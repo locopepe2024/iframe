@@ -552,7 +552,7 @@ function StoryboardInspector() {
                                                     }`}
                                             >
                                                 <div className="w-4 h-4 rounded-full bg-elevated overflow-hidden">
-                                                    {char.avatar_url && <img src={getAssetUrl(char.avatar_url)} className="w-full h-full object-cover" />}
+                                                    {(char.cover_url || char.avatar_url) && <img src={getAssetUrl(char.cover_url || char.avatar_url)} className="w-full h-full object-cover" />}
                                                 </div>
                                                 <span className="truncate">{char.name}</span>
                                             </button>
@@ -604,7 +604,7 @@ function StoryboardInspector() {
                                                         }`}
                                                 >
                                                     <div className="w-4 h-4 rounded bg-elevated overflow-hidden flex-shrink-0">
-                                                        {prop.image_url && <img src={getAssetUrl(prop.image_url)} className="w-full h-full object-cover" />}
+                                                        {(prop.cover_url || prop.image_url) && <img src={getAssetUrl(prop.cover_url || prop.image_url)} className="w-full h-full object-cover" />}
                                                     </div>
 
                                                     <span className="truncate">{prop.name}</span>

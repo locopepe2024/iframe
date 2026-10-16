@@ -429,6 +429,52 @@ def _project_cover_url(script: Script, owner_profile_id: str) -> Optional[str]:
         return None
 
 
+def _asset_cover_url(asset: Any, asset_type: str, owner_profile_id: str) -> Optional[str]:
+    variants = []
+    if asset_type == "character":
+        for name in ("reference_sheet", "full_body_asset", "three_view_asset", "headshot_asset"):
+            unit = getattr(asset, name, None)
+            variants.extend(getattr(unit, "image_variants", None) or getattr(unit, "variants", None) or [] if unit else [])
+    else:
+        unit = getattr(asset, "image_asset", None)
+        variants = list(getattr(unit, "variants", None) or []) if unit else []
+    cover_id = getattr(asset, "cover_variant_id", None)
+    selected_id = getattr(getattr(asset, "image_asset", None), "selected_id", None)
+    variant = next((item for item in variants if item.id == cover_id), None) if cover_id else None
+    variant = variant or (next((item for item in variants if item.id == selected_id), None) if selected_id else None)
+    raw = image_variant_storage_key(variant) if variant else None
+    raw = raw or getattr(asset, "image_url", None) or getattr(asset, "full_body_image_url", None)
+    if not raw:
+        return None
+    try:
+        return _owned_media_cover_url(raw, owner_profile_id, 160)
+    except HTTPException:
+        return None
+
+
+def _add_asset_cover_urls(payload: Dict[str, Any], owner_profile_id: str) -> None:
+    for key, asset_type in (("characters", "character"), ("scenes", "scene"), ("props", "prop")):
+        for asset in payload.get(key, []):
+            variants = []
+            if asset_type == "character":
+                for name in ("reference_sheet", "full_body_asset", "three_view_asset", "headshot_asset"):
+                    unit = asset.get(name) or {}
+                    variants.extend(unit.get("image_variants", unit.get("variants", [])) or [])
+            else:
+                variants = (asset.get("image_asset") or {}).get("variants", []) or []
+            cover_id = asset.get("cover_variant_id")
+            selected_id = (asset.get("image_asset") or {}).get("selected_id")
+            selected = next((item for item in variants if item.get("id") == cover_id), None) if cover_id else None
+            selected = selected or (next((item for item in variants if item.get("id") == selected_id), None) if selected_id else None)
+            raw = (selected or {}).get("storage_key") or (selected or {}).get("url")
+            raw = raw or asset.get("image_url") or asset.get("full_body_image_url")
+            if raw:
+                try:
+                    asset["cover_url"] = _owned_media_cover_url(raw, owner_profile_id, 160)
+                except HTTPException:
+                    asset["cover_url"] = None
+
+
 def private_no_store_signed_response(data):
     """Return owner-scoped mutable data without allowing intermediary caching."""
     response = signed_response(data)
@@ -1046,7 +1092,11 @@ async def extract_preview(script_id: str, request: ReparseProjectRequest):
 def list_projects(user: UserContext = Depends(require_studio_user)):
     """Lists all projects from backend storage."""
     scripts = pipeline.list_scripts(user.owner_profile_id)
-    payload = [_script_response_dump(script) | {"cover_url": _project_cover_url(script, user.owner_profile_id)} for script in scripts]
+    payload = []
+    for script in scripts:
+        item = _script_response_dump(script) | {"cover_url": _project_cover_url(script, user.owner_profile_id)}
+        _add_asset_cover_urls(item, user.owner_profile_id)
+        payload.append(item)
     return signed_response(payload)
 
 
@@ -2273,6 +2323,7 @@ def get_project(script_id: str):
     # Global assets are intentionally opt-in. They enter a series only through
     # the explicit /series/{id}/assets/import-from-library action; merely
     # reading an episode must not make every global asset appear in it.
+    _add_asset_cover_urls(payload, user.owner_profile_id)
     return signed_response(payload)
 
 

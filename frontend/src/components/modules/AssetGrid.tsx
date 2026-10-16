@@ -35,13 +35,13 @@ export default function AssetGrid({ projectId }: AssetGridProps) {
             ...currentProject.characters.map((c: any) => ({
                 id: c.id,
                 type: "char" as const,
-                url: getAssetUrl(c.image_url),
+                url: getAssetUrl(c.cover_url || c.image_url),
                 title: c.name
             })),
             ...currentProject.scenes.map((s: any) => ({
                 id: s.id,
                 type: "bg" as const,
-                url: getAssetUrl(s.image_url),
+                url: getAssetUrl(s.cover_url || s.image_url),
                 title: s.name
             }))
         ];
@@ -54,13 +54,13 @@ export default function AssetGrid({ projectId }: AssetGridProps) {
                 ...currentProject.characters.map((c: any) => ({
                     id: c.id,
                     type: "char" as const,
-                    url: getAssetUrl(c.image_url),
+                    url: getAssetUrl(c.cover_url || c.image_url),
                     title: c.name
                 })),
                 ...currentProject.scenes.map((s: any) => ({
                     id: s.id,
                     type: "bg" as const,
-                    url: getAssetUrl(s.image_url),
+                    url: getAssetUrl(s.cover_url || s.image_url),
                     title: s.name
                 }))
             ];
@@ -82,13 +82,13 @@ export default function AssetGrid({ projectId }: AssetGridProps) {
                 ...project.characters.map((c: any) => ({
                     id: c.id,
                     type: "char" as const,
-                    url: getAssetUrl(c.image_url),
+                    url: getAssetUrl(c.cover_url || c.image_url),
                     title: c.name
                 })),
                 ...project.scenes.map((s: any) => ({
                     id: s.id,
                     type: "bg" as const,
-                    url: getAssetUrl(s.image_url),
+                    url: getAssetUrl(s.cover_url || s.image_url),
                     title: s.name
                 }))
             ];
