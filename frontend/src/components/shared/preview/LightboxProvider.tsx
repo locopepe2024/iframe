@@ -24,13 +24,17 @@ import { createPortal } from "react-dom";
 import { X, ChevronLeft, ChevronRight, Copy, Check, ExternalLink } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { getAssetUrl } from "@/lib/utils";
-import { isManagedMedia, resolveMediaDelivery } from "@/lib/mediaDelivery";
+import { isManagedMedia, resolveMediaDelivery, resolveRegisteredMediaDelivery, resolveVideoDelivery } from "@/lib/mediaDelivery";
 
 export type LightboxItem = {
     /** Raw URL (relative or absolute) — resolved via getAssetUrl on render. */
     src: string;
     alt?: string;
     kind: "image" | "video";
+    mediaId?: string | null;
+    projectId?: string;
+    taskId?: string;
+    mergedProjectId?: string;
 };
 
 interface LightboxContextValue {
@@ -88,12 +92,17 @@ export function LightboxProvider({ children }: LightboxProviderProps) {
         setDeliveryUrl(null);
         setDeliveryError(false);
         if (!source) return;
-        if (!isManagedMedia(source)) { setDeliveryUrl(getAssetUrl(source)); return; }
+        if (!currentItem?.mergedProjectId && !currentItem?.mediaId && !(currentItem?.projectId && currentItem?.taskId) && !isManagedMedia(source)) {
+            setDeliveryUrl(getAssetUrl(source)); return;
+        }
         let active = true;
-        void resolveMediaDelivery(source).then(url => { if (active) setDeliveryUrl(url); })
+        void (currentItem.kind === "video"
+            ? resolveVideoDelivery(source, currentItem.mediaId, currentItem.projectId, currentItem.taskId, currentItem.mergedProjectId)
+            : currentItem.mediaId ? resolveRegisteredMediaDelivery(currentItem.mediaId) : resolveMediaDelivery(source))
+            .then(url => { if (active) setDeliveryUrl(url); })
             .catch(() => { if (active) setDeliveryError(true); });
         return () => { active = false; };
-    }, [currentItem?.src]);
+    }, [currentItem?.src, currentItem?.kind, currentItem?.mediaId, currentItem?.projectId, currentItem?.taskId, currentItem?.mergedProjectId]);
 
     const close = useCallback(() => {
         setSingleItem(null);

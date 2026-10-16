@@ -151,6 +151,8 @@ export interface ShotNode {
 export const T2I_HISTORY_LIMIT = 10;
 
 interface ShotCardProps {
+    projectId?: string;
+    activeVideoTaskId?: string;
     generateAudio?: boolean;
     targetDuration?: number;
     referenceImageUrls?: string[];
@@ -209,6 +211,8 @@ interface ShotCardProps {
 }
 
 export default function ShotCard({
+    projectId,
+    activeVideoTaskId,
     generateAudio,
     targetDuration,
     referenceImageUrls = [],
@@ -356,6 +360,8 @@ export default function ShotCard({
                 return (
                     <PreviewVideo
                         src={shot.videoUrl}
+                        projectId={projectId}
+                        taskId={activeVideoTaskId}
                         alt={t("generatedVideo") || "Generated video"}
                         className="w-full aspect-video"
                     />
@@ -448,6 +454,8 @@ export default function ShotCard({
             return (
                 <PreviewVideo
                     src={shot.videoUrl}
+                    projectId={projectId}
+                    taskId={activeVideoTaskId}
                     alt={t("generatedVideo") || "Generated video"}
                     className="w-full aspect-video"
                 />

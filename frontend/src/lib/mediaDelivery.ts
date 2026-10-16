@@ -55,3 +55,38 @@ export async function resolveAssetVariantDelivery(locator: {
   const value = await response.json() as { url: string };
   return getAssetUrl(value.url);
 }
+
+export async function resolveRegisteredMediaDelivery(mediaId: string, preview = 0): Promise<string> {
+  const response = await authenticatedFetch(
+    `${API_URL}/studio/media-records/${encodeURIComponent(mediaId)}/delivery${preview ? `?preview=${preview}` : ''}`, { cache: 'no-store' },
+  );
+  if (!response.ok) throw new Error(`Media unavailable (HTTP ${response.status})`);
+  const value = await response.json() as { url: string };
+  return getAssetUrl(value.url);
+}
+
+export async function resolveVideoTaskDelivery(projectId: string, taskId: string, preview = 0): Promise<string> {
+  const response = await authenticatedFetch(
+    `${API_URL}/projects/${encodeURIComponent(projectId)}/video_tasks/${encodeURIComponent(taskId)}/delivery${preview ? `?preview=${preview}` : ''}`,
+    { cache: 'no-store' },
+  );
+  if (!response.ok) throw new Error(`Video unavailable (HTTP ${response.status})`);
+  const value = await response.json() as { url: string };
+  return getAssetUrl(value.url);
+}
+
+export async function resolveMergedVideoDelivery(projectId: string, preview = 0): Promise<string> {
+  const response = await authenticatedFetch(
+    `${API_URL}/projects/${encodeURIComponent(projectId)}/merged-video/delivery${preview ? `?preview=${preview}` : ''}`, { cache: 'no-store' },
+  );
+  if (!response.ok) throw new Error(`Video unavailable (HTTP ${response.status})`);
+  const value = await response.json() as { url: string };
+  return getAssetUrl(value.url);
+}
+
+export function resolveVideoDelivery(source: string, mediaId?: string | null, projectId?: string, taskId?: string, mergedProjectId?: string): Promise<string> {
+  if (mergedProjectId) return resolveMergedVideoDelivery(mergedProjectId);
+  if (mediaId) return resolveRegisteredMediaDelivery(mediaId);
+  if (projectId && taskId) return resolveVideoTaskDelivery(projectId, taskId);
+  return resolveMediaDelivery(source);
+}

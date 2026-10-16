@@ -3,7 +3,9 @@ import { beforeEach, expect, it, vi } from 'vitest';
 import RecreationMediaLibrary from './RecreationMediaLibrary';
 import { recreationApi, RecreationMedia, RecreationMediaPage } from '@/lib/recreation';
 vi.mock('@/lib/recreation', () => ({ recreationApi: { list: vi.fn(), searchMedia: vi.fn() } }));
-vi.mock('@/lib/api', () => ({ API_URL: 'https://api.example.test' }));
+vi.mock('@/lib/api', () => ({ API_URL: 'https://api.example.test', authenticatedFetch: vi.fn(async (url: string) => ({
+  ok: true, json: async () => ({ url: url.includes('preview=320') ? '/cover.webp' : '/source.mp4' }),
+})) }));
 vi.mock('next-intl', () => ({ useTranslations: () => (key: string, values?: { name?: string }) => values?.name ? `${key} ${values.name}` : key }));
 const item = (id: string): RecreationMedia => ({ media_id: id, project_id: 'p', kind: 'evidence_frame', display_name: id, storage_path: '/frame.jpg?signature=test', sha256: 'hash', created_at: 1, metadata: { parent_media_id: 'original', pts: 61696, time_base: '1/15360' } });
 const videoItem = (id: string, kind: RecreationMedia['kind']): RecreationMedia => ({ media_id: id, project_id: 'p', kind, display_name: id, storage_path: `/${id}.mp4?signature=test`, sha256: 'hash', created_at: 1, metadata: {} });
@@ -17,7 +19,7 @@ it('paginates without duplicate identities, previews lineage, and retries a fail
   render(<RecreationMediaLibrary />);
   fireEvent.click(await screen.findByRole('button', { name: 'preview one' }));
   expect(screen.getByText('original')).toBeInTheDocument();
-  expect(screen.getByRole('img', { name: 'one' })).toHaveAttribute('src', 'https://api.example.test/frame.jpg?signature=test');
+  await waitFor(() => expect(screen.getByRole('img', { name: 'one' })).toHaveAttribute('src', 'https://api.example.test/files/cover.webp'));
   fireEvent.click(screen.getByRole('button', { name: 'more' }));
   await screen.findByRole('alert');
   expect(screen.getByRole('button', { name: 'preview one' })).toBeInTheDocument();
@@ -51,10 +53,10 @@ it('keeps source, generated, and final videos playable in the recreation library
   await screen.findByRole('button', { name: 'preview source' });
   expect(screen.getByRole('option', { name: 'generated_video' })).toBeInTheDocument();
   expect(screen.getByRole('option', { name: 'final_video' })).toBeInTheDocument();
-  expect(document.querySelectorAll('button video')).toHaveLength(3);
+  expect(document.querySelectorAll('[role="button"] img')).toHaveLength(3);
 
   fireEvent.click(screen.getByRole('button', { name: 'preview final' }));
   const selectedVideo = document.querySelector('video[controls]');
-  expect(selectedVideo).toHaveAttribute('src', 'https://api.example.test/final.mp4?signature=test');
+  await waitFor(() => expect(selectedVideo).toHaveAttribute('src', 'https://api.example.test/files/source.mp4'));
   expect(screen.queryByRole('img', { name: 'final' })).not.toBeInTheDocument();
 });

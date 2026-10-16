@@ -4,37 +4,13 @@ import { useEffect, useMemo, useState } from 'react';
 import { ArrowDown, ArrowUp, Images, Plus, Trash2 } from 'lucide-react';
 import { useTranslations } from 'next-intl';
 
-import { API_URL, authenticatedFetch, api, playgroundApi, type AssetReferenceIndexEntry, type PlaygroundGenerationResponse, type UniArtCatalogModelResponse } from '@/lib/api';
+import { api, playgroundApi, type AssetReferenceIndexEntry, type PlaygroundGenerationResponse, type UniArtCatalogModelResponse } from '@/lib/api';
 import { imageEditorApi, type EditSource } from '@/lib/imageEditor';
-import { getAssetUrl } from '@/lib/utils';
+import { AssetIndexPreview } from '@/components/shared/AssetIndexPreview';
+import PreviewImage from '@/components/shared/preview/PreviewImage';
 
 export interface EditorReference { path: string; title: string }
 type GenerationMode = 'reference' | 'panorama';
-
-function LibraryVariantCover({ entry, variantId }: { entry: AssetReferenceIndexEntry; variantId: string }) {
-  const [url, setUrl] = useState<string>();
-  useEffect(() => {
-    const controller = new AbortController();
-    let objectUrl: string | undefined;
-    const params = new URLSearchParams({
-      scope: entry.source_scope === 'episode' ? 'project' : entry.source_scope,
-      container_id: entry.source_container_id || '', asset_type: entry.asset_type,
-      asset_id: entry.asset_id, variant_id: variantId,
-    });
-    setUrl(undefined);
-    void authenticatedFetch(`${API_URL}/asset-index/preview?${params}`, { signal: controller.signal })
-      .then(async response => {
-        if (!response.ok) throw new Error('Preview unavailable');
-        const blob = await response.blob();
-        if (controller.signal.aborted) return;
-        objectUrl = URL.createObjectURL(blob);
-        setUrl(objectUrl);
-      }).catch(() => setUrl(undefined));
-    return () => { controller.abort(); if (objectUrl) URL.revokeObjectURL(objectUrl); };
-  }, [entry, variantId]);
-  return url ? <img src={url} alt="" className="h-10 w-10 shrink-0 object-cover" />
-    : <span className="h-10 w-10 shrink-0 bg-elevated" />;
-}
 
 export function generationInputMedia(source: EditSource | null, references: EditorReference[]): string[] {
   return [...(source ? [source.reference] : []), ...references.map(reference => reference.path)];
@@ -144,7 +120,7 @@ export default function ImageEditorReferenceTools({ source, references, onAdd, o
         <div className="max-h-48 space-y-2 overflow-auto">
           {filteredLibrary.map(entry => <div key={entryKey(entry)} className="flex min-w-0 items-center gap-2 border-b border-glass-border pb-2">
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <LibraryVariantCover entry={entry} variantId={selectedVariants[entryKey(entry)] || entry.selected_variant_id || entry.variants[0].id}/>
+            <span className="h-10 w-10 shrink-0"><AssetIndexPreview asset={{ ...entry, variant_id: selectedVariants[entryKey(entry)] || entry.selected_variant_id || entry.variants[0].id }}/></span>
             <div className="min-w-0 flex-1"><strong className="block truncate text-xs">{entry.name}</strong><small className="text-text-muted">{entry.source_name || entry.source_scope}</small>
               {entry.variants.length > 1 && <select aria-label={`${entry.name} ${t('variant')}`} value={selectedVariants[entryKey(entry)] || entry.selected_variant_id || entry.variants[0].id} onChange={event => setSelectedVariants(current => ({ ...current, [entryKey(entry)]: event.target.value }))} className="mt-1 w-full bg-surface text-xs">{entry.variants.map((variant, index) => <option key={variant.id} value={variant.id}>{t('variant')} {index + 1}</option>)}</select>}
             </div>
@@ -155,7 +131,7 @@ export default function ImageEditorReferenceTools({ source, references, onAdd, o
       </div>}
       <ol className="space-y-1">{references.map((reference, index) => <li key={reference.path} className="flex min-w-0 items-center gap-1 border-b border-glass-border py-1">
         {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src={getAssetUrl(reference.path)} alt="" className="h-9 w-9 shrink-0 object-cover"/>
+        <PreviewImage src={reference.path} alt="" noLightbox className="h-9 w-9 shrink-0 object-cover"/>
         <span className="min-w-0 flex-1 truncate text-xs">{index + 1}. {reference.title}</span>
         <button type="button" disabled={index === 0} title={t('moveUp')} aria-label={`${t('moveUp')} ${reference.title}`} onClick={() => onMove(reference.path, -1)}><ArrowUp size={15}/></button>
         <button type="button" disabled={index === references.length - 1} title={t('moveDown')} aria-label={`${t('moveDown')} ${reference.title}`} onClick={() => onMove(reference.path, 1)}><ArrowDown size={15}/></button>
@@ -180,7 +156,7 @@ export default function ImageEditorReferenceTools({ source, references, onAdd, o
         {generation.status === 'completed' && !generation.outputs.some(output => output.media_type === 'image') && <p role="alert" className="text-status-failed-fg">{t('noGeneratedImage')}</p>}
         {generation.status === 'completed' && generation.outputs.filter(output => output.media_type === 'image').map(output => <div key={output.id} className="space-y-2">
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={getAssetUrl(output.media_path)} alt={t('generatedImage')} className="max-h-40 w-full object-contain"/>
+          <PreviewImage src={output.media_path} alt={t('generatedImage')} noLightbox className="max-h-40 w-full object-contain"/>
           <button type="button" onClick={() => onUseResult(output.media_path, t('generatedImage'))} className="min-h-9 w-full rounded border border-glass-border">{t('editGenerated')}</button>
         </div>)}
       </div>}

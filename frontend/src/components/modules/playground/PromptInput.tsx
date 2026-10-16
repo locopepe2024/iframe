@@ -3,7 +3,8 @@
 import { useState } from 'react';
 import { Film, Plus, X, FileText, Music } from 'lucide-react';
 import { useTranslations } from 'next-intl';
-import { getAssetUrl } from '@/lib/utils';
+import PreviewImage from '@/components/shared/preview/PreviewImage';
+import PreviewVideo from '@/components/shared/preview/PreviewVideo';
 import { usePlaygroundStore } from './usePlaygroundStore';
 import { referenceKey, referenceName } from './referenceMedia';
 import FullNameHints from './FullNameHints';
@@ -64,9 +65,9 @@ export default function PromptInput({ onSubmit, onOpenReferences }: PromptInputP
                 className="group relative h-12 w-12 overflow-hidden rounded-xl border border-primary/30 bg-surface-inset"
               >
                 {/\.(mp3|wav|m4a|aac|ogg|flac|opus|aiff|aif|wma)(?:[?#].*)?$/i.test(path) ? <Music aria-label="音频参考" className="m-3 h-6 w-6 text-primary" /> : /\.(txt|md|csv|json|srt|vtt)(?:[?#].*)?$/i.test(path) ? <FileText aria-label="文本参考" className="m-3 h-6 w-6 text-primary" /> : isVideo ? (
-                  <video src={getAssetUrl(path)} muted className="h-full w-full object-cover" />
+                  <PreviewVideo src={path} noLightbox hoverPlay={false} className="h-full w-full object-cover" />
                 ) : (
-                  <img src={getAssetUrl(path)} alt={label} className="h-full w-full object-cover" />
+                  <PreviewImage src={path} alt={label} noLightbox className="h-full w-full object-cover" />
                 )}
                 <button
                   type="button"
@@ -117,7 +118,7 @@ export default function PromptInput({ onSubmit, onOpenReferences }: PromptInputP
                 {candidate.mediaType === 'audio' ? <Music size={15} aria-label="音频参考" /> : candidate.mediaType === 'text' ? <FileText size={15} aria-label="文本参考" /> : candidate.mediaType === 'video' ? (
                   <Film size={15} className="text-text-muted" aria-hidden="true" />
                 ) : (
-                  <img src={getAssetUrl(candidate.path)} alt="" className="h-full w-full object-cover" />
+                  <PreviewImage src={candidate.path} alt="" noLightbox className="h-full w-full object-cover" />
                 )}
               </span>
               <span className="min-w-0 flex-1 text-xs">

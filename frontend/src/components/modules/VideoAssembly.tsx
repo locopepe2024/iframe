@@ -11,6 +11,9 @@ import StepPageHeader, { StepPill } from "@/components/shared/StepPageHeader";
 import SidePanelHeader from "@/components/shared/SidePanelHeader";
 import { getAssemblyReadiness, resolveAssemblyVideo } from "./assemblyReadiness";
 import { buildDraftAssemblyPlan, formatAssemblyTime, hasAssemblyPlanChanges, moveAssemblyClip, updateAssemblyClip, refreshAssemblySelectedTakes } from "./assemblyEditPlan";
+import PreviewVideo from "@/components/shared/preview/PreviewVideo";
+import PreviewImage from "@/components/shared/preview/PreviewImage";
+import { resolveMergedVideoDelivery } from "@/lib/mediaDelivery";
 
 type AssemblyPhase = "timeline" | "takes" | "mix" | "export";
 
@@ -159,14 +162,7 @@ export default function VideoAssembly() {
         if (!currentProject?.merged_video_url) return;
         setIsDownloading(true);
         try {
-            // Build download URL - use proxy in dev to avoid CORS, direct in production
-            const rawPath = currentProject.merged_video_url;
-            const cleanPath = rawPath.startsWith("/") ? rawPath.slice(1) : rawPath;
-            const isDev = process.env.NODE_ENV === "development";
-            const url = isDev
-                ? `/api-proxy/files/${cleanPath}`
-                : getAssetUrl(rawPath);
-
+            const url = await resolveMergedVideoDelivery(currentProject.id);
             const response = await fetch(url);
             if (!response.ok) throw new Error(`HTTP ${response.status}`);
             const blob = await response.blob();
@@ -285,23 +281,15 @@ export default function VideoAssembly() {
                                     {/* Left: Preview */}
                                     <div className="w-48 aspect-video relative flex-shrink-0 border-r border-glass-border bg-elevated">
                                         {selectedVideo ? (
-                                            <video
-                                                src={getAssetUrl(selectedVideo.video_url)}
-                                                className="w-full h-full object-cover"
-                                                muted
-                                                onMouseOver={(e) => e.currentTarget.play()}
-                                                onMouseOut={(e) => {
-                                                    e.currentTarget.pause();
-                                                    e.currentTarget.currentTime = 0;
-                                                }}
-                                            />
+                                            <PreviewVideo src={selectedVideo.video_url}
+                                                mediaId={selectedVideo.source === "dubbed" ? undefined : videoTasks.find(task => task.id === selectedVideo.id)?.video_media_id}
+                                                projectId={selectedVideo.source === "dubbed" ? undefined : currentProject.id}
+                                                taskId={selectedVideo.source === "dubbed" ? undefined : selectedVideo.id || undefined}
+                                                className="w-full h-full" noLightbox />
                                         ) : (
                                             <div className="w-full h-full relative">
                                                 {frame.image_url ? (
-                                                    <img
-                                                        src={getAssetUrl(frame.image_url)}
-                                                        className="w-full h-full object-cover opacity-50 grayscale"
-                                                    />
+                                                    <PreviewImage src={frame.image_url} className="w-full h-full opacity-50 grayscale" noLightbox />
                                                 ) : (
                                                     <div className="w-full h-full bg-glass" />
                                                 )}
@@ -375,6 +363,7 @@ export default function VideoAssembly() {
                 {phase === "export" && (
                     <div className="flex-1 overflow-y-auto custom-scrollbar p-8 space-y-6">
                         <ExportPhase
+                            projectId={currentProject?.id}
                             mergedVideoUrl={currentProject?.merged_video_url ?? null}
                             isMerging={isMerging}
                             isDownloading={isDownloading}
@@ -418,14 +407,14 @@ export default function VideoAssembly() {
                                                     }`}
                                             >
                                                 <div className="aspect-video relative bg-black">
-                                                    <video
-                                                        src={getAssetUrl(
-                                                            selectedFrame?.dubbed_video_task_id === video.id && selectedFrame?.dubbed_video_url
-                                                                ? selectedFrame.dubbed_video_url
-                                                                : video.video_url
-                                                        )}
-                                                        className="w-full h-full object-contain"
-                                                        controls
+                                                    <PreviewVideo
+                                                        src={selectedFrame?.dubbed_video_task_id === video.id && selectedFrame?.dubbed_video_url
+                                                            ? selectedFrame.dubbed_video_url : video.video_url}
+                                                        mediaId={selectedFrame?.dubbed_video_task_id === video.id && selectedFrame?.dubbed_video_url
+                                                            ? undefined : video.video_media_id}
+                                                        projectId={selectedFrame?.dubbed_video_task_id === video.id && selectedFrame?.dubbed_video_url ? undefined : currentProject?.id}
+                                                        taskId={selectedFrame?.dubbed_video_task_id === video.id && selectedFrame?.dubbed_video_url ? undefined : video.id}
+                                                        className="w-full h-full" controls hoverPlay={false} noLightbox
                                                     />
                                                     {/* Overlay Info */}
                                                     <div className="absolute top-2 left-2 bg-surface px-1.5 rounded text-[0.625rem] text-foreground opacity-0 group-hover:opacity-100 transition-opacity">
@@ -886,6 +875,7 @@ function MixPhase({
 }
 
 function ExportPhase({
+    projectId,
     mergedVideoUrl,
     isMerging,
     isDownloading,
@@ -899,6 +889,7 @@ function ExportPhase({
     onDownload,
     onDismissError,
 }: {
+    projectId?: string;
     mergedVideoUrl: string | null;
     isMerging: boolean;
     isDownloading: boolean;
@@ -986,7 +977,8 @@ function ExportPhase({
                     >
                         <div className="grid md:grid-cols-2 gap-0">
                             <div className="aspect-video bg-black">
-                                <video src={getAssetUrl(mergedVideoUrl)} className="w-full h-full object-contain" controls autoPlay />
+                                <PreviewVideo src={mergedVideoUrl} mergedProjectId={projectId}
+                                    className="w-full h-full" controls autoPlay hoverPlay={false} noLightbox />
                             </div>
                             <div className="p-5 flex flex-col justify-center gap-3">
                                 <div>

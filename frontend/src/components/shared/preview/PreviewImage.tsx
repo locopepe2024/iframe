@@ -32,13 +32,14 @@ import { AlertTriangle, RefreshCw, Maximize2, Copy, Check } from "lucide-react";
 import clsx from "clsx";
 import { useTranslations } from "next-intl";
 import { getAssetUrl } from "@/lib/utils";
-import { isManagedMedia, resolveMediaDelivery } from "@/lib/mediaDelivery";
+import { isManagedMedia, resolveMediaDelivery, resolveRegisteredMediaDelivery } from "@/lib/mediaDelivery";
 import { useLightbox, type LightboxItem } from "./LightboxProvider";
 
 export interface PreviewImageProps {
     /** Raw URL — relative paths auto-resolve via getAssetUrl. Empty/undefined
      *  renders the placeholder (no fallback panel, just empty state). */
     src?: string;
+    mediaId?: string | null;
     alt?: string;
     className?: string;
     /** Disable click-to-lightbox + 🔍 button (e.g. cast avatars in chip bar
@@ -63,7 +64,7 @@ export interface PreviewImageProps {
 }
 
 export default function PreviewImage({
-    src, alt, className, noLightbox = false,
+    src, mediaId, alt, className, noLightbox = false,
     groupId, groupIndex, alwaysShowMagnify = false,
     clickToLightbox = false, placeholder,
 }: PreviewImageProps) {
@@ -83,7 +84,16 @@ export default function PreviewImage({
         setHasRetriedOnce(false);
         setRetryNonce(0);
         setFreshSrc(undefined);
-    }, [src]);
+    }, [src, mediaId]);
+
+    useEffect(() => {
+        if (!src || (!mediaId && !isManagedMedia(src))) return;
+        let active = true;
+        void (mediaId ? resolveRegisteredMediaDelivery(mediaId, 320) : resolveMediaDelivery(src, 320))
+            .then(url => { if (active) setFreshSrc(url); })
+            .catch(() => { if (active) setErrored(true); });
+        return () => { active = false; };
+    }, [src, mediaId]);
 
     useEffect(() => {
         const el = wrapperRef.current;
@@ -101,16 +111,16 @@ export default function PreviewImage({
         return () => ro.disconnect();
     }, []);
 
-    const resolved = freshSrc || getAssetUrl(src);
+    const resolved = freshSrc || ((mediaId || isManagedMedia(src || "")) ? "" : getAssetUrl(src));
     /** Append retry-bust to bypass browser/OSS cache on retry. */
     const displaySrc = resolved
         ? (retryNonce > 0 ? `${resolved}${resolved.includes("?") ? "&" : "?"}__r=${retryNonce}` : resolved)
         : "";
 
     const handleError = () => {
-        if (src && isManagedMedia(src) && !hasRetriedOnce) {
+        if (src && (mediaId || isManagedMedia(src)) && !hasRetriedOnce) {
             setHasRetriedOnce(true);
-            void resolveMediaDelivery(src, 320).then(url => { setFreshSrc(url); setErrored(false); })
+            void (mediaId ? resolveRegisteredMediaDelivery(mediaId, 320) : resolveMediaDelivery(src, 320)).then(url => { setFreshSrc(url); setErrored(false); })
                 .catch(() => setErrored(true));
             return;
         }
@@ -126,8 +136,8 @@ export default function PreviewImage({
 
     const handleManualRetry = () => {
         setErrored(false);
-        if (src && isManagedMedia(src)) {
-            void resolveMediaDelivery(src, 320).then(setFreshSrc).catch(() => setErrored(true));
+        if (src && (mediaId || isManagedMedia(src))) {
+            void (mediaId ? resolveRegisteredMediaDelivery(mediaId, 320) : resolveMediaDelivery(src, 320)).then(setFreshSrc).catch(() => setErrored(true));
             return;
         }
         setRetryNonce(n => n + 1);
@@ -147,7 +157,7 @@ export default function PreviewImage({
     const handleOpenLightbox = (e?: React.MouseEvent) => {
         if (e) e.stopPropagation();
         if (noLightbox || !src) return;
-        const item: LightboxItem = { src, alt, kind: "image" };
+        const item: LightboxItem = { src, mediaId, alt, kind: "image" };
         if (groupId && typeof groupIndex === "number") openInGroup(groupId, groupIndex);
         else open(item);
     };

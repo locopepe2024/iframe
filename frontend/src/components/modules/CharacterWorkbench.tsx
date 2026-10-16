@@ -12,6 +12,8 @@ import { useProjectStore } from "@/store/projectStore";
 import { Image as PhotoIcon } from "lucide-react";
 import { getAssetUrl } from "@/lib/utils";
 import { AssetIndexPreview } from "@/components/shared/AssetIndexPreview";
+import PreviewVideo from "@/components/shared/preview/PreviewVideo";
+import PreviewImage from "@/components/shared/preview/PreviewImage";
 import { toast } from "@/store/toastStore";
 import {
     buildCharacterImagePrompt,
@@ -1407,12 +1409,11 @@ export function WorkbenchPanel({
                                 Generate Full Body from your uploaded reference image
                             </p>
                             {reverseReferenceUrl && (
-                                <img
-                                    src={typeof reverseReferenceUrl === 'string' && reverseReferenceUrl.startsWith('http')
-                                        ? reverseReferenceUrl
-                                        : `${window.location.origin}/${reverseReferenceUrl}`}
+                                <PreviewImage
+                                    src={reverseReferenceUrl}
                                     alt="Reference"
                                     className="w-16 h-16 rounded-lg object-cover border border-glass-border"
+                                    noLightbox
                                 />
                             )}
                         </div>
@@ -1451,16 +1452,13 @@ export function WorkbenchPanel({
                                 ) : null}
 
                                 {motionRefVideos?.length > 0 ? (
-                                    <video
+                                    <PreviewVideo
                                         key={motionRefVideos[motionRefVideos.length - 1]?.url}
-                                        src={getAssetUrl(motionRefVideos[motionRefVideos.length - 1]?.url)}
+                                        src={motionRefVideos[motionRefVideos.length - 1]?.url}
+                                        mediaId={motionRefVideos[motionRefVideos.length - 1]?.media_id}
                                         onCanPlay={() => setIsVideoLoading(false)}
                                         onLoadStart={() => setIsVideoLoading(true)}
-                                        className="w-full h-full object-contain"
-                                        controls
-                                        loop
-                                        autoPlay
-                                        muted
+                                        className="w-full h-full" controls autoPlay muted loop hoverPlay={false} noLightbox
                                     />
                                 ) : !isGeneratingMotion && (
                                     <div className="w-full h-full flex flex-col items-center justify-center text-text-muted gap-2">
