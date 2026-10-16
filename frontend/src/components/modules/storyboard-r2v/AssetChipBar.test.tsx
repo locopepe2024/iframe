@@ -6,7 +6,7 @@ import { expect, it, vi } from "vitest";
 import messages from "../../../../messages/en.json";
 import AssetChipBar from "./AssetChipBar";
 
-vi.mock("@/components/shared/preview/PreviewImage", () => ({ default: ({ alt }: any) => <span>{alt}</span> }));
+vi.mock("@/components/shared/AssetIndexPreview", () => ({ AssetIndexPreview: ({ alt }: { alt: string }) => <span>{alt}</span> }));
 
 it("inserts one semantic asset while selecting multiple child views", () => {
     const insert = vi.fn();

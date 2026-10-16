@@ -6,8 +6,8 @@ vi.mock("next-intl", () => ({
     useTranslations: () => (key: string, values?: Record<string, unknown>) =>
         values ? `${key}:${JSON.stringify(values)}` : key,
 }));
-vi.mock("@/components/shared/preview/PreviewImage", () => ({
-    default: ({ alt }: { alt: string }) => <div aria-label={alt} />,
+vi.mock("@/components/shared/AssetIndexPreview", () => ({
+    AssetIndexPreview: ({ alt }: { alt: string }) => <div aria-label={alt} />,
 }));
 
 describe("AssetDrawer product references", () => {

@@ -3,7 +3,7 @@
 import { motion, AnimatePresence } from "framer-motion";
 import { Check, X, User, MapPin, Package } from "lucide-react";
 import { useTranslations } from "next-intl";
-import PreviewImage from "@/components/shared/preview/PreviewImage";
+import { AssetIndexPreview } from "@/components/shared/AssetIndexPreview";
 import type { AssetReferenceIndexEntry } from "@/lib/api";
 import { projectReferenceIndex } from "@/lib/assetReferenceIndex";
 
@@ -105,7 +105,7 @@ export default function AssetDrawer({
                                                         >
                                                             <div className="w-12 h-12 rounded-lg bg-glass overflow-hidden flex items-center justify-center">
                                                                 {thumb ? (
-                                                                    <PreviewImage src={thumb} alt={c.name} className="w-full h-full" noLightbox />
+                                                                    <AssetIndexPreview asset={{ ...c, variant_id: c.variants.find((variant: any) => variant.id === c.selected_variant_id)?.id ?? c.variants[0].id }} alt={c.name} />
                                                                 ) : (
                                                                     <User size={16} className="text-text-secondary/40" />
                                                                 )}
@@ -139,7 +139,7 @@ export default function AssetDrawer({
                                                         >
                                                             <div className="w-12 h-12 rounded-lg bg-glass overflow-hidden flex items-center justify-center">
                                                                 {thumb ? (
-                                                                    <PreviewImage src={thumb} alt={s.name} className="w-full h-full" noLightbox />
+                                                                    <AssetIndexPreview asset={{ ...s, variant_id: s.variants.find((variant: any) => variant.id === s.selected_variant_id)?.id ?? s.variants[0].id }} alt={s.name} />
                                                                 ) : (
                                                                     <MapPin size={16} className="text-text-secondary/40" />
                                                                 )}
@@ -175,7 +175,7 @@ export default function AssetDrawer({
                                                             >
                                                                 <div className="h-11 w-11 shrink-0 overflow-hidden rounded-md bg-surface-inset flex items-center justify-center">
                                                                     {thumb ? (
-                                                                        <PreviewImage src={thumb} alt={p.name} className="h-full w-full" noLightbox />
+                                                                        <AssetIndexPreview asset={{ ...p, variant_id: p.variants.find((variant: any) => variant.id === p.selected_variant_id)?.id ?? p.variants[0].id }} alt={p.name} />
                                                                     ) : (
                                                                         <Package size={16} className="text-text-secondary/40" />
                                                                     )}
@@ -204,7 +204,7 @@ export default function AssetDrawer({
                                                                                 onClick={() => onToggleVariant(p.asset_id, variant.id, primaryId)}
                                                                                 className={`relative aspect-square overflow-hidden rounded border transition-colors ${selected ? "border-primary ring-1 ring-primary/60" : "border-glass-border hover:border-foreground/30"}`}
                                                                             >
-                                                                                <PreviewImage src={variant.url} alt={label} className="h-full w-full" noLightbox />
+                                                                                <AssetIndexPreview asset={{ ...p, variant_id: variant.id }} alt={label} />
                                                                                 {selected ? (
                                                                                     <span className="absolute right-1 top-1 grid h-4 w-4 place-items-center rounded-full bg-primary text-white">
                                                                                         <Check size={10} strokeWidth={3} />

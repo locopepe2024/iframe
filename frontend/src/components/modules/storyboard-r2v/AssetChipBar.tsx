@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { Check, ChevronDown, Images } from "lucide-react";
 import { useTranslations } from "next-intl";
-import PreviewImage from "@/components/shared/preview/PreviewImage";
+import { AssetIndexPreview } from "@/components/shared/AssetIndexPreview";
 import type { AssetReferenceIndexEntry } from "@/lib/api";
 import { projectReferenceIndex } from "@/lib/assetReferenceIndex";
 
@@ -87,7 +87,7 @@ export default function AssetChipBar({
                                                 onClick={() => onToggleVariant(asset.asset_id, variant.id, primaryId)}
                                                 className={`relative aspect-square min-h-11 overflow-hidden rounded border transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary ${active ? "border-primary ring-1 ring-primary/60" : "border-glass-border hover:border-foreground/40"}`}
                                             >
-                                                <PreviewImage src={variant.url} alt={label} className="h-full w-full" noLightbox />
+                                                <AssetIndexPreview asset={{ ...asset, variant_id: variant.id }} alt={label} />
                                                 {active ? <span className="absolute right-1 top-1 grid h-4 w-4 place-items-center rounded-full bg-primary text-white"><Check size={10} strokeWidth={3} /></span> : null}
                                             </button>
                                         );
