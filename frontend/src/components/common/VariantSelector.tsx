@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { ImageAsset, ImageVariant } from '@/store/projectStore';
 import { Trash2, Check, ChevronLeft, ChevronRight, Layers, X, Maximize2, Star, Save } from 'lucide-react';
-import { API_URL } from '@/lib/api';
+import { API_URL, authenticatedFetch } from '@/lib/api';
 import { getAssetUrl } from '@/lib/utils';
 import { useTranslations } from "next-intl";
 
@@ -20,6 +20,12 @@ interface VariantSelectorProps {
     generatingBatchSize?: number; // Persisted batch size from parent/store
     className?: string;
     aspectRatio?: string; // e.g., "9:16", "16:9", "1:1"
+    previewLocator?: {
+        scope: 'global' | 'series' | 'project';
+        containerId: string;
+        assetType: 'character' | 'scene' | 'prop';
+        assetId: string;
+    };
 }
 
 // Use the API_URL constant for consistent behavior
@@ -37,7 +43,8 @@ export const VariantSelector: React.FC<VariantSelectorProps> = ({
     isGenerating,
     generatingBatchSize: propGeneratingBatchSize,
     className = "",
-    aspectRatio = "9:16"
+    aspectRatio = "9:16",
+    previewLocator,
 }) => {
     const t = useTranslations("assets");
     const [batchSize, setBatchSize] = useState(1);
@@ -48,6 +55,7 @@ export const VariantSelector: React.FC<VariantSelectorProps> = ({
     const [variantName, setVariantName] = useState('');
     const [savingName, setSavingName] = useState(false);
     const [renameError, setRenameError] = useState(false);
+    const [previewUrls, setPreviewUrls] = useState<Record<string, string>>({});
     const prevIsGenerating = useRef(isGenerating);
 
     // Automatically save batchSize when generation starts
@@ -74,8 +82,9 @@ export const VariantSelector: React.FC<VariantSelectorProps> = ({
     }, [selectedVariant?.id, selectedVariant?.display_name]);
     const apiBase = getApiBaseUrl();
     const displayUrl = selectedVariant
-        ? getAssetUrl(selectedVariant.url)
+        ? (previewLocator ? previewUrls[selectedVariant.id] || '' : getAssetUrl(selectedVariant.url))
         : pendingDeletions.includes(asset?.selected_id || '') ? '' : getAssetUrl(currentImageUrl);
+    const fullImageUrl = selectedVariant ? getAssetUrl(selectedVariant.url) : getAssetUrl(currentImageUrl);
 
     useEffect(() => {
         if (pendingSelection && asset?.selected_id === pendingSelection) setPendingSelection(null);
@@ -93,6 +102,37 @@ export const VariantSelector: React.FC<VariantSelectorProps> = ({
             setPendingSelection(current => current === variantId ? null : current);
         });
     };
+
+    useEffect(() => {
+        if (!previewLocator || variants.length === 0) return;
+        const controller = new AbortController();
+        const objectUrls: string[] = [];
+        setPreviewUrls({});
+        variants.forEach((variant) => {
+            const params = new URLSearchParams({
+                scope: previewLocator.scope,
+                container_id: previewLocator.containerId,
+                asset_type: previewLocator.assetType,
+                asset_id: previewLocator.assetId,
+                variant_id: variant.id,
+            });
+            void authenticatedFetch(`${apiBase}/asset-index/preview?${params}`, { signal: controller.signal })
+                .then(async (response) => {
+                    if (!response.ok) throw new Error('Asset preview unavailable');
+                    const objectUrl = URL.createObjectURL(await response.blob());
+                    if (controller.signal.aborted) {
+                        URL.revokeObjectURL(objectUrl);
+                        return;
+                    }
+                    objectUrls.push(objectUrl);
+                    setPreviewUrls((current) => ({ ...current, [variant.id]: objectUrl }));
+                }).catch(() => undefined);
+        });
+        return () => {
+            controller.abort();
+            objectUrls.forEach((url) => URL.revokeObjectURL(url));
+        };
+    }, [apiBase, previewLocator?.scope, previewLocator?.containerId, previewLocator?.assetType, previewLocator?.assetId, variants.map((variant) => variant.id).join('|')]);
 
     const deleteVariant = (variantId: string) => {
         setPendingDeletions(current => [...current, variantId]);
@@ -130,7 +170,7 @@ export const VariantSelector: React.FC<VariantSelectorProps> = ({
             {/* Main Viewer */}
             <div
                 className={`relative w-full ${getAspectRatioClass()} bg-elevated rounded-lg overflow-hidden border border-glass-border group cursor-pointer`}
-                onClick={() => displayUrl && setZoomedImage(displayUrl)}
+                onClick={() => fullImageUrl && setZoomedImage(fullImageUrl)}
             >
                 {displayUrl ? (
                     <>
@@ -216,7 +256,7 @@ export const VariantSelector: React.FC<VariantSelectorProps> = ({
                             {variants.map((variant, index) => {
                                 const isSelected = variant.id === selectedId;
                                 const isFavorited = (variant as any).is_favorited || false;
-                                const url = getAssetUrl(variant.url);
+                                const url = previewLocator ? previewUrls[variant.id] : getAssetUrl(variant.url);
 
                                 return (
                                     <div
@@ -227,13 +267,13 @@ export const VariantSelector: React.FC<VariantSelectorProps> = ({
                                         `}
                                     >
                                         {/* Clickable image area */}
-                                        <img
+                                        {url ? <img
                                             src={url}
                                             alt={variant.display_name || `未命名素材 ${index + 1}`}
                                             loading="lazy"
                                             className="h-20 w-full object-cover cursor-pointer"
                                             onClick={() => selectVariant(variant.id)}
-                                        />
+                                        /> : <div className="h-20 w-full bg-elevated" />}
                                         <span className="block truncate bg-surface px-1 py-1 text-[0.6875rem] text-foreground" title={variant.display_name || `未命名素材 ${index + 1}`}>
                                             {variant.display_name || `未命名素材 ${index + 1}`}
                                         </span>

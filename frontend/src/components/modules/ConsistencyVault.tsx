@@ -1245,6 +1245,12 @@ function CharacterDetailModal({ asset, type, onClose, onUpdateDescription, onRen
                                 isGenerating={isGenerating}
                                 aspectRatio="16:9"
                                 className="h-full"
+                                previewLocator={currentProject ? {
+                                    scope: asset.source === "series" && currentProject.series_id ? "series" : "project",
+                                    containerId: asset.source === "series" && currentProject.series_id ? currentProject.series_id : currentProject.id,
+                                    assetType: type,
+                                    assetId: asset.id,
+                                } : undefined}
                             />
                         ) : (
                             <VideoVariantSelector
