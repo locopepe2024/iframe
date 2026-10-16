@@ -17,6 +17,8 @@ interface AssetDrawerProps {
     onSelectAsset: (type: string, name: string) => void;
     selectedVariantIds?: Record<string, string[]>;
     onToggleVariant?: (assetId: string, variantId: string, primaryVariantId?: string) => void;
+    frameSlot?: "first" | "last";
+    onSelectFrameVariant?: (asset: AssetReferenceIndexEntry, variantId: string) => void;
 }
 
 function getAssetThumbnail(item: AssetReferenceIndexEntry): string | null {
@@ -35,6 +37,8 @@ export default function AssetDrawer({
     onSelectAsset,
     selectedVariantIds = {},
     onToggleVariant,
+    frameSlot,
+    onSelectFrameVariant,
 }: AssetDrawerProps) {
     const t = useTranslations("storyboardR2V");
     const entries = projectReferenceIndex(assetIndex, legacyCharacters, legacyScenes, legacyProps);
@@ -77,7 +81,32 @@ export default function AssetDrawer({
 
                         {/* Content */}
                         <div className="flex-1 overflow-y-auto p-4 space-y-5">
-                            {!hasAnyAssets ? (
+                            {frameSlot ? (
+                                <div className="space-y-3">
+                                    <p className="text-xs text-text-secondary">选择{frameSlot === "first" ? "首帧" : "尾帧"}资产变体</p>
+                                    {entries.filter((entry) => entry.variants.length > 0).map((entry) => (
+                                        <div key={`${entry.asset_type}:${entry.asset_id}`} className="rounded-lg border border-glass-border p-2">
+                                            <div className="mb-2 truncate text-xs text-foreground">{entry.name}</div>
+                                            <div className="grid grid-cols-3 gap-2">
+                                                {entry.variants.map((variant) => (
+                                                    <button
+                                                        key={variant.id}
+                                                        type="button"
+                                                        onClick={() => {
+                                                            onSelectFrameVariant?.(entry, variant.id);
+                                                            onClose();
+                                                        }}
+                                                        aria-label={`${entry.name} 变体 ${variant.id}`}
+                                                        className="overflow-hidden rounded-md border border-glass-border hover:border-primary/55"
+                                                    >
+                                                        <AssetIndexPreview asset={{ ...entry, variant_id: variant.id }} alt={entry.name} />
+                                                    </button>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            ) : !hasAnyAssets ? (
                                 <div className="text-center py-8">
                                     <p className="text-sm text-text-secondary">{t("noAssetsAvailable")}</p>
                                     <p className="text-xs text-text-secondary/60 mt-1">{t("noAssetsHint")}</p>

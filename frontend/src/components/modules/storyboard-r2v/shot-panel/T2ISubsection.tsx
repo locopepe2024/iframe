@@ -159,7 +159,7 @@ interface HeroProps {
 
 function Hero({
     t, promptIsEmpty, generating, inFlightTaskId, inFlightStatus, onGenerate, onUpload,
-    frameLabel,
+    onSelectAsset, frameLabel,
 }: HeroProps) {
     const [uploading, setUploading] = useState(false);
     const [uploadError, setUploadError] = useState<T2IUploadError | null>(null);
@@ -237,7 +237,7 @@ function Hero({
                     </div>
                     {/* Title — display tier，是 hero 的视觉焦点 */}
                     <div className="font-display text-display-sm font-semibold text-foreground">
-                        {t("t2iHeroTitle")}
+                        {frameLabel === "首帧" ? t("t2iHeroTitle") : "添加尾帧候选"}
                     </div>
                     <p className="max-w-[58ch] font-sans text-body-sm leading-relaxed text-text-secondary">
                         {t("t2iHeroBody")}
@@ -273,6 +273,18 @@ function Hero({
                             )}
                             {uploading ? t("t2iHeroUploadingLabel") : t("t2iHeroUploadLabel")}
                         </button>
+
+                        {onSelectAsset ? (
+                            <button
+                                type="button"
+                                onClick={onSelectAsset}
+                                disabled={uploadDisabled}
+                                className="inline-flex min-h-[36px] items-center gap-1.5 rounded-md border border-glass-border bg-black/20 px-3 py-1.5 font-mono text-chrome font-medium text-text-secondary hover:border-primary/45 hover:bg-primary/10 hover:text-primary disabled:opacity-50"
+                            >
+                                <ImageIcon size={13} aria-hidden="true" />
+                                选择资产变体
+                            </button>
+                        ) : null}
 
                         <span className="font-mono text-chrome-sm tracking-tight text-text-muted">
                             {t("t2iHeroDropHint")}
