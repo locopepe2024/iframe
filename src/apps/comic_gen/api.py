@@ -86,6 +86,7 @@ from .llm import ScriptProcessor, DEFAULT_STORYBOARD_POLISH_PROMPT, DEFAULT_VIDE
 from ...utils.oss_utils import OSSImageUploader, is_object_key, managed_object_key_from_url, sign_oss_urls_in_data
 from ...utils.uniart_catalog import fetch_uniart_catalog, normalize_uniart_catalog
 from ...utils import setup_logging, get_user_data_dir
+from ...utils.storage_config import media_root, storage_backend
 from fastapi.responses import FileResponse, JSONResponse, Response
 from pathlib import Path
 from dotenv import load_dotenv, set_key
@@ -196,28 +197,29 @@ async def add_cache_control_header(request: Request, call_next):
     return response
 
 # Create output directory if it doesn't exist
-os.makedirs("output", exist_ok=True)
-os.makedirs("output/uploads", exist_ok=True)
-os.makedirs("output/video", exist_ok=True)
-os.makedirs("output/assets", exist_ok=True)
+MEDIA_ROOT = media_root()
+os.makedirs(MEDIA_ROOT, exist_ok=True)
+os.makedirs(os.path.join(MEDIA_ROOT, "uploads"), exist_ok=True)
+os.makedirs(os.path.join(MEDIA_ROOT, "video"), exist_ok=True)
+os.makedirs(os.path.join(MEDIA_ROOT, "assets"), exist_ok=True)
 
 # Mount static files with multiple aliases to handle plural/singular inconsistencies
 # Legacy paths in projects.json often use 'outputs/videos' or 'outputs/assets'
-app.mount("/files/outputs/videos", StaticFiles(directory="output/video"), name="files_outputs_videos")
-app.mount("/files/outputs/assets", StaticFiles(directory="output/assets"), name="files_outputs_assets")
-app.mount("/files/outputs", StaticFiles(directory="output"), name="files_outputs")
-app.mount("/files/videos", StaticFiles(directory="output/video"), name="files_videos")
-app.mount("/files/assets", StaticFiles(directory="output/assets"), name="files_assets")
-app.mount("/files", StaticFiles(directory="output"), name="files")
+app.mount("/files/outputs/videos", StaticFiles(directory=os.path.join(MEDIA_ROOT, "video")), name="files_outputs_videos")
+app.mount("/files/outputs/assets", StaticFiles(directory=os.path.join(MEDIA_ROOT, "assets")), name="files_outputs_assets")
+app.mount("/files/outputs", StaticFiles(directory=MEDIA_ROOT), name="files_outputs")
+app.mount("/files/videos", StaticFiles(directory=os.path.join(MEDIA_ROOT, "video")), name="files_videos")
+app.mount("/files/assets", StaticFiles(directory=os.path.join(MEDIA_ROOT, "assets")), name="files_assets")
+app.mount("/files", StaticFiles(directory=MEDIA_ROOT), name="files")
 
 # Ensure playground output directories exist
-os.makedirs("output/playground/images", exist_ok=True)
-os.makedirs("output/playground/videos", exist_ok=True)
-app.mount("/files/playground", StaticFiles(directory="output/playground"), name="files_playground")
+os.makedirs(os.path.join(MEDIA_ROOT, "playground", "images"), exist_ok=True)
+os.makedirs(os.path.join(MEDIA_ROOT, "playground", "videos"), exist_ok=True)
+app.mount("/files/playground", StaticFiles(directory=os.path.join(MEDIA_ROOT, "playground")), name="files_playground")
 
 
 # Initialize pipeline
-pipeline = ComicGenPipeline()
+pipeline = ComicGenPipeline(output_root=MEDIA_ROOT)
 
 
 @app.middleware("http")
@@ -309,8 +311,11 @@ def debug_config():
         "oss_configured": uploader.is_configured,
         "oss_bucket_initialized": uploader.bucket is not None,
         "oss_base_path": os.getenv("OSS_BASE_PATH", "lumenx"),
-        "output_dir_exists": os.path.exists("output"),
-        "output_contents": os.listdir("output") if os.path.exists("output") else [],
+        "media_root": MEDIA_ROOT,
+        "storage_backend": storage_backend(),
+        "media_root": MEDIA_ROOT,
+        "output_dir_exists": os.path.exists(MEDIA_ROOT),
+        "output_contents": os.listdir(MEDIA_ROOT) if os.path.exists(MEDIA_ROOT) else [],
         "cwd": os.getcwd(),
         "env_vars_present": {
             "OSS_ENDPOINT": bool(os.getenv("OSS_ENDPOINT")),
@@ -350,6 +355,7 @@ def signed_response(data):
         processed_data = sign_studio_media_paths(
             processed_data,
             studio_user.owner_profile_id,
+            output_root=pipeline.output_root,
         )
     
     # Check if OSS is configured
@@ -396,7 +402,7 @@ def private_no_store_signed_response(data):
 
 @app.get("/provider/media/{owner_key}/{relative_path:path}")
 def get_provider_media(owner_key: str, relative_path: str, expires: int = 0, signature: str = ""):
-    path = verify_provider_media(owner_key, relative_path, expires, signature)
+    path = verify_provider_media(owner_key, relative_path, expires, signature, output_root=pipeline.output_root)
     return FileResponse(path, headers={"Cache-Control": "private, no-store"})
 
 
@@ -409,15 +415,15 @@ def get_studio_media(
     preview: int = 0,
 ):
     if preview:
-        source_path = verify_studio_media_preview(owner_key, relative_path, preview, expires, signature)
-        owner_root = os.path.join("output", "users", owner_key, "studio")
+        source_path = verify_studio_media_preview(owner_key, relative_path, preview, expires, signature, output_root=pipeline.output_root)
+        owner_root = os.path.join(pipeline.output_root, "users", owner_key, "studio")
         try:
             path = create_media_thumbnail(source_path, owner_root, preview)
         except (OSError, ValueError) as exc:
             raise HTTPException(status_code=415, detail="A supported image or video is required for preview") from exc
         headers = {"Cache-Control": "private, max-age=1800"}
     else:
-        path = verify_studio_media(owner_key, relative_path, expires, signature)
+        path = verify_studio_media(owner_key, relative_path, expires, signature, output_root=pipeline.output_root)
         headers = None
     if not os.path.isfile(path):
         raise HTTPException(status_code=404, detail="Media not found")
@@ -449,7 +455,7 @@ def get_owned_playground_media(
 def _owned_local_media(owner_key: str, relative_path: str, preview: int, user: UserContext, area: str):
     if owner_key != studio_owner_key(user.owner_profile_id):
         raise HTTPException(status_code=404, detail="Media not found")
-    owner_root = os.path.realpath(os.path.join("output", "users", owner_key, area))
+    owner_root = os.path.realpath(os.path.join(pipeline.output_root, "users", owner_key, area))
     path = os.path.realpath(os.path.join(owner_root, relative_path))
     if not path.startswith(owner_root + os.sep) or not os.path.isfile(path):
         raise HTTPException(status_code=404, detail="Media not found")
@@ -463,10 +469,10 @@ def _owned_local_media(owner_key: str, relative_path: str, preview: int, user: U
 
 
 def _studio_upload_target(user: UserContext, filename: str) -> Tuple[str, str]:
-    upload_dir = studio_media_dir(user.owner_profile_id, "uploads")
+    upload_dir = studio_media_dir(user.owner_profile_id, "uploads", output_root=pipeline.output_root)
     os.makedirs(upload_dir, exist_ok=True)
     absolute_path = os.path.join(upload_dir, filename)
-    stored_path = os.path.relpath(absolute_path, "output")
+    stored_path = os.path.relpath(absolute_path, pipeline.output_root)
     return absolute_path, stored_path
 
 
@@ -589,6 +595,7 @@ def upload_file(
         oss_key = uploader.upload_file(
             file_path,
             sub_path=f"users/{studio_owner_key(user.owner_profile_id)}/studio/uploads",
+            output_root=pipeline.output_root,
         )
         storage_key = oss_key or stored_path
         from ..media_registry import register_media
@@ -641,7 +648,7 @@ def upload_asset(
         
         # 2. Upload to OSS
         uploader = OSSImageUploader()
-        oss_url = uploader.upload_image(file_path)
+        oss_url = uploader.upload_image(file_path, output_root=pipeline.output_root)
         if not oss_url:
             oss_url = stored_path
         
@@ -1885,6 +1892,13 @@ class EnvConfig(ProviderRoutingConfig):
     OSS_ENDPOINT: Optional[str] = None
     OSS_BASE_PATH: Optional[str] = None
     OSS_ENABLE: bool = True
+    IFRAME_MEDIA_ROOT: Optional[str] = None
+    IFRAME_STORAGE_BACKEND: Optional[Literal["local", "cos", "oss"]] = None
+    PROVIDER_MEDIA_PUBLIC_BASE_URL: Optional[str] = None
+    PROVIDER_MEDIA_URL_TTL_SECONDS: Optional[int] = Field(default=None, ge=1)
+    UNIART_VIDEO_COS_BUCKET: Optional[str] = None
+    UNIART_VIDEO_COS_REGION: Optional[str] = None
+    UNIART_VIDEO_COS_DOMAIN: Optional[str] = None
     KLING_ACCESS_KEY: Optional[str] = None
     KLING_SECRET_KEY: Optional[str] = None
     VIDU_API_KEY: Optional[str] = None
@@ -2055,6 +2069,15 @@ def update_env_config(
             if field in SECRET_FIELDS and _MASK_CHAR in str(config_dict[field]):
                 config_dict.pop(field, None)
 
+        if "IFRAME_MEDIA_ROOT" in config_dict:
+            configured_root = str(config_dict["IFRAME_MEDIA_ROOT"]).strip()
+            if not configured_root:
+                raise ValueError("IFRAME_MEDIA_ROOT must not be empty")
+        if "IFRAME_STORAGE_BACKEND" in config_dict:
+            configured_backend = str(config_dict["IFRAME_STORAGE_BACKEND"]).strip().lower()
+            if configured_backend not in {"local", "cos", "oss"}:
+                raise ValueError("IFRAME_STORAGE_BACKEND must be one of: local, cos, oss")
+
         # Process endpoint overrides: validate keys against known providers
         from ...utils.endpoints import PROVIDER_DEFAULTS
         allowed_keys = {f"{p}_BASE_URL" for p in PROVIDER_DEFAULTS}
@@ -2087,7 +2110,14 @@ def update_env_config(
             logger.warning(f"OSS reset failed (non-critical): {oss_e}")
 
         config_path = get_user_config_path()
-        return {"status": "success", "message": f"Configuration saved to {config_path}"}
+        return {
+            "status": "success",
+            "message": f"Configuration saved to {config_path}",
+            "restart_required": any(key in config_dict for key in (
+                "IFRAME_MEDIA_ROOT", "IFRAME_STORAGE_BACKEND",
+                "PROVIDER_MEDIA_PUBLIC_BASE_URL", "PROVIDER_MEDIA_URL_TTL_SECONDS",
+            )),
+        }
     except Exception as e:
         logger.exception("Failed to save environment configuration")
         raise HTTPException(status_code=500, detail=str(e))
@@ -6527,6 +6557,13 @@ def get_env_config(identity: UserContext = Depends(require_user_context)):
             "OSS_ENDPOINT": os.getenv("OSS_ENDPOINT", ""),
             "OSS_BASE_PATH": os.getenv("OSS_BASE_PATH", ""),
             "OSS_ENABLE": is_oss_enabled(),
+            "IFRAME_MEDIA_ROOT": os.getenv("IFRAME_MEDIA_ROOT", "output"),
+            "IFRAME_STORAGE_BACKEND": storage_backend(),
+            "PROVIDER_MEDIA_PUBLIC_BASE_URL": os.getenv("PROVIDER_MEDIA_PUBLIC_BASE_URL", os.getenv("UNIART_MEDIA_BASE_URL", "")),
+            "PROVIDER_MEDIA_URL_TTL_SECONDS": int(os.getenv("PROVIDER_MEDIA_URL_TTL_SECONDS", "1800")),
+            "UNIART_VIDEO_COS_BUCKET": os.getenv("UNIART_VIDEO_COS_BUCKET", ""),
+            "UNIART_VIDEO_COS_REGION": os.getenv("UNIART_VIDEO_COS_REGION", ""),
+            "UNIART_VIDEO_COS_DOMAIN": os.getenv("UNIART_VIDEO_COS_DOMAIN", ""),
             "MANAGED_COS_CONFIGURED": bool(os.getenv("MANAGED_STORAGE_BASE_URL") and os.getenv("MANAGED_STORAGE_SERVICE_TOKEN")),
             "MULERUN_CLI_LOGGED_IN": _check_mulerun_cli_status(),
             "KLING_PROVIDER_MODE": _normalize_provider_mode(os.getenv("KLING_PROVIDER_MODE")),
