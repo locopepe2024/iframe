@@ -3675,6 +3675,9 @@ class UpdateFrameWorkbenchRequest(BaseModel):
     workbench_tab_mode: Optional[str] = None  # 't2i_i2v' | 'direct_r2v'
     t2i_image_urls: Optional[List[str]] = None  # full ordered history, server caps at 10 FIFO
     t2i_selected_index: Optional[int] = None  # active首帧 index, clamped to range
+    last_frame_image_urls: Optional[List[str]] = None
+    last_frame_selected_index: Optional[int] = None
+    video_generation_mode: Optional[str] = None
     workbench_generate_count: Optional[int] = None  # batch size, clamped to [1, 6]
     video_model: Optional[str] = None
     workbench_generate_audio: Optional[bool] = None
@@ -3698,6 +3701,9 @@ def update_frame_workbench(
             workbench_tab_mode=request.workbench_tab_mode,
             t2i_image_urls=request.t2i_image_urls,
             t2i_selected_index=request.t2i_selected_index,
+            last_frame_image_urls=request.last_frame_image_urls,
+            last_frame_selected_index=request.last_frame_selected_index,
+            video_generation_mode=request.video_generation_mode,
             workbench_generate_count=request.workbench_generate_count,
             video_model=request.video_model,
             workbench_generate_audio=request.workbench_generate_audio,
@@ -5095,6 +5101,7 @@ async def upload_t2i_frame(
     script_id: str,
     frame_id: str,
     file: UploadFile = File(...),
+    slot: Literal["first", "last"] = "first",
     user: UserContext = Depends(require_studio_user),
 ):
     """Upload an external image as a T2I首帧 candidate for an I2V flow.
@@ -5120,7 +5127,7 @@ async def upload_t2i_frame(
 
         # Stream-to-disk with explicit byte cap so we never load >8 MB
         # into memory if a client lies about Content-Length.
-        filename = f"t2i_{uuid.uuid4().hex}{ext}"
+        filename = f"{slot}_frame_{uuid.uuid4().hex}{ext}"
         abs_path, rel_path = _studio_upload_target(user, filename)
         size = 0
         try:
@@ -5153,7 +5160,7 @@ async def upload_t2i_frame(
         loop = asyncio.get_event_loop()
         frame = await loop.run_in_executor(
             None,
-            partial(pipeline.upload_t2i_frame, script_id, frame_id, rel_path),
+            partial(pipeline.upload_last_frame if slot == "last" else pipeline.upload_t2i_frame, script_id, frame_id, rel_path),
         )
         if frame is None:
             # Roll back the file — frame/script gone, no reference will exist

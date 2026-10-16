@@ -204,6 +204,7 @@ export function frameToShotNode(
             || frame.action_description || "",
         promptIsOptimized: frame.workbench_prompt_is_optimized === true,
         tabMode: (frame.workbench_tab_mode as "t2i_i2v" | "direct_r2v" | undefined) ?? defaultTabMode,
+        videoMode: frame.video_generation_mode as ShotNode["videoMode"] | undefined,
         videoModel: typeof frame.video_model === "string" ? frame.video_model : undefined,
         generateAudio: typeof frame.workbench_generate_audio === "boolean"
             ? frame.workbench_generate_audio
@@ -228,6 +229,11 @@ export function frameToShotNode(
         t2iSelectedIndex: typeof frame.t2i_selected_index === "number"
             ? frame.t2i_selected_index
             : 0,
+        lastFrameImageUrls: Array.isArray(frame.last_frame_image_urls) ? frame.last_frame_image_urls : [],
+        lastFrameSelectedIndex: typeof frame.last_frame_selected_index === "number" ? frame.last_frame_selected_index : 0,
+        lastFrameUrl: Array.isArray(frame.last_frame_image_urls) && frame.last_frame_image_urls.length
+            ? frame.last_frame_image_urls[typeof frame.last_frame_selected_index === "number" ? frame.last_frame_selected_index : 0]
+            : undefined,
         duration: frame.duration ?? frame.director_shot_context?.shot?.duration_seconds ?? null,
         visualDescription: frame.visual_description ?? null,
         assembledPrompt: frame.assembled_prompt ?? null,

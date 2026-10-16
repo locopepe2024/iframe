@@ -435,6 +435,9 @@ class ComicGenPipeline(StudioOwnerMixin):
         workbench_tab_mode: Optional[str] = None,
         t2i_image_urls: Optional[List[str]] = None,
         t2i_selected_index: Optional[int] = None,
+        last_frame_image_urls: Optional[List[str]] = None,
+        last_frame_selected_index: Optional[int] = None,
+        video_generation_mode: Optional[str] = None,
         workbench_generate_count: Optional[int] = None,
         video_model: Optional[str] = None,
         workbench_generate_audio: Optional[bool] = None,
@@ -491,6 +494,16 @@ class ComicGenPipeline(StudioOwnerMixin):
                     frame.t2i_selected_index = 0
                 else:
                     frame.t2i_selected_index = max(0, min(int(t2i_selected_index), len(urls) - 1))
+            if last_frame_image_urls is not None:
+                cleaned_last = [u for u in last_frame_image_urls if isinstance(u, str) and u.strip()]
+                frame.last_frame_image_urls = cleaned_last[-self._T2I_HISTORY_LIMIT:]
+            if last_frame_selected_index is not None:
+                urls = frame.last_frame_image_urls or []
+                frame.last_frame_selected_index = max(0, min(int(last_frame_selected_index), len(urls) - 1)) if urls else 0
+            if video_generation_mode is not None:
+                if video_generation_mode not in ("t2v", "i2v", "first_last_frame", "r2v"):
+                    raise ValueError("invalid video_generation_mode")
+                frame.video_generation_mode = video_generation_mode
             if workbench_generate_count is not None:
                 frame.workbench_generate_count = max(
                     1, min(int(workbench_generate_count), self._MAX_GENERATE_COUNT)
@@ -5517,6 +5530,19 @@ class ComicGenPipeline(StudioOwnerMixin):
 
         self._save_data()
         return frame
+
+    def upload_last_frame(self, script_id: str, frame_id: str, file_path: str) -> Optional["StoryboardFrame"]:
+        with self._save_lock:
+            script = self.scripts.get(script_id)
+            frame = next((f for f in (script.frames if script else []) if f.id == frame_id), None)
+            if not frame:
+                return None
+            urls = list(frame.last_frame_image_urls or []) + [file_path]
+            frame.last_frame_image_urls = urls[-self._T2I_HISTORY_LIMIT:]
+            frame.last_frame_selected_index = len(frame.last_frame_image_urls) - 1
+            frame.updated_at = time.time()
+            self._save_data()
+            return frame
 
     def refine_batch_generator(self, script_id: str):
         """Phase 2: Generator that yields SSE events while refining all frames."""

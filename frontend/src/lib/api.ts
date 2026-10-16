@@ -746,11 +746,11 @@ export const api = {
      *  The caller does cheap front-side checks first to avoid a
      *  round-trip on obvious rejects (file type / size from the File
      *  object) and surfaces backend errors verbatim otherwise. */
-    uploadT2IFrame: async (scriptId: string, frameId: string, file: File) => {
+    uploadT2IFrame: async (scriptId: string, frameId: string, file: File, slot: "first" | "last" = "first") => {
         const formData = new FormData();
         formData.append("file", file);
         const res = await axios.post(
-            `${API_URL}/projects/${scriptId}/frames/${frameId}/upload_t2i`,
+            `${API_URL}/projects/${scriptId}/frames/${frameId}/upload_t2i?slot=${slot}`,
             formData,
             { headers: { "Content-Type": "multipart/form-data" } },
         );
@@ -771,6 +771,9 @@ export const api = {
             workbench_tab_mode?: "t2i_i2v" | "direct_r2v";
             t2i_image_urls?: string[];
             t2i_selected_index?: number;
+            last_frame_image_urls?: string[];
+            last_frame_selected_index?: number;
+            video_generation_mode?: "t2v" | "i2v" | "first_last_frame" | "r2v";
             workbench_generate_count?: number;
             video_model?: string;
             workbench_generate_audio?: boolean;

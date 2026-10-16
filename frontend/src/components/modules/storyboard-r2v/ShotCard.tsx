@@ -99,6 +99,9 @@ export interface ShotNode {
      *  localStorage from growing without bound. */
     t2iImageUrls?: string[];
     t2iSelectedIndex?: number;
+    lastFrameImageUrls?: string[];
+    lastFrameSelectedIndex?: number;
+    lastFrameTaskId?: string;
 
     // Video stage (shared). The single-task fields stay for "the most
     // recent attempt" but the candidates panel reads from the shot's
