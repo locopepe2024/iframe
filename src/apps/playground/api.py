@@ -29,6 +29,7 @@ from ..user_config import get_user_config_store
 from ..media_registry import register_media
 from ...utils.managed_media_root import ManagedMediaRoot
 from ...utils import get_logger
+from ...utils.storage_config import media_root
 
 logger = get_logger(__name__)
 
@@ -45,6 +46,7 @@ def _storage_for(identity: UserContext) -> PlaygroundStorage:
             storage = PlaygroundStorage(
                 owner_user_id=identity.user_id,
                 owner_profile_id=identity.owner_profile_id,
+                output_root=media_root(),
             )
             _storages[identity.owner_profile_id] = storage
             # Only recover tasks read from disk on first access after restart.

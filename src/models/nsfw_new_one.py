@@ -43,7 +43,10 @@ def _reference_url(value: str) -> str:
     if value.startswith(("http://", "https://")):
         return value
     path = value if os.path.isfile(value) else os.path.join("output", value)
-    return signed_provider_media_url(path)
+    absolute = os.path.abspath(path)
+    marker = f"{os.sep}users{os.sep}"
+    root = absolute.split(marker, 1)[0] if marker in absolute else "output"
+    return signed_provider_media_url(absolute) if root == "output" else signed_provider_media_url(absolute, output_root=root)
 
 
 def _size(value: str | None) -> tuple[str, str | None]:
