@@ -120,6 +120,20 @@ def test_project_cover_uses_current_webp_delivery(monkeypatch):
     assert api._project_cover_url(script, 'owner-1') == '/cover/owner-1/320.webp'
 
 
+def test_project_asset_covers_use_webp_delivery(monkeypatch):
+    from src.apps.comic_gen import api
+
+    payload = {
+        'characters': [],
+        'scenes': [{'id': 'scene-1', 'image_url': 'lumenx/scenes/scene.png'}],
+        'props': [{'id': 'prop-1', 'image_url': 'lumenx/props/prop.jpg'}],
+    }
+    monkeypatch.setattr(api, '_owned_media_cover_url', lambda value, owner, preview: f'/preview/{preview}.webp')
+    api._add_asset_cover_urls(payload, 'owner-1')
+    assert payload['scenes'][0]['cover_url'] == '/preview/160.webp'
+    assert payload['props'][0]['cover_url'] == '/preview/160.webp'
+
+
 def test_admin_storage_settings_persist_without_live_cutover(monkeypatch):
     from src.apps.comic_gen import api
     monkeypatch.setenv('LUMENX_ENABLE_ADMIN_ENV_CONFIG', 'true')

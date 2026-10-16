@@ -429,6 +429,71 @@ def _project_cover_url(script: Script, owner_profile_id: str) -> Optional[str]:
         return None
 
 
+def _asset_cover_url(asset: Any, asset_type: str, owner_profile_id: str) -> Optional[str]:
+    variants = []
+    if asset_type == "character":
+        for name in ("reference_sheet", "full_body_asset", "three_view_asset", "headshot_asset"):
+            unit = getattr(asset, name, None)
+            variants.extend(getattr(unit, "image_variants", None) or getattr(unit, "variants", None) or [] if unit else [])
+    else:
+        unit = getattr(asset, "image_asset", None)
+        variants = list(getattr(unit, "variants", None) or []) if unit else []
+    cover_id = getattr(asset, "cover_variant_id", None)
+    selected_id = getattr(getattr(asset, "image_asset", None), "selected_id", None)
+    variant = next((item for item in variants if item.id == cover_id), None) if cover_id else None
+    variant = variant or (next((item for item in variants if item.id == selected_id), None) if selected_id else None)
+    raw = image_variant_storage_key(variant) if variant else None
+    raw = raw or getattr(asset, "image_url", None) or getattr(asset, "full_body_image_url", None)
+    if not raw:
+        return None
+    try:
+        return _owned_media_cover_url(raw, owner_profile_id, 160)
+    except HTTPException:
+        return None
+
+
+def _add_asset_cover_urls(payload: Dict[str, Any], owner_profile_id: str) -> None:
+    for key, asset_type in (("characters", "character"), ("scenes", "scene"), ("props", "prop")):
+        for asset in payload.get(key, []):
+            variants = []
+            if asset_type == "character":
+                for name in ("reference_sheet", "full_body_asset", "three_view_asset", "headshot_asset"):
+                    unit = asset.get(name) or {}
+                    variants.extend(unit.get("image_variants", unit.get("variants", [])) or [])
+            else:
+                variants = (asset.get("image_asset") or {}).get("variants", []) or []
+            cover_id = asset.get("cover_variant_id")
+            selected_id = (asset.get("image_asset") or {}).get("selected_id")
+            selected = next((item for item in variants if item.get("id") == cover_id), None) if cover_id else None
+            selected = selected or (next((item for item in variants if item.get("id") == selected_id), None) if selected_id else None)
+            raw = (selected or {}).get("storage_key") or (selected or {}).get("url")
+            raw = raw or asset.get("image_url") or asset.get("full_body_image_url")
+            if raw:
+                try:
+                    asset["cover_url"] = _owned_media_cover_url(raw, owner_profile_id, 160)
+                except HTTPException:
+                    asset["cover_url"] = None
+
+
+def _add_storyboard_cover_urls(payload: Dict[str, Any], owner_profile_id: str) -> None:
+    """Expose stable WebP covers for storyboard frames in series views."""
+    for frame in payload.get("frames", []):
+        source = frame.get("rendered_image_url") or frame.get("image_url")
+        if not source:
+            for key in ("rendered_image_asset", "image_asset"):
+                variants = (frame.get(key) or {}).get("variants", [])
+                selected_id = (frame.get(key) or {}).get("selected_id")
+                selected = next((item for item in variants if item.get("id") == selected_id), None)
+                source = (selected or (variants[0] if variants else {})).get("url")
+                if source:
+                    break
+        if source:
+            try:
+                frame["cover_url"] = _owned_media_cover_url(source, owner_profile_id, 320)
+            except HTTPException:
+                frame["cover_url"] = None
+
+
 def private_no_store_signed_response(data):
     """Return owner-scoped mutable data without allowing intermediary caching."""
     response = signed_response(data)
@@ -1046,7 +1111,11 @@ async def extract_preview(script_id: str, request: ReparseProjectRequest):
 def list_projects(user: UserContext = Depends(require_studio_user)):
     """Lists all projects from backend storage."""
     scripts = pipeline.list_scripts(user.owner_profile_id)
-    payload = [_script_response_dump(script) | {"cover_url": _project_cover_url(script, user.owner_profile_id)} for script in scripts]
+    payload = []
+    for script in scripts:
+        item = _script_response_dump(script) | {"cover_url": _project_cover_url(script, user.owner_profile_id)}
+        _add_asset_cover_urls(item, user.owner_profile_id)
+        payload.append(item)
     return signed_response(payload)
 
 
@@ -1122,14 +1191,15 @@ def list_series(user: UserContext = Depends(require_studio_user)):
 
 
 @app.get("/series/{series_id}")
-def get_series(series_id: str):
+def get_series(series_id: str, user: UserContext = Depends(require_studio_user)):
     """Get Series details including assets and episode list."""
-    series = pipeline.get_series(series_id)
+    series = pipeline.get_series(series_id, user.owner_profile_id)
     if not series:
         raise HTTPException(status_code=404, detail="Series not found")
     # Include episode summaries
     episodes = pipeline.get_series_episodes(series_id)
     result = series.model_dump()
+    _add_asset_cover_urls(result, user.owner_profile_id)
     result["episodes"] = [
         {
             "id": ep.id,
@@ -1275,7 +1345,12 @@ def get_series_episodes(series_id: str, user: UserContext = Depends(require_stud
     """Get all episodes in a Series."""
     try:
         episodes = pipeline.get_series_episodes(series_id)
-        payload = [_script_response_dump(episode) | {"cover_url": _project_cover_url(episode, user.owner_profile_id)} for episode in episodes]
+        payload = []
+        for episode in episodes:
+            item = _script_response_dump(episode) | {"cover_url": _project_cover_url(episode, user.owner_profile_id)}
+            _add_asset_cover_urls(item, user.owner_profile_id)
+            _add_storyboard_cover_urls(item, user.owner_profile_id)
+            payload.append(item)
         return signed_response(payload)
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
@@ -1357,16 +1432,18 @@ def update_series_model_settings(series_id: str, settings: UpdateModelSettingsRe
 # ============================================================
 
 @app.get("/series/{series_id}/assets")
-def get_series_assets(series_id: str):
+def get_series_assets(series_id: str, user: UserContext = Depends(require_studio_user)):
     """Get all shared assets from a Series."""
-    series = pipeline.get_series(series_id)
+    series = pipeline.get_series(series_id, user.owner_profile_id)
     if not series:
         raise HTTPException(status_code=404, detail="Series not found")
-    return signed_response({
+    payload = {
         "characters": [c.model_dump() for c in series.characters],
         "scenes": [s.model_dump() for s in series.scenes],
         "props": [p.model_dump() for p in series.props],
-    })
+    }
+    _add_asset_cover_urls(payload, user.owner_profile_id)
+    return signed_response(payload)
 
 
 @app.delete("/series/{series_id}/assets/{asset_type}/{asset_id}")
@@ -2200,7 +2277,7 @@ def update_env_config(
 
 
 @app.get("/projects/{script_id}")
-def get_project(script_id: str):
+def get_project(script_id: str, user: UserContext = Depends(require_studio_user)):
     """Retrieves a project by ID. When the project belongs to a
     Series, the response merges series-shared characters / scenes /
     props on top of the episode-local lists. Each item carries a
@@ -2213,7 +2290,15 @@ def get_project(script_id: str):
     Response model dropped from `Script` because the `source` field
     is a presentation-layer concern (never persisted, derived from
     container membership at read time)."""
-    script = pipeline.get_script(script_id)
+    # FastAPI supplies ``user`` for HTTP requests. Several mutation handlers
+    # reuse this response builder directly, so resolve the active workspace
+    # user when called internally instead of treating Depends as a context.
+    resolved_user = user if isinstance(user, UserContext) else current_studio_user()
+    script = (
+        pipeline.get_script(script_id, resolved_user.owner_profile_id)
+        if resolved_user
+        else pipeline.get_script(script_id)
+    )
     if not script:
         raise HTTPException(status_code=404, detail="Project not found")
 
@@ -2273,6 +2358,7 @@ def get_project(script_id: str):
     # Global assets are intentionally opt-in. They enter a series only through
     # the explicit /series/{id}/assets/import-from-library action; merely
     # reading an episode must not make every global asset appear in it.
+    _add_asset_cover_urls(payload, resolved_user.owner_profile_id if resolved_user else script.owner_profile_id or "")
     return signed_response(payload)
 
 
