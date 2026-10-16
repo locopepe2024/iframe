@@ -58,7 +58,7 @@ export default function AssetCard({ asset, type }: AssetCardProps) {
       ) : null}
       <div className="aspect-square bg-elevated/50 flex items-center justify-center overflow-hidden">
         {imageUrl ? (
-          <img src={imageUrl} alt={asset.name} className="w-full h-full object-cover" />
+          <img src={imageUrl} alt={asset.name} className="w-full h-full object-contain" />
         ) : (
           <ImageIcon size={32} className="text-text-muted" />
         )}
