@@ -313,7 +313,6 @@ def debug_config():
         "oss_configured": uploader.is_configured,
         "oss_bucket_initialized": uploader.bucket is not None,
         "oss_base_path": os.getenv("OSS_BASE_PATH", "lumenx"),
-        "media_root": MEDIA_ROOT,
         "storage_backend": storage_backend(),
         "media_root": MEDIA_ROOT,
         "output_dir_exists": os.path.exists(MEDIA_ROOT),
@@ -2084,7 +2083,7 @@ def update_env_config(
             elif isinstance(value, ProviderBackend):
                 config_dict[key] = value.value
             else:
-                config_dict[key] = value
+                config_dict[key] = str(value)
 
         # Secret masking guard: GET /config/env returns secrets masked with the
         # bullet sentinel. If the frontend re-submits an unchanged secret it will
@@ -2119,8 +2118,15 @@ def update_env_config(
                 keys_to_remove.append(env_key)
 
         # Update current process env
+        restart_keys = {
+            "IFRAME_MEDIA_ROOT", "IFRAME_STORAGE_BACKEND",
+            "PROVIDER_MEDIA_PUBLIC_BASE_URL", "PROVIDER_MEDIA_URL_TTL_SECONDS",
+        }
+        # Persist startup settings without splitting existing Pipeline/Playground
+        # instances across roots or changing upload policy mid-generation.
         for key, value in config_dict.items():
-            os.environ[key] = value
+            if key not in restart_keys:
+                os.environ[key] = value
 
         # Save to file
         save_user_config(config_dict)
@@ -2138,10 +2144,7 @@ def update_env_config(
         return {
             "status": "success",
             "message": f"Configuration saved to {config_path}",
-            "restart_required": any(key in config_dict for key in (
-                "IFRAME_MEDIA_ROOT", "IFRAME_STORAGE_BACKEND",
-                "PROVIDER_MEDIA_PUBLIC_BASE_URL", "PROVIDER_MEDIA_URL_TTL_SECONDS",
-            )),
+            "restart_required": bool(restart_keys.intersection(config_dict)),
         }
     except Exception as e:
         logger.exception("Failed to save environment configuration")

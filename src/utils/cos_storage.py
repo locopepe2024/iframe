@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Optional
 
 from .upload_paths import resolve_upload_file
+from .storage_config import storage_backend
 from . import get_logger
 
 logger = get_logger(__name__)
@@ -67,6 +68,8 @@ class COSImageUploader:
         return "/".join(parts)
 
     def upload_file(self, local_path: str, sub_path: str = "", custom_filename: str = None, *, output_root: str = "output") -> Optional[str]:
+        if os.getenv("IFRAME_STORAGE_BACKEND") is not None and storage_backend() != "cos":
+            return None
         if not self.is_configured:
             return None
         resolved = resolve_upload_file(local_path, output_root=output_root)
