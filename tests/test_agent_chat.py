@@ -839,6 +839,28 @@ def test_chat_mixed_materials_and_names_survive_followup(setup, tmp_path, monkey
     assert historical_parts[2]['video_url'] == 'https://cdn.example/walk.mp4'
 
 
+def test_chat_sends_uploaded_docx_as_text_attachment(setup, tmp_path, monkeypatch):
+    import zipfile
+
+    docx = tmp_path / 'scene.docx'
+    with zipfile.ZipFile(docx, 'w') as archive:
+        archive.writestr('word/document.xml',
+            '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">'
+            '<w:p><w:r><w:t>长街人来人往</w:t></w:r></w:p></w:document>')
+    monkeypatch.setattr(agent, 'reference_path', lambda ctx, ref: str(docx))
+    monkeypatch.setattr(agent, 'owned_library_image_key', lambda ctx, ref: None)
+    complete = Mock(return_value='已读取剧本')
+    monkeypatch.setattr(agent, 'complete', complete)
+    sid = agent.create(agent.SessionCreate(model='qwen'), setup)['session']['id']
+
+    agent.send(sid, agent.MessageCreate(content='分析 @scene.docx', input_media=['/playground/input-media/scene.docx'],
+                                        asset_names=['scene.docx']), setup)
+
+    content = complete.call_args.args[2][-1]['content']
+    assert content[-1]['type'] == 'text'
+    assert '长街人来人往' in content[-1]['text']
+
+
 def test_chat_replays_only_relevant_historical_materials_and_context(setup, monkeypatch):
     monkeypatch.setattr(agent, 'reference_content', lambda ctx, ref: {'type': 'image_url', 'image_url': {'url': ref}})
     call = Mock(return_value='answer')
