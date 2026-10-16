@@ -313,7 +313,6 @@ def debug_config():
         "oss_configured": uploader.is_configured,
         "oss_bucket_initialized": uploader.bucket is not None,
         "oss_base_path": os.getenv("OSS_BASE_PATH", "lumenx"),
-        "media_root": MEDIA_ROOT,
         "storage_backend": storage_backend(),
         "media_root": MEDIA_ROOT,
         "output_dir_exists": os.path.exists(MEDIA_ROOT),
@@ -404,6 +403,8 @@ def private_no_store_signed_response(data):
 
 @app.get("/provider/media/{owner_key}/{relative_path:path}")
 def get_provider_media(owner_key: str, relative_path: str, expires: int = 0, signature: str = ""):
+    if os.getenv("IFRAME_STORAGE_BACKEND") == "cos":
+        raise HTTPException(status_code=404, detail="Local media is outside the active COS storage")
     path = verify_provider_media(owner_key, relative_path, expires, signature, output_root=pipeline.output_root)
     return FileResponse(path, headers={"Cache-Control": "private, no-store"})
 
@@ -416,6 +417,8 @@ def get_studio_media(
     signature: str = "",
     preview: int = 0,
 ):
+    if os.getenv("IFRAME_STORAGE_BACKEND") == "cos":
+        raise HTTPException(status_code=404, detail="Local media is outside the active COS storage")
     if preview:
         source_path = verify_studio_media_preview(owner_key, relative_path, preview, expires, signature, output_root=pipeline.output_root)
         owner_root = os.path.join(pipeline.output_root, "users", owner_key, "studio")
@@ -444,6 +447,8 @@ def refresh_studio_media_delivery(
 
     if preview and preview not in PREVIEW_MAX_EDGES:
         raise HTTPException(status_code=422, detail="Unsupported media preview size")
+    if os.getenv("IFRAME_STORAGE_BACKEND") == "cos":
+        raise HTTPException(status_code=404, detail="Local media is outside the active COS storage")
     try:
         stored = resolve_studio_reference(reference, user.owner_profile_id, output_root=pipeline.output_root)
     except (ValueError, FileNotFoundError, HTTPException) as exc:
@@ -480,6 +485,10 @@ def get_owned_playground_media(
 def _owned_local_media(owner_key: str, relative_path: str, preview: int, user: UserContext, area: str):
     if owner_key != studio_owner_key(user.owner_profile_id):
         raise HTTPException(status_code=404, detail="Media not found")
+    if os.getenv("IFRAME_STORAGE_BACKEND") == "cos" and (
+        area != "studio" or not relative_path.startswith(".cos-previews/")
+    ):
+        raise HTTPException(status_code=404, detail="Local media is outside the active COS storage")
     owner_root = os.path.realpath(os.path.join(pipeline.output_root, "users", owner_key, area))
     path = os.path.realpath(os.path.join(owner_root, relative_path))
     if not path.startswith(owner_root + os.sep) or not os.path.isfile(path):
@@ -1918,7 +1927,7 @@ class EnvConfig(ProviderRoutingConfig):
     OSS_BASE_PATH: Optional[str] = None
     OSS_ENABLE: bool = True
     IFRAME_MEDIA_ROOT: Optional[str] = None
-    IFRAME_STORAGE_BACKEND: Optional[Literal["local", "cos", "oss"]] = None
+    IFRAME_STORAGE_BACKEND: Optional[Literal["local", "cos"]] = None
     PROVIDER_MEDIA_PUBLIC_BASE_URL: Optional[str] = None
     PROVIDER_MEDIA_URL_TTL_SECONDS: Optional[int] = Field(default=None, ge=1)
     UNIART_VIDEO_COS_BUCKET: Optional[str] = None
@@ -2084,7 +2093,7 @@ def update_env_config(
             elif isinstance(value, ProviderBackend):
                 config_dict[key] = value.value
             else:
-                config_dict[key] = value
+                config_dict[key] = str(value)
 
         # Secret masking guard: GET /config/env returns secrets masked with the
         # bullet sentinel. If the frontend re-submits an unchanged secret it will
@@ -2100,8 +2109,8 @@ def update_env_config(
                 raise ValueError("IFRAME_MEDIA_ROOT must not be empty")
         if "IFRAME_STORAGE_BACKEND" in config_dict:
             configured_backend = str(config_dict["IFRAME_STORAGE_BACKEND"]).strip().lower()
-            if configured_backend not in {"local", "cos", "oss"}:
-                raise ValueError("IFRAME_STORAGE_BACKEND must be one of: local, cos, oss")
+            if configured_backend not in {"local", "cos"}:
+                raise ValueError("IFRAME_STORAGE_BACKEND must be one of: local, cos")
 
         # Process endpoint overrides: validate keys against known providers
         from ...utils.endpoints import PROVIDER_DEFAULTS
@@ -2119,8 +2128,15 @@ def update_env_config(
                 keys_to_remove.append(env_key)
 
         # Update current process env
+        restart_keys = {
+            "IFRAME_MEDIA_ROOT", "IFRAME_STORAGE_BACKEND",
+            "PROVIDER_MEDIA_PUBLIC_BASE_URL", "PROVIDER_MEDIA_URL_TTL_SECONDS",
+        }
+        # Persist startup settings without splitting existing Pipeline/Playground
+        # instances across roots or changing upload policy mid-generation.
         for key, value in config_dict.items():
-            os.environ[key] = value
+            if key not in restart_keys:
+                os.environ[key] = value
 
         # Save to file
         save_user_config(config_dict)
@@ -2138,10 +2154,7 @@ def update_env_config(
         return {
             "status": "success",
             "message": f"Configuration saved to {config_path}",
-            "restart_required": any(key in config_dict for key in (
-                "IFRAME_MEDIA_ROOT", "IFRAME_STORAGE_BACKEND",
-                "PROVIDER_MEDIA_PUBLIC_BASE_URL", "PROVIDER_MEDIA_URL_TTL_SECONDS",
-            )),
+            "restart_required": bool(restart_keys.intersection(config_dict)),
         }
     except Exception as e:
         logger.exception("Failed to save environment configuration")
@@ -2313,6 +2326,11 @@ def _owned_media_delivery_url(stored: str, owner_profile_id: str) -> str:
     """Resolve only managed local or object storage into a current browser URL."""
     from ..studio_access import studio_media_url
 
+    active_backend = os.getenv("IFRAME_STORAGE_BACKEND")
+    if active_backend == "local" and (
+        stored.startswith(("http://", "https://")) or is_object_key(stored)
+    ):
+        raise HTTPException(status_code=404, detail="Media is outside the active local storage")
     uploader = OSSImageUploader()
     if stored.startswith(("http://", "https://")):
         stored = managed_object_key_from_url(stored, uploader)
@@ -2327,6 +2345,8 @@ def _owned_media_delivery_url(stored: str, owner_profile_id: str) -> str:
         source = pipeline._resolve_stored_reference_value(stored, owner_profile_id)
     except InvalidAssetReference as exc:
         raise HTTPException(status_code=404, detail="Media not found") from exc
+    if active_backend == "cos":
+        raise HTTPException(status_code=404, detail="Local media is outside the active COS storage")
     relative = os.path.relpath(source, pipeline.output_root)
     url = studio_media_url(owner_profile_id, relative, output_root=pipeline.output_root)
     if url == relative:
@@ -2340,6 +2360,11 @@ def _owned_media_cover_url(stored: str, owner_profile_id: str, preview: int) -> 
 
     if preview not in PREVIEW_MAX_EDGES:
         raise HTTPException(status_code=422, detail="Unsupported media preview size")
+    active_backend = os.getenv("IFRAME_STORAGE_BACKEND")
+    if active_backend == "local" and (
+        stored.startswith(("http://", "https://")) or is_object_key(stored)
+    ):
+        raise HTTPException(status_code=404, detail="Media is outside the active local storage")
     uploader = OSSImageUploader()
     if stored.startswith(("http://", "https://")):
         stored = managed_object_key_from_url(stored, uploader)
@@ -2367,6 +2392,8 @@ def _owned_media_cover_url(stored: str, owner_profile_id: str, preview: int) -> 
         source = pipeline._resolve_stored_reference_value(stored, owner_profile_id)
     except InvalidAssetReference as exc:
         raise HTTPException(status_code=404, detail="Media not found") from exc
+    if active_backend == "cos":
+        raise HTTPException(status_code=404, detail="Local media is outside the active COS storage")
     relative = os.path.relpath(source, pipeline.output_root)
     url = studio_media_preview_url(owner_profile_id, relative, preview)
     if url == relative:
@@ -6719,7 +6746,10 @@ def get_env_config(identity: UserContext = Depends(require_user_context)):
             "OSS_BASE_PATH": os.getenv("OSS_BASE_PATH", ""),
             "OSS_ENABLE": is_oss_enabled(),
             "IFRAME_MEDIA_ROOT": os.getenv("IFRAME_MEDIA_ROOT", "output"),
-            "IFRAME_STORAGE_BACKEND": storage_backend(),
+            "IFRAME_STORAGE_BACKEND": (
+                storage_backend() if os.getenv("IFRAME_STORAGE_BACKEND") is not None
+                else "cos" if is_cos_configured() else "local"
+            ),
             "PROVIDER_MEDIA_PUBLIC_BASE_URL": os.getenv("PROVIDER_MEDIA_PUBLIC_BASE_URL", os.getenv("UNIART_MEDIA_BASE_URL", "")),
             "PROVIDER_MEDIA_URL_TTL_SECONDS": int(os.getenv("PROVIDER_MEDIA_URL_TTL_SECONDS", "1800")),
             "UNIART_VIDEO_COS_BUCKET": os.getenv("UNIART_VIDEO_COS_BUCKET", ""),

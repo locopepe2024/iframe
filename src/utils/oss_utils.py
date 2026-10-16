@@ -7,6 +7,7 @@ from typing import Optional, Tuple
 from .upload_paths import resolve_upload_file
 from . import get_logger
 from .media_refs import classify_media_ref, MEDIA_REF_LOCAL_PATH, MEDIA_REF_OBJECT_KEY
+from .storage_config import storage_backend
 
 logger = get_logger(__name__)
 
@@ -91,7 +92,9 @@ class OSSImageUploader:
     _instance = None
     
     def __new__(cls):
-        if is_cos_configured() and COSImageUploader is not None:
+        selected = os.getenv("IFRAME_STORAGE_BACKEND")
+        backend = storage_backend() if selected is not None else None
+        if backend != "local" and is_cos_configured() and COSImageUploader is not None:
             return COSImageUploader()
         """Singleton pattern to reuse OSS connection."""
         if cls._instance is None:
@@ -174,6 +177,8 @@ class OSSImageUploader:
         Returns:
             Object Key (e.g., "lumenx/proj_123/assets/characters/file.png") or None if failed
         """
+        if os.getenv("IFRAME_STORAGE_BACKEND") is not None and storage_backend() != "oss":
+            return None
         if not is_oss_enabled():
             logger.info("OSS upload disabled (OSS_ENABLE=false); skipping, using local path.")
             return None
@@ -219,6 +224,8 @@ class OSSImageUploader:
         Returns:
             Signed URL string
         """
+        if os.getenv("IFRAME_STORAGE_BACKEND") is not None:
+            return ""
         if not self.bucket:
             logger.warning("OSS not configured, cannot generate signed URL.")
             return ""

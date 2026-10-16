@@ -344,7 +344,7 @@ export interface EnvConfigPayload {
     OSS_BASE_PATH?: string;
     OSS_ENABLE?: boolean;
     IFRAME_MEDIA_ROOT?: string;
-    IFRAME_STORAGE_BACKEND?: 'local' | 'cos' | 'oss';
+    IFRAME_STORAGE_BACKEND?: 'local' | 'cos';
     PROVIDER_MEDIA_PUBLIC_BASE_URL?: string;
     PROVIDER_MEDIA_URL_TTL_SECONDS?: number | string;
     MANAGED_COS_CONFIGURED?: boolean;
@@ -1958,13 +1958,6 @@ export const api = {
 
     saveUserConfig: async (config: UserConfigPayload) => {
         const res = await axios.put<UserConfigPayload>(`${API_URL}/user/config`, config);
-        return res.data;
-    },
-
-    saveEnvConfig: async (config: EnvConfigPayload) => {
-        const res = await axios.post(`${API_URL}/config/env`, config, {
-            timeout: 60000, // 60 seconds timeout
-        });
         return res.data;
     },
 
