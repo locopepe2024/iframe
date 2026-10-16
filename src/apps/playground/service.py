@@ -20,6 +20,7 @@ from .models import (
     PlaygroundOutput,
 )
 from .storage import PlaygroundStorage
+from ...utils.managed_media_root import ManagedMediaRoot
 from ...utils import get_logger
 from ...models.reference_binding import bind_h3_canonical_prompt, bind_reference_names, media_kind, video_reference_prompt
 
@@ -139,7 +140,7 @@ class PlaygroundService:
         self.storage.update_generation(gen)
 
     def save_to_library(self, generation_id: str, output_id: str, category: str = "general") -> bool:
-        """Archive a generated output under ``output/assets/{category}/``.
+        """Archive a generated output under the owner asset directory.
 
         This legacy endpoint stores a material file and marks the output. It
         does not create a semantic Character, Scene, or Prop asset.
@@ -158,21 +159,19 @@ class PlaygroundService:
             logger.warning("save_to_library: output %s not found in generation %s", output_id, generation_id)
             return False
 
-        # media_path is stored as e.g. "output/playground/images/t2i_xxx_0.png"
-        # Normalise: try as-is first, then strip leading "output/" and re-join
-        src_path = target_output.media_path
-        if not os.path.isfile(src_path):
-            alt = os.path.join("output", target_output.media_path)
-            if os.path.isfile(alt):
-                src_path = alt
+        src_path = self._local_media_path(target_output.media_path)
         if not os.path.isfile(src_path):
             logger.error("save_to_library: source file not found: %s", target_output.media_path)
             return False
 
+        if not category or os.path.isabs(category) or ".." in category.replace("\\", "/").split("/"):
+            raise ValueError("Invalid archive category")
         dest_dir = os.path.join(self.storage.asset_dir, category)
+        dest_path = os.path.join(dest_dir, os.path.basename(src_path))
+        ManagedMediaRoot(self.storage.media_root).resolve(os.path.abspath(dest_path))
+        ManagedMediaRoot(self.storage.asset_dir).resolve(os.path.abspath(dest_path))
         os.makedirs(dest_dir, exist_ok=True)
 
-        dest_path = os.path.join(dest_dir, os.path.basename(src_path))
         shutil.copy2(src_path, dest_path)
         logger.info("Archived output %s as material: %s", output_id, dest_path)
 
@@ -595,8 +594,19 @@ class PlaygroundService:
             return True
         return os.getenv("LUMENX_ALLOW_SHARED_PROVIDER_CREDENTIALS", "false").lower() == "true"
 
-    @staticmethod
-    def _resolve_first_input_media(gen: PlaygroundGeneration):
+    def _local_media_path(self, value: str) -> str:
+        root = ManagedMediaRoot(self.storage.media_root)
+        if value.startswith(("output/", "outputs/")) or ".." in value.replace("\\", "/").split("/"):
+            return str(root.resolve(value))
+        # Generated records can still hold relative physical paths. Only use
+        # that interpretation when it is inside the selected managed root.
+        absolute = os.path.abspath(value)
+        try:
+            return str(root.resolve(absolute))
+        except ValueError:
+            return str(root.resolve(value))
+
+    def _resolve_first_input_media(self, gen: PlaygroundGeneration):
         """Return ``(img_path, img_url)`` for the first entry in
         :pyattr:`input_media`.  Local files are returned as *img_path*;
         remote URLs as *img_url*."""
@@ -607,11 +617,8 @@ class PlaygroundService:
         if first.startswith(("http://", "https://")):
             return None, first
 
-        # Try as-is, then relative to output/
-        if os.path.exists(first):
-            return first, None
-        candidate = os.path.join("output", first)
-        if os.path.exists(candidate):
+        candidate = self._local_media_path(first)
+        if os.path.isfile(candidate):
             return candidate, None
 
         # Fall back to treating it as a URL-like reference

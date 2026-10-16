@@ -25,7 +25,7 @@ def test_mixed_video_references_follow_canonical_order_and_bind_names(monkeypatc
     gen = PlaygroundGeneration(id='mixed', model_id='uniart/seedance-2.5-special', mode='r2v',
         prompt=prompt, input_media=refs, media_names=dict(zip(refs, labels)),
         parameters={'resolution': '720p', 'duration': 15, 'aspect_ratio': '9:16', 'audio': True}, created_at='today')
-    PlaygroundService(Mock(output_dir=str(tmp_path)))._process_video_generation(gen)
+    PlaygroundService(Mock(output_dir=str(tmp_path), media_root=str(tmp_path)))._process_video_generation(gen)
     body = post.call_args.args[2]
     assert body['content'][0] == {'type': 'text', 'text': '让 @1 穿 @2，参考 @3 和 @4'}
     assert body['duration'] == 15
@@ -42,7 +42,7 @@ def test_image_edit_keeps_all_urls_and_names_without_quality_changes(monkeypatch
     gen = PlaygroundGeneration(id='images', model_id='uniart/' + model, mode='i2i',
         prompt='@face.png 穿 @dress.png', input_media=refs, media_names=dict(zip(refs, ['face.png', 'dress.png'])),
         parameters={'quality': 'high'}, created_at='today')
-    PlaygroundService(Mock(output_dir=str(tmp_path)))._generate_image_mulerouter(gen, 'unused.png', 0)
+    PlaygroundService(Mock(output_dir=str(tmp_path), media_root=str(tmp_path)))._generate_image_mulerouter(gen, 'unused.png', 0)
     body = post.call_args.args[2]
     assert post.call_args.args[1] == '/images/edits'
     assert body['images'] == ([{'image_url': ref} for ref in refs] if objects else refs)
@@ -63,7 +63,7 @@ def test_image_edit_accepts_webp_when_system_mime_database_lacks_it(monkeypatch,
         prompt='Keep the face and change the outfit', input_media=refs, created_at='today',
     )
 
-    PlaygroundService(Mock(output_dir=str(tmp_path)))._generate_image_mulerouter(gen, 'unused.png', 0)
+    PlaygroundService(Mock(output_dir=str(tmp_path), media_root=str(tmp_path)))._generate_image_mulerouter(gen, 'unused.png', 0)
 
     assert post.call_args.args[1] == '/images/edits'
     assert post.call_args.args[2]['images'] == [{'image_url': ref} for ref in refs]
@@ -81,7 +81,7 @@ def test_i2v_never_silently_drops_second_image(monkeypatch, tmp_path):
         prompt='walk', input_media=['https://cdn.example/a.png', 'https://cdn.example/b.png'],
         parameters={'resolution': '720p', 'duration': 15}, created_at='today')
     with pytest.raises(RuntimeError, match='exactly one image'):
-        PlaygroundService(Mock(output_dir=str(tmp_path)))._process_video_generation(gen)
+        PlaygroundService(Mock(output_dir=str(tmp_path), media_root=str(tmp_path)))._process_video_generation(gen)
     post.assert_not_called()
 
 
@@ -92,7 +92,7 @@ def test_uniart_video_missing_duration_never_falls_back_to_five_seconds(monkeypa
         media_names={'https://cdn.example/face.png': 'face.png'},
         parameters={'resolution': '720p'}, created_at='today')
     with pytest.raises(RuntimeError, match='Video duration is required'):
-        PlaygroundService(Mock(output_dir=str(tmp_path)))._process_video_generation(gen)
+        PlaygroundService(Mock(output_dir=str(tmp_path), media_root=str(tmp_path)))._process_video_generation(gen)
     post.assert_not_called()
 
 
@@ -105,7 +105,7 @@ def test_video_text_is_prompt_context_and_does_not_consume_media_indices(monkeyp
         prompt='根据 @script.txt 将 @2 中商品替换为 @3，声音参考 @4', input_media=refs,
         media_names=dict(zip(refs, ['script.txt', 'original.mp4', 'product.png', 'voice.m4a'])),
         parameters={'resolution': '720p', 'duration': 15}, created_at='today')
-    PlaygroundService(Mock(output_dir=str(tmp_path)))._process_video_generation(gen)
+    PlaygroundService(Mock(output_dir=str(tmp_path), media_root=str(tmp_path)))._process_video_generation(gen)
     content = post.call_args.args[2]['content']
     assert content[0]['text'].startswith('根据 [Text 1] 将 <Video 1> 中商品替换为 <Picture 1>，声音参考 <Audio 1>')
     assert '台词是“晨光精华”' in content[0]['text']
@@ -119,7 +119,7 @@ def test_video_reference_does_not_require_an_unrelated_image(monkeypatch, tmp_pa
     gen = PlaygroundGeneration(id='video-only', model_id='uniart/minimax-h3-vip', mode='r2v',
         prompt='参考运镜', input_media=['https://cdn.example/original.mp4'],
         parameters={'resolution': '720p', 'duration': 15}, created_at='today')
-    PlaygroundService(Mock(output_dir=str(tmp_path)))._process_video_generation(gen)
+    PlaygroundService(Mock(output_dir=str(tmp_path), media_root=str(tmp_path)))._process_video_generation(gen)
     assert post.call_args.args[2]['content'][1]['type'] == 'video_url'
 
 
@@ -131,5 +131,5 @@ def test_invalid_text_reference_fails_before_generation(monkeypatch, tmp_path):
         prompt='使用脚本', input_media=[str(script), 'https://cdn.example/original.mp4'],
         parameters={'resolution': '720p', 'duration': 15}, created_at='today')
     with pytest.raises(RuntimeError, match='UTF-8'):
-        PlaygroundService(Mock(output_dir=str(tmp_path)))._process_video_generation(gen)
+        PlaygroundService(Mock(output_dir=str(tmp_path), media_root=str(tmp_path)))._process_video_generation(gen)
     post.assert_not_called()

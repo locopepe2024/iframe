@@ -64,9 +64,11 @@ def test_library_studio_reference_resolves_before_generation_and_keeps_alias(tmp
         media_names={signed.split("?", 1)[0]: "苏砚"},
     ))
 
-    assert generation.input_media == [stored]
-    assert generation.media_names == {stored: "苏砚"}
-    assert bind_reference_names(generation.prompt, [generation.media_names[stored]]) == "@1 持剑站立"
+    resolved = str(image)
+    assert generation.input_media == [resolved]
+    assert Path(generation.input_media[0]).read_bytes() == b"image"
+    assert generation.media_names == {resolved: "苏砚"}
+    assert bind_reference_names(generation.prompt, [generation.media_names[resolved]]) == "@1 持剑站立"
 
     foreign_image = Path(studio_owner_dir("another-profile")) / "assets" / "foreign.png"
     foreign_image.parent.mkdir(parents=True)
@@ -76,8 +78,9 @@ def test_library_studio_reference_resolves_before_generation_and_keeps_alias(tmp
         service.create_generation(GenerateRequest(
             mode=PlaygroundMode.I2I,
             model_id="uniart/image-model",
-            prompt="unrelated",
+            prompt="@foreign.png",
             input_media=[foreign_signed],
+            media_names={foreign_signed: "foreign.png"},
         ))
 
 
@@ -165,8 +168,8 @@ def test_h3_video_submission_uses_canonical_prompt_without_model_name_error(tmp_
         mode=PlaygroundMode.R2V,
         model_id="uniart/minimax-h3-vip",
         prompt="@identity.jpg is the subject; @motion.mp4 supplies motion.",
-        input_media=["/tmp/identity.jpg", "/tmp/motion.mp4"],
-        media_names={"/tmp/identity.jpg": "identity.jpg", "/tmp/motion.mp4": "motion.mp4"},
+        input_media=["https://cdn.example/identity.jpg", "https://cdn.example/motion.mp4"],
+        media_names={"https://cdn.example/identity.jpg": "identity.jpg", "https://cdn.example/motion.mp4": "motion.mp4"},
         parameters={"resolution": "720p", "duration": 15},
         created_at="2026-10-03T00:00:00+00:00",
     )

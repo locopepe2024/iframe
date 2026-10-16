@@ -27,6 +27,7 @@ from .storage import PlaygroundStorage
 from ..identity import BROWSER_PROFILE_COOKIE, UserContext, _resolve_request_context, require_user_context
 from ..user_config import get_user_config_store
 from ..media_registry import register_media
+from ...utils.managed_media_root import ManagedMediaRoot
 from ...utils import get_logger
 
 logger = get_logger(__name__)
@@ -111,11 +112,11 @@ def _public_reference_fields(payload, identity: UserContext):
         elif reference.startswith("/studio/media/"):
             from ..studio_access import studio_media_url, resolve_studio_reference
             try:
-                resolved = resolve_studio_reference(reference, identity.owner_profile_id)
+                resolved = resolve_studio_reference(reference, identity.owner_profile_id, output_root=storage.media_root)
             except (ValueError, FileNotFoundError):
                 pass
             else:
-                reference = studio_media_url(identity.owner_profile_id, resolved)
+                reference = studio_media_url(identity.owner_profile_id, resolved, output_root=storage.media_root)
         if name:
             public_names[reference] = name
         references.append(reference)
@@ -210,7 +211,11 @@ def save_to_library(
 ):
     """Save a specific generation output to the project library."""
     category = request.category if request else "general"
-    if not _service_for(identity).save_to_library(generation_id, output_id, category):
+    try:
+        saved = _service_for(identity).save_to_library(generation_id, output_id, category)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    if not saved:
         raise HTTPException(status_code=404, detail="Generation or output not found")
     return {"ok": True}
 
@@ -422,18 +427,21 @@ async def upload_media(
     identity: UserContext = Depends(require_user_context),
 ):
     """Upload a media file for use as playground input (reference image, first frame, etc.)."""
-    upload_dir = os.path.join(_storage_for(identity).output_dir, "uploads")
-    os.makedirs(upload_dir, exist_ok=True)
+    storage = _storage_for(identity)
+    upload_dir = os.path.join(storage.output_dir, "uploads")
     ext = os.path.splitext(file.filename or "file")[1] or ".bin"
     filename = f"{uuid.uuid4()}{ext}"
     dest = os.path.join(upload_dir, filename)
+    storage_key = ManagedMediaRoot(storage.media_root).key(os.path.abspath(dest))
+    os.makedirs(upload_dir, exist_ok=True)
     contents = await file.read()
     with open(dest, "wb") as f:
         f.write(contents)
     media_id = register_media(
         identity.owner_profile_id,
-        os.path.relpath(dest, "output"),
+        storage_key,
         kind="temporary_input",
+        output_root=storage.media_root,
         display_name=os.path.basename(file.filename or filename),
         sha256=hashlib.sha256(contents).hexdigest(),
     )
