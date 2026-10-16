@@ -117,3 +117,23 @@ Audit checklist for every consumer:
 No module is considered migrated until both source and cover paths pass the
 expired-time, replacement-revision, missing-file, traversal, and cross-owner
 tests.
+
+## Implementation status (2026-10-16)
+
+Code fact: Playground generation/output IDs, Studio owner media references,
+asset variant IDs, media registry IDs, video task IDs, and merged project IDs
+now have authenticated delivery endpoints. The shared frontend preview
+components request current source or bounded WebP cover URLs when a managed
+reference or registry ID is present. Playground results, Agent projections,
+asset inspection, recreation media, selected storyboard and assembly views,
+character workbench, and the inspected Playground/editor thumbnails use these
+paths. Local cover generation is cached by source file revision.
+
+Not yet proven: a production session that stays open beyond the signature TTL
+has not been replayed across every screen. Some legacy storyboard/frame and
+dubbed-video records still lack a stable media ID and may use URL-only paths.
+Registry cover delivery for COS/OSS objects currently returns 422; a provider
+cover cache and revision scheme must be implemented before claiming the WebP
+contract for cloud media. Arbitrary provider and external URLs are outside the
+managed refresh contract. These gaps remain release review items, not evidence
+that every consumer is fixed.
