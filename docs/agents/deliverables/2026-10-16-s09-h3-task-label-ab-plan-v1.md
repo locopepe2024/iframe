@@ -1,6 +1,6 @@
 # s09 H3 task-label A/B 验证计划
 
-日期：2026-10-16。状态：待提交；本文件是验证计划，不是生成结果。
+日期：2026-10-16。状态：待提交；本文件是验证计划，不是生成结果。语义对照见 [H3 Ref2VA 任务语义对照](2026-10-16-h3-reference-generation-vs-video-editing-v1.md)。
 
 ## Observed
 
