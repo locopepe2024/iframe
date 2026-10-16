@@ -70,3 +70,23 @@ render the same active camera for each frame, and return video, per-frame camera
 records and optional depth. Validate output against the browser recording on
 two-character occlusion and moving-camera fixtures. Do not treat the static
 depth worker or fixed-camera retarget renderer as proof of this behavior.
+
+## Blocking workflow reference
+
+The [shot-layout guide](https://xjstoryboard.com/help/shot-layout-guide)
+describes a useful order: place people, choose a preset or empty scene, refine
+positions and facing, then move the camera and adjust framing. Its preset scenes
+serve spatial relationships (person relative to table, door or wall), not a
+promise that final generated art matches the 3D decoration. Blocking is most
+valuable for multiple people and ambiguous foreground/background relationships.
+
+- Code fact: the director stage stores people, objects and cameras in 3D space,
+  evaluates their positions at timeline frames, and can record the active camera.
+- Code fact: its two built-in scenes are labeled validation scenes. They do not
+  constitute a reusable location preset library or a cross-shot scene asset.
+- Product implication: the next usability slice should offer reusable spatial
+  scene presets and a fast people-first blocking workflow, then keep camera
+  framing and the white-model motion preview within that same authored scene.
+- Not yet proven: the recorded video or static depth output improves downstream
+  image/video generation consistency. That requires an explicit reference-input
+  integration and comparative generation tests.
