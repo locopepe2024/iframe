@@ -17,6 +17,7 @@ import { useEffect, useRef, useState } from "react";
 import { AlertTriangle, RefreshCw, Maximize2, Copy, Check, Play } from "lucide-react";
 import clsx from "clsx";
 import { getAssetUrl, getVideoPosterUrl } from "@/lib/utils";
+import { isManagedMedia, resolveMediaDelivery } from "@/lib/mediaDelivery";
 import { useTranslations } from "next-intl";
 import { useLightbox, type LightboxItem } from "./LightboxProvider";
 
@@ -49,6 +50,7 @@ export default function PreviewVideo({
     const [retryNonce, setRetryNonce] = useState(0);
     const [hasRetriedOnce, setHasRetriedOnce] = useState(false);
     const [copied, setCopied] = useState(false);
+    const [freshSrc, setFreshSrc] = useState<string>();
     const wrapperRef = useRef<HTMLDivElement | null>(null);
     const videoRef = useRef<HTMLVideoElement | null>(null);
     const [sizeBucket, setSizeBucket] = useState<"micro" | "mid" | "large">("large");
@@ -57,6 +59,15 @@ export default function PreviewVideo({
         setErrored(false);
         setHasRetriedOnce(false);
         setRetryNonce(0);
+        setFreshSrc(undefined);
+    }, [src]);
+
+    useEffect(() => {
+        if (!src || !isManagedMedia(src)) return;
+        let active = true;
+        void resolveMediaDelivery(src).then(url => { if (active) setFreshSrc(url); })
+            .catch(() => { if (active) setErrored(true); });
+        return () => { active = false; };
     }, [src]);
 
     useEffect(() => {
@@ -75,13 +86,19 @@ export default function PreviewVideo({
         return () => ro.disconnect();
     }, []);
 
-    const resolved = getAssetUrl(src);
+    const resolved = freshSrc || getAssetUrl(src);
     const resolvedPoster = getAssetUrl(poster) || getVideoPosterUrl(src);
     const displaySrc = resolved
         ? (retryNonce > 0 ? `${resolved}${resolved.includes("?") ? "&" : "?"}__r=${retryNonce}` : resolved)
         : "";
 
     const handleError = () => {
+        if (src && isManagedMedia(src) && !hasRetriedOnce) {
+            setHasRetriedOnce(true);
+            void resolveMediaDelivery(src).then(url => { setFreshSrc(url); setErrored(false); })
+                .catch(() => setErrored(true));
+            return;
+        }
         if (!hasRetriedOnce) {
             setHasRetriedOnce(true);
             setRetryNonce(n => n + 1);
@@ -92,6 +109,10 @@ export default function PreviewVideo({
 
     const handleManualRetry = () => {
         setErrored(false);
+        if (src && isManagedMedia(src)) {
+            void resolveMediaDelivery(src).then(setFreshSrc).catch(() => setErrored(true));
+            return;
+        }
         setRetryNonce(n => n + 1);
     };
 

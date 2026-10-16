@@ -21,6 +21,7 @@ import { useTranslations } from 'next-intl';
 import { usePlaygroundStore, type PlaygroundGeneration } from './usePlaygroundStore';
 import { downloadOutput } from './downloadOutput';
 import NewLibraryAssetDialog from '@/components/library/NewLibraryAssetDialog';
+import { resolveMediaDelivery } from '@/lib/mediaDelivery';
 
 // ---------------------------------------------------------------------------
 // Props
@@ -85,6 +86,7 @@ export default function DetailPanel({
   const [downloading, setDownloading] = useState(false);
   const [downloadError, setDownloadError] = useState('');
   const [importAssetOpen, setImportAssetOpen] = useState(false);
+  const [freshMediaUrl, setFreshMediaUrl] = useState<string | null>(null);
   const updateGeneration = usePlaygroundStore((s) => s.updateGeneration);
   const history = usePlaygroundStore((s) => s.history);
   const featuredByGen = usePlaygroundStore((s) => s.featuredByGen);
@@ -102,6 +104,15 @@ export default function DetailPanel({
     output?.media_type === 'video' ||
     ['t2v', 'i2v', 'r2v', 'f2v', 'v2v'].includes(generation.mode);
   const mediaUrl = output?.media_path ? getMediaUrl(output.media_path) : null;
+
+  useEffect(() => {
+    setFreshMediaUrl(null);
+    if (!output?.media_path) return;
+    let active = true;
+    void resolveMediaDelivery(output.media_path).then(url => { if (active) setFreshMediaUrl(url); })
+      .catch(() => { if (active) setFreshMediaUrl(null); });
+    return () => { active = false; };
+  }, [output?.media_path]);
 
   // Navigation
   const currentIndex = allGenerations.findIndex((g) => g.id === generation.id);
@@ -220,16 +231,16 @@ export default function DetailPanel({
       <div className="fixed inset-4 md:inset-8 z-50 bg-surface border border-glass-border rounded-[20px] shadow-2xl flex overflow-hidden">
         {/* ─── LEFT SIDE (Media) ─────────────────────────────────────────── */}
         <div className="relative w-[60%] h-full bg-surface-inset flex items-center justify-center">
-          {mediaUrl ? (
+          {freshMediaUrl ? (
             isVideo ? (
               <video
-                src={mediaUrl}
+                src={freshMediaUrl}
                 controls
                 className="max-w-full max-h-full object-contain rounded"
               />
             ) : (
               <img
-                src={mediaUrl}
+                src={freshMediaUrl}
                 alt={generation.prompt}
                 className="max-w-full max-h-full object-contain"
               />

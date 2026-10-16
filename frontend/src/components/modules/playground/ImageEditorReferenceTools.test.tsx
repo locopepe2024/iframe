@@ -2,9 +2,9 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, expect, it, vi } from 'vitest';
 import ImageEditorReferenceTools, { generationInputMedia } from './ImageEditorReferenceTools';
 
-const mocks = vi.hoisted(() => ({ models: vi.fn(), library: vi.fn(), generate: vi.fn(), status: vi.fn(), upload: vi.fn(), importVariant: vi.fn() }));
+const mocks = vi.hoisted(() => ({ models: vi.fn(), library: vi.fn(), generate: vi.fn(), status: vi.fn(), upload: vi.fn(), importVariant: vi.fn(), fetch: vi.fn() }));
 vi.mock('next-intl', () => ({ useTranslations: () => (key: string) => key }));
-vi.mock('@/lib/api', () => ({ API_URL: '/api-proxy', api: { getAssetLibraryIndex: mocks.library }, playgroundApi: { getUniArtModels: mocks.models, generate: mocks.generate, getGenerationStatus: mocks.status, uploadMedia: mocks.upload } }));
+vi.mock('@/lib/api', () => ({ API_URL: '/api-proxy', authenticatedFetch: mocks.fetch, api: { getAssetLibraryIndex: mocks.library }, playgroundApi: { getUniArtModels: mocks.models, generate: mocks.generate, getGenerationStatus: mocks.status, uploadMedia: mocks.upload } }));
 vi.mock('@/lib/imageEditor', () => ({ imageEditorApi: { importLibraryVariant: mocks.importVariant } }));
 
 const source = { reference: '/playground/input-media/base.png', sha256: 'a'.repeat(64), width: 512, height: 512, mime: 'image/png' };
@@ -15,6 +15,9 @@ beforeEach(() => {
   mocks.models.mockResolvedValue({ models: [{ id: 'image-model', display_name: 'Image Model', capabilities: ['i2i', 't2i'], inputs: { reference_images: { max: 4 } } }] });
   mocks.library.mockResolvedValue({ assets: [] });
   mocks.generate.mockResolvedValue({ id: 'generation-1', status: 'completed', outputs: [] });
+  mocks.fetch.mockResolvedValue({ ok: true, blob: async () => new Blob(['webp'], { type: 'image/webp' }) });
+  URL.createObjectURL = vi.fn(() => 'blob:cover');
+  URL.revokeObjectURL = vi.fn();
 });
 
 it('preserves ordered base and reference inputs in a generation request', async () => {
@@ -34,7 +37,8 @@ it('imports a selected owner library variant as an ordered reference', async () 
   render(<ImageEditorReferenceTools source={source} references={[]} onAdd={onAdd} onRemove={vi.fn()} onMove={vi.fn()} onUseResult={vi.fn()}/>);
   fireEvent.click(screen.getByRole('button', { name: 'libraryReferences' }));
   fireEvent.change(await screen.findByRole('combobox', { name: 'Room variant' }), { target: { value: 'v2' } });
-  expect(screen.getByRole('presentation').getAttribute('src')).toContain('/studio/media/two');
+  await waitFor(() => expect(screen.getByRole('presentation')).toHaveAttribute('src', 'blob:cover'));
+  expect(mocks.fetch.mock.calls.at(-1)?.[0]).toContain('variant_id=v2');
   fireEvent.click(screen.getByRole('button', { name: 'addReference Room' }));
   await waitFor(() => expect(mocks.importVariant).toHaveBeenCalledWith(entry, 'v2'));
   expect(onAdd).toHaveBeenCalledWith({ path: '/playground/input-media/library-room.png', title: 'Room' });

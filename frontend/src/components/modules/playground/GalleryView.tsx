@@ -3,8 +3,9 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { Video, AlertCircle } from 'lucide-react';
 import { useTranslations } from 'next-intl';
-import { getAssetUrl } from '@/lib/utils';
 import type { PlaygroundGeneration } from './usePlaygroundStore';
+import { resolveMediaDelivery } from '@/lib/mediaDelivery';
+import { getAssetUrl } from '@/lib/utils';
 
 // ---------------------------------------------------------------------------
 // Props
@@ -19,10 +20,6 @@ interface GalleryViewProps {
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
-
-function getMediaUrl(path: string): string {
-  return getAssetUrl(path);
-}
 
 function formatTime(dateStr: string): string {
   const date = new Date(dateStr);
@@ -44,6 +41,7 @@ export default function GalleryView({
 }: GalleryViewProps) {
   const t = useTranslations('playground');
   const [selectedIndex, setSelectedIndex] = useState(0);
+  const [freshMedia, setFreshMedia] = useState<string | null>(null);
   const thumbnailStripRef = useRef<HTMLDivElement>(null);
 
   // Clamp selectedIndex when generations change
@@ -88,6 +86,16 @@ export default function GalleryView({
     }
   }, [generations, selectedIndex, onOpenDetail]);
 
+  useEffect(() => {
+    const source = generations[selectedIndex]?.outputs[0]?.media_path;
+    setFreshMedia(null);
+    if (!source) return;
+    let active = true;
+    void resolveMediaDelivery(source).then(url => { if (active) setFreshMedia(url); })
+      .catch(() => { if (active) setFreshMedia(null); });
+    return () => { active = false; };
+  }, [generations, selectedIndex]);
+
   if (generations.length === 0) {
     return (
       <div className="flex flex-col h-full items-center justify-center">
@@ -102,7 +110,6 @@ export default function GalleryView({
   const output = current.outputs[0];
   const isVideo =
     output?.media_type === 'video' || VIDEO_MODES.has(current.mode);
-  const mediaUrl = output?.media_path ? getMediaUrl(output.media_path) : null;
 
   return (
     <div className="flex flex-col h-full">
@@ -111,18 +118,18 @@ export default function GalleryView({
         className="flex-1 min-h-0 overflow-hidden flex items-center justify-center p-6 bg-background"
         onClick={handleClick}
       >
-        {current.status === 'completed' && mediaUrl ? (
+        {current.status === 'completed' && freshMedia ? (
           isVideo ? (
             <video
               key={current.id}
-              src={mediaUrl}
+              src={freshMedia}
               controls
               className="max-w-full max-h-full object-contain rounded-lg cursor-pointer hover:ring-2 hover:ring-primary/30 transition-all duration-200"
             />
           ) : (
             <img
               key={current.id}
-              src={mediaUrl}
+              src={freshMedia}
               alt={current.prompt}
               className="max-w-full max-h-full object-contain rounded-lg cursor-pointer hover:scale-[1.01] hover:ring-2 hover:ring-primary/30 transition-all duration-200"
             />
@@ -190,8 +197,8 @@ export default function GalleryView({
             const genOutput = gen.outputs[0];
             const genIsVideo =
               genOutput?.media_type === 'video' || VIDEO_MODES.has(gen.mode);
-            const genMediaUrl = genOutput?.media_path
-              ? getMediaUrl(genOutput.media_path)
+            const genMediaUrl = genOutput?.thumbnail_path
+              ? getAssetUrl(genOutput.thumbnail_path)
               : null;
             const isSelected = idx === selectedIndex;
             const isFailed = gen.status === 'failed';

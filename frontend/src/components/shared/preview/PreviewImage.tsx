@@ -32,6 +32,7 @@ import { AlertTriangle, RefreshCw, Maximize2, Copy, Check } from "lucide-react";
 import clsx from "clsx";
 import { useTranslations } from "next-intl";
 import { getAssetUrl } from "@/lib/utils";
+import { isManagedMedia, resolveMediaDelivery } from "@/lib/mediaDelivery";
 import { useLightbox, type LightboxItem } from "./LightboxProvider";
 
 export interface PreviewImageProps {
@@ -72,6 +73,7 @@ export default function PreviewImage({
     const [retryNonce, setRetryNonce] = useState(0);
     const [hasRetriedOnce, setHasRetriedOnce] = useState(false);
     const [copied, setCopied] = useState(false);
+    const [freshSrc, setFreshSrc] = useState<string>();
     const wrapperRef = useRef<HTMLDivElement | null>(null);
     /** Sized-adaptive bucket; recomputed on resize via ResizeObserver. */
     const [sizeBucket, setSizeBucket] = useState<"micro" | "mid" | "large">("large");
@@ -80,6 +82,7 @@ export default function PreviewImage({
         setErrored(false);
         setHasRetriedOnce(false);
         setRetryNonce(0);
+        setFreshSrc(undefined);
     }, [src]);
 
     useEffect(() => {
@@ -98,13 +101,19 @@ export default function PreviewImage({
         return () => ro.disconnect();
     }, []);
 
-    const resolved = getAssetUrl(src);
+    const resolved = freshSrc || getAssetUrl(src);
     /** Append retry-bust to bypass browser/OSS cache on retry. */
     const displaySrc = resolved
         ? (retryNonce > 0 ? `${resolved}${resolved.includes("?") ? "&" : "?"}__r=${retryNonce}` : resolved)
         : "";
 
     const handleError = () => {
+        if (src && isManagedMedia(src) && !hasRetriedOnce) {
+            setHasRetriedOnce(true);
+            void resolveMediaDelivery(src, 320).then(url => { setFreshSrc(url); setErrored(false); })
+                .catch(() => setErrored(true));
+            return;
+        }
         // First failure → silent automatic retry once (cache hiccup / signature blip).
         // Second failure → surface fallback panel.
         if (!hasRetriedOnce) {
@@ -117,6 +126,10 @@ export default function PreviewImage({
 
     const handleManualRetry = () => {
         setErrored(false);
+        if (src && isManagedMedia(src)) {
+            void resolveMediaDelivery(src, 320).then(setFreshSrc).catch(() => setErrored(true));
+            return;
+        }
         setRetryNonce(n => n + 1);
     };
 

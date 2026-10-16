@@ -4,12 +4,37 @@ import { useEffect, useMemo, useState } from 'react';
 import { ArrowDown, ArrowUp, Images, Plus, Trash2 } from 'lucide-react';
 import { useTranslations } from 'next-intl';
 
-import { api, playgroundApi, type AssetReferenceIndexEntry, type PlaygroundGenerationResponse, type UniArtCatalogModelResponse } from '@/lib/api';
+import { API_URL, authenticatedFetch, api, playgroundApi, type AssetReferenceIndexEntry, type PlaygroundGenerationResponse, type UniArtCatalogModelResponse } from '@/lib/api';
 import { imageEditorApi, type EditSource } from '@/lib/imageEditor';
 import { getAssetUrl } from '@/lib/utils';
 
 export interface EditorReference { path: string; title: string }
 type GenerationMode = 'reference' | 'panorama';
+
+function LibraryVariantCover({ entry, variantId }: { entry: AssetReferenceIndexEntry; variantId: string }) {
+  const [url, setUrl] = useState<string>();
+  useEffect(() => {
+    const controller = new AbortController();
+    let objectUrl: string | undefined;
+    const params = new URLSearchParams({
+      scope: entry.source_scope === 'episode' ? 'project' : entry.source_scope,
+      container_id: entry.source_container_id || '', asset_type: entry.asset_type,
+      asset_id: entry.asset_id, variant_id: variantId,
+    });
+    setUrl(undefined);
+    void authenticatedFetch(`${API_URL}/asset-index/preview?${params}`, { signal: controller.signal })
+      .then(async response => {
+        if (!response.ok) throw new Error('Preview unavailable');
+        const blob = await response.blob();
+        if (controller.signal.aborted) return;
+        objectUrl = URL.createObjectURL(blob);
+        setUrl(objectUrl);
+      }).catch(() => setUrl(undefined));
+    return () => { controller.abort(); if (objectUrl) URL.revokeObjectURL(objectUrl); };
+  }, [entry, variantId]);
+  return url ? <img src={url} alt="" className="h-10 w-10 shrink-0 object-cover" />
+    : <span className="h-10 w-10 shrink-0 bg-elevated" />;
+}
 
 export function generationInputMedia(source: EditSource | null, references: EditorReference[]): string[] {
   return [...(source ? [source.reference] : []), ...references.map(reference => reference.path)];
@@ -119,7 +144,7 @@ export default function ImageEditorReferenceTools({ source, references, onAdd, o
         <div className="max-h-48 space-y-2 overflow-auto">
           {filteredLibrary.map(entry => <div key={entryKey(entry)} className="flex min-w-0 items-center gap-2 border-b border-glass-border pb-2">
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={getAssetUrl(entry.variants.find(variant => variant.id === (selectedVariants[entryKey(entry)] || entry.selected_variant_id))?.url || entry.variants[0].url)} alt="" className="h-10 w-10 shrink-0 object-cover"/>
+            <LibraryVariantCover entry={entry} variantId={selectedVariants[entryKey(entry)] || entry.selected_variant_id || entry.variants[0].id}/>
             <div className="min-w-0 flex-1"><strong className="block truncate text-xs">{entry.name}</strong><small className="text-text-muted">{entry.source_name || entry.source_scope}</small>
               {entry.variants.length > 1 && <select aria-label={`${entry.name} ${t('variant')}`} value={selectedVariants[entryKey(entry)] || entry.selected_variant_id || entry.variants[0].id} onChange={event => setSelectedVariants(current => ({ ...current, [entryKey(entry)]: event.target.value }))} className="mt-1 w-full bg-surface text-xs">{entry.variants.map((variant, index) => <option key={variant.id} value={variant.id}>{t('variant')} {index + 1}</option>)}</select>}
             </div>

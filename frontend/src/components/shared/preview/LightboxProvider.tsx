@@ -24,6 +24,7 @@ import { createPortal } from "react-dom";
 import { X, ChevronLeft, ChevronRight, Copy, Check, ExternalLink } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { getAssetUrl } from "@/lib/utils";
+import { isManagedMedia, resolveMediaDelivery } from "@/lib/mediaDelivery";
 
 export type LightboxItem = {
     /** Raw URL (relative or absolute) — resolved via getAssetUrl on render. */
@@ -74,11 +75,25 @@ export function LightboxProvider({ children }: LightboxProviderProps) {
     /** Single-item open path stores in this slot (no group). */
     const [singleItem, setSingleItem] = useState<LightboxItem | null>(null);
     const [copied, setCopied] = useState(false);
+    const [deliveryUrl, setDeliveryUrl] = useState<string | null>(null);
+    const [deliveryError, setDeliveryError] = useState(false);
 
     const isOpen = !!singleItem || !!activeGroup;
     const currentItem: LightboxItem | null = singleItem
         ? singleItem
         : (activeGroup ? (groups[activeGroup]?.[activeIndex] ?? null) : null);
+
+    useEffect(() => {
+        const source = currentItem?.src;
+        setDeliveryUrl(null);
+        setDeliveryError(false);
+        if (!source) return;
+        if (!isManagedMedia(source)) { setDeliveryUrl(getAssetUrl(source)); return; }
+        let active = true;
+        void resolveMediaDelivery(source).then(url => { if (active) setDeliveryUrl(url); })
+            .catch(() => { if (active) setDeliveryError(true); });
+        return () => { active = false; };
+    }, [currentItem?.src]);
 
     const close = useCallback(() => {
         setSingleItem(null);
@@ -149,13 +164,14 @@ export function LightboxProvider({ children }: LightboxProviderProps) {
     const handleCopyUrl = useCallback(async () => {
         if (!currentItem) return;
         try {
-            await navigator.clipboard.writeText(getAssetUrl(currentItem.src));
+            if (!deliveryUrl) return;
+            await navigator.clipboard.writeText(deliveryUrl);
             setCopied(true);
             window.setTimeout(() => setCopied(false), 1500);
         } catch {
             /* clipboard blocked — silently fail */
         }
-    }, [currentItem]);
+    }, [currentItem, deliveryUrl]);
 
     const value = useMemo<LightboxContextValue>(() => ({
         open, openInGroup, registerGroup, unregisterGroup,
@@ -166,7 +182,8 @@ export function LightboxProvider({ children }: LightboxProviderProps) {
             {children}
             {isOpen && currentItem ? (
                 <LightboxPortal
-                    item={currentItem}
+                    item={{ ...currentItem, src: deliveryUrl || "" }}
+                    deliveryError={deliveryError}
                     groupCount={activeGroup ? (groups[activeGroup]?.length ?? 0) : 1}
                     groupIndex={activeGroup ? activeIndex : 0}
                     onClose={close}
@@ -188,6 +205,7 @@ export function LightboxProvider({ children }: LightboxProviderProps) {
 
 interface LightboxPortalProps {
     item: LightboxItem;
+    deliveryError: boolean;
     groupCount: number;
     groupIndex: number;
     onClose: () => void;
@@ -198,7 +216,7 @@ interface LightboxPortalProps {
 }
 
 function LightboxPortal({
-    item, groupCount, groupIndex, onClose, onPrev, onNext, copied, onCopyUrl,
+    item, deliveryError, groupCount, groupIndex, onClose, onPrev, onNext, copied, onCopyUrl,
 }: LightboxPortalProps) {
     const t = useTranslations("preview");
     const resolved = getAssetUrl(item.src);
@@ -238,7 +256,7 @@ function LightboxPortal({
                         {copied ? t("copied") : t("copyUrl")}
                     </button>
                     <a
-                        href={resolved}
+                        href={resolved || undefined}
                         target="_blank"
                         rel="noreferrer"
                         title={t("openInNewTab")}
@@ -294,7 +312,9 @@ function LightboxPortal({
                     onClick={onClose}
                     className="grid h-full w-full place-items-center"
                 >
-                    {item.kind === "image" ? (
+                    {!resolved ? (
+                        <span role="status" className="text-sm text-foreground">{deliveryError ? "素材暂时无法访问" : "正在加载素材"}</span>
+                    ) : item.kind === "image" ? (
                         // eslint-disable-next-line @next/next/no-img-element
                         <img
                             src={resolved}
