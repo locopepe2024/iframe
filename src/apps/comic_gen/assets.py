@@ -14,6 +14,7 @@ from .character_prompts import (
 from ...models.image import WanxImageModel, ImageGenModel
 from ...utils import get_logger
 from ...utils.oss_utils import is_object_key
+from ...utils.managed_media_root import ManagedMediaRoot
 from ..studio_access import studio_media_dir, studio_uniart_config, studio_nsfw_new_one_config
 
 logger = get_logger(__name__)
@@ -94,6 +95,8 @@ class AssetGenerator:
         """
         if not reference:
             return reference
+        if reference.startswith(("output/", "outputs/")):
+            return str(ManagedMediaRoot(self.output_root).resolve(reference))
         if (
             reference.startswith(("https://", "http://"))
             or is_object_key(reference)

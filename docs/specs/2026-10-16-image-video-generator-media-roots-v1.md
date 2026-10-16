@@ -17,6 +17,8 @@ root in stored keys. Remote URLs and cloud object keys keep their existing
 semantics. Existing output_dir overrides and already-existing physical reference
 files retain their legacy behavior; this slice does not redefine their trust
 policy or claim that arbitrary overrides produce portable managed keys.
+Legacy output/ and outputs/ stored locators resolve under the selected root,
+even if a same-named file still exists under the process working directory.
 
 No process-global environment switch is exposed. No provider requests, media
 format changes, prompt changes or generation-mode changes are required.
@@ -40,7 +42,8 @@ production does not introduce a missing-configuration fallback for those fixture
 
 ## Local verification result
 
-16 new generator tests pass; 58 focused writer/reference tests pass. Backend
-CI selection: 1308 passed, 5 skipped, 2 deselected. Cloud clients and model
+19 new generator tests pass, including legacy output/ and outputs/ references;
+95 focused writer/reference tests pass after the review fix. The original PR head's backend
+CI selection was 1308 passed, 5 skipped, 2 deselected; the updated head requires a fresh CI run. Cloud clients and model
 adapters in the new tests are fake; these results are not live provider or
 production deployment evidence.

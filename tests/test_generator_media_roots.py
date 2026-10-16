@@ -146,6 +146,37 @@ def test_relative_root_character_derivation_and_video_roundtrip(workspace):
     assert Path(video.model.calls[0]['img_path']).read_bytes() == b'generated media'
 
 
+@pytest.mark.parametrize('prefix', ['output/', 'outputs/'])
+def test_legacy_output_prefix_reads_selected_root_even_when_old_file_exists(workspace, prefix):
+    root, _ = workspace
+    key, reference = prepare_reference(root)
+    reference.write_bytes(b'current root')
+    old_path = Path('output') / key
+    old_path.parent.mkdir(parents=True)
+    old_path.write_bytes(b'old root')
+    legacy_key = prefix + key
+
+    image = AssetGenerator(output_root=root)
+    assert Path(image._reference_path(legacy_key)) == reference
+
+    video = VideoGenerator(output_root=root)
+    video.generate_i2v(legacy_key, 'slow pan', owner_profile_id='owner-a')
+    assert Path(video.model.calls[0]['img_path']) == reference
+    frame = StoryboardFrame(id='legacy-frame', scene_id='scene-1', image_url=legacy_key,
+                            owner_profile_id='owner-a')
+    video.generate_clip(frame)
+    assert Path(video.model.calls[1]['img_path']) == reference
+
+
+def test_invalid_legacy_locator_marks_frame_failed(workspace):
+    root, _ = workspace
+    video = VideoGenerator(output_root=root)
+    frame = StoryboardFrame(id='invalid-frame', scene_id='scene-1', image_url='output/../private.png')
+    video.generate_clip(frame)
+    assert frame.status == GenerationStatus.FAILED
+    assert not video.model.calls
+
+
 def test_same_key_is_portable_between_independent_roots(workspace):
     root, uploader = workspace
     keys = []

@@ -4,6 +4,7 @@ from .models import StoryboardFrame, GenerationStatus
 from ..studio_access import studio_media_dir
 from ...models.wanx import WanxModel
 from ...utils import get_logger
+from ...utils.managed_media_root import ManagedMediaRoot
 
 logger = get_logger(__name__)
 
@@ -13,6 +14,15 @@ class VideoGenerator:
         self.output_root = os.fspath(output_root)
         self.model = WanxModel(self.config.get('model', {}))
         self.output_dir = self.config.get('output_dir', os.path.join(self.output_root, 'video'))
+
+    def _local_image_path(self, reference: str) -> str | None:
+        if reference.startswith(("output/", "outputs/")):
+            path = str(ManagedMediaRoot(self.output_root).resolve(reference))
+            return path if os.path.exists(path) else None
+        path = os.path.join(self.output_root, reference)
+        if os.path.exists(path):
+            return os.path.abspath(path)
+        return reference if os.path.exists(reference) else None
 
     def generate_i2v(self, image_url: str, prompt: str, duration: int = 5, audio_url: str = None,
                      owner_profile_id: str = None) -> Dict[str, Any]:
@@ -33,13 +43,7 @@ class VideoGenerator:
         logger.info(f"Generating I2V motion reference: prompt={prompt[:50]}..., duration={duration}")
         
         # Handle local file paths
-        img_path = None
-        if image_url and not image_url.startswith("http"):
-            potential_path = os.path.join(self.output_root, image_url)
-            if os.path.exists(potential_path):
-                img_path = os.path.abspath(potential_path)
-            elif os.path.exists(image_url):
-                img_path = image_url
+        img_path = self._local_image_path(image_url) if image_url and not image_url.startswith("http") else None
         
         try:
             output_filename = f"motion_ref_{uuid.uuid4().hex[:8]}.mp4"
@@ -86,15 +90,11 @@ class VideoGenerator:
         prompt = frame.video_prompt or frame.image_prompt or frame.action_description
         
         img_url = frame.image_url
-        img_path = None
-        
-        # Resolve stored keys against the configured root before physical paths.
-        if img_url and not img_url.startswith("http"):
-            potential_path = os.path.join(self.output_root, img_url)
-            if os.path.exists(potential_path):
-                img_path = os.path.abspath(potential_path)
-            elif os.path.exists(img_url):
-                img_path = img_url
+        try:
+            img_path = self._local_image_path(img_url) if img_url and not img_url.startswith("http") else None
+        except ValueError:
+            frame.status = GenerationStatus.FAILED
+            return frame
 
         try:
             output_dir = studio_media_dir(frame.owner_profile_id, "video", output_root=self.output_root) if frame.owner_profile_id else self.output_dir
