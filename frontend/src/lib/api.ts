@@ -343,6 +343,10 @@ export interface EnvConfigPayload {
     OSS_ENDPOINT?: string;
     OSS_BASE_PATH?: string;
     OSS_ENABLE?: boolean;
+    IFRAME_MEDIA_ROOT?: string;
+    IFRAME_STORAGE_BACKEND?: 'local' | 'cos' | 'oss';
+    PROVIDER_MEDIA_PUBLIC_BASE_URL?: string;
+    PROVIDER_MEDIA_URL_TTL_SECONDS?: number | string;
     MANAGED_COS_CONFIGURED?: boolean;
     KLING_PROVIDER_MODE?: ProviderMode;
     VIDU_PROVIDER_MODE?: ProviderMode;

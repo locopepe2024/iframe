@@ -47,6 +47,10 @@ type EnvConfig = EnvConfigPayload & UserConfigPayload & {
   OSS_BUCKET_NAME: string;
   OSS_ENDPOINT: string;
   OSS_BASE_PATH: string;
+  IFRAME_MEDIA_ROOT?: string;
+  IFRAME_STORAGE_BACKEND?: "local" | "cos" | "oss";
+  PROVIDER_MEDIA_PUBLIC_BASE_URL?: string;
+  PROVIDER_MEDIA_URL_TTL_SECONDS?: number | string;
   KLING_PROVIDER_MODE: ProviderMode;
   VIDU_PROVIDER_MODE: ProviderMode;
   PIXVERSE_PROVIDER_MODE: ProviderMode;
@@ -70,6 +74,10 @@ const DEFAULT_CONFIG: EnvConfig = {
   OSS_BUCKET_NAME: "",
   OSS_ENDPOINT: "",
   OSS_BASE_PATH: "",
+  IFRAME_MEDIA_ROOT: "output",
+  IFRAME_STORAGE_BACKEND: "local",
+  PROVIDER_MEDIA_PUBLIC_BASE_URL: "",
+  PROVIDER_MEDIA_URL_TTL_SECONDS: 1800,
   KLING_PROVIDER_MODE: "dashscope",
   VIDU_PROVIDER_MODE: "dashscope",
   PIXVERSE_PROVIDER_MODE: "dashscope",
@@ -872,6 +880,22 @@ export default function SettingsPage() {
         <div className="rounded-xl border border-green-500/20 bg-green-500/10 p-4">
           <div className="text-sm font-semibold text-foreground">腾讯 COS · {config.MANAGED_COS_CONFIGURED ? "已启用" : "等待服务端接入"}</div>
           <p className="mt-1 text-xs text-text-secondary">私有对象、签名访问、素材额度和结果代理由平台管理，无需填写 COS 密钥。</p>
+        </div>
+      </FormRow>
+      <FormRow label="存储后端" hint="修改目录或后端后需要重启服务才会切换正在运行的 Pipeline。">
+        <div className="space-y-3">
+          <select value={config.IFRAME_STORAGE_BACKEND || "local"} onChange={(e) => handleChange("IFRAME_STORAGE_BACKEND", e.target.value)} className={settingsInputClass}>
+            <option value="local">本地存储</option>
+            <option value="cos">腾讯 COS</option>
+            <option value="oss">阿里云 OSS</option>
+          </select>
+          <input type="text" value={config.IFRAME_MEDIA_ROOT || "output"} onChange={(e) => handleChange("IFRAME_MEDIA_ROOT", e.target.value)} placeholder="本地素材目录，例如 output" className={settingsInputClass} />
+        </div>
+      </FormRow>
+      <FormRow label="供应商素材公网地址" hint="Wan、GreenA、UniArt 读取本地素材时使用的 HTTPS origin。">
+        <div className="space-y-3">
+          <input type="url" value={config.PROVIDER_MEDIA_PUBLIC_BASE_URL || ""} onChange={(e) => handleChange("PROVIDER_MEDIA_PUBLIC_BASE_URL", e.target.value)} placeholder="https://media.example.com" className={settingsInputClass} />
+          <input type="number" min={1} value={config.PROVIDER_MEDIA_URL_TTL_SECONDS || 1800} onChange={(e) => handleChange("PROVIDER_MEDIA_URL_TTL_SECONDS", e.target.value)} placeholder="URL 有效期（秒）" className={settingsInputClass} />
         </div>
       </FormRow>
       <FormRow label="自有 OSS" hint="可选：将结果同步到您自己的阿里云 OSS。">
