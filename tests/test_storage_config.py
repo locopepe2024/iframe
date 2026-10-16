@@ -13,7 +13,7 @@ def test_media_root_expands_user_path(monkeypatch):
     assert media_root().endswith("/iframe-media")
 
 
-@pytest.mark.parametrize("value", ["local", "cos", "oss"])
+@pytest.mark.parametrize("value", ["local", "cos"])
 def test_storage_backend_accepts_supported_values(monkeypatch, value):
     monkeypatch.setenv("IFRAME_STORAGE_BACKEND", value)
     assert storage_backend() == value

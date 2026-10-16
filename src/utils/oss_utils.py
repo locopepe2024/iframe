@@ -94,7 +94,7 @@ class OSSImageUploader:
     def __new__(cls):
         selected = os.getenv("IFRAME_STORAGE_BACKEND")
         backend = storage_backend() if selected is not None else None
-        if backend != "oss" and is_cos_configured() and COSImageUploader is not None:
+        if backend != "local" and is_cos_configured() and COSImageUploader is not None:
             return COSImageUploader()
         """Singleton pattern to reuse OSS connection."""
         if cls._instance is None:
@@ -224,6 +224,8 @@ class OSSImageUploader:
         Returns:
             Signed URL string
         """
+        if os.getenv("IFRAME_STORAGE_BACKEND") is not None:
+            return ""
         if not self.bucket:
             logger.warning("OSS not configured, cannot generate signed URL.")
             return ""

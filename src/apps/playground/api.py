@@ -204,6 +204,8 @@ def get_generation_media_url(
     identity: UserContext = Depends(require_user_context),
 ):
     """Issue a delivery URL from an owned generation/output identity."""
+    if os.getenv("IFRAME_STORAGE_BACKEND") == "cos":
+        raise HTTPException(status_code=404, detail="Local media is outside the active COS storage")
     storage = _storage_for(identity)
     generation = storage.get_generation(generation_id)
     output = next((item for item in generation.outputs if item.id == output_id), None) if generation else None
@@ -266,6 +268,8 @@ def get_generation_media(
     authorization: str | None = Header(default=None),
     browser_profile: str | None = Cookie(default=None, alias=BROWSER_PROFILE_COOKIE),
 ):
+    if os.getenv("IFRAME_STORAGE_BACKEND") == "cos":
+        raise HTTPException(status_code=404, detail="Local media is outside the active COS storage")
     # Original downloads use the same browser identity as history and uploads.
     # Signed previews still validate their signature; invalid bearer credentials
     # must not silently fall back to a different browser owner.

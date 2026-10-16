@@ -93,6 +93,8 @@ class COSImageUploader:
             return None
 
     def generate_signed_url(self, object_key: str, expires: int = 7200) -> str:
+        if os.getenv("IFRAME_STORAGE_BACKEND") is not None and storage_backend() != "cos":
+            return ""
         if not self.is_configured:
             return ""
         cache_key = (object_key, expires)
