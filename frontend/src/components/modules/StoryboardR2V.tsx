@@ -1006,7 +1006,7 @@ export default function StoryboardR2V() {
                     routeModelId,  // use routed R2V model
                     shot.id, // frameId
                     "multi", // shotType
-                    "r2v", // generationMode
+                    shot.videoMode ?? "r2v", // generationMode
                     !imageBased ? referenceUrls : undefined, // referenceVideoUrls (Wan 2.6 legacy)
                     undefined, undefined, undefined, // kling params
                     undefined, undefined, // vidu params
@@ -1016,6 +1016,8 @@ export default function StoryboardR2V() {
                     undefined, // watermark
                     shot.poseReferenceVariantIds,
                     shot.directorSnapshotMediaId ?? undefined,
+                    shot.lastFrameUrl,
+                    shot.lastFrameMediaId,
                 );
                 const task = Array.isArray(tasks) ? tasks[0] : tasks;
 
@@ -1099,7 +1101,7 @@ export default function StoryboardR2V() {
                     videoConfig.model, // direct I2V model
                     shot.id, // frameId
                     "multi", // shotType
-                    "i2v", // generationMode
+                    shot.videoMode ?? "i2v", // generationMode
                     undefined, // referenceVideoUrls
                     // Kling params
                     videoConfig.mode,
@@ -1115,6 +1117,8 @@ export default function StoryboardR2V() {
                     undefined, // watermark
                     shot.poseReferenceVariantIds,
                     shot.directorSnapshotMediaId ?? undefined,
+                    shot.lastFrameUrl,
+                    shot.lastFrameMediaId,
                 );
                 const task = Array.isArray(tasks) ? tasks[0] : tasks;
 

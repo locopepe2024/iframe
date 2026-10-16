@@ -674,7 +674,7 @@ export const api = {
         model: string = DEFAULT_I2V_MODEL_ID,
         frameId?: string,
         shotType: string = "single",  // 'single' or 'multi' (only for wan2.6-i2v)
-        generationMode: string = "i2v",  // 'i2v' or 'r2v'
+        generationMode: string = "i2v",  // 't2v' | 'i2v' | 'first_last_frame' | 'r2v'
         referenceVideoUrls: string[] = [],  // Reference videos for R2V (max 3)
         // Kling params
         mode?: string,
@@ -696,6 +696,8 @@ export const api = {
         watermark?: boolean,
         poseReferenceVariantIds?: Record<string, string[]>,
         directorSnapshotMediaId?: string,
+        lastFrameUrl?: string,
+        lastFrameMediaId?: string,
     ) => {
         const res = await axios.post(`${API_URL}/projects/${id}/video_tasks`, {
             image_url,
@@ -727,6 +729,8 @@ export const api = {
             workbench_tab: workbenchTab,
             pose_reference_variant_ids: poseReferenceVariantIds,
             director_snapshot_media_id: directorSnapshotMediaId,
+            last_frame_url: lastFrameUrl,
+            last_frame_media_id: lastFrameMediaId,
         });
         return res.data;
     },

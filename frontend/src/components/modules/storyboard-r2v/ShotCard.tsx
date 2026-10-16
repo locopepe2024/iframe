@@ -42,6 +42,10 @@ export interface ShotNode {
     prompt: string;
     promptIsOptimized?: boolean;
     tabMode: "t2i_i2v" | "direct_r2v";
+    /** Concrete video input mode; legacy tabs map to i2v/r2v when absent. */
+    videoMode?: "t2v" | "i2v" | "first_last_frame" | "r2v";
+    lastFrameUrl?: string;
+    lastFrameMediaId?: string;
     /** Optional per-shot video model override. */
     videoModel?: string;
     /** Explicit per-shot generated-audio choice. Undefined inherits the UI default. */
