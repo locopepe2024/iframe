@@ -424,6 +424,29 @@ def get_studio_media(
     return FileResponse(path, headers=headers, media_type="image/webp" if preview else None)
 
 
+@app.get("/studio/media-delivery")
+def refresh_studio_media_delivery(
+    reference: str,
+    preview: int = 0,
+    user: UserContext = Depends(require_studio_user),
+):
+    """Refresh an owned source or WebP cover without trusting URL expiry."""
+    from ..studio_access import resolve_studio_reference, studio_media_url, studio_media_preview_url
+    from ...utils.media_thumbnails import PREVIEW_MAX_EDGES
+
+    if preview and preview not in PREVIEW_MAX_EDGES:
+        raise HTTPException(status_code=422, detail="Unsupported media preview size")
+    try:
+        stored = resolve_studio_reference(reference, user.owner_profile_id, output_root=pipeline.output_root)
+    except (ValueError, FileNotFoundError, HTTPException) as exc:
+        raise HTTPException(status_code=404, detail="Media not found") from exc
+    if stored.startswith(("http://", "https://")):
+        raise HTTPException(status_code=422, detail="External media is not managed Studio media")
+    url = (studio_media_preview_url(user.owner_profile_id, stored, preview)
+           if preview else studio_media_url(user.owner_profile_id, stored, output_root=pipeline.output_root))
+    return private_no_store_signed_response({"url": url, "media_type": "image/webp" if preview else None})
+
+
 @app.get("/studio/owned-media/{owner_key}/{relative_path:path}")
 def get_owned_studio_media(
     owner_key: str,
@@ -2252,6 +2275,53 @@ def get_asset_library_preview(
     return FileResponse(preview, media_type="image/webp", headers={
         "Cache-Control": "private, max-age=1800", "X-Content-Type-Options": "nosniff",
     })
+
+
+@app.get("/asset-index/delivery")
+def get_asset_library_delivery(
+    scope: Literal["global", "series", "project"],
+    asset_type: Literal["character", "scene", "prop"],
+    asset_id: str,
+    variant_id: str,
+    container_id: str = "",
+    user: UserContext = Depends(require_studio_user),
+):
+    """Resolve a current source URL from an owned asset variant identity."""
+    if scope == "global":
+        assets = pipeline._library_list_for_type(asset_type, user.owner_profile_id) if not container_id else []
+    elif scope == "series":
+        series = pipeline.get_series(container_id, user.owner_profile_id)
+        assets = getattr(series, f"{asset_type}s", []) if series else []
+    else:
+        script = pipeline.get_script(container_id, user.owner_profile_id)
+        assets = getattr(script, f"{asset_type}s", []) if script else []
+    asset = next((item for item in assets if item.id == asset_id), None)
+    variant = next((item for item in pipeline._asset_image_variants(asset, asset_type) if item.id == variant_id), None) if asset else None
+    if variant is None:
+        raise HTTPException(status_code=404, detail="Asset variant not found")
+    raw = image_variant_storage_key(variant)
+    if not raw:
+        raise HTTPException(status_code=404, detail="Asset image not found")
+    uploader = OSSImageUploader()
+    if raw.startswith(("http://", "https://")):
+        raw = managed_object_key_from_url(raw, uploader)
+        if not raw:
+            raise HTTPException(status_code=422, detail="External asset source is unavailable")
+    try:
+        source = pipeline._resolve_stored_reference_value(raw, user.owner_profile_id)
+    except InvalidAssetReference as exc:
+        raise HTTPException(status_code=404, detail="Asset image not found") from exc
+    if is_object_key(source):
+        url = uploader.sign_url_for_display(source)
+        if not url:
+            raise HTTPException(status_code=503, detail="Asset storage unavailable")
+    else:
+        from ..studio_access import studio_media_url
+        stored = os.path.relpath(source, pipeline.output_root)
+        url = studio_media_url(user.owner_profile_id, stored, output_root=pipeline.output_root)
+        if url == stored:
+            raise HTTPException(status_code=404, detail="Asset image not found")
+    return JSONResponse({"url": url}, headers={"Cache-Control": "private, no-store"})
 
 
 @app.get("/projects/{script_id}/assembly-plan")

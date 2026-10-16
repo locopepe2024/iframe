@@ -136,8 +136,7 @@ def _public_generation(generation, identity: UserContext):
     _public_reference_fields(payload, identity)
     for output in payload.get("outputs", []):
         output["media_path"] = _media_url(identity, generation.id, output["id"])
-        if output.get("thumbnail_path"):
-            output["thumbnail_path"] = _media_url(identity, generation.id, output["id"], 1)
+        output["thumbnail_path"] = _media_url(identity, generation.id, output["id"], 1)
     return payload
 
 # ---------------------------------------------------------------------------
@@ -196,6 +195,34 @@ def get_generation_status(generation_id: str, identity: UserContext = Depends(re
     return payload
 
 
+def get_generation_media_url(
+    generation_id: str,
+    output_id: str,
+    thumbnail: int = Query(0, ge=0, le=1),
+    identity: UserContext = Depends(require_user_context),
+):
+    """Issue a delivery URL from an owned generation/output identity."""
+    storage = _storage_for(identity)
+    generation = storage.get_generation(generation_id)
+    output = next((item for item in generation.outputs if item.id == output_id), None) if generation else None
+    if output is None:
+        raise HTTPException(status_code=404, detail="Media not found")
+    path = output.thumbnail_path if thumbnail and output.thumbnail_path else output.media_path
+    try:
+        resolved = ManagedMediaRoot(storage.media_root).resolve(path)
+    except (TypeError, ValueError):
+        raise HTTPException(status_code=404, detail="Media not found")
+    if not resolved.is_file():
+        raise HTTPException(status_code=404, detail="Media not found")
+    if thumbnail:
+        from ...utils.media_thumbnails import create_media_thumbnail
+        try:
+            create_media_thumbnail(str(resolved), storage.output_dir, 320)
+        except (OSError, ValueError) as exc:
+            raise HTTPException(status_code=415, detail="Media preview unavailable") from exc
+    return {"url": _media_url(identity, generation_id, output_id, thumbnail)}
+
+
 def delete_generation(generation_id: str, identity: UserContext = Depends(require_user_context)):
     """Delete a generation record and its outputs."""
     if not _storage_for(identity).delete_generation(generation_id):
@@ -222,6 +249,7 @@ def save_to_library(
 
 router.add_api_route("/history", list_history, methods=["GET"])
 router.add_api_route("/history/{generation_id}", get_generation, methods=["GET"])
+router.add_api_route("/history/{generation_id}/outputs/{output_id}/media-url", get_generation_media_url, methods=["GET"])
 router.add_api_route(
     "/history/{generation_id}/status", get_generation_status, methods=["GET"]
 )
@@ -266,7 +294,13 @@ def get_generation_media(
     path = output.thumbnail_path if thumbnail and output.thumbnail_path else output.media_path
     if not path or not os.path.isfile(path):
         raise HTTPException(status_code=404, detail="Media not found")
-    return FileResponse(path)
+    if thumbnail:
+        from ...utils.media_thumbnails import create_media_thumbnail
+        try:
+            path = create_media_thumbnail(path, _storage_for(identity).output_dir, 320)
+        except (OSError, ValueError) as exc:
+            raise HTTPException(status_code=415, detail="Media preview unavailable") from exc
+    return FileResponse(path, media_type="image/webp" if thumbnail else None)
 
 
 router.add_api_route(

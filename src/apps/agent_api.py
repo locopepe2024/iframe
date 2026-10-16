@@ -86,6 +86,38 @@ def public(session):
     return {k: v for k, v in session.items() if k != "messages"}
 
 
+def public_media_messages(messages, ctx: UserContext):
+    """Project owned, current browser URLs without rewriting session history."""
+    from .playground.api import _media_url, _storage_for
+    from .studio_access import resolve_studio_reference, studio_media_url
+
+    storage = _storage_for(ctx)
+    result = []
+    for message in messages or []:
+        item = dict(message)
+        if "input_media" not in item:
+            result.append(item)
+            continue
+        media = []
+        for value in item.get("input_media") or []:
+            try:
+                reference = storage.browser_media_reference(value)
+                if reference.startswith("/playground/media/"):
+                    parts = reference.removeprefix("/playground/media/").split("/")
+                    if len(parts) == 2:
+                        storage.resolve_media_reference(reference)
+                        reference = _media_url(ctx, parts[0], parts[1])
+                elif reference.startswith("/studio/media/"):
+                    stored = resolve_studio_reference(reference, ctx.owner_profile_id, output_root=storage.media_root)
+                    reference = studio_media_url(ctx.owner_profile_id, stored, output_root=storage.media_root)
+                media.append(reference)
+            except (ValueError, FileNotFoundError, HTTPException):
+                media.append(value)
+        item["input_media"] = media
+        result.append(item)
+    return result
+
+
 class SessionCreate(BaseModel):
     playground_session_id: str | None = Field(default=None, max_length=100)
     title: str = Field(default="新会话", min_length=1, max_length=100)
@@ -848,7 +880,7 @@ def delete(sid: str, ctx: UserContext = Depends(require_user_context)):
 def messages(sid: str, ctx: UserContext = Depends(require_user_context)):
     with database() as db:
         _, session = read_session(db, ctx.owner_profile_id, sid)
-    return {"messages": session["messages"]}
+    return {"messages": public_media_messages(session["messages"], ctx)}
 
 
 def require_playground(ctx, sid):
@@ -863,7 +895,7 @@ def playground_conversation(sid: str, ctx: UserContext = Depends(require_user_co
     with database() as db:
         row = db.execute("SELECT payload,busy FROM sessions WHERE owner=? AND id=?", (ctx.owner_profile_id, "playground-" + sid)).fetchone()
     session = json.loads(row[0]) if row else None
-    return {"session": public(session) if session else None, "messages": session["messages"] if session else [], "busy_until": row["busy"] if row and row["busy"] > time.time() else 0}
+    return {"session": public(session) if session else None, "messages": public_media_messages(session["messages"], ctx) if session else [], "busy_until": row["busy"] if row and row["busy"] > time.time() else 0}
 
 
 def reference_path(ctx, reference):
@@ -1197,7 +1229,8 @@ def send(sid: str, body: MessageCreate, ctx: UserContext = Depends(require_user_
                     raise HTTPException(409, "会话已更新，请重新加载")
             if failure_http_exc:
                 raise failure_http_exc
-            return dict(session=public(session), user_message=user, assistant_message=assistant)
+            projected = public_media_messages([user, assistant], ctx)
+            return dict(session=public(session), user_message=projected[0], assistant_message=projected[1])
         validate_model(ctx, session["model"])
         if body.companion_skills:
             base_instruction = "你是温和、尊重的对话陪伴助手。认真倾听，以简短清晰的语言回应。用户当前的话优先于过往背景。你没有日历、闹钟、媒体播放或主动发送消息的能力；不得声称已执行这些操作。医疗、药物和投资问题不做个性化决策，建议咨询专业人士。"
@@ -1318,7 +1351,8 @@ def send(sid: str, body: MessageCreate, ctx: UserContext = Depends(require_user_
             result = db.execute("UPDATE sessions SET payload=?, busy=0 WHERE owner=? AND id=? AND busy=?", (json.dumps(session), owner, sid, lease))
             if result.rowcount != 1:
                 raise HTTPException(409, "会话已更新，请重新加载")
-        return dict(session=public(session), user_message=user, assistant_message=assistant)
+        projected = public_media_messages([user, assistant], ctx)
+        return dict(session=public(session), user_message=projected[0], assistant_message=projected[1])
     except HTTPException:
         raise
     except Exception as exc:
