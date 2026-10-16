@@ -20,6 +20,7 @@ export type DerivedStatus = "completed" | "processing" | "pending";
 // Derive a cover image from the project's frames / scenes. The backend has no
 // dedicated cover field, so we fall back through the richest available source.
 export function deriveCover(project: Project): string | undefined {
+    if (project.cover_url) return getAssetUrl(project.cover_url);
     const frames = (project.frames || []) as Array<Record<string, any>>;
     for (const f of frames) {
         const direct = f?.rendered_image_url || f?.image_url;

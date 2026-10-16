@@ -403,7 +403,7 @@ def sign_studio_media_paths(value: Any, owner_profile_id: str, *, output_root: s
         return [sign_studio_media_paths(item, owner_profile_id, output_root=output_root) for item in value]
     if isinstance(value, dict):
         return {
-            key: item if key == "storage_key" else sign_studio_media_paths(item, owner_profile_id, output_root=output_root)
+            key: item if key in {"storage_key", "cover_url"} else sign_studio_media_paths(item, owner_profile_id, output_root=output_root)
             for key, item in value.items()
         }
     return value

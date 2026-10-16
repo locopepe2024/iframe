@@ -110,6 +110,16 @@ def test_settings_reports_effective_storage_backend(monkeypatch, selected, cos_c
     assert api.get_env_config(identity=None)['IFRAME_STORAGE_BACKEND'] == expected
 
 
+def test_project_cover_uses_current_webp_delivery(monkeypatch):
+    from types import SimpleNamespace
+    from src.apps.comic_gen import api
+
+    frame = SimpleNamespace(rendered_image_url="lumenx/frames/first.png", image_url=None)
+    script = SimpleNamespace(frames=[frame], scenes=[])
+    monkeypatch.setattr(api, '_owned_media_cover_url', lambda value, owner, preview: f'/cover/{owner}/{preview}.webp')
+    assert api._project_cover_url(script, 'owner-1') == '/cover/owner-1/320.webp'
+
+
 def test_admin_storage_settings_persist_without_live_cutover(monkeypatch):
     from src.apps.comic_gen import api
     monkeypatch.setenv('LUMENX_ENABLE_ADMIN_ENV_CONFIG', 'true')

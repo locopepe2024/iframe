@@ -394,6 +394,41 @@ def _script_response_dump(script: Script) -> Dict[str, Any]:
     return payload
 
 
+def _project_cover_source(script: Script) -> Optional[str]:
+    """Choose the first durable still used for a workspace project cover."""
+    for frame in script.frames or []:
+        for value in (getattr(frame, "rendered_image_url", None), getattr(frame, "image_url", None)):
+            if value:
+                return value
+        for asset_name in ("rendered_image_asset", "image_asset"):
+            asset = getattr(frame, asset_name, None)
+            variants = getattr(asset, "variants", None) if asset else None
+            if variants:
+                selected_id = getattr(asset, "selected_id", None)
+                selected = next((item for item in variants if item.id == selected_id), None) if selected_id else None
+                value = getattr(selected or variants[0], "url", None)
+                if value:
+                    return value
+    for scene in script.scenes or []:
+        if getattr(scene, "image_url", None):
+            return scene.image_url
+        asset = getattr(scene, "image_asset", None)
+        variants = getattr(asset, "variants", None) if asset else None
+        if variants and getattr(variants[0], "url", None):
+            return variants[0].url
+    return None
+
+
+def _project_cover_url(script: Script, owner_profile_id: str) -> Optional[str]:
+    source = _project_cover_source(script)
+    if not source:
+        return None
+    try:
+        return _owned_media_cover_url(source, owner_profile_id, 320)
+    except HTTPException:
+        return None
+
+
 def private_no_store_signed_response(data):
     """Return owner-scoped mutable data without allowing intermediary caching."""
     response = signed_response(data)
@@ -1011,7 +1046,8 @@ async def extract_preview(script_id: str, request: ReparseProjectRequest):
 def list_projects(user: UserContext = Depends(require_studio_user)):
     """Lists all projects from backend storage."""
     scripts = pipeline.list_scripts(user.owner_profile_id)
-    return signed_response(scripts)
+    payload = [_script_response_dump(script) | {"cover_url": _project_cover_url(script, user.owner_profile_id)} for script in scripts]
+    return signed_response(payload)
 
 
 @app.post("/projects/{script_id}/toggle_starred")
@@ -1235,11 +1271,12 @@ def remove_episode_from_series(series_id: str, script_id: str):
 
 
 @app.get("/series/{series_id}/episodes")
-def get_series_episodes(series_id: str):
+def get_series_episodes(series_id: str, user: UserContext = Depends(require_studio_user)):
     """Get all episodes in a Series."""
     try:
         episodes = pipeline.get_series_episodes(series_id)
-        return signed_response(episodes)
+        payload = [_script_response_dump(episode) | {"cover_url": _project_cover_url(episode, user.owner_profile_id)} for episode in episodes]
+        return signed_response(payload)
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
 

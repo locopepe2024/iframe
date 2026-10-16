@@ -515,6 +515,7 @@ export interface Project {
     episode_prop_asset_replacements?: Record<string, string>;
     /** T13 — user-starred (featured) flag; drives the amber-halation card. */
     starred?: boolean;
+    cover_url?: string | null;
 }
 
 interface ProjectStore {
