@@ -8,6 +8,7 @@
 - H3 文章建议：源视频被直接修改时使用 `[video editing]`，并以 `The target video is an edited version of <Video 1>.` 开头。
 - s09 切前单镜头为局部帧 `[0,112)`，帧 112 是硬切；源片有两次独立高举：69–73 与 82–87，中间 74–81 为回落/转背。
 - 现有 `s09-action-v2` 是历史 `reference2video` 结果，不能作为本次 A/B 的同批对照。
+- 代码与单元测试只暴露 `reference2video`；没有独立的 `video editing` provider mode。UniArt 的 `v2v` 兼容映射也归入 `reference2video`。
 
 ## Direct implication
 
@@ -21,6 +22,8 @@
 | B | `[video editing] The target video is an edited version of <Video 1>.`；只替换指定人物身份，其他内容声明保留 | 当前可用的同一视频输入路径；若 provider 不接受编辑模式，记录为接口/能力不可比，不强行替代 | 固定 |
 
 B 组不能仅替换字符串后宣称完成编辑验证：必须记录实际请求 body、provider 接受的 mode、任务 ID 和输入指纹。若 UniArt 仍将两组路由为同一个 `reference2video`，结论只能是“提示词标签 A/B”，不能称为原生 editing A/B。
+
+离线验证：H3 prompt 结构检查及 UniArt 视频引用序列/URL 传输相关测试通过；完整 `tests/test_uniart_video_urls.py` 仍有既有 playground duration 缺失测试失败，与本计划文件无关。
 
 ## Acceptance sheet
 
