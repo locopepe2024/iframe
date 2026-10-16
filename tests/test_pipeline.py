@@ -224,6 +224,7 @@ def test_storyboard_prompt_projection_is_per_frame_and_includes_visual_baseline(
     second_prompt = pipeline.storyboard_frame_prompt_projection(project, second)
 
     assert "cinematic realism" in first_prompt
+    assert "Ancient Ruins" in first_prompt
     assert "暮秋残阳从画面右侧照入" in first_prompt
     assert "Alex enters from the left" in first_prompt
     assert "檐下冷阴影" in second_prompt

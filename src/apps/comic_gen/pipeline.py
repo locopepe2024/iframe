@@ -2653,6 +2653,9 @@ class ComicGenPipeline(StudioOwnerMixin):
         if frame.style_prompt_override and frame.style_prompt_override.strip():
             style_text = frame.style_prompt_override.strip()
 
+        resolved = self.resolve_project_assets(script)
+        scene = next((item for item in resolved["scenes"] if item.id == frame.scene_id), None)
+
         lighting_parts: List[str] = []
         if frame.lighting:
             lighting_parts.extend(
@@ -2670,6 +2673,7 @@ class ComicGenPipeline(StudioOwnerMixin):
 
         parts = [
             str(frame.visual_description or frame.action_description or "").strip(),
+            f"Location: {scene.name}. {scene.description}" if scene else "",
             f"Visual style: {style_text}" if style_text else "",
             f"Lighting: {'; '.join(lighting_parts)}" if lighting_parts else "",
             f"Shot size: {frame.shot_size}" if frame.shot_size else "",
