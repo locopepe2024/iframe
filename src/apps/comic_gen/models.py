@@ -351,6 +351,8 @@ class VideoTask(BaseModel):
     frame_id: Optional[str] = Field(None, description="ID of the storyboard frame this video belongs to")
     asset_id: Optional[str] = Field(None, description="ID of the asset this video belongs to")
     image_url: str
+    last_frame_url: Optional[str] = Field(None, description="Stable delivery URL/key for the confirmed last frame in first_last_frame mode")
+    last_frame_media_id: Optional[str] = Field(None, description="Stable media identity of the confirmed last frame")
     input_media_id: Optional[str] = Field(None, description="Stable media identity of the I2V input frame")
     prompt: str
     status: str = "pending"  # pending, processing, completed, failed

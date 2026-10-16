@@ -65,6 +65,37 @@ def test_h3_rejects_more_than_nine_reference_images(studio):
     assert not script.video_tasks
 
 
+def test_h3_first_last_frame_persists_both_inputs(studio):
+    pipeline, script = studio
+    pipeline.create_video_task(
+        script.id,
+        "https://cdn.example/first.jpg",
+        "move between frames",
+        model="uniart/minimax-h3-vip",
+        generation_mode="first_last_frame",
+        last_frame_url="https://cdn.example/last.jpg",
+        last_frame_media_id="last-media-1",
+    )
+    task = script.video_tasks[0]
+    assert task.generation_mode == "first_last_frame"
+    assert task.image_url == "https://cdn.example/first.jpg"
+    assert task.last_frame_url == "https://cdn.example/last.jpg"
+    assert task.last_frame_media_id == "last-media-1"
+
+
+def test_first_last_frame_requires_distinct_frames(studio):
+    pipeline, script = studio
+    with pytest.raises(ValueError, match="different"):
+        pipeline.create_video_task(
+            script.id,
+            "https://cdn.example/frame.jpg",
+            "move",
+            model="uniart/seedance-2.0-vip",
+            generation_mode="first_last_frame",
+            last_frame_url="https://cdn.example/frame.jpg",
+        )
+
+
 def task(script, **overrides):
     values = dict(id="take", project_id=script.id, image_url="", prompt="replace product",
                   model="uniart/minimax-h3-vip", generation_mode="r2v", duration=6,

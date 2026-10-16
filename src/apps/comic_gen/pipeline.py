@@ -6230,7 +6230,7 @@ class ComicGenPipeline(StudioOwnerMixin):
         self._save_data()
         return script
 
-    def create_video_task(self, script_id: str, image_url: str, prompt: str, duration: int = 5, seed: int = None, resolution: str = "720p", generate_audio: bool = False, audio_url: str = None, prompt_extend: bool = True, negative_prompt: str = None, model: str = "wan2.7-i2v", frame_id: str = None, shot_type: str = "single", generation_mode: str = "i2v", reference_video_urls: list = None, reference_image_urls: list = None, ratio: str = None, watermark: Optional[bool] = None, mode: str = None, sound: str = None, cfg_scale: float = None, vidu_audio: bool = None, movement_amplitude: str = None, workbench_tab: Optional[str] = None, pose_reference_variant_ids: Optional[Dict[str, List[str]]] = None, director_snapshot_media_id: Optional[str] = None) -> Tuple[Script, str]:
+    def create_video_task(self, script_id: str, image_url: str, prompt: str, duration: int = 5, seed: int = None, resolution: str = "720p", generate_audio: bool = False, audio_url: str = None, prompt_extend: bool = True, negative_prompt: str = None, model: str = "wan2.7-i2v", frame_id: str = None, shot_type: str = "single", generation_mode: str = "i2v", reference_video_urls: list = None, reference_image_urls: list = None, ratio: str = None, watermark: Optional[bool] = None, mode: str = None, sound: str = None, cfg_scale: float = None, vidu_audio: bool = None, movement_amplitude: str = None, workbench_tab: Optional[str] = None, pose_reference_variant_ids: Optional[Dict[str, List[str]]] = None, director_snapshot_media_id: Optional[str] = None, last_frame_url: Optional[str] = None, last_frame_media_id: Optional[str] = None) -> Tuple[Script, str]:
         """Creates a new video generation task."""
         script = self.get_script(script_id)
         if not script:
@@ -6242,6 +6242,17 @@ class ComicGenPipeline(StudioOwnerMixin):
         from ...models.nsfw_new_one import WAN_IDS
         is_nsfw_wan = model in WAN_IDS
         is_uniart_video = bool(model and model.startswith(("uniart/minimax-h3-", "uniart/seedance-")))
+        if generation_mode not in ("t2v", "i2v", "first_last_frame", "r2v"):
+            raise ValueError(f"Unsupported video generation mode: {generation_mode}")
+        if generation_mode == "first_last_frame":
+            if not image_url or not last_frame_url:
+                raise ValueError("First/last-frame video requires both first and last frame images")
+            if image_url == last_frame_url:
+                raise ValueError("First and last frame images must be different")
+            if not is_uniart_video:
+                raise ValueError("First/last-frame mode is currently supported by UniArt Seedance and MiniMax H3")
+        if generation_mode == "t2v" and (image_url or last_frame_url):
+            raise ValueError("Text-to-video cannot accept first/last frame images")
         if generation_mode == "r2v" and not (is_uniart_video or is_nsfw_wan):
             # Skip auto-switch if user already selected an R2V model directly
             if not (model and model.endswith("-r2v")):
@@ -6294,7 +6305,7 @@ class ComicGenPipeline(StudioOwnerMixin):
             references = (reference_image_urls or []) + (reference_video_urls or [])
             if generation_mode == "r2v" and not references and not audio_url:
                 raise ValueError("Reference-to-video requires image, video or audio references")
-            if generation_mode not in ("r2v", "i2v", "t2v"):
+            if generation_mode not in ("r2v", "i2v", "t2v", "first_last_frame"):
                 raise ValueError("Unsupported Studio UniArt generation mode")
             if generation_mode != "r2v" and references:
                 raise ValueError("Reference lists require reference-to-video mode")
@@ -6302,6 +6313,8 @@ class ComicGenPipeline(StudioOwnerMixin):
                 raise ValueError("Use the ordered reference list instead of an additional input image")
             if generation_mode == "i2v" and not image_url:
                 raise ValueError("Image-to-video requires an input image")
+            if generation_mode == "first_last_frame" and (not image_url or not last_frame_url):
+                raise ValueError("First/last-frame video requires both frame images")
             if generation_mode == "i2v" and audio_url:
                 raise ValueError("Audio references require reference-to-video mode")
             if generation_mode == "t2v" and (image_url or audio_url):
@@ -6312,6 +6325,8 @@ class ComicGenPipeline(StudioOwnerMixin):
             reference_video_urls = [resolve_studio_reference(ref, script.owner_profile_id, output_root=self.output_root) for ref in reference_video_urls or []]
             if image_url:
                 image_url = resolve_studio_reference(image_url, script.owner_profile_id, output_root=self.output_root)
+            if last_frame_url:
+                last_frame_url = resolve_studio_reference(last_frame_url, script.owner_profile_id, output_root=self.output_root)
             if audio_url:
                 audio_url = resolve_studio_reference(audio_url, script.owner_profile_id, output_root=self.output_root)
 
@@ -6369,6 +6384,7 @@ class ComicGenPipeline(StudioOwnerMixin):
 
         source_frame = next((item for item in script.frames if item.id == frame_id), None) if frame_id else None
         input_media_id = None
+        effective_last_frame_media_id = last_frame_media_id
         reference_media_ids: List[str] = []
         storyboard_reference_revision = None
         if source_frame:
@@ -6385,6 +6401,7 @@ class ComicGenPipeline(StudioOwnerMixin):
             selected_id = rendered.selected_id if rendered else None
             selected = next((item for item in (rendered.variants if rendered else []) if item.id == selected_id), None)
             input_media_id = selected.media_id if selected else None
+            effective_last_frame_media_id = effective_last_frame_media_id or package.last_frame_media_id
         else:
             asset_revision_pins = []
 
@@ -6405,6 +6422,8 @@ class ComicGenPipeline(StudioOwnerMixin):
                 else None
             ),
             image_url=snapshot_url,
+            last_frame_url=last_frame_url,
+            last_frame_media_id=effective_last_frame_media_id,
             input_media_id=input_media_id,
             prompt=prompt,
             status="pending",
@@ -7620,9 +7639,11 @@ class ComicGenPipeline(StudioOwnerMixin):
                 provider_duration = max(4, min(max_duration, task.duration))
                 video_path, _ = uniart_model.generate(
                     prompt=submitted_prompt, output_path=output_path, img_url=img_url, img_path=img_path,
+                    first_frame=task.image_url if task.generation_mode == "first_last_frame" else None,
+                    last_frame=task.last_frame_url if task.generation_mode == "first_last_frame" else None,
                     duration=provider_duration, resolution=task.resolution, aspect_ratio=task.ratio or "16:9",
                     model=task.model,
-                    mode={"r2v": "reference2video", "i2v": "image2video", "t2v": "text2video"}[task.generation_mode],
+                    mode={"r2v": "reference2video", "i2v": "image2video", "first_last_frame": "frames2video", "t2v": "text2video"}[task.generation_mode],
                     ref_image_urls=reference_images if task.generation_mode == "r2v" else [],
                     ref_video_urls=task.reference_video_urls if task.generation_mode == "r2v" else [],
                     ref_audio_urls=[task.audio_url] if task.audio_url and task.generation_mode == "r2v" else [],
