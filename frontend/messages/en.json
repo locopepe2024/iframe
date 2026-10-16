@@ -2787,7 +2787,7 @@
       "saving": "Saving draft…",
       "manage": "Session actions",
       "factSettings": "Auto-save settings",
-      "factSettingsDescription": "Choose which personal fact categories may be extracted and saved from this session. You can turn them off at any time.",
+      "factSettingsDescription": "These settings apply to all your creation sessions. Choose which personal fact categories may be saved automatically. Turning one off does not delete existing facts.",
       "factSettingsLoadFailed": "Could not load auto-save settings. Please retry.",
       "factSettingsSaveFailed": "Could not save auto-save settings. Please retry.",
       "close": "Close",

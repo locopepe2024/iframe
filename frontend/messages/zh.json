@@ -2787,7 +2787,7 @@
       "saving": "正在保存草稿…",
       "manage": "会话管理",
       "factSettings": "自动保存设置",
-      "factSettingsDescription": "选择哪些个人事实类别可以从本会话中自动提炼保存。你可以随时关闭。",
+      "factSettingsDescription": "此设置适用于你的所有创作会话。选择可自动提炼保存的个人事实类别；关闭后不会删除已保存的事实。",
       "factSettingsLoadFailed": "无法加载自动保存设置，请重试。",
       "factSettingsSaveFailed": "自动保存设置保存失败，请重试。",
       "close": "关闭",
