@@ -767,6 +767,13 @@ def facts(since: float | None = None, until: float | None = None,
         return {"events": agent_facts.list_events(db, ctx.owner_profile_id, since, until, category, limit)}
 
 
+@router.post("/facts/query")
+def query_facts(body: agent_facts.FactTimelineQuery,
+                ctx: UserContext = Depends(require_user_context)):
+    with database() as db:
+        return agent_facts.query_timeline(db, ctx.owner_profile_id, body)
+
+
 @router.get("/fact-categories")
 def fact_categories(ctx: UserContext = Depends(require_user_context)):
     with database() as db:

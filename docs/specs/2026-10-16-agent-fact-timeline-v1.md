@@ -18,6 +18,12 @@ outside world. Existing confirmed `agent_memories` remain unchanged.
 - Extraction is best effort after a completed turn. A failed extraction does not
   fail the chat request; the owner can retry extraction for a saved message.
 - No extracted event is injected into Chat prompts in this slice.
+- Category settings are owner-wide even though their UI entry is on each
+  session's overflow menu. The UI must state this scope.
+- `current` is the latest original statement per category, subject and predicate,
+  with a later correction or retraction applied to that specific statement.
+  It is not a verified current condition; `recent` uses recorded time (default 30
+  days), and `history` returns the bounded recorded timeline.
 
 ## Data
 
@@ -33,6 +39,11 @@ events that depend on them. Reads check source existence and quote again.
 - `POST /agent/facts/extract`: retry extraction for one saved user message.
 - `POST /agent/facts/{id}/correct`: create a correction or retraction event from
   a later saved user message, with an exact supporting quote.
+- `POST /agent/facts/query`: request `current`, `recent`, or `history` view;
+  response names its `recorded_at` time basis and interpretation. Corrections
+  require their replacement value to occur in the quoted user message.
+- `GET/PATCH /agent/fact-categories`: inspect and update owner-wide capture
+  and future recall preferences. Recall is not enabled in this release.
 
 ## Verification
 
@@ -41,6 +52,10 @@ events that depend on them. Reads check source existence and quote again.
 - Preserve imprecise time and historical events after a state change.
 - Deleting a source message or session prevents derived facts from being recalled.
 - Test correction and retraction links without mutating the earlier quote.
+- Reject a replacement value invented outside the correcting message.
+- Reject exact date boundaries absent from the quoted user text.
+- Apply a retraction to its target, without hiding a newer independent statement.
+- Distinguish latest user report from verified current state.
 
 Affected paths: `src/apps/agent_api.py`, `src/apps/agent_facts.py`,
 `tests/test_agent_facts.py`.

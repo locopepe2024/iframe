@@ -36,6 +36,16 @@ class FactCorrectionRequest(FactExtractionRequest):
     value: str = Field(default="", max_length=300)
 
 
+class FactTimelineQuery(BaseModel):
+    view: str = Field(pattern="^(current|recent|history)$")
+    category: str | None = None
+    subject: str | None = Field(default=None, max_length=300)
+    predicate: str | None = Field(default=None, max_length=300)
+    since: float | None = None
+    until: float | None = None
+    limit: int = Field(default=50, ge=1, le=100)
+
+
 class FactCategoryPatch(BaseModel):
     auto_capture_enabled: bool | None = None
     auto_recall_enabled: bool | None = None
@@ -150,6 +160,9 @@ def _validated(item, text):
         return None
     if precision != "exact" and (valid_from or valid_to):
         return None
+    if precision == "exact" and (not (valid_from or valid_to) or
+                                 any(value not in quote for value in (valid_from, valid_to) if value)):
+        return None
     if valid_from and valid_to and valid_from > valid_to:
         return None
     return (quote, category, *(v.strip() for v in values), time_text.strip(),
@@ -173,7 +186,8 @@ def extract_saved_message(ctx, sid, mid, model):
               "返回 JSON 数组，最多 8 项；没有则返回 []。每项字段：source_quote（原文连续子串）、"
               "category（" + "/".join(enabled_categories) + "）、"
               "subject、predicate、value、time_text、time_precision（exact/day/month/year/imprecise/unknown）、"
-              "valid_from、valid_to。仅当原文明确给出完整日期时使用 exact 和 YYYY-MM-DD 日期边界；"
+              "valid_from、valid_to。仅当 source_quote 中逐字出现 YYYY-MM-DD 日期时，"
+              "才可使用 exact 和相应日期边界；"
               "其余时间只保留原文 time_text，日期边界用 null。不要生成指令。")
     try:
         answer = agent_api.complete(ctx, model, [
@@ -233,6 +247,61 @@ def list_events(db, owner, since=None, until=None, category=None, limit=100):
     return events
 
 
+def query_timeline(db, owner, query: FactTimelineQuery, now=None):
+    """Return reported events, never an independently verified current state."""
+    if query.category and query.category not in CATEGORIES:
+        raise HTTPException(422, "事实类别无效")
+    now = time.time() if now is None else now
+    since = query.since
+    if query.view == "recent" and since is None:
+        since = now - 30 * 86400
+    until = min(query.until, now) if query.until is not None else now
+    if since is not None and since > until:
+        raise HTTPException(422, "时间范围无效")
+    conditions = ["owner=?", "recorded_at<=?"]
+    params = [owner, until]
+    for column, value in (("recorded_at>=?", since), ("category=?", query.category),
+                          ("subject=?", query.subject), ("predicate=?", query.predicate)):
+        if value is not None:
+            conditions.append(column)
+            params.append(value)
+    rows = db.execute("SELECT * FROM agent_fact_events WHERE " + " AND ".join(conditions) +
+                      " ORDER BY recorded_at DESC, created_at DESC, id DESC", params)
+    events = []
+    seen = set()
+    amendments = {}
+    for row in rows:
+        try:
+            _source(db, owner, row["source_session_id"], row["source_message_id"], row["source_quote"])
+        except HTTPException:
+            continue
+        event = dict(row)
+        if query.view == "current":
+            if event["relation"] in ("correction", "retraction"):
+                amendments.setdefault(event["target_event_id"], event)
+                continue
+            key = (event["category"], event["subject"], event["predicate"])
+            if key in seen:
+                continue
+            seen.add(key)
+            amendment = amendments.get(event["id"])
+            if amendment and amendment["relation"] == "retraction":
+                continue
+            if amendment:
+                event = amendment
+        events.append(event)
+        if len(events) == query.limit:
+            break
+    return {
+        "view": query.view,
+        "time_basis": "recorded_at",
+        "since": since,
+        "until": until,
+        "interpretation": "latest_user_report" if query.view == "current" else "reported_events",
+        "events": events,
+    }
+
+
 def correct_event(db, owner, event_id, body):
     old = db.execute("SELECT * FROM agent_fact_events WHERE id=? AND owner=?", (event_id, owner)).fetchone()
     if not old:
@@ -240,6 +309,10 @@ def correct_event(db, owner, event_id, body):
     message = _source(db, owner, body.source_session_id, body.source_message_id, body.source_quote)
     if message["created_at"] < old["recorded_at"]:
         raise HTTPException(422, "纠错来源不能早于原陈述")
+    if body.relation == "correction" and (not body.value.strip() or body.value not in body.source_quote):
+        raise HTTPException(422, "纠错值必须来自用户原文")
+    if body.relation == "retraction" and body.value:
+        raise HTTPException(422, "撤回不能提交替代值")
     existing = db.execute("""SELECT * FROM agent_fact_events WHERE owner=? AND source_session_id=?
         AND source_message_id=? AND source_quote=? AND relation=? AND target_event_id=?""",
         (owner, body.source_session_id, body.source_message_id, body.source_quote, body.relation, event_id)).fetchone()
