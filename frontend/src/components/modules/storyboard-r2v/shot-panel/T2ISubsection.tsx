@@ -75,6 +75,7 @@ interface T2ISubsectionProps {
     onUpload: (file: File) => Promise<T2IUploadError | void>;
     onSelectAsset?: () => void;
     resolveUrl?: (url: string) => string;
+    frameLabel?: string;
 }
 
 export default function T2ISubsection({
@@ -90,6 +91,7 @@ export default function T2ISubsection({
     onGenerate,
     onUpload, onSelectAsset,
     resolveUrl,
+    frameLabel = "首帧",
 }: T2ISubsectionProps) {
     const t = useTranslations("storyboardR2V");
     // resolveUrl is kept in the prop API (still passed by host for back-compat)
@@ -113,6 +115,7 @@ export default function T2ISubsection({
                 onGenerate={onGenerate}
                 onUpload={onUpload}
                 onSelectAsset={onSelectAsset}
+                frameLabel={frameLabel}
             />
         );
     }
@@ -132,6 +135,7 @@ export default function T2ISubsection({
             onGenerate={onGenerate}
             onUpload={onUpload}
             onSelectAsset={onSelectAsset}
+            frameLabel={frameLabel}
         />
     );
 }
@@ -150,10 +154,12 @@ interface HeroProps {
     onGenerate: () => void;
     onUpload: (file: File) => Promise<T2IUploadError | void>;
     onSelectAsset?: () => void;
+    frameLabel: string;
 }
 
 function Hero({
     t, promptIsEmpty, generating, inFlightTaskId, inFlightStatus, onGenerate, onUpload,
+    frameLabel,
 }: HeroProps) {
     const [uploading, setUploading] = useState(false);
     const [uploadError, setUploadError] = useState<T2IUploadError | null>(null);
@@ -319,12 +325,13 @@ interface CompactProps {
     onGenerate: () => void;
     onUpload: (file: File) => Promise<T2IUploadError | void>;
     onSelectAsset?: () => void;
+    frameLabel: string;
 }
 
 function Compact({
     t, imageUrls, selectedIndex, storyboardFrameUrl, generating,
     inFlightTaskId, inFlightStatus, promptIsEmpty,
-    onSelect, onRemove, onGenerate, onUpload, onSelectAsset,
+    onSelect, onRemove, onGenerate, onUpload, onSelectAsset, frameLabel,
 }: CompactProps) {
     // 数据模型：active frame 来源优先级 = getActiveT2IImageUrl 然后 fallback shot.imageUrl。
     // 简化 v1 决定：storyboard frame thumb 只在 T2I 历史为空时显示（自动成为 active）；
@@ -412,7 +419,7 @@ function Compact({
         >
             {/* Header row — Step indicator + count + ▼/+ controls. */}
             <div className="flex items-center gap-2">
-                <StepBadge num={1} done label={t("t2iStepOneDone")} />
+                <StepBadge num={1} done label={`${frameLabel} · ${t("t2iStepOneDone")}`} />
                 <span className="font-mono text-chrome-sm tracking-tight text-text-muted">
                     · {countLabel}
                 </span>

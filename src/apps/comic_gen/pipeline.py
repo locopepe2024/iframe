@@ -10,6 +10,7 @@ import subprocess
 import threading
 import platform
 import tempfile
+import copy
 from urllib.parse import quote
 from .models import (
     Script,
@@ -6226,26 +6227,55 @@ class ComicGenPipeline(StudioOwnerMixin):
             frame.status = GenerationStatus.FAILED
             self._save_data()
             raise e
-            # 1. Take the composition_data (positions of assets)
-            # 2. Construct a composite image (ControlNet input)
-            # 3. Call Img2Img with the composite + prompt
-            
-            logger.debug(f"Rendering frame {frame_id} with prompt: {prompt}")
-            time.sleep(1.5) # Simulate processing
-            
-            # Mock Result
-            mock_url = f"https://placehold.co/1280x720/2a2a2a/FFF?text=Rendered+Frame+{frame_id}"
-            frame.rendered_image_url = mock_url
-            frame.image_url = mock_url # Update main image too
-            frame.status = GenerationStatus.COMPLETED
-            
-        except Exception as e:
-            logger.error(f"Frame rendering failed: {e}")
-            frame.status = GenerationStatus.FAILED
-            
-        self._save_data()
-        return script
 
+    def generate_storyboard_candidate(
+        self,
+        script_id: str,
+        frame_id: str,
+        prompt: str,
+        negative_prompt: Optional[str] = None,
+    ) -> str:
+        """Render an isolated frame candidate for a first/last-frame slot.
+
+        This deliberately does not call ``generate_storyboard_render``: that
+        method owns the Storyboard image and updates ``image_url`` and
+        ``rendered_image_url``. A last-frame candidate is a video input and
+        must never replace the Storyboard's canonical first frame.
+        """
+        script = self.scripts.get(script_id)
+        if not script:
+            raise ValueError("Script not found")
+        source = next((f for f in script.frames if f.id == frame_id), None)
+        if not source:
+            raise ValueError(f"Frame {frame_id} not found")
+        resolved = self.resolve_project_assets(script)
+        scene = next((s for s in resolved["scenes"] if s.id == source.scene_id), None)
+        candidate = copy.deepcopy(source)
+        candidate.id = f"{source.id}_candidate_{uuid.uuid4().hex[:8]}"
+        candidate.rendered_image_asset = None
+        candidate.image_url = None
+        candidate.rendered_image_url = None
+        from .assets import ASPECT_RATIO_TO_SIZE
+        series = self.series_store.get(script.series_id) if script.series_id else None
+        model = series.model_settings.i2i_model if series else script.model_settings.i2i_model
+        self.storyboard_generator.generate_frame(
+            candidate,
+            resolved["characters"],
+            scene,
+            prompt=prompt,
+            negative_prompt=negative_prompt,
+            batch_size=1,
+            size=ASPECT_RATIO_TO_SIZE.get(script.model_settings.storyboard_aspect_ratio, "1024*576"),
+            model_name=model,
+            preserve_prompt=True,
+            output_dir=self._owner_output_dir(script, "storyboard"),
+        )
+        self._register_storyboard_frame_media(candidate, script.owner_profile_id)
+        selected = candidate.rendered_image_asset.selected_id if candidate.rendered_image_asset else None
+        variant = next((v for v in (candidate.rendered_image_asset.variants if candidate.rendered_image_asset else []) if v.id == selected), None)
+        if not variant:
+            raise RuntimeError("Storyboard candidate render returned no image")
+        return image_variant_storage_key(variant)
     def generate_video(self, script_id: str) -> Script:
         """Step 4: Generate video clips."""
         script = self.scripts.get(script_id)

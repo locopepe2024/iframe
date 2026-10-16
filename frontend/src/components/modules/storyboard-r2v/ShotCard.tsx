@@ -691,19 +691,6 @@ export default function ShotCard({
                     </div>
                 </div>
 
-                {videoMode === "first_last_frame" ? (
-                    <div className="px-5 pb-3">
-                        <input
-                            value={shot.lastFrameUrl ?? ""}
-                            onChange={(event) => onUpdateField("lastFrameUrl", event.target.value)}
-                            placeholder="选择尾帧，或从下方添加素材"
-                            readOnly
-                            onClick={onSelectFrameAsset}
-                            className="w-full rounded-md border border-glass-border bg-surface-inset px-3 py-2 text-[12px] text-foreground placeholder:text-text-muted focus:outline-none focus:border-primary/50"
-                        />
-                    </div>
-                ) : null}
-
                 {/* Main content: Preview + Editor */}
                 <div className="flex px-5">
                     {/* Left: Preview */}

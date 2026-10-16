@@ -1568,6 +1568,17 @@ export const api = {
         return res.data;
     },
 
+    renderFrameCandidate: async (
+        scriptId: string, frameId: string, prompt: string, negativePrompt?: string,
+    ): Promise<{ image_url: string }> => {
+        const res = await axios.post(`${API_URL}/projects/${scriptId}/storyboard/render-candidate`, {
+            frame_id: frameId,
+            prompt,
+            negative_prompt: negativePrompt,
+        });
+        return res.data;
+    },
+
     previewFrameRender: async (scriptId: string, frameId: string, prompt: string): Promise<{ prompt: string; contextToken: string }> => {
         const res = await axios.post(`${API_URL}/projects/${scriptId}/storyboard/render-preview`, {
             frame_id: frameId,

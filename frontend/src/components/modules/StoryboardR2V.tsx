@@ -900,19 +900,22 @@ export default function StoryboardR2V() {
                 .replace(/\[(?:character\d+|character|scene|prop):[^\]]+\]/g, "")
                 .replace(/\s+/g, " ")
                 .trim();
-            const result = await api.renderFrame(
-                currentProject.id,
-                shot.id,
-                {},  // compositionData (empty for now)
-                t2iPrompt,
-                1,   // batchSize
-                resolveNegativePrompt(
-                    style.negativePrompt,
-                    "",
-                    shot.negativePromptOverride,
-                ),
-                true,
+            const negativePrompt = resolveNegativePrompt(
+                style.negativePrompt,
+                "",
+                shot.negativePromptOverride,
             );
+            const result = slot === "last"
+                ? await api.renderFrameCandidate(currentProject.id, shot.id, t2iPrompt, negativePrompt)
+                : await api.renderFrame(
+                    currentProject.id,
+                    shot.id,
+                    {},
+                    t2iPrompt,
+                    1,
+                    negativePrompt,
+                    true,
+                );
 
             if (result?.task_id || result?.id) {
                 const taskId = result.task_id || result.id;
@@ -1542,6 +1545,9 @@ export default function StoryboardR2V() {
                             }
                         } else if (status.status === "failed") {
                             setShotErrors(prev => ({ ...prev, [shot.id]: status.error || t("genFailed") }));
+                            setShots(prev => prev.map(s =>
+                                s.id === shot.id ? { ...s, lastFrameTaskId: undefined } : s,
+                            ));
                         }
                     } catch (error) {
                         debugLog.error("Studio", "Last frame poll failed for shot:", shot.id, error);
@@ -2474,13 +2480,16 @@ export default function StoryboardR2V() {
                                             }
                                         }}
                                         resolveUrl={resolveAssetUrl}
+                                        frameLabel="首帧"
                                     />
                                     {shot.videoMode === "first_last_frame" ? (
                                         <T2ISubsection
                                             imageUrls={shot.lastFrameImageUrls ?? []}
                                             selectedIndex={shot.lastFrameSelectedIndex ?? 0}
                                             promptIsEmpty={!shot.prompt.trim()}
-                                            generating={false}
+                                            generating={Boolean(shot.lastFrameTaskId)}
+                                            inFlightTaskId={shot.lastFrameTaskId}
+                                            inFlightStatus={shot.lastFrameTaskId ? "processing" : undefined}
                                             onSelect={(i) => setShots(prev => prev.map((s, j) => {
                                                 if (j !== index) return s;
                                                 persistWorkbench(s.id, { last_frame_selected_index: i });
@@ -2495,6 +2504,7 @@ export default function StoryboardR2V() {
                                             }))}
                                             onGenerate={() => generateT2I(index, "last")}
                                             onSelectAsset={() => setDrawerState({ isOpen: true, targetShotIndex: index, frameSlot: "last" })}
+                                            frameLabel="尾帧"
                                             onUpload={async (file) => {
                                                 if (!currentProject) return { code: "network", detail: "no current project" };
                                                 try {

@@ -4890,6 +4890,30 @@ class RenderFramePreviewRequest(BaseModel):
     frame_id: str
     prompt: str
 
+class RenderFrameCandidateRequest(BaseModel):
+    frame_id: str
+    prompt: str
+    negative_prompt: Optional[str] = None
+
+@app.post("/projects/{script_id}/storyboard/render-candidate")
+def render_frame_candidate(script_id: str, request: RenderFrameCandidateRequest,
+                           user: UserContext = Depends(require_studio_user)):
+    """Render an isolated first/last-frame candidate without changing the
+    Storyboard frame's canonical image fields."""
+    script = pipeline.get_script(script_id, user.owner_profile_id)
+    if not script:
+        raise HTTPException(status_code=404, detail="Script not found")
+    try:
+        url = pipeline.generate_storyboard_candidate(
+            script_id, request.frame_id, request.prompt, request.negative_prompt,
+        )
+        return {"image_url": url}
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except Exception as exc:
+        logger.exception("Error rendering storyboard candidate %s", request.frame_id)
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+
 
 @app.post("/projects/{script_id}/storyboard/render-preview")
 def preview_render_frame(script_id: str, request: RenderFramePreviewRequest,
