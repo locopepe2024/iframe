@@ -2653,8 +2653,13 @@ class ComicGenPipeline(StudioOwnerMixin):
         if frame.style_prompt_override and frame.style_prompt_override.strip():
             style_text = frame.style_prompt_override.strip()
 
-        resolved = self.resolve_project_assets(script)
-        scene = next((item for item in resolved["scenes"] if item.id == frame.scene_id), None)
+        scene = next((item for item in getattr(script, "scenes", []) if item.id == frame.scene_id), None)
+        if scene is None:
+            try:
+                resolved = self.resolve_project_assets(script)
+                scene = next((item for item in resolved["scenes"] if item.id == frame.scene_id), None)
+            except (AttributeError, KeyError, TypeError):
+                scene = None
 
         lighting_parts: List[str] = []
         if frame.lighting:
@@ -2682,6 +2687,14 @@ class ComicGenPipeline(StudioOwnerMixin):
             f"Transition: {frame.transition_hint}" if frame.transition_hint else "",
         ]
         return "\n".join(item for item in parts if item)
+
+    def storyboard_render_prompt_projection(self, script: Script, frame: StoryboardFrame, prompt: str) -> str:
+        """Compose a draft render prompt with only this frame's constraints."""
+        projected_context = append_projected_shot_context(prompt.strip(), frame.director_shot_context)
+        frame_projection = self.storyboard_frame_prompt_projection(script, frame)
+        if not frame_projection:
+            return projected_context
+        return "\n\n".join(filter(None, [projected_context, "CURRENT SHOT VISUAL CONSTRAINTS:\n" + frame_projection]))
 
     def director_prompt_context(
         self,
@@ -6009,7 +6022,7 @@ class ComicGenPipeline(StudioOwnerMixin):
         polished = (frame.image_prompt_en or "").strip()
         if polished and polished == prompt.strip():
             return prompt
-        projected = append_projected_shot_context(prompt, frame.director_shot_context)
+        projected = self.storyboard_render_prompt_projection(script, frame, prompt)
         characters = self.resolve_project_assets(script)["characters"]
         return append_storyboard_character_descriptions(projected, frame.character_ids, characters)
 
@@ -6141,7 +6154,7 @@ class ComicGenPipeline(StudioOwnerMixin):
             # receive the current shot projection until preview is migrated.
             polished = (frame.image_prompt_en or "").strip()
             preserve_prompt = prompt_is_complete or bool(polished and polished == prompt.strip())
-            final_prompt = prompt if preserve_prompt else append_projected_shot_context(prompt, frame.director_shot_context)
+            final_prompt = prompt if preserve_prompt else self.storyboard_render_prompt_projection(script, frame, prompt)
             
             # Update frame with final prompt
             frame.image_prompt = final_prompt
