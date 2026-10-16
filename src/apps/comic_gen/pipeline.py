@@ -7740,7 +7740,7 @@ class ComicGenPipeline(StudioOwnerMixin):
         # Try to delete the video file
         try:
             if video_task_to_delete and video_task_to_delete.video_url:
-                video_path = os.path.join(self.output_root, video_task_to_delete.video_url)
+                video_path = self._local_output_path(video_task_to_delete.video_url)
                 if os.path.exists(video_path):
                     os.remove(video_path)
                     logger.info(f"Deleted video file: {video_path}")

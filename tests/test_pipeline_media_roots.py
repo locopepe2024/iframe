@@ -6,7 +6,7 @@ import pytest
 
 from src.apps.comic_gen.pipeline import ComicGenPipeline, InvalidAssetReference
 from src.apps.comic_gen.export import ExportManager
-from src.apps.comic_gen.models import Script, Scene, ImageAsset, ImageVariant
+from src.apps.comic_gen.models import Script, Scene, ImageAsset, ImageVariant, VideoTask
 from src.apps.media_registry import get_media
 from src.apps.studio_access import studio_media_url, studio_owner_key
 
@@ -101,6 +101,43 @@ def test_legacy_media_migration_uses_selected_root(factory):
     assert (Path(pipeline.output_root) / payload['image_url']).read_bytes() == b'legacy portrait'
     assert source.read_bytes() == b'legacy portrait'
     assert not Path('output').exists()
+
+
+@pytest.mark.parametrize('locator', ['../outside.mp4', 'output/../../outside.mp4', 'absolute'])
+def test_deleting_asset_video_keeps_files_outside_selected_root(factory, tmp_path, locator):
+    create, _ = factory
+    pipeline = create('managed-media')
+    outside = Path.cwd() / 'outside.mp4'
+    outside.write_bytes(b'keep')
+    video_url = str(outside) if locator == 'absolute' else locator
+    task = VideoTask(id='video-1', project_id='project-1', asset_id='scene-1',
+                     image_url='', prompt='', video_url=video_url)
+    scene = Scene(id='scene-1', name='Scene', description='', video_assets=[task])
+    script = Script(id='project-1', title='Test', original_text='', created_at=1, updated_at=1,
+                    scenes=[scene], video_tasks=[task])
+    pipeline.scripts[script.id] = script
+
+    pipeline.delete_asset_video(script.id, scene.id, 'scene', task.id)
+
+    assert outside.read_bytes() == b'keep'
+
+
+def test_deleting_asset_video_uses_selected_root(factory):
+    create, _ = factory
+    pipeline = create('managed-media')
+    stored = Path('managed-media/video/source.mp4')
+    stored.parent.mkdir(parents=True)
+    stored.write_bytes(b'delete')
+    task = VideoTask(id='video-1', project_id='project-1', asset_id='scene-1',
+                     image_url='', prompt='', video_url='output/video/source.mp4')
+    scene = Scene(id='scene-1', name='Scene', description='', video_assets=[task])
+    script = Script(id='project-1', title='Test', original_text='', created_at=1, updated_at=1,
+                    scenes=[scene], video_tasks=[task])
+    pipeline.scripts[script.id] = script
+
+    pipeline.delete_asset_video(script.id, scene.id, 'scene', task.id)
+
+    assert not stored.exists()
 
 
 def test_legacy_export_path_only_uses_selected_root(tmp_path, monkeypatch):
