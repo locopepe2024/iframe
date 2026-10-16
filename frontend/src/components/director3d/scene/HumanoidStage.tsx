@@ -125,7 +125,8 @@ function PathEventMarkers() {
 }
 
 function PanoramaAnchorMarkers() {
-  const anchors = useWorkbenchStore((state) => state.panoramaScenePackage?.semanticAnchors ?? []);
+  const packageState = useWorkbenchStore((state) => state.panoramaScenePackage);
+  const anchors = packageState?.semanticAnchors ?? [];
   return <>{anchors.map((anchor) => <group key={anchor.anchorId} position={anchor.positionM}>
     <mesh><sphereGeometry args={[0.07, 12, 8]}/><meshBasicMaterial color="#fbbf24" depthTest={false}/></mesh>
     <mesh rotation={[Math.PI / 2, 0, 0]}><ringGeometry args={[0.1, 0.14, 20]}/><meshBasicMaterial color="#fbbf24" side={THREE.DoubleSide} transparent opacity={0.7} depthTest={false}/></mesh>
@@ -527,7 +528,7 @@ function PrimitiveGeometry({ sceneObject }: { sceneObject: SceneObjectAuthoringS
   return <boxGeometry args={[width, depth, height]} />;
 }
 
-function StageSceneObject({ sceneObject }: { sceneObject: SceneObjectAuthoringState }) {
+function StageSceneObject({ sceneObject, recordingVideo }: { sceneObject: SceneObjectAuthoringState; recordingVideo: boolean }) {
   const selectSceneObject = useWorkbenchStore((state) => state.selectSceneObject);
   const selected = useWorkbenchStore((state) => state.selectedSceneObjectId === sceneObject.sceneObjectId);
   const [width, depth, height] = sceneObject.dimensionsM;
@@ -541,7 +542,7 @@ function StageSceneObject({ sceneObject }: { sceneObject: SceneObjectAuthoringSt
         : [width, depth, height];
   return (
     <group position={sceneObject.transform.position} rotation={sceneObject.transform.rotationDeg.map(THREE.MathUtils.degToRad) as [number, number, number]} scale={sceneObject.transform.scale}>
-      {sceneObject.objectKind === "empty" ? <group onClick={(event) => { event.stopPropagation(); selectSceneObject(sceneObject.sceneObjectId); }}><axesHelper args={[0.35]}/><mesh><sphereGeometry args={[0.08, 12, 8]}/><meshBasicMaterial transparent opacity={0.08}/></mesh></group> : <mesh userData={{ directorDepthGeometry: true }}
+      {sceneObject.objectKind === "empty" ? !recordingVideo && <group onClick={(event) => { event.stopPropagation(); selectSceneObject(sceneObject.sceneObjectId); }}><axesHelper args={[0.35]}/><mesh><sphereGeometry args={[0.08, 12, 8]}/><meshBasicMaterial transparent opacity={0.08}/></mesh></group> : <mesh userData={{ directorDepthGeometry: true }}
         position={sceneObject.pivotM.map((value) => -value) as [number, number, number]}
         rotation={isVerticalRadial ? [Math.PI / 2, 0, 0] : [0, 0, 0]}
         scale={geometryScale}
@@ -550,13 +551,13 @@ function StageSceneObject({ sceneObject }: { sceneObject: SceneObjectAuthoringSt
         onClick={(event) => { event.stopPropagation(); selectSceneObject(sceneObject.sceneObjectId); }}
       >
         <PrimitiveGeometry sceneObject={sceneObject}/>
-        <meshStandardMaterial color={sceneObject.materialHint?.color ?? "#94A3B8"} emissive={selected ? "#1D4ED8" : "#000000"} emissiveIntensity={selected ? 0.25 : 0} roughness={sceneObject.materialHint?.roughness ?? 0.8}/>
+        <meshStandardMaterial color={sceneObject.materialHint?.color ?? "#94A3B8"} emissive={selected && !recordingVideo ? "#1D4ED8" : "#000000"} emissiveIntensity={selected && !recordingVideo ? 0.25 : 0} roughness={sceneObject.materialHint?.roughness ?? 0.8}/>
       </mesh>}
     </group>
   );
 }
 
-export function HumanoidStage() {
+export function HumanoidStage({ recordingVideo = false }: { recordingVideo?: boolean }) {
   const viewMode = useWorkbenchStore((state) => state.viewMode);
   const transformMode = useWorkbenchStore((state) => state.transformMode);
   const selectedCharacterId = useWorkbenchStore((state) => state.selectedCharacterId);
@@ -599,7 +600,7 @@ export function HumanoidStage() {
       <div className="scene-plate-three-layer">
       <Canvas
         shadows
-        gl={{ alpha: true }}
+        gl={{ alpha: true, preserveDrawingBuffer: true }}
         dpr={[1, 2]}
         camera={{ fov: 42, near: 0.01, far: 100, position: [3, -4.2, 2.2], up: [0, 0, 1] }}
         aria-label="多角色三维导演舞台。指针可直接操作；键盘用户可使用场景树、空间位置和关节数值控件完成同等编辑"
@@ -621,16 +622,13 @@ export function HumanoidStage() {
             </mesh>
           </>}
           <Suspense fallback={<LoadingModel />}>
-            {characters.filter((character) => character.visible).map((character) => <HumanoidModel key={character.characterId} character={character} selected={!selectedSceneObjectId && character.characterId === selectedCharacterId} register={register} />)}
+            {characters.filter((character) => character.visible).map((character) => <HumanoidModel key={character.characterId} character={character} selected={!recordingVideo && !selectedSceneObjectId && character.characterId === selectedCharacterId} register={register} />)}
           </Suspense>
-          <Suspense fallback={null}>{Object.values(sceneObjects).filter((sceneObject) => sceneObject.visible && sceneObject.browserCapabilityState === "available").map((sceneObject) => <StageSceneObject key={sceneObject.sceneObjectId} sceneObject={sceneObject}/>)}</Suspense>
-          <ActorPaths />
-          <CameraPaths />
-          <PathEventMarkers />
-          <PanoramaAnchorMarkers />
-          {Object.values(cameras).map((camera) => <StageCameraFrustum key={camera.cameraId} composition={camera} selected={camera.cameraId === selectedCameraId} lookAtM={cameraTargetPosition(camera.lookAt, charactersRecord, sceneObjects)} followM={cameraTargetPosition(camera.follow, charactersRecord, sceneObjects)}/>)}
+          <Suspense fallback={null}>{Object.values(sceneObjects).filter((sceneObject) => sceneObject.visible && sceneObject.browserCapabilityState === "available").map((sceneObject) => <StageSceneObject key={sceneObject.sceneObjectId} sceneObject={sceneObject} recordingVideo={recordingVideo}/>)}</Suspense>
+          {!recordingVideo && <><ActorPaths /><CameraPaths /><PathEventMarkers /><PanoramaAnchorMarkers />
+            {Object.values(cameras).map((camera) => <StageCameraFrustum key={camera.cameraId} composition={camera} selected={camera.cameraId === selectedCameraId} lookAtM={cameraTargetPosition(camera.lookAt, charactersRecord, sceneObjects)} followM={cameraTargetPosition(camera.follow, charactersRecord, sceneObjects)}/>)}</>}
         </group>
-        {playheadFrame === 1 && !selectedSceneObjectId && !selectedActorPathControlPointId && !selectedCameraPathControlPointId && selectedCharacter?.visible && !selectedCharacter.locked && <TransformGizmo target={targets[selectedCharacterId] ?? null} characterId={selectedCharacterId} mode={transformMode} />}
+        {!recordingVideo && playheadFrame === 1 && !selectedSceneObjectId && !selectedActorPathControlPointId && !selectedCameraPathControlPointId && selectedCharacter?.visible && !selectedCharacter.locked && <TransformGizmo target={targets[selectedCharacterId] ?? null} characterId={selectedCharacterId} mode={transformMode} />}
         <ViewCamera viewMode={viewMode} calibration={null} composition={cameraComposition} compositionTargetM={compositionTargetM} compositionPositionM={compositionPositionM} />
         {viewMode === "camera" && cameraComposition.depthOfField?.enabled && <CameraDepthOfField focusDistanceM={cameraComposition.depthOfField.focusDistanceM} aperture={cameraComposition.depthOfField.aperture}/>}
       </Canvas>

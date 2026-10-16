@@ -51,6 +51,7 @@ export function App({ restoredSavedAt = null }: DirectorAppProps = {}) {
   const [lastSavedAt, setLastSavedAt] = useState<string | null>(restoredSavedAt);
   const [leftPanelExpanded, setLeftPanelExpanded] = useState(true);
   const [inspectorExpanded, setInspectorExpanded] = useState(true);
+  const [recordingVideo, setRecordingVideo] = useState(false);
   const [saveState, setSaveState] = useState<{ status: "idle" | "saving" | "saved" | "error"; message: string }>(() => restoredSavedAt
     ? { status: "saved", message: `本地草稿已恢复 ${formatSavedTime(restoredSavedAt)}` }
     : { status: "idle", message: "" });
@@ -157,7 +158,7 @@ export function App({ restoredSavedAt = null }: DirectorAppProps = {}) {
               <button className={`toggle-button ${showJointHandles ? "active" : ""}`} type="button" aria-pressed={showJointHandles} onClick={toggleJointHandles}>关节控制点</button>
               <button className={`toggle-button ${fullscreenActive ? "active" : ""}`} type="button" aria-pressed={fullscreenActive} onClick={toggleFullscreen}>{fullscreenActive ? "退出全屏" : "全屏"}</button>
             </div>
-            <HumanoidStage />
+            <HumanoidStage recordingVideo={recordingVideo} />
             <p className="sr-only" role="status" aria-live="polite" aria-atomic="true">
               {selectedSceneObject ? `当前选择物体 ${selectedSceneObject.label}；${selectedSceneObject.visible ? "可见" : "已隐藏"}，${selectedSceneObject.locked ? "已锁定" : "可编辑"}。` : `已选择 ${selectedCharacterIds.length} 个人物，当前为 ${selectedCharacter.label}；${selectedCharacter.visible ? "可见" : "已隐藏"}，${selectedCharacter.locked ? "已锁定，编辑不可用" : "未锁定，可编辑"}。`}撤销 {undoDepth > 0 ? "可用" : "不可用"}，重做 {redoDepth > 0 ? "可用" : "不可用"}。
             </p>
@@ -171,7 +172,7 @@ export function App({ restoredSavedAt = null }: DirectorAppProps = {}) {
             <TemporalToolsInspector />
           </div>
           <section className="timeline-dock" aria-label="底部时间轴">
-            <TimelinePanel />
+            <TimelinePanel recordingVideo={recordingVideo} setRecordingVideo={setRecordingVideo} />
           </section>
         </div>
         <div className={`inspector-column ${viewMode === "camera" ? "camera-inspector-column" : ""} ${inspectorExpanded ? "" : "panel-collapsed"}`} aria-label="属性配置">

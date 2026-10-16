@@ -3,6 +3,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { createIdleLocalAnimationImportState, createLocalAnimationImportErrorState, LOCAL_ANIMATION_MAX_BYTES, parseLocalAnimationManifest } from "../state/local-animation-import";
 import { useWorkbenchStore } from "../state/workbench-store";
 import type { TimelineTrackKind } from "../types";
+import { WhiteModelVideoRecorder } from "../reference/WhiteModelVideoRecorder";
 
 const TRACK_LABELS: Record<TimelineTrackKind, string> = {
   character_transform: "人物变换",
@@ -28,7 +29,7 @@ const PROPERTY_KEYS: Record<TimelineTrackKind, string> = {
   active_camera: "active_camera_id",
 };
 
-export function TimelinePanel() {
+export function TimelinePanel({ recordingVideo = false, setRecordingVideo = () => {} }: { recordingVideo?: boolean; setRecordingVideo?: (value: boolean) => void }) {
   const timeline = useWorkbenchStore((state) => state.dialogueTimeline);
   const localAnimationImport = useWorkbenchStore((state) => state.localAnimationImport);
   const playheadFrame = useWorkbenchStore((state) => state.playheadFrame);
@@ -180,6 +181,7 @@ export function TimelinePanel() {
       </div>}
     </section>}
     <div id="timeline-panel-content" hidden={minimized}>
+      <WhiteModelVideoRecorder recording={recordingVideo} setRecording={setRecordingVideo} stopPlayback={() => setPlaying(false)} />
       <div className="timeline-settings">
         <label>时长（秒）<input type="number" min="0.05" max="3600" step="0.05" value={timeline.durationSeconds} onChange={(event) => setTimelineDuration(Number(event.target.value))}/></label>
         <label>FPS<input type="number" min="1" max="120" step="1" value={timeline.fps} onChange={(event) => setTimelineFps(Number(event.target.value))}/></label>
