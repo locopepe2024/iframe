@@ -23,7 +23,7 @@ function ValidationSceneMenu() {
         <div className="validation-scene-actions">
           {VALIDATION_PRESETS.map((preset) => <button key={preset.id} type="button" onClick={() => load(preset.id)}><span><strong>{preset.label}</strong><small>{preset.description}</small></span><span className="availability available">可用</span></button>)}
         </div>
-        <p className="director-boundary-note">真实视频抽帧、姿态求解和 MP4 输出需另行验证。</p>
+        <p className="director-boundary-note">可从时间线录制浏览器白模参考视频；媒体端渲染仍待接入。</p>
       </div>
     </details>
   );

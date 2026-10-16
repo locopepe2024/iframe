@@ -62,7 +62,12 @@ export async function recordWhiteModelVideo(options: WhiteModelVideoOptions): Pr
   output.height = height;
   const context = output.getContext("2d", { alpha: false });
   if (!context) throw new Error("无法创建视频画布。");
-  const stream = output.captureStream(fps);
+  const stream = output.captureStream(0);
+  const captureTrack = stream.getVideoTracks()[0] as CanvasCaptureMediaStreamTrack | undefined;
+  if (!captureTrack || typeof captureTrack.requestFrame !== "function") {
+    stream.getTracks().forEach((track) => track.stop());
+    throw new Error("当前浏览器不支持按时间轴帧录制。");
+  }
   const chunks: Blob[] = [];
   let recorder: MediaRecorder;
   try {
@@ -82,22 +87,26 @@ export async function recordWhiteModelVideo(options: WhiteModelVideoOptions): Pr
     await waitForPaint(signal);
     recorder.start();
     const start = performance.now();
-    for (let index = 0; index < frameCount; index++) {
+    let index = 0;
+    while (true) {
       signal.throwIfAborted();
-      if (index > 0) {
-        await waitUntil(start + index * 1000 / fps, signal);
-        setFrame(index + 1);
-        await waitForPaint(signal);
-      }
       context.fillStyle = "#101820";
       context.fillRect(0, 0, width, height);
       const scale = Math.min(width / source.width, height / source.height);
       const imageWidth = source.width * scale;
       const imageHeight = source.height * scale;
       context.drawImage(source, (width - imageWidth) / 2, (height - imageHeight) / 2, imageWidth, imageHeight);
+      captureTrack.requestFrame();
       onProgress(index + 1);
+      if (index === frameCount - 1) break;
+      // Keep video time aligned with the authored timeline when rendering falls behind.
+      const nextIndex = Math.min(frameCount - 1, Math.max(index + 1, Math.floor((performance.now() - start) * fps / 1000)));
+      await waitUntil(start + nextIndex * 1000 / fps, signal);
+      index = nextIndex;
+      setFrame(index + 1);
+      await waitForPaint(signal);
     }
-    await waitUntil(start + frameCount * 1000 / fps, signal);
+    await waitUntil(start + Math.max(1, frameCount - 1) * 1000 / fps, signal);
     recorder.stop();
     return { blob: await finished, extension: format.extension };
   } catch (error) {
