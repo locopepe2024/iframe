@@ -6746,7 +6746,10 @@ def get_env_config(identity: UserContext = Depends(require_user_context)):
             "OSS_BASE_PATH": os.getenv("OSS_BASE_PATH", ""),
             "OSS_ENABLE": is_oss_enabled(),
             "IFRAME_MEDIA_ROOT": os.getenv("IFRAME_MEDIA_ROOT", "output"),
-            "IFRAME_STORAGE_BACKEND": storage_backend(),
+            "IFRAME_STORAGE_BACKEND": (
+                storage_backend() if os.getenv("IFRAME_STORAGE_BACKEND") is not None
+                else "cos" if is_cos_configured() else "local"
+            ),
             "PROVIDER_MEDIA_PUBLIC_BASE_URL": os.getenv("PROVIDER_MEDIA_PUBLIC_BASE_URL", os.getenv("UNIART_MEDIA_BASE_URL", "")),
             "PROVIDER_MEDIA_URL_TTL_SECONDS": int(os.getenv("PROVIDER_MEDIA_URL_TTL_SECONDS", "1800")),
             "UNIART_VIDEO_COS_BUCKET": os.getenv("UNIART_VIDEO_COS_BUCKET", ""),

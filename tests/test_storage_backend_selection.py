@@ -94,6 +94,22 @@ def test_unset_preserves_legacy_cos_selection(monkeypatch):
     assert oss_utils.OSSImageUploader() is expected
 
 
+@pytest.mark.parametrize(
+    ('selected', 'cos_configured', 'expected'),
+    [(None, True, 'cos'), (None, False, 'local'), ('local', True, 'local'), ('cos', True, 'cos')],
+)
+def test_settings_reports_effective_storage_backend(monkeypatch, selected, cos_configured, expected):
+    from src.apps.comic_gen import api
+
+    if selected is None:
+        monkeypatch.delenv('IFRAME_STORAGE_BACKEND', raising=False)
+    else:
+        monkeypatch.setenv('IFRAME_STORAGE_BACKEND', selected)
+    monkeypatch.setattr(api, 'is_cos_configured', lambda: cos_configured)
+
+    assert api.get_env_config(identity=None)['IFRAME_STORAGE_BACKEND'] == expected
+
+
 def test_admin_storage_settings_persist_without_live_cutover(monkeypatch):
     from src.apps.comic_gen import api
     monkeypatch.setenv('LUMENX_ENABLE_ADMIN_ENV_CONFIG', 'true')
