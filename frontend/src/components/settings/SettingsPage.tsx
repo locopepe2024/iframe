@@ -48,7 +48,7 @@ type EnvConfig = EnvConfigPayload & UserConfigPayload & {
   OSS_ENDPOINT: string;
   OSS_BASE_PATH: string;
   IFRAME_MEDIA_ROOT?: string;
-  IFRAME_STORAGE_BACKEND?: "local" | "cos" | "oss";
+  IFRAME_STORAGE_BACKEND?: "local" | "cos";
   PROVIDER_MEDIA_PUBLIC_BASE_URL?: string;
   PROVIDER_MEDIA_URL_TTL_SECONDS?: number | string;
   KLING_PROVIDER_MODE: ProviderMode;
@@ -390,12 +390,17 @@ export default function SettingsPage() {
     }
   };
 
-  // Storage(OSS) 保存不应被 DashScope / 生成相关必填项挡住——它们与存储无关。
+  // Storage settings are startup-only and independent of model credentials.
   const handleSaveStorage = async () => {
     setSaving(true);
     try {
-      await api.saveEnvConfig(config);
-      toast.success(t("saveSuccess"));
+      const result = await api.saveEnvConfig({
+        IFRAME_STORAGE_BACKEND: config.IFRAME_STORAGE_BACKEND,
+        IFRAME_MEDIA_ROOT: config.IFRAME_MEDIA_ROOT,
+        PROVIDER_MEDIA_PUBLIC_BASE_URL: config.PROVIDER_MEDIA_PUBLIC_BASE_URL,
+        PROVIDER_MEDIA_URL_TTL_SECONDS: config.PROVIDER_MEDIA_URL_TTL_SECONDS,
+      });
+      toast.success(result.restart_required ? "保存成功，重启服务后生效" : t("saveSuccess"));
     } catch {
       toast.error(t("saveConfigFailed"));
     } finally {
@@ -887,7 +892,6 @@ export default function SettingsPage() {
           <select value={config.IFRAME_STORAGE_BACKEND || "local"} onChange={(e) => handleChange("IFRAME_STORAGE_BACKEND", e.target.value)} className={settingsInputClass}>
             <option value="local">本地存储</option>
             <option value="cos">腾讯 COS</option>
-            <option value="oss">阿里云 OSS</option>
           </select>
           <input type="text" value={config.IFRAME_MEDIA_ROOT || "output"} onChange={(e) => handleChange("IFRAME_MEDIA_ROOT", e.target.value)} placeholder="本地素材目录，例如 output" className={settingsInputClass} />
         </div>
@@ -898,27 +902,7 @@ export default function SettingsPage() {
           <input type="number" min={1} value={config.PROVIDER_MEDIA_URL_TTL_SECONDS || 1800} onChange={(e) => handleChange("PROVIDER_MEDIA_URL_TTL_SECONDS", e.target.value)} placeholder="URL 有效期（秒）" className={settingsInputClass} />
         </div>
       </FormRow>
-      <FormRow label="自有 OSS" hint="可选：将结果同步到您自己的阿里云 OSS。">
-        <Toggle checked={config.OSS_ENABLE} onChange={(v) => setConfig((c) => ({ ...c, OSS_ENABLE: v }))} label="同步到自有 OSS" sub="关闭时仍会保存到平台 COS。" ariaLabel="同步到自有 OSS" />
-      </FormRow>
-      {config.OSS_ENABLE && (
-        <>
-          <FormRow label="OSS AccessKey">
-            <div className="space-y-3">
-              <KeyField value={config.ALIBABA_CLOUD_ACCESS_KEY_ID} onChange={(v) => handleChange("ALIBABA_CLOUD_ACCESS_KEY_ID", v)} placeholder="AccessKey ID" />
-              <KeyField value={config.ALIBABA_CLOUD_ACCESS_KEY_SECRET} onChange={(v) => handleChange("ALIBABA_CLOUD_ACCESS_KEY_SECRET", v)} placeholder="AccessKey Secret" />
-            </div>
-          </FormRow>
-          <FormRow label="OSS Bucket / Endpoint">
-            <div className="space-y-3">
-              <input type="text" value={config.OSS_BUCKET_NAME} onChange={(e) => handleChange("OSS_BUCKET_NAME", e.target.value)} placeholder="Bucket" className={settingsInputClass} />
-              <input type="text" value={config.OSS_ENDPOINT} onChange={(e) => handleChange("OSS_ENDPOINT", e.target.value)} placeholder="Endpoint" className={settingsInputClass} />
-              <input type="text" value={config.OSS_BASE_PATH} onChange={(e) => handleChange("OSS_BASE_PATH", e.target.value)} placeholder="iframe" className={settingsInputClass} />
-            </div>
-          </FormRow>
-        </>
-      )}
-      <div className="flex justify-end pt-4"><button type="button" onClick={handleSaveApiConfig} disabled={saving || loading || !online} className="flex items-center gap-2 px-4 py-2 bg-primary text-on-accent text-sm font-medium rounded-lg disabled:opacity-50"><Save size={16} />保存存储设置</button></div>
+      <div className="flex justify-end pt-4"><button type="button" onClick={handleSaveStorage} disabled={saving || loading || !online} className="flex items-center gap-2 px-4 py-2 bg-primary text-on-accent text-sm font-medium rounded-lg disabled:opacity-50"><Save size={16} />保存存储设置</button></div>
     </Section>
   );
 
