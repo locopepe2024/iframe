@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { Download, Film, Square, X } from "lucide-react";
 
 import { useWorkbenchStore } from "../state/workbench-store";
-import { aspectRatioValue, evaluateDirectorFrame } from "../timeline/timeline-evaluation";
+import { projectDirectorShotPackage } from "./director-shot-package";
 import { recordWhiteModelVideo } from "./record-white-model-video";
 
 interface VideoResult { url: string; extension: "webm" | "mp4"; }
@@ -37,13 +37,13 @@ export function WhiteModelVideoRecorder({ recording, setRecording, stopPlayback 
       setError("单次录制最长 10 秒；请先缩短时间轴时长。");
       return;
     }
-    const first = evaluateDirectorFrame({
+    const first = projectDirectorShotPackage({
       frame: 1, durationSeconds: state.dialogueTimeline.durationSeconds, fps: state.dialogueTimeline.fps,
       tracks: state.dialogueTimeline.tracks, activeCameraTrackId: state.dialogueTimeline.activeCameraTrackId,
       selectedCameraId: state.selectedCameraId, characters: state.characters, cameras: state.cameras,
       sceneObjects: state.sceneObjects, actorPaths: state.actorPaths, cameraPaths: state.cameraPaths,
     });
-    const aspect = aspectRatioValue(first.cameras[first.activeCameraId]?.aspectRatio ?? "16:9");
+    const aspect = first.aspectRatio === "auto" ? 16 / 9 : Number(first.aspectRatio.split(":")[0]) / Number(first.aspectRatio.split(":")[1]);
     const previousView = state.viewMode;
     const previousFrame = state.playheadFrame;
     const controller = new AbortController();
