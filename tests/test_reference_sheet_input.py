@@ -11,6 +11,7 @@ from src.apps.comic_gen.pipeline import ComicGenPipeline
 def test_selected_reference_reaches_every_candidate(tmp_path, monkeypatch, reference):
     monkeypatch.chdir(tmp_path)
     generator = AssetGenerator.__new__(AssetGenerator)
+    generator.output_root = "output"
     generator.output_dir = "output/assets"
     model = Mock()
     generator._get_model_for = Mock(return_value=model)
@@ -27,6 +28,7 @@ def test_selected_reference_reaches_every_candidate(tmp_path, monkeypatch, refer
 def test_selected_reference_is_bound_to_character_identity_in_prompt(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     generator = AssetGenerator.__new__(AssetGenerator)
+    generator.output_root = "output"
     generator.output_dir = "output/assets"
     model = Mock()
     generator._get_model_for = Mock(return_value=model)
@@ -53,6 +55,7 @@ def test_selected_reference_is_bound_to_character_identity_in_prompt(tmp_path, m
 def test_text_only_reference_sheet_does_not_claim_an_input_reference(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     generator = AssetGenerator.__new__(AssetGenerator)
+    generator.output_root = "output"
     generator.output_dir = "output/assets"
     model = Mock()
     generator._get_model_for = Mock(return_value=model)
@@ -72,6 +75,7 @@ def test_text_only_reference_sheet_does_not_claim_an_input_reference(tmp_path, m
 def test_missing_selected_reference_does_not_silently_generate_text_only(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     generator = AssetGenerator.__new__(AssetGenerator)
+    generator.output_root = "output"
     generator.output_dir = "output/assets"
     generator._get_model_for = Mock()
     character = Character(id="c", name="Test", description="Test", reference_sheet=AssetUnit(
@@ -84,6 +88,7 @@ def test_missing_selected_reference_does_not_silently_generate_text_only(tmp_pat
 def test_unselected_uploaded_reference_is_not_sent_when_generation_opts_out(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     generator = AssetGenerator.__new__(AssetGenerator)
+    generator.output_root = "output"
     generator.output_dir = "output/assets"
     model = Mock()
     generator._get_model_for = Mock(return_value=model)
@@ -114,6 +119,7 @@ def test_unselected_uploaded_reference_is_not_sent_when_generation_opts_out(tmp_
 def test_derived_character_generation_uses_selected_reference_sheet(tmp_path, monkeypatch, generation_type):
     monkeypatch.chdir(tmp_path)
     generator = AssetGenerator.__new__(AssetGenerator)
+    generator.output_root = "output"
     generator.output_dir = "output/assets"
     model = Mock()
     generator._get_model_for = Mock(return_value=model)
@@ -172,6 +178,7 @@ def test_canonical_reference_variant_can_be_favorited():
 def test_text_mode_does_not_attach_uploaded_character_reference_implicitly(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     generator = AssetGenerator.__new__(AssetGenerator)
+    generator.output_root = "output"
     generator.output_dir = "output/assets"
     model = Mock()
     generator._get_model_for = Mock(return_value=model)
@@ -203,6 +210,7 @@ def test_derived_character_generation_uses_selected_reference_sheet(
 ):
     monkeypatch.chdir(tmp_path)
     generator = AssetGenerator.__new__(AssetGenerator)
+    generator.output_root = "output"
     generator.output_dir = "output/assets"
     model = Mock()
     generator._get_model_for = Mock(return_value=model)
@@ -276,6 +284,7 @@ def test_stored_reference_reaches_real_uniart_edit_adapter(tmp_path, monkeypatch
     storage.upload_file.return_value = None
     monkeypatch.setattr(oss_utils, 'OSSImageUploader', lambda: storage)
     generator = AssetGenerator.__new__(AssetGenerator)
+    generator.output_root = "output"
     generator.output_dir = 'output/assets'
     monkeypatch.setattr('src.apps.comic_gen.assets.studio_uniart_config', lambda: {})
     monkeypatch.setattr('src.apps.comic_gen.assets.time.sleep', lambda _: None)

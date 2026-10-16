@@ -49,6 +49,7 @@ def test_style_suffix_is_appended_without_duplicate_terminal_punctuation():
 ])
 def test_asset_generator_uses_chinese_fallback_prompt(tmp_path, monkeypatch, generation_type, english_marker):
     generator = AssetGenerator.__new__(AssetGenerator)
+    generator.output_root = "output"
     generator.output_dir = str(tmp_path / "output" / "assets")
     model = Mock()
     generator._get_model_for = Mock(return_value=model)
