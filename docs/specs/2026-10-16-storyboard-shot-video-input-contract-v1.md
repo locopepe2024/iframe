@@ -96,7 +96,7 @@ shot.fps_override > project/series fps default > model catalog default
 
 系统不根据镜头编号、相邻关系或文本自行判断当前镜头是连续镜头还是转场镜头。连续性关系由用户在 Shot Design 中人工选择；系统只负责校验选择是否有合法的媒体和一致性来源。
 
-Storyboard 的职责是保存当前镜头自己的视觉参考包，并与 Shot Design 共享当前镜头的风格、光影、构图、角色、场景和道具约束。上一镜头尾帧不是 Storyboard 自动生成的当前首帧，而是 Shot Design 中可人工选择的输入来源。
+Storyboard 的职责是保存当前镜头自己的视觉参考包，并与 Shot Design 共享当前镜头已确认的风格、光影、角色、场景和道具约束。当前系统尚未建立稳定的构图确认与提交链路，因此构图不列入本阶段的共享一致性约束。上一镜头尾帧不是 Storyboard 自动生成的当前首帧，而是 Shot Design 中可人工选择的输入来源。
 
 当用户人工选择“沿用上一镜头尾帧”，且上一镜头存在经过审核的尾帧时：
 
