@@ -97,3 +97,20 @@ def test_completed_chat_schedules_extraction_of_saved_user_message(setup, monkey
     result = agent.send(sid, agent.MessageCreate(content="我最近搬家了"), setup, background)
     assert len(background.tasks) == 1
     assert background.tasks[0].args[1:3] == (sid, result["user_message"]["id"])
+
+
+def test_fact_category_registry_controls_auto_capture_and_is_owner_scoped(setup, monkeypatch):
+    with agent.database() as db:
+        initial = agent.fact_categories(setup)["categories"]
+    assert {item["id"] for item in initial} == agent_facts.CATEGORIES
+    agent.patch_fact_category("health", agent_facts.FactCategoryPatch(auto_capture_enabled=False), setup)
+    other = UserContext("other", "other-profile", "name", "token")
+    assert next(item for item in agent.fact_categories(setup)["categories"] if item["id"] == "health")["auto_capture_enabled"] is False
+    assert next(item for item in agent.fact_categories(other)["categories"] if item["id"] == "health")["auto_capture_enabled"] is True
+    sid = agent.create(agent.SessionCreate(model="qwen"), setup)["session"]["id"]
+    message = {"id": "m1", "role": "user", "content": "我最近不服药了", "created_at": 100.0}
+    with agent.database() as db:
+        session = {"id": sid, "model": "qwen", "title": "x", "updated_at": 100.0, "messages": [message]}
+        db.execute("UPDATE sessions SET payload=? WHERE owner=? AND id=?", (__import__("json").dumps(session), setup.owner_profile_id, sid))
+    monkeypatch.setattr(agent, "complete", Mock(return_value='[{"source_quote":"我最近不服药了","category":"health","subject":"我","predicate":"服药状态","value":"不服药","time_text":"最近","time_precision":"imprecise"}]'))
+    assert agent.extract_facts(agent_facts.FactExtractionRequest(source_session_id=sid, source_message_id="m1"), setup)["events"] == []

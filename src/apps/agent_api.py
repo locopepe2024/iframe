@@ -72,6 +72,9 @@ def database():
         db.execute("CREATE TABLE IF NOT EXISTS sessions (owner TEXT, id TEXT, payload TEXT, busy REAL DEFAULT 0, PRIMARY KEY(owner,id))")
         db.execute("CREATE TABLE IF NOT EXISTS agent_memories (id TEXT PRIMARY KEY, owner TEXT NOT NULL, content TEXT NOT NULL, category TEXT NOT NULL, source_session_id TEXT NOT NULL, source_message_id TEXT NOT NULL, source_quote TEXT NOT NULL, created_at REAL NOT NULL, updated_at REAL NOT NULL)")
         agent_facts.migrate(db)
+        # Category defaults are seed writes; commit them before callers begin
+        # their own IMMEDIATE transaction.
+        db.commit()
         yield db
         db.commit()
     finally:
@@ -762,6 +765,19 @@ def facts(since: float | None = None, until: float | None = None,
           ctx: UserContext = Depends(require_user_context)):
     with database() as db:
         return {"events": agent_facts.list_events(db, ctx.owner_profile_id, since, until, category, limit)}
+
+
+@router.get("/fact-categories")
+def fact_categories(ctx: UserContext = Depends(require_user_context)):
+    with database() as db:
+        return {"categories": agent_facts.categories(db, ctx.owner_profile_id)}
+
+
+@router.patch("/fact-categories/{category}")
+def patch_fact_category(category: str, body: agent_facts.FactCategoryPatch,
+                        ctx: UserContext = Depends(require_user_context)):
+    with database() as db:
+        return {"category": agent_facts.patch_category(db, ctx.owner_profile_id, category, body)}
 
 
 @router.post("/facts/extract")

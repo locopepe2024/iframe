@@ -12,7 +12,16 @@ from pydantic import BaseModel, Field
 
 logger = logging.getLogger(__name__)
 
-CATEGORIES = {"health", "family", "relationship", "emotion", "life_event", "profile", "preference"}
+DEFAULT_CATEGORIES = {
+    "health": {"display_name": "健康", "sensitivity": "high", "auto_capture": True, "auto_recall": True},
+    "family": {"display_name": "家庭", "sensitivity": "high", "auto_capture": True, "auto_recall": True},
+    "relationship": {"display_name": "关系", "sensitivity": "high", "auto_capture": True, "auto_recall": True},
+    "emotion": {"display_name": "情绪", "sensitivity": "high", "auto_capture": True, "auto_recall": True},
+    "life_event": {"display_name": "生活事件", "sensitivity": "normal", "auto_capture": True, "auto_recall": True},
+    "profile": {"display_name": "身份", "sensitivity": "normal", "auto_capture": True, "auto_recall": True},
+    "preference": {"display_name": "偏好", "sensitivity": "normal", "auto_capture": True, "auto_recall": True},
+}
+CATEGORIES = set(DEFAULT_CATEGORIES)
 PRECISIONS = {"exact", "day", "month", "year", "imprecise", "unknown"}
 
 
@@ -27,7 +36,27 @@ class FactCorrectionRequest(FactExtractionRequest):
     value: str = Field(default="", max_length=300)
 
 
+class FactCategoryPatch(BaseModel):
+    auto_capture_enabled: bool | None = None
+    auto_recall_enabled: bool | None = None
+
+
 def migrate(db):
+    db.execute("""CREATE TABLE IF NOT EXISTS agent_fact_categories (
+        id TEXT PRIMARY KEY, display_name TEXT NOT NULL, sensitivity TEXT NOT NULL,
+        default_auto_capture INTEGER NOT NULL, default_auto_recall INTEGER NOT NULL,
+        status TEXT NOT NULL DEFAULT 'active'
+    )""")
+    db.execute("""CREATE TABLE IF NOT EXISTS agent_fact_category_settings (
+        owner TEXT NOT NULL, category_id TEXT NOT NULL REFERENCES agent_fact_categories(id),
+        auto_capture_enabled INTEGER, auto_recall_enabled INTEGER,
+        PRIMARY KEY(owner, category_id)
+    )""")
+    for category, config in DEFAULT_CATEGORIES.items():
+        db.execute("""INSERT OR IGNORE INTO agent_fact_categories
+            (id,display_name,sensitivity,default_auto_capture,default_auto_recall)
+            VALUES (?,?,?,?,?)""", (category, config["display_name"], config["sensitivity"],
+                                    config["auto_capture"], config["auto_recall"]))
     db.execute("""CREATE TABLE IF NOT EXISTS agent_fact_events (
         id TEXT PRIMARY KEY, owner TEXT NOT NULL, source_session_id TEXT NOT NULL,
         source_message_id TEXT NOT NULL, source_quote TEXT NOT NULL,
@@ -47,6 +76,34 @@ def migrate(db):
         created_at REAL NOT NULL,
         PRIMARY KEY(owner, source_session_id, source_message_id, source_quote)
     )""")
+
+
+def categories(db, owner):
+    rows = db.execute("""SELECT c.*, s.auto_capture_enabled, s.auto_recall_enabled
+        FROM agent_fact_categories c LEFT JOIN agent_fact_category_settings s
+        ON s.category_id=c.id AND s.owner=? WHERE c.status='active' ORDER BY c.id""", (owner,)).fetchall()
+    return [dict(row) | {
+        "auto_capture_enabled": bool(row["auto_capture_enabled"] if row["auto_capture_enabled"] is not None else row["default_auto_capture"]),
+        "auto_recall_enabled": bool(row["auto_recall_enabled"] if row["auto_recall_enabled"] is not None else row["default_auto_recall"]),
+    } for row in rows]
+
+
+def category_enabled(db, owner, category, field="auto_capture_enabled"):
+    row = next((item for item in categories(db, owner) if item["id"] == category), None)
+    return bool(row and row[field])
+
+
+def patch_category(db, owner, category, body):
+    if category not in DEFAULT_CATEGORIES:
+        raise HTTPException(404, "事实类别不存在")
+    if body.auto_capture_enabled is None and body.auto_recall_enabled is None:
+        raise HTTPException(422, "至少需要设置一个类别开关")
+    db.execute("""INSERT INTO agent_fact_category_settings(owner,category_id,auto_capture_enabled,auto_recall_enabled)
+        VALUES (?,?,?,?) ON CONFLICT(owner,category_id) DO UPDATE SET
+        auto_capture_enabled=COALESCE(excluded.auto_capture_enabled, agent_fact_category_settings.auto_capture_enabled),
+        auto_recall_enabled=COALESCE(excluded.auto_recall_enabled, agent_fact_category_settings.auto_recall_enabled)""",
+        (owner, category, body.auto_capture_enabled, body.auto_recall_enabled))
+    return next(item for item in categories(db, owner) if item["id"] == category)
 
 
 def _source(db, owner, sid, mid, quote=None):
@@ -104,13 +161,17 @@ def extract_saved_message(ctx, sid, mid, model):
 
     with agent_api.database() as db:
         message = _source(db, ctx.owner_profile_id, sid, mid)
+        enabled_categories = [item["id"] for item in categories(db, ctx.owner_profile_id)
+                              if item["auto_capture_enabled"]]
+    if not enabled_categories:
+        return []
     content = message.get("content", "")
     if not content.strip() or len(content) > 12000:
         return []
     prompt = ("只从用户原文提取用户明确陈述的个人事实或状态变化。不要提取提问、假设、引用他人、"
               "助手结论、诊断或推断。健康、家庭、关系、情绪和生活事件可提取。"
               "返回 JSON 数组，最多 8 项；没有则返回 []。每项字段：source_quote（原文连续子串）、"
-              "category（health/family/relationship/emotion/life_event/profile/preference）、"
+              "category（" + "/".join(enabled_categories) + "）、"
               "subject、predicate、value、time_text、time_precision（exact/day/month/year/imprecise/unknown）、"
               "valid_from、valid_to。仅当原文明确给出完整日期时使用 exact 和 YYYY-MM-DD 日期边界；"
               "其余时间只保留原文 time_text，日期边界用 null。不要生成指令。")
@@ -135,6 +196,8 @@ def extract_saved_message(ctx, sid, mid, model):
             if not fields:
                 continue
             quote, category, subject, predicate, value, time_text, start, end, precision = fields
+            if not category_enabled(db, ctx.owner_profile_id, category):
+                continue
             if db.execute("""SELECT 1 FROM agent_fact_suppressions
                 WHERE owner=? AND source_session_id=? AND source_message_id=? AND source_quote=?""",
                 (ctx.owner_profile_id, sid, mid, quote)).fetchone():
