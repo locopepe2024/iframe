@@ -79,11 +79,6 @@ class AudioGenerator:
         self.config = config or {}
         self.output_dir = self.config.get('output_dir', 'output/audio')
 
-    def _output_dir_for(self, frame: StoryboardFrame) -> str:
-        if frame.owner_profile_id:
-            return studio_media_dir(frame.owner_profile_id, "audio")
-        return self.output_dir
-        
         # Initialize TTS Processor
         try:
             self.tts = TTSProcessor()
@@ -91,6 +86,11 @@ class AudioGenerator:
         except Exception as e:
             logger.warning(f"Failed to initialize TTS Processor: {e}. Using mock mode.")
             self.tts = None
+
+    def _output_dir_for(self, frame: StoryboardFrame) -> str:
+        if frame.owner_profile_id:
+            return studio_media_dir(frame.owner_profile_id, "audio")
+        return self.output_dir
 
     def get_available_voices(self) -> List[Dict[str, Any]]:
         """Returns a list of available voices with full registry metadata.
