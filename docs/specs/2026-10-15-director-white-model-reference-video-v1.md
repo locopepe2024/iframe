@@ -121,3 +121,70 @@ its actual lens focal length, f-stop and focus distance independently. Coordinat
 such as the single sofa at `(-75.73, 0.5, -123.54)` should be checked against
 the same scene origin and camera frustum; they may be outside the proposed
 8.5m shot, but are not proof of an error without the camera pose and bounds.
+
+## Reference implementation: open-ai-canvas previs
+
+Source reviewed: `locopepe2024/open-ai-canvas`, `main`, read-only on
+2026-10-16. Relevant files include `web/src/types/previs.ts`,
+`web/src/lib/canvas/previs/previs-prompt-compiler.ts`,
+`web/src/lib/canvas/previs/previs-templates.ts`,
+`web/src/components/canvas/previs/previs-viewport-capture.ts` and the previs
+workbench/inspector/sequencer components.
+
+### Observed
+
+- Code fact: `PrevisScene` is a single scene document containing objects,
+  cameras, lights, environment, shots and an active shot. Objects contain
+  transforms, visibility, actor archetypes, poses, motion paths and keyframes.
+- Code fact: cameras explicitly store position, target, focal length, FOV,
+  aperture, focus distance, near/far planes and keyframes. Lights store type,
+  transform, color, intensity and shadow state.
+- Code fact: templates include `empty`, `monologue`, `dialogue`, `blocking` and
+  `product`. The dialogue/blocking templates establish non-overlapping actor
+  positions and facing before camera adjustment; the shared three-point rig
+  uses key/fill/rim-style light records.
+- Code fact: `compilePrevisPrompt` derives shot size, camera movement, physical
+  camera values, environment, visible object coordinates, actor identity/color,
+  asset references and light values from the scene document. The prompt is a
+  projection of authored state rather than a second source of truth.
+- Code fact: the viewport supports beauty, clay, pose, depth and normal capture;
+  clay video records the authored camera view while temporarily applying clay
+  materials and restores the previous render state afterward.
+- Code fact: the workbench has a shot inspector, camera inspector, object/bone
+  inspectors, a sequencer with camera/object/bone keyframes, camera alignment,
+  camera movement presets, templates and save/close guards.
+
+### Direct implication
+
+The strongest reusable idea is a **shot package**: authored scene state,
+active shot, camera/lens settings, lighting, blocking objects and derived
+outputs stay linked. The prompt shown in the user example can be generated
+deterministically from this package. Reference captures should be explicit
+render modes (clay/depth/pose), rather than separate ad hoc exports.
+
+### Current iframe gap
+
+- Code fact: iframe has equivalent lower-level state for characters, scene
+  objects, cameras, paths, depth snapshots and timeline evaluation, but these
+  are spread across workbench state and panels rather than one shot package.
+- Code fact: iframe has browser white-model video and media depth PNG/EXR, but
+  the browser depth snapshot currently carries geometry and camera data, not
+  semantic object labels or light records.
+- Not yet proven: open-ai-canvas's browser capture is a production-quality
+  replacement for media Blender. It uses `captureStream` and clay/depth
+  material overrides; it does not establish metric EXR correctness or remote
+  failure semantics.
+
+### Recommended migration order
+
+1. Add a versioned `DirectorShotPackage` projection for one active shot. Keep
+   existing workbench state authoritative and derive the package at export time.
+2. Add reusable blocking templates: empty, single actor, dialogue, multi-actor
+   blocking and prop/product. Templates should be deterministic and create
+   non-overlapping positions, facing and a usable starter camera.
+3. Add explicit render modes for browser preview: clay/white-model, pose and
+   depth preview. Keep metric depth PNG/EXR owned by the media path.
+4. Compile the structured prompt from the package, including a provenance
+   manifest. Do not let prompt text mutate coordinates, lens values or lights.
+5. Add shot-package parity tests: prompt values, viewport capture, Blender
+   manifest and camera records must agree for the same frame.
