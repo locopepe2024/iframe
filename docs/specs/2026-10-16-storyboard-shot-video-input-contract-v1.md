@@ -67,7 +67,32 @@ shot.fps_override > project/series fps default > model catalog default
 - `VideoTask` 有 `generation_mode`，但缺少统一的首尾帧模式校验和最终 FPS 快照。
 - `StoryboardFrame` 没有明确的 `fps` 字段，现有 `duration` 定义重复且未形成提交链路。
 
-## 6. 实施顺序与验收
+## 6. 首帧提示词来源与一致性约束
+
+首帧提示词必须区分“事实来源”和“生成文本”。推荐的权威顺序如下：
+
+```text
+剧集/项目视觉风格
+  -> 当前镜头继承或明确覆盖的光影基线
+  -> 当前镜头的场景、角色、道具与空间事实
+  -> 当前镜头的景别、机位、构图、动作和转场状态
+  -> 用户明确的首帧补充要求
+  -> 图像模型可执行的正向/负向表达
+```
+
+其中前四层是结构化上下文，不应由模型重新猜测；最后一层才是 LLM 或提示词组装器的输出。首帧生成应保存 `prompt_source_revision` 或等价 lineage，能够回答每段文字来自哪个剧集、镜头或用户修改。
+
+当前代码路径的事实：
+
+1. `StoryboardGenerator.generate_frame()` 在没有显式 prompt 的批量路径中，只拼接 `action_description`、角色描述、场景描述和 `camera_angle/camera_movement`。它没有自动拼接 `storyboard_visual_style()` 的项目风格，也没有自动拼接 `lighting` 或 `director_shot_context`。
+2. 单帧渲染路径 `generate_storyboard_render()` 使用界面提交的 prompt；未标记为完整或已保存润色快照时，才追加 `director_shot_context`。风格和光影只有在润色请求构造 `custom_prompt` 时进入模型结果，不能假设所有渲染路径都有它们。
+3. 分镜分析/细化阶段会把剧集视觉风格、导演执行上下文和镜头光影写入 `StoryboardFrame`，但这不等于后续首帧批量生成已经消费这些字段。
+
+因此，当前存在一个已定位的漂移边界：分镜结构化数据包含风格/光影，首帧批量生成却可能只消费场景和角色文本。这是代码事实；它导致实际画面不一致仍需通过请求日志或生成结果统计验证。
+
+目标实现应提供一个服务端 `build_storyboard_frame_prompt(frame, script, assets)`，作为批量生成、单帧渲染预览和重新生成的唯一入口。该函数先投影结构化风格、光影和镜头连续性，再合并用户正文；LLM 润色只改写投影后的文本，不在返回结果后再次追加同一约束。首帧和视频提示词可以共享同一份镜头事实投影，但视频动作扩展和 provider 字段必须保持在 Shot Design 层。
+
+## 7. 实施顺序与验收
 
 第一阶段：不改变 provider 路由，建立 Storyboard 首帧到 I2V 的自动绑定、明确来源标记、首尾帧校验和 revision stale 检查。
 
