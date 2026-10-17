@@ -539,6 +539,42 @@ export interface RefineSSEEvent {
     error?: string;
 }
 
+type PolishJob = {
+    id: string;
+    status: string;
+    result?: { prompt_cn?: string; prompt_en?: string; detail?: Record<string, unknown> } | null;
+    error?: string | null;
+};
+
+async function submitPolishJob(scriptId: string, mode: "video" | "r2v", payload: object) {
+    const base = `${API_URL}/projects/${encodeURIComponent(scriptId)}/polish-jobs`;
+    const started = await axios.post<PolishJob>(`${base}/${mode}`, payload, { timeout: 15_000 });
+    const jobId = started.data.id;
+    if (!jobId) throw new Error("Polish job did not return an ID");
+    const deadline = Date.now() + 10 * 60_000;
+    while (Date.now() < deadline) {
+        const { data: job } = await axios.get<PolishJob>(`${base}/${encodeURIComponent(jobId)}`, { timeout: 15_000 });
+        if (job.status === "completed") {
+            if (job.result?.detail) throw { response: { data: { detail: job.result.detail } } };
+            if (job.result?.prompt_cn && job.result?.prompt_en) return job.result;
+            throw new Error("Polish job returned no bilingual result");
+        }
+        if (job.status === "failed" || job.status === "superseded") {
+            throw { response: { data: { detail: {
+                reason: "api_error",
+                message_zh: job.error || "润色任务失败，请重试。",
+                message_en: job.error || "Polish task failed. Please retry.",
+            } } } };
+        }
+        await new Promise(resolve => setTimeout(resolve, 3000));
+    }
+    throw { response: { data: { detail: {
+        reason: "api_error",
+        message_zh: "润色处理时间过长，请稍后重试。",
+        message_en: "Polish is taking too long. Please try again later.",
+    } } } };
+}
+
 export const api = {
     createProject: async (title: string, text: string, skipAnalysis: boolean = false, workflowMode: string = "r2v", seriesId?: string) => {
         const res = await axios.post(`${API_URL}/projects`, { title, text, workflow_mode: workflowMode, series_id: seriesId }, {
@@ -1421,7 +1457,7 @@ export const api = {
         frameId: string = "",
         shotOverrides?: { style: string; lighting: string },
     ) => {
-        const res = await axios.post(`${API_URL}/video/polish_prompt`, {
+        const payload = {
             draft_prompt: draftPrompt,
             feedback: feedback,
             script_id: scriptId,
@@ -1438,8 +1474,12 @@ export const api = {
             target_duration: targetDuration,
             dialogue_speaker: dialogue?.speaker ?? "",
             dialogue_line: dialogue?.line ?? "",
-        });
-        return res.data;
+        };
+        if (!scriptId) {
+            const res = await axios.post(`${API_URL}/video/polish_prompt`, payload);
+            return res.data;
+        }
+        return submitPolishJob(scriptId, "video", payload);
     },
     polishR2VPrompt: async (
         draftPrompt: string,
@@ -1459,7 +1499,7 @@ export const api = {
         frameId: string = "",
         shotOverrides?: { style: string; lighting: string },
     ) => {
-        const res = await axios.post(`${API_URL}/video/polish_r2v_prompt`, {
+        const payload = {
             draft_prompt: draftPrompt,
             slots: slots,
             feedback: feedback,
@@ -1477,8 +1517,12 @@ export const api = {
             target_duration: targetDuration,
             dialogue_speaker: dialogue?.speaker ?? "",
             dialogue_line: dialogue?.line ?? "",
-        });
-        return res.data;
+        };
+        if (!scriptId) {
+            const res = await axios.post(`${API_URL}/video/polish_r2v_prompt`, payload);
+            return res.data;
+        }
+        return submitPolishJob(scriptId, "r2v", payload);
     },
     updateAssetDescription: async (scriptId: string, assetId: string, assetType: string, description: string) => {
         const res = await axios.post(`${API_URL}/projects/${scriptId}/assets/update_description`, {

@@ -15,7 +15,21 @@ from src.apps.comic_gen.llm import (
     PolishError,
     ScriptProcessor,
     _is_echo,
+    _parse_bilingual_polish,
 )
+
+
+def test_wrapped_complete_polish_json_is_accepted():
+    value = _parse_bilingual_polish(
+        'Here is the result:\n{"prompt_cn":"中文镜头", "prompt_en":"English shot"}', label="Video"
+    )
+    assert value == {"prompt_cn": "中文镜头", "prompt_en": "English shot"}
+
+
+def test_truncated_polish_json_is_rejected():
+    with pytest.raises(PolishError) as error:
+        _parse_bilingual_polish('{"prompt_cn":"中文镜头", "prompt_en":', label="Video")
+    assert error.value.reason == "json_parse_error"
 
 
 # ---------------------------------------------------------------------------

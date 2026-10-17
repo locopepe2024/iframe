@@ -6887,6 +6887,60 @@ def polish_r2v_prompt(request: PolishR2VPromptRequest):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+def _start_polish_job(script_id: str, request, mode: str, owner: str):
+    """Run slow model calls independently of the browser's HTTP connection."""
+    if request.script_id != script_id:
+        raise HTTPException(422, "Project identity mismatch")
+    if not pipeline.get_script(script_id, owner):
+        raise HTTPException(404, "Script not found")
+    if request.frame_id and not any(
+        frame.id == request.frame_id for frame in pipeline.get_script(script_id, owner).frames
+    ):
+        raise HTTPException(404, "Frame not found")
+
+    def work():
+        try:
+            value = polish_r2v_prompt(request) if mode == "r2v" else polish_video_prompt(request)
+            return {"prompt_cn": value["prompt_cn"], "prompt_en": value["prompt_en"]}
+        except HTTPException as exc:
+            if exc.status_code == 502 and isinstance(exc.detail, dict):
+                return {"detail": exc.detail}
+            logger.warning("Polish job failed: mode=%s status=%s", mode, exc.status_code)
+            return {"detail": {
+                "reason": "api_error",
+                "message_zh": "润色任务失败，请重试。",
+                "message_en": "Polish task failed. Please retry.",
+            }}
+
+    fingerprint = f"polish:{mode}:{uuid.uuid4().hex}"
+    return extraction_jobs.start(
+        owner, f"polish:{script_id}:{request.frame_id or 'general'}",
+        fingerprint, work,
+    )
+
+
+@app.post("/projects/{script_id}/polish-jobs/video", status_code=202)
+def start_video_polish_job(script_id: str, request: PolishVideoPromptRequest,
+                           user: UserContext = Depends(require_studio_user)):
+    return _start_polish_job(script_id, request, "video", user.owner_profile_id)
+
+
+@app.post("/projects/{script_id}/polish-jobs/r2v", status_code=202)
+def start_r2v_polish_job(script_id: str, request: PolishR2VPromptRequest,
+                         user: UserContext = Depends(require_studio_user)):
+    return _start_polish_job(script_id, request, "r2v", user.owner_profile_id)
+
+
+@app.get("/projects/{script_id}/polish-jobs/{job_id}")
+def get_polish_job(script_id: str, job_id: str,
+                   user: UserContext = Depends(require_studio_user)):
+    if not pipeline.get_script(script_id, user.owner_profile_id):
+        raise HTTPException(404, "Script not found")
+    return extraction_jobs.get_for_project_prefix(
+        user.owner_profile_id, f"polish:{script_id}", job_id, "polish:",
+    )
+
+
 # ===== Environment Configuration Endpoints =====
 
 def _check_mulerun_cli_status() -> bool:
