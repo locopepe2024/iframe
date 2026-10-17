@@ -6,6 +6,7 @@ import clsx from 'clsx';
 import { useState } from 'react';
 import { agentRequest, playgroundApi } from '@/lib/api';
 import FullNameHints from './FullNameHints';
+import MemorySettingsDialog from './MemorySettingsDialog';
 import OverflowActions from './OverflowActions';
 import { shortReferenceLabel } from './referenceMedia';
 import { createPlaygroundSession, openPlaygroundSession } from './playgroundSessionController';
@@ -27,6 +28,7 @@ export default function PlaygroundSessionSubnav() {
   const [title, setTitle] = useState('');
   const [busy, setBusy] = useState(false);
   const [factSettingsOpen, setFactSettingsOpen] = useState(false);
+  const [memorySettingsOpen, setMemorySettingsOpen] = useState(false);
   const [factCategories, setFactCategories] = useState<Array<{ id: string; display_name: string; auto_capture_enabled: boolean }>>([]);
   const [factSettingsError, setFactSettingsError] = useState('');
 
@@ -141,6 +143,7 @@ export default function PlaygroundSessionSubnav() {
             <OverflowActions label={t('manage')} actions={[
               { label: t('rename'), onClick: () => { setRenaming(session.id); setTitle(session.title); } },
               { label: t('factSettings'), onClick: () => { void openFactSettings(); } },
+              { label: t('memorySettings'), onClick: () => setMemorySettingsOpen(true) },
               { label: t('delete'), danger: true, onClick: () => { void remove(session.id); } },
             ]} />
             </div>
@@ -163,6 +166,7 @@ export default function PlaygroundSessionSubnav() {
           </div>
         </section>
       </div>}
+      {memorySettingsOpen && <MemorySettingsDialog onClose={() => setMemorySettingsOpen(false)} />}
     </FullNameHints>
   );
 }

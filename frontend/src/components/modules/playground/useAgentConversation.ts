@@ -4,9 +4,6 @@ import { usePlaygroundStore } from './usePlaygroundStore';
 import { referenceName } from './referenceMedia';
 import { readCompanionSkills, COMPANION_SKILLS_STORAGE_KEY, type CompanionSkillId } from './companionSkills';
 
-export type AgentMemory = { id: string; content: string; category: string; source_quote: string; updated_at: number };
-export type MemoryCandidate = { content: string; category: string; source_session_id: string; source_message_id: string; source_quote: string };
-
 export function requestsCurrentInformation(content: string): boolean {
   return /截至目前|截止目前|截至今天|截止今天|至今|到今天|今年|最近一年/.test(content)
     && /资讯|新闻|公告|研究|分析|近况|动态|运营|经营/.test(content);
@@ -29,9 +26,6 @@ export function useAgentConversation(enabled: boolean, sessionId: string | null)
   const [liveResearch, setLiveResearch] = useState(false);
   const [liveResearchAvailable, setLiveResearchAvailable] = useState(false);
   const [skillsLoaded, setSkillsLoaded] = useState(false);
-  const [memories, setMemories] = useState<AgentMemory[]>([]);
-  const [memoryCandidates, setMemoryCandidates] = useState<MemoryCandidate[]>([]);
-  const [memoryError, setMemoryError] = useState('');
   const active = useRef(sessionId);
   active.current = sessionId;
   const sending = useRef(false);
@@ -55,36 +49,6 @@ export function useAgentConversation(enabled: boolean, sessionId: string | null)
   function toggleCompanionSkill(id: CompanionSkillId) {
     setCompanionSkills(current => current.includes(id) ? current.filter(item => item !== id) : [...current, id]);
   }
-  async function refreshMemories() {
-    try {
-      const result = await agentRequest<{ memories: AgentMemory[] }>('/memories');
-      setMemories(result.memories);
-      setMemoryError('');
-    } catch (error) { setMemoryError(error instanceof Error ? error.message : '加载记忆失败'); }
-  }
-  async function extractMemories() {
-    try {
-      const result = await agentRequest<{ candidates: MemoryCandidate[] }>('/memories/extract', 'POST');
-      setMemoryCandidates(result.candidates);
-      setMemoryError('');
-    } catch (error) { setMemoryError(error instanceof Error ? error.message : '提取候选失败'); }
-  }
-  async function saveMemory(candidate: MemoryCandidate) {
-    try {
-      await agentRequest('/memories', 'POST', candidate);
-      setMemoryCandidates(current => current.filter(item => item !== candidate));
-      await refreshMemories();
-    } catch (error) { setMemoryError(error instanceof Error ? error.message : '保存记忆失败'); }
-  }
-  async function editMemory(id: string, content: string) {
-    try { await agentRequest(`/memories/${id}`, 'PATCH', { content }); await refreshMemories(); }
-    catch (error) { setMemoryError(error instanceof Error ? error.message : '更新记忆失败'); }
-  }
-  async function deleteMemory(id: string) {
-    try { await agentRequest(`/memories/${id}`, 'DELETE'); await refreshMemories(); }
-    catch (error) { setMemoryError(error instanceof Error ? error.message : '删除记忆失败'); }
-  }
-  useEffect(() => { if (enabled && companionSkills.includes('memory')) void refreshMemories(); }, [enabled, companionSkills]);
   useEffect(() => {
     const changed = () => setRevision(r => r + 1);
     window.addEventListener('lumenx:uniart-skus-changed', changed);
@@ -165,7 +129,6 @@ export function useAgentConversation(enabled: boolean, sessionId: string | null)
       });
       if (active.current === sessionId) {
         setMessages(m => [...m.filter(x => x.id !== result.user_message.id && x.id !== result.assistant_message.id), result.user_message, result.assistant_message]);
-        if (companionSkills.includes('memory')) void extractMemories();
       }
     } catch (e) {
       if (active.current === sessionId) {
@@ -182,5 +145,5 @@ export function useAgentConversation(enabled: boolean, sessionId: string | null)
     }
     finally { sending.current = false; setBusy(false); }
   }
-  return { models, model, setModel, modelsLoading, modelsError, reloadModels: () => setRevision(r => r + 1), messages, busy: busy || remoteBusy, loading: loading || modelsLoading || !!modelsError, error, send, removeMessage, companionSkills, toggleCompanionSkill, knowledgeSearch, setKnowledgeSearch, knowledgeQuery, setKnowledgeQuery, liveResearch, setLiveResearch, liveResearchAvailable, memories, memoryCandidates, memoryError, refreshMemories, extractMemories, saveMemory, editMemory, deleteMemory };
+  return { models, model, setModel, modelsLoading, modelsError, reloadModels: () => setRevision(r => r + 1), messages, busy: busy || remoteBusy, loading: loading || modelsLoading || !!modelsError, error, send, removeMessage, companionSkills, toggleCompanionSkill, knowledgeSearch, setKnowledgeSearch, knowledgeQuery, setKnowledgeQuery, liveResearch, setLiveResearch, liveResearchAvailable };
 }
