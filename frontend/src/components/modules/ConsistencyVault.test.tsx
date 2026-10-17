@@ -92,7 +92,8 @@ it("sends only the visible edited scene prompt and negative prompt", async () =>
     render(<ConsistencyVault />);
     fireEvent.click(screen.getByRole("button", { name: /Scenes/ }));
     fireEvent.click(screen.getByText("长街"));
-    fireEvent.click(screen.getByRole("button", { name: "copyStyleToPrompt" }));
+    fireEvent.click(screen.getByRole("button", { name: "采用" }));
+    fireEvent.click(screen.getByRole("button", { name: "应用到图片提示词" }));
     const visiblePrompt = (screen.getByRole("textbox", { name: "图像提示词" }) as HTMLTextAreaElement).value;
     expect(visiblePrompt).toContain("暮秋蓝调");
     fireEvent.click(screen.getByRole("button", { name: "测试生成图片" }));
@@ -106,6 +107,46 @@ it("sends only the visible edited scene prompt and negative prompt", async () =>
     expect(args[15]).toBe(true);
     expect(args[16]).toBe("reviewed");
     expect(args[4]).toBe("");
+});
+
+it("edits scene light and view before refinement and submits only the applied visible prompt", async () => {
+    const asset = { id: "street", name: "青溪镇长街", description: "人来人往的青石长街", source: "episode",
+        lighting_mood: "暮秋黄昏", image_asset: { selected_id: "v1", variants: [{ id: "v1", url: "/street.png" }] } };
+    const project = { id: "episode-1", characters: [], scenes: [asset], props: [],
+        art_direction: { style_config: { positive_prompt: "", negative_prompt: "" } } };
+    useProjectStore.setState({ currentProject: project as any });
+    mocks.getEpisodeVisualContext.mockResolvedValue({ context: null, bindings: [] });
+    mocks.updateAssetAttributes.mockResolvedValue(project);
+    mocks.generateAsset.mockResolvedValue(project);
+    render(<ConsistencyVault />);
+    fireEvent.click(screen.getByRole("button", { name: /Scenes/ }));
+    fireEvent.click(screen.getByText("青溪镇长街"));
+    expect(screen.getByRole("textbox", { name: "场景风格" })).toBeEnabled();
+    fireEvent.change(screen.getByRole("textbox", { name: "场景风格" }), { target: { value: "写实蓝调" } });
+    fireEvent.change(screen.getByRole("textbox", { name: "场景环境光" }), { target: { value: "街道保持蓝色黄昏" } });
+    fireEvent.change(screen.getByRole("textbox", { name: "局部光作用区域" }), { target: { value: "远处落日" } });
+    fireEvent.change(screen.getByRole("textbox", { name: "局部光效果" }), { target: { value: "仅远处暖红" } });
+    fireEvent.change(screen.getByRole("textbox", { name: "场景参考图视角" }), { target: { value: "沿街向北" } });
+    fireEvent.click(screen.getByRole("button", { name: "保存草稿" }));
+    await waitFor(() => expect(mocks.updateAssetAttributes).toHaveBeenCalledWith("episode-1", "street", "scene",
+        expect.objectContaining({ asset_design: expect.objectContaining({
+            style: "写实蓝调", ambient_lighting: "街道保持蓝色黄昏",
+            local_lighting: { target: "远处落日", effect: "仅远处暖红" },
+            reference_viewpoint: "沿街向北", confirmed: false,
+        }) })));
+    fireEvent.click(screen.getByRole("button", { name: "优化提示词" }));
+    await waitFor(() => expect(mocks.agentRequest).toHaveBeenCalledWith("/asset-image-prompt/refine", "POST",
+        expect.objectContaining({ style: expect.stringContaining("局部光（远处落日）：仅远处暖红") })));
+    fireEvent.click(screen.getByRole("button", { name: "应用到图片提示词" }));
+    const visible = (screen.getByRole("textbox", { name: "图像提示词" }) as HTMLTextAreaElement).value;
+    expect(visible).toContain("环境光：街道保持蓝色黄昏");
+    expect(visible).toContain("局部光（远处落日）：仅远处暖红");
+    fireEvent.click(screen.getByRole("button", { name: "测试生成图片" }));
+    const confirm = await screen.findByRole("button", { name: "确认并生成" });
+    await waitFor(() => expect(confirm).not.toBeDisabled());
+    fireEvent.click(confirm);
+    await waitFor(() => expect(mocks.generateAsset).toHaveBeenCalled());
+    expect(mocks.generateAsset.mock.calls[0][6]).toBe(visible);
 });
 
 it.each([

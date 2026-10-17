@@ -786,6 +786,7 @@ export default function ConsistencyVault() {
                                 setSelectedAssetType(null);
                             }}
                             onUpdateDescription={(desc: string) => handleUpdateDescription(selectedAssetId, selectedAssetType, desc)}
+                            onUpdateAttributes={(attributes: Record<string, unknown>) => handleUpdateAttributes(selectedAssetId, selectedAssetType, attributes)}
                             onRename={(name: string) => handleRenameAsset(selectedAssetId, selectedAssetType, name)}
                             onGenerate={(prompt: string, applyStyle: boolean, negativePrompt: string, batchSize: number, references?: AssetLibraryReference[], imageGenerationMode?: "text" | "reference", preservePrompt?: boolean, reviewFingerprint?: string) => handleGenerate(selectedAssetId, selectedAssetType, "all", prompt, applyStyle, negativePrompt, batchSize, references, imageGenerationMode, preservePrompt, reviewFingerprint)}
                             isGenerating={isAssetGenerating(selectedAssetId)}
@@ -1016,7 +1017,7 @@ function ShootingPlanAssetRequirements({
     );
 }
 
-function CharacterDetailModal({ asset, type, onClose, onUpdateDescription, onRename, onGenerate, isGenerating, stylePrompt = "", styleNegativePrompt = "", onGenerateVideo, onDeleteVideo, isGeneratingVideo, planEntries = [] }: any) {
+function CharacterDetailModal({ asset, type, onClose, onUpdateDescription, onUpdateAttributes, onRename, onGenerate, isGenerating, stylePrompt = "", styleNegativePrompt = "", onGenerateVideo, onDeleteVideo, isGeneratingVideo, planEntries = [] }: any) {
     const tv = useTranslations("vault");
     const [description, setDescription] = useState(asset.description);
     const [isEditing, setIsEditing] = useState(false);
@@ -1025,6 +1026,26 @@ function CharacterDetailModal({ asset, type, onClose, onUpdateDescription, onRen
     const selectionQueue = useRef<Promise<void>>(Promise.resolve());
     const selectionVersion = useRef(0);
     const [imagePrompt, setImagePrompt] = useState(asset.image_prompt || asset.description || "");
+    const savedSceneDesign = asset.asset_design?.design_draft || {};
+    const inheritedSceneLighting = [asset.time_of_day, asset.lighting_mood].filter(Boolean).join("；");
+    const [sceneDesign, setSceneDesign] = useState(() => ({
+        visual_notes: String(savedSceneDesign.visual_notes || asset.description || ""),
+        style: typeof savedSceneDesign.style === "string" ? savedSceneDesign.style : stylePrompt,
+        ambient_lighting: typeof savedSceneDesign.ambient_lighting === "string" ? savedSceneDesign.ambient_lighting : inheritedSceneLighting,
+        local_target: String(savedSceneDesign.local_lighting?.target || ""),
+        local_effect: String(savedSceneDesign.local_lighting?.effect || ""),
+        reference_viewpoint: String(savedSceneDesign.reference_viewpoint || ""),
+        reference_framing: String(savedSceneDesign.reference_framing || ""),
+    }));
+    const [sceneDesignNeedsApply, setSceneDesignNeedsApply] = useState(() =>
+        type === "scene" && !String(asset.image_prompt || "").includes("【场景结构化设置】") && Boolean(
+            (typeof savedSceneDesign.style === "string" ? savedSceneDesign.style : stylePrompt)
+            || (typeof savedSceneDesign.ambient_lighting === "string" ? savedSceneDesign.ambient_lighting : inheritedSceneLighting)
+            || savedSceneDesign.local_lighting?.effect
+            || savedSceneDesign.reference_viewpoint
+            || savedSceneDesign.reference_framing,
+        ));
+    const [sceneDesignSaving, setSceneDesignSaving] = useState(false);
     const [promptModels, setPromptModels] = useState<ChatModel[]>([]);
     const [promptModel, setPromptModel] = useState("");
     const [optimizingPrompt, setOptimizingPrompt] = useState(false);
@@ -1195,8 +1216,16 @@ function CharacterDetailModal({ asset, type, onClose, onUpdateDescription, onRen
                 asset_name: asset.name,
                 description: asset.description,
                 current_prompt: imagePrompt,
-                style: "",
-                plan_context: planEntries.slice(0, 8).map((entry: AssetPlanEntry) => entry.prompt),
+                style: type === "scene" ? [
+                    sceneDesign.visual_notes && `场景空间：${sceneDesign.visual_notes}`,
+                    sceneDesign.style && `场景风格：${sceneDesign.style}`,
+                    sceneDesign.ambient_lighting && `环境光：${sceneDesign.ambient_lighting}`,
+                    sceneDesign.local_effect && `局部光（${sceneDesign.local_target}）：${sceneDesign.local_effect}`,
+                    sceneDesign.reference_viewpoint && `参考图视角：${sceneDesign.reference_viewpoint}`,
+                    sceneDesign.reference_framing && `参考图构图：${sceneDesign.reference_framing}`,
+                ].filter(Boolean).join("\n") : "",
+                // A shooting-plan clause is sent only after the user adds it to the visible prompt.
+                plan_context: [],
             });
             setOptimizedPrompt(result.prompt);
         } catch (error) {
@@ -1207,6 +1236,10 @@ function CharacterDetailModal({ asset, type, onClose, onUpdateDescription, onRen
     };
 
     const handleGenerateClick = (batchSize: number) => {
+        if (type === "scene" && sceneDesignNeedsApply) {
+            toast.warning("场景设置已修改；请先应用到可见提示词，或选择保留当前提示词。");
+            return;
+        }
         if (imageGenerationMode === "reference" && promptReferences.length === 0) {
             toast.warning(tv("referenceModeRequiresExplicit"));
             return;
@@ -1232,6 +1265,58 @@ function CharacterDetailModal({ asset, type, onClose, onUpdateDescription, onRen
             apply_style: false,
             preserve_prompt: true,
         });
+    };
+
+    const updateSceneDesign = (key: keyof typeof sceneDesign, value: string) => {
+        setSceneDesign(current => ({ ...current, [key]: value }));
+        setSceneDesignNeedsApply(true);
+    };
+
+    const applySceneDesign = () => {
+        if (sceneDesign.local_effect.trim() && !sceneDesign.local_target.trim()) {
+            toast.warning("请指定局部光的作用区域或对象。");
+            return;
+        }
+        const lines = [
+            sceneDesign.visual_notes && `场景空间：${sceneDesign.visual_notes}`,
+            sceneDesign.style && `场景风格：${sceneDesign.style}`,
+            sceneDesign.ambient_lighting && `环境光：${sceneDesign.ambient_lighting}`,
+            sceneDesign.local_effect && `局部光（${sceneDesign.local_target}）：${sceneDesign.local_effect}`,
+            sceneDesign.reference_viewpoint && `参考图视角：${sceneDesign.reference_viewpoint}`,
+            sceneDesign.reference_framing && `参考图构图：${sceneDesign.reference_framing}`,
+        ].filter(Boolean);
+        const block = `【场景结构化设置】\n${lines.join("\n")}\n【/场景结构化设置】`;
+        setImagePrompt((current: string) => {
+            const withoutPrevious = current.replace(/\n?【场景结构化设置】[\s\S]*?【\/场景结构化设置】/g, "").trim();
+            const base = withoutPrevious === sceneDesign.visual_notes.trim() ? "" : withoutPrevious;
+            return [base, block].filter(Boolean).join("\n\n");
+        });
+        setSceneDesignNeedsApply(false);
+    };
+
+    const saveSceneDesign = async (confirmed: boolean) => {
+        if (!sceneDesign.visual_notes.trim() || sceneDesignSaving) return;
+        if (sceneDesign.local_effect.trim() && !sceneDesign.local_target.trim()) {
+            toast.warning("请指定局部光的作用区域或对象。");
+            return;
+        }
+        setSceneDesignSaving(true);
+        try {
+            await onUpdateAttributes({ asset_design: {
+                visual_notes: sceneDesign.visual_notes.trim(),
+                style: sceneDesign.style.trim(),
+                ambient_lighting: sceneDesign.ambient_lighting.trim(),
+                local_lighting: { target: sceneDesign.local_target.trim(), effect: sceneDesign.local_effect.trim() },
+                reference_viewpoint: sceneDesign.reference_viewpoint.trim(),
+                reference_framing: sceneDesign.reference_framing.trim(),
+                confirmed,
+            } });
+            toast.success(confirmed ? "场景设计已确认" : "场景草稿已保存");
+        } catch (error) {
+            toast.error("场景设计保存失败", { body: extractErrorDetail(error) });
+        } finally {
+            setSceneDesignSaving(false);
+        }
     };
 
     return (
@@ -1336,6 +1421,49 @@ function CharacterDetailModal({ asset, type, onClose, onUpdateDescription, onRen
                             )}
                         </div>
 
+                        {type === "scene" && activeTab === "image" && (
+                            <section className="space-y-3 rounded-lg border border-glass-border bg-glass p-4" aria-label="场景结构化设置">
+                                <div>
+                                    <h3 className="text-sm font-bold text-foreground">场景结构化设置</h3>
+                                    <p className="mt-1 text-xs text-text-muted">设置可保存为场景设计；点击“应用到图片提示词”后才进入本次生成。参考图视角与构图只控制场景参考图。</p>
+                                </div>
+                                <label className="block text-xs text-text-secondary">空间与固定外观
+                                    <textarea aria-label="场景空间与固定外观" value={sceneDesign.visual_notes} onChange={event => updateSceneDesign("visual_notes", event.target.value)} className="mt-1 w-full rounded border border-glass-border bg-input-bg p-2 text-sm text-foreground" rows={3} />
+                                </label>
+                                <label className="block text-xs text-text-secondary">风格
+                                    <textarea aria-label="场景风格" value={sceneDesign.style} onChange={event => updateSceneDesign("style", event.target.value)} className="mt-1 w-full rounded border border-glass-border bg-input-bg p-2 text-sm text-foreground" rows={2} />
+                                </label>
+                                {stylePrompt && <p className="text-xs text-text-muted">导演／项目风格建议：{stylePrompt} <button type="button" className="text-primary" onClick={() => updateSceneDesign("style", stylePrompt)}>采用</button></p>}
+                                <label className="block text-xs text-text-secondary">环境光与整体色调
+                                    <textarea aria-label="场景环境光" value={sceneDesign.ambient_lighting} onChange={event => updateSceneDesign("ambient_lighting", event.target.value)} className="mt-1 w-full rounded border border-glass-border bg-input-bg p-2 text-sm text-foreground" rows={2} />
+                                </label>
+                                {(asset.time_of_day || asset.lighting_mood) && <p className="text-xs text-text-muted">场景档案时段／光影建议：{[asset.time_of_day, asset.lighting_mood].filter(Boolean).join(" · ")} <button type="button" className="text-primary" onClick={() => updateSceneDesign("ambient_lighting", [asset.time_of_day, asset.lighting_mood].filter(Boolean).join("；"))}>采用</button></p>}
+                                <div className="grid gap-2 md:grid-cols-2">
+                                    <label className="block text-xs text-text-secondary">局部光作用区域／对象
+                                        <input aria-label="局部光作用区域" value={sceneDesign.local_target} onChange={event => updateSceneDesign("local_target", event.target.value)} className="mt-1 w-full rounded border border-glass-border bg-input-bg p-2 text-sm text-foreground" placeholder="例如：远处落日；树荫外街面" />
+                                    </label>
+                                    <label className="block text-xs text-text-secondary">局部光效果
+                                        <input aria-label="局部光效果" value={sceneDesign.local_effect} onChange={event => updateSceneDesign("local_effect", event.target.value)} className="mt-1 w-full rounded border border-glass-border bg-input-bg p-2 text-sm text-foreground" placeholder="例如：限定的暖红轮廓光" />
+                                    </label>
+                                </div>
+                                <div className="grid gap-2 md:grid-cols-2">
+                                    <label className="block text-xs text-text-secondary">参考图视角／机位
+                                        <input aria-label="场景参考图视角" value={sceneDesign.reference_viewpoint} onChange={event => updateSceneDesign("reference_viewpoint", event.target.value)} className="mt-1 w-full rounded border border-glass-border bg-input-bg p-2 text-sm text-foreground" />
+                                    </label>
+                                    <label className="block text-xs text-text-secondary">参考图构图
+                                        <input aria-label="场景参考图构图" value={sceneDesign.reference_framing} onChange={event => updateSceneDesign("reference_framing", event.target.value)} className="mt-1 w-full rounded border border-glass-border bg-input-bg p-2 text-sm text-foreground" />
+                                    </label>
+                                </div>
+                                <div className="flex flex-wrap items-center gap-2">
+                                    <button type="button" onClick={() => void saveSceneDesign(false)} disabled={sceneDesignSaving || !sceneDesign.visual_notes.trim()} className="rounded border border-glass-border px-2 py-1 text-xs text-foreground disabled:opacity-40">保存草稿</button>
+                                    <button type="button" onClick={() => void saveSceneDesign(true)} disabled={sceneDesignSaving || !sceneDesign.visual_notes.trim()} className="rounded border border-glass-border px-2 py-1 text-xs text-foreground disabled:opacity-40">确认场景设计</button>
+                                    <button type="button" onClick={applySceneDesign} className="rounded bg-primary px-2 py-1 text-xs text-white">应用到图片提示词</button>
+                                </div>
+                                {sceneDesignNeedsApply && <p role="status" className="text-xs text-primary">设置有修改。生成前请应用到可见提示词，或<button type="button" className="ml-1 underline" onClick={() => setSceneDesignNeedsApply(false)}>保留当前提示词</button>。</p>}
+                                <p className="text-xs text-text-muted">已确认版本：{asset.asset_design?.design_revisions?.at(-1)?.revision || "无"}</p>
+                            </section>
+                        )}
+
                         {/* Image generation description. Selecting/uploading a
                             variant only makes it available; @ in this editor
                             is the explicit binding sent to the provider. */}
@@ -1374,7 +1502,7 @@ function CharacterDetailModal({ asset, type, onClose, onUpdateDescription, onRen
                                 {optimizedPrompt && <div className="space-y-2 border-l-2 border-primary pl-3">
                                     <p className="whitespace-pre-wrap text-xs leading-relaxed text-text-secondary">{optimizedPrompt}</p>
                                     <div className="flex gap-3">
-                                        <button type="button" onClick={() => { setImagePrompt(optimizedPrompt); setOptimizedPrompt(""); }} className="text-xs text-primary hover:underline">采用建议</button>
+                                        <button type="button" onClick={() => { setImagePrompt(optimizedPrompt); setOptimizedPrompt(""); setSceneDesignNeedsApply(false); }} className="text-xs text-primary hover:underline">采用建议</button>
                                         <button type="button" onClick={() => setOptimizedPrompt("")} className="text-xs text-text-muted hover:underline">忽略</button>
                                     </div>
                                 </div>}
@@ -1434,7 +1562,7 @@ function CharacterDetailModal({ asset, type, onClose, onUpdateDescription, onRen
                         )}
 
                         {/* Style Control (Only visible in Image Tab) */}
-                        {activeTab === "image" && (
+                        {activeTab === "image" && type !== "scene" && (
                             <div className="space-y-2">
                                 <label className="text-sm font-bold text-text-secondary uppercase">Style Settings</label>
                                 <div className="bg-glass rounded-lg p-3 border border-border-subtle">

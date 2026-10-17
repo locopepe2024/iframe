@@ -2460,7 +2460,8 @@ class ComicGenPipeline(StudioOwnerMixin):
             design = attributes["asset_design"]
             if not isinstance(design, dict):
                 raise ValueError("Asset design must be an object")
-            if set(design) - {"visual_notes", "user_requirements", "unresolved", "confirmed"}:
+            scene_fields = {"style", "ambient_lighting", "local_lighting", "reference_viewpoint", "reference_framing"} if asset_type == "scene" else set()
+            if set(design) - {"visual_notes", "user_requirements", "unresolved", "confirmed"} - scene_fields:
                 raise ValueError("Asset design contains unknown fields")
             notes = design.get("visual_notes")
             if not isinstance(notes, str) or not notes.strip():
@@ -2472,6 +2473,18 @@ class ComicGenPipeline(StudioOwnerMixin):
                 raise ValueError("Asset design unresolved items must be text")
             if not isinstance(design.get("confirmed", False), bool):
                 raise ValueError("Asset design confirmation must be boolean")
+            for field in scene_fields - {"local_lighting"}:
+                value = design.get(field, "")
+                if not isinstance(value, str) or len(value) > 2000:
+                    raise ValueError(f"Asset design {field} must be bounded text")
+            if "local_lighting" in scene_fields:
+                local = design.get("local_lighting", {})
+                if not isinstance(local, dict) or set(local) - {"target", "effect"}:
+                    raise ValueError("Asset design local_lighting must contain target and effect")
+                if any(not isinstance(local.get(key, ""), str) or len(local.get(key, "")) > 1000 for key in ("target", "effect")):
+                    raise ValueError("Asset design local_lighting must be bounded text")
+                if local.get("effect", "").strip() and not local.get("target", "").strip():
+                    raise ValueError("Asset design local lighting needs a target")
             record = dict(target_asset.asset_design or {})
             record["design_draft"] = design
             revisions = list(record.get("design_revisions") or [])
