@@ -753,6 +753,8 @@ class AssetGenerator:
         reference_image_urls: List[str] = None,
         reference_provenance_list: List[Dict[str, str]] = None,
         image_generation_mode: str = "text",
+        scene_tool: Dict = None,
+        scene_tool_source_variant_id: str = None,
     ) -> Scene:
         """Generates a scene reference image."""
         scene.status = GenerationStatus.PROCESSING
@@ -808,11 +810,13 @@ class AssetGenerator:
                     created_at=time.time(),
                     prompt_used=prompt,
                     source_origin="generation",
+                    scene_tool=scene_tool,
+                    scene_tool_source_variant_id=scene_tool_source_variant_id,
                     **self._reference_metadata(reference_provenance, reference_provenance_list),
                 )
                 scene.image_asset.variants.insert(0, variant)
                 
-                if not scene.episode_scene_id and (not scene.image_asset.selected_id or batch_size == 1):
+                if not scene_tool and not scene.episode_scene_id and (not scene.image_asset.selected_id or batch_size == 1):
                     scene.image_asset.selected_id = variant_id
                     scene.image_url = rel_path # Legacy sync
 

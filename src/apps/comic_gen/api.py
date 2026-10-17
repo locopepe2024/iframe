@@ -421,6 +421,7 @@ class GenerateAssetRequest(BaseModel):
     reference: Optional[AssetLibraryReference] = None
     references: List[AssetLibraryReference] = Field(default_factory=list, max_length=9)
     image_generation_mode: Literal["text", "reference"] = "text"
+    scene_tool: Optional[Dict[str, Any]] = None
     style_prompt: Optional[str] = None
     generation_type: str = "all"  # 'full_body', 'three_view', 'headshot', 'all', 'reference_sheet'
     prompt: Optional[str] = None
@@ -3306,6 +3307,7 @@ def generate_single_asset(script_id: str, request: GenerateAssetRequest, backgro
             request.reference,
             request.references,
             request.image_generation_mode,
+            request.scene_tool,
         )
         
         # Add background processing
@@ -3321,7 +3323,7 @@ def generate_single_asset(script_id: str, request: GenerateAssetRequest, backgro
     except AssetGenerationInProgress as e:
         raise HTTPException(status_code=409, detail=str(e))
     except ValueError as e:
-        raise HTTPException(status_code=404, detail=str(e))
+        raise HTTPException(status_code=400 if request.scene_tool is not None else 404, detail=str(e))
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
