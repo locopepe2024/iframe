@@ -124,8 +124,7 @@ def studio_media_preview_url(
     if max_edge not in STUDIO_MEDIA_PREVIEW_SIZES:
         raise ValueError("Unsupported Studio media preview size")
     owner_key = studio_owner_key(owner_profile_id)
-    local_path = _local_studio_path_for_object_key(stored_path, owner_profile_id)
-    normalized = local_path.replace("\\", "/").lstrip("/")
+    normalized = stored_path.replace("\\", "/").lstrip("/")
     prefix = f"users/{owner_key}/studio/"
     if not normalized.startswith(prefix):
         return stored_path
