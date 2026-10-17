@@ -216,6 +216,7 @@ export default function ReferencePromptEditor({ value, labels = EMPTY_LABELS, ca
       const document = referencePromptDocument(value, currentCandidates.current, false, allowImplicitMentions);
       if (!editor.state.doc.eq(editor.schema.nodeFromJSON(document))) {
         editor.commands.setContent(document, { emitUpdate: false });
+        callbacks.current.onReferencesChange?.(referenceSelectionsFromEditor(editor));
       }
       return;
     }
@@ -246,6 +247,7 @@ export default function ReferencePromptEditor({ value, labels = EMPTY_LABELS, ca
     const textChanged = editor.getText({ blockSeparator: '\n' }) !== value;
     const { from, to } = editor.state.selection;
     editor.commands.setContent(document, { emitUpdate: false });
+    callbacks.current.onReferencesChange?.(referenceSelectionsFromEditor(editor));
     if (textChanged) editor.commands.focus('end');
     else {
       const end = editor.state.doc.content.size - 1;
