@@ -191,25 +191,35 @@ def comparable_company_request(content: str) -> bool:
     return bool(re.search(r"类似公司|可比公司|同行|对标|参考公司|竞品|竞争对手", content, re.IGNORECASE))
 
 
-def comparable_company_clarification(content: str, previous_messages: list[dict]) -> str | None:
+def comparable_company_clarification(content: str, previous_messages: list[dict], payload: dict) -> str | None:
     """Return a targeted clarification before trying a listed-company adapter.
 
     A private company is still a valid research subject. It needs a name and
     comparison dimensions so the next stage can map it to public peers; it is
     not an unsupported subject or a reason to spend a discovery budget.
     """
-    context = " ".join(str(item.get("content", "")) for item in previous_messages[-6:])
-    combined = f"{context} {content}"
-    if not comparable_company_request(combined):
+    previous_user = next((str(item.get("content", "")) for item in reversed(previous_messages)
+                          if item.get("role") == "user"), "")
+    current_peer_request = comparable_company_request(content)
+    private_followup = bool(re.search(r"未上市|没上市|尚未上市|非上市", content)) and comparable_company_request(previous_user)
+    if not current_peer_request and not private_followup:
         return None
-    has_identity = bool(re.search(r"[A-Za-z][A-Za-z0-9 ._-]{1,80}|[\u4e00-\u9fff]{2,30}", content))
-    has_listing = bool(re.search(r"上市|A股|港股|美股|证券代码|股票代码|\b\d{6}\b", combined, re.IGNORECASE))
-    private = bool(re.search(r"未上市|没上市|尚未上市|私有公司|非上市", combined))
-    if private or not has_identity or (not has_listing and len(content) < 160):
-        return ("这家公司可以按未上市公司处理。请补充公司或项目名称，并选择希望对比的维度，"
-                "例如模型能力与产品、客户与商业化、融资与估值、研发团队与算力、收入与盈利。"
-                "确认后我会据此筛选可公开检索的上市公司和行业参与者做对比；未上市公司本身不要求股票代码。")
-    return None
+    user_text = f"{previous_user} {content}" if private_followup else content
+    subject = str(payload.get("subject") or "").strip()
+    generic_subjects = {"公司", "这家公司", "该公司", "一家未上市公司", "未上市公司", "项目", "这个项目", "AI视频模型后训练"}
+    has_identity = (len(subject) >= 2 and subject not in generic_subjects
+                    and subject.casefold() in user_text.casefold())
+    has_dimensions = bool(re.search(
+        r"模型能力|产品|技术|性能|客户|商业化|融资|估值|研发|团队|算力|收入|营收|盈利|利润|市场|渠道",
+        user_text,
+    ))
+    if has_identity and has_dimensions:
+        return None
+    missing = ("公司或项目名称，并说明希望对比的维度" if not has_identity and not has_dimensions
+               else "公司或项目名称" if not has_identity else "希望对比的维度")
+    return (f"未上市公司或项目也可以研究。请补充{missing}，"
+            "例如模型能力与产品、客户与商业化、融资与估值、研发团队与算力、收入与盈利。"
+            "未上市主体不要求股票代码；取得这些信息后再筛选可公开检索的上市公司和行业参与者。")
 
 
 def plan_research(ctx, model: str, content: str, previous_messages: list[dict]) -> ResearchIntent:
@@ -242,8 +252,8 @@ def plan_research(ctx, model: str, content: str, previous_messages: list[dict]) 
         payload = json.loads(match.group(0) if match else result)
         if isinstance(payload, dict) and payload.get("clarification") is None:
             payload["clarification"] = ""
-        guided_clarification = comparable_company_clarification(content, previous_messages)
-        if guided_clarification and not payload.get("needs_clarification"):
+        guided_clarification = comparable_company_clarification(content, previous_messages, payload) if isinstance(payload, dict) else None
+        if guided_clarification:
             payload["needs_clarification"] = True
             payload["clarification"] = guided_clarification
         if isinstance(payload, dict) and not payload.get("needs_clarification"):

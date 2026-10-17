@@ -466,6 +466,7 @@ def test_research_plan_accepts_null_optional_clarification(setup, monkeypatch):
     intent = agent.plan_research(setup, 'qwen', '查询美盈森从2026年3月1日至今的官方公告资讯', [])
     assert intent.subject == '美盈森'
     assert intent.clarification == ''
+    assert intent.end_date == '2026-10-14'
 
 
 def test_peer_research_guides_private_company_to_name_and_dimensions(setup, monkeypatch):
@@ -484,6 +485,22 @@ def test_private_company_followup_does_not_require_a_stock_code(setup, monkeypat
     assert intent.needs_clarification is True
     assert '未上市公司' in intent.clarification
     assert '不要求股票代码' in intent.clarification
+
+
+def test_peer_research_with_named_subject_and_dimensions_does_not_repeat_clarification(setup, monkeypatch):
+    monkeypatch.setattr(agent, 'complete', Mock(return_value='{"search_query":"Moonshot AI peers","subject":"Moonshot AI","start_date":"2026-09-17","end_date":"2026-10-17","dimensions":["产品","融资"],"needs_clarification":false,"clarification":""}'))
+    intent = agent.plan_research(setup, 'qwen', '比较 Moonshot AI 的产品和融资与同行', [])
+    assert intent.needs_clarification is False
+
+
+def test_old_peer_request_does_not_contaminate_unrelated_research(setup, monkeypatch):
+    monkeypatch.setattr(agent, 'complete', Mock(return_value='{"search_query":"002303","subject":"美盈森","start_date":"2026-10-01","end_date":"2026-10-17","dimensions":[],"needs_clarification":false,"clarification":""}'))
+    intent = agent.plan_research(setup, 'qwen', '查询美盈森公告', [
+        {'role': 'user', 'content': '找类似公司参考'},
+        {'role': 'assistant', 'content': '请说明公司名称和比较维度'},
+        {'role': 'user', 'content': '换一个问题'},
+    ])
+    assert intent.needs_clarification is False
 
 
 def test_research_answer_is_idempotent_and_cites_exact_units(setup, monkeypatch):
