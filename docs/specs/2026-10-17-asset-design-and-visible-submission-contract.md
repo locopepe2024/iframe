@@ -33,6 +33,13 @@ This contract covers character, scene, and prop image generation in Studio asset
 - Bring the structure of scene/prop AI design drafts beyond one `visual_notes` string if field-specific editing proves useful. Keep frame content and continuity choices at generation scope, outside the reusable asset design record.
 - Add a dedicated preflight display of stable reference variant IDs, effective model and ratio for all manual entry points. Current input controls expose selected reference images, but the complete ledger is not yet shown in one review surface.
 
+### Preflight cutover
+
+- Use a read-only server projection of the exact pending image request. It resolves the effective model and ratio through the same project/series settings used at enqueue, checks reference identities, and returns a fingerprint of all reviewed fields. It must not call an LLM or mutate the asset.
+- The UI freezes the edited prompt, negative prompt, mode, generation type, count and explicit references when opening review. It shows the server projection in one confirmation surface. Returning to edit discards that review.
+- The final generation request carries the fingerprint. Enqueue recomputes it inside the existing asset lock and rejects a changed model, ratio, design revision, prompt or reference set before creating a paid task. Existing non-UI direct callers may omit the fingerprint during migration; the manual browser entry points must supply it.
+- Character, scene, prop, Cast and asset-library manual generation use the same review surface. The backend remains authoritative for effective model and ratio; the visible text remains the request body and cannot be changed by the projection.
+
 ## Submission ledger implementation plan
 
 - At enqueue, freeze the request's visible positive/negative text, requested and effective image model, aspect ratio, generation type, image mode, stable explicit reference IDs and confirmed design revision. Do not store signed delivery URLs in this ledger.

@@ -178,6 +178,7 @@ class AssetImageSubmissionSnapshot(BaseModel):
     selected_model_id: str
     aspect_ratio: str
     generation_type: str
+    batch_size: int = Field(1, ge=1)
     image_generation_mode: Literal["text", "reference"]
     reference_inputs: List[AssetImageReferenceIdentity] = Field(default_factory=list)
     design_revision_at_submission: Optional[int] = Field(None, ge=1)

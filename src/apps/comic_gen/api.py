@@ -44,6 +44,7 @@ from urllib.request import Request as UrlRequest, urlopen
 from .pipeline import (
     ComicGenPipeline,
     AssetGenerationInProgress,
+    AssetReviewChanged,
     LibraryAssetInUseError,
     InvalidAssetReference,
     InvalidAssetName,
@@ -633,6 +634,7 @@ class GenerateAssetRequest(BaseModel):
     batch_size: int = 1
     model_name: Optional[str] = None
     aspect_ratio: Optional[str] = None
+    expected_review_fingerprint: Optional[str] = None
 
 class ToggleLockRequest(BaseModel):
     asset_id: str
@@ -1479,6 +1481,36 @@ def _require_reviewed_asset_image_prompt(request: GenerateAssetRequest) -> None:
             raise HTTPException(status_code=422, detail="Choose one explicit master image variant for this derived character view")
 
 
+@app.post("/series/{series_id}/assets/generate/preview")
+def preview_series_asset_image(series_id: str, request: GenerateAssetRequest):
+    _require_reviewed_asset_image_prompt(request)
+    try:
+        return pipeline.preview_asset_image_submission(
+            series_id, request.asset_id, request.asset_type, prompt=request.prompt,
+            negative_prompt=request.negative_prompt or "", model_name=request.model_name,
+            generation_type=request.generation_type, image_generation_mode=request.image_generation_mode,
+            batch_size=request.batch_size, reference=request.reference,
+            references=request.references, is_series=True,
+        )
+    except (InvalidAssetReference, ValueError) as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.post("/projects/{script_id}/assets/generate/preview")
+def preview_project_asset_image(script_id: str, request: GenerateAssetRequest):
+    _require_reviewed_asset_image_prompt(request)
+    try:
+        return pipeline.preview_asset_image_submission(
+            script_id, request.asset_id, request.asset_type, prompt=request.prompt,
+            negative_prompt=request.negative_prompt or "", model_name=request.model_name,
+            aspect_ratio=request.aspect_ratio, generation_type=request.generation_type,
+            image_generation_mode=request.image_generation_mode, batch_size=request.batch_size,
+            reference=request.reference, references=request.references,
+        )
+    except (InvalidAssetReference, ValueError) as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
 @app.post("/series/{series_id}/assets/generate")
 def generate_series_asset(series_id: str, request: GenerateAssetRequest, background_tasks: BackgroundTasks):
     """Generate a single asset for a Series (async)."""
@@ -1501,6 +1533,7 @@ def generate_series_asset(series_id: str, request: GenerateAssetRequest, backgro
             request.references,
             request.image_generation_mode,
             request.preserve_prompt,
+            request.expected_review_fingerprint,
         )
         background_tasks.add_task(pipeline.process_asset_generation_task, task_id)
         response_data = series.dict()
@@ -1509,6 +1542,8 @@ def generate_series_asset(series_id: str, request: GenerateAssetRequest, backgro
     except InvalidAssetReference as e:
         raise HTTPException(status_code=400, detail=str(e))
     except AssetGenerationInProgress as e:
+        raise HTTPException(status_code=409, detail=str(e))
+    except AssetReviewChanged as e:
         raise HTTPException(status_code=409, detail=str(e))
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
@@ -3830,6 +3865,7 @@ def generate_single_asset(script_id: str, request: GenerateAssetRequest, backgro
             request.references,
             request.image_generation_mode,
             request.preserve_prompt,
+            request.expected_review_fingerprint,
         )
         
         # Add background processing
@@ -3843,6 +3879,8 @@ def generate_single_asset(script_id: str, request: GenerateAssetRequest, backgro
     except InvalidAssetReference as e:
         raise HTTPException(status_code=400, detail=str(e))
     except AssetGenerationInProgress as e:
+        raise HTTPException(status_code=409, detail=str(e))
+    except AssetReviewChanged as e:
         raise HTTPException(status_code=409, detail=str(e))
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))

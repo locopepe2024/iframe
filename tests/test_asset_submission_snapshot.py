@@ -6,7 +6,7 @@ from fastapi import HTTPException
 
 from src.apps.comic_gen.api import GenerateAssetRequest, _require_reviewed_asset_image_prompt
 from src.apps.comic_gen.models import Character, ImageAsset, ImageVariant, Scene, Script, Series
-from src.apps.comic_gen.pipeline import ComicGenPipeline
+from src.apps.comic_gen.pipeline import AssetReviewChanged, ComicGenPipeline
 
 
 def test_queued_scene_variant_keeps_reviewed_submission_when_design_changes():
@@ -125,3 +125,56 @@ def test_submission_snapshot_records_only_stable_reference_identity():
         "asset_type": "scene", "asset_id": "background", "variant_id": "blue-1",
     }]
     assert "expires=" not in str(snapshot)
+
+
+def test_preflight_rejects_changed_effective_ratio_before_paid_task():
+    scene = Scene(id="street", name="Street", description="Street")
+    script = Script(id="project", title="Project", original_text="", scenes=[scene], created_at=1, updated_at=1)
+    pipeline = ComicGenPipeline.__new__(ComicGenPipeline)
+    pipeline.scripts = {script.id: script}
+    pipeline.series_store = {}
+    pipeline.asset_generation_tasks = {}
+    pipeline._save_lock = RLock()
+    pipeline._save_after_asset_mutation = MagicMock()
+
+    review = pipeline.preview_asset_image_submission(
+        "project", "street", "scene", prompt="Blue street", negative_prompt="red",
+        model_name="model-a", image_generation_mode="text", batch_size=2,
+    )
+    assert review["positive_prompt"] == "Blue street"
+    assert review["selected_model_id"] == "model-a"
+    assert review["batch_size"] == 2
+    script.model_settings.scene_aspect_ratio = "1:1"
+    with pytest.raises(AssetReviewChanged):
+        pipeline.create_asset_generation_task(
+            "project", "street", "scene", prompt="Blue street", negative_prompt="red",
+            model_name="model-a", batch_size=2, apply_style=False, preserve_prompt=True,
+            expected_review_fingerprint=review["fingerprint"],
+        )
+    assert not pipeline.asset_generation_tasks
+    assert scene.status.value != "processing"
+
+
+def test_preflight_and_enqueue_share_exact_reviewed_request():
+    scene = Scene(id="street", name="Street", description="Street")
+    script = Script(id="project", title="Project", original_text="", scenes=[scene], created_at=1, updated_at=1)
+    pipeline = ComicGenPipeline.__new__(ComicGenPipeline)
+    pipeline.scripts = {script.id: script}
+    pipeline.series_store = {}
+    pipeline.asset_generation_tasks = {}
+    pipeline._save_lock = RLock()
+    pipeline._save_after_asset_mutation = MagicMock()
+
+    review = pipeline.preview_asset_image_submission(
+        "project", "street", "scene", prompt="Blue street", negative_prompt="red",
+        model_name="model-a", image_generation_mode="text", batch_size=2,
+    )
+    _script, task_id = pipeline.create_asset_generation_task(
+        "project", "street", "scene", prompt="Blue street", negative_prompt="red",
+        model_name="model-a", batch_size=2, apply_style=False, preserve_prompt=True,
+        expected_review_fingerprint=review["fingerprint"],
+    )
+    stored = pipeline.asset_generation_tasks[task_id]["submission_snapshot"]
+    assert {key: value for key, value in stored.items() if key != "submitted_at"} == {
+        key: value for key, value in review.items() if key != "fingerprint"
+    }
