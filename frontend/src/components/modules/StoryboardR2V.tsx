@@ -772,17 +772,6 @@ export default function StoryboardR2V() {
         }));
     }, [persistFrameEdit]);
 
-    // Set shot tab mode + persist so the user's last-active tab
-    // survives refresh.
-    const setTabMode = useCallback((index: number, mode: "t2i_i2v" | "direct_r2v") => {
-        setShots(prev => prev.map((s, i) => {
-            if (i !== index) return s;
-            const videoMode = mode === "direct_r2v" ? "r2v" : "i2v";
-            persistWorkbench(s.id, { workbench_tab_mode: mode, video_generation_mode: videoMode });
-            return { ...s, tabMode: mode, videoMode };
-        }));
-    }, [persistWorkbench]);
-
     const setVideoMode = useCallback((index: number, mode: "t2v" | "i2v" | "first_last_frame" | "r2v") => {
         setShots(prev => prev.map((s, i) => {
             if (i !== index) return s;
@@ -1960,7 +1949,7 @@ export default function StoryboardR2V() {
                         (t) => t.status === "pending" || t.status === "processing",
                     ).length;
                     const paramsState = paramsStateForShot(shot);
-                    const isI2vTab = shot.tabMode === "t2i_i2v";
+                    const showFrameInputs = shot.videoMode === "first_last_frame" || (shot.videoMode ?? (shot.tabMode === "direct_r2v" ? "r2v" : "i2v")) === "i2v";
                     const modelList = (shot.tabMode === "direct_r2v" ? VIDEO_R2V_MODELS : VIDEO_I2V_MODELS)
                         .filter(model => videoModelSupportsMode(model.id, resolveShotVideoInput(shot).mode));
                     return (
@@ -1998,7 +1987,6 @@ export default function StoryboardR2V() {
                             onMoveUp={() => moveShot(index, "up")}
                             onMoveDown={() => moveShot(index, "down")}
                             onDuplicate={() => duplicateShot(index)}
-                            onSetTabMode={(mode) => setTabMode(index, mode)}
                             onSetVideoMode={(mode) => setVideoMode(index, mode)}
                             videoModel={paramsState.model}
                             onOpenDrawer={() => setDrawerState({ isOpen: true, targetShotIndex: index })}
@@ -2157,7 +2145,7 @@ export default function StoryboardR2V() {
                             thumbnail in Step 2 — 看用户反馈再升级 v2. */}
                         {expandedShots.has(shot.id) ? (
                         <div className="mx-5 mb-[18px] motion-safe:animate-[shotPanelIn_220ms_cubic-bezier(0.22,1,0.36,1)_both]">
-                            {isI2vTab ? (
+                            {showFrameInputs ? (
                                 <div>
                                     <T2ISubsection
                                         imageUrls={shot.t2iImageUrls ?? []}
@@ -2270,6 +2258,7 @@ export default function StoryboardR2V() {
                                         }}
                                         resolveUrl={resolveAssetUrl}
                                         frameLabel="首帧"
+                                        firstLastFrameMode={shot.videoMode === "first_last_frame"}
                                     />
                                     {shot.videoMode === "first_last_frame" ? (
                                         <T2ISubsection
@@ -2310,15 +2299,12 @@ export default function StoryboardR2V() {
                                     ) : null}
                                 </div>
                             ) : null}
-                            {/* Step 2 · 生成视频 (ParamsSection) — always shown
-                                when shot expanded; renders below Step 1 in
-                                t2i_i2v mode, and is the only section above
-                                candidates in direct_r2v mode. */}
-                            <div className={isI2vTab ? "border-t border-glass-border" : ""}>
+                            {/* Video parameters follow any required frame inputs. */}
+                            <div className={showFrameInputs ? "border-t border-glass-border" : ""}>
                                 <ParamsSection
                                     shotId={shot.id}
                                     modelList={modelList}
-                                    title={isI2vTab ? "I2V Params" : "R2V Params"}
+                                    title={shot.videoMode === "first_last_frame" ? "FL2V Params" : shot.videoMode === "t2v" ? "TEXT Params" : shot.tabMode === "direct_r2v" ? "R2V Params" : "I2V Params"}
                                     params={paramsState}
                                     onChange={(next) => handleShotParamsChange(shot, next)}
                                     inFlightCount={shotInFlight}
