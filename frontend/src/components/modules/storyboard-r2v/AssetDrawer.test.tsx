@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import AssetDrawer from "./AssetDrawer";
 
@@ -75,4 +75,21 @@ it("shows only project and inherited series assets, excluding reusable global ca
     expect(screen.getByText("Project actor")).toBeInTheDocument();
     expect(screen.getByText("Series actor")).toBeInTheDocument();
     expect(screen.queryByText("Global candidate")).not.toBeInTheDocument();
+});
+
+it("keeps the asset drawer open and reports an attach failure so selection can be retried", async () => {
+    const onClose = vi.fn();
+    const onSelectFrameVariant = vi.fn()
+        .mockRejectedValueOnce(new Error("Asset image not found"))
+        .mockResolvedValueOnce(undefined);
+    render(<AssetDrawer isOpen onClose={onClose} characters={[]} scenes={[]} props={[]}
+        assetIndex={[{ asset_type: "scene", asset_id: "scene-1", name: "长街",
+            source_scope: "episode", variants: [{ id: "v1", url: "expired-url" }] }]}
+        frameSlot="first" onSelectAsset={vi.fn()} onSelectFrameVariant={onSelectFrameVariant} />);
+    const variant = screen.getByRole("button", { name: "长街 变体 v1" });
+    fireEvent.click(variant);
+    expect(await screen.findByRole("alert")).toHaveTextContent("Asset image not found");
+    expect(onClose).not.toHaveBeenCalled();
+    fireEvent.click(variant);
+    await waitFor(() => expect(onClose).toHaveBeenCalledTimes(1));
 });

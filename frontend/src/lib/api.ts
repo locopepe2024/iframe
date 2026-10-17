@@ -757,6 +757,22 @@ export const api = {
         return res.data;
     },
 
+    attachAssetFrame: async (scriptId: string, frameId: string, asset: AssetReferenceIndexEntry,
+        variantId: string, slot: "first" | "last") => {
+        const res = await axios.post(
+            `${API_URL}/projects/${encodeURIComponent(scriptId)}/frames/${encodeURIComponent(frameId)}/attach_asset_frame`,
+            {
+                scope: asset.source_scope === "episode" ? "project" : asset.source_scope,
+                container_id: asset.source_container_id || scriptId,
+                asset_type: asset.asset_type,
+                asset_id: asset.asset_id,
+                variant_id: variantId,
+                slot,
+            },
+        );
+        return res.data;
+    },
+
     /** Persist Storyboard R2V workbench state onto a frame.
      *  Used by StoryboardR2V to write tab/T2I history/active index/
      *  batch-count whenever the user changes them. Server clamps:

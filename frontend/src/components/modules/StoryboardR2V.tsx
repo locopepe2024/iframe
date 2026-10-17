@@ -2434,21 +2434,31 @@ export default function StoryboardR2V() {
                 props={props}
                 assetIndex={assetIndex}
                 frameSlot={drawerState.frameSlot}
-                onSelectFrameVariant={(entry, variantId) => {
+                onSelectFrameVariant={async (entry, variantId) => {
                     const index = drawerState.targetShotIndex;
-                    if (index == null) return;
-                    const variant = entry.variants.find(item => item.id === variantId);
-                    const shot = shots[index];
-                    if (!variant?.url || !shot) return;
+                    const shot = index == null ? undefined : shots[index];
+                    if (index == null || !shot || !currentProject) throw new Error("当前镜头不可用，请重新打开资产库");
+                    let frameId = shot.id;
+                    if (frameId.startsWith("shot_")) {
+                        const created = await crudApi.createFrame(currentProject.id, {
+                            scene_id: "",
+                            action_description: shot.prompt || "",
+                            insert_at: index,
+                        } as any);
+                        const newFrame = Array.isArray(created?.frames)
+                            ? created.frames[Math.min(index, created.frames.length - 1)] : null;
+                        if (!newFrame?.id) throw new Error("创建镜头失败，请重试");
+                        frameId = newFrame.id;
+                        setShots(prev => prev.map((item, i) => i === index ? { ...item, id: frameId } : item));
+                    }
                     const isLast = drawerState.frameSlot === "last";
-                    const urls = [...(isLast ? shot.lastFrameImageUrls ?? [] : shot.t2iImageUrls ?? []), variant.url].slice(-10);
-                    const selected = urls.length - 1;
+                    const updated = await api.attachAssetFrame(currentProject.id, frameId, entry, variantId,
+                        isLast ? "last" : "first");
+                    const urls: string[] = isLast ? updated.last_frame_image_urls ?? [] : updated.t2i_image_urls ?? [];
+                    const selected: number = isLast ? updated.last_frame_selected_index ?? 0 : updated.t2i_selected_index ?? 0;
                     setShots(prev => prev.map((item, i) => i === index ? (isLast
-                        ? { ...item, lastFrameImageUrls: urls, lastFrameSelectedIndex: selected, lastFrameUrl: variant.url }
-                        : { ...item, t2iImageUrls: urls, t2iSelectedIndex: selected, t2iImageUrl: variant.url }) : item));
-                    persistWorkbench(shot.id, isLast
-                        ? { last_frame_image_urls: urls, last_frame_selected_index: selected }
-                        : { t2i_image_urls: urls, t2i_selected_index: selected });
+                        ? { ...item, id: frameId, lastFrameImageUrls: urls, lastFrameSelectedIndex: selected, lastFrameUrl: urls[selected] }
+                        : { ...item, id: frameId, t2iImageUrls: urls, t2iSelectedIndex: selected, t2iImageUrl: urls[selected] }) : item));
                 }}
                 onSelectAsset={(type, name) => {
                     insertAssetFromDrawer(type, name);

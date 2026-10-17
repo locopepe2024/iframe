@@ -3,6 +3,7 @@
 import { motion, AnimatePresence } from "framer-motion";
 import { Check, X, User, MapPin, Package } from "lucide-react";
 import { useTranslations } from "next-intl";
+import { useState } from "react";
 import { AssetIndexPreview } from "@/components/shared/AssetIndexPreview";
 import type { AssetReferenceIndexEntry } from "@/lib/api";
 import { projectReferenceIndex } from "@/lib/assetReferenceIndex";
@@ -18,7 +19,7 @@ interface AssetDrawerProps {
     selectedVariantIds?: Record<string, string[]>;
     onToggleVariant?: (assetId: string, variantId: string, primaryVariantId?: string) => void;
     frameSlot?: "first" | "last";
-    onSelectFrameVariant?: (asset: AssetReferenceIndexEntry, variantId: string) => void;
+    onSelectFrameVariant?: (asset: AssetReferenceIndexEntry, variantId: string) => Promise<void>;
 }
 
 function getAssetThumbnail(item: AssetReferenceIndexEntry): string | null {
@@ -41,6 +42,8 @@ export default function AssetDrawer({
     onSelectFrameVariant,
 }: AssetDrawerProps) {
     const t = useTranslations("storyboardR2V");
+    const [frameError, setFrameError] = useState("");
+    const [selectingFrame, setSelectingFrame] = useState(false);
     const entries = projectReferenceIndex(assetIndex, legacyCharacters, legacyScenes, legacyProps);
     const characters = entries.filter((entry) => entry.asset_type === "character");
     const scenes = entries.filter((entry) => entry.asset_type === "scene");
@@ -84,6 +87,7 @@ export default function AssetDrawer({
                             {frameSlot ? (
                                 <div className="space-y-3">
                                     <p className="text-xs text-text-secondary">选择{frameSlot === "first" ? "首帧" : "尾帧"}资产变体</p>
+                                    {frameError && <p role="alert" className="text-xs text-status-failed-fg">{frameError}</p>}
                                     {entries.filter((entry) => entry.variants.length > 0).map((entry) => (
                                         <div key={`${entry.asset_type}:${entry.asset_id}`} className="rounded-lg border border-glass-border p-2">
                                             <div className="mb-2 truncate text-xs text-foreground">{entry.name}</div>
@@ -92,9 +96,19 @@ export default function AssetDrawer({
                                                     <button
                                                         key={variant.id}
                                                         type="button"
-                                                        onClick={() => {
-                                                            onSelectFrameVariant?.(entry, variant.id);
-                                                            onClose();
+                                                        disabled={selectingFrame}
+                                                        onClick={async () => {
+                                                            if (!onSelectFrameVariant) return;
+                                                            setFrameError("");
+                                                            setSelectingFrame(true);
+                                                            try {
+                                                                await onSelectFrameVariant(entry, variant.id);
+                                                                onClose();
+                                                            } catch (error: any) {
+                                                                setFrameError(String(error?.response?.data?.detail || error?.message || "首帧资产读取失败，请重试"));
+                                                            } finally {
+                                                                setSelectingFrame(false);
+                                                            }
                                                         }}
                                                         aria-label={`${entry.name} 变体 ${variant.id}`}
                                                         className="overflow-hidden rounded-md border border-glass-border hover:border-primary/55"
