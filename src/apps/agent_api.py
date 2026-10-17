@@ -186,6 +186,32 @@ def company_finance_guidance() -> str:
     return FINANCE_RESEARCH_SKILL.read_text(encoding="utf-8")
 
 
+def comparable_company_request(content: str) -> bool:
+    """Whether the user is asking for peer or comparable-company research."""
+    return bool(re.search(r"类似公司|可比公司|同行|对标|参考公司|竞品|竞争对手", content, re.IGNORECASE))
+
+
+def comparable_company_clarification(content: str, previous_messages: list[dict]) -> str | None:
+    """Return a targeted clarification before trying a listed-company adapter.
+
+    A private company is still a valid research subject. It needs a name and
+    comparison dimensions so the next stage can map it to public peers; it is
+    not an unsupported subject or a reason to spend a discovery budget.
+    """
+    context = " ".join(str(item.get("content", "")) for item in previous_messages[-6:])
+    combined = f"{context} {content}"
+    if not comparable_company_request(combined):
+        return None
+    has_identity = bool(re.search(r"[A-Za-z][A-Za-z0-9 ._-]{1,80}|[\u4e00-\u9fff]{2,30}", content))
+    has_listing = bool(re.search(r"上市|A股|港股|美股|证券代码|股票代码|\b\d{6}\b", combined, re.IGNORECASE))
+    private = bool(re.search(r"未上市|没上市|尚未上市|私有公司|非上市", combined))
+    if private or not has_identity or (not has_listing and len(content) < 160):
+        return ("这家公司可以按未上市公司处理。请补充公司或项目名称，并选择希望对比的维度，"
+                "例如模型能力与产品、客户与商业化、融资与估值、研发团队与算力、收入与盈利。"
+                "确认后我会据此筛选可公开检索的上市公司和行业参与者做对比；未上市公司本身不要求股票代码。")
+    return None
+
+
 def plan_research(ctx, model: str, content: str, previous_messages: list[dict]) -> ResearchIntent:
     from .knowledge.discovery import current_cninfo_date
     today = (current_cninfo_date() if os.getenv("IFRAME_KNOWLEDGE_DISCOVERY_PROVIDER") == "cninfo"
@@ -216,6 +242,10 @@ def plan_research(ctx, model: str, content: str, previous_messages: list[dict]) 
         payload = json.loads(match.group(0) if match else result)
         if isinstance(payload, dict) and payload.get("clarification") is None:
             payload["clarification"] = ""
+        guided_clarification = comparable_company_clarification(content, previous_messages)
+        if guided_clarification and not payload.get("needs_clarification"):
+            payload["needs_clarification"] = True
+            payload["clarification"] = guided_clarification
         if isinstance(payload, dict) and not payload.get("needs_clarification"):
             if "今年" in content:
                 default_start = date(today.year, 1, 1)
