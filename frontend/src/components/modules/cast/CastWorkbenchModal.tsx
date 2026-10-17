@@ -232,7 +232,7 @@ function buildTemplate(kind: CastKind, entity: any, template?: CharacterTemplate
         return `${charDesc}\n\n${tpl.composition}`;
     }
     if (kind === "scene") {
-        return `${name}${desc ? "：" + desc : ""}\n\n构图：中性灰背景下的环境广角定调镜头，单张统一画面，前景不出现人物。突出氛围、建筑和地形结构，光线与色调贴合场景情绪，使用柔和的体积光和适度景深。`;
+        return `${name}${desc ? "：" + desc : ""}\n\n场景参考图：按上述描述呈现场所、空间层次与画面主体；构图、人物分布和光影由本次提示词及所选参考图确定。`;
     }
     return `${name}${desc ? "：" + desc : ""}\n\n构图：中性灰背景下的产品摄影风格，单张统一画面，无边框或分隔框。主体以轻微侧角居中展示，并辅以材质和纹理的细节特写。使用干净均匀的摄影棚光线，在主体下方保留轻微自然阴影。`;
 }
@@ -526,7 +526,7 @@ export default function CastWorkbenchModal({ isOpen, kind, entityId, onClose }: 
             setAssetDesignNotes(notes);
             setAssetDesignUnresolved(Array.isArray(result?.unresolved) ? result.unresolved : []);
             setPrompt(`${entity.name}：${notes}\n\n${kind === "scene"
-                ? "构图：环境广角定调镜头，突出空间结构和氛围，不出现人物。"
+                ? "场景参考图：根据已确认的空间设定及本次画面要求安排构图、人物和光影。"
                 : "构图：产品摄影式单体展示，突出轮廓、材质、比例和关键结构。"}`);
             setPromptDirty(true);
         } catch (error: any) {
