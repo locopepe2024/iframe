@@ -133,3 +133,24 @@ def test_generated_tool_candidate_keeps_source_and_does_not_replace_selection(tm
     assert candidate.scene_tool == {"kind": "camera", "yaw": 30}
     assert candidate.scene_tool_source_variant_id == "source"
     assert scene.image_asset.selected_id == "source"
+
+
+def test_scene_tool_infers_and_validates_shared_edit_mode(tmp_path, monkeypatch):
+    pipeline, _scene = make_pipeline(tmp_path, monkeypatch)
+    tool = {"kind": "camera", "yaw": 30}
+    prompt = scene_tool_prompt(parse_scene_tool(tool))
+    _, task_id = pipeline.create_asset_generation_task(
+        "project", "scene", "scene", prompt=prompt,
+        preserve_prompt=True, image_generation_mode="reference",
+        references=[{"asset_type": "scene", "asset_id": "scene", "variant_id": "source"}],
+        scene_tool=tool,
+    )
+    assert pipeline.asset_generation_tasks[task_id]["submission_snapshot"]["edit_mode"] == "scene_camera"
+
+    with pytest.raises(InvalidAssetReference):
+        pipeline.create_asset_generation_task(
+            "project", "scene", "scene", prompt=prompt,
+            preserve_prompt=True, image_generation_mode="reference",
+            references=[{"asset_type": "scene", "asset_id": "scene", "variant_id": "source"}],
+            scene_tool=tool, edit_mode="scene_lighting",
+        )

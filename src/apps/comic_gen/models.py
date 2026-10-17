@@ -180,6 +180,7 @@ class AssetImageSubmissionSnapshot(BaseModel):
     generation_type: str
     batch_size: int = Field(1, ge=1)
     image_generation_mode: Literal["text", "reference"]
+    edit_mode: Literal["freeform", "scene_lighting", "scene_camera"] = "freeform"
     reference_inputs: List[AssetImageReferenceIdentity] = Field(default_factory=list)
     scene_tool: Optional[Dict[str, Any]] = None
     design_revision_at_submission: Optional[int] = Field(None, ge=1)
