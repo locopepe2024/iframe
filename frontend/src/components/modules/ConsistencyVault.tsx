@@ -25,6 +25,7 @@ import { toast } from "@/store/toastStore";
 import type { EpisodeAssetSyncDiff, EpisodeVisualContext, EpisodeVisualContextState } from "@/lib/directorShootingPlan";
 import { getAssetPlanEntries, getUnboundCharacterRequirements, type AssetPlanEntry } from "@/lib/episodeAssetPlan";
 import EpisodeAssetPlanPanel from "./EpisodeAssetPlanPanel";
+import { SceneImageTools, type LightingReference, type SceneImageSource, type SceneToolParams } from "./SceneImageTools";
 import AssetCoverBadges from "./AssetCoverBadges";
 import { characterImageUrl } from "@/lib/characterImage";
 import AssetNameEditor from "../common/AssetNameEditor";
@@ -202,7 +203,7 @@ export default function ConsistencyVault() {
         }
     };
 
-    const handleGenerate = async (assetId: string, type: string, generationType: string = "all", prompt: string = "", applyStyle: boolean = true, negativePrompt: string = "", batchSize: number = 1, references: AssetLibraryReference[] = [], imageGenerationMode: "text" | "reference" = "text", preservePrompt: boolean = false) => {
+    const handleGenerate = async (assetId: string, type: string, generationType: string = "all", prompt: string = "", applyStyle: boolean = true, negativePrompt: string = "", batchSize: number = 1, references: AssetLibraryReference[] = [], imageGenerationMode: "text" | "reference" = "text", preservePrompt: boolean = false, sceneTool?: SceneToolParams) => {
         if (!currentProject) return;
 
         // Add task with specific generation type and batch size
@@ -233,6 +234,7 @@ export default function ConsistencyVault() {
                 references,
                 imageGenerationMode,
                 preservePrompt,
+                sceneTool,
             );
 
             const taskId = response._task_id;
@@ -774,7 +776,7 @@ export default function ConsistencyVault() {
                             }}
                             onUpdateDescription={(desc: string) => handleUpdateDescription(selectedAssetId, selectedAssetType, desc)}
                             onRename={(name: string) => handleRenameAsset(selectedAssetId, selectedAssetType, name)}
-                            onGenerate={(prompt: string, applyStyle: boolean, negativePrompt: string, batchSize: number, references?: AssetLibraryReference[], imageGenerationMode?: "text" | "reference", preservePrompt?: boolean) => handleGenerate(selectedAssetId, selectedAssetType, "all", prompt, applyStyle, negativePrompt, batchSize, references, imageGenerationMode, preservePrompt)}
+                            onGenerate={(prompt: string, applyStyle: boolean, negativePrompt: string, batchSize: number, references?: AssetLibraryReference[], imageGenerationMode?: "text" | "reference", preservePrompt?: boolean, sceneTool?: SceneToolParams) => handleGenerate(selectedAssetId, selectedAssetType, "all", prompt, applyStyle, negativePrompt, batchSize, references, imageGenerationMode, preservePrompt, sceneTool)}
                             isGenerating={isAssetGenerating(selectedAssetId)}
                             stylePrompt={currentProject?.art_direction?.style_config?.positive_prompt || ""}
                             styleNegativePrompt={currentProject?.art_direction?.style_config?.negative_prompt || ""}
@@ -1043,8 +1045,14 @@ function CharacterDetailModal({ asset, type, onClose, onUpdateDescription, onRen
     const [showAdvanced, setShowAdvanced] = useState(false);
 
     // Video Controls
-    const [activeTab, setActiveTab] = useState<"image" | "video">("image");
+    const [activeTab, setActiveTab] = useState<"image" | "video" | "lighting" | "camera">("image");
     const [videoPrompt, setVideoPrompt] = useState(asset.video_prompt || "");
+    const sceneImageSources = useMemo<SceneImageSource[]>(() => (asset.image_asset?.variants || [])
+        .filter((variant: any) => variant.id && variant.url)
+        .map((variant: any, index: number) => ({
+            key: variant.id, variantId: variant.id, label: `场景图片 · ${index + 1}${variant.scene_tool ? ` · ${variant.scene_tool.kind === "lighting" ? "光影" : "镜头"}` : ""}`, url: getAssetUrl(variant.url), tool: variant.scene_tool, sourceVariantId: variant.scene_tool_source_variant_id,
+        })), [asset.image_asset]);
+    const lightingReferences = useMemo<LightingReference[]>(() => referenceCandidates.flatMap((candidate) => candidate.reference && candidate.previewUrl ? [{ key: `${candidate.reference.asset_type}:${candidate.reference.asset_id}:${candidate.reference.variant_id}`, label: candidate.label, url: candidate.previewUrl, reference: candidate.reference }] : []), [referenceCandidates]);
 
     // Sync local state if asset changes
     useEffect(() => {
@@ -1230,6 +1238,10 @@ function CharacterDetailModal({ asset, type, onClose, onUpdateDescription, onRen
                         >
                             Video Reference
                         </button>
+                        {type === "scene" && <>
+                            <button onClick={() => setActiveTab("lighting")} className={`flex-1 p-3 text-sm font-bold transition-colors ${activeTab === "lighting" ? "text-foreground border-b-2 border-primary bg-glass" : "text-text-muted hover:text-text-secondary"}`}>光影</button>
+                            <button onClick={() => setActiveTab("camera")} className={`flex-1 p-3 text-sm font-bold transition-colors ${activeTab === "camera" ? "text-foreground border-b-2 border-primary bg-glass" : "text-text-muted hover:text-text-secondary"}`}>镜头</button>
+                        </>}
                     </div>
 
                     <div className="flex-1 p-4 overflow-hidden">
@@ -1252,7 +1264,7 @@ function CharacterDetailModal({ asset, type, onClose, onUpdateDescription, onRen
                                     assetId: asset.id,
                                 } : undefined}
                             />
-                        ) : (
+                        ) : activeTab === "video" ? (
                             <VideoVariantSelector
                                 videos={asset.video_assets || []}
                                 onDelete={onDeleteVideo}
@@ -1261,7 +1273,12 @@ function CharacterDetailModal({ asset, type, onClose, onUpdateDescription, onRen
                                 aspectRatio="16:9"
                                 className="h-full"
                             />
-                        )}
+                        ) : <SceneImageTools kind={activeTab} sources={sceneImageSources} sceneAssetId={asset.id} lightingReferences={lightingReferences} busy={isGenerating} onGenerate={(source, params, compiledPrompt, lightReference) => {
+                            const sourceReference: AssetLibraryReference = { asset_type: "scene", asset_id: asset.id, variant_id: source.variantId };
+                            const references = [sourceReference];
+                            if (lightReference && !(lightReference.asset_type === sourceReference.asset_type && lightReference.asset_id === sourceReference.asset_id && lightReference.variant_id === sourceReference.variant_id)) references.push(lightReference);
+                            onGenerate(compiledPrompt, false, negativePrompt, 1, references, "reference", true, params);
+                        }} />}
                     </div>
                 </div>
 
