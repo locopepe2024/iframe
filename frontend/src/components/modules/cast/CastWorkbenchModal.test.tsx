@@ -162,6 +162,7 @@ it('separates scene content from continuity and submits only reviewed text', asy
  vi.mocked(api.getProject).mockResolvedValue({ ...project, scenes: [scene] } as any);
  vi.mocked(api.generateAsset).mockResolvedValue({ ...project, scenes: [scene] } as any);
  showScene(scene);
+ expect(document.querySelector('[contenteditable="true"]')?.textContent).not.toContain('不出现人物');
  expect(await screen.findByRole('region', { name: '场景画面描述' })).toHaveTextContent('匪寇围堵粮铺');
  expect(screen.getByRole('region', { name: '场景画面描述' })).not.toHaveTextContent('暖褐与血红夕照');
  expect(screen.getByRole('region', { name: '连续性参考' })).toHaveTextContent('暖褐与血红夕照');
@@ -197,6 +198,7 @@ it('lets scene designers ask AI for an editable draft and save it without replac
   asset_type: 'scene', asset_name: '粮铺门前', user_requirements: '南北要道，暮秋黄昏，画面简洁',
  })));
  expect((screen.getByLabelText('视觉设计草稿') as HTMLTextAreaElement).value).toContain('青石板长街');
+ expect(document.querySelector('[contenteditable="true"]')?.textContent).not.toContain('不出现人物');
 
  fireEvent.change(screen.getByLabelText('视觉设计草稿'), { target: { value: '用户调整后的粮铺外观' } });
  fireEvent.click(screen.getByRole('button', { name: '确认设计' }));
