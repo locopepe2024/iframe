@@ -6506,6 +6506,7 @@ class PolishVideoPromptRequest(BaseModel):
     optimization_skills: Optional[List[str]] = Field(default=None, max_length=12)
     target_ratio: str = Field("16:9", max_length=20)
     target_video_model: str = ""
+    generation_mode: Literal["t2v", "i2v", "first_last_frame", "r2v"] = "i2v"
     dialogue_speaker: str = Field("", max_length=200)
     dialogue_line: str = Field("", max_length=2000)
 
@@ -6558,10 +6559,29 @@ def _selected_skill_guidance(skill_ids: Optional[List[str]]) -> str:
     return "SELECTED OPTIMIZATION SKILLS (user-selected; do not infer additional skills):\n" + text
 
 
-def _storyboard_polish_contract(model_id: str, custom: str, default: str, generate_audio=None, target_duration=None, dialogue_speaker="", dialogue_line="", optimization_skills: Optional[List[str]] = None, reference_mode: bool = False) -> str:
+def _first_last_polish_guidance(target_duration: Optional[float]) -> str:
+    endpoint = f"{target_duration:.2f} seconds" if target_duration is not None else "the end of the clip"
+    return f"""
+FIRST/LAST FRAME VIDEO MODE (highest visual priority):
+Two attached images are ordered: image 1 is the actual first frame at 0.00 seconds;
+image 2 is the actual last frame at {endpoint}. Examine both images. Describe
+only visible opening and ending states as observed; write a continuous, plausible
+camera and subject motion path between them. At the end, subjects, camera,
+composition and lighting must settle into the second image. A still image
+does not prove its people are moving: if the ending pose has no clear motion
+cue, let movement decelerate and hold that pose. Do not keep subjects walking
+through or beyond the ending frame. Do not invent unseen events or claim the
+two images depict motion by themselves. In each bilingual
+prompt, state both frame alignments before the existing model-specific body
+fields, then make the final action inside the visual timeline reach image 2.
+Do not add a new body heading or append an afterword to the polished prompt.
+"""
+
+
+def _storyboard_polish_contract(model_id: str, custom: str, default: str, generate_audio=None, target_duration=None, dialogue_speaker="", dialogue_line="", optimization_skills: Optional[List[str]] = None, reference_mode: bool = False, generation_mode: str = "i2v") -> str:
     guidance = _selected_skill_guidance(optimization_skills) if optimization_skills is not None else _target_model_guidance(model_id)
     is_h3 = "h3" in (model_id or "").lower()
-    if not guidance and not is_h3:
+    if not guidance and not is_h3 and generation_mode != "first_last_frame":
         return custom or default
     constraints = ""
     if generate_audio is False:
@@ -6573,6 +6593,8 @@ def _storyboard_polish_contract(model_id: str, custom: str, default: str, genera
             constraints += f"\nEXPLICIT DIALOGUE (verbatim, do not translate, omit, or rewrite): {speaker}: {dialogue_line.strip()}"
     if target_duration is not None:
         constraints += f"\nTarget duration: {target_duration} seconds. All action must fit within this duration; no invented exact source cut times."
+    if generation_mode == "first_last_frame":
+        constraints += _first_last_polish_guidance(target_duration)
     if is_h3:
         constraints += """
 HARD H3 TEXT-OVERLAY PROHIBITION:
@@ -6619,8 +6641,19 @@ Never omit a heading. Never put subtitles or any other text overlay in the promp
 """
 
 
-def _validate_storyboard_polish_result(model_id: str, result: Dict[str, Any], reference_mode: bool, generate_audio=None, dialogue_line="") -> None:
+def _validate_storyboard_polish_result(model_id: str, result: Dict[str, Any], reference_mode: bool, generate_audio=None, dialogue_line="", generation_mode: str = "i2v") -> None:
     """Reject responses that ignore the selected provider's prompt contract."""
+    if generation_mode == "first_last_frame":
+        first = re.compile(r"(?i)first[\s_-]*(?:frame|image)|opening[\s_-]*(?:frame|image)|picture\s*1\b|首帧|起始帧")
+        last = re.compile(r"(?i)last[\s_-]*(?:frame|image)|final[\s_-]*(?:frame|image)|ending[\s_-]*(?:frame|image)|picture\s*2\b|尾帧|终帧|末帧")
+        if any(not first.search(result.get(key, "")) or not last.search(result.get(key, ""))
+               for key in ("prompt_cn", "prompt_en")):
+            from .llm import PolishError
+            raise PolishError(
+                reason="model_contract_mismatch",
+                message_zh="润色结果没有同时说明首帧与尾帧，本次结果未应用。",
+                message_en="Polished result omitted the first or last frame; it was not applied.",
+            )
     if "h3" not in (model_id or "").lower():
         return
     reference_fields = ("subject_definitions", "summary", "retention_analysis", "detailed_description", "overall_soundscape", "non_diegetic_music")
@@ -6695,6 +6728,8 @@ def _complete_minimax_ir_polish(request, custom_prompt: str) -> Dict[str, str]:
     from ..studio_access import runtime_uniart_for_owner
     config = runtime_uniart_for_owner(user.user_id, user.owner_profile_id)
     instruction = custom_prompt.strip()
+    if getattr(request, "generation_mode", "") == "first_last_frame":
+        instruction += _first_last_polish_guidance(request.target_duration)
     instruction += "\n\nH3 constraint: do not add subtitles, captions, title cards, watermarks, labels, or any burned-in on-screen text. Dialogue is audio only."
     if request.optimization_skills:
         instruction += "\n\nApply the selected skills above as constraints while preserving the official H3 output format."
@@ -6703,7 +6738,8 @@ def _complete_minimax_ir_polish(request, custom_prompt: str) -> Dict[str, str]:
         text += f"\n\n[USER FEEDBACK]\n{request.feedback.strip()}"
     content: List[Dict[str, Any]] = [{"type": "text", "text": text}]
     for index, value in enumerate(request.image_urls or []):
-        content.append({"type": "text", "text": f"Reference image {index + 1}"})
+        label = ("Actual first frame at 0.00 seconds", "Actual last frame at the end") if getattr(request, "generation_mode", "") == "first_last_frame" else ()
+        content.append({"type": "text", "text": label[index] if label else f"Reference image {index + 1}"})
         content.append({"type": "image_url", "role": "reference_image", "image_url": {"url": _image_reference_url(value)}})
     try:
         prompt = complete_context_ir(
@@ -6711,7 +6747,7 @@ def _complete_minimax_ir_polish(request, custom_prompt: str) -> Dict[str, str]:
             content,
             duration=max(1, int(round(request.target_duration or 5))),
             ratio=request.target_ratio or "16:9",
-            idempotency_key=f"storyboard-polish:{request.script_id}:{hashlib.sha256(text.encode('utf-8')).hexdigest()[:24]}",
+            idempotency_key=f"storyboard-polish:{request.script_id}:{hashlib.sha256(json.dumps([text, request.image_urls], ensure_ascii=False).encode('utf-8')).hexdigest()[:24]}",
         )
     except Exception as exc:
         logger.exception("MiniMax Context-IR storyboard polish failed")
@@ -6782,6 +6818,14 @@ def polish_video_prompt(request: PolishVideoPromptRequest):
     from .llm import PolishError
     try:
         from .llm import DEFAULT_VIDEO_POLISH_PROMPT
+        if request.generation_mode == "first_last_frame" and (
+            len(request.image_urls) != 2 or request.image_urls[0] == request.image_urls[1]
+        ):
+            raise PolishError(
+                reason="api_error",
+                message_zh="首尾帧润色需要两张不同的已选图片，请先选择首帧和尾帧。",
+                message_en="First/last-frame polish requires two different selected images.",
+            )
         custom = _get_custom_prompt(request.script_id, "video_polish")
         director = _get_director_prompt_context(request.script_id, request.frame_id, request.shot_overrides)
         if director:
@@ -6791,9 +6835,9 @@ def polish_video_prompt(request: PolishVideoPromptRequest):
             # Context-IR owns its provider-native structure. Keep the existing
             # freeform instruction path; its output is still validated below.
             result = _complete_minimax_ir_polish(request, custom or DEFAULT_VIDEO_POLISH_PROMPT)
-            _validate_storyboard_polish_result(request.target_video_model, result, reference_mode=False, generate_audio=request.generate_audio, dialogue_line=request.dialogue_line)
+            _validate_storyboard_polish_result(request.target_video_model, result, reference_mode=False, generate_audio=request.generate_audio, dialogue_line=request.dialogue_line, generation_mode=request.generation_mode)
             return result
-        custom_prompt = _storyboard_polish_contract(request.target_video_model, custom, DEFAULT_VIDEO_POLISH_PROMPT, request.generate_audio, request.target_duration, request.dialogue_speaker, request.dialogue_line, selected_skills, reference_mode=False)
+        custom_prompt = _storyboard_polish_contract(request.target_video_model, custom, DEFAULT_VIDEO_POLISH_PROMPT, request.generate_audio, request.target_duration, request.dialogue_speaker, request.dialogue_line, selected_skills, reference_mode=False, generation_mode=request.generation_mode)
         # Polish model: request override → project/series PromptConfig → ""
         polish_model = request.polish_model or _OPTIMIZER_MODEL_IDS.get(request.optimizer_provider) or _get_polish_model_for_project(request.script_id)
         processor = ScriptProcessor()
@@ -6804,8 +6848,9 @@ def polish_video_prompt(request: PolishVideoPromptRequest):
             request.prev_cn,
             image_urls=_polish_image_urls(request.image_urls) or None,
             polish_model=polish_model,
+            generation_mode=request.generation_mode,
         )
-        _validate_storyboard_polish_result(request.target_video_model, result, reference_mode=False, generate_audio=request.generate_audio, dialogue_line=request.dialogue_line)
+        _validate_storyboard_polish_result(request.target_video_model, result, reference_mode=False, generate_audio=request.generate_audio, dialogue_line=request.dialogue_line, generation_mode=request.generation_mode)
         return {
             "prompt_cn": result.get("prompt_cn", ""),
             "prompt_en": result.get("prompt_en", "")

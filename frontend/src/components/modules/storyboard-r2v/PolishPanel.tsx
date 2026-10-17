@@ -56,6 +56,7 @@ interface PolishPanelProps {
     optimizationDraft?: string;
     shotOverrides?: { style: string; lighting: string };
     tabMode: "t2i_i2v" | "direct_r2v";
+    videoMode?: "t2v" | "i2v" | "first_last_frame" | "r2v";
     scriptId: string;
     frameId?: string;
     slots?: { description: string }[];
@@ -116,6 +117,7 @@ export default function PolishPanel({
     targetDuration,
     dialogue,
     tabMode,
+    videoMode,
     scriptId,
     frameId = "",
     slots = [],
@@ -160,7 +162,7 @@ export default function PolishPanel({
         try {
             const res = tabMode === "direct_r2v"
                 ? await api.polishR2VPrompt(draft, slots, feedbackText, scriptId, prevCn, imageUrls, "", videoModel, generateAudio, targetDuration, dialogue ?? undefined, optimizerProvider, optimizationSkills, targetRatio, frameId, shotOverrides)
-                : await api.polishVideoPrompt(draft, feedbackText, scriptId, prevCn, imageUrls, "", videoModel, generateAudio, targetDuration, dialogue ?? undefined, optimizerProvider, optimizationSkills, targetRatio, frameId, shotOverrides);
+                : await api.polishVideoPrompt(draft, feedbackText, scriptId, prevCn, imageUrls, "", videoModel, generateAudio, targetDuration, dialogue ?? undefined, optimizerProvider, optimizationSkills, targetRatio, frameId, shotOverrides, videoMode ?? "i2v");
             if (res?.prompt_cn && res?.prompt_en) {
                 setPolishedSettings(shotOverrides);
                 setPolished({ cn: res.prompt_cn, en: res.prompt_en });
@@ -186,7 +188,7 @@ export default function PolishPanel({
         } finally {
             setIsPolishing(false);
         }
-    }, [tabMode, prompt, optimizationDraft, shotOverrides, slots, scriptId, frameId, polished?.en, polished?.cn, imageUrls, videoModel, generateAudio, targetDuration, dialogue, optimizerProvider, optimizationSkills, targetRatio]);
+    }, [tabMode, videoMode, prompt, optimizationDraft, shotOverrides, slots, scriptId, frameId, polished?.en, polished?.cn, imageUrls, videoModel, generateAudio, targetDuration, dialogue, optimizerProvider, optimizationSkills, targetRatio]);
 
     const handleApply = useCallback((text: string) => {
         onApply(text);

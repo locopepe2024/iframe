@@ -78,6 +78,62 @@ def test_h3_polish_contract_forbids_text_overlays():
     assert 'non_diegetic_music:' in text
 
 
+def test_first_last_polish_contract_aligns_both_images_without_new_h3_fields():
+    text = api._storyboard_polish_contract(
+        'uniart/minimax-h3-vip', '', '', target_duration=8,
+        generation_mode='first_last_frame', optimization_skills=['minimax-h3-director'],
+    )
+    assert 'image 1 is the actual first frame at 0.00 seconds' in text
+    assert 'image 2 is the actual last frame at 8.00 seconds' in text
+    assert 'ending pose has no clear motion' in text
+    assert 'integrated_multimodal_description:' in text
+    assert 'Do not add a new body heading' in text
+
+
+def test_first_last_polish_requires_two_selected_images_before_model_call(monkeypatch):
+    processor = Mock()
+    monkeypatch.setattr(api, 'ScriptProcessor', lambda: processor)
+    for images in ([], ['first'], ['same', 'same']):
+        with pytest.raises(api.HTTPException) as exc:
+            api.polish_video_prompt(api.PolishVideoPromptRequest(
+                draft_prompt='action', generation_mode='first_last_frame', image_urls=images,
+            ))
+        assert exc.value.status_code == 502
+        assert '两张不同' in exc.value.detail['message_zh']
+    processor.polish_video_prompt.assert_not_called()
+
+
+def test_first_last_polish_passes_mode_and_two_images_to_processor(monkeypatch):
+    processor = Mock()
+    result = '首帧图像在0.00秒，尾帧图像在8.00秒。\nintegrated_multimodal_description: opening to ending\noverall_soundscape: N/A\nnon_diegetic_music: N/A'
+    processor.polish_video_prompt.return_value = {'prompt_cn': result, 'prompt_en': result}
+    monkeypatch.setattr(api, 'ScriptProcessor', lambda: processor)
+    monkeypatch.setattr(api, '_get_custom_prompt', lambda *a: '')
+    monkeypatch.setattr(api, '_get_polish_model_for_project', lambda *a: '')
+    monkeypatch.setattr(api, '_polish_image_urls', lambda values: values)
+    api.polish_video_prompt(api.PolishVideoPromptRequest(
+        draft_prompt='street scene', target_video_model='uniart/minimax-h3-vip',
+        generation_mode='first_last_frame', target_duration=8,
+        image_urls=['first', 'last'], optimizer_provider='qwen',
+    ))
+    call = processor.polish_video_prompt.call_args
+    assert call.kwargs['image_urls'] == ['first', 'last']
+    assert call.kwargs['generation_mode'] == 'first_last_frame'
+    assert 'last frame at 8.00 seconds' in call.args[2]
+
+
+def test_first_last_polish_rejects_ordinary_i2v_result():
+    from src.apps.comic_gen.llm import PolishError
+
+    body = '首帧图像在0.00秒。\nintegrated_multimodal_description: people walk\noverall_soundscape: N/A\nnon_diegetic_music: N/A'
+    with pytest.raises(PolishError) as error:
+        api._validate_storyboard_polish_result(
+            'uniart/minimax-h3-vip', {'prompt_cn': body, 'prompt_en': body},
+            reference_mode=False, generation_mode='first_last_frame',
+        )
+    assert error.value.reason == 'model_contract_mismatch'
+
+
 def test_h3_final_contract_matches_base_or_reference_mode():
     base = api._storyboard_polish_contract(
         'uniart/minimax-h3-vip', '', '', optimization_skills=['minimax-h3-director'])

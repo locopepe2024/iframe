@@ -1456,6 +1456,7 @@ export const api = {
         targetRatio: string = "16:9",
         frameId: string = "",
         shotOverrides?: { style: string; lighting: string },
+        generationMode: "t2v" | "i2v" | "first_last_frame" | "r2v" = "i2v",
     ) => {
         const payload = {
             draft_prompt: draftPrompt,
@@ -1467,6 +1468,7 @@ export const api = {
             image_urls: imageUrls,
             polish_model: polishModel,
             target_video_model: targetVideoModel,
+            generation_mode: generationMode,
             optimizer_provider: optimizerProvider,
             optimization_skills: optimizationSkills,
             target_ratio: targetRatio,

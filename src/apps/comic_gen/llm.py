@@ -2561,6 +2561,7 @@ Return a JSON object with ALL fields below. null is acceptable for optional fiel
         prev_cn: str = "",
         image_urls: Optional[List[str]] = None,
         polish_model: str = "",
+        generation_mode: str = "i2v",
     ) -> Dict[str, str]:
         """
         Polishes a video generation prompt using Qwen.
@@ -2595,7 +2596,16 @@ Return a JSON object with ALL fields below. null is acceptable for optional fiel
             else DEFAULT_VIDEO_POLISH_PROMPT
         )
         # 让模型知道有图可看（仅在多模态分支才追加，避免无图时误导）。
-        if has_images:
+        if has_images and generation_mode == "first_last_frame":
+            system_prompt += (
+                "\n\nThe two attached images are ordered: first is the actual opening frame, "
+                "second is the actual ending frame. Inspect both. A still image alone does "
+                "not prove its people are moving; if the ending pose has no motion cue, "
+                "settle and hold it. Describe a continuous transition that reaches the "
+                "ending image without animating subjects past it. Do not claim unseen "
+                "intermediate events are observed."
+            )
+        elif has_images:
             system_prompt = (
                 system_prompt
                 + "\n\nIMPORTANT: The user has attached the first frame image(s) of the clip. "
@@ -2636,10 +2646,12 @@ Return a JSON object with ALL fields below. null is acceptable for optional fiel
             # always put images FIRST so the model attends to them
             # before reading the text-side instructions.
             parts: List[Dict[str, Any]] = []
-            for url in image_urls:
+            for index, url in enumerate(image_urls):
                 resolved = _resolve_image_for_vision(url)
                 if not resolved:
                     raise PolishError(reason="api_error", message_zh="参考图无法读取，请重新选择后再润色。", message_en="Reference image could not be read; reselect it before polishing.")
+                if generation_mode == "first_last_frame":
+                    parts.append({"type": "text", "text": "Actual first frame at 0.00 seconds" if index == 0 else "Actual last frame at the end of the clip"})
                 parts.append({"type": "image_url", "image_url": {"url": resolved}})
             if not parts:
                 # All image URLs failed to resolve → fall back to text-only

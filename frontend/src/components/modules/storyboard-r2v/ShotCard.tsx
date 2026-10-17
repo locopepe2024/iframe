@@ -30,6 +30,7 @@ import PromptExpandModal from "./PromptExpandModal";
 import PolishPanel from "./PolishPanel";
 import FieldTagChip, { AddFieldButton, type FieldType } from "./FieldTagChip";
 import { buildGenerationPrompt } from "./buildAssembledPrompt";
+import { resolveShotVideoInput } from "./shotVideoInput";
 import { PendingTaskAffordance } from "@/components/shared/PendingTaskAffordance";
 import PreviewImage from "@/components/shared/preview/PreviewImage";
 import PreviewVideo from "@/components/shared/preview/PreviewVideo";
@@ -309,12 +310,17 @@ export default function ShotCard({
         if (shot.tabMode === "direct_r2v") {
             return referenceImageUrls;
         }
+        if (shot.videoMode === "first_last_frame") {
+            const input = resolveShotVideoInput(shot);
+            return [input.firstFrameUrl, input.lastFrameUrl].filter(Boolean);
+        }
+        if (shot.videoMode === "t2v") return [];
         // i2v: prefer active T2I image; fall back to storyboard frame.
         const active = (shot.t2iImageUrls && shot.t2iImageUrls.length > 0)
             ? shot.t2iImageUrls[Math.max(0, Math.min(shot.t2iSelectedIndex ?? 0, shot.t2iImageUrls.length - 1))]
             : (shot.t2iImageUrl || shot.imageUrl);
         return active ? [active] : [];
-    }, [shot.tabMode, shot.t2iImageUrls, shot.t2iSelectedIndex, shot.t2iImageUrl, shot.imageUrl, referenceImageUrls])();
+    }, [shot.tabMode, shot.videoMode, shot.t2iImageUrls, shot.t2iSelectedIndex, shot.t2iImageUrl, shot.imageUrl, shot.lastFrameImageUrls, shot.lastFrameSelectedIndex, referenceImageUrls])();
 
     // castAvatars — character avatar group for the "Cast:" row above
     // the prompt textarea (L5 borrow from 火山剧创's 出镜角色). De-
@@ -816,6 +822,7 @@ export default function ShotCard({
                             prompt={shot.prompt}
                             optimizationDraft={buildGenerationPrompt(shot, generateAudio ?? false, videoModel ?? "", globalStylePrompt)}
                             tabMode={shot.tabMode}
+                            videoMode={shot.videoMode}
                             scriptId={currentProjectId ?? ""}
                             frameId={shot.id}
                             shotOverrides={{ style: shot.stylePromptOverride || globalStylePrompt, lighting: shot.lightingOverride || "" }}

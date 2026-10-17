@@ -83,6 +83,26 @@ it("sends the selected shot video model when polishing", async () => {
     expect(vi.mocked(api.polishVideoPrompt).mock.calls[0][14]).toEqual({ style: "current style", lighting: "current unsaved light" });
 });
 
+it("sends the selected first and last variants in order for FL2V polish", async () => {
+    render(
+        <ShotCard
+            shot={{ ...shot, videoMode: "first_last_frame", t2iImageUrls: ["first-a", "first-b"], t2iSelectedIndex: 1,
+                lastFrameImageUrls: ["last-a", "last-b"], lastFrameSelectedIndex: 1 }}
+            videoModel="uniart/minimax-h3-vip"
+            index={0} totalShots={1} characters={[]} scenes={[]} props={[]}
+            onUpdatePrompt={vi.fn()} onUpdateField={vi.fn()} onGenerateT2I={vi.fn()} onGenerateVideo={vi.fn()}
+            onDelete={vi.fn()} onMoveUp={vi.fn()} onMoveDown={vi.fn()} onDuplicate={vi.fn()}
+            onSetVideoMode={vi.fn()} onOpenDrawer={vi.fn()} onInsertAsset={vi.fn()}
+            expanded={false} onToggleExpanded={vi.fn()}
+        />,
+    );
+    fireEvent.click(screen.getByTitle("polish"));
+    await waitFor(() => expect(api.polishVideoPrompt).toHaveBeenCalledOnce());
+    const args = vi.mocked(api.polishVideoPrompt).mock.calls[0];
+    expect(args[4]).toEqual(["first-b", "last-b"]);
+    expect(args[15]).toBe("first_last_frame");
+});
+
 it("uses one four-mode tab control for video input selection", () => {
     const onSetVideoMode = vi.fn();
     render(
