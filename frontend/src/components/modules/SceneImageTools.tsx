@@ -269,7 +269,7 @@ export function SceneImageTools({ kind, sources, sceneAssetId, lightingReference
                 <label className="block text-sm text-text-secondary" htmlFor={`${kind}-extra`}>补充提示词</label>
                 <textarea id={`${kind}-extra`} value={extra} onChange={(event) => setExtra(event.target.value)} onFocus={() => { if (kind === "camera") setCameraPromptEnabled(true); }} disabled={kind === "lighting" && !intelligent} rows={3} className={`${control} w-full py-2 disabled:opacity-50`} placeholder={kind === "lighting" ? "补充想要的光影氛围" : "补充镜头位置或构图要求"} />
                 {reviewedPrompt && <div className="space-y-2 rounded-lg border border-primary/40 bg-primary/5 p-3"><p className="text-xs font-medium text-foreground">提交前提示词核对</p><pre className="max-h-44 overflow-auto whitespace-pre-wrap text-xs leading-5 text-text-secondary">{reviewedPrompt}</pre><p className="text-xs text-text-muted">确认后将提交上面这份完整文本。</p></div>}
-                <div className="flex flex-wrap items-center gap-2">
+                <div className="sticky bottom-0 z-20 -mx-4 flex flex-wrap items-center gap-2 border-t border-glass-border bg-surface/95 px-4 py-3 backdrop-blur sm:-mx-6 sm:px-6">
                     <button type="button" onClick={() => { setReviewedPrompt(""); reset(); }} className={option}>重置参数</button>
                     <button type="button" aria-label={busy ? "生成中…" : reviewedPrompt ? "确认并生成" : "查看并确认提示词"} disabled={!source || busy} onClick={submit} className="min-h-11 rounded-md bg-primary px-5 text-sm font-medium text-primary-foreground hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary">
                         {busy ? "生成中…" : reviewedPrompt ? "提交到生成审核" : "查看并确认提示词"}
