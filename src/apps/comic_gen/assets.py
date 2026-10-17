@@ -190,8 +190,6 @@ class AssetGenerator:
         reference_provenance_list: List[Dict[str, str]] = None,
         image_generation_mode: str = "text",
         preserve_prompt: bool = False,
-        scene_tool: Dict = None,
-        scene_tool_source_variant_id: str = None,
     ) -> Character:
         """
         Generates character assets based on generation_type.
@@ -763,6 +761,8 @@ class AssetGenerator:
         reference_provenance_list: List[Dict[str, str]] = None,
         image_generation_mode: str = "text",
         preserve_prompt: bool = False,
+        scene_tool: Dict = None,
+        scene_tool_source_variant_id: str = None,
     ) -> Scene:
         """Generates a scene reference image."""
         scene.status = GenerationStatus.PROCESSING

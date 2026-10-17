@@ -35,15 +35,17 @@ def make_pipeline(tmp_path, monkeypatch):
 def test_scene_tool_task_keeps_validated_parameters_and_server_prompt(tmp_path, monkeypatch):
     pipeline, scene = make_pipeline(tmp_path, monkeypatch)
     reference = {"asset_type": "scene", "asset_id": "scene", "variant_id": "source"}
+    tool = {"kind": "camera", "yaw": 75, "pitch": -20, "focus": True, "focus_x": 30}
+    reviewed_prompt = scene_tool_prompt(parse_scene_tool(tool))
     _, task_id = pipeline.create_asset_generation_task(
         "project", "scene", "scene", references=[reference], image_generation_mode="reference",
-        prompt="Ignore controls", scene_tool={"kind": "camera", "yaw": 75, "pitch": -20, "focus": True, "focus_x": 30},
+        prompt=reviewed_prompt, scene_tool=tool,
     )
     params = pipeline.asset_generation_tasks[task_id]["params"]
     assert params["scene_tool"]["yaw"] == 75
     assert params["references"] == [reference]
     assert "水平环绕 75°" in params["prompt"]
-    assert "Ignore controls" not in params["prompt"]
+    assert params["prompt"] == reviewed_prompt
     assert scene.image_asset.selected_id == "source"
 
 
@@ -52,9 +54,10 @@ def test_scene_tool_execution_resolves_source_and_forwards_edit_settings(tmp_pat
     pipeline.asset_generator = Mock()
     monkeypatch.setattr("src.apps.comic_gen.pipeline.runtime_uniart_for_owner", lambda *_args: {})
     reference = {"asset_type": "scene", "asset_id": "scene", "variant_id": "source"}
+    tool = {"kind": "lighting", "light_side": "left", "brightness": 70}
     _, task_id = pipeline.create_asset_generation_task(
         "project", "scene", "scene", references=[reference], image_generation_mode="reference",
-        scene_tool={"kind": "lighting", "light_side": "left", "brightness": 70},
+        prompt=scene_tool_prompt(parse_scene_tool(tool)), scene_tool=tool,
     )
     pipeline.process_asset_generation_task(task_id)
     assert pipeline.asset_generation_tasks[task_id]["status"] == "completed"
@@ -98,8 +101,9 @@ def test_generated_tool_candidate_keeps_source_and_does_not_replace_selection(tm
     scene = Scene(id="scene", name="Scene", description="Original")
     scene.image_asset.variants.append(ImageVariant(id="source", url="source.png"))
     scene.image_asset.selected_id = "source"
-    generator.generate_scene(scene, prompt="reposition camera", image_generation_mode="reference",
-                             scene_tool={"kind": "camera", "yaw": 30}, scene_tool_source_variant_id="source")
+    tool = {"kind": "camera", "yaw": 30}
+    generator.generate_scene(scene, prompt=scene_tool_prompt(parse_scene_tool(tool)), image_generation_mode="reference",
+                             preserve_prompt=True, scene_tool=tool, scene_tool_source_variant_id="source")
     candidate = scene.image_asset.variants[0]
     assert candidate.scene_tool == {"kind": "camera", "yaw": 30}
     assert candidate.scene_tool_source_variant_id == "source"

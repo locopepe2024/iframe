@@ -1168,8 +1168,6 @@ class ComicGenPipeline(StudioOwnerMixin):
                     reference_provenance_list=reference_provenance_list,
                     image_generation_mode=image_generation_mode,
                     preserve_prompt=preserve_prompt,
-                    scene_tool=parsed_scene_tool.model_dump() if parsed_scene_tool else None,
-                    scene_tool_source_variant_id=normalized_tool_references[0]["variant_id"] if parsed_scene_tool else None,
                 )
             elif asset_type == "scene":
                 self.asset_generator.generate_scene(
@@ -1186,6 +1184,8 @@ class ComicGenPipeline(StudioOwnerMixin):
                     reference_provenance_list=reference_provenance_list,
                     image_generation_mode=image_generation_mode,
                     preserve_prompt=preserve_prompt,
+                    scene_tool=parsed_scene_tool.model_dump() if parsed_scene_tool else None,
+                    scene_tool_source_variant_id=normalized_tool_references[0]["variant_id"] if parsed_scene_tool else None,
                 )
             elif asset_type == "prop":
                 self.asset_generator.generate_prop(

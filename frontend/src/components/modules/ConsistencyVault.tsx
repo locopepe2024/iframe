@@ -1052,7 +1052,6 @@ function CharacterDetailModal({ asset, type, onClose, onUpdateDescription, onRen
         .map((variant: any, index: number) => ({
             key: variant.id, variantId: variant.id, label: `场景图片 · ${index + 1}${variant.scene_tool ? ` · ${variant.scene_tool.kind === "lighting" ? "光影" : "镜头"}` : ""}`, url: getAssetUrl(variant.url), tool: variant.scene_tool, sourceVariantId: variant.scene_tool_source_variant_id,
         })), [asset.image_asset]);
-    const lightingReferences = useMemo<LightingReference[]>(() => referenceCandidates.flatMap((candidate) => candidate.reference && candidate.previewUrl ? [{ key: `${candidate.reference.asset_type}:${candidate.reference.asset_id}:${candidate.reference.variant_id}`, label: candidate.label, url: candidate.previewUrl, reference: candidate.reference }] : []), [referenceCandidates]);
 
     // Sync local state if asset changes
     useEffect(() => {
@@ -1115,6 +1114,7 @@ function CharacterDetailModal({ asset, type, onClose, onUpdateDescription, onRen
     const matchingReferenceCandidates = referenceCandidates.filter((candidate) =>
         candidate.label.toLocaleLowerCase().includes(mention?.query.trim().toLocaleLowerCase() ?? ""),
     ).sort((left, right) => Number(Boolean(right.isActive)) - Number(Boolean(left.isActive)));
+    const lightingReferences = useMemo<LightingReference[]>(() => referenceCandidates.flatMap((candidate) => candidate.reference && candidate.previewUrl ? [{ key: `${candidate.reference.asset_type}:${candidate.reference.asset_id}:${candidate.reference.variant_id}`, label: candidate.label, url: candidate.previewUrl, reference: candidate.reference }] : []), [referenceCandidates]);
 
     const handleMentionKeyDown = (event: KeyboardEvent) => {
         if (!mention) return false;
