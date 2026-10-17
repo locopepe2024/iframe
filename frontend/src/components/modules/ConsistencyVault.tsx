@@ -1037,7 +1037,14 @@ function CharacterDetailModal({ asset, type, onClose, onUpdateDescription, onUpd
         reference_viewpoint: String(savedSceneDesign.reference_viewpoint || ""),
         reference_framing: String(savedSceneDesign.reference_framing || ""),
     }));
-    const [sceneDesignNeedsApply, setSceneDesignNeedsApply] = useState(false);
+    const [sceneDesignNeedsApply, setSceneDesignNeedsApply] = useState(() =>
+        type === "scene" && !String(asset.image_prompt || "").includes("【场景结构化设置】") && Boolean(
+            (typeof savedSceneDesign.style === "string" ? savedSceneDesign.style : stylePrompt)
+            || (typeof savedSceneDesign.ambient_lighting === "string" ? savedSceneDesign.ambient_lighting : inheritedSceneLighting)
+            || savedSceneDesign.local_lighting?.effect
+            || savedSceneDesign.reference_viewpoint
+            || savedSceneDesign.reference_framing,
+        ));
     const [sceneDesignSaving, setSceneDesignSaving] = useState(false);
     const [promptModels, setPromptModels] = useState<ChatModel[]>([]);
     const [promptModel, setPromptModel] = useState("");
