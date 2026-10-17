@@ -183,6 +183,7 @@ export interface StoryboardFrame {
     image_url?: string;
     image_asset?: ImageAsset;
     rendered_image_url?: string;
+    rendered_image_preview_url?: string;
     rendered_image_asset?: ImageAsset;
     generation_lineage?: GenerationLineage | null;
     style_prompt_override?: string | null;

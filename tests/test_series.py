@@ -6,11 +6,12 @@ PromptConfig three-level fallback, text splitting, and cross-series import.
 
 import time
 import uuid
+import json
 import pytest
 from unittest.mock import patch, MagicMock
 
 from src.apps.comic_gen.models import (
-    Series, Script, Character, Scene, Prop, PromptConfig, ModelSettings,
+    Series, Script, Character, Scene, Prop, PromptConfig, ModelSettings, StoryboardFrame,
 )
 from src.apps.comic_gen.pipeline import ComicGenPipeline
 
@@ -58,6 +59,42 @@ def _make_character(name="Hero", **kw) -> Character:
 def _make_scene(name="Forest", **kw) -> Scene:
     return Scene(id=kw.pop("id", str(uuid.uuid4())), name=name,
                  description=kw.pop("description", "A dark forest"), **kw)
+
+
+def test_series_episode_overview_uses_signed_webp_preview(tmp_path, monkeypatch):
+    from PIL import Image
+    from src.apps.comic_gen import api
+    from src.apps.identity import UserContext
+    from src.apps.studio_access import (
+        reset_studio_user, set_studio_user, studio_owner_key,
+    )
+
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("LUMENX_MEDIA_SIGNING_KEY", "test-only-signing-key")
+    user = UserContext("user", "profile", "User", "")
+    source = tmp_path / "output" / "users" / studio_owner_key(user.owner_profile_id) / "studio" / "storyboard" / "frame.png"
+    source.parent.mkdir(parents=True)
+    Image.new("RGB", (800, 450), "red").save(source)
+    stored_path = source.relative_to(tmp_path / "output").as_posix()
+    episode = _make_script(frames=[
+        StoryboardFrame(id="frame-1", scene_id="scene-1", rendered_image_url=stored_path),
+        StoryboardFrame(id="frame-2", scene_id="scene-1", rendered_image_url="lumenx/storyboard/frame.png"),
+    ])
+    monkeypatch.setattr(api.pipeline, "get_series_episodes", lambda _series_id: [episode])
+
+    context = set_studio_user(user)
+    try:
+        response = api.get_series_episodes("series-1", user)
+    finally:
+        reset_studio_user(context)
+
+    frame = json.loads(response.body)[0]["frames"][0]
+    assert "preview=320" in frame["rendered_image_preview_url"]
+    assert frame["rendered_image_preview_url"].startswith("/studio/media/")
+    assert frame["rendered_image_url"].startswith("/studio/media/")
+    assert "preview=" not in frame["rendered_image_url"]
+    legacy_frame = json.loads(response.body)[0]["frames"][1]
+    assert "preview=320" in legacy_frame["rendered_image_preview_url"]
 
 
 def test_series_source_context_is_exposed_to_episode_analysis(pipeline):

@@ -571,8 +571,10 @@ function EpisodeContentPanel({
                 >
                   {frame.rendered_image_url ? (
                     <img
-                      src={frame.rendered_image_url}
+                      src={getAssetUrl(frame.rendered_image_preview_url || frame.rendered_image_url)}
                       alt={`#${i + 1}`}
+                      loading="lazy"
+                      decoding="async"
                       className="w-full h-full object-cover"
                     />
                   ) : (

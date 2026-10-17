@@ -127,6 +127,7 @@ from ..studio_access import (
     sign_studio_media_paths,
     set_studio_user,
     studio_owner_dir,
+    studio_media_preview_url,
     studio_uniart_config,
     verify_studio_media,
     verify_studio_media_preview,
@@ -1120,11 +1121,19 @@ def remove_episode_from_series(series_id: str, script_id: str):
 
 
 @app.get("/series/{series_id}/episodes")
-def get_series_episodes(series_id: str):
+def get_series_episodes(series_id: str, user: UserContext = Depends(require_studio_user)):
     """Get all episodes in a Series."""
     try:
         episodes = pipeline.get_series_episodes(series_id)
-        return signed_response(episodes)
+        episode_data = [_script_response_dump(episode) for episode in episodes]
+        for episode in episode_data:
+            for frame in episode.get("frames", [])[:12]:
+                image_url = frame.get("rendered_image_url")
+                if image_url:
+                    frame["rendered_image_preview_url"] = studio_media_preview_url(
+                        user.owner_profile_id, image_url, 320
+                    )
+        return signed_response(episode_data)
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
 
