@@ -51,8 +51,25 @@ it("records the camera view and restores the original view and playhead", async 
   expect(stopPlayback).toHaveBeenCalledOnce();
   expect(setRecording).toHaveBeenCalledWith(true);
   expect(setRecording).toHaveBeenCalledWith(false);
+  act(() => useWorkbenchStore.getState().setCameraTransformAxis("camera-main", "position", 0, 2));
+  expect(screen.getAllByText(/当前导演设置已变化/)).toHaveLength(2);
   view.unmount();
   expect(URL.revokeObjectURL).toHaveBeenCalledWith("blob:director-test");
+});
+
+it("rejects a timeline cut to a camera with a different aspect ratio", async () => {
+  act(() => {
+    const state = useWorkbenchStore.getState();
+    state.setRigAdmissionIssues([]);
+    useWorkbenchStore.setState({
+      cameras: { ...state.cameras, "camera-vertical": { ...state.cameras["camera-main"], cameraId: "camera-vertical", aspectRatio: "9:16" } },
+      dialogueTimeline: { ...state.dialogueTimeline, tracks: [{ trackId: "camera-cut", trackKind: "active_camera", target: { targetType: "timeline", targetId: state.dialogueTimeline.timelineId }, propertyKey: "activeCameraId", keyframes: [{ keyframeId: "cut-1", timeSeconds: 0, value: "camera-main", interpolation: "step" }, { keyframeId: "cut-2", timeSeconds: 1, value: "camera-vertical", interpolation: "step" }] }], activeCameraTrackId: "camera-cut" },
+    });
+  });
+  render(<WhiteModelVideoRecorder recording={false} setRecording={vi.fn()} stopPlayback={vi.fn()} />);
+  fireEvent.click(screen.getByRole("button", { name: "录制白模视频" }));
+  expect(screen.getByRole("alert")).toHaveTextContent("不同画幅");
+  expect(recordWhiteModelVideo).not.toHaveBeenCalled();
 });
 
 it("cancels recording and restores the view without a result", async () => {

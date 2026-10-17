@@ -2,10 +2,34 @@ import { useEffect, useRef, useState } from "react";
 import { Download, Film, Square, X } from "lucide-react";
 
 import { useWorkbenchStore } from "../state/workbench-store";
+import { activeCameraAtFrame } from "../timeline/timeline-evaluation";
 import { projectDirectorShotPackage } from "./director-shot-package";
 import { recordWhiteModelVideo } from "./record-white-model-video";
 
-interface VideoResult { url: string; extension: "webm" | "mp4"; }
+interface VideoResult { url: string; extension: "webm" | "mp4"; signature: string; snapshotId: string; }
+
+function recordingSignature(state: ReturnType<typeof useWorkbenchStore.getState>): string {
+  return JSON.stringify({
+    characters: state.characters, sceneObjects: state.sceneObjects, renderScene: state.renderScene,
+    cameras: state.cameras, actorPaths: state.actorPaths, cameraPaths: state.cameraPaths,
+    dialogueTimeline: state.dialogueTimeline, selectedCameraId: state.selectedCameraId,
+  });
+}
+
+function recordingSnapshotId(signature: string): string {
+  let hash = 0x811c9dc5;
+  for (let index = 0; index < signature.length; index += 1) {
+    hash ^= signature.charCodeAt(index);
+    hash = Math.imul(hash, 0x01000193);
+  }
+  return `director-${(hash >>> 0).toString(16).padStart(8, "0")}`;
+}
+
+function aspectValue(aspectRatio: string): number {
+  if (aspectRatio === "auto") return 16 / 9;
+  const [width, height] = aspectRatio.split(":").map(Number);
+  return width / height;
+}
 
 export function WhiteModelVideoRecorder({ recording, setRecording, stopPlayback }: {
   recording: boolean;
@@ -16,6 +40,8 @@ export function WhiteModelVideoRecorder({ recording, setRecording, stopPlayback 
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<VideoResult | null>(null);
   const [reviewOpen, setReviewOpen] = useState(false);
+  const currentSignature = useWorkbenchStore(recordingSignature);
+  const stale = result !== null && result.signature !== currentSignature;
   const abortRef = useRef<AbortController | null>(null);
   const resultRef = useRef<string | null>(null);
 
@@ -43,7 +69,17 @@ export function WhiteModelVideoRecorder({ recording, setRecording, stopPlayback 
       selectedCameraId: state.selectedCameraId, characters: state.characters, cameras: state.cameras,
       sceneObjects: state.sceneObjects, actorPaths: state.actorPaths, cameraPaths: state.cameraPaths,
     });
-    const aspect = first.aspectRatio === "auto" ? 16 / 9 : Number(first.aspectRatio.split(":")[0]) / Number(first.aspectRatio.split(":")[1]);
+    const aspect = aspectValue(first.aspectRatio);
+    const authoredFrameCount = Math.round(state.dialogueTimeline.durationSeconds * state.dialogueTimeline.fps) + 1;
+    for (let frame = 2; frame <= authoredFrameCount; frame += 1) {
+      const cameraId = activeCameraAtFrame(state.dialogueTimeline.activeCameraTrackId, state.dialogueTimeline.tracks, frame, state.dialogueTimeline.fps, state.selectedCameraId);
+      const camera = state.cameras[cameraId] ?? state.cameras[state.selectedCameraId];
+      if (camera && Math.abs(aspectValue(camera.aspectRatio) - aspect) > 0.0001) {
+        setError("时间线包含不同画幅的机位；请统一机位画幅后录制。");
+        return;
+      }
+    }
+    const signature = recordingSignature(state);
     const previousView = state.viewMode;
     const previousFrame = state.playheadFrame;
     const controller = new AbortController();
@@ -66,7 +102,7 @@ export function WhiteModelVideoRecorder({ recording, setRecording, stopPlayback 
       const url = URL.createObjectURL(video.blob);
       if (resultRef.current) URL.revokeObjectURL(resultRef.current);
       resultRef.current = url;
-      setResult({ url, extension: video.extension });
+      setResult({ url, extension: video.extension, signature, snapshotId: recordingSnapshotId(signature) });
       setReviewOpen(true);
     } catch (caught) {
       if (!controller.signal.aborted) setError(caught instanceof Error ? caught.message : "录制失败。");
@@ -85,12 +121,15 @@ export function WhiteModelVideoRecorder({ recording, setRecording, stopPlayback 
         : <button type="button" onClick={() => void start()}><Film size={16} aria-hidden="true"/>录制白模视频</button>}
       {result && <a href={result.url} download={`director-reference.${result.extension}`} title="下载白模参考视频"><Download size={16} aria-hidden="true"/>下载</a>}
       {result && <button type="button" onClick={() => setReviewOpen(true)}>查看视频</button>}
+      {result && <span>录制快照 {result.snapshotId}</span>}
+      {stale && <span role="status">当前导演设置已变化，视频为旧版本；请重新录制。</span>}
       {recording && <span role="status">录制中 · {progress} 帧</span>}
       {error && <span role="alert">{error}</span>}
     </div>
     {result && reviewOpen && <div className="white-model-video-overlay" role="presentation" onClick={() => setReviewOpen(false)}>
       <section className="white-model-video-dialog" role="dialog" aria-modal="true" aria-label="白模运镜参考视频" onClick={(event) => event.stopPropagation()}>
         <div className="white-model-video-dialog-header"><strong>白模运镜参考视频</strong><button type="button" aria-label="关闭视频预览" onClick={() => setReviewOpen(false)}><X size={17} aria-hidden="true"/></button></div>
+        {stale && <p role="status">当前导演设置已变化，视频为旧版本；请重新录制。</p>}
         <video controls autoPlay playsInline src={result.url} aria-label="白模运镜参考视频"/>
         <a href={result.url} download={`director-reference.${result.extension}`}><Download size={16} aria-hidden="true"/>下载视频</a>
       </section>

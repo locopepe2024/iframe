@@ -11,6 +11,7 @@ import { FrameManifestImporter } from "./reference/FrameManifestImporter";
 import { ActionProposalPanel } from "./action/ActionProposalPanel";
 import { MotionTrackImporter } from "./reference/MotionTrackImporter";
 import { MotionTrackReviewPanel } from "./reference/MotionTrackReviewPanel";
+import { useWorkbenchStore } from "./state/workbench-store";
 
 type TemporalTool = "depth" | "dialogue" | "focus" | "interaction" | "actor-path" | "path-event" | "frame-reference" | "motion-track" | "motion-review" | "action";
 
@@ -41,6 +42,7 @@ function renderTemporalTool(tool: TemporalTool) {
 }
 
 export function TemporalToolsInspector() {
+  const hasCharacters = useWorkbenchStore((state) => Object.keys(state.characters).length > 0);
   const [activeTool, setActiveTool] = useState<TemporalTool>("dialogue");
   const [expanded, setExpanded] = useState(true);
   const contentId = "temporal-tools-content";
@@ -100,7 +102,9 @@ export function TemporalToolsInspector() {
               aria-labelledby={activeTool === tool.id ? `temporal-tool-tab-${tool.id}` : undefined}
               hidden={activeTool !== tool.id}
             >
-              {tool.id !== "depth" || activeTool === "depth" ? renderTemporalTool(tool.id) : null}
+              {tool.id !== "depth" || activeTool === "depth" ? !hasCharacters && ["dialogue", "interaction", "actor-path", "path-event", "action"].includes(tool.id)
+                ? <p>请先从左侧添加人物，再使用此工具。</p>
+                : renderTemporalTool(tool.id) : null}
             </div>
           ))}
         </div>

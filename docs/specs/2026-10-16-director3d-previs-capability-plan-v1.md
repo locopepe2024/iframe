@@ -40,6 +40,13 @@ is metric or that it replaces iframe's Blender media path.
 | Prompt | No unified shot compiler | Deterministic projection from authored shot package |
 | Recovery | Local draft, undo and capture cleanup exist | Block stale output and preserve last valid result |
 
+As of 2026-10-17, `DirectorShotPackage` is projected by the browser white-model
+recorder to select its initial camera and aspect. Blender depth, blocking PNG,
+camera records and prompt compilation do not consume it yet. The shared-frame
+behavior below is a target, not an implemented consistency guarantee. Browser
+recording now identifies its authoring snapshot, flags results after relevant
+settings change, and requires one aspect ratio across all active cameras.
+
 ## Shot Package
 
 Create a versioned `DirectorShotPackage` projection at export time. Existing

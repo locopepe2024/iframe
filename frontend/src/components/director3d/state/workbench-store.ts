@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import type { DirectorBlockingTemplateId } from "../types";
 
 import { createManualScenePlateCalibration, evaluateScenePlateCalibration, intersectGroundPlane, placeTargetOnScenePlate, pointInsideGroundRegion } from "../calibration/scene-plate-calibration";
 import { createManualPanoramaCalibration, evaluatePanoramaCalibration, panoramaRotationTuple } from "../calibration/panorama-calibration";
@@ -411,9 +412,40 @@ function validationCube(
     browserCapabilityState: "available",
     compilerCapabilityState: "available",
     capabilityIds: ["director.scene.inspect", "director.scene.object.transform"],
-    limitations: ["验证场景参数化白模；不包含材质、纹理、物理或可变形家具。"],
+    limitations: ["参数化白模；不包含材质、纹理、物理或可变形家具。"],
     calibratedPlacement: null,
   };
+}
+
+function blockingTemplate(templateId: DirectorBlockingTemplateId) {
+  const base = createInitialCharacters();
+  const at = (character: CharacterAuthoringState, position: [number, number, number], facingDeg = 0) => ({
+    ...character,
+    transform: { ...character.transform, position, rotationDeg: [0, 0, facingDeg] as [number, number, number] },
+  });
+  const characters: Record<string, CharacterAuthoringState> = templateId === "empty" || templateId === "product" ? {} :
+    templateId === "single" ? { [CHARACTER_A_ID]: at(base[CHARACTER_A_ID], [0, 0, 0]) } :
+    templateId === "dialogue" ? { [CHARACTER_A_ID]: at(base[CHARACTER_A_ID], [-0.9, 0, 0], -90), [CHARACTER_B_ID]: at(base[CHARACTER_B_ID], [0.9, 0, 0], 90) } :
+    { [CHARACTER_A_ID]: at(base[CHARACTER_A_ID], [-1.8, 0, 0]), [CHARACTER_B_ID]: at(base[CHARACTER_B_ID], [0, 0.7, 0]), [CHARACTER_C_ID]: at(initialCharacter(CHARACTER_C_ID, 1.8), [1.8, 0, 0]) };
+  const sceneObjects = templateId === "product" ? Object.fromEntries([
+    validationCube("template-product", "产品主体", [0.8, 0.8, 0.8], [0, 0, 0.4], "#94a3b8"),
+    validationCube("template-backdrop", "背景板", [3.2, 0.12, 2.4], [0, 1.5, 1.2], "#cbd5e1"),
+    validationCube("template-side-prop", "侧面道具", [0.45, 0.45, 0.8], [1.25, -0.2, 0.4], "#64748b"),
+  ].map((object) => [object.sceneObjectId, object])) : {};
+  const camera = createInitialCameras()["camera-main"];
+  const compositionPresetId: CameraCompositionPresetId = templateId === "product" ? "close_up" : templateId === "blocking" ? "wide" : templateId === "dialogue" ? "two_shot" : "medium";
+  const lens = COMPOSITION_PRESETS[compositionPresetId];
+  const cameraPosition: [number, number, number] = templateId === "single" ? [1.5, -3.5, 1.8] : templateId === "dialogue" ? [2.2, -4.5, 1.8] : templateId === "blocking" ? [0, -7.5, 3] : templateId === "product" ? [1.1, -2.8, 1.3] : [0, -7, 2.5];
+  const cameras = { "camera-main": {
+    ...camera,
+    transform: { ...camera.transform, position: cameraPosition },
+    fovDeg: lens.fovDeg,
+    focalLengthMm: lens.focalLengthMm,
+    lookAt: templateId === "product" ? { targetType: "scene_object" as const, targetId: "template-product" } : templateId === "empty" ? null : { targetType: "character" as const, targetId: CHARACTER_A_ID },
+    subjectTargetIds: templateId === "product" ? ["template-product"] : Object.keys(characters),
+    compositionPresetId,
+  } };
+  return { characters, actorMappings: createInitialActorMappingsForCharacters(characters), sceneObjects, cameras };
 }
 function validationTrack(
   trackId: string,
@@ -908,6 +940,8 @@ export interface WorkbenchState {
   applySubjectProxyReplacement: (replacedProxyAssetId: string, proxyAssetId: string) => void;
   loadSceneObjects: (sceneObjects: Record<string, SceneObjectAuthoringState>) => void;
   applyValidationScenePreset: (presetId: DirectorValidationPresetId) => void;
+  applyBlockingTemplate: (templateId: DirectorBlockingTemplateId) => void;
+  addWhiteModelCharacter: () => void;
   toggleGroundVisible: () => void;
   toggleGroundLocked: () => void;
   setGroundHeightM: (heightM: number) => void;
@@ -2440,6 +2474,64 @@ export const useWorkbenchStore = create<WorkbenchState>((set, get) => ({
       transformDragSnapshot: null,
       transformDragCharacterId: null,
       playheadFrame: 1,
+    };
+  }),
+  applyBlockingTemplate: (templateId) => set((state) => {
+    const template = blockingTemplate(templateId);
+    const renderScene = createInitialRenderSceneState();
+    renderScene.labels = [`template:${templateId}`];
+    return {
+      ...mutateScene(state, `scene.blocking_template.${templateId}`, {
+        characters: template.characters,
+        actorMappings: template.actorMappings,
+        actorPaths: {},
+        sceneObjects: template.sceneObjects,
+        cameras: template.cameras,
+        cameraPaths: {},
+        dialogueTimeline: { ...createInitialDialogueTimeline(), durationSeconds: 5 },
+        pathEvents: [],
+        renderScene,
+        panoramaScenePackage: null,
+        externalCameraMotionProposals: [],
+      }),
+      selectedCharacterId: Object.keys(template.characters)[0] ?? CHARACTER_A_ID,
+      selectedCharacterIds: Object.keys(template.characters).slice(0, 1),
+      selectedSceneObjectId: templateId === "product" ? "template-product" : null,
+      selectedCameraId: "camera-main",
+      cameraSnapshots: [],
+      viewMode: "camera" as const,
+      playheadFrame: 1,
+      localAnimationImport: createIdleLocalAnimationImportState(),
+      frameManifestImport: createIdleFrameManifestImportState(),
+      selectedActorPathControlPointId: null,
+      actorPathDragSnapshot: null,
+      actorPathDragTarget: null,
+      selectedCameraPathControlPointId: null,
+      cameraPathDragSnapshot: null,
+      cameraPathDragTarget: null,
+      cameraPathDragUnsavedChanges: null,
+      pathEventDiagnostic: null,
+      transformDragging: false,
+      transformDragSnapshot: null,
+      transformDragCharacterId: null,
+    };
+  }),
+  addWhiteModelCharacter: () => set((state) => {
+    const existingIds = Object.keys(state.characters);
+    const nextCustomIndex = Math.max(0, ...existingIds.map((id) => Number(id.match(/^character-custom-(\d+)$/)?.[1] ?? 0))) + 1;
+    const characterId = [CHARACTER_A_ID, CHARACTER_B_ID, CHARACTER_C_ID].find((id) => !state.characters[id])
+      ?? `character-custom-${nextCustomIndex}`;
+    const character = initialCharacter(characterId, existingIds.length * 1.2);
+    if (!character.label) character.label = `白模人物 ${existingIds.length + 1}`;
+    const actorMapping: ActorMappingState = { actorMappingId: character.actorMappingId, characterId, subjectId: null, referenceSetId: null, proxyAssetId: null, appearanceRole: "unassigned" };
+    return {
+      ...mutateScene(state, "scene.character.add", {
+        characters: { ...state.characters, [characterId]: character },
+        actorMappings: { ...state.actorMappings, [actorMapping.actorMappingId]: actorMapping },
+      }),
+      selectedCharacterId: characterId,
+      selectedCharacterIds: [characterId],
+      selectedSceneObjectId: null,
     };
   }),
   toggleGroundVisible: () => set((state) => mutateScene(state, "scene.ground.visibility", {

@@ -414,6 +414,36 @@ it("loads deterministic indoor and fight validation scenes without external requ
   expect(state.characters["character-female-c001"].visible).toBe(false);
   expect(fetch).not.toHaveBeenCalled();
 });
+it("loads editable blocking templates and restores the previous scene with undo", () => {
+  render(<App />);
+  const initialCharacters = useWorkbenchStore.getState().characters;
+  const open = () => fireEvent.click(screen.getByText("站位模板"));
+  open();
+  fireEvent.click(screen.getByRole("button", { name: /空场景/ }));
+  expect(Object.keys(useWorkbenchStore.getState().characters)).toHaveLength(0);
+  expect(screen.getByText(/当前场景没有人物/)).toBeInTheDocument();
+  expect(useWorkbenchStore.getState().dialogueTimeline.durationSeconds).toBe(5);
+  fireEvent.click(screen.getByText("添加对象"));
+  fireEvent.click(screen.getByRole("button", { name: /白模人物/ }));
+  expect(Object.keys(useWorkbenchStore.getState().characters)).toHaveLength(1);
+  act(() => useWorkbenchStore.getState().undo());
+  expect(Object.keys(useWorkbenchStore.getState().characters)).toHaveLength(0);
+  act(() => useWorkbenchStore.getState().undo());
+  expect(useWorkbenchStore.getState().characters).toEqual(initialCharacters);
+
+  for (const [label, count] of [["单人镜头", 1], ["双人对话", 2], ["多人走位", 3], ["道具镜头", 0]] as const) {
+    open();
+    fireEvent.click(screen.getByRole("button", { name: new RegExp(label) }));
+    const state = useWorkbenchStore.getState();
+    expect(Object.keys(state.characters)).toHaveLength(count);
+    expect(state.actorPaths).toEqual({});
+    const positions = Object.values(state.characters).map((character) => character.transform.position);
+    expect(new Set(positions.map(([x, y]) => `${x}:${y}`)).size).toBe(positions.length);
+    expect(state.cameras[state.selectedCameraId]).toBeDefined();
+  }
+  expect(Object.values(useWorkbenchStore.getState().sceneObjects).map((object) => object.label)).toContain("产品主体");
+  expect(fetch).not.toHaveBeenCalled();
+});
 it("collapses configuration surfaces without discarding local drafts", () => {
   render(<App />);
   const sceneToggle = screen.getByRole("button", { name: "收起场景配置" });

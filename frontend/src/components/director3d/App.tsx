@@ -160,7 +160,7 @@ export function App({ restoredSavedAt = null }: DirectorAppProps = {}) {
             </div>
             <HumanoidStage recordingVideo={recordingVideo} />
             <p className="sr-only" role="status" aria-live="polite" aria-atomic="true">
-              {selectedSceneObject ? `当前选择物体 ${selectedSceneObject.label}；${selectedSceneObject.visible ? "可见" : "已隐藏"}，${selectedSceneObject.locked ? "已锁定" : "可编辑"}。` : `已选择 ${selectedCharacterIds.length} 个人物，当前为 ${selectedCharacter.label}；${selectedCharacter.visible ? "可见" : "已隐藏"}，${selectedCharacter.locked ? "已锁定，编辑不可用" : "未锁定，可编辑"}。`}撤销 {undoDepth > 0 ? "可用" : "不可用"}，重做 {redoDepth > 0 ? "可用" : "不可用"}。
+              {selectedSceneObject ? `当前选择物体 ${selectedSceneObject.label}；${selectedSceneObject.visible ? "可见" : "已隐藏"}，${selectedSceneObject.locked ? "已锁定" : "可编辑"}。` : selectedCharacter ? `已选择 ${selectedCharacterIds.length} 个人物，当前为 ${selectedCharacter.label}；${selectedCharacter.visible ? "可见" : "已隐藏"}，${selectedCharacter.locked ? "已锁定，编辑不可用" : "未锁定，可编辑"}。` : "当前场景没有人物，可从添加对象开始。"}撤销 {undoDepth > 0 ? "可用" : "不可用"}，重做 {redoDepth > 0 ? "可用" : "不可用"}。
             </p>
             <div className="stage-status" role="status" aria-live="polite">
               <span><strong>{selectedSceneObject ? "物体" : "人物"}：</strong>{selectedSceneObject?.label ?? characters.find((character) => character.characterId === selectedCharacterId)?.label}</span>
@@ -187,7 +187,7 @@ export function App({ restoredSavedAt = null }: DirectorAppProps = {}) {
             />
           </div>
           <div id="inspector-column-content" hidden={!inspectorExpanded}>
-            {viewMode === "camera" ? <CameraToolsInspector /> : selectedSceneObjectId ? <SceneObjectInspector /> : <JointInspector />}
+            {viewMode === "camera" ? <CameraToolsInspector /> : selectedSceneObjectId ? <SceneObjectInspector /> : selectedCharacter ? <JointInspector /> : <aside className="inspector-panel"><h2>空场景</h2><p>从左侧添加人物或道具后继续布置。</p></aside>}
           </div>
         </div>
       </main>

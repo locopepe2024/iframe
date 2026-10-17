@@ -22,6 +22,7 @@ export function ObjectAddMenu() {
   const menuRef = useRef<HTMLDetailsElement>(null);
   const addPrimitive = useWorkbenchStore((state) => state.addPrimitive);
   const addEmptyObject = useWorkbenchStore((state) => state.addEmptyObject);
+  const addWhiteModelCharacter = useWorkbenchStore((state) => state.addWhiteModelCharacter);
   const finish = (action: () => void) => {
     action();
     menuRef.current?.removeAttribute("open");
@@ -31,6 +32,7 @@ export function ObjectAddMenu() {
     <details className="object-add-menu" ref={menuRef}>
       <summary aria-label="添加场景对象"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg><span>添加对象</span></summary>
       <div className="object-add-popover">
+        <button className="empty-object-action" type="button" onClick={() => finish(addWhiteModelCharacter)}><span><strong>白模人物</strong><small>添加可移动、可设置动作路径的人物。</small></span><span className="availability available">可用</span></button>
         <div className="object-add-heading"><strong>本地基础几何体</strong><small>无需网络，可用于站位、产品和空间占位。</small></div>
         <div className="primitive-grid">
           {PRIMITIVES.map((primitive) => <button key={primitive.kind} type="button" onClick={() => finish(() => addPrimitive(primitive.kind))}><PrimitiveGlyph kind={primitive.kind}/><span><strong>{primitive.label}</strong><small>{primitive.description}</small></span><span className="availability available">可用</span></button>)}

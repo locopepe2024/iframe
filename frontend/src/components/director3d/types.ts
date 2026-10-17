@@ -40,6 +40,7 @@ export interface RigProfile {
 export type ViewMode = "director" | "top" | "camera";
 export type TransformMode = "translate" | "rotate" | "scale";
 export type DirectorValidationPresetId = "indoor-sofa-wide" | "fight-15s";
+export type DirectorBlockingTemplateId = "empty" | "single" | "dialogue" | "blocking" | "product";
 export type PrimitiveKind = "cube" | "sphere" | "cylinder" | "torus" | "cone" | "pyramid";
 export type SceneObjectKind = "primitive" | "proxy" | "model_3d" | "gaussian_splat" | "empty" | "reference_board" | "reference_video";
 
