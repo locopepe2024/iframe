@@ -251,6 +251,9 @@ it("does not turn a manually typed @name into an implicit reference", () => {
 });
 
 it("loads the project reference index for the character workbench", async () => {
+    // Earlier tests enqueue one-shot responses; their async effects may not
+    // consume them before cleanup, so this case needs an isolated index mock.
+    apiMocks.getAssetReferenceIndex.mockReset();
     apiMocks.getAssetReferenceIndex.mockResolvedValue({
         schema_version: 1,
         project_id: "project-1",
