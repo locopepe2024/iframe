@@ -1468,6 +1468,8 @@ def delete_series_asset(series_id: str, asset_type: Literal["character", "scene"
 @app.post("/series/{series_id}/assets/generate")
 def generate_series_asset(series_id: str, request: GenerateAssetRequest, background_tasks: BackgroundTasks):
     """Generate a single asset for a Series (async)."""
+    if request.scene_tool is not None:
+        raise HTTPException(status_code=400, detail="scene_tool is only available for project scene assets")
     try:
         series, task_id = pipeline.generate_series_asset(
             series_id,
