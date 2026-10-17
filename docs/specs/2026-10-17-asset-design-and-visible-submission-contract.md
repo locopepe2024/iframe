@@ -1,0 +1,93 @@
+# Asset design and visible submission contract
+
+External structure comparison: [scene and shot GitHub references](../research/2026-10-17-scene-shot-structured-reference-comparison.md).
+
+## Scope and evidence
+
+This contract covers character, scene, and prop image generation in Studio asset workbenches. Character, scene and prop designs now have reviewable confirmed revisions. Manual image routes require a complete visible prompt. Provider output adherence still requires runtime checks.
+
+## Ownership
+
+1. **Asset identity/design** is the reusable, editable source for stable appearance. A character owns identity and look; a scene owns spatial layout, architecture, fixed materials and landmarks; a prop owns silhouette, construction, material and recognizable details. Drafts and confirmed revisions are distinct. A script fact and a creative design choice must retain their provenance.
+2. **Frame content** describes the image being generated now: actors, action, staging, framing, weather and local light. A shooting-plan entry such as "bandits surround the shop" is candidate frame content, not an invariant of the shop asset.
+3. **Continuity references** name the exact preceding/related asset variant and the applicable place, story-time, lighting or object state. The user selects which references to use. The location/time baseline may be shown for review even when it conflicts with a selected image; it does not override that image automatically.
+4. **Submission snapshot** contains the complete positive prompt, separate negative prompt, explicit reference identities, model, aspect ratio and the source design revision. Every content-affecting instruction must be visible and editable before submission. A renderer must not append hidden prose after submission. Reference image bytes and provider parameters may be transported separately, but their identity and values must be visible in the review UI.
+
+## Three consistency passes and visual review
+
+- **Director interpretation, first pass:** establish the episode framework: confirmed story facts, visual direction, time/place relationships and shooting-plan intent. Record its revision. It does not finalize every asset detail or every shot image.
+- **Asset design, second pass:** refine reusable character, scene and prop identities from that framework. Record the director revision used and the confirmed asset design revision. Stable appearance and spatial facts belong here; one shot's action and composition do not.
+- **Shot design, third pass:** refine one frame or video using the relevant director revision and exact asset variants. Record the shot revision and selected asset design/variant revisions. Shot design can expose an asset mismatch and propose a design change, but the proposal returns to asset review; it never edits the confirmed asset implicitly. A newly confirmed asset revision marks affected draft shots for review without rewriting already approved shot snapshots. This is a reviewable asset ↔ shot feedback loop, with separate ownership on each side.
+- Each downstream output must distinguish inherited facts, local design choices and user-approved departures. Prose similarity alone cannot establish continuity.
+- **Setting precedence:** confirmed director interpretation initializes episode style and story-time lighting; the confirmed shooting plan initializes scene/shot framing intent. A scene design may override lighting and framing for a particular reference-image variant; a shot may override those values for its own frame. Show inherited value, local override, source revision and the resulting prompt before submitting. An override changes only its scope and never rewrites the upstream record.
+- Separate global illumination from local accents. For example, the episode can retain blue dusk as its ambient baseline while “blood-red sunset” applies only to the distant sun and a limited warm highlight. A camera or framing change to one asset variant does not become the default camera for every shot using the same location.
+- Descriptive plan text such as “残阳如血” is candidate frame content. It is not automatically a lighting constraint or a style instruction. In shot design, unapplied plan clauses stay visible as suggestions, and the user adds only the clauses wanted in the current prompt.
+- Text review proves what was submitted, not whether the provider rendered a matching color palette, geometry or character. After generation, compare the result with the selected scene/character reference images and the reviewed prompt. A visual mismatch should cause an explicit prompt/reference revision or a different candidate choice; it must not silently rewrite the confirmed director interpretation.
+
+## Target structured handoff for scene design and shots
+
+This is the target schema, not a claim that all fields are implemented. `scene.description` and confirmed director/plan revisions initialize a scene-design draft; the user confirms the draft before it becomes an asset source. The scene design then proposes initial shot values, while the shot owns any local override.
+
+| Owner | Structured fields | Scope and review rule |
+| --- | --- | --- |
+| Scene design | Scene description; explicit character asset IDs and selected variants; prop asset IDs and selected variants; style; lighting with ambient baseline and scoped local accents; reference-image camera/viewpoint and framing | Saved as a versioned scene-design snapshot. Character and prop references are relationships, not copied prose. Occupancy/precise placement is reserved and not required now. The user reviews the compiled scene-image prompt before generation. |
+| Shot design | Exact scene/character/prop reference image variants; current prompt; voice/voice asset; camera movement; shot/camera treatment; shot size; camera position/angle; transition | Saved per shot. Initially inherits relevant scene design and director plan values, then allows explicit local overrides. A shot must never mutate the upstream scene-design revision. The user reviews the final image/video request before submission. |
+
+`scene_design.camera` means the observation angle used to create a scene reference image. `shot.camera_movement`, `shot.shot_size`, `shot.camera_angle` and `shot.transition` describe the moving shot. Do not merge these fields by name. A lighting accent must carry a target region or subject and an effect scope; “残阳如血” may apply to the distant sun while the street retains blue dusk ambient light. Do not promote narrative wording into a global style or lighting override.
+
+Each projection records the director revision, scene-design revision, selected variant IDs, shot revision and source for each inherited/overridden field. An upstream change marks affected downstream drafts for review; it does not rewrite approved prompts or images. The first implementation slice should persist scene-design fields and preview their compiled prompt, then project them into one shot with explicit override controls and an exact request preflight.
+
+## Projection and revision rules
+
+- An AI design draft can suggest asset design; it cannot silently change the asset description or final prompt. The user confirms a design revision separately.
+- Projecting design, frame content and continuity into a prompt creates an editable snapshot. Later edits to a source do not rewrite an already reviewed snapshot. The UI marks the snapshot stale and offers an explicit rebuild.
+- The submitted text is the reviewed snapshot. A saved design, shooting plan, global style, negative preset or legacy template does not gain authority to append text during execution.
+- Scene and prop draft confirmation must survive save/reload and create a revision only on confirmation. Unknown design fields must be rejected instead of returning apparent success.
+
+## Implemented boundary
+
+- Scene/prop design drafts and confirmed revisions persist and survive reload. Invalid and unknown design fields fail before a save.
+- The project and series manual asset image endpoints require a non-empty reviewed prompt, `preserve_prompt=true` and `apply_style=false`. Character `all` mode is rejected because its derived images use separate generated prompt text.
+- The legacy project batch route rejects generation until a per-asset prompt review flow exists. Its old `AssetGrid` caller has no imports in the current frontend tree.
+- Studio and Cast workbenches copy optional global style into editable prompt fields only on a user action. The asset library asks for an editable prompt and negative prompt before generating more variants. These requests send the reviewed text and no style suffix.
+- The character three-view generator does not add hidden negative terms when receiving a reviewed prompt.
+- Reviewed project and series tasks freeze positive/negative text, effective model, ratio, mode, stable explicit reference IDs and the latest confirmed design revision at enqueue. New image variants carry that snapshot after generation; older variants and direct generator calls have no fabricated snapshot.
+- Manual character three-view and headshot requests require one explicitly selected master variant. The character workbench checks this before submission and passes that variant as one structured reference. Manual requests using a legacy reference URL fail validation because the URL does not establish a stable visible identity. Series character text generation no longer implicitly reuses its selected image.
+- Project asset generation now exposes a read-only server preflight. Character, Cast, scene/prop and asset-library manual entry points freeze their edited request and show the server-effective model, ratio, mode, quantity, reference identities and exact positive/negative text before final confirmation. The final request carries a fingerprint; enqueue rejects changed reviewed fields before creating a task.
+- The fingerprint also binds the project or series scope, target asset type and target asset ID. An asset-library entry opened outside the current project leaves the model unspecified so the server projects that target project's actual setting. Structured preview errors render as readable text without closing the review surface.
+
+## Remaining work
+
+### Initial scene settings slice (2026-10-17)
+
+- Owner: `scene.asset_design.design_draft` and its confirmed revisions own `style`, `ambient_lighting`, `local_lighting` (`target` and `effect`), `reference_viewpoint`, and `reference_framing`. These describe a scene reference image, not a moving shot. The scene's existing `description` remains its spatial source; the structured fields never rewrite it.
+- Inheritance: the project art-direction positive prompt and the scene's legacy `time_of_day` / `lighting_mood` are displayed as starting suggestions with their source labels. Empty upstream fields stay empty. Shooting-plan prose remains a separate, manually applied frame-content suggestion.
+- Submission: saved settings do not silently enter generation. Applying them updates a visible, editable section of the image prompt. Prompt refinement receives the current structured settings before the model call. Generation submits only the reviewed prompt and explicit references. Editing a structured setting after applying it marks the prompt stale until the user reapplies it or explicitly keeps the edited prompt.
+- Validation: scene-only structured fields have bounded string values; local light requires a named target when an effect is set. Unknown fields fail. A confirmed revision preserves the exact design snapshot and is not modified by a later draft.
+- Acceptance: save/reload preserves the draft and confirmed revision; empty project style does not disable local style editing; a blue ambient street with a red sunset limited to the horizon is representable; the refined and generated request contains no hidden postscript.
+
+- Bring the structure of scene/prop AI design drafts beyond one `visual_notes` string if field-specific editing proves useful. Keep frame content and continuity choices at generation scope, outside the reusable asset design record.
+- PR #171's scene lighting/camera tools create new candidates from an existing source variant; they are image-edit operations, not the initial director → asset → shot inheritance model. Before integrating them, add a preflight for the server-compiled image-edit prompt, expose the intended lighting region, and show the source/result variant relationship. Keep the PR separate until its large branch and conflicts are reviewed.
+- Shot-design first/last-frame candidates must use a separate read-only preflight: show the exact assembled positive/negative prompt, effective image model, ratio and frame source before a paid render. Bind confirmation to the current frame context and reject stale submissions. Candidate rendering must preserve the reviewed prompt verbatim. Explicit reference variant selection for this path remains a separate follow-up; until then the UI must say that the generator selects references from the frame's current character/scene assets.
+
+### Preflight cutover
+
+- Use a read-only server projection of the exact pending image request. It resolves the effective model and ratio through the same project/series settings used at enqueue, checks reference identities, and returns a fingerprint of all reviewed fields. It must not call an LLM or mutate the asset.
+- The UI freezes the edited prompt, negative prompt, mode, generation type, count and explicit references when opening review. It shows the server projection in one confirmation surface. Returning to edit discards that review.
+- The final generation request must carry the fingerprint. Enqueue recomputes it inside the existing asset lock and rejects a changed model, ratio, design revision, prompt or reference set before creating a paid task. Both manual HTTP generation routes reject requests without a fingerprint; direct pipeline callers remain outside this browser review contract.
+- Character, scene, prop, Cast and asset-library manual generation use the same review surface. The backend remains authoritative for effective model and ratio; the visible text remains the request body and cannot be changed by the projection.
+
+## Submission ledger implementation plan
+
+- At enqueue, freeze the request's visible positive/negative text, requested and effective image model, aspect ratio, generation type, image mode, stable explicit reference IDs and confirmed design revision. Do not store signed delivery URLs in this ledger.
+- At execution, associate that frozen record only with variants created by the task. A later design edit must not change the recorded source revision.
+- Derived character views require an explicit structured master variant. A text-mode request cannot quietly consume a selected master image.
+- Legacy or directly invoked generator paths may lack a reviewed snapshot; represent that absence explicitly instead of inventing provenance.
+- Verify scene, prop, character reference sheet and derived character paths with a task queued before a design revision changes. Check reload and API projection, not only in-memory state.
+
+## Acceptance criteria
+
+1. Scene/prop design confirmation round-trips through storage with a monotonically increasing confirmed revision.
+2. A rejected or unknown design payload does not report successful confirmation.
+3. In every migrated image-generation entry, the positive and negative text seen before submission equal the text passed to the provider, apart from documented provider-side transformations outside iFrame's control.
+4. Reference identities, model and aspect ratio remain visible in the same preflight review.

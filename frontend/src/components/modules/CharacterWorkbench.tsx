@@ -4,17 +4,20 @@ import { useState, useEffect, useMemo, useRef, useId, useCallback } from "react"
 import { useTranslations } from "next-intl";
 import { motion, AnimatePresence } from "framer-motion";
 import { X, RefreshCw, Check, Image as ImageIcon, Lock, ChevronRight, ChevronDown, Video, PanelLeft, Sparkles, Search } from "lucide-react";
-import { agentRequest, api, type AssetLibraryReference, type AssetReferenceIndexEntry, type ChatModel } from "@/lib/api";
+import { agentRequest, api, type AssetImageReviewRequest, type AssetLibraryReference, type AssetReferenceIndexEntry, type ChatModel } from "@/lib/api";
 
 import { VariantSelector } from "../common/VariantSelector";
 import { VideoVariantSelector } from "../common/VideoVariantSelector";
 import { useProjectStore } from "@/store/projectStore";
 import { Image as PhotoIcon } from "lucide-react";
 import { getAssetUrl } from "@/lib/utils";
+import { includeVisibleStyle } from "@/lib/assetPromptStyle";
 import { AssetIndexPreview } from "@/components/shared/AssetIndexPreview";
 import PreviewVideo from "@/components/shared/preview/PreviewVideo";
 import PreviewImage from "@/components/shared/preview/PreviewImage";
 import { toast } from "@/store/toastStore";
+import { resolveAssetGenerationModel } from "@/lib/modelCatalog";
+import AssetImageSubmissionReview from "@/components/shared/AssetImageSubmissionReview";
 import {
     buildCharacterImagePrompt,
     buildCharacterMotionPrompt,
@@ -301,7 +304,7 @@ interface CharacterWorkbenchProps {
     onUpdateDescription: (desc: string) => void;
     onUpdateAttributes?: (attributes: Record<string, unknown>) => void | Promise<void>;
     onRename?: (name: string) => Promise<void>;
-    onGenerate: (type: string, prompt: string, applyStyle: boolean, negativePrompt: string, batchSize: number, references?: AssetLibraryReference[], imageGenerationMode?: "text" | "reference") => void;
+    onGenerate: (type: string, prompt: string, applyStyle: boolean, negativePrompt: string, batchSize: number, references?: AssetLibraryReference[], imageGenerationMode?: "text" | "reference", reviewFingerprint?: string) => void;
     generatingTypes: { type: string; batchSize: number }[];
     stylePrompt?: string;
     styleNegativePrompt?: string;
@@ -377,6 +380,7 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
         three_view: "text",
         headshot: "text",
     });
+    const [pendingImageReview, setPendingImageReview] = useState<AssetImageReviewRequest | null>(null);
 
     useEffect(() => {
         let active = true;
@@ -515,7 +519,6 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
     );
 
     // New State for Style Control
-    const [applyStyle, setApplyStyle] = useState(true);
     // User's own negative prompt (initially empty or with sensible defaults)
     const [negativePrompt, setNegativePrompt] = useState(DEFAULT_CHARACTER_NEGATIVE_PROMPT);
 
@@ -799,7 +802,29 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
             toast.warning("This prompt contains @ references. Select Reference image mode before generating.");
             return;
         }
-        onGenerate(type, prompt, applyStyle, negativePrompt, batchSize, references, imageGenerationMode);
+        if ((type === "three_view" || type === "headshot") &&
+            (imageGenerationMode !== "reference" || references.length !== 1)) {
+            toast.warning("Select exactly one master image in Reference image mode for this character view.");
+            return;
+        }
+        if (!currentProject?.id || !prompt.trim()) {
+            toast.warning("Review a non-empty image prompt before generating.");
+            return;
+        }
+        const isDerived = type === "three_view" || type === "headshot";
+        setPendingImageReview({
+            asset_id: asset.id,
+            asset_type: "character",
+            generation_type: type,
+            prompt,
+            negative_prompt: negativePrompt,
+            batch_size: batchSize,
+            model_name: currentProject.series_id ? undefined : resolveAssetGenerationModel(currentProject.model_settings?.t2i_model),
+            image_generation_mode: imageGenerationMode,
+            ...(isDerived ? { reference: references[0] } : { references }),
+            apply_style: false,
+            preserve_prompt: true,
+        });
     };
 
     const setPanelReferences = (type: "full_body" | "three_view" | "headshot", references: AssetLibraryReference[]) => {
@@ -1196,25 +1221,23 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
                             />
                         </div>
 
-                        {/* Apply Style Toggle */}
+                        {/* Copy style into the editable prompts before submitting. */}
                         <div className="pt-6">
                             <div className="flex items-center gap-2 bg-surface px-4 py-2 rounded-lg border border-glass-border">
-                                <input
-                                    type="checkbox"
-                                    id="applyStyleFooter"
-                                    checked={applyStyle}
-                                    onChange={(e) => setApplyStyle(e.target.checked)}
-                                    className="rounded border-gray-600 bg-gray-700 text-primary focus:ring-primary w-4 h-4"
-                                />
-                                <label htmlFor="applyStyleFooter" className="text-xs font-bold text-text-secondary cursor-pointer select-none whitespace-nowrap">
-                                    {tc("workbench")}
-                                </label>
+                                <button type="button" disabled={activePanel === "video" || (!stylePrompt && !styleNegativePrompt)} onClick={() => {
+                                    if (activePanel === "full_body") setFullBodyPrompt((current) => includeVisibleStyle(current, stylePrompt));
+                                    if (activePanel === "three_view") setThreeViewPrompt((current) => includeVisibleStyle(current, stylePrompt));
+                                    if (activePanel === "headshot") setHeadshotPrompt((current) => includeVisibleStyle(current, stylePrompt));
+                                    setNegativePrompt((current) => includeVisibleStyle(current, styleNegativePrompt));
+                                }} className="text-xs font-bold text-text-secondary disabled:opacity-40">
+                                    {tc("copyStyleToPrompt")}
+                                </button>
                             </div>
                         </div>
                     </div>
 
-                    {/* Art Direction Style Display (Collapsible) - Only show toggle when style exists */}
-                    {applyStyle && (stylePrompt || styleNegativePrompt) && (
+                    {/* Optional style source; generation uses only the edited prompt fields. */}
+                    {(stylePrompt || styleNegativePrompt) && (
                         <div className="border-t border-border-subtle">
                             <button
                                 onClick={() => setShowStyleExpanded(!showStyleExpanded)}
@@ -1222,7 +1245,7 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
                             >
                                 <div className="flex items-center gap-2">
                                     <div className="w-2 h-2 rounded-full bg-gradient-to-r from-purple-500 to-blue-500" />
-                                    <span className="text-xs font-bold text-text-secondary uppercase">Art Direction Style (Will Be Appended)</span>
+                                    <span className="text-xs font-bold text-text-secondary uppercase">Art Direction Style (Copy to Prompt Above)</span>
                                 </div>
                                 <ChevronRight size={14} className={`text-text-muted transform transition-transform ${showStyleExpanded ? 'rotate-90' : ''}`} />
                             </button>
@@ -1265,6 +1288,18 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
                     </div>
                 </details>
             </motion.div>
+            {pendingImageReview && currentProject?.id && <AssetImageSubmissionReview
+                projectId={currentProject.id}
+                request={pendingImageReview}
+                onBack={() => setPendingImageReview(null)}
+                onConfirm={(review) => {
+                    const request = pendingImageReview;
+                    setPendingImageReview(null);
+                    onGenerate(request.generation_type, request.prompt, false, request.negative_prompt,
+                        request.batch_size, request.reference ? [request.reference] : request.references || [],
+                        request.image_generation_mode, review.fingerprint);
+                }}
+            />}
         </div>
     );
 }

@@ -6,7 +6,7 @@ import { X, Star, Download, Sparkles, Loader2, Globe, History, RotateCcw, Check 
 import type { Character, Scene, Prop, ImageAsset, ImageVariant } from "@/store/projectStore";
 import { useProjectStore } from "@/store/projectStore";
 import { characterImageAsset } from "@/lib/characterImage";
-import { api, type AssetCoverSelectionResult, type AssetRevisionHistory } from "@/lib/api";
+import { api, type AssetCoverSelectionResult, type AssetImageReviewProjection, type AssetImageReviewRequest, type AssetRevisionHistory } from "@/lib/api";
 import { waitForAssetTask } from "@/lib/assetTaskPolling";
 import { resolveAssetGenerationModel } from "@/lib/modelCatalog";
 import { toast } from "@/store/toastStore";
@@ -15,6 +15,7 @@ import { getAssetUrl } from "@/lib/utils";
 import { resolveAssetVariantDelivery } from "@/lib/mediaDelivery";
 import AssetNameEditor from "@/components/common/AssetNameEditor";
 import { AssetIndexPreview } from "@/components/shared/AssetIndexPreview";
+import AssetImageSubmissionReview from "@/components/shared/AssetImageSubmissionReview";
 
 type AssetTab = "characters" | "scenes" | "props";
 
@@ -152,6 +153,9 @@ export default function AssetInspector({
   const [revisionHistory, setRevisionHistory] = useState<AssetRevisionHistory | null>(null);
   const [checkedVariantIds, setCheckedVariantIds] = useState<string[]>([]);
   const [savingRevision, setSavingRevision] = useState(false);
+  const [generationPrompt, setGenerationPrompt] = useState("");
+  const [generationNegativePrompt, setGenerationNegativePrompt] = useState("");
+  const [pendingImageReview, setPendingImageReview] = useState<AssetImageReviewRequest | null>(null);
   const [heroDelivery, setHeroDelivery] = useState<{ variantId: string; url: string }>();
 
   const variantIds = variants.map((item) => item.id).join("|");
@@ -169,6 +173,12 @@ export default function AssetInspector({
       .catch(() => { if (!cancelled) setRevisionHistory(null); });
     return () => { cancelled = true; };
   }, [asset.id, sourceId, sourceKind, type]);
+
+  useEffect(() => {
+    setGenerationPrompt(asset.description || "");
+    setGenerationNegativePrompt("");
+    setPendingImageReview(null);
+  }, [asset.id]);
 
   // 切换选中资产时重置本地高亮的变体 + 丢弃上一个资产本地追加的变体。
   useEffect(() => {
@@ -340,8 +350,28 @@ export default function AssetInspector({
 
   // 生成更多变体：仅 project 资产可用（series 无生成端点）。复用按项目 batch 生成管线，
   // 完成后优先使用任务返回的目标资产快照，并高亮最新一张。
-  const handleGenerateVariants = async () => {
+  const handleGenerateVariants = async (approved?: { request: AssetImageReviewRequest; review: AssetImageReviewProjection }) => {
     if (sourceKind !== "project" || generating) return;
+    if (!approved) {
+      if (!generationPrompt.trim()) return;
+      const projectId = sourceId.replace(/^project-/, "");
+      setPendingImageReview({
+        asset_id: asset.id,
+        asset_type: SINGULAR_TYPE[type] as "character" | "scene" | "prop",
+        generation_type: type === "characters" ? "reference_sheet" : "all",
+        prompt: generationPrompt.trim(),
+        negative_prompt: generationNegativePrompt,
+        batch_size: VARIANT_BATCH,
+        model_name: currentProject?.id === projectId && !currentProject.series_id
+          ? resolveAssetGenerationModel(currentProject.model_settings?.t2i_model)
+          : undefined,
+        image_generation_mode: "text",
+        apply_style: false,
+        preserve_prompt: true,
+      });
+      return;
+    }
+    const frozen = approved.request;
     const assetId = asset.id;
     // 父层传入的是列表 key（`project-<id>`）；生成/刷新 API 需要裸 project id。
     const projectId = sourceId.replace(/^project-/, "");
@@ -355,19 +385,19 @@ export default function AssetInspector({
         assetId,
         SINGULAR_TYPE[type],
         "",
+        "",
+        frozen.generation_type,
+        frozen.prompt,
+        false,
+        frozen.negative_prompt,
+        frozen.batch_size,
+        frozen.model_name,
         undefined,
-        "all",
-        "",
+        undefined,
+        [],
+        "text",
         true,
-        "",
-        VARIANT_BATCH,
-        sourceKind === "project"
-          ? resolveAssetGenerationModel(
-              currentProject?.id === projectId
-                ? currentProject.model_settings?.t2i_model
-                : undefined,
-            )
-          : undefined,
+        approved.review.fingerprint,
       );
       const taskId = (resp as { _task_id?: string } | undefined)?._task_id;
       let taskAsset: any;
@@ -520,6 +550,7 @@ export default function AssetInspector({
                     <button
                       type="button"
                       onClick={() => setActiveVariantId(v.id)}
+                      aria-label={t("variantAlt")}
                       aria-current={on ? "true" : undefined}
                       className={`w-full h-full rounded-md overflow-hidden transition-transform hover:-translate-y-0.5 ${
                         on ? "ring-2 ring-primary" : "ring-1 ring-glass-border"
@@ -625,15 +656,25 @@ export default function AssetInspector({
         */}
         <div className="flex flex-col gap-2">
           {sourceKind === "project" ? (
+            <div className="space-y-2">
+              <label htmlFor="library-generation-prompt" className="text-xs text-text-secondary">{t("reviewedImagePrompt")}</label>
+              <textarea id="library-generation-prompt" value={generationPrompt}
+                onChange={(event) => setGenerationPrompt(event.target.value)} rows={4}
+                className="w-full rounded border border-glass-border bg-surface p-2 text-sm text-foreground" />
+              <label htmlFor="library-generation-negative" className="text-xs text-text-secondary">{t("reviewedNegativePrompt")}</label>
+              <textarea id="library-generation-negative" value={generationNegativePrompt}
+                onChange={(event) => setGenerationNegativePrompt(event.target.value)} rows={2}
+                className="w-full rounded border border-glass-border bg-surface p-2 text-sm text-foreground" />
             <button
               type="button"
-              onClick={handleGenerateVariants}
-              disabled={generating}
+              onClick={() => void handleGenerateVariants()}
+              disabled={generating || !generationPrompt.trim()}
               className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg bg-primary text-on-accent text-sm font-semibold hover:bg-primary-hover transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
             >
               {generating ? <Loader2 size={15} className="animate-spin" /> : <Sparkles size={15} />}
               {generating ? t("generating") : t("generateMoreVariants")}
             </button>
+            </div>
           ) : (
             <button
               type="button"
@@ -672,6 +713,16 @@ export default function AssetInspector({
           </button>
         </div>
       </div>
+      {pendingImageReview && <AssetImageSubmissionReview
+        projectId={sourceId.replace(/^project-/, "")}
+        request={pendingImageReview}
+        onBack={() => setPendingImageReview(null)}
+        onConfirm={(review) => {
+          const request = pendingImageReview;
+          setPendingImageReview(null);
+          void handleGenerateVariants({ request, review });
+        }}
+      />}
     </aside>
   );
 }

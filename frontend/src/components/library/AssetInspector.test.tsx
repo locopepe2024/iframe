@@ -4,9 +4,17 @@ import AssetInspector from "./AssetInspector";
 import { useProjectStore } from "@/store/projectStore";
 
 const mocked = vi.hoisted(() => ({ setAssetCoverVariant: vi.fn(), getAssetRevisions: vi.fn(),
-  confirmAssetRevision: vi.fn(), getProject: vi.fn(), success: vi.fn(), error: vi.fn() }));
+  confirmAssetRevision: vi.fn(), getProject: vi.fn(), generateAsset: vi.fn(),
+  previewAssetImageSubmission: vi.fn((_id: string, request: any) => Promise.resolve({
+    positive_prompt: request.prompt, negative_prompt: request.negative_prompt,
+    selected_model_id: "test-model", aspect_ratio: "16:9",
+    generation_type: request.generation_type, image_generation_mode: request.image_generation_mode,
+    batch_size: request.batch_size, reference_inputs: [], design_revision_at_submission: null,
+    fingerprint: "reviewed",
+  })),
+  authenticatedFetch: vi.fn(), success: vi.fn(), error: vi.fn() }));
 vi.mock("next-intl", () => ({ useTranslations: () => (key: string) => key }));
-vi.mock("@/lib/api", () => ({ api: mocked, API_URL: "" }));
+vi.mock("@/lib/api", () => ({ api: mocked, API_URL: "", authenticatedFetch: mocked.authenticatedFetch }));
 vi.mock("@/store/toastStore", () => ({ toast: { success: mocked.success, error: mocked.error, progress: vi.fn(), update: vi.fn() } }));
 
 const asset = {
@@ -36,6 +44,7 @@ beforeEach(() => {
   mocked.getAssetRevisions.mockResolvedValue({ current_revision: 1, revisions: [] });
   mocked.confirmAssetRevision.mockResolvedValue({ revision: { revision: 2 } });
   mocked.getProject.mockResolvedValue({ id: "project-1" });
+  mocked.authenticatedFetch.mockResolvedValue({ ok: true, json: async () => ({ url: "/asset.png" }) });
 });
 
 it("confirms variants across all character image containers", async () => {
@@ -82,4 +91,32 @@ it("persists an explicitly chosen cover and reports the saved result", async () 
   ));
   expect(onCoverUpdated).toHaveBeenCalledWith(result);
   expect(mocked.success).toHaveBeenCalledWith("coverUpdated");
+});
+
+it("reviews the full prompt before generating more variants", async () => {
+  const scene = { id: "street", name: "长街", description: "蓝调长街",
+    image_asset: { selected_id: "v1", variants: [{ id: "v1", url: "assets/street.png" }] } };
+  mocked.generateAsset.mockResolvedValue({ id: "project-1", scenes: [scene] });
+  mocked.getProject.mockResolvedValue({ id: "project-1", scenes: [scene] });
+  render(<AssetInspector asset={scene as any} type="scenes" sourceName="Episode 1"
+    sourceId="project-project-1" sourceKind="project" starred={false}
+    onClose={vi.fn()} onToggleStar={vi.fn()} />);
+
+  fireEvent.change(screen.getByRole("textbox", { name: "reviewedImagePrompt" }),
+    { target: { value: "青石长街，冷蓝夕光" } });
+  fireEvent.change(screen.getByRole("textbox", { name: "reviewedNegativePrompt" }),
+    { target: { value: "暖红色调" } });
+  fireEvent.click(screen.getByRole("button", { name: "generateMoreVariants" }));
+  expect(mocked.previewAssetImageSubmission.mock.calls[0][1].model_name).toBeUndefined();
+  const confirm = await screen.findByRole("button", { name: "确认并生成" });
+  await waitFor(() => expect(confirm).not.toBeDisabled());
+  fireEvent.click(confirm);
+  await waitFor(() => expect(mocked.generateAsset).toHaveBeenCalled());
+  const args = mocked.generateAsset.mock.calls[0];
+  expect(args[6]).toBe("青石长街，冷蓝夕光");
+  expect(args[7]).toBe(false);
+  expect(args[8]).toBe("暖红色调");
+  expect(args[10]).toBeUndefined();
+  expect(args[15]).toBe(true);
+  expect(args[16]).toBe("reviewed");
 });

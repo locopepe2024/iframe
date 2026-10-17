@@ -1,6 +1,6 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { expect, it, vi } from "vitest";
-import { SceneImageTools } from "./SceneImageTools";
+import { SceneImageTools, containedImageBounds } from "./SceneImageTools";
 
 const apiMocks = vi.hoisted(() => ({
     uploadLibraryImage: vi.fn(), createLibraryAsset: vi.fn(),
@@ -30,6 +30,26 @@ it("submits camera angle and focus settings as structured parameters", () => {
         kind: "camera", yaw: 15, pitch: 0, focus: true, focus_x: 50, focus_y: 50,
     }), expect.any(String), undefined);
     expect(screen.getByTestId("camera-preview")).toHaveTextContent("水平 15°");
+});
+
+it("maps a pointer to the displayed image rather than the letterboxed container", () => {
+    const onGenerate = vi.fn();
+    render(<SceneImageTools kind="camera" sources={sources} busy={false} onGenerate={onGenerate} />);
+    const image = screen.getByAltText("来源图片：场景图片 · 1") as HTMLImageElement;
+    Object.defineProperty(image, "naturalWidth", { value: 1600 });
+    Object.defineProperty(image, "naturalHeight", { value: 900 });
+    image.getBoundingClientRect = () => ({ left: 0, top: 0, width: 400, height: 300, right: 400, bottom: 300 } as DOMRect);
+    const stage = image.parentElement as HTMLDivElement;
+    stage.getBoundingClientRect = () => ({ left: 0, top: 0, width: 400, height: 300, right: 400, bottom: 300 } as DOMRect);
+    expect(containedImageBounds(image)).toEqual({ left: 0, top: 37.5, width: 400, height: 225 });
+    fireEvent.load(image);
+    fireEvent.click(screen.getByLabelText("指定对焦点"));
+    fireEvent.pointerDown(stage, { clientX: 200, clientY: 75, pointerId: 1 });
+    fireEvent.click(screen.getByRole("button", { name: "查看并确认提示词" }));
+    fireEvent.click(screen.getByRole("button", { name: "确认并生成" }));
+    expect(onGenerate).toHaveBeenCalledWith(sources[0], expect.objectContaining({
+        kind: "camera", focus: true, focus_x: 50, focus_y: 17,
+    }), expect.any(String), undefined);
 });
 
 it("submits lighting direction, preset, and stable reference identity", () => {

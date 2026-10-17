@@ -2203,6 +2203,8 @@
     "promptSection": "Prompt",
     "generating": "Generating…",
     "generateMoreVariants": "Generate more variants",
+    "reviewedImagePrompt": "Image prompt (review before generating)",
+    "reviewedNegativePrompt": "Negative prompt",
     "genInEpisodeTooltip": "Generate variants inside the corresponding episode (the library doesn't generate for episodes directly)",
     "genInEpisodeBadge": "In-episode",
     "download": "Download",
@@ -2377,6 +2379,7 @@
   },
   "character": {
     "workbench": "Character Workbench",
+    "copyStyleToPrompt": "Add style to editable prompts",
     "dossier": "Character profile",
     "noDossier": "No character profile yet",
     "closeWorkbench": "Close character workbench",
@@ -2420,6 +2423,7 @@
   },
   "vault": {
     "title": "Consistency Vault",
+    "copyStyleToPrompt": "Add style to editable prompts",
     "characters": "Characters",
     "scenes": "Scenes",
     "props": "Props",

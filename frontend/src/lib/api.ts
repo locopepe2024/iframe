@@ -234,6 +234,37 @@ export interface AssetLibraryReference {
     variant_id: string;
 }
 
+export interface AssetImageReviewRequest {
+    asset_id: string;
+    asset_type: "character" | "scene" | "prop";
+    generation_type: string;
+    prompt: string;
+    negative_prompt: string;
+    batch_size: number;
+    model_name?: string;
+    aspect_ratio?: string;
+    reference?: AssetLibraryReference;
+    references?: AssetLibraryReference[];
+    image_generation_mode: "text" | "reference";
+    apply_style: false;
+    preserve_prompt: true;
+    scene_tool?: import("@/components/modules/SceneImageTools").SceneToolParams;
+}
+
+export interface AssetImageReviewProjection {
+    positive_prompt: string;
+    negative_prompt: string;
+    selected_model_id: string;
+    aspect_ratio: string;
+    generation_type: string;
+    image_generation_mode: "text" | "reference";
+    batch_size: number;
+    reference_inputs: AssetLibraryReference[];
+    design_revision_at_submission: number | null;
+    scene_tool?: import("@/components/modules/SceneImageTools").SceneToolParams | null;
+    fingerprint: string;
+}
+
 export interface AssetReferenceIndexVariant {
     id: string;
     display_name?: string | null;
@@ -967,7 +998,12 @@ export const api = {
     assetVariantContentUrl: (scriptId: string, assetType: string, assetId: string, variantId: string) =>
         `${API_URL}/projects/${encodeURIComponent(scriptId)}/assets/${encodeURIComponent(assetType)}/${encodeURIComponent(assetId)}/variants/${encodeURIComponent(variantId)}/content`,
 
-    generateAsset: async (scriptId: string, assetId: string, assetType: string, stylePreset: string, stylePrompt?: string, generationType: string = "all", prompt: string = "", applyStyle: boolean = true, negativePrompt: string = "", batchSize: number = 1, modelName?: string, aspectRatio?: string, reference?: AssetLibraryReference, references?: AssetLibraryReference[], imageGenerationMode: "text" | "reference" = "text", preservePrompt: boolean = false, sceneTool?: import("@/components/modules/SceneImageTools").SceneToolParams) => {
+    previewAssetImageSubmission: async (scriptId: string, request: AssetImageReviewRequest): Promise<AssetImageReviewProjection> => {
+        const res = await axios.post(`${API_URL}/projects/${scriptId}/assets/generate/preview`, request);
+        return res.data;
+    },
+
+    generateAsset: async (scriptId: string, assetId: string, assetType: string, stylePreset: string, stylePrompt?: string, generationType: string = "all", prompt: string = "", applyStyle: boolean = true, negativePrompt: string = "", batchSize: number = 1, modelName?: string, aspectRatio?: string, reference?: AssetLibraryReference, references?: AssetLibraryReference[], imageGenerationMode: "text" | "reference" = "text", preservePrompt: boolean = false, expectedReviewFingerprint?: string, sceneTool?: import("@/components/modules/SceneImageTools").SceneToolParams) => {
         const res = await axios.post(`${API_URL}/projects/${scriptId}/assets/generate`, {
             asset_id: assetId,
             asset_type: assetType,
@@ -983,6 +1019,7 @@ export const api = {
             ...(reference ? { reference } : {}),
             ...(references?.length ? { references } : {}),
             image_generation_mode: imageGenerationMode,
+            ...(expectedReviewFingerprint ? { expected_review_fingerprint: expectedReviewFingerprint } : {}),
             preserve_prompt: preservePrompt,
             ...(sceneTool ? { scene_tool: sceneTool } : {}),
         });
@@ -1632,12 +1669,22 @@ export const api = {
     },
 
     renderFrameCandidate: async (
-        scriptId: string, frameId: string, prompt: string, negativePrompt?: string,
+        scriptId: string, frameId: string, prompt: string, negativePrompt: string | undefined, contextToken: string,
     ): Promise<{ image_url: string }> => {
         const res = await axios.post(`${API_URL}/projects/${scriptId}/storyboard/render-candidate`, {
             frame_id: frameId,
             prompt,
             negative_prompt: negativePrompt,
+            context_token: contextToken,
+        });
+        return res.data;
+    },
+
+    previewFrameCandidate: async (
+        scriptId: string, frameId: string, prompt: string, negativePrompt?: string,
+    ): Promise<{ prompt: string; negative_prompt: string; model: string; aspect_ratio: string; size: string; reference_asset_labels: string[]; context_token: string }> => {
+        const res = await axios.post(`${API_URL}/projects/${scriptId}/storyboard/render-candidate-preview`, {
+            frame_id: frameId, prompt, negative_prompt: negativePrompt,
         });
         return res.data;
     },

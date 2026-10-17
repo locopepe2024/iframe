@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, type ChangeEvent, type PointerEvent } from "react";
+import { useEffect, useRef, useState, type ChangeEvent, type PointerEvent } from "react";
 import { api, type AssetLibraryReference } from "@/lib/api";
 import { getAssetUrl } from "@/lib/utils";
 
@@ -39,6 +39,15 @@ const LIGHT_SIDE_LABELS: Record<"left" | "top" | "right" | "front" | "bottom" | 
     left: "左侧", top: "顶部", right: "右侧", front: "前方", bottom: "底部", back: "后方",
 };
 const distances = ["远景", "中远景", "中景", "近景", "特写"] as const;
+
+export function containedImageBounds(image: HTMLImageElement) {
+    const rect = image.getBoundingClientRect();
+    if (!rect.width || !rect.height || !image.naturalWidth || !image.naturalHeight) return null;
+    const scale = Math.min(rect.width / image.naturalWidth, rect.height / image.naturalHeight);
+    const width = image.naturalWidth * scale;
+    const height = image.naturalHeight * scale;
+    return { left: rect.left + (rect.width - width) / 2, top: rect.top + (rect.height - height) / 2, width, height };
+}
 
 export function buildSceneToolPrompt(params: SceneToolParams, hasLightingReference = false): string {
     if (params.kind === "lighting") {
@@ -80,6 +89,9 @@ export function SceneImageTools({ kind, sources, sceneAssetId, lightingReference
     const [focusX, setFocusX] = useState(50);
     const [focusY, setFocusY] = useState(50);
     const [focusRadius, setFocusRadius] = useState(18);
+    const imageRef = useRef<HTMLImageElement>(null);
+    const stageRef = useRef<HTMLDivElement>(null);
+    const [focusImageBounds, setFocusImageBounds] = useState<{ left: number; top: number; width: number; height: number } | null>(null);
     const [cameraPromptEnabled, setCameraPromptEnabled] = useState(false);
     const [extra, setExtra] = useState("");
     const source = sources.find((item) => item.key === sourceKey) ?? sources[0];
@@ -145,13 +157,37 @@ export function SceneImageTools({ kind, sources, sceneAssetId, lightingReference
         }
     }
 
-    function updateFocus(event: PointerEvent<HTMLDivElement>) {
-        if (!focus) return;
-        const rect = event.currentTarget.getBoundingClientRect();
-        if (!rect.width || !rect.height) return;
-        setFocusX(Math.round(Math.max(0, Math.min(1, (event.clientX - rect.left) / rect.width)) * 100));
-        setFocusY(Math.round(Math.max(0, Math.min(1, (event.clientY - rect.top) / rect.height)) * 100));
+    function measureFocusImage() {
+        const image = imageRef.current;
+        const stage = stageRef.current;
+        if (!image || !stage) return null;
+        const imageBounds = containedImageBounds(image);
+        if (!imageBounds) return null;
+        const stageBounds = stage.getBoundingClientRect();
+        setFocusImageBounds({ left: imageBounds.left - stageBounds.left, top: imageBounds.top - stageBounds.top,
+            width: imageBounds.width, height: imageBounds.height });
+        return imageBounds;
     }
+
+    function updateFocus(event: PointerEvent<HTMLDivElement>, allowOutside = false) {
+        if (!focus) return false;
+        const bounds = measureFocusImage();
+        if (!bounds) return false;
+        if (!allowOutside && (event.clientX < bounds.left || event.clientX > bounds.left + bounds.width
+            || event.clientY < bounds.top || event.clientY > bounds.top + bounds.height)) return false;
+        setFocusX(Math.round(Math.max(0, Math.min(1, (event.clientX - bounds.left) / bounds.width)) * 100));
+        setFocusY(Math.round(Math.max(0, Math.min(1, (event.clientY - bounds.top) / bounds.height)) * 100));
+        return true;
+    }
+
+    useEffect(() => {
+        const update = () => { measureFocusImage(); };
+        update();
+        window.addEventListener("resize", update);
+        const observer = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(update);
+        if (stageRef.current) observer?.observe(stageRef.current);
+        return () => { window.removeEventListener("resize", update); observer?.disconnect(); };
+    }, [source?.url]);
 
     function reset() {
         if (kind === "lighting") {
@@ -180,9 +216,9 @@ export function SceneImageTools({ kind, sources, sceneAssetId, lightingReference
                     {source.tool.kind === "lighting" ? <p className="mt-1">方向 {LIGHT_SIDE_LABELS[source.tool.light_side]} · 亮度 {source.tool.brightness}% · 颜色 {source.tool.color} · {source.tool.rim_light ? "有轮廓光" : "无轮廓光"}</p>
                         : <p className="mt-1">{cameraPresets.find((item) => item.key === source.tool?.preset)?.label} · 水平 {source.tool.yaw}° · 俯仰 {source.tool.pitch}° · {distances[source.tool.zoom]}</p>}
                 </details>}
-                <div className="relative flex min-h-52 items-center justify-center overflow-hidden rounded-lg border border-glass-border bg-surface-inset sm:min-h-72" onPointerDown={(event) => { if (kind === "camera" && focus) { updateFocus(event); event.currentTarget.setPointerCapture?.(event.pointerId); } }} onPointerMove={(event) => { if (kind === "camera" && focus && event.buttons) updateFocus(event); }} onPointerUp={(event) => { if (event.currentTarget.hasPointerCapture?.(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId); }}>
-                    {source ? <img src={source.url} alt={`来源图片：${source.label}`} className="max-h-[48vh] w-full object-contain" /> : <p className="px-4 text-center text-sm text-text-muted">先生成或上传场景图片</p>}
-                    {kind === "camera" && source && focus && <span aria-label="镜头对焦点" className="pointer-events-none absolute h-6 w-6 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-primary bg-primary/20 shadow-lg" style={{ left: `${focusX}%`, top: `${focusY}%` }} />}
+                <div ref={stageRef} className="relative flex min-h-52 items-center justify-center overflow-hidden rounded-lg border border-glass-border bg-surface-inset sm:min-h-72" onPointerDown={(event) => { if (kind === "camera" && updateFocus(event)) event.currentTarget.setPointerCapture?.(event.pointerId); }} onPointerMove={(event) => { if (kind === "camera" && event.buttons && event.currentTarget.hasPointerCapture?.(event.pointerId)) updateFocus(event, true); }} onPointerUp={(event) => { if (event.currentTarget.hasPointerCapture?.(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId); }}>
+                    {source ? <img ref={imageRef} onLoad={() => measureFocusImage()} src={source.url} alt={`来源图片：${source.label}`} className="max-h-[48vh] w-full object-contain" /> : <p className="px-4 text-center text-sm text-text-muted">先生成或上传场景图片</p>}
+                    {kind === "camera" && source && focus && focusImageBounds && <span aria-label="镜头对焦点" className="pointer-events-none absolute h-6 w-6 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-primary bg-primary/20 shadow-lg" style={{ left: focusImageBounds.left + focusImageBounds.width * focusX / 100, top: focusImageBounds.top + focusImageBounds.height * focusY / 100 }} />}
                 </div>
                 <div className="rounded-lg border border-glass-border bg-surface-inset p-4" aria-label={kind === "lighting" ? "光影参数示意" : "镜头参数示意"}>
                     <div className="mb-3 flex items-center justify-between gap-2 text-xs text-text-secondary"><span>参数示意</span><span>{kind === "lighting" ? `${lightSide}主光 · ${brightness}%` : `${cameraPresets.find((item) => item.key === cameraPreset)?.label} · ${distances[distance]}`}</span></div>

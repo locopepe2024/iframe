@@ -6,7 +6,7 @@ import pytest
 
 from src.apps.comic_gen.assets import AssetGenerator
 from src.apps.comic_gen.models import GlobalAssetLibrary, ImageVariant, Scene, Script
-from src.apps.comic_gen.pipeline import ComicGenPipeline, InvalidAssetReference
+from src.apps.comic_gen.pipeline import AssetReviewChanged, ComicGenPipeline, InvalidAssetReference
 from src.apps.comic_gen.scene_image_tools import parse_scene_tool, scene_tool_prompt
 
 
@@ -47,6 +47,31 @@ def test_scene_tool_task_keeps_validated_parameters_and_server_prompt(tmp_path, 
     assert "水平环绕 75°" in params["prompt"]
     assert params["prompt"] == reviewed_prompt
     assert scene.image_asset.selected_id == "source"
+
+
+def test_scene_tool_preflight_binds_coordinates_source_and_prompt(tmp_path, monkeypatch):
+    pipeline, _scene = make_pipeline(tmp_path, monkeypatch)
+    reference = {"asset_type": "scene", "asset_id": "scene", "variant_id": "source"}
+    tool = {"kind": "camera", "yaw": 45, "focus": True, "focus_x": 25, "focus_y": 60}
+    prompt = scene_tool_prompt(parse_scene_tool(tool))
+    review = pipeline.preview_asset_image_submission(
+        "project", "scene", "scene", prompt=prompt, image_generation_mode="reference",
+        references=[reference], scene_tool=tool,
+    )
+    assert review["scene_tool"]["focus_x"] == 25
+    assert review["reference_inputs"][0]["variant_id"] == "source"
+    with pytest.raises(AssetReviewChanged):
+        pipeline.create_asset_generation_task(
+            "project", "scene", "scene", prompt=prompt, image_generation_mode="reference",
+            references=[reference], scene_tool=tool,
+            expected_review_fingerprint="stale-review", preserve_prompt=True,
+        )
+    _, task_id = pipeline.create_asset_generation_task(
+        "project", "scene", "scene", prompt=prompt, image_generation_mode="reference",
+        references=[reference], scene_tool=tool,
+        expected_review_fingerprint=review["fingerprint"], preserve_prompt=True,
+    )
+    assert pipeline.asset_generation_tasks[task_id]["submission_snapshot"]["scene_tool"]["focus_y"] == 60
 
 
 def test_scene_tool_execution_resolves_source_and_forwards_edit_settings(tmp_path, monkeypatch):

@@ -44,6 +44,7 @@ from urllib.request import Request as UrlRequest, urlopen
 from .pipeline import (
     ComicGenPipeline,
     AssetGenerationInProgress,
+    AssetReviewChanged,
     LibraryAssetInUseError,
     InvalidAssetReference,
     InvalidAssetName,
@@ -634,6 +635,7 @@ class GenerateAssetRequest(BaseModel):
     batch_size: int = 1
     model_name: Optional[str] = None
     aspect_ratio: Optional[str] = None
+    expected_review_fingerprint: Optional[str] = None
 
 class ToggleLockRequest(BaseModel):
     asset_id: str
@@ -1465,11 +1467,62 @@ def delete_series_asset(series_id: str, asset_type: Literal["character", "scene"
         raise HTTPException(status_code=404, detail=str(exc)) from exc
 
 
+def _require_reviewed_asset_image_prompt(
+    request: GenerateAssetRequest, *, require_fingerprint: bool = False,
+) -> None:
+    """Manual image routes must receive the prompt exactly as reviewed in the UI."""
+    if not request.prompt or not request.prompt.strip():
+        raise HTTPException(status_code=422, detail="Review a non-empty asset image prompt before generating")
+    if not request.preserve_prompt or request.apply_style:
+        raise HTTPException(status_code=422, detail="Submit the complete visible prompt; hidden style or template append is disabled")
+    if request.asset_type == "character" and request.generation_type == "all":
+        raise HTTPException(status_code=422, detail="Choose one reviewed character image type per submission")
+    if request.reference_image_url:
+        raise HTTPException(status_code=422, detail="Select a reference by stable asset and variant ID before generating")
+    if request.asset_type == "character" and request.generation_type in ("three_view", "headshot"):
+        if request.image_generation_mode != "reference" or request.reference is None or request.references:
+            raise HTTPException(status_code=422, detail="Choose one explicit master image variant for this derived character view")
+    if require_fingerprint and not request.expected_review_fingerprint:
+        raise HTTPException(status_code=422, detail="Preview and confirm the asset image request before generating")
+
+
+@app.post("/series/{series_id}/assets/generate/preview")
+def preview_series_asset_image(series_id: str, request: GenerateAssetRequest):
+    _require_reviewed_asset_image_prompt(request)
+    try:
+        return pipeline.preview_asset_image_submission(
+            series_id, request.asset_id, request.asset_type, prompt=request.prompt,
+            negative_prompt=request.negative_prompt or "", model_name=request.model_name,
+            generation_type=request.generation_type, image_generation_mode=request.image_generation_mode,
+            batch_size=request.batch_size, reference=request.reference,
+            references=request.references, is_series=True,
+        )
+    except (InvalidAssetReference, ValueError) as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.post("/projects/{script_id}/assets/generate/preview")
+def preview_project_asset_image(script_id: str, request: GenerateAssetRequest):
+    _require_reviewed_asset_image_prompt(request)
+    try:
+        return pipeline.preview_asset_image_submission(
+            script_id, request.asset_id, request.asset_type, prompt=request.prompt,
+            negative_prompt=request.negative_prompt or "", model_name=request.model_name,
+            aspect_ratio=request.aspect_ratio, generation_type=request.generation_type,
+            image_generation_mode=request.image_generation_mode, batch_size=request.batch_size,
+            reference=request.reference, references=request.references,
+            scene_tool=request.scene_tool,
+        )
+    except (InvalidAssetReference, ValueError) as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
 @app.post("/series/{series_id}/assets/generate")
 def generate_series_asset(series_id: str, request: GenerateAssetRequest, background_tasks: BackgroundTasks):
     """Generate a single asset for a Series (async)."""
     if request.scene_tool is not None:
         raise HTTPException(status_code=400, detail="scene_tool is only available for project scene assets")
+    _require_reviewed_asset_image_prompt(request, require_fingerprint=True)
     try:
         series, task_id = pipeline.generate_series_asset(
             series_id,
@@ -1487,6 +1540,8 @@ def generate_series_asset(series_id: str, request: GenerateAssetRequest, backgro
             request.reference,
             request.references,
             request.image_generation_mode,
+            request.preserve_prompt,
+            request.expected_review_fingerprint,
         )
         background_tasks.add_task(pipeline.process_asset_generation_task, task_id)
         response_data = series.dict()
@@ -1495,6 +1550,8 @@ def generate_series_asset(series_id: str, request: GenerateAssetRequest, backgro
     except InvalidAssetReference as e:
         raise HTTPException(status_code=400, detail=str(e))
     except AssetGenerationInProgress as e:
+        raise HTTPException(status_code=409, detail=str(e))
+    except AssetReviewChanged as e:
         raise HTTPException(status_code=409, detail=str(e))
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
@@ -3254,22 +3311,8 @@ def update_project_style(script_id: str, request: UpdateStyleRequest):
 
 @app.post("/projects/{script_id}/generate_assets", response_model=Script)
 def generate_assets(script_id: str, background_tasks: BackgroundTasks):
-    """Triggers asset generation."""
-    script = pipeline.get_script(script_id)
-    if not script:
-        raise HTTPException(status_code=404, detail="Project not found")
-
-    # Run in background to avoid blocking
-    # For simplicity in this demo, we run synchronously or use background tasks
-    # pipeline.generate_assets(script_id) 
-    # But since we want to return the updated status, we might want to run it and return.
-    # Given the mock nature, it's fast.
-
-    try:
-        updated_script = pipeline.generate_assets(script_id)
-        return signed_response(updated_script)
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+    """Legacy batch endpoint cannot review a separate prompt for each asset."""
+    raise HTTPException(status_code=422, detail="Batch asset generation requires reviewed prompts for each asset; use an asset workbench")
 
 
 
@@ -3810,6 +3853,7 @@ def create_video_task(script_id: str, request: CreateVideoTaskRequest, backgroun
 def generate_single_asset(script_id: str, request: GenerateAssetRequest, background_tasks: BackgroundTasks):
     """Generates a single asset with specific options (async).
     Returns immediately with task_id for polling progress."""
+    _require_reviewed_asset_image_prompt(request, require_fingerprint=True)
     try:
         script, task_id = pipeline.create_asset_generation_task(
             script_id,
@@ -3829,6 +3873,7 @@ def generate_single_asset(script_id: str, request: GenerateAssetRequest, backgro
             request.references,
             request.image_generation_mode,
             request.preserve_prompt,
+            request.expected_review_fingerprint,
             request.scene_tool,
         )
         
@@ -3843,6 +3888,8 @@ def generate_single_asset(script_id: str, request: GenerateAssetRequest, backgro
     except InvalidAssetReference as e:
         raise HTTPException(status_code=400, detail=str(e))
     except AssetGenerationInProgress as e:
+        raise HTTPException(status_code=409, detail=str(e))
+    except AssetReviewChanged as e:
         raise HTTPException(status_code=409, detail=str(e))
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
@@ -4895,11 +4942,63 @@ class RenderFrameJobRequest(RenderFrameRequest):
 class RenderFramePreviewRequest(BaseModel):
     frame_id: str
     prompt: str
+    negative_prompt: Optional[str] = None
 
 class RenderFrameCandidateRequest(BaseModel):
     frame_id: str
     prompt: str
     negative_prompt: Optional[str] = None
+    context_token: str
+
+
+@app.post("/projects/{script_id}/storyboard/render-candidate-preview")
+def preview_frame_candidate(script_id: str, request: RenderFramePreviewRequest,
+                            user: UserContext = Depends(require_studio_user)):
+    """Show the exact candidate prompt and effective settings before rendering."""
+    script = pipeline.get_script(script_id, user.owner_profile_id)
+    if not script:
+        raise HTTPException(status_code=404, detail="Script not found")
+    frame = next((item for item in script.frames if item.id == request.frame_id), None)
+    if not frame:
+        raise HTTPException(status_code=404, detail="Frame not found")
+    if not request.prompt.strip():
+        raise HTTPException(status_code=422, detail="Storyboard prompt cannot be empty")
+    series = pipeline.series_store.get(script.series_id) if script.series_id else None
+    assets = pipeline.resolve_project_assets(script)
+    character_assets = {item.id: item for item in assets["characters"]}
+    scene_assets = {item.id: item for item in assets["scenes"]}
+    reference_labels = []
+    for item_id in frame.character_ids:
+        character = character_assets.get(item_id)
+        if not character:
+            reference_labels.append(f"{item_id}（素材未找到）")
+            continue
+        selected = next((f"{field}:{asset.selected_id}"
+                         for field in ("three_view_asset", "full_body_asset", "headshot_asset")
+                         if (asset := getattr(character, field, None)) and asset.selected_id
+                         and any(variant.id == asset.selected_id for variant in asset.variants)), None)
+        reference_labels.append(f"{character.name}（{selected or '旧版图片或无参考图'}）")
+    if frame.scene_id:
+        scene_asset = scene_assets.get(frame.scene_id)
+        image_asset = scene_asset.image_asset if scene_asset else None
+        selected = image_asset.selected_id if image_asset and any(
+            variant.id == image_asset.selected_id for variant in image_asset.variants
+        ) else None
+        reference_labels.append(f"{scene_asset.name if scene_asset else frame.scene_id}（{selected or '旧版图片或无参考图'}）")
+    from .assets import ASPECT_RATIO_TO_SIZE
+    return {
+        "prompt": request.prompt,
+        "negative_prompt": request.negative_prompt or "",
+        "model": series.model_settings.i2i_model if series else script.model_settings.i2i_model,
+        "aspect_ratio": script.model_settings.storyboard_aspect_ratio,
+        "size": ASPECT_RATIO_TO_SIZE.get(script.model_settings.storyboard_aspect_ratio, "1024*576"),
+        "character_ids": frame.character_ids,
+        "scene_id": frame.scene_id,
+        "reference_asset_labels": reference_labels,
+        "context_token": pipeline.storyboard_candidate_preview_token(
+            script_id, request.frame_id, request.prompt, request.negative_prompt,
+        ),
+    }
 
 @app.post("/projects/{script_id}/storyboard/render-candidate")
 def render_frame_candidate(script_id: str, request: RenderFrameCandidateRequest,
@@ -4909,13 +5008,16 @@ def render_frame_candidate(script_id: str, request: RenderFrameCandidateRequest,
     script = pipeline.get_script(script_id, user.owner_profile_id)
     if not script:
         raise HTTPException(status_code=404, detail="Script not found")
+    if not any(item.id == request.frame_id for item in script.frames):
+        raise HTTPException(status_code=404, detail="Frame not found")
     try:
         url = pipeline.generate_storyboard_candidate(
             script_id, request.frame_id, request.prompt, request.negative_prompt,
+            context_token=request.context_token,
         )
         return {"image_url": url}
     except ValueError as exc:
-        raise HTTPException(status_code=404, detail=str(exc)) from exc
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
     except Exception as exc:
         logger.exception("Error rendering storyboard candidate %s", request.frame_id)
         raise HTTPException(status_code=500, detail=str(exc)) from exc

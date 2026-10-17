@@ -185,7 +185,7 @@ class StoryboardGenerator:
         char_text = ", ".join(char_descriptions)
 
         # Remove duplicates
-        asset_ref_paths = list(set(asset_ref_paths))
+        asset_ref_paths = list(dict.fromkeys(asset_ref_paths))
         
         if not prompt:
             prompt = f"Storyboard Frame: {frame.action_description}. "

@@ -3,6 +3,7 @@
 import { useProjectStore } from "@/store/projectStore";
 import { api, type AssetLibraryReference } from "@/lib/api";
 import { resolveAssetGenerationModel } from "@/lib/modelCatalog";
+import { toast } from "@/store/toastStore";
 import CharacterWorkbench from "@/components/modules/CharacterWorkbench";
 
 /**
@@ -24,14 +25,20 @@ export default function CharacterWorkbenchBridge({ entityId, onClose }: { entity
     const onGenerate = async (
         type: string,
         prompt: string,
-        applyStyle: boolean,
+        _applyStyle: boolean,
         negativePrompt: string,
         batchSize: number,
         references: AssetLibraryReference[] = [],
         imageGenerationMode: "text" | "reference" = "text",
+        reviewFingerprint?: string,
     ) => {
         if (!project) return;
         const generationType = type === "reference_sheet" ? "reference_sheet" : type;
+        const isDerivedView = generationType === "three_view" || generationType === "headshot";
+        if (isDerivedView && (imageGenerationMode !== "reference" || references.length !== 1)) {
+            toast.warning("Select exactly one master image for this character view.");
+            return;
+        }
         addGeneratingTask(entityId, generationType, batchSize);
         try {
             const result = await api.generateAsset(
@@ -39,17 +46,19 @@ export default function CharacterWorkbenchBridge({ entityId, onClose }: { entity
                 entityId,
                 "character",
                 project.style_preset || "realistic",
-                applyStyle ? stylePrompt : "",
+                "",
                 generationType,
                 prompt,
-                applyStyle,
-                [applyStyle ? styleNegativePrompt : "", negativePrompt].filter(Boolean).join(", "),
+                false,
+                negativePrompt,
                 batchSize,
                 resolveAssetGenerationModel(project.model_settings?.t2i_model),
                 undefined,
-                undefined,
-                imageGenerationMode === "reference" ? references : [],
+                isDerivedView ? references[0] : undefined,
+                imageGenerationMode === "reference" && !isDerivedView ? references : [],
                 imageGenerationMode,
+                true,
+                reviewFingerprint,
             );
             if ((result as any)?._task_id) {
                 const taskId = (result as any)._task_id;

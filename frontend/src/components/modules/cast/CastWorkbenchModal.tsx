@@ -20,7 +20,7 @@ import { createPortal } from "react-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { X, Sparkles, Loader2, Check, RefreshCw, Wand2, Star, Upload, Trash2, Library } from "lucide-react";
 import { useTranslations } from "next-intl";
-import { agentRequest, api, type AssetLibraryReference, type AssetReferenceIndexEntry } from "@/lib/api";
+import { agentRequest, api, type AssetImageReviewProjection, type AssetImageReviewRequest, type AssetLibraryReference, type AssetReferenceIndexEntry } from "@/lib/api";
 import { useProjectStore, IMAGE_MODELS } from "@/store/projectStore";
 import {
     createSingleFlightTaskStatusPoller,
@@ -31,6 +31,7 @@ import { resolveAssetGenerationModel } from "@/lib/modelCatalog";
 import { toast } from "@/store/toastStore";
 import { getAssetUrl } from "@/lib/utils";
 import { AssetIndexPreview } from "@/components/shared/AssetIndexPreview";
+import AssetImageSubmissionReview from "@/components/shared/AssetImageSubmissionReview";
 import PreviewImage from "@/components/shared/preview/PreviewImage";
 import GroupedModelGrid from "@/components/common/GroupedModelGrid";
 import ReferencePromptEditor, {
@@ -231,7 +232,7 @@ function buildTemplate(kind: CastKind, entity: any, template?: CharacterTemplate
         return `${charDesc}\n\n${tpl.composition}`;
     }
     if (kind === "scene") {
-        return `${name}${desc ? "：" + desc : ""}\n\n构图：中性灰背景下的环境广角定调镜头，单张统一画面，前景不出现人物。突出氛围、建筑和地形结构，光线与色调贴合场景情绪，使用柔和的体积光和适度景深。`;
+        return `${name}${desc ? "：" + desc : ""}\n\n场景参考图：按上述描述呈现场所、空间层次与画面主体；构图、人物分布和光影由本次提示词及所选参考图确定。`;
     }
     return `${name}${desc ? "：" + desc : ""}\n\n构图：中性灰背景下的产品摄影风格，单张统一画面，无边框或分隔框。主体以轻微侧角居中展示，并辅以材质和纹理的细节特写。使用干净均匀的摄影棚光线，在主体下方保留轻微自然阴影。`;
 }
@@ -357,6 +358,7 @@ export default function CastWorkbenchModal({ isOpen, kind, entityId, onClose }: 
     const [referenceRefresh, setReferenceRefresh] = useState(0);
     const generating = generatingTasks.some((t) => t.assetId === entityId);
     const [submitting, setSubmitting] = useState(false);
+    const [pendingImageReview, setPendingImageReview] = useState<AssetImageReviewRequest | null>(null);
     const submissionInFlight = useRef(false);
     const generationBusy = generating || submitting;
     const planEntries = useMemo(() => kind === "scene" && entityId
@@ -394,6 +396,7 @@ export default function CastWorkbenchModal({ isOpen, kind, entityId, onClose }: 
         setDeletedVariantIds([]);
         setAvailableReferences([]);
         setPromptReferences([]);
+        setPendingImageReview(null);
         setMention(null);
         setLibraryPickerOpen(false);
         setAssetDesignNotes("");
@@ -472,7 +475,7 @@ export default function CastWorkbenchModal({ isOpen, kind, entityId, onClose }: 
         if (!isOpen || !entity || !kind) return;
         if (lastSeededEntityId.current !== entity.id) {
             setPrompt(buildTemplate(kind, entity, selectedTemplate));
-            const saved = entity.asset_design || {};
+            const saved = entity.asset_design?.design_draft || entity.asset_design || {};
             setAssetDesignNotes(typeof saved.visual_notes === "string" ? saved.visual_notes : "");
             setAssetDesignRequirements(typeof saved.user_requirements === "string" ? saved.user_requirements : "");
             setAssetDesignUnresolved(Array.isArray(saved.unresolved) ? saved.unresolved : []);
@@ -516,14 +519,14 @@ export default function CastWorkbenchModal({ isOpen, kind, entityId, onClose }: 
                 description: entity.description || entity.name,
                 current_draft: assetDesignNotes,
                 user_requirements: assetDesignRequirements,
-                confirmed_design: entity.asset_design?.confirmed ? assetDesignNotes : "",
+                confirmed_design: entity.asset_design?.design_revisions?.at(-1)?.design?.visual_notes || "",
             });
             const notes = String(result?.visual_notes || "").trim();
             if (!notes) throw new Error("设计模型未返回视觉方案");
             setAssetDesignNotes(notes);
             setAssetDesignUnresolved(Array.isArray(result?.unresolved) ? result.unresolved : []);
             setPrompt(`${entity.name}：${notes}\n\n${kind === "scene"
-                ? "构图：环境广角定调镜头，突出空间结构和氛围，不出现人物。"
+                ? "场景参考图：根据已确认的空间设定及本次画面要求安排构图、人物和光影。"
                 : "构图：产品摄影式单体展示，突出轮廓、材质、比例和关键结构。"}`);
             setPromptDirty(true);
         } catch (error: any) {
@@ -635,7 +638,7 @@ export default function CastWorkbenchModal({ isOpen, kind, entityId, onClose }: 
         setPendingTemplate(null);
     };
 
-    const handleGenerate = async () => {
+    const handleGenerate = async (approved?: { request: AssetImageReviewRequest; review: AssetImageReviewProjection }) => {
         if (submissionInFlight.current) return;
         if (!prompt.trim()) {
             toast.warning(t("toastPromptEmpty"), {
@@ -644,17 +647,43 @@ export default function CastWorkbenchModal({ isOpen, kind, entityId, onClose }: 
             });
             return;
         }
+        if (!approved) {
+            if (imageGenerationMode === "reference" && activePromptReferences.length === 0) {
+                toast.warning(t("referenceModeRequiresImage"));
+                return;
+            }
+            if (imageGenerationMode === "text" && activePromptReferences.length > 0) {
+                toast.warning(t("referenceModeSelectExplicitly"));
+                return;
+            }
+            setPendingImageReview({
+                asset_id: entity.id,
+                asset_type: kind,
+                generation_type: kind === "character" ? "reference_sheet" : "all",
+                prompt: prompt.trim(),
+                negative_prompt: kind === "scene" ? sceneNegativePrompt : getTemplateNegative(kind, selectedTemplate),
+                batch_size: Math.max(1, Math.min(4, batchSize)),
+                model_name: selectedModelId,
+                aspect_ratio: aspectRatioOverride || undefined,
+                references: imageGenerationMode === "reference" ? activePromptReferences : [],
+                image_generation_mode: imageGenerationMode,
+                apply_style: false,
+                preserve_prompt: true,
+            });
+            return;
+        }
+        const frozen = approved.request;
         submissionInFlight.current = true;
         setSubmitting(true);
         try {
-        if (imageGenerationMode === "reference" && activePromptReferences.length === 0) {
+        if (frozen.image_generation_mode === "reference" && !(frozen.references?.length)) {
             toast.warning(t("referenceModeRequiresImage"), {
                 projectId: currentProject.id,
                 projectTitle: currentProject.title,
             });
             return;
         }
-        if (imageGenerationMode === "text" && activePromptReferences.length > 0) {
+        if (frozen.image_generation_mode === "text" && frozen.references?.length) {
             toast.warning(t("referenceModeSelectExplicitly"), {
                 projectId: currentProject.id,
                 projectTitle: currentProject.title,
@@ -678,10 +707,10 @@ export default function CastWorkbenchModal({ isOpen, kind, entityId, onClose }: 
                 onClose();
                 return;
             }
-            const freshIndex = activePromptReferences.length > 0
+            const freshIndex = (frozen.references?.length || 0) > 0
                 ? await api.getAssetReferenceIndex(currentProject.id)
                 : null;
-            const staleReference = activePromptReferences.find((reference) => {
+            const staleReference = (frozen.references || []).find((reference) => {
                 const indexedAsset = freshIndex?.assets.find((item) => item.asset_type === reference.asset_type
                     && item.asset_id === reference.asset_id);
                 return !indexedAsset?.variants.some((variant) => variant.id === reference.variant_id);
@@ -700,7 +729,7 @@ export default function CastWorkbenchModal({ isOpen, kind, entityId, onClose }: 
             // A reference request must never fall through to submission when
             // the fresh index could not be checked. The backend remains the
             // final authority, but avoid sending a known potentially stale ID.
-            if (activePromptReferences.length > 0) {
+            if ((frozen.references?.length || 0) > 0) {
                 toast.error(t("toastReferenceCheckFailed"), {
                     projectId: currentProject.id,
                     projectTitle: currentProject.title,
@@ -708,7 +737,7 @@ export default function CastWorkbenchModal({ isOpen, kind, entityId, onClose }: 
                 return;
             }
         }
-        const effectiveBatchSize = Math.max(1, Math.min(4, batchSize));
+        const effectiveBatchSize = frozen.batch_size;
         addGeneratingTask(entity.id, kind === "character" ? "reference_sheet" : "all", effectiveBatchSize);
 
         const progressId = toast.progress(t("toastGenStart", { kind: t(`kind.${kind}`) }), {
@@ -724,19 +753,18 @@ export default function CastWorkbenchModal({ isOpen, kind, entityId, onClose }: 
                 kind,
                 currentProject.style_preset || "realistic",
                 "",
-                kind === "character" ? "reference_sheet" : "all",
-                prompt.trim(),
+                frozen.generation_type,
+                frozen.prompt,
                 false,
-                kind === "scene" ? sceneNegativePrompt : getTemplateNegative(kind, selectedTemplate),
+                frozen.negative_prompt,
                 effectiveBatchSize,
-                selectedModelId,
-                aspectRatioOverride || undefined,
+                frozen.model_name,
+                frozen.aspect_ratio,
                 undefined,
-                imageGenerationMode === "reference"
-                    ? activePromptReferences
-                    : [],
-                imageGenerationMode,
+                frozen.references || [],
+                frozen.image_generation_mode,
                 true,
+                approved.review.fingerprint,
             );
 
             const taskId = (resp as any)?._task_id;
@@ -976,6 +1004,7 @@ export default function CastWorkbenchModal({ isOpen, kind, entityId, onClose }: 
     const accent = accentClasses[kind];
 
     return createPortal((
+        <>
         <AnimatePresence>
             <motion.div
                 initial={{ opacity: 0 }}
@@ -1473,7 +1502,7 @@ export default function CastWorkbenchModal({ isOpen, kind, entityId, onClose }: 
 
                             {/* Generate CTA */}
                             <button
-                                onClick={handleGenerate}
+                                onClick={() => void handleGenerate()}
                                 disabled={generationBusy || !prompt.trim() || (imageGenerationMode === "reference" && activePromptReferences.length === 0)}
                                 className="mt-5 self-center inline-flex items-center justify-center gap-2 px-6 py-2.5 rounded-md bg-primary text-white border border-[rgba(100,108,255,0.65)] shadow-[inset_0_1.5px_0_rgba(255,255,255,0.14)] hover:bg-primary-hover disabled:opacity-40 disabled:cursor-not-allowed transition-colors text-[0.875rem] font-semibold"
                             >
@@ -1709,5 +1738,16 @@ export default function CastWorkbenchModal({ isOpen, kind, entityId, onClose }: 
                 </motion.div>
             </motion.div>
         </AnimatePresence>
+        {pendingImageReview && <AssetImageSubmissionReview
+            projectId={currentProject.id}
+            request={pendingImageReview}
+            onBack={() => setPendingImageReview(null)}
+            onConfirm={(review) => {
+                const request = pendingImageReview;
+                setPendingImageReview(null);
+                void handleGenerate({ request, review });
+            }}
+        />}
+        </>
     ), document.body);
 }

@@ -10,6 +10,13 @@ import {
 
 const apiMocks = vi.hoisted(() => ({
     getAssetReferenceIndex: vi.fn(),
+    previewAssetImageSubmission: vi.fn((_id: string, request: any) => Promise.resolve({
+        positive_prompt: request.prompt, negative_prompt: request.negative_prompt,
+        selected_model_id: "test-model", aspect_ratio: "9:16",
+        generation_type: request.generation_type, image_generation_mode: request.image_generation_mode,
+        batch_size: request.batch_size, reference_inputs: request.reference ? [request.reference] : request.references || [],
+        design_revision_at_submission: null, fingerprint: "reviewed",
+    })),
     agentRequest: vi.fn((path: string) => path === "/models"
         ? Promise.resolve({ models: [{ api_model_id: "qwen", display_name: "Qwen" }] })
         : Promise.resolve({ identity: { visual_notes: "深棕眼" }, look: { visual_notes: "黑色劲装" }, skill_revision: "skill-hash" })),
@@ -42,7 +49,7 @@ vi.mock("@/lib/api", () => ({ API_URL: "", api: apiMocks, agentRequest: apiMocks
 vi.mock("@/store/projectStore", () => ({
     useProjectStore: (selector: (state: unknown) => unknown) => selector(projectStoreMocks),
 }));
-vi.mock("@/store/toastStore", () => ({ toast: { success: vi.fn() } }));
+vi.mock("@/store/toastStore", () => ({ toast: { success: vi.fn(), warning: vi.fn(), error: vi.fn() } }));
 
 const baseProps = {
     title: "Full body",
@@ -244,6 +251,9 @@ it("does not turn a manually typed @name into an implicit reference", () => {
 });
 
 it("loads the project reference index for the character workbench", async () => {
+    // Earlier tests enqueue one-shot responses; their async effects may not
+    // consume them before cleanup, so this case needs an isolated index mock.
+    apiMocks.getAssetReferenceIndex.mockReset();
     apiMocks.getAssetReferenceIndex.mockResolvedValue({
         schema_version: 1,
         project_id: "project-1",
@@ -270,20 +280,26 @@ it("loads the project reference index for the character workbench", async () => 
     const editors = screen.getAllByRole("textbox") as Array<HTMLElement & { editor?: import("@tiptap/core").Editor }>;
     const promptEditor = editors.find((editor) => editor.editor);
     expect(promptEditor?.editor).toBeDefined();
-    act(() => { promptEditor!.editor!.commands.setContent("<p>@wat</p>"); });
+    act(() => { promptEditor!.editor!.chain().setContent("<p>@wat</p>").focus("end").run(); });
     expect(await screen.findByRole("listbox")).toHaveTextContent("Pocket watch");
     fireEvent.mouseDown(within(screen.getByRole("listbox")).getByRole("option"));
     fireEvent.click(within(screen.getByRole("listbox")).getByRole("option"));
+    await waitFor(() => expect(document.querySelector('[data-reference-variant-id="watch-front"]')).toBeInTheDocument(),
+        { timeout: 3000 });
     fireEvent.click(screen.getAllByRole("button", { name: "Reference image" })[0]);
     fireEvent.click(screen.getAllByTestId("variant-generate")[0]);
+    const confirm = await screen.findByRole("button", { name: "确认并生成" });
+    await waitFor(() => expect(confirm).not.toBeDisabled());
+    fireEvent.click(confirm);
     await waitFor(() => expect(onGenerate).toHaveBeenCalledWith(
         "full_body",
         "@Pocket watch ",
-        true,
+        false,
         expect.any(String),
         1,
         [{ asset_type: "prop", asset_id: "watch-1", variant_id: "watch-front" }],
         "reference",
+        "reviewed",
     ));
 });
 
@@ -599,19 +615,24 @@ it("refreshes the reference index when a generated project snapshot arrives", as
 
     const editor = (screen.getAllByRole("textbox") as Array<HTMLElement & { editor?: import("@tiptap/core").Editor }>).find((item) => item.editor);
     expect(editor?.editor).toBeDefined();
-    act(() => { editor!.editor!.commands.setContent("<p>@Hero</p>"); });
+    act(() => { editor!.editor!.chain().setContent("<p>@Hero</p>").focus("end").run(); });
     fireEvent.click(within(screen.getByRole("listbox")).getByRole("option"));
+    await waitFor(() => expect(document.querySelector('[data-reference-variant-id="new-view"]')).toBeInTheDocument());
     fireEvent.click(screen.getAllByRole("button", { name: "Reference image" })[0]);
     fireEvent.click(screen.getAllByTestId("variant-generate")[0]);
+    const confirm = await screen.findByRole("button", { name: "确认并生成" });
+    await waitFor(() => expect(confirm).not.toBeDisabled());
+    fireEvent.click(confirm);
 
     await waitFor(() => expect(onGenerate).toHaveBeenCalledWith(
         "full_body",
         "@Hero ",
-        true,
+        false,
         expect.any(String),
         1,
         [{ asset_type: "character", asset_id: "character-1", variant_id: "new-view" }],
         "reference",
+        "reviewed",
     ));
 });
 
