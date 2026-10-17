@@ -5,7 +5,7 @@ import logging
 import re
 import time
 import uuid
-from datetime import date
+from datetime import date, datetime, timezone
 
 from fastapi import HTTPException
 from pydantic import BaseModel, Field
@@ -270,10 +270,19 @@ def query_timeline(db, owner, query: FactTimelineQuery, now=None):
     events = []
     seen = set()
     amendments = {}
+    source_cache = {}
     for row in rows:
-        try:
-            _source(db, owner, row["source_session_id"], row["source_message_id"], row["source_quote"])
-        except HTTPException:
+        sid = row["source_session_id"]
+        if sid not in source_cache:
+            session_row = db.execute("SELECT payload FROM sessions WHERE owner=? AND id=?", (owner, sid)).fetchone()
+            messages = {}
+            if session_row:
+                for message in json.loads(session_row["payload"]).get("messages", []):
+                    if message.get("role") == "user":
+                        messages.setdefault(message.get("id"), message.get("content", ""))
+            source_cache[sid] = messages
+        content = source_cache[sid].get(row["source_message_id"])
+        if not isinstance(content, str) or row["source_quote"] not in content:
             continue
         event = dict(row)
         if query.view == "current":
@@ -300,6 +309,44 @@ def query_timeline(db, owner, query: FactTimelineQuery, now=None):
         "interpretation": "latest_user_report" if query.view == "current" else "reported_events",
         "events": events,
     }
+
+
+_RECALL_STOP_TERMS = {"我的", "我是", "我在", "我们", "最近", "现在", "情况", "什么",
+                      "如何", "怎么", "是否", "已经", "之前", "以前", "可以", "知道"}
+
+
+def _recall_terms(value):
+    terms = set()
+    for segment in re.findall(r"[\u3400-\u9fff]+", value.lower()):
+        terms.update(segment[index:index + 2] for index in range(len(segment) - 1))
+    terms.update(word for word in re.findall(r"[a-z0-9]+", value.lower()) if len(word) >= 4)
+    return terms - _RECALL_STOP_TERMS
+
+
+def recall_for_chat(db, owner, current_session_id, question, limit=5):
+    """Select relevant earlier user reports; no match is safer than broad recall."""
+    terms = _recall_terms(question[:500])
+    if not terms:
+        return []
+    enabled = {item["id"] for item in categories(db, owner) if item["auto_recall_enabled"]}
+    if not enabled:
+        return []
+    events = query_timeline(db, owner, FactTimelineQuery(view="current", limit=100))["events"]
+    ranked = []
+    for event in events:
+        if event["category"] not in enabled or event["source_session_id"] == current_session_id:
+            continue
+        key_overlap = terms & _recall_terms(event["predicate"] + " " + event["value"])
+        quote_overlap = terms & _recall_terms(event["source_quote"])
+        score = 2 * len(key_overlap) + len(quote_overlap)
+        if score:
+            ranked.append((score, event))
+    ranked.sort(key=lambda pair: (-pair[0], -pair[1]["recorded_at"], pair[1]["id"]))
+    return [{key: event[key] for key in ("id", "category", "subject", "predicate", "value",
+                                        "source_quote", "source_session_id", "source_message_id",
+                                        "time_text", "time_precision", "relation")}
+            | {"recorded_at_utc": datetime.fromtimestamp(event["recorded_at"], timezone.utc).isoformat()}
+            for _, event in ranked[:limit]]
 
 
 def correct_event(db, owner, event_id, body):
