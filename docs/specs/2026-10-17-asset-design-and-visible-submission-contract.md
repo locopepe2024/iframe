@@ -11,6 +11,15 @@ This contract covers character, scene, and prop image generation in Studio asset
 3. **Continuity references** name the exact preceding/related asset variant and the applicable place, story-time, lighting or object state. The user selects which references to use. The location/time baseline may be shown for review even when it conflicts with a selected image; it does not override that image automatically.
 4. **Submission snapshot** contains the complete positive prompt, separate negative prompt, explicit reference identities, model, aspect ratio and the source design revision. Every content-affecting instruction must be visible and editable before submission. A renderer must not append hidden prose after submission. Reference image bytes and provider parameters may be transported separately, but their identity and values must be visible in the review UI.
 
+## Three consistency passes and visual review
+
+- **Director interpretation, first pass:** establish the episode framework: confirmed story facts, visual direction, time/place relationships and shooting-plan intent. Record its revision. It does not finalize every asset detail or every shot image.
+- **Asset design, second pass:** refine reusable character, scene and prop identities from that framework. Record the director revision used and the confirmed asset design revision. Stable appearance and spatial facts belong here; one shot's action and composition do not.
+- **Shot design, third pass:** refine one frame or video using the relevant director revision and exact asset variants. Record the shot revision and selected asset design/variant revisions. Shot design can expose an asset mismatch and propose a design change, but the proposal returns to asset review; it never edits the confirmed asset implicitly. A newly confirmed asset revision marks affected draft shots for review without rewriting already approved shot snapshots. This is a reviewable asset ↔ shot feedback loop, with separate ownership on each side.
+- Each downstream output must distinguish inherited facts, local design choices and user-approved departures. Prose similarity alone cannot establish continuity.
+- Descriptive plan text such as “残阳如血” is candidate frame content. It is not automatically a lighting constraint or a style instruction. In shot design, unapplied plan clauses stay visible as suggestions, and the user adds only the clauses wanted in the current prompt.
+- Text review proves what was submitted, not whether the provider rendered a matching color palette, geometry or character. After generation, compare the result with the selected scene/character reference images and the reviewed prompt. A visual mismatch should cause an explicit prompt/reference revision or a different candidate choice; it must not silently rewrite the confirmed director interpretation.
+
 ## Projection and revision rules
 
 - An AI design draft can suggest asset design; it cannot silently change the asset description or final prompt. The user confirms a design revision separately.
@@ -33,6 +42,7 @@ This contract covers character, scene, and prop image generation in Studio asset
 ## Remaining work
 
 - Bring the structure of scene/prop AI design drafts beyond one `visual_notes` string if field-specific editing proves useful. Keep frame content and continuity choices at generation scope, outside the reusable asset design record.
+- Shot-design first/last-frame candidates must use a separate read-only preflight: show the exact assembled positive/negative prompt, effective image model, ratio and frame source before a paid render. Bind confirmation to the current frame context and reject stale submissions. Candidate rendering must preserve the reviewed prompt verbatim. Explicit reference variant selection for this path remains a separate follow-up; until then the UI must say that the generator selects references from the frame's current character/scene assets.
 
 ### Preflight cutover
 
