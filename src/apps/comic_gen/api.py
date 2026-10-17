@@ -241,6 +241,8 @@ async def enforce_studio_owner_boundary(request: Request, call_next):
         or path == "/upload"
         or path == "/config/models"
         or path == "/config/uniart/models"
+        or path == "/studio/media-delivery"
+        or path.startswith("/studio/media-records/")
         or path.startswith("/studio/owned-media/")
         or path.startswith("/studio/owned-playground-media/")
         or path.startswith("/tasks/")
