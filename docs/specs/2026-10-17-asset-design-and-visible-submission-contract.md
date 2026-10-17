@@ -28,6 +28,7 @@ This contract covers character, scene, and prop image generation in Studio asset
 - Reviewed project and series tasks freeze positive/negative text, effective model, ratio, mode, stable explicit reference IDs and the latest confirmed design revision at enqueue. New image variants carry that snapshot after generation; older variants and direct generator calls have no fabricated snapshot.
 - Manual character three-view and headshot requests require one explicitly selected master variant. The character workbench checks this before submission and passes that variant as one structured reference. Manual requests using a legacy reference URL fail validation because the URL does not establish a stable visible identity. Series character text generation no longer implicitly reuses its selected image.
 - Project asset generation now exposes a read-only server preflight. Character, Cast, scene/prop and asset-library manual entry points freeze their edited request and show the server-effective model, ratio, mode, quantity, reference identities and exact positive/negative text before final confirmation. The final request carries a fingerprint; enqueue rejects changed reviewed fields before creating a task.
+- The fingerprint also binds the project or series scope, target asset type and target asset ID. An asset-library entry opened outside the current project leaves the model unspecified so the server projects that target project's actual setting. Structured preview errors render as readable text without closing the review surface.
 
 ## Remaining work
 

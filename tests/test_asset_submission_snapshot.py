@@ -178,3 +178,32 @@ def test_preflight_and_enqueue_share_exact_reviewed_request():
     assert {key: value for key, value in stored.items() if key != "submitted_at"} == {
         key: value for key, value in review.items() if key != "fingerprint"
     }
+
+
+def test_preflight_fingerprint_is_bound_to_target_asset_and_project():
+    first = Scene(id="street-a", name="Street A", description="Street")
+    second = Scene(id="street-b", name="Street B", description="Street")
+    script = Script(id="project-a", title="Project A", original_text="",
+                    scenes=[first, second], created_at=1, updated_at=1)
+    other = Script(id="project-b", title="Project B", original_text="",
+                   scenes=[Scene(id="street-a", name="Street A", description="Street")],
+                   created_at=1, updated_at=1)
+    pipeline = ComicGenPipeline.__new__(ComicGenPipeline)
+    pipeline.scripts = {script.id: script, other.id: other}
+    pipeline.series_store = {}
+    pipeline.asset_generation_tasks = {}
+    pipeline._save_lock = RLock()
+    pipeline._save_after_asset_mutation = MagicMock()
+
+    review = pipeline.preview_asset_image_submission("project-a", "street-a", "scene", prompt="Blue street")
+    assert review["fingerprint"] != pipeline.preview_asset_image_submission(
+        "project-a", "street-b", "scene", prompt="Blue street")["fingerprint"]
+    assert review["fingerprint"] != pipeline.preview_asset_image_submission(
+        "project-b", "street-a", "scene", prompt="Blue street")["fingerprint"]
+    with pytest.raises(AssetReviewChanged):
+        pipeline.create_asset_generation_task(
+            "project-a", "street-b", "scene", prompt="Blue street",
+            apply_style=False, preserve_prompt=True,
+            expected_review_fingerprint=review["fingerprint"],
+        )
+    assert not pipeline.asset_generation_tasks

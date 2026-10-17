@@ -1066,8 +1066,17 @@ class ComicGenPipeline(StudioOwnerMixin):
         ).model_dump()
 
     @staticmethod
-    def _asset_review_fingerprint(snapshot: Dict[str, Any]) -> str:
-        reviewed = {key: value for key, value in snapshot.items() if key != "submitted_at"}
+    def _asset_review_fingerprint(
+        snapshot: Dict[str, Any], *, scope_id: str, asset_id: str,
+        asset_type: str, is_series: bool,
+    ) -> str:
+        reviewed = {
+            "scope": "series" if is_series else "project",
+            "scope_id": scope_id,
+            "asset_id": asset_id,
+            "asset_type": asset_type,
+            "submission": {key: value for key, value in snapshot.items() if key != "submitted_at"},
+        }
         encoded = json.dumps(reviewed, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8")
         return hashlib.sha256(encoded).hexdigest()
 
@@ -1120,7 +1129,10 @@ class ComicGenPipeline(StudioOwnerMixin):
             batch_size=batch_size, reference=normalized_reference, references=normalized_references,
         )
         return {**{key: value for key, value in snapshot.items() if key != "submitted_at"},
-                "fingerprint": self._asset_review_fingerprint(snapshot)}
+                "fingerprint": self._asset_review_fingerprint(
+                    snapshot, scope_id=scope_id, asset_id=asset_id,
+                    asset_type=asset_type, is_series=is_series,
+                )}
 
     def generate_asset(self, script_id: str, asset_id: str, asset_type: str, style_preset: str = None, reference_image_url: str = None, style_prompt: str = None, generation_type: str = "all", prompt: str = None, apply_style: bool = True, negative_prompt: str = None, batch_size: int = 1, model_name: str = None, aspect_ratio: str = None, use_reference_image: bool = True, reference: Any = None, references: Any = None, image_generation_mode: str = "text", _generation_task_id: Optional[str] = None, preserve_prompt: bool = False) -> Script:
         """Step 2: Generate a specific asset (character/scene/prop).
