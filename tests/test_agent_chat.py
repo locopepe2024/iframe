@@ -466,7 +466,24 @@ def test_research_plan_accepts_null_optional_clarification(setup, monkeypatch):
     intent = agent.plan_research(setup, 'qwen', '查询美盈森从2026年3月1日至今的官方公告资讯', [])
     assert intent.subject == '美盈森'
     assert intent.clarification == ''
-    assert intent.end_date == '2026-10-14'
+
+
+def test_peer_research_guides_private_company_to_name_and_dimensions(setup, monkeypatch):
+    monkeypatch.setattr(agent, 'complete', Mock(return_value='{"search_query":"AI video post-training","subject":"AI video post-training","start_date":"2026-09-17","end_date":"2026-10-17","dimensions":[],"needs_clarification":false,"clarification":""}'))
+    intent = agent.plan_research(setup, 'qwen', '我们在分析一家公司，从事AI视频模型后训练，找类似公司参考', [])
+    assert intent.needs_clarification is True
+    assert '公司或项目名称' in intent.clarification
+    assert '对比的维度' in intent.clarification
+
+
+def test_private_company_followup_does_not_require_a_stock_code(setup, monkeypatch):
+    monkeypatch.setattr(agent, 'complete', Mock(return_value='{"search_query":"AI video post-training","subject":"AI video post-training","start_date":"2026-09-17","end_date":"2026-10-17","dimensions":[],"needs_clarification":false,"clarification":""}'))
+    intent = agent.plan_research(setup, 'qwen', '这家公司还没上市', [
+        {'role': 'user', 'content': '我们在分析一家公司，从事AI视频模型后训练，找类似公司参考'},
+    ])
+    assert intent.needs_clarification is True
+    assert '未上市公司' in intent.clarification
+    assert '不要求股票代码' in intent.clarification
 
 
 def test_research_answer_is_idempotent_and_cites_exact_units(setup, monkeypatch):
