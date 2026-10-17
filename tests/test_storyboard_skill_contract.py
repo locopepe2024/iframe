@@ -74,8 +74,42 @@ def test_h3_polish_contract_forbids_text_overlays():
     assert 'Dialogue, if\nrequested, is audio only' in text
     assert 'FINAL H3 ENFORCEMENT (highest priority)' in text
     assert 'Do not return a standalone sentence' in text
-    assert 'subject_definitions:' in text
+    assert 'integrated_multimodal_description:' in text
     assert 'non_diegetic_music:' in text
+
+
+def test_h3_final_contract_matches_base_or_reference_mode():
+    base = api._storyboard_polish_contract(
+        'uniart/minimax-h3-vip', '', '', optimization_skills=['minimax-h3-director'])
+    reference = api._storyboard_polish_contract(
+        'uniart/minimax-h3-vip', '', '', optimization_skills=['minimax-h3-director'],
+        reference_mode=True)
+    base_final = base.split('FINAL H3 ENFORCEMENT', 1)[1]
+    reference_final = reference.split('FINAL H3 ENFORCEMENT', 1)[1]
+    assert 'integrated_multimodal_description:' in base_final
+    assert 'subject_definitions:' not in base_final
+    assert 'subject_definitions:' in reference_final
+    assert 'detailed_description:' in reference_final
+    assert 'integrated_multimodal_description:' not in reference_final
+
+
+def test_seedance_polish_contract_does_not_demand_h3_fields():
+    text = api._storyboard_polish_contract(
+        'uniart/seedance-2.5-vip', '', '', optimization_skills=['seedance-camera'])
+    assert 'FINAL H3 ENFORCEMENT' not in text
+
+
+def test_h3_contract_mismatch_logs_headings_without_model_text(caplog):
+    from src.apps.comic_gen.llm import PolishError
+
+    with pytest.raises(PolishError):
+        api._validate_storyboard_polish_result(
+            'uniart/minimax-h3-vip',
+            {'prompt_cn': 'private scene text', 'prompt_en': 'private scene text'},
+            reference_mode=False,
+        )
+    assert 'integrated_multimodal_description' in caplog.text
+    assert 'private scene text' not in caplog.text
 
 
 def test_polish_keeps_default_contract_with_model_skill(monkeypatch):

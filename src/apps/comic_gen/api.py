@@ -6558,9 +6558,10 @@ def _selected_skill_guidance(skill_ids: Optional[List[str]]) -> str:
     return "SELECTED OPTIMIZATION SKILLS (user-selected; do not infer additional skills):\n" + text
 
 
-def _storyboard_polish_contract(model_id: str, custom: str, default: str, generate_audio=None, target_duration=None, dialogue_speaker="", dialogue_line="", optimization_skills: Optional[List[str]] = None) -> str:
+def _storyboard_polish_contract(model_id: str, custom: str, default: str, generate_audio=None, target_duration=None, dialogue_speaker="", dialogue_line="", optimization_skills: Optional[List[str]] = None, reference_mode: bool = False) -> str:
     guidance = _selected_skill_guidance(optimization_skills) if optimization_skills is not None else _target_model_guidance(model_id)
-    if not guidance:
+    is_h3 = "h3" in (model_id or "").lower()
+    if not guidance and not is_h3:
         return custom or default
     constraints = ""
     if generate_audio is False:
@@ -6572,7 +6573,7 @@ def _storyboard_polish_contract(model_id: str, custom: str, default: str, genera
             constraints += f"\nEXPLICIT DIALOGUE (verbatim, do not translate, omit, or rewrite): {speaker}: {dialogue_line.strip()}"
     if target_duration is not None:
         constraints += f"\nTarget duration: {target_duration} seconds. All action must fit within this duration; no invented exact source cut times."
-    if "h3" in (model_id or "").lower():
+    if is_h3:
         constraints += """
 HARD H3 TEXT-OVERLAY PROHIBITION:
 Do not add subtitles, captions, karaoke text, dialogue text overlays, title cards,
@@ -6580,7 +6581,8 @@ watermarks, labels, or any other burned-in/on-screen typography. Dialogue, if
 requested, is audio only and must not be rendered as text. Do not describe or
 request subtitle tracks in either prompt language.
 """
-    return guidance + "\n" + custom + constraints + """
+    base_prompt = custom or (default if not guidance else "")
+    contract = guidance + "\n" + base_prompt + constraints + """
 STORYBOARD OUTPUT CONTRACT:
 Return only JSON with string fields prompt_cn and prompt_en. Each string contains
 all fields required by the selected model skill and generation mode (H3 base:
@@ -6598,21 +6600,22 @@ Do not invent dialogue text, music, extra shots or replacement identities unless
 requested. Inspect all attached images, including scene, prop and storyboard
 images. Distinguish observed image content from user requirements; sampling
 cannot establish exact cut times. Missing images must not be described as seen.
-
+"""
+    if not is_h3:
+        return contract
+    headings = (
+        "subject_definitions:\nsummary:\nretention_analysis:\ndetailed_description:\noverall_soundscape:\nnon_diegetic_music:"
+        if reference_mode else
+        "integrated_multimodal_description:\noverall_soundscape:\nnon_diegetic_music:"
+    )
+    return contract + f"""
 FINAL H3 ENFORCEMENT (highest priority):
 Do not return a standalone sentence, summary, explanation, Markdown prose, or
 an unstructured action description. Return one JSON object with exactly these
 string keys: prompt_cn and prompt_en. Inside EACH string, emit the required
 field headings in this exact order and spelling, each followed by a colon:
-subject_definitions:
-summary:
-retention_analysis:
-detailed_description:
-overall_soundscape:
-non_diegetic_music:
-If the request is not reference mode, still use the same six headings and set
-subject_definitions/retention_analysis to N/A when no references exist. Never
-omit a heading. Never put subtitles or any other text overlay in the prompt.
+{headings}
+Never omit a heading. Never put subtitles or any other text overlay in the prompt.
 """
 
 
@@ -6641,6 +6644,7 @@ def _validate_storyboard_polish_result(model_id: str, result: Dict[str, Any], re
         return pattern.search(text) is not None
 
     invalid_languages = []
+    missing_fields = {}
     for key in ("prompt_cn", "prompt_en"):
         text = result.get(key, "")
         # MiniMax IR may return the valid base H3/T2VA contract even when the
@@ -6649,7 +6653,14 @@ def _validate_storyboard_polish_result(model_id: str, result: Dict[str, Any], re
         accepted = (reference_fields, base_fields) if reference_mode else (base_fields,)
         if not any(all(has_field(text, field) for field in fields) for fields in accepted):
             invalid_languages.append(key)
+            missing_fields[key] = {
+                "base": [field for field in base_fields if not has_field(text, field)],
+                **({"reference": [field for field in reference_fields if not has_field(text, field)]}
+                   if reference_mode else {}),
+            }
     if invalid_languages:
+        logger.warning("H3 polish headings missing: reference_mode=%s languages=%s missing=%s",
+                       reference_mode, invalid_languages, missing_fields)
         from .llm import PolishError
         raise PolishError(
             reason="model_contract_mismatch",
@@ -6776,12 +6787,13 @@ def polish_video_prompt(request: PolishVideoPromptRequest):
         if director:
             custom = "\n\n".join(filter(None, [custom, "CURRENT SHOT CONTEXT (editable overrides replace planned shot settings; matching continuity baseline is background):\n" + director]))
         selected_skills = _effective_optimization_skills(request)
-        contract_skills = [] if request.optimizer_provider == "minimax_context_ir" else selected_skills
-        custom_prompt = _storyboard_polish_contract(request.target_video_model, custom, DEFAULT_VIDEO_POLISH_PROMPT, request.generate_audio, request.target_duration, request.dialogue_speaker, request.dialogue_line, contract_skills)
         if request.optimizer_provider == "minimax_context_ir":
-            result = _complete_minimax_ir_polish(request, custom_prompt)
+            # Context-IR owns its provider-native structure. Keep the existing
+            # freeform instruction path; its output is still validated below.
+            result = _complete_minimax_ir_polish(request, custom or DEFAULT_VIDEO_POLISH_PROMPT)
             _validate_storyboard_polish_result(request.target_video_model, result, reference_mode=False, generate_audio=request.generate_audio, dialogue_line=request.dialogue_line)
             return result
+        custom_prompt = _storyboard_polish_contract(request.target_video_model, custom, DEFAULT_VIDEO_POLISH_PROMPT, request.generate_audio, request.target_duration, request.dialogue_speaker, request.dialogue_line, selected_skills, reference_mode=False)
         # Polish model: request override → project/series PromptConfig → ""
         polish_model = request.polish_model or _OPTIMIZER_MODEL_IDS.get(request.optimizer_provider) or _get_polish_model_for_project(request.script_id)
         processor = ScriptProcessor()
@@ -6845,12 +6857,11 @@ def polish_r2v_prompt(request: PolishR2VPromptRequest):
         if director:
             custom = "\n\n".join(filter(None, [custom, "CURRENT SHOT CONTEXT (editable overrides replace planned shot settings; matching continuity baseline is background):\n" + director]))
         selected_skills = _effective_optimization_skills(request)
-        contract_skills = [] if request.optimizer_provider == "minimax_context_ir" else selected_skills
-        custom_prompt = _storyboard_polish_contract(request.target_video_model, custom, DEFAULT_R2V_POLISH_PROMPT, request.generate_audio, request.target_duration, request.dialogue_speaker, request.dialogue_line, contract_skills)
         if request.optimizer_provider == "minimax_context_ir":
-            result = _complete_minimax_ir_polish(request, custom_prompt)
+            result = _complete_minimax_ir_polish(request, custom or DEFAULT_R2V_POLISH_PROMPT)
             _validate_storyboard_polish_result(request.target_video_model, result, reference_mode=True, generate_audio=request.generate_audio, dialogue_line=request.dialogue_line)
             return result
+        custom_prompt = _storyboard_polish_contract(request.target_video_model, custom, DEFAULT_R2V_POLISH_PROMPT, request.generate_audio, request.target_duration, request.dialogue_speaker, request.dialogue_line, selected_skills, reference_mode=True)
         polish_model = request.polish_model or _OPTIMIZER_MODEL_IDS.get(request.optimizer_provider) or _get_polish_model_for_project(request.script_id)
         processor = ScriptProcessor()
         slot_info = [{"description": s.description} for s in request.slots]
