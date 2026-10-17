@@ -28,6 +28,7 @@ def make_pipeline(tmp_path, monkeypatch):
     pipeline._save_data = Mock()
     pipeline._save_library_data = Mock()
     pipeline._save_series_data = Mock()
+    pipeline.effective_director_profile = lambda _script: None
     return pipeline, scene
 
 
@@ -44,6 +45,25 @@ def test_scene_tool_task_keeps_validated_parameters_and_server_prompt(tmp_path, 
     assert "水平环绕 75°" in params["prompt"]
     assert "Ignore controls" not in params["prompt"]
     assert scene.image_asset.selected_id == "source"
+
+
+def test_scene_tool_execution_resolves_source_and_forwards_edit_settings(tmp_path, monkeypatch):
+    pipeline, _scene = make_pipeline(tmp_path, monkeypatch)
+    pipeline.asset_generator = Mock()
+    monkeypatch.setattr("src.apps.comic_gen.pipeline.runtime_uniart_for_owner", lambda *_args: {})
+    reference = {"asset_type": "scene", "asset_id": "scene", "variant_id": "source"}
+    _, task_id = pipeline.create_asset_generation_task(
+        "project", "scene", "scene", references=[reference], image_generation_mode="reference",
+        scene_tool={"kind": "lighting", "light_side": "left", "brightness": 70},
+    )
+    pipeline.process_asset_generation_task(task_id)
+    assert pipeline.asset_generation_tasks[task_id]["status"] == "completed"
+    call = pipeline.asset_generator.generate_scene.call_args
+    assert "左侧" in call.kwargs["prompt"]
+    assert call.kwargs["reference_image_urls"] == [str(tmp_path / "output" / "source.png")]
+    assert call.kwargs["scene_tool"]["brightness"] == 70
+    assert call.kwargs["scene_tool_source_variant_id"] == "source"
+    assert call.kwargs["image_generation_mode"] == "reference"
 
 
 @pytest.mark.parametrize("tool, references", [
