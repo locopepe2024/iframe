@@ -64,7 +64,7 @@ it("sends the selected shot video model when polishing", async () => {
             onMoveUp={vi.fn()}
             onMoveDown={vi.fn()}
             onDuplicate={vi.fn()}
-            onSetTabMode={vi.fn()}
+            onSetVideoMode={vi.fn()}
             onOpenDrawer={vi.fn()}
             onInsertAsset={vi.fn()}
             expanded={false}
@@ -81,4 +81,38 @@ it("sends the selected shot video model when polishing", async () => {
         line: "今天这款穿心莲分散片，我们决定给大家随机立减！",
     });
     expect(vi.mocked(api.polishVideoPrompt).mock.calls[0][14]).toEqual({ style: "current style", lighting: "current unsaved light" });
+});
+
+it("uses one four-mode tab control for video input selection", () => {
+    const onSetVideoMode = vi.fn();
+    render(
+        <ShotCard
+            shot={{ ...shot, videoMode: "first_last_frame" }}
+            index={0}
+            totalShots={1}
+            characters={[]}
+            scenes={[]}
+            props={[]}
+            onUpdatePrompt={vi.fn()}
+            onUpdateField={vi.fn()}
+            onGenerateT2I={vi.fn()}
+            onGenerateVideo={vi.fn()}
+            onDelete={vi.fn()}
+            onMoveUp={vi.fn()}
+            onMoveDown={vi.fn()}
+            onDuplicate={vi.fn()}
+            onSetVideoMode={onSetVideoMode}
+            onOpenDrawer={vi.fn()}
+            onInsertAsset={vi.fn()}
+            expanded={false}
+            onToggleExpanded={vi.fn()}
+        />,
+    );
+
+    const tabs = screen.getAllByRole("tab");
+    expect(tabs).toHaveLength(4);
+    expect(screen.getByRole("tab", { name: "tabFirstLastFrame" })).toHaveAttribute("aria-selected", "true");
+    expect(screen.queryByRole("combobox", { name: "视频生成模式" })).toBeNull();
+    fireEvent.click(screen.getByRole("tab", { name: "tabTextVideo" }));
+    expect(onSetVideoMode).toHaveBeenCalledWith("t2v");
 });

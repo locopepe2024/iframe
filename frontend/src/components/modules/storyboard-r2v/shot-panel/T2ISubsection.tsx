@@ -76,6 +76,7 @@ interface T2ISubsectionProps {
     onSelectAsset?: () => void;
     resolveUrl?: (url: string) => string;
     frameLabel?: string;
+    firstLastFrameMode?: boolean;
 }
 
 export default function T2ISubsection({
@@ -92,6 +93,7 @@ export default function T2ISubsection({
     onUpload, onSelectAsset,
     resolveUrl,
     frameLabel = "首帧",
+    firstLastFrameMode = false,
 }: T2ISubsectionProps) {
     const t = useTranslations("storyboardR2V");
     // resolveUrl is kept in the prop API (still passed by host for back-compat)
@@ -116,6 +118,7 @@ export default function T2ISubsection({
                 onUpload={onUpload}
                 onSelectAsset={onSelectAsset}
                 frameLabel={frameLabel}
+                firstLastFrameMode={firstLastFrameMode}
             />
         );
     }
@@ -155,11 +158,12 @@ interface HeroProps {
     onUpload: (file: File) => Promise<T2IUploadError | void>;
     onSelectAsset?: () => void;
     frameLabel: string;
+    firstLastFrameMode: boolean;
 }
 
 function Hero({
     t, promptIsEmpty, generating, inFlightTaskId, inFlightStatus, onGenerate, onUpload,
-    onSelectAsset, frameLabel,
+    onSelectAsset, frameLabel, firstLastFrameMode,
 }: HeroProps) {
     const [uploading, setUploading] = useState(false);
     const [uploadError, setUploadError] = useState<T2IUploadError | null>(null);
@@ -233,14 +237,14 @@ function Hero({
                 <div className="min-w-0 flex-1 space-y-1.5">
                     {/* Step eyebrow — chrome tier，不是 banner */}
                     <div className="font-mono text-chrome-sm font-medium uppercase tracking-tight text-primary/90">
-                        {t("t2iHeroEyebrow")}
+                        {frameLabel === "尾帧" ? t("lastFrameHeroEyebrow") : t("t2iHeroEyebrow")}
                     </div>
                     {/* Title — display tier，是 hero 的视觉焦点 */}
                     <div className="font-display text-display-sm font-semibold text-foreground">
-                        {frameLabel === "首帧" ? t("t2iHeroTitle") : "添加尾帧候选"}
+                        {frameLabel === "尾帧" ? t("lastFrameHeroTitle") : t("t2iHeroTitle")}
                     </div>
                     <p className="max-w-[58ch] font-sans text-body-sm leading-relaxed text-text-secondary">
-                        {t("t2iHeroBody")}
+                        {frameLabel === "尾帧" ? t("lastFrameHeroBody") : firstLastFrameMode ? t("firstLastFirstFrameHeroBody") : t("t2iHeroBody")}
                     </p>
 
                     {/* CTA row — 主生成 + 次上传 + 拖拽 hint */}
@@ -431,7 +435,7 @@ function Compact({
         >
             {/* Header row — Step indicator + count + ▼/+ controls. */}
             <div className="flex items-center gap-2">
-                <StepBadge num={1} done label={`${frameLabel} · ${t("t2iStepOneDone")}`} />
+                <StepBadge num={frameLabel === "尾帧" ? 2 : 1} done label={`Step ${frameLabel === "尾帧" ? 2 : 1} · ${frameLabel} · ${t("t2iStepOneDone")}`} />
                 <span className="font-mono text-chrome-sm tracking-tight text-text-muted">
                     · {countLabel}
                 </span>

@@ -181,8 +181,7 @@ interface ShotCardProps {
     onMoveUp: () => void;
     onMoveDown: () => void;
     onDuplicate: () => void;
-    onSetTabMode: (mode: "t2i_i2v" | "direct_r2v") => void;
-    onSetVideoMode?: (mode: "t2v" | "i2v" | "first_last_frame" | "r2v") => void;
+    onSetVideoMode: (mode: "t2v" | "i2v" | "first_last_frame" | "r2v") => void;
     onOpenDrawer: () => void;
     onSelectFrameAsset?: () => void;
     onInsertAsset: (type: string, name: string) => void;
@@ -243,7 +242,6 @@ export default function ShotCard({
     onMoveUp,
     onMoveDown,
     onDuplicate,
-    onSetTabMode,
     onSetVideoMode,
     onOpenDrawer,
     onSelectFrameAsset,
@@ -631,7 +629,7 @@ export default function ShotCard({
             {/* Floating card body — mock-aligned glass surface */}
             <div className="relative overflow-hidden rounded-[20px] border border-glass-border bg-surface shadow-[0_8px_30px_-10px_rgba(0,0,0,0.55),inset_0_1px_0_rgba(255,255,255,0.05)] transition-all duration-base ease-out-quart group-hover:-translate-y-1 group-hover:shadow-[0_16px_50px_-12px_rgba(0,0,0,0.65),inset_0_1px_0_rgba(255,255,255,0.07)] z-10">
                 {/* Card top — shot no/cap + status badge + tab switcher */}
-                <div className="flex items-center justify-between gap-4 px-5 pt-4 pb-3">
+                <div className="flex flex-wrap items-center justify-between gap-3 px-5 pt-4 pb-3">
                     <div className="flex items-center gap-3 min-w-0">
                         <div className="font-display text-[1.875rem] font-semibold leading-none text-text-secondary tracking-tight">
                             {String(index + 1).padStart(2, "0")}
@@ -646,49 +644,26 @@ export default function ShotCard({
                             ) : null}
                         </div>
                     </div>
-                    <div className="flex items-center gap-2 shrink-0">
+                    <div className="flex min-w-0 flex-wrap items-center gap-2">
                         <ShotStatusBadge shot={shot} t={t} />
-                        {/* Pill Tab Switcher */}
-                        <div className="relative inline-flex items-center p-[3px] bg-surface-inset rounded-full">
-                            <motion.div
-                                className="absolute top-[3px] bottom-[3px] rounded-full bg-elevated shadow-[inset_0_1px_0_rgba(255,255,255,0.1)]"
-                                initial={false}
-                                animate={{
-                                    left: isActiveT2I ? 3 : "calc(50% + 1.5px)",
-                                    width: "calc(50% - 3px)",
-                                }}
-                                transition={{ type: "spring", stiffness: 350, damping: 32 }}
-                            />
-                            <button
-                                onClick={() => onSetTabMode("t2i_i2v")}
-                                className={`relative z-10 flex items-center gap-1.5 px-3.5 py-1.5 text-[13px] font-semibold rounded-full transition-colors duration-200 ${
-                                    isActiveT2I ? "text-foreground" : "text-text-secondary hover:text-text-secondary/80"
-                                }`}
-                            >
-                                <ImageIcon size={11} strokeWidth={1.6} />
-                                {t("tabT2iI2v")}
-                            </button>
-                            <button
-                                onClick={() => onSetTabMode("direct_r2v")}
-                                className={`relative z-10 flex items-center gap-1.5 px-3.5 py-1.5 text-[13px] font-semibold rounded-full transition-colors duration-200 ${
-                                    !isActiveT2I ? "text-foreground" : "text-text-secondary hover:text-text-secondary/80"
-                                }`}
-                            >
-                                <Video size={11} strokeWidth={1.6} />
-                                {t("tabDirectR2v")}
-                            </button>
+                        <div role="tablist" aria-label={t("videoModeTabsLabel")} className="inline-flex flex-wrap items-center gap-0.5 rounded-full bg-surface-inset p-[3px]">
+                            {(["t2v", "i2v", "first_last_frame", "r2v"] as const).map((mode) => (
+                                <button
+                                    key={mode}
+                                    type="button"
+                                    role="tab"
+                                    aria-selected={videoMode === mode}
+                                    onClick={() => onSetVideoMode(mode)}
+                                    className={`rounded-full px-3 py-1.5 text-[12px] font-semibold transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/55 ${
+                                        videoMode === mode
+                                            ? "bg-elevated text-foreground shadow-[inset_0_1px_0_rgba(255,255,255,0.1)]"
+                                            : "text-text-secondary hover:text-foreground"
+                                    }`}
+                                >
+                                    {t(mode === "t2v" ? "tabTextVideo" : mode === "i2v" ? "tabT2iI2v" : mode === "first_last_frame" ? "tabFirstLastFrame" : "tabDirectR2v")}
+                                </button>
+                            ))}
                         </div>
-                        <select
-                            aria-label="视频生成模式"
-                            value={videoMode}
-                            onChange={(event) => onSetVideoMode?.(event.target.value as typeof videoMode)}
-                            className="h-8 rounded-md border border-glass-border bg-surface-inset px-2 text-[11px] text-text-secondary"
-                        >
-                            <option value="t2v">文生视频</option>
-                            <option value="i2v">首帧 I2V</option>
-                            <option value="first_last_frame">首尾帧</option>
-                            <option value="r2v">全能参考 R2V</option>
-                        </select>
                     </div>
                 </div>
 
