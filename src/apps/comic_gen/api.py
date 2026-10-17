@@ -629,6 +629,7 @@ class GenerateAssetRequest(BaseModel):
     prompt: Optional[str] = None
     apply_style: bool = True
     preserve_prompt: bool = False
+    scene_tool: Optional[Dict[str, Any]] = None
     negative_prompt: Optional[str] = None
     batch_size: int = 1
     model_name: Optional[str] = None
@@ -3826,6 +3827,7 @@ def generate_single_asset(script_id: str, request: GenerateAssetRequest, backgro
             request.references,
             request.image_generation_mode,
             request.preserve_prompt,
+            request.scene_tool,
         )
         
         # Add background processing
