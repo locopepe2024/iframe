@@ -25,7 +25,7 @@ import { toast } from "@/store/toastStore";
 import type { EpisodeAssetSyncDiff, EpisodeVisualContextState } from "@/lib/directorShootingPlan";
 import { getAssetPlanEntries, type AssetPlanEntry } from "@/lib/episodeAssetPlan";
 import EpisodeAssetPlanPanel from "./EpisodeAssetPlanPanel";
-import { SceneImageTools, type SceneImageSource } from "./SceneImageTools";
+import { SceneImageTools, type LightingReference, type SceneImageSource } from "./SceneImageTools";
 
 export default function ConsistencyVault() {
     const tv = useTranslations("vault");
@@ -733,6 +733,11 @@ export function CharacterDetailModal({ asset, type, onClose, onUpdateDescription
             };
         }).filter(Boolean) as ReferenceCandidate[]);
     }, [assetIndex]);
+    const lightingReferences = useMemo<LightingReference[]>(() => referenceCandidates.flatMap((candidate) =>
+        candidate.reference && candidate.previewUrl ? [{
+            key: `${candidate.reference.asset_type}:${candidate.reference.asset_id}:${candidate.reference.variant_id}`,
+            label: candidate.label, url: candidate.previewUrl, reference: candidate.reference,
+        }] : []), [referenceCandidates]);
 
     const matchingReferenceCandidates = referenceCandidates.filter((candidate) =>
         candidate.label.toLocaleLowerCase().includes(mention?.query.toLocaleLowerCase() ?? ""),
@@ -838,8 +843,12 @@ export function CharacterDetailModal({ asset, type, onClose, onUpdateDescription
                             />
                         ) : null}
                         {type === "scene" && (["lighting", "camera"] as const).map((kind) => <div key={kind} role="tabpanel" aria-label={kind === "lighting" ? "光影" : "镜头"} className={`${activeTab === kind ? "flex" : "hidden"} h-full min-w-0`}>
-                            <SceneImageTools kind={kind} sources={sceneImageSources} busy={isGenerating} onGenerate={(source, prompt) => onGenerate(prompt, false, negativePrompt, 1,
-                                [{ asset_type: "scene", asset_id: asset.id, variant_id: source.variantId }], "reference")} />
+                            <SceneImageTools kind={kind} sources={sceneImageSources} sceneAssetId={asset.id} lightingReferences={lightingReferences} busy={isGenerating} onGenerate={(source, prompt, lightReference) => {
+                                const sourceReference: AssetLibraryReference = { asset_type: "scene", asset_id: asset.id, variant_id: source.variantId };
+                                const references = [sourceReference];
+                                if (lightReference && !(lightReference.asset_type === sourceReference.asset_type && lightReference.asset_id === sourceReference.asset_id && lightReference.variant_id === sourceReference.variant_id)) references.push(lightReference);
+                                onGenerate(prompt, false, negativePrompt, 1, references, "reference");
+                            }} />
                         </div>)}
                     </div>
                 </div>
