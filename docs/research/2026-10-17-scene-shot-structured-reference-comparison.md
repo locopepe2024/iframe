@@ -1,0 +1,24 @@
+# Scene and shot structure: GitHub comparison
+
+Date: 2026-10-17. Scope: public repository files read at pinned commits. This compares contracts and selected validation code; it does not claim the projects produce visually consistent output.
+
+## Observed
+
+| Project | Directly observed structure | Implementation evidence and limit |
+| --- | --- | --- |
+| [AutoMovie](https://github.com/samchon/automovie/tree/47e37a2121ca3e9af569aad5796cf4a9d22366ae) | [Production design](https://github.com/samchon/automovie/blob/47e37a2121ca3e9af569aad5796cf4a9d22366ae/packages/interface/src/production/IAutoMovieProductionDesign.ts) owns `artDirection` and optional `environmentContext`; [production lighting](https://github.com/samchon/automovie/blob/47e37a2121ca3e9af569aad5796cf4a9d22366ae/packages/interface/src/scene/IAutoMovieProductionLighting.ts) has stable light IDs and story-clock tracks; [shot contract](https://github.com/samchon/automovie/blob/47e37a2121ca3e9af569aad5796cf4a9d22366ae/packages/interface/src/production/IAutoMovieShotContract.ts) separately names participants, opening/closing state, camera readability, timed events and review frames. | The lighting type explicitly says the current production caller samples opening state only; a declared track is not proof of through-shot inheritance. The shot type notes that occlusion ratio needs external image review. Earlier [continuity requirements](https://github.com/samchon/automovie/blob/b4fba4f4a702d6caf64636ec4d1898a519738612/docs/requirements/staging/state-handoff-and-continuity.md) are design requirements, not proof of complete runtime enforcement. |
+| [production-pack](https://github.com/chaoszero6/production-pack/tree/39bff233945efaff5b0daa058067f69b7a52f9cc) | [Story schema](https://github.com/chaoszero6/production-pack/blob/39bff233945efaff5b0daa058067f69b7a52f9cc/.dsh/skills/story-schema.md) separates character identity, location palette/atmosphere and scene visual mood. [Shot-list schema](https://github.com/chaoszero6/production-pack/blob/39bff233945efaff5b0daa058067f69b7a52f9cc/.dsh/skills/shot-list-schema.md) carries location ID, character positions, lighting, camera, keyframe strategy, reference images, audio and transition per shot. | These schemas are skill instructions. [shot_list_lint.py](https://github.com/chaoszero6/production-pack/blob/39bff233945efaff5b0daa058067f69b7a52f9cc/pipeline/shot_list_lint.py) actually checks selected shot-list properties, including named-character count, montage patterns and reference-file existence. The [continuity-check skill](https://github.com/chaoszero6/production-pack/blob/39bff233945efaff5b0daa058067f69b7a52f9cc/.dsh/skills/continuity-check.md) prescribes frame-boundary review; the skill alone does not prove automated visual comparison. |
+| iFrame current main / PR #174 | Confirmed director plan already has place/time continuity IDs and structured lighting baseline. Scene/prop confirmed design saves `visual_notes`; shot context stores a matching plan snapshot. Shot UI has size, angle, camera movement, transition, prompt and video references. PR #174 makes plan prose selectable and candidate requests reviewable. | The scene design still lacks the full structured scene package requested here. PR #171 adds image-edit tools based on an existing scene variant, not director → scene → shot initial inheritance. Both remain integration work. |
+
+## Direct implication
+
+Both external projects support separating shared visual/world state from per-shot camera, participant and boundary state. production-pack also shows that reference-image role and first-frame strategy belong to each shot. For iFrame, the useful mapping is confirmed director defaults → versioned scene design (description, character/prop refs, style, ambient and local light, reference-image viewpoint) → shot design (exact variants, prompt, voice, movement, size, angle, transition). The scene reference-image viewpoint and the moving shot camera must keep separate field names and owners.
+
+## Not yet proven
+
+- Neither external source establishes that a phrase such as “blood-red sunset” will be visually limited to the sun by an image/video model. iFrame needs explicit scope in reviewed prompt plus image review.
+- The inspected files do not establish a reusable, production-ready schema that can be copied directly into iFrame. AutoMovie uses a deterministic 3D engine; production-pack uses skill-authored JSON and partial linting.
+
+## What would verify it
+
+Build a minimal iFrame fixture for blue-dusk street + distant red sunset + tree shade + another outdoor street in the same time period. Confirm versioned director defaults, scene overrides and shot overrides separately; inspect the exact outgoing image/video payload and selected variant IDs; then compare generated frames visually. Also verify that changing a scene design marks affected shot drafts for review without rewriting approved shots.

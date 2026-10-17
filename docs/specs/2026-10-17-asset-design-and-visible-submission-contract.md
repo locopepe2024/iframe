@@ -1,5 +1,7 @@
 # Asset design and visible submission contract
 
+External structure comparison: [scene and shot GitHub references](../research/2026-10-17-scene-shot-structured-reference-comparison.md).
+
 ## Scope and evidence
 
 This contract covers character, scene, and prop image generation in Studio asset workbenches. Character, scene and prop designs now have reviewable confirmed revisions. Manual image routes require a complete visible prompt. Provider output adherence still requires runtime checks.
