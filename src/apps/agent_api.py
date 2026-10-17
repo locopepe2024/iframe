@@ -186,6 +186,42 @@ def company_finance_guidance() -> str:
     return FINANCE_RESEARCH_SKILL.read_text(encoding="utf-8")
 
 
+def comparable_company_request(content: str) -> bool:
+    """Whether the user is asking for peer or comparable-company research."""
+    return bool(re.search(r"类似公司|可比公司|同行|对标|参考公司|竞品|竞争对手", content, re.IGNORECASE))
+
+
+def comparable_company_clarification(content: str, previous_messages: list[dict], payload: dict) -> str | None:
+    """Return a targeted clarification before trying a listed-company adapter.
+
+    A private company is still a valid research subject. It needs a name and
+    comparison dimensions so the next stage can map it to public peers; it is
+    not an unsupported subject or a reason to spend a discovery budget.
+    """
+    previous_user = next((str(item.get("content", "")) for item in reversed(previous_messages)
+                          if item.get("role") == "user"), "")
+    current_peer_request = comparable_company_request(content)
+    private_followup = bool(re.search(r"未上市|没上市|尚未上市|非上市", content)) and comparable_company_request(previous_user)
+    if not current_peer_request and not private_followup:
+        return None
+    user_text = f"{previous_user} {content}" if private_followup else content
+    subject = str(payload.get("subject") or "").strip()
+    generic_subjects = {"公司", "这家公司", "该公司", "一家未上市公司", "未上市公司", "项目", "这个项目", "AI视频模型后训练"}
+    has_identity = (len(subject) >= 2 and subject not in generic_subjects
+                    and subject.casefold() in user_text.casefold())
+    has_dimensions = bool(re.search(
+        r"模型能力|产品|技术|性能|客户|商业化|融资|估值|研发|团队|算力|收入|营收|盈利|利润|市场|渠道",
+        user_text,
+    ))
+    if has_identity and has_dimensions:
+        return None
+    missing = ("公司或项目名称，并说明希望对比的维度" if not has_identity and not has_dimensions
+               else "公司或项目名称" if not has_identity else "希望对比的维度")
+    return (f"未上市公司或项目也可以研究。请补充{missing}，"
+            "例如模型能力与产品、客户与商业化、融资与估值、研发团队与算力、收入与盈利。"
+            "未上市主体不要求股票代码；取得这些信息后再筛选可公开检索的上市公司和行业参与者。")
+
+
 def plan_research(ctx, model: str, content: str, previous_messages: list[dict]) -> ResearchIntent:
     from .knowledge.discovery import current_cninfo_date
     today = (current_cninfo_date() if os.getenv("IFRAME_KNOWLEDGE_DISCOVERY_PROVIDER") == "cninfo"
@@ -216,6 +252,10 @@ def plan_research(ctx, model: str, content: str, previous_messages: list[dict]) 
         payload = json.loads(match.group(0) if match else result)
         if isinstance(payload, dict) and payload.get("clarification") is None:
             payload["clarification"] = ""
+        guided_clarification = comparable_company_clarification(content, previous_messages, payload) if isinstance(payload, dict) else None
+        if guided_clarification:
+            payload["needs_clarification"] = True
+            payload["clarification"] = guided_clarification
         if isinstance(payload, dict) and not payload.get("needs_clarification"):
             if "今年" in content:
                 default_start = date(today.year, 1, 1)
