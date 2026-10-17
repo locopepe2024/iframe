@@ -64,8 +64,9 @@ import {
 } from "./storyboard-r2v/referenceAssets";
 
 export default function StoryboardR2V() {
+    const candidateRenderBusyRef = useRef(false);
     const [pendingCandidate, setPendingCandidate] = useState<{
-        projectId: string; frameId: string; index: number; slot: "first" | "last";
+        projectId: string; frameId: string; slot: "first" | "last";
         preview: FrameRenderPreview;
     } | null>(null);
     const currentProject = useProjectStore((state) => state.currentProject);
@@ -966,7 +967,7 @@ export default function StoryboardR2V() {
             );
             const projected = await api.previewFrameCandidate(currentProject.id, shot.id, t2iPrompt, negativePrompt);
             setPendingCandidate({
-                projectId: currentProject.id, frameId: shot.id, index, slot,
+                projectId: currentProject.id, frameId: shot.id, slot,
                 preview: {
                     prompt: projected.prompt, negativePrompt: projected.negative_prompt,
                     contextToken: projected.context_token, batchSize: 1, referenceCount: null,
@@ -983,11 +984,17 @@ export default function StoryboardR2V() {
 
     const confirmT2I = useCallback(async () => {
         const pending = pendingCandidate;
-        if (!pending) return;
+        if (!pending || candidateRenderBusyRef.current) return;
+        if (currentProject?.id !== pending.projectId) {
+            setPendingCandidate(null);
+            toast.warning("项目已切换，请重新预览生成输入");
+            return;
+        }
+        candidateRenderBusyRef.current = true;
         setPendingCandidate(null);
-        const { projectId, frameId, index, slot, preview } = pending;
-        setShots(prev => prev.map((s, i) =>
-            i === index ? (slot === "first"
+        const { projectId, frameId, slot, preview } = pending;
+        setShots(prev => prev.map((s) =>
+            s.id === frameId ? (slot === "first"
                 ? { ...s, t2iStatus: "pending" }
                 : { ...s, lastFrameStatus: "pending" }) : s
         ));
@@ -998,8 +1005,8 @@ export default function StoryboardR2V() {
             if (!result?.image_url) throw new Error("候选生图没有返回图片");
 
             const imageUrl = result.image_url;
-            setShots(prev => prev.map((s, i) => {
-                if (i !== index) return s;
+            setShots(prev => prev.map((s) => {
+                if (s.id !== frameId) return s;
                 if (slot === "last") {
                     const urls = [...(s.lastFrameImageUrls ?? []), imageUrl].slice(-10);
                     const selected = urls.length - 1;
@@ -1016,13 +1023,15 @@ export default function StoryboardR2V() {
         } catch (error) {
             debugLog.error("Studio", "Failed to generate T2I for shot:", error);
             toast.error("候选图片生成失败", { body: String((error as Error)?.message || "请重新预览后重试") });
-            setShots(prev => prev.map((s, i) =>
-                i === index ? (slot === "first"
+            setShots(prev => prev.map((s) =>
+                s.id === frameId ? (slot === "first"
                     ? { ...s, t2iStatus: "failed" }
                     : { ...s, lastFrameStatus: "failed" }) : s
             ));
+        } finally {
+            candidateRenderBusyRef.current = false;
         }
-    }, [pendingCandidate, persistWorkbench]);
+    }, [pendingCandidate, currentProject?.id, persistWorkbench]);
 
     // Batch-aware generation. The user's "抽卡" mental model: one
     // click of Generate ×N fires N independent createVideoTask calls

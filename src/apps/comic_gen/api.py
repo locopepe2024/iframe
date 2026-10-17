@@ -4968,13 +4968,17 @@ def preview_frame_candidate(script_id: str, request: RenderFramePreviewRequest,
         if not character:
             reference_labels.append(f"{item_id}（素材未找到）")
             continue
-        selected = next((f"{field}:{getattr(character, field).selected_id}"
+        selected = next((f"{field}:{asset.selected_id}"
                          for field in ("three_view_asset", "full_body_asset", "headshot_asset")
-                         if getattr(character, field, None) and getattr(character, field).selected_id), None)
+                         if (asset := getattr(character, field, None)) and asset.selected_id
+                         and any(variant.id == asset.selected_id for variant in asset.variants)), None)
         reference_labels.append(f"{character.name}（{selected or '旧版图片或无参考图'}）")
     if frame.scene_id:
         scene_asset = scene_assets.get(frame.scene_id)
-        selected = scene_asset.image_asset.selected_id if scene_asset and scene_asset.image_asset else None
+        image_asset = scene_asset.image_asset if scene_asset else None
+        selected = image_asset.selected_id if image_asset and any(
+            variant.id == image_asset.selected_id for variant in image_asset.variants
+        ) else None
         reference_labels.append(f"{scene_asset.name if scene_asset else frame.scene_id}（{selected or '旧版图片或无参考图'}）")
     from .assets import ASPECT_RATIO_TO_SIZE
     return {
