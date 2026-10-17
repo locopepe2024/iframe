@@ -1,28 +1,41 @@
 import { useRef, useState } from "react";
 import { useWorkbenchStore } from "../state/workbench-store";
 import { selectCharactersRecord } from "../state/workbench-selectors";
-import type { DirectorValidationPresetId } from "../types";
+import type { DirectorBlockingTemplateId, DirectorValidationPresetId } from "../types";
 import { ObjectAddMenu } from "./ObjectAddMenu";
 import { PanoramaEnvironmentPanel } from "./PanoramaEnvironmentPanel";
 const VALIDATION_PRESETS: ReadonlyArray<{ id: DirectorValidationPresetId; label: string; description: string }> = [
   { id: "indoor-sofa-wide", label: "室内沙发三人全景", description: "室内宽景、沙发和三名坐姿白模。" },
   { id: "fight-15s", label: "15 秒武打参考", description: "两名白模、15 秒关键帧与接触标记。" },
 ];
+const BLOCKING_TEMPLATES: ReadonlyArray<{ id: DirectorBlockingTemplateId; label: string; description: string }> = [
+  { id: "empty", label: "空场景", description: "仅保留地面与机位，从零开始布置。" },
+  { id: "single", label: "单人镜头", description: "一名人物与中景机位。" },
+  { id: "dialogue", label: "双人对话", description: "两人面对面站位与双人机位。" },
+  { id: "blocking", label: "多人走位", description: "三人前后错开，继续绘制运动路径。" },
+  { id: "product", label: "道具镜头", description: "产品主体、背景板和侧面道具。" },
+];
 function ValidationSceneMenu() {
   const menuRef = useRef<HTMLDetailsElement>(null);
+  const applyTemplate = useWorkbenchStore((state) => state.applyBlockingTemplate);
   const applyPreset = useWorkbenchStore((state) => state.applyValidationScenePreset);
   const load = (presetId: DirectorValidationPresetId) => {
     applyPreset(presetId);
     menuRef.current?.removeAttribute("open");
   };
+  const loadTemplate = (templateId: DirectorBlockingTemplateId) => {
+    applyTemplate(templateId);
+    menuRef.current?.removeAttribute("open");
+  };
   return (
     <details className="object-add-menu validation-scene-menu" ref={menuRef}>
-      <summary aria-label="加载验证场景"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16v12H4z"/><path d="M8 10h8M8 14h5"/></svg><span>验证场景</span></summary>
+      <summary aria-label="选择站位模板"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16v12H4z"/><path d="M8 10h8M8 14h5"/></svg><span>站位模板</span></summary>
       <div className="object-add-popover">
-        <div className="object-add-heading"><strong>浏览器白模验证</strong><small>仅装配本地导演台状态，不上传素材或调用模型。</small></div>
+        <div className="object-add-heading"><strong>快速建立空间关系</strong><small>模板会替换当前场景，可撤销；仅在本地装配。</small></div>
         <div className="validation-scene-actions">
-          {VALIDATION_PRESETS.map((preset) => <button key={preset.id} type="button" onClick={() => load(preset.id)}><span><strong>{preset.label}</strong><small>{preset.description}</small></span><span className="availability available">可用</span></button>)}
+          {BLOCKING_TEMPLATES.map((template) => <button key={template.id} type="button" onClick={() => loadTemplate(template.id)}><span><strong>{template.label}</strong><small>{template.description}</small></span><span className="availability available">可用</span></button>)}
         </div>
+        <details><summary>验证样例</summary><div className="validation-scene-actions">{VALIDATION_PRESETS.map((preset) => <button key={preset.id} type="button" onClick={() => load(preset.id)}><span><strong>{preset.label}</strong><small>{preset.description}</small></span><span className="availability available">可用</span></button>)}</div></details>
         <p className="director-boundary-note">可从时间线录制浏览器白模参考视频；媒体端渲染仍待接入。</p>
       </div>
     </details>
