@@ -32,6 +32,30 @@ def test_truncated_polish_json_is_rejected():
     assert error.value.reason == "json_parse_error"
 
 
+def test_first_last_polish_labels_both_images_before_draft(monkeypatch):
+    from src.apps.comic_gen import llm
+
+    monkeypatch.setattr(llm, "_resolve_image_for_vision", lambda value: value)
+    processor = ScriptProcessor.__new__(ScriptProcessor)
+    processor.llm = MagicMock()
+    processor.llm.is_configured = True
+    processor.llm.chat.return_value = json.dumps({
+        "prompt_cn": "首帧开始，尾帧停止。", "prompt_en": "Start at first image and stop at last image.",
+    })
+    processor.polish_video_prompt(
+        "people move along the street", image_urls=["first", "last"],
+        generation_mode="first_last_frame",
+    )
+    messages = processor.llm.chat.call_args.kwargs["messages"]
+    assert "ending image" in messages[0]["content"]
+    parts = messages[1]["content"]
+    assert [(part["type"], part.get("text", part.get("image_url", {}).get("url"))) for part in parts] == [
+        ("text", "Actual first frame at 0.00 seconds"), ("image_url", "first"),
+        ("text", "Actual last frame at the end of the clip"), ("image_url", "last"),
+        ("text", "people move along the street"),
+    ]
+
+
 # ---------------------------------------------------------------------------
 # _is_echo unit tests
 # ---------------------------------------------------------------------------
