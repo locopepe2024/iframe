@@ -5,8 +5,9 @@ import { useTranslations } from "next-intl";
 import { motion, AnimatePresence } from "framer-motion";
 import { Paintbrush, User, Users, MapPin, Box, Lock, Unlock, RefreshCw, Upload, Image as ImageIcon, X, Check, Settings, ChevronRight, Trash2, Plus, Link as LinkIcon, Sparkles } from "lucide-react";
 import { useProjectStore } from "@/store/projectStore";
-import { agentRequest, api, API_URL, authenticatedFetch, crudApi, type AssetLibraryReference, type ChatModel } from "@/lib/api";
+import { agentRequest, api, API_URL, authenticatedFetch, crudApi, type AssetImageReviewRequest, type AssetLibraryReference, type ChatModel } from "@/lib/api";
 import { extractErrorDetail, getAssetUrl } from "@/lib/utils";
+import { includeVisibleStyle } from "@/lib/assetPromptStyle";
 import CharacterWorkbench from "./CharacterWorkbench";
 import { VariantSelector } from "../common/VariantSelector";
 import { VideoVariantSelector } from "../common/VideoVariantSelector";
@@ -28,6 +29,7 @@ import EpisodeAssetPlanPanel from "./EpisodeAssetPlanPanel";
 import AssetCoverBadges from "./AssetCoverBadges";
 import { characterImageUrl } from "@/lib/characterImage";
 import AssetNameEditor from "../common/AssetNameEditor";
+import AssetImageSubmissionReview from "@/components/shared/AssetImageSubmissionReview";
 
 export default function ConsistencyVault() {
     const tv = useTranslations("vault");
@@ -202,8 +204,17 @@ export default function ConsistencyVault() {
         }
     };
 
-    const handleGenerate = async (assetId: string, type: string, generationType: string = "all", prompt: string = "", applyStyle: boolean = true, negativePrompt: string = "", batchSize: number = 1, references: AssetLibraryReference[] = [], imageGenerationMode: "text" | "reference" = "text", preservePrompt: boolean = false) => {
+    const handleGenerate = async (assetId: string, type: string, generationType: string = "all", prompt: string = "", _applyStyle: boolean = false, negativePrompt: string = "", batchSize: number = 1, references: AssetLibraryReference[] = [], imageGenerationMode: "text" | "reference" = "text", _preservePrompt: boolean = true, reviewFingerprint?: string) => {
         if (!currentProject) return;
+        if (!prompt.trim()) {
+            toast.warning("Review and enter the final image prompt before generating.");
+            return;
+        }
+        const isDerivedCharacter = type === "character" && (generationType === "three_view" || generationType === "headshot");
+        if (isDerivedCharacter && (imageGenerationMode !== "reference" || references.length !== 1)) {
+            toast.warning("Select exactly one master image in Reference image mode for this character view.");
+            return;
+        }
 
         // Add task with specific generation type and batch size
         if (addGeneratingTask) {
@@ -211,8 +222,6 @@ export default function ConsistencyVault() {
         }
 
         try {
-            const stylePrompt = currentProject?.art_direction?.style_config?.positive_prompt || "";
-
             console.log("[handleGenerate] Starting asset generation...");
 
             // Call API - now returns immediately with task_id
@@ -221,18 +230,19 @@ export default function ConsistencyVault() {
                 assetId,
                 type,
                 "ArtDirection",
-                stylePrompt,
+                "",
                 generationType,
                 prompt,
-                applyStyle,
+                false,
                 negativePrompt,
                 batchSize,
                 currentProject.series_id ? undefined : resolveAssetGenerationModel(currentProject.model_settings?.t2i_model),
                 undefined,
-                undefined,
-                references,
+                isDerivedCharacter ? references[0] : undefined,
+                isDerivedCharacter ? [] : references,
                 imageGenerationMode,
-                preservePrompt,
+                true,
+                reviewFingerprint,
             );
 
             const taskId = response._task_id;
@@ -712,7 +722,10 @@ export default function ConsistencyVault() {
                                 asset={asset}
                                 type={activeTab}
                                 isGenerating={isAssetGenerating(asset.id)}
-                                onGenerate={() => handleGenerate(asset.id, activeTab)}
+                                onGenerate={() => {
+                                    setSelectedAssetId(asset.id);
+                                    setSelectedAssetType(activeTab);
+                                }}
                                 onToggleLock={() => api.toggleAssetLock(currentProject.id, asset.id, activeTab).then(updated => updateProject(currentProject.id, updated))}
                                 onClick={() => {
                                     setSelectedAssetId(asset.id);
@@ -755,7 +768,7 @@ export default function ConsistencyVault() {
                             onUpdateDescription={(desc: string) => handleUpdateDescription(selectedAssetId, selectedAssetType, desc)}
                             onUpdateAttributes={(attributes: Record<string, unknown>) => handleUpdateAttributes(selectedAssetId, selectedAssetType, attributes)}
                             onRename={(name: string) => handleRenameAsset(selectedAssetId, selectedAssetType, name)}
-                            onGenerate={(type: string, prompt: string, applyStyle: boolean, negativePrompt: string, batchSize: number, references?: AssetLibraryReference[], imageGenerationMode?: "text" | "reference") => handleGenerate(selectedAssetId, selectedAssetType, type, prompt, applyStyle, negativePrompt, batchSize, references, imageGenerationMode)}
+                            onGenerate={(type: string, prompt: string, applyStyle: boolean, negativePrompt: string, batchSize: number, references?: AssetLibraryReference[], imageGenerationMode?: "text" | "reference", reviewFingerprint?: string) => handleGenerate(selectedAssetId, selectedAssetType, type, prompt, applyStyle, negativePrompt, batchSize, references, imageGenerationMode, true, reviewFingerprint)}
                             generatingTypes={getAssetGeneratingTypes(selectedAssetId)}
                             stylePrompt={currentProject?.art_direction?.style_config?.positive_prompt || ""}
                             styleNegativePrompt={currentProject?.art_direction?.style_config?.negative_prompt || ""}
@@ -774,7 +787,7 @@ export default function ConsistencyVault() {
                             }}
                             onUpdateDescription={(desc: string) => handleUpdateDescription(selectedAssetId, selectedAssetType, desc)}
                             onRename={(name: string) => handleRenameAsset(selectedAssetId, selectedAssetType, name)}
-                            onGenerate={(prompt: string, applyStyle: boolean, negativePrompt: string, batchSize: number, references?: AssetLibraryReference[], imageGenerationMode?: "text" | "reference", preservePrompt?: boolean) => handleGenerate(selectedAssetId, selectedAssetType, "all", prompt, applyStyle, negativePrompt, batchSize, references, imageGenerationMode, preservePrompt)}
+                            onGenerate={(prompt: string, applyStyle: boolean, negativePrompt: string, batchSize: number, references?: AssetLibraryReference[], imageGenerationMode?: "text" | "reference", preservePrompt?: boolean, reviewFingerprint?: string) => handleGenerate(selectedAssetId, selectedAssetType, "all", prompt, applyStyle, negativePrompt, batchSize, references, imageGenerationMode, preservePrompt, reviewFingerprint)}
                             isGenerating={isAssetGenerating(selectedAssetId)}
                             stylePrompt={currentProject?.art_direction?.style_config?.positive_prompt || ""}
                             styleNegativePrompt={currentProject?.art_direction?.style_config?.negative_prompt || ""}
@@ -1016,7 +1029,6 @@ function CharacterDetailModal({ asset, type, onClose, onUpdateDescription, onRen
     const [promptModel, setPromptModel] = useState("");
     const [optimizingPrompt, setOptimizingPrompt] = useState(false);
     const [optimizedPrompt, setOptimizedPrompt] = useState("");
-    const [acceptedOptimizedPrompt, setAcceptedOptimizedPrompt] = useState("");
     const [promptError, setPromptError] = useState("");
     const [imageGenerationMode, setImageGenerationMode] = useState<"text" | "reference">("text");
     const [promptReferences, setPromptReferences] = useState<AssetLibraryReference[]>([]);
@@ -1038,8 +1050,8 @@ function CharacterDetailModal({ asset, type, onClose, onUpdateDescription, onRen
     const [mentionIndex, setMentionIndex] = useState(0);
 
     // Style Controls
-    const [applyStyle, setApplyStyle] = useState(true);
     const [negativePrompt, setNegativePrompt] = useState(styleNegativePrompt || DEFAULT_CHARACTER_NEGATIVE_PROMPT);
+    const [pendingImageReview, setPendingImageReview] = useState<AssetImageReviewRequest | null>(null);
     const [showAdvanced, setShowAdvanced] = useState(false);
 
     // Video Controls
@@ -1183,7 +1195,7 @@ function CharacterDetailModal({ asset, type, onClose, onUpdateDescription, onRen
                 asset_name: asset.name,
                 description: asset.description,
                 current_prompt: imagePrompt,
-                style: applyStyle ? stylePrompt : "",
+                style: "",
                 plan_context: planEntries.slice(0, 8).map((entry: AssetPlanEntry) => entry.prompt),
             });
             setOptimizedPrompt(result.prompt);
@@ -1203,7 +1215,23 @@ function CharacterDetailModal({ asset, type, onClose, onUpdateDescription, onRen
             toast.warning(tv("referenceModeSelectExplicitly"));
             return;
         }
-        onGenerate(imagePrompt, applyStyle, negativePrompt, batchSize, promptReferences, imageGenerationMode, Boolean(acceptedOptimizedPrompt && imagePrompt === acceptedOptimizedPrompt));
+        if (!currentProject?.id || !imagePrompt.trim()) {
+            toast.warning("Review a non-empty image prompt before generating.");
+            return;
+        }
+        setPendingImageReview({
+            asset_id: asset.id,
+            asset_type: type,
+            generation_type: "all",
+            prompt: imagePrompt,
+            negative_prompt: negativePrompt,
+            batch_size: batchSize,
+            model_name: currentProject.series_id ? undefined : resolveAssetGenerationModel(currentProject.model_settings?.t2i_model),
+            references: promptReferences,
+            image_generation_mode: imageGenerationMode,
+            apply_style: false,
+            preserve_prompt: true,
+        });
     };
 
     return (
@@ -1346,7 +1374,7 @@ function CharacterDetailModal({ asset, type, onClose, onUpdateDescription, onRen
                                 {optimizedPrompt && <div className="space-y-2 border-l-2 border-primary pl-3">
                                     <p className="whitespace-pre-wrap text-xs leading-relaxed text-text-secondary">{optimizedPrompt}</p>
                                     <div className="flex gap-3">
-                                        <button type="button" onClick={() => { setImagePrompt(optimizedPrompt); setAcceptedOptimizedPrompt(optimizedPrompt); setOptimizedPrompt(""); }} className="text-xs text-primary hover:underline">采用建议</button>
+                                        <button type="button" onClick={() => { setImagePrompt(optimizedPrompt); setOptimizedPrompt(""); }} className="text-xs text-primary hover:underline">采用建议</button>
                                         <button type="button" onClick={() => setOptimizedPrompt("")} className="text-xs text-text-muted hover:underline">忽略</button>
                                     </div>
                                 </div>}
@@ -1410,18 +1438,13 @@ function CharacterDetailModal({ asset, type, onClose, onUpdateDescription, onRen
                             <div className="space-y-2">
                                 <label className="text-sm font-bold text-text-secondary uppercase">Style Settings</label>
                                 <div className="bg-glass rounded-lg p-3 border border-border-subtle">
-                                    <div className="flex items-center gap-2 mb-2">
-                                        <input
-                                            type="checkbox"
-                                            id="applyStyleModal"
-                                            checked={applyStyle}
-                                            onChange={(e) => setApplyStyle(e.target.checked)}
-                                            className="rounded border-gray-600 bg-gray-700 text-primary focus:ring-primary"
-                                        />
-                                        <label htmlFor="applyStyleModal" className="text-sm font-bold text-text-secondary cursor-pointer select-none">
-                                            Apply Art Direction Style
-                                        </label>
-                                    </div>
+                                    <button type="button" onClick={() => {
+                                        setImagePrompt((current: string) => includeVisibleStyle(current, stylePrompt));
+                                        setNegativePrompt((current: string) => includeVisibleStyle(current, styleNegativePrompt));
+                                    }} disabled={!stylePrompt && !styleNegativePrompt}
+                                        className="mb-2 rounded border border-glass-border px-2 py-1 text-xs text-text-secondary disabled:opacity-40">
+                                        {tv("copyStyleToPrompt")}
+                                    </button>
 
                                     {stylePrompt && (
                                         <div className="text-xs text-text-muted font-mono bg-surface p-2 rounded border border-border-subtle">
@@ -1476,6 +1499,18 @@ function CharacterDetailModal({ asset, type, onClose, onUpdateDescription, onRen
                     </div>
                 </div>
             </motion.div>
+            {pendingImageReview && currentProject?.id && <AssetImageSubmissionReview
+                projectId={currentProject.id}
+                request={pendingImageReview}
+                onBack={() => setPendingImageReview(null)}
+                onConfirm={(review) => {
+                    const request = pendingImageReview;
+                    setPendingImageReview(null);
+                    onGenerate(request.prompt, false, request.negative_prompt,
+                        request.batch_size, request.references || [], request.image_generation_mode,
+                        true, review.fingerprint);
+                }}
+            />}
         </div>
     );
 }

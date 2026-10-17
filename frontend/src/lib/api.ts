@@ -234,6 +234,35 @@ export interface AssetLibraryReference {
     variant_id: string;
 }
 
+export interface AssetImageReviewRequest {
+    asset_id: string;
+    asset_type: "character" | "scene" | "prop";
+    generation_type: string;
+    prompt: string;
+    negative_prompt: string;
+    batch_size: number;
+    model_name?: string;
+    aspect_ratio?: string;
+    reference?: AssetLibraryReference;
+    references?: AssetLibraryReference[];
+    image_generation_mode: "text" | "reference";
+    apply_style: false;
+    preserve_prompt: true;
+}
+
+export interface AssetImageReviewProjection {
+    positive_prompt: string;
+    negative_prompt: string;
+    selected_model_id: string;
+    aspect_ratio: string;
+    generation_type: string;
+    image_generation_mode: "text" | "reference";
+    batch_size: number;
+    reference_inputs: AssetLibraryReference[];
+    design_revision_at_submission: number | null;
+    fingerprint: string;
+}
+
 export interface AssetReferenceIndexVariant {
     id: string;
     display_name?: string | null;
@@ -967,7 +996,12 @@ export const api = {
     assetVariantContentUrl: (scriptId: string, assetType: string, assetId: string, variantId: string) =>
         `${API_URL}/projects/${encodeURIComponent(scriptId)}/assets/${encodeURIComponent(assetType)}/${encodeURIComponent(assetId)}/variants/${encodeURIComponent(variantId)}/content`,
 
-    generateAsset: async (scriptId: string, assetId: string, assetType: string, stylePreset: string, stylePrompt?: string, generationType: string = "all", prompt: string = "", applyStyle: boolean = true, negativePrompt: string = "", batchSize: number = 1, modelName?: string, aspectRatio?: string, reference?: AssetLibraryReference, references?: AssetLibraryReference[], imageGenerationMode: "text" | "reference" = "text", preservePrompt: boolean = false) => {
+    previewAssetImageSubmission: async (scriptId: string, request: AssetImageReviewRequest): Promise<AssetImageReviewProjection> => {
+        const res = await axios.post(`${API_URL}/projects/${scriptId}/assets/generate/preview`, request);
+        return res.data;
+    },
+
+    generateAsset: async (scriptId: string, assetId: string, assetType: string, stylePreset: string, stylePrompt?: string, generationType: string = "all", prompt: string = "", applyStyle: boolean = true, negativePrompt: string = "", batchSize: number = 1, modelName?: string, aspectRatio?: string, reference?: AssetLibraryReference, references?: AssetLibraryReference[], imageGenerationMode: "text" | "reference" = "text", preservePrompt: boolean = false, expectedReviewFingerprint?: string) => {
         const res = await axios.post(`${API_URL}/projects/${scriptId}/assets/generate`, {
             asset_id: assetId,
             asset_type: assetType,
@@ -983,6 +1017,7 @@ export const api = {
             ...(reference ? { reference } : {}),
             ...(references?.length ? { references } : {}),
             image_generation_mode: imageGenerationMode,
+            ...(expectedReviewFingerprint ? { expected_review_fingerprint: expectedReviewFingerprint } : {}),
             preserve_prompt: preservePrompt,
         });
         return res.data;

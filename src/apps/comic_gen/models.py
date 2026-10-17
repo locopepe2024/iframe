@@ -164,6 +164,27 @@ class ProviderRoutingConfig(BaseModel):
         description="Provider backend for pixverse-* models: dashscope or vendor",
     )
 
+class AssetImageReferenceIdentity(BaseModel):
+    asset_type: Literal["character", "scene", "prop"]
+    asset_id: str
+    variant_id: str
+
+
+class AssetImageSubmissionSnapshot(BaseModel):
+    """Immutable user-reviewed request captured before an image task is queued."""
+    schema_version: Literal[1] = 1
+    positive_prompt: str
+    negative_prompt: str = ""
+    selected_model_id: str
+    aspect_ratio: str
+    generation_type: str
+    batch_size: int = Field(1, ge=1)
+    image_generation_mode: Literal["text", "reference"]
+    reference_inputs: List[AssetImageReferenceIdentity] = Field(default_factory=list)
+    design_revision_at_submission: Optional[int] = Field(None, ge=1)
+    submitted_at: float = Field(default_factory=time.time)
+
+
 class ImageVariant(BaseModel):
     model_config = ConfigDict(validate_assignment=True)
     id: str = Field(..., description="Unique identifier for the variant")
@@ -181,6 +202,9 @@ class ImageVariant(BaseModel):
     )
     created_at: float = Field(default_factory=time.time, description="Timestamp of creation")
     prompt_used: Optional[str] = Field(None, description="Prompt used for this specific variant")
+    submission_snapshot: Optional[AssetImageSubmissionSnapshot] = Field(
+        None, description="Reviewed image request frozen at enqueue; absent for legacy or uploaded media"
+    )
     is_favorited: bool = Field(False, description="Whether this variant is favorited/pinned (won't be auto-deleted)")
     # NEW: 上传来源标记
     is_uploaded_source: bool = Field(False, description="Whether this is a user-uploaded source file")
@@ -575,6 +599,10 @@ class Scene(BaseModel):
     owner_profile_id: Optional[str] = Field(None, description="Profile owner when stored in the personal asset library")
     name: str = Field(..., description="Name of the location/scene")
     description: str = Field(..., description="Visual description of the environment")
+    asset_design: Dict[str, Any] = Field(
+        default_factory=lambda: {"design_draft": {}, "design_revisions": []},
+        description="Editable scene design draft and user-confirmed design revisions",
+    )
     visual_weight: int = Field(3, description="Visual importance weight (1-5)")
     time_of_day: Optional[str] = Field(None, description="Time of day (e.g. Night, Day)")
     lighting_mood: Optional[str] = Field(None, description="Lighting atmosphere")
@@ -605,6 +633,10 @@ class Prop(BaseModel):
     owner_profile_id: Optional[str] = Field(None, description="Profile owner when stored in the personal asset library")
     name: str = Field(..., description="Name of the object")
     description: str = Field(..., description="Visual description of the object")
+    asset_design: Dict[str, Any] = Field(
+        default_factory=lambda: {"design_draft": {}, "design_revisions": []},
+        description="Editable prop design draft and user-confirmed design revisions",
+    )
     video_url: Optional[str] = None
     audio_url: Optional[str] = None
     sfx_url: Optional[str] = None

@@ -44,6 +44,7 @@ from urllib.request import Request as UrlRequest, urlopen
 from .pipeline import (
     ComicGenPipeline,
     AssetGenerationInProgress,
+    AssetReviewChanged,
     LibraryAssetInUseError,
     InvalidAssetReference,
     InvalidAssetName,
@@ -633,6 +634,7 @@ class GenerateAssetRequest(BaseModel):
     batch_size: int = 1
     model_name: Optional[str] = None
     aspect_ratio: Optional[str] = None
+    expected_review_fingerprint: Optional[str] = None
 
 class ToggleLockRequest(BaseModel):
     asset_id: str
@@ -1464,9 +1466,59 @@ def delete_series_asset(series_id: str, asset_type: Literal["character", "scene"
         raise HTTPException(status_code=404, detail=str(exc)) from exc
 
 
+def _require_reviewed_asset_image_prompt(
+    request: GenerateAssetRequest, *, require_fingerprint: bool = False,
+) -> None:
+    """Manual image routes must receive the prompt exactly as reviewed in the UI."""
+    if not request.prompt or not request.prompt.strip():
+        raise HTTPException(status_code=422, detail="Review a non-empty asset image prompt before generating")
+    if not request.preserve_prompt or request.apply_style:
+        raise HTTPException(status_code=422, detail="Submit the complete visible prompt; hidden style or template append is disabled")
+    if request.asset_type == "character" and request.generation_type == "all":
+        raise HTTPException(status_code=422, detail="Choose one reviewed character image type per submission")
+    if request.reference_image_url:
+        raise HTTPException(status_code=422, detail="Select a reference by stable asset and variant ID before generating")
+    if request.asset_type == "character" and request.generation_type in ("three_view", "headshot"):
+        if request.image_generation_mode != "reference" or request.reference is None or request.references:
+            raise HTTPException(status_code=422, detail="Choose one explicit master image variant for this derived character view")
+    if require_fingerprint and not request.expected_review_fingerprint:
+        raise HTTPException(status_code=422, detail="Preview and confirm the asset image request before generating")
+
+
+@app.post("/series/{series_id}/assets/generate/preview")
+def preview_series_asset_image(series_id: str, request: GenerateAssetRequest):
+    _require_reviewed_asset_image_prompt(request)
+    try:
+        return pipeline.preview_asset_image_submission(
+            series_id, request.asset_id, request.asset_type, prompt=request.prompt,
+            negative_prompt=request.negative_prompt or "", model_name=request.model_name,
+            generation_type=request.generation_type, image_generation_mode=request.image_generation_mode,
+            batch_size=request.batch_size, reference=request.reference,
+            references=request.references, is_series=True,
+        )
+    except (InvalidAssetReference, ValueError) as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.post("/projects/{script_id}/assets/generate/preview")
+def preview_project_asset_image(script_id: str, request: GenerateAssetRequest):
+    _require_reviewed_asset_image_prompt(request)
+    try:
+        return pipeline.preview_asset_image_submission(
+            script_id, request.asset_id, request.asset_type, prompt=request.prompt,
+            negative_prompt=request.negative_prompt or "", model_name=request.model_name,
+            aspect_ratio=request.aspect_ratio, generation_type=request.generation_type,
+            image_generation_mode=request.image_generation_mode, batch_size=request.batch_size,
+            reference=request.reference, references=request.references,
+        )
+    except (InvalidAssetReference, ValueError) as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
 @app.post("/series/{series_id}/assets/generate")
 def generate_series_asset(series_id: str, request: GenerateAssetRequest, background_tasks: BackgroundTasks):
     """Generate a single asset for a Series (async)."""
+    _require_reviewed_asset_image_prompt(request, require_fingerprint=True)
     try:
         series, task_id = pipeline.generate_series_asset(
             series_id,
@@ -1484,6 +1536,8 @@ def generate_series_asset(series_id: str, request: GenerateAssetRequest, backgro
             request.reference,
             request.references,
             request.image_generation_mode,
+            request.preserve_prompt,
+            request.expected_review_fingerprint,
         )
         background_tasks.add_task(pipeline.process_asset_generation_task, task_id)
         response_data = series.dict()
@@ -1492,6 +1546,8 @@ def generate_series_asset(series_id: str, request: GenerateAssetRequest, backgro
     except InvalidAssetReference as e:
         raise HTTPException(status_code=400, detail=str(e))
     except AssetGenerationInProgress as e:
+        raise HTTPException(status_code=409, detail=str(e))
+    except AssetReviewChanged as e:
         raise HTTPException(status_code=409, detail=str(e))
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
@@ -3251,22 +3307,8 @@ def update_project_style(script_id: str, request: UpdateStyleRequest):
 
 @app.post("/projects/{script_id}/generate_assets", response_model=Script)
 def generate_assets(script_id: str, background_tasks: BackgroundTasks):
-    """Triggers asset generation."""
-    script = pipeline.get_script(script_id)
-    if not script:
-        raise HTTPException(status_code=404, detail="Project not found")
-
-    # Run in background to avoid blocking
-    # For simplicity in this demo, we run synchronously or use background tasks
-    # pipeline.generate_assets(script_id) 
-    # But since we want to return the updated status, we might want to run it and return.
-    # Given the mock nature, it's fast.
-
-    try:
-        updated_script = pipeline.generate_assets(script_id)
-        return signed_response(updated_script)
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+    """Legacy batch endpoint cannot review a separate prompt for each asset."""
+    raise HTTPException(status_code=422, detail="Batch asset generation requires reviewed prompts for each asset; use an asset workbench")
 
 
 
@@ -3807,6 +3849,7 @@ def create_video_task(script_id: str, request: CreateVideoTaskRequest, backgroun
 def generate_single_asset(script_id: str, request: GenerateAssetRequest, background_tasks: BackgroundTasks):
     """Generates a single asset with specific options (async).
     Returns immediately with task_id for polling progress."""
+    _require_reviewed_asset_image_prompt(request, require_fingerprint=True)
     try:
         script, task_id = pipeline.create_asset_generation_task(
             script_id,
@@ -3826,6 +3869,7 @@ def generate_single_asset(script_id: str, request: GenerateAssetRequest, backgro
             request.references,
             request.image_generation_mode,
             request.preserve_prompt,
+            request.expected_review_fingerprint,
         )
         
         # Add background processing
@@ -3839,6 +3883,8 @@ def generate_single_asset(script_id: str, request: GenerateAssetRequest, backgro
     except InvalidAssetReference as e:
         raise HTTPException(status_code=400, detail=str(e))
     except AssetGenerationInProgress as e:
+        raise HTTPException(status_code=409, detail=str(e))
+    except AssetReviewChanged as e:
         raise HTTPException(status_code=409, detail=str(e))
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
