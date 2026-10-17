@@ -220,7 +220,13 @@ class LLMAdapter:
                 content = "".join(parts)
             else:
                 content = response.choices[0].message.content
-            logger.info("LLM chat response body decoded: model=%s chars=%s", model, len(content or ""))
+            finish_reason = None
+            if not stream and response.choices:
+                finish_reason = getattr(response.choices[0], "finish_reason", None)
+            logger.info(
+                "LLM chat response body decoded: model=%s chars=%s finish_reason=%s",
+                model, len(content or ""), finish_reason,
+            )
             return content
         except Exception as e:
             provider_label = "DashScope" if self.provider != "openai" else "OpenAI"

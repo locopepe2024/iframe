@@ -318,12 +318,30 @@ def _parse_bilingual_polish(content: str, *, label: str) -> Dict[str, str]:
     try:
         value: Any = json.loads(content.strip())
     except json.JSONDecodeError as exc:
-        logger.error("Failed to parse %s polish JSON: %s", label, exc)
-        raise PolishError(
-            reason="json_parse_error",
-            message_zh="模型返回了无效响应，建议重试或简化提示词。",
-            message_en="Model returned invalid response. Try again or simplify the prompt.",
-        ) from exc
+        # Some compatible gateways ignore response_format and prepend a short
+        # explanation. Accept a complete embedded object, never a truncated one.
+        value = None
+        if not content.lstrip().startswith("{"):
+            decoder = json.JSONDecoder()
+            for match in re.finditer(r"\{", content):
+                try:
+                    candidate, _ = decoder.raw_decode(content[match.start():])
+                except json.JSONDecodeError:
+                    continue
+                if isinstance(candidate, dict):
+                    value = candidate
+                    break
+        if value is not None:
+            logger.info("Recovered %s polish JSON from wrapped response: chars=%s", label, len(content))
+        else:
+            first = next((ch for ch in content if not ch.isspace()), "")
+            category = "object" if first == "{" else "array" if first == "[" else "fence" if first == "`" else "text" if first else "empty"
+            logger.error("Failed to parse %s polish JSON: chars=%s first=%s position=%s", label, len(content), category, exc.pos)
+            raise PolishError(
+                reason="json_parse_error",
+                message_zh="模型返回了无效响应，建议重试或简化提示词。",
+                message_en="Model returned invalid response. Try again or simplify the prompt.",
+            ) from exc
 
     aliases = {
         "prompt_cn": ("prompt_cn", "prompt_zh", "cn", "zh", "中文提示词"),
