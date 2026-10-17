@@ -209,6 +209,11 @@ export default function ConsistencyVault() {
             toast.warning("Review and enter the final image prompt before generating.");
             return;
         }
+        const isDerivedCharacter = type === "character" && (generationType === "three_view" || generationType === "headshot");
+        if (isDerivedCharacter && (imageGenerationMode !== "reference" || references.length !== 1)) {
+            toast.warning("Select exactly one master image in Reference image mode for this character view.");
+            return;
+        }
 
         // Add task with specific generation type and batch size
         if (addGeneratingTask) {
@@ -232,8 +237,8 @@ export default function ConsistencyVault() {
                 batchSize,
                 currentProject.series_id ? undefined : resolveAssetGenerationModel(currentProject.model_settings?.t2i_model),
                 undefined,
-                undefined,
-                references,
+                isDerivedCharacter ? references[0] : undefined,
+                isDerivedCharacter ? [] : references,
                 imageGenerationMode,
                 true,
             );

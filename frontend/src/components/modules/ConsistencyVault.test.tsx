@@ -18,9 +18,11 @@ const mocks = vi.hoisted(() => ({
 vi.mock("next-intl", () => ({ useTranslations: () => (key: string) => key }));
 vi.mock("@/lib/api", () => ({ API_URL: "", authenticatedFetch: mocks.authenticatedFetch, agentRequest: mocks.agentRequest, api: mocks, crudApi: mocks }));
 vi.mock("@/store/toastStore", () => ({ toast: { error: mocks.error, warning: vi.fn() } }));
-vi.mock("./CharacterWorkbench", () => ({ default: ({ asset, onRename }: any) =>
+vi.mock("./CharacterWorkbench", () => ({ default: ({ asset, onRename, onGenerate }: any) =>
     <div role="dialog" aria-label="角色工作台">{asset.name}
         <button type="button" onClick={() => void onRename("新名字")}>保存资产名</button>
+        <button type="button" onClick={() => onGenerate("three_view", "Reviewed three view", false, "blur", 1,
+            [{ asset_type: "character", asset_id: asset.id, variant_id: "master-1" }], "reference")}>生成三视图</button>
     </div> }));
 vi.mock("../common/VariantSelector", () => ({ VariantSelector: ({ asset, onRename, onGenerate }: any) =>
     <><button type="button" onClick={() => void onRename(asset.variants[0].id, "黄昏参考图")}>命名素材</button>
@@ -54,6 +56,22 @@ beforeEach(() => {
         : Promise.resolve({ prompt: "黄昏参考图，青石板与粮铺门头清晰可见" }));
     vi.spyOn(window, "confirm").mockReturnValue(true);
     vi.spyOn(window, "alert").mockImplementation(() => {});
+});
+
+it("submits a derived character master as one stable reference identity", async () => {
+    const character = { id: "hero", name: "Hero", source: "episode" };
+    const project = { id: "episode-1", characters: [character], scenes: [], props: [] };
+    useProjectStore.setState({ currentProject: project as any });
+    mocks.getEpisodeVisualContext.mockResolvedValue({ context: null, bindings: [] });
+    mocks.generateAsset.mockResolvedValue(project);
+    render(<ConsistencyVault />);
+    fireEvent.click(screen.getByText("Hero"));
+    fireEvent.click(screen.getByRole("button", { name: "生成三视图" }));
+    await waitFor(() => expect(mocks.generateAsset).toHaveBeenCalled());
+    const args = mocks.generateAsset.mock.calls[0];
+    expect(args[12]).toEqual({ asset_type: "character", asset_id: "hero", variant_id: "master-1" });
+    expect(args[13]).toEqual([]);
+    expect(args[14]).toBe("reference");
 });
 
 it("sends only the visible edited scene prompt and negative prompt", async () => {

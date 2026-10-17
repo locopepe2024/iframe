@@ -799,6 +799,11 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
             toast.warning("This prompt contains @ references. Select Reference image mode before generating.");
             return;
         }
+        if ((type === "three_view" || type === "headshot") &&
+            (imageGenerationMode !== "reference" || references.length !== 1)) {
+            toast.warning("Select exactly one master image in Reference image mode for this character view.");
+            return;
+        }
         onGenerate(type, prompt, false, negativePrompt, batchSize, references, imageGenerationMode);
     };
 

@@ -279,7 +279,7 @@ it("loads the project reference index for the character workbench", async () => 
     await waitFor(() => expect(onGenerate).toHaveBeenCalledWith(
         "full_body",
         "@Pocket watch ",
-        true,
+        false,
         expect.any(String),
         1,
         [{ asset_type: "prop", asset_id: "watch-1", variant_id: "watch-front" }],
@@ -607,7 +607,7 @@ it("refreshes the reference index when a generated project snapshot arrives", as
     await waitFor(() => expect(onGenerate).toHaveBeenCalledWith(
         "full_body",
         "@Hero ",
-        true,
+        false,
         expect.any(String),
         1,
         [{ asset_type: "character", asset_id: "character-1", variant_id: "new-view" }],

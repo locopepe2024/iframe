@@ -26,7 +26,7 @@ This contract covers character, scene, and prop image generation in Studio asset
 - Studio and Cast workbenches copy optional global style into editable prompt fields only on a user action. The asset library asks for an editable prompt and negative prompt before generating more variants. These requests send the reviewed text and no style suffix.
 - The character three-view generator does not add hidden negative terms when receiving a reviewed prompt.
 - Reviewed project and series tasks freeze positive/negative text, effective model, ratio, mode, stable explicit reference IDs and the latest confirmed design revision at enqueue. New image variants carry that snapshot after generation; older variants and direct generator calls have no fabricated snapshot.
-- Manual character three-view and headshot requests require one explicitly selected master variant. Manual requests using a legacy reference URL fail validation because the URL does not establish a stable visible identity. Series character text generation no longer implicitly reuses its selected image.
+- Manual character three-view and headshot requests require one explicitly selected master variant. The character workbench checks this before submission and passes that variant as one structured reference. Manual requests using a legacy reference URL fail validation because the URL does not establish a stable visible identity. Series character text generation no longer implicitly reuses its selected image.
 
 ## Remaining work
 
