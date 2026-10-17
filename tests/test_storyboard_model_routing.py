@@ -216,12 +216,31 @@ def test_shot_frame_candidate_does_not_replace_storyboard_image(tmp_path):
 
     pipeline.storyboard_generator.generate_frame.side_effect = generate
 
-    assert pipeline.generate_storyboard_candidate(script.id, frame.id, "shot input") == "candidate.png"
+    token = pipeline.storyboard_candidate_preview_token(script.id, frame.id, "shot input", None)
+    assert pipeline.generate_storyboard_candidate(script.id, frame.id, "shot input", context_token=token) == "candidate.png"
     assert frame.image_url == "original.png"
     assert frame.rendered_image_url == "original.png"
     assert frame.image_prompt == "reviewed storyboard"
     assert frame.status == GenerationStatus.COMPLETED
     assert pipeline.storyboard_generator.generate_frame.call_args.kwargs["preserve_prompt"] is True
+
+
+def test_shot_candidate_requires_current_reviewed_input(tmp_path):
+    frame = StoryboardFrame(id="frame-1", scene_id="scene-1")
+    script = Script(id="episode-1", title="Episode", original_text="", frames=[frame],
+                    created_at=time.time(), updated_at=time.time())
+    pipeline = ComicGenPipeline.__new__(ComicGenPipeline)
+    pipeline.scripts = {script.id: script}
+    pipeline.series_store = {}
+    pipeline.resolve_project_assets = Mock(return_value={"characters": [], "scenes": [], "props": []})
+    token = pipeline.storyboard_candidate_preview_token(script.id, frame.id, "reviewed", "negative")
+    with pytest.raises(ValueError, match="outdated"):
+        pipeline.generate_storyboard_candidate(script.id, frame.id, "changed", "negative", token)
+    with pytest.raises(ValueError, match="outdated"):
+        pipeline.generate_storyboard_candidate(script.id, frame.id, "reviewed", "different negative", token)
+    frame.shot_size = "close-up"
+    with pytest.raises(ValueError, match="outdated"):
+        pipeline.generate_storyboard_candidate(script.id, frame.id, "reviewed", "negative", token)
 
 
 def test_render_preview_is_the_exact_complete_generator_prompt():

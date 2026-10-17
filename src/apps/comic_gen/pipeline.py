@@ -6261,6 +6261,13 @@ class ComicGenPipeline(StudioOwnerMixin):
             "shot_id": frame.shot_id,
             "shot_context": frame.director_shot_context,
             "action_description": frame.action_description,
+            "visual_description": frame.visual_description,
+            "shot_size": frame.shot_size,
+            "camera_angle": frame.camera_angle,
+            "camera_movement": frame.camera_movement,
+            "camera_movement_structured": frame.camera_movement_structured.model_dump(mode="json") if frame.camera_movement_structured else None,
+            "transition_hint": frame.transition_hint,
+            "lighting": frame.lighting.model_dump(mode="json") if frame.lighting else None,
             "dialogue": frame.dialogue,
             "character_ids": frame.character_ids,
             "characters": [characters[item_id].model_dump(mode="json") if item_id in characters else None
@@ -6421,6 +6428,7 @@ class ComicGenPipeline(StudioOwnerMixin):
         frame_id: str,
         prompt: str,
         negative_prompt: Optional[str] = None,
+        context_token: Optional[str] = None,
     ) -> str:
         """Render an isolated frame candidate for a first/last-frame slot.
 
@@ -6435,6 +6443,10 @@ class ComicGenPipeline(StudioOwnerMixin):
         source = next((f for f in script.frames if f.id == frame_id), None)
         if not source:
             raise ValueError(f"Frame {frame_id} not found")
+        if not prompt.strip() or not context_token or context_token != self.storyboard_candidate_preview_token(
+            script_id, frame_id, prompt, negative_prompt
+        ):
+            raise ValueError("Storyboard candidate preview is missing or outdated")
         resolved = self.resolve_project_assets(script)
         scene = next((s for s in resolved["scenes"] if s.id == source.scene_id), None)
         candidate = copy.deepcopy(source)
@@ -6463,6 +6475,18 @@ class ComicGenPipeline(StudioOwnerMixin):
         if not variant:
             raise RuntimeError("Storyboard candidate render returned no image")
         return image_variant_storage_key(variant)
+
+    def storyboard_candidate_preview_token(
+        self, script_id: str, frame_id: str, prompt: str, negative_prompt: Optional[str]
+    ) -> str:
+        """Bind the candidate's complete visible text to its current frame and assets."""
+        import hashlib
+
+        payload = json.dumps(
+            [self.storyboard_render_context_token(script_id, frame_id), prompt, negative_prompt or ""],
+            ensure_ascii=False, separators=(",", ":"),
+        )
+        return hashlib.sha256(payload.encode("utf-8")).hexdigest()
     def generate_video(self, script_id: str) -> Script:
         """Step 4: Generate video clips."""
         script = self.scripts.get(script_id)
