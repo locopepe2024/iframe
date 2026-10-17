@@ -164,6 +164,36 @@ def test_pipeline_forwards_scene_prompt_to_generator():
     assert pipeline.asset_generator.generate_scene.call_args.kwargs["prompt"] == "中式茶事：茶桌与黄连中药材"
 
 
+def test_reviewed_scene_prompt_does_not_append_episode_plan():
+    from src.apps.comic_gen.pipeline import ComicGenPipeline
+    from src.apps.comic_gen.models import EpisodeVisualContext, Script
+
+    scene = Scene(id="scene-1", name="粮铺", description="长街中段")
+    script = Script(
+        id="project-1", title="test", original_text="", scenes=[scene], created_at=0, updated_at=0,
+        episode_visual_context=EpisodeVisualContext(
+            source_revision=1, director_profile_revision=1, shooting_plan_revision=1,
+            shooting_plan_hash="hash", scenes=[],
+        ),
+    )
+    pipeline = ComicGenPipeline.__new__(ComicGenPipeline)
+    pipeline._save_lock = RLock()
+    pipeline.scripts = {script.id: script}
+    pipeline.series_store = {}
+    pipeline.asset_generation_tasks = {}
+    pipeline.asset_generator = MagicMock()
+    pipeline._save_after_asset_mutation = MagicMock()
+    pipeline.effective_director_profile = lambda _script: None
+    pipeline._episode_asset_context_prompt = MagicMock(return_value="血色斜阳")
+
+    pipeline.generate_asset(script.id, scene.id, "scene", prompt="延续长街蓝色调", preserve_prompt=True)
+
+    call = pipeline.asset_generator.generate_scene.call_args
+    assert call.kwargs["prompt"] == "延续长街蓝色调"
+    assert call.args[1] == ""
+    assert call.kwargs["preserve_prompt"] is True
+
+
 @pytest.mark.parametrize("asset_type", ["character", "scene", "prop"])
 def test_asset_image_prompt_excludes_director_and_scene_style_context(asset_type):
     from src.apps.comic_gen.pipeline import ComicGenPipeline

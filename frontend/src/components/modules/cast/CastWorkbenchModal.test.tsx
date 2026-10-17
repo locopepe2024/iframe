@@ -10,7 +10,7 @@ import { useToastStore } from '@/store/toastStore';
 import { agentRequest, api } from '@/lib/api';
 Object.defineProperty(Range.prototype, 'getClientRects', { configurable: true, value: () => [{ top: 0, bottom: 1, left: 0, right: 1 }] });
 Object.defineProperty(Range.prototype, 'getBoundingClientRect', { configurable: true, value: () => ({ top: 0, bottom: 1, left: 0, right: 1 }) });
-vi.mock('@/lib/api', () => ({ API_URL: '', agentRequest: vi.fn().mockResolvedValue({ installed: [] }), api: { getStylePresets: vi.fn().mockResolvedValue([]), getProject: vi.fn(), getTaskStatus: vi.fn(), getAssetReferenceIndex: vi.fn(), listLibraryAssets: vi.fn(), generateAsset: vi.fn(), uploadAsset: vi.fn(), selectAssetVariant: vi.fn(), deleteAssetVariant: vi.fn(), updateAssetVariantMetadata: vi.fn(), favoriteAssetVariant: vi.fn(), updateAssetAttributes: vi.fn() } }));
+vi.mock('@/lib/api', () => ({ API_URL: '', agentRequest: vi.fn().mockResolvedValue({ installed: [] }), api: { getStylePresets: vi.fn().mockResolvedValue([]), getProject: vi.fn(), getTaskStatus: vi.fn(), getAssetReferenceIndex: vi.fn(), getEpisodeVisualContext: vi.fn(), listLibraryAssets: vi.fn(), generateAsset: vi.fn(), uploadAsset: vi.fn(), selectAssetVariant: vi.fn(), deleteAssetVariant: vi.fn(), updateAssetVariantMetadata: vi.fn(), updateAssetAttributes: vi.fn() } }));
 vi.mock('@/components/common/GroupedModelGrid', () => ({ default: () => null }));
 vi.mock('@/components/shared/preview/PreviewImage', () => ({ default: ({ alt, clickToLightbox }: any) => <span onClick={clickToLightbox ? e => e.stopPropagation() : undefined}>{alt}</span> }));
 vi.mock('@/components/shared/AssetIndexPreview', () => ({ AssetIndexPreview: ({ alt }: { alt?: string }) => <span data-testid="asset-preview">{alt}</span> }));
@@ -36,6 +36,7 @@ beforeEach(() => {
  vi.clearAllMocks();
  useToastStore.getState().clear();
  vi.mocked(api.getAssetReferenceIndex).mockResolvedValue({ schema_version: 1, project_id: 'project', assets: [] });
+ vi.mocked(api.getEpisodeVisualContext).mockResolvedValue({ context: null, bindings: [] });
  useProjectStore.setState({ currentProject: project, projects: [project], currentSeries: null, generatingTasks: [] });
 });
 it('merges the completed target snapshot and clears its marker without fetching the project', async () => {
@@ -131,6 +132,27 @@ it('does not load the legacy character Skill facet panel', () => {
  show();
  expect(agentRequest).not.toHaveBeenCalled();
  expect(screen.queryByText('Eyes and gaze')).not.toBeInTheDocument();
+});
+
+it('shows scene plan constraints but submits only the reviewed prompt', async () => {
+ const scene = { id: 'scene-1', name: '粮铺门前', description: '长街中段的粮铺' };
+ vi.mocked(api.getEpisodeVisualContext).mockResolvedValue({ context: {
+  scenes: [{ scene_id: 'plan-1', scene_asset_id: scene.id, scene_ref: '青溪镇长街·粮铺劫掠',
+   location: '青溪镇长街', time_anchor: '暮秋，残阳如血', atmosphere: '血色斜阳' }],
+  shots: [], characters: [], props: [],
+ }, bindings: [] } as any);
+ vi.mocked(api.getProject).mockResolvedValue({ ...project, scenes: [scene] } as any);
+ vi.mocked(api.generateAsset).mockResolvedValue({ ...project, scenes: [scene] } as any);
+ showScene(scene);
+ expect(await screen.findByRole('region', { name: '拍摄计划约束' })).toHaveTextContent('血色斜阳');
+ expect(document.querySelector('[contenteditable="true"]')).not.toHaveTextContent('血色斜阳');
+ fireEvent.change(screen.getByRole('textbox', { name: '排除词（单独提交给模型）' }), { target: { value: '不要偏红' } });
+ fireEvent.click(screen.getByRole('button', { name: /Generate first batch/ }));
+ await waitFor(() => expect(api.generateAsset).toHaveBeenCalled());
+ const args = vi.mocked(api.generateAsset).mock.calls[0];
+ expect(args[6]).not.toContain('血色斜阳');
+ expect(args[8]).toBe('不要偏红');
+ expect(args[15]).toBe(true);
 });
 
 it('lets scene designers ask AI for an editable draft and save it without replacing the asset description', async () => {
