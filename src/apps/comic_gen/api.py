@@ -5170,7 +5170,12 @@ def attach_asset_frame(
         if ext not in _T2I_UPLOAD_ALLOWED_EXTS or os.path.getsize(source) > 64 * 1024 * 1024:
             raise HTTPException(status_code=415, detail="Asset image format or size is unsupported")
         copied_path, stored = _studio_upload_target(user, f"{request.slot}_asset_{uuid.uuid4().hex}{ext}")
-        shutil.copyfile(source, copied_path)
+        try:
+            shutil.copyfile(source, copied_path)
+        except OSError:
+            if os.path.exists(copied_path):
+                os.unlink(copied_path)
+            raise HTTPException(status_code=503, detail="Asset image could not be copied") from None
     try:
         frame = (pipeline.upload_last_frame if request.slot == "last" else pipeline.upload_t2i_frame)(
             script_id, frame_id, stored,
