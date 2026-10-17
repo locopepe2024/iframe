@@ -1,4 +1,5 @@
 import axios from "axios";
+import type { ImageEditMode } from "@/lib/imageEditing";
 import { extractScriptPreview, refineScriptPreview } from "./scriptExtraction";
 import {
     analyzeAndApplyStoryboard,
@@ -249,6 +250,8 @@ export interface AssetImageReviewRequest {
     apply_style: false;
     preserve_prompt: true;
     scene_tool?: import("@/components/modules/SceneImageTools").SceneToolParams;
+    /** Shared editor vocabulary; omitted for legacy callers and inferred from scene_tool. */
+    edit_mode?: ImageEditMode;
 }
 
 export interface AssetImageReviewProjection {
@@ -262,6 +265,7 @@ export interface AssetImageReviewProjection {
     reference_inputs: AssetLibraryReference[];
     design_revision_at_submission: number | null;
     scene_tool?: import("@/components/modules/SceneImageTools").SceneToolParams | null;
+    edit_mode?: ImageEditMode;
     fingerprint: string;
 }
 
