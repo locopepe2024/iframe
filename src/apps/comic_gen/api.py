@@ -41,6 +41,60 @@ import re
 import traceback
 from urllib.parse import unquote, urlparse
 from urllib.request import Request as UrlRequest, urlopen
+import sys
+
+from dotenv import load_dotenv
+from ...utils import get_user_data_dir
+
+def get_user_config_path() -> str:
+    """
+    Returns the path to the user config file.
+    - Development mode: Uses .env in project root
+    - Packaged app mode: Uses ~/.iframe/config.json
+    """
+    from ...utils import get_user_data_dir
+
+    # Check if running in packaged mode (e.g., via environment variable or frozen check)
+    is_packaged = os.getenv("LUMEN_X_PACKAGED", "false").lower() == "true" or getattr(sys, 'frozen', False)
+
+    if is_packaged:
+        # Use user home directory for packaged app
+        config_dir = get_user_data_dir()
+        os.makedirs(config_dir, exist_ok=True)
+        return os.path.join(config_dir, "config.json")
+    else:
+        # Use .env in project root for development
+        # Get absolute path to project root (api.py is in src/apps/comic_gen/)
+        project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+        return os.path.join(project_root, ".env")
+
+
+
+def load_user_config():
+    """Loads user config from file and applies to environment."""
+    config_path = get_user_config_path()
+
+    if config_path.endswith(".json"):
+        # JSON config for packaged app
+        if os.path.exists(config_path):
+            try:
+                import json
+                with open(config_path, "r") as f:
+                    config = json.load(f)
+                for key, value in config.items():
+                    if value:
+                        os.environ[key] = str(value)
+            except Exception as e:
+                logging.getLogger(__name__).warning("Failed to load config from %s: %s", config_path, e)
+    # .env is already loaded at startup via dotenv
+
+
+# Apply persisted settings before importing startup snapshots.
+env_path = get_user_config_path()
+if env_path.endswith(".env") and os.path.exists(env_path):
+    load_dotenv(env_path, override=True)
+load_user_config()
+
 from .pipeline import (
     ComicGenPipeline,
     AssetGenerationInProgress,
@@ -108,12 +162,6 @@ def _director_plan_lineage_changed(plan: DirectorShootingPlan, lineage: Optional
 
 # Setup logging to user directory
 setup_logging()
-
-# Use absolute path for .env file (api.py is in src/apps/comic_gen/)
-_project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
-env_path = os.path.join(_project_root, ".env")
-if os.path.exists(env_path):
-    load_dotenv(env_path, override=True)
 
 # Mount playground router AFTER .env is loaded (adapters read API keys from env)
 from ..identity import (
@@ -329,13 +377,13 @@ def debug_config():
 
 def signed_response(data):
     """Helper to sign OSS URLs in data before returning to frontend.
-    
+
     Handles Pydantic models, lists of models, and dicts.
     Returns a JSONResponse with signed URLs.
     """
     if data is None:
         return JSONResponse(content=None)
-    
+
     # Keep immutable history snapshots behind their dedicated revision APIs;
     # embedding them in every project response multiplies long-script payloads.
     if isinstance(data, Script):
@@ -360,13 +408,13 @@ def signed_response(data):
             studio_user.owner_profile_id,
             output_root=pipeline.output_root,
         )
-    
+
     # Check if OSS is configured
     uploader = OSSImageUploader()
     if uploader.is_configured:
         # OSS mode: sign URLs in the data
         processed_data = sign_oss_urls_in_data(processed_data, uploader)
-    
+
     # Return JSONResponse directly to avoid Pydantic re-validation stripping fields
     return JSONResponse(content=processed_data)
 
@@ -768,7 +816,7 @@ def upload_asset(
     """
     Uploads an image as a new variant for an asset.
     The uploaded image is marked as the 'upload source' for reverse generation.
-    
+
     - asset_type: "character", "scene", or "prop"
     - upload_type: "full_body", "head_shot", "three_views", or "image" (for scene/prop)
     - description: Optional modified description for the asset
@@ -778,16 +826,16 @@ def upload_asset(
         file_ext = _safe_upload_ext(file.filename)
         filename = f"{uuid.uuid4()}{file_ext}"
         file_path, stored_path = _studio_upload_target(user, filename)
-        
+
         with open(file_path, "wb") as buffer:
             shutil.copyfileobj(file.file, buffer)
-        
+
         # 2. Upload to OSS
         uploader = OSSImageUploader()
         oss_url = uploader.upload_image(file_path, output_root=pipeline.output_root)
         if not oss_url:
             oss_url = stored_path
-        
+
         # 3. Update asset with new variant
         updated_script = pipeline.add_uploaded_asset_variant(
             script_id=script_id,
@@ -797,12 +845,12 @@ def upload_asset(
             image_url=oss_url,
             description=description
         )
-        
+
         if not updated_script:
             raise HTTPException(status_code=404, detail="Script or asset not found")
-        
+
         return get_project(script_id)
-        
+
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
@@ -2063,49 +2111,6 @@ def _normalize_provider_mode(value: Optional[str]) -> str:
     return ProviderBackend.DASHSCOPE.value
 
 
-def get_user_config_path() -> str:
-    """
-    Returns the path to the user config file.
-    - Development mode: Uses .env in project root
-    - Packaged app mode: Uses ~/.iframe/config.json
-    """
-    from ...utils import get_user_data_dir
-    
-    # Check if running in packaged mode (e.g., via environment variable or frozen check)
-    is_packaged = os.getenv("LUMEN_X_PACKAGED", "false").lower() == "true" or getattr(sys, 'frozen', False)
-    
-    if is_packaged:
-        # Use user home directory for packaged app
-        config_dir = get_user_data_dir()
-        os.makedirs(config_dir, exist_ok=True)
-        return os.path.join(config_dir, "config.json")
-    else:
-        # Use .env in project root for development
-        # Get absolute path to project root (api.py is in src/apps/comic_gen/)
-        project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
-        return os.path.join(project_root, ".env")
-
-
-
-def load_user_config():
-    """Loads user config from file and applies to environment."""
-    config_path = get_user_config_path()
-    
-    if config_path.endswith(".json"):
-        # JSON config for packaged app
-        if os.path.exists(config_path):
-            try:
-                import json
-                with open(config_path, "r") as f:
-                    config = json.load(f)
-                for key, value in config.items():
-                    if value:
-                        os.environ[key] = value
-            except Exception as e:
-                logger.warning(f"Failed to load config from {config_path}: {e}")
-    # .env is already loaded at startup via dotenv
-
-
 def save_user_config(config_dict: dict):
     """Saves user config to file."""
     config_path = get_user_config_path()
@@ -2157,9 +2162,7 @@ def remove_user_config_keys(keys: list):
                 logger.warning(f"Failed to unset key {key} from .env: {e}")
 
 
-# Load user config on startup
-import sys
-load_user_config()
+
 
 
 
@@ -2683,7 +2686,7 @@ def delete_project(script_id: str):
     script = pipeline.get_script(script_id)
     if not script:
         raise HTTPException(status_code=404, detail="Project not found")
-    
+
     try:
         # If project belongs to a Series, remove from episode_ids
         if script.series_id:
@@ -3157,10 +3160,10 @@ def update_next_episode_hook(script_id: str, payload: dict):
 def sync_descriptions(script_id: str):
     """
     Syncs entity descriptions from Script module to Assets module.
-    
+
     This endpoint forces a refresh of the project data, ensuring that any
     description changes made in the Script module are reflected in Assets.
-    
+
     Note: This only syncs descriptions; generated images/videos are preserved.
     """
     try:
@@ -3258,7 +3261,7 @@ def generate_assets(script_id: str, background_tasks: BackgroundTasks):
 
     # Run in background to avoid blocking
     # For simplicity in this demo, we run synchronously or use background tasks
-    # pipeline.generate_assets(script_id) 
+    # pipeline.generate_assets(script_id)
     # But since we want to return the updated status, we might want to run it and return.
     # Given the mock nature, it's fast.
 
@@ -3293,10 +3296,10 @@ def generate_motion_ref(script_id: str, request: GenerateMotionRefRequest, backg
             duration=request.duration,
             batch_size=request.batch_size
         )
-        
+
         # Add background processing
         background_tasks.add_task(pipeline.process_motion_ref_task, script_id, task_id)
-        
+
         # Return script with task_id for frontend polling
         response_data = script.model_dump() if hasattr(script, 'model_dump') else script.dict()
         response_data["_task_id"] = task_id
@@ -3827,10 +3830,10 @@ def generate_single_asset(script_id: str, request: GenerateAssetRequest, backgro
             request.image_generation_mode,
             request.preserve_prompt,
         )
-        
+
         # Add background processing
         background_tasks.add_task(pipeline.process_asset_generation_task, task_id)
-        
+
         # Return script with task_id for frontend polling
         response_data = script.model_dump() if hasattr(script, 'model_dump') else script.dict()
         response_data["_task_id"] = task_id
@@ -3909,10 +3912,10 @@ def generate_asset_video(script_id: str, asset_type: str, asset_id: str, request
             request.duration,
             request.aspect_ratio
         )
-        
+
         # Add background processing
         background_tasks.add_task(pipeline.process_video_task, script_id, task_id)
-        
+
         return signed_response(script)
 
     except ValueError as e:
@@ -4725,7 +4728,7 @@ def generate_dialogue_audio_batch(script_id: str):
 @app.post("/projects/{script_id}/mix/generate_sfx", response_model=Script)
 def generate_mix_sfx(script_id: str):
     """Triggers Video-to-Audio SFX generation for all frames."""
-    # Re-using generate_audio for now as it covers everything, 
+    # Re-using generate_audio for now as it covers everything,
     # but ideally we'd have granular methods in pipeline.
     # Let's just call generate_audio again, it's idempotent-ish.
     try:
@@ -4822,9 +4825,9 @@ def add_frame(script_id: str, request: AddFrameRequest):
     """Adds a new storyboard frame."""
     try:
         updated_script = pipeline.add_frame(
-            script_id, 
-            request.scene_id, 
-            request.action_description, 
+            script_id,
+            request.scene_id,
+            request.action_description,
             request.camera_angle,
             request.insert_at
         )
