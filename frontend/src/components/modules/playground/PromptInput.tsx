@@ -12,6 +12,8 @@ import ReferencePromptEditor, { type ReferenceSuggestion } from './ReferenceProm
 import PromptTemplateModal from './PromptTemplateModal';
 import PromptHistoryDrawer from './PromptHistoryDrawer';
 
+const DOCUMENT_REFERENCE_RE = /\.(txt|md|csv|json|srt|vtt|pdf|docx|pptx)(?:[?#].*)?$/i;
+
 interface PromptInputProps {
   onSubmit?: () => void;
   onOpenReferences?: () => void;
@@ -39,7 +41,7 @@ export default function PromptInput({ onSubmit, onOpenReferences }: PromptInputP
     mediaType: history.flatMap((generation) => generation.outputs)
       .find((output) => referenceKey(output.media_path) === referenceKey(path))?.media_type
       || (/\.(mp3|wav|m4a|aac|ogg|flac|opus|aiff|aif|wma)(?:[?#].*)?$/i.test(path) ? 'audio'
-        : /\.(txt|md|csv|json|srt|vtt)(?:[?#].*)?$/i.test(path) ? 'text'
+        : DOCUMENT_REFERENCE_RE.test(path) ? 'text'
         : /\.(mp4|mov|webm|avi|mkv)(?:[?#].*)?$/i.test(path) ? 'video' : 'image'),
   }));
 
@@ -64,7 +66,7 @@ export default function PromptInput({ onSubmit, onOpenReferences }: PromptInputP
                 data-full-name={label}
                 className="group relative h-12 w-12 overflow-hidden rounded-xl border border-primary/30 bg-surface-inset"
               >
-                {/\.(mp3|wav|m4a|aac|ogg|flac|opus|aiff|aif|wma)(?:[?#].*)?$/i.test(path) ? <Music aria-label="音频参考" className="m-3 h-6 w-6 text-primary" /> : /\.(txt|md|csv|json|srt|vtt)(?:[?#].*)?$/i.test(path) ? <FileText aria-label="文本参考" className="m-3 h-6 w-6 text-primary" /> : isVideo ? (
+                {/\.(mp3|wav|m4a|aac|ogg|flac|opus|aiff|aif|wma)(?:[?#].*)?$/i.test(path) ? <Music aria-label="音频参考" className="m-3 h-6 w-6 text-primary" /> : DOCUMENT_REFERENCE_RE.test(path) ? <FileText aria-label="文本参考" className="m-3 h-6 w-6 text-primary" /> : isVideo ? (
                   <PreviewVideo src={path} noLightbox hoverPlay={false} className="h-full w-full object-cover" />
                 ) : (
                   <PreviewImage src={path} alt={label} noLightbox className="h-full w-full object-cover" />

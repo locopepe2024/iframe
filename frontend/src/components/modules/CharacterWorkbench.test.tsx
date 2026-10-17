@@ -251,6 +251,9 @@ it("does not turn a manually typed @name into an implicit reference", () => {
 });
 
 it("loads the project reference index for the character workbench", async () => {
+    // Earlier tests enqueue one-shot responses; their async effects may not
+    // consume them before cleanup, so this case needs an isolated index mock.
+    apiMocks.getAssetReferenceIndex.mockReset();
     apiMocks.getAssetReferenceIndex.mockResolvedValue({
         schema_version: 1,
         project_id: "project-1",
@@ -277,7 +280,7 @@ it("loads the project reference index for the character workbench", async () => 
     const editors = screen.getAllByRole("textbox") as Array<HTMLElement & { editor?: import("@tiptap/core").Editor }>;
     const promptEditor = editors.find((editor) => editor.editor);
     expect(promptEditor?.editor).toBeDefined();
-    act(() => { promptEditor!.editor!.commands.setContent("<p>@wat</p>"); });
+    act(() => { promptEditor!.editor!.chain().setContent("<p>@wat</p>").focus("end").run(); });
     expect(await screen.findByRole("listbox")).toHaveTextContent("Pocket watch");
     fireEvent.mouseDown(within(screen.getByRole("listbox")).getByRole("option"));
     fireEvent.click(within(screen.getByRole("listbox")).getByRole("option"));
@@ -612,7 +615,7 @@ it("refreshes the reference index when a generated project snapshot arrives", as
 
     const editor = (screen.getAllByRole("textbox") as Array<HTMLElement & { editor?: import("@tiptap/core").Editor }>).find((item) => item.editor);
     expect(editor?.editor).toBeDefined();
-    act(() => { editor!.editor!.commands.setContent("<p>@Hero</p>"); });
+    act(() => { editor!.editor!.chain().setContent("<p>@Hero</p>").focus("end").run(); });
     fireEvent.click(within(screen.getByRole("listbox")).getByRole("option"));
     await waitFor(() => expect(document.querySelector('[data-reference-variant-id="new-view"]')).toBeInTheDocument());
     fireEvent.click(screen.getAllByRole("button", { name: "Reference image" })[0]);

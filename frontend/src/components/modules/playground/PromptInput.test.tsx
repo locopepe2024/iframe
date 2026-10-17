@@ -59,6 +59,16 @@ describe('selected reference mentions', () => {
         expect(options.every(option => !option.querySelector('img'))).toBe(true);
     });
 
+    it('shows document references as icons instead of trying to load them as images', () => {
+        usePlaygroundStore.setState({ inputMedia: ['/playground/input-media/report.pdf', '/playground/input-media/brief.docx'], history: [] });
+        render(<PromptInput />);
+        openMentions();
+        const options = screen.getAllByRole('option');
+        expect(options).toHaveLength(2);
+        expect(options.every(option => within(option).getByLabelText('文本参考'))).toBe(true);
+        expect(options.every(option => !option.querySelector('img'))).toBe(true);
+    });
+
     it('tracks reference removal and session draft replacement without requiring history', () => {
         render(<PromptInput />);
         openMentions();
