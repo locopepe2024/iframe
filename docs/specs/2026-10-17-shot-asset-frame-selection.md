@@ -27,3 +27,17 @@ unchanged. The existing bounded 10-frame history remains in force.
 - The frontend uses the returned frame state and surfaces attach failure.
 - The selected frame can be previewed and supplied to video generation after
   the asset index's original signature expires.
+
+## Project membership at selection time
+
+The first/last frame drawer must not turn legacy project arrays into selectable
+frame variants while the authoritative `scope=project` index is loading or has
+failed. Those arrays lack a reliable source container. Show loading or a retry
+control instead. Before attaching, refresh the project index and match the
+asset type, ID, source scope, source container and variant ID. A variant removed
+since the drawer opened stays unsubmitted; refresh the visible list and explain
+that the user must reselect it. Validate membership before creating a new frame.
+
+Verify that a legacy-only variant cannot be selected while the project index is
+unavailable, and that a project or inherited-series variant remains selectable
+after the index loads.
