@@ -630,6 +630,7 @@ class GenerateAssetRequest(BaseModel):
     prompt: Optional[str] = None
     apply_style: bool = True
     preserve_prompt: bool = False
+    scene_tool: Optional[Dict[str, Any]] = None
     negative_prompt: Optional[str] = None
     batch_size: int = 1
     model_name: Optional[str] = None
@@ -1510,6 +1511,7 @@ def preview_project_asset_image(script_id: str, request: GenerateAssetRequest):
             aspect_ratio=request.aspect_ratio, generation_type=request.generation_type,
             image_generation_mode=request.image_generation_mode, batch_size=request.batch_size,
             reference=request.reference, references=request.references,
+            scene_tool=request.scene_tool,
         )
     except (InvalidAssetReference, ValueError) as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
@@ -1518,6 +1520,8 @@ def preview_project_asset_image(script_id: str, request: GenerateAssetRequest):
 @app.post("/series/{series_id}/assets/generate")
 def generate_series_asset(series_id: str, request: GenerateAssetRequest, background_tasks: BackgroundTasks):
     """Generate a single asset for a Series (async)."""
+    if request.scene_tool is not None:
+        raise HTTPException(status_code=400, detail="scene_tool is only available for project scene assets")
     _require_reviewed_asset_image_prompt(request, require_fingerprint=True)
     try:
         series, task_id = pipeline.generate_series_asset(
@@ -3870,6 +3874,7 @@ def generate_single_asset(script_id: str, request: GenerateAssetRequest, backgro
             request.image_generation_mode,
             request.preserve_prompt,
             request.expected_review_fingerprint,
+            request.scene_tool,
         )
         
         # Add background processing

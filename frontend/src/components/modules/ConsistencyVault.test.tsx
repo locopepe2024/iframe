@@ -149,6 +149,34 @@ it("edits scene light and view before refinement and submits only the applied vi
     expect(mocks.generateAsset.mock.calls[0][6]).toBe(visible);
 });
 
+it("reviews a scene image tool with its source and settings before enqueue", async () => {
+    const asset = { id: "street", name: "长街", description: "青石长街", source: "episode",
+        image_asset: { selected_id: "source", variants: [{ id: "source", url: "/street.png" }] } };
+    const project = { id: "episode-1", characters: [], scenes: [asset], props: [] };
+    useProjectStore.setState({ currentProject: project as any });
+    mocks.getEpisodeVisualContext.mockResolvedValue({ context: null, bindings: [] });
+    mocks.generateAsset.mockResolvedValue(project);
+    render(<ConsistencyVault />);
+    fireEvent.click(screen.getByRole("button", { name: /Scenes/ }));
+    fireEvent.click(screen.getByText("长街"));
+    fireEvent.click(screen.getByRole("button", { name: "光影" }));
+    fireEvent.click(screen.getByRole("button", { name: "查看并确认提示词" }));
+    fireEvent.click(screen.getByRole("button", { name: "确认并生成" }));
+    await waitFor(() => expect(mocks.previewAssetImageSubmission).toHaveBeenCalledWith("episode-1",
+        expect.objectContaining({
+            asset_type: "scene", image_generation_mode: "reference",
+            references: [{ asset_type: "scene", asset_id: "street", variant_id: "source" }],
+            scene_tool: expect.objectContaining({ kind: "lighting", brightness: 50 }),
+        })));
+    const dialog = await screen.findByRole("dialog", { name: "核对图片生成请求" });
+    fireEvent.click(within(dialog).getByRole("button", { name: "确认并生成" }));
+    await waitFor(() => expect(mocks.generateAsset).toHaveBeenCalled());
+    const submitted = mocks.generateAsset.mock.calls[0];
+    expect(submitted[13]).toEqual([{ asset_type: "scene", asset_id: "street", variant_id: "source" }]);
+    expect(submitted[16]).toBe("reviewed");
+    expect(submitted[17]).toEqual(expect.objectContaining({ kind: "lighting", brightness: 50 }));
+});
+
 it.each([
     ["scene", "scenes", "粮铺门前"],
     ["prop", "props", "双手剑"],

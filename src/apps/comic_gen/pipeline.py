@@ -1050,7 +1050,7 @@ class ComicGenPipeline(StudioOwnerMixin):
         cls, asset: Any, asset_type: str, *, prompt: str, negative_prompt: str,
         model_id: str, aspect_ratio: str, generation_type: str,
         image_generation_mode: str, batch_size: int = 1,
-        reference: Any = None, references: Any = None,
+        reference: Any = None, references: Any = None, scene_tool: Any = None,
     ) -> Dict[str, Any]:
         identities = ([reference] if reference else []) + list(references or [])
         return AssetImageSubmissionSnapshot(
@@ -1062,6 +1062,7 @@ class ComicGenPipeline(StudioOwnerMixin):
             batch_size=batch_size,
             image_generation_mode=image_generation_mode,
             reference_inputs=[AssetImageReferenceIdentity.model_validate(item) for item in identities],
+            scene_tool=scene_tool,
             design_revision_at_submission=cls._confirmed_asset_design_revision(asset, asset_type),
         ).model_dump()
 
@@ -1086,6 +1087,7 @@ class ComicGenPipeline(StudioOwnerMixin):
         aspect_ratio: Optional[str] = None, generation_type: str = "all",
         image_generation_mode: str = "text", batch_size: int = 1,
         reference: Any = None, references: Any = None, is_series: bool = False,
+        scene_tool: Any = None,
     ) -> Dict[str, Any]:
         """Read-only projection of the exact reviewed request; never invokes a model."""
         if asset_type not in ("character", "scene", "prop"):
@@ -1103,6 +1105,20 @@ class ComicGenPipeline(StudioOwnerMixin):
         if reference is not None:
             _url, normalized_reference = self._resolve_asset_library_reference(owner, reference)
         normalized_references = self._normalize_asset_references(references or [])
+        normalized_scene_tool = None
+        if scene_tool is not None:
+            from .scene_image_tools import parse_scene_tool, scene_tool_prompt
+            parsed = parse_scene_tool(scene_tool)
+            if (is_series or asset_type != "scene" or image_generation_mode != "reference"
+                    or reference is not None or batch_size != 1 or not normalized_references
+                    or len(normalized_references) > 2
+                    or normalized_references[0]["asset_type"] != "scene"
+                    or normalized_references[0]["asset_id"] != asset_id
+                    or (parsed.kind == "camera" and len(normalized_references) != 1)):
+                raise InvalidAssetReference("scene tool requires its source scene variant first and at most one lighting reference")
+            if prompt != scene_tool_prompt(parsed, len(normalized_references) == 2):
+                raise InvalidAssetReference("scene tool prompt must match the reviewed compiled prompt")
+            normalized_scene_tool = parsed.model_dump()
         self._validate_asset_generation_mode(
             image_generation_mode, bool(normalized_reference or normalized_references),
         )
@@ -1127,6 +1143,7 @@ class ComicGenPipeline(StudioOwnerMixin):
             model_id=effective_model, aspect_ratio=effective_aspect,
             generation_type=generation_type, image_generation_mode=image_generation_mode,
             batch_size=batch_size, reference=normalized_reference, references=normalized_references,
+            scene_tool=normalized_scene_tool,
         )
         return {**{key: value for key, value in snapshot.items() if key != "submitted_at"},
                 "fingerprint": self._asset_review_fingerprint(
@@ -1134,12 +1151,27 @@ class ComicGenPipeline(StudioOwnerMixin):
                     asset_type=asset_type, is_series=is_series,
                 )}
 
-    def generate_asset(self, script_id: str, asset_id: str, asset_type: str, style_preset: str = None, reference_image_url: str = None, style_prompt: str = None, generation_type: str = "all", prompt: str = None, apply_style: bool = True, negative_prompt: str = None, batch_size: int = 1, model_name: str = None, aspect_ratio: str = None, use_reference_image: bool = True, reference: Any = None, references: Any = None, image_generation_mode: str = "text", _generation_task_id: Optional[str] = None, preserve_prompt: bool = False) -> Script:
+    def generate_asset(self, script_id: str, asset_id: str, asset_type: str, style_preset: str = None, reference_image_url: str = None, style_prompt: str = None, generation_type: str = "all", prompt: str = None, apply_style: bool = True, negative_prompt: str = None, batch_size: int = 1, model_name: str = None, aspect_ratio: str = None, use_reference_image: bool = True, reference: Any = None, references: Any = None, image_generation_mode: str = "text", _generation_task_id: Optional[str] = None, preserve_prompt: bool = False, scene_tool: Any = None) -> Script:
         """Step 2: Generate a specific asset (character/scene/prop).
         If style_preset is None, uses the project's global style."""
         script = self.scripts.get(script_id)
         if not script:
             raise ValueError("Script not found")
+        parsed_scene_tool = None
+        normalized_tool_references = []
+        if scene_tool is not None:
+            from .scene_image_tools import parse_scene_tool, scene_tool_prompt
+            parsed_scene_tool = parse_scene_tool(scene_tool)
+            normalized_tool_references = self._normalize_asset_references(references or [])
+            if (asset_type != "scene" or image_generation_mode != "reference" or reference is not None or reference_image_url or
+                    batch_size != 1 or not normalized_tool_references or len(normalized_tool_references) > 2 or
+                    normalized_tool_references[0]["asset_type"] != "scene" or normalized_tool_references[0]["asset_id"] != asset_id or
+                    (parsed_scene_tool.kind == "camera" and len(normalized_tool_references) != 1)):
+                raise InvalidAssetReference("scene tool requires its source scene variant first and at most one lighting reference")
+            compiled_prompt = scene_tool_prompt(parsed_scene_tool, len(normalized_tool_references) == 2)
+            if prompt != compiled_prompt:
+                raise InvalidAssetReference("scene tool prompt must match the reviewed compiled prompt")
+            apply_style = False
         if references and (reference is not None or reference_image_url):
             raise InvalidAssetReference("multiple structured references cannot be combined with a singular legacy reference")
         self._validate_asset_generation_mode(
@@ -1285,6 +1317,8 @@ class ComicGenPipeline(StudioOwnerMixin):
                     reference_provenance_list=reference_provenance_list,
                     image_generation_mode=image_generation_mode,
                     preserve_prompt=preserve_prompt,
+                    scene_tool=parsed_scene_tool.model_dump() if parsed_scene_tool else None,
+                    scene_tool_source_variant_id=normalized_tool_references[0]["variant_id"] if parsed_scene_tool else None,
                 )
             elif asset_type == "prop":
                 self.asset_generator.generate_prop(
@@ -1335,7 +1369,8 @@ class ComicGenPipeline(StudioOwnerMixin):
                                       model_name: str = None, aspect_ratio: str = None,
                                       reference: Any = None, references: Any = None,
                                       image_generation_mode: str = "text", preserve_prompt: bool = False,
-                                      expected_review_fingerprint: Optional[str] = None) -> Tuple[Script, str]:
+                                      expected_review_fingerprint: Optional[str] = None,
+                                      scene_tool: Any = None) -> Tuple[Script, str]:
         """Creates an async asset generation task and returns (script, task_id) immediately."""
         script = self.scripts.get(script_id)
         if not script:
@@ -1346,6 +1381,22 @@ class ComicGenPipeline(StudioOwnerMixin):
         target_asset, source = self._find_asset_with_source(script, asset_id, asset_type)
         if not target_asset:
             raise ValueError(f"{asset_type.capitalize()} {asset_id} not found")
+        normalized_scene_tool = None
+        normalized_tool_references = []
+        if scene_tool is not None:
+            from .scene_image_tools import parse_scene_tool, scene_tool_prompt
+            parsed_scene_tool = parse_scene_tool(scene_tool)
+            normalized_scene_tool = parsed_scene_tool.model_dump()
+            normalized_tool_references = self._normalize_asset_references(references or [])
+            if (asset_type != "scene" or image_generation_mode != "reference" or reference is not None or reference_image_url or
+                    batch_size != 1 or not normalized_tool_references or len(normalized_tool_references) > 2 or
+                    normalized_tool_references[0]["asset_type"] != "scene" or normalized_tool_references[0]["asset_id"] != asset_id or
+                    (parsed_scene_tool.kind == "camera" and len(normalized_tool_references) != 1)):
+                raise InvalidAssetReference("scene tool requires its source scene variant first and at most one lighting reference")
+            compiled_prompt = scene_tool_prompt(parsed_scene_tool, len(normalized_tool_references) == 2)
+            if prompt != compiled_prompt:
+                raise InvalidAssetReference("scene tool prompt must match the reviewed compiled prompt")
+            apply_style = False
 
         if references and (reference is not None or reference_image_url):
             raise InvalidAssetReference("multiple structured references cannot be combined with a singular legacy reference")
@@ -1396,6 +1447,7 @@ class ComicGenPipeline(StudioOwnerMixin):
                     aspect_ratio=aspect_ratio, generation_type=generation_type,
                     image_generation_mode=image_generation_mode, batch_size=batch_size,
                     reference=normalized_reference, references=normalized_references,
+                    scene_tool=normalized_scene_tool,
                 )
                 if expected_review_fingerprint and review["fingerprint"] != expected_review_fingerprint:
                     raise AssetReviewChanged("Asset image review changed; open the submission review again")
@@ -1423,6 +1475,7 @@ class ComicGenPipeline(StudioOwnerMixin):
                     "references": normalized_references,
                     "image_generation_mode": image_generation_mode,
                     "preserve_prompt": preserve_prompt,
+                    "scene_tool": normalized_scene_tool,
                     "style_prompt": style_prompt,
                     "generation_type": generation_type,
                     "prompt": prompt,
@@ -1483,6 +1536,7 @@ class ComicGenPipeline(StudioOwnerMixin):
                     params.get("image_generation_mode", "text"),
                     _generation_task_id=task_id,
                     preserve_prompt=params.get("preserve_prompt", False),
+                    scene_tool=params.get("scene_tool"),
                 )
             task["result_asset"], task["asset_source"] = self._asset_generation_result(task)
             task["status"] = "completed"

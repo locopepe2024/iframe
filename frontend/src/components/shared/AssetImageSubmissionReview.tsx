@@ -60,6 +60,16 @@ export default function AssetImageSubmissionReview({ projectId, request, onBack,
                         <p>数量：<span className="text-foreground">{review.batch_size}</span></p>
                         <p>确认设计版本：<span className="text-foreground">{review.design_revision_at_submission ?? "未确认"}</span></p>
                     </div>
+                    {review.scene_tool && <div className="mt-4 rounded border border-glass-border bg-surface-inset p-3 text-xs text-foreground">
+                        <h3 className="font-medium">场景图片编辑参数</h3>
+                        {review.scene_tool.kind === "camera" ? <p className="mt-1">
+                            镜头 · {review.scene_tool.preset} · 水平 {review.scene_tool.yaw}° · 俯仰 {review.scene_tool.pitch}° · 景别档位 {review.scene_tool.zoom}
+                            {review.scene_tool.focus ? ` · 对焦 x=${review.scene_tool.focus_x}%, y=${review.scene_tool.focus_y}%, 范围 ${review.scene_tool.focus_radius}%` : ""}
+                        </p> : <p className="mt-1">
+                            光影 · {review.scene_tool.light_side} 主光 · 亮度 {review.scene_tool.brightness}% · 颜色 {review.scene_tool.color}
+                        </p>}
+                        <p className="mt-1 text-text-muted">来源图为下方第一张参考图；光影参考图如有则为第二张。</p>
+                    </div>}
                     <div className="mt-4 space-y-3">
                         <div><h3 className="text-xs font-medium text-text-secondary">正向提示词</h3>
                             <p className="mt-1 max-h-44 overflow-y-auto whitespace-pre-wrap break-words rounded border border-glass-border bg-surface-inset p-3 text-sm text-foreground">{review.positive_prompt}</p></div>

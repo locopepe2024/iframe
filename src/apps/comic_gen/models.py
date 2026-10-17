@@ -181,6 +181,7 @@ class AssetImageSubmissionSnapshot(BaseModel):
     batch_size: int = Field(1, ge=1)
     image_generation_mode: Literal["text", "reference"]
     reference_inputs: List[AssetImageReferenceIdentity] = Field(default_factory=list)
+    scene_tool: Optional[Dict[str, Any]] = None
     design_revision_at_submission: Optional[int] = Field(None, ge=1)
     submitted_at: float = Field(default_factory=time.time)
 
@@ -251,6 +252,8 @@ class ImageVariant(BaseModel):
     )
     camera_yaw: Optional[float] = Field(None, description="Optional camera yaw in degrees")
     camera_pitch: Optional[float] = Field(None, description="Optional camera pitch in degrees")
+    scene_tool: Optional[Dict[str, Any]] = Field(None, description="Validated scene image tool settings used for this candidate")
+    scene_tool_source_variant_id: Optional[str] = Field(None, description="Source scene variant for a derived image candidate")
 
 
 def image_variant_storage_key(variant: Optional[ImageVariant]) -> Optional[str]:

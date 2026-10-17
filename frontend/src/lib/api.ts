@@ -248,6 +248,7 @@ export interface AssetImageReviewRequest {
     image_generation_mode: "text" | "reference";
     apply_style: false;
     preserve_prompt: true;
+    scene_tool?: import("@/components/modules/SceneImageTools").SceneToolParams;
 }
 
 export interface AssetImageReviewProjection {
@@ -260,6 +261,7 @@ export interface AssetImageReviewProjection {
     batch_size: number;
     reference_inputs: AssetLibraryReference[];
     design_revision_at_submission: number | null;
+    scene_tool?: import("@/components/modules/SceneImageTools").SceneToolParams | null;
     fingerprint: string;
 }
 
@@ -1001,7 +1003,7 @@ export const api = {
         return res.data;
     },
 
-    generateAsset: async (scriptId: string, assetId: string, assetType: string, stylePreset: string, stylePrompt?: string, generationType: string = "all", prompt: string = "", applyStyle: boolean = true, negativePrompt: string = "", batchSize: number = 1, modelName?: string, aspectRatio?: string, reference?: AssetLibraryReference, references?: AssetLibraryReference[], imageGenerationMode: "text" | "reference" = "text", preservePrompt: boolean = false, expectedReviewFingerprint?: string) => {
+    generateAsset: async (scriptId: string, assetId: string, assetType: string, stylePreset: string, stylePrompt?: string, generationType: string = "all", prompt: string = "", applyStyle: boolean = true, negativePrompt: string = "", batchSize: number = 1, modelName?: string, aspectRatio?: string, reference?: AssetLibraryReference, references?: AssetLibraryReference[], imageGenerationMode: "text" | "reference" = "text", preservePrompt: boolean = false, expectedReviewFingerprint?: string, sceneTool?: import("@/components/modules/SceneImageTools").SceneToolParams) => {
         const res = await axios.post(`${API_URL}/projects/${scriptId}/assets/generate`, {
             asset_id: assetId,
             asset_type: assetType,
@@ -1019,6 +1021,7 @@ export const api = {
             image_generation_mode: imageGenerationMode,
             ...(expectedReviewFingerprint ? { expected_review_fingerprint: expectedReviewFingerprint } : {}),
             preserve_prompt: preservePrompt,
+            ...(sceneTool ? { scene_tool: sceneTool } : {}),
         });
         return res.data;
     },
