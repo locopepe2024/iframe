@@ -2,6 +2,8 @@ from types import SimpleNamespace
 
 from fastapi.testclient import TestClient
 from PIL import Image
+from fastapi import HTTPException
+import pytest
 
 
 def test_asset_library_preview_is_owner_scoped_and_cached(monkeypatch, tmp_path):
@@ -69,3 +71,38 @@ def test_episode_asset_preview_works_inside_series(monkeypatch, tmp_path):
             assert response.headers["content-type"] == "image/webp"
     finally:
         api.app.dependency_overrides.pop(require_studio_user, None)
+
+
+@pytest.mark.parametrize("slot", ["first", "last"])
+def test_attach_asset_frame_uses_owned_storage_key_not_expired_delivery_url(monkeypatch, slot):
+    from src.apps.comic_gen import api
+    from src.apps.comic_gen.models import ImageVariant
+    from src.apps.identity import UserContext
+
+    owner = UserContext("owner", "owner", "Owner", "")
+    variant = ImageVariant(id="v1", url="https://old.example/image?expires=1",
+                           storage_key="users/owner/assets/source.png")
+    entry = SimpleNamespace(asset_type="scene", asset_id="scene-1", source_scope="episode",
+                            source_container_id="project-1", variants=[variant])
+    monkeypatch.setattr(api.pipeline, "get_script", lambda project, profile: object()
+                        if (project, profile) == ("project-1", "owner") else None)
+    monkeypatch.setattr(api.pipeline, "get_asset_reference_index", lambda *_args, **_kwargs:
+                        SimpleNamespace(assets=[entry]))
+    monkeypatch.setattr(api, "_owned_media_delivery_url", lambda stored, profile:
+                        "/studio/media/current" if (stored, profile) == (variant.storage_key, "owner") else None)
+    attached = []
+    monkeypatch.setattr(api.pipeline, "upload_t2i_frame", lambda *args: attached.append(("first", args)) or {"ok": True})
+    monkeypatch.setattr(api.pipeline, "upload_last_frame", lambda *args: attached.append(("last", args)) or {"ok": True})
+    monkeypatch.setattr(api, "signed_response", lambda value: value)
+    request = api.AttachAssetFrameRequest(scope="project", container_id="project-1",
+        asset_type="scene", asset_id="scene-1", variant_id="v1", slot=slot)
+
+    assert api.attach_asset_frame("project-1", "frame-1", request, owner) == {"ok": True}
+    assert attached == [(slot, ("project-1", "frame-1", variant.storage_key))]
+    with pytest.raises(HTTPException) as denied:
+        api.attach_asset_frame("project-1", "frame-1", request,
+                               UserContext("other", "other", "Other", ""))
+    assert denied.value.status_code == 404
+    with pytest.raises(HTTPException) as missing:
+        api.attach_asset_frame("project-1", "frame-1", request.model_copy(update={"variant_id": "other"}), owner)
+    assert missing.value.status_code == 404

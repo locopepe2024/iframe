@@ -5120,6 +5120,47 @@ _T2I_UPLOAD_MAX_BYTES = 8 * 1024 * 1024
 _T2I_UPLOAD_ALLOWED_EXTS = {".jpg", ".jpeg", ".png", ".webp"}
 
 
+class AttachAssetFrameRequest(BaseModel):
+    scope: Literal["project", "series"]
+    container_id: str
+    asset_type: Literal["character", "scene", "prop"]
+    asset_id: str
+    variant_id: str
+    slot: Literal["first", "last"] = "first"
+
+
+@app.post("/projects/{script_id}/frames/{frame_id}/attach_asset_frame")
+def attach_asset_frame(
+    script_id: str,
+    frame_id: str,
+    request: AttachAssetFrameRequest,
+    user: UserContext = Depends(require_studio_user),
+):
+    """Attach an owned asset by durable identity, never by its delivery URL."""
+    if not pipeline.get_script(script_id, user.owner_profile_id):
+        raise HTTPException(status_code=404, detail="Project not found")
+    index = pipeline.get_asset_reference_index(script_id, scope="project")
+    scope = "episode" if request.scope == "project" else request.scope
+    entry = next((item for item in index.assets
+                  if item.asset_type == request.asset_type and item.asset_id == request.asset_id
+                  and item.source_scope == scope and item.source_container_id == request.container_id), None)
+    variant = next((item for item in entry.variants if item.id == request.variant_id), None) if entry else None
+    if not variant:
+        raise HTTPException(status_code=404, detail="Asset variant not found in this project")
+    stored = image_variant_storage_key(variant)
+    if not stored:
+        raise HTTPException(status_code=404, detail="Asset image not found")
+    # Enforce the active storage backend and owner path before persisting a
+    # reference that later reaches image and video providers.
+    _owned_media_delivery_url(stored, user.owner_profile_id)
+    frame = (pipeline.upload_last_frame if request.slot == "last" else pipeline.upload_t2i_frame)(
+        script_id, frame_id, stored,
+    )
+    if frame is None:
+        raise HTTPException(status_code=404, detail="Frame not found")
+    return signed_response(frame)
+
+
 @app.post("/projects/{script_id}/frames/{frame_id}/upload_t2i")
 async def upload_t2i_frame(
     script_id: str,
