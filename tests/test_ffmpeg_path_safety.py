@@ -83,6 +83,12 @@ def _make_script_with_video_task(video_url: str) -> Script:
         action_description="test frame",
     )
     script_id = str(uuid.uuid4())
+    target = StoryboardFrame(
+        id=f"frame{uuid.uuid4().hex[:8]}",
+        scene_id=frame.scene_id,
+        character_ids=[],
+        action_description="following shot",
+    )
     task = VideoTask(
         id=str(uuid.uuid4()),
         project_id=script_id,
@@ -92,13 +98,14 @@ def _make_script_with_video_task(video_url: str) -> Script:
         status="completed",
         video_url=video_url,
     )
+    frame.selected_video_id = task.id
     return Script(
         id=script_id,
         title="ffmpeg safety",
         original_text="test",
         characters=[],
         scenes=[],
-        frames=[frame],
+        frames=[frame, target],
         video_tasks=[task],
         created_at=now,
         updated_at=now,
@@ -114,7 +121,7 @@ class TestExtractLastFramePathContainment:
         task = script.video_tasks[0]
 
         with pytest.raises(ValueError, match="outside managed output"):
-            pipeline.extract_last_frame(script.id, script.frames[0].id, task.id)
+            pipeline.extract_last_frame(script.id, script.frames[1].id, task.id)
 
     def test_traversal_relative_path_is_rejected(self, pipeline, monkeypatch, tmp_path):
         monkeypatch.chdir(tmp_path)
@@ -124,7 +131,7 @@ class TestExtractLastFramePathContainment:
         task = script.video_tasks[0]
 
         with pytest.raises(ValueError, match="escapes base directory|traversal"):
-            pipeline.extract_last_frame(script.id, script.frames[0].id, task.id)
+            pipeline.extract_last_frame(script.id, script.frames[1].id, task.id)
 
     @pytest.mark.skipif(
         get_ffmpeg_path() is None and shutil.which("ffmpeg") is None,
@@ -150,10 +157,22 @@ class TestExtractLastFramePathContainment:
         pipeline.scripts[script.id] = script
         task = script.video_tasks[0]
 
-        result = pipeline.extract_last_frame(script.id, script.frames[0].id, task.id)
+        result = pipeline.extract_last_frame(script.id, script.frames[1].id, task.id)
 
-        frame = result.frames[0]
+        frame = result.frames[1]
         assert frame.rendered_image_url, "extracted frame should be recorded"
         extracted = os.path.join("output", frame.rendered_image_url)
         assert os.path.exists(extracted)
         assert os.path.getsize(extracted) > 0
+        selected = next(v for v in frame.rendered_image_asset.variants if v.id == frame.rendered_image_asset.selected_id)
+        assert selected.storage_key == frame.rendered_image_url
+
+    def test_only_previous_selected_video_can_be_used(self, pipeline):
+        script = _make_script_with_video_task("video/tiny.mp4")
+        pipeline.scripts[script.id] = script
+        task = script.video_tasks[0]
+        with pytest.raises(ValueError, match="no previous shot"):
+            pipeline.extract_last_frame(script.id, script.frames[0].id, task.id)
+        script.frames[0].selected_video_id = None
+        with pytest.raises(ValueError, match="previous shot's selected video"):
+            pipeline.extract_last_frame(script.id, script.frames[1].id, task.id)

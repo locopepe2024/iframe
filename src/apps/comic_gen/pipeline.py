@@ -6524,13 +6524,20 @@ class ComicGenPipeline(StudioOwnerMixin):
         if not script:
             raise ValueError("Script not found")
 
-        frame = next((f for f in script.frames if f.id == frame_id), None)
-        if not frame:
+        frame_index = next((i for i, item in enumerate(script.frames) if item.id == frame_id), -1)
+        if frame_index < 0:
             raise ValueError("Frame not found")
+        if frame_index == 0:
+            raise ValueError("First frame has no previous shot")
+        frame = script.frames[frame_index]
+        previous_frame = script.frames[frame_index - 1]
+        if previous_frame.selected_video_id != video_task_id:
+            raise ValueError("Video task is not the previous shot's selected video")
 
         # Find the video task
         video_task = next((t for t in script.video_tasks if t.id == video_task_id), None)
-        if not video_task or video_task.status != "completed" or not video_task.video_url:
+        if (not video_task or video_task.frame_id != previous_frame.id
+                or video_task.status != "completed" or not video_task.video_url):
             raise ValueError("Video task not found or not completed")
 
         # Resolve video path (managed output/ files, temp downloads, or URLs)
@@ -6592,6 +6599,7 @@ class ComicGenPipeline(StudioOwnerMixin):
         variant = ImageVariant(
             id=str(uuid.uuid4()),
             url=image_url,
+            storage_key=os.path.relpath(output_path, self.output_root),
             prompt_used="Extracted last frame from video",
             is_uploaded_source=True,
             upload_type="image",

@@ -1325,7 +1325,7 @@
     "moveDown": "下移",
     "duplicateFrame": "复制",
     "uploadImage": "上传图片",
-    "usePrevEndFrame": "使用上一帧尾帧",
+    "usePrevEndFrame": "使用上一镜头尾帧",
     "dialogueLabel": "台词",
     "actionLabel": "动作"
   },
@@ -2542,6 +2542,7 @@
     "tabDirectR2v": "多参考 R2V",
     "tabTextVideo": "文生 TEXT",
     "tabFirstLastFrame": "首尾帧 FL2V",
+    "usePrevEndFrame": "使用上一镜头尾帧",
     "videoModeTabsLabel": "视频生成模式",
     "videoSettings": "视频生成设置",
     "modelSelection": "选择模型",
