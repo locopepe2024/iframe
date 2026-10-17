@@ -25,6 +25,7 @@ import { toast } from "@/store/toastStore";
 import type { EpisodeAssetSyncDiff, EpisodeVisualContextState } from "@/lib/directorShootingPlan";
 import { getAssetPlanEntries, type AssetPlanEntry } from "@/lib/episodeAssetPlan";
 import EpisodeAssetPlanPanel from "./EpisodeAssetPlanPanel";
+import { SceneImageTools, type SceneImageSource } from "./SceneImageTools";
 
 export default function ConsistencyVault() {
     const tv = useTranslations("vault");
@@ -657,7 +658,7 @@ export default function ConsistencyVault() {
     );
 }
 
-function CharacterDetailModal({ asset, type, onClose, onUpdateDescription, onGenerate, isGenerating, stylePrompt = "", styleNegativePrompt = "", onGenerateVideo, onDeleteVideo, isGeneratingVideo, planEntries = [], onCreateSceneAsset, creatingSceneAsset = false }: any) {
+export function CharacterDetailModal({ asset, type, onClose, onUpdateDescription, onGenerate, isGenerating, stylePrompt = "", styleNegativePrompt = "", onGenerateVideo, onDeleteVideo, isGeneratingVideo, planEntries = [], onCreateSceneAsset, creatingSceneAsset = false }: any) {
     const tv = useTranslations("vault");
     const [description, setDescription] = useState(asset.description);
     const [isEditing, setIsEditing] = useState(false);
@@ -677,8 +678,13 @@ function CharacterDetailModal({ asset, type, onClose, onUpdateDescription, onGen
     const [showAdvanced, setShowAdvanced] = useState(false);
 
     // Video Controls
-    const [activeTab, setActiveTab] = useState<"image" | "video">("image");
+    const [activeTab, setActiveTab] = useState<"image" | "video" | "lighting" | "camera">("image");
     const [videoPrompt, setVideoPrompt] = useState(asset.video_prompt || "");
+    const sceneImageSources = useMemo<SceneImageSource[]>(() => (asset.image_asset?.variants || [])
+        .filter((variant: { id?: string; url?: string }) => variant.id && variant.url)
+        .map((variant: { id: string; url: string }, index: number) => ({
+            key: variant.id, variantId: variant.id, label: `场景图片 · ${index + 1}`, url: getAssetUrl(variant.url),
+        })), [asset.image_asset]);
 
     // Sync local state if asset changes
     useEffect(() => {
@@ -783,32 +789,32 @@ function CharacterDetailModal({ asset, type, onClose, onUpdateDescription, onGen
     };
 
     return (
-        <div className="absolute inset-0 z-50 flex items-center justify-center bg-overlay backdrop-blur-sm p-8">
+        <div className="absolute inset-0 z-50 flex items-center justify-center bg-overlay backdrop-blur-sm p-2 lg:pl-4 lg:pr-0">
             <motion.div
                 initial={{ opacity: 0, scale: 0.95 }}
                 animate={{ opacity: 1, scale: 1 }}
                 exit={{ opacity: 0, scale: 0.95 }}
-                className="bg-surface border border-glass-border rounded-2xl w-full max-w-5xl h-[85vh] flex overflow-hidden shadow-lg"
+                className="bg-surface border border-glass-border rounded-lg w-full h-[calc(100dvh-1rem)] lg:h-full lg:rounded-r-none flex flex-col md:flex-row overflow-hidden shadow-lg"
             >
                 {/* Left: Variant Selector */}
-                <div className="w-1/2 bg-surface relative border-r border-glass-border flex flex-col overflow-hidden">
+                <div className="min-h-0 min-w-0 flex-[3] bg-surface relative border-b md:border-b-0 md:border-r border-glass-border flex flex-col overflow-hidden">
                     {/* Tab Switcher */}
-                    <div className="flex border-b border-glass-border bg-surface">
-                        <button
-                            onClick={() => setActiveTab("image")}
-                            className={`flex-1 p-3 text-sm font-bold transition-colors ${activeTab === "image" ? "text-foreground border-b-2 border-primary bg-glass" : "text-text-muted hover:text-text-secondary"}`}
-                        >
-                            Image Reference
-                        </button>
-                        <button
-                            onClick={() => setActiveTab("video")}
-                            className={`flex-1 p-3 text-sm font-bold transition-colors ${activeTab === "video" ? "text-foreground border-b-2 border-primary bg-glass" : "text-text-muted hover:text-text-secondary"}`}
-                        >
-                            Video Reference
-                        </button>
+                    <div role="tablist" aria-label="场景设计工具" className="flex overflow-x-auto border-b border-glass-border bg-surface">
+                        {([ ["image", "Image Reference"], ["video", "Video Reference"], ...(type === "scene" ? [["lighting", "光影"], ["camera", "镜头"]] : []) ] as [typeof activeTab, string][]).map(([id, label]) => <button
+                            key={id} type="button" role="tab" aria-selected={activeTab === id} tabIndex={activeTab === id ? 0 : -1}
+                            onClick={() => setActiveTab(id)}
+                            onKeyDown={(event) => {
+                                if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
+                                event.preventDefault();
+                                const tabs = Array.from(event.currentTarget.parentElement?.querySelectorAll<HTMLElement>('[role="tab"]') || []);
+                                const next = tabs[(tabs.indexOf(event.currentTarget) + (event.key === "ArrowRight" ? 1 : tabs.length - 1)) % tabs.length];
+                                next?.click(); next?.focus();
+                            }}
+                            className={`min-h-11 shrink-0 px-4 text-sm font-medium transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary ${activeTab === id ? "text-foreground border-b-2 border-primary bg-glass" : "text-text-muted hover:text-text-secondary"}`}
+                        >{label}</button>)}
                     </div>
 
-                    <div className="flex-1 p-4 overflow-hidden">
+                    <div className={`min-h-0 flex-1 overflow-hidden ${activeTab === "image" || activeTab === "video" ? "p-4" : ""}`}>
                         {activeTab === "image" ? (
                             <VariantSelector
                                 key={`${type}:${asset.id}`}
@@ -821,7 +827,7 @@ function CharacterDetailModal({ asset, type, onClose, onUpdateDescription, onGen
                                 aspectRatio="16:9"
                                 className="h-full"
                             />
-                        ) : (
+                        ) : activeTab === "video" ? (
                             <VideoVariantSelector
                                 videos={asset.video_assets || []}
                                 onDelete={onDeleteVideo}
@@ -830,12 +836,16 @@ function CharacterDetailModal({ asset, type, onClose, onUpdateDescription, onGen
                                 aspectRatio="16:9"
                                 className="h-full"
                             />
-                        )}
+                        ) : null}
+                        {type === "scene" && (["lighting", "camera"] as const).map((kind) => <div key={kind} role="tabpanel" aria-label={kind === "lighting" ? "光影" : "镜头"} className={`${activeTab === kind ? "flex" : "hidden"} h-full min-w-0`}>
+                            <SceneImageTools kind={kind} sources={sceneImageSources} busy={isGenerating} onGenerate={(source, prompt) => onGenerate(prompt, false, negativePrompt, 1,
+                                [{ asset_type: "scene", asset_id: asset.id, variant_id: source.variantId }], "reference")} />
+                        </div>)}
                     </div>
                 </div>
 
                 {/* Right: Details */}
-                <div className="w-1/2 flex flex-col">
+                <div className="min-h-0 min-w-0 flex-[2] flex flex-col">
                     {/* Header */}
                     <div className="p-6 border-b border-glass-border flex justify-between items-center bg-surface">
                         <h2 className="text-2xl font-bold text-foreground">{asset.name}</h2>

@@ -532,12 +532,12 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
     };
 
     return (
-        <div className="absolute inset-0 z-50 flex items-center justify-center bg-overlay backdrop-blur-md p-4 md:p-8">
+        <div className="absolute inset-0 z-50 flex items-center justify-center bg-overlay backdrop-blur-md p-2 lg:pl-4 lg:pr-0">
             <motion.div
                 initial={{ opacity: 0, scale: 0.95 }}
                 animate={{ opacity: 1, scale: 1 }}
                 exit={{ opacity: 0, scale: 0.95 }}
-                className="bg-surface border border-glass-border rounded-2xl w-full max-w-7xl h-[90vh] flex flex-col overflow-hidden shadow-lg"
+                className="bg-surface border border-glass-border rounded-lg w-full h-[calc(100dvh-1rem)] lg:h-full lg:rounded-r-none flex flex-col overflow-hidden shadow-lg"
             >
                 <div className="h-16 border-b border-glass-border flex justify-between items-center px-6 bg-surface">
                     <div className="flex items-center gap-4">
