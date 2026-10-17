@@ -19,6 +19,7 @@ from src.utils.cos_storage import COSImageUploader
 
 ROOT = Path(__file__).resolve().parent
 PROJECT = ROOT.parents[3]
+LABEL = "B3"
 SOURCE = ROOT / "qiangfa2-gray-full/s09-motion.mp4"
 IDENTITY = Path("/Users/owen/Downloads/白模/枪法.png")
 PROMPT = ROOT / "qiangfa2-gray-full/s09-label-ab-video-editing-frame-anchors-b3.md"
@@ -43,9 +44,10 @@ def write_record(record):
 
 def preflight():
     manifest = json.loads(MANIFEST.read_text())
-    group = manifest["groups"]["B3"]
-    if group["status"] not in {"offline_draft_not_submitted", "submitted", "completed"}:
-        raise RuntimeError("Unexpected B3 manifest status")
+    group = manifest["groups"][LABEL]
+    if group["status"] not in {"offline_draft_not_submitted", "submitted", "completed",
+                               "completed_failed_visual_review_wrong_identity_input"}:
+        raise RuntimeError(f"Unexpected {LABEL} manifest status")
     if sha256(SOURCE) != manifest["source_sha256"]:
         raise RuntimeError("Source hash changed")
     if sha256(IDENTITY) != IDENTITY_SHA256:
@@ -72,7 +74,7 @@ def credentials():
 def submit():
     prompt = preflight()
     if RECORD.exists():
-        raise RuntimeError("B3 task record already exists; refusing duplicate submission")
+        raise RuntimeError(f"{LABEL} task record already exists; refusing duplicate submission")
     headers = credentials()
     uploader = COSImageUploader()
     urls = {}
@@ -80,7 +82,7 @@ def submit():
         for role, source in (("identity", IDENTITY), ("motion", SOURCE)):
             copy = Path(directory) / f"s09-b3-{role}-{sha256(source)[:12]}{source.suffix}"
             shutil.copyfile(source, copy)
-            key = uploader.upload_file(str(copy), sub_path="image-edit-inputs/s09-b3-20261017")
+            key = uploader.upload_file(str(copy), sub_path=f"image-edit-inputs/s09-{LABEL.lower()}-20261017")
             if not key:
                 raise RuntimeError(f"COS upload failed for {role}")
             urls[role] = uploader.sign_url_for_api(key)
@@ -93,7 +95,7 @@ def submit():
                         {"type": "image_url", "role": "reference_image", "image_url": {"url": urls["identity"]}},
                         {"type": "video_url", "role": "reference_video", "video_url": {"url": urls["motion"]}}]}
     record = {"timestamp_utc": datetime.now(timezone.utc).isoformat(),
-              "status": "submission_started", "label": "B3",
+              "status": "submission_started", "label": LABEL,
               "prompt_sha256": sha256(PROMPT), "source_sha256": sha256(SOURCE),
               "identity_sha256": sha256(IDENTITY), "model": body["model"],
               "mode": body["mode"], "duration": body["duration"],
@@ -121,7 +123,7 @@ def collect():
     record = json.loads(RECORD.read_text())
     task_id = record.get("task_id")
     if not task_id:
-        raise RuntimeError("B3 has no task ID")
+        raise RuntimeError(f"{LABEL} has no task ID")
     headers = credentials()
     session = requests.Session()
     session.trust_env = False
@@ -170,14 +172,18 @@ def collect():
     print(status, task_id, record.get("output_path") or "no_output")
 
 
-if __name__ == "__main__":
+def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("action", choices=("validate", "submit", "collect"))
     action = parser.parse_args().action
     if action == "validate":
         preflight()
-        print("B3 inputs and prompt valid")
+        print(f"{LABEL} inputs and prompt valid")
     elif action == "submit":
         submit()
     else:
         collect()
+
+
+if __name__ == "__main__":
+    main()
