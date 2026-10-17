@@ -1,6 +1,6 @@
 import { expect, it } from "vitest";
 
-import { buildGenerationPrompt, resolveNegativePrompt, resolveStylePrompt } from "./buildAssembledPrompt";
+import { buildGenerationPrompt, directorShotSuggestions, resolveNegativePrompt, resolveStylePrompt } from "./buildAssembledPrompt";
 import { resolveStoryboardStyle, resolveStoryboardStyleForRender } from "@/lib/storyboardStyle";
 import type { ShotNode } from "./ShotCard";
 
@@ -32,6 +32,15 @@ it("submits an accepted optimized prompt unchanged for H3 and other video models
         .toBe(optimized.prompt);
     expect(buildGenerationPrompt(optimized, true, "wan2.7-i2v", "cinematic style"))
         .toBe(optimized.prompt);
+});
+
+it("keeps shooting-plan prose as an explicit suggestion instead of appending it", () => {
+    const withPlan: ShotNode = {
+        ...shot,
+        directorShotContext: { scene: { atmosphere: "残阳如血" } },
+    };
+    expect(directorShotSuggestions(withPlan)).toContain("环境氛围：残阳如血");
+    expect(buildGenerationPrompt(withPlan, false, "wan2.7-i2v")).not.toContain("残阳如血");
 });
 
 it("does not add dialogue when generated audio is disabled", () => {

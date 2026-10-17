@@ -34,9 +34,9 @@ function normalizedPromptText(value: string): string {
     return value.replace(/[\s，。；：、,.!?！？:;]+/g, "").toLocaleLowerCase();
 }
 
-function directorShotConstraint(shot: ShotNode): string {
+export function directorShotSuggestions(shot: ShotNode): string[] {
     const context = shot.directorShotContext;
-    if (!context) return "";
+    if (!context) return [];
     const values: Array<[string, string | undefined]> = [
         ["地点与时段", [context.scene?.location, context.scene?.time_anchor].filter(Boolean).join("，")],
         ["场景入场连续性", context.scene?.continuity_in],
@@ -74,7 +74,7 @@ function directorShotConstraint(shot: ShotNode): string {
         existingFields.push(normalizedValue);
         return [`${label}：${value}`];
     });
-    return clauses.length ? `导演镜头约束：${clauses.join("；")}` : "";
+    return clauses;
 }
 
 /**
@@ -111,9 +111,6 @@ export function buildAssembledPrompt(
         shot.lightingOverride,
     );
     const suffixes: string[] = [];
-
-    const directorConstraint = directorShotConstraint(shot);
-    if (directorConstraint) suffixes.push(directorConstraint);
 
     // Camera movement (natural language, speed naturally embedded)
     if (shot.cameraMovementStructured) {

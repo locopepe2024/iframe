@@ -9,6 +9,7 @@ import { useState, useCallback, useEffect, useMemo, useRef } from "react";
 import { motion } from "framer-motion";
 import { Plus, Loader2, Sparkles, PanelBottomOpen, PanelBottomClose } from "lucide-react";
 import StepPageHeader, { StepPill } from "@/components/shared/StepPageHeader";
+import RenderPromptPreviewDialog, { type FrameRenderPreview } from "./RenderPromptPreviewDialog";
 import { useTranslations } from "next-intl";
 import { useProjectStore } from "@/store/projectStore";
 import { api, crudApi, type VideoTask, type RefineSSEEvent, type AssetReferenceIndexEntry } from "@/lib/api";
@@ -63,6 +64,10 @@ import {
 } from "./storyboard-r2v/referenceAssets";
 
 export default function StoryboardR2V() {
+    const [pendingCandidate, setPendingCandidate] = useState<{
+        projectId: string; frameId: string; index: number; slot: "first" | "last";
+        preview: FrameRenderPreview;
+    } | null>(null);
     const currentProject = useProjectStore((state) => state.currentProject);
     const currentSeries = useProjectStore((state) => state.currentSeries);
     const updateProject = useProjectStore((state) => state.updateProject);
@@ -943,13 +948,6 @@ export default function StoryboardR2V() {
     const generateT2I = useCallback(async (index: number, slot: "first" | "last" = "first") => {
         const shot = shots[index];
         if (!currentProject || !shot.prompt.trim()) return;
-
-        setShots(prev => prev.map((s, i) =>
-            i === index ? (slot === "first"
-                ? { ...s, t2iStatus: "pending" }
-                : { ...s, lastFrameStatus: "pending" }) : s
-        ));
-
         try {
             const style = await loadGenerationStyle();
             const t2iPrompt = buildGenerationPrompt(
@@ -966,8 +964,36 @@ export default function StoryboardR2V() {
                 "",
                 shot.negativePromptOverride,
             );
+            const projected = await api.previewFrameCandidate(currentProject.id, shot.id, t2iPrompt, negativePrompt);
+            setPendingCandidate({
+                projectId: currentProject.id, frameId: shot.id, index, slot,
+                preview: {
+                    prompt: projected.prompt, negativePrompt: projected.negative_prompt,
+                    contextToken: projected.context_token, batchSize: 1, referenceCount: null,
+                    model: projected.model, aspectRatio: projected.aspect_ratio,
+                    sourceLabel: slot === "first" ? "STEP 1 首帧" : "STEP 2 尾帧",
+                    referenceLabels: projected.reference_asset_labels,
+                },
+            });
+        } catch (error) {
+            debugLog.error("Studio", "Failed to preview shot candidate:", error);
+            toast.error("无法预览生成输入", { body: String((error as Error)?.message || "请重试") });
+        }
+    }, [shots, currentProject, loadGenerationStyle]);
+
+    const confirmT2I = useCallback(async () => {
+        const pending = pendingCandidate;
+        if (!pending) return;
+        setPendingCandidate(null);
+        const { projectId, frameId, index, slot, preview } = pending;
+        setShots(prev => prev.map((s, i) =>
+            i === index ? (slot === "first"
+                ? { ...s, t2iStatus: "pending" }
+                : { ...s, lastFrameStatus: "pending" }) : s
+        ));
+        try {
             const result = await api.renderFrameCandidate(
-                currentProject.id, shot.id, t2iPrompt, negativePrompt,
+                projectId, frameId, preview.prompt, preview.negativePrompt, preview.contextToken,
             );
             if (!result?.image_url) throw new Error("候选生图没有返回图片");
 
@@ -989,13 +1015,14 @@ export default function StoryboardR2V() {
             }));
         } catch (error) {
             debugLog.error("Studio", "Failed to generate T2I for shot:", error);
+            toast.error("候选图片生成失败", { body: String((error as Error)?.message || "请重新预览后重试") });
             setShots(prev => prev.map((s, i) =>
                 i === index ? (slot === "first"
                     ? { ...s, t2iStatus: "failed" }
                     : { ...s, lastFrameStatus: "failed" }) : s
             ));
         }
-    }, [shots, currentProject, persistWorkbench, loadGenerationStyle]);
+    }, [pendingCandidate, persistWorkbench]);
 
     // Batch-aware generation. The user's "抽卡" mental model: one
     // click of Generate ×N fires N independent createVideoTask calls
@@ -1871,6 +1898,11 @@ export default function StoryboardR2V() {
         // to main column (not page-wide), so the right TaskQueuePanel can
         // be a true floor-to-ceiling sidebar with its own SidePanelHeader.
         <div className="h-full flex overflow-hidden relative">
+        {pendingCandidate && <RenderPromptPreviewDialog
+            preview={pendingCandidate.preview}
+            onConfirm={confirmT2I}
+            onClose={() => setPendingCandidate(null)}
+        />}
         {/* Main column — pushed (compressed) when the queue panel opens
             so the queue doesn't overlay content. Bloom/grain now global in
             ProjectClient so the whole pipeline shares one atmosphere. */}
