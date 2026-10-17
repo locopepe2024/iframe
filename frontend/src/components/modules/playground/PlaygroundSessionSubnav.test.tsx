@@ -48,3 +48,22 @@ it('opens automatic fact save settings from the session menu', async () => {
   fireEvent.click(screen.getByRole('checkbox'));
   await waitFor(() => expect(agent.agentRequest).toHaveBeenLastCalledWith('/fact-categories/health', 'PATCH', { auto_capture_enabled: false }));
 });
+
+it('enables owner-wide memory from the session menu and manages confirmed memories there', async () => {
+  agent.agentRequest.mockImplementation((path: string, method?: string) => {
+    if (path === '/memory-settings' && method === 'PATCH') return Promise.resolve({ enabled: true });
+    if (path === '/memory-settings') return Promise.resolve({ enabled: false });
+    if (path === '/memories/extract') return Promise.resolve({ candidates: [{ content: '喜欢象棋', category: 'preference', source_session_id: 's', source_message_id: 'm', source_quote: '我喜欢象棋' }] });
+    if (path === '/memories') return Promise.resolve({ memories: [] });
+    return Promise.resolve({});
+  });
+  render(<PlaygroundSessionSubnav />);
+  fireEvent.click(screen.getByRole('button', { name: 'manage' }));
+  fireEvent.click(screen.getByRole('menuitem', { name: 'memorySettings' }));
+  expect(await screen.findByRole('dialog', { name: 'memorySettings' })).toBeInTheDocument();
+  fireEvent.click(await screen.findByRole('checkbox', { name: 'memoryEnable' }));
+  await waitFor(() => expect(agent.agentRequest).toHaveBeenCalledWith('/memory-settings', 'PATCH', { enabled: true }));
+  fireEvent.click(screen.getByRole('button', { name: 'extractMemoryCandidates' }));
+  fireEvent.click(await screen.findByRole('button', { name: 'confirmMemory' }));
+  await waitFor(() => expect(agent.agentRequest).toHaveBeenCalledWith('/memories', 'POST', expect.objectContaining({ source_quote: '我喜欢象棋' })));
+});

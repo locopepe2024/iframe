@@ -1,9 +1,5 @@
 export const COMPANION_SKILLS = [
   {
-    id: 'memory',
-    title: '记忆与画像',
-  },
-  {
     id: 'listening',
     title: '倾听与话题引导',
   },

@@ -23,8 +23,9 @@ import GroupedModelGrid from "@/components/common/GroupedModelGrid";
 import IFrameBranding from "@/components/layout/IFrameBranding";
 import UpdateChecker from "./UpdateChecker";
 import SkillsSettings from "./SkillsSettings";
+import AgentSettings from "./AgentSettings";
 import { APP_VERSION, APP_VERSION_LABEL } from "@/generated/appVersion";
-type SettingsCategory = "general" | "models" | "prompts" | "skills" | "apikeys" | "storage" | "about";
+type SettingsCategory = "general" | "models" | "prompts" | "skills" | "agent" | "apikeys" | "storage" | "about";
 import {
   FormRow,
   FieldLabel,
@@ -960,6 +961,8 @@ export default function SettingsPage() {
         return renderPrompts();
       case "skills":
         return <SkillsSettings />;
+      case "agent":
+        return <AgentSettings />;
       case "apikeys":
         return renderApiKeys();
       case "storage":
@@ -976,6 +979,7 @@ export default function SettingsPage() {
     models: t("eyebrowModels"),
     prompts: t("eyebrowPrompts"),
     skills: "Skills",
+    agent: "Agent",
     apikeys: t("eyebrowApikeys"),
     storage: t("eyebrowStorage"),
     about: t("eyebrowAbout"),
@@ -987,6 +991,7 @@ export default function SettingsPage() {
     { id: "models", label: t("tabModels") },
     { id: "prompts", label: t("eyebrowPrompts") },
     { id: "skills", label: "Skills" },
+    { id: "agent", label: "Agent" },
     { id: "apikeys", label: t("eyebrowApikeys") },
     { id: "storage", label: t("tabStorage") },
     { id: "about", label: t("eyebrowAbout") },

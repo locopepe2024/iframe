@@ -3,6 +3,7 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { useAgentConversation } from './useAgentConversation';
 import { agentRequest, knowledgeRequest } from '@/lib/api';
 import { usePlaygroundStore } from './usePlaygroundStore';
+import { COMPANION_SKILLS_STORAGE_KEY } from './companionSkills';
 
 vi.mock('@/lib/api', () => ({ agentRequest: vi.fn(), knowledgeRequest: vi.fn().mockResolvedValue({ enabled: false }) }));
 beforeEach(() => { vi.mocked(knowledgeRequest).mockResolvedValue({ enabled: false }); });
@@ -25,6 +26,14 @@ it('sends only enabled companion skill IDs with a chat request', async () => {
         companion_skills: ['listening'],
     })));
     await act(async () => { response.resolve({ user_message: { id: 'u' }, assistant_message: { id: 'a' } }); await sending; });
+    hook.unmount();
+});
+
+it('drops the legacy memory skill from saved companion preferences', async () => {
+    window.localStorage.setItem(COMPANION_SKILLS_STORAGE_KEY, JSON.stringify(['memory', 'listening']));
+    mockConversation(Promise.resolve({ user_message: { id: 'u' }, assistant_message: { id: 'a' } }));
+    const hook = renderHook(() => useAgentConversation(true, 'session'));
+    await waitFor(() => expect(hook.result.current.companionSkills).toEqual(['listening']));
     hook.unmount();
 });
 
