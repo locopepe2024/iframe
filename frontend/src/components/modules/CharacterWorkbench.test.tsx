@@ -42,7 +42,7 @@ vi.mock("@/lib/api", () => ({ API_URL: "", api: apiMocks, agentRequest: apiMocks
 vi.mock("@/store/projectStore", () => ({
     useProjectStore: (selector: (state: unknown) => unknown) => selector(projectStoreMocks),
 }));
-vi.mock("@/store/toastStore", () => ({ toast: { success: vi.fn() } }));
+vi.mock("@/store/toastStore", () => ({ toast: { success: vi.fn(), warning: vi.fn(), error: vi.fn() } }));
 
 const baseProps = {
     title: "Full body",
@@ -274,6 +274,7 @@ it("loads the project reference index for the character workbench", async () => 
     expect(await screen.findByRole("listbox")).toHaveTextContent("Pocket watch");
     fireEvent.mouseDown(within(screen.getByRole("listbox")).getByRole("option"));
     fireEvent.click(within(screen.getByRole("listbox")).getByRole("option"));
+    await waitFor(() => expect(document.querySelector('[data-reference-variant-id="watch-front"]')).toBeInTheDocument());
     fireEvent.click(screen.getAllByRole("button", { name: "Reference image" })[0]);
     fireEvent.click(screen.getAllByTestId("variant-generate")[0]);
     await waitFor(() => expect(onGenerate).toHaveBeenCalledWith(
@@ -601,6 +602,7 @@ it("refreshes the reference index when a generated project snapshot arrives", as
     expect(editor?.editor).toBeDefined();
     act(() => { editor!.editor!.commands.setContent("<p>@Hero</p>"); });
     fireEvent.click(within(screen.getByRole("listbox")).getByRole("option"));
+    await waitFor(() => expect(document.querySelector('[data-reference-variant-id="new-view"]')).toBeInTheDocument());
     fireEvent.click(screen.getAllByRole("button", { name: "Reference image" })[0]);
     fireEvent.click(screen.getAllByTestId("variant-generate")[0]);
 
