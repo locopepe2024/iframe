@@ -14,7 +14,7 @@ import UploadAssetModal from "../modals/UploadAssetModal";
 import StepHeader from "@/components/shared/StepHeader";
 import WorkflowActionButton from "@/components/shared/WorkflowActionButton";
 import { buildCharacterVideoPrompt, DEFAULT_CHARACTER_NEGATIVE_PROMPT } from "@/lib/characterPrompts";
-import { resolveAssetGenerationModel } from "@/lib/modelCatalog";
+import { resolveAssetGenerationModel, resolveModelSettings } from "@/lib/modelCatalog";
 import {
     createSingleFlightTaskStatusPoller,
     mergeAssetTaskResult,
@@ -25,7 +25,7 @@ import { toast } from "@/store/toastStore";
 import type { EpisodeAssetSyncDiff, EpisodeVisualContextState } from "@/lib/directorShootingPlan";
 import { getAssetPlanEntries, type AssetPlanEntry } from "@/lib/episodeAssetPlan";
 import EpisodeAssetPlanPanel from "./EpisodeAssetPlanPanel";
-import { SceneImageTools, type LightingReference, type SceneImageSource } from "./SceneImageTools";
+import { SceneImageTools, type LightingReference, type SceneImageSource, type SceneToolParams } from "./SceneImageTools";
 
 export default function ConsistencyVault() {
     const tv = useTranslations("vault");
@@ -128,7 +128,7 @@ export default function ConsistencyVault() {
         }
     };
 
-    const handleGenerate = async (assetId: string, type: string, generationType: string = "all", prompt: string = "", applyStyle: boolean = true, negativePrompt: string = "", batchSize: number = 1, references: AssetLibraryReference[] = [], imageGenerationMode: "text" | "reference" = "text") => {
+    const handleGenerate = async (assetId: string, type: string, generationType: string = "all", prompt: string = "", applyStyle: boolean = true, negativePrompt: string = "", batchSize: number = 1, references: AssetLibraryReference[] = [], imageGenerationMode: "text" | "reference" = "text", sceneTool?: SceneToolParams) => {
         if (!currentProject) return;
 
         // Add task with specific generation type and batch size
@@ -153,11 +153,12 @@ export default function ConsistencyVault() {
                 applyStyle,
                 negativePrompt,
                 batchSize,
-                resolveAssetGenerationModel(currentProject.model_settings?.t2i_model),
+                sceneTool ? resolveModelSettings(currentProject.model_settings).i2i_model : resolveAssetGenerationModel(currentProject.model_settings?.t2i_model),
                 undefined,
                 undefined,
                 references,
                 imageGenerationMode,
+                sceneTool,
             );
 
             const taskId = response._task_id;
@@ -610,7 +611,7 @@ export default function ConsistencyVault() {
                                 setSelectedAssetType(null);
                             }}
                             onUpdateDescription={(desc: string) => handleUpdateDescription(selectedAssetId, selectedAssetType, desc)}
-                            onGenerate={(prompt: string, applyStyle: boolean, negativePrompt: string, batchSize: number, references?: AssetLibraryReference[], imageGenerationMode?: "text" | "reference") => handleGenerate(selectedAssetId, selectedAssetType, "all", prompt, applyStyle, negativePrompt, batchSize, references, imageGenerationMode)}
+                            onGenerate={(prompt: string, applyStyle: boolean, negativePrompt: string, batchSize: number, references?: AssetLibraryReference[], imageGenerationMode?: "text" | "reference", sceneTool?: SceneToolParams) => handleGenerate(selectedAssetId, selectedAssetType, "all", prompt, applyStyle, negativePrompt, batchSize, references, imageGenerationMode, sceneTool)}
                             isGenerating={isAssetGenerating(selectedAssetId)}
                             stylePrompt={currentProject?.art_direction?.style_config?.positive_prompt || ""}
                             styleNegativePrompt={currentProject?.art_direction?.style_config?.negative_prompt || ""}
@@ -682,8 +683,9 @@ export function CharacterDetailModal({ asset, type, onClose, onUpdateDescription
     const [videoPrompt, setVideoPrompt] = useState(asset.video_prompt || "");
     const sceneImageSources = useMemo<SceneImageSource[]>(() => (asset.image_asset?.variants || [])
         .filter((variant: { id?: string; url?: string }) => variant.id && variant.url)
-        .map((variant: { id: string; url: string }, index: number) => ({
-            key: variant.id, variantId: variant.id, label: `场景图片 · ${index + 1}`, url: getAssetUrl(variant.url),
+        .map((variant: { id: string; url: string; scene_tool?: SceneToolParams; scene_tool_source_variant_id?: string }, index: number) => ({
+            key: variant.id, variantId: variant.id, label: `场景图片 · ${index + 1}${variant.scene_tool ? ` · ${variant.scene_tool.kind === "lighting" ? "光影" : "镜头"}` : ""}`, url: getAssetUrl(variant.url),
+            tool: variant.scene_tool, sourceVariantId: variant.scene_tool_source_variant_id,
         })), [asset.image_asset]);
 
     // Sync local state if asset changes
@@ -843,11 +845,11 @@ export function CharacterDetailModal({ asset, type, onClose, onUpdateDescription
                             />
                         ) : null}
                         {type === "scene" && (["lighting", "camera"] as const).map((kind) => <div key={kind} role="tabpanel" aria-label={kind === "lighting" ? "光影" : "镜头"} className={`${activeTab === kind ? "flex" : "hidden"} h-full min-w-0`}>
-                            <SceneImageTools kind={kind} sources={sceneImageSources} sceneAssetId={asset.id} lightingReferences={lightingReferences} busy={isGenerating} onGenerate={(source, prompt, lightReference) => {
+                            <SceneImageTools kind={kind} sources={sceneImageSources} sceneAssetId={asset.id} lightingReferences={lightingReferences} busy={isGenerating} onGenerate={(source, params, lightReference) => {
                                 const sourceReference: AssetLibraryReference = { asset_type: "scene", asset_id: asset.id, variant_id: source.variantId };
                                 const references = [sourceReference];
                                 if (lightReference && !(lightReference.asset_type === sourceReference.asset_type && lightReference.asset_id === sourceReference.asset_id && lightReference.variant_id === sourceReference.variant_id)) references.push(lightReference);
-                                onGenerate(prompt, false, negativePrompt, 1, references, "reference");
+                                onGenerate("", false, negativePrompt, 1, references, "reference", params);
                             }} />
                         </div>)}
                     </div>

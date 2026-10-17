@@ -1,16 +1,22 @@
 "use client";
 
-import { useState, type PointerEvent } from "react";
-import type { AssetLibraryReference } from "@/lib/api";
+import { useState, type ChangeEvent, type PointerEvent } from "react";
+import { api, type AssetLibraryReference } from "@/lib/api";
+import { getAssetUrl } from "@/lib/utils";
 
 export type SceneImageSource = {
     key: string;
     label: string;
     url: string;
     variantId: string;
+    tool?: SceneToolParams;
+    sourceVariantId?: string;
 };
 
 export type LightingReference = { key: string; label: string; url: string; reference: AssetLibraryReference };
+export type SceneToolParams =
+    | { kind: "lighting"; view_mode: "perspective" | "front"; intelligent: boolean; brightness: number; color: string; light_side: "left" | "top" | "right" | "front" | "bottom" | "back"; rim_light: boolean; preset: string | null; extra: string }
+    | { kind: "camera"; preset: string; yaw: number; pitch: number; zoom: number; focus: boolean; focus_x: number; focus_y: number; focus_radius: number; prompt_enabled: boolean; extra: string };
 
 const cameraPresets = [
     { key: "custom", label: "自定义" }, { key: "fisheye", label: "鱼眼视角" },
@@ -29,6 +35,9 @@ const lightPresets = [
     { key: "studio_softbox", label: "柔光棚拍", prompt: "柔光箱近距离补光，减弱硬阴影，照明均匀干净" },
 ] as const;
 const lightSides = ["左侧", "顶部", "右侧", "前方", "底部", "后方"] as const;
+const LIGHT_SIDE_LABELS: Record<"left" | "top" | "right" | "front" | "bottom" | "back", string> = {
+    left: "左侧", top: "顶部", right: "右侧", front: "前方", bottom: "底部", back: "后方",
+};
 const distances = ["远景", "中远景", "中景", "近景", "特写"] as const;
 
 export function SceneImageTools({ kind, sources, sceneAssetId, lightingReferences = [], busy, onGenerate }: {
@@ -37,7 +46,7 @@ export function SceneImageTools({ kind, sources, sceneAssetId, lightingReference
     sceneAssetId?: string;
     lightingReferences?: LightingReference[];
     busy: boolean;
-    onGenerate: (source: SceneImageSource, prompt: string, lightingReference?: AssetLibraryReference) => void;
+    onGenerate: (source: SceneImageSource, params: SceneToolParams, lightingReference?: AssetLibraryReference) => void;
 }) {
     const [sourceKey, setSourceKey] = useState("");
     const [brightness, setBrightness] = useState(50);
@@ -48,6 +57,9 @@ export function SceneImageTools({ kind, sources, sceneAssetId, lightingReference
     const [rimLight, setRimLight] = useState(false);
     const [lightPreset, setLightPreset] = useState<string>("");
     const [lightingReferenceKey, setLightingReferenceKey] = useState("");
+    const [uploadedLightingReference, setUploadedLightingReference] = useState<LightingReference | null>(null);
+    const [uploadingLightingReference, setUploadingLightingReference] = useState(false);
+    const [lightingReferenceError, setLightingReferenceError] = useState("");
     const [cameraPreset, setCameraPreset] = useState<(typeof cameraPresets)[number]["key"]>("custom");
     const [yaw, setYaw] = useState(0);
     const [pitch, setPitch] = useState(0);
@@ -59,7 +71,8 @@ export function SceneImageTools({ kind, sources, sceneAssetId, lightingReference
     const [cameraPromptEnabled, setCameraPromptEnabled] = useState(false);
     const [extra, setExtra] = useState("");
     const source = sources.find((item) => item.key === sourceKey) ?? sources[0];
-    const lightingReference = lightingReferences.find((item) => item.key === lightingReferenceKey);
+    const allLightingReferences = uploadedLightingReference ? [uploadedLightingReference, ...lightingReferences] : lightingReferences;
+    const lightingReference = allLightingReferences.find((item) => item.key === lightingReferenceKey);
     const activeLightingReference = intelligent && !(lightingReference?.reference.asset_type === "scene" && lightingReference.reference.asset_id === sceneAssetId && lightingReference.reference.variant_id === source?.variantId)
         ? lightingReference : undefined;
     const lightPosition: Record<(typeof lightSides)[number], { left: string; top: string }> = {
@@ -72,23 +85,47 @@ export function SceneImageTools({ kind, sources, sceneAssetId, lightingReference
 
     function submit() {
         if (!source || busy) return;
-        const brightnessGuide = brightness >= 75 ? "受光区域明显，但高光不要过曝。" : brightness >= 45
-            ? "保持自然明暗层次和稳定反差。" : "阴影占比更高，整体照度克制。";
-        const prompt = kind === "lighting" ? [
-            "基于参考图片仅调整场景打光与光影，保持场景结构、主体、物体位置和构图；不要替换主体或新增物体。",
-            `观察模式：${viewMode === "front" ? "正面" : "透视"}。`,
-            `主光从${lightSide}进入，亮度约 ${brightness}%，主光颜色 ${color}；受光面和阴影方向应一致。${brightnessGuide}`,
-            rimLight ? "增加克制的轮廓光。" : "不额外增加明显轮廓光。",
-            intelligent ? lightPresets.find((item) => item.key === lightPreset)?.prompt : "以结构化灯位、光色和亮度为主，只做克制的光照重塑。",
-            intelligent ? extra.trim() : "",
-            activeLightingReference ? "附加光影参考图只用于主光方向、明暗分布与色温；场景内容以来源图片为准。" : "",
-        ] : [
-            "基于参考图片调整观察镜头，保持同一场景的空间结构、主体、物体位置关系和核心风格；不要生成新场景。",
-            `视角：${cameraPresets.find((item) => item.key === cameraPreset)?.label}；水平环绕 ${yaw}°，垂直俯仰 ${pitch}°，景别 ${distances[distance]}。`,
-            focus ? `以画面坐标 x=${focusX}%、y=${focusY}% 的主体区域为对焦中心，影响半径约 ${focusRadius}%，保持该区域清晰。` : "",
-            cameraPromptEnabled ? extra.trim() : "",
-        ];
-        onGenerate(source, prompt.filter(Boolean).join("\n"), kind === "lighting" ? activeLightingReference?.reference : undefined);
+        const params: SceneToolParams = kind === "lighting" ? {
+            kind, view_mode: viewMode, intelligent, brightness, color,
+            light_side: ({ 左侧: "left", 顶部: "top", 右侧: "right", 前方: "front", 底部: "bottom", 后方: "back" } as const)[lightSide],
+            rim_light: rimLight, preset: intelligent && lightPreset ? lightPreset === "cool_gray" ? "nolan_cool_gray" : lightPreset : null, extra: intelligent ? extra.trim() : "",
+        } : {
+            kind, preset: cameraPreset, yaw, pitch, zoom: distance, focus,
+            focus_x: focusX, focus_y: focusY, focus_radius: focusRadius,
+            prompt_enabled: cameraPromptEnabled, extra: cameraPromptEnabled ? extra.trim() : "",
+        };
+        onGenerate(source, params, kind === "lighting" ? activeLightingReference?.reference : undefined);
+    }
+
+    async function uploadLightingReference(event: ChangeEvent<HTMLInputElement>) {
+        const file = event.target.files?.[0];
+        event.target.value = "";
+        if (!file) return;
+        if (!file.type.startsWith("image/") || file.size > 10 * 1024 * 1024) {
+            setLightingReferenceError("请选择不超过 10 MB 的图片文件");
+            return;
+        }
+        setUploadingLightingReference(true);
+        setLightingReferenceError("");
+        try {
+            const uploaded = await api.uploadLibraryImage(file);
+            const asset = await api.createLibraryAsset("prop", {
+                name: `光影参考 · ${file.name}`, image_url: uploaded.image_url, image_origin: "upload",
+            });
+            const variant = asset.image_asset?.variants?.[0];
+            if (!variant?.id || !variant?.url) throw new Error("上传图片没有产生可引用版本");
+            const reference: LightingReference = {
+                key: `prop:${asset.id}:${variant.id}`, label: asset.name,
+                url: getAssetUrl(variant.url),
+                reference: { asset_type: "prop", asset_id: asset.id, variant_id: variant.id },
+            };
+            setUploadedLightingReference(reference);
+            setLightingReferenceKey(reference.key);
+        } catch (error) {
+            setLightingReferenceError(error instanceof Error ? error.message : "上传光影参考图失败");
+        } finally {
+            setUploadingLightingReference(false);
+        }
     }
 
     function updateFocus(event: PointerEvent<HTMLDivElement>) {
@@ -120,6 +157,12 @@ export function SceneImageTools({ kind, sources, sceneAssetId, lightingReference
                     {!sources.length && <option value="">暂无可用场景图片</option>}
                     {sources.map((item) => <option key={item.key} value={item.key}>{item.label}</option>)}
                 </select>
+                {source?.tool && <details className="rounded-md border border-glass-border bg-surface-inset px-3 py-2 text-xs text-text-secondary">
+                    <summary className="cursor-pointer focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary">此候选的生成参数 · {source.tool.kind === "lighting" ? "光影" : "镜头"}</summary>
+                    <p className="mt-2">来源版本：{sources.find((item) => item.variantId === source.sourceVariantId)?.label ?? source.sourceVariantId ?? "未知"}</p>
+                    {source.tool.kind === "lighting" ? <p className="mt-1">方向 {LIGHT_SIDE_LABELS[source.tool.light_side]} · 亮度 {source.tool.brightness}% · 颜色 {source.tool.color} · {source.tool.rim_light ? "有轮廓光" : "无轮廓光"}</p>
+                        : <p className="mt-1">{cameraPresets.find((item) => item.key === source.tool?.preset)?.label} · 水平 {source.tool.yaw}° · 俯仰 {source.tool.pitch}° · {distances[source.tool.zoom]}</p>}
+                </details>}
                 <div className="relative flex min-h-52 items-center justify-center overflow-hidden rounded-lg border border-glass-border bg-surface-inset sm:min-h-72" onPointerDown={(event) => { if (kind === "camera" && focus) { updateFocus(event); event.currentTarget.setPointerCapture?.(event.pointerId); } }} onPointerMove={(event) => { if (kind === "camera" && focus && event.buttons) updateFocus(event); }} onPointerUp={(event) => { if (event.currentTarget.hasPointerCapture?.(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId); }}>
                     {source ? <img src={source.url} alt={`来源图片：${source.label}`} className="max-h-[48vh] w-full object-contain" /> : <p className="px-4 text-center text-sm text-text-muted">先生成或上传场景图片</p>}
                     {kind === "camera" && source && focus && <span aria-label="镜头对焦点" className="pointer-events-none absolute h-6 w-6 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-primary bg-primary/20 shadow-lg" style={{ left: `${focusX}%`, top: `${focusY}%` }} />}
@@ -148,9 +191,14 @@ export function SceneImageTools({ kind, sources, sceneAssetId, lightingReference
                     <label className="flex min-h-10 items-center gap-2 text-sm text-text-secondary"><input type="checkbox" checked={intelligent} onChange={(event) => setIntelligent(event.target.checked)} className="accent-primary" />智能模式</label>
                     <fieldset disabled={!intelligent} className="space-y-2 disabled:opacity-50"><legend className="text-sm font-medium text-foreground">光影预设</legend><div className="flex flex-wrap gap-2">{lightPresets.map((item) => <button type="button" key={item.key} className={option} aria-pressed={lightPreset === item.key} onClick={() => setLightPreset(item.key)}>{item.label}</button>)}</div></fieldset>
                     <label className="block text-sm text-text-secondary" htmlFor="lighting-reference">光影参考图（可选）</label>
-                    <select id="lighting-reference" className={`${control} w-full`} value={activeLightingReference?.key ?? ""} onChange={(event) => setLightingReferenceKey(event.target.value)} disabled={!intelligent || !lightingReferences.length}>
-                        <option value="">不使用附加参考图</option>{lightingReferences.filter((item) => !(item.reference.asset_type === "scene" && item.reference.asset_id === sceneAssetId && item.reference.variant_id === source?.variantId)).map((item) => <option key={item.key} value={item.key}>{item.label}</option>)}
+                    <select id="lighting-reference" className={`${control} w-full`} value={activeLightingReference?.key ?? ""} onChange={(event) => setLightingReferenceKey(event.target.value)} disabled={!intelligent || !allLightingReferences.length}>
+                        <option value="">不使用附加参考图</option>{allLightingReferences.filter((item) => !(item.reference.asset_type === "scene" && item.reference.asset_id === sceneAssetId && item.reference.variant_id === source?.variantId)).map((item) => <option key={item.key} value={item.key}>{item.label}</option>)}
                     </select>
+                    <label className="inline-flex min-h-10 cursor-pointer items-center rounded-md border border-glass-border px-3 text-sm text-text-secondary hover:bg-hover-bg focus-within:outline focus-within:outline-2 focus-within:outline-primary">
+                        {uploadingLightingReference ? "上传中…" : "上传光影参考图"}
+                        <input type="file" accept="image/*" className="sr-only" disabled={!intelligent || uploadingLightingReference || busy} onChange={uploadLightingReference} />
+                    </label>
+                    {lightingReferenceError && <p role="alert" className="text-sm text-red-400">{lightingReferenceError}</p>}
                     {activeLightingReference && <img src={activeLightingReference.url} alt={`光影参考图：${activeLightingReference.label}`} className="h-24 w-24 rounded-md border border-glass-border object-cover" />}
                     <label className="block text-sm text-text-secondary">亮度 · {brightness}%<input type="range" min="0" max="100" value={brightness} onChange={(event) => setBrightness(Number(event.target.value))} className="mt-2 w-full accent-primary" /></label>
                     <label className="flex items-center gap-3 text-sm text-text-secondary">主光颜色<input type="color" aria-label="主光颜色" value={color} onChange={(event) => setColor(event.target.value)} className="h-10 w-14 cursor-pointer rounded border border-glass-border bg-surface" /></label>

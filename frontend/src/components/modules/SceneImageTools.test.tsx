@@ -1,55 +1,71 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { expect, it, vi } from "vitest";
-
 import { SceneImageTools } from "./SceneImageTools";
 
-const sources = [
-    { key: "one", variantId: "one", label: "场景图片 · 1", url: "/one.png" },
-    { key: "two", variantId: "two", label: "场景图片 · 2", url: "/two.png" },
-];
+const apiMocks = vi.hoisted(() => ({
+    uploadLibraryImage: vi.fn(), createLibraryAsset: vi.fn(),
+}));
+vi.mock("@/lib/api", () => ({ API_URL: "", api: apiMocks }));
 
-it("requires a saved scene image before submitting a lighting task", () => {
-    const generate = vi.fn();
-    render(<SceneImageTools kind="lighting" sources={[]} busy={false} onGenerate={generate} />);
+const sources = [{ key: "source", label: "场景图片 · 1", url: "/source.png", variantId: "source" }];
+
+it("requires a saved scene image and disables submission while busy", () => {
+    const onGenerate = vi.fn();
+    const { rerender } = render(<SceneImageTools kind="lighting" sources={[]} busy={false} onGenerate={onGenerate} />);
     expect(screen.getByRole("button", { name: "生成光影候选" })).toBeDisabled();
-    expect(generate).not.toHaveBeenCalled();
-});
-
-it("sends the selected scene variant with a lighting-only prompt", () => {
-    const generate = vi.fn();
-    render(<SceneImageTools kind="lighting" sources={sources} busy={false} onGenerate={generate} />);
-    fireEvent.change(screen.getByRole("combobox", { name: "来源图片" }), { target: { value: "two" } });
-    fireEvent.click(screen.getByRole("button", { name: "黄金时刻" }));
-    fireEvent.click(screen.getByRole("button", { name: "左侧" }));
-    expect(screen.getByLabelText("左侧主光位置")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "生成光影候选" }));
-    expect(generate).toHaveBeenCalledWith(sources[1], expect.stringContaining("主光从左侧进入"), undefined);
-    expect(generate.mock.calls[0][1]).toContain("低角度暖阳");
-    expect(generate.mock.calls[0][1]).toContain("保持场景结构");
-});
-
-it("uses a separate indexed image only as a lighting reference", () => {
-    const generate = vi.fn();
-    const reference = { asset_type: "scene" as const, asset_id: "scene-2", variant_id: "reference-v1" };
-    render(<SceneImageTools kind="lighting" sources={sources} sceneAssetId="scene-1" busy={false} onGenerate={generate}
-        lightingReferences={[{ key: "scene-2:reference-v1", label: "日落参考", url: "/sunset.png", reference }]} />);
-    fireEvent.change(screen.getByRole("combobox", { name: "光影参考图（可选）" }), { target: { value: "scene-2:reference-v1" } });
-    expect(screen.getByAltText("光影参考图：日落参考")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "生成光影候选" }));
-    expect(generate).toHaveBeenCalledWith(sources[0], expect.stringContaining("附加光影参考图只用于主光方向"), reference);
-});
-
-it("keeps camera controls in a separate prompt and disables submission while busy", () => {
-    const generate = vi.fn();
-    const { rerender } = render(<SceneImageTools kind="camera" sources={sources} busy={false} onGenerate={generate} />);
-    fireEvent.click(screen.getByRole("button", { name: "正面俯拍" }));
-    fireEvent.click(screen.getByRole("button", { name: "镜头向右" }));
-    expect(screen.getByText("水平 15° · 俯仰 0°")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("checkbox", { name: "指定对焦点" }));
-    fireEvent.click(screen.getByRole("button", { name: "生成镜头候选" }));
-    expect(generate).toHaveBeenCalledWith(sources[0], expect.stringContaining("正面俯拍"), undefined);
-    expect(generate.mock.calls[0][1]).toContain("主体区域为对焦中心");
-    expect(generate.mock.calls[0][1]).not.toContain("主光从");
-    rerender(<SceneImageTools kind="camera" sources={sources} busy onGenerate={generate} />);
+    rerender(<SceneImageTools kind="lighting" sources={sources} busy onGenerate={onGenerate} />);
     expect(screen.getByRole("button", { name: "生成中…" })).toBeDisabled();
+    expect(onGenerate).not.toHaveBeenCalled();
+});
+
+it("submits camera angle and focus settings as structured parameters", () => {
+    const onGenerate = vi.fn();
+    render(<SceneImageTools kind="camera" sources={sources} busy={false} onGenerate={onGenerate} />);
+    fireEvent.click(screen.getByRole("button", { name: "镜头向右" }));
+    fireEvent.click(screen.getByLabelText("指定对焦点"));
+    fireEvent.click(screen.getByRole("button", { name: "生成镜头候选" }));
+    expect(onGenerate).toHaveBeenCalledWith(sources[0], expect.objectContaining({
+        kind: "camera", yaw: 15, pitch: 0, focus: true, focus_x: 50, focus_y: 50,
+    }), undefined);
+    expect(screen.getByTestId("camera-preview")).toHaveTextContent("水平 15°");
+});
+
+it("submits lighting direction, preset, and stable reference identity", () => {
+    const onGenerate = vi.fn();
+    const reference = { asset_type: "prop" as const, asset_id: "light-ref", variant_id: "variant" };
+    render(<SceneImageTools kind="lighting" sources={sources} sceneAssetId="scene" lightingReferences={[
+        { key: "light-ref", label: "蓝色参考", url: "/light.png", reference },
+    ]} busy={false} onGenerate={onGenerate} />);
+    fireEvent.click(screen.getByRole("button", { name: "后方" }));
+    fireEvent.click(screen.getByRole("button", { name: "诺兰冷灰" }));
+    fireEvent.change(screen.getByLabelText("光影参考图（可选）"), { target: { value: "light-ref" } });
+    fireEvent.click(screen.getByRole("button", { name: "生成光影候选" }));
+    expect(onGenerate).toHaveBeenCalledWith(sources[0], expect.objectContaining({
+        kind: "lighting", light_side: "back", preset: "nolan_cool_gray", brightness: 50,
+    }), reference);
+    expect(screen.getByTestId("lighting-preview")).toHaveTextContent("透视观察");
+});
+
+it("uploads a separate lighting reference into the asset library before submission", async () => {
+    apiMocks.uploadLibraryImage.mockResolvedValue({ image_url: "uploads/light.png" });
+    apiMocks.createLibraryAsset.mockResolvedValue({
+        id: "uploaded-prop", name: "光影参考 · light.png",
+        image_asset: { variants: [{ id: "uploaded-v1", url: "uploads/light.png" }] },
+    });
+    const onGenerate = vi.fn();
+    render(<SceneImageTools kind="lighting" sources={sources} sceneAssetId="scene" busy={false} onGenerate={onGenerate} />);
+    fireEvent.change(screen.getByLabelText("上传光影参考图"), {
+        target: { files: [new File(["image"], "light.png", { type: "image/png" })] },
+    });
+    await waitFor(() => expect(apiMocks.uploadLibraryImage).toHaveBeenCalled());
+    await waitFor(() => expect(apiMocks.createLibraryAsset).toHaveBeenCalled());
+    await waitFor(() => {
+        const error = screen.queryByRole("alert");
+        if (error) throw new Error(error.textContent || "upload failed");
+        expect(screen.getByAltText("光影参考图：光影参考 · light.png")).toBeInTheDocument();
+    });
+    fireEvent.click(screen.getByRole("button", { name: "生成光影候选" }));
+    expect(onGenerate).toHaveBeenCalledWith(sources[0], expect.objectContaining({ kind: "lighting" }), {
+        asset_type: "prop", asset_id: "uploaded-prop", variant_id: "uploaded-v1",
+    });
 });
