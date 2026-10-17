@@ -158,6 +158,40 @@ it('lets scene designers ask AI for an editable draft and save it without replac
  }));
 });
 
+it('keeps only the remaining selected scene image after an external prompt replacement', async () => {
+ const scene = { id: 'scene-2', name: '粮铺门前', description: '长街中段' };
+ const current = { ...project, scenes: [scene] };
+ useProjectStore.setState({ currentProject: current, projects: [current] });
+ vi.mocked(api.getProject).mockResolvedValue(current as any);
+ vi.mocked(api.generateAsset).mockResolvedValue(current as any);
+ vi.mocked(api.getAssetReferenceIndex).mockResolvedValue({ schema_version: 1, project_id: 'project', assets: [
+  { asset_type: 'scene', asset_id: 'long-street', name: '青溪镇青石板长街', source_scope: 'episode', source_container_id: 'project', selected_variant_id: 'street-v1', variants: [{ id: 'street-v1', url: 'street.png' }] },
+  { asset_type: 'prop', asset_id: 'grain', name: '粮食', source_scope: 'episode', source_container_id: 'project', selected_variant_id: 'grain-v1', variants: [{ id: 'grain-v1', url: 'grain.png' }] },
+ ] } as any);
+ showScene(scene);
+ await waitFor(() => expect(screen.getAllByRole('button', { name: 'Add reference images' })[0]).not.toBeDisabled());
+ fireEvent.click(screen.getAllByRole('button', { name: 'Add reference images' })[0]);
+ fireEvent.click(await screen.findByRole('button', { name: 'Toggle this 青溪镇青石板长街 variant in the available reference pool' }));
+ fireEvent.click(screen.getByRole('button', { name: 'Toggle this 粮食 variant in the available reference pool' }));
+ act(() => { (screen.getByRole('textbox', { name: 'Generation description (editable template)' }) as any).editor.commands.setContent('<p>@</p>'); });
+ fireEvent.click(screen.getByRole('option', { name: /青溪镇青石板长街/ }));
+ act(() => { (screen.getByRole('textbox', { name: 'Generation description (editable template)' }) as any).editor.commands.insertContent('@'); });
+ fireEvent.click(screen.getByRole('option', { name: /粮食/ }));
+ fireEvent.click(screen.getByRole('button', { name: 'Reference image' }));
+ expect(screen.getByRole('textbox', { name: 'Generation description (editable template)' })).toHaveTextContent('青溪镇青石');
+ // The AI draft path replaces the prompt with plain text while the selected
+ // scene remains. The editor must rebuild the stable token and drop grain.
+ vi.mocked(agentRequest).mockResolvedValueOnce({ visual_notes: '粮铺人群退避，背景与@青溪镇青石板长街一致。', unresolved: [] } as any);
+ fireEvent.change(screen.getByLabelText('设计要求'), { target: { value: '沿用长街背景' } });
+ fireEvent.click(screen.getByRole('button', { name: '生成设计草稿' }));
+ await waitFor(() => expect((screen.getByRole('textbox', { name: 'Generation description (editable template)' }) as any).editor.getText()).toContain('背景与@青溪镇青石板长街'));
+ fireEvent.click(screen.getByRole('button', { name: /Generate first batch/ }));
+ await waitFor(() => expect(api.generateAsset).toHaveBeenCalled());
+ expect(vi.mocked(api.generateAsset).mock.calls[0][13]).toEqual([
+  { asset_type: 'scene', asset_id: 'long-street', variant_id: 'street-v1' },
+ ]);
+});
+
 it('shows the Cast generation-description @ menu and submits only selected stable ids in order', async () => {
  const withLibrary = { ...project, scenes: [{ id: 'scene-1', name: 'Night train', description: 'Train' }], props: [{ id: 'prop-1', name: 'Pocket watch', description: 'Watch' }] };
  useProjectStore.setState({ currentProject: withLibrary, projects: [withLibrary] });
