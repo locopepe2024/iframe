@@ -3263,22 +3263,8 @@ def update_project_style(script_id: str, request: UpdateStyleRequest):
 
 @app.post("/projects/{script_id}/generate_assets", response_model=Script)
 def generate_assets(script_id: str, background_tasks: BackgroundTasks):
-    """Triggers asset generation."""
-    script = pipeline.get_script(script_id)
-    if not script:
-        raise HTTPException(status_code=404, detail="Project not found")
-
-    # Run in background to avoid blocking
-    # For simplicity in this demo, we run synchronously or use background tasks
-    # pipeline.generate_assets(script_id) 
-    # But since we want to return the updated status, we might want to run it and return.
-    # Given the mock nature, it's fast.
-
-    try:
-        updated_script = pipeline.generate_assets(script_id)
-        return signed_response(updated_script)
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+    """Legacy batch endpoint cannot review a separate prompt for each asset."""
+    raise HTTPException(status_code=422, detail="Batch asset generation requires reviewed prompts for each asset; use an asset workbench")
 
 
 

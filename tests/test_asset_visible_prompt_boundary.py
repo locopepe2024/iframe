@@ -24,3 +24,9 @@ def test_manual_character_all_mode_cannot_create_unreviewed_derived_prompts():
     with pytest.raises(HTTPException) as exc:
         api.generate_single_asset("project", request, BackgroundTasks())
     assert exc.value.status_code == 422
+
+
+def test_legacy_batch_route_cannot_generate_unreviewed_asset_prompts():
+    with pytest.raises(HTTPException) as exc:
+        api.generate_assets("project", BackgroundTasks())
+    assert exc.value.status_code == 422

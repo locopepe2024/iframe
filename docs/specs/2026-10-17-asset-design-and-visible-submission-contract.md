@@ -22,6 +22,7 @@ This contract covers character, scene, and prop image generation in Studio asset
 
 - Scene/prop design drafts and confirmed revisions persist and survive reload. Invalid and unknown design fields fail before a save.
 - The project and series manual asset image endpoints require a non-empty reviewed prompt, `preserve_prompt=true` and `apply_style=false`. Character `all` mode is rejected because its derived images use separate generated prompt text.
+- The legacy project batch route rejects generation until a per-asset prompt review flow exists. Its old `AssetGrid` caller has no imports in the current frontend tree.
 - Studio and Cast workbenches copy optional global style into editable prompt fields only on a user action. The asset library asks for an editable prompt and negative prompt before generating more variants. These requests send the reviewed text and no style suffix.
 - The character three-view generator does not add hidden negative terms when receiving a reviewed prompt.
 
