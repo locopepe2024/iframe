@@ -1094,7 +1094,7 @@ class ComicGenPipeline(StudioOwnerMixin):
             director_profile=director_profile,
         )
         episode_context_prompt = self._episode_asset_context_prompt(script, asset_type, asset_id)
-        if asset_type == "scene" and script.episode_visual_context and episode_context_prompt:
+        if asset_type == "scene" and not preserve_prompt and script.episode_visual_context and episode_context_prompt:
             # A scene asset may inherit its confirmed episode location/time
             # when it belongs to exactly one plan scene. Shared assets stay
             # generic so one episode cannot overwrite another scene's look.
@@ -1454,6 +1454,7 @@ class ComicGenPipeline(StudioOwnerMixin):
                 reference_image_urls=resolved_references,
                 reference_provenance_list=reference_provenance_list,
                 image_generation_mode=image_generation_mode,
+                preserve_prompt=params.get("preserve_prompt", False),
             )
         elif asset_type == "scene":
             target = next((s for s in series.scenes if s.id == asset_id), None)
@@ -1468,6 +1469,7 @@ class ComicGenPipeline(StudioOwnerMixin):
                 reference_image_urls=resolved_references,
                 reference_provenance_list=reference_provenance_list,
                 image_generation_mode=image_generation_mode,
+                preserve_prompt=params.get("preserve_prompt", False),
             )
         elif asset_type == "prop":
             target = next((p for p in series.props if p.id == asset_id), None)
@@ -1482,6 +1484,7 @@ class ComicGenPipeline(StudioOwnerMixin):
                 reference_image_urls=resolved_references,
                 reference_provenance_list=reference_provenance_list,
                 image_generation_mode=image_generation_mode,
+                preserve_prompt=params.get("preserve_prompt", False),
             )
         else:
             raise ValueError(f"Unknown asset type: {asset_type}")

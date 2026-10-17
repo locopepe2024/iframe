@@ -56,6 +56,8 @@ export function getAssetPlanEntries(
             ].filter((value): value is string => Boolean(value));
             if (assetType === "scene") {
                 if (scene.atmosphere) details.push(scene.atmosphere);
+                if (scene.continuity_in) details.push(`入场状态：${scene.continuity_in}`);
+                if (scene.continuity_out) details.push(`出场状态：${scene.continuity_out}`);
             } else if (assetType === "character" && "continuity_state" in match) {
                 for (const [key, value] of Object.entries(match.continuity_state)) {
                     if (value !== null && value !== "") details.push(`${key}：${typeof value === "object" ? JSON.stringify(value) : String(value)}`);

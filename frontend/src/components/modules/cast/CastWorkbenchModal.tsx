@@ -37,6 +37,8 @@ import ReferencePromptEditor, {
     type ReferenceCandidate,
     type ReferenceSuggestion,
 } from "@/components/modules/playground/ReferencePromptEditor";
+import { getAssetPlanEntries } from "@/lib/episodeAssetPlan";
+import type { EpisodeVisualContext } from "@/lib/directorShootingPlan";
 
 export type CastKind = "character" | "scene" | "prop";
 
@@ -332,11 +334,13 @@ export default function CastWorkbenchModal({ isOpen, kind, entityId, onClose }: 
     const uploadInput = useRef<HTMLInputElement>(null);
     const [uploading, setUploading] = useState(false);
     const [prompt, setPrompt] = useState("");
+    const [sceneNegativePrompt, setSceneNegativePrompt] = useState(getTemplateNegative("scene"));
     const [assetDesignNotes, setAssetDesignNotes] = useState("");
     const [assetDesignRequirements, setAssetDesignRequirements] = useState("");
     const [assetDesignUnresolved, setAssetDesignUnresolved] = useState<string[]>([]);
     const [assetDesigning, setAssetDesigning] = useState(false);
     const [assetDesignSaving, setAssetDesignSaving] = useState(false);
+    const [episodeVisualContext, setEpisodeVisualContext] = useState<EpisodeVisualContext | null>(null);
     const [batchSize, setBatchSize] = useState(1);
     const [aspectRatioOverride, setAspectRatioOverride] = useState<string | null>(null);
     const [modelOverride, setModelOverride] = useState<string | null>(null);
@@ -355,6 +359,22 @@ export default function CastWorkbenchModal({ isOpen, kind, entityId, onClose }: 
     const [submitting, setSubmitting] = useState(false);
     const submissionInFlight = useRef(false);
     const generationBusy = generating || submitting;
+    const planEntries = useMemo(() => kind === "scene" && entityId
+        ? getAssetPlanEntries(episodeVisualContext, "scene", entityId)
+        : [], [kind, entityId, episodeVisualContext]);
+
+    useEffect(() => {
+        if (!isOpen || kind !== "scene" || !currentProject?.id) {
+            setEpisodeVisualContext(null);
+            return;
+        }
+        let active = true;
+        setEpisodeVisualContext(null);
+        void api.getEpisodeVisualContext(currentProject.id)
+            .then((result) => { if (active) setEpisodeVisualContext(result.context); })
+            .catch(() => { if (active) setEpisodeVisualContext(null); });
+        return () => { active = false; };
+    }, [isOpen, kind, currentProject?.id]);
     // Resolve the selected model against the current live catalog before both
     // rendering and submitting. A project can retain a SKU that was removed
     // upstream (for example `gpt-image-2.5-flare`); using that raw value here
@@ -379,6 +399,7 @@ export default function CastWorkbenchModal({ isOpen, kind, entityId, onClose }: 
         setAssetDesignNotes("");
         setAssetDesignRequirements("");
         setAssetDesignUnresolved([]);
+        setSceneNegativePrompt(getTemplateNegative("scene"));
     }, [entityId, kind]);
 
     useEffect(() => {
@@ -706,7 +727,7 @@ export default function CastWorkbenchModal({ isOpen, kind, entityId, onClose }: 
                 kind === "character" ? "reference_sheet" : "all",
                 prompt.trim(),
                 false,
-                getTemplateNegative(kind, selectedTemplate),
+                kind === "scene" ? sceneNegativePrompt : getTemplateNegative(kind, selectedTemplate),
                 effectiveBatchSize,
                 selectedModelId,
                 aspectRatioOverride || undefined,
@@ -715,6 +736,7 @@ export default function CastWorkbenchModal({ isOpen, kind, entityId, onClose }: 
                     ? activePromptReferences
                     : [],
                 imageGenerationMode,
+                true,
             );
 
             const taskId = (resp as any)?._task_id;
@@ -1179,6 +1201,22 @@ export default function CastWorkbenchModal({ isOpen, kind, entityId, onClose }: 
 
                             {/* Prompt editor — the only place where an available
                                 reference becomes an explicit generation input. */}
+                            {kind === "scene" && (
+                                <section className="mb-3 rounded-md border border-glass-border bg-black/20 p-3" aria-label="拍摄计划约束">
+                                    <p className="text-xs font-medium text-foreground">拍摄计划约束</p>
+                                    <p className="mt-1 text-xs text-text-muted">以下内容仅供核对。点击加入后可编辑；生成时只提交下方提示词正文。</p>
+                                    <div className="mt-2 space-y-2">
+                                        {planEntries.length === 0 && <p className="text-xs text-text-muted">暂无与此场景匹配的拍摄计划约束。</p>}
+                                        {planEntries.map((entry) => (
+                                            <div key={entry.key} className="border-l-2 border-primary/40 pl-2 text-xs">
+                                                <p className="font-medium text-foreground">{entry.sceneLabel}</p>
+                                                <p className="mt-1 whitespace-pre-wrap text-text-secondary">{entry.details.join(" · ")}</p>
+                                                <button type="button" disabled={generationBusy} onClick={() => setPrompt((current) => `${current.trim()}\n${entry.prompt}`.trim())} className="mt-1 text-primary hover:underline disabled:opacity-40">加入提示词</button>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </section>
+                            )}
                             <div className="flex items-center justify-between mb-2">
                                 <label className="font-mono text-[0.625rem] uppercase tracking-[0.18em] text-text-muted">
                                     {t("promptLabel")}
@@ -1267,6 +1305,13 @@ export default function CastWorkbenchModal({ isOpen, kind, entityId, onClose }: 
                                     </div>
                                 )}
                             </div>
+
+                            {kind === "scene" && (
+                                <label className="mt-3 block text-xs text-text-secondary">
+                                    排除词（单独提交给模型）
+                                    <textarea value={sceneNegativePrompt} onChange={(event) => setSceneNegativePrompt(event.target.value)} disabled={generationBusy} rows={2} className="mt-1 w-full resize-y rounded-md border border-glass-border bg-black/20 px-3 py-2 text-xs text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60 disabled:opacity-40" />
+                                </label>
+                            )}
 
                             {/* Quick tags — immediately below textarea */}
                             <div className="mt-2.5 flex flex-wrap gap-1.5">
