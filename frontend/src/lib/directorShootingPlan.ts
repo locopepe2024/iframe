@@ -178,7 +178,8 @@ export interface EpisodeVisualContext {
     shooting_plan_revision: number;
     shooting_plan_hash: string;
     context_status: "complete" | "partial";
-    scenes: Array<{ scene_id: string; scene_asset_id?: string | null; plan_scene_asset_id?: string | null; scene_ref: string; location: string; time_anchor: string; interior_exterior?: string | null; time_of_day?: string | null; season?: string | null; weather?: string | null; atmosphere: string; continuity_in?: string | null; continuity_out?: string | null; prop_ids: string[] }>;
+    lighting_baselines?: DirectorPlanLightingBaseline[];
+    scenes: Array<{ scene_id: string; scene_asset_id?: string | null; plan_scene_asset_id?: string | null; scene_ref: string; location: string; time_anchor: string; place_continuity_id?: string | null; time_continuity_id?: string | null; interior_exterior?: string | null; time_of_day?: string | null; season?: string | null; weather?: string | null; atmosphere: string; continuity_in?: string | null; continuity_out?: string | null; prop_ids: string[] }>;
     characters: Array<{ person_id: string; person_label?: string | null; character_asset_ids: string[]; era_variant_id?: string | null; scene_look_id?: string | null; continuity_state: Record<string, unknown>; scene_ids: string[]; shot_ids: string[] }>;
     props: Array<{ prop_id: string; plan_prop_id?: string | null; state: string; scene_ids: string[]; shot_ids: string[] }>;
     shots: Array<{ scene_id: string; beat_id: string; shot_id: string; scene_asset_id?: string | null; plan_scene_asset_id?: string | null; character_ids: string[]; person_ids: string[]; prop_ids: string[]; visual_intent: string; performance_action: string; composition: string; camera_movement: string; lighting: Record<string, unknown> }>;

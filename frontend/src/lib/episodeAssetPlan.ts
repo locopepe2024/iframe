@@ -5,6 +5,8 @@ export interface AssetPlanEntry {
     sceneLabel: string;
     details: string[];
     prompt: string;
+    visualDetails?: Array<{ label: string; text: string }>;
+    continuityDetails?: Array<{ label: string; text: string }>;
 }
 
 export interface UnboundCharacterRequirement {
@@ -66,11 +68,45 @@ export function getAssetPlanEntries(
                 details.push(`道具状态：${match.state}`);
             }
             const sceneLabel = scene.scene_ref || scene.location || `场景 ${sceneIndex + 1}`;
+            const visualDetails = assetType === "scene" ? [
+                { label: "剧情时段", text: scene.time_anchor },
+                { label: "环境与画面", text: scene.atmosphere },
+                { label: "入场画面", text: scene.continuity_in || "" },
+                { label: "后续画面", text: scene.continuity_out || "" },
+            ].filter(item => item.text?.trim()) : [];
+            const baseline = assetType === "scene" && scene.place_continuity_id && scene.time_continuity_id
+                ? context.lighting_baselines?.find(item =>
+                    item.place_continuity_id === scene.place_continuity_id
+                    && item.time_continuity_id === scene.time_continuity_id)
+                : undefined;
+            const continuityDetails = baseline ? [
+                { label: "剧情时间基线", text: baseline.story_time },
+                { label: "日光阶段", text: baseline.daylight_phase },
+                { label: "天气", text: baseline.weather },
+                { label: "光源方向", text: baseline.lighting.key_source },
+                { label: "色调", text: baseline.lighting.color_tone },
+                { label: "明暗反差", text: baseline.lighting.contrast },
+                { label: "影子方向", text: baseline.shadow_direction },
+                { label: "实景光源", text: baseline.lighting.practical_sources.join("、") },
+            ].filter(item => item.text?.trim()) : [];
+            if (assetType === "scene") {
+                for (const character of context.characters.filter(item => item.scene_ids.includes(scene.scene_id))) {
+                    const state = Object.entries(character.continuity_state || {})
+                        .filter(([, value]) => value !== null && value !== undefined && value !== "")
+                        .map(([key, value]) => `${key}：${typeof value === "object" ? JSON.stringify(value) : String(value)}`);
+                    if (state.length) continuityDetails.push({
+                        label: character.person_label ? `${character.person_label}的人物状态` : "人物状态",
+                        text: state.join("；"),
+                    });
+                }
+            }
             entries.push({
                 key: `${scene.scene_id}:${assetType}:${index}`,
                 sceneLabel,
                 details,
                 prompt: `拍摄计划场景「${sceneLabel}」：${details.join("；")}`,
+                visualDetails,
+                continuityDetails,
             });
         });
     }

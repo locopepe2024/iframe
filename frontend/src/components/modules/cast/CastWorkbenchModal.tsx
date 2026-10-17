@@ -1202,20 +1202,48 @@ export default function CastWorkbenchModal({ isOpen, kind, entityId, onClose }: 
                             {/* Prompt editor — the only place where an available
                                 reference becomes an explicit generation input. */}
                             {kind === "scene" && (
-                                <section className="mb-3 rounded-md border border-glass-border bg-black/20 p-3" aria-label="拍摄计划约束">
-                                    <p className="text-xs font-medium text-foreground">拍摄计划约束</p>
-                                    <p className="mt-1 text-xs text-text-muted">以下内容仅供核对。点击加入后可编辑；生成时只提交下方提示词正文。</p>
-                                    <div className="mt-2 space-y-2">
-                                        {planEntries.length === 0 && <p className="text-xs text-text-muted">暂无与此场景匹配的拍摄计划约束。</p>}
+                                <div className="mb-3 space-y-2">
+                                    <section className="rounded-md border border-glass-border bg-black/20 p-3" aria-label="场景画面描述">
+                                        <p className="text-xs font-medium text-foreground">场景画面描述</p>
+                                        <p className="mt-1 text-xs text-text-muted">拍摄计划中的剧情时段、环境和入场／后续画面。按当前要生成的画面逐项加入提示词。</p>
+                                        {planEntries.length === 0 && <p className="mt-2 text-xs text-text-muted">暂无匹配的场景描述。</p>}
                                         {planEntries.map((entry) => (
-                                            <div key={entry.key} className="border-l-2 border-primary/40 pl-2 text-xs">
+                                            <div key={entry.key} className="mt-2 border-l-2 border-primary/40 pl-2 text-xs">
                                                 <p className="font-medium text-foreground">{entry.sceneLabel}</p>
-                                                <p className="mt-1 whitespace-pre-wrap text-text-secondary">{entry.details.join(" · ")}</p>
-                                                <button type="button" disabled={generationBusy} onClick={() => setPrompt((current) => `${current.trim()}\n${entry.prompt}`.trim())} className="mt-1 text-primary hover:underline disabled:opacity-40">加入提示词</button>
+                                                {entry.visualDetails?.map((item) => (
+                                                    <div key={item.label} className="mt-1 flex items-start justify-between gap-2">
+                                                        <p className="whitespace-pre-wrap text-text-secondary"><span className="text-text-muted">{item.label}：</span>{item.text}</p>
+                                                        <button type="button" disabled={generationBusy} onClick={() => setPrompt((current) => `${current.trim()}\n${item.text}`.trim())} className="shrink-0 text-primary hover:underline disabled:opacity-40">加入此项</button>
+                                                    </div>
+                                                ))}
                                             </div>
                                         ))}
-                                    </div>
-                                </section>
+                                    </section>
+                                    <section className="rounded-md border border-glass-border bg-black/20 p-3" aria-label="连续性参考">
+                                        <p className="text-xs font-medium text-foreground">连续性参考</p>
+                                        <p className="mt-1 text-xs text-text-muted">以下光影和人物状态来自拍摄计划；若与后续确认的参考图冲突，以你最终选用的图片和提示词为准。</p>
+                                        {planEntries.map((entry) => entry.continuityDetails?.length ? (
+                                            <div key={entry.key} className="mt-2 border-l-2 border-primary/40 pl-2 text-xs">
+                                                <p className="font-medium text-foreground">{entry.sceneLabel} · 拍摄计划基线</p>
+                                                {entry.continuityDetails.map((item) => (
+                                                    <div key={`${item.label}:${item.text}`} className="mt-1 flex items-start justify-between gap-2">
+                                                        <p className="whitespace-pre-wrap text-text-secondary"><span className="text-text-muted">{item.label}：</span>{item.text}</p>
+                                                        <button type="button" disabled={generationBusy} onClick={() => setPrompt((current) => `${current.trim()}\n${item.label}：${item.text}`.trim())} className="shrink-0 text-primary hover:underline disabled:opacity-40">加入此项</button>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        ) : null)}
+                                        {planEntries.every((entry) => !entry.continuityDetails?.length) && <p className="mt-2 text-xs text-text-muted">拍摄计划暂无可投影的光影或人物连续性字段。</p>}
+                                        {imageGenerationMode === "reference" && activePromptReferences.filter((reference) => reference.asset_type === "scene").map((reference) => {
+                                            const asset = visibleReferenceLibraryAssets.find((item) => item.asset_type === reference.asset_type && item.asset_id === reference.asset_id);
+                                            return <p key={`${reference.asset_id}:${reference.variant_id}`} className="mt-2 text-xs text-text-secondary">已选场景参考图：{asset?.name || reference.asset_id}</p>;
+                                        })}
+                                        {imageGenerationMode === "reference" && activePromptReferences.filter((reference) => reference.asset_type === "character").map((reference) => {
+                                            const asset = visibleReferenceLibraryAssets.find((item) => item.asset_type === reference.asset_type && item.asset_id === reference.asset_id);
+                                            return <p key={`${reference.asset_id}:${reference.variant_id}`} className="mt-1 text-xs text-text-secondary">已选人物参考图：{asset?.name || reference.asset_id}</p>;
+                                        })}
+                                    </section>
+                                </div>
                             )}
                             <div className="flex items-center justify-between mb-2">
                                 <label className="font-mono text-[0.625rem] uppercase tracking-[0.18em] text-text-muted">

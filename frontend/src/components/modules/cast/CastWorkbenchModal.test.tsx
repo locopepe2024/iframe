@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import React from 'react';
 import { beforeEach, expect, it, vi } from 'vitest';
-import { act, fireEvent, render, screen, waitFor, cleanup } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, cleanup, within } from '@testing-library/react';
 import { NextIntlClientProvider } from 'next-intl';
 import messages from '../../../../messages/en.json';
 import CastWorkbenchModal, { activePolls, startAssetPoll } from '@/components/modules/cast/CastWorkbenchModal';
@@ -134,23 +134,32 @@ it('does not load the legacy character Skill facet panel', () => {
  expect(screen.queryByText('Eyes and gaze')).not.toBeInTheDocument();
 });
 
-it('shows scene plan constraints but submits only the reviewed prompt', async () => {
+it('separates scene content from continuity and submits only reviewed text', async () => {
  const scene = { id: 'scene-1', name: '粮铺门前', description: '长街中段的粮铺' };
  vi.mocked(api.getEpisodeVisualContext).mockResolvedValue({ context: {
   scenes: [{ scene_id: 'plan-1', scene_asset_id: scene.id, scene_ref: '青溪镇长街·粮铺劫掠',
-   location: '青溪镇长街', time_anchor: '暮秋，残阳如血', atmosphere: '血色斜阳' }],
+   location: '青溪镇长街', time_anchor: '暮秋，残阳如血', atmosphere: '人流繁杂',
+   continuity_in: '匪寇围堵粮铺', place_continuity_id: 'longstreet', time_continuity_id: 'dusk' }],
+  lighting_baselines: [{ place_continuity_id: 'longstreet', time_continuity_id: 'dusk',
+   lighting: { key_source: '低位斜阳', color_tone: '暖褐与血红夕照', contrast: '中高反差', practical_sources: [] },
+   story_time: '黄昏', daylight_phase: '', weather: '', shadow_direction: '' }],
   shots: [], characters: [], props: [],
  }, bindings: [] } as any);
  vi.mocked(api.getProject).mockResolvedValue({ ...project, scenes: [scene] } as any);
  vi.mocked(api.generateAsset).mockResolvedValue({ ...project, scenes: [scene] } as any);
  showScene(scene);
- expect(await screen.findByRole('region', { name: '拍摄计划约束' })).toHaveTextContent('血色斜阳');
- expect(document.querySelector('[contenteditable="true"]')).not.toHaveTextContent('血色斜阳');
+ expect(await screen.findByRole('region', { name: '场景画面描述' })).toHaveTextContent('匪寇围堵粮铺');
+ expect(screen.getByRole('region', { name: '场景画面描述' })).not.toHaveTextContent('暖褐与血红夕照');
+ expect(screen.getByRole('region', { name: '连续性参考' })).toHaveTextContent('暖褐与血红夕照');
+ expect(screen.getByRole('region', { name: '连续性参考' })).not.toHaveTextContent('匪寇围堵粮铺');
+ expect(document.querySelector('[contenteditable="true"]')).not.toHaveTextContent('暖褐与血红夕照');
+ fireEvent.click(within(screen.getByRole('region', { name: '场景画面描述' })).getAllByRole('button', { name: '加入此项' })[2]);
  fireEvent.change(screen.getByRole('textbox', { name: '排除词（单独提交给模型）' }), { target: { value: '不要偏红' } });
  fireEvent.click(screen.getByRole('button', { name: /Generate first batch/ }));
  await waitFor(() => expect(api.generateAsset).toHaveBeenCalled());
  const args = vi.mocked(api.generateAsset).mock.calls[0];
- expect(args[6]).not.toContain('血色斜阳');
+ expect(args[6]).not.toContain('暖褐与血红夕照');
+ expect(args[6]).toContain('匪寇围堵粮铺');
  expect(args[8]).toBe('不要偏红');
  expect(args[15]).toBe(true);
 });
