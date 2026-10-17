@@ -21,7 +21,7 @@ def test_seedream_asset_uses_nsfw_new_one_adapter(monkeypatch):
     model = generator._get_model_for("nsfw/seedream_5.0Pro_nsfw")
     assert isinstance(model, NSFWNewOneImageModel)
     assert model.config["base_url"] == "http://172.17.0.1:3000/v1"
-from src.apps.comic_gen.models import ModelSettings, Prop, Scene, Series
+from src.apps.comic_gen.models import Character, ModelSettings, Prop, Scene, Series
 
 
 class FakeImageModel:
@@ -79,6 +79,24 @@ def test_accepted_asset_polish_is_sent_without_generated_suffix(tmp_path, asset_
 
     assert model.calls[0][0] == prompt
     assert asset.image_asset.variants[0].prompt_used == prompt
+
+
+def test_reviewed_character_sheet_does_not_append_hidden_negative_terms(tmp_path):
+    model = FakeImageModel()
+    generator = AssetGenerator({"output_dir": str(tmp_path / "assets")})
+    generator._get_model_for = lambda _model_name: model
+    reference = tmp_path / "assets" / "hero.png"
+    reference.parent.mkdir(parents=True, exist_ok=True)
+    reference.write_bytes(b"fake-image")
+    character = Character(id="hero", name="Hero", description="Blue robe",
+                          full_body_image_url=str(reference))
+
+    generator.generate_character(character, generation_type="three_view",
+                                 prompt="Three views of Hero in blue", negative_prompt="red robe",
+                                 preserve_prompt=True)
+
+    assert model.calls[0][0] == "Three views of Hero in blue"
+    assert model.calls[0][1]["negative_prompt"] == "red robe"
 
 
 def test_frame_polish_receives_default_contract_and_current_shot_context():

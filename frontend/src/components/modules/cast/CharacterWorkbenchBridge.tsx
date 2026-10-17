@@ -24,7 +24,7 @@ export default function CharacterWorkbenchBridge({ entityId, onClose }: { entity
     const onGenerate = async (
         type: string,
         prompt: string,
-        applyStyle: boolean,
+        _applyStyle: boolean,
         negativePrompt: string,
         batchSize: number,
         references: AssetLibraryReference[] = [],
@@ -39,17 +39,18 @@ export default function CharacterWorkbenchBridge({ entityId, onClose }: { entity
                 entityId,
                 "character",
                 project.style_preset || "realistic",
-                applyStyle ? stylePrompt : "",
+                "",
                 generationType,
                 prompt,
-                applyStyle,
-                [applyStyle ? styleNegativePrompt : "", negativePrompt].filter(Boolean).join(", "),
+                false,
+                negativePrompt,
                 batchSize,
                 resolveAssetGenerationModel(project.model_settings?.t2i_model),
                 undefined,
                 undefined,
                 imageGenerationMode === "reference" ? references : [],
                 imageGenerationMode,
+                true,
             );
             if ((result as any)?._task_id) {
                 const taskId = (result as any)._task_id;

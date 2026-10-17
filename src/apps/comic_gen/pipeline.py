@@ -10361,7 +10361,7 @@ class ComicGenPipeline(StudioOwnerMixin):
                               negative_prompt: str = None, batch_size: int = 1,
                               model_name: str = None, reference: Any = None,
                               references: Any = None,
-                              image_generation_mode: str = "text") -> tuple:
+                              image_generation_mode: str = "text", preserve_prompt: bool = False) -> tuple:
         """Generate a Series asset. Creates an async task like project asset generation.
         Returns (series, task_id)."""
         series = self.get_series(series_id)
@@ -10458,6 +10458,7 @@ class ComicGenPipeline(StudioOwnerMixin):
                     "generation_type": generation_type,
                     "prompt": prompt,
                     "apply_style": apply_style,
+                    "preserve_prompt": preserve_prompt,
                     "batch_size": batch_size,
                     "t2i_model": t2i_model,
                     "effective_size": effective_size,

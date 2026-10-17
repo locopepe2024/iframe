@@ -11,6 +11,7 @@ import { VideoVariantSelector } from "../common/VideoVariantSelector";
 import { useProjectStore } from "@/store/projectStore";
 import { Image as PhotoIcon } from "lucide-react";
 import { getAssetUrl } from "@/lib/utils";
+import { includeVisibleStyle } from "@/lib/assetPromptStyle";
 import { AssetIndexPreview } from "@/components/shared/AssetIndexPreview";
 import PreviewVideo from "@/components/shared/preview/PreviewVideo";
 import PreviewImage from "@/components/shared/preview/PreviewImage";
@@ -515,7 +516,6 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
     );
 
     // New State for Style Control
-    const [applyStyle, setApplyStyle] = useState(true);
     // User's own negative prompt (initially empty or with sensible defaults)
     const [negativePrompt, setNegativePrompt] = useState(DEFAULT_CHARACTER_NEGATIVE_PROMPT);
 
@@ -799,7 +799,7 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
             toast.warning("This prompt contains @ references. Select Reference image mode before generating.");
             return;
         }
-        onGenerate(type, prompt, applyStyle, negativePrompt, batchSize, references, imageGenerationMode);
+        onGenerate(type, prompt, false, negativePrompt, batchSize, references, imageGenerationMode);
     };
 
     const setPanelReferences = (type: "full_body" | "three_view" | "headshot", references: AssetLibraryReference[]) => {
@@ -1196,25 +1196,23 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
                             />
                         </div>
 
-                        {/* Apply Style Toggle */}
+                        {/* Copy style into the editable prompts before submitting. */}
                         <div className="pt-6">
                             <div className="flex items-center gap-2 bg-surface px-4 py-2 rounded-lg border border-glass-border">
-                                <input
-                                    type="checkbox"
-                                    id="applyStyleFooter"
-                                    checked={applyStyle}
-                                    onChange={(e) => setApplyStyle(e.target.checked)}
-                                    className="rounded border-gray-600 bg-gray-700 text-primary focus:ring-primary w-4 h-4"
-                                />
-                                <label htmlFor="applyStyleFooter" className="text-xs font-bold text-text-secondary cursor-pointer select-none whitespace-nowrap">
-                                    {tc("workbench")}
-                                </label>
+                                <button type="button" disabled={activePanel === "video" || (!stylePrompt && !styleNegativePrompt)} onClick={() => {
+                                    if (activePanel === "full_body") setFullBodyPrompt((current) => includeVisibleStyle(current, stylePrompt));
+                                    if (activePanel === "three_view") setThreeViewPrompt((current) => includeVisibleStyle(current, stylePrompt));
+                                    if (activePanel === "headshot") setHeadshotPrompt((current) => includeVisibleStyle(current, stylePrompt));
+                                    setNegativePrompt((current) => includeVisibleStyle(current, styleNegativePrompt));
+                                }} className="text-xs font-bold text-text-secondary disabled:opacity-40">
+                                    {tc("copyStyleToPrompt")}
+                                </button>
                             </div>
                         </div>
                     </div>
 
-                    {/* Art Direction Style Display (Collapsible) - Only show toggle when style exists */}
-                    {applyStyle && (stylePrompt || styleNegativePrompt) && (
+                    {/* Optional style source; generation uses only the edited prompt fields. */}
+                    {(stylePrompt || styleNegativePrompt) && (
                         <div className="border-t border-border-subtle">
                             <button
                                 onClick={() => setShowStyleExpanded(!showStyleExpanded)}
@@ -1222,7 +1220,7 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
                             >
                                 <div className="flex items-center gap-2">
                                     <div className="w-2 h-2 rounded-full bg-gradient-to-r from-purple-500 to-blue-500" />
-                                    <span className="text-xs font-bold text-text-secondary uppercase">Art Direction Style (Will Be Appended)</span>
+                                    <span className="text-xs font-bold text-text-secondary uppercase">Art Direction Style (Copy to Prompt Above)</span>
                                 </div>
                                 <ChevronRight size={14} className={`text-text-muted transform transition-transform ${showStyleExpanded ? 'rotate-90' : ''}`} />
                             </button>

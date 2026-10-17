@@ -575,7 +575,8 @@ class AssetGenerator:
                     else generation_prompt
                 )
                 
-                sheet_negative = negative_prompt + ", background, scenery, landscape, shadows, complex background, text, watermark, messy, distorted, extra limbs"
+                sheet_negative = (negative_prompt if preserve_prompt else
+                    negative_prompt + ", background, scenery, landscape, shadows, complex background, text, watermark, messy, distorted, extra limbs")
 
                 successful_generations = 0
                 last_error = ""

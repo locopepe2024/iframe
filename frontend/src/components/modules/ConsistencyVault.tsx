@@ -7,6 +7,7 @@ import { Paintbrush, User, Users, MapPin, Box, Lock, Unlock, RefreshCw, Upload, 
 import { useProjectStore } from "@/store/projectStore";
 import { agentRequest, api, API_URL, authenticatedFetch, crudApi, type AssetLibraryReference, type ChatModel } from "@/lib/api";
 import { extractErrorDetail, getAssetUrl } from "@/lib/utils";
+import { includeVisibleStyle } from "@/lib/assetPromptStyle";
 import CharacterWorkbench from "./CharacterWorkbench";
 import { VariantSelector } from "../common/VariantSelector";
 import { VideoVariantSelector } from "../common/VideoVariantSelector";
@@ -202,8 +203,12 @@ export default function ConsistencyVault() {
         }
     };
 
-    const handleGenerate = async (assetId: string, type: string, generationType: string = "all", prompt: string = "", applyStyle: boolean = true, negativePrompt: string = "", batchSize: number = 1, references: AssetLibraryReference[] = [], imageGenerationMode: "text" | "reference" = "text", preservePrompt: boolean = false) => {
+    const handleGenerate = async (assetId: string, type: string, generationType: string = "all", prompt: string = "", _applyStyle: boolean = false, negativePrompt: string = "", batchSize: number = 1, references: AssetLibraryReference[] = [], imageGenerationMode: "text" | "reference" = "text", _preservePrompt: boolean = true) => {
         if (!currentProject) return;
+        if (!prompt.trim()) {
+            toast.warning("Review and enter the final image prompt before generating.");
+            return;
+        }
 
         // Add task with specific generation type and batch size
         if (addGeneratingTask) {
@@ -211,8 +216,6 @@ export default function ConsistencyVault() {
         }
 
         try {
-            const stylePrompt = currentProject?.art_direction?.style_config?.positive_prompt || "";
-
             console.log("[handleGenerate] Starting asset generation...");
 
             // Call API - now returns immediately with task_id
@@ -221,10 +224,10 @@ export default function ConsistencyVault() {
                 assetId,
                 type,
                 "ArtDirection",
-                stylePrompt,
+                "",
                 generationType,
                 prompt,
-                applyStyle,
+                false,
                 negativePrompt,
                 batchSize,
                 currentProject.series_id ? undefined : resolveAssetGenerationModel(currentProject.model_settings?.t2i_model),
@@ -232,7 +235,7 @@ export default function ConsistencyVault() {
                 undefined,
                 references,
                 imageGenerationMode,
-                preservePrompt,
+                true,
             );
 
             const taskId = response._task_id;
@@ -712,7 +715,10 @@ export default function ConsistencyVault() {
                                 asset={asset}
                                 type={activeTab}
                                 isGenerating={isAssetGenerating(asset.id)}
-                                onGenerate={() => handleGenerate(asset.id, activeTab)}
+                                onGenerate={() => {
+                                    setSelectedAssetId(asset.id);
+                                    setSelectedAssetType(activeTab);
+                                }}
                                 onToggleLock={() => api.toggleAssetLock(currentProject.id, asset.id, activeTab).then(updated => updateProject(currentProject.id, updated))}
                                 onClick={() => {
                                     setSelectedAssetId(asset.id);
@@ -1016,7 +1022,6 @@ function CharacterDetailModal({ asset, type, onClose, onUpdateDescription, onRen
     const [promptModel, setPromptModel] = useState("");
     const [optimizingPrompt, setOptimizingPrompt] = useState(false);
     const [optimizedPrompt, setOptimizedPrompt] = useState("");
-    const [acceptedOptimizedPrompt, setAcceptedOptimizedPrompt] = useState("");
     const [promptError, setPromptError] = useState("");
     const [imageGenerationMode, setImageGenerationMode] = useState<"text" | "reference">("text");
     const [promptReferences, setPromptReferences] = useState<AssetLibraryReference[]>([]);
@@ -1038,7 +1043,6 @@ function CharacterDetailModal({ asset, type, onClose, onUpdateDescription, onRen
     const [mentionIndex, setMentionIndex] = useState(0);
 
     // Style Controls
-    const [applyStyle, setApplyStyle] = useState(true);
     const [negativePrompt, setNegativePrompt] = useState(styleNegativePrompt || DEFAULT_CHARACTER_NEGATIVE_PROMPT);
     const [showAdvanced, setShowAdvanced] = useState(false);
 
@@ -1183,7 +1187,7 @@ function CharacterDetailModal({ asset, type, onClose, onUpdateDescription, onRen
                 asset_name: asset.name,
                 description: asset.description,
                 current_prompt: imagePrompt,
-                style: applyStyle ? stylePrompt : "",
+                style: "",
                 plan_context: planEntries.slice(0, 8).map((entry: AssetPlanEntry) => entry.prompt),
             });
             setOptimizedPrompt(result.prompt);
@@ -1203,7 +1207,7 @@ function CharacterDetailModal({ asset, type, onClose, onUpdateDescription, onRen
             toast.warning(tv("referenceModeSelectExplicitly"));
             return;
         }
-        onGenerate(imagePrompt, applyStyle, negativePrompt, batchSize, promptReferences, imageGenerationMode, Boolean(acceptedOptimizedPrompt && imagePrompt === acceptedOptimizedPrompt));
+        onGenerate(imagePrompt, false, negativePrompt, batchSize, promptReferences, imageGenerationMode, true);
     };
 
     return (
@@ -1346,7 +1350,7 @@ function CharacterDetailModal({ asset, type, onClose, onUpdateDescription, onRen
                                 {optimizedPrompt && <div className="space-y-2 border-l-2 border-primary pl-3">
                                     <p className="whitespace-pre-wrap text-xs leading-relaxed text-text-secondary">{optimizedPrompt}</p>
                                     <div className="flex gap-3">
-                                        <button type="button" onClick={() => { setImagePrompt(optimizedPrompt); setAcceptedOptimizedPrompt(optimizedPrompt); setOptimizedPrompt(""); }} className="text-xs text-primary hover:underline">采用建议</button>
+                                        <button type="button" onClick={() => { setImagePrompt(optimizedPrompt); setOptimizedPrompt(""); }} className="text-xs text-primary hover:underline">采用建议</button>
                                         <button type="button" onClick={() => setOptimizedPrompt("")} className="text-xs text-text-muted hover:underline">忽略</button>
                                     </div>
                                 </div>}
@@ -1410,18 +1414,13 @@ function CharacterDetailModal({ asset, type, onClose, onUpdateDescription, onRen
                             <div className="space-y-2">
                                 <label className="text-sm font-bold text-text-secondary uppercase">Style Settings</label>
                                 <div className="bg-glass rounded-lg p-3 border border-border-subtle">
-                                    <div className="flex items-center gap-2 mb-2">
-                                        <input
-                                            type="checkbox"
-                                            id="applyStyleModal"
-                                            checked={applyStyle}
-                                            onChange={(e) => setApplyStyle(e.target.checked)}
-                                            className="rounded border-gray-600 bg-gray-700 text-primary focus:ring-primary"
-                                        />
-                                        <label htmlFor="applyStyleModal" className="text-sm font-bold text-text-secondary cursor-pointer select-none">
-                                            Apply Art Direction Style
-                                        </label>
-                                    </div>
+                                    <button type="button" onClick={() => {
+                                        setImagePrompt((current: string) => includeVisibleStyle(current, stylePrompt));
+                                        setNegativePrompt((current: string) => includeVisibleStyle(current, styleNegativePrompt));
+                                    }} disabled={!stylePrompt && !styleNegativePrompt}
+                                        className="mb-2 rounded border border-glass-border px-2 py-1 text-xs text-text-secondary disabled:opacity-40">
+                                        {tv("copyStyleToPrompt")}
+                                    </button>
 
                                     {stylePrompt && (
                                         <div className="text-xs text-text-muted font-mono bg-surface p-2 rounded border border-border-subtle">

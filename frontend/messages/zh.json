@@ -2203,6 +2203,8 @@
     "promptSection": "生成提示词 · PROMPT",
     "generating": "生成中…",
     "generateMoreVariants": "生成更多变体",
+    "reviewedImagePrompt": "生成提示词（提交前可编辑）",
+    "reviewedNegativePrompt": "排除词",
     "genInEpisodeTooltip": "请在对应剧集内生成变体（资产库不直接对剧集生成）",
     "genInEpisodeBadge": "剧集内生成",
     "download": "下载",
@@ -2377,6 +2379,7 @@
   },
   "character": {
     "workbench": "角色工作台",
+    "copyStyleToPrompt": "将风格加入可编辑提示词",
     "dossier": "角色档案",
     "noDossier": "暂无角色档案",
     "closeWorkbench": "关闭角色工作台",
@@ -2420,6 +2423,7 @@
   },
   "vault": {
     "title": "一致性金库",
+    "copyStyleToPrompt": "将风格加入可编辑提示词",
     "characters": "角色",
     "scenes": "场景",
     "props": "道具",

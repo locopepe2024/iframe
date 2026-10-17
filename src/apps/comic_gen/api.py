@@ -1464,9 +1464,20 @@ def delete_series_asset(series_id: str, asset_type: Literal["character", "scene"
         raise HTTPException(status_code=404, detail=str(exc)) from exc
 
 
+def _require_reviewed_asset_image_prompt(request: GenerateAssetRequest) -> None:
+    """Manual image routes must receive the prompt exactly as reviewed in the UI."""
+    if not request.prompt or not request.prompt.strip():
+        raise HTTPException(status_code=422, detail="Review a non-empty asset image prompt before generating")
+    if not request.preserve_prompt or request.apply_style:
+        raise HTTPException(status_code=422, detail="Submit the complete visible prompt; hidden style or template append is disabled")
+    if request.asset_type == "character" and request.generation_type == "all":
+        raise HTTPException(status_code=422, detail="Choose one reviewed character image type per submission")
+
+
 @app.post("/series/{series_id}/assets/generate")
 def generate_series_asset(series_id: str, request: GenerateAssetRequest, background_tasks: BackgroundTasks):
     """Generate a single asset for a Series (async)."""
+    _require_reviewed_asset_image_prompt(request)
     try:
         series, task_id = pipeline.generate_series_asset(
             series_id,
@@ -1484,6 +1495,7 @@ def generate_series_asset(series_id: str, request: GenerateAssetRequest, backgro
             request.reference,
             request.references,
             request.image_generation_mode,
+            request.preserve_prompt,
         )
         background_tasks.add_task(pipeline.process_asset_generation_task, task_id)
         response_data = series.dict()
@@ -3807,6 +3819,7 @@ def create_video_task(script_id: str, request: CreateVideoTaskRequest, backgroun
 def generate_single_asset(script_id: str, request: GenerateAssetRequest, background_tasks: BackgroundTasks):
     """Generates a single asset with specific options (async).
     Returns immediately with task_id for polling progress."""
+    _require_reviewed_asset_image_prompt(request)
     try:
         script, task_id = pipeline.create_asset_generation_task(
             script_id,

@@ -18,11 +18,18 @@ This contract covers character, scene, and prop image generation in Studio asset
 - The submitted text is the reviewed snapshot. A saved design, shooting plan, global style, negative preset or legacy template does not gain authority to append text during execution.
 - Scene and prop draft confirmation must survive save/reload and create a revision only on confirmation. Unknown design fields must be rejected instead of returning apparent success.
 
-## Initial implementation slice
+## Implemented boundary
 
-- Persist scene/prop design drafts and confirmed revisions with validation and a reload regression test.
-- Keep the current scene workbench's reviewed prompt and explicit references as the generation input; do not inject the confirmed design or shooting plan into the request behind the UI.
-- Audit and then migrate legacy character and asset library workbenches that still opt into backend style/default-composition appends. Their UI and runtime must change together so toggles do not promise an effect that is no longer sent.
+- Scene/prop design drafts and confirmed revisions persist and survive reload. Invalid and unknown design fields fail before a save.
+- The project and series manual asset image endpoints require a non-empty reviewed prompt, `preserve_prompt=true` and `apply_style=false`. Character `all` mode is rejected because its derived images use separate generated prompt text.
+- Studio and Cast workbenches copy optional global style into editable prompt fields only on a user action. The asset library asks for an editable prompt and negative prompt before generating more variants. These requests send the reviewed text and no style suffix.
+- The character three-view generator does not add hidden negative terms when receiving a reviewed prompt.
+
+## Remaining work
+
+- Store the exact submission snapshot and its source design revision on each generated variant. Existing `prompt_used` records provider positive text for some paths, but does not provide the complete revision/reference/parameter ledger.
+- Bring the structure of scene/prop AI design drafts beyond one `visual_notes` string if field-specific editing proves useful. Keep frame content and continuity choices at generation scope, outside the reusable asset design record.
+- Verify that derived character image references are shown with their stable variant identity before submission; the generator can use a selected master image for derived views.
 
 ## Acceptance criteria
 

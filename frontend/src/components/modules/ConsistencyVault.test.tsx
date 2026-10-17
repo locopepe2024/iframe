@@ -12,17 +12,19 @@ const mocks = vi.hoisted(() => ({
     deleteCharacter: vi.fn(), deleteScene: vi.fn(), deleteProp: vi.fn(),
     updateAssetAttributes: vi.fn(),
     updateAssetVariantMetadata: vi.fn(), agentRequest: vi.fn(),
+    generateAsset: vi.fn(),
     error: vi.fn(),
 }));
 vi.mock("next-intl", () => ({ useTranslations: () => (key: string) => key }));
 vi.mock("@/lib/api", () => ({ API_URL: "", authenticatedFetch: mocks.authenticatedFetch, agentRequest: mocks.agentRequest, api: mocks, crudApi: mocks }));
-vi.mock("@/store/toastStore", () => ({ toast: { error: mocks.error } }));
+vi.mock("@/store/toastStore", () => ({ toast: { error: mocks.error, warning: vi.fn() } }));
 vi.mock("./CharacterWorkbench", () => ({ default: ({ asset, onRename }: any) =>
     <div role="dialog" aria-label="角色工作台">{asset.name}
         <button type="button" onClick={() => void onRename("新名字")}>保存资产名</button>
     </div> }));
-vi.mock("../common/VariantSelector", () => ({ VariantSelector: ({ asset, onRename }: any) =>
-    <button type="button" onClick={() => void onRename(asset.variants[0].id, "黄昏参考图")}>命名素材</button> }));
+vi.mock("../common/VariantSelector", () => ({ VariantSelector: ({ asset, onRename, onGenerate }: any) =>
+    <><button type="button" onClick={() => void onRename(asset.variants[0].id, "黄昏参考图")}>命名素材</button>
+    <button type="button" onClick={() => onGenerate(1)}>测试生成图片</button></> }));
 vi.mock("../common/VideoVariantSelector", () => ({ VideoVariantSelector: () => null }));
 vi.mock("../modals/UploadAssetModal", () => ({ default: () => null }));
 vi.mock("./playground/ReferencePromptEditor", () => ({ default: ({ value, onChange }: any) =>
@@ -52,6 +54,29 @@ beforeEach(() => {
         : Promise.resolve({ prompt: "黄昏参考图，青石板与粮铺门头清晰可见" }));
     vi.spyOn(window, "confirm").mockReturnValue(true);
     vi.spyOn(window, "alert").mockImplementation(() => {});
+});
+
+it("sends only the visible edited scene prompt and negative prompt", async () => {
+    const asset = { id: "scene-1", name: "长街", description: "蓝调长街", source: "episode",
+        image_asset: { selected_id: "v1", variants: [{ id: "v1", url: "/street.png" }] } };
+    const project = { id: "episode-1", characters: [], scenes: [asset], props: [],
+        art_direction: { style_config: { positive_prompt: "暮秋蓝调", negative_prompt: "暖红色调" } } };
+    useProjectStore.setState({ currentProject: project as any });
+    mocks.getEpisodeVisualContext.mockResolvedValue({ context: null, bindings: [] });
+    mocks.generateAsset.mockResolvedValue(project);
+    render(<ConsistencyVault />);
+    fireEvent.click(screen.getByRole("button", { name: /Scenes/ }));
+    fireEvent.click(screen.getByText("长街"));
+    fireEvent.click(screen.getByRole("button", { name: "copyStyleToPrompt" }));
+    const visiblePrompt = (screen.getByRole("textbox", { name: "图像提示词" }) as HTMLTextAreaElement).value;
+    expect(visiblePrompt).toContain("暮秋蓝调");
+    fireEvent.click(screen.getByRole("button", { name: "测试生成图片" }));
+    await waitFor(() => expect(mocks.generateAsset).toHaveBeenCalled());
+    const args = mocks.generateAsset.mock.calls[0];
+    expect(args[6]).toBe(visiblePrompt);
+    expect(args[7]).toBe(false);
+    expect(args[15]).toBe(true);
+    expect(args[4]).toBe("");
 });
 
 it.each([
