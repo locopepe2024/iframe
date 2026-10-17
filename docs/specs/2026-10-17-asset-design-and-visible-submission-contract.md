@@ -58,6 +58,14 @@ Each projection records the director revision, scene-design revision, selected v
 
 ## Remaining work
 
+### Initial scene settings slice (2026-10-17)
+
+- Owner: `scene.asset_design.design_draft` and its confirmed revisions own `style`, `ambient_lighting`, `local_lighting` (`target` and `effect`), `reference_viewpoint`, and `reference_framing`. These describe a scene reference image, not a moving shot. The scene's existing `description` remains its spatial source; the structured fields never rewrite it.
+- Inheritance: the project art-direction positive prompt and the scene's legacy `time_of_day` / `lighting_mood` are displayed as starting suggestions with their source labels. Empty upstream fields stay empty. Shooting-plan prose remains a separate, manually applied frame-content suggestion.
+- Submission: saved settings do not silently enter generation. Applying them updates a visible, editable section of the image prompt. Prompt refinement receives the current structured settings before the model call. Generation submits only the reviewed prompt and explicit references. Editing a structured setting after applying it marks the prompt stale until the user reapplies it or explicitly keeps the edited prompt.
+- Validation: scene-only structured fields have bounded string values; local light requires a named target when an effect is set. Unknown fields fail. A confirmed revision preserves the exact design snapshot and is not modified by a later draft.
+- Acceptance: save/reload preserves the draft and confirmed revision; empty project style does not disable local style editing; a blue ambient street with a red sunset limited to the horizon is representable; the refined and generated request contains no hidden postscript.
+
 - Bring the structure of scene/prop AI design drafts beyond one `visual_notes` string if field-specific editing proves useful. Keep frame content and continuity choices at generation scope, outside the reusable asset design record.
 - PR #171's scene lighting/camera tools create new candidates from an existing source variant; they are image-edit operations, not the initial director → asset → shot inheritance model. Before integrating them, add a preflight for the server-compiled image-edit prompt, expose the intended lighting region, and show the source/result variant relationship. Keep the PR separate until its large branch and conflicts are reviewed.
 - Shot-design first/last-frame candidates must use a separate read-only preflight: show the exact assembled positive/negative prompt, effective image model, ratio and frame source before a paid render. Bind confirmation to the current frame context and reject stale submissions. Candidate rendering must preserve the reviewed prompt verbatim. Explicit reference variant selection for this path remains a separate follow-up; until then the UI must say that the generator selects references from the frame's current character/scene assets.
