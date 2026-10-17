@@ -239,6 +239,15 @@ export function SceneImageTools({ kind, sources, sceneAssetId, lightingReference
                 </div>
             </div>
             <div className="min-w-0 space-y-5">
+                <div className="sticky top-0 z-20 -mx-4 flex flex-wrap items-center gap-2 border-b border-glass-border bg-surface/95 px-4 py-3 backdrop-blur sm:-mx-6 sm:px-6">
+                    <button type="button" onClick={() => { setReviewedPrompt(""); reset(); }} className={option}>重置参数</button>
+                    <button type="button" aria-label={busy ? "生成中…" : reviewedPrompt ? "确认并生成" : "查看并确认提示词"} disabled={!source || busy} onClick={submit} className="min-h-11 rounded-md bg-primary px-5 text-sm font-medium text-primary-foreground hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary">
+                        {busy ? "生成中…" : reviewedPrompt ? "提交到生成审核" : "查看并确认提示词"}
+                    </button>
+                    <span className="basis-full text-xs text-text-muted">
+                        {reviewedPrompt ? "下一步：核对完整提示词、来源图和参数，再点击“确认并生成”。" : "先查看完整提示词；确认后才会进入生成审核。"}
+                    </span>
+                </div>
                 {kind === "lighting" ? <>
                     <fieldset className="space-y-2"><legend className="text-sm font-medium text-foreground">观察模式</legend><div className="flex gap-2"><button type="button" className={option} aria-pressed={viewMode === "perspective"} onClick={() => setViewMode("perspective")}>透视</button><button type="button" className={option} aria-pressed={viewMode === "front"} onClick={() => setViewMode("front")}>正面</button></div></fieldset>
                     <label className="flex min-h-10 items-center gap-2 text-sm text-text-secondary"><input type="checkbox" checked={intelligent} onChange={(event) => setIntelligent(event.target.checked)} className="accent-primary" />智能模式</label>
@@ -269,15 +278,6 @@ export function SceneImageTools({ kind, sources, sceneAssetId, lightingReference
                 <label className="block text-sm text-text-secondary" htmlFor={`${kind}-extra`}>补充提示词</label>
                 <textarea id={`${kind}-extra`} value={extra} onChange={(event) => setExtra(event.target.value)} onFocus={() => { if (kind === "camera") setCameraPromptEnabled(true); }} disabled={kind === "lighting" && !intelligent} rows={3} className={`${control} w-full py-2 disabled:opacity-50`} placeholder={kind === "lighting" ? "补充想要的光影氛围" : "补充镜头位置或构图要求"} />
                 {reviewedPrompt && <div className="space-y-2 rounded-lg border border-primary/40 bg-primary/5 p-3"><p className="text-xs font-medium text-foreground">提交前提示词核对</p><pre className="max-h-44 overflow-auto whitespace-pre-wrap text-xs leading-5 text-text-secondary">{reviewedPrompt}</pre><p className="text-xs text-text-muted">确认后将提交上面这份完整文本。</p></div>}
-                <div className="flex flex-wrap items-center gap-2">
-                    <button type="button" onClick={() => { setReviewedPrompt(""); reset(); }} className={option}>重置参数</button>
-                    <button type="button" aria-label={busy ? "生成中…" : reviewedPrompt ? "确认并生成" : "查看并确认提示词"} disabled={!source || busy} onClick={submit} className="min-h-11 rounded-md bg-primary px-5 text-sm font-medium text-primary-foreground hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary">
-                        {busy ? "生成中…" : reviewedPrompt ? "提交到生成审核" : "查看并确认提示词"}
-                    </button>
-                    <span className="basis-full text-xs text-text-muted">
-                        {reviewedPrompt ? "下一步：点击后核对完整提示词、来源图和参数，再点击“确认并生成”。" : "先查看完整提示词；确认后才会进入生成审核。"}
-                    </span>
-                </div>
             </div>
         </div>
     </section>;
