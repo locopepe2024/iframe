@@ -2,7 +2,7 @@
 
 ## Goal and success criteria
 
-When the owner enables the existing `memory` companion skill, a normal Chat
+When the owner enables memory in the recent session menu, a normal Chat
 answer may use relevant, source-backed fact events from earlier sessions.
 The prompt must distinguish a user's past statement from an independently
 verified current condition. A retraction must not resurrect the targeted
@@ -14,8 +14,12 @@ statement. Turning off a category's recall setting must exclude its facts.
   quote. Their normalized values are not externally verified.
 - This slice does not change extraction, add semantic embeddings, or recall
   facts during live research or H3 prompt optimization.
-- Recall requires the `memory` companion skill on the current request. The
-  owner-wide `auto_recall_enabled` setting further restricts categories.
+- Recall requires an owner-wide memory setting, default off. The owner-wide
+  `auto_recall_enabled` setting further restricts fact categories. Memory
+  management moves from the companion panel to the recent session menu.
+- Turning off memory stops cross-session prompt injection but does not delete
+  saved facts or confirmed memories. Automatic fact capture remains controlled
+  by the separate category capture switches.
 - Only statements from other sessions are candidates; the current session's
   recent messages already appear in Chat history.
 - Candidate selection uses bounded lexical overlap and may miss paraphrases.
@@ -32,15 +36,21 @@ statement. Turning off a category's recall setting must exclude its facts.
 2. Check the owner's recall setting and source existence, exclude events from
    the current session, and rank lexical matches against the current question.
 3. Pass at most five small, source-labelled records to the normal Chat model.
-   The current user message wins on conflict. Keep existing confirmed memory
-   behavior unchanged.
+   The current user message wins on conflict. Confirmed memories use the same
+   owner-wide memory gate.
+4. Put the memory enable switch and confirmed memory controls in the recent
+   session overflow menu. Remove memory from companion skills. An old client
+   may still send `memory` as a legacy skill ID, but it no longer enables
+   recall or a companion style.
 
 Affected paths: `src/apps/agent_facts.py`, `src/apps/agent_api.py`,
-`tests/test_agent_facts.py`.
+`tests/test_agent_facts.py`, `tests/test_agent_chat.py`, and Playground UI.
 
 ## Verification
 
-- Relevant earlier statement appears only when memory skill and category
+- Relevant earlier statement appears only when owner memory and category
   recall are both enabled.
+- Memory controls work from the session menu, and no memory choice appears in
+  companion skills. Owner settings apply across sessions.
 - Unrelated questions, deleted sources, and retracted statements do not appear.
 - The prompt labels recalled material as past user reports, not verified facts.

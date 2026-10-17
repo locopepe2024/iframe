@@ -528,7 +528,8 @@ def test_companion_skills_are_server_owned_and_not_persisted_as_user_memory(setu
     agent.send(sid, agent.MessageCreate(content='今天有点孤单', companion_skills=['listening', 'memory']), setup)
     system = complete.call_args.args[2][0]['content']
     assert agent.COMPANION_SKILL_INSTRUCTIONS['listening'] in system
-    assert agent.COMPANION_SKILL_INSTRUCTIONS['memory'] in system
+    assert '已确认的跨会话记忆' not in system
+    assert 'memory' not in agent.COMPANION_SKILL_INSTRUCTIONS
     assert 'companion_skills' not in agent.messages(sid, setup)['messages'][0]
     with pytest.raises(HTTPException) as invalid:
         agent.send(sid, agent.MessageCreate(content='你好', companion_skills=['unknown']), setup)
@@ -548,11 +549,18 @@ def test_confirmed_memory_is_owner_scoped_and_injected_only_when_enabled(setup, 
     assert saved['memory']['owner'] == setup.owner_profile_id
     next_sid = agent.create(agent.SessionCreate(model='qwen'), setup)['session']['id']
     agent.send(next_sid, agent.MessageCreate(content='你还记得我喜欢什么吗？', companion_skills=['memory']), setup)
-    assert '喜欢听邓丽君的歌' in completion.call_args.args[2][0]['content']
-    agent.send(next_sid, agent.MessageCreate(content='继续', companion_skills=[]), setup)
     assert '已确认的跨会话记忆' not in completion.call_args.args[2][0]['content']
+    agent.patch_memory_settings(agent.MemorySettingsPatch(enabled=True), setup)
     other = UserContext('other', 'other-profile', 'other', 'token')
+    assert agent.memory_settings(other) == {'enabled': False}
+    agent.send(next_sid, agent.MessageCreate(content='你还记得我喜欢什么吗？'), setup)
+    assert '喜欢听邓丽君的歌' in completion.call_args.args[2][0]['content']
+    agent.patch_memory_settings(agent.MemorySettingsPatch(enabled=False), setup)
+    agent.send(next_sid, agent.MessageCreate(content='继续'), setup)
+    assert '已确认的跨会话记忆' not in completion.call_args.args[2][0]['content']
+    assert len(agent.memories(setup)['memories']) == 1
     assert agent.memories(other)['memories'] == []
+    assert agent.memory_settings(other) == {'enabled': False}
     with pytest.raises(HTTPException):
         agent.create_memory(agent.MemoryCreate(content='假记忆', source_session_id=sid, source_message_id=message['id'], source_quote='不存在的原文'), setup)
     agent.delete_memory(saved['memory']['id'], setup)

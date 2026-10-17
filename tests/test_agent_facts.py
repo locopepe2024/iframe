@@ -210,7 +210,7 @@ def test_fact_category_registry_controls_auto_capture_and_is_owner_scoped(setup,
     assert agent.extract_facts(agent_facts.FactExtractionRequest(source_session_id=sid, source_message_id="m1"), setup)["events"] == []
 
 
-def test_chat_recall_requires_memory_skill_relevance_and_owner_category_setting(setup, monkeypatch):
+def test_chat_recall_requires_owner_setting_relevance_and_category_setting(setup, monkeypatch):
     prior = agent.create(agent.SessionCreate(model="qwen"), setup)["session"]["id"]
     message = {"id": "m1", "role": "user", "content": "我最近已经不服药了", "created_at": 100.0}
     with agent.database() as db:
@@ -225,18 +225,24 @@ def test_chat_recall_requires_memory_skill_relevance_and_owner_category_setting(
     current = agent.create(agent.SessionCreate(model="qwen"), setup)["session"]["id"]
     completion = Mock(return_value="收到")
     monkeypatch.setattr(agent, "complete", completion)
+    assert agent.memory_settings(setup) == {"enabled": False}
     agent.send(current, agent.MessageCreate(content="我的服药情况怎样？", companion_skills=["memory"]), setup)
+    assert all("相关过往陈述" not in item["content"] for item in completion.call_args.args[2][1:])
+    agent.patch_memory_settings(agent.MemorySettingsPatch(enabled=True), setup)
+    agent.send(current, agent.MessageCreate(content="我的服药情况怎样？"), setup)
     history = completion.call_args.args[2]
     assert "不是已核实的当前状态" in history[0]["content"]
     assert any("我最近已经不服药了" in item["content"] for item in history[1:-1])
     assert "1970-01-01T00:01:40+00:00" in history[1]["content"]
     assert '"time_text": "最近"' in history[1]["content"]
+    agent.send(current, agent.MessageCreate(content="今天天气怎么样？"), setup)
+    assert all("相关过往陈述" not in item["content"] for item in completion.call_args.args[2][1:])
+    agent.patch_memory_settings(agent.MemorySettingsPatch(enabled=False), setup)
     agent.send(current, agent.MessageCreate(content="我的服药情况怎样？"), setup)
     assert all("相关过往陈述" not in item["content"] for item in completion.call_args.args[2][1:])
-    agent.send(current, agent.MessageCreate(content="今天天气怎么样？", companion_skills=["memory"]), setup)
-    assert all("相关过往陈述" not in item["content"] for item in completion.call_args.args[2][1:])
+    agent.patch_memory_settings(agent.MemorySettingsPatch(enabled=True), setup)
     agent.patch_fact_category("health", agent_facts.FactCategoryPatch(auto_recall_enabled=False), setup)
-    agent.send(current, agent.MessageCreate(content="我的服药情况怎样？", companion_skills=["memory"]), setup)
+    agent.send(current, agent.MessageCreate(content="我的服药情况怎样？"), setup)
     assert all("相关过往陈述" not in item["content"] for item in completion.call_args.args[2][1:])
     agent.patch_fact_category("health", agent_facts.FactCategoryPatch(auto_recall_enabled=True), setup)
     session["messages"].append({"id": "m2", "role": "user", "content": "我上次说错了，撤回服药说法", "created_at": 200.0})
@@ -246,8 +252,8 @@ def test_chat_recall_requires_memory_skill_relevance_and_owner_category_setting(
     agent.correct_fact(original["id"], agent_facts.FactCorrectionRequest(
         source_session_id=prior, source_message_id="m2", source_quote="我上次说错了，撤回服药说法",
         relation="retraction"), setup)
-    agent.send(current, agent.MessageCreate(content="我的服药情况怎样？", companion_skills=["memory"]), setup)
+    agent.send(current, agent.MessageCreate(content="我的服药情况怎样？"), setup)
     assert all("相关过往陈述" not in item["content"] for item in completion.call_args.args[2][1:])
     agent.delete_message(prior, "m1", setup)
-    agent.send(current, agent.MessageCreate(content="我的服药情况怎样？", companion_skills=["memory"]), setup)
+    agent.send(current, agent.MessageCreate(content="我的服药情况怎样？"), setup)
     assert all("相关过往陈述" not in item["content"] for item in completion.call_args.args[2][1:])
