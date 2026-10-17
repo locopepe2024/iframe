@@ -56,6 +56,24 @@ def test_storyboard_generation_failure_is_not_returned_as_success(tmp_path):
     assert frame.status == GenerationStatus.FAILED
 
 
+def test_storyboard_reference_images_keep_selected_order(monkeypatch, tmp_path):
+    adapter = Mock()
+    adapter.generate.side_effect = lambda _prompt, path, **_kwargs: path
+    generator = StoryboardGenerator({"output_dir": str(tmp_path)})
+    generator._get_model_for = Mock(return_value=adapter)
+    first = tmp_path / "first.png"
+    second = tmp_path / "second.png"
+    first.write_bytes(b"first")
+    second.write_bytes(b"second")
+
+    generator.generate_frame(
+        StoryboardFrame(id="frame-1", scene_id="scene-1"), [], None,
+        prompt="A street", ref_image_paths=[str(first), str(second), str(first)],
+    )
+
+    assert adapter.generate.call_args.kwargs["ref_image_paths"] == [str(first), str(second)]
+
+
 def test_storyboard_render_keeps_local_file_even_when_oss_is_configured(monkeypatch, tmp_path):
     monkeypatch.chdir(tmp_path)
     monkeypatch.setattr(
