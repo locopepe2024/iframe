@@ -1666,12 +1666,22 @@ export const api = {
     },
 
     renderFrameCandidate: async (
-        scriptId: string, frameId: string, prompt: string, negativePrompt?: string,
+        scriptId: string, frameId: string, prompt: string, negativePrompt: string | undefined, contextToken: string,
     ): Promise<{ image_url: string }> => {
         const res = await axios.post(`${API_URL}/projects/${scriptId}/storyboard/render-candidate`, {
             frame_id: frameId,
             prompt,
             negative_prompt: negativePrompt,
+            context_token: contextToken,
+        });
+        return res.data;
+    },
+
+    previewFrameCandidate: async (
+        scriptId: string, frameId: string, prompt: string, negativePrompt?: string,
+    ): Promise<{ prompt: string; negative_prompt: string; model: string; aspect_ratio: string; size: string; reference_asset_labels: string[]; context_token: string }> => {
+        const res = await axios.post(`${API_URL}/projects/${scriptId}/storyboard/render-candidate-preview`, {
+            frame_id: frameId, prompt, negative_prompt: negativePrompt,
         });
         return res.data;
     },

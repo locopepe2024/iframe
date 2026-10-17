@@ -4937,11 +4937,63 @@ class RenderFrameJobRequest(RenderFrameRequest):
 class RenderFramePreviewRequest(BaseModel):
     frame_id: str
     prompt: str
+    negative_prompt: Optional[str] = None
 
 class RenderFrameCandidateRequest(BaseModel):
     frame_id: str
     prompt: str
     negative_prompt: Optional[str] = None
+    context_token: str
+
+
+@app.post("/projects/{script_id}/storyboard/render-candidate-preview")
+def preview_frame_candidate(script_id: str, request: RenderFramePreviewRequest,
+                            user: UserContext = Depends(require_studio_user)):
+    """Show the exact candidate prompt and effective settings before rendering."""
+    script = pipeline.get_script(script_id, user.owner_profile_id)
+    if not script:
+        raise HTTPException(status_code=404, detail="Script not found")
+    frame = next((item for item in script.frames if item.id == request.frame_id), None)
+    if not frame:
+        raise HTTPException(status_code=404, detail="Frame not found")
+    if not request.prompt.strip():
+        raise HTTPException(status_code=422, detail="Storyboard prompt cannot be empty")
+    series = pipeline.series_store.get(script.series_id) if script.series_id else None
+    assets = pipeline.resolve_project_assets(script)
+    character_assets = {item.id: item for item in assets["characters"]}
+    scene_assets = {item.id: item for item in assets["scenes"]}
+    reference_labels = []
+    for item_id in frame.character_ids:
+        character = character_assets.get(item_id)
+        if not character:
+            reference_labels.append(f"{item_id}（素材未找到）")
+            continue
+        selected = next((f"{field}:{asset.selected_id}"
+                         for field in ("three_view_asset", "full_body_asset", "headshot_asset")
+                         if (asset := getattr(character, field, None)) and asset.selected_id
+                         and any(variant.id == asset.selected_id for variant in asset.variants)), None)
+        reference_labels.append(f"{character.name}（{selected or '旧版图片或无参考图'}）")
+    if frame.scene_id:
+        scene_asset = scene_assets.get(frame.scene_id)
+        image_asset = scene_asset.image_asset if scene_asset else None
+        selected = image_asset.selected_id if image_asset and any(
+            variant.id == image_asset.selected_id for variant in image_asset.variants
+        ) else None
+        reference_labels.append(f"{scene_asset.name if scene_asset else frame.scene_id}（{selected or '旧版图片或无参考图'}）")
+    from .assets import ASPECT_RATIO_TO_SIZE
+    return {
+        "prompt": request.prompt,
+        "negative_prompt": request.negative_prompt or "",
+        "model": series.model_settings.i2i_model if series else script.model_settings.i2i_model,
+        "aspect_ratio": script.model_settings.storyboard_aspect_ratio,
+        "size": ASPECT_RATIO_TO_SIZE.get(script.model_settings.storyboard_aspect_ratio, "1024*576"),
+        "character_ids": frame.character_ids,
+        "scene_id": frame.scene_id,
+        "reference_asset_labels": reference_labels,
+        "context_token": pipeline.storyboard_candidate_preview_token(
+            script_id, request.frame_id, request.prompt, request.negative_prompt,
+        ),
+    }
 
 @app.post("/projects/{script_id}/storyboard/render-candidate")
 def render_frame_candidate(script_id: str, request: RenderFrameCandidateRequest,
@@ -4951,13 +5003,16 @@ def render_frame_candidate(script_id: str, request: RenderFrameCandidateRequest,
     script = pipeline.get_script(script_id, user.owner_profile_id)
     if not script:
         raise HTTPException(status_code=404, detail="Script not found")
+    if not any(item.id == request.frame_id for item in script.frames):
+        raise HTTPException(status_code=404, detail="Frame not found")
     try:
         url = pipeline.generate_storyboard_candidate(
             script_id, request.frame_id, request.prompt, request.negative_prompt,
+            context_token=request.context_token,
         )
         return {"image_url": url}
     except ValueError as exc:
-        raise HTTPException(status_code=404, detail=str(exc)) from exc
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
     except Exception as exc:
         logger.exception("Error rendering storyboard candidate %s", request.frame_id)
         raise HTTPException(status_code=500, detail=str(exc)) from exc

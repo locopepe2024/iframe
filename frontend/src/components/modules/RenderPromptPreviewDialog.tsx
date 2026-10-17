@@ -8,6 +8,10 @@ export type FrameRenderPreview = {
     referenceCount: number | null;
     batchSize: number;
     contextToken: string;
+    model?: string;
+    aspectRatio?: string;
+    sourceLabel?: string;
+    referenceLabels?: string[];
 };
 
 export default function RenderPromptPreviewDialog({
@@ -29,6 +33,10 @@ export default function RenderPromptPreviewDialog({
                         <span>{preview.referenceCount === null ? "参考图按镜头资产选择" : `参考图 ${preview.referenceCount}`}</span>
                         <span>生成 {preview.batchSize} 张</span>
                     </div>
+                    {(preview.model || preview.aspectRatio || preview.sourceLabel) && <p className="text-text-secondary">
+                        {[preview.sourceLabel, preview.model, preview.aspectRatio].filter(Boolean).join(" · ")}
+                    </p>}
+                    {preview.referenceLabels && <p className="text-text-secondary">镜头关联素材：{preview.referenceLabels.length ? preview.referenceLabels.join("、") : "无"}。生成器会尝试使用这些素材当前选中的参考图。</p>}
                     <div>
                         <h3 className="mb-2 font-medium text-foreground">正向提示词</h3>
                         <pre className="max-h-[45vh] overflow-auto whitespace-pre-wrap break-words rounded border border-glass-border bg-surface p-3 font-sans leading-relaxed text-text-secondary">{preview.prompt}</pre>

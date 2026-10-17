@@ -29,7 +29,7 @@ import AssetChipBar from "./AssetChipBar";
 import PromptExpandModal from "./PromptExpandModal";
 import PolishPanel from "./PolishPanel";
 import FieldTagChip, { AddFieldButton, type FieldType } from "./FieldTagChip";
-import { buildGenerationPrompt } from "./buildAssembledPrompt";
+import { buildGenerationPrompt, directorShotSuggestions } from "./buildAssembledPrompt";
 import { resolveShotVideoInput } from "./shotVideoInput";
 import { PendingTaskAffordance } from "@/components/shared/PendingTaskAffordance";
 import PreviewImage from "@/components/shared/preview/PreviewImage";
@@ -352,6 +352,7 @@ export default function ShotCard({
         shot.prompt, shot.shotSize, shot.cameraAngle, shot.cameraMovementStructured, shot.transitionHint,
         shot.stylePromptOverride, shot.lightingOverride, shot.directorShotContext, globalStylePrompt, shot.promptIsOptimized, generateAudio, videoModel,
     ]);
+    const planSuggestions = useMemo(() => directorShotSuggestions(shot), [shot]);
 
     useEffect(() => {
         const ta = textareaRef.current;
@@ -808,6 +809,15 @@ export default function ShotCard({
                                 <Maximize2 size={12} aria-hidden="true" />
                             </button>
                         </div>
+                        {planSuggestions.length > 0 && <details className="rounded-md border border-glass-border px-3 py-2 text-xs text-text-secondary">
+                            <summary className="cursor-pointer text-foreground">拍摄计划参考 · {planSuggestions.length} 条（不会自动加入生成提示词）</summary>
+                            <ul className="mt-2 space-y-2">
+                                {planSuggestions.map((suggestion, index) => <li key={`${index}-${suggestion}`} className="flex items-start gap-2">
+                                    <span className="min-w-0 flex-1 whitespace-pre-wrap">{suggestion}</span>
+                                    <button type="button" className="shrink-0 text-primary hover:underline" onClick={() => onUpdatePrompt([shot.prompt.trim(), suggestion].filter(Boolean).join("\n"))}>加入提示词</button>
+                                </li>)}
+                            </ul>
+                        </details>}
 
                         {/* AI Polish — bilingual prompt rewrite using
                             the project's polish system prompt

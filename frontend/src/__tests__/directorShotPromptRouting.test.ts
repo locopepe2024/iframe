@@ -1,8 +1,8 @@
 import { expect, it } from "vitest";
-import { buildGenerationPrompt } from "@/components/modules/storyboard-r2v/buildAssembledPrompt";
+import { buildGenerationPrompt, directorShotSuggestions } from "@/components/modules/storyboard-r2v/buildAssembledPrompt";
 import { frameToShotNode } from "@/components/modules/storyboard-r2v/shotNodeHelpers";
 
-it("routes confirmed shooting-plan direction into the final R2V prompt", () => {
+it("offers confirmed shooting-plan direction without overriding the current shot prompt", () => {
     const shot = frameToShotNode({
         id: "frame-1",
         scene_id: "scene-asset",
@@ -38,15 +38,17 @@ it("routes confirmed shooting-plan direction into the final R2V prompt", () => {
     }, []);
 
     const result = buildGenerationPrompt(shot, false, "wan2.7-i2v");
+    const suggestions = directorShotSuggestions(shot).join("；");
 
     expect(shot.duration).toBe(8);
-    expect(result).toContain("导演镜头约束");
-    expect(result).toContain("青溪镇粮铺门前，黄昏");
-    expect(result).toContain("苏砚刚从青石板长街转入粮铺门前");
-    expect(result).toContain("苏砚听见后巷动静，转身追去");
-    expect(result).toContain("先建立旁观者视角");
-    expect(result).toContain("兵器接触后错身分开");
-    expect(result).toContain("夕阳从画面右后方斜照");
+    expect(suggestions).toContain("青溪镇粮铺门前，黄昏");
+    expect(suggestions).toContain("苏砚刚从青石板长街转入粮铺门前");
+    expect(suggestions).toContain("苏砚听见后巷动静，转身追去");
+    expect(suggestions).toContain("先建立旁观者视角");
+    expect(suggestions).toContain("兵器接触后错身分开");
+    expect(suggestions).toContain("夕阳从画面右后方斜照");
+    expect(result).not.toContain("暖红主调");
+    expect(result).not.toContain("苏砚听见后巷动静");
     expect(result).toContain("远处人声与兵器碰撞声");
     expect(result).toContain("缓慢跟随");
     expect(result).toContain("远景，平视");

@@ -1,5 +1,7 @@
 # Asset design and visible submission contract
 
+External structure comparison: [scene and shot GitHub references](../research/2026-10-17-scene-shot-structured-reference-comparison.md).
+
 ## Scope and evidence
 
 This contract covers character, scene, and prop image generation in Studio asset workbenches. Character, scene and prop designs now have reviewable confirmed revisions. Manual image routes require a complete visible prompt. Provider output adherence still requires runtime checks.
@@ -10,6 +12,30 @@ This contract covers character, scene, and prop image generation in Studio asset
 2. **Frame content** describes the image being generated now: actors, action, staging, framing, weather and local light. A shooting-plan entry such as "bandits surround the shop" is candidate frame content, not an invariant of the shop asset.
 3. **Continuity references** name the exact preceding/related asset variant and the applicable place, story-time, lighting or object state. The user selects which references to use. The location/time baseline may be shown for review even when it conflicts with a selected image; it does not override that image automatically.
 4. **Submission snapshot** contains the complete positive prompt, separate negative prompt, explicit reference identities, model, aspect ratio and the source design revision. Every content-affecting instruction must be visible and editable before submission. A renderer must not append hidden prose after submission. Reference image bytes and provider parameters may be transported separately, but their identity and values must be visible in the review UI.
+
+## Three consistency passes and visual review
+
+- **Director interpretation, first pass:** establish the episode framework: confirmed story facts, visual direction, time/place relationships and shooting-plan intent. Record its revision. It does not finalize every asset detail or every shot image.
+- **Asset design, second pass:** refine reusable character, scene and prop identities from that framework. Record the director revision used and the confirmed asset design revision. Stable appearance and spatial facts belong here; one shot's action and composition do not.
+- **Shot design, third pass:** refine one frame or video using the relevant director revision and exact asset variants. Record the shot revision and selected asset design/variant revisions. Shot design can expose an asset mismatch and propose a design change, but the proposal returns to asset review; it never edits the confirmed asset implicitly. A newly confirmed asset revision marks affected draft shots for review without rewriting already approved shot snapshots. This is a reviewable asset ↔ shot feedback loop, with separate ownership on each side.
+- Each downstream output must distinguish inherited facts, local design choices and user-approved departures. Prose similarity alone cannot establish continuity.
+- **Setting precedence:** confirmed director interpretation initializes episode style and story-time lighting; the confirmed shooting plan initializes scene/shot framing intent. A scene design may override lighting and framing for a particular reference-image variant; a shot may override those values for its own frame. Show inherited value, local override, source revision and the resulting prompt before submitting. An override changes only its scope and never rewrites the upstream record.
+- Separate global illumination from local accents. For example, the episode can retain blue dusk as its ambient baseline while “blood-red sunset” applies only to the distant sun and a limited warm highlight. A camera or framing change to one asset variant does not become the default camera for every shot using the same location.
+- Descriptive plan text such as “残阳如血” is candidate frame content. It is not automatically a lighting constraint or a style instruction. In shot design, unapplied plan clauses stay visible as suggestions, and the user adds only the clauses wanted in the current prompt.
+- Text review proves what was submitted, not whether the provider rendered a matching color palette, geometry or character. After generation, compare the result with the selected scene/character reference images and the reviewed prompt. A visual mismatch should cause an explicit prompt/reference revision or a different candidate choice; it must not silently rewrite the confirmed director interpretation.
+
+## Target structured handoff for scene design and shots
+
+This is the target schema, not a claim that all fields are implemented. `scene.description` and confirmed director/plan revisions initialize a scene-design draft; the user confirms the draft before it becomes an asset source. The scene design then proposes initial shot values, while the shot owns any local override.
+
+| Owner | Structured fields | Scope and review rule |
+| --- | --- | --- |
+| Scene design | Scene description; explicit character asset IDs and selected variants; prop asset IDs and selected variants; style; lighting with ambient baseline and scoped local accents; reference-image camera/viewpoint and framing | Saved as a versioned scene-design snapshot. Character and prop references are relationships, not copied prose. Occupancy/precise placement is reserved and not required now. The user reviews the compiled scene-image prompt before generation. |
+| Shot design | Exact scene/character/prop reference image variants; current prompt; voice/voice asset; camera movement; shot/camera treatment; shot size; camera position/angle; transition | Saved per shot. Initially inherits relevant scene design and director plan values, then allows explicit local overrides. A shot must never mutate the upstream scene-design revision. The user reviews the final image/video request before submission. |
+
+`scene_design.camera` means the observation angle used to create a scene reference image. `shot.camera_movement`, `shot.shot_size`, `shot.camera_angle` and `shot.transition` describe the moving shot. Do not merge these fields by name. A lighting accent must carry a target region or subject and an effect scope; “残阳如血” may apply to the distant sun while the street retains blue dusk ambient light. Do not promote narrative wording into a global style or lighting override.
+
+Each projection records the director revision, scene-design revision, selected variant IDs, shot revision and source for each inherited/overridden field. An upstream change marks affected downstream drafts for review; it does not rewrite approved prompts or images. The first implementation slice should persist scene-design fields and preview their compiled prompt, then project them into one shot with explicit override controls and an exact request preflight.
 
 ## Projection and revision rules
 
@@ -33,6 +59,8 @@ This contract covers character, scene, and prop image generation in Studio asset
 ## Remaining work
 
 - Bring the structure of scene/prop AI design drafts beyond one `visual_notes` string if field-specific editing proves useful. Keep frame content and continuity choices at generation scope, outside the reusable asset design record.
+- PR #171's scene lighting/camera tools create new candidates from an existing source variant; they are image-edit operations, not the initial director → asset → shot inheritance model. Before integrating them, add a preflight for the server-compiled image-edit prompt, expose the intended lighting region, and show the source/result variant relationship. Keep the PR separate until its large branch and conflicts are reviewed.
+- Shot-design first/last-frame candidates must use a separate read-only preflight: show the exact assembled positive/negative prompt, effective image model, ratio and frame source before a paid render. Bind confirmation to the current frame context and reject stale submissions. Candidate rendering must preserve the reviewed prompt verbatim. Explicit reference variant selection for this path remains a separate follow-up; until then the UI must say that the generator selects references from the frame's current character/scene assets.
 
 ### Preflight cutover
 
