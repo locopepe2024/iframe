@@ -4,7 +4,7 @@ import { MessageSquare, Plus } from 'lucide-react';
 import { useTranslations } from 'next-intl';
 import clsx from 'clsx';
 import { useState } from 'react';
-import { playgroundApi } from '@/lib/api';
+import { agentRequest, playgroundApi } from '@/lib/api';
 import FullNameHints from './FullNameHints';
 import OverflowActions from './OverflowActions';
 import { shortReferenceLabel } from './referenceMedia';
@@ -26,6 +26,30 @@ export default function PlaygroundSessionSubnav() {
   const [renaming, setRenaming] = useState<string | null>(null);
   const [title, setTitle] = useState('');
   const [busy, setBusy] = useState(false);
+  const [factSettingsOpen, setFactSettingsOpen] = useState(false);
+  const [factCategories, setFactCategories] = useState<Array<{ id: string; display_name: string; auto_capture_enabled: boolean }>>([]);
+  const [factSettingsError, setFactSettingsError] = useState('');
+
+  const openFactSettings = async () => {
+    setFactSettingsError('');
+    setFactSettingsOpen(true);
+    try {
+      const result = await agentRequest<{ categories: typeof factCategories }>('/fact-categories');
+      setFactCategories(result.categories);
+    } catch { setFactSettingsError(t('factSettingsLoadFailed')); }
+  };
+
+  const toggleFactCategory = async (category: typeof factCategories[number]) => {
+    const next = !category.auto_capture_enabled;
+    setFactCategories(current => current.map(item => item.id === category.id ? { ...item, auto_capture_enabled: next } : item));
+    try {
+      const result = await agentRequest<{ category: typeof category }>(`/fact-categories/${encodeURIComponent(category.id)}`, 'PATCH', { auto_capture_enabled: next });
+      setFactCategories(current => current.map(item => item.id === category.id ? { ...item, ...result.category } : item));
+    } catch {
+      setFactCategories(current => current.map(item => item.id === category.id ? { ...item, auto_capture_enabled: category.auto_capture_enabled } : item));
+      setFactSettingsError(t('factSettingsSaveFailed'));
+    }
+  };
   const remove = async (id: string) => {
     setError('');
     try {
@@ -116,12 +140,29 @@ export default function PlaygroundSessionSubnav() {
             </button>
             <OverflowActions label={t('manage')} actions={[
               { label: t('rename'), onClick: () => { setRenaming(session.id); setTitle(session.title); } },
+              { label: t('factSettings'), onClick: () => { void openFactSettings(); } },
               { label: t('delete'), danger: true, onClick: () => { void remove(session.id); } },
             ]} />
             </div>
           );
         })}
       </div>
+      {factSettingsOpen && <div role="dialog" aria-label={t('factSettings')} className="fixed inset-0 z-[90] flex items-center justify-center bg-black/40 p-4" onClick={() => setFactSettingsOpen(false)}>
+        <section className="w-full max-w-sm rounded-xl border border-glass-border bg-elevated p-4 shadow-xl" onClick={event => event.stopPropagation()}>
+          <div className="flex items-center justify-between gap-3">
+            <h2 className="text-sm font-semibold text-foreground">{t('factSettings')}</h2>
+            <button type="button" onClick={() => setFactSettingsOpen(false)} className="text-xs text-text-muted hover:text-foreground">{t('close')}</button>
+          </div>
+          <p className="mt-2 text-xs leading-5 text-text-muted">{t('factSettingsDescription')}</p>
+          {factSettingsError && <p role="alert" className="mt-2 text-xs text-status-failed-fg">{factSettingsError}</p>}
+          <div className="mt-3 space-y-1">
+            {factCategories.map(category => <label key={category.id} className="flex min-h-10 items-center justify-between gap-3 rounded-lg px-2 hover:bg-hover-bg">
+              <span className="text-xs text-foreground">{category.display_name}</span>
+              <input type="checkbox" checked={category.auto_capture_enabled} onChange={() => { void toggleFactCategory(category); }} className="h-4 w-4 accent-primary" />
+            </label>)}
+          </div>
+        </section>
+      </div>}
     </FullNameHints>
   );
 }

@@ -3,9 +3,10 @@ import { beforeEach, expect, it, vi } from 'vitest';
 import PlaygroundSessionSubnav from './PlaygroundSessionSubnav';
 import { usePlaygroundStore } from './usePlaygroundStore';
 const api = vi.hoisted(() => ({ deleteSession: vi.fn().mockResolvedValue({ ok: true }), updateSession: vi.fn() }));
+const agent = vi.hoisted(() => ({ agentRequest: vi.fn().mockResolvedValue({ categories: [] }) }));
 const controller = vi.hoisted(() => ({ createPlaygroundSession: vi.fn().mockResolvedValue({}), openPlaygroundSession: vi.fn().mockResolvedValue(undefined) }));
 vi.mock('next-intl', () => ({ useTranslations: () => (key: string) => key }));
-vi.mock('@/lib/api', () => ({ playgroundApi: api }));
+vi.mock('@/lib/api', () => ({ playgroundApi: api, agentRequest: agent.agentRequest }));
 vi.mock('./playgroundSessionController', () => controller);
 const session = { id: 's', title: '第一个测试会话', updated_at: '2026-09-15', created_at: '2026-09-15', draft: { mode: 't2i' as const, model_id: '', prompt: '', input_media: [], parameters: {}, batch_size: 1 } };
 beforeEach(() => {
@@ -36,4 +37,14 @@ it('removes the active last session and opens a blank session', async () => {
   await waitFor(() => expect(controller.createPlaygroundSession).toHaveBeenCalledTimes(1));
   expect(api.deleteSession).toHaveBeenCalledWith('s');
   expect(usePlaygroundStore.getState().sessions).toEqual([]);
+});
+
+it('opens automatic fact save settings from the session menu', async () => {
+  agent.agentRequest.mockResolvedValueOnce({ categories: [{ id: 'health', display_name: '健康', auto_capture_enabled: true }] });
+  render(<PlaygroundSessionSubnav />);
+  fireEvent.click(screen.getByRole('button', { name: 'manage' }));
+  fireEvent.click(screen.getByRole('menuitem', { name: 'factSettings' }));
+  expect(await screen.findByRole('dialog', { name: 'factSettings' })).toBeInTheDocument();
+  fireEvent.click(screen.getByRole('checkbox'));
+  await waitFor(() => expect(agent.agentRequest).toHaveBeenLastCalledWith('/fact-categories/health', 'PATCH', { auto_capture_enabled: false }));
 });

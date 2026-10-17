@@ -18,7 +18,7 @@ import base64
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
+from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, UploadFile
 from openai import APIConnectionError, APIStatusError, APITimeoutError
 from pydantic import BaseModel, Field, ValidationError
 
@@ -30,6 +30,7 @@ from ..utils.uniart_catalog import normalize_uniart_catalog
 from ..utils.reference_files import AUDIO_EXTENSIONS, DOCUMENT_EXTENSIONS, TEXT_EXTENSIONS, chat_audio, read_reference_document, read_reference_text
 from .media_reference import normalize_managed_media_reference
 from .agent_tools import search_knowledge
+from . import agent_facts
 
 router = APIRouter(prefix="/agent", tags=["agent"])
 router.include_router(skills_router)
@@ -70,6 +71,10 @@ def database():
     try:
         db.execute("CREATE TABLE IF NOT EXISTS sessions (owner TEXT, id TEXT, payload TEXT, busy REAL DEFAULT 0, PRIMARY KEY(owner,id))")
         db.execute("CREATE TABLE IF NOT EXISTS agent_memories (id TEXT PRIMARY KEY, owner TEXT NOT NULL, content TEXT NOT NULL, category TEXT NOT NULL, source_session_id TEXT NOT NULL, source_message_id TEXT NOT NULL, source_quote TEXT NOT NULL, created_at REAL NOT NULL, updated_at REAL NOT NULL)")
+        agent_facts.migrate(db)
+        # Category defaults are seed writes; commit them before callers begin
+        # their own IMMEDIATE transaction.
+        db.commit()
         yield db
         db.commit()
     finally:
@@ -754,6 +759,60 @@ def memories(ctx: UserContext = Depends(require_user_context)):
     return {"memories": [dict(row) for row in rows]}
 
 
+@router.get("/facts")
+def facts(since: float | None = None, until: float | None = None,
+          category: str | None = None, limit: int = 100,
+          ctx: UserContext = Depends(require_user_context)):
+    with database() as db:
+        return {"events": agent_facts.list_events(db, ctx.owner_profile_id, since, until, category, limit)}
+
+
+@router.post("/facts/query")
+def query_facts(body: agent_facts.FactTimelineQuery,
+                ctx: UserContext = Depends(require_user_context)):
+    with database() as db:
+        return agent_facts.query_timeline(db, ctx.owner_profile_id, body)
+
+
+@router.get("/fact-categories")
+def fact_categories(ctx: UserContext = Depends(require_user_context)):
+    with database() as db:
+        return {"categories": agent_facts.categories(db, ctx.owner_profile_id)}
+
+
+@router.patch("/fact-categories/{category}")
+def patch_fact_category(category: str, body: agent_facts.FactCategoryPatch,
+                        ctx: UserContext = Depends(require_user_context)):
+    with database() as db:
+        return {"category": agent_facts.patch_category(db, ctx.owner_profile_id, category, body)}
+
+
+@router.post("/facts/extract")
+def extract_facts(body: agent_facts.FactExtractionRequest,
+                  ctx: UserContext = Depends(require_user_context)):
+    with database() as db:
+        _, session = read_session(db, ctx.owner_profile_id, body.source_session_id)
+        agent_facts._source(db, ctx.owner_profile_id, body.source_session_id, body.source_message_id)
+    ids = agent_facts.extract_saved_message(ctx, body.source_session_id, body.source_message_id, session["model"])
+    with database() as db:
+        rows = [dict(db.execute("SELECT * FROM agent_fact_events WHERE id=?", (item,)).fetchone()) for item in ids]
+    return {"events": rows}
+
+
+@router.post("/facts/{event_id}/correct")
+def correct_fact(event_id: str, body: agent_facts.FactCorrectionRequest,
+                 ctx: UserContext = Depends(require_user_context)):
+    with database() as db:
+        return {"event": agent_facts.correct_event(db, ctx.owner_profile_id, event_id, body)}
+
+
+@router.delete("/facts/{event_id}")
+def delete_fact(event_id: str, ctx: UserContext = Depends(require_user_context)):
+    with database() as db:
+        agent_facts.suppress_event(db, ctx.owner_profile_id, event_id)
+    return {"ok": True}
+
+
 def _memory_key(value: str) -> str:
     normalized = unicodedata.normalize("NFKC", value).casefold()
     return re.sub(r"\s+", "", normalized).rstrip("。！？.!?；;，,")
@@ -873,6 +932,7 @@ def delete(sid: str, ctx: UserContext = Depends(require_user_context)):
         if row["busy"] > time.time():
             raise HTTPException(409, "请等待当前回复完成")
         db.execute("DELETE FROM agent_memories WHERE owner=? AND source_session_id=?", (ctx.owner_profile_id, sid))
+        agent_facts.delete_source(db, ctx.owner_profile_id, sid)
         db.execute("DELETE FROM sessions WHERE owner=? AND id=?", (ctx.owner_profile_id, sid))
     return {"ok": True}
 
@@ -1098,7 +1158,8 @@ def complete_h3_context_ir(ctx, content, duration, ratio, idempotency_key):
 
 
 @router.post("/sessions/{sid}/messages")
-def send(sid: str, body: MessageCreate, ctx: UserContext = Depends(require_user_context)):
+def send(sid: str, body: MessageCreate, ctx: UserContext = Depends(require_user_context),
+         background_tasks: BackgroundTasks = None):
     # Selected Playground media is a candidate list, not attachment consent.
     # Normalize before validation and every dispatch path, including H3/research.
     if "@" not in body.content:
@@ -1228,6 +1289,8 @@ def send(sid: str, body: MessageCreate, ctx: UserContext = Depends(require_user_
                                     (json.dumps(session), owner, sid, lease))
                 if result.rowcount != 1:
                     raise HTTPException(409, "会话已更新，请重新加载")
+            if background_tasks is not None:
+                background_tasks.add_task(agent_facts.extract_saved_message, ctx, sid, user["id"], session["model"])
             if failure_http_exc:
                 raise failure_http_exc
             projected = public_media_messages([user, assistant], ctx)
@@ -1352,6 +1415,8 @@ def send(sid: str, body: MessageCreate, ctx: UserContext = Depends(require_user_
             result = db.execute("UPDATE sessions SET payload=?, busy=0 WHERE owner=? AND id=? AND busy=?", (json.dumps(session), owner, sid, lease))
             if result.rowcount != 1:
                 raise HTTPException(409, "会话已更新，请重新加载")
+        if background_tasks is not None:
+            background_tasks.add_task(agent_facts.extract_saved_message, ctx, sid, user["id"], session["model"])
         projected = public_media_messages([user, assistant], ctx)
         return dict(session=public(session), user_message=projected[0], assistant_message=projected[1])
     except HTTPException:
@@ -1466,5 +1531,6 @@ def delete_message(sid: str, mid: str, ctx: UserContext = Depends(require_user_c
             raise HTTPException(404, "消息不存在")
         session["messages"] = [m for m in session["messages"] if m["id"] != mid]
         db.execute("DELETE FROM agent_memories WHERE owner=? AND source_session_id=? AND source_message_id=?", (ctx.owner_profile_id, sid, mid))
+        agent_facts.delete_source(db, ctx.owner_profile_id, sid, mid)
         db.execute("UPDATE sessions SET payload=? WHERE owner=? AND id=?", (json.dumps(session), ctx.owner_profile_id, sid))
     return {"ok": True}
