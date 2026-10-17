@@ -1051,6 +1051,7 @@ class ComicGenPipeline(StudioOwnerMixin):
         model_id: str, aspect_ratio: str, generation_type: str,
         image_generation_mode: str, batch_size: int = 1,
         reference: Any = None, references: Any = None, scene_tool: Any = None,
+        edit_mode: str = "freeform",
     ) -> Dict[str, Any]:
         identities = ([reference] if reference else []) + list(references or [])
         return AssetImageSubmissionSnapshot(
@@ -1061,6 +1062,7 @@ class ComicGenPipeline(StudioOwnerMixin):
             generation_type=generation_type,
             batch_size=batch_size,
             image_generation_mode=image_generation_mode,
+            edit_mode=edit_mode,
             reference_inputs=[AssetImageReferenceIdentity.model_validate(item) for item in identities],
             scene_tool=scene_tool,
             design_revision_at_submission=cls._confirmed_asset_design_revision(asset, asset_type),
@@ -1087,7 +1089,7 @@ class ComicGenPipeline(StudioOwnerMixin):
         aspect_ratio: Optional[str] = None, generation_type: str = "all",
         image_generation_mode: str = "text", batch_size: int = 1,
         reference: Any = None, references: Any = None, is_series: bool = False,
-        scene_tool: Any = None,
+        scene_tool: Any = None, edit_mode: Optional[str] = None,
     ) -> Dict[str, Any]:
         """Read-only projection of the exact reviewed request; never invokes a model."""
         if asset_type not in ("character", "scene", "prop"):
@@ -1119,6 +1121,13 @@ class ComicGenPipeline(StudioOwnerMixin):
             if prompt != scene_tool_prompt(parsed, len(normalized_references) == 2):
                 raise InvalidAssetReference("scene tool prompt must match the reviewed compiled prompt")
             normalized_scene_tool = parsed.model_dump()
+            expected_mode = "scene_lighting" if parsed.kind == "lighting" else "scene_camera"
+            edit_mode = edit_mode or expected_mode
+            if edit_mode != expected_mode:
+                raise InvalidAssetReference("edit_mode must match scene_tool.kind")
+        elif edit_mode not in (None, "freeform"):
+            raise InvalidAssetReference("structured edit_mode requires scene_tool")
+        edit_mode = edit_mode or "freeform"
         self._validate_asset_generation_mode(
             image_generation_mode, bool(normalized_reference or normalized_references),
         )
@@ -1144,6 +1153,7 @@ class ComicGenPipeline(StudioOwnerMixin):
             generation_type=generation_type, image_generation_mode=image_generation_mode,
             batch_size=batch_size, reference=normalized_reference, references=normalized_references,
             scene_tool=normalized_scene_tool,
+            edit_mode=edit_mode,
         )
         return {**{key: value for key, value in snapshot.items() if key != "submitted_at"},
                 "fingerprint": self._asset_review_fingerprint(
@@ -1369,8 +1379,8 @@ class ComicGenPipeline(StudioOwnerMixin):
                                       model_name: str = None, aspect_ratio: str = None,
                                       reference: Any = None, references: Any = None,
                                       image_generation_mode: str = "text", preserve_prompt: bool = False,
-                                      expected_review_fingerprint: Optional[str] = None,
-                                      scene_tool: Any = None) -> Tuple[Script, str]:
+                                       expected_review_fingerprint: Optional[str] = None,
+                                      scene_tool: Any = None, edit_mode: Optional[str] = None) -> Tuple[Script, str]:
         """Creates an async asset generation task and returns (script, task_id) immediately."""
         script = self.scripts.get(script_id)
         if not script:
@@ -1397,6 +1407,13 @@ class ComicGenPipeline(StudioOwnerMixin):
             if prompt != compiled_prompt:
                 raise InvalidAssetReference("scene tool prompt must match the reviewed compiled prompt")
             apply_style = False
+            expected_mode = "scene_lighting" if parsed_scene_tool.kind == "lighting" else "scene_camera"
+            edit_mode = edit_mode or expected_mode
+            if edit_mode != expected_mode:
+                raise InvalidAssetReference("edit_mode must match scene_tool.kind")
+        elif edit_mode not in (None, "freeform"):
+            raise InvalidAssetReference("structured edit_mode requires scene_tool")
+        edit_mode = edit_mode or "freeform"
 
         if references and (reference is not None or reference_image_url):
             raise InvalidAssetReference("multiple structured references cannot be combined with a singular legacy reference")
@@ -1448,6 +1465,7 @@ class ComicGenPipeline(StudioOwnerMixin):
                     image_generation_mode=image_generation_mode, batch_size=batch_size,
                     reference=normalized_reference, references=normalized_references,
                     scene_tool=normalized_scene_tool,
+                    edit_mode=edit_mode,
                 )
                 if expected_review_fingerprint and review["fingerprint"] != expected_review_fingerprint:
                     raise AssetReviewChanged("Asset image review changed; open the submission review again")

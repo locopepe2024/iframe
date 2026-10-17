@@ -631,6 +631,7 @@ class GenerateAssetRequest(BaseModel):
     apply_style: bool = True
     preserve_prompt: bool = False
     scene_tool: Optional[Dict[str, Any]] = None
+    edit_mode: Optional[Literal["freeform", "scene_lighting", "scene_camera"]] = None
     negative_prompt: Optional[str] = None
     batch_size: int = 1
     model_name: Optional[str] = None
@@ -1512,6 +1513,7 @@ def preview_project_asset_image(script_id: str, request: GenerateAssetRequest):
             image_generation_mode=request.image_generation_mode, batch_size=request.batch_size,
             reference=request.reference, references=request.references,
             scene_tool=request.scene_tool,
+            edit_mode=request.edit_mode,
         )
     except (InvalidAssetReference, ValueError) as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
@@ -3875,6 +3877,7 @@ def generate_single_asset(script_id: str, request: GenerateAssetRequest, backgro
             request.preserve_prompt,
             request.expected_review_fingerprint,
             request.scene_tool,
+            request.edit_mode,
         )
         
         # Add background processing
