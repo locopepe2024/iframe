@@ -10,6 +10,13 @@ import {
 
 const apiMocks = vi.hoisted(() => ({
     getAssetReferenceIndex: vi.fn(),
+    previewAssetImageSubmission: vi.fn((_id: string, request: any) => Promise.resolve({
+        positive_prompt: request.prompt, negative_prompt: request.negative_prompt,
+        selected_model_id: "test-model", aspect_ratio: "9:16",
+        generation_type: request.generation_type, image_generation_mode: request.image_generation_mode,
+        batch_size: request.batch_size, reference_inputs: request.reference ? [request.reference] : request.references || [],
+        design_revision_at_submission: null, fingerprint: "reviewed",
+    })),
     agentRequest: vi.fn((path: string) => path === "/models"
         ? Promise.resolve({ models: [{ api_model_id: "qwen", display_name: "Qwen" }] })
         : Promise.resolve({ identity: { visual_notes: "深棕眼" }, look: { visual_notes: "黑色劲装" }, skill_revision: "skill-hash" })),
@@ -277,6 +284,9 @@ it("loads the project reference index for the character workbench", async () => 
     await waitFor(() => expect(document.querySelector('[data-reference-variant-id="watch-front"]')).toBeInTheDocument());
     fireEvent.click(screen.getAllByRole("button", { name: "Reference image" })[0]);
     fireEvent.click(screen.getAllByTestId("variant-generate")[0]);
+    const confirm = await screen.findByRole("button", { name: "确认并生成" });
+    await waitFor(() => expect(confirm).not.toBeDisabled());
+    fireEvent.click(confirm);
     await waitFor(() => expect(onGenerate).toHaveBeenCalledWith(
         "full_body",
         "@Pocket watch ",
@@ -285,6 +295,7 @@ it("loads the project reference index for the character workbench", async () => 
         1,
         [{ asset_type: "prop", asset_id: "watch-1", variant_id: "watch-front" }],
         "reference",
+        "reviewed",
     ));
 });
 
@@ -605,6 +616,9 @@ it("refreshes the reference index when a generated project snapshot arrives", as
     await waitFor(() => expect(document.querySelector('[data-reference-variant-id="new-view"]')).toBeInTheDocument());
     fireEvent.click(screen.getAllByRole("button", { name: "Reference image" })[0]);
     fireEvent.click(screen.getAllByTestId("variant-generate")[0]);
+    const confirm = await screen.findByRole("button", { name: "确认并生成" });
+    await waitFor(() => expect(confirm).not.toBeDisabled());
+    fireEvent.click(confirm);
 
     await waitFor(() => expect(onGenerate).toHaveBeenCalledWith(
         "full_body",
@@ -614,6 +628,7 @@ it("refreshes the reference index when a generated project snapshot arrives", as
         1,
         [{ asset_type: "character", asset_id: "character-1", variant_id: "new-view" }],
         "reference",
+        "reviewed",
     ));
 });
 

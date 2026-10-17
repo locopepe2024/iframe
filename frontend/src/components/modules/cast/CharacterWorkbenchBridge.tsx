@@ -30,6 +30,7 @@ export default function CharacterWorkbenchBridge({ entityId, onClose }: { entity
         batchSize: number,
         references: AssetLibraryReference[] = [],
         imageGenerationMode: "text" | "reference" = "text",
+        reviewFingerprint?: string,
     ) => {
         if (!project) return;
         const generationType = type === "reference_sheet" ? "reference_sheet" : type;
@@ -57,6 +58,7 @@ export default function CharacterWorkbenchBridge({ entityId, onClose }: { entity
                 imageGenerationMode === "reference" && !isDerivedView ? references : [],
                 imageGenerationMode,
                 true,
+                reviewFingerprint,
             );
             if ((result as any)?._task_id) {
                 const taskId = (result as any)._task_id;

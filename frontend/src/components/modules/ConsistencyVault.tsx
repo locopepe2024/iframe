@@ -5,7 +5,7 @@ import { useTranslations } from "next-intl";
 import { motion, AnimatePresence } from "framer-motion";
 import { Paintbrush, User, Users, MapPin, Box, Lock, Unlock, RefreshCw, Upload, Image as ImageIcon, X, Check, Settings, ChevronRight, Trash2, Plus, Link as LinkIcon, Sparkles } from "lucide-react";
 import { useProjectStore } from "@/store/projectStore";
-import { agentRequest, api, API_URL, authenticatedFetch, crudApi, type AssetLibraryReference, type ChatModel } from "@/lib/api";
+import { agentRequest, api, API_URL, authenticatedFetch, crudApi, type AssetImageReviewRequest, type AssetLibraryReference, type ChatModel } from "@/lib/api";
 import { extractErrorDetail, getAssetUrl } from "@/lib/utils";
 import { includeVisibleStyle } from "@/lib/assetPromptStyle";
 import CharacterWorkbench from "./CharacterWorkbench";
@@ -29,6 +29,7 @@ import EpisodeAssetPlanPanel from "./EpisodeAssetPlanPanel";
 import AssetCoverBadges from "./AssetCoverBadges";
 import { characterImageUrl } from "@/lib/characterImage";
 import AssetNameEditor from "../common/AssetNameEditor";
+import AssetImageSubmissionReview from "@/components/shared/AssetImageSubmissionReview";
 
 export default function ConsistencyVault() {
     const tv = useTranslations("vault");
@@ -203,7 +204,7 @@ export default function ConsistencyVault() {
         }
     };
 
-    const handleGenerate = async (assetId: string, type: string, generationType: string = "all", prompt: string = "", _applyStyle: boolean = false, negativePrompt: string = "", batchSize: number = 1, references: AssetLibraryReference[] = [], imageGenerationMode: "text" | "reference" = "text", _preservePrompt: boolean = true) => {
+    const handleGenerate = async (assetId: string, type: string, generationType: string = "all", prompt: string = "", _applyStyle: boolean = false, negativePrompt: string = "", batchSize: number = 1, references: AssetLibraryReference[] = [], imageGenerationMode: "text" | "reference" = "text", _preservePrompt: boolean = true, reviewFingerprint?: string) => {
         if (!currentProject) return;
         if (!prompt.trim()) {
             toast.warning("Review and enter the final image prompt before generating.");
@@ -241,6 +242,7 @@ export default function ConsistencyVault() {
                 isDerivedCharacter ? [] : references,
                 imageGenerationMode,
                 true,
+                reviewFingerprint,
             );
 
             const taskId = response._task_id;
@@ -766,7 +768,7 @@ export default function ConsistencyVault() {
                             onUpdateDescription={(desc: string) => handleUpdateDescription(selectedAssetId, selectedAssetType, desc)}
                             onUpdateAttributes={(attributes: Record<string, unknown>) => handleUpdateAttributes(selectedAssetId, selectedAssetType, attributes)}
                             onRename={(name: string) => handleRenameAsset(selectedAssetId, selectedAssetType, name)}
-                            onGenerate={(type: string, prompt: string, applyStyle: boolean, negativePrompt: string, batchSize: number, references?: AssetLibraryReference[], imageGenerationMode?: "text" | "reference") => handleGenerate(selectedAssetId, selectedAssetType, type, prompt, applyStyle, negativePrompt, batchSize, references, imageGenerationMode)}
+                            onGenerate={(type: string, prompt: string, applyStyle: boolean, negativePrompt: string, batchSize: number, references?: AssetLibraryReference[], imageGenerationMode?: "text" | "reference", reviewFingerprint?: string) => handleGenerate(selectedAssetId, selectedAssetType, type, prompt, applyStyle, negativePrompt, batchSize, references, imageGenerationMode, true, reviewFingerprint)}
                             generatingTypes={getAssetGeneratingTypes(selectedAssetId)}
                             stylePrompt={currentProject?.art_direction?.style_config?.positive_prompt || ""}
                             styleNegativePrompt={currentProject?.art_direction?.style_config?.negative_prompt || ""}
@@ -785,7 +787,7 @@ export default function ConsistencyVault() {
                             }}
                             onUpdateDescription={(desc: string) => handleUpdateDescription(selectedAssetId, selectedAssetType, desc)}
                             onRename={(name: string) => handleRenameAsset(selectedAssetId, selectedAssetType, name)}
-                            onGenerate={(prompt: string, applyStyle: boolean, negativePrompt: string, batchSize: number, references?: AssetLibraryReference[], imageGenerationMode?: "text" | "reference", preservePrompt?: boolean) => handleGenerate(selectedAssetId, selectedAssetType, "all", prompt, applyStyle, negativePrompt, batchSize, references, imageGenerationMode, preservePrompt)}
+                            onGenerate={(prompt: string, applyStyle: boolean, negativePrompt: string, batchSize: number, references?: AssetLibraryReference[], imageGenerationMode?: "text" | "reference", preservePrompt?: boolean, reviewFingerprint?: string) => handleGenerate(selectedAssetId, selectedAssetType, "all", prompt, applyStyle, negativePrompt, batchSize, references, imageGenerationMode, preservePrompt, reviewFingerprint)}
                             isGenerating={isAssetGenerating(selectedAssetId)}
                             stylePrompt={currentProject?.art_direction?.style_config?.positive_prompt || ""}
                             styleNegativePrompt={currentProject?.art_direction?.style_config?.negative_prompt || ""}
@@ -1049,6 +1051,7 @@ function CharacterDetailModal({ asset, type, onClose, onUpdateDescription, onRen
 
     // Style Controls
     const [negativePrompt, setNegativePrompt] = useState(styleNegativePrompt || DEFAULT_CHARACTER_NEGATIVE_PROMPT);
+    const [pendingImageReview, setPendingImageReview] = useState<AssetImageReviewRequest | null>(null);
     const [showAdvanced, setShowAdvanced] = useState(false);
 
     // Video Controls
@@ -1212,7 +1215,23 @@ function CharacterDetailModal({ asset, type, onClose, onUpdateDescription, onRen
             toast.warning(tv("referenceModeSelectExplicitly"));
             return;
         }
-        onGenerate(imagePrompt, false, negativePrompt, batchSize, promptReferences, imageGenerationMode, true);
+        if (!currentProject?.id || !imagePrompt.trim()) {
+            toast.warning("Review a non-empty image prompt before generating.");
+            return;
+        }
+        setPendingImageReview({
+            asset_id: asset.id,
+            asset_type: type,
+            generation_type: "all",
+            prompt: imagePrompt,
+            negative_prompt: negativePrompt,
+            batch_size: batchSize,
+            model_name: currentProject.series_id ? undefined : resolveAssetGenerationModel(currentProject.model_settings?.t2i_model),
+            references: promptReferences,
+            image_generation_mode: imageGenerationMode,
+            apply_style: false,
+            preserve_prompt: true,
+        });
     };
 
     return (
@@ -1480,6 +1499,18 @@ function CharacterDetailModal({ asset, type, onClose, onUpdateDescription, onRen
                     </div>
                 </div>
             </motion.div>
+            {pendingImageReview && currentProject?.id && <AssetImageSubmissionReview
+                projectId={currentProject.id}
+                request={pendingImageReview}
+                onBack={() => setPendingImageReview(null)}
+                onConfirm={(review) => {
+                    const request = pendingImageReview;
+                    setPendingImageReview(null);
+                    onGenerate(request.prompt, false, request.negative_prompt,
+                        request.batch_size, request.references || [], request.image_generation_mode,
+                        true, review.fingerprint);
+                }}
+            />}
         </div>
     );
 }

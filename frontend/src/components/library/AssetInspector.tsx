@@ -6,7 +6,7 @@ import { X, Star, Download, Sparkles, Loader2, Globe, History, RotateCcw, Check 
 import type { Character, Scene, Prop, ImageAsset, ImageVariant } from "@/store/projectStore";
 import { useProjectStore } from "@/store/projectStore";
 import { characterImageAsset } from "@/lib/characterImage";
-import { api, type AssetCoverSelectionResult, type AssetRevisionHistory } from "@/lib/api";
+import { api, type AssetCoverSelectionResult, type AssetImageReviewProjection, type AssetImageReviewRequest, type AssetRevisionHistory } from "@/lib/api";
 import { waitForAssetTask } from "@/lib/assetTaskPolling";
 import { resolveAssetGenerationModel } from "@/lib/modelCatalog";
 import { toast } from "@/store/toastStore";
@@ -15,6 +15,7 @@ import { getAssetUrl } from "@/lib/utils";
 import { resolveAssetVariantDelivery } from "@/lib/mediaDelivery";
 import AssetNameEditor from "@/components/common/AssetNameEditor";
 import { AssetIndexPreview } from "@/components/shared/AssetIndexPreview";
+import AssetImageSubmissionReview from "@/components/shared/AssetImageSubmissionReview";
 
 type AssetTab = "characters" | "scenes" | "props";
 
@@ -154,6 +155,7 @@ export default function AssetInspector({
   const [savingRevision, setSavingRevision] = useState(false);
   const [generationPrompt, setGenerationPrompt] = useState("");
   const [generationNegativePrompt, setGenerationNegativePrompt] = useState("");
+  const [pendingImageReview, setPendingImageReview] = useState<AssetImageReviewRequest | null>(null);
   const [heroDelivery, setHeroDelivery] = useState<{ variantId: string; url: string }>();
 
   const variantIds = variants.map((item) => item.id).join("|");
@@ -175,6 +177,7 @@ export default function AssetInspector({
   useEffect(() => {
     setGenerationPrompt(asset.description || "");
     setGenerationNegativePrompt("");
+    setPendingImageReview(null);
   }, [asset.id]);
 
   // 切换选中资产时重置本地高亮的变体 + 丢弃上一个资产本地追加的变体。
@@ -347,8 +350,26 @@ export default function AssetInspector({
 
   // 生成更多变体：仅 project 资产可用（series 无生成端点）。复用按项目 batch 生成管线，
   // 完成后优先使用任务返回的目标资产快照，并高亮最新一张。
-  const handleGenerateVariants = async () => {
-    if (sourceKind !== "project" || generating || !generationPrompt.trim()) return;
+  const handleGenerateVariants = async (approved?: { request: AssetImageReviewRequest; review: AssetImageReviewProjection }) => {
+    if (sourceKind !== "project" || generating) return;
+    if (!approved) {
+      if (!generationPrompt.trim()) return;
+      const projectId = sourceId.replace(/^project-/, "");
+      setPendingImageReview({
+        asset_id: asset.id,
+        asset_type: SINGULAR_TYPE[type] as "character" | "scene" | "prop",
+        generation_type: type === "characters" ? "reference_sheet" : "all",
+        prompt: generationPrompt.trim(),
+        negative_prompt: generationNegativePrompt,
+        batch_size: VARIANT_BATCH,
+        model_name: resolveAssetGenerationModel(currentProject?.id === projectId ? currentProject.model_settings?.t2i_model : undefined),
+        image_generation_mode: "text",
+        apply_style: false,
+        preserve_prompt: true,
+      });
+      return;
+    }
+    const frozen = approved.request;
     const assetId = asset.id;
     // 父层传入的是列表 key（`project-<id>`）；生成/刷新 API 需要裸 project id。
     const projectId = sourceId.replace(/^project-/, "");
@@ -363,23 +384,18 @@ export default function AssetInspector({
         SINGULAR_TYPE[type],
         "",
         "",
-        type === "characters" ? "reference_sheet" : "all",
-        generationPrompt.trim(),
+        frozen.generation_type,
+        frozen.prompt,
         false,
-        generationNegativePrompt,
-        VARIANT_BATCH,
-        sourceKind === "project"
-          ? resolveAssetGenerationModel(
-              currentProject?.id === projectId
-                ? currentProject.model_settings?.t2i_model
-                : undefined,
-            )
-          : undefined,
+        frozen.negative_prompt,
+        frozen.batch_size,
+        frozen.model_name,
         undefined,
         undefined,
         [],
         "text",
         true,
+        approved.review.fingerprint,
       );
       const taskId = (resp as { _task_id?: string } | undefined)?._task_id;
       let taskAsset: any;
@@ -649,7 +665,7 @@ export default function AssetInspector({
                 className="w-full rounded border border-glass-border bg-surface p-2 text-sm text-foreground" />
             <button
               type="button"
-              onClick={handleGenerateVariants}
+              onClick={() => void handleGenerateVariants()}
               disabled={generating || !generationPrompt.trim()}
               className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg bg-primary text-on-accent text-sm font-semibold hover:bg-primary-hover transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
             >
@@ -695,6 +711,16 @@ export default function AssetInspector({
           </button>
         </div>
       </div>
+      {pendingImageReview && <AssetImageSubmissionReview
+        projectId={sourceId.replace(/^project-/, "")}
+        request={pendingImageReview}
+        onBack={() => setPendingImageReview(null)}
+        onConfirm={(review) => {
+          const request = pendingImageReview;
+          setPendingImageReview(null);
+          void handleGenerateVariants({ request, review });
+        }}
+      />}
     </aside>
   );
 }

@@ -4,7 +4,7 @@ import { useState, useEffect, useMemo, useRef, useId, useCallback } from "react"
 import { useTranslations } from "next-intl";
 import { motion, AnimatePresence } from "framer-motion";
 import { X, RefreshCw, Check, Image as ImageIcon, Lock, ChevronRight, ChevronDown, Video, PanelLeft, Sparkles, Search } from "lucide-react";
-import { agentRequest, api, type AssetLibraryReference, type AssetReferenceIndexEntry, type ChatModel } from "@/lib/api";
+import { agentRequest, api, type AssetImageReviewRequest, type AssetLibraryReference, type AssetReferenceIndexEntry, type ChatModel } from "@/lib/api";
 
 import { VariantSelector } from "../common/VariantSelector";
 import { VideoVariantSelector } from "../common/VideoVariantSelector";
@@ -16,6 +16,8 @@ import { AssetIndexPreview } from "@/components/shared/AssetIndexPreview";
 import PreviewVideo from "@/components/shared/preview/PreviewVideo";
 import PreviewImage from "@/components/shared/preview/PreviewImage";
 import { toast } from "@/store/toastStore";
+import { resolveAssetGenerationModel } from "@/lib/modelCatalog";
+import AssetImageSubmissionReview from "@/components/shared/AssetImageSubmissionReview";
 import {
     buildCharacterImagePrompt,
     buildCharacterMotionPrompt,
@@ -302,7 +304,7 @@ interface CharacterWorkbenchProps {
     onUpdateDescription: (desc: string) => void;
     onUpdateAttributes?: (attributes: Record<string, unknown>) => void | Promise<void>;
     onRename?: (name: string) => Promise<void>;
-    onGenerate: (type: string, prompt: string, applyStyle: boolean, negativePrompt: string, batchSize: number, references?: AssetLibraryReference[], imageGenerationMode?: "text" | "reference") => void;
+    onGenerate: (type: string, prompt: string, applyStyle: boolean, negativePrompt: string, batchSize: number, references?: AssetLibraryReference[], imageGenerationMode?: "text" | "reference", reviewFingerprint?: string) => void;
     generatingTypes: { type: string; batchSize: number }[];
     stylePrompt?: string;
     styleNegativePrompt?: string;
@@ -378,6 +380,7 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
         three_view: "text",
         headshot: "text",
     });
+    const [pendingImageReview, setPendingImageReview] = useState<AssetImageReviewRequest | null>(null);
 
     useEffect(() => {
         let active = true;
@@ -804,7 +807,24 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
             toast.warning("Select exactly one master image in Reference image mode for this character view.");
             return;
         }
-        onGenerate(type, prompt, false, negativePrompt, batchSize, references, imageGenerationMode);
+        if (!currentProject?.id || !prompt.trim()) {
+            toast.warning("Review a non-empty image prompt before generating.");
+            return;
+        }
+        const isDerived = type === "three_view" || type === "headshot";
+        setPendingImageReview({
+            asset_id: asset.id,
+            asset_type: "character",
+            generation_type: type,
+            prompt,
+            negative_prompt: negativePrompt,
+            batch_size: batchSize,
+            model_name: currentProject.series_id ? undefined : resolveAssetGenerationModel(currentProject.model_settings?.t2i_model),
+            image_generation_mode: imageGenerationMode,
+            ...(isDerived ? { reference: references[0] } : { references }),
+            apply_style: false,
+            preserve_prompt: true,
+        });
     };
 
     const setPanelReferences = (type: "full_body" | "three_view" | "headshot", references: AssetLibraryReference[]) => {
@@ -1268,6 +1288,18 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
                     </div>
                 </details>
             </motion.div>
+            {pendingImageReview && currentProject?.id && <AssetImageSubmissionReview
+                projectId={currentProject.id}
+                request={pendingImageReview}
+                onBack={() => setPendingImageReview(null)}
+                onConfirm={(review) => {
+                    const request = pendingImageReview;
+                    setPendingImageReview(null);
+                    onGenerate(request.generation_type, request.prompt, false, request.negative_prompt,
+                        request.batch_size, request.reference ? [request.reference] : request.references || [],
+                        request.image_generation_mode, review.fingerprint);
+                }}
+            />}
         </div>
     );
 }

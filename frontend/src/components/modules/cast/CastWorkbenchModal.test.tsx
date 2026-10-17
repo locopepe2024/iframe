@@ -10,7 +10,7 @@ import { useToastStore } from '@/store/toastStore';
 import { agentRequest, api } from '@/lib/api';
 Object.defineProperty(Range.prototype, 'getClientRects', { configurable: true, value: () => [{ top: 0, bottom: 1, left: 0, right: 1 }] });
 Object.defineProperty(Range.prototype, 'getBoundingClientRect', { configurable: true, value: () => ({ top: 0, bottom: 1, left: 0, right: 1 }) });
-vi.mock('@/lib/api', () => ({ API_URL: '', agentRequest: vi.fn().mockResolvedValue({ installed: [] }), api: { getStylePresets: vi.fn().mockResolvedValue([]), getProject: vi.fn(), getTaskStatus: vi.fn(), getAssetReferenceIndex: vi.fn(), getEpisodeVisualContext: vi.fn(), listLibraryAssets: vi.fn(), generateAsset: vi.fn(), uploadAsset: vi.fn(), selectAssetVariant: vi.fn(), deleteAssetVariant: vi.fn(), updateAssetVariantMetadata: vi.fn(), updateAssetAttributes: vi.fn() } }));
+vi.mock('@/lib/api', () => ({ API_URL: '', agentRequest: vi.fn().mockResolvedValue({ installed: [] }), api: { getStylePresets: vi.fn().mockResolvedValue([]), getProject: vi.fn(), getTaskStatus: vi.fn(), getAssetReferenceIndex: vi.fn(), getEpisodeVisualContext: vi.fn(), listLibraryAssets: vi.fn(), generateAsset: vi.fn(), previewAssetImageSubmission: vi.fn(), uploadAsset: vi.fn(), selectAssetVariant: vi.fn(), deleteAssetVariant: vi.fn(), updateAssetVariantMetadata: vi.fn(), updateAssetAttributes: vi.fn() } }));
 vi.mock('@/components/common/GroupedModelGrid', () => ({ default: () => null }));
 vi.mock('@/components/shared/preview/PreviewImage', () => ({ default: ({ alt, clickToLightbox }: any) => <span onClick={clickToLightbox ? e => e.stopPropagation() : undefined}>{alt}</span> }));
 vi.mock('@/components/shared/AssetIndexPreview', () => ({ AssetIndexPreview: ({ alt }: { alt?: string }) => <span data-testid="asset-preview">{alt}</span> }));
@@ -28,6 +28,11 @@ function promptEditor() {
 function setPromptDocument(html: string) {
  act(() => { promptEditor().editor.commands.focus(); promptEditor().editor.commands.setContent(html); });
 }
+async function approveImageReview() {
+ const confirm = await screen.findByRole('button', { name: '确认并生成' });
+ await waitFor(() => expect(confirm).not.toBeDisabled());
+ fireEvent.click(confirm);
+}
 beforeEach(() => {
  cleanup();
  for (const poll of Array.from(activePolls.values())) clearInterval(poll);
@@ -37,6 +42,13 @@ beforeEach(() => {
  useToastStore.getState().clear();
  vi.mocked(api.getAssetReferenceIndex).mockResolvedValue({ schema_version: 1, project_id: 'project', assets: [] });
  vi.mocked(api.getEpisodeVisualContext).mockResolvedValue({ context: null, bindings: [] });
+ vi.mocked(api.previewAssetImageSubmission).mockImplementation(async (_id, request) => ({
+  positive_prompt: request.prompt, negative_prompt: request.negative_prompt,
+  selected_model_id: 'test-model', aspect_ratio: '9:16',
+  generation_type: request.generation_type, image_generation_mode: request.image_generation_mode,
+  batch_size: request.batch_size, reference_inputs: request.references || [],
+  design_revision_at_submission: null, fingerprint: 'reviewed',
+ }));
  useProjectStore.setState({ currentProject: project, projects: [project], currentSeries: null, generatingTasks: [] });
 });
 it('merges the completed target snapshot and clears its marker without fetching the project', async () => {
@@ -105,6 +117,7 @@ it('keeps an uploaded image in the candidate pool until @ explicitly binds it', 
  await waitFor(() => expect(screen.getByText('Test one')).toBeTruthy());
  expect(api.uploadAsset).toHaveBeenCalledWith('project', 'character', 'char', file, 'reference_sheet');
  fireEvent.click(screen.getByRole('button', { name: /Generate .*more/ }));
+ await approveImageReview();
  await waitFor(() => expect(api.generateAsset).toHaveBeenCalled());
  expect(vi.mocked(api.generateAsset).mock.calls[0][12]).toBeUndefined();
  expect(vi.mocked(api.generateAsset).mock.calls[0][13]).toEqual([]);
@@ -121,6 +134,7 @@ it('submits only once when generate is clicked twice during project validation',
  const button = await screen.findByRole('button', { name: /Generate first batch/ });
  fireEvent.click(button);
  fireEvent.click(button);
+ await approveImageReview();
 
  expect(api.getProject).toHaveBeenCalledTimes(1);
  await act(async () => finishValidation(project));
@@ -156,12 +170,14 @@ it('separates scene content from continuity and submits only reviewed text', asy
  fireEvent.click(within(screen.getByRole('region', { name: '场景画面描述' })).getAllByRole('button', { name: '加入此项' })[2]);
  fireEvent.change(screen.getByRole('textbox', { name: '排除词（单独提交给模型）' }), { target: { value: '不要偏红' } });
  fireEvent.click(screen.getByRole('button', { name: /Generate first batch/ }));
+ await approveImageReview();
  await waitFor(() => expect(api.generateAsset).toHaveBeenCalled());
  const args = vi.mocked(api.generateAsset).mock.calls[0];
  expect(args[6]).not.toContain('暖褐与血红夕照');
  expect(args[6]).toContain('匪寇围堵粮铺');
  expect(args[8]).toBe('不要偏红');
  expect(args[15]).toBe(true);
+ expect(args[16]).toBe('reviewed');
 });
 
 it('lets scene designers ask AI for an editable draft and save it without replacing the asset description', async () => {
@@ -217,6 +233,7 @@ it('keeps only the remaining selected scene image after an external prompt repla
  fireEvent.click(screen.getByRole('button', { name: '生成设计草稿' }));
  await waitFor(() => expect((screen.getByRole('textbox', { name: 'Generation description (editable template)' }) as any).editor.getText()).toContain('背景与@青溪镇青石板长街'));
  fireEvent.click(screen.getByRole('button', { name: /Generate first batch/ }));
+ await approveImageReview();
  await waitFor(() => expect(api.generateAsset).toHaveBeenCalled());
  expect(vi.mocked(api.generateAsset).mock.calls[0][13]).toEqual([
   { asset_type: 'scene', asset_id: 'long-street', variant_id: 'street-v1' },
@@ -249,6 +266,7 @@ it('shows the Cast generation-description @ menu and submits only selected stabl
  fireEvent.click(screen.getByRole('option', { name: /Pocket watch/ }));
  fireEvent.click(screen.getByRole('button', { name: 'Reference image' }));
  fireEvent.click(screen.getByRole('button', { name: /Generate first batch/ }));
+ await approveImageReview();
  await waitFor(() => expect(api.generateAsset).toHaveBeenCalled());
  const args = vi.mocked(api.generateAsset).mock.calls[0];
  expect(args[13]).toEqual([
@@ -272,6 +290,7 @@ it('selects a canonical output without silently using it as generation input', a
  await waitFor(() => expect(api.selectAssetVariant).toHaveBeenCalledWith('project', 'char', 'character', 'one', 'reference_sheet'));
  expect(screen.getByLabelText('Available reference candidates')).toHaveTextContent('Test');
  fireEvent.click(screen.getByRole('button', { name: /Generate .*more/ }));
+ await approveImageReview();
  await waitFor(() => expect(api.generateAsset).toHaveBeenCalled());
  expect(vi.mocked(api.generateAsset).mock.calls[0][12]).toBeUndefined();
  expect(vi.mocked(api.generateAsset).mock.calls[0][13]).toEqual([]);
@@ -397,6 +416,7 @@ it('attaches a specific asset-library variant and submits only stable ids', asyn
  fireEvent.click(screen.getByRole('button', { name: 'Reference image' }));
 
  fireEvent.click(screen.getByRole('button', { name: /Generate first batch/ }));
+ await approveImageReview();
  await waitFor(() => expect(api.generateAsset).toHaveBeenCalled());
  const args = vi.mocked(api.generateAsset).mock.calls[0];
  expect(args[12]).toBeUndefined();
@@ -425,8 +445,10 @@ it('does not submit a reference whose variant disappeared from the fresh index',
  setPromptDocument('<p>@Tea room</p>');
  fireEvent.click(screen.getByRole('option', { name: /Tea room/ }));
  fireEvent.click(screen.getByRole('button', { name: 'Reference image' }));
+ const checksBeforeSubmission = vi.mocked(api.getAssetReferenceIndex).mock.calls.length;
  fireEvent.click(screen.getByRole('button', { name: /Generate first batch/ }));
- await waitFor(() => expect(api.getAssetReferenceIndex).toHaveBeenCalledTimes(3));
+ await approveImageReview();
+ await waitFor(() => expect(vi.mocked(api.getAssetReferenceIndex).mock.calls.length).toBeGreaterThan(checksBeforeSubmission));
  expect(api.generateAsset).not.toHaveBeenCalled();
 });
 
@@ -455,6 +477,7 @@ it('removes an explicit reference image before the next text-to-image request', 
  fireEvent.click(screen.getByRole('button', { name: 'Remove Tea cup from available references' }));
  fireEvent.click(screen.getByRole('button', { name: 'Text to image' }));
  fireEvent.click(screen.getByRole('button', { name: /Generate first batch/ }));
+ await approveImageReview();
  await waitFor(() => expect(api.generateAsset).toHaveBeenCalled());
  const args = vi.mocked(api.generateAsset).mock.calls[0];
  expect(args[12]).toBeUndefined();

@@ -13,6 +13,13 @@ const mocks = vi.hoisted(() => ({
     updateAssetAttributes: vi.fn(),
     updateAssetVariantMetadata: vi.fn(), agentRequest: vi.fn(),
     generateAsset: vi.fn(),
+    previewAssetImageSubmission: vi.fn((_id: string, request: any) => Promise.resolve({
+        positive_prompt: request.prompt, negative_prompt: request.negative_prompt,
+        selected_model_id: "test-model", aspect_ratio: "16:9",
+        generation_type: request.generation_type, image_generation_mode: request.image_generation_mode,
+        batch_size: request.batch_size, reference_inputs: request.references || [],
+        design_revision_at_submission: null, fingerprint: "reviewed",
+    })),
     error: vi.fn(),
 }));
 vi.mock("next-intl", () => ({ useTranslations: () => (key: string) => key }));
@@ -89,11 +96,15 @@ it("sends only the visible edited scene prompt and negative prompt", async () =>
     const visiblePrompt = (screen.getByRole("textbox", { name: "图像提示词" }) as HTMLTextAreaElement).value;
     expect(visiblePrompt).toContain("暮秋蓝调");
     fireEvent.click(screen.getByRole("button", { name: "测试生成图片" }));
+    const confirm = await screen.findByRole("button", { name: "确认并生成" });
+    await waitFor(() => expect(confirm).not.toBeDisabled());
+    fireEvent.click(confirm);
     await waitFor(() => expect(mocks.generateAsset).toHaveBeenCalled());
     const args = mocks.generateAsset.mock.calls[0];
     expect(args[6]).toBe(visiblePrompt);
     expect(args[7]).toBe(false);
     expect(args[15]).toBe(true);
+    expect(args[16]).toBe("reviewed");
     expect(args[4]).toBe("");
 });
 
