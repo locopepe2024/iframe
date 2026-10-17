@@ -23,9 +23,16 @@ statement. Turning off a category's recall setting must exclude its facts.
 - Only statements from other sessions are candidates; the current session's
   recent messages already appear in Chat history.
 - Candidate selection uses bounded lexical overlap and may miss paraphrases.
-  It considers at most the 100 most recent distinct reports, then passes up
-  to five matches. No match means no fact context. The API's explicit timeline
-  query remains available for owner review in pages of up to 100 events.
+  The automatic Chat path reads at most 500 recent raw fact event rows, considers
+  at most 100 distinct reports, then passes up to five matches. A dense run of
+  repeats or corrections can therefore hide an older relevant report. No match
+  means no fact context. The explicit timeline API has its own result limit.
+- The 500-row database read cap, 100-report candidate cap and five-record
+  prompt cap are recall-specific. They are unrelated to session summaries,
+  time-of-day summaries or any future context compaction thresholds.
+- Source session payloads are checked once per distinct session in the capped
+  event window. This bounds the number of source sessions read, but individual
+  session payload size remains a separate storage concern.
 - Source quotes are untrusted data. The prompt must forbid treating them as
   instructions, diagnosis, or proof of an external event.
 
@@ -53,4 +60,6 @@ Affected paths: `src/apps/agent_facts.py`, `src/apps/agent_api.py`,
 - Memory controls work from the session menu, and no memory choice appears in
   companion skills. Owner settings apply across sessions.
 - Unrelated questions, deleted sources, and retracted statements do not appear.
+- A corpus with over 1,000 repeated events stays inside the raw read cap and
+  uses the ordered owner index; a newly reported relevant event remains found.
 - The prompt labels recalled material as past user reports, not verified facts.

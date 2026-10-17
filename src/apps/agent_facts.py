@@ -23,6 +23,8 @@ DEFAULT_CATEGORIES = {
 }
 CATEGORIES = set(DEFAULT_CATEGORIES)
 PRECISIONS = {"exact", "day", "month", "year", "imprecise", "unknown"}
+MAX_RECALL_RAW_EVENTS = 500
+MAX_RECALL_DISTINCT_REPORTS = 100
 
 
 class FactExtractionRequest(BaseModel):
@@ -77,6 +79,8 @@ def migrate(db):
         UNIQUE(owner, source_session_id, source_message_id, source_quote, relation, target_event_id)
     )""")
     db.execute("CREATE INDEX IF NOT EXISTS agent_fact_owner_time_idx ON agent_fact_events(owner, recorded_at DESC)")
+    db.execute("""CREATE INDEX IF NOT EXISTS agent_fact_owner_order_idx
+        ON agent_fact_events(owner, recorded_at DESC, created_at DESC, id DESC)""")
     db.execute("""CREATE UNIQUE INDEX IF NOT EXISTS agent_fact_assertion_source_idx
         ON agent_fact_events(owner, source_session_id, source_message_id, source_quote)
         WHERE relation = 'assertion'""")
@@ -247,7 +251,7 @@ def list_events(db, owner, since=None, until=None, category=None, limit=100):
     return events
 
 
-def query_timeline(db, owner, query: FactTimelineQuery, now=None):
+def query_timeline(db, owner, query: FactTimelineQuery, now=None, raw_event_limit=None):
     """Return reported events, never an independently verified current state."""
     if query.category and query.category not in CATEGORIES:
         raise HTTPException(422, "事实类别无效")
@@ -265,8 +269,14 @@ def query_timeline(db, owner, query: FactTimelineQuery, now=None):
         if value is not None:
             conditions.append(column)
             params.append(value)
-    rows = db.execute("SELECT * FROM agent_fact_events WHERE " + " AND ".join(conditions) +
-                      " ORDER BY recorded_at DESC, created_at DESC, id DESC", params)
+    sql = ("SELECT * FROM agent_fact_events WHERE " + " AND ".join(conditions) +
+           " ORDER BY recorded_at DESC, created_at DESC, id DESC")
+    if raw_event_limit is not None:
+        if raw_event_limit < 1:
+            raise ValueError("raw_event_limit must be positive")
+        sql += " LIMIT ?"
+        params.append(raw_event_limit)
+    rows = db.execute(sql, params)
     events = []
     seen = set()
     amendments = {}
@@ -331,7 +341,10 @@ def recall_for_chat(db, owner, current_session_id, question, limit=5):
     enabled = {item["id"] for item in categories(db, owner) if item["auto_recall_enabled"]}
     if not enabled:
         return []
-    events = query_timeline(db, owner, FactTimelineQuery(view="current", limit=100))["events"]
+    events = query_timeline(
+        db, owner, FactTimelineQuery(view="current", limit=MAX_RECALL_DISTINCT_REPORTS),
+        raw_event_limit=MAX_RECALL_RAW_EVENTS,
+    )["events"]
     ranked = []
     for event in events:
         if event["category"] not in enabled or event["source_session_id"] == current_session_id:

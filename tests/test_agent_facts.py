@@ -257,3 +257,53 @@ def test_chat_recall_requires_owner_setting_relevance_and_category_setting(setup
     agent.delete_message(prior, "m1", setup)
     agent.send(current, agent.MessageCreate(content="我的服药情况怎样？"), setup)
     assert all("相关过往陈述" not in item["content"] for item in completion.call_args.args[2][1:])
+
+
+def test_recall_bounds_raw_event_reads_with_many_repeated_reports(setup):
+    sid = agent.create(agent.SessionCreate(model="qwen"), setup)["session"]["id"]
+    messages = [{"id": "m0", "role": "user", "content": "我不服药", "created_at": 1000.0}]
+    messages.extend({"id": f"m{i}", "role": "user", "content": f"普通条目{i}",
+                     "created_at": float(1000 + i)} for i in range(1, 1201))
+    with agent.database() as db:
+        session = {"id": sid, "model": "qwen", "title": "x", "updated_at": 2200.0,
+                   "messages": messages}
+        db.execute("UPDATE sessions SET payload=? WHERE owner=? AND id=?",
+                   (__import__("json").dumps(session), setup.owner_profile_id, sid))
+        records = [
+            (f"e{i}", setup.owner_profile_id, sid, f"m{i}", messages[i]["content"], "health", "我",
+             "服药状态" if i == 0 else "普通", "不服药" if i == 0 else "普通条目",
+             float(1000 + i), "", None, None, "unknown", "assertion", None, float(1000 + i))
+            for i in range(1201)
+        ]
+        db.executemany("""INSERT INTO agent_fact_events
+            (id,owner,source_session_id,source_message_id,source_quote,category,subject,predicate,value,
+             recorded_at,time_text,valid_from,valid_to,time_precision,relation,target_event_id,created_at)
+             VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""", records)
+        statement = """SELECT * FROM agent_fact_events WHERE owner=? AND recorded_at<=?
+            ORDER BY recorded_at DESC, created_at DESC, id DESC LIMIT ?"""
+        plan = [row["detail"] for row in db.execute(
+            "EXPLAIN QUERY PLAN " + statement, (setup.owner_profile_id, 3000, 500))]
+        assert any("agent_fact_owner_order_idx" in detail for detail in plan)
+        assert all("USE TEMP B-TREE" not in detail for detail in plan)
+        statements = []
+        db.set_trace_callback(statements.append)
+        assert agent_facts.recall_for_chat(db, setup.owner_profile_id, "another-session",
+                                           "我的服药情况怎样？") == []
+        db.set_trace_callback(None)
+        fact_reads = [sql for sql in statements if sql.startswith("SELECT * FROM agent_fact_events")]
+        source_reads = [sql for sql in statements if sql.startswith("SELECT payload FROM sessions")]
+        assert len(fact_reads) == 1 and "LIMIT 500" in fact_reads[0]
+        assert len(source_reads) == 1
+        messages.append({"id": "m1201", "role": "user", "content": "现在我又不服药", "created_at": 2201.0})
+        session["messages"] = messages
+        db.execute("UPDATE sessions SET payload=? WHERE owner=? AND id=?",
+                   (__import__("json").dumps(session), setup.owner_profile_id, sid))
+        db.execute("""INSERT INTO agent_fact_events
+            (id,owner,source_session_id,source_message_id,source_quote,category,subject,predicate,value,
+             recorded_at,time_text,valid_from,valid_to,time_precision,relation,target_event_id,created_at)
+             VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+            ("recent-health", setup.owner_profile_id, sid, "m1201", "现在我又不服药", "health", "我",
+             "服药状态", "不服药", 2201.0, "", None, None, "unknown", "assertion", None, 2201.0))
+        recalled = agent_facts.recall_for_chat(db, setup.owner_profile_id, "another-session",
+                                               "我的服药情况怎样？")
+        assert [event["id"] for event in recalled] == ["recent-health"]
