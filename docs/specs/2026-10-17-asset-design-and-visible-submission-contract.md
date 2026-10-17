@@ -22,6 +22,19 @@ This contract covers character, scene, and prop image generation in Studio asset
 - Descriptive plan text such as “残阳如血” is candidate frame content. It is not automatically a lighting constraint or a style instruction. In shot design, unapplied plan clauses stay visible as suggestions, and the user adds only the clauses wanted in the current prompt.
 - Text review proves what was submitted, not whether the provider rendered a matching color palette, geometry or character. After generation, compare the result with the selected scene/character reference images and the reviewed prompt. A visual mismatch should cause an explicit prompt/reference revision or a different candidate choice; it must not silently rewrite the confirmed director interpretation.
 
+## Target structured handoff for scene design and shots
+
+This is the target schema, not a claim that all fields are implemented. `scene.description` and confirmed director/plan revisions initialize a scene-design draft; the user confirms the draft before it becomes an asset source. The scene design then proposes initial shot values, while the shot owns any local override.
+
+| Owner | Structured fields | Scope and review rule |
+| --- | --- | --- |
+| Scene design | Scene description; explicit character asset IDs and selected variants; prop asset IDs and selected variants; style; lighting with ambient baseline and scoped local accents; reference-image camera/viewpoint and framing | Saved as a versioned scene-design snapshot. Character and prop references are relationships, not copied prose. Occupancy/precise placement is reserved and not required now. The user reviews the compiled scene-image prompt before generation. |
+| Shot design | Exact scene/character/prop reference image variants; current prompt; voice/voice asset; camera movement; shot/camera treatment; shot size; camera position/angle; transition | Saved per shot. Initially inherits relevant scene design and director plan values, then allows explicit local overrides. A shot must never mutate the upstream scene-design revision. The user reviews the final image/video request before submission. |
+
+`scene_design.camera` means the observation angle used to create a scene reference image. `shot.camera_movement`, `shot.shot_size`, `shot.camera_angle` and `shot.transition` describe the moving shot. Do not merge these fields by name. A lighting accent must carry a target region or subject and an effect scope; “残阳如血” may apply to the distant sun while the street retains blue dusk ambient light. Do not promote narrative wording into a global style or lighting override.
+
+Each projection records the director revision, scene-design revision, selected variant IDs, shot revision and source for each inherited/overridden field. An upstream change marks affected downstream drafts for review; it does not rewrite approved prompts or images. The first implementation slice should persist scene-design fields and preview their compiled prompt, then project them into one shot with explicit override controls and an exact request preflight.
+
 ## Projection and revision rules
 
 - An AI design draft can suggest asset design; it cannot silently change the asset description or final prompt. The user confirms a design revision separately.
