@@ -71,6 +71,7 @@ export default function StoryboardR2V() {
     const [indexedProject, setIndexedProject] = useState<{
         projectId: string; assets: AssetReferenceIndexEntry[];
     }>();
+    const [assetIndexError, setAssetIndexError] = useState("");
     const assetIndex = indexedProject?.projectId === currentProject?.id ? indexedProject?.assets : undefined;
     const displayedStyle = currentProject
         ? resolveStoryboardStyle(currentProject, currentSeries)
@@ -84,9 +85,14 @@ export default function StoryboardR2V() {
         const projectId = currentProject?.id;
         if (!projectId || typeof api.getProjectAssetReferenceIndex !== "function") return;
         let active = true;
+        setAssetIndexError("");
         void api.getProjectAssetReferenceIndex(projectId)
             .then((index) => { if (active) setIndexedProject({ projectId, assets: index.assets }); })
-            .catch((error) => debugLog.error("Studio", "Asset index load failed", error));
+            .catch((error) => {
+                if (!active) return;
+                setAssetIndexError("项目资产读取失败，请重试。");
+                debugLog.error("Studio", "Asset index load failed", error);
+            });
         return () => { active = false; };
     }, [currentProject?.id, currentProject?.characters, currentProject?.scenes, currentProject?.props]);
 
@@ -2434,10 +2440,36 @@ export default function StoryboardR2V() {
                 props={props}
                 assetIndex={assetIndex}
                 frameSlot={drawerState.frameSlot}
+                frameAssetError={assetIndexError}
+                onReloadFrameAssets={() => {
+                    if (!currentProject) return;
+                    const projectId = currentProject.id;
+                    setAssetIndexError("");
+                    void api.getProjectAssetReferenceIndex(projectId)
+                        .then((index) => {
+                            if (useProjectStore.getState().currentProject?.id === projectId)
+                                setIndexedProject({ projectId, assets: index.assets });
+                        })
+                        .catch((error) => {
+                            if (useProjectStore.getState().currentProject?.id !== projectId) return;
+                            setAssetIndexError("项目资产读取失败，请重试。");
+                            debugLog.error("Studio", "Asset index reload failed", error);
+                        });
+                }}
                 onSelectFrameVariant={async (entry, variantId) => {
                     const index = drawerState.targetShotIndex;
                     const shot = index == null ? undefined : shots[index];
                     if (index == null || !shot || !currentProject) throw new Error("当前镜头不可用，请重新打开资产库");
+                    const fresh = await api.getProjectAssetReferenceIndex(currentProject.id);
+                    if (useProjectStore.getState().currentProject?.id !== currentProject.id)
+                        throw new Error("项目已切换，请重新打开资产库");
+                    setIndexedProject({ projectId: currentProject.id, assets: fresh.assets });
+                    const currentEntry = fresh.assets.find((candidate) =>
+                        candidate.asset_type === entry.asset_type && candidate.asset_id === entry.asset_id
+                        && candidate.source_scope === entry.source_scope
+                        && candidate.source_container_id === entry.source_container_id
+                        && candidate.variants.some((variant) => variant.id === variantId));
+                    if (!currentEntry) throw new Error("该资产变体已不在当前项目，请从更新后的列表重选");
                     let frameId = shot.id;
                     if (frameId.startsWith("shot_")) {
                         const created = await crudApi.createFrame(currentProject.id, {
@@ -2460,7 +2492,7 @@ export default function StoryboardR2V() {
                         });
                     }
                     const isLast = drawerState.frameSlot === "last";
-                    const updated = await api.attachAssetFrame(currentProject.id, frameId, entry, variantId,
+                    const updated = await api.attachAssetFrame(currentProject.id, frameId, currentEntry, variantId,
                         isLast ? "last" : "first");
                     const urls: string[] = isLast ? updated.last_frame_image_urls ?? [] : updated.t2i_image_urls ?? [];
                     const selected: number = isLast ? updated.last_frame_selected_index ?? 0 : updated.t2i_selected_index ?? 0;

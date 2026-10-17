@@ -20,6 +20,8 @@ interface AssetDrawerProps {
     onToggleVariant?: (assetId: string, variantId: string, primaryVariantId?: string) => void;
     frameSlot?: "first" | "last";
     onSelectFrameVariant?: (asset: AssetReferenceIndexEntry, variantId: string) => Promise<void>;
+    frameAssetError?: string;
+    onReloadFrameAssets?: () => void;
 }
 
 function getAssetThumbnail(item: AssetReferenceIndexEntry): string | null {
@@ -40,11 +42,17 @@ export default function AssetDrawer({
     onToggleVariant,
     frameSlot,
     onSelectFrameVariant,
+    frameAssetError,
+    onReloadFrameAssets,
 }: AssetDrawerProps) {
     const t = useTranslations("storyboardR2V");
     const [frameError, setFrameError] = useState("");
     const [selectingFrame, setSelectingFrame] = useState(false);
-    const entries = projectReferenceIndex(assetIndex, legacyCharacters, legacyScenes, legacyProps);
+    // Frame inputs require server-confirmed project membership. Legacy UI
+    // arrays lack a reliable source container and must not become selectable.
+    const entries = frameSlot
+        ? projectReferenceIndex(assetIndex ?? [], [], [], [])
+        : projectReferenceIndex(assetIndex, legacyCharacters, legacyScenes, legacyProps);
     const characters = entries.filter((entry) => entry.asset_type === "character");
     const scenes = entries.filter((entry) => entry.asset_type === "scene");
     const props = entries.filter((entry) => entry.asset_type === "prop");
@@ -88,6 +96,19 @@ export default function AssetDrawer({
                                 <div className="space-y-3">
                                     <p className="text-xs text-text-secondary">选择{frameSlot === "first" ? "首帧" : "尾帧"}资产变体</p>
                                     {frameError && <p role="alert" className="text-xs text-status-failed-fg">{frameError}</p>}
+                                    {assetIndex === undefined ? (
+                                        <div className="space-y-2 text-xs text-text-secondary">
+                                            {frameAssetError
+                                                ? <p role="alert" className="text-status-failed-fg">{frameAssetError}</p>
+                                                : <p>正在核对当前项目资产…</p>}
+                                            {frameAssetError && onReloadFrameAssets ? (
+                                                <button type="button" onClick={onReloadFrameAssets}
+                                                    className="text-primary hover:underline">重试加载项目资产</button>
+                                            ) : null}
+                                        </div>
+                                    ) : entries.every((entry) => entry.variants.length === 0) ? (
+                                        <p className="text-xs text-text-secondary">当前项目没有可用的图片资产。</p>
+                                    ) : null}
                                     {entries.filter((entry) => entry.variants.length > 0).map((entry) => (
                                         <div key={`${entry.asset_type}:${entry.asset_id}`} className="rounded-lg border border-glass-border p-2">
                                             <div className="mb-2 truncate text-xs text-foreground">{entry.name}</div>

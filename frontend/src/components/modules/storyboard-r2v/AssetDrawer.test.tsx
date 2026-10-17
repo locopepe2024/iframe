@@ -93,3 +93,20 @@ it("keeps the asset drawer open and reports an attach failure so selection can b
     fireEvent.click(variant);
     await waitFor(() => expect(onClose).toHaveBeenCalledTimes(1));
 });
+
+it("does not offer legacy assets as frame inputs before project membership is loaded", () => {
+    const onSelectFrameVariant = vi.fn();
+    const onReloadFrameAssets = vi.fn();
+    render(<AssetDrawer isOpen onClose={vi.fn()}
+        characters={[{ id: "legacy", name: "旧角色", full_body_asset: {
+            variants: [{ id: "old", url: "old.png" }],
+        } }]}
+        scenes={[]} props={[]} frameSlot="first" onSelectAsset={vi.fn()}
+        onSelectFrameVariant={onSelectFrameVariant} onReloadFrameAssets={onReloadFrameAssets}
+        frameAssetError="项目资产读取失败" />);
+    expect(screen.queryByRole("button", { name: "旧角色 变体 old" })).not.toBeInTheDocument();
+    expect(screen.getByRole("alert")).toHaveTextContent("项目资产读取失败");
+    fireEvent.click(screen.getByRole("button", { name: "重试加载项目资产" }));
+    expect(onReloadFrameAssets).toHaveBeenCalledTimes(1);
+    expect(onSelectFrameVariant).not.toHaveBeenCalled();
+});
