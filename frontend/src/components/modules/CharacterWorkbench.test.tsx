@@ -281,6 +281,7 @@ it("loads the project reference index for the character workbench", async () => 
     const promptEditor = editors.find((editor) => editor.editor);
     expect(promptEditor?.editor).toBeDefined();
     act(() => { promptEditor!.editor!.chain().setContent("<p>@wat</p>").focus("end").run(); });
+    await waitFor(() => expect(promptEditor).toHaveFocus());
     expect(await screen.findByRole("listbox")).toHaveTextContent("Pocket watch");
     fireEvent.mouseDown(within(screen.getByRole("listbox")).getByRole("option"));
     fireEvent.click(within(screen.getByRole("listbox")).getByRole("option"));
