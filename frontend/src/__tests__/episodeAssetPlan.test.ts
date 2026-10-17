@@ -59,6 +59,30 @@ describe("episode asset plan context", () => {
         expect(entries[1].prompt).toContain("室内");
         expect(getAssetPlanEntries(context, "character", "other")).toEqual([]);
     });
+
+    it("projects scene content and only the exactly matched lighting baseline separately", () => {
+        const context = {
+            scenes: [{ scene_id: "shop", scene_asset_id: "grain-shop", scene_ref: "粮铺劫掠",
+                location: "青溪镇长街", time_anchor: "暮秋黄昏", atmosphere: "百姓退避",
+                continuity_in: "匪寇围堵粮铺", continuity_out: "掌柜倒地",
+                place_continuity_id: "street", time_continuity_id: "dusk", prop_ids: [] }],
+            lighting_baselines: [
+                { place_continuity_id: "street", time_continuity_id: "dusk", lighting: {
+                    key_source: "街口斜阳", color_tone: "暖褐", contrast: "中高反差", practical_sources: [],
+                }, shadow_direction: "向东", story_time: "黄昏", daylight_phase: "", weather: "" },
+                { place_continuity_id: "street", time_continuity_id: "night", lighting: {
+                    key_source: "灯笼", color_tone: "深蓝", contrast: "低反差", practical_sources: [],
+                }, shadow_direction: "", story_time: "夜间", daylight_phase: "", weather: "" },
+            ],
+            characters: [], props: [], shots: [],
+        } as unknown as EpisodeVisualContext;
+        const entry = getAssetPlanEntries(context, "scene", "grain-shop")[0];
+        expect(entry.visualDetails).toContainEqual({ label: "入场画面", text: "匪寇围堵粮铺" });
+        expect(entry.visualDetails).toContainEqual({ label: "后续画面", text: "掌柜倒地" });
+        expect(entry.continuityDetails).toContainEqual({ label: "色调", text: "暖褐" });
+        expect(entry.continuityDetails).not.toContainEqual({ label: "色调", text: "深蓝" });
+        expect(entry.continuityDetails).not.toContainEqual({ label: "入场画面", text: "匪寇围堵粮铺" });
+    });
 });
 
 describe("unbound shooting plan characters", () => {
