@@ -445,6 +445,7 @@ def test_asset_generation_endpoint_maps_invalid_reference_to_http_400(monkeypatc
         asset_id="scene",
         asset_type="scene",
         prompt="Reviewed scene image prompt", apply_style=False, preserve_prompt=True,
+        expected_review_fingerprint="reviewed-fingerprint",
         reference={
             "asset_type": "prop",
             "asset_id": "foreign",
@@ -466,7 +467,8 @@ def test_duplicate_generation_request_maps_to_http_conflict(monkeypatch):
 
     monkeypatch.setattr(api, "pipeline", SimpleNamespace(create_asset_generation_task=reject))
     request = api.GenerateAssetRequest(asset_id="scene", asset_type="scene",
-                                       prompt="Reviewed scene image prompt", apply_style=False, preserve_prompt=True)
+                                       prompt="Reviewed scene image prompt", apply_style=False, preserve_prompt=True,
+                                       expected_review_fingerprint="reviewed-fingerprint")
 
     with pytest.raises(HTTPException) as error:
         api.generate_single_asset("project", request, BackgroundTasks())

@@ -1466,7 +1466,9 @@ def delete_series_asset(series_id: str, asset_type: Literal["character", "scene"
         raise HTTPException(status_code=404, detail=str(exc)) from exc
 
 
-def _require_reviewed_asset_image_prompt(request: GenerateAssetRequest) -> None:
+def _require_reviewed_asset_image_prompt(
+    request: GenerateAssetRequest, *, require_fingerprint: bool = False,
+) -> None:
     """Manual image routes must receive the prompt exactly as reviewed in the UI."""
     if not request.prompt or not request.prompt.strip():
         raise HTTPException(status_code=422, detail="Review a non-empty asset image prompt before generating")
@@ -1479,6 +1481,8 @@ def _require_reviewed_asset_image_prompt(request: GenerateAssetRequest) -> None:
     if request.asset_type == "character" and request.generation_type in ("three_view", "headshot"):
         if request.image_generation_mode != "reference" or request.reference is None or request.references:
             raise HTTPException(status_code=422, detail="Choose one explicit master image variant for this derived character view")
+    if require_fingerprint and not request.expected_review_fingerprint:
+        raise HTTPException(status_code=422, detail="Preview and confirm the asset image request before generating")
 
 
 @app.post("/series/{series_id}/assets/generate/preview")
@@ -1514,7 +1518,7 @@ def preview_project_asset_image(script_id: str, request: GenerateAssetRequest):
 @app.post("/series/{series_id}/assets/generate")
 def generate_series_asset(series_id: str, request: GenerateAssetRequest, background_tasks: BackgroundTasks):
     """Generate a single asset for a Series (async)."""
-    _require_reviewed_asset_image_prompt(request)
+    _require_reviewed_asset_image_prompt(request, require_fingerprint=True)
     try:
         series, task_id = pipeline.generate_series_asset(
             series_id,
@@ -3845,7 +3849,7 @@ def create_video_task(script_id: str, request: CreateVideoTaskRequest, backgroun
 def generate_single_asset(script_id: str, request: GenerateAssetRequest, background_tasks: BackgroundTasks):
     """Generates a single asset with specific options (async).
     Returns immediately with task_id for polling progress."""
-    _require_reviewed_asset_image_prompt(request)
+    _require_reviewed_asset_image_prompt(request, require_fingerprint=True)
     try:
         script, task_id = pipeline.create_asset_generation_task(
             script_id,

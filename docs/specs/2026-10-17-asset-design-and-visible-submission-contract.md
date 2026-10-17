@@ -27,17 +27,17 @@ This contract covers character, scene, and prop image generation in Studio asset
 - The character three-view generator does not add hidden negative terms when receiving a reviewed prompt.
 - Reviewed project and series tasks freeze positive/negative text, effective model, ratio, mode, stable explicit reference IDs and the latest confirmed design revision at enqueue. New image variants carry that snapshot after generation; older variants and direct generator calls have no fabricated snapshot.
 - Manual character three-view and headshot requests require one explicitly selected master variant. The character workbench checks this before submission and passes that variant as one structured reference. Manual requests using a legacy reference URL fail validation because the URL does not establish a stable visible identity. Series character text generation no longer implicitly reuses its selected image.
+- Project asset generation now exposes a read-only server preflight. Character, Cast, scene/prop and asset-library manual entry points freeze their edited request and show the server-effective model, ratio, mode, quantity, reference identities and exact positive/negative text before final confirmation. The final request carries a fingerprint; enqueue rejects changed reviewed fields before creating a task.
 
 ## Remaining work
 
 - Bring the structure of scene/prop AI design drafts beyond one `visual_notes` string if field-specific editing proves useful. Keep frame content and continuity choices at generation scope, outside the reusable asset design record.
-- Add a dedicated preflight display of stable reference variant IDs, effective model and ratio for all manual entry points. Current input controls expose selected reference images, but the complete ledger is not yet shown in one review surface.
 
 ### Preflight cutover
 
 - Use a read-only server projection of the exact pending image request. It resolves the effective model and ratio through the same project/series settings used at enqueue, checks reference identities, and returns a fingerprint of all reviewed fields. It must not call an LLM or mutate the asset.
 - The UI freezes the edited prompt, negative prompt, mode, generation type, count and explicit references when opening review. It shows the server projection in one confirmation surface. Returning to edit discards that review.
-- The final generation request carries the fingerprint. Enqueue recomputes it inside the existing asset lock and rejects a changed model, ratio, design revision, prompt or reference set before creating a paid task. Existing non-UI direct callers may omit the fingerprint during migration; the manual browser entry points must supply it.
+- The final generation request must carry the fingerprint. Enqueue recomputes it inside the existing asset lock and rejects a changed model, ratio, design revision, prompt or reference set before creating a paid task. Both manual HTTP generation routes reject requests without a fingerprint; direct pipeline callers remain outside this browser review contract.
 - Character, scene, prop, Cast and asset-library manual generation use the same review surface. The backend remains authoritative for effective model and ratio; the visible text remains the request body and cannot be changed by the projection.
 
 ## Submission ledger implementation plan
