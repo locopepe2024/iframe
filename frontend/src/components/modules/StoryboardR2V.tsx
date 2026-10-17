@@ -2448,8 +2448,16 @@ export default function StoryboardR2V() {
                         const newFrame = Array.isArray(created?.frames)
                             ? created.frames[Math.min(index, created.frames.length - 1)] : null;
                         if (!newFrame?.id) throw new Error("创建镜头失败，请重试");
+                        const syntheticId = frameId;
                         frameId = newFrame.id;
                         setShots(prev => prev.map((item, i) => i === index ? { ...item, id: frameId } : item));
+                        setExpandedShots(prev => {
+                            if (!prev.has(syntheticId)) return prev;
+                            const next = new Set(prev);
+                            next.delete(syntheticId);
+                            next.add(frameId);
+                            return next;
+                        });
                     }
                     const isLast = drawerState.frameSlot === "last";
                     const updated = await api.attachAssetFrame(currentProject.id, frameId, entry, variantId,
