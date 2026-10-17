@@ -2542,6 +2542,7 @@
     "tabDirectR2v": "Multi-Ref R2V",
     "tabTextVideo": "Text TEXT",
     "tabFirstLastFrame": "First/Last FL2V",
+    "usePrevEndFrame": "Use previous shot's last frame",
     "videoModeTabsLabel": "Video generation mode",
     "videoSettings": "Video Settings",
     "modelSelection": "Select Model",

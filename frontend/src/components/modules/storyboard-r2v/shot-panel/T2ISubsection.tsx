@@ -15,7 +15,7 @@
 import { useEffect, useRef, useState } from "react";
 import {
     Loader2, Plus, X, Sparkles, Upload, Image as ImageIcon, Check, Pin, ChevronDown, ChevronUp,
-    RefreshCw,
+    RefreshCw, Film,
 } from "lucide-react";
 import clsx from "clsx";
 import { useTranslations } from "next-intl";
@@ -77,6 +77,8 @@ interface T2ISubsectionProps {
     resolveUrl?: (url: string) => string;
     frameLabel?: string;
     firstLastFrameMode?: boolean;
+    onUsePreviousEndFrame?: () => void;
+    extractingPreviousEndFrame?: boolean;
 }
 
 export default function T2ISubsection({
@@ -94,6 +96,8 @@ export default function T2ISubsection({
     resolveUrl,
     frameLabel = "首帧",
     firstLastFrameMode = false,
+    onUsePreviousEndFrame,
+    extractingPreviousEndFrame = false,
 }: T2ISubsectionProps) {
     const t = useTranslations("storyboardR2V");
     // resolveUrl is kept in the prop API (still passed by host for back-compat)
@@ -119,6 +123,8 @@ export default function T2ISubsection({
                 onSelectAsset={onSelectAsset}
                 frameLabel={frameLabel}
                 firstLastFrameMode={firstLastFrameMode}
+                onUsePreviousEndFrame={onUsePreviousEndFrame}
+                extractingPreviousEndFrame={extractingPreviousEndFrame}
             />
         );
     }
@@ -139,6 +145,8 @@ export default function T2ISubsection({
             onUpload={onUpload}
             onSelectAsset={onSelectAsset}
             frameLabel={frameLabel}
+            onUsePreviousEndFrame={onUsePreviousEndFrame}
+            extractingPreviousEndFrame={extractingPreviousEndFrame}
         />
     );
 }
@@ -159,11 +167,13 @@ interface HeroProps {
     onSelectAsset?: () => void;
     frameLabel: string;
     firstLastFrameMode: boolean;
+    onUsePreviousEndFrame?: () => void;
+    extractingPreviousEndFrame: boolean;
 }
 
 function Hero({
     t, promptIsEmpty, generating, inFlightTaskId, inFlightStatus, onGenerate, onUpload,
-    onSelectAsset, frameLabel, firstLastFrameMode,
+    onSelectAsset, frameLabel, firstLastFrameMode, onUsePreviousEndFrame, extractingPreviousEndFrame,
 }: HeroProps) {
     const [uploading, setUploading] = useState(false);
     const [uploadError, setUploadError] = useState<T2IUploadError | null>(null);
@@ -290,6 +300,18 @@ function Hero({
                             </button>
                         ) : null}
 
+                        {onUsePreviousEndFrame ? (
+                            <button
+                                type="button"
+                                onClick={onUsePreviousEndFrame}
+                                disabled={uploadDisabled || extractingPreviousEndFrame}
+                                className="inline-flex min-h-[36px] items-center gap-1.5 rounded-md border border-glass-border bg-black/20 px-3 py-1.5 font-mono text-chrome font-medium text-text-secondary hover:border-primary/45 hover:bg-primary/10 hover:text-primary disabled:opacity-50"
+                            >
+                                {extractingPreviousEndFrame ? <Loader2 size={13} className="animate-spin" /> : <Film size={13} />}
+                                {t("usePrevEndFrame")}
+                            </button>
+                        ) : null}
+
                         <span className="font-mono text-chrome-sm tracking-tight text-text-muted">
                             {t("t2iHeroDropHint")}
                         </span>
@@ -342,12 +364,15 @@ interface CompactProps {
     onUpload: (file: File) => Promise<T2IUploadError | void>;
     onSelectAsset?: () => void;
     frameLabel: string;
+    onUsePreviousEndFrame?: () => void;
+    extractingPreviousEndFrame: boolean;
 }
 
 function Compact({
     t, imageUrls, selectedIndex, storyboardFrameUrl, generating,
     inFlightTaskId, inFlightStatus, promptIsEmpty,
     onSelect, onRemove, onGenerate, onUpload, onSelectAsset, frameLabel,
+    onUsePreviousEndFrame, extractingPreviousEndFrame,
 }: CompactProps) {
     // 数据模型：active frame 来源优先级 = getActiveT2IImageUrl 然后 fallback shot.imageUrl。
     // 简化 v1 决定：storyboard frame thumb 只在 T2I 历史为空时显示（自动成为 active）；
@@ -440,6 +465,18 @@ function Compact({
                     · {countLabel}
                 </span>
                 <div className="ml-auto flex items-center gap-0.5">
+                    {onUsePreviousEndFrame ? (
+                        <button
+                            type="button"
+                            onClick={onUsePreviousEndFrame}
+                            disabled={generating || extractingPreviousEndFrame}
+                            title={t("usePrevEndFrame")}
+                            className="btn-tip inline-flex h-7 items-center gap-1 rounded px-1.5 font-mono text-chrome-sm text-text-muted hover:bg-hover-bg hover:text-primary disabled:opacity-50"
+                        >
+                            {extractingPreviousEndFrame ? <Loader2 size={12} className="animate-spin" /> : <Film size={12} />}
+                            {t("usePrevEndFrame")}
+                        </button>
+                    ) : null}
                     {/* PR-3 grill Q14 (D) — Reroll button: explicit "再抽一张"
                         action, surfaces the "regenerate first frame with current
                         prompt" capability that was previously hidden in the

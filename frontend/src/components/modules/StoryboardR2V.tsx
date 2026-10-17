@@ -213,6 +213,7 @@ export default function StoryboardR2V() {
     // backend, so the user gets immediate feedback instead of a
     // task that queues, fails, and shows up only in the diagnose log.
     const [shotErrors, setShotErrors] = useState<Record<string, string>>({});
+    const [extractingPreviousEndFrameId, setExtractingPreviousEndFrameId] = useState<string | null>(null);
     const missingRefsMessage = useCallback(
         (modelLabel: string) =>
             t("missingRefs", { model: modelLabel }),
@@ -340,6 +341,67 @@ export default function StoryboardR2V() {
         }, 1000);
         map.set(shotId, { timer, patch: merged });
     }, [currentProject?.id, updateProject]);
+
+    const usePreviousVideoEndFrame = useCallback(async (index: number) => {
+        const shot = shots[index];
+        const frames = currentProject?.frames ?? [];
+        const frameIndex = frames.findIndex((frame: any) => frame.id === shot?.id);
+        if (!currentProject || !shot || frameIndex <= 0 || extractingPreviousEndFrameId) return;
+        const previousFrame = frames[frameIndex - 1];
+        const selectedTask = (currentProject.video_tasks ?? []).find((task: any) =>
+            task.id === previousFrame.selected_video_id
+            && task.frame_id === previousFrame.id
+            && task.status === "completed"
+            && task.video_url,
+        );
+        if (!selectedTask) return;
+
+        setExtractingPreviousEndFrameId(shot.id);
+        let pendingPatch: Parameters<typeof api.updateFrameWorkbench>[2] | null = null;
+        try {
+            const extracted = await api.extractLastFrame(currentProject.id, shot.id, selectedTask.id);
+            const extractedFrame = extracted.frames?.find((frame: any) => frame.id === shot.id);
+            const selectedVariant = extractedFrame?.rendered_image_asset?.variants?.find((variant: any) =>
+                variant.id === extractedFrame.rendered_image_asset.selected_id,
+            );
+            // Workbench history must contain the durable storage key, never
+            // the short-lived URL returned by signed_response.
+            const imageKey = selectedVariant?.storage_key;
+            if (!imageKey) throw new Error("尾帧截取未返回稳定素材路径");
+            const urls = [...(shot.t2iImageUrls ?? []), imageKey].slice(-10);
+            const selectedIndex = urls.length - 1;
+            const pending = workbenchPendingRef.current.get(shot.id);
+            if (pending) {
+                pendingPatch = pending.patch;
+                window.clearTimeout(pending.timer);
+                workbenchPendingRef.current.delete(shot.id);
+            }
+            const savedFrame = await api.updateFrameWorkbench(currentProject.id, shot.id, {
+                ...(pending?.patch ?? {}),
+                t2i_image_urls: urls,
+                t2i_selected_index: selectedIndex,
+            });
+            updateProject(currentProject.id, {
+                frames: extracted.frames.map((frame: any) => frame.id === shot.id
+                    ? { ...savedFrame, t2i_image_urls: urls, t2i_selected_index: selectedIndex }
+                    : frame),
+            });
+            setShots(prev => prev.map(item => item.id === shot.id ? {
+                ...item,
+                imageUrl: extractedFrame.rendered_image_url,
+                t2iImageUrls: urls,
+                t2iSelectedIndex: selectedIndex,
+                t2iImageUrl: imageKey,
+            } : item));
+        } catch (error: any) {
+            if (pendingPatch) persistWorkbench(shot.id, pendingPatch);
+            const message = error?.response?.data?.detail || error?.message || "无法截取上一镜头尾帧";
+            setShotErrors(prev => ({ ...prev, [shot.id]: String(message) }));
+            toast.warning(String(message));
+        } finally {
+            setExtractingPreviousEndFrameId(null);
+        }
+    }, [shots, currentProject, extractingPreviousEndFrameId, updateProject, persistWorkbench]);
 
     // Adopted text, its flag and editable direction share one ordered writer.
     const frameEdits = useMemo(() => createFrameEditQueue(
@@ -1950,6 +2012,15 @@ export default function StoryboardR2V() {
                     ).length;
                     const paramsState = paramsStateForShot(shot);
                     const showFrameInputs = shot.videoMode === "first_last_frame" || (shot.videoMode ?? (shot.tabMode === "direct_r2v" ? "r2v" : "i2v")) === "i2v";
+                    const projectFrames = currentProject?.frames ?? [];
+                    const projectFrameIndex = projectFrames.findIndex((frame: any) => frame.id === shot.id);
+                    const previousFrame = projectFrameIndex > 0 ? projectFrames[projectFrameIndex - 1] : null;
+                    const previousSelectedVideo = previousFrame && (currentProject?.video_tasks ?? []).find((task: any) =>
+                        task.id === previousFrame.selected_video_id
+                        && task.frame_id === previousFrame.id
+                        && task.status === "completed"
+                        && task.video_url,
+                    );
                     const modelList = (shot.tabMode === "direct_r2v" ? VIDEO_R2V_MODELS : VIDEO_I2V_MODELS)
                         .filter(model => videoModelSupportsMode(model.id, resolveShotVideoInput(shot).mode));
                     return (
@@ -2259,6 +2330,8 @@ export default function StoryboardR2V() {
                                         resolveUrl={resolveAssetUrl}
                                         frameLabel="首帧"
                                         firstLastFrameMode={shot.videoMode === "first_last_frame"}
+                                        onUsePreviousEndFrame={previousSelectedVideo ? () => void usePreviousVideoEndFrame(index) : undefined}
+                                        extractingPreviousEndFrame={extractingPreviousEndFrameId === shot.id}
                                     />
                                     {shot.videoMode === "first_last_frame" ? (
                                         <T2ISubsection
