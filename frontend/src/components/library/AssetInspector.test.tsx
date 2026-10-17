@@ -107,6 +107,7 @@ it("reviews the full prompt before generating more variants", async () => {
   fireEvent.change(screen.getByRole("textbox", { name: "reviewedNegativePrompt" }),
     { target: { value: "暖红色调" } });
   fireEvent.click(screen.getByRole("button", { name: "generateMoreVariants" }));
+  expect(mocked.previewAssetImageSubmission.mock.calls[0][1].model_name).toBeUndefined();
   const confirm = await screen.findByRole("button", { name: "确认并生成" });
   await waitFor(() => expect(confirm).not.toBeDisabled());
   fireEvent.click(confirm);
@@ -115,6 +116,7 @@ it("reviews the full prompt before generating more variants", async () => {
   expect(args[6]).toBe("青石长街，冷蓝夕光");
   expect(args[7]).toBe(false);
   expect(args[8]).toBe("暖红色调");
+  expect(args[10]).toBeUndefined();
   expect(args[15]).toBe(true);
   expect(args[16]).toBe("reviewed");
 });

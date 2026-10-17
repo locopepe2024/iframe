@@ -362,7 +362,9 @@ export default function AssetInspector({
         prompt: generationPrompt.trim(),
         negative_prompt: generationNegativePrompt,
         batch_size: VARIANT_BATCH,
-        model_name: resolveAssetGenerationModel(currentProject?.id === projectId ? currentProject.model_settings?.t2i_model : undefined),
+        model_name: currentProject?.id === projectId && !currentProject.series_id
+          ? resolveAssetGenerationModel(currentProject.model_settings?.t2i_model)
+          : undefined,
         image_generation_mode: "text",
         apply_style: false,
         preserve_prompt: true,

@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { api, type AssetImageReviewProjection, type AssetImageReviewRequest } from "@/lib/api";
+import { extractErrorDetail } from "@/lib/utils";
 
 type Props = {
     projectId: string;
@@ -34,7 +35,7 @@ export default function AssetImageSubmissionReview({ projectId, request, onBack,
             }
             setReview(result);
         }).catch((cause) => {
-            if (active) setError(cause?.response?.data?.detail || cause?.message || "无法获取提交预览");
+            if (active) setError(extractErrorDetail(cause, "无法获取提交预览"));
         });
         return () => { active = false; };
     }, [projectId, request]);

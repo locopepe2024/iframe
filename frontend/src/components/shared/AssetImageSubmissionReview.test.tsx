@@ -46,3 +46,12 @@ it("blocks confirmation when the preview text differs from the edited request", 
     expect(screen.getByRole("button", { name: "确认并生成" })).toBeDisabled();
     expect(confirm).not.toHaveBeenCalled();
 });
+
+it("renders structured preview validation errors as readable text", async () => {
+    preview.mockRejectedValueOnce({ response: { data: { detail: [
+        { loc: ["body", "references"], msg: "Reference variant is unavailable" },
+    ] } } });
+    render(<AssetImageSubmissionReview projectId="project" request={request} onBack={vi.fn()} onConfirm={vi.fn()} />);
+    expect(await screen.findByRole("alert")).toHaveTextContent("Reference variant is unavailable");
+    expect(screen.getByRole("button", { name: "确认并生成" })).toBeDisabled();
+});
