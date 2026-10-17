@@ -472,7 +472,7 @@ export default function CastWorkbenchModal({ isOpen, kind, entityId, onClose }: 
         if (!isOpen || !entity || !kind) return;
         if (lastSeededEntityId.current !== entity.id) {
             setPrompt(buildTemplate(kind, entity, selectedTemplate));
-            const saved = entity.asset_design || {};
+            const saved = entity.asset_design?.design_draft || entity.asset_design || {};
             setAssetDesignNotes(typeof saved.visual_notes === "string" ? saved.visual_notes : "");
             setAssetDesignRequirements(typeof saved.user_requirements === "string" ? saved.user_requirements : "");
             setAssetDesignUnresolved(Array.isArray(saved.unresolved) ? saved.unresolved : []);
@@ -516,7 +516,7 @@ export default function CastWorkbenchModal({ isOpen, kind, entityId, onClose }: 
                 description: entity.description || entity.name,
                 current_draft: assetDesignNotes,
                 user_requirements: assetDesignRequirements,
-                confirmed_design: entity.asset_design?.confirmed ? assetDesignNotes : "",
+                confirmed_design: entity.asset_design?.design_revisions?.at(-1)?.design?.visual_notes || "",
             });
             const notes = String(result?.visual_notes || "").trim();
             if (!notes) throw new Error("设计模型未返回视觉方案");

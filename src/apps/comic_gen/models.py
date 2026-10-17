@@ -575,6 +575,10 @@ class Scene(BaseModel):
     owner_profile_id: Optional[str] = Field(None, description="Profile owner when stored in the personal asset library")
     name: str = Field(..., description="Name of the location/scene")
     description: str = Field(..., description="Visual description of the environment")
+    asset_design: Dict[str, Any] = Field(
+        default_factory=lambda: {"design_draft": {}, "design_revisions": []},
+        description="Editable scene design draft and user-confirmed design revisions",
+    )
     visual_weight: int = Field(3, description="Visual importance weight (1-5)")
     time_of_day: Optional[str] = Field(None, description="Time of day (e.g. Night, Day)")
     lighting_mood: Optional[str] = Field(None, description="Lighting atmosphere")
@@ -605,6 +609,10 @@ class Prop(BaseModel):
     owner_profile_id: Optional[str] = Field(None, description="Profile owner when stored in the personal asset library")
     name: str = Field(..., description="Name of the object")
     description: str = Field(..., description="Visual description of the object")
+    asset_design: Dict[str, Any] = Field(
+        default_factory=lambda: {"design_draft": {}, "design_revisions": []},
+        description="Editable prop design draft and user-confirmed design revisions",
+    )
     video_url: Optional[str] = None
     audio_url: Optional[str] = None
     sfx_url: Optional[str] = None

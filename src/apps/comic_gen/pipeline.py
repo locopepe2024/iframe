@@ -2300,6 +2300,36 @@ class ComicGenPipeline(StudioOwnerMixin):
             target_asset.character_design = character_design
             attributes = {key: value for key, value in attributes.items() if key != "character_design"}
 
+        if "asset_design" in attributes:
+            if asset_type not in ("scene", "prop"):
+                raise ValueError("Asset design can only be saved for a scene or prop")
+            design = attributes["asset_design"]
+            if not isinstance(design, dict):
+                raise ValueError("Asset design must be an object")
+            if set(design) - {"visual_notes", "user_requirements", "unresolved", "confirmed"}:
+                raise ValueError("Asset design contains unknown fields")
+            notes = design.get("visual_notes")
+            if not isinstance(notes, str) or not notes.strip():
+                raise ValueError("Asset design requires a concrete visual design")
+            if not isinstance(design.get("user_requirements", ""), str):
+                raise ValueError("Asset design user requirements must be text")
+            unresolved = design.get("unresolved", [])
+            if not isinstance(unresolved, list) or any(not isinstance(item, str) for item in unresolved):
+                raise ValueError("Asset design unresolved items must be text")
+            if not isinstance(design.get("confirmed", False), bool):
+                raise ValueError("Asset design confirmation must be boolean")
+            record = dict(target_asset.asset_design or {})
+            record["design_draft"] = design
+            revisions = list(record.get("design_revisions") or [])
+            if design.get("confirmed"):
+                revisions.append({
+                    "revision": len(revisions) + 1,
+                    "design": {key: value for key, value in design.items() if key != "confirmed"},
+                })
+            record["design_revisions"] = revisions
+            target_asset.asset_design = record
+            attributes = {key: value for key, value in attributes.items() if key != "asset_design"}
+
         # Update attributes
         for key, value in attributes.items():
             if hasattr(target_asset, key):
