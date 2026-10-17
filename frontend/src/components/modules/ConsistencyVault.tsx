@@ -1333,7 +1333,7 @@ function CharacterDetailModal({ asset, type, onClose, onUpdateDescription, onUpd
                 initial={{ opacity: 0, scale: 0.95 }}
                 animate={{ opacity: 1, scale: 1 }}
                 exit={{ opacity: 0, scale: 0.95 }}
-                className="bg-surface border border-glass-border rounded-lg w-full max-w-5xl h-[min(94dvh,900px)] flex flex-col overflow-hidden shadow-lg md:flex-row"
+                className="bg-surface border border-glass-border rounded-lg w-[min(96vw,1600px)] max-w-none h-[min(96dvh,1000px)] flex flex-col overflow-hidden shadow-lg md:flex-row"
             >
                 {/* Left: Variant Selector */}
                 <div className="h-[40%] min-h-0 w-full bg-surface relative border-b border-glass-border flex flex-col overflow-hidden md:h-auto md:w-1/2 md:border-b-0 md:border-r">
