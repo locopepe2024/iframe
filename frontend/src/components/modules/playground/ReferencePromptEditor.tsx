@@ -11,6 +11,7 @@ import type { AssetLibraryReference } from '@/lib/api';
 import type { AssetPreviewRef } from '@/components/shared/AssetIndexPreview';
 
 const EMPTY_LABELS: string[] = [];
+const EMPTY_REFERENCES: AssetLibraryReference[] = [];
 
 export type ReferenceCandidate = {
   label: string;
@@ -135,7 +136,7 @@ export function referenceSelectionsFromEditor(editor: Editor): AssetLibraryRefer
   return references;
 }
 
-export default function ReferencePromptEditor({ value, labels = EMPTY_LABELS, candidates, placeholder, onChange, onSubmit, onMentionChange, onMentionKeyDown, onReferencesChange, allowImplicitMentions = true, editable = true, pruneUnlistedReferences = false }: {
+export default function ReferencePromptEditor({ value, labels = EMPTY_LABELS, candidates, placeholder, onChange, onSubmit, onMentionChange, onMentionKeyDown, onReferencesChange, allowImplicitMentions = true, editable = true, pruneUnlistedReferences = false, restoreSelectedReferences = EMPTY_REFERENCES }: {
   value: string; labels?: string[]; candidates?: ReferenceCandidate[]; placeholder: string; onChange: (text: string) => void; onSubmit?: () => void;
   onMentionChange?: (suggestion: ReferenceSuggestion | null) => void;
   onMentionKeyDown?: (event: KeyboardEvent) => boolean;
@@ -143,6 +144,9 @@ export default function ReferencePromptEditor({ value, labels = EMPTY_LABELS, ca
   allowImplicitMentions?: boolean;
   editable?: boolean;
   pruneUnlistedReferences?: boolean;
+  /** Rebind matching @labels after an external plain-text replacement (for
+   * example accepting an AI-polished prompt) without binding new references. */
+  restoreSelectedReferences?: AssetLibraryReference[];
 }) {
   const lastLocalValue = useRef<string | null>(null);
   const currentCandidates = useRef<ReferenceCandidate[]>(candidates ?? labels.map((label) => ({ label })));
@@ -219,7 +223,24 @@ export default function ReferencePromptEditor({ value, labels = EMPTY_LABELS, ca
     // document when its plain text is unchanged preserves selected token
     // metadata and avoids upgrading manually typed @names into references.
     if (!allowImplicitMentions && editor.getText({ blockSeparator: '\n' }) === value) return;
-    const document = referencePromptDocument(value, [...currentCandidates.current, ...existingNames.map((label) => ({ label }))], lastLocalValue.current !== value, allowImplicitMentions);
+    const selectedKeys = new Set(restoreSelectedReferences.map((reference) =>
+      `${reference.asset_type}:${reference.asset_id}:${reference.variant_id}`,
+    ));
+    const selectedCandidates = currentCandidates.current.filter((candidate) => {
+      const reference = candidate.reference;
+      return reference && selectedKeys.has(`${reference.asset_type}:${reference.asset_id}:${reference.variant_id}`);
+    });
+    const selectedAliases = selectedCandidates.flatMap((candidate) => {
+      const separator = candidate.label.indexOf(' · ');
+      if (separator <= 0) return [];
+      return [{ ...candidate, label: candidate.label.slice(0, separator) }];
+    });
+    const document = referencePromptDocument(
+      value,
+      [...selectedCandidates, ...selectedAliases, ...existingNames.map((label) => ({ label }))],
+      lastLocalValue.current !== value,
+      selectedCandidates.length > 0 ? true : allowImplicitMentions,
+    );
     // Equal text can still be plain text while reference metadata is loading.
     if (editor.state.doc.eq(editor.schema.nodeFromJSON(document))) return;
     const textChanged = editor.getText({ blockSeparator: '\n' }) !== value;
@@ -230,6 +251,6 @@ export default function ReferencePromptEditor({ value, labels = EMPTY_LABELS, ca
       const end = editor.state.doc.content.size - 1;
       editor.commands.setTextSelection({ from: Math.min(from, end), to: Math.min(to, end) });
     }
-  }, [editor, value, labels, candidates, allowImplicitMentions, pruneUnlistedReferences]);
+  }, [editor, value, labels, candidates, allowImplicitMentions, pruneUnlistedReferences, restoreSelectedReferences]);
   return <EditorContent editor={editor} className="min-w-0 w-full" />;
 }

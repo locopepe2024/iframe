@@ -1356,6 +1356,7 @@ function CharacterDetailModal({ asset, type, onClose, onUpdateDescription, onRen
                                         candidates={referenceCandidates}
                                         onChange={setImagePrompt}
                                         onReferencesChange={setPromptReferences}
+                                        restoreSelectedReferences={promptReferences}
                                         onMentionChange={(suggestion) => { setMention(suggestion); setMentionIndex(0); }}
                                         onMentionKeyDown={handleMentionKeyDown}
                                         allowImplicitMentions={false}

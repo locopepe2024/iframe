@@ -1227,6 +1227,7 @@ export default function CastWorkbenchModal({ isOpen, kind, entityId, onClose }: 
                                         setPromptDirty(true);
                                     }}
                                     onReferencesChange={setPromptReferences}
+                                    restoreSelectedReferences={promptReferences}
                                     onMentionChange={(next) => {
                                         if (next && !mention) setReferenceRefresh((value) => value + 1);
                                         setMention(next);
