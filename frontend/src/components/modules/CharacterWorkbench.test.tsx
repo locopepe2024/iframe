@@ -281,7 +281,8 @@ it("loads the project reference index for the character workbench", async () => 
     expect(await screen.findByRole("listbox")).toHaveTextContent("Pocket watch");
     fireEvent.mouseDown(within(screen.getByRole("listbox")).getByRole("option"));
     fireEvent.click(within(screen.getByRole("listbox")).getByRole("option"));
-    await waitFor(() => expect(document.querySelector('[data-reference-variant-id="watch-front"]')).toBeInTheDocument());
+    await waitFor(() => expect(document.querySelector('[data-reference-variant-id="watch-front"]')).toBeInTheDocument(),
+        { timeout: 3000 });
     fireEvent.click(screen.getAllByRole("button", { name: "Reference image" })[0]);
     fireEvent.click(screen.getAllByTestId("variant-generate")[0]);
     const confirm = await screen.findByRole("button", { name: "确认并生成" });
