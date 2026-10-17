@@ -53,6 +53,8 @@ from .models import (
     build_episode_readable_summary,
     GlobalAssetLibrary,
     AssetLibraryReference,
+    AssetImageSubmissionSnapshot,
+    AssetImageReferenceIdentity,
     AssetReferenceIndex,
     AssetReferenceIndexEntry,
     image_variant_storage_key,
@@ -1019,6 +1021,44 @@ class ComicGenPipeline(StudioOwnerMixin):
             return series.model_settings.t2i_model
         return requested_model or script.model_settings.t2i_model
 
+    @staticmethod
+    def _confirmed_asset_design_revision(asset: Any, asset_type: str) -> Optional[int]:
+        record = (asset.character_design if asset_type == "character" else asset.asset_design) or {}
+        revisions = record.get("design_revisions") or []
+        if not revisions:
+            return None
+        revision = revisions[-1].get("revision")
+        return revision if isinstance(revision, int) and revision >= 1 else None
+
+    @staticmethod
+    def _stamp_submission_on_new_variants(
+        asset: Any, asset_type: str, before_ids: set[str], snapshot: Optional[Dict[str, Any]],
+    ) -> None:
+        if not snapshot:
+            return
+        frozen = AssetImageSubmissionSnapshot.model_validate(snapshot)
+        for variant in ComicGenPipeline._asset_image_variants(asset, asset_type):
+            if variant.id not in before_ids:
+                variant.submission_snapshot = frozen.model_copy(deep=True)
+
+    @classmethod
+    def _asset_submission_snapshot(
+        cls, asset: Any, asset_type: str, *, prompt: str, negative_prompt: str,
+        model_id: str, aspect_ratio: str, generation_type: str,
+        image_generation_mode: str, reference: Any = None, references: Any = None,
+    ) -> Dict[str, Any]:
+        identities = ([reference] if reference else []) + list(references or [])
+        return AssetImageSubmissionSnapshot(
+            positive_prompt=prompt,
+            negative_prompt=negative_prompt or "",
+            selected_model_id=model_id,
+            aspect_ratio=aspect_ratio,
+            generation_type=generation_type,
+            image_generation_mode=image_generation_mode,
+            reference_inputs=[AssetImageReferenceIdentity.model_validate(item) for item in identities],
+            design_revision_at_submission=cls._confirmed_asset_design_revision(asset, asset_type),
+        ).model_dump()
+
     def generate_asset(self, script_id: str, asset_id: str, asset_type: str, style_preset: str = None, reference_image_url: str = None, style_prompt: str = None, generation_type: str = "all", prompt: str = None, apply_style: bool = True, negative_prompt: str = None, batch_size: int = 1, model_name: str = None, aspect_ratio: str = None, use_reference_image: bool = True, reference: Any = None, references: Any = None, image_generation_mode: str = "text", _generation_task_id: Optional[str] = None, preserve_prompt: bool = False) -> Script:
         """Step 2: Generate a specific asset (character/scene/prop).
         If style_preset is None, uses the project's global style."""
@@ -1119,6 +1159,7 @@ class ComicGenPipeline(StudioOwnerMixin):
                     raise AssetGenerationInProgress("Asset generation is already processing")
             target_asset.status = GenerationStatus.PROCESSING
             target_asset.generation_error = None
+            before_variant_ids = {v.id for v in self._asset_image_variants(target_asset, asset_type)}
             if not target_asset.owner_user_id:
                 target_asset.owner_user_id = script.owner_user_id
             if not target_asset.owner_profile_id:
@@ -1198,6 +1239,11 @@ class ComicGenPipeline(StudioOwnerMixin):
             target_asset.generation_error = str(e)
             raise e
         finally:
+            queued_task = getattr(self, "asset_generation_tasks", {}).get(_generation_task_id or "")
+            self._stamp_submission_on_new_variants(
+                target_asset, asset_type, before_variant_ids,
+                queued_task.get("submission_snapshot") if queued_task else None,
+            )
             self._register_asset_media(
                 target_asset,
                 getattr(target_asset, "owner_profile_id", None) or script.owner_profile_id,
@@ -1266,6 +1312,22 @@ class ComicGenPipeline(StudioOwnerMixin):
             if target_asset.status == GenerationStatus.PROCESSING:
                 raise AssetGenerationInProgress("Asset generation is already processing")
 
+            selected_model = (
+                (self.series_store[script.series_id].model_settings.i2i_model if script.series_id
+                 else script.model_settings.i2i_model)
+                if asset_type == "character" and generation_type in ("three_view", "headshot")
+                else effective_reference_model
+            )
+            selected_aspect = aspect_ratio or getattr(
+                script.model_settings, f"{asset_type}_aspect_ratio"
+            )
+            submission_snapshot = self._asset_submission_snapshot(
+                target_asset, asset_type, prompt=prompt or "", negative_prompt=negative_prompt or "",
+                model_id=selected_model, aspect_ratio=selected_aspect,
+                generation_type=generation_type, image_generation_mode=image_generation_mode,
+                reference=normalized_reference, references=normalized_references,
+            ) if preserve_prompt and prompt else None
+
             target_asset.status = GenerationStatus.PROCESSING
             target_asset.generation_error = None
             self.asset_generation_tasks[task_id] = {
@@ -1278,6 +1340,7 @@ class ComicGenPipeline(StudioOwnerMixin):
                 "created_at": time.time(),
                 "owner_user_id": script.owner_user_id,
                 "owner_profile_id": script.owner_profile_id,
+                "submission_snapshot": submission_snapshot,
                 "params": {
                     "style_preset": style_preset,
                     "reference_image_url": reference_image_url,
@@ -1370,6 +1433,13 @@ class ComicGenPipeline(StudioOwnerMixin):
                             asset, source = self._find_asset_with_source(
                                 owner, task.get("asset_id"), asset_type,
                             )
+                        if asset and task.get("is_series"):
+                            self._stamp_submission_on_new_variants(
+                                asset, asset_type,
+                                set(task.get("existing_variant_ids") or []),
+                                task.get("submission_snapshot"),
+                            )
+                            self._save_after_asset_mutation(source)
                         if asset and asset.status == GenerationStatus.PROCESSING:
                             asset.status = GenerationStatus.FAILED
                             asset.generation_error = str(e)
@@ -1445,11 +1515,14 @@ class ComicGenPipeline(StudioOwnerMixin):
             target = next((c for c in series.characters if c.id == asset_id), None)
             if not target:
                 raise ValueError(f"Character {asset_id} not found in series")
+            before_variant_ids = {v.id for v in self._asset_image_variants(target, asset_type)}
             self.asset_generator.generate_character(
                 target, generation_type=generation_type, prompt=prompt or "",
                 positive_prompt=positive_prompt, negative_prompt=negative_prompt,
-                batch_size=batch_size, model_name=t2i_model, size=effective_size,
+                batch_size=batch_size, model_name=t2i_model,
+                i2i_model_name=series.model_settings.i2i_model, size=effective_size,
                 reference_image_url=reference_image_url,
+                use_reference_image=bool(reference_image_url),
                 reference_provenance=reference_provenance,
                 reference_image_urls=resolved_references,
                 reference_provenance_list=reference_provenance_list,
@@ -1460,6 +1533,7 @@ class ComicGenPipeline(StudioOwnerMixin):
             target = next((s for s in series.scenes if s.id == asset_id), None)
             if not target:
                 raise ValueError(f"Scene {asset_id} not found in series")
+            before_variant_ids = {v.id for v in self._asset_image_variants(target, asset_type)}
             self.asset_generator.generate_scene(
                 target, positive_prompt=positive_prompt, negative_prompt=negative_prompt,
                 batch_size=batch_size, model_name=t2i_model, size=effective_size,
@@ -1475,6 +1549,7 @@ class ComicGenPipeline(StudioOwnerMixin):
             target = next((p for p in series.props if p.id == asset_id), None)
             if not target:
                 raise ValueError(f"Prop {asset_id} not found in series")
+            before_variant_ids = {v.id for v in self._asset_image_variants(target, asset_type)}
             self.asset_generator.generate_prop(
                 target, positive_prompt=positive_prompt, negative_prompt=negative_prompt,
                 batch_size=batch_size, model_name=t2i_model, size=effective_size,
@@ -1488,6 +1563,10 @@ class ComicGenPipeline(StudioOwnerMixin):
             )
         else:
             raise ValueError(f"Unknown asset type: {asset_type}")
+
+        self._stamp_submission_on_new_variants(
+            target, asset_type, before_variant_ids, task.get("submission_snapshot"),
+        )
 
         self._save_series_data()
 
@@ -10434,6 +10513,17 @@ class ComicGenPipeline(StudioOwnerMixin):
             series, target_asset = self._find_series_asset(series_id, asset_id, asset_type)
             if target_asset.status == GenerationStatus.PROCESSING:
                 raise AssetGenerationInProgress("Asset generation is already processing")
+            selected_model = (
+                series.model_settings.i2i_model
+                if asset_type == "character" and generation_type in ("three_view", "headshot")
+                else t2i_model
+            )
+            submission_snapshot = self._asset_submission_snapshot(
+                target_asset, asset_type, prompt=prompt or "", negative_prompt=effective_negative_prompt,
+                model_id=selected_model, aspect_ratio=aspect_ratio,
+                generation_type=generation_type, image_generation_mode=image_generation_mode,
+                reference=normalized_reference, references=normalized_references,
+            ) if preserve_prompt and prompt and not apply_style else None
             target_asset.status = GenerationStatus.PROCESSING
             target_asset.generation_error = None
             self.asset_generation_tasks[task_id] = {
@@ -10447,6 +10537,10 @@ class ComicGenPipeline(StudioOwnerMixin):
                 "owner_user_id": series.owner_user_id,
                 "owner_profile_id": series.owner_profile_id,
                 "is_series": True,
+                "submission_snapshot": submission_snapshot,
+                "existing_variant_ids": [
+                    variant.id for variant in self._asset_image_variants(target_asset, asset_type)
+                ],
                 "params": {
                     "style_preset": style_preset,
                     "reference_image_url": reference_image_url,

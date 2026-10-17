@@ -2,7 +2,7 @@
 
 ## Scope and evidence
 
-This contract covers character, scene, and prop image generation in Studio asset workbenches. Current code has a versioned character design, but scene/prop `asset_design` submissions are ignored because those models have no matching field. Scene/prop and legacy workbench generation paths also differ in how they append style or default composition. These are code observations; provider output adherence requires runtime checks.
+This contract covers character, scene, and prop image generation in Studio asset workbenches. Character, scene and prop designs now have reviewable confirmed revisions. Manual image routes require a complete visible prompt. Provider output adherence still requires runtime checks.
 
 ## Ownership
 
@@ -25,12 +25,21 @@ This contract covers character, scene, and prop image generation in Studio asset
 - The legacy project batch route rejects generation until a per-asset prompt review flow exists. Its old `AssetGrid` caller has no imports in the current frontend tree.
 - Studio and Cast workbenches copy optional global style into editable prompt fields only on a user action. The asset library asks for an editable prompt and negative prompt before generating more variants. These requests send the reviewed text and no style suffix.
 - The character three-view generator does not add hidden negative terms when receiving a reviewed prompt.
+- Reviewed project and series tasks freeze positive/negative text, effective model, ratio, mode, stable explicit reference IDs and the latest confirmed design revision at enqueue. New image variants carry that snapshot after generation; older variants and direct generator calls have no fabricated snapshot.
+- Manual character three-view and headshot requests require one explicitly selected master variant. Manual requests using a legacy reference URL fail validation because the URL does not establish a stable visible identity. Series character text generation no longer implicitly reuses its selected image.
 
 ## Remaining work
 
-- Store the exact submission snapshot and its source design revision on each generated variant. Existing `prompt_used` records provider positive text for some paths, but does not provide the complete revision/reference/parameter ledger.
 - Bring the structure of scene/prop AI design drafts beyond one `visual_notes` string if field-specific editing proves useful. Keep frame content and continuity choices at generation scope, outside the reusable asset design record.
-- Verify that derived character image references are shown with their stable variant identity before submission; the generator can use a selected master image for derived views.
+- Add a dedicated preflight display of stable reference variant IDs, effective model and ratio for all manual entry points. Current input controls expose selected reference images, but the complete ledger is not yet shown in one review surface.
+
+## Submission ledger implementation plan
+
+- At enqueue, freeze the request's visible positive/negative text, requested and effective image model, aspect ratio, generation type, image mode, stable explicit reference IDs and confirmed design revision. Do not store signed delivery URLs in this ledger.
+- At execution, associate that frozen record only with variants created by the task. A later design edit must not change the recorded source revision.
+- Derived character views require an explicit structured master variant. A text-mode request cannot quietly consume a selected master image.
+- Legacy or directly invoked generator paths may lack a reviewed snapshot; represent that absence explicitly instead of inventing provenance.
+- Verify scene, prop, character reference sheet and derived character paths with a task queued before a design revision changes. Check reload and API projection, not only in-memory state.
 
 ## Acceptance criteria
 

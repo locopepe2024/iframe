@@ -164,6 +164,26 @@ class ProviderRoutingConfig(BaseModel):
         description="Provider backend for pixverse-* models: dashscope or vendor",
     )
 
+class AssetImageReferenceIdentity(BaseModel):
+    asset_type: Literal["character", "scene", "prop"]
+    asset_id: str
+    variant_id: str
+
+
+class AssetImageSubmissionSnapshot(BaseModel):
+    """Immutable user-reviewed request captured before an image task is queued."""
+    schema_version: Literal[1] = 1
+    positive_prompt: str
+    negative_prompt: str = ""
+    selected_model_id: str
+    aspect_ratio: str
+    generation_type: str
+    image_generation_mode: Literal["text", "reference"]
+    reference_inputs: List[AssetImageReferenceIdentity] = Field(default_factory=list)
+    design_revision_at_submission: Optional[int] = Field(None, ge=1)
+    submitted_at: float = Field(default_factory=time.time)
+
+
 class ImageVariant(BaseModel):
     model_config = ConfigDict(validate_assignment=True)
     id: str = Field(..., description="Unique identifier for the variant")
@@ -181,6 +201,9 @@ class ImageVariant(BaseModel):
     )
     created_at: float = Field(default_factory=time.time, description="Timestamp of creation")
     prompt_used: Optional[str] = Field(None, description="Prompt used for this specific variant")
+    submission_snapshot: Optional[AssetImageSubmissionSnapshot] = Field(
+        None, description="Reviewed image request frozen at enqueue; absent for legacy or uploaded media"
+    )
     is_favorited: bool = Field(False, description="Whether this variant is favorited/pinned (won't be auto-deleted)")
     # NEW: 上传来源标记
     is_uploaded_source: bool = Field(False, description="Whether this is a user-uploaded source file")

@@ -1472,6 +1472,11 @@ def _require_reviewed_asset_image_prompt(request: GenerateAssetRequest) -> None:
         raise HTTPException(status_code=422, detail="Submit the complete visible prompt; hidden style or template append is disabled")
     if request.asset_type == "character" and request.generation_type == "all":
         raise HTTPException(status_code=422, detail="Choose one reviewed character image type per submission")
+    if request.reference_image_url:
+        raise HTTPException(status_code=422, detail="Select a reference by stable asset and variant ID before generating")
+    if request.asset_type == "character" and request.generation_type in ("three_view", "headshot"):
+        if request.image_generation_mode != "reference" or request.reference is None or request.references:
+            raise HTTPException(status_code=422, detail="Choose one explicit master image variant for this derived character view")
 
 
 @app.post("/series/{series_id}/assets/generate")
