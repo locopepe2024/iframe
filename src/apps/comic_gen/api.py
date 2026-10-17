@@ -5120,6 +5120,75 @@ _T2I_UPLOAD_MAX_BYTES = 8 * 1024 * 1024
 _T2I_UPLOAD_ALLOWED_EXTS = {".jpg", ".jpeg", ".png", ".webp"}
 
 
+class AttachAssetFrameRequest(BaseModel):
+    scope: Literal["project", "series"]
+    container_id: str
+    asset_type: Literal["character", "scene", "prop"]
+    asset_id: str
+    variant_id: str
+    slot: Literal["first", "last"] = "first"
+
+
+@app.post("/projects/{script_id}/frames/{frame_id}/attach_asset_frame")
+def attach_asset_frame(
+    script_id: str,
+    frame_id: str,
+    request: AttachAssetFrameRequest,
+    user: UserContext = Depends(require_studio_user),
+):
+    """Attach an owned asset by durable identity, never by its delivery URL."""
+    if not pipeline.get_script(script_id, user.owner_profile_id):
+        raise HTTPException(status_code=404, detail="Project not found")
+    index = pipeline.get_asset_reference_index(script_id, scope="project")
+    scope = "episode" if request.scope == "project" else request.scope
+    entry = next((item for item in index.assets
+                  if item.asset_type == request.asset_type and item.asset_id == request.asset_id
+                  and item.source_scope == scope and item.source_container_id == request.container_id), None)
+    variant = next((item for item in entry.variants if item.id == request.variant_id), None) if entry else None
+    if not variant:
+        raise HTTPException(status_code=404, detail="Asset variant not found in this project")
+    stored = image_variant_storage_key(variant)
+    if not stored:
+        raise HTTPException(status_code=404, detail="Asset image not found")
+    copied_path = None
+    if is_object_key(stored) or stored.startswith(("http://", "https://")):
+        # A managed cloud key is already durable. Reject external/disabled
+        # storage through the same owner delivery boundary as asset viewing.
+        if stored.startswith(("http://", "https://")):
+            stored = managed_object_key_from_url(stored, OSSImageUploader())
+            if not stored:
+                raise HTTPException(status_code=422, detail="External asset image is not managed")
+        _owned_media_delivery_url(stored, user.owner_profile_id)
+    else:
+        if storage_backend() != "local":
+            raise HTTPException(status_code=404, detail="Asset is outside the active storage")
+        try:
+            source = pipeline._resolve_stored_reference_value(stored, user.owner_profile_id)
+        except InvalidAssetReference as exc:
+            raise HTTPException(status_code=404, detail="Asset image not found") from exc
+        ext = os.path.splitext(source)[1].lower()
+        if ext not in _T2I_UPLOAD_ALLOWED_EXTS or os.path.getsize(source) > 64 * 1024 * 1024:
+            raise HTTPException(status_code=415, detail="Asset image format or size is unsupported")
+        copied_path, stored = _studio_upload_target(user, f"{request.slot}_asset_{uuid.uuid4().hex}{ext}")
+        try:
+            shutil.copyfile(source, copied_path)
+        except OSError:
+            if os.path.exists(copied_path):
+                os.unlink(copied_path)
+            raise HTTPException(status_code=503, detail="Asset image could not be copied") from None
+    try:
+        frame = (pipeline.upload_last_frame if request.slot == "last" else pipeline.upload_t2i_frame)(
+            script_id, frame_id, stored,
+        )
+        if frame is None:
+            raise HTTPException(status_code=404, detail="Frame not found")
+    except Exception:
+        if copied_path and os.path.exists(copied_path):
+            os.unlink(copied_path)
+        raise
+    return signed_response(frame)
+
+
 @app.post("/projects/{script_id}/frames/{frame_id}/upload_t2i")
 async def upload_t2i_frame(
     script_id: str,
