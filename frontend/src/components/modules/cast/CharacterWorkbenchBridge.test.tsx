@@ -12,7 +12,7 @@ vi.mock("@/store/projectStore", () => ({
 }));
 vi.mock("@/lib/api", () => ({ api: { generateAsset, getTaskStatus: vi.fn(), getProject: vi.fn(), updateAssetDescription: vi.fn(), updateAssetAttributes }, }));
 vi.mock("@/lib/modelCatalog", () => ({ resolveAssetGenerationModel: vi.fn(() => "test-model") }));
-vi.mock("@/components/modules/CharacterWorkbench", () => ({ default: ({ asset, onRename, onGenerate }: any) => <div data-testid="canonical-character-workbench">{asset.name}<button onClick={() => void onRename("New name")}>rename</button><button onClick={() => void onGenerate("reference_sheet", "Reviewed blue portrait", true, "red robe", 1)}>generate</button></div> }));
+vi.mock("@/components/modules/CharacterWorkbench", () => ({ default: ({ asset, onRename, onGenerate }: any) => <div data-testid="canonical-character-workbench">{asset.name}<button onClick={() => void onRename("New name")}>rename</button><button onClick={() => void onGenerate("reference_sheet", "Reviewed blue portrait", true, "red robe", 1)}>generate</button><button onClick={() => void onGenerate("three_view", "Reviewed three view", false, "blur", 1, [{ asset_type: "character", asset_id: "character", variant_id: "master-1" }], "reference")}>derived</button></div> }));
 
 import CharacterWorkbenchBridge from "./CharacterWorkbenchBridge";
 
@@ -40,4 +40,15 @@ it("does not add hidden style text when the canonical workbench submits", async 
     expect(args[7]).toBe(false);
     expect(args[8]).toBe("red robe");
     expect(args[15]).toBe(true);
+});
+
+it("sends a derived character master as one stable reference", async () => {
+    generateAsset.mockReset().mockResolvedValue(project);
+    render(<CharacterWorkbenchBridge entityId="character" onClose={vi.fn()} />);
+    fireEvent.click(screen.getByRole("button", { name: "derived" }));
+    await waitFor(() => expect(generateAsset).toHaveBeenCalled());
+    const args = generateAsset.mock.calls[0];
+    expect(args[12]).toEqual({ asset_type: "character", asset_id: "character", variant_id: "master-1" });
+    expect(args[13]).toEqual([]);
+    expect(args[14]).toBe("reference");
 });

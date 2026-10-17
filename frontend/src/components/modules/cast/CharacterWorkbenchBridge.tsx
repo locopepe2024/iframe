@@ -3,6 +3,7 @@
 import { useProjectStore } from "@/store/projectStore";
 import { api, type AssetLibraryReference } from "@/lib/api";
 import { resolveAssetGenerationModel } from "@/lib/modelCatalog";
+import { toast } from "@/store/toastStore";
 import CharacterWorkbench from "@/components/modules/CharacterWorkbench";
 
 /**
@@ -32,6 +33,11 @@ export default function CharacterWorkbenchBridge({ entityId, onClose }: { entity
     ) => {
         if (!project) return;
         const generationType = type === "reference_sheet" ? "reference_sheet" : type;
+        const isDerivedView = generationType === "three_view" || generationType === "headshot";
+        if (isDerivedView && (imageGenerationMode !== "reference" || references.length !== 1)) {
+            toast.warning("Select exactly one master image for this character view.");
+            return;
+        }
         addGeneratingTask(entityId, generationType, batchSize);
         try {
             const result = await api.generateAsset(
@@ -47,8 +53,8 @@ export default function CharacterWorkbenchBridge({ entityId, onClose }: { entity
                 batchSize,
                 resolveAssetGenerationModel(project.model_settings?.t2i_model),
                 undefined,
-                undefined,
-                imageGenerationMode === "reference" ? references : [],
+                isDerivedView ? references[0] : undefined,
+                imageGenerationMode === "reference" && !isDerivedView ? references : [],
                 imageGenerationMode,
                 true,
             );
