@@ -24,6 +24,7 @@ import { debugLog } from "@/lib/debugLog";
 import BorderGlow from "@/components/shared/BorderGlow/BorderGlow";
 import WorkflowActionButton from "@/components/shared/WorkflowActionButton";
 import OptimizerSelector, { type OptimizerProvider } from "./OptimizerSelector";
+import VideoPolishReview from "./VideoPolishReview";
 
 interface PolishedPrompt {
     cn: string;
@@ -280,31 +281,11 @@ export default function PolishPanel({
     );
 
     if (review) {
-        return <div className="space-y-3 rounded-lg border border-glass-border bg-black/20 p-3">
-            <div className="flex items-center justify-between text-body-sm text-foreground">
-                <strong>提交前检查模型输入</strong>
-                <button type="button" onClick={() => setReview(null)} aria-label="关闭输入检查"><X size={15} /></button>
-            </div>
-            <p className="text-xs text-text-secondary">创作约束可以编辑；图片按下列顺序发送。确认后才调用模型。</p>
-            {review.media.length ? <ul className="space-y-1 text-xs text-text-secondary">{review.media.map((item, i) =>
-                <li key={`${item.url}-${i}`}>{item.label}：{item.url}</li>)}</ul> : <p className="text-xs text-text-muted">无参考图</p>}
-            <label className="block text-xs text-text-secondary">系统／任务文字
-                <textarea className="mt-1 h-48 w-full rounded border border-glass-border bg-black/30 p-2 text-xs text-foreground disabled:opacity-50" value={review.messages.system}
-                    disabled={optimizerProvider === "minimax_context_ir"}
-                    onChange={(event) => setReview({ ...review, messages: { ...review.messages, system: event.target.value } })} />
-            </label>
-            <label className="block text-xs text-text-secondary">用户／镜头文字
-                <textarea className="mt-1 h-32 w-full rounded border border-glass-border bg-black/30 p-2 text-xs text-foreground" value={review.messages.user}
-                    onChange={(event) => setReview({ ...review, messages: { ...review.messages, user: event.target.value } })} />
-            </label>
-            <p className="text-xs text-text-muted">{review.format_note}</p>
-            {error && <p className="text-xs text-status-failed-fg">{error.messageZh}</p>}
-            <div className="flex justify-end gap-2">
-                <button type="button" onClick={() => setReview(null)} className="rounded border border-glass-border px-3 py-1.5 text-xs text-foreground">返回</button>
-                <button type="button" onClick={() => void confirmPolish()} disabled={isPolishing || !review.messages.user.trim()}
-                    className="rounded bg-primary px-3 py-1.5 text-xs text-white disabled:opacity-50">{isPolishing ? "润色中…" : "确认输入并润色"}</button>
-            </div>
-        </div>;
+        return <VideoPolishReview messages={review.messages} media={review.media}
+            formatNote={review.format_note} isContextIr={optimizerProvider === "minimax_context_ir"}
+            isSubmitting={isPolishing} error={error?.messageZh}
+            onChange={(messages) => setReview({ ...review, messages })}
+            onCancel={() => setReview(null)} onConfirm={() => void confirmPolish()} />;
     }
 
     if (!polished && !error && !isPolishing) {
