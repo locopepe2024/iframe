@@ -932,12 +932,7 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
                     </div>
                     {isPlanOpen && planEntries.length > 0 && (
                         <div id="character-plan-constraints" className="absolute right-3 top-full z-50 max-h-[45vh] w-[min(34rem,calc(100vw-2rem))] overflow-y-auto border border-glass-border bg-surface shadow-lg md:right-6">
-                            <EpisodeAssetPlanPanel entries={planEntries} onUse={(text) => {
-                                if (activePanel === "three_view") setThreeViewPrompt(previous => `${previous.trim()}\n${text}`.trim());
-                                else if (activePanel === "headshot") setHeadshotPrompt(previous => `${previous.trim()}\n${text}`.trim());
-                                else setFullBodyPrompt(previous => `${previous.trim()}\n${text}`.trim());
-                                setIsPlanOpen(false);
-                            }} />
+                            <EpisodeAssetPlanPanel entries={planEntries} title="拍摄计划关联场景（仅供核对）" />
                         </div>
                     )}
                 </div>

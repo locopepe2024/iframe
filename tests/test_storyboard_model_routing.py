@@ -6,7 +6,7 @@ from urllib.parse import parse_qs, urlsplit
 
 import pytest
 
-from src.apps.comic_gen.models import Character, GenerationStatus, ImageAsset, ImageVariant, ModelSettings, Script, Series, StoryboardFrame
+from src.apps.comic_gen.models import Character, GenerationStatus, ImageAsset, ImageVariant, ModelSettings, Scene, Script, Series, StoryboardFrame
 from src.apps.comic_gen.pipeline import ComicGenPipeline
 from src.apps.comic_gen.storyboard import StoryboardGenerator
 from src.apps.studio_access import studio_media_url, studio_owner_key, verify_studio_media
@@ -288,6 +288,47 @@ def test_render_preview_is_the_exact_complete_generator_prompt():
     call = pipeline.storyboard_generator.generate_frame.call_args
     assert call.kwargs["prompt"] == preview
     assert call.kwargs["preserve_prompt"] is True
+
+
+def test_storyboard_preview_uses_confirmed_scene_design_and_ignores_new_draft():
+    now = time.time()
+    scene = Scene(id="scene-1", name="长街", description="青石长街", asset_design={
+        "design_draft": {"visual_notes": "全画面暖红色", "confirmed": False},
+        "design_revisions": [{"revision": 1, "design": {
+            "visual_notes": "青石长街与街边粮铺",
+            "style": "写实古装",
+            "ambient_lighting": "街面环境为冷灰蓝，夕阳仅在远处天际",
+            "reference_viewpoint": "街口向粮铺侧拍",
+            "visual_constraints": {"key_light_direction": "side", "visible_face_limit": 3},
+        }}],
+    })
+    frame = StoryboardFrame(id="frame-1", scene_id=scene.id,
+                            director_shot_context={"shot": {"lighting": {
+                                "key_source": "残阳如血覆盖整条街", "color_tone": "暖红色",
+                            }, "composition": "粮铺位于画面中段"}})
+    script = Script(id="episode-1", title="Episode", original_text="", scenes=[scene], frames=[frame],
+                    created_at=now, updated_at=now)
+    pipeline = ComicGenPipeline.__new__(ComicGenPipeline)
+    pipeline.scripts = {script.id: script}
+    pipeline.series_store = {}
+    pipeline.resolve_episode_assets = Mock(return_value={"characters": [], "scenes": [scene]})
+
+    preview = pipeline.preview_storyboard_render_prompt(script.id, frame.id, "粮铺前人群退避")
+    assert "场景视觉基线" in preview
+    assert pipeline.storyboard_render_scene_design_source(script.id, frame.id) == "关联场景设计：长街 r1"
+    assert pipeline.storyboard_render_omitted_plan_lighting(script.id, frame.id) == "残阳如血覆盖整条街；暖红色"
+    assert "街面环境为冷灰蓝，夕阳仅在远处天际" in preview
+    assert "主光方向：侧面光" in preview
+    assert "粮铺位于画面中段" in preview
+    assert "残阳如血覆盖整条街" not in preview
+    assert "全画面暖红色" not in preview
+    before = pipeline.storyboard_render_context_token(script.id, frame.id)
+    scene.asset_design["design_revisions"].append({"revision": 2, "design": {"visual_notes": "新版长街"}})
+    assert pipeline.storyboard_render_context_token(script.id, frame.id) != before
+    scene.asset_design["design_revisions"] = []
+    assert "残阳如血覆盖整条街" in pipeline.preview_storyboard_render_prompt(
+        script.id, frame.id, "粮铺前人群退避",
+    )
 
 
 def test_complete_prompt_reaches_image_adapter_without_character_suffix(tmp_path):

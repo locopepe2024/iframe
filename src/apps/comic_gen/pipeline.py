@@ -3095,6 +3095,35 @@ class ComicGenPipeline(StudioOwnerMixin):
             "style_prompt": script.style_prompt,
         }
 
+    @staticmethod
+    def _confirmed_scene_design(scene: Optional[Scene]) -> tuple[Optional[int], Dict[str, Any]]:
+        if scene is None or not isinstance(scene.asset_design, dict):
+            return None, {}
+        revisions = scene.asset_design.get("design_revisions") or []
+        if not isinstance(revisions, list) or not revisions:
+            return None, {}
+        latest = revisions[-1]
+        if not isinstance(latest, dict) or not isinstance(latest.get("design"), dict):
+            return None, {}
+        return latest.get("revision"), latest["design"]
+
+    @staticmethod
+    def _scene_design_has_light(design: Dict[str, Any]) -> bool:
+        constraints = design.get("visual_constraints")
+        return bool(str(design.get("ambient_lighting") or "").strip()) or (
+            isinstance(constraints, dict) and constraints.get("key_light_direction") not in (None, "unspecified")
+        )
+
+    def _storyboard_scene_asset(self, script: Script, frame: StoryboardFrame) -> Optional[Scene]:
+        scene = next((item for item in getattr(script, "scenes", []) if item.id == frame.scene_id), None)
+        if scene is not None:
+            return scene
+        try:
+            resolved = self.resolve_project_assets(script)
+            return next((item for item in resolved["scenes"] if item.id == frame.scene_id), None)
+        except (AttributeError, KeyError, TypeError):
+            return None
+
     def storyboard_frame_prompt_projection(self, script: Script, frame: StoryboardFrame) -> str:
         """Build the current frame's bounded visual prompt projection.
 
@@ -3113,16 +3142,44 @@ class ComicGenPipeline(StudioOwnerMixin):
             ).strip()
         if not style_text:
             style_text = str(style.get("style_prompt") or style.get("style_preset") or "").strip()
+        scene = self._storyboard_scene_asset(script, frame)
+        scene_revision, scene_design = self._confirmed_scene_design(scene)
+        if isinstance(scene_design.get("style"), str) and scene_design["style"].strip():
+            style_text = scene_design["style"].strip()
         if frame.style_prompt_override and frame.style_prompt_override.strip():
             style_text = frame.style_prompt_override.strip()
 
-        scene = next((item for item in getattr(script, "scenes", []) if item.id == frame.scene_id), None)
-        if scene is None:
-            try:
-                resolved = self.resolve_project_assets(script)
-                scene = next((item for item in resolved["scenes"] if item.id == frame.scene_id), None)
-            except (AttributeError, KeyError, TypeError):
-                scene = None
+        scene_design_parts: List[str] = []
+        if scene_design:
+            notes = str(scene_design.get("visual_notes") or "").strip()
+            if notes and (scene is None or notes not in scene.description):
+                scene_design_parts.append("空间与内容：" + notes)
+            for key, label in (
+                ("ambient_lighting", "环境光"),
+                ("reference_viewpoint", "基础视角"),
+                ("reference_framing", "占位与深度"),
+            ):
+                value = scene_design.get(key)
+                if isinstance(value, str) and value.strip():
+                    scene_design_parts.append(f"{label}：{value.strip()}")
+            constraints = scene_design.get("visual_constraints")
+            if isinstance(constraints, dict):
+                light_names = {"front": "正面光", "back": "背面光", "side": "侧面光",
+                               "top": "顶部光", "bottom": "底部光", "mixed": "混合光"}
+                direction = constraints.get("key_light_direction")
+                if direction in light_names:
+                    scene_design_parts.append("主光方向：" + light_names[direction])
+                forbidden = constraints.get("forbidden_light_directions")
+                if isinstance(forbidden, list):
+                    names = [light_names[item] for item in forbidden if item in light_names]
+                    if names:
+                        scene_design_parts.append("禁止光线方向：" + "、".join(names))
+                face_limit = constraints.get("visible_face_limit")
+                if isinstance(face_limit, int) and not isinstance(face_limit, bool):
+                    scene_design_parts.append(f"可见人脸上限：{face_limit} 张")
+                people_view = constraints.get("secondary_people_view")
+                if isinstance(people_view, str) and people_view.strip():
+                    scene_design_parts.append("其他人物呈现：" + people_view.strip())
 
         lighting_parts: List[str] = []
         if frame.lighting:
@@ -3142,6 +3199,8 @@ class ComicGenPipeline(StudioOwnerMixin):
         parts = [
             str(frame.visual_description or frame.action_description or "").strip(),
             f"Location: {scene.name}. {scene.description}" if scene else "",
+            "场景视觉基线：" + "；".join(scene_design_parts)
+            if scene_design_parts and scene_revision is not None else "",
             f"Visual style: {style_text}" if style_text else "",
             f"Lighting: {'; '.join(lighting_parts)}" if lighting_parts else "",
             f"Shot size: {frame.shot_size}" if frame.shot_size else "",
@@ -3153,7 +3212,17 @@ class ComicGenPipeline(StudioOwnerMixin):
 
     def storyboard_render_prompt_projection(self, script: Script, frame: StoryboardFrame, prompt: str) -> str:
         """Compose a draft render prompt with only this frame's constraints."""
-        projected_context = append_projected_shot_context(prompt.strip(), frame.director_shot_context)
+        context = frame.director_shot_context
+        _, scene_design = self._confirmed_scene_design(self._storyboard_scene_asset(script, frame))
+        if self._scene_design_has_light(scene_design) and isinstance(context, dict):
+            # A confirmed scene baseline supersedes older plan lighting. The
+            # frame's explicit lighting fields are projected separately below.
+            context = {**context}
+            if isinstance(context.get("shot"), dict):
+                context["shot"] = {key: value for key, value in context["shot"].items() if key != "lighting"}
+            else:
+                context.pop("lighting", None)
+        projected_context = append_projected_shot_context(prompt.strip(), context)
         frame_projection = self.storyboard_frame_prompt_projection(script, frame)
         if not frame_projection:
             return projected_context
@@ -6501,6 +6570,36 @@ class ComicGenPipeline(StudioOwnerMixin):
         projected = self.storyboard_render_prompt_projection(script, frame, prompt)
         characters = self.resolve_project_assets(script)["characters"]
         return append_storyboard_character_descriptions(projected, frame.character_ids, characters)
+
+    def storyboard_render_scene_design_source(self, script_id: str, frame_id: str) -> Optional[str]:
+        script = self.scripts.get(script_id)
+        if not script:
+            raise ValueError("Script not found")
+        frame = next((item for item in script.frames if item.id == frame_id), None)
+        if not frame:
+            raise ValueError("Frame not found")
+        scene = self._storyboard_scene_asset(script, frame)
+        revision, _ = self._confirmed_scene_design(scene)
+        return f"关联场景设计：{scene.name} r{revision}" if scene and revision is not None else None
+
+    def storyboard_render_omitted_plan_lighting(self, script_id: str, frame_id: str) -> Optional[str]:
+        script = self.scripts.get(script_id)
+        if not script:
+            raise ValueError("Script not found")
+        frame = next((item for item in script.frames if item.id == frame_id), None)
+        if not frame:
+            raise ValueError("Frame not found")
+        _, design = self._confirmed_scene_design(self._storyboard_scene_asset(script, frame))
+        if not self._scene_design_has_light(design):
+            return None
+        context = frame.director_shot_context or {}
+        shot = context.get("shot") if isinstance(context.get("shot"), dict) else context
+        lighting = shot.get("lighting") if isinstance(shot, dict) else None
+        if isinstance(lighting, dict):
+            values = [str(lighting.get(key) or "").strip() for key in ("key_source", "color_tone", "contrast")]
+            values += [str(item).strip() for item in (lighting.get("practical_sources") or [])]
+            return "；".join(item for item in values if item) or None
+        return lighting.strip() if isinstance(lighting, str) and lighting.strip() else None
 
     def storyboard_render_context_token(self, script_id: str, frame_id: str) -> str:
         """Fingerprint inputs that can change a prepared storyboard render."""
