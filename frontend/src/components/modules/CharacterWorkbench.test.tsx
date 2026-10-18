@@ -17,9 +17,12 @@ const apiMocks = vi.hoisted(() => ({
         batch_size: request.batch_size, reference_inputs: request.reference ? [request.reference] : request.references || [],
         design_revision_at_submission: null, fingerprint: "reviewed",
     })),
-    agentRequest: vi.fn((path: string) => path === "/models"
+    agentRequest: vi.fn((path: string, _method?: string, body?: any) => path === "/models"
         ? Promise.resolve({ models: [{ api_model_id: "qwen", display_name: "Qwen" }] })
-        : Promise.resolve({ identity: { visual_notes: "深棕眼" }, look: { visual_notes: "黑色劲装" }, skill_revision: "skill-hash" })),
+        : path === "/character-design/draft/preview"
+            ? Promise.resolve({ messages: { system: "返回 identity 与 look", user: JSON.stringify(body) },
+                media: [], review_token: "reviewed", format_note: "JSON" })
+            : Promise.resolve({ identity: { visual_notes: "深棕眼" }, look: { visual_notes: "黑色劲装" }, skill_revision: "skill-hash" })),
 }));
 
 const projectStoreMocks = vi.hoisted(() => ({
@@ -63,6 +66,11 @@ const baseProps = {
     isGenerating: false,
     description: "Character reference",
 };
+
+async function approveDesignPreview() {
+    const confirm = await screen.findByRole("button", { name: "确认输入并生成角色草稿" });
+    fireEvent.click(confirm);
+}
 
 it("keeps image editing out of the character workbench", () => {
     render(<WorkbenchPanel {...baseProps} />);
@@ -356,11 +364,18 @@ it("keeps an AI design as an editable draft until the user confirms it", async (
     const editor = document.querySelector("[contenteditable]") as HTMLElement & { editor: import("@tiptap/core").Editor };
     expect(editor.editor.getText()).not.toContain("深棕眼");
     fireEvent.click(screen.getByRole("button", { name: "生成草稿" }));
+    await screen.findByRole("button", { name: "确认输入并生成角色草稿" });
+    expect(apiMocks.agentRequest).not.toHaveBeenCalledWith("/character-design/draft", "POST", expect.anything());
+    fireEvent.change(screen.getByRole("textbox", { name: "角色档案与视觉要求" }), {
+        target: { value: '{"profile":"A hero","style":"冷灰蓝"}' },
+    });
+    await approveDesignPreview();
     await waitFor(() => expect(screen.getByLabelText("身份视觉值")).toHaveValue("深棕眼"));
     expect(apiMocks.agentRequest).toHaveBeenCalledWith("/character-design/draft", "POST", expect.objectContaining({
         profile: "A hero",
         current_draft: "",
         user_answers: {},
+        reviewed_messages: expect.objectContaining({ user: '{"profile":"A hero","style":"冷灰蓝"}' }),
     }));
     expect(onUpdateAttributes).not.toHaveBeenCalled();
     expect(editor.editor.getText()).not.toContain("深棕眼");
@@ -376,6 +391,19 @@ it("keeps an AI design as an editable draft until the user confirms it", async (
     fireEvent.click(screen.getByRole("button", { name: "应用到图片提示词" }));
     expect(editor.editor.getText()).toContain("深棕眼");
     expect(editor.editor.getText()).toContain("黑色劲装");
+});
+
+it("drops the role design preview after a visual requirement changes", async () => {
+    apiMocks.agentRequest.mockClear();
+    apiMocks.getAssetReferenceIndex.mockResolvedValueOnce({ assets: [] } as any);
+    render(<CharacterWorkbench asset={{ id: "character-1", name: "Hero", description: "A hero" }}
+        onClose={vi.fn()} onUpdateDescription={vi.fn()} onGenerate={vi.fn()} generatingTypes={[]} />);
+    await waitFor(() => expect(screen.getByLabelText("设计模型")).toHaveValue("qwen"));
+    fireEvent.click(screen.getByRole("button", { name: "生成草稿" }));
+    await screen.findByRole("button", { name: "确认输入并生成角色草稿" });
+    fireEvent.change(screen.getByRole("textbox", { name: "身份视觉值" }), { target: { value: "宽肩长腿" } });
+    await waitFor(() => expect(screen.queryByRole("button", { name: "确认输入并生成角色草稿" })).not.toBeInTheDocument());
+    expect(apiMocks.agentRequest).not.toHaveBeenCalledWith("/character-design/draft", "POST", expect.anything());
 });
 
 it("projects edited character fields only after explicit application and saves them in the revision", async () => {
@@ -440,6 +468,7 @@ it("uses visual fields as editable inputs before generating a draft", async () =
     fireEvent.change(look, { target: { value: "宋代服装，长柄双手剑" } });
     await waitFor(() => expect(screen.getByLabelText("设计模型")).toHaveValue("qwen"));
     fireEvent.click(generate);
+    await approveDesignPreview();
 
     await waitFor(() => expect(apiMocks.agentRequest).toHaveBeenCalledWith("/character-design/draft", "POST", expect.objectContaining({
         current_draft: "日晒肤色，宽肩长腿。 宋代服装，长柄双手剑",
@@ -540,9 +569,12 @@ it("lets the user adopt an Agent suggestion for a genuine character decision", a
             field_suggestion_choices: { "剧本写少年，但年龄阶段选择为青年": { age_stage: "teen" } },
             skill_revision: "skill-hash",
         };
-    apiMocks.agentRequest.mockImplementation((path: string) => path === "/models"
+    apiMocks.agentRequest.mockImplementation((path: string, _method?: string, body?: any) => path === "/models"
         ? Promise.resolve({ models: [{ api_model_id: "qwen", display_name: "Qwen" }] })
-        : Promise.resolve(designResult as any));
+        : path === "/character-design/draft/preview"
+            ? Promise.resolve({ messages: { system: "返回 identity 与 look", user: JSON.stringify(body) },
+                media: [], review_token: "reviewed", format_note: "JSON" })
+            : Promise.resolve(designResult as any));
     const onUpdateAttributes = vi.fn();
     render(<CharacterWorkbench asset={{ id: "character-1", name: "苏砚", description: "少年剑客" }}
         onClose={vi.fn()} onUpdateDescription={vi.fn()} onUpdateAttributes={onUpdateAttributes}
@@ -550,6 +582,7 @@ it("lets the user adopt an Agent suggestion for a genuine character decision", a
 
     await waitFor(() => expect(screen.getByLabelText("设计模型")).toHaveValue("qwen"));
     fireEvent.click(screen.getByRole("button", { name: "生成草稿" }));
+    await approveDesignPreview();
     await waitFor(() => expect(apiMocks.agentRequest).toHaveBeenCalledWith("/character-design/draft", "POST", expect.anything()));
     await waitFor(() => expect(screen.getByLabelText("身份视觉值")).toHaveValue("少年感面容，短黑发"));
     fireEvent.click(screen.getByText("采用此建议"));
@@ -576,6 +609,7 @@ it("searches current project materials and passes selected reference IDs to desi
     fireEvent.change(screen.getByLabelText("搜索角色参考素材"), { target: { value: "苏砚" } });
     fireEvent.click(await screen.findByRole("option", { name: /苏砚定妆照/ }));
     fireEvent.click(screen.getByRole("button", { name: "生成草稿" }));
+    await approveDesignPreview();
 
     await waitFor(() => expect(apiMocks.agentRequest).toHaveBeenCalledWith("/character-design/draft", "POST", expect.objectContaining({
         project_id: "project-1",
