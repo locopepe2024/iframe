@@ -5,6 +5,7 @@ Date: 2026-10-18. Status: required contract and staged migration. This document 
 ## Observed
 
 - Storyboard image polish previously assembled the Director profile, confirmed scene/character design, style/light and shot context in the backend. PR #193 now exposes the assembled model message for editing and requires explicit confirmation before the call. PR #194 separates returned candidates from adoption. Both are pending review and deployment.
+- The legacy storyboard image-polish template calls selected asset descriptions `Image X` and says reference images are attached, while this path passes description dictionaries and no image bytes. The new preview exposes this text but does not yet correct that inaccurate template; it needs a separate asset-binding change.
 - Video polish currently sends `optimizationDraft`, shot overrides, selected image URLs and model settings from `PolishPanel`. The backend also adds `_get_director_prompt_context` and a model-specific prompt contract before calling the LLM. `PolishPanel` does not yet present that complete compiled input for confirmation. The result remains local until the user applies it through the frame edit queue.
 - Generation paths have separate prompt and media submission contracts. An optimizer preview cannot prove that the subsequent image/video generation uses the same references or text without a generation submission review.
 
@@ -39,6 +40,7 @@ Provider protocol requirements and safety validation can remain server enforced,
 2. Add a video-polish preflight for all four modes and all optimizer providers, including MiniMax Context IR. Show both system/task text and user text, image order/IDs, audio/dialogue rules and model-format requirements. Reuse the same compiler at preflight and execution. Do not add confirmed design text to the current hidden video path before this review exists.
 3. Persist the adopted video's source snapshot through an ordered frame write or explicit adoption API. Show stale sources in generation review. Test concurrent shot edits and candidate replacement.
 4. Audit Director interpretation and character/scene/prop prompt optimization entry points against this contract. For each, record the compiler owner, frontend review surface, apply owner, token boundary and generation payload equivalence. Migrate any path that fails the test before adding further automatic context.
+5. Replace the legacy image-polish `Image X` assumption with actual user-selected image bindings or truthful text-only asset labels. Test that an unselected image is neither claimed in the model text nor attached to the request.
 
 ## Evidence and limits
 
