@@ -14,7 +14,10 @@ from typing import Any, Optional
 
 
 CATALOG_ROOT = Path(__file__).resolve().parents[1] / ".." / "config" / "platform_reference_catalog"
-MANIFEST_PATH = CATALOG_ROOT / "manifest.json"
+PACKAGED_MANIFEST_PATH = CATALOG_ROOT / "manifest.json"
+# Runtime approvals live on the persistent output mount, not in the container
+# image. The packaged manifest seeds an installation only on first read.
+MANIFEST_PATH = Path(os.getenv("IFRAME_PLATFORM_REFERENCE_MANIFEST", "output/platform_reference_catalog/manifest.json"))
 
 
 def _default_review_config() -> Path:
@@ -97,8 +100,12 @@ def reviewer_is_authorized(owner_profile_id: str, config_path: Path | None = Non
 
 def _read_manifest(path: Path = MANIFEST_PATH) -> dict[str, Any]:
     if not path.exists():
-        return {"schema_version": 1, "catalog_revision": "empty", "resources": []}
-    payload = json.loads(path.read_text(encoding="utf-8"))
+        if path != MANIFEST_PATH or not PACKAGED_MANIFEST_PATH.exists():
+            return {"schema_version": 1, "catalog_revision": "empty", "resources": []}
+        source = PACKAGED_MANIFEST_PATH
+    else:
+        source = path
+    payload = json.loads(source.read_text(encoding="utf-8"))
     if not isinstance(payload, dict) or payload.get("schema_version") != 1:
         raise ValueError("platform reference catalog schema is invalid")
     resources = payload.get("resources", [])
@@ -206,6 +213,7 @@ def promote_resource(
         "reviewer": reviewer_identity,
         "content_sha256": actual_hash,
     }
+    path.parent.mkdir(parents=True, exist_ok=True)
     temporary = path.with_suffix(path.suffix + ".tmp")
     temporary.write_text(json.dumps(manifest, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     os.replace(temporary, path)

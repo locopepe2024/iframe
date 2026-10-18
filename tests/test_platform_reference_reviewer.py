@@ -59,3 +59,19 @@ def test_review_queue_lists_only_unpublished_candidates(tmp_path):
     ]}), encoding="utf-8")
     result = list_review_candidates(path=manifest)
     assert [item["platform_resource_id"] for item in result["resources"]] == ["candidate"]
+
+
+def test_runtime_manifest_seeds_from_packaged_then_persists_review(monkeypatch, tmp_path):
+    import src.apps.platform_reference_catalog as catalog
+    packaged = tmp_path / "packaged.json"
+    packaged.write_text(json.dumps({"schema_version": 1, "catalog_revision": "r1", "resources": [{
+        "platform_resource_id": "style.card.v1", "revision": 1, "kind": "style", "title": "Card",
+        "status": "candidate", "provenance": {"license": "MIT", "content_sha256": "a" * 64},
+    }]}), encoding="utf-8")
+    runtime = tmp_path / "output" / "platform_reference_catalog" / "manifest.json"
+    monkeypatch.setattr(catalog, "MANIFEST_PATH", runtime)
+    monkeypatch.setattr(catalog, "PACKAGED_MANIFEST_PATH", packaged)
+    assert catalog.list_review_candidates(path=runtime)["resources"][0]["status"] == "candidate"
+    catalog.promote_resource("style.card.v1", "apikey-reviewer", "a" * 64, runtime)
+    assert catalog.list_resources(path=runtime)["resources"][0]["status"] == "active"
+    assert json.loads(packaged.read_text())["resources"][0]["status"] == "candidate"
