@@ -1756,6 +1756,7 @@ class CreateLibraryAssetRequest(BaseModel):
     source_generation_id: Optional[str] = None
     source_output_id: Optional[str] = None
     voice_id: Optional[str] = None     # characters only — TTS voice binding
+    initial_variants: List[Dict[str, Any]] = Field(default_factory=list, max_length=8)
 
 
 class UpdateLibraryAssetRequest(BaseModel):

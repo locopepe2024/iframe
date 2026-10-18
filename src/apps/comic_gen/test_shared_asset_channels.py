@@ -142,6 +142,21 @@ def test_create_library_character_tolerates_partial_payload(tmp_path):
     assert ch.name == "未命名"
 
 
+def test_create_library_asset_preserves_structured_reference_variants(tmp_path):
+    p = _bare_pipeline(tmp_path)
+    character = p.create_library_asset("character", {
+        "name": "Hero",
+        "initial_variants": [
+            {"image_url": "output/hero-front.png", "image_origin": "upload", "reference_view_role": "front", "reference_distance": "full"},
+            {"image_url": "output/hero-profile.png", "image_origin": "upload", "reference_view_role": "profile", "reference_distance": "medium"},
+        ],
+    })
+    variants = character.reference_sheet.image_variants
+    assert len(variants) == 2
+    assert {item.reference_view_role for item in variants} == {"front", "profile"}
+    assert character.reference_sheet.selected_image_id == variants[0].id
+
+
 def test_update_and_delete_library_asset(tmp_path):
     lib = GlobalAssetLibrary(characters=[_char("c1", "old")])
     p = _bare_pipeline(tmp_path, library=lib)
