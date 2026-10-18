@@ -360,12 +360,14 @@ function StoryboardInspector() {
     const [polishedPrompts, setPolishedPrompts] = useState<Record<string, { cn: string; en: string }>>({});
     const [isPolishing, setIsPolishing] = useState(false);
     const [feedbackText, setFeedbackText] = useState("");
+    const [pendingPolish, setPendingPolish] = useState<{
+        frameId: string; draft: string; assets: any[]; feedback: string; message: string; contextToken: string;
+    } | null>(null);
 
     const polishedPrompt = selectedFrame ? polishedPrompts[selectedFrame.id] : null;
 
     const handlePolish = async (feedback: string = "") => {
         if (!selectedFrame || !currentProject) return;
-        setIsPolishing(true);
 
         // Construct assets list for context
         const assets = [];
@@ -392,18 +394,34 @@ function StoryboardInspector() {
             : (selectedFrame.image_prompt || selectedFrame.action_description);
 
         try {
-            // Use new bilingual refine API
-            const res = await api.refineFramePrompt(currentProject.id, selectedFrame.id, draft, assets, feedback);
+            const preview = await api.previewFramePolish(currentProject.id, selectedFrame.id, draft, assets, feedback);
+            setPendingPolish({ frameId: selectedFrame.id, draft, assets, feedback,
+                message: preview.message, contextToken: preview.context_token });
+        } catch (err) {
+            console.error("Could not preview polish input", err);
+            alert("无法准备润色上下文，请重试。");
+        }
+    };
+
+    const confirmPolish = async () => {
+        if (!pendingPolish || !currentProject || pendingPolish.frameId !== selectedFrame?.id) return;
+        setIsPolishing(true);
+        try {
+            const res = await api.refineFramePrompt(currentProject.id, pendingPolish.frameId,
+                pendingPolish.draft, pendingPolish.assets, pendingPolish.feedback,
+                pendingPolish.message, pendingPolish.contextToken);
             if (res.prompt_cn && res.prompt_en) {
                 setPolishedPrompts(prev => ({
                     ...prev,
                     [selectedFrame.id]: { cn: res.prompt_cn, en: res.prompt_en }
                 }));
                 setFeedbackText("");
+                setPendingPolish(null);
             }
         } catch (err) {
             console.error("Polish failed", err);
-            alert("Prompt polishing failed");
+            setPendingPolish(null);
+            alert("镜头或设计已变化，或模型调用失败；请重新查看润色上下文。");
         } finally {
             setIsPolishing(false);
         }
@@ -442,6 +460,7 @@ function StoryboardInspector() {
                     onChange={(e) => updateFrame({ action_description: e.target.value })}
                     placeholder="Describe the action..."
                 />
+
             </div>
 
             {/* Dialogue */}
@@ -683,6 +702,20 @@ function StoryboardInspector() {
                     onChange={(e) => updateFrame({ image_prompt: e.target.value })}
                     placeholder="Full image generation prompt..."
                 />
+
+                {pendingPolish?.frameId === selectedFrame.id && <div className="space-y-2 rounded-lg border border-purple-500/40 bg-purple-900/10 p-3">
+                    <p className="text-xs text-foreground">将发送给模型的完整文字。可修改或删除其中任何结构化与一致性约束；确认后才调用模型。</p>
+                    <textarea
+                        aria-label="润色模型输入预览"
+                        className="h-64 w-full resize-y rounded border border-glass-border bg-input-bg p-2 text-xs text-text-secondary"
+                        value={pendingPolish?.message || ""}
+                        onChange={(event) => setPendingPolish(prev => prev ? { ...prev, message: event.target.value } : prev)}
+                    />
+                    <div className="flex justify-end gap-2">
+                        <button type="button" onClick={() => setPendingPolish(null)} className="rounded border border-glass-border px-2 py-1 text-xs">取消</button>
+                        <button type="button" onClick={confirmPolish} disabled={isPolishing || !pendingPolish?.message.trim()} className="rounded bg-purple-600 px-2 py-1 text-xs text-white disabled:opacity-50">确认并调用模型</button>
+                    </div>
+                </div>}
 
                 {/* Polished Result Display - Bilingual */}
                 {polishedPrompt && (

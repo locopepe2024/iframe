@@ -805,6 +805,9 @@ class StoryboardFrame(BaseModel):
     image_prompt: Optional[str] = Field(None, description="Optimized prompt for T2I/I2I (Legacy)")
     image_prompt_cn: Optional[str] = Field(None, description="Polished Chinese prompt for user confirmation")
     image_prompt_en: Optional[str] = Field(None, description="Polished English prompt for Wan model generation")
+    image_polish_source: Optional[Dict[str, Any]] = Field(
+        None, description="Confirmed scene/character design revisions captured before image prompt polish"
+    )
     
     image_url: Optional[str] = Field(None, description="URL of the generated storyboard image (Legacy)")
     image_asset: Optional[ImageAsset] = Field(default_factory=ImageAsset, description="Storyboard image asset container")

@@ -760,6 +760,23 @@ STORYBOARD_CONTINUITY_CONTEXT = """
 """
 
 
+def assemble_storyboard_polish_message(draft_prompt: str, assets: List[Dict[str, Any]],
+                                       feedback: str, template: str) -> str:
+    asset_context = "\n".join(
+        f"Image {index}: {asset.get('type', 'Unknown')} - {asset.get('name', 'Unknown')} ({asset.get('description', '')})"
+        for index, asset in enumerate(assets, start=1)
+    )
+    message = template.strip().replace("{ASSETS}", asset_context).replace("{DRAFT}", draft_prompt)
+    if feedback and feedback.strip():
+        message += f"""
+[用户反馈]
+{feedback.strip()}
+
+请根据用户反馈修改提示词，只修改用户指出的问题，保持其他部分不变。
+"""
+    return message
+
+
 class ScriptProcessor:
     def __init__(self, api_key: str = None):
         self._api_key = api_key
@@ -2490,7 +2507,7 @@ Return a JSON object with ALL fields below. null is acceptable for optional fiel
             logger.error(f"Frame refine LLM call failed: {e}")
             return None
 
-    def polish_storyboard_prompt(self, draft_prompt: str, assets: List[Dict[str, Any]], feedback: str = "", custom_system_prompt: str = "") -> Dict[str, str]:
+    def polish_storyboard_prompt(self, draft_prompt: str, assets: List[Dict[str, Any]], feedback: str = "", custom_system_prompt: str = "", *, prepared_message: Optional[str] = None) -> Dict[str, str]:
         """
         Polishes the storyboard prompt using Qwen-Plus, incorporating asset references.
         Returns a dict with 'prompt_cn' and 'prompt_en'.
@@ -2502,30 +2519,10 @@ Return a JSON object with ALL fields below. null is acceptable for optional fiel
         if not self.is_configured:
              return fallback_result
 
-        # Construct context about assets
-        asset_context = []
-        for i, asset in enumerate(assets):
-            asset_type = asset.get('type', 'Unknown')
-            name = asset.get('name', 'Unknown')
-            desc = asset.get('description', '')
-            # Map index to "Image X"
-            asset_context.append(f"Image {i+1}: {asset_type} - {name} ({desc})")
-
-        context_str = "\n".join(asset_context)
-
-        # Use custom prompt or default, substituting placeholders
         template = custom_system_prompt.strip() if custom_system_prompt and custom_system_prompt.strip() else DEFAULT_STORYBOARD_POLISH_PROMPT
-        system_prompt = template.replace("{ASSETS}", context_str).replace("{DRAFT}", draft_prompt)
-
-        # Build user message with optional feedback (injected in user content, not system prompt)
-        user_content = system_prompt
-        if feedback and feedback.strip():
-            user_content += f"""
-[用户反馈]
-{feedback.strip()}
-
-请根据用户反馈修改提示词，只修改用户指出的问题，保持其他部分不变。
-"""
+        user_content = prepared_message if prepared_message is not None else assemble_storyboard_polish_message(
+            draft_prompt, assets, feedback, template,
+        )
 
         try:
             content = self.llm.chat(

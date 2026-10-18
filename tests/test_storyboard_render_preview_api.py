@@ -7,6 +7,17 @@ from fastapi import HTTPException
 from src.apps.comic_gen import api
 
 
+def test_storyboard_polish_requires_reviewed_model_input(monkeypatch):
+    pipeline = Mock()
+    pipeline.get_script.return_value = SimpleNamespace()
+    monkeypatch.setattr(api, "pipeline", pipeline)
+    request = api.RefinePromptRequest(frame_id="frame", raw_prompt="草稿")
+    with pytest.raises(HTTPException) as error:
+        api.refine_storyboard_prompt("episode", request, SimpleNamespace(owner_profile_id="owner"))
+    assert error.value.status_code == 422
+    pipeline.refine_frame_prompt.assert_not_called()
+
+
 def test_preview_returns_confirmed_scene_design_source_separately_from_prompt(monkeypatch):
     pipeline = Mock()
     pipeline.get_script.return_value = SimpleNamespace()
@@ -15,6 +26,7 @@ def test_preview_returns_confirmed_scene_design_source_separately_from_prompt(mo
     pipeline.storyboard_render_preview_token.return_value = "reviewed"
     pipeline.storyboard_render_scene_design_source.return_value = "关联场景设计：长街 r2"
     pipeline.storyboard_render_omitted_plan_lighting.return_value = "残阳如血覆盖整条街"
+    pipeline.storyboard_image_polish_review.return_value = "场景设计已变化；请核对润色正文后再生成。"
     monkeypatch.setattr(api, "pipeline", pipeline)
 
     result = api.preview_render_frame(
@@ -27,6 +39,7 @@ def test_preview_returns_confirmed_scene_design_source_separately_from_prompt(mo
         "context_token": "reviewed",
         "source_label": "关联场景设计：长街 r2",
         "omitted_plan_lighting": "残阳如血覆盖整条街",
+        "polish_review": "场景设计已变化；请核对润色正文后再生成。",
     }
 
 
