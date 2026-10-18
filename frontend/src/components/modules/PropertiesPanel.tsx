@@ -357,14 +357,19 @@ function StoryboardInspector() {
     };
 
     // State for bilingual polish results
-    const [polishedPrompts, setPolishedPrompts] = useState<Record<string, { cn: string; en: string }>>({});
+    const [polishedPrompts, setPolishedPrompts] = useState<Record<string, { cn: string; en: string; candidateId: string }>>({});
     const [isPolishing, setIsPolishing] = useState(false);
     const [feedbackText, setFeedbackText] = useState("");
     const [pendingPolish, setPendingPolish] = useState<{
         frameId: string; draft: string; assets: any[]; feedback: string; message: string; contextToken: string;
     } | null>(null);
 
-    const polishedPrompt = selectedFrame ? polishedPrompts[selectedFrame.id] : null;
+    const savedCandidate = selectedFrame?.image_polish_candidate;
+    const polishedPrompt = selectedFrame
+        ? polishedPrompts[selectedFrame.id] || (savedCandidate?.id ? {
+            cn: savedCandidate.prompt_cn || "", en: savedCandidate.prompt_en || "", candidateId: savedCandidate.id,
+        } : null)
+        : null;
 
     const handlePolish = async (feedback: string = "") => {
         if (!selectedFrame || !currentProject) return;
@@ -410,10 +415,10 @@ function StoryboardInspector() {
             const res = await api.refineFramePrompt(currentProject.id, pendingPolish.frameId,
                 pendingPolish.draft, pendingPolish.assets, pendingPolish.feedback,
                 pendingPolish.message, pendingPolish.contextToken);
-            if (res.prompt_cn && res.prompt_en) {
+            if (res.prompt_cn && res.prompt_en && res.candidate_id) {
                 setPolishedPrompts(prev => ({
                     ...prev,
-                    [selectedFrame.id]: { cn: res.prompt_cn, en: res.prompt_en }
+                    [selectedFrame.id]: { cn: res.prompt_cn, en: res.prompt_en, candidateId: res.candidate_id }
                 }));
                 setFeedbackText("");
                 setPendingPolish(null);
@@ -730,13 +735,22 @@ function StoryboardInspector() {
                                 <Wand2 size={12} /> AI Bilingual Polish
                             </span>
                             <button
-                                onClick={() => {
-                                    setPolishedPrompts(prev => {
-                                        const newState = { ...prev };
-                                        delete newState[selectedFrame.id];
-                                        return newState;
-                                    });
-                                    setFeedbackText("");
+                                onClick={async () => {
+                                    try {
+                                        const updated = await api.discardFrameImagePolish(
+                                            currentProject.id, selectedFrame.id, polishedPrompt.candidateId,
+                                        );
+                                        updateProject(currentProject.id, updated);
+                                        setPolishedPrompts(prev => {
+                                            const next = { ...prev };
+                                            delete next[selectedFrame.id];
+                                            return next;
+                                        });
+                                        setFeedbackText("");
+                                    } catch (error) {
+                                        console.error("Could not discard image polish candidate:", error);
+                                        alert("润色候选已变化，请刷新镜头后重试。");
+                                    }
                                 }}
                                 className="text-[0.625rem] text-text-secondary hover:text-foreground"
                             >
@@ -778,17 +792,21 @@ function StoryboardInspector() {
                                         Copy
                                     </button>
                                     <button
-                                        onClick={() => {
-                                            updateFrame({
-                                                image_prompt: polishedPrompt.en,
-                                                image_prompt_cn: polishedPrompt.cn,
-                                                image_prompt_en: polishedPrompt.en
-                                            });
-                                            setPolishedPrompts(prev => {
-                                                const newState = { ...prev };
-                                                delete newState[selectedFrame.id];
-                                                return newState;
-                                            });
+                                        onClick={async () => {
+                                            try {
+                                                const updated = await api.applyFrameImagePolish(
+                                                    currentProject.id, selectedFrame.id, polishedPrompt.candidateId,
+                                                );
+                                                updateProject(currentProject.id, updated);
+                                                setPolishedPrompts(prev => {
+                                                    const next = { ...prev };
+                                                    delete next[selectedFrame.id];
+                                                    return next;
+                                                });
+                                            } catch (error) {
+                                                console.error("Could not apply image polish candidate:", error);
+                                                alert("场景、角色设计或润色候选已变化，请重新润色后应用。 ");
+                                            }
                                         }}
                                         className="text-[0.625rem] text-white bg-purple-600 hover:bg-purple-500 px-2 py-0.5 rounded font-bold"
                                     >

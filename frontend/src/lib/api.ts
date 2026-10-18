@@ -1892,7 +1892,7 @@ export const api = {
 
     /**
      * Refines a raw prompt into bilingual (CN/EN) prompts using AI.
-     * Returns { prompt_cn, prompt_en, frame_updated }.
+     * Returns an unapplied candidate; use applyFrameImagePolish after review.
      */
     previewFramePolish: async (scriptId: string, frameId: string, rawPrompt: string, assets: any[] = [], feedback: string = "") => {
         const res = await axios.post(`${API_URL}/projects/${scriptId}/storyboard/refine-preview`, {
@@ -1908,6 +1908,20 @@ export const api = {
             feedback: feedback,
             reviewed_message: reviewedMessage,
             context_token: contextToken,
+        });
+        return res.data;
+    },
+
+    applyFrameImagePolish: async (scriptId: string, frameId: string, candidateId: string) => {
+        const res = await axios.post(`${API_URL}/projects/${scriptId}/frames/${frameId}/image-polish/apply`, {
+            candidate_id: candidateId,
+        });
+        return res.data;
+    },
+
+    discardFrameImagePolish: async (scriptId: string, frameId: string, candidateId: string) => {
+        const res = await axios.post(`${API_URL}/projects/${scriptId}/frames/${frameId}/image-polish/discard`, {
+            candidate_id: candidateId,
         });
         return res.data;
     },
