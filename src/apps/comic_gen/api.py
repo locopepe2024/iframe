@@ -95,6 +95,7 @@ from ..platform_reference_catalog import (
     promote_resource as promote_platform_reference_resource,
     reviewer_is_authorized,
 )
+from ..workbench_templates import list_workbench_templates
 from fastapi.responses import FileResponse, JSONResponse, Response
 from pathlib import Path
 from dotenv import load_dotenv, set_key
@@ -179,6 +180,20 @@ def get_platform_reference_library(
         return private_no_store_signed_response(list_platform_reference_resources(kind=kind, query=query))
     except ValueError as exc:
         raise HTTPException(status_code=500, detail=str(exc))
+
+
+@app.get("/workbench-templates")
+def get_workbench_templates(
+    station: Optional[str] = None,
+    kind: Optional[str] = None,
+    query: str = "",
+    user: UserContext = Depends(require_user_context),
+):
+    """Search text-only task templates; this endpoint never binds media or prompts."""
+    try:
+        return list_workbench_templates(station=station, kind=kind, query=query)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
 
 
 class PlatformReferencePromotionRequest(BaseModel):
