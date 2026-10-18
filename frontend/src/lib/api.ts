@@ -1631,6 +1631,7 @@ export const api = {
         frameId: string = "",
         shotOverrides?: { style: string; lighting: string },
         generationMode: "t2v" | "i2v" | "first_last_frame" | "r2v" = "i2v",
+        review?: { messages: { system: string; user: string }; token: string },
     ) => {
         const payload = {
             draft_prompt: draftPrompt,
@@ -1650,7 +1651,13 @@ export const api = {
             target_duration: targetDuration,
             dialogue_speaker: dialogue?.speaker ?? "",
             dialogue_line: dialogue?.line ?? "",
+            reviewed_messages: review?.messages,
+            review_token: review?.token ?? "",
         };
+        if (!review) {
+            const res = await axios.post(`${API_URL}/video/polish_prompt/preview`, payload);
+            return res.data;
+        }
         if (!scriptId) {
             const res = await axios.post(`${API_URL}/video/polish_prompt`, payload);
             return res.data;
@@ -1674,6 +1681,7 @@ export const api = {
         targetRatio: string = "16:9",
         frameId: string = "",
         shotOverrides?: { style: string; lighting: string },
+        review?: { messages: { system: string; user: string }; token: string },
     ) => {
         const payload = {
             draft_prompt: draftPrompt,
@@ -1693,7 +1701,13 @@ export const api = {
             target_duration: targetDuration,
             dialogue_speaker: dialogue?.speaker ?? "",
             dialogue_line: dialogue?.line ?? "",
+            reviewed_messages: review?.messages,
+            review_token: review?.token ?? "",
         };
+        if (!review) {
+            const res = await axios.post(`${API_URL}/video/polish_r2v_prompt/preview`, payload);
+            return res.data;
+        }
         if (!scriptId) {
             const res = await axios.post(`${API_URL}/video/polish_r2v_prompt`, payload);
             return res.data;

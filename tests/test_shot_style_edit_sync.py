@@ -92,11 +92,15 @@ def test_polish_model_receives_current_fields_before_generation(monkeypatch, ref
     monkeypatch.setattr(api, "ScriptProcessor", lambda: processor)
     values = dict(draft_prompt="visible draft", script_id="project", frame_id="frame", shot_overrides={"style": "current style", "lighting": "current light"})
     if reference_mode:
-        api.polish_r2v_prompt(api.PolishR2VPromptRequest(**values, slots=[]))
+        request = api.PolishR2VPromptRequest(**values, slots=[])
+        preview = api.preview_r2v_polish_prompt(request)
+        api.polish_r2v_prompt(request.model_copy(update={"review_token": preview["review_token"], "reviewed_messages": preview["messages"]}))
         call = processor.polish_r2v_prompt.call_args
         instructions = call.args[3]
     else:
-        api.polish_video_prompt(api.PolishVideoPromptRequest(**values))
+        request = api.PolishVideoPromptRequest(**values)
+        preview = api.preview_video_polish_prompt(request)
+        api.polish_video_prompt(request.model_copy(update={"review_token": preview["review_token"], "reviewed_messages": preview["messages"]}))
         call = processor.polish_video_prompt.call_args
         instructions = call.args[2]
     assert call.args[0] == "visible draft"

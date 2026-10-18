@@ -6,7 +6,7 @@ Date: 2026-10-18. Status: required contract and staged migration. This document 
 
 - Storyboard image polish previously assembled the Director profile, confirmed scene/character design, style/light and shot context in the backend. PR #193 now exposes the assembled model message for editing and requires explicit confirmation before the call. PR #194 separates returned candidates from adoption. Both are pending review and deployment.
 - The legacy storyboard image-polish template calls selected asset descriptions `Image X` and says reference images are attached, while this path passes description dictionaries and no image bytes. The new preview exposes this text but does not yet correct that inaccurate template; it needs a separate asset-binding change.
-- Video polish currently sends `optimizationDraft`, shot overrides, selected image URLs and model settings from `PolishPanel`. The backend also adds `_get_director_prompt_context` and a model-specific prompt contract before calling the LLM. `PolishPanel` does not yet present that complete compiled input for confirmation. The result remains local until the user applies it through the frame edit queue.
+- PR #197 adds video-polish preflight for T2V, I2V, first/last frame and R2V, including MiniMax Context IR. The user can edit the system/task and user/shot text before confirming; a context token binds the source request and compiled input. This remains pending review and deployment.
 - Generation paths have separate prompt and media submission contracts. An optimizer preview cannot prove that the subsequent image/video generation uses the same references or text without a generation submission review.
 
 ## Non-negotiable rule
@@ -37,13 +37,13 @@ Provider protocol requirements and safety validation can remain server enforced,
 ## Migration and tests
 
 1. Keep PR #193 image-polish preview and PR #194 explicit candidate adoption as the initial implementation. Test that a deleted constraint is absent from the LLM message, previewed source changes reject execution, and a returned candidate does not alter the frame before adoption.
-2. Add a video-polish preflight for all four modes and all optimizer providers, including MiniMax Context IR. Show both system/task text and user text, image order/IDs, audio/dialogue rules and model-format requirements. Reuse the same compiler at preflight and execution. Do not add confirmed design text to the current hidden video path before this review exists.
+2. PR #197 implements video-polish preflight for all four modes and all optimizer providers, including MiniMax Context IR. It shows system/task text, user text, selected image order and model-format notes. Execution sends the reviewed text and rejects changed source context. The current image selection is represented by URL because the existing `PolishPanel` API has no stable variant ID; binding to immutable media IDs remains a separate required migration before claiming durable revision-grade provenance.
 3. Persist the adopted video's source snapshot through an ordered frame write or explicit adoption API. Show stale sources in generation review. Test concurrent shot edits and candidate replacement.
 4. Audit Director interpretation and character/scene/prop prompt optimization entry points against this contract. For each, record the compiler owner, frontend review surface, apply owner, token boundary and generation payload equivalence. Migrate any path that fails the test before adding further automatic context.
 5. Replace the legacy image-polish `Image X` assumption with truthful text-only asset labels (PR #196). Test that an unselected image is neither claimed in the model text nor attached to the request. Explicit image binding remains a separate future capability.
 
 ## Evidence and limits
 
-- **Code fact:** The current image-polish preflight and candidate split exist only on the pending PR stack. Video polish still compiles additional backend context.
-- **Direct implication:** The present video-polish UI cannot let the creator remove every backend-added creative instruction before the LLM call.
+- **Code fact:** Image-polish preflight, candidate split and video-polish preflight exist only on the pending PR stack. The new video path passes the reviewed system/user text to the LLM adapter; the MiniMax IR path passes the reviewed text directly.
+- **Direct implication:** After this stack is deployed, the creator can edit the compiled video-polish creative text before the model call. Provider output-format validation still applies; H3 required headings and explicit dialogue conflicts are rejected before the call.
 - **Not yet proven:** This audit does not show that every video result drifts or that a particular hidden instruction dominates the model output. Inspect request diagnostics and compare generated inputs to establish that empirically.

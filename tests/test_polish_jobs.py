@@ -24,6 +24,7 @@ def test_polish_job_is_durable_owner_scoped_and_preserves_model_error(tmp_path, 
         raise HTTPException(502, {"reason": "json_parse_error", "message_zh": "返回格式错误", "message_en": "Invalid format"})
 
     monkeypatch.setattr(api, "polish_video_prompt", failed_polish)
+    monkeypatch.setattr(api, "_require_video_polish_review", lambda *_args: {"system": "", "user": "test"})
     with ThreadPoolExecutor(max_workers=1) as executor:
         jobs = ExtractionJobs(tmp_path / "jobs.sqlite3", executor=executor)
         monkeypatch.setattr(api, "extraction_jobs", jobs)
@@ -64,6 +65,7 @@ def test_r2v_polish_job_returns_bilingual_result(tmp_path, monkeypatch):
     monkeypatch.setattr(api, "polish_r2v_prompt", lambda request: {
         "prompt_cn": "中文镜头", "prompt_en": "English shot",
     })
+    monkeypatch.setattr(api, "_require_video_polish_review", lambda *_args: {"system": "", "user": "test"})
     with ThreadPoolExecutor(max_workers=1) as executor:
         jobs = ExtractionJobs(tmp_path / "jobs.sqlite3", executor=executor)
         monkeypatch.setattr(api, "extraction_jobs", jobs)

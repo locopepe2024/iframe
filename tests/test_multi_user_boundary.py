@@ -88,7 +88,12 @@ def test_prompt_polish_routes_set_studio_identity(monkeypatch, path, payload, me
 
     monkeypatch.setattr(api, "ScriptProcessor", Processor)
     with TestClient(api.app) as client:
-        response = client.post(path, json=payload)
+        preview = client.post(path + "/preview", json=payload)
+        assert preview.status_code == 200
+        assert preview.json()["messages"]["user"] == "镜头推进"
+        response = client.post(path, json={**payload,
+            "review_token": preview.json()["review_token"],
+            "reviewed_messages": preview.json()["messages"]})
     assert response.status_code == 200
 
 

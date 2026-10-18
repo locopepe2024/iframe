@@ -331,7 +331,8 @@ async def enforce_studio_owner_boundary(request: Request, call_next):
         # episode/series prompt context from the current Studio owner.  Keep
         # these body-based endpoints inside the same request context even
         # though the project id is not part of the URL.
-        or path in {"/video/polish_prompt", "/video/polish_r2v_prompt"}
+        or path in {"/video/polish_prompt", "/video/polish_r2v_prompt",
+                    "/video/polish_prompt/preview", "/video/polish_r2v_prompt/preview"}
     )
     if not protected or request.method == "OPTIONS":
         return await call_next(request)
@@ -6806,6 +6807,8 @@ class PolishVideoPromptRequest(BaseModel):
     generation_mode: Literal["t2v", "i2v", "first_last_frame", "r2v"] = "i2v"
     dialogue_speaker: str = Field("", max_length=200)
     dialogue_line: str = Field("", max_length=2000)
+    reviewed_messages: Optional[Dict[Literal["system", "user"], str]] = None
+    review_token: str = ""
 
 
 def _polish_error_response(err) -> Dict[str, Any]:
@@ -7010,7 +7013,124 @@ def _validate_storyboard_polish_result(model_id: str, result: Dict[str, Any], re
         )
 
 
-def _complete_minimax_ir_polish(request, custom_prompt: str) -> Dict[str, str]:
+def _compile_ir_polish_text(request, custom_prompt: str) -> str:
+    instruction = custom_prompt.strip()
+    if getattr(request, "generation_mode", "") == "first_last_frame":
+        instruction += _first_last_polish_guidance(request.target_duration)
+    instruction += "\n\nH3 constraint: do not add subtitles, captions, title cards, watermarks, labels, or any burned-in on-screen text. Dialogue is audio only."
+    if request.optimization_skills:
+        instruction += "\n\nApply the selected skills above as constraints while preserving the official H3 output format."
+    text = f"{instruction}\n\n[DRAFT PROMPT]\n{request.draft_prompt.strip()}"
+    if request.feedback.strip():
+        text += f"\n\n[USER FEEDBACK]\n{request.feedback.strip()}"
+    return text
+
+
+def _video_polish_user_text(request) -> str:
+    if request.feedback.strip():
+        if request.prev_cn.strip():
+            return f"[当前提示词-CN]\n{request.prev_cn.strip()}\n\n[当前提示词-EN]\n{request.draft_prompt}\n\n[用户反馈]\n{request.feedback.strip()}\n\n请根据用户反馈同步修改双语版本，只修改用户指出的问题，保持其他部分不变。"
+        return f"[当前提示词]\n{request.draft_prompt}\n\n[用户反馈]\n{request.feedback.strip()}\n\n请根据用户反馈修改提示词，只修改用户指出的问题，保持其他部分不变。"
+    return request.draft_prompt
+
+
+def _compile_video_polish_review(request, reference_mode: bool) -> Dict[str, Any]:
+    from .llm import DEFAULT_R2V_POLISH_PROMPT, DEFAULT_VIDEO_POLISH_PROMPT
+    user = current_studio_user()
+    frame_snapshot: Dict[str, Any] = {}
+    if user is not None and request.script_id:
+        script = pipeline.get_script(request.script_id, user.owner_profile_id)
+        if not script:
+            raise HTTPException(404, "Script not found")
+        if request.frame_id:
+            frame = next((item for item in script.frames if item.id == request.frame_id), None)
+            if frame is None:
+                raise HTTPException(404, "Frame not found")
+            frame_snapshot = {name: getattr(frame, name, None) for name in (
+                "scene_id", "shot_id", "director_profile_revision", "director_profile_hash",
+                "director_shot_context", "action_description", "style_prompt_override",
+                "lighting_override", "shot_visual_design", "composition", "shot_size",
+                "camera_angle", "camera_movement", "transition_hint", "dialogue",
+            )}
+            frame_snapshot = {
+                key: value.model_dump() if hasattr(value, "model_dump") else value
+                for key, value in frame_snapshot.items()
+            }
+    if not reference_mode and request.generation_mode == "first_last_frame" and (
+        len(request.image_urls) != 2 or request.image_urls[0] == request.image_urls[1]
+    ):
+        raise HTTPException(422, "首尾帧润色需要两张不同的已选图片")
+    custom = _get_custom_prompt(request.script_id, "r2v_polish" if reference_mode else "video_polish")
+    director = _get_director_prompt_context(request.script_id, request.frame_id, request.shot_overrides)
+    if director:
+        custom = "\n\n".join(filter(None, [custom, "CURRENT SHOT CONTEXT (editable overrides replace planned shot settings; matching continuity baseline is background):\n" + director]))
+    default = DEFAULT_R2V_POLISH_PROMPT if reference_mode else DEFAULT_VIDEO_POLISH_PROMPT
+    if request.optimizer_provider == "minimax_context_ir":
+        if request.target_video_model and "h3" not in request.target_video_model.lower():
+            raise HTTPException(422, "MiniMax Context-IR requires an H3 target")
+        messages = {"system": "", "user": _compile_ir_polish_text(request, custom or default)}
+    else:
+        system = _storyboard_polish_contract(
+            request.target_video_model, custom, default, request.generate_audio,
+            request.target_duration, request.dialogue_speaker, request.dialogue_line,
+            _effective_optimization_skills(request), reference_mode=reference_mode,
+            generation_mode=getattr(request, "generation_mode", "r2v"),
+        ).strip()
+        if reference_mode:
+            slots = "\n".join(f"- character{i + 1}: {slot.description}" for i, slot in enumerate(request.slots)) or "No reference videos provided."
+            system = system.replace("{SLOTS}", slots)
+        if request.image_urls:
+            if reference_mode:
+                system += "\n\nIMPORTANT: The user has attached the reference image(s) for character1/2/3 above. Look at the images to understand each character's actual appearance, costume, and pose. Use that grounding when writing the action / camera description so the polished prompt is faithful to what the references show. Do NOT contradict visible details."
+            elif request.generation_mode == "first_last_frame":
+                system += "\n\nThe two attached images are ordered: first is the actual opening frame, second is the actual ending frame. Inspect both. A still image alone does not prove its people are moving; if the ending pose has no motion cue, settle and hold it. Describe a continuous transition that reaches the ending image without animating subjects past it. Do not claim unseen intermediate events are observed."
+            else:
+                system += "\n\nIMPORTANT: The user has attached the first frame image(s) of the clip. Look at the image(s) to ground your polish — describe what is actually visible (subjects, composition, lighting, color palette) and use that to enrich the motion/camera description. Do NOT invent elements absent from the image."
+        messages = {"system": system, "user": _video_polish_user_text(request)}
+    labels = (["首帧 0.00 秒", "尾帧 结束时"] if getattr(request, "generation_mode", "") == "first_last_frame" else [f"参考图 {i + 1}" for i in range(len(request.image_urls))])
+    media = [{"label": labels[i], "url": url} for i, url in enumerate(request.image_urls)]
+    source = request.model_dump(exclude={"reviewed_messages", "review_token"})
+    token = hashlib.sha256(json.dumps({"source": source, "frame": frame_snapshot, "compiled": messages},
+                                      sort_keys=True, ensure_ascii=False, default=str).encode()).hexdigest()
+    format_note = (
+        "MiniMax Context IR 按所选模型的原生结构生成；这里展示送入 IR 的完整文字。"
+        if request.optimizer_provider == "minimax_context_ir" else
+        "MiniMax H3 必须保留结构化输出字段；删除必需字段会在调用前拒绝。"
+        if "h3" in request.target_video_model.lower() else
+        "模型以 JSON 返回中英双语提示词。"
+    )
+    return {"messages": messages, "media": media, "review_token": token,
+            "format_note": format_note}
+
+
+def _require_video_polish_review(request, reference_mode: bool) -> Dict[str, str]:
+    compiled = _compile_video_polish_review(request, reference_mode)
+    messages = request.reviewed_messages
+    if not request.review_token or request.review_token != compiled["review_token"] or not messages:
+        raise HTTPException(409, "润色输入或来源已变化，请重新预览并确认")
+    if set(messages) != {"system", "user"} or not messages["user"].strip():
+        raise HTTPException(422, "确认后的模型输入缺少用户消息")
+    if request.optimizer_provider == "minimax_context_ir" and messages["system"].strip():
+        raise HTTPException(422, "MiniMax Context IR 只接受一条输入文字，请将编辑内容放入用户文字")
+    if "h3" in request.target_video_model.lower() and request.optimizer_provider != "minimax_context_ir":
+        required = ("subject_definitions", "summary", "retention_analysis", "detailed_description",
+                    "overall_soundscape", "non_diegetic_music") if reference_mode else (
+                    "integrated_multimodal_description", "overall_soundscape", "non_diegetic_music")
+        if any(field not in messages["system"] for field in required):
+            raise HTTPException(422, "MiniMax H3 的必需输出字段已被移除，请恢复格式要求后再提交")
+    if request.generate_audio is True and request.dialogue_line.strip() and (
+        request.dialogue_line.strip() not in messages["system"] + messages["user"]
+    ):
+        raise HTTPException(422, "镜头对白已从模型输入移除，请先修改镜头对白设置或恢复该行")
+    return messages
+
+
+@app.post("/video/polish_prompt/preview")
+def preview_video_polish_prompt(request: PolishVideoPromptRequest):
+    return _compile_video_polish_review(request, False)
+
+
+def _complete_minimax_ir_polish(request, custom_prompt: str, reviewed_text: Optional[str] = None) -> Dict[str, str]:
     """Run the official MiniMax Context-IR optimizer for storyboard polish."""
     from .llm import PolishError
     if request.target_video_model and "h3" not in request.target_video_model.lower():
@@ -7021,18 +7141,10 @@ def _complete_minimax_ir_polish(request, custom_prompt: str) -> Dict[str, str]:
     user = current_studio_user()
     if user is None:
         raise HTTPException(status_code=401, detail="MiniMax Context-IR requires a Studio user context")
-    from ..models.uniart import complete_context_ir, _image_reference_url
+    from ...models.uniart import complete_context_ir, _image_reference_url
     from ..studio_access import runtime_uniart_for_owner
     config = runtime_uniart_for_owner(user.user_id, user.owner_profile_id)
-    instruction = custom_prompt.strip()
-    if getattr(request, "generation_mode", "") == "first_last_frame":
-        instruction += _first_last_polish_guidance(request.target_duration)
-    instruction += "\n\nH3 constraint: do not add subtitles, captions, title cards, watermarks, labels, or any burned-in on-screen text. Dialogue is audio only."
-    if request.optimization_skills:
-        instruction += "\n\nApply the selected skills above as constraints while preserving the official H3 output format."
-    text = f"{instruction}\n\n[DRAFT PROMPT]\n{request.draft_prompt.strip()}"
-    if getattr(request, "feedback", "").strip():
-        text += f"\n\n[USER FEEDBACK]\n{request.feedback.strip()}"
+    text = reviewed_text if reviewed_text is not None else _compile_ir_polish_text(request, custom_prompt)
     content: List[Dict[str, Any]] = [{"type": "text", "text": text}]
     for index, value in enumerate(request.image_urls or []):
         label = ("Actual first frame at 0.00 seconds", "Actual last frame at the end") if getattr(request, "generation_mode", "") == "first_last_frame" else ()
@@ -7114,6 +7226,7 @@ def polish_video_prompt(request: PolishVideoPromptRequest):
     """
     from .llm import PolishError
     try:
+        reviewed = _require_video_polish_review(request, False)
         from .llm import DEFAULT_VIDEO_POLISH_PROMPT
         if request.generation_mode == "first_last_frame" and (
             len(request.image_urls) != 2 or request.image_urls[0] == request.image_urls[1]
@@ -7131,7 +7244,7 @@ def polish_video_prompt(request: PolishVideoPromptRequest):
         if request.optimizer_provider == "minimax_context_ir":
             # Context-IR owns its provider-native structure. Keep the existing
             # freeform instruction path; its output is still validated below.
-            result = _complete_minimax_ir_polish(request, custom or DEFAULT_VIDEO_POLISH_PROMPT)
+            result = _complete_minimax_ir_polish(request, custom or DEFAULT_VIDEO_POLISH_PROMPT, reviewed["user"])
             _validate_storyboard_polish_result(request.target_video_model, result, reference_mode=False, generate_audio=request.generate_audio, dialogue_line=request.dialogue_line, generation_mode=request.generation_mode)
             return result
         custom_prompt = _storyboard_polish_contract(request.target_video_model, custom, DEFAULT_VIDEO_POLISH_PROMPT, request.generate_audio, request.target_duration, request.dialogue_speaker, request.dialogue_line, selected_skills, reference_mode=False, generation_mode=request.generation_mode)
@@ -7146,6 +7259,7 @@ def polish_video_prompt(request: PolishVideoPromptRequest):
             image_urls=_polish_image_urls(request.image_urls) or None,
             polish_model=polish_model,
             generation_mode=request.generation_mode,
+            reviewed_messages=reviewed,
         )
         _validate_storyboard_polish_result(request.target_video_model, result, reference_mode=False, generate_audio=request.generate_audio, dialogue_line=request.dialogue_line, generation_mode=request.generation_mode)
         return {
@@ -7155,6 +7269,8 @@ def polish_video_prompt(request: PolishVideoPromptRequest):
     except PolishError as e:
         logger.warning("polish_video_prompt failed: %s", e)
         raise HTTPException(status_code=502, detail=_polish_error_response(e))
+    except HTTPException:
+        raise
     except Exception as e:
         logger.exception("polish_video_prompt unexpected error")
         raise HTTPException(status_code=500, detail=str(e))
@@ -7184,6 +7300,13 @@ class PolishR2VPromptRequest(BaseModel):
     target_video_model: str = ""
     dialogue_speaker: str = Field("", max_length=200)
     dialogue_line: str = Field("", max_length=2000)
+    reviewed_messages: Optional[Dict[Literal["system", "user"], str]] = None
+    review_token: str = ""
+
+
+@app.post("/video/polish_r2v_prompt/preview")
+def preview_r2v_polish_prompt(request: PolishR2VPromptRequest):
+    return _compile_video_polish_review(request, True)
 
 
 @app.post("/video/polish_r2v_prompt")
@@ -7193,6 +7316,7 @@ def polish_r2v_prompt(request: PolishR2VPromptRequest):
     SYNC handler on purpose — see polish_video_prompt for rationale."""
     from .llm import PolishError
     try:
+        reviewed = _require_video_polish_review(request, True)
         from .llm import DEFAULT_R2V_POLISH_PROMPT
         custom = _get_custom_prompt(request.script_id, "r2v_polish")
         director = _get_director_prompt_context(request.script_id, request.frame_id, request.shot_overrides)
@@ -7200,7 +7324,7 @@ def polish_r2v_prompt(request: PolishR2VPromptRequest):
             custom = "\n\n".join(filter(None, [custom, "CURRENT SHOT CONTEXT (editable overrides replace planned shot settings; matching continuity baseline is background):\n" + director]))
         selected_skills = _effective_optimization_skills(request)
         if request.optimizer_provider == "minimax_context_ir":
-            result = _complete_minimax_ir_polish(request, custom or DEFAULT_R2V_POLISH_PROMPT)
+            result = _complete_minimax_ir_polish(request, custom or DEFAULT_R2V_POLISH_PROMPT, reviewed["user"])
             _validate_storyboard_polish_result(request.target_video_model, result, reference_mode=True, generate_audio=request.generate_audio, dialogue_line=request.dialogue_line)
             return result
         custom_prompt = _storyboard_polish_contract(request.target_video_model, custom, DEFAULT_R2V_POLISH_PROMPT, request.generate_audio, request.target_duration, request.dialogue_speaker, request.dialogue_line, selected_skills, reference_mode=True)
@@ -7215,6 +7339,7 @@ def polish_r2v_prompt(request: PolishR2VPromptRequest):
             request.prev_cn,
             image_urls=_polish_image_urls(request.image_urls) or None,
             polish_model=polish_model,
+            reviewed_messages=reviewed,
         )
         _validate_storyboard_polish_result(request.target_video_model, result, reference_mode=True, generate_audio=request.generate_audio, dialogue_line=request.dialogue_line)
         return {
@@ -7224,6 +7349,8 @@ def polish_r2v_prompt(request: PolishR2VPromptRequest):
     except PolishError as e:
         logger.warning("polish_r2v_prompt failed: %s", e)
         raise HTTPException(status_code=502, detail=_polish_error_response(e))
+    except HTTPException:
+        raise
     except Exception as e:
         logger.exception("polish_r2v_prompt unexpected error")
         raise HTTPException(status_code=500, detail=str(e))
@@ -7239,6 +7366,7 @@ def _start_polish_job(script_id: str, request, mode: str, owner: str):
         frame.id == request.frame_id for frame in pipeline.get_script(script_id, owner).frames
     ):
         raise HTTPException(404, "Frame not found")
+    _require_video_polish_review(request, mode == "r2v")
 
     def work():
         try:
