@@ -32,6 +32,7 @@ import AssetCoverBadges from "./AssetCoverBadges";
 import { characterImageUrl } from "@/lib/characterImage";
 import AssetNameEditor from "../common/AssetNameEditor";
 import AssetImageSubmissionReview from "@/components/shared/AssetImageSubmissionReview";
+import VideoPolishReview, { type VideoPolishMessages } from "./storyboard-r2v/VideoPolishReview";
 
 export default function ConsistencyVault() {
     const tv = useTranslations("vault");
@@ -1064,6 +1065,10 @@ function CharacterDetailModal({ asset, type, onClose, onUpdateDescription, onUpd
     const [optimizingPrompt, setOptimizingPrompt] = useState(false);
     const [optimizedPrompt, setOptimizedPrompt] = useState("");
     const [promptError, setPromptError] = useState("");
+    const [pendingPromptReview, setPendingPromptReview] = useState<{
+        source: string; request: Record<string, unknown>; messages: VideoPolishMessages;
+        reviewToken: string; formatNote: string;
+    } | null>(null);
     const [imageGenerationMode, setImageGenerationMode] = useState<"text" | "reference">("text");
     const [promptReferences, setPromptReferences] = useState<AssetLibraryReference[]>([]);
     const [assetIndex, setAssetIndex] = useState<any[]>([]);
@@ -1228,6 +1233,35 @@ function CharacterDetailModal({ asset, type, onClose, onUpdateDescription, onUpd
         updateProject(currentProject.id, updatedProject);
     };
 
+    const promptRefineRequest = {
+        model: promptModel,
+        project_id: currentProject?.id || "",
+        asset_id: asset.id,
+        asset_type: type,
+        asset_name: asset.name,
+        description,
+        current_prompt: imagePrompt,
+        style: type === "scene" ? [
+            sceneDesign.visual_notes && `场景空间：${sceneDesign.visual_notes}`,
+            sceneDesign.style && `场景风格：${sceneDesign.style}`,
+            sceneDesign.ambient_lighting && `环境光：${sceneDesign.ambient_lighting}`,
+            sceneDesign.reference_viewpoint && `参考图视角：${sceneDesign.reference_viewpoint}`,
+            sceneDesign.reference_framing && `参考图构图：${sceneDesign.reference_framing}`,
+            sceneDesign.visual_constraints.key_light_direction !== "unspecified" && `主光方向：${sceneDesign.visual_constraints.key_light_direction}`,
+            sceneDesign.visual_constraints.forbidden_light_directions.length > 0 && `禁止光线方向：${sceneDesign.visual_constraints.forbidden_light_directions.join("、")}`,
+            sceneDesign.visual_constraints.visible_face_limit !== "" && `可见人脸上限：${sceneDesign.visual_constraints.visible_face_limit}`,
+            sceneDesign.visual_constraints.secondary_people_view && `其他人物呈现：${sceneDesign.visual_constraints.secondary_people_view}`,
+        ].filter(Boolean).join("\n") : "",
+        plan_context: [],
+    };
+    const promptRefineSource = JSON.stringify(promptRefineRequest);
+    const promptRefineSourceRef = useRef(promptRefineSource);
+    promptRefineSourceRef.current = promptRefineSource;
+    useEffect(() => {
+        setPendingPromptReview(null);
+        setOptimizedPrompt("");
+    }, [promptRefineSource]);
+
     const handleOptimizePrompt = async () => {
         if (!promptModel || optimizingPrompt) return;
         if (type === "scene" && sceneDesignNeedsApply) {
@@ -1237,28 +1271,38 @@ function CharacterDetailModal({ asset, type, onClose, onUpdateDescription, onUpd
         setOptimizingPrompt(true);
         setPromptError("");
         setOptimizedPrompt("");
+        setPendingPromptReview(null);
+        try {
+            const source = promptRefineSource;
+            const preview = await agentRequest<{ messages: VideoPolishMessages; review_token: string; format_note: string }>(
+                "/asset-image-prompt/refine/preview", "POST", promptRefineRequest);
+            if (promptRefineSourceRef.current === source) setPendingPromptReview({
+                source, request: promptRefineRequest, messages: preview.messages,
+                reviewToken: preview.review_token, formatNote: preview.format_note,
+            });
+        } catch (error) {
+            setPromptError(extractErrorDetail(error));
+        } finally {
+            setOptimizingPrompt(false);
+        }
+    };
+
+    const confirmPromptRefine = async () => {
+        const review = pendingPromptReview;
+        if (!review) return;
+        if (review.source !== promptRefineSourceRef.current) {
+            setPendingPromptReview(null);
+            setPromptError("资产输入已变化，请重新预览。");
+            return;
+        }
+        setOptimizingPrompt(true);
+        setPromptError("");
         try {
             const result = await agentRequest<{ prompt: string }>("/asset-image-prompt/refine", "POST", {
-                model: promptModel,
-                asset_type: type,
-                asset_name: asset.name,
-                description,
-                current_prompt: imagePrompt,
-                style: type === "scene" ? [
-                    sceneDesign.visual_notes && `场景空间：${sceneDesign.visual_notes}`,
-                    sceneDesign.style && `场景风格：${sceneDesign.style}`,
-                    sceneDesign.ambient_lighting && `环境光：${sceneDesign.ambient_lighting}`,
-                    sceneDesign.reference_viewpoint && `参考图视角：${sceneDesign.reference_viewpoint}`,
-                    sceneDesign.reference_framing && `参考图构图：${sceneDesign.reference_framing}`,
-                    sceneDesign.visual_constraints.key_light_direction !== "unspecified" && `主光方向：${sceneDesign.visual_constraints.key_light_direction}`,
-                    sceneDesign.visual_constraints.forbidden_light_directions.length > 0 && `禁止光线方向：${sceneDesign.visual_constraints.forbidden_light_directions.join("、")}`,
-                    sceneDesign.visual_constraints.visible_face_limit !== "" && `可见人脸上限：${sceneDesign.visual_constraints.visible_face_limit}`,
-                    sceneDesign.visual_constraints.secondary_people_view && `其他人物呈现：${sceneDesign.visual_constraints.secondary_people_view}`,
-                ].filter(Boolean).join("\n") : "",
-                // A shooting-plan clause is sent only after the user adds it to the visible prompt.
-                plan_context: [],
+                ...review.request, reviewed_messages: review.messages, review_token: review.reviewToken,
             });
-            setOptimizedPrompt(result.prompt);
+            setPendingPromptReview(null);
+            if (review.source === promptRefineSourceRef.current) setOptimizedPrompt(result.prompt);
         } catch (error) {
             setPromptError(extractErrorDetail(error));
         } finally {
@@ -1606,6 +1650,11 @@ function CharacterDetailModal({ asset, type, onClose, onUpdateDescription, onUpd
                                     </button>
                                 </div>
                                 {promptError && <p role="alert" className="text-xs text-status-failed-fg">{promptError}</p>}
+                                {pendingPromptReview && <VideoPolishReview messages={pendingPromptReview.messages}
+                                    media={[]} formatNote={pendingPromptReview.formatNote} isContextIr={false}
+                                    isSubmitting={optimizingPrompt} error={promptError} userLabel="资产描述与可见提示词"
+                                    confirmLabel="确认输入并优化" onChange={messages => setPendingPromptReview(current => current && ({ ...current, messages }))}
+                                    onCancel={() => setPendingPromptReview(null)} onConfirm={() => void confirmPromptRefine()} />}
                                 {optimizedPrompt && <div className="space-y-2 border-l-2 border-primary pl-3">
                                     <p className="whitespace-pre-wrap text-xs leading-relaxed text-text-secondary">{optimizedPrompt}</p>
                                     <div className="flex gap-3">

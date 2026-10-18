@@ -14,13 +14,16 @@ interface VideoPolishReviewProps {
     isContextIr: boolean;
     isSubmitting: boolean;
     error?: string;
+    userLabel?: string;
+    confirmLabel?: string;
     onChange: (messages: VideoPolishMessages) => void;
     onCancel: () => void;
     onConfirm: () => void;
 }
 
 export default function VideoPolishReview({ messages, media, formatNote, isContextIr,
-    isSubmitting, error, onChange, onCancel, onConfirm }: VideoPolishReviewProps) {
+    isSubmitting, error, userLabel = "用户／镜头文字", confirmLabel = "确认输入并润色",
+    onChange, onCancel, onConfirm }: VideoPolishReviewProps) {
     return <div className="space-y-3 rounded-lg border border-glass-border bg-surface-inset p-3">
         <div className="flex items-center justify-between gap-2">
             <strong className="text-sm text-foreground">提交前检查模型输入</strong>
@@ -35,8 +38,8 @@ export default function VideoPolishReview({ messages, media, formatNote, isConte
                 onChange={(event) => onChange({ ...messages, system: event.target.value })}
                 className="mt-1 h-40 w-full rounded border border-glass-border bg-surface p-2 text-xs text-foreground disabled:opacity-50" />
         </label>
-        <label className="block text-xs text-text-secondary">用户／镜头文字
-            <textarea aria-label="用户／镜头文字" value={messages.user}
+        <label className="block text-xs text-text-secondary">{userLabel}
+            <textarea aria-label={userLabel} value={messages.user}
                 onChange={(event) => onChange({ ...messages, user: event.target.value })}
                 className="mt-1 h-28 w-full rounded border border-glass-border bg-surface p-2 text-xs text-foreground" />
         </label>
@@ -46,7 +49,7 @@ export default function VideoPolishReview({ messages, media, formatNote, isConte
             <button type="button" onClick={onCancel} className="rounded border border-glass-border px-3 py-1.5 text-xs text-foreground">返回</button>
             <button type="button" onClick={onConfirm} disabled={isSubmitting || !messages.user.trim()}
                 className="rounded bg-primary px-3 py-1.5 text-xs text-white disabled:opacity-50">
-                {isSubmitting ? "润色中…" : "确认输入并润色"}
+                {isSubmitting ? "模型处理中…" : confirmLabel}
             </button>
         </div>
     </div>;
