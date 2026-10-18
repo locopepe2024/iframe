@@ -595,7 +595,7 @@ it("uses the latest confirmed design instead of an older saved image prompt", ()
     expect(editor.editor.getText()).not.toContain("Old image prompt");
 });
 
-it("keeps shooting-plan constraints collapsed in the workbench header", () => {
+it("shows linked shooting-plan scenes without adding scene context to character prompts", () => {
     apiMocks.getAssetReferenceIndex.mockResolvedValueOnce({ assets: [] } as any);
     render(
         <CharacterWorkbench
@@ -613,9 +613,10 @@ it("keeps shooting-plan constraints collapsed in the workbench header", () => {
     expect(screen.queryByText("2018年秋天")).not.toBeInTheDocument();
     fireEvent.click(toggle);
     expect(toggle).toHaveAttribute("aria-expanded", "true");
+    expect(screen.getByText("拍摄计划关联场景（仅供核对）")).toBeInTheDocument();
     expect(screen.getByText("2018年秋天 · 室外")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "加入提示词" }));
-    expect(toggle).toHaveAttribute("aria-expanded", "false");
+    expect(screen.queryByRole("button", { name: "加入提示词" })).not.toBeInTheDocument();
+    expect(screen.getByRole("textbox", { name: "Enter prompt description..." })).not.toHaveTextContent("电影院");
 });
 
 it("refreshes the reference index when a generated project snapshot arrives", async () => {
