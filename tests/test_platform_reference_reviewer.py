@@ -40,3 +40,11 @@ def test_host_iframe_key_file_is_supported(tmp_path):
     config = tmp_path / "config.json"
     config.write_text(json.dumps({"UNIART_API_KEY": "host-key"}), encoding="utf-8")
     assert configured_reviewer_identity(key_file) == configured_reviewer_identity(config)
+
+
+def test_mounted_reviewer_key_file_is_supported(tmp_path):
+    mounted = tmp_path / "iframe-review-key"
+    mounted.write_text("api_key=host-key\n", encoding="utf-8")
+    config = tmp_path / "config.json"
+    config.write_text(json.dumps({"UNIART_API_KEY": "host-key"}), encoding="utf-8")
+    assert configured_reviewer_identity(mounted) == configured_reviewer_identity(config)

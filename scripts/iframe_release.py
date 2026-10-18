@@ -29,6 +29,8 @@ CANDIDATE_PORT = 17178
 REQUIRED_PATHS = {"/asset-index/preview", "/projects", "/series"}
 KNOWLEDGE_SECRETS = Path("/srv/lumenx/runtime/knowledge-pg-provision")
 KNOWLEDGE_MOUNT = "/run/iframe-knowledge"
+REVIEW_CONFIG = Path("/opt/.iframe")
+REVIEW_CONFIG_MOUNT = "/run/iframe-review-key"
 KNOWLEDGE_PATHS = {"/knowledge/collections", "/knowledge/search", "/knowledge/collections/{collection_id}/sources"}
 
 
@@ -85,9 +87,14 @@ def verify_topology(backend, frontend):
     if len(output) != 1 or output[0]["Type"] != "bind" or output[0]["Source"] != str(OUTPUT) or not output[0]["RW"]:
         raise RuntimeError("Unexpected backend output mount")
     extra = [mount for mount in mounts if mount["Destination"] != "/app/output"]
-    if len(extra) > 1 or any(
-        mount["Type"] != "bind" or mount["Source"] != str(KNOWLEDGE_SECRETS)
-        or mount["Destination"] != KNOWLEDGE_MOUNT or mount["RW"]
+    allowed_extra = {
+        (str(KNOWLEDGE_SECRETS), KNOWLEDGE_MOUNT),
+        (str(REVIEW_CONFIG), REVIEW_CONFIG_MOUNT),
+    }
+    if any(
+        mount["Type"] != "bind"
+        or (mount["Source"], mount["Destination"]) not in allowed_extra
+        or mount["RW"]
         for mount in extra
     ) or NETWORK not in backend["NetworkSettings"]["Networks"]:
         raise RuntimeError("Unexpected backend mounts or network")
@@ -244,6 +251,8 @@ def create_backend(name, image, env_path, output, host_port, *, restart=False):
             "--env-file", str(env_path), "-v", f"{output}:/app/output", "-p", f"127.0.0.1:{host_port}:17177"]
     if knowledge_runtime(env_path):
         args += ["-v", f"{KNOWLEDGE_SECRETS}:{KNOWLEDGE_MOUNT}:ro"]
+    if REVIEW_CONFIG.is_file():
+        args += ["-v", f"{REVIEW_CONFIG}:{REVIEW_CONFIG_MOUNT}:ro", "-e", f"IFRAME_PLATFORM_REVIEW_CONFIG={REVIEW_CONFIG_MOUNT}"]
     if restart:
         args += ["--restart", "unless-stopped"]
     run(*(args + [image]))

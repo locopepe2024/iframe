@@ -67,7 +67,10 @@ def configured_reviewer_identity(
     except OSError:
         return None
     key: Optional[str]
-    if path.is_file() and path.name == ".iframe":
+    if path.is_file() and (
+        path.name == ".iframe"
+        or any(line.lstrip().startswith(("api_key=", f"{field}=")) for line in raw.splitlines())
+    ):
         key = None
         for line in raw.splitlines():
             name, separator, value = line.partition("=")
