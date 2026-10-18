@@ -18,11 +18,12 @@ MANIFEST_PATH = CATALOG_ROOT / "manifest.json"
 
 
 def _default_review_config() -> Path:
-    # Production iFrame hosts keep the deployment credential under /opt/.iframe.
-    # The application data directory remains the local/dev fallback. Neither
-    # path creates or stores a browser-side reviewer credential.
-    host_config = Path("/opt/.iframe/config.json")
-    if host_config.exists() or Path("/opt/.iframe").exists():
+    # Production iFrame hosts keep the deployment credential in /opt/.iframe.
+    # Older hosts use that path as a one-line key file; packaged installs use
+    # config.json under the application data directory. Neither path creates
+    # or stores a browser-side reviewer credential.
+    host_config = Path("/opt/.iframe")
+    if host_config.exists():
         return host_config
     from ..utils import get_user_data_dir
 
@@ -62,10 +63,25 @@ def configured_reviewer_identity(
     if not path.exists():
         return None
     try:
-        payload = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError):
+        raw = path.read_text(encoding="utf-8")
+    except OSError:
         return None
-    key = _find_config_value(payload, field)
+    key: Optional[str]
+    if path.is_file() and path.name == ".iframe":
+        key = None
+        for line in raw.splitlines():
+            name, separator, value = line.partition("=")
+            if separator and name.strip() in {field, "api_key"}:
+                key = value.strip()
+                break
+        if not key and raw.strip():
+            key = raw.strip()
+    else:
+        try:
+            payload = json.loads(raw)
+        except json.JSONDecodeError:
+            return None
+        key = _find_config_value(payload, field)
     if not key:
         return None
     return "apikey-" + hashlib.sha256(key.encode("utf-8")).hexdigest()

@@ -32,3 +32,11 @@ def test_default_reviewer_config_uses_iframe_data_dir(monkeypatch, tmp_path):
     monkeypatch.setenv("IFRAME_DATA_DIR", str(data_dir))
     identity = configured_reviewer_identity()
     assert identity == configured_reviewer_identity(data_dir / "config.json")
+
+
+def test_host_iframe_key_file_is_supported(tmp_path):
+    key_file = tmp_path / ".iframe"
+    key_file.write_text("api_key=host-key\n", encoding="utf-8")
+    config = tmp_path / "config.json"
+    config.write_text(json.dumps({"UNIART_API_KEY": "host-key"}), encoding="utf-8")
+    assert configured_reviewer_identity(key_file) == configured_reviewer_identity(config)
