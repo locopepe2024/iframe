@@ -3,6 +3,22 @@ import pytest
 from src.apps.comic_gen import api
 
 
+def _confirmed_video(request):
+    preview = api.preview_video_polish_prompt(request)
+    return api.polish_video_prompt(request.model_copy(update={
+        'review_token': preview['review_token'],
+        'reviewed_messages': preview['messages'],
+    }))
+
+
+def _confirmed_r2v(request):
+    preview = api.preview_r2v_polish_prompt(request)
+    return api.polish_r2v_prompt(request.model_copy(update={
+        'review_token': preview['review_token'],
+        'reviewed_messages': preview['messages'],
+    }))
+
+
 @pytest.mark.parametrize('model,label', [('uniart/minimax-h3-vip', 'MiniMax H3'), ('uniart/seedance-2.5-vip', 'Seedance')])
 def test_skill_loads_outside_repo_and_preserves_editor_contract(monkeypatch, tmp_path, model, label):
     monkeypatch.chdir(tmp_path)
@@ -60,7 +76,7 @@ def test_named_optimizer_selects_its_model_and_director_skill(monkeypatch):
     monkeypatch.setattr(api, 'ScriptProcessor', lambda: processor)
     monkeypatch.setattr(api, '_get_custom_prompt', lambda *a: '')
     monkeypatch.setattr(api, '_get_polish_model_for_project', lambda *a: '')
-    api.polish_video_prompt(api.PolishVideoPromptRequest(
+    _confirmed_video(api.PolishVideoPromptRequest(
         draft_prompt='动作', target_video_model='uniart/minimax-h3-vip', optimizer_provider='qwen'
     ))
     assert processor.polish_video_prompt.call_args.kwargs['polish_model'] == 'qwen3.8-flash'
@@ -95,11 +111,11 @@ def test_first_last_polish_requires_two_selected_images_before_model_call(monkey
     monkeypatch.setattr(api, 'ScriptProcessor', lambda: processor)
     for images in ([], ['first'], ['same', 'same']):
         with pytest.raises(api.HTTPException) as exc:
-            api.polish_video_prompt(api.PolishVideoPromptRequest(
+            _confirmed_video(api.PolishVideoPromptRequest(
                 draft_prompt='action', generation_mode='first_last_frame', image_urls=images,
             ))
-        assert exc.value.status_code == 502
-        assert '两张不同' in exc.value.detail['message_zh']
+        assert exc.value.status_code == 422
+        assert '两张不同' in exc.value.detail
     processor.polish_video_prompt.assert_not_called()
 
 
@@ -111,7 +127,7 @@ def test_first_last_polish_passes_mode_and_two_images_to_processor(monkeypatch):
     monkeypatch.setattr(api, '_get_custom_prompt', lambda *a: '')
     monkeypatch.setattr(api, '_get_polish_model_for_project', lambda *a: '')
     monkeypatch.setattr(api, '_polish_image_urls', lambda values: values)
-    api.polish_video_prompt(api.PolishVideoPromptRequest(
+    _confirmed_video(api.PolishVideoPromptRequest(
         draft_prompt='street scene', target_video_model='uniart/minimax-h3-vip',
         generation_mode='first_last_frame', target_duration=8,
         image_urls=['first', 'last'], optimizer_provider='qwen',
@@ -180,7 +196,7 @@ def test_polish_keeps_default_contract_with_model_skill(monkeypatch):
     monkeypatch.setattr(api, '_get_custom_prompt', lambda *a: '')
     monkeypatch.setattr(api, '_get_polish_model_for_project', lambda *a: '')
     monkeypatch.setattr(api, '_get_director_prompt_context', lambda *a: 'Director profile revision: 3; keep Chinese setting')
-    api.polish_video_prompt(api.PolishVideoPromptRequest(draft_prompt='replace character', target_video_model='uniart/minimax-h3-vip'))
+    _confirmed_video(api.PolishVideoPromptRequest(draft_prompt='replace character', target_video_model='uniart/minimax-h3-vip'))
     from src.apps.comic_gen.llm import DEFAULT_VIDEO_POLISH_PROMPT
     prompt = processor.polish_video_prompt.call_args.args[2]
     assert not prompt.startswith(DEFAULT_VIDEO_POLISH_PROMPT)
@@ -204,9 +220,9 @@ def test_h3_polish_rejects_plain_prompt_response(monkeypatch, r2v):
 
     with pytest.raises(api.HTTPException) as exc_info:
         if r2v:
-            api.polish_r2v_prompt(api.PolishR2VPromptRequest(slots=[], **request))
+            _confirmed_r2v(api.PolishR2VPromptRequest(slots=[], **request))
         else:
-            api.polish_video_prompt(api.PolishVideoPromptRequest(**request))
+            _confirmed_video(api.PolishVideoPromptRequest(**request))
 
     assert exc_info.value.status_code == 502
     assert exc_info.value.detail['reason'] == 'model_contract_mismatch'
@@ -227,9 +243,9 @@ def test_h3_polish_accepts_required_structure(monkeypatch, r2v, fields):
     request = dict(draft_prompt='主播举起药盒', target_video_model='uniart/minimax-h3-vip')
 
     if r2v:
-        result = api.polish_r2v_prompt(api.PolishR2VPromptRequest(slots=[], **request))
+        result = _confirmed_r2v(api.PolishR2VPromptRequest(slots=[], **request))
     else:
-        result = api.polish_video_prompt(api.PolishVideoPromptRequest(**request))
+        result = _confirmed_video(api.PolishVideoPromptRequest(**request))
 
     assert result == {'prompt_cn': structured, 'prompt_en': structured}
 
@@ -249,7 +265,7 @@ def test_h3_polish_accepts_markdown_field_headings(monkeypatch):
     monkeypatch.setattr(api, '_get_custom_prompt', lambda *a: '')
     monkeypatch.setattr(api, '_get_polish_model_for_project', lambda *a: '')
 
-    result = api.polish_r2v_prompt(api.PolishR2VPromptRequest(
+    result = _confirmed_r2v(api.PolishR2VPromptRequest(
         draft_prompt='主播举起药盒',
         slots=[],
         target_video_model='uniart/minimax-h3-vip',
@@ -270,7 +286,7 @@ def test_r2v_polish_accepts_minimax_ir_base_h3_contract(monkeypatch):
     monkeypatch.setattr(api, '_get_custom_prompt', lambda *a: '')
     monkeypatch.setattr(api, '_get_polish_model_for_project', lambda *a: '')
 
-    result = api.polish_r2v_prompt(api.PolishR2VPromptRequest(
+    result = _confirmed_r2v(api.PolishR2VPromptRequest(
         draft_prompt='苏砚拔剑横掠',
         slots=[],
         target_video_model='uniart/minimax-h3-vip',
@@ -287,7 +303,7 @@ def test_seedance_polish_does_not_require_h3_fields(monkeypatch):
     monkeypatch.setattr(api, '_get_custom_prompt', lambda *a: '')
     monkeypatch.setattr(api, '_get_polish_model_for_project', lambda *a: '')
 
-    response = api.polish_video_prompt(api.PolishVideoPromptRequest(
+    response = _confirmed_video(api.PolishVideoPromptRequest(
         draft_prompt='主播举起药盒',
         target_video_model='uniart/seedance-2.5-vip',
     ))
@@ -308,7 +324,7 @@ def test_h3_audio_polish_rejects_result_that_drops_explicit_dialogue(monkeypatch
     monkeypatch.setattr(api, '_get_polish_model_for_project', lambda *a: '')
 
     with pytest.raises(api.HTTPException) as exc_info:
-        api.polish_video_prompt(api.PolishVideoPromptRequest(
+        _confirmed_video(api.PolishVideoPromptRequest(
             draft_prompt='主播举起药盒',
             target_video_model='uniart/minimax-h3-vip',
             generate_audio=True,
@@ -333,7 +349,7 @@ def test_h3_audio_polish_passes_exact_dialogue_to_skill_and_accepts_it(monkeypat
     monkeypatch.setattr(api, '_get_custom_prompt', lambda *a: '')
     monkeypatch.setattr(api, '_get_polish_model_for_project', lambda *a: '')
 
-    result = api.polish_video_prompt(api.PolishVideoPromptRequest(
+    result = _confirmed_video(api.PolishVideoPromptRequest(
         draft_prompt='主播举起药盒',
         target_video_model='uniart/minimax-h3-vip',
         generate_audio=True,
@@ -361,9 +377,9 @@ def test_h3_polish_rejects_plain_prompt_response(monkeypatch, r2v):
 
     with pytest.raises(api.HTTPException) as exc_info:
         if r2v:
-            api.polish_r2v_prompt(api.PolishR2VPromptRequest(slots=[], **request))
+            _confirmed_r2v(api.PolishR2VPromptRequest(slots=[], **request))
         else:
-            api.polish_video_prompt(api.PolishVideoPromptRequest(**request))
+            _confirmed_video(api.PolishVideoPromptRequest(**request))
 
     assert exc_info.value.status_code == 502
     assert exc_info.value.detail['reason'] == 'model_contract_mismatch'
@@ -384,9 +400,9 @@ def test_h3_polish_accepts_required_structure(monkeypatch, r2v, fields):
     request = dict(draft_prompt='主播举起药盒', target_video_model='uniart/minimax-h3-vip')
 
     if r2v:
-        result = api.polish_r2v_prompt(api.PolishR2VPromptRequest(slots=[], **request))
+        result = _confirmed_r2v(api.PolishR2VPromptRequest(slots=[], **request))
     else:
-        result = api.polish_video_prompt(api.PolishVideoPromptRequest(**request))
+        result = _confirmed_video(api.PolishVideoPromptRequest(**request))
 
     assert result == {'prompt_cn': structured, 'prompt_en': structured}
 
@@ -399,7 +415,7 @@ def test_seedance_polish_does_not_require_h3_fields(monkeypatch):
     monkeypatch.setattr(api, '_get_custom_prompt', lambda *a: '')
     monkeypatch.setattr(api, '_get_polish_model_for_project', lambda *a: '')
 
-    response = api.polish_video_prompt(api.PolishVideoPromptRequest(
+    response = _confirmed_video(api.PolishVideoPromptRequest(
         draft_prompt='主播举起药盒',
         target_video_model='uniart/seedance-2.5-vip',
     ))

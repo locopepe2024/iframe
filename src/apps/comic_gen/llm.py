@@ -2558,6 +2558,7 @@ Return a JSON object with ALL fields below. null is acceptable for optional fiel
         image_urls: Optional[List[str]] = None,
         polish_model: str = "",
         generation_mode: str = "i2v",
+        reviewed_messages: Optional[Dict[str, str]] = None,
     ) -> Dict[str, str]:
         """
         Polishes a video generation prompt using Qwen.
@@ -2635,6 +2636,9 @@ Return a JSON object with ALL fields below. null is acceptable for optional fiel
         else:
             user_text = draft_prompt
 
+        if reviewed_messages is not None:
+            system_prompt = reviewed_messages["system"]
+            user_text = reviewed_messages["user"]
         user_content: Any = user_text
         if has_images:
             # Multimodal user message — Qwen-VL & Kimi-K2 vision API
@@ -2700,6 +2704,7 @@ Return a JSON object with ALL fields below. null is acceptable for optional fiel
         prev_cn: str = "",
         image_urls: Optional[List[str]] = None,
         polish_model: str = "",
+        reviewed_messages: Optional[Dict[str, str]] = None,
     ) -> Dict[str, str]:
         """
         Polishes a R2V (Reference-to-Video) prompt using Qwen.
@@ -2769,6 +2774,9 @@ Return a JSON object with ALL fields below. null is acceptable for optional fiel
         else:
             user_text = draft_prompt
 
+        if reviewed_messages is not None:
+            system_prompt = reviewed_messages["system"]
+            user_text = reviewed_messages["user"]
         user_content: Any = user_text
         if has_images:
             parts: List[Dict[str, Any]] = []
