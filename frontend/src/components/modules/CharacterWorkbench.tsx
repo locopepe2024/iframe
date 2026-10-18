@@ -518,6 +518,18 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
         return () => { active = false; };
     }, [currentProject?.id, asset.id, asset.base_character_id]);
 
+    useEffect(() => {
+        const projectId = currentProject?.id;
+        if (!projectId || typeof api.listEpisodeCharacterUses !== "function") return;
+        let active = true;
+        void api.listEpisodeCharacterUses(projectId)
+            .then((uses) => {
+                if (active) updateProject(projectId, { episode_character_uses: uses });
+            })
+            .catch(() => { /* retain the current snapshot if refresh is unavailable */ });
+        return () => { active = false; };
+    }, [currentProject?.id, updateProject]);
+
     const confirmMasterAnchor = async () => {
         if (!currentProject?.id || !selectedMasterVariantId || anchorBusy) return;
         if (!window.confirm(`确认当前选中的图片 ${selectedMasterVariantId} 是该角色正面全身锚点图？请核对面容、发型、服装与鞋履。`)) return;

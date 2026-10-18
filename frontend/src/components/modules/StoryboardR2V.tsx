@@ -104,6 +104,21 @@ export default function StoryboardR2V() {
         return () => { active = false; };
     }, [currentProject?.id, currentProject?.characters, currentProject?.scenes, currentProject?.props]);
 
+    // Episode looks are a live, user-confirmed index. Refresh them when the
+    // shot workbench opens so a look confirmed in Character Workbench or
+    // another tab is searchable without a full page reload.
+    useEffect(() => {
+        const projectId = currentProject?.id;
+        if (!projectId || typeof api.listEpisodeCharacterUses !== "function") return;
+        let active = true;
+        void api.listEpisodeCharacterUses(projectId)
+            .then((uses) => {
+                if (active) updateProject(projectId, { episode_character_uses: uses });
+            })
+            .catch(() => { /* project snapshot remains usable while refreshing */ });
+        return () => { active = false; };
+    }, [currentProject?.id, updateProject]);
+
     // Derive shots from project frames. Workbench state (T2I 抽卡
     // history, last-active tab, batch count) now comes from backend-
     // persisted frame fields (added in commit 9149b06) instead of
