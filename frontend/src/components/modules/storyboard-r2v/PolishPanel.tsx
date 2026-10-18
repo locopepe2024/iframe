@@ -30,6 +30,17 @@ interface PolishedPrompt {
     en: string;
 }
 
+interface PolishReview {
+    messages: { system: string; user: string };
+    media: { label: string; url: string }[];
+    review_token: string;
+    format_note: string;
+    draft: string;
+    prevCn: string;
+    feedbackText: string;
+    sourceSignature: string;
+}
+
 type PolishErrorReason =
     | "is_configured_false"
     | "api_error"
@@ -139,6 +150,16 @@ export default function PolishPanel({
     const [copiedCol, setCopiedCol] = useState<"cn" | "en" | "original" | null>(null);
     const [optimizerProvider, setOptimizerProvider] = useState<OptimizerProvider>("qwen");
     const [optimizationSkills, setOptimizationSkills] = useState<string[]>(["minimax-h3-director"]);
+    const [review, setReview] = useState<PolishReview | null>(null);
+    const sourceSignature = JSON.stringify([prompt, optimizationDraft, polished?.cn, polished?.en,
+        shotOverrides, slots, imageUrls, videoModel, generateAudio, targetDuration, dialogue,
+        optimizerProvider, optimizationSkills, targetRatio, videoMode, tabMode, scriptId, frameId]);
+
+    const requestPolish = (draft: string, prevCn: string, feedbackText: string,
+        confirmed?: { messages: { system: string; user: string }; token: string }) =>
+        tabMode === "direct_r2v"
+            ? api.polishR2VPrompt(draft, slots, feedbackText, scriptId, prevCn, imageUrls, "", videoModel, generateAudio, targetDuration, dialogue ?? undefined, optimizerProvider, optimizationSkills, targetRatio, frameId, shotOverrides, confirmed)
+            : api.polishVideoPrompt(draft, feedbackText, scriptId, prevCn, imageUrls, "", videoModel, generateAudio, targetDuration, dialogue ?? undefined, optimizerProvider, optimizationSkills, targetRatio, frameId, shotOverrides, videoMode ?? "i2v", confirmed);
 
     const toggleSkill = (skillId: string) => {
         setOptimizationSkills((current) => current.includes(skillId)
@@ -160,13 +181,9 @@ export default function PolishPanel({
         // 成功后再 setPolished 覆盖。
 
         try {
-            const res = tabMode === "direct_r2v"
-                ? await api.polishR2VPrompt(draft, slots, feedbackText, scriptId, prevCn, imageUrls, "", videoModel, generateAudio, targetDuration, dialogue ?? undefined, optimizerProvider, optimizationSkills, targetRatio, frameId, shotOverrides)
-                : await api.polishVideoPrompt(draft, feedbackText, scriptId, prevCn, imageUrls, "", videoModel, generateAudio, targetDuration, dialogue ?? undefined, optimizerProvider, optimizationSkills, targetRatio, frameId, shotOverrides, videoMode ?? "i2v");
-            if (res?.prompt_cn && res?.prompt_en) {
-                setPolishedSettings(shotOverrides);
-                setPolished({ cn: res.prompt_cn, en: res.prompt_en });
-                setFeedback("");
+            const res = await requestPolish(draft, prevCn, feedbackText);
+            if (res?.messages?.user && res?.review_token) {
+                setReview({ ...res, draft, prevCn, feedbackText, sourceSignature });
             } else {
                 // 200 但缺 key 走错误态
                 setError({
@@ -188,7 +205,31 @@ export default function PolishPanel({
         } finally {
             setIsPolishing(false);
         }
-    }, [tabMode, videoMode, prompt, optimizationDraft, shotOverrides, slots, scriptId, frameId, polished?.en, polished?.cn, imageUrls, videoModel, generateAudio, targetDuration, dialogue, optimizerProvider, optimizationSkills, targetRatio]);
+    }, [sourceSignature, polished?.en, polished?.cn, prompt, optimizationDraft]);
+
+    const confirmPolish = async () => {
+        if (!review) return;
+        if (review.sourceSignature !== sourceSignature) {
+            setReview(null);
+            setError({ reason: "api_error", messageZh: "镜头或素材已变化，请重新查看模型输入。", messageEn: "Shot or media changed; review the input again." });
+            return;
+        }
+        setIsPolishing(true);
+        setError(null);
+        try {
+            const res = await requestPolish(review.draft, review.prevCn, review.feedbackText,
+                { messages: review.messages, token: review.review_token });
+            if (!res?.prompt_cn || !res?.prompt_en) throw new Error("Missing bilingual polish result");
+            setPolishedSettings(shotOverrides);
+            setPolished({ cn: res.prompt_cn, en: res.prompt_en });
+            setFeedback("");
+            setReview(null);
+        } catch (err: any) {
+            setError(parsePolishError(err, t));
+        } finally {
+            setIsPolishing(false);
+        }
+    };
 
     const handleApply = useCallback((text: string) => {
         onApply(text);
@@ -198,6 +239,7 @@ export default function PolishPanel({
     }, [onApply]);
 
     const handleDiscard = useCallback(() => {
+        setReview(null);
         setPolished(null);
         setError(null);
         setFeedback("");
@@ -237,6 +279,34 @@ export default function PolishPanel({
         </div>
     );
 
+    if (review) {
+        return <div className="space-y-3 rounded-lg border border-glass-border bg-black/20 p-3">
+            <div className="flex items-center justify-between text-body-sm text-foreground">
+                <strong>提交前检查模型输入</strong>
+                <button type="button" onClick={() => setReview(null)} aria-label="关闭输入检查"><X size={15} /></button>
+            </div>
+            <p className="text-xs text-text-secondary">创作约束可以编辑；图片按下列顺序发送。确认后才调用模型。</p>
+            {review.media.length ? <ul className="space-y-1 text-xs text-text-secondary">{review.media.map((item, i) =>
+                <li key={`${item.url}-${i}`}>{item.label}：{item.url}</li>)}</ul> : <p className="text-xs text-text-muted">无参考图</p>}
+            <label className="block text-xs text-text-secondary">系统／任务文字
+                <textarea className="mt-1 h-48 w-full rounded border border-glass-border bg-black/30 p-2 text-xs text-foreground disabled:opacity-50" value={review.messages.system}
+                    disabled={optimizerProvider === "minimax_context_ir"}
+                    onChange={(event) => setReview({ ...review, messages: { ...review.messages, system: event.target.value } })} />
+            </label>
+            <label className="block text-xs text-text-secondary">用户／镜头文字
+                <textarea className="mt-1 h-32 w-full rounded border border-glass-border bg-black/30 p-2 text-xs text-foreground" value={review.messages.user}
+                    onChange={(event) => setReview({ ...review, messages: { ...review.messages, user: event.target.value } })} />
+            </label>
+            <p className="text-xs text-text-muted">{review.format_note}</p>
+            {error && <p className="text-xs text-status-failed-fg">{error.messageZh}</p>}
+            <div className="flex justify-end gap-2">
+                <button type="button" onClick={() => setReview(null)} className="rounded border border-glass-border px-3 py-1.5 text-xs text-foreground">返回</button>
+                <button type="button" onClick={() => void confirmPolish()} disabled={isPolishing || !review.messages.user.trim()}
+                    className="rounded bg-primary px-3 py-1.5 text-xs text-white disabled:opacity-50">{isPolishing ? "润色中…" : "确认输入并润色"}</button>
+            </div>
+        </div>;
+    }
+
     if (!polished && !error && !isPolishing) {
         return (
             <div>
@@ -248,9 +318,9 @@ export default function PolishPanel({
                     leftIcon={<Sparkles />}
                     onClick={() => runPolish("")}
                     disabled={disabled}
-                    title={t("polish")}
+                    title="查看并确认模型输入"
                 >
-                    {t("polish")}
+                    查看并确认模型输入
                 </WorkflowActionButton>
                 </div>
             </div>

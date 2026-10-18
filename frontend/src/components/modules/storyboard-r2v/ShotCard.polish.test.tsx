@@ -72,7 +72,7 @@ it("sends the selected shot video model when polishing", async () => {
         />,
     );
 
-    fireEvent.click(screen.getByTitle("polish"));
+    fireEvent.click(screen.getByTitle("查看并确认模型输入"));
 
     await waitFor(() => expect(api.polishVideoPrompt).toHaveBeenCalledOnce());
     expect(vi.mocked(api.polishVideoPrompt).mock.calls[0][6]).toBe("uniart/minimax-h3-vip");
@@ -96,7 +96,7 @@ it("sends the selected first and last variants in order for FL2V polish", async 
             expanded={false} onToggleExpanded={vi.fn()}
         />,
     );
-    fireEvent.click(screen.getByTitle("polish"));
+    fireEvent.click(screen.getByTitle("查看并确认模型输入"));
     await waitFor(() => expect(api.polishVideoPrompt).toHaveBeenCalledOnce());
     const args = vi.mocked(api.polishVideoPrompt).mock.calls[0];
     expect(args[4]).toEqual(["first-b", "last-b"]);
