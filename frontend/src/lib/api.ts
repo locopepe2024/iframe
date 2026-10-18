@@ -362,6 +362,24 @@ export interface PlatformReferenceReviewer {
     authorized: boolean;
 }
 
+export interface WorkbenchTemplate {
+    template_id: string;
+    revision: number;
+    kind: "image" | "video";
+    station: "character" | "scene" | "prop" | "shot";
+    title: string;
+    focus: string;
+    input_slots: Array<{ id: string; label: string; required: boolean }>;
+    source: { repository: string; commit: string; path: string; license: string; content_sha256: string };
+    media: [];
+}
+
+export interface WorkbenchTemplateCatalog {
+    schema_version: 1;
+    catalog_revision: string;
+    templates: WorkbenchTemplate[];
+}
+
 /**
  * PR-3g #3 · TTS voice metadata returned by GET /voices.
  * Family-aware fields (family/dialect/lang_primary/supports_instruction)
@@ -688,6 +706,13 @@ export const api = {
         const res = await axios.get<PlatformReferenceCatalog>(`${API_URL}/platform-reference-library`, {
             params: { query: query || undefined, kind: kind || undefined },
             headers: { "Cache-Control": "no-cache" },
+        });
+        return res.data;
+    },
+
+    getWorkbenchTemplates: async (station?: string, query = ""): Promise<WorkbenchTemplateCatalog> => {
+        const res = await axios.get<WorkbenchTemplateCatalog>(`${API_URL}/workbench-templates`, {
+            params: { station: station || undefined, query: query || undefined },
         });
         return res.data;
     },
