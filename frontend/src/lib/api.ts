@@ -699,6 +699,14 @@ export const api = {
         return res.data;
     },
 
+    getPlatformReferenceReviewQueue: async (query = "", kind?: string): Promise<PlatformReferenceCatalog> => {
+        const res = await axios.get<PlatformReferenceCatalog>(`${API_URL}/platform-reference-library/review-queue`, {
+            params: { query: query || undefined, kind: kind || undefined },
+            headers: { "Cache-Control": "no-cache" },
+        });
+        return res.data;
+    },
+
     promotePlatformReferenceResource: async (
         resourceId: string,
         expectedHash?: string,

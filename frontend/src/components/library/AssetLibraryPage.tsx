@@ -174,12 +174,60 @@ function recencyOf(asset: Character | Scene | Prop, type: AssetTab): number {
 export default function AssetLibraryPage() {
   const t = useTranslations("recreationMedia");
   const [section, setSection] = useState("assets");
+  const [reviewer, setReviewer] = useState(false);
+  useEffect(() => {
+    void api.getPlatformReferenceReviewer?.().then((result) => setReviewer(!!result.authorized)).catch(() => setReviewer(false));
+  }, []);
   return <div className="flex h-full min-h-0 flex-col">
     <div className="flex flex-wrap gap-2 px-4 pt-3 md:px-7" role="group" aria-label={t("sections")}>
-      {["assets", "media"].map(value => <button key={value} type="button" aria-pressed={section === value}
+      {["assets", ...(reviewer ? ["platform"] : []), "media"].map(value => <button key={value} type="button" aria-pressed={section === value}
         className="glass-button px-4 py-2 aria-pressed:text-primary" onClick={() => setSection(value)}>{t(value)}</button>)}
     </div>
-    {section === "assets" ? <SemanticAssetLibrary /> : <RecreationMediaLibrary />}
+    {section === "assets" ? <SemanticAssetLibrary /> : section === "platform" ? <PlatformReferenceReviewQueue /> : <RecreationMediaLibrary />}
+  </div>;
+}
+
+function PlatformReferenceReviewQueue() {
+  const t = useTranslations("library");
+  const [catalog, setCatalog] = useState<import("@/lib/api").PlatformReferenceCatalog | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [publishing, setPublishing] = useState<string | null>(null);
+  const load = async () => {
+    setLoading(true);
+    try { setCatalog(await api.getPlatformReferenceReviewQueue()); }
+    catch { toast.error(t("reviewLoadFailed")); }
+    finally { setLoading(false); }
+  };
+  useEffect(() => { void load(); }, []);
+  const promote = async (resource: import("@/lib/api").PlatformReferenceResource) => {
+    setPublishing(resource.platform_resource_id);
+    try {
+      await api.promotePlatformReferenceResource(resource.platform_resource_id, resource.provenance.content_sha256);
+      toast.success(t("reviewPromoted"));
+      await load();
+    } catch { toast.error(t("reviewPromoteFailed")); }
+    finally { setPublishing(null); }
+  };
+  return <div className="flex-1 min-h-0 overflow-y-auto px-4 py-6 md:px-7">
+    <div className="mb-5">
+      <div className="font-mono text-[0.625rem] uppercase tracking-[0.2em] text-text-muted">PLATFORM REFERENCE LIBRARY</div>
+      <h1 className="text-2xl font-display font-semibold text-foreground mt-1">{t("reviewTitle")}</h1>
+      <p className="text-sm text-text-secondary mt-1">{t("reviewDescription")}</p>
+    </div>
+    {loading ? <div className="py-12 text-text-secondary">{t("reviewLoading")}</div> : !catalog?.resources.length ?
+      <div className="glass-panel rounded-xl p-8 text-text-secondary">{t("reviewEmpty")}</div> :
+      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+        {catalog.resources.map((resource) => <article key={resource.platform_resource_id} className="glass-panel rounded-xl border border-glass-border p-4">
+          <div className="flex items-start justify-between gap-3">
+            <div><h2 className="font-semibold text-foreground">{resource.title}</h2><div className="text-xs text-text-muted mt-1">{resource.kind} · v{resource.revision} · {resource.status}</div></div>
+            <span className="text-[0.625rem] rounded-full bg-amber-500/15 text-amber-700 px-2 py-1">{t("reviewPending")}</span>
+          </div>
+          {resource.summary && <p className="text-sm text-text-secondary mt-3">{resource.summary}</p>}
+          {!!resource.tags?.length && <div className="flex flex-wrap gap-1 mt-3">{resource.tags.map((tag) => <span key={tag} className="text-xs rounded bg-surface-inset px-2 py-1 text-text-muted">{tag}</span>)}</div>}
+          <dl className="mt-4 space-y-1 text-xs text-text-muted"><div><dt className="inline font-medium">{t("reviewSource")}：</dt> <dd className="inline">{resource.provenance.source || "—"}</dd></div><div><dt className="inline font-medium">{t("reviewLicense")}：</dt> <dd className="inline">{resource.provenance.license}</dd></div></dl>
+          <button type="button" disabled={publishing === resource.platform_resource_id} onClick={() => void promote(resource)} className="mt-4 w-full glass-button font-semibold disabled:opacity-50">{publishing === resource.platform_resource_id ? t("reviewPublishing") : t("reviewPublish")}</button>
+        </article>)}
+      </div>}
   </div>;
 }
 

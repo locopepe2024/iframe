@@ -91,6 +91,7 @@ from ...utils import setup_logging, get_user_data_dir
 from ...utils.storage_config import media_root, storage_backend
 from ..platform_reference_catalog import (
     list_resources as list_platform_reference_resources,
+    list_review_candidates as list_platform_reference_review_candidates,
     promote_resource as promote_platform_reference_resource,
     reviewer_is_authorized,
 )
@@ -188,6 +189,23 @@ class PlatformReferencePromotionRequest(BaseModel):
 def get_platform_reference_reviewer(user: UserContext = Depends(require_user_context)):
     """Return only whether this API-key identity may review platform candidates."""
     return {"authorized": reviewer_is_authorized(user.owner_profile_id)}
+
+
+@app.get("/platform-reference-library/review-queue")
+def get_platform_reference_review_queue(
+    kind: Optional[str] = None,
+    query: str = "",
+    user: UserContext = Depends(require_user_context),
+):
+    """Return candidate/review resources only to the deployment reviewer."""
+    if not reviewer_is_authorized(user.owner_profile_id):
+        raise HTTPException(status_code=403, detail="平台参考资源审核权限不足")
+    try:
+        return private_no_store_signed_response(
+            list_platform_reference_review_candidates(kind=kind, query=query)
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
 
 
 @app.post("/platform-reference-library/{resource_id}/promote")

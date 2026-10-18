@@ -48,3 +48,14 @@ def test_mounted_reviewer_key_file_is_supported(tmp_path):
     config = tmp_path / "config.json"
     config.write_text(json.dumps({"UNIART_API_KEY": "host-key"}), encoding="utf-8")
     assert configured_reviewer_identity(mounted) == configured_reviewer_identity(config)
+
+
+def test_review_queue_lists_only_unpublished_candidates(tmp_path):
+    from src.apps.platform_reference_catalog import list_review_candidates
+    manifest = tmp_path / "manifest.json"
+    manifest.write_text(json.dumps({"schema_version": 1, "catalog_revision": "r1", "resources": [
+        {"platform_resource_id": "candidate", "revision": 1, "kind": "style", "title": "Candidate", "status": "candidate", "provenance": {"license": "MIT", "content_sha256": "a" * 64}},
+        {"platform_resource_id": "active", "revision": 1, "kind": "style", "title": "Active", "status": "active", "provenance": {"license": "MIT", "content_sha256": "b" * 64}},
+    ]}), encoding="utf-8")
+    result = list_review_candidates(path=manifest)
+    assert [item["platform_resource_id"] for item in result["resources"]] == ["candidate"]

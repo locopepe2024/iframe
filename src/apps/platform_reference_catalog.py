@@ -154,6 +154,38 @@ def list_resources(*, kind: Optional[str] = None, query: str = "", path: Path = 
     }
 
 
+def list_review_candidates(*, kind: Optional[str] = None, query: str = "", path: Path = MANIFEST_PATH) -> dict[str, Any]:
+    """Return unpublished candidates for the deployment reviewer queue.
+
+    The public catalog deliberately exposes active resources only; review UI
+    callers must use this separate, server-authorized boundary.
+    """
+    manifest = _read_manifest(path)
+    needle = query.strip().casefold()
+    resources = []
+    for resource in manifest.get("resources", []):
+        if resource.get("status") not in ("candidate", "review"):
+            continue
+        if kind and resource.get("kind") != kind:
+            continue
+        if needle:
+            haystack = " ".join([
+                str(resource.get("title", "")),
+                str(resource.get("summary", "")),
+                " ".join(str(tag) for tag in resource.get("tags", [])),
+                str(resource.get("kind", "")),
+            ]).casefold()
+            if needle not in haystack:
+                continue
+        resources.append(resource)
+    return {
+        "scope": "platform_shared",
+        "schema_version": manifest.get("schema_version", 1),
+        "catalog_revision": manifest.get("catalog_revision", "unknown"),
+        "resources": resources,
+    }
+
+
 def promote_resource(
     resource_id: str,
     reviewer_identity: str,
