@@ -648,7 +648,8 @@ def _owned_local_media(owner_key: str, relative_path: str, preview: int, user: U
             path = create_media_thumbnail(path, owner_root, preview)
         except (OSError, ValueError) as exc:
             raise HTTPException(status_code=415, detail="A supported image or video is required for preview") from exc
-    return FileResponse(path, media_type="image/webp" if preview else None,
+    media_type = "image/webp" if preview or path.lower().endswith(".webp") else None
+    return FileResponse(path, media_type=media_type,
                         headers={"Cache-Control": "private, no-store", "X-Content-Type-Options": "nosniff"})
 
 
