@@ -169,3 +169,23 @@ def test_scene_asset_submission_snapshot_captures_structured_visual_design(tmp_p
         image_generation_mode="text",
     )
     assert snapshot["visual_design"]["visual_constraints"]["visible_face_limit"] == 3
+
+
+def test_scene_variant_visual_snapshot_is_projected_as_reusable_preset(tmp_path):
+    pipeline, scene, _ = make_pipeline(tmp_path)
+    scene.image_asset.variants = [ImageVariant(
+        id="scene-variant-1",
+        url="output/assets/scenes/street-1.webp",
+        submission_snapshot={
+            "positive_prompt": "cool side-lit autumn street",
+            "selected_model_id": "image-model",
+            "aspect_ratio": "16:9",
+            "generation_type": "all",
+            "image_generation_mode": "text",
+            "visual_design": {"visual_constraints": {"key_light_direction": "side"}},
+        },
+    )]
+    presets = pipeline.list_shot_visual_presets("project", "street")
+    assert len(presets) == 1
+    assert presets[0].source_asset_id == "street"
+    assert presets[0].source_variant_id == "scene-variant-1"

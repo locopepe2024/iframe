@@ -563,6 +563,25 @@ class ComicGenPipeline(StudioOwnerMixin):
         if not script:
             return []
         presets = list(getattr(script, "shot_visual_presets", []) or [])
+        scenes = [scene for scene in (script.scenes or []) if not scene_id or scene.id == scene_id]
+        for scene in scenes:
+            for variant in (scene.image_asset.variants or []):
+                snapshot = variant.submission_snapshot
+                if not snapshot or not snapshot.visual_design:
+                    continue
+                derived_id = f"asset_variant_visual_{scene.id}_{variant.id}"
+                if any(item.id == derived_id for item in presets):
+                    continue
+                presets.append(ShotVisualPreset(
+                    id=derived_id,
+                    name=f"{scene.name} · {variant.display_name or variant.id[:8]}",
+                    scene_id=scene.id,
+                    source_asset_id=scene.id,
+                    source_variant_id=variant.id,
+                    source_scene_revision=snapshot.design_revision_at_submission,
+                    visual_design=copy.deepcopy(snapshot.visual_design),
+                    compiled_prompt=snapshot.positive_prompt,
+                ))
         if scene_id:
             presets = [preset for preset in presets if preset.scene_id == scene_id]
         return presets
@@ -632,7 +651,10 @@ class ComicGenPipeline(StudioOwnerMixin):
                 raise ValueError("visual preset belongs to another scene")
             source_frame = next((item for item in (script.frames or []) if item.id == preset.source_frame_id), None)
             source_variant = None
-            if source_frame and preset.source_variant_id:
+            if preset.source_asset_id and preset.source_variant_id:
+                source_asset = next((item for item in (script.scenes or []) if item.id == preset.source_asset_id), None)
+                source_variant = next((item for item in ((source_asset.image_asset.variants if source_asset else []) or []) if item.id == preset.source_variant_id), None)
+            elif source_frame and preset.source_variant_id:
                 source_asset = source_frame.rendered_image_asset or source_frame.image_asset
                 source_variant = next((item for item in (source_asset.variants or []) if item.id == preset.source_variant_id), None)
             if apply_mode == "parameters_with_reference":

@@ -276,7 +276,7 @@ export default function StoryboardFrameEditor({ frame: initialFrame, onClose }: 
                                     </div>
                                     <select aria-label="选择结构化视觉预设" value={selectedVisualPresetId} onChange={event => setSelectedVisualPresetId(event.target.value)} className="w-full rounded border border-glass-border bg-surface p-2 text-xs text-foreground">
                                         <option value="">选择同场景视觉预设</option>
-                                        {visualPresets.map((preset: any) => <option key={preset.id} value={preset.id}>{preset.name} · 来源 {preset.source_frame_id}</option>)}
+                                        {visualPresets.map((preset: any) => <option key={preset.id} value={preset.id}>{preset.name} · 来源 {preset.source_asset_id ? `场景资产变体 ${preset.source_variant_id}` : `分镜 ${preset.source_frame_id}`}</option>)}
                                     </select>
                                     <div className="flex gap-2">
                                         <select aria-label="视觉预设应用模式" value={visualPresetApplyMode} onChange={event => setVisualPresetApplyMode(event.target.value as "parameters_only" | "parameters_with_reference")} className="min-w-0 flex-1 rounded border border-glass-border bg-surface p-2 text-xs text-foreground">

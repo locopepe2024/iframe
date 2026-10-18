@@ -701,7 +701,8 @@ class ShotVisualPreset(BaseModel):
     id: str = Field(default_factory=lambda: f"visual_preset_{uuid.uuid4().hex[:10]}")
     name: str = Field(..., min_length=1, max_length=120)
     scene_id: str = Field(..., min_length=1)
-    source_frame_id: str = Field(..., min_length=1)
+    source_frame_id: Optional[str] = None
+    source_asset_id: Optional[str] = None
     source_variant_id: Optional[str] = None
     source_scene_revision: Optional[int] = Field(None, ge=1)
     visual_design: Dict[str, Any] = Field(default_factory=dict)
