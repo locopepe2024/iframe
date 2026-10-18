@@ -347,6 +347,12 @@ class AssetLibraryReference(BaseModel):
     asset_type: Literal["character", "scene", "prop"]
     asset_id: str = Field(..., min_length=1)
     variant_id: str = Field(..., min_length=1)
+    source_scope: Optional[Literal["shared", "project", "episode", "series", "private"]] = None
+    revision: Optional[int] = Field(None, ge=1)
+    application_mode: Optional[Literal[
+        "reference_only", "parameters_only", "parameters_with_media", "parameters_with_video"
+    ]] = None
+    applied_fields: List[str] = Field(default_factory=list, max_length=16)
 
 
 class AssetReferenceIndexEntry(BaseModel):

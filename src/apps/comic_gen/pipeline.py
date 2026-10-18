@@ -2094,7 +2094,7 @@ class ComicGenPipeline(StudioOwnerMixin):
             self._save_data()
 
     @staticmethod
-    def _normalize_asset_reference(reference: Any) -> Optional[Dict[str, str]]:
+    def _normalize_asset_reference(reference: Any) -> Optional[Dict[str, Any]]:
         """Normalize the public reference contract before resolving it.
 
         This deliberately keeps only the three stable identifiers. Provider
@@ -2118,14 +2118,35 @@ class ComicGenPipeline(StudioOwnerMixin):
             raise InvalidAssetReference("reference.asset_id is required")
         if not isinstance(variant_id, str) or not variant_id.strip():
             raise InvalidAssetReference("reference.variant_id is required")
-        return {
+        stable: Dict[str, Any] = {
             "asset_type": asset_type,
             "asset_id": asset_id.strip(),
             "variant_id": variant_id.strip(),
         }
+        # Optional provenance/application metadata is durable intent, not a
+        # provider URL. Preserve it when supplied so previews and snapshots can
+        # explain how a selected asset was applied; legacy callers retain the
+        # original three-key shape.
+        source_scope = raw.get("source_scope")
+        if source_scope not in (None, "shared", "project", "episode", "series", "private"):
+            raise InvalidAssetReference("reference.source_scope is invalid")
+        revision = raw.get("revision")
+        if revision is not None and (isinstance(revision, bool) or not isinstance(revision, int) or revision < 1):
+            raise InvalidAssetReference("reference.revision is invalid")
+        application_mode = raw.get("application_mode")
+        if application_mode not in (None, "reference_only", "parameters_only", "parameters_with_media", "parameters_with_video"):
+            raise InvalidAssetReference("reference.application_mode is invalid")
+        applied_fields = raw.get("applied_fields")
+        if applied_fields is not None:
+            if not isinstance(applied_fields, list) or len(applied_fields) > 16 or any(not isinstance(item, str) or not item.strip() for item in applied_fields):
+                raise InvalidAssetReference("reference.applied_fields is invalid")
+        for key in ("source_scope", "revision", "application_mode", "applied_fields"):
+            if key in raw and raw[key] not in (None, "", []):
+                stable[key] = raw[key]
+        return stable
 
     @classmethod
-    def _normalize_asset_references(cls, references: Any) -> List[Dict[str, str]]:
+    def _normalize_asset_references(cls, references: Any) -> List[Dict[str, Any]]:
         if references is None:
             return []
         if not isinstance(references, (list, tuple)):

@@ -233,6 +233,10 @@ export interface AssetLibraryReference {
     asset_type: "character" | "scene" | "prop";
     asset_id: string;
     variant_id: string;
+    source_scope?: "shared" | "project" | "episode" | "series" | "private";
+    revision?: number;
+    application_mode?: "reference_only" | "parameters_only" | "parameters_with_media" | "parameters_with_video";
+    applied_fields?: string[];
 }
 
 export interface AssetImageReviewRequest {
