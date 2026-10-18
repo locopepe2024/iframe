@@ -59,6 +59,74 @@
 
 `wardrobe`、`weapon`、`audio` 可作为角色或分镜引用的子类型，是否单独展示由 UI 过滤决定，不改变资源身份。
 
+## 与 IYIShow 平台参考库契约的对齐
+
+IYIShow 的平台参考库契约进一步区分了平台资源、媒体变体和结构化提示词变体。iFrame 当前的 `global` 资产池只能覆盖其中一部分，不能直接视为完整的平台资源层。
+
+### 五道闸门
+
+平台共享资源进入正式目录前必须经过：
+
+1. **身份**：稳定 `resource_id`、平台 revision、媒体 `variant_id` 和 `prompt_variant_id`；URL 只作为运行时投影。
+2. **结构**：结构化 schema、变量约束、模型适配和 provider projection 校验通过。
+3. **来源**：仓库、commit、作者、许可证、内容 hash 和导入批次完整。
+4. **引用**：脚本、剧集、分镜、容器和 Context IR 固定绑定具体 revision；替换使用并发安全的显式操作；删除先检查引用。
+5. **质量**：技术就绪、提示词对齐、来源相关性、可复用性和连续性适配分别记录。
+
+### 对 iFrame 当前模型的判断
+
+已具备：
+
+- 语义资产 `asset_id`
+- 资产 `asset_revision`
+- 图片/视频变体 `variant_id`
+- `media_id` / `storage_key`
+- `prompt_used` 和生成提交快照
+- 项目、剧集、全局作用域
+- 显式 promote / fork 和删除引用保护
+
+尚未具备：
+
+- 独立的平台 `resource_id` 与平台资源 revision
+- `prompt_variant_id` 及字段级 provider projection
+- `source -> import_job -> candidate -> review -> promote` 导入生命周期
+- 独立的来源 manifest 和质量评分记录
+- Context IR 的冻结绑定快照
+
+因此，当前共享资产库只能作为第一阶段的结构化素材目录；平台风格、题材、运镜、特效、角色库和 skill 正式发布前，需要新增平台资源层，不能继续扩展 `GlobalAssetLibrary` 来承载全部治理职责。
+
+### 推荐资源生命周期
+
+```text
+source
+  → import_job
+  → candidate
+  → review
+  → promoted platform resource
+  → platform revision
+  → media variant
+  → prompt variant
+  → binding
+  → Context IR snapshot
+  → runtime result
+```
+
+导入候选未通过来源、许可证和质量检查时，只能留在候选区，不得出现在普通共享搜索结果中。
+
+### 结构化提示词变体
+
+`prompt_used` 保留为历史证据，但不能作为唯一事实源。平台资源的提示词变体至少需要：
+
+- `prompt_variant_id`、revision、status
+- `prompt_schema_version`
+- provider-neutral blocks：主体、场景、动作、镜头/运镜、光影、风格、音频和约束
+- provider projection：面向具体模型的提示词或协议字段
+- 来源资源、来源媒体变体、来源 skill/风格 revision
+- 模型族、语言、创建者和创建时间
+- 验收标准和质量状态
+
+运行时只消费已冻结的 prompt variant revision，不能在任务执行期间按名称重新搜索平台目录。
+
 ## 资产记录与版本
 
 共享资产必须包含以下字段：
