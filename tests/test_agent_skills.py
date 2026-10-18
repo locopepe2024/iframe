@@ -192,10 +192,35 @@ def test_asset_design_draft_returns_editable_scene_or_prop_visual_notes(ctx, mon
         model='qwen', asset_type='scene', asset_name='粮铺门前',
         description='青溪镇街边粮铺', user_requirements='南北要道，黄昏，写实电影质感',
     )
-    result = agent.asset_design_draft(body, ctx)
+    preview = agent.preview_asset_design_draft(body, ctx)
+    reviewed = body.model_copy(update={'reviewed_messages': preview['messages'], 'review_token': preview['review_token']})
+    result = agent.asset_design_draft(reviewed, ctx)
     assert '青石板长街' in result['visual_notes']
     assert result['unresolved'] == []
     assert '南北要道' in complete.call_args.args[2][1]['content']
+
+
+def test_asset_design_draft_requires_review_and_sends_only_reviewed_text(ctx, monkeypatch):
+    monkeypatch.setattr(agent, 'validate_model', lambda *_: None)
+    complete = Mock(return_value='{"visual_notes":"蓝灰长街","unresolved":[]}')
+    monkeypatch.setattr(agent, 'complete', complete)
+    body = agent.AssetDesignRequest(model='qwen', asset_type='scene', asset_name='长街',
+                                    description='残阳如血', user_requirements='不要全画面染红')
+    with pytest.raises(HTTPException) as unreviewed:
+        agent.asset_design_draft(body, ctx)
+    assert unreviewed.value.status_code == 409
+    complete.assert_not_called()
+    preview = agent.preview_asset_design_draft(body, ctx)
+    reviewed = body.model_copy(update={'reviewed_messages': {
+        **preview['messages'], 'user': '{"user_requirements":"仅远处落日暖红"}'},
+        'review_token': preview['review_token']})
+    assert agent.asset_design_draft(reviewed, ctx)['visual_notes'] == '蓝灰长街'
+    assert complete.call_args.args[2][1]['content'] == reviewed.reviewed_messages['user']
+    reviewed.user_requirements = '另一版要求'
+    with pytest.raises(HTTPException) as changed:
+        agent.asset_design_draft(reviewed, ctx)
+    assert changed.value.status_code == 409
+    assert complete.call_count == 1
 
 
 def test_character_design_draft_accepts_skill_field_output(ctx, monkeypatch):
