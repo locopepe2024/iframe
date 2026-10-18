@@ -440,6 +440,19 @@ def _character_design_visual_notes(section: dict) -> str:
     return "；".join(details)
 
 
+_CHARACTER_IDENTITY_FEATURES = ("face", "hair", "skin", "build", "recognition_marks")
+_CHARACTER_LOOK_FEATURES = ("clothing", "palette", "accessories", "weapon")
+
+
+def _character_design_features(section: dict, allowed: tuple[str, ...]) -> dict[str, str]:
+    raw = section.get("features", {})
+    if not isinstance(raw, dict) or set(raw) - set(allowed):
+        raise ValueError("Invalid character design features")
+    if any(not isinstance(value, str) or len(value) > 500 for value in raw.values()):
+        raise ValueError("Invalid character design feature value")
+    return {key: raw[key].strip() for key in allowed if raw.get(key, "").strip()}
+
+
 def _character_design_review_needs_revision(result: dict) -> bool:
     legacy = result.get("unresolved") or []
     if legacy:
@@ -476,7 +489,8 @@ def character_design_draft(body: CharacterDesignRequest, ctx: UserContext = Depe
     route_skill = packages["character-style-routes"]
     system = (identity_skill["instructions"] + "\n\n" + route_skill["instructions"]
               + "\n\n用户主动点击了生成角色设计草稿；你的任务是替用户完成可直接评审和用于出图的创意设计，不是列出待办清单。"
-              + "只返回 JSON 对象：identity.visual_notes、identity.basis、look.visual_notes、look.basis、review_items（对象数组，每项含 question 和 suggestion，可选 suggested_age_stage 或 suggested_route）。"
+              + "只返回 JSON 对象：identity.visual_notes、identity.features、identity.basis、look.visual_notes、look.features、look.basis、review_items（对象数组，每项含 question 和 suggestion，可选 suggested_age_stage 或 suggested_route）。"
+              + "identity.features 仅含 face、hair、skin、build、recognition_marks；look.features 仅含 clothing、palette、accessories、weapon。每项是简短、可观察的视觉值，无依据可留空，不得把性格或场景光影填入。visual_notes 是兼容旧工作台的摘要，不应增加 features 中没有的新事实。"
               + "basis 只能使用 script_fact、user_specified、confirmed_design、verified_reference、creative_choice；可用字符串数组表示混合来源。"
               + "每段视觉值必须具体、可观察、彼此协调。不得把角色性格、镜头动作或通用质量词写入视觉值。"
               + "群体角色须先给出统一主色、统一服装轮廓和一个视觉焦点，再用少量面孔或体型差异区分成员；杂色、拼凑和脏污应在受控色系内表现，不要扩展成多种抢眼颜色与层叠碎片。用户要求简化服装时，减少层数、配饰和兵器展示，不得一边保留满屏装饰一边只追加‘简化’字样。"
@@ -544,8 +558,14 @@ def character_design_draft(body: CharacterDesignRequest, ctx: UserContext = Depe
         look = result.get("look") or {}
         if not isinstance(identity, dict) or not isinstance(look, dict):
             raise ValueError("Invalid design sections")
+        identity_features = _character_design_features(identity, _CHARACTER_IDENTITY_FEATURES)
+        look_features = _character_design_features(look, _CHARACTER_LOOK_FEATURES)
         identity_notes = _character_design_visual_notes(identity)
         look_notes = _character_design_visual_notes(look)
+        if not identity_notes and identity_features:
+            identity_notes = "；".join(identity_features.values())
+        if not look_notes and look_features:
+            look_notes = "；".join(look_features.values())
         if not identity_notes:
             raise ValueError("Missing concrete identity design")
         review_items = result.get("review_items") or []
@@ -622,8 +642,8 @@ def character_design_draft(body: CharacterDesignRequest, ctx: UserContext = Depe
     except (ValueError, TypeError):
         raise HTTPException(502, "角色设计模型未返回可编辑的结构化草稿，请重试")
     return {
-        "identity": {"visual_notes": identity_notes.strip(), "basis": identity.get("basis", ["creative_choice"])},
-        "look": {"visual_notes": look_notes.strip(), "basis": look.get("basis", ["creative_choice"])},
+        "identity": {"visual_notes": identity_notes.strip(), "features": identity_features, "basis": identity.get("basis", ["creative_choice"])},
+        "look": {"visual_notes": look_notes.strip(), "features": look_features, "basis": look.get("basis", ["creative_choice"])},
         "unresolved": unresolved,
         "field_suggestions": suggestions,
         "field_suggestion_choices": suggestion_choices,

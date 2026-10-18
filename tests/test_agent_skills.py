@@ -151,6 +151,16 @@ def test_character_design_draft_accepts_annotated_visual_notes(ctx, monkeypatch)
     assert result['identity']['visual_notes'] == '黑发束起'
 
 
+def test_character_design_draft_returns_bounded_visual_features(ctx, monkeypatch):
+    monkeypatch.setattr(agent, 'validate_model', lambda *_: None)
+    monkeypatch.setattr(agent, 'complete', lambda *_: '{"identity":{"features":{"face":"窄长脸","hair":"黑发束起"}},"look":{"features":{"clothing":"深蓝劲装"}},"review_items":[]}')
+    body = agent.CharacterDesignRequest(model='qwen', character_name='苏砚', profile='少年剑客', route='historical-costume')
+    result = agent.character_design_draft(body, ctx)
+    assert result['identity']['features'] == {'face': '窄长脸', 'hair': '黑发束起'}
+    assert result['identity']['visual_notes'] == '窄长脸；黑发束起'
+    assert result['look']['features'] == {'clothing': '深蓝劲装'}
+
+
 def test_character_design_draft_returns_actionable_review_suggestions(ctx, monkeypatch):
     monkeypatch.setattr(agent, 'validate_model', lambda *_: None)
     complete = Mock(return_value='{"identity":{"visual_notes":"少年感面容，短黑发","basis":["creative_choice"]},"look":{"visual_notes":"窄袖黑色劲装，哑光布面，布靴","basis":["creative_choice"]},"review_items":[{"question":"剧本要求写实，但用户指定动漫风格，两者冲突","suggestion":"写实真人，低饱和国风摄影质感","suggested_route":"realistic-modern"}]}')

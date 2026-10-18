@@ -2657,8 +2657,22 @@ class ComicGenPipeline(StudioOwnerMixin):
             design = attributes["character_design"]
             if not isinstance(design, dict):
                 raise ValueError("Character design must be an object")
-            notes = design.get("identity", {}).get("visual_notes") if isinstance(design.get("identity"), dict) else None
-            if design.get("confirmed") and (not isinstance(notes, str) or not notes.strip()):
+            identity = design.get("identity", {})
+            look = design.get("look", {})
+            if not isinstance(identity, dict) or not isinstance(look, dict):
+                raise ValueError("Character design identity and look must be objects")
+            for section, allowed in ((identity, {"face", "hair", "skin", "build", "recognition_marks"}),
+                                     (look, {"clothing", "palette", "accessories", "weapon"})):
+                features = section.get("features", {})
+                if not isinstance(features, dict) or set(features) - allowed or any(
+                    not isinstance(value, str) or len(value) > 500 for value in features.values()
+                ):
+                    raise ValueError("Character design features are invalid")
+            notes = identity.get("visual_notes")
+            visible_identity = isinstance(notes, str) and bool(notes.strip()) or any(
+                value.strip() for value in identity.get("features", {}).values()
+            )
+            if design.get("confirmed") and not visible_identity:
                 raise ValueError("Confirm a concrete visual design before saving a revision")
             character_design = dict(target_asset.character_design or {})
             character_design["design_draft"] = design
