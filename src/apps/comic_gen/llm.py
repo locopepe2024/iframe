@@ -472,17 +472,16 @@ logger = get_logger(__name__)
 
 DEFAULT_STORYBOARD_POLISH_PROMPT = """
 # 角色
-你是一名资深分镜师与提示词工程师。你的任务是把一段草稿提示词改写成高质量的图像生成提示词，专用于多参考图（multi-reference）工作流。
+你是一名资深分镜师与提示词工程师。你的任务是把一段草稿改写成高质量的分镜图像提示词。
 
 # 背景
-用户已选定若干参考图（素材）来构成一个画面。
-在提示词中描述这些素材时，你必须用它们的 Image ID（如 "Image 1"、"Image 2"）来指代。
+以下素材是文字线索，并不表示图片已附加到本次模型请求。只有用户明确选择并实际绑定图片时，才能声称使用了参考图。
 
 # 可用素材
 {ASSETS}
 
 # 规则
-1.  **整合素材**：描述对应的角色、场景或道具时，显式写出 "Image X"。
+1.  **整合素材**：可使用素材名称及其文字描述，不要把 Asset 编号写成参考图片编号，也不要声称已看见未附加的图片。
 2.  **自然连贯**：不要简单拼接。要写成连贯的句子或段落来描述视觉画面。
 3.  **严格忠实**：不要臆造草稿中不存在的情绪、动作或剧情。若草稿写 "坐着"，不要擅自加 "悲伤地" 或 "开心地"，除非草稿明确写明。保持叙述中性、准确。
 4.  **丰富细节**：可基于草稿补充视觉细节（光线、氛围、情绪），但要保持素材指代清晰。
@@ -494,16 +493,16 @@ DEFAULT_STORYBOARD_POLISH_PROMPT = """
 # 输出格式
 严格返回一个 JSON 对象：
 {{
-    "prompt_cn": "含 Image X 指代的中文描述……",
-    "prompt_en": "English cinematic description with Image X references..."
+    "prompt_cn": "忠实描述分镜画面的中文提示词……",
+    "prompt_en": "English cinematic description of the storyboard frame..."
 }}
 
 # 示例
-**输入草稿**：男孩（Image 1）坐在病床（Image 2）上。
+**输入草稿**：男孩坐在病床上。
 **输出**：
 {{
-    "prompt_cn": "图像1中的男孩坐在图像2的病床边缘。病房内光线柔和，自然光从侧面照射在男孩身上，勾勒出真实的轮廓。画面构图稳定，质感写实。",
-    "prompt_en": "The boy from Image 1 is seated on the edge of the hospital bed in Image 2. Soft natural light illuminates the scene from the side, highlighting the fabric textures of the bedding and the realistic skin tone of the boy. Cinematic composition, high resolution, photorealistic."
+    "prompt_cn": "男孩坐在病床边缘。柔和自然光从侧面照射，画面构图稳定，质感写实。",
+    "prompt_en": "A boy sits at the edge of a hospital bed. Soft natural side light illuminates the scene; the composition is stable and realistic."
 }}
 
 # 用户草稿提示词
@@ -763,7 +762,7 @@ STORYBOARD_CONTINUITY_CONTEXT = """
 def assemble_storyboard_polish_message(draft_prompt: str, assets: List[Dict[str, Any]],
                                        feedback: str, template: str) -> str:
     asset_context = "\n".join(
-        f"Image {index}: {asset.get('type', 'Unknown')} - {asset.get('name', 'Unknown')} ({asset.get('description', '')})"
+        f"Asset {index} (text only): {asset.get('type', 'Unknown')} - {asset.get('name', 'Unknown')} ({asset.get('description', '')})"
         for index, asset in enumerate(assets, start=1)
     )
     message = template.strip().replace("{ASSETS}", asset_context).replace("{DRAFT}", draft_prompt)

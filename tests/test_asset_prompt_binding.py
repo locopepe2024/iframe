@@ -147,6 +147,18 @@ def test_storyboard_polish_sends_edited_review_text_exactly():
     assert processor.llm.chat.call_args.kwargs["messages"] == [{"role": "user", "content": reviewed}]
 
 
+def test_storyboard_polish_text_assets_are_not_claimed_as_attached_images():
+    from src.apps.comic_gen.llm import DEFAULT_STORYBOARD_POLISH_PROMPT, assemble_storyboard_polish_message
+
+    message = assemble_storyboard_polish_message(
+        "长街人流", [{"type": "Scene", "name": "长街", "description": "冷灰蓝环境光"}],
+        "", DEFAULT_STORYBOARD_POLISH_PROMPT,
+    )
+    assert "Asset 1 (text only): Scene - 长街" in message
+    assert "并不表示图片已附加到本次模型请求" in message
+    assert "Image 1" not in message
+
+
 def test_storyboard_generator_preserves_accepted_polish_prompt(tmp_path):
     from src.apps.comic_gen.models import Character, StoryboardFrame
     from src.apps.comic_gen.storyboard import StoryboardGenerator
