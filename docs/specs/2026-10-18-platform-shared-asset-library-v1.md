@@ -43,6 +43,39 @@
 
 共享资产的逻辑 scope 使用 `platform_shared`。不能把共享资产伪装成某个用户或项目的 owner 资产，也不能依赖前端过滤来实现权限。
 
+## 无注册体系下的平台资源身份
+
+iFrame 当前没有独立的用户注册和管理员账户体系，因此平台资源不绑定到某个用户或 API Key，而绑定到部署实例：
+
+```text
+platform_instance
+  └─ platform_shared resources
+
+api_key → owner_profile_id
+  └─ project / series / episode / private assets
+```
+
+规则：
+
+- `platform_shared` 是部署级只读目录，所有有效 API Key 可以读取和检索。
+- API Key 身份只用于工作区隔离、项目写权限和媒体访问，不拥有平台资源所有权。
+- 用户可以把平台资源绑定到自己的项目，或显式 fork 成项目/剧集/个人资产。
+- 平台资源不能由普通 API 请求直接创建、修改或删除。
+- 平台资源通过受控导入、部署配置或未来独立的管理员能力发布。
+- 当前 `global` 仍表示工作区级共享资产，不能把它当作部署级平台资源。
+
+建议的部署资源目录：
+
+```text
+config/platform_reference_catalog/
+  manifest.json
+  resources/
+  notices/
+  licenses/
+```
+
+平台资源 API 只提供目录读取、详情读取和绑定；发布、下架和 revision 更新走导入 manifest 与部署流程。项目绑定保存 `platform_resource_id + platform_revision + variant_id + prompt_variant_id`，不会因平台目录发布新 revision 而静默变化。
+
 ## 共享资产类别
 
 第一批类别与 open-ai-canvas 对齐，但在 iFrame 中保持独立的结构化类型：
