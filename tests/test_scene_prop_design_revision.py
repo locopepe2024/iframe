@@ -147,3 +147,25 @@ def test_shot_visual_preset_is_snapshot_and_apply_is_frame_owned(tmp_path):
     assert applied.shot_visual_design.apply_mode == "parameters_with_reference"
     preset.visual_design["lighting"] = "mutated test value"
     assert applied.shot_visual_design.visual_design["lighting"] == "side"
+
+
+def test_scene_asset_submission_snapshot_captures_structured_visual_design(tmp_path):
+    pipeline, scene, _ = make_pipeline(tmp_path)
+    scene.asset_design["design_draft"] = {
+        "visual_notes": "Autumn street",
+        "visual_constraints": {
+            "key_light_direction": "side",
+            "visible_face_limit": 3,
+        },
+    }
+    snapshot = pipeline._asset_submission_snapshot(
+        scene,
+        "scene",
+        prompt="Autumn street, side light",
+        negative_prompt="",
+        model_id="image-model",
+        aspect_ratio="16:9",
+        generation_type="all",
+        image_generation_mode="text",
+    )
+    assert snapshot["visual_design"]["visual_constraints"]["visible_face_limit"] == 3

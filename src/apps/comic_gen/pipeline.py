@@ -1152,6 +1152,8 @@ class ComicGenPipeline(StudioOwnerMixin):
         edit_mode: str = "freeform",
     ) -> Dict[str, Any]:
         identities = ([reference] if reference else []) + list(references or [])
+        asset_design = getattr(asset, "asset_design", None) if asset_type == "scene" else None
+        visual_design = copy.deepcopy(asset_design.get("design_draft")) if isinstance(asset_design, dict) else None
         return AssetImageSubmissionSnapshot(
             positive_prompt=prompt,
             negative_prompt=negative_prompt or "",
@@ -1163,6 +1165,7 @@ class ComicGenPipeline(StudioOwnerMixin):
             edit_mode=edit_mode,
             reference_inputs=[AssetImageReferenceIdentity.model_validate(item) for item in identities],
             scene_tool=scene_tool,
+            visual_design=visual_design,
             design_revision_at_submission=cls._confirmed_asset_design_revision(asset, asset_type),
         ).model_dump()
 

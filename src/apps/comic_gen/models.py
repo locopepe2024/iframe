@@ -183,6 +183,10 @@ class AssetImageSubmissionSnapshot(BaseModel):
     edit_mode: Literal["freeform", "scene_lighting", "scene_camera"] = "freeform"
     reference_inputs: List[AssetImageReferenceIdentity] = Field(default_factory=list)
     scene_tool: Optional[Dict[str, Any]] = None
+    visual_design: Optional[Dict[str, Any]] = Field(
+        None,
+        description="Structured scene visual design snapshot used for this asset variant",
+    )
     design_revision_at_submission: Optional[int] = Field(None, ge=1)
     submitted_at: float = Field(default_factory=time.time)
 
