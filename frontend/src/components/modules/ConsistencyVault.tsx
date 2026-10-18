@@ -1229,6 +1229,10 @@ function CharacterDetailModal({ asset, type, onClose, onUpdateDescription, onUpd
 
     const handleOptimizePrompt = async () => {
         if (!promptModel || optimizingPrompt) return;
+        if (type === "scene" && sceneDesignNeedsApply) {
+            toast.warning("请先检查并应用场景结构化设置到可见提示词，再进行 AI 优化。");
+            return;
+        }
         setOptimizingPrompt(true);
         setPromptError("");
         setOptimizedPrompt("");
@@ -1605,7 +1609,7 @@ function CharacterDetailModal({ asset, type, onClose, onUpdateDescription, onUpd
                                         {promptModels.map(model => <option key={model.api_model_id} value={model.api_model_id}>{model.display_name}</option>)}
                                     </select>
                                     <button type="button" onClick={() => void handleOptimizePrompt()}
-                                        disabled={!promptModel || optimizingPrompt || !descriptionSaved || !description.trim()}
+                                        disabled={!promptModel || optimizingPrompt || !descriptionSaved || !description.trim() || (type === "scene" && sceneDesignNeedsApply)}
                                         className="inline-flex h-9 items-center gap-1.5 rounded border border-glass-border px-3 text-xs text-foreground hover:bg-hover-bg disabled:opacity-50">
                                         <Sparkles size={14} />{optimizingPrompt ? "优化中…" : "优化提示词"}
                                     </button>
