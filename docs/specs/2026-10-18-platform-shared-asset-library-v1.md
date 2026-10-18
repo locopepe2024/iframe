@@ -370,6 +370,17 @@ revision：4
 - 复用统一媒体访问封装，覆盖展示、复制、模型输入和过期续签。
 - 增加共享资产只读、项目/剧集复制和跨用户拒绝测试。
 
+当前已提供 open-ai-canvas 的显式 allowlist 导入器：
+
+```bash
+python3 scripts/import_platform_reference_catalog.py \
+  --source-root "/path/to/open-ai-canvas" \
+  --allowlist config/platform_reference_catalog/open_ai_canvas.allowlist.json \
+  --manifest config/platform_reference_catalog/manifest.json
+```
+
+导入器只生成 `candidate`，不会自动激活；它会记录源 commit、路径、许可证、来源 URL、内容 hash 和导入时间。
+
 ### 第 2 批：种子和检索
 
 - 将已核实、可授权的风格、题材、运镜、特效和角色条目导入种子文件。
