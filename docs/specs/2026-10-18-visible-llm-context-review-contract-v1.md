@@ -40,7 +40,7 @@ Provider protocol requirements and safety validation can remain server enforced,
 2. Add a video-polish preflight for all four modes and all optimizer providers, including MiniMax Context IR. Show both system/task text and user text, image order/IDs, audio/dialogue rules and model-format requirements. Reuse the same compiler at preflight and execution. Do not add confirmed design text to the current hidden video path before this review exists.
 3. Persist the adopted video's source snapshot through an ordered frame write or explicit adoption API. Show stale sources in generation review. Test concurrent shot edits and candidate replacement.
 4. Audit Director interpretation and character/scene/prop prompt optimization entry points against this contract. For each, record the compiler owner, frontend review surface, apply owner, token boundary and generation payload equivalence. Migrate any path that fails the test before adding further automatic context.
-5. Replace the legacy image-polish `Image X` assumption with actual user-selected image bindings or truthful text-only asset labels. Test that an unselected image is neither claimed in the model text nor attached to the request.
+5. Replace the legacy image-polish `Image X` assumption with truthful text-only asset labels (PR #196). Test that an unselected image is neither claimed in the model text nor attached to the request. Explicit image binding remains a separate future capability.
 
 ## Evidence and limits
 
