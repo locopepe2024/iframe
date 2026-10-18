@@ -22,9 +22,9 @@ def _default_review_config() -> Path:
     # Older hosts use that path as a one-line key file; packaged installs use
     # config.json under the application data directory. Neither path creates
     # or stores a browser-side reviewer credential.
-    host_config = Path("/opt/.iframe")
-    if host_config.exists():
-        return host_config
+    for host_config in (Path("/run/iframe-review-key"), Path("/opt/.iframe")):
+        if host_config.exists():
+            return host_config
     from ..utils import get_user_data_dir
 
     return Path(get_user_data_dir()) / "config.json"
