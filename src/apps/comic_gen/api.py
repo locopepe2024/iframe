@@ -5170,6 +5170,7 @@ def preview_render_frame(script_id: str, request: RenderFramePreviewRequest,
         before = pipeline.storyboard_render_context_token(script_id, request.frame_id)
         prompt = pipeline.preview_storyboard_render_prompt(script_id, request.frame_id, request.prompt)
         source_label = pipeline.storyboard_render_scene_design_source(script_id, request.frame_id)
+        omitted_plan_lighting = pipeline.storyboard_render_omitted_plan_lighting(script_id, request.frame_id)
         after = pipeline.storyboard_render_context_token(script_id, request.frame_id)
         if before != after:
             raise HTTPException(status_code=409, detail="Storyboard render preview is outdated; preview the current frame again")
@@ -5177,6 +5178,7 @@ def preview_render_frame(script_id: str, request: RenderFramePreviewRequest,
             "prompt": prompt,
             "context_token": pipeline.storyboard_render_preview_token(after, prompt),
             "source_label": source_label,
+            "omitted_plan_lighting": omitted_plan_lighting,
         }
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc

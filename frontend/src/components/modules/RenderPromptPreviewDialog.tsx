@@ -12,6 +12,7 @@ export type FrameRenderPreview = {
     aspectRatio?: string;
     sourceLabel?: string;
     referenceLabels?: string[];
+    omittedPlanLighting?: string;
 };
 
 export default function RenderPromptPreviewDialog({
@@ -35,6 +36,9 @@ export default function RenderPromptPreviewDialog({
                     </div>
                     {(preview.model || preview.aspectRatio || preview.sourceLabel) && <p className="text-text-secondary">
                         {[preview.sourceLabel, preview.model, preview.aspectRatio].filter(Boolean).join(" · ")}
+                    </p>}
+                    {preview.omittedPlanLighting && <p role="note" className="rounded border border-amber-500/30 bg-amber-500/10 p-3 text-xs text-text-secondary">
+                        拍摄计划原光影：{preview.omittedPlanLighting}。系统不会在当前正文后额外追加这条；请核对正向提示词是否仍保留该描述。
                     </p>}
                     {preview.referenceLabels && <p className="text-text-secondary">镜头关联素材：{preview.referenceLabels.length ? preview.referenceLabels.join("、") : "无"}。生成器会尝试使用这些素材当前选中的参考图。</p>}
                     <div>

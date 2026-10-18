@@ -315,7 +315,8 @@ def test_storyboard_preview_uses_confirmed_scene_design_and_ignores_new_draft():
 
     preview = pipeline.preview_storyboard_render_prompt(script.id, frame.id, "粮铺前人群退避")
     assert "场景视觉基线" in preview
-    assert pipeline.storyboard_render_scene_design_source(script.id, frame.id) == "场景设计：长街 r1"
+    assert pipeline.storyboard_render_scene_design_source(script.id, frame.id) == "关联场景设计：长街 r1"
+    assert pipeline.storyboard_render_omitted_plan_lighting(script.id, frame.id) == "残阳如血覆盖整条街；暖红色"
     assert "街面环境为冷灰蓝，夕阳仅在远处天际" in preview
     assert "主光方向：侧面光" in preview
     assert "粮铺位于画面中段" in preview

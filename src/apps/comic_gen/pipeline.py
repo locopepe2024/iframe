@@ -3107,6 +3107,13 @@ class ComicGenPipeline(StudioOwnerMixin):
             return None, {}
         return latest.get("revision"), latest["design"]
 
+    @staticmethod
+    def _scene_design_has_light(design: Dict[str, Any]) -> bool:
+        constraints = design.get("visual_constraints")
+        return bool(str(design.get("ambient_lighting") or "").strip()) or (
+            isinstance(constraints, dict) and constraints.get("key_light_direction") not in (None, "unspecified")
+        )
+
     def _storyboard_scene_asset(self, script: Script, frame: StoryboardFrame) -> Optional[Scene]:
         scene = next((item for item in getattr(script, "scenes", []) if item.id == frame.scene_id), None)
         if scene is not None:
@@ -3207,11 +3214,7 @@ class ComicGenPipeline(StudioOwnerMixin):
         """Compose a draft render prompt with only this frame's constraints."""
         context = frame.director_shot_context
         _, scene_design = self._confirmed_scene_design(self._storyboard_scene_asset(script, frame))
-        constraints = scene_design.get("visual_constraints")
-        has_scene_light = bool(str(scene_design.get("ambient_lighting") or "").strip()) or (
-            isinstance(constraints, dict) and constraints.get("key_light_direction") not in (None, "unspecified")
-        )
-        if has_scene_light and isinstance(context, dict):
+        if self._scene_design_has_light(scene_design) and isinstance(context, dict):
             # A confirmed scene baseline supersedes older plan lighting. The
             # frame's explicit lighting fields are projected separately below.
             context = {**context}
@@ -6577,7 +6580,26 @@ class ComicGenPipeline(StudioOwnerMixin):
             raise ValueError("Frame not found")
         scene = self._storyboard_scene_asset(script, frame)
         revision, _ = self._confirmed_scene_design(scene)
-        return f"场景设计：{scene.name} r{revision}" if scene and revision is not None else None
+        return f"关联场景设计：{scene.name} r{revision}" if scene and revision is not None else None
+
+    def storyboard_render_omitted_plan_lighting(self, script_id: str, frame_id: str) -> Optional[str]:
+        script = self.scripts.get(script_id)
+        if not script:
+            raise ValueError("Script not found")
+        frame = next((item for item in script.frames if item.id == frame_id), None)
+        if not frame:
+            raise ValueError("Frame not found")
+        _, design = self._confirmed_scene_design(self._storyboard_scene_asset(script, frame))
+        if not self._scene_design_has_light(design):
+            return None
+        context = frame.director_shot_context or {}
+        shot = context.get("shot") if isinstance(context.get("shot"), dict) else context
+        lighting = shot.get("lighting") if isinstance(shot, dict) else None
+        if isinstance(lighting, dict):
+            values = [str(lighting.get(key) or "").strip() for key in ("key_source", "color_tone", "contrast")]
+            values += [str(item).strip() for item in (lighting.get("practical_sources") or [])]
+            return "；".join(item for item in values if item) or None
+        return lighting.strip() if isinstance(lighting, str) and lighting.strip() else None
 
     def storyboard_render_context_token(self, script_id: str, frame_id: str) -> str:
         """Fingerprint inputs that can change a prepared storyboard render."""
