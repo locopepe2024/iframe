@@ -1023,6 +1023,7 @@ function CharacterDetailModal({ asset, type, onClose, onUpdateDescription, onUpd
     const tv = useTranslations("vault");
     const [description, setDescription] = useState(asset.description);
     const [isEditing, setIsEditing] = useState(false);
+    const [descriptionSaved, setDescriptionSaved] = useState(true);
     const currentProject = useProjectStore((state) => state.currentProject);
     const updateProject = useProjectStore((state) => state.updateProject);
     const selectionQueue = useRef<Promise<void>>(Promise.resolve());
@@ -1182,8 +1183,13 @@ function CharacterDetailModal({ asset, type, onClose, onUpdateDescription, onUpd
         }
     }, [styleNegativePrompt]);
 
-    const handleSave = () => {
-        onUpdateDescription(description);
+    const handleSave = async () => {
+        await onUpdateDescription(description);
+        setDescriptionSaved(true);
+        if (type === "scene") {
+            setSceneDesign(current => ({ ...current, visual_notes: description }));
+            setSceneDesignNeedsApply(true);
+        }
         setIsEditing(false);
     };
 
@@ -1231,7 +1237,7 @@ function CharacterDetailModal({ asset, type, onClose, onUpdateDescription, onUpd
                 model: promptModel,
                 asset_type: type,
                 asset_name: asset.name,
-                description: asset.description,
+                description,
                 current_prompt: imagePrompt,
                 style: type === "scene" ? [
                     sceneDesign.visual_notes && `场景空间：${sceneDesign.visual_notes}`,
@@ -1240,6 +1246,10 @@ function CharacterDetailModal({ asset, type, onClose, onUpdateDescription, onUpd
                     sceneDesign.local_effect && `局部光（${sceneDesign.local_target}）：${sceneDesign.local_effect}`,
                     sceneDesign.reference_viewpoint && `参考图视角：${sceneDesign.reference_viewpoint}`,
                     sceneDesign.reference_framing && `参考图构图：${sceneDesign.reference_framing}`,
+                    sceneDesign.visual_constraints.key_light_direction !== "unspecified" && `主光方向：${sceneDesign.visual_constraints.key_light_direction}`,
+                    sceneDesign.visual_constraints.forbidden_light_directions.length > 0 && `禁止光线方向：${sceneDesign.visual_constraints.forbidden_light_directions.join("、")}`,
+                    sceneDesign.visual_constraints.visible_face_limit !== "" && `可见人脸上限：${sceneDesign.visual_constraints.visible_face_limit}`,
+                    sceneDesign.visual_constraints.secondary_people_view && `其他人物呈现：${sceneDesign.visual_constraints.secondary_people_view}`,
                 ].filter(Boolean).join("\n") : "",
                 // A shooting-plan clause is sent only after the user adds it to the visible prompt.
                 plan_context: [],
@@ -1317,10 +1327,7 @@ function CharacterDetailModal({ asset, type, onClose, onUpdateDescription, onUpd
             toast.warning("请指定局部光的作用区域或对象。");
             return;
         }
-        const visualConstraints = extractVisualConstraints(sceneDesign.visual_notes);
-        if (JSON.stringify(visualConstraints) !== JSON.stringify(sceneDesign.visual_constraints)) {
-            setSceneDesign(current => ({ ...current, visual_constraints: visualConstraints }));
-        }
+        const visualConstraints = sceneDesign.visual_constraints;
         const lines = [
             sceneDesign.visual_notes && `场景空间：${sceneDesign.visual_notes}`,
             sceneDesign.style && `场景风格：${sceneDesign.style}`,
@@ -1340,6 +1347,17 @@ function CharacterDetailModal({ asset, type, onClose, onUpdateDescription, onUpd
             return [base, block].filter(Boolean).join("\n\n");
         });
         setSceneDesignNeedsApply(false);
+    };
+
+    const parseSavedDescription = () => {
+        if (!descriptionSaved || !description.trim()) {
+            toast.warning("请先保存 Description，再解析结构化设置。");
+            return;
+        }
+        const visualConstraints = extractVisualConstraints(description);
+        setSceneDesign(current => ({ ...current, visual_notes: description, visual_constraints: visualConstraints }));
+        setSceneDesignNeedsApply(true);
+        toast.success("已从已保存的 Description 解析结构化设置，请检查后再应用到提示词。");
     };
 
     const saveSceneDesign = async (confirmed: boolean) => {
@@ -1476,12 +1494,12 @@ function CharacterDetailModal({ asset, type, onClose, onUpdateDescription, onUpd
                                 <div className="space-y-2">
                                     <textarea
                                         value={description}
-                                        onChange={(e) => setDescription(e.target.value)}
+                                        onChange={(e) => { setDescription(e.target.value); setDescriptionSaved(false); }}
                                         className="w-full h-32 bg-input-bg border border-glass-border rounded-lg p-3 text-sm text-text-secondary resize-none focus:border-primary focus:outline-none"
                                     />
                                     <div className="flex justify-end gap-2">
                                         <button onClick={() => { setIsEditing(false); setDescription(asset.description); }} className="px-3 py-1.5 text-xs text-text-secondary hover:text-foreground">Cancel</button>
-                                        <button onClick={handleSave} className="px-3 py-1.5 bg-primary text-white text-xs rounded hover:bg-primary/90">Save Description</button>
+                                        <button onClick={() => void handleSave()} className="px-3 py-1.5 bg-primary text-white text-xs rounded hover:bg-primary/90">Save Description</button>
                                     </div>
                                 </div>
                             ) : (
@@ -1495,7 +1513,11 @@ function CharacterDetailModal({ asset, type, onClose, onUpdateDescription, onUpd
                             <section className="space-y-3 rounded-lg border border-glass-border bg-glass p-4" aria-label="场景结构化设置">
                                 <div>
                                     <h3 className="text-sm font-bold text-foreground">场景结构化设置</h3>
-                                    <p className="mt-1 text-xs text-text-muted">设置可保存为场景设计；点击“应用到图片提示词”后才进入本次生成。参考图视角与构图只控制场景参考图。</p>
+                                    <p className="mt-1 text-xs text-text-muted">流程：先保存 Description → 从已保存描述解析结构化设置 → 检查并应用到可见提示词 → AI 优化 → 生成。参考图视角与构图只控制场景参考图。</p>
+                                </div>
+                                <div className="flex flex-wrap items-center gap-2 text-xs">
+                                    <span className={descriptionSaved ? "text-status-success-fg" : "text-status-warning-fg"}>{descriptionSaved ? "Description 已保存" : "Description 有未保存修改"}</span>
+                                    <button type="button" onClick={parseSavedDescription} disabled={!descriptionSaved} className="rounded border border-glass-border px-2 py-1 text-foreground disabled:opacity-40">从已保存 Description 解析</button>
                                 </div>
                                 <label className="block text-xs text-text-secondary">空间与固定外观
                                     <textarea aria-label="场景空间与固定外观" value={sceneDesign.visual_notes} onChange={event => updateSceneDesign("visual_notes", event.target.value)} className="mt-1 w-full rounded border border-glass-border bg-input-bg p-2 text-sm text-foreground" rows={3} />
@@ -1583,7 +1605,7 @@ function CharacterDetailModal({ asset, type, onClose, onUpdateDescription, onUpd
                                         {promptModels.map(model => <option key={model.api_model_id} value={model.api_model_id}>{model.display_name}</option>)}
                                     </select>
                                     <button type="button" onClick={() => void handleOptimizePrompt()}
-                                        disabled={!promptModel || optimizingPrompt || !asset.description?.trim()}
+                                        disabled={!promptModel || optimizingPrompt || !descriptionSaved || !description.trim()}
                                         className="inline-flex h-9 items-center gap-1.5 rounded border border-glass-border px-3 text-xs text-foreground hover:bg-hover-bg disabled:opacity-50">
                                         <Sparkles size={14} />{optimizingPrompt ? "优化中…" : "优化提示词"}
                                     </button>
