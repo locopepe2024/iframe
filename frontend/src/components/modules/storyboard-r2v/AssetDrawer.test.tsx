@@ -94,6 +94,17 @@ it("keeps the asset drawer open and reports an attach failure so selection can b
     await waitFor(() => expect(onClose).toHaveBeenCalledTimes(1));
 });
 
+it("applies asset search to first-frame reference choices", () => {
+    render(<AssetDrawer isOpen onClose={vi.fn()} characters={[]} scenes={[]} props={[]}
+        assetIndex={[
+            { asset_type: "scene", asset_id: "street", name: "长街", description: "冷灰蓝黄昏", source_scope: "episode", variants: [{ id: "blue", url: "street.png" }] },
+            { asset_type: "scene", asset_id: "shop", name: "粮铺", description: "室内暖光", source_scope: "episode", variants: [{ id: "warm", url: "shop.png" }] },
+        ]} frameSlot="first" onSelectAsset={vi.fn()} onSelectFrameVariant={vi.fn()} />);
+    fireEvent.change(screen.getByRole("textbox", { name: "搜索结构化资产" }), { target: { value: "冷灰蓝" } });
+    expect(screen.getByRole("button", { name: "长街 变体 blue" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "粮铺 变体 warm" })).not.toBeInTheDocument();
+});
+
 it("does not offer legacy assets as frame inputs before project membership is loaded", () => {
     const onSelectFrameVariant = vi.fn();
     const onReloadFrameAssets = vi.fn();
