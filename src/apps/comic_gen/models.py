@@ -493,6 +493,35 @@ class ArtifactLineage(BaseModel):
     source_ranges: List[SourceRange] = Field(default_factory=list, max_length=40)
 
 
+class CharacterAssetPackRevision(BaseModel):
+    """One reviewed project character anchor; older revisions stay addressable."""
+
+    revision: int = Field(..., ge=1)
+    kind: Literal["front_full_body_anchor"] = "front_full_body_anchor"
+    variant_id: str = Field(..., min_length=1)
+    media_id: Optional[str] = None
+    source_asset_revision: int = Field(..., ge=1)
+    source_design_revision: int = Field(
+        ..., ge=1,
+        description="Confirmed visual-design revision reviewed when selecting this anchor; generation provenance remains on the image variant",
+    )
+    confirmed_at: float = Field(default_factory=time.time)
+
+
+class CharacterAssetPack(BaseModel):
+    """Project-owned, append-only anchor history for one visual character."""
+
+    pack_id: str = Field(..., min_length=1)
+    current_revision: int = Field(..., ge=1)
+    revisions: List[CharacterAssetPackRevision] = Field(..., min_length=1)
+
+    @model_validator(mode="after")
+    def validate_revision_chain(self):
+        if [item.revision for item in self.revisions] != list(range(1, self.current_revision + 1)):
+            raise ValueError("Character asset pack revisions must be consecutive")
+        return self
+
+
 class Character(BaseModel):
     id: str = Field(..., description="Unique identifier for the character")
     asset_revision: int = Field(0, ge=0)
@@ -525,6 +554,9 @@ class Character(BaseModel):
     character_design: Dict[str, Any] = Field(
         default_factory=dict,
         description="Project character workbench visual design draft and confirmed revisions",
+    )
+    asset_pack: Optional[CharacterAssetPack] = Field(
+        None, description="Reviewed project character anchor history; never inferred from a cover or selected image",
     )
     
     # === R2V v2 Phase 5: Unified reference sheet ===

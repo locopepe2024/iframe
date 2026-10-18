@@ -4292,6 +4292,44 @@ class RestoreAssetRevisionRequest(BaseModel):
     expected_revision: int = Field(..., ge=1)
 
 
+class ConfirmCharacterAnchorRequest(BaseModel):
+    variant_id: str = Field(..., min_length=1)
+    expected_asset_revision: int = Field(..., ge=1)
+    expected_pack_revision: int = Field(..., ge=0)
+    verified_front_full_body: bool = False
+
+
+@app.get("/projects/{script_id}/characters/{character_id}/asset-pack")
+def get_project_character_asset_pack(
+    script_id: str, character_id: str,
+    user: UserContext = Depends(require_studio_user),
+):
+    if not pipeline.get_script(script_id, user.owner_profile_id):
+        raise HTTPException(status_code=404, detail="Project not found")
+    try:
+        return pipeline.get_project_character_asset_pack(script_id, character_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@app.post("/projects/{script_id}/characters/{character_id}/asset-pack/anchor")
+def confirm_project_character_anchor(
+    script_id: str, character_id: str, request: ConfirmCharacterAnchorRequest,
+    user: UserContext = Depends(require_studio_user),
+):
+    if not pipeline.get_script(script_id, user.owner_profile_id):
+        raise HTTPException(status_code=404, detail="Project not found")
+    try:
+        return pipeline.confirm_project_character_anchor(
+            script_id, character_id, request.variant_id,
+            request.expected_asset_revision, request.expected_pack_revision,
+            request.verified_front_full_body,
+        )
+    except ValueError as exc:
+        status = 409 if "revision changed" in str(exc) else 422
+        raise HTTPException(status_code=status, detail=str(exc)) from exc
+
+
 @app.get("/projects/{script_id}/assets/{asset_type}/{asset_id}/revisions")
 def get_asset_revisions(script_id: str, asset_type: str, asset_id: str,
                         user: UserContext = Depends(require_studio_user)):
