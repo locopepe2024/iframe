@@ -15,7 +15,8 @@ export function characterUseReferenceError(
             ...uses.filter((item) => item.project_character_id === projectCharacterId)
                 .map((item) => item.selected_asset_id),
         ]);
-        const selectedGroup = groups.find((group) => group.assetId === use.selected_asset_id
+        const selectedGroup = groups.find((group) => group.kind === "character"
+            && group.assetId === use.selected_asset_id
             && group.variants.length === 1
             && group.variants[0].id === use.selected_variant_id);
         const conflictingGroup = groups.some((group) => group.kind === "character"

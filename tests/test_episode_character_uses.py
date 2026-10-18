@@ -184,6 +184,11 @@ def test_explicit_storyboard_references_cannot_omit_reviewed_look(tmp_path):
             "episode", "after", {"reference_image_urls": ["old-look.webp"]}, "Reviewed prompt",
             prompt_is_complete=True,
         )
+    with pytest.raises(ValueError, match="mix another look"):
+        pipeline.generate_storyboard_render(
+            "episode", "after", {"reference_image_urls": ["injured.webp", "normal.webp"]},
+            "Reviewed prompt", prompt_is_complete=True,
+        )
     assert script.frames[1].status.value != "processing"
 
 

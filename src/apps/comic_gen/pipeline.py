@@ -6947,6 +6947,15 @@ class ComicGenPipeline(StudioOwnerMixin):
                 expected_refs = {value for value in (image_variant_storage_key(variant), variant.url) if value}
                 if not expected_refs.intersection(resolved_refs):
                     raise ValueError("Storyboard references omit the selected episode character look")
+                family = [item for item in self.resolve_project_assets(script)["characters"]
+                          if item.id == project_character_id or item.base_character_id == project_character_id]
+                for relative in family:
+                    for other in self._asset_image_variants(relative, "character"):
+                        if relative.id == use.selected_asset_id and other.id == use.selected_variant_id:
+                            continue
+                        old_refs = {value for value in (image_variant_storage_key(other), other.url) if value}
+                        if old_refs.intersection(resolved_refs):
+                            raise ValueError("Storyboard references mix another look of the selected character")
             
         frame.status = GenerationStatus.PROCESSING
         if composition_data:
