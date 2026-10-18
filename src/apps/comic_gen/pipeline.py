@@ -536,6 +536,16 @@ class ComicGenPipeline(StudioOwnerMixin):
                             unique_ids.append(variant_id)
                     if unique_ids:
                         cleaned_selections[asset_id] = unique_ids
+                if frame.reference_package.confirmed and cleaned_selections != frame.workbench_reference_variant_ids:
+                    pinned_ids = {pin.asset_id for pin in frame.reference_package.asset_revision_pins}
+                    changed_ids = {asset_id for asset_id in
+                                   set(cleaned_selections) | set(frame.workbench_reference_variant_ids)
+                                   if cleaned_selections.get(asset_id) != frame.workbench_reference_variant_ids.get(asset_id)}
+                    if changed_ids & pinned_ids:
+                        frame.reference_package.confirmed = False
+                        frame.reference_package.asset_revision_pins = []
+                        frame.reference_package.revision += 1
+                        frame.reference_package.updated_at = time.time()
                 frame.workbench_reference_variant_ids = cleaned_selections
             if workbench_pose_reference_variant_ids is not None:
                 cleaned_pose_selections: Dict[str, List[str]] = {}
@@ -4505,12 +4515,15 @@ class ComicGenPipeline(StudioOwnerMixin):
                 if ids:
                     character_ids_by_person[person.person_id] = ids
         def matching_character_assets(person_id: str, era_variant_id: Optional[str] = None) -> List[str]:
+            candidates = character_ids_by_person.get(person_id, [])
+            # era_variant_id also carries semantic era labels in older plans.
+            # Only treat it as an asset selection when it resolves to a
+            # character asset belonging to this person.
+            if era_variant_id in candidates:
+                return [era_variant_id]
             explicit_id = script.episode_person_asset_bindings.get(person_id)
             if explicit_id:
                 return [explicit_id] if any(item.id == explicit_id for item in resolved_assets["characters"]) else []
-            candidates = character_ids_by_person.get(person_id, [])
-            if era_variant_id in candidates:
-                return [era_variant_id]
             return candidates if len(candidates) == 1 else []
         scenes: List[EpisodeVisualSceneContext] = []
         characters: Dict[tuple, EpisodeVisualCharacterContext] = {}
@@ -4565,13 +4578,29 @@ class ComicGenPipeline(StudioOwnerMixin):
                     prop_items = [DirectorPlanPropBinding.model_validate(item) if isinstance(item, dict) else item for item in shot.prop_bindings]
                     known_people = {cast.person_id for cast in cast_items}
                     known_people.update(script.episode_person_asset_bindings)
+                    cast_character_ids: Dict[str, List[str]] = {}
+                    for cast in cast_items:
+                        candidates = character_ids_by_person.get(cast.person_id, [])
+                        selected_in_shot = list(dict.fromkeys(
+                            item for item in shot.character_ids if item in candidates
+                        ))
+                        if cast.era_variant_id in candidates:
+                            selected = [cast.era_variant_id]
+                        elif len(selected_in_shot) == 1:
+                            selected = selected_in_shot
+                        elif selected_in_shot:
+                            selected = []  # Ambiguous plan: do not mix looks.
+                        else:
+                            selected = matching_character_assets(cast.person_id, cast.era_variant_id)
+                        cast_character_ids[cast.person_id] = selected
                     legacy_char_ids = [asset_id for item in shot.character_ids
+                                       if not any(item == cast.person_id or item in character_ids_by_person.get(cast.person_id, [])
+                                                  for cast in cast_items)
                                        for asset_id in (matching_character_assets(item)
                                                         if item in known_people else [item])]
                     shot_char_ids = list(dict.fromkeys(
                         legacy_char_ids + [asset_id for cast in cast_items
-                                              for asset_id in matching_character_assets(
-                                                  cast.person_id, cast.era_variant_id)]))
+                                              for asset_id in cast_character_ids[cast.person_id]]))
                     shot_prop_ids = list(dict.fromkeys(
                         current_asset_id("prop", item) for item in
                         shot.prop_ids + [b.prop_id for b in prop_items]))
@@ -4611,7 +4640,7 @@ class ComicGenPipeline(StudioOwnerMixin):
                         item = characters.setdefault(key, EpisodeVisualCharacterContext(
                             person_id=cast.person_id,
                             person_label=person_labels.get(cast.person_id),
-                            character_asset_ids=matching_character_assets(cast.person_id, cast.era_variant_id),
+                            character_asset_ids=cast_character_ids[cast.person_id],
                             era_variant_id=cast.era_variant_id,
                             scene_look_id=cast.scene_look_id, continuity_state=cast.continuity_state,
                             scene_ids=[scene.scene_id],
@@ -4970,7 +4999,17 @@ class ComicGenPipeline(StudioOwnerMixin):
                 continue
             binding = bindings.get((asset_type, asset_id))
             asset = by_type[asset_type].get(asset_id)
-            if binding and binding.selected_variant_id:
+            selected_for_shot = frame.workbench_reference_variant_ids.get(asset_id, [])
+            if asset is not None and selected_for_shot:
+                variants = {item.id: item for item in self._asset_image_variants(asset, asset_type)}
+                result.extend({
+                    "asset_type": asset_type, "asset_id": asset_id,
+                    "variant_id": variant_id,
+                    "media_id": variants[variant_id].media_id if variant_id in variants else None,
+                    "storage_key": image_variant_storage_key(variants[variant_id]) if variant_id in variants else None,
+                    "source": "shot_variant_selection", "missing": variant_id not in variants,
+                } for variant_id in selected_for_shot)
+            elif binding and binding.selected_variant_id:
                 source = "episode_scene_variant" if asset_type == "scene" else "episode_variant"
                 result.append({"asset_type": asset_type, "asset_id": asset_id, "variant_id": binding.selected_variant_id, "source": source})
             elif asset is not None:
