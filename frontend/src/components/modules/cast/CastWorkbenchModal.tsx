@@ -31,6 +31,8 @@ import { resolveAssetGenerationModel } from "@/lib/modelCatalog";
 import { toast } from "@/store/toastStore";
 import { getAssetUrl } from "@/lib/utils";
 import { AssetIndexPreview } from "@/components/shared/AssetIndexPreview";
+import { searchStructuredAssets, type AssetSearchScope, type AssetSearchType } from "@/lib/structuredAssetSearch";
+import { searchReferenceCandidates } from "@/lib/referenceCandidateSearch";
 import AssetImageSubmissionReview from "@/components/shared/AssetImageSubmissionReview";
 import PreviewImage from "@/components/shared/preview/PreviewImage";
 import GroupedModelGrid from "@/components/common/GroupedModelGrid";
@@ -354,6 +356,9 @@ export default function CastWorkbenchModal({ isOpen, kind, entityId, onClose }: 
     const [promptReferences, setPromptReferences] = useState<AssetLibraryReference[]>([]);
     const [mention, setMention] = useState<ReferenceSuggestion | null>(null);
     const [libraryPickerOpen, setLibraryPickerOpen] = useState(false);
+    const [libraryQuery, setLibraryQuery] = useState("");
+    const [libraryType, setLibraryType] = useState<AssetSearchType>("all");
+    const [libraryScope, setLibraryScope] = useState<AssetSearchScope>("all");
     const [referenceLibraryAssets, setReferenceLibraryAssets] = useState<ReferenceLibraryAsset[]>([]);
     const [referenceRefresh, setReferenceRefresh] = useState(0);
     const generating = generatingTasks.some((t) => t.assetId === entityId);
@@ -428,6 +433,10 @@ export default function CastWorkbenchModal({ isOpen, kind, entityId, onClose }: 
         const variants = asset.variants.filter((variant) => !deletedVariantIds.includes(variant.id));
         return variants.length ? [{ ...asset, variants }] : [];
     }), [referenceLibraryAssets, deletedVariantIds]);
+    const searchedReferenceLibraryAssets = useMemo(() => searchStructuredAssets(
+        visibleReferenceLibraryAssets,
+        { query: libraryQuery, type: libraryType, scope: libraryScope },
+    ), [visibleReferenceLibraryAssets, libraryQuery, libraryType, libraryScope]);
 
     const visibleAvailableReferences = useMemo(() => availableReferences.flatMap((reference) => {
         const asset = visibleReferenceLibraryAssets.find((item) =>
@@ -445,7 +454,10 @@ export default function CastWorkbenchModal({ isOpen, kind, entityId, onClose }: 
 
     const referenceCandidates = useMemo<ReferenceCandidate[]>(() => {
         const labels = new Set<string>();
-        return visibleAvailableReferences.flatMap(({ reference, asset, variant }, index) => {
+        return visibleReferenceLibraryAssets.flatMap((asset) => asset.variants.flatMap((variant, index) => {
+            const reference: AssetLibraryReference = { asset_type: asset.asset_type, asset_id: asset.asset_id, variant_id: variant.id };
+            const alreadyAvailable = availableReferences.some((item) => item.asset_type === reference.asset_type && item.asset_id === reference.asset_id && item.variant_id === reference.variant_id);
+            if (!alreadyAvailable && availableReferences.length >= 9) return [];
             const variantLabel = variant.display_name || variant.reference_view_role || variant.reference_distance || `未命名素材 ${index + 1}`;
             const baseLabel = asset.variants.length > 1 ? `${asset.name} · ${variantLabel}` : asset.name;
             let label = baseLabel;
@@ -458,14 +470,13 @@ export default function CastWorkbenchModal({ isOpen, kind, entityId, onClose }: 
                     asset_type: asset.asset_type, asset_id: asset.asset_id, variant_id: variant.id },
                 sourceLabel: asset.source_scope,
                 variantLabel,
+                description: asset.description,
                 reference,
             }];
-        });
-    }, [visibleAvailableReferences]);
+        }));
+    }, [visibleReferenceLibraryAssets, availableReferences]);
 
-    const matchingReferenceCandidates = useMemo(() => referenceCandidates.filter((candidate) =>
-        candidate.label.toLocaleLowerCase().includes(mention?.query.toLocaleLowerCase() ?? ""),
-    ), [mention, referenceCandidates]);
+    const matchingReferenceCandidates = useMemo(() => searchReferenceCandidates(referenceCandidates, mention?.query ?? ""), [mention, referenceCandidates]);
 
     // Reset prompt to template ONLY when the entity changes (not on every
     // open) so the user's in-flight edits aren't clobbered if they happen
@@ -1347,7 +1358,14 @@ export default function CastWorkbenchModal({ isOpen, kind, entityId, onClose }: 
                                                 type="button"
                                                 role="option"
                                                 onMouseDown={(event) => event.preventDefault()}
-                                                onClick={() => { mention.choose(candidate); setMention(null); }}
+                                                onClick={() => {
+                                                    const asset = visibleReferenceLibraryAssets.find((item) => item.asset_type === candidate.reference?.asset_type && item.asset_id === candidate.reference?.asset_id);
+                                                    const variant = asset?.variants.find((item) => item.id === candidate.reference?.variant_id);
+                                                    if (!asset || !variant) return;
+                                                    addAvailableReference(asset, variant);
+                                                    mention.choose(candidate);
+                                                    setMention(null);
+                                                }}
                                                 className="flex min-h-11 w-full items-center gap-3 rounded-lg px-2 py-2 text-left transition-colors hover:bg-hover-bg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60"
                                             >
                                                 <span className="inline-flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-surface-inset">
@@ -1547,8 +1565,21 @@ export default function CastWorkbenchModal({ isOpen, kind, entityId, onClose }: 
                                             <X size={13} />
                                         </button>
                                     </div>
+                                    <div className="mb-3 flex flex-wrap gap-1.5">
+                                        <input aria-label="搜索参考图资产" value={libraryQuery} onChange={(event) => setLibraryQuery(event.target.value)}
+                                            placeholder="搜索名称、描述或来源" className="min-w-36 flex-1 rounded border border-glass-border bg-input-bg px-2 py-1 text-xs text-foreground" />
+                                        <select aria-label="筛选参考图类型" value={libraryType} onChange={(event) => setLibraryType(event.target.value as AssetSearchType)}
+                                            className="rounded border border-glass-border bg-input-bg px-2 py-1 text-xs text-foreground">
+                                            <option value="all">全部类型</option><option value="character">角色</option><option value="scene">场景</option><option value="prop">道具</option>
+                                        </select>
+                                        <select aria-label="筛选参考图作用域" value={libraryScope} onChange={(event) => setLibraryScope(event.target.value as AssetSearchScope)}
+                                            className="rounded border border-glass-border bg-input-bg px-2 py-1 text-xs text-foreground">
+                                            <option value="all">全部作用域</option><option value="episode">剧集</option><option value="series">系列</option><option value="project">项目</option><option value="global">共享</option>
+                                        </select>
+                                    </div>
                                     <div className="space-y-3">
-                                        {visibleReferenceLibraryAssets.map((asset) => (
+                                        {searchedReferenceLibraryAssets.length === 0 && <p className="text-xs text-text-muted">没有匹配的参考图资产。</p>}
+                                        {searchedReferenceLibraryAssets.map((asset) => (
                                             <div key={`${asset.asset_type}:${asset.asset_id}`}>
                                                 <div className="mb-1 flex items-center gap-1.5">
                                                     <p className="text-[0.6875rem] font-medium text-text-secondary truncate">{asset.name}</p>

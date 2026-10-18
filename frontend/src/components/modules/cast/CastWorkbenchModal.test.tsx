@@ -23,7 +23,7 @@ function showScene(scene: any) {
  return render(<NextIntlClientProvider locale="en" messages={messages}><CastWorkbenchModal isOpen kind="scene" entityId={scene.id} onClose={() => {}} /></NextIntlClientProvider>);
 }
 function promptEditor() {
- return screen.getByRole('textbox') as HTMLElement & { editor: import('@tiptap/core').Editor };
+ return document.querySelector('[contenteditable="true"]') as HTMLElement & { editor: import('@tiptap/core').Editor };
 }
 function setPromptDocument(html: string) {
  act(() => { promptEditor().editor.commands.focus(); promptEditor().editor.commands.setContent(html); });
