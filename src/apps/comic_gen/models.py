@@ -522,6 +522,28 @@ class CharacterAssetPack(BaseModel):
         return self
 
 
+class EpisodeCharacterUse(BaseModel):
+    """One reviewed, immutable episode look with project-pack provenance."""
+
+    use_id: str = Field(..., min_length=1, max_length=120)
+    project_character_id: str = Field(..., min_length=1)
+    label: str = Field(..., min_length=1, max_length=120)
+    condition: str = Field("", max_length=500)
+    source_pack_id: str = Field(..., min_length=1)
+    source_pack_revision: int = Field(..., ge=1)
+    source_design_revision: int = Field(..., ge=1)
+    source_anchor_variant_id: str = Field(..., min_length=1)
+    source_anchor_media_id: Optional[str] = None
+    selected_asset_id: str = Field(..., min_length=1)
+    selected_asset_revision: int = Field(..., ge=1)
+    selected_variant_id: str = Field(..., min_length=1)
+    selected_media_id: Optional[str] = None
+    selected_source_scope: Literal["project", "series", "episode"]
+    selected_source_container_id: str = Field(..., min_length=1)
+    status: Literal["confirmed"] = "confirmed"
+    confirmed_at: float = Field(default_factory=time.time)
+
+
 class Character(BaseModel):
     id: str = Field(..., description="Unique identifier for the character")
     asset_revision: int = Field(0, ge=0)
@@ -776,6 +798,10 @@ class StoryboardFrame(BaseModel):
         description="Server-projected read-only context from the confirmed shooting-plan shot",
     )
     character_ids: List[str] = Field(default_factory=list, description="List of Character IDs present in the frame")
+    character_use_ids: Dict[str, str] = Field(
+        default_factory=dict,
+        description="Explicit project-character ID to confirmed episode use ID for this shot",
+    )
     prop_ids: List[str] = Field(default_factory=list, description="List of Prop IDs present in the frame")
     
     # Legacy fields (kept for compatibility)
@@ -2934,6 +2960,10 @@ class Script(BaseModel):
     )
     episode_person_asset_bindings: Dict[str, str] = Field(
         default_factory=dict, description="Explicit episode person-to-Character asset choices"
+    )
+    episode_character_uses: List[EpisodeCharacterUse] = Field(
+        default_factory=list,
+        description="Reviewed episode looks; project anchor media remains owned by its source asset",
     )
     episode_scene_asset_replacements: Dict[str, str] = Field(
         default_factory=dict, description="Confirmed-plan Scene asset ID to current episode-visible asset ID"

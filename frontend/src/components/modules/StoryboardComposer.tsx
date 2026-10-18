@@ -20,6 +20,7 @@ import WorkflowActionButton from "@/components/shared/WorkflowActionButton";
 import StoryboardFrameEditor from "./StoryboardFrameEditor";
 import RenderPromptPreviewDialog, { type FrameRenderPreview } from "./RenderPromptPreviewDialog";
 import { resolveNegativePrompt, resolveStylePrompt } from "./storyboard-r2v/buildAssembledPrompt";
+import { reviewedEpisodeLookImage } from "./storyboard-r2v/episodeLookImage";
 
 export default function StoryboardComposer() {
     const t = useTranslations("storyboard");
@@ -245,6 +246,7 @@ export default function StoryboardComposer() {
                 scene_id: frame.scene_id,
                 reference_image_urls: []
             };
+            const referenceLabels: string[] = [];
 
             // Helper to get selected variant URL from an asset
             const getSelectedVariantUrl = (asset: any): string | null => {
@@ -266,14 +268,27 @@ export default function StoryboardComposer() {
                 const scene = currentProject.scenes?.find((s: any) => s.id === frame.scene_id);
                 if (scene) {
                     const sceneUrl = getSelectedVariantUrl(scene.image_asset) || scene.image_url;
-                    if (sceneUrl) compositionData.reference_image_urls.push(sceneUrl);
+                    if (sceneUrl) {
+                        compositionData.reference_image_urls.push(sceneUrl);
+                        referenceLabels.push(`场景：${scene.name || scene.id}`);
+                    }
                 }
             }
 
             // 2. Add Character Images - use selected variant from three_view > full_body > headshot
             if (frame.character_ids && frame.character_ids.length > 0) {
                 frame.character_ids.forEach((charId: string) => {
-                    const char = currentProject.characters?.find((c: any) => c.id === charId);
+                    const characters = [...(currentProject.characters || []),
+                        ...(currentSeries && currentSeries.id === currentProject.series_id ? currentSeries.characters || [] : [])];
+                    const reviewed = reviewedEpisodeLookImage(
+                        charId, frame.character_use_ids, currentProject.episode_character_uses || [], characters,
+                    );
+                    if (reviewed) {
+                        compositionData.reference_image_urls.push(reviewed.url);
+                        referenceLabels.push(`角色：${reviewed.label}`);
+                        return;
+                    }
+                    const char = characters.find((c: any) => c.id === charId);
                     if (char) {
                         // Priority: three_view_asset > full_body_asset > headshot_asset > legacy fields
                         const charUrl = selectedVariantUrl(char.reference_sheet)
@@ -285,7 +300,10 @@ export default function StoryboardComposer() {
                             || char.headshot_image_url
                             || char.avatar_url
                             || char.image_url;
-                        if (charUrl) compositionData.reference_image_urls.push(charUrl);
+                        if (charUrl) {
+                            compositionData.reference_image_urls.push(charUrl);
+                            referenceLabels.push(`角色：${char.name || char.id}`);
+                        }
                     }
                 });
             }
@@ -296,7 +314,10 @@ export default function StoryboardComposer() {
                     const prop = currentProject.props?.find((p: any) => p.id === propId);
                     if (prop) {
                         const propUrl = getSelectedVariantUrl(prop.image_asset) || prop.image_url;
-                        if (propUrl) compositionData.reference_image_urls.push(propUrl);
+                        if (propUrl) {
+                            compositionData.reference_image_urls.push(propUrl);
+                            referenceLabels.push(`道具：${prop.name || prop.id}`);
+                        }
                     }
                 });
             }
@@ -340,7 +361,8 @@ export default function StoryboardComposer() {
 
             const preview = await api.previewFrameRender(currentProject.id, frame.id, finalPrompt);
             setPendingRender({ frameId: frame.id, compositionData, ...preview,
-                negativePrompt: frameNegativePrompt, referenceCount: compositionData.reference_image_urls.length || null, batchSize });
+                negativePrompt: frameNegativePrompt, referenceCount: compositionData.reference_image_urls.length || null,
+                referenceLabels, batchSize });
         } catch (error) {
             alert(t("renderFailedDetail", { detail: extractErrorDetail(error, t("generateFailed")) }));
         }

@@ -19,6 +19,7 @@ from .models import (
     Character,
     CharacterAssetPack,
     CharacterAssetPackRevision,
+    EpisodeCharacterUse,
     Scene,
     Prop,
     StoryboardFrame,
@@ -536,6 +537,12 @@ class ComicGenPipeline(StudioOwnerMixin):
                             unique_ids.append(variant_id)
                     if unique_ids:
                         cleaned_selections[asset_id] = unique_ids
+                reviewed_uses = {item.use_id: item for item in script.episode_character_uses}
+                for use_id in frame.character_use_ids.values():
+                    use = reviewed_uses.get(use_id)
+                    if (use and cleaned_selections.get(use.selected_asset_id)
+                            != [use.selected_variant_id]):
+                        raise ValueError("Change the confirmed episode look through the shot look selector")
                 if frame.reference_package.confirmed and cleaned_selections != frame.workbench_reference_variant_ids:
                     pinned_ids = {pin.asset_id for pin in frame.reference_package.asset_revision_pins}
                     changed_ids = {asset_id for asset_id in
@@ -2016,6 +2023,9 @@ class ComicGenPipeline(StudioOwnerMixin):
         script = self.scripts.get(script_id)
         if not script:
             raise ValueError("Script not found")
+        if any(item.selected_asset_id == char_id or item.project_character_id == char_id
+               for item in script.episode_character_uses):
+            raise ValueError("Cannot delete a character used by a confirmed episode look")
         
         self.retire_episode_plan_asset(script, "character", char_id)
         script.characters = [c for c in script.characters if c.id != char_id]
@@ -4999,8 +5009,25 @@ class ComicGenPipeline(StudioOwnerMixin):
                 continue
             binding = bindings.get((asset_type, asset_id))
             asset = by_type[asset_type].get(asset_id)
+            selected_use = next((use for use in script.episode_character_uses
+                                 if asset_type == "character" and use.selected_asset_id == asset_id
+                                 and frame.character_use_ids.get(use.project_character_id) == use.use_id), None)
             selected_for_shot = frame.workbench_reference_variant_ids.get(asset_id, [])
-            if asset is not None and selected_for_shot:
+            if selected_use:
+                variants = {item.id: item for item in self._asset_image_variants(asset, asset_type)} if asset else {}
+                variant = variants.get(selected_use.selected_variant_id)
+                result.append({
+                    "asset_type": asset_type, "asset_id": asset_id,
+                    "revision": selected_use.selected_asset_revision,
+                    "variant_id": selected_use.selected_variant_id,
+                    "media_id": selected_use.selected_media_id,
+                    "storage_key": image_variant_storage_key(variant) if variant else None,
+                    "source_scope": selected_use.selected_source_scope,
+                    "source": "episode_character_use",
+                    "use_id": selected_use.use_id,
+                    "missing": variant is None or variant.media_id != selected_use.selected_media_id,
+                })
+            elif asset is not None and selected_for_shot:
                 variants = {item.id: item for item in self._asset_image_variants(asset, asset_type)}
                 result.extend({
                     "asset_type": asset_type, "asset_id": asset_id,
@@ -5051,6 +5078,13 @@ class ComicGenPipeline(StudioOwnerMixin):
                 scope = "global"
             variants = {item.id: item for item in self._asset_image_variants(asset, asset_type)}
             selected_ids = frame.workbench_reference_variant_ids.get(asset_id, [])
+            selected_use = next((use for use in script.episode_character_uses
+                                 if asset_type == "character" and use.selected_asset_id == asset_id
+                                 and frame.character_use_ids.get(use.project_character_id) == use.use_id), None)
+            if selected_use:
+                if selected_ids and selected_ids != [selected_use.selected_variant_id]:
+                    raise ValueError("Shot references conflict with the confirmed episode look")
+                selected_ids = [selected_use.selected_variant_id]
             package_refs = [item for item in package.references
                             if asset_type == "scene" and item.kind == "scene"
                             and item.source_asset_id == asset_id]
@@ -5085,12 +5119,17 @@ class ComicGenPipeline(StudioOwnerMixin):
                 variant = variants.get(variant_id) if variant_id else None
                 if variant_id and variant is None:
                     raise ValueError(f"Cannot pin missing variant {variant_id} on {asset_type} {asset_id}")
+                if selected_use and variant and variant.media_id != selected_use.selected_media_id:
+                    raise ValueError("Confirmed episode look media has changed")
                 pins.append(AssetRevisionPin(
-                    asset_type=asset_type, asset_id=asset_id, source_scope=scope,
-                    source_container_id=container_id, revision=revision.revision,
+                    asset_type=asset_type, asset_id=asset_id,
+                    source_scope=("project" if selected_use.selected_source_scope == "episode" else selected_use.selected_source_scope)
+                    if selected_use else scope,
+                    source_container_id=selected_use.selected_source_container_id if selected_use else container_id,
+                    revision=selected_use.selected_asset_revision if selected_use else revision.revision,
                     variant_id=variant_id, media_id=variant.media_id if variant else None,
                     storage_key=image_variant_storage_key(variant),
-                    confirmation_status=revision.confirmation_status,
+                    confirmation_status="user_confirmed" if selected_use else revision.confirmation_status,
                 ))
         return pins
 
@@ -6359,6 +6398,13 @@ class ComicGenPipeline(StudioOwnerMixin):
             frame.scene_id = kwargs['scene_id']
         if kwargs.get('character_ids') is not None:
             frame.character_ids = kwargs['character_ids']
+            uses_by_id = {item.use_id: item for item in script.episode_character_uses}
+            for project_character_id, use_id in list(frame.character_use_ids.items()):
+                use = uses_by_id.get(use_id)
+                if use is None or use.selected_asset_id not in frame.character_ids:
+                    frame.character_use_ids.pop(project_character_id, None)
+                    if use:
+                        frame.workbench_reference_variant_ids.pop(use.selected_asset_id, None)
         if kwargs.get('duration') is not None:
             frame.duration = kwargs['duration']
         if kwargs.get('shot_size') is not None:
@@ -6820,6 +6866,8 @@ class ComicGenPipeline(StudioOwnerMixin):
             "lighting": frame.lighting.model_dump(mode="json") if frame.lighting else None,
             "dialogue": frame.dialogue,
             "character_ids": frame.character_ids,
+            "character_use_ids": frame.character_use_ids,
+            "workbench_reference_variant_ids": frame.workbench_reference_variant_ids,
             "characters": [characters[item_id].model_dump(mode="json") if item_id in characters else None
                            for item_id in frame.character_ids],
             "scene": scenes[frame.scene_id].model_dump(mode="json") if frame.scene_id in scenes else None,
@@ -6876,6 +6924,38 @@ class ComicGenPipeline(StudioOwnerMixin):
             expected = self.storyboard_render_preview_token(current_context, prompt)
             if not prompt_is_complete or context_token != expected:
                 raise ValueError("Storyboard render preview is outdated; preview the current frame again")
+        explicit_refs = list((composition_data or {}).get("reference_image_urls") or [])
+        single_ref = (composition_data or {}).get("reference_image_url")
+        if single_ref:
+            explicit_refs.append(single_ref)
+        if explicit_refs and frame.character_use_ids:
+            resolved_refs = {
+                resolve_studio_reference(ref, script.owner_profile_id, output_root=self.output_root)
+                if ref.startswith("/studio/") else ref
+                for ref in explicit_refs if ref
+            }
+            for project_character_id, use_id in frame.character_use_ids.items():
+                use = next((item for item in script.episode_character_uses
+                            if item.use_id == use_id and item.project_character_id == project_character_id), None)
+                if use is None:
+                    raise ValueError("Storyboard character look is no longer available")
+                asset, _ = self._find_asset_with_source(script, use.selected_asset_id, "character")
+                variant = next((item for item in self._asset_image_variants(asset, "character")
+                                if item.id == use.selected_variant_id), None) if asset else None
+                if variant is None or variant.media_id != use.selected_media_id:
+                    raise ValueError("Storyboard character look media has changed")
+                expected_refs = {value for value in (image_variant_storage_key(variant), variant.url) if value}
+                if not expected_refs.intersection(resolved_refs):
+                    raise ValueError("Storyboard references omit the selected episode character look")
+                family = [item for item in self.resolve_project_assets(script)["characters"]
+                          if item.id == project_character_id or item.base_character_id == project_character_id]
+                for relative in family:
+                    for other in self._asset_image_variants(relative, "character"):
+                        if relative.id == use.selected_asset_id and other.id == use.selected_variant_id:
+                            continue
+                        old_refs = {value for value in (image_variant_storage_key(other), other.url) if value}
+                        if old_refs.intersection(resolved_refs):
+                            raise ValueError("Storyboard references mix another look of the selected character")
             
         frame.status = GenerationStatus.PROCESSING
         if composition_data:
@@ -8932,6 +9012,126 @@ class ComicGenPipeline(StudioOwnerMixin):
             self._save_after_asset_mutation(source)
             return self.get_project_character_asset_pack(script_id, character_id)
 
+    def confirm_episode_character_use(
+        self, script_id: str, project_character_id: str, use_id: str,
+        label: str, condition: str, selected_asset_id: str,
+        selected_variant_id: str, expected_pack_revision: int, reviewed: bool,
+    ) -> EpisodeCharacterUse:
+        """Confirm a look already visible to the reviewer; never copy its media."""
+        with self._save_lock:
+            script = self.scripts.get(script_id)
+            if not script:
+                raise ValueError("Script not found")
+            project_character, project_source = self._project_character_for_pack(
+                script_id, project_character_id)
+            pack = project_character.asset_pack
+            if not pack or pack.current_revision != expected_pack_revision:
+                raise ValueError("Character asset pack revision changed; reload before confirming")
+            if not reviewed:
+                raise ValueError("Review the selected episode character image before confirming")
+            if any(item.use_id == use_id for item in script.episode_character_uses):
+                raise ValueError("Episode character use ID already exists")
+            if not label.strip() or not use_id.strip():
+                raise ValueError("Episode character use ID and label are required")
+            anchor = pack.revisions[-1]
+            if selected_asset_id == project_character_id:
+                # An episode-local shadow would make the saved character ID
+                # resolve to different media in storyboard generation.
+                if project_source == "series" and any(
+                    item.id == project_character_id for item in script.characters):
+                    raise ValueError("Episode-local asset shadows the project character")
+                if selected_variant_id != anchor.variant_id:
+                    raise ValueError("Project look must use the confirmed anchor variant")
+                selected_asset = project_character
+                selected_scope = "series" if project_source == "series" else "project"
+                container_id = script.series_id if project_source == "series" else script.id
+            else:
+                selected_asset = next((item for item in script.characters
+                                       if item.id == selected_asset_id), None)
+                if not selected_asset or selected_asset.base_character_id != project_character_id:
+                    raise ValueError("Episode look must belong to the same project character")
+                selected_scope = "episode"
+                container_id = script.id
+            variants = {item.id: item for item in self._asset_image_variants(selected_asset, "character")}
+            selected_variant = variants.get(selected_variant_id)
+            if selected_variant is None:
+                raise ValueError("Selected episode look variant is not available")
+            selected_revision = commit_asset_revision(selected_asset)
+            use = EpisodeCharacterUse(
+                use_id=use_id, project_character_id=project_character_id,
+                label=label.strip(), condition=condition.strip(),
+                source_pack_id=pack.pack_id, source_pack_revision=anchor.revision,
+                source_design_revision=anchor.source_design_revision,
+                source_anchor_variant_id=anchor.variant_id,
+                source_anchor_media_id=anchor.media_id,
+                selected_asset_id=selected_asset_id,
+                selected_asset_revision=selected_revision.revision,
+                selected_variant_id=selected_variant.id,
+                selected_media_id=selected_variant.media_id,
+                selected_source_scope=selected_scope,
+                selected_source_container_id=container_id,
+            )
+            script.episode_character_uses.append(use)
+            script.updated_at = time.time()
+            self._save_data()
+            return use
+
+    def select_frame_character_use(
+        self, script_id: str, frame_id: str, project_character_id: str,
+        use_id: str, expected_reference_revision: int,
+    ) -> StoryboardFrame:
+        """Apply one reviewed look to exactly one shot and its media selection."""
+        with self._save_lock:
+            script = self.scripts.get(script_id)
+            if not script:
+                raise ValueError("Script not found")
+            frame = next((item for item in script.frames if item.id == frame_id), None)
+            if not frame:
+                raise ValueError("Frame not found")
+            if frame.reference_package.revision != expected_reference_revision:
+                raise ValueError("Storyboard reference revision changed; reload before selecting")
+            use = next((item for item in script.episode_character_uses
+                        if item.use_id == use_id and item.project_character_id == project_character_id), None)
+            if use is None:
+                raise ValueError("Character use is not available in this episode")
+            project_character, _ = self._project_character_for_pack(script_id, project_character_id)
+            asset = (project_character if use.selected_asset_id == project_character_id
+                     else next((item for item in script.characters
+                                if item.id == use.selected_asset_id
+                                and item.base_character_id == project_character_id), None))
+            if asset is None:
+                raise ValueError("Selected episode look asset is no longer available")
+            variant = next((item for item in self._asset_image_variants(asset, "character")
+                            if item.id == use.selected_variant_id), None)
+            if variant is None or variant.media_id != use.selected_media_id:
+                raise ValueError("Selected episode look media has changed")
+            family_ids = {item.id for item in self.resolve_project_assets(script)["characters"]
+                          if item.id == project_character_id
+                          or item.base_character_id == project_character_id}
+            insert_at = next((index for index, item in enumerate(frame.character_ids)
+                              if item in family_ids), len(frame.character_ids))
+            character_ids = [item for item in frame.character_ids if item not in family_ids]
+            character_ids.insert(insert_at, use.selected_asset_id)
+            selections = {key: list(value) for key, value in frame.workbench_reference_variant_ids.items()
+                          if key not in family_ids}
+            selections[use.selected_asset_id] = [use.selected_variant_id]
+            if (frame.character_use_ids.get(project_character_id) == use_id
+                    and frame.character_ids == character_ids
+                    and frame.workbench_reference_variant_ids == selections):
+                return frame
+            frame.character_ids = character_ids
+            frame.character_use_ids[project_character_id] = use_id
+            frame.workbench_reference_variant_ids = selections
+            if frame.reference_package.confirmed:
+                frame.reference_package.confirmed = False
+                frame.reference_package.asset_revision_pins = []
+            frame.reference_package.revision += 1
+            frame.reference_package.updated_at = time.time()
+            frame.updated_at = time.time()
+            script.updated_at = frame.updated_at
+            self._save_data()
+            return frame
+
     def confirm_asset_revision(
         self, script_id: str, asset_id: str, asset_type: str,
         expected_revision: int, active_variant_ids: Optional[List[str]] = None,
@@ -8959,6 +9159,11 @@ class ComicGenPipeline(StudioOwnerMixin):
                 anchors = {item.variant_id for item in asset.asset_pack.revisions}
                 if not anchors.issubset(active):
                     raise ValueError("Confirmed character anchors cannot be removed")
+            if asset_type == "character" and any(
+                item.selected_asset_id == asset_id and item.selected_variant_id not in active
+                for item in script.episode_character_uses
+            ):
+                raise ValueError("Variants used by a confirmed episode look cannot be removed")
             from .models import AssetUnit
             for container in containers:
                 variant_field = "image_variants" if isinstance(container, AssetUnit) else "variants"
@@ -9207,6 +9412,9 @@ class ComicGenPipeline(StudioOwnerMixin):
                 item.variant_id == variant_id for item in target_asset.asset_pack.revisions
             ):
                 raise ValueError("Confirmed character anchor cannot be deleted")
+            if any(item.selected_asset_id == asset_id and item.selected_variant_id == variant_id
+                   for item in script.episode_character_uses):
+                raise ValueError("Variant belongs to a confirmed episode look and cannot be deleted")
             for field, legacy_url_field in (
                 ("reference_sheet", "image_url"),
                 ("full_body_asset", "image_url"),
@@ -10451,6 +10659,12 @@ class ComicGenPipeline(StudioOwnerMixin):
             collection = getattr(series, collections[asset_type])
             if not any(item.id == asset_id for item in collection):
                 raise ValueError("Series asset not found")
+            if asset_type == "character" and any(
+                item.project_character_id == asset_id or item.selected_asset_id == asset_id
+                for episode in self.scripts.values() if episode.series_id == series_id
+                for item in episode.episode_character_uses
+            ):
+                raise ValueError("Cannot delete a character used by a confirmed episode look")
 
             def cast_asset_ids(episode: Script, plan: DirectorShootingPlan,
                                cast: DirectorPlanCastBinding) -> List[str]:

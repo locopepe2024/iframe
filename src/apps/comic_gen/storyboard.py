@@ -121,9 +121,36 @@ class StoryboardGenerator:
                     # Add character reference image - prioritize selected variant from ImageAsset
                     target_url = None
                     source = "none"
+                    selected_for_shot = frame.workbench_reference_variant_ids.get(char.id, [])
+                    if selected_for_shot:
+                        if len(selected_for_shot) != 1:
+                            raise ValueError("A shot character look requires exactly one image variant")
+                        selected_id = selected_for_shot[0]
+                        for container in (char.reference_sheet, char.full_body_asset,
+                                          char.three_view_asset, char.headshot_asset):
+                            if container is None:
+                                continue
+                            variants = getattr(container, "image_variants", None)
+                            if variants is None:
+                                variants = getattr(container, "variants", [])
+                            selected_variant = next((item for item in variants if item.id == selected_id), None)
+                            if selected_variant:
+                                target_url = image_variant_storage_key(selected_variant)
+                                source = "shot_variant_selection"
+                                break
+                        if not target_url:
+                            raise ValueError(f"Shot character variant {selected_id} is unavailable")
+
+                    # The canonical sheet is the current character master.
+                    if not target_url and char.reference_sheet and char.reference_sheet.selected_image_id:
+                        selected_variant = next((item for item in char.reference_sheet.image_variants
+                                                 if item.id == char.reference_sheet.selected_image_id), None)
+                        if selected_variant:
+                            target_url = image_variant_storage_key(selected_variant)
+                            source = "reference_sheet"
                     
                     # Priority 1: Use selected variant from three_view_asset
-                    if char.three_view_asset and char.three_view_asset.selected_id:
+                    if not target_url and char.three_view_asset and char.three_view_asset.selected_id:
                         selected_variant = next((v for v in char.three_view_asset.variants if v.id == char.three_view_asset.selected_id), None)
                         if selected_variant:
                             target_url = image_variant_storage_key(selected_variant)

@@ -359,6 +359,10 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
     const [assetPackView, setAssetPackView] = useState<CharacterAssetPackView | null>(null);
     const [anchorBusy, setAnchorBusy] = useState(false);
     const [anchorError, setAnchorError] = useState("");
+    const [episodeLookLabel, setEpisodeLookLabel] = useState("");
+    const [episodeLookCondition, setEpisodeLookCondition] = useState("");
+    const [episodeLookBusy, setEpisodeLookBusy] = useState(false);
+    const [episodeLookError, setEpisodeLookError] = useState("");
     const [assetIndex, setAssetIndex] = useState<AssetReferenceIndexEntry[]>([]);
     const assetIndexRequest = useRef(0);
     const assetIndexRevision = JSON.stringify(
@@ -505,13 +509,26 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
         let active = true;
         setAssetPackView(null);
         setAnchorError("");
-        if (currentProject?.id && asset.id) {
-            void api.getCharacterAssetPack(currentProject.id, asset.id)
+        const projectCharacterId = asset.base_character_id || asset.id;
+        if (currentProject?.id && projectCharacterId) {
+            void api.getCharacterAssetPack(currentProject.id, projectCharacterId)
                 .then((view) => { if (active) setAssetPackView(view); })
                 .catch(() => { if (active) setAssetPackView(null); });
         }
         return () => { active = false; };
-    }, [currentProject?.id, asset.id]);
+    }, [currentProject?.id, asset.id, asset.base_character_id]);
+
+    useEffect(() => {
+        const projectId = currentProject?.id;
+        if (!projectId || typeof api.listEpisodeCharacterUses !== "function") return;
+        let active = true;
+        void api.listEpisodeCharacterUses(projectId)
+            .then((uses) => {
+                if (active) updateProject(projectId, { episode_character_uses: uses });
+            })
+            .catch(() => { /* retain the current snapshot if refresh is unavailable */ });
+        return () => { active = false; };
+    }, [currentProject?.id, updateProject]);
 
     const confirmMasterAnchor = async () => {
         if (!currentProject?.id || !selectedMasterVariantId || anchorBusy) return;
@@ -530,6 +547,35 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
             setAnchorError(error instanceof Error ? error.message : "锚点确认失败，请刷新后重试");
         } finally {
             setAnchorBusy(false);
+        }
+    };
+
+    const confirmEpisodeLook = async () => {
+        if (!currentProject?.id || !assetPackView?.pack || !selectedMasterVariantId || episodeLookBusy) return;
+        const projectCharacterId = asset.base_character_id || asset.id;
+        const label = episodeLookLabel.trim() || asset.name;
+        if (!window.confirm(`确认本集造型“${label}”使用当前图片 ${selectedMasterVariantId}？\n来源：${projectCharacterId} / 资产包 r${assetPackView.pack.current_revision}\n状态：${episodeLookCondition.trim() || "无额外状态"}`)) return;
+        setEpisodeLookBusy(true);
+        setEpisodeLookError("");
+        try {
+            await selectionQueue.current;
+            const latest = await api.getCharacterAssetPack(currentProject.id, projectCharacterId);
+            if (!latest.pack) throw new Error("请先确认项目角色正面全身锚点");
+            const use = await api.confirmEpisodeCharacterUse(currentProject.id, projectCharacterId, {
+                label, condition: episodeLookCondition.trim(), selected_asset_id: asset.id,
+                selected_variant_id: selectedMasterVariantId,
+                expected_pack_revision: latest.pack.current_revision, reviewed: true,
+            });
+            updateProject(currentProject.id, {
+                episode_character_uses: [...(currentProject.episode_character_uses || []), use],
+            });
+            setEpisodeLookLabel("");
+            setEpisodeLookCondition("");
+            toast.success(`已确认本集造型：${use.label}`);
+        } catch (error: any) {
+            setEpisodeLookError(String(error?.response?.data?.detail || error?.message || "本集造型确认失败"));
+        } finally {
+            setEpisodeLookBusy(false);
         }
     };
 
@@ -1191,13 +1237,34 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
                             }} className={`min-h-11 shrink-0 border-b-2 px-3 text-sm transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary ${activePanel === id ? "border-primary text-primary" : "border-transparent text-text-secondary hover:text-foreground"}`}>{label}</button>)}
                         </div>
                         {activePanel === "full_body" && <div className="flex flex-wrap items-center gap-2 border-b border-glass-border px-3 py-2 text-xs text-text-secondary sm:px-5">
-                            <span>项目角色锚点：{assetPackView?.pack ? `r${assetPackView.pack.current_revision} · ${assetPackView.pack.revisions.at(-1)?.variant_id}` : "未确认"}</span>
-                            <button type="button" onClick={() => void confirmMasterAnchor()}
+                            <span>{asset.base_character_id ? "来源项目角色锚点" : "项目角色锚点"}：{assetPackView?.pack ? `r${assetPackView.pack.current_revision} · ${assetPackView.pack.revisions.at(-1)?.variant_id}` : "未确认"}</span>
+                            {!asset.base_character_id && <button type="button" onClick={() => void confirmMasterAnchor()}
                                 disabled={!selectedMasterVariantId || !designRevision || !assetPackView || anchorBusy}
                                 className="rounded border border-glass-border px-2 py-1 text-foreground hover:bg-hover-bg disabled:opacity-50">
                                 {anchorBusy ? "确认中…" : "将选中图确认为正面全身锚点"}
-                            </button>
+                            </button>}
                             {anchorError && <span role="alert" className="text-red-400">{anchorError}</span>}
+                        </div>}
+                        {activePanel === "full_body" && assetPackView?.pack && <div className="border-b border-glass-border px-3 py-2 text-xs text-text-secondary sm:px-5">
+                            <div className="mb-2 font-medium text-foreground">本集造型 · 人工确认后可在分镜中选择</div>
+                            <div className="flex flex-wrap items-center gap-2">
+                                <input aria-label="本集造型名称" value={episodeLookLabel} onChange={(event) => setEpisodeLookLabel(event.target.value)}
+                                    placeholder={asset.base_character_id ? "例如：受伤造型" : "例如：正常造型"} maxLength={120}
+                                    className="min-w-36 rounded border border-glass-border bg-surface-inset px-2 py-1 text-foreground" />
+                                <input aria-label="本集造型状态" value={episodeLookCondition} onChange={(event) => setEpisodeLookCondition(event.target.value)}
+                                    placeholder="状态说明，可留空" maxLength={500}
+                                    className="min-w-40 flex-1 rounded border border-glass-border bg-surface-inset px-2 py-1 text-foreground" />
+                                <button type="button" onClick={() => void confirmEpisodeLook()}
+                                    disabled={!selectedMasterVariantId || episodeLookBusy || (!asset.base_character_id && selectedMasterVariantId !== assetPackView.pack.revisions.at(-1)?.variant_id)}
+                                    className="rounded border border-primary/50 px-2 py-1 text-primary hover:bg-primary/10 disabled:opacity-50">
+                                    {episodeLookBusy ? "确认中…" : "确认选中图为本集造型"}
+                                </button>
+                            </div>
+                            {episodeLookError && <p role="alert" className="mt-1 text-red-400">{episodeLookError}</p>}
+                            {(currentProject?.episode_character_uses || []).filter((item) => item.project_character_id === (asset.base_character_id || asset.id)).length > 0 &&
+                                <p className="mt-2">本集已确认：{(currentProject?.episode_character_uses || [])
+                                    .filter((item) => item.project_character_id === (asset.base_character_id || asset.id))
+                                    .map((item) => `${item.label} · ${item.selected_asset_id}/${item.selected_variant_id}`).join("；")}</p>}
                         </div>}
                         <div className="min-h-0 flex-1 flex overflow-hidden">
 
