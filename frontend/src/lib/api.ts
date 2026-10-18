@@ -714,6 +714,9 @@ export const api = {
         const res = await axios.get<WorkbenchTemplateCatalog>(`${API_URL}/workbench-templates`, {
             params: { station: station || undefined, query: query || undefined },
         });
+        if (!Array.isArray(res.data?.templates)) {
+            throw new Error("Workbench template catalog is unavailable");
+        }
         return res.data;
     },
 
