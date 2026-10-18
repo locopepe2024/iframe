@@ -91,3 +91,36 @@ def test_scene_local_light_requires_a_target_and_prop_rejects_scene_fields(tmp_p
         })
     assert scene.asset_design["design_revisions"] == []
     assert prop.asset_design["design_revisions"] == []
+
+
+def test_scene_visual_constraints_are_saved_and_versioned(tmp_path):
+    pipeline, scene, _ = make_pipeline(tmp_path)
+    design = {
+        "visual_notes": "Autumn street with a busy crowd",
+        "visual_constraints": {
+            "key_light_direction": "side",
+            "forbidden_light_directions": ["front", "back"],
+            "visible_face_limit": 3,
+            "secondary_people_view": "其他人物保持侧身或远景",
+        },
+        "confirmed": True,
+    }
+    pipeline.update_asset_attributes("project", "street", "scene", {"asset_design": design})
+    saved = scene.asset_design["design_revisions"][0]["design"]["visual_constraints"]
+    assert saved == design["visual_constraints"]
+
+
+@pytest.mark.parametrize("constraints, message", [
+    ({"key_light_direction": "diagonal"}, "key_light_direction is invalid"),
+    ({"forbidden_light_directions": ["unspecified"]}, "forbidden_light_directions is invalid"),
+    ({"visible_face_limit": 51}, "visible_face_limit is invalid"),
+    ({"visible_face_limit": True}, "visible_face_limit is invalid"),
+    ({"secondary_people_view": "x" * 301}, "secondary_people_view must be bounded text"),
+])
+def test_scene_visual_constraints_reject_invalid_values_without_mutation(tmp_path, constraints, message):
+    pipeline, scene, _ = make_pipeline(tmp_path)
+    with pytest.raises(ValueError, match=message):
+        pipeline.update_asset_attributes("project", "street", "scene", {
+            "asset_design": {"visual_notes": "Street", "visual_constraints": constraints},
+        })
+    assert scene.asset_design["design_revisions"] == []

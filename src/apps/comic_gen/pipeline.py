@@ -2532,7 +2532,7 @@ class ComicGenPipeline(StudioOwnerMixin):
             design = attributes["asset_design"]
             if not isinstance(design, dict):
                 raise ValueError("Asset design must be an object")
-            scene_fields = {"style", "ambient_lighting", "local_lighting", "reference_viewpoint", "reference_framing"} if asset_type == "scene" else set()
+            scene_fields = {"style", "ambient_lighting", "local_lighting", "reference_viewpoint", "reference_framing", "visual_constraints"} if asset_type == "scene" else set()
             if set(design) - {"visual_notes", "user_requirements", "unresolved", "confirmed"} - scene_fields:
                 raise ValueError("Asset design contains unknown fields")
             notes = design.get("visual_notes")
@@ -2545,7 +2545,7 @@ class ComicGenPipeline(StudioOwnerMixin):
                 raise ValueError("Asset design unresolved items must be text")
             if not isinstance(design.get("confirmed", False), bool):
                 raise ValueError("Asset design confirmation must be boolean")
-            for field in scene_fields - {"local_lighting"}:
+            for field in scene_fields - {"local_lighting", "visual_constraints"}:
                 value = design.get(field, "")
                 if not isinstance(value, str) or len(value) > 2000:
                     raise ValueError(f"Asset design {field} must be bounded text")
@@ -2557,6 +2557,25 @@ class ComicGenPipeline(StudioOwnerMixin):
                     raise ValueError("Asset design local_lighting must be bounded text")
                 if local.get("effect", "").strip() and not local.get("target", "").strip():
                     raise ValueError("Asset design local lighting needs a target")
+            if "visual_constraints" in design:
+                constraints = design.get("visual_constraints")
+                if not isinstance(constraints, dict) or set(constraints) - {
+                    "key_light_direction", "forbidden_light_directions", "visible_face_limit", "secondary_people_view",
+                }:
+                    raise ValueError("Asset design visual_constraints contains unknown fields")
+                direction = constraints.get("key_light_direction", "unspecified")
+                allowed_directions = {"front", "back", "side", "top", "bottom", "mixed", "unspecified"}
+                if not isinstance(direction, str) or direction not in allowed_directions:
+                    raise ValueError("Asset design key_light_direction is invalid")
+                forbidden = constraints.get("forbidden_light_directions", [])
+                if not isinstance(forbidden, list) or any(not isinstance(item, str) or item not in allowed_directions - {"unspecified"} for item in forbidden):
+                    raise ValueError("Asset design forbidden_light_directions is invalid")
+                face_limit = constraints.get("visible_face_limit")
+                if face_limit is not None and (isinstance(face_limit, bool) or not isinstance(face_limit, int) or not 0 <= face_limit <= 50):
+                    raise ValueError("Asset design visible_face_limit is invalid")
+                people_view = constraints.get("secondary_people_view", "")
+                if not isinstance(people_view, str) or len(people_view) > 300:
+                    raise ValueError("Asset design secondary_people_view must be bounded text")
             record = dict(target_asset.asset_design or {})
             record["design_draft"] = design
             revisions = list(record.get("design_revisions") or [])
