@@ -2,6 +2,7 @@
 from contextvars import ContextVar
 
 import json
+import hashlib
 import os
 import re
 import sqlite3
@@ -380,11 +381,13 @@ class AssetImagePromptRequest(BaseModel):
     current_prompt: str = Field(default="", max_length=12000)
     style: str = Field(default="", max_length=4000)
     plan_context: list[str] = Field(default_factory=list, max_length=8)
+    project_id: str = Field(default="", max_length=100)
+    asset_id: str = Field(default="", max_length=200)
+    reviewed_messages: dict[Literal["system", "user"], str] | None = None
+    review_token: str = ""
 
 
-@router.post("/asset-image-prompt/refine")
-def refine_asset_image_prompt(body: AssetImagePromptRequest, ctx: UserContext = Depends(require_user_context)):
-    validate_model(ctx, body.model)
+def _compile_asset_image_refine_input(body: AssetImagePromptRequest, ctx: UserContext) -> dict:
     system = (
         "你是影视资产设计师。根据资产档案和现有提示词，输出一条具体、可直接用于生成单张"
         "场景或道具参考图的中文提示词。保持资产身份和用户已给出的事实，不虚构剧情事实。"
@@ -392,9 +395,53 @@ def refine_asset_image_prompt(body: AssetImagePromptRequest, ctx: UserContext = 
         "明确主体、形制、材质、空间或细节、构图及光影；未知细节可合理设计，但不得当作原作事实。"
         "只返回 JSON 对象，字段为 prompt，值为非空字符串。"
     )
+    source = body.model_dump(exclude={"reviewed_messages", "review_token"})
+    asset_snapshot = None
+    if bool(body.project_id) != bool(body.asset_id):
+        raise HTTPException(422, "项目与资产身份需要同时提供")
+    if body.project_id:
+        from .comic_gen.api import pipeline as studio_pipeline
+        script = studio_pipeline.get_script(body.project_id, ctx.owner_profile_id)
+        if script is None:
+            raise HTTPException(404, "项目不存在或当前用户无权访问")
+        asset, _ = studio_pipeline._find_asset_with_source(script, body.asset_id, body.asset_type)
+        if asset is None:
+            raise HTTPException(404, "资产不存在或当前用户无权访问")
+        asset_snapshot = {
+            field: getattr(asset, field, None)
+            for field in ("name", "description", "image_prompt", "asset_design", "updated_at")
+        }
+    user = json.dumps({key: value for key, value in source.items()
+                       if key not in {"model", "project_id", "asset_id"}}, ensure_ascii=False)
+    messages = {"system": system, "user": user}
+    token = hashlib.sha256(json.dumps({"owner": ctx.owner_profile_id, "source": source,
+                                      "asset": asset_snapshot, "compiled": messages},
+                                     ensure_ascii=False, sort_keys=True, default=str).encode()).hexdigest()
+    return {"messages": messages, "media": [], "review_token": token,
+            "format_note": "模型只返回含 prompt 字段的 JSON；结构冲突会在调用前拒绝。"}
+
+
+@router.post("/asset-image-prompt/refine/preview")
+def preview_asset_image_prompt_refine(body: AssetImagePromptRequest,
+                                      ctx: UserContext = Depends(require_user_context)):
+    validate_model(ctx, body.model)
+    return _compile_asset_image_refine_input(body, ctx)
+
+
+@router.post("/asset-image-prompt/refine")
+def refine_asset_image_prompt(body: AssetImagePromptRequest, ctx: UserContext = Depends(require_user_context)):
+    validate_model(ctx, body.model)
+    prepared = _compile_asset_image_refine_input(body, ctx)
+    messages = body.reviewed_messages
+    if not body.review_token or body.review_token != prepared["review_token"] or not messages:
+        raise HTTPException(409, "资产提示词输入已变化，请重新预览并确认")
+    if set(messages) != {"system", "user"} or not messages["user"].strip():
+        raise HTTPException(422, "确认后的模型输入缺少用户消息")
+    if "prompt" not in messages["system"]:
+        raise HTTPException(422, "输出格式中的 prompt 字段已被移除，请恢复后再提交")
     answer = complete(ctx, body.model, [
-        {"role": "system", "content": system},
-        {"role": "user", "content": json.dumps(body.model_dump(exclude={"model"}), ensure_ascii=False)},
+        {"role": "system", "content": messages["system"]},
+        {"role": "user", "content": messages["user"]},
     ])
     decoder = json.JSONDecoder()
     for offset, char in enumerate(answer):

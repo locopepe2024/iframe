@@ -58,9 +58,12 @@ beforeEach(() => {
     vi.resetAllMocks();
     mocks.getAssetReferenceIndex.mockResolvedValue({ assets: [] });
     mocks.authenticatedFetch.mockResolvedValue({ ok: false });
-    mocks.agentRequest.mockImplementation((path: string) => path === "/models"
+    mocks.agentRequest.mockImplementation((path: string, _method: string, body: any) => path === "/models"
         ? Promise.resolve({ models: [{ api_model_id: "qwen", display_name: "Qwen" }] })
-        : Promise.resolve({ prompt: "黄昏参考图，青石板与粮铺门头清晰可见" }));
+        : path === "/asset-image-prompt/refine/preview"
+            ? Promise.resolve({ messages: { system: "只返回 JSON 对象，字段为 prompt", user: JSON.stringify(body) },
+                review_token: "reviewed-token", format_note: "JSON prompt" })
+            : Promise.resolve({ prompt: "黄昏参考图，青石板与粮铺门头清晰可见" }));
     vi.spyOn(window, "confirm").mockReturnValue(true);
     vi.spyOn(window, "alert").mockImplementation(() => {});
 });
@@ -92,7 +95,6 @@ it("sends only the visible edited scene prompt and negative prompt", async () =>
     render(<ConsistencyVault />);
     fireEvent.click(screen.getByRole("button", { name: /Scenes/ }));
     fireEvent.click(screen.getByText("长街"));
-    fireEvent.click(screen.getByRole("button", { name: "采用" }));
     fireEvent.click(screen.getByRole("button", { name: "应用到图片提示词" }));
     const visiblePrompt = (screen.getByRole("textbox", { name: "图像提示词" }) as HTMLTextAreaElement).value;
     expect(visiblePrompt).toContain("暮秋蓝调");
@@ -124,23 +126,21 @@ it("edits scene light and view before refinement and submits only the applied vi
     expect(screen.getByRole("textbox", { name: "场景风格" })).toBeEnabled();
     fireEvent.change(screen.getByRole("textbox", { name: "场景风格" }), { target: { value: "写实蓝调" } });
     fireEvent.change(screen.getByRole("textbox", { name: "场景环境光" }), { target: { value: "街道保持蓝色黄昏" } });
-    fireEvent.change(screen.getByRole("textbox", { name: "局部光作用区域" }), { target: { value: "远处落日" } });
-    fireEvent.change(screen.getByRole("textbox", { name: "局部光效果" }), { target: { value: "仅远处暖红" } });
     fireEvent.change(screen.getByRole("textbox", { name: "场景参考图视角" }), { target: { value: "沿街向北" } });
     fireEvent.click(screen.getByRole("button", { name: "保存草稿" }));
     await waitFor(() => expect(mocks.updateAssetAttributes).toHaveBeenCalledWith("episode-1", "street", "scene",
         expect.objectContaining({ asset_design: expect.objectContaining({
             style: "写实蓝调", ambient_lighting: "街道保持蓝色黄昏",
-            local_lighting: { target: "远处落日", effect: "仅远处暖红" },
             reference_viewpoint: "沿街向北", confirmed: false,
         }) })));
-    fireEvent.click(screen.getByRole("button", { name: "优化提示词" }));
-    await waitFor(() => expect(mocks.agentRequest).toHaveBeenCalledWith("/asset-image-prompt/refine", "POST",
-        expect.objectContaining({ style: expect.stringContaining("局部光（远处落日）：仅远处暖红") })));
     fireEvent.click(screen.getByRole("button", { name: "应用到图片提示词" }));
+    fireEvent.click(screen.getByRole("button", { name: "优化提示词" }));
+    await waitFor(() => expect(mocks.agentRequest).toHaveBeenCalledWith("/asset-image-prompt/refine/preview", "POST",
+        expect.objectContaining({ style: expect.stringContaining("环境光：街道保持蓝色黄昏") })));
+    expect(mocks.agentRequest).not.toHaveBeenCalledWith("/asset-image-prompt/refine", "POST", expect.anything());
+    fireEvent.click(screen.getByRole("button", { name: "确认输入并优化" }));
     const visible = (screen.getByRole("textbox", { name: "图像提示词" }) as HTMLTextAreaElement).value;
     expect(visible).toContain("环境光：街道保持蓝色黄昏");
-    expect(visible).toContain("局部光（远处落日）：仅远处暖红");
     fireEvent.click(screen.getByRole("button", { name: "测试生成图片" }));
     const confirm = await screen.findByRole("button", { name: "确认并生成" });
     await waitFor(() => expect(confirm).not.toBeDisabled());
@@ -195,18 +195,47 @@ it.each([
     fireEvent.click(screen.getByText(name));
     await screen.findByRole("button", { name: "优化提示词" });
     fireEvent.click(screen.getByRole("button", { name: "优化提示词" }));
+    await screen.findByRole("button", { name: "确认输入并优化" });
+    expect(mocks.agentRequest).not.toHaveBeenCalledWith("/asset-image-prompt/refine", "POST", expect.anything());
+    fireEvent.click(screen.getByRole("button", { name: "确认输入并优化" }));
     await screen.findByRole("button", { name: "采用建议" });
     expect(screen.getByRole("textbox", { name: "图像提示词" })).toHaveValue(asset.description);
     fireEvent.click(screen.getByRole("button", { name: "采用建议" }));
     expect(screen.getByRole("textbox", { name: "图像提示词" })).toHaveValue("黄昏参考图，青石板与粮铺门头清晰可见");
     expect(mocks.agentRequest).toHaveBeenCalledWith("/asset-image-prompt/refine", "POST",
-        expect.objectContaining({ asset_type: type, asset_name: name, current_prompt: asset.description }));
+        expect.objectContaining({ asset_type: type, asset_name: name, current_prompt: asset.description,
+            project_id: "episode-1", asset_id: asset.id, review_token: "reviewed-token" }));
 
     fireEvent.click(screen.getByRole("button", { name: "命名素材" }));
     await waitFor(() => expect(mocks.updateAssetVariantMetadata).toHaveBeenCalledWith(
         "episode-1", asset.id, type, "variant-1", undefined, undefined, "黄昏参考图"));
     expect(screen.getByRole("textbox", { name: "图像提示词" })).toHaveValue("黄昏参考图，青石板与粮铺门头清晰可见");
     expect(useProjectStore.getState().currentProject?.[key][0].image_asset?.variants[0].display_name).toBe("黄昏参考图");
+});
+
+it("sends the edited review text and discards a review after source changes", async () => {
+    const asset = { id: "prop-1", name: "旧剑", description: "旧剑档案", source: "episode" };
+    useProjectStore.setState({ currentProject: { id: "episode-1", characters: [], scenes: [], props: [asset] } as any });
+    mocks.getEpisodeVisualContext.mockResolvedValue({ context: null, bindings: [] });
+    render(<ConsistencyVault />);
+    fireEvent.click(screen.getByRole("button", { name: /Props/ }));
+    fireEvent.click(screen.getByText("旧剑"));
+    await waitFor(() => expect(screen.getByRole("button", { name: "优化提示词" })).not.toBeDisabled());
+    fireEvent.click(screen.getByRole("button", { name: "优化提示词" }));
+    await screen.findByRole("button", { name: "确认输入并优化" });
+    const reviewedUser = screen.getByRole("textbox", { name: "资产描述与可见提示词" });
+    fireEvent.change(reviewedUser, { target: { value: '{"current_prompt":"只保留冷色旧剑"}' } });
+    fireEvent.click(screen.getByRole("button", { name: "确认输入并优化" }));
+    await waitFor(() => expect(mocks.agentRequest).toHaveBeenCalledWith("/asset-image-prompt/refine", "POST",
+        expect.objectContaining({ reviewed_messages: expect.objectContaining({
+            user: '{"current_prompt":"只保留冷色旧剑"}',
+        }) })));
+
+    fireEvent.click(screen.getByRole("button", { name: "优化提示词" }));
+    await screen.findByRole("button", { name: "确认输入并优化" });
+    fireEvent.change(screen.getByRole("textbox", { name: "图像提示词" }), { target: { value: "修改后的可见提示词" } });
+    await waitFor(() => expect(screen.queryByRole("button", { name: "确认输入并优化" })).not.toBeInTheDocument());
+    expect(mocks.agentRequest.mock.calls.filter(([path]) => path === "/asset-image-prompt/refine")).toHaveLength(1);
 });
 
 it("keeps a series character workbench open after renaming", async () => {
