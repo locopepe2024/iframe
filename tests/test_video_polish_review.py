@@ -71,6 +71,21 @@ def test_changed_source_rejects_old_token(monkeypatch):
     processor.polish_video_prompt.assert_not_called()
 
 
+def test_saved_shot_edit_invalidates_review_even_with_same_submitted_overrides(monkeypatch):
+    frame = SimpleNamespace(id="shot", lighting_override="old")
+    monkeypatch.setattr(api, "current_studio_user", lambda: SimpleNamespace(owner_profile_id="owner"))
+    monkeypatch.setattr(api.pipeline, "get_script", lambda script_id, owner: SimpleNamespace(frames=[frame]))
+    monkeypatch.setattr(api, "_get_custom_prompt", lambda *args: "")
+    monkeypatch.setattr(api, "_get_director_prompt_context", lambda *args: "")
+    request = api.PolishVideoPromptRequest(script_id="project", frame_id="shot", draft_prompt="长街",
+                                          shot_overrides={"style": "", "lighting": "current"})
+    confirmed, _ = _confirmed(request)
+    frame.lighting_override = "changed by another editor"
+    with pytest.raises(HTTPException) as rejected:
+        api._require_video_polish_review(confirmed, False)
+    assert rejected.value.status_code == 409
+
+
 def test_h3_format_conflict_is_rejected_before_model_call(monkeypatch):
     request = api.PolishVideoPromptRequest(draft_prompt="长街", target_video_model="uniart/minimax-h3-vip")
     confirmed, _ = _confirmed(request)

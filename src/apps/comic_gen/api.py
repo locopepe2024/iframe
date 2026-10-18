@@ -7037,12 +7037,25 @@ def _video_polish_user_text(request) -> str:
 def _compile_video_polish_review(request, reference_mode: bool) -> Dict[str, Any]:
     from .llm import DEFAULT_R2V_POLISH_PROMPT, DEFAULT_VIDEO_POLISH_PROMPT
     user = current_studio_user()
+    frame_snapshot: Dict[str, Any] = {}
     if user is not None and request.script_id:
         script = pipeline.get_script(request.script_id, user.owner_profile_id)
         if not script:
             raise HTTPException(404, "Script not found")
-        if request.frame_id and not any(frame.id == request.frame_id for frame in script.frames):
-            raise HTTPException(404, "Frame not found")
+        if request.frame_id:
+            frame = next((item for item in script.frames if item.id == request.frame_id), None)
+            if frame is None:
+                raise HTTPException(404, "Frame not found")
+            frame_snapshot = {name: getattr(frame, name, None) for name in (
+                "scene_id", "shot_id", "director_profile_revision", "director_profile_hash",
+                "director_shot_context", "action_description", "style_prompt_override",
+                "lighting_override", "shot_visual_design", "composition", "shot_size",
+                "camera_angle", "camera_movement", "transition_hint", "dialogue",
+            )}
+            frame_snapshot = {
+                key: value.model_dump() if hasattr(value, "model_dump") else value
+                for key, value in frame_snapshot.items()
+            }
     if not reference_mode and request.generation_mode == "first_last_frame" and (
         len(request.image_urls) != 2 or request.image_urls[0] == request.image_urls[1]
     ):
@@ -7077,7 +7090,8 @@ def _compile_video_polish_review(request, reference_mode: bool) -> Dict[str, Any
     labels = (["首帧 0.00 秒", "尾帧 结束时"] if getattr(request, "generation_mode", "") == "first_last_frame" else [f"参考图 {i + 1}" for i in range(len(request.image_urls))])
     media = [{"label": labels[i], "url": url} for i, url in enumerate(request.image_urls)]
     source = request.model_dump(exclude={"reviewed_messages", "review_token"})
-    token = hashlib.sha256(json.dumps({"source": source, "compiled": messages}, sort_keys=True, ensure_ascii=False).encode()).hexdigest()
+    token = hashlib.sha256(json.dumps({"source": source, "frame": frame_snapshot, "compiled": messages},
+                                      sort_keys=True, ensure_ascii=False, default=str).encode()).hexdigest()
     format_note = (
         "MiniMax Context IR 按所选模型的原生结构生成；这里展示送入 IR 的完整文字。"
         if request.optimizer_provider == "minimax_context_ir" else
