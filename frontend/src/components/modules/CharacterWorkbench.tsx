@@ -342,6 +342,8 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
     const [designFieldSuggestions, setDesignFieldSuggestions] = useState<Record<string, string>>(savedDesign.field_suggestions || {});
     const [designFieldSuggestionChoices, setDesignFieldSuggestionChoices] = useState<Record<string, { age_stage?: string; route?: string }>>(savedDesign.field_suggestion_choices || {});
     const [designReferences, setDesignReferences] = useState<AssetLibraryReference[]>(savedDesign.reference_assets || []);
+    const [showIdentityFields, setShowIdentityFields] = useState(false);
+    const [showLookFields, setShowLookFields] = useState(false);
     const [designSkillRevision, setDesignSkillRevision] = useState(savedDesign.skill_revision || "");
     const [designModels, setDesignModels] = useState<ChatModel[]>([]);
     const [designModel, setDesignModel] = useState("");
@@ -621,6 +623,8 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
             setLookNotes(nextLook);
             setIdentityFeatures(nextIdentityFeatures);
             setLookFeatures(nextLookFeatures);
+            setShowIdentityFields(true);
+            setShowLookFields(true);
             setDesignIdentityBasis(userVisualRequirements.identity.trim()
                 ? Array.from(new Set([...normalizeDesignBasis(result.identity.basis), "user_specified" as const]))
                 : normalizeDesignBasis(result.identity.basis));
@@ -886,6 +890,18 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
         setPromptPickerReferences((current) => ({ ...current, [type]: references }));
     };
 
+    const reuseDesignReferencesForFullBody = () => {
+        const available = new Set(referenceCandidates.map((candidate) => referenceKey(candidate.reference)));
+        const references = designReferences.filter((reference) => available.has(referenceKey(reference)));
+        if (references.length === 0) {
+            toast.warning("设计参考图已不在当前项目可用素材中，请重新选择。");
+            return;
+        }
+        setPanelPickerReferences("full_body", references);
+        setPanelMode("full_body", "reference");
+        toast.success(`已将 ${references.length} 张设计参考图选为全身出图参考；生成前请核对图片审核。`);
+    };
+
 
     const setPanelMode = (type: "full_body" | "three_view" | "headshot", mode: "text" | "reference") => {
         setPromptModes((current) => ({ ...current, [type]: mode }));
@@ -1013,8 +1029,11 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
                                 <option value="older-adult">老年</option>
                             </select>
                             <div className="mt-4 rounded-md border border-glass-border bg-surface/60 p-3">
-                                <h4 className="text-xs font-medium text-foreground">身份外观字段</h4>
-                                <p className="mt-1 text-[11px] leading-4 text-text-muted">这些字段优先编入角色图片提示词；留空的内容不会由系统补写。</p>
+                                <button type="button" aria-expanded={showIdentityFields} onClick={() => setShowIdentityFields((open) => !open)} className="flex min-h-10 w-full items-center justify-between gap-2 text-left text-xs font-medium text-foreground focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary">
+                                    <span>逐项编辑身份外观 · {Object.values(identityFeatures).filter((value) => value?.trim()).length}/{IDENTITY_FIELDS.length}</span>
+                                    {showIdentityFields ? <ChevronDown size={15} aria-hidden="true" /> : <ChevronRight size={15} aria-hidden="true" />}
+                                </button>
+                                {showIdentityFields && <><p className="mt-1 text-[11px] leading-4 text-text-muted">这些字段优先编入角色图片提示词；留空的内容不会由系统补写。</p>
                                 <div className="mt-2 space-y-2">
                                     {IDENTITY_FIELDS.map(([key, label]) => <label key={key} className="block text-xs text-text-secondary">
                                         {label}
@@ -1022,15 +1041,18 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
                                             onChange={(event) => { setIdentityFeatures((current) => ({ ...current, [key]: event.target.value })); setDesignIdentityBasis(["user_specified"]); setDesignSource("stated"); setDesignStatus("draft"); setPromptsNeedDesignApply(true); }}
                                             className="mt-1 w-full resize-y rounded border border-glass-border bg-surface px-2 py-1.5 text-xs text-foreground" />
                                     </label>)}
-                                </div>
+                                </div></>}
                             </div>
                             <label className="mt-3 block text-xs text-text-secondary" htmlFor="character-visual-notes">身份视觉值</label>
                             <textarea id="character-visual-notes" value={designNotes} onChange={(event) => { setDesignNotes(event.target.value); setIdentityFeatures({}); setUserVisualRequirements(current => ({ ...current, identity: event.target.value })); setDesignIdentityBasis(["user_specified"]); setDesignSource("stated"); setDesignStatus("draft"); setPromptsNeedDesignApply(true); }} placeholder="可先写年龄感、面容、体态等要求；留空由 AI 设计。" rows={4} className="mt-1 w-full resize-y rounded-md border border-glass-border bg-surface px-3 py-2 text-sm leading-5 text-foreground placeholder:text-text-muted focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary" />
                             {Object.values(identityFeatures).some((value) => value?.trim()) && <p className="mt-1 text-[11px] text-text-muted">当前使用上方结构化字段；编辑本段会切回整段文本并清空上方字段。</p>}
                             {designSource === "creative-choice" && <p className="mt-1 text-xs text-amber-400">AI 创意设计选择，确认前请核对剧本与参考素材。</p>}
                             <div className="mt-4 rounded-md border border-glass-border bg-surface/60 p-3">
-                                <h4 className="text-xs font-medium text-foreground">造型字段</h4>
-                                <p className="mt-1 text-[11px] leading-4 text-text-muted">服装、配色和配件分别确认；武器未在剧本或用户要求中出现时可留空。</p>
+                                <button type="button" aria-expanded={showLookFields} onClick={() => setShowLookFields((open) => !open)} className="flex min-h-10 w-full items-center justify-between gap-2 text-left text-xs font-medium text-foreground focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary">
+                                    <span>逐项编辑造型 · {Object.values(lookFeatures).filter((value) => value?.trim()).length}/{LOOK_FIELDS.length}</span>
+                                    {showLookFields ? <ChevronDown size={15} aria-hidden="true" /> : <ChevronRight size={15} aria-hidden="true" />}
+                                </button>
+                                {showLookFields && <><p className="mt-1 text-[11px] leading-4 text-text-muted">服装、配色和配件分别确认；武器未在剧本或用户要求中出现时可留空。</p>
                                 <div className="mt-2 space-y-2">
                                     {LOOK_FIELDS.map(([key, label]) => <label key={key} className="block text-xs text-text-secondary">
                                         {label}
@@ -1038,7 +1060,7 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
                                             onChange={(event) => { setLookFeatures((current) => ({ ...current, [key]: event.target.value })); setDesignLookBasis(["user_specified"]); setDesignStatus("draft"); setPromptsNeedDesignApply(true); }}
                                             className="mt-1 w-full resize-y rounded border border-glass-border bg-surface px-2 py-1.5 text-xs text-foreground" />
                                     </label>)}
-                                </div>
+                                </div></>}
                             </div>
                             <label className="mt-3 block text-xs text-text-secondary" htmlFor="character-look-notes">造型视觉值</label>
                             <textarea id="character-look-notes" value={lookNotes} onChange={(event) => { setLookNotes(event.target.value); setLookFeatures({}); setUserVisualRequirements(current => ({ ...current, look: event.target.value })); setDesignLookBasis(["user_specified"]); setDesignStatus("draft"); setPromptsNeedDesignApply(true); }} placeholder="可先写服装、鞋履、武器等要求；留空由 AI 设计。" rows={3} className="mt-1 w-full resize-y rounded-md border border-glass-border bg-surface px-3 py-2 text-sm leading-5 text-foreground placeholder:text-text-muted focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary" />
@@ -1143,6 +1165,10 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
                             <button type="button" onClick={() => applyDesignToPrompts()} className="inline-flex min-h-10 shrink-0 items-center justify-center gap-1.5 rounded-md bg-primary px-3 text-xs font-medium text-primary-foreground hover:opacity-90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary">
                                 <Sparkles size={14} aria-hidden="true" />应用到图片提示词
                             </button>
+                        </div>}
+                        {activePanel === "full_body" && designReferences.length > 0 && <div className="mx-3 mt-3 flex flex-col gap-2 rounded-md border border-glass-border bg-surface-inset p-3 text-xs sm:mx-5 sm:flex-row sm:items-center sm:justify-between">
+                            <p className="text-text-secondary">设计参考图 {designReferences.length} 张目前只用于 AI 草稿分析。出图可显式沿用，提交前仍可增删。</p>
+                            <button type="button" onClick={reuseDesignReferencesForFullBody} className="min-h-10 shrink-0 rounded-md border border-glass-border px-3 text-foreground hover:bg-hover-bg focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary">沿用到全身出图</button>
                         </div>}
                         <div role="tablist" aria-label={tc("materialTypes")} className="flex shrink-0 gap-1 overflow-x-auto border-b border-glass-border px-3 sm:px-5">
                             {([ ["full_body", tc("masterAsset")], ["three_view", tc("threeViews")], ["headshot", tc("avatar")] ] as const).map(([id, label]) => <button key={id} type="button" role="tab" aria-selected={activePanel === id} tabIndex={activePanel === id ? 0 : -1} onClick={() => setActivePanel(id)} onKeyDown={(event) => {
