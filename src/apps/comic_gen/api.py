@@ -4330,6 +4330,70 @@ def confirm_project_character_anchor(
         raise HTTPException(status_code=status, detail=str(exc)) from exc
 
 
+class ConfirmEpisodeCharacterUseRequest(BaseModel):
+    use_id: Optional[str] = Field(None, min_length=1, max_length=120)
+    label: str = Field(..., min_length=1, max_length=120)
+    condition: str = Field("", max_length=500)
+    selected_asset_id: str = Field(..., min_length=1)
+    selected_variant_id: str = Field(..., min_length=1)
+    expected_pack_revision: int = Field(..., ge=1)
+    reviewed: bool = False
+
+
+class SelectFrameCharacterUseRequest(BaseModel):
+    project_character_id: str = Field(..., min_length=1)
+    use_id: str = Field(..., min_length=1)
+    expected_reference_revision: int = Field(..., ge=1)
+
+
+@app.get("/projects/{script_id}/character-uses")
+def list_episode_character_uses(
+    script_id: str, user: UserContext = Depends(require_studio_user),
+):
+    script = pipeline.get_script(script_id, user.owner_profile_id)
+    if not script:
+        raise HTTPException(status_code=404, detail="Project not found")
+    return {"uses": [item.model_dump() for item in script.episode_character_uses]}
+
+
+@app.post("/projects/{script_id}/characters/{character_id}/episode-uses")
+def confirm_episode_character_use(
+    script_id: str, character_id: str, request: ConfirmEpisodeCharacterUseRequest,
+    user: UserContext = Depends(require_studio_user),
+):
+    if not pipeline.get_script(script_id, user.owner_profile_id):
+        raise HTTPException(status_code=404, detail="Project not found")
+    try:
+        use = pipeline.confirm_episode_character_use(
+            script_id, character_id, request.use_id or str(uuid.uuid4()),
+            request.label, request.condition, request.selected_asset_id,
+            request.selected_variant_id, request.expected_pack_revision,
+            request.reviewed,
+        )
+        return use.model_dump()
+    except ValueError as exc:
+        status = 409 if "revision changed" in str(exc) else 422
+        raise HTTPException(status_code=status, detail=str(exc)) from exc
+
+
+@app.post("/projects/{script_id}/frames/{frame_id}/character-use")
+def select_frame_character_use(
+    script_id: str, frame_id: str, request: SelectFrameCharacterUseRequest,
+    user: UserContext = Depends(require_studio_user),
+):
+    if not pipeline.get_script(script_id, user.owner_profile_id):
+        raise HTTPException(status_code=404, detail="Project not found")
+    try:
+        pipeline.select_frame_character_use(
+            script_id, frame_id, request.project_character_id,
+            request.use_id, request.expected_reference_revision,
+        )
+        return signed_response(pipeline.get_script(script_id, user.owner_profile_id))
+    except ValueError as exc:
+        status = 409 if "revision changed" in str(exc) else 422
+        raise HTTPException(status_code=status, detail=str(exc)) from exc
+
+
 @app.get("/projects/{script_id}/assets/{asset_type}/{asset_id}/revisions")
 def get_asset_revisions(script_id: str, asset_type: str, asset_id: str,
                         user: UserContext = Depends(require_studio_user)):
@@ -5191,24 +5255,21 @@ def preview_frame_candidate(script_id: str, request: RenderFramePreviewRequest,
     assets = pipeline.resolve_project_assets(script)
     character_assets = {item.id: item for item in assets["characters"]}
     scene_assets = {item.id: item for item in assets["scenes"]}
+    selected_assets = pipeline.resolve_storyboard_asset_selection(script_id, frame.id)["assets"]
     reference_labels = []
     for item_id in frame.character_ids:
         character = character_assets.get(item_id)
         if not character:
             reference_labels.append(f"{item_id}（素材未找到）")
             continue
-        selected = next((f"{field}:{asset.selected_id}"
-                         for field in ("three_view_asset", "full_body_asset", "headshot_asset")
-                         if (asset := getattr(character, field, None)) and asset.selected_id
-                         and any(variant.id == asset.selected_id for variant in asset.variants)), None)
-        reference_labels.append(f"{character.name}（{selected or '旧版图片或无参考图'}）")
+        selected = next((item for item in selected_assets
+                         if item["asset_type"] == "character" and item["asset_id"] == item_id), None)
+        reference_labels.append(f"{character.name}（{selected['variant_id'] if selected and selected.get('variant_id') else '无参考图'}）")
     if frame.scene_id:
         scene_asset = scene_assets.get(frame.scene_id)
-        image_asset = scene_asset.image_asset if scene_asset else None
-        selected = image_asset.selected_id if image_asset and any(
-            variant.id == image_asset.selected_id for variant in image_asset.variants
-        ) else None
-        reference_labels.append(f"{scene_asset.name if scene_asset else frame.scene_id}（{selected or '旧版图片或无参考图'}）")
+        selected = next((item for item in selected_assets
+                         if item["asset_type"] == "scene" and item["asset_id"] == frame.scene_id), None)
+        reference_labels.append(f"{scene_asset.name if scene_asset else frame.scene_id}（{selected['variant_id'] if selected and selected.get('variant_id') else '无参考图'}）")
     from .assets import ASPECT_RATIO_TO_SIZE
     return {
         "prompt": request.prompt,
