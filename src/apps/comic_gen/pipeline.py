@@ -2023,6 +2023,9 @@ class ComicGenPipeline(StudioOwnerMixin):
         script = self.scripts.get(script_id)
         if not script:
             raise ValueError("Script not found")
+        if any(item.selected_asset_id == char_id or item.project_character_id == char_id
+               for item in script.episode_character_uses):
+            raise ValueError("Cannot delete a character used by a confirmed episode look")
         
         self.retire_episode_plan_asset(script, "character", char_id)
         script.characters = [c for c in script.characters if c.id != char_id]
@@ -6863,6 +6866,8 @@ class ComicGenPipeline(StudioOwnerMixin):
             "lighting": frame.lighting.model_dump(mode="json") if frame.lighting else None,
             "dialogue": frame.dialogue,
             "character_ids": frame.character_ids,
+            "character_use_ids": frame.character_use_ids,
+            "workbench_reference_variant_ids": frame.workbench_reference_variant_ids,
             "characters": [characters[item_id].model_dump(mode="json") if item_id in characters else None
                            for item_id in frame.character_ids],
             "scene": scenes[frame.scene_id].model_dump(mode="json") if frame.scene_id in scenes else None,
@@ -6919,6 +6924,29 @@ class ComicGenPipeline(StudioOwnerMixin):
             expected = self.storyboard_render_preview_token(current_context, prompt)
             if not prompt_is_complete or context_token != expected:
                 raise ValueError("Storyboard render preview is outdated; preview the current frame again")
+        explicit_refs = list((composition_data or {}).get("reference_image_urls") or [])
+        single_ref = (composition_data or {}).get("reference_image_url")
+        if single_ref:
+            explicit_refs.append(single_ref)
+        if explicit_refs and frame.character_use_ids:
+            resolved_refs = {
+                resolve_studio_reference(ref, script.owner_profile_id, output_root=self.output_root)
+                if ref.startswith("/studio/") else ref
+                for ref in explicit_refs if ref
+            }
+            for project_character_id, use_id in frame.character_use_ids.items():
+                use = next((item for item in script.episode_character_uses
+                            if item.use_id == use_id and item.project_character_id == project_character_id), None)
+                if use is None:
+                    raise ValueError("Storyboard character look is no longer available")
+                asset, _ = self._find_asset_with_source(script, use.selected_asset_id, "character")
+                variant = next((item for item in self._asset_image_variants(asset, "character")
+                                if item.id == use.selected_variant_id), None) if asset else None
+                if variant is None or variant.media_id != use.selected_media_id:
+                    raise ValueError("Storyboard character look media has changed")
+                expected_refs = {value for value in (image_variant_storage_key(variant), variant.url) if value}
+                if not expected_refs.intersection(resolved_refs):
+                    raise ValueError("Storyboard references omit the selected episode character look")
             
         frame.status = GenerationStatus.PROCESSING
         if composition_data:
@@ -10622,6 +10650,12 @@ class ComicGenPipeline(StudioOwnerMixin):
             collection = getattr(series, collections[asset_type])
             if not any(item.id == asset_id for item in collection):
                 raise ValueError("Series asset not found")
+            if asset_type == "character" and any(
+                item.project_character_id == asset_id or item.selected_asset_id == asset_id
+                for episode in self.scripts.values() if episode.series_id == series_id
+                for item in episode.episode_character_uses
+            ):
+                raise ValueError("Cannot delete a character used by a confirmed episode look")
 
             def cast_asset_ids(episode: Script, plan: DirectorShootingPlan,
                                cast: DirectorPlanCastBinding) -> List[str]:

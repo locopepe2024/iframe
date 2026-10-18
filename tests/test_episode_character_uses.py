@@ -59,8 +59,10 @@ def test_two_reviewed_looks_select_distinct_shot_media_and_pins():
         "episode", "hero", "injured", "Injured", "wound visible",
         "hero-injured", "injured", 1, True)
 
+    preview_before = pipeline.storyboard_render_context_token("episode", "before")
     pipeline.select_frame_character_use("episode", "before", "hero", normal.use_id, 1)
     pipeline.select_frame_character_use("episode", "after", "hero", injured.use_id, 1)
+    assert pipeline.storyboard_render_context_token("episode", "before") != preview_before
 
     before, after = script.frames
     assert before.character_ids == ["hero"]
@@ -138,6 +140,17 @@ def test_direct_character_change_clears_former_use_binding():
     assert "hero-injured" not in script.frames[1].workbench_reference_variant_ids
 
 
+def test_confirmed_look_blocks_whole_character_deletion():
+    pipeline, _ = make_pipeline()
+    pipeline.confirm_episode_character_use(
+        "episode", "hero", "injured", "Injured", "wound visible",
+        "hero-injured", "injured", 1, True)
+    with pytest.raises(ValueError, match="confirmed episode look"):
+        pipeline.delete_character("episode", "hero-injured")
+    with pytest.raises(ValueError, match="confirmed episode look"):
+        pipeline.delete_series_asset("series", "character", "hero", owner_profile_id="owner", force=True)
+
+
 def test_first_frame_generator_uses_exact_selected_episode_look(tmp_path):
     pipeline, script = make_pipeline()
     use = pipeline.confirm_episode_character_use(
@@ -157,6 +170,21 @@ def test_first_frame_generator_uses_exact_selected_episode_look(tmp_path):
 
     assert model.generate.call_args.kwargs["ref_image_paths"] == [str(tmp_path / "injured.webp")]
     assert model.generate.call_args.args[0] == "Visible reviewed prompt"
+
+
+def test_explicit_storyboard_references_cannot_omit_reviewed_look(tmp_path):
+    pipeline, script = make_pipeline()
+    pipeline.output_root = str(tmp_path)
+    use = pipeline.confirm_episode_character_use(
+        "episode", "hero", "injured", "Injured", "wound visible",
+        "hero-injured", "injured", 1, True)
+    pipeline.select_frame_character_use("episode", "after", "hero", use.use_id, 1)
+    with pytest.raises(ValueError, match="omit the selected episode character look"):
+        pipeline.generate_storyboard_render(
+            "episode", "after", {"reference_image_urls": ["old-look.webp"]}, "Reviewed prompt",
+            prompt_is_complete=True,
+        )
+    assert script.frames[1].status.value != "processing"
 
 
 def test_episode_use_api_is_owner_scoped(monkeypatch):
