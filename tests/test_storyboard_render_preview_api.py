@@ -60,6 +60,29 @@ def test_preview_rejects_context_change_during_prompt_assembly(monkeypatch):
     pipeline.storyboard_render_preview_token.assert_not_called()
 
 
+def test_image_polish_apply_checks_owner_and_rejects_stale_candidate(monkeypatch):
+    pipeline = Mock()
+    pipeline.get_script.return_value = SimpleNamespace()
+    pipeline.apply_frame_image_polish_candidate.side_effect = ValueError("Shot or asset design changed")
+    monkeypatch.setattr(api, "pipeline", pipeline)
+
+    with pytest.raises(HTTPException) as error:
+        api.apply_frame_image_polish(
+            "episode", "shot", api.ApplyFrameImagePolishRequest(candidate_id="candidate"),
+            SimpleNamespace(owner_profile_id="owner"),
+        )
+    assert error.value.status_code == 409
+    pipeline.get_script.assert_called_once_with("episode", "owner")
+
+    pipeline.get_script.return_value = None
+    with pytest.raises(HTTPException) as error:
+        api.apply_frame_image_polish(
+            "episode", "shot", api.ApplyFrameImagePolishRequest(candidate_id="candidate"),
+            SimpleNamespace(owner_profile_id="stranger"),
+        )
+    assert error.value.status_code == 404
+
+
 def test_async_render_rejects_changed_preview_body_before_enqueuing(monkeypatch):
     pipeline = Mock()
     pipeline.get_script.return_value = SimpleNamespace(frames=[SimpleNamespace(id="shot")])

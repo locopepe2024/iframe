@@ -3645,7 +3645,7 @@ def refine_storyboard_prompt(script_id: str, request: RefinePromptRequest,
                              user: UserContext = Depends(require_studio_user)):
     """
     Refines a raw prompt into bilingual (CN/EN) prompts using AI (Prompt C).
-    Returns the refined prompts and optionally updates the frame.
+    Returns a persistent candidate. The frame prompt changes only when applied.
 
     SYNC handler — pipeline.refine_frame_prompt() does a blocking LLM call.
     Declared `def` (not `async def`) so FastAPI runs it on the threadpool
@@ -3671,6 +3671,32 @@ def refine_storyboard_prompt(script_id: str, request: RefinePromptRequest,
     except Exception as e:
         logger.error(f"Error in refine_storyboard_prompt: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
+
+
+class ApplyFrameImagePolishRequest(BaseModel):
+    candidate_id: str
+
+
+@app.post("/projects/{script_id}/frames/{frame_id}/image-polish/apply", response_model=Script)
+def apply_frame_image_polish(script_id: str, frame_id: str, request: ApplyFrameImagePolishRequest,
+                             user: UserContext = Depends(require_studio_user)):
+    if not pipeline.get_script(script_id, user.owner_profile_id):
+        raise HTTPException(status_code=404, detail="Script not found")
+    try:
+        return signed_response(pipeline.apply_frame_image_polish_candidate(script_id, frame_id, request.candidate_id))
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+
+@app.post("/projects/{script_id}/frames/{frame_id}/image-polish/discard", response_model=Script)
+def discard_frame_image_polish(script_id: str, frame_id: str, request: ApplyFrameImagePolishRequest,
+                               user: UserContext = Depends(require_studio_user)):
+    if not pipeline.get_script(script_id, user.owner_profile_id):
+        raise HTTPException(status_code=404, detail="Script not found")
+    try:
+        return signed_response(pipeline.discard_frame_image_polish_candidate(script_id, frame_id, request.candidate_id))
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
 
 
 @app.post("/projects/{script_id}/frames/{frame_id}/refine")

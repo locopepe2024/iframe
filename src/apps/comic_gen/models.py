@@ -808,6 +808,9 @@ class StoryboardFrame(BaseModel):
     image_polish_source: Optional[Dict[str, Any]] = Field(
         None, description="Confirmed scene/character design revisions captured before image prompt polish"
     )
+    image_polish_candidate: Optional[Dict[str, Any]] = Field(
+        None, description="Unapplied bilingual image prompt polish candidate and its source snapshot"
+    )
     
     image_url: Optional[str] = Field(None, description="URL of the generated storyboard image (Legacy)")
     image_asset: Optional[ImageAsset] = Field(default_factory=ImageAsset, description="Storyboard image asset container")
