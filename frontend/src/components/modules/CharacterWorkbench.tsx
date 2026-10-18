@@ -33,6 +33,22 @@ import ReferencePromptEditor, {
 import { searchReferenceCandidates } from "@/lib/referenceCandidateSearch";
 import { IDENTITY_FIELDS, LOOK_FIELDS, characterSectionText, normalizeCharacterFeatures,
     requirementNeedsReview, type IdentityFeatures, type LookFeatures } from "@/lib/characterStructuredDesign";
+import { AVATAR_FEATURE_LIBRARY, type AvatarFeatureOption } from "@/lib/avatarFeatureLibrary";
+
+const PLATFORM_IDENTITY_TERMS: Partial<Record<keyof IdentityFeatures, string[]>> = {
+    face: ["face", "eye_shape", "brow_shape", "nose_shape", "lip_shape"],
+    hair: ["base_hair"],
+    skin: ["skin"],
+    build: ["body"],
+    recognition_marks: ["facial_mark"],
+};
+
+function termSource(option: AvatarFeatureOption): string {
+    const provenance = option.provenance;
+    if (!provenance) return "平台基础词条";
+    const status = provenance.reviewStatus === "internal_test_only" ? "内部测试" : provenance.reviewStatus === "needs_verification" ? "待核验" : "已核验";
+    return [status, provenance.license, provenance.sourceRepo, provenance.sourcePath].filter(Boolean).join(" · ");
+}
 
 import type { AssetPlanEntry } from "@/lib/episodeAssetPlan";
 import EpisodeAssetPlanPanel from "./EpisodeAssetPlanPanel";
@@ -1098,12 +1114,18 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
                                 <h4 className="text-xs font-medium text-foreground">身份外观字段</h4>
                                 <p className="mt-1 text-[11px] leading-4 text-text-muted">这些字段优先编入角色图片提示词；留空的内容不会由系统补写。</p>
                                 <div className="mt-2 space-y-2">
-                                    {IDENTITY_FIELDS.map(([key, label]) => <label key={key} className="block text-xs text-text-secondary">
-                                        {label}
-                                        <textarea aria-label={`角色${label}`} value={identityFeatures[key] || ""} maxLength={500} rows={2}
+                                    {IDENTITY_FIELDS.map(([key, label]) => <div key={key}>
+                                        <label className="block text-xs text-text-secondary" htmlFor={`character-identity-${key}`}>{label}</label>
+                                        <textarea id={`character-identity-${key}`} aria-label={`角色${label}`} value={identityFeatures[key] || ""} maxLength={500} rows={2}
                                             onChange={(event) => { setIdentityFeatures((current) => ({ ...current, [key]: event.target.value })); setDesignIdentityBasis(["user_specified"]); setDesignSource("stated"); setDesignStatus("draft"); setPromptsNeedDesignApply(true); }}
                                             className="mt-1 w-full resize-y rounded border border-glass-border bg-surface px-2 py-1.5 text-xs text-foreground" />
-                                    </label>)}
+                                        <span className="mt-1 flex flex-wrap gap-1" aria-label={`${label}平台词条`}>
+                                            {(PLATFORM_IDENTITY_TERMS[key] || []).flatMap((category) => (AVATAR_FEATURE_LIBRARY[category] || []).map((option) => ({ category, option }))).map(({ category, option }) => <button
+                                                key={`${category}-${option.id}`} type="button" title={termSource(option)}
+                                                onClick={() => { setIdentityFeatures((current) => ({ ...current, [key]: [current[key]?.trim(), option.zh].filter(Boolean).join("；") })); setDesignIdentityBasis(["user_specified"]); setDesignSource("stated"); setDesignStatus("draft"); setPromptsNeedDesignApply(true); }}
+                                                className="rounded border border-glass-border px-2 py-1 text-[11px] text-text-secondary hover:border-primary hover:text-foreground focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary">{option.zh}{option.provenance?.reviewStatus === "internal_test_only" && <span className="ml-1 text-text-muted">内部测试</span>}</button>)}
+                                        </span>
+                                    </div>)}
                                 </div>
                             </div>
                             <label className="mt-3 block text-xs text-text-secondary" htmlFor="character-visual-notes">身份视觉值</label>

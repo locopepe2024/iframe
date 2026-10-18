@@ -76,6 +76,23 @@ async function approveDesignPreview() {
     fireEvent.click(confirm);
 }
 
+it("applies platform terms only to the selected identity field draft", () => {
+    apiMocks.getAssetReferenceIndex.mockResolvedValueOnce({ assets: [] } as any);
+    apiMocks.agentRequest.mockClear();
+    const onUpdateAttributes = vi.fn();
+    const onGenerate = vi.fn();
+    render(<CharacterWorkbench asset={{ id: "character-1", name: "苏砚", description: "少年剑客" }}
+        onClose={vi.fn()} onUpdateDescription={vi.fn()} onUpdateAttributes={onUpdateAttributes}
+        onGenerate={onGenerate} generatingTypes={[]} />);
+
+    fireEvent.click(screen.getByRole("button", { name: /窄长椭圆脸/ }));
+    expect(screen.getByRole("textbox", { name: "角色脸型与眉眼" })).toHaveValue("窄长椭圆脸");
+    expect(screen.getByRole("button", { name: /窄长椭圆脸/ })).toHaveAttribute("title", expect.stringContaining("MIT"));
+    expect(onUpdateAttributes).not.toHaveBeenCalled();
+    expect(onGenerate).not.toHaveBeenCalled();
+    expect(apiMocks.agentRequest.mock.calls.some(([path]) => path === "/character-design/draft")).toBe(false);
+});
+
 it("keeps image editing out of the character workbench", () => {
     render(<WorkbenchPanel {...baseProps} />);
 
