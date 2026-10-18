@@ -24,6 +24,7 @@ import { getAssetUrl, getAssetUrlWithTimestamp } from "@/lib/utils";
 import { characterImageUrl, characterReferenceVariants } from "@/lib/characterImage";
 import PromptBuilder, { PromptSegment, PromptBuilderRef } from "./PromptBuilder";
 import OptimizerSelector, { type OptimizerProvider } from "./storyboard-r2v/OptimizerSelector";
+import VideoPolishReview from "./storyboard-r2v/VideoPolishReview";
 import type { VideoParams } from "@/store/projectStore";
 
 interface VideoCreatorProps {
@@ -32,6 +33,22 @@ interface VideoCreatorProps {
     onRemixClear: () => void;
     params: VideoParams;
     onParamsChange: (params: Partial<VideoParams>) => void;
+}
+
+interface PendingVideoPolish {
+    messages: { system: string; user: string };
+    media: { label: string; url: string }[];
+    reviewToken: string;
+    formatNote: string;
+    sourceSignature: string;
+    draft: string;
+    feedback: string;
+    scriptId: string;
+    slots: { description: string }[];
+    mode: "i2v" | "r2v";
+    provider: OptimizerProvider;
+    skills: string[];
+    motion: string;
 }
 
 export default function VideoCreator({ onTaskCreated, remixData, onRemixClear, params, onParamsChange }: VideoCreatorProps) {
@@ -162,6 +179,20 @@ export default function VideoCreator({ onTaskCreated, remixData, onRemixClear, p
     const [feedbackText, setFeedbackText] = useState("");
     const [optimizerProvider, setOptimizerProvider] = useState<OptimizerProvider>("qwen");
     const [optimizationSkills, setOptimizationSkills] = useState<string[]>(["minimax-h3-director"]);
+    const [pendingPolish, setPendingPolish] = useState<PendingVideoPolish | null>(null);
+    const [reviewError, setReviewError] = useState("");
+    const polishSourceSignature = JSON.stringify([
+        prompt, getMotionDescription(), generationMode, castSlots, selectedImages,
+        optimizerProvider, optimizationSkills, currentProject?.id, polishedPrompt?.en,
+        optimizedMotion, feedbackText,
+    ]);
+
+    const requestPolish = (input: PendingVideoPolish,
+        review?: { messages: { system: string; user: string }; token: string }) => input.mode === "r2v"
+        ? api.polishR2VPrompt(input.draft, input.slots, input.feedback, input.scriptId, "", [], "", "",
+            undefined, undefined, undefined, input.provider, input.skills, "16:9", "", undefined, review)
+        : api.polishVideoPrompt(input.draft, input.feedback, input.scriptId, "", [], "", "",
+            undefined, undefined, undefined, input.provider, input.skills, "16:9", "", undefined, "i2v", review);
 
     const handlePolish = async (feedback: string = "") => {
         const motionDesc = getMotionDescription();
@@ -169,30 +200,49 @@ export default function VideoCreator({ onTaskCreated, remixData, onRemixClear, p
             ? [polishedPrompt?.en || prompt, optimizedMotion !== motionDesc ? `Current motion: ${motionDesc || "static camera and subject"}` : ""].filter(Boolean).join("\n")
             : [prompt, motionDesc].filter(Boolean).join(", ");
         if (!draftPrompt) return;
+        const input: PendingVideoPolish = {
+            messages: { system: "", user: "" }, media: [], reviewToken: "", formatNote: "",
+            sourceSignature: polishSourceSignature, draft: draftPrompt, feedback,
+            scriptId: currentProject?.id || "",
+            slots: castSlots.filter(slot => slot.url).map(slot => ({ description: slot.name || "Unknown character" })),
+            mode: generationMode, provider: optimizerProvider, skills: [...optimizationSkills], motion: motionDesc,
+        };
         setIsPolishing(true);
+        setPendingPolish(null);
+        setReviewError("");
         try {
-            let res;
-            const scriptId = currentProject?.id || "";
-            if (generationMode === 'r2v') {
-                // R2V mode: use R2V-specific polish with slot info
-                const slotInfo = castSlots
-                    .filter(slot => slot.url)
-                    .map((slot) => ({
-                        description: slot.name || 'Unknown character'
-                    }));
-                res = await api.polishR2VPrompt(draftPrompt, slotInfo, feedback, scriptId, "", [], "", "", undefined, undefined, undefined, optimizerProvider, optimizationSkills);
-            } else {
-                // I2V mode: use video polish
-                res = await api.polishVideoPrompt(draftPrompt, feedback, scriptId, "", [], "", "", undefined, undefined, undefined, optimizerProvider, optimizationSkills);
-            }
-            if (res.prompt_cn && res.prompt_en) {
-                setPolishedPrompt({ cn: res.prompt_cn, en: res.prompt_en });
-                setOptimizedMotion(motionDesc);
-                setFeedbackText("");
-            }
+            const preview = await requestPolish(input);
+            if (!preview?.messages?.user || !preview?.review_token) throw new Error("Missing polish preview");
+            setPendingPolish({ ...input, messages: preview.messages, media: preview.media ?? [],
+                reviewToken: preview.review_token, formatNote: preview.format_note ?? "" });
         } catch (error) {
             console.error("Polish failed", error);
             alert(tc("aiPolishFailed"));
+        } finally {
+            setIsPolishing(false);
+        }
+    };
+
+    const confirmPolish = async () => {
+        if (!pendingPolish) return;
+        if (pendingPolish.sourceSignature !== polishSourceSignature) {
+            setPendingPolish(null);
+            setReviewError("提示词、模式、素材或设置已变化，请重新预览模型输入。");
+            return;
+        }
+        setIsPolishing(true);
+        setReviewError("");
+        try {
+            const result = await requestPolish(pendingPolish, {
+                messages: pendingPolish.messages, token: pendingPolish.reviewToken,
+            });
+            if (!result?.prompt_cn || !result?.prompt_en) throw new Error("Missing bilingual polish result");
+            setPolishedPrompt({ cn: result.prompt_cn, en: result.prompt_en });
+            setOptimizedMotion(pendingPolish.motion);
+            setFeedbackText("");
+            setPendingPolish(null);
+        } catch (error: any) {
+            setReviewError(error?.response?.data?.detail?.message_zh || "润色失败，请重新检查输入。");
         } finally {
             setIsPolishing(false);
         }
@@ -1149,7 +1199,7 @@ export default function VideoCreator({ onTaskCreated, remixData, onRemixClear, p
                                     className="text-xs text-primary hover:text-primary/80 flex items-center gap-1 disabled:opacity-50"
                                 >
                                     {isPolishing ? <Loader2 size={12} className="animate-spin" /> : <Wand2 size={12} />}
-                                    {tc("aiPolish")}
+                                    查看并确认润色输入
                                 </button>
                                 <button
                                     onClick={() => { setSegments([{ type: "text", value: "", id: "init" }]); setOptimizedPromptApplied(false); }}
@@ -1201,6 +1251,19 @@ export default function VideoCreator({ onTaskCreated, remixData, onRemixClear, p
                                 }
                             />
                         </div>
+
+                        {reviewError && <p role="alert" className="text-xs text-status-failed-fg">{reviewError}</p>}
+                        {pendingPolish && (
+                            <VideoPolishReview messages={pendingPolish.messages} media={pendingPolish.media}
+                                formatNote={pendingPolish.formatNote} isContextIr={pendingPolish.provider === "minimax_context_ir"}
+                                isSubmitting={isPolishing}
+                                onChange={(messages) => setPendingPolish({ ...pendingPolish, messages })}
+                                onCancel={() => setPendingPolish(null)} onConfirm={() => void confirmPolish()} />
+                        )}
+                        {pendingPolish && selectedImages.length > 0 && pendingPolish.media.length === 0 &&
+                            <p className="text-xs text-text-muted">当前选中的图片仅用于视频生成，未送入这次润色。</p>}
+                        {pendingPolish && pendingPolish.mode === "r2v" && castSlots.some(slot => slot.url) &&
+                            <p className="text-xs text-text-muted">角色参考视频仅用于视频生成；本次润色只接收上方可见的角色文字说明。</p>}
 
                         {/* Polished Result Display - Bilingual */}
                         <AnimatePresence>
