@@ -4,7 +4,7 @@ import { useState, useEffect, useMemo, useRef, useId, useCallback } from "react"
 import { useTranslations } from "next-intl";
 import { motion, AnimatePresence } from "framer-motion";
 import { X, RefreshCw, Check, Image as ImageIcon, Lock, ChevronRight, ChevronDown, Video, PanelLeft, Sparkles, Search } from "lucide-react";
-import { agentRequest, api, type AssetImageReviewRequest, type AssetLibraryReference, type AssetReferenceIndexEntry, type ChatModel } from "@/lib/api";
+import { agentRequest, api, type AssetImageReviewRequest, type AssetLibraryReference, type AssetReferenceIndexEntry, type ChatModel, type CharacterAssetPackView } from "@/lib/api";
 
 import { VariantSelector } from "../common/VariantSelector";
 import { VideoVariantSelector } from "../common/VideoVariantSelector";
@@ -356,6 +356,9 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
     } | null>(null);
     const updateProject = useProjectStore(state => state.updateProject);
     const currentProject = useProjectStore(state => state.currentProject);
+    const [assetPackView, setAssetPackView] = useState<CharacterAssetPackView | null>(null);
+    const [anchorBusy, setAnchorBusy] = useState(false);
+    const [anchorError, setAnchorError] = useState("");
     const [assetIndex, setAssetIndex] = useState<AssetReferenceIndexEntry[]>([]);
     const assetIndexRequest = useRef(0);
     const assetIndexRevision = JSON.stringify(
@@ -496,6 +499,39 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
     const masterAsset = referenceSheetImageAsset || asset.full_body_asset;
     const masterGenerationType = referenceSheetImageAsset ? "reference_sheet" : "full_body";
     const hasFullBodyImage = !!masterImageUrl;
+    const selectedMasterVariantId = masterAsset?.selected_id as string | undefined;
+
+    useEffect(() => {
+        let active = true;
+        setAssetPackView(null);
+        setAnchorError("");
+        if (currentProject?.id && asset.id) {
+            void api.getCharacterAssetPack(currentProject.id, asset.id)
+                .then((view) => { if (active) setAssetPackView(view); })
+                .catch(() => { if (active) setAssetPackView(null); });
+        }
+        return () => { active = false; };
+    }, [currentProject?.id, asset.id]);
+
+    const confirmMasterAnchor = async () => {
+        if (!currentProject?.id || !selectedMasterVariantId || anchorBusy) return;
+        if (!window.confirm(`确认当前选中的图片 ${selectedMasterVariantId} 是该角色正面全身锚点图？请核对面容、发型、服装与鞋履。`)) return;
+        setAnchorBusy(true);
+        setAnchorError("");
+        try {
+            await selectionQueue.current;
+            const current = await api.getCharacterAssetPack(currentProject.id, asset.id);
+            const updated = await api.confirmCharacterAnchor(
+                currentProject.id, asset.id, selectedMasterVariantId,
+                current.asset_revision, current.pack?.current_revision || 0,
+            );
+            setAssetPackView(updated);
+        } catch (error) {
+            setAnchorError(error instanceof Error ? error.message : "锚点确认失败，请刷新后重试");
+        } finally {
+            setAnchorBusy(false);
+        }
+    };
 
     // Local state for prompts
     const getInitialPrompt = (type: string, existingPrompt: string) => {
@@ -1154,6 +1190,15 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
                                 next?.focus();
                             }} className={`min-h-11 shrink-0 border-b-2 px-3 text-sm transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary ${activePanel === id ? "border-primary text-primary" : "border-transparent text-text-secondary hover:text-foreground"}`}>{label}</button>)}
                         </div>
+                        {activePanel === "full_body" && <div className="flex flex-wrap items-center gap-2 border-b border-glass-border px-3 py-2 text-xs text-text-secondary sm:px-5">
+                            <span>项目角色锚点：{assetPackView?.pack ? `r${assetPackView.pack.current_revision} · ${assetPackView.pack.revisions.at(-1)?.variant_id}` : "未确认"}</span>
+                            <button type="button" onClick={() => void confirmMasterAnchor()}
+                                disabled={!selectedMasterVariantId || !designRevision || !assetPackView || anchorBusy}
+                                className="rounded border border-glass-border px-2 py-1 text-foreground hover:bg-hover-bg disabled:opacity-50">
+                                {anchorBusy ? "确认中…" : "将选中图确认为正面全身锚点"}
+                            </button>
+                            {anchorError && <span role="alert" className="text-red-400">{anchorError}</span>}
+                        </div>}
                         <div className="min-h-0 flex-1 flex overflow-hidden">
 
                     {/* Panel 1: Full Body (Master) */}
