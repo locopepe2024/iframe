@@ -830,6 +830,33 @@ def test_multi_era_person_requires_explicit_variant_before_asset_binding():
     assert result["context"]["shots"][0]["person_ids"] == ["shen-xia"]
 
 
+def test_shot_look_overrides_episode_character_default_without_adding_both_looks():
+    pipeline, script = make_pipeline()
+    career = Character(id="shen-xia-career", name="沈夏（职场）", description="职场时期", base_character_id="shen-xia")
+    script.characters.append(career)
+    script.art_direction.director_profile.story_map.people[0].variant_character_ids.append(career.id)
+    pipeline.resolve_episode_assets.return_value["characters"].append(career)
+    script.episode_person_asset_bindings["shen-xia"] = "shen-xia-young"
+    plan = make_plan(pipeline)
+    first = plan.scenes[0].beats[0].shots[0]
+    first.cast_bindings = [DirectorPlanCastBinding(person_id="shen-xia", binding_status="confirmed")]
+    second = first.model_copy(deep=True)
+    second.shot_id = "shot-career"
+    second.order = 1
+    second.cast_bindings = [DirectorPlanCastBinding(
+        person_id="shen-xia", era_variant_id="shen-xia-career", binding_status="confirmed")]
+    plan.scenes[0].beats[0].shots.append(second)
+    pipeline.save_director_shooting_plan_draft("film", 1, 0, plan)
+    pipeline.apply_director_shooting_plan("film", plan, 0, 1)
+
+    context = pipeline.project_episode_visual_context("film")
+    assert context.shots[0].character_ids == ["shen-xia-young"]
+    assert context.shots[1].character_ids == ["shen-xia-career"]
+    assert {item.era_variant_id: item.character_asset_ids for item in context.characters} == {
+        None: ["shen-xia-young"], "shen-xia-career": ["shen-xia-career"],
+    }
+
+
 def test_explicit_binding_resolves_legacy_plan_person_after_asset_id_changes():
     pipeline, script = make_pipeline()
     plan = make_plan(pipeline)

@@ -100,6 +100,25 @@ def test_changing_frame_asset_reference_invalidates_confirmation(tmp_path):
     assert frame.reference_package.revision == 3
 
 
+def test_changing_shot_reference_variant_invalidates_confirmed_pins(tmp_path):
+    pipeline, _, _, frame = make_pipeline(tmp_path)
+    pipeline.update_frame("project", "frame", reference_package=StoryboardReferencePackage(
+        first_frame_url="storyboard/frame.png", confirmed=True))
+    assert frame.reference_package.asset_revision_pins[0].variant_id == "first"
+    previous_revision = frame.reference_package.revision
+
+    pipeline.update_frame_workbench(
+        "project", "frame", workbench_reference_variant_ids={"cinema": ["second"]})
+
+    assert frame.reference_package.confirmed is False
+    assert frame.reference_package.asset_revision_pins == []
+    assert frame.reference_package.revision == previous_revision + 1
+    selection = pipeline.resolve_storyboard_asset_selection("project", "frame")
+    assert [(item["variant_id"], item["source"]) for item in selection["assets"]] == [
+        ("second", "shot_variant_selection")]
+    assert pipeline._pin_frame_assets(pipeline.scripts["project"], frame)[0].variant_id == "second"
+
+
 def test_confirmed_pin_survives_current_asset_removal(tmp_path):
     pipeline, script, _, frame = make_pipeline(tmp_path)
     pipeline.update_frame("project", "frame", reference_package=StoryboardReferencePackage(
