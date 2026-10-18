@@ -146,6 +146,30 @@ source
 
 导入候选未通过来源、许可证和质量检查时，只能留在候选区，不得出现在普通共享搜索结果中。
 
+审核人可以使用当前 iFrame API Key 作为审核身份，但 manifest 只保存不可逆身份指纹（格式为 `apikey-<sha256>`），绝不保存 API Key 原文：
+
+```bash
+export IFRAME_PLATFORM_REVIEW_API_KEY='当前 iFrame API Key'
+python3 scripts/promote_platform_reference_candidate.py \
+  open-ai-canvas.style.freestyle-template-match.v1 \
+  --reviewer-api-key-env IFRAME_PLATFORM_REVIEW_API_KEY \
+  --expected-hash <sha256>
+```
+
+桌面版也可以直接读取 `~/.iframe/config.json` 中的 `UNIART_API_KEY`：
+
+```bash
+python3 scripts/promote_platform_reference_candidate.py \
+  open-ai-canvas.style.freestyle-template-match.v1 \
+  --reviewer-config ~/.iframe/config.json \
+  --reviewer-config-key UNIART_API_KEY \
+  --expected-hash <sha256>
+```
+
+配置文件中的密钥只用于计算 `apikey-<sha256>`，不会写入审核记录或 manifest。
+
+这与现有 `owner_profile_id=apikey-<sha256>` 的身份规则一致。
+
 ### 结构化提示词变体
 
 `prompt_used` 保留为历史证据，但不能作为唯一事实源。平台资源的提示词变体至少需要：
