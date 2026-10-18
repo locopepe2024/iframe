@@ -6136,7 +6136,7 @@ class ComicGenPipeline(StudioOwnerMixin):
             ]))
         projected_draft = append_projected_shot_context(raw_prompt, frame.director_shot_context)
         message = assemble_storyboard_polish_message(projected_draft, assets, feedback, custom_prompt)
-        token_payload = json.dumps([polish_source, raw_prompt, assets, feedback, message], ensure_ascii=False, sort_keys=True)
+        token_payload = json.dumps([polish_source, frame.image_prompt, raw_prompt, assets, feedback, message], ensure_ascii=False, sort_keys=True)
         return {"message": message, "context_token": hashlib.sha256(token_payload.encode("utf-8")).hexdigest()}
 
     def refine_frame_prompt(self, script_id: str, frame_id: str, raw_prompt: str, assets: List[Dict[str, Any]],
@@ -6148,35 +6148,74 @@ class ComicGenPipeline(StudioOwnerMixin):
         script = self.scripts[script_id]
         frame = next(item for item in script.frames if item.id == frame_id)
         polish_source = self._storyboard_image_polish_source(script, frame)
+        base_prompt_hash = hashlib.sha256((frame.image_prompt or "").encode("utf-8")).hexdigest()
         result = self.script_processor.polish_storyboard_prompt(
             raw_prompt, [], "", prepared_message=reviewed_message,
         )
         
-        # Find and update the frame
-        frame_found = False
-        for frame in script.frames:
-            if frame.id == frame_id:
-                frame.image_prompt_cn = result.get("prompt_cn")
-                frame.image_prompt_en = result.get("prompt_en")
-                frame.image_prompt = result.get("prompt_en")  # Also update legacy field
-                if result.get("prompt_en"):
-                    import hashlib
-                    frame.image_polish_source = {
-                        **polish_source,
-                        "prompt_hash": hashlib.sha256(result["prompt_en"].strip().encode("utf-8")).hexdigest(),
-                    }
-                frame.updated_at = time.time()
-                frame_found = True
-                break
-        
-        if frame_found:
-            self._save_data()
+        if not frame:
+            raise ValueError("Frame not found")
+        if not isinstance(result.get("prompt_en"), str) or not result["prompt_en"].strip():
+            raise ValueError("Polish returned no image prompt")
+        candidate_id = str(uuid.uuid4())
+        frame.image_polish_candidate = {
+            "id": candidate_id,
+            "prompt_cn": result.get("prompt_cn") or "",
+            "prompt_en": result["prompt_en"],
+            "source": polish_source,
+            "base_prompt_hash": base_prompt_hash,
+        }
+        frame.updated_at = time.time()
+        self._save_data()
         
         return {
             "prompt_cn": result.get("prompt_cn"),
             "prompt_en": result.get("prompt_en"),
-            "frame_updated": frame_found
+            "candidate_id": candidate_id,
+            "frame_updated": False,
         }
+
+    def apply_frame_image_polish_candidate(self, script_id: str, frame_id: str, candidate_id: str) -> Script:
+        script = self.scripts.get(script_id)
+        if not script:
+            raise ValueError("Script not found")
+        frame = next((item for item in script.frames if item.id == frame_id), None)
+        if not frame:
+            raise ValueError("Frame not found")
+        candidate = frame.image_polish_candidate or {}
+        if not candidate_id or candidate.get("id") != candidate_id:
+            raise ValueError("Polish candidate is no longer current")
+        source = candidate.get("source")
+        if source != self._storyboard_image_polish_source(script, frame):
+            raise ValueError("Shot or asset design changed; polish this frame again")
+        if candidate.get("base_prompt_hash") != hashlib.sha256((frame.image_prompt or "").encode("utf-8")).hexdigest():
+            raise ValueError("Frame prompt changed; polish this frame again")
+        prompt_en = candidate["prompt_en"]
+        frame.image_prompt_cn = candidate["prompt_cn"]
+        frame.image_prompt_en = prompt_en
+        frame.image_prompt = prompt_en
+        frame.image_polish_source = {
+            **source,
+            "prompt_hash": hashlib.sha256(prompt_en.strip().encode("utf-8")).hexdigest(),
+        }
+        frame.image_polish_candidate = None
+        frame.updated_at = time.time()
+        self._save_data()
+        return script
+
+    def discard_frame_image_polish_candidate(self, script_id: str, frame_id: str, candidate_id: str) -> Script:
+        script = self.scripts.get(script_id)
+        if not script:
+            raise ValueError("Script not found")
+        frame = next((item for item in script.frames if item.id == frame_id), None)
+        if not frame:
+            raise ValueError("Frame not found")
+        if not candidate_id or (frame.image_polish_candidate or {}).get("id") != candidate_id:
+            raise ValueError("Polish candidate is no longer current")
+        frame.image_polish_candidate = None
+        frame.updated_at = time.time()
+        self._save_data()
+        return script
 
     def generate_storyboard(self, script_id: str) -> Script:
         """Step 3: Generate storyboard images (Initial/Batch)."""
@@ -6600,6 +6639,18 @@ class ComicGenPipeline(StudioOwnerMixin):
         scenes = {item.id: item for item in resolved["scenes"]}
         characters = {item.id: item for item in resolved["characters"]}
         scene = scenes.get(frame.scene_id)
+        shot_state = {
+            "action": frame.action_description,
+            "visual": frame.visual_description,
+            "shot_size": frame.shot_size,
+            "camera_angle": frame.camera_angle,
+            "camera_movement": frame.camera_movement,
+            "transition": frame.transition_hint,
+            "lighting": frame.lighting.model_dump(mode="json") if frame.lighting else None,
+            "style_override": frame.style_prompt_override,
+            "lighting_override": frame.lighting_override,
+            "director_context": frame.director_shot_context,
+        }
         return {
             "scene_id": frame.scene_id,
             "scene_revision": self._confirmed_asset_design_revision(scene, "scene") if scene else None,
@@ -6608,6 +6659,7 @@ class ComicGenPipeline(StudioOwnerMixin):
                 if item_id in characters else None
                 for item_id in frame.character_ids
             },
+            "shot_hash": hashlib.sha256(json.dumps(shot_state, ensure_ascii=False, sort_keys=True, default=str).encode("utf-8")).hexdigest(),
         }
 
     def _storyboard_image_polish_design_context(self, script: Script, frame: StoryboardFrame) -> str:
@@ -6656,6 +6708,8 @@ class ComicGenPipeline(StudioOwnerMixin):
             changed.append("场景设计")
         if source.get("characters") != current["characters"]:
             changed.append("角色设计")
+        if "shot_hash" in source and source["shot_hash"] != current["shot_hash"]:
+            changed.append("镜头设定")
         return "、".join(changed) + "已变化；请核对润色正文后再生成。" if changed else None
 
     def storyboard_render_scene_design_source(self, script_id: str, frame_id: str) -> Optional[str]:
@@ -6726,6 +6780,7 @@ class ComicGenPipeline(StudioOwnerMixin):
                       for item_id in frame.prop_ids],
             "image_prompt_en": frame.image_prompt_en,
             "image_polish_source": frame.image_polish_source,
+            "image_polish_candidate": frame.image_polish_candidate,
             "style_prompt_override": frame.style_prompt_override,
             "lighting_override": frame.lighting_override,
             "negative_prompt_override": frame.negative_prompt_override,

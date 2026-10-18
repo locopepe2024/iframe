@@ -37,21 +37,63 @@ def test_accepted_image_polish_flags_new_confirmed_design_but_not_draft():
     pipeline._save_data = Mock()
 
     prepared = pipeline.preview_frame_polish_input(script.id, frame.id, "街上行人", [])
-    pipeline.refine_frame_prompt(script.id, frame.id, "街上行人", [],
-                                 reviewed_message=prepared["message"], context_token=prepared["context_token"])
+    result = pipeline.refine_frame_prompt(script.id, frame.id, "街上行人", [],
+                                          reviewed_message=prepared["message"], context_token=prepared["context_token"])
     polish_message = pipeline.script_processor.polish_storyboard_prompt.call_args.kwargs["prepared_message"]
     assert "冷灰蓝长街" in polish_message and "素衣" in polish_message
+    assert frame.image_prompt_en is None and frame.image_prompt is None
+    pipeline.apply_frame_image_polish_candidate(script.id, frame.id, result["candidate_id"])
     assert pipeline.storyboard_image_polish_review(script.id, frame.id, frame.image_prompt_en) is None
     scene.asset_design["design_draft"] = {"visual_notes": "红色草稿"}
     assert pipeline.storyboard_image_polish_review(script.id, frame.id, frame.image_prompt_en) is None
     scene.asset_design["design_revisions"].append({"revision": 2, "design": {"visual_notes": "新街景"}})
     assert "场景设计已变化" in pipeline.storyboard_image_polish_review(script.id, frame.id, frame.image_prompt_en)
     prepared = pipeline.preview_frame_polish_input(script.id, frame.id, "街上行人", [])
-    pipeline.refine_frame_prompt(script.id, frame.id, "街上行人", [],
-                                 reviewed_message=prepared["message"], context_token=prepared["context_token"])
+    result = pipeline.refine_frame_prompt(script.id, frame.id, "街上行人", [],
+                                          reviewed_message=prepared["message"], context_token=prepared["context_token"])
+    pipeline.apply_frame_image_polish_candidate(script.id, frame.id, result["candidate_id"])
     assert pipeline.storyboard_image_polish_review(script.id, frame.id, frame.image_prompt_en) is None
     character.character_design["design_revisions"].append({"revision": 2, "design": {"identity": "蓝衣"}})
     assert "角色设计已变化" in pipeline.storyboard_image_polish_review(script.id, frame.id, frame.image_prompt_en)
+
+
+def test_image_polish_candidate_rejects_changed_confirmed_design_without_replacing_prompt():
+    scene = Scene(id="scene-1", name="长街", description="青石街", asset_design={
+        "design_revisions": [{"revision": 1, "design": {"visual_notes": "冷灰蓝"}}],
+    })
+    frame = StoryboardFrame(id="frame-1", scene_id=scene.id, image_prompt="原提示词")
+    script = Script(id="episode-1", title="Episode", original_text="", scenes=[scene],
+                    frames=[frame], created_at=0, updated_at=0)
+    pipeline = ComicGenPipeline.__new__(ComicGenPipeline)
+    pipeline.scripts = {script.id: script}
+    pipeline.series_store = {}
+    pipeline.resolve_project_assets = Mock(return_value={"scenes": [scene], "characters": []})
+    pipeline.get_effective_prompt = Mock(return_value="")
+    pipeline.director_prompt_context = Mock(return_value="")
+    pipeline.effective_art_direction = Mock(return_value=None)
+    pipeline.script_processor = Mock()
+    pipeline.script_processor.polish_storyboard_prompt.return_value = {
+        "prompt_cn": "新版", "prompt_en": "New candidate",
+    }
+    pipeline._save_data = Mock()
+
+    prepared = pipeline.preview_frame_polish_input(script.id, frame.id, "草稿", [])
+    result = pipeline.refine_frame_prompt(script.id, frame.id, "草稿", [],
+                                          reviewed_message=prepared["message"], context_token=prepared["context_token"])
+    scene.asset_design["design_revisions"].append({"revision": 2, "design": {"visual_notes": "新场景"}})
+    with pytest.raises(ValueError, match="asset design changed"):
+        pipeline.apply_frame_image_polish_candidate(script.id, frame.id, result["candidate_id"])
+    assert frame.image_prompt == "原提示词"
+    assert frame.image_prompt_en is None
+    scene.asset_design["design_revisions"].pop()
+    original_angle = frame.camera_angle
+    frame.camera_angle = "low_angle"
+    with pytest.raises(ValueError, match="Shot or asset design changed"):
+        pipeline.apply_frame_image_polish_candidate(script.id, frame.id, result["candidate_id"])
+    frame.camera_angle = original_angle
+    frame.image_prompt = "用户刚刚手动修改"
+    with pytest.raises(ValueError, match="Frame prompt changed"):
+        pipeline.apply_frame_image_polish_candidate(script.id, frame.id, result["candidate_id"])
 
 
 @pytest.mark.parametrize("model_name", ["uniart/gpt-image-2"])
