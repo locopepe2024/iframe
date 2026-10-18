@@ -1,0 +1,23 @@
+# 本集角色造型选择纵切 V1
+
+日期：2026-10-18。状态：实施中，以下是本轮边界和验收标准，不代表已上线。
+
+## 已核对事实
+
+- 项目角色锚点保存在 `Character.asset_pack`，当前只有人工确认的正面全身图历史；系列角色由 `Series.characters` 持有。
+- `Script.episode_person_asset_bindings` 只有人物到单个角色视觉资产的本集默认映射。`StoryboardFrame.character_ids` 和 `workbench_reference_variant_ids` 已分别承载镜头资产 ID、媒体变体 ID；确认包的 pins 和视频任务保存实际版本。
+- 导演计划中的 `era_variant_id` 有时是视觉资产 ID，有时是时代标签；不能直接用它充当本集造型身份。
+
+## 本轮契约
+
+`EpisodeCharacterUse` 是本集经用户确认的一个可复用造型选择，不复制项目锚点媒体。它保存 `use_id`、项目角色资产 ID、标签、状态说明、确认时间、来源 `pack_id/revision`、设计 revision、锚点变体和媒体 ID、实际选用的视觉资产 ID、变体和媒体 ID，以及实际选用资产 revision。项目锚点直接使用时，实际选用资产是项目角色本身；本集受伤等专属造型使用本集 `Character`，其 `base_character_id` 必须指向项目角色 ID。真实媒体来源作用域由服务端解析并冻结，不由客户端声明。
+
+创建入口只确认当前已有的、用户可见的角色图，不在此请求中生成图像；服务端校验项目／系列 owner、项目包 revision、来源锚点、实际变体、媒体身份及本集派生资产的归属。创建使用项须显式 `reviewed=true`。已有条目不就地改写；修改造型或来源时另建一项，以免历史镜头引用漂移。
+
+镜头显式选择 `use_id` 后，同一次保存把 `StoryboardFrame.character_use_ids[project_character_id]`、`character_ids` 和该资产的 `workbench_reference_variant_ids` 设成同一选择，并撤销涉及角色资产的旧参考包确认。镜头保持自身的场景、光影与转场字段；选择不按镜头顺序或转场自动继承。首帧投影和视频 pins 继续通过现有 `character_ids`／变体选择消费该状态。提交前界面须显示该来源和所选图，供用户审核；本轮不把 `use_id` 隐藏投影成提示词。
+
+## 验收与实施边界
+
+先实现有界模型、确认与镜头选择的后端纵切，再提供角色工作台的确认入口及分镜选择入口。行为测试覆盖：同一角色的项目正常图和本集受伤图形成两个使用项；两个镜头分别选择；解析预览、首帧角色描述和视频任务 pins 一致；跨系列／跨剧集、本集派生资产身份不符、过期包版本和未审核提交均拒绝；旧项目可读。
+
+受影响路径：`src/apps/comic_gen/models.py`、`pipeline.py`、`api.py`、`tests/`，以及角色工作台、分镜工作台和 `frontend/src/lib/api.ts`。Blender／3D 导演台不在本轮范围。
