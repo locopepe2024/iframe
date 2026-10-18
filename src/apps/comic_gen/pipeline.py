@@ -9494,6 +9494,19 @@ class ComicGenPipeline(StudioOwnerMixin):
             if image_origin not in (None, "upload", "workbench"):
                 raise ValueError("Invalid image origin")
             initial_variant = None
+            initial_variants: List[ImageVariant] = []
+            for item in payload.get("initial_variants") or []:
+                if not isinstance(item, dict) or not item.get("image_url"):
+                    continue
+                initial_variants.append(ImageVariant(
+                    id=f"img_{uuid.uuid4().hex[:12]}",
+                    url=item["image_url"],
+                    is_uploaded_source=item.get("image_origin") == "upload",
+                    upload_type=item.get("upload_type") or "image",
+                    source_origin=item.get("image_origin"),
+                    reference_view_role=item.get("reference_view_role"),
+                    reference_distance=item.get("reference_distance"),
+                ))
             if image_url:
                 initial_variant = ImageVariant(
                     id=f"img_{uuid.uuid4().hex[:12]}",
@@ -9504,11 +9517,12 @@ class ComicGenPipeline(StudioOwnerMixin):
                     source_generation_id=payload.get("source_generation_id") if image_origin == "workbench" else None,
                     source_output_id=payload.get("source_output_id") if image_origin == "workbench" else None,
                 )
+                initial_variants.insert(0, initial_variant)
             if asset_type == "character":
                 ref_sheet = AssetUnit()
-                if initial_variant:
-                    ref_sheet.image_variants.append(initial_variant)
-                    ref_sheet.selected_image_id = initial_variant.id
+                if initial_variants:
+                    ref_sheet.image_variants.extend(initial_variants)
+                    ref_sheet.selected_image_id = initial_variants[0].id
                 asset = Character(
                     id=f"char_{uuid.uuid4().hex[:12]}",
                     owner_user_id=owner_user_id,
@@ -9521,9 +9535,9 @@ class ComicGenPipeline(StudioOwnerMixin):
                 )
             elif asset_type == "scene":
                 image_asset = ImageAsset()
-                if initial_variant:
-                    image_asset.variants.append(initial_variant)
-                    image_asset.selected_id = initial_variant.id
+                if initial_variants:
+                    image_asset.variants.extend(initial_variants)
+                    image_asset.selected_id = initial_variants[0].id
                 asset = Scene(
                     id=f"scene_{uuid.uuid4().hex[:12]}",
                     owner_user_id=owner_user_id,
@@ -9535,9 +9549,9 @@ class ComicGenPipeline(StudioOwnerMixin):
                 )
             elif asset_type == "prop":
                 image_asset = ImageAsset()
-                if initial_variant:
-                    image_asset.variants.append(initial_variant)
-                    image_asset.selected_id = initial_variant.id
+                if initial_variants:
+                    image_asset.variants.extend(initial_variants)
+                    image_asset.selected_id = initial_variants[0].id
                 asset = Prop(
                     id=f"prop_{uuid.uuid4().hex[:12]}",
                     owner_user_id=owner_user_id,

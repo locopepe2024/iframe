@@ -24,6 +24,12 @@ interface NewLibraryAssetDialogProps {
   initialSourceOutputId?: string;
 }
 
+interface ImportedVariant {
+  image_url: string;
+  reference_view_role: string;
+  reference_distance: string;
+}
+
 /**
  * 资产库「新建全局资产」轻量弹窗（T6-entries）。
  * 选类型(角色/场景/道具) + 名称 + 描述 +（可选）图片（上传本地文件或填 URL）→ POST /library/assets。
@@ -39,6 +45,7 @@ export default function NewLibraryAssetDialog({ onClose, onCreated, initialImage
   const [submitting, setSubmitting] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [imageOrigin, setImageOrigin] = useState<"upload" | "workbench" | undefined>(initialImageOrigin);
+  const [initialVariants, setInitialVariants] = useState<ImportedVariant[]>([]);
 
   const nameRef = useRef<HTMLInputElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -68,14 +75,17 @@ export default function NewLibraryAssetDialog({ onClose, onCreated, initialImage
 
   // 上传本地图片 → 后端返回 image_url，写入 imageUrl 作为创建用图。
   const handleFileChange = async (e: ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
+    const files = Array.from(e.target.files ?? []);
     e.target.value = ""; // reset so re-selecting the same file fires onChange again
-    if (!file) return;
+    if (!files.length) return;
     setUploading(true);
     try {
-      const { image_url } = await api.uploadLibraryImage(file);
-      setImageUrl(image_url);
-      setImageOrigin("upload");
+      const uploaded = await Promise.all(files.slice(0, 8).map(async (file, index) => {
+        const { image_url } = await api.uploadLibraryImage(file);
+        return { image_url, reference_view_role: index === 0 ? "front" : "additional", reference_distance: index === 0 ? "full" : "medium" };
+      }));
+      setInitialVariants((current) => [...current, ...uploaded].slice(0, 8));
+      if (!imageUrl && uploaded[0]) { setImageUrl(uploaded[0].image_url); setImageOrigin("upload"); }
       toast.success(t("uploadSuccess"));
     } catch (err) {
       const msg = err instanceof Error ? err.message : "";
@@ -96,14 +106,16 @@ export default function NewLibraryAssetDialog({ onClose, onCreated, initialImage
     }
     setSubmitting(true);
     try {
-      await api.createLibraryAsset(SINGULAR[assetType], {
+      const payload = {
         name: trimmed,
         description: description.trim() || undefined,
-        image_url: imageUrl.trim() || undefined,
-        image_origin: imageUrl.trim() ? imageOrigin : undefined,
-        source_generation_id: imageOrigin === "workbench" ? initialSourceGenerationId : undefined,
-        source_output_id: imageOrigin === "workbench" ? initialSourceOutputId : undefined,
-      });
+        image_url: initialVariants.length ? undefined : imageUrl.trim() || undefined,
+        image_origin: initialVariants.length ? undefined : imageUrl.trim() ? imageOrigin : undefined,
+        source_generation_id: initialVariants.length ? undefined : imageOrigin === "workbench" ? initialSourceGenerationId : undefined,
+        source_output_id: initialVariants.length ? undefined : imageOrigin === "workbench" ? initialSourceOutputId : undefined,
+        ...(initialVariants.length ? { initial_variants: initialVariants } : {}),
+      };
+      await api.createLibraryAsset(SINGULAR[assetType], payload);
       toast.success(t("createSuccess"), { body: trimmed });
       onCreated();
       onClose();
@@ -240,6 +252,7 @@ export default function NewLibraryAssetDialog({ onClose, onCreated, initialImage
                 ref={fileInputRef}
                 type="file"
                 accept="image/*"
+                multiple
                 onChange={handleFileChange}
                 className="hidden"
               />
@@ -253,6 +266,29 @@ export default function NewLibraryAssetDialog({ onClose, onCreated, initialImage
                 {uploading ? t("uploading") : t("uploadImageButton")}
               </button>
             </div>
+            {initialVariants.length > 0 && (
+              <div className="mt-3 space-y-2" aria-label="已导入参考变体">
+                <div className="text-xs text-text-secondary">已导入 {initialVariants.length} 张参考图</div>
+                {initialVariants.map((variant, index) => (
+                  <div key={`${variant.image_url}-${index}`} className="flex items-center gap-2 rounded-lg border border-glass-border bg-surface-inset p-2">
+                    <img src={getAssetUrl(variant.image_url)} alt="" className="h-9 w-9 rounded object-cover" />
+                    <select aria-label={`第 ${index + 1} 张参考职责`} value={variant.reference_view_role} onChange={(event) => setInitialVariants((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, reference_view_role: event.target.value } : item))} className="min-w-0 flex-1 rounded border border-glass-border bg-surface px-2 py-1 text-xs text-foreground">
+                      <option value="front">正面 / 主视角</option>
+                      <option value="profile">侧面 / 侧视角</option>
+                      <option value="three_quarter">三分之四视角</option>
+                      <option value="detail">细节 / 材质</option>
+                      <option value="additional">补充视角</option>
+                    </select>
+                    <select aria-label={`第 ${index + 1} 张参考距离`} value={variant.reference_distance} onChange={(event) => setInitialVariants((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, reference_distance: event.target.value } : item))} className="w-24 rounded border border-glass-border bg-surface px-2 py-1 text-xs text-foreground">
+                      <option value="full">全身 / 远景</option>
+                      <option value="medium">中景</option>
+                      <option value="close">近景</option>
+                      <option value="macro">细节</option>
+                    </select>
+                  </div>
+                ))}
+              </div>
+            )}
 
             {/* 备选：直接填图片 URL */}
             <label

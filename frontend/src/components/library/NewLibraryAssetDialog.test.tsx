@@ -38,3 +38,24 @@ it('registers a workbench image as the initial variant of a typed asset', async 
     source_output_id: 'output-1',
   }));
 });
+
+it('imports multiple reference images as one structured asset', async () => {
+  vi.mocked(api.uploadLibraryImage)
+    .mockResolvedValueOnce({ image_url: 'output/hero-front.png' })
+    .mockResolvedValueOnce({ image_url: 'output/hero-profile.png' });
+  const { container } = render(<NewLibraryAssetDialog onClose={vi.fn()} onCreated={vi.fn()} />);
+  fireEvent.change(screen.getByLabelText('nameLabel'), { target: { value: 'Hero' } });
+  fireEvent.change(container.querySelector('input[type="file"]')!, {
+    target: { files: [new File(['front'], 'front.png', { type: 'image/png' }), new File(['profile'], 'profile.png', { type: 'image/png' })] },
+  });
+  await waitFor(() => expect(screen.getByText('已导入 2 张参考图')).toBeInTheDocument());
+  fireEvent.change(screen.getByLabelText('第 2 张参考职责'), { target: { value: 'profile' } });
+  fireEvent.submit(screen.getByRole('button', { name: 'create' }).closest('form')!);
+  await waitFor(() => expect(api.createLibraryAsset).toHaveBeenCalledWith('character', expect.objectContaining({
+    name: 'Hero',
+    initial_variants: [
+      expect.objectContaining({ image_url: 'output/hero-front.png', reference_view_role: 'front' }),
+      expect.objectContaining({ image_url: 'output/hero-profile.png', reference_view_role: 'profile' }),
+    ],
+  })));
+});
