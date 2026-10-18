@@ -72,4 +72,3 @@ def list_resources(*, kind: Optional[str] = None, query: str = "", path: Path = 
         "catalog_revision": manifest.get("catalog_revision", "unknown"),
         "resources": resources,
     }
-
