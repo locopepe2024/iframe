@@ -1845,14 +1845,19 @@ def _library_asset_payload(request: CreateLibraryAssetRequest, user: UserContext
 
 
 @app.get("/library/assets")
-def get_library_assets():
+def get_library_assets(user: UserContext = Depends(require_studio_user)):
     """List all assets in the global shared pool."""
     lib = pipeline.list_library_assets()
-    return signed_response({
+    payload = {
         "characters": [c.model_dump() for c in lib.characters],
         "scenes": [s.model_dump() for s in lib.scenes],
         "props": [p.model_dump() for p in lib.props],
-    })
+    }
+    # Keep the source image identity intact while exposing a current, signed
+    # WebP cover for every asset card. Consumers must prefer cover_url for
+    # list/grid rendering and reserve image_url for full-resolution use.
+    _add_asset_cover_urls(payload, user.owner_profile_id)
+    return signed_response(payload)
 
 
 @app.post("/library/assets")
