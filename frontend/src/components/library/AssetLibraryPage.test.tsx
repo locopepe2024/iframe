@@ -4,6 +4,7 @@ import AssetLibraryPage from './AssetLibraryPage';
 const mocked = vi.hoisted(() => ({
   getAssetLibraryIndex: vi.fn(), deleteLibraryAsset: vi.fn(), authenticatedFetch: vi.fn(), error: vi.fn(),
   updateLibraryAsset: vi.fn(), updateSeriesAssetAttributes: vi.fn(), updateAssetAttributes: vi.fn(),
+  getWorkbenchTemplates: vi.fn(),
 }));
 vi.mock('@/lib/api', () => ({ api: mocked, API_URL: '', authenticatedFetch: mocked.authenticatedFetch }));
 vi.mock('next-intl', () => ({ useTranslations: () => (key: string, values?: { name?: string }) => values?.name ? `${key} ${values.name}` : key }));
@@ -25,6 +26,21 @@ beforeEach(() => {
   mocked.updateSeriesAssetAttributes.mockResolvedValue({});
   mocked.updateAssetAttributes.mockResolvedValue({});
   mocked.getAssetLibraryIndex.mockResolvedValue({ schema_version: 1, project_id: 'library', assets: [{ asset_type: 'character', asset_id: 'character-1', name: 'Test character', source_scope: 'global', source_container_id: null, selected_variant_id: null, cover_variant_id: null, variants: [] }] });
+  mocked.getWorkbenchTemplates.mockResolvedValue({ schema_version: 1, catalog_revision: 'test', templates: [] });
+});
+
+it('searches text-only workbench templates separately from image assets', async () => {
+  mocked.getWorkbenchTemplates.mockResolvedValue({ schema_version: 1, catalog_revision: 'test', templates: [{
+    template_id: 'open-ai-canvas:drama-location-master', revision: 1, kind: 'image', station: 'scene',
+    title: '短剧场景空间母版', focus: '锁定场景空间', input_slots: [{ id: 'primary', label: '场景参考图', required: true }],
+    source: { repository: 'open-ai-canvas', commit: '86ebb6c5345287c645e857a8f550901bb6fd4bd8', path: 'catalog.json', license: 'MIT', content_sha256: 'hash' }, media: [],
+  }] });
+  render(<AssetLibraryPage />);
+  fireEvent.click(screen.getByRole('button', { name: '工作台模板' }));
+  expect(await screen.findByText('短剧场景空间母版')).toBeInTheDocument();
+  expect(screen.getByText(/没有参考图，也不会自动写入提示词/)).toBeInTheDocument();
+  fireEvent.change(screen.getByRole('textbox', { name: '搜索工作台模板' }), { target: { value: '空间' } });
+  await waitFor(() => expect(mocked.getWorkbenchTemplates).toHaveBeenCalledWith('', '空间'));
 });
 
 function renderFlatLibrary() {
