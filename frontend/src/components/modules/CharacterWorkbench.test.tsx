@@ -363,7 +363,7 @@ it("keeps an AI design as an editable draft until the user confirms it", async (
         user_answers: {},
     }));
     expect(onUpdateAttributes).not.toHaveBeenCalled();
-    expect(editor.editor.getText()).toContain("深棕眼");
+    expect(editor.editor.getText()).not.toContain("深棕眼");
 
     fireEvent.click(screen.getByRole("button", { name: "确认设计" }));
     await waitFor(() => expect(onUpdateAttributes).toHaveBeenCalledWith({ character_design: expect.objectContaining({
@@ -372,8 +372,38 @@ it("keeps an AI design as an editable draft until the user confirms it", async (
         field_status: expect.objectContaining({ visual_notes: "creative-choice" }),
     }) }));
     await waitFor(() => expect(screen.getByText("已确认 r1")).toBeInTheDocument());
+    expect(editor.editor.getText()).not.toContain("深棕眼");
+    fireEvent.click(screen.getByRole("button", { name: "应用到图片提示词" }));
     expect(editor.editor.getText()).toContain("深棕眼");
     expect(editor.editor.getText()).toContain("黑色劲装");
+});
+
+it("projects edited character fields only after explicit application and saves them in the revision", async () => {
+    apiMocks.getAssetReferenceIndex.mockResolvedValueOnce({ assets: [] } as any);
+    const onUpdateAttributes = vi.fn().mockResolvedValue(undefined);
+    render(<CharacterWorkbench asset={{ id: "character-1", name: "苏砚", description: "少年剑客",
+        character_design: { design_draft: {
+            identity: { visual_notes: "旧的整段摘要", features: { face: "窄长脸", hair: "黑发束起" } },
+            look: { visual_notes: "旧服装摘要", features: { clothing: "深蓝劲装" } },
+            confirmed: false,
+        } },
+    }} onClose={vi.fn()} onUpdateDescription={vi.fn()} onUpdateAttributes={onUpdateAttributes}
+        onGenerate={vi.fn()} generatingTypes={[]} />);
+
+    const editor = screen.getByRole("textbox", { name: "Enter prompt description..." });
+    fireEvent.change(screen.getByRole("textbox", { name: "角色脸型与眉眼" }), { target: { value: "方脸，眉眼锋利" } });
+    expect(editor).not.toHaveTextContent("方脸，眉眼锋利");
+    fireEvent.click(screen.getByText("查看将写入的三条图片提示词"));
+    expect(screen.getByText(/全身：.*方脸，眉眼锋利/)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "应用到图片提示词" }));
+    expect(editor).toHaveTextContent("方脸，眉眼锋利");
+    expect(editor).not.toHaveTextContent("旧的整段摘要");
+    fireEvent.click(screen.getByRole("button", { name: "确认设计" }));
+    await waitFor(() => expect(onUpdateAttributes).toHaveBeenCalledWith({ character_design: expect.objectContaining({
+        identity: expect.objectContaining({ features: expect.objectContaining({ face: "方脸，眉眼锋利", hair: "黑发束起" }) }),
+        look: expect.objectContaining({ features: { clothing: "深蓝劲装" } }),
+        confirmed: true,
+    }) }));
 });
 
 it("uses visual fields as editable inputs before generating a draft", async () => {
@@ -395,7 +425,7 @@ it("uses visual fields as editable inputs before generating a draft", async () =
     fireEvent.click(generate);
 
     await waitFor(() => expect(apiMocks.agentRequest).toHaveBeenCalledWith("/character-design/draft", "POST", expect.objectContaining({
-        current_draft: "",
+        current_draft: "日晒肤色，宽肩长腿。 宋代服装，长柄双手剑",
         user_visual_requirements: { identity: "日晒肤色，宽肩长腿", look: "宋代服装，长柄双手剑" },
     })));
     await waitFor(() => expect((identity as HTMLTextAreaElement).value).toContain("日晒肤色，宽肩长腿"));
@@ -435,6 +465,8 @@ it("lets the user answer a design conflict and carries answers into confirmed pr
     }) }));
     await waitFor(() => expect(screen.getByText("已确认 r1")).toBeInTheDocument());
     const editor = screen.getByRole("textbox", { name: "Enter prompt description..." });
+    expect(editor).not.toHaveTextContent("按十七岁少年表现，身形尚未完全长成");
+    fireEvent.click(screen.getByRole("button", { name: "应用到图片提示词" }));
     expect(editor).toHaveTextContent("按十七岁少年表现，身形尚未完全长成");
 });
 
