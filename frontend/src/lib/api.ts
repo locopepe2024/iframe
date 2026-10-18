@@ -346,6 +346,26 @@ export interface CharacterAssetPackView {
     };
 }
 
+export interface EpisodeCharacterUse {
+    use_id: string;
+    project_character_id: string;
+    label: string;
+    condition: string;
+    source_pack_id: string;
+    source_pack_revision: number;
+    source_design_revision: number;
+    source_anchor_variant_id: string;
+    source_anchor_media_id?: string | null;
+    selected_asset_id: string;
+    selected_asset_revision: number;
+    selected_variant_id: string;
+    selected_media_id?: string | null;
+    selected_source_scope: "project" | "series" | "episode";
+    selected_source_container_id: string;
+    status: "confirmed";
+    confirmed_at: number;
+}
+
 export interface AssetReferenceIndex {
     schema_version: 1;
     project_id: string;
@@ -1298,6 +1318,37 @@ export const api = {
             `${API_URL}/projects/${encodeURIComponent(scriptId)}/characters/${encodeURIComponent(characterId)}/asset-pack/anchor`,
             { variant_id: variantId, expected_asset_revision: expectedAssetRevision,
                 expected_pack_revision: expectedPackRevision, verified_front_full_body: true },
+        );
+        return res.data;
+    },
+
+    listEpisodeCharacterUses: async (scriptId: string): Promise<EpisodeCharacterUse[]> => {
+        const res = await axios.get<{ uses: EpisodeCharacterUse[] }>(
+            `${API_URL}/projects/${encodeURIComponent(scriptId)}/character-uses`,
+        );
+        return res.data.uses;
+    },
+
+    confirmEpisodeCharacterUse: async (
+        scriptId: string, projectCharacterId: string,
+        input: { label: string; condition: string; selected_asset_id: string;
+            selected_variant_id: string; expected_pack_revision: number; reviewed: true },
+    ): Promise<EpisodeCharacterUse> => {
+        const res = await axios.post<EpisodeCharacterUse>(
+            `${API_URL}/projects/${encodeURIComponent(scriptId)}/characters/${encodeURIComponent(projectCharacterId)}/episode-uses`,
+            input,
+        );
+        return res.data;
+    },
+
+    selectFrameCharacterUse: async (
+        scriptId: string, frameId: string, input: {
+            project_character_id: string; use_id: string; expected_reference_revision: number;
+        },
+    ) => {
+        const res = await axios.post(
+            `${API_URL}/projects/${encodeURIComponent(scriptId)}/frames/${encodeURIComponent(frameId)}/character-use`,
+            input,
         );
         return res.data;
     },

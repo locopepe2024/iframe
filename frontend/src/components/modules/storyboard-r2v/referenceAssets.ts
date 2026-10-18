@@ -103,11 +103,16 @@ export function resolveReferenceSubmission(
         const explicitIds = selections[asset.id];
         let variants: ReferenceVariant[];
         if (asset.kind === "character") {
-            // Character generations retain old takes for review. Storyboard
-            // references follow the one selected portrait, so history cannot
-            // silently become a multi-image character input.
+            // A confirmed episode look chooses exactly one view. Ordinary
+            // multi-select history remains on the asset's primary portrait.
             const primary = primaryVariant(asset);
-            variants = primary ? [primary] : [];
+            const reviewed = explicitIds?.length === 1
+                ? asset.variants.find((variant) => variant.id === explicitIds[0])
+                : undefined;
+            if (explicitIds?.length === 1 && !reviewed) invalidVariantIds.push(explicitIds[0]);
+            variants = explicitIds?.length === 1
+                ? reviewed ? [reviewed] : []
+                : primary ? [primary] : [];
         } else if (explicitIds?.length) {
             const byId = new Map(asset.variants.map((variant) => [variant.id, variant]));
             variants = [];

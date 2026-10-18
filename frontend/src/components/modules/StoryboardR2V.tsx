@@ -12,7 +12,7 @@ import StepPageHeader, { StepPill } from "@/components/shared/StepPageHeader";
 import RenderPromptPreviewDialog, { type FrameRenderPreview } from "./RenderPromptPreviewDialog";
 import { useTranslations } from "next-intl";
 import { useProjectStore } from "@/store/projectStore";
-import { api, crudApi, type VideoTask, type RefineSSEEvent, type AssetReferenceIndexEntry } from "@/lib/api";
+import { api, crudApi, type VideoTask, type RefineSSEEvent, type AssetReferenceIndexEntry, type EpisodeCharacterUse } from "@/lib/api";
 import { resolveMediaDelivery, resolveVideoTaskDelivery } from "@/lib/mediaDelivery";
 import { resolveStoryboardStyle, resolveStoryboardStyleForRender } from "@/lib/storyboardStyle";
 import { getAssetUrl } from "@/lib/utils";
@@ -37,6 +37,8 @@ import type {
 import { toast } from "@/store/toastStore";
 import { Wand2 } from "lucide-react";
 import AssetDrawer from "./storyboard-r2v/AssetDrawer";
+import ShotCharacterUsePicker from "./storyboard-r2v/ShotCharacterUsePicker";
+import { characterUseReferenceError } from "./storyboard-r2v/shotCharacterUseSubmission";
 import { type VideoConfig, DEFAULT_VIDEO_CONFIG } from "./storyboard-r2v/VideoConfigModal";
 import {
     migrateShotNode,
@@ -225,6 +227,7 @@ export default function StoryboardR2V() {
     // backend, so the user gets immediate feedback instead of a
     // task that queues, fails, and shows up only in the diagnose log.
     const [shotErrors, setShotErrors] = useState<Record<string, string>>({});
+    const [lookBusyFrameId, setLookBusyFrameId] = useState<string | null>(null);
     const [extractingPreviousEndFrameId, setExtractingPreviousEndFrameId] = useState<string | null>(null);
     const missingRefsMessage = useCallback(
         (modelLabel: string) =>
@@ -473,6 +476,31 @@ export default function StoryboardR2V() {
     const characters = currentProject?.characters || [];
     const scenes = currentProject?.scenes || [];
     const props = currentProject?.props || [];
+
+    const selectShotCharacterUse = useCallback(async (frameId: string, use: EpisodeCharacterUse) => {
+        if (!currentProject || lookBusyFrameId) return;
+        const frame = currentProject.frames.find((item: any) => item.id === frameId);
+        if (!frame) return;
+        setLookBusyFrameId(frameId);
+        try {
+            const updated = await api.selectFrameCharacterUse(currentProject.id, frameId, {
+                project_character_id: use.project_character_id,
+                use_id: use.use_id,
+                expected_reference_revision: frame.reference_package?.revision ?? 1,
+            });
+            if (useProjectStore.getState().currentProject?.id !== currentProject.id) return;
+            updateProject(currentProject.id, updated);
+            const saved = updated.frames?.find((item: any) => item.id === frameId);
+            if (saved) setShots((previous) => previous.map((item) => item.id === frameId
+                ? { ...item, referenceVariantIds: saved.workbench_reference_variant_ids || {} }
+                : item));
+            toast.success(`已选择本镜头造型：${use.label}。请核对首帧和提示词引用。`);
+        } catch (error: any) {
+            toast.error(String(error?.response?.data?.detail || error?.message || "镜头造型选择失败"));
+        } finally {
+            setLookBusyFrameId(null);
+        }
+    }, [currentProject, lookBusyFrameId, updateProject]);
 
     // ────────────────────────────────────────────────────────────────────
     // Shot mutations — Optimistic UI + 异步同步后端 + store 更新
@@ -1067,6 +1095,18 @@ export default function StoryboardR2V() {
         const referenceSubmission = tabMode === "direct_r2v"
             ? await loadShotReferences(shot) : resolveShotReferences(shot);
         if (!referenceSubmission) return;
+        if (tabMode === "direct_r2v") {
+            const frame = currentProject.frames.find((item: any) => item.id === shot.id);
+            const message = characterUseReferenceError(
+                (frame?.character_use_ids || {}) as Record<string, string>,
+                currentProject.episode_character_uses || [], referenceSubmission.groups,
+            );
+            if (message) {
+                setShotErrors((previous) => ({ ...previous, [shot.id]: message }));
+                toast.warning(message);
+                return;
+            }
+        }
         const requestedDuration = params?.duration ?? videoConfig.duration;
         const durationConfig = [...VIDEO_I2V_MODELS, ...VIDEO_R2V_MODELS]
             .find(model => model.id === requestedModelId)?.duration;
@@ -2080,6 +2120,17 @@ export default function StoryboardR2V() {
                         key={shot.id}
                         ref={(el) => { shotWrapperRefs.current.set(shot.id, el); }}
                     >
+                        {projectFrameIndex >= 0 && <ShotCharacterUsePicker
+                            frame={projectFrames[projectFrameIndex]}
+                            uses={currentProject?.episode_character_uses || []}
+                            assetIndex={assetIndex}
+                            busy={lookBusyFrameId === shot.id}
+                            onSelect={(use) => void selectShotCharacterUse(shot.id, use)}
+                            onInsertReference={(_use, name) => {
+                                const tag = `[character:${name}]`;
+                                if (!shot.prompt.includes(tag)) updatePrompt(index, `${shot.prompt} ${tag}`.trim());
+                            }}
+                        />}
                         <ShotCard
                             projectId={currentProject?.id}
                             activeVideoTaskId={currentProject?.frames?.find((frame) => frame.id === shot.id)?.selected_video_id || shot.videoTaskId}

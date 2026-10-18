@@ -76,6 +76,21 @@ describe("storyboard multi-reference assets", () => {
         expect(result.groups[0].variants.map((variant) => variant.id)).toEqual(["host-front"]);
     });
 
+    it("uses an explicitly reviewed single character look instead of the asset default", () => {
+        const character = {
+            ...assets[0],
+            variants: [
+                { id: "host-front", url: "host-front.jpg" },
+                { id: "host-injured", url: "host-injured.jpg" },
+            ],
+        };
+        const result = resolveReferenceSubmission(
+            "[character:女主播]", [character], { host: ["host-injured"] },
+        );
+        expect(result.urls).toEqual(["host-injured.jpg"]);
+        expect(result.groups[0].variants.map((variant) => variant.id)).toEqual(["host-injured"]);
+    });
+
     it("binds all selected product pictures without mixing Subject and Picture syntax", () => {
         const result = resolveReferenceSubmission(
             "subject_definitions:\nold\n[character1:穿心莲] beside [character2:女主播] <Picture 2>",
