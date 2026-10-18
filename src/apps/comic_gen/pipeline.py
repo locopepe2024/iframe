@@ -2651,7 +2651,7 @@ class ComicGenPipeline(StudioOwnerMixin):
             raise ValueError(f"Asset {asset_id} of type {asset_type} not found")
         if asset_type == "character" and (
             "asset_pack" in attributes or
-            (target_asset.asset_pack and set(attributes) & {
+            (getattr(target_asset, "asset_pack", None) and set(attributes) & {
                 "reference_sheet", "full_body_asset", "asset_revision", "asset_revisions",
             })
         ):
@@ -11150,7 +11150,7 @@ class ComicGenPipeline(StudioOwnerMixin):
             series, target_asset = self._find_series_asset(series_id, asset_id, asset_type)
             if asset_type == "character" and (
                 "asset_pack" in attributes or
-                (target_asset.asset_pack and set(attributes) & {
+                (getattr(target_asset, "asset_pack", None) and set(attributes) & {
                     "reference_sheet", "full_body_asset", "asset_revision", "asset_revisions",
                 })
             ):
