@@ -332,6 +332,32 @@ export interface AssetReferenceIndex {
     assets: AssetReferenceIndexEntry[];
 }
 
+export interface PlatformReferenceResource {
+    platform_resource_id: string;
+    revision: number;
+    kind: string;
+    title: string;
+    summary?: string;
+    tags?: string[];
+    status: "active" | "retired" | "candidate" | "review";
+    provenance: {
+        license: string;
+        content_sha256: string;
+        source?: string;
+        source_url?: string;
+        attribution?: string;
+        notice_text?: string;
+    };
+    [key: string]: unknown;
+}
+
+export interface PlatformReferenceCatalog {
+    scope: "platform_shared";
+    schema_version: number;
+    catalog_revision: string;
+    resources: PlatformReferenceResource[];
+}
+
 /**
  * PR-3g #3 · TTS voice metadata returned by GET /voices.
  * Family-aware fields (family/dialect/lang_primary/supports_instruction)
@@ -649,6 +675,14 @@ export const api = {
 
     getAssetLibraryIndex: async (): Promise<AssetReferenceIndex> => {
         const res = await axios.get<AssetReferenceIndex>(`${API_URL}/asset-index`, {
+            headers: { "Cache-Control": "no-cache" },
+        });
+        return res.data;
+    },
+
+    getPlatformReferenceLibrary: async (query = "", kind?: string): Promise<PlatformReferenceCatalog> => {
+        const res = await axios.get<PlatformReferenceCatalog>(`${API_URL}/platform-reference-library`, {
+            params: { query: query || undefined, kind: kind || undefined },
             headers: { "Cache-Control": "no-cache" },
         });
         return res.data;

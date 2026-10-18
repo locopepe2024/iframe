@@ -89,6 +89,7 @@ from ...utils.oss_utils import OSSImageUploader, is_object_key, managed_object_k
 from ...utils.uniart_catalog import fetch_uniart_catalog, normalize_uniart_catalog
 from ...utils import setup_logging, get_user_data_dir
 from ...utils.storage_config import media_root, storage_backend
+from ..platform_reference_catalog import list_resources as list_platform_reference_resources
 from fastapi.responses import FileResponse, JSONResponse, Response
 from pathlib import Path
 from dotenv import load_dotenv, set_key
@@ -160,6 +161,19 @@ app.include_router(agent_router)
 app.include_router(knowledge_router)
 app.include_router(recreation_router)
 app.include_router(director_depth_router)
+
+
+@app.get("/platform-reference-library")
+def get_platform_reference_library(
+    kind: Optional[str] = None,
+    query: str = "",
+    user: UserContext = Depends(require_studio_user),
+):
+    """Read active deployment-scoped resources; mutations are not exposed here."""
+    try:
+        return private_no_store_signed_response(list_platform_reference_resources(kind=kind, query=query))
+    except ValueError as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
 
 # Debug: Print OSS configuration at startup
 logger.info(f"STARTUP: OSS_ENDPOINT={os.getenv('OSS_ENDPOINT')}, OSS_BUCKET_NAME={os.getenv('OSS_BUCKET_NAME')}, OSS_BASE_PATH={os.getenv('OSS_BASE_PATH')}")
