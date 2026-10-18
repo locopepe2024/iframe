@@ -31,6 +31,8 @@ Order is iterative: Director interpretation → initial storyboard → character
 4. Before an LLM refinement call, pass the bounded, source-tagged relevant snapshot. The model returns a complete candidate, not a base prompt plus hidden appended constraints. The creator applies the candidate to visible text.
 5. Before image/video generation, show the final prompt, mode, references, scene/character/plan revisions and any conflicting or stale source. Never bind a reference image because a task template or asset name merely mentions one.
 6. A reviewed submission is immutable input: the preview fingerprint includes the chosen asset design revisions and frame fields. Upstream edits require a new preview; they do not mutate existing output variants.
+7. A polished image prompt is a snapshot of the confirmed design revisions available when the LLM call started. Store those source IDs/revisions with the candidate. If a confirmed scene or character design changes, the next render preview must flag the accepted prompt for review. A draft edit alone does not make it stale. Do not silently rewrite the accepted text. The preview-to-submit token is a separate, short-lived guard and cannot substitute for the polish source snapshot. Older prompts without a source snapshot have unknown provenance, rather than an invented current revision.
+   The polish request projects only the current scene's confirmed visual fields and selected characters' confirmed identity/look fields, bounded to 4,000 characters total. The visual baseline is text context; it does not select image references.
 
 ## Thin slices
 

@@ -12,6 +12,44 @@ from src.apps.comic_gen.storyboard import StoryboardGenerator
 from src.apps.studio_access import studio_media_url, studio_owner_key, verify_studio_media
 
 
+def test_accepted_image_polish_flags_new_confirmed_design_but_not_draft():
+    scene = Scene(id="scene-1", name="长街", description="青石街", asset_design={
+        "design_revisions": [{"revision": 1, "design": {"visual_notes": "冷灰蓝长街"}}],
+        "design_draft": {},
+    })
+    character = Character(id="char-1", name="苏砚", description="剑客", character_design={
+        "design_revisions": [{"revision": 1, "design": {"identity": "素衣"}}],
+    })
+    frame = StoryboardFrame(id="frame-1", scene_id=scene.id, character_ids=[character.id])
+    script = Script(id="episode-1", title="Episode", original_text="", scenes=[scene],
+                    characters=[character], frames=[frame], created_at=0, updated_at=0)
+    pipeline = ComicGenPipeline.__new__(ComicGenPipeline)
+    pipeline.scripts = {script.id: script}
+    pipeline.series_store = {}
+    pipeline.resolve_project_assets = Mock(return_value={"scenes": [scene], "characters": [character]})
+    pipeline.get_effective_prompt = Mock(return_value="")
+    pipeline.director_prompt_context = Mock(return_value="")
+    pipeline.effective_art_direction = Mock(return_value=None)
+    pipeline.script_processor = Mock()
+    pipeline.script_processor.polish_storyboard_prompt.return_value = {
+        "prompt_cn": "长街", "prompt_en": "Reviewed street prompt",
+    }
+    pipeline._save_data = Mock()
+
+    pipeline.refine_frame_prompt(script.id, frame.id, "街上行人", [])
+    polish_call = pipeline.script_processor.polish_storyboard_prompt.call_args.args
+    assert "冷灰蓝长街" in polish_call[3] and "素衣" in polish_call[3]
+    assert pipeline.storyboard_image_polish_review(script.id, frame.id, frame.image_prompt_en) is None
+    scene.asset_design["design_draft"] = {"visual_notes": "红色草稿"}
+    assert pipeline.storyboard_image_polish_review(script.id, frame.id, frame.image_prompt_en) is None
+    scene.asset_design["design_revisions"].append({"revision": 2, "design": {"visual_notes": "新街景"}})
+    assert "场景设计已变化" in pipeline.storyboard_image_polish_review(script.id, frame.id, frame.image_prompt_en)
+    pipeline.refine_frame_prompt(script.id, frame.id, "街上行人", [])
+    assert pipeline.storyboard_image_polish_review(script.id, frame.id, frame.image_prompt_en) is None
+    character.character_design["design_revisions"].append({"revision": 2, "design": {"identity": "蓝衣"}})
+    assert "角色设计已变化" in pipeline.storyboard_image_polish_review(script.id, frame.id, frame.image_prompt_en)
+
+
 @pytest.mark.parametrize("model_name", ["uniart/gpt-image-2"])
 def test_storyboard_routes_uniart_image_models_to_uniart_adapter(monkeypatch, tmp_path, model_name):
     adapter = Mock()

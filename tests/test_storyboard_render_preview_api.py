@@ -15,6 +15,7 @@ def test_preview_returns_confirmed_scene_design_source_separately_from_prompt(mo
     pipeline.storyboard_render_preview_token.return_value = "reviewed"
     pipeline.storyboard_render_scene_design_source.return_value = "关联场景设计：长街 r2"
     pipeline.storyboard_render_omitted_plan_lighting.return_value = "残阳如血覆盖整条街"
+    pipeline.storyboard_image_polish_review.return_value = "场景设计已变化；请核对润色正文后再生成。"
     monkeypatch.setattr(api, "pipeline", pipeline)
 
     result = api.preview_render_frame(
@@ -27,6 +28,7 @@ def test_preview_returns_confirmed_scene_design_source_separately_from_prompt(mo
         "context_token": "reviewed",
         "source_label": "关联场景设计：长街 r2",
         "omitted_plan_lighting": "残阳如血覆盖整条街",
+        "polish_review": "场景设计已变化；请核对润色正文后再生成。",
     }
 
 
