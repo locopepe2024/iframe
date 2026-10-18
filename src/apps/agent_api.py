@@ -361,6 +361,8 @@ class CharacterDesignRequest(BaseModel):
     confirmed_design: str = Field(default="", max_length=4000)
     project_id: str | None = Field(default=None, max_length=100)
     reference_assets: list[CharacterDesignReference] = Field(default_factory=list, max_length=9)
+    reviewed_messages: dict[Literal["system", "user"], str] | None = None
+    review_token: str = ""
 
 
 class AssetDesignRequest(BaseModel):
@@ -523,8 +525,7 @@ def _character_design_review_needs_revision(result: dict) -> bool:
     )
 
 
-@router.post("/character-design/draft")
-def character_design_draft(body: CharacterDesignRequest, ctx: UserContext = Depends(require_user_context)):
+def _compile_character_design_draft_input(body: CharacterDesignRequest, ctx: UserContext) -> dict:
     validate_model(ctx, body.model)
     allowed_routes = {"realistic-modern", "historical-costume", "xianxia-fantasy", "anime-stylized"}
     if body.route not in allowed_routes:
@@ -551,9 +552,12 @@ def character_design_draft(body: CharacterDesignRequest, ctx: UserContext = Depe
               + "review_items 只用于输入中有明确相互矛盾的事实或已确认设定时的关键抉择；资料未提及年龄观感、画风、五官、体型或服饰细节不是冲突，请直接设计并标为 creative_choice。每项只写一个原子问题并提供一条可直接采纳的 suggestion；没有具体建议时不要输出 review_item。suggestion 必须是可直接加入图片 Prompt 的视觉值，不能是让用户修改表单、选择路由或回答问题的操作指令。不要把常规的造型细节放入 review_items，也不要输出旧字段 unresolved。"
               + "若建议改变年龄阶段或题材画风，同时提供与 suggestion 一致的 suggested_age_stage 或 suggested_route；否则工作台选项与图片 Prompt 会冲突。"
               + "参考图片是只读视觉证据，只能描述图中清晰可见的内容；不要推断图外事实。不要把图中其他人物或物品混为本角色。")
-    user_data = body.model_dump(exclude={"model", "project_id", "reference_assets"})
+    source = body.model_dump(exclude={"reviewed_messages", "review_token"})
+    user_data = body.model_dump(exclude={"model", "project_id", "reference_assets", "reviewed_messages", "review_token"})
     user_data["reference_assets"] = [reference.model_dump() for reference in body.reference_assets]
-    user_content: str | list[dict] = json.dumps(user_data, ensure_ascii=False)
+    user_content = json.dumps(user_data, ensure_ascii=False)
+    media: list[dict] = []
+    resolved_references: list[dict] = []
     if body.reference_assets:
         if not body.project_id:
             raise HTTPException(422, "选择角色参考图时需要当前项目")
@@ -564,10 +568,10 @@ def character_design_draft(body: CharacterDesignRequest, ctx: UserContext = Depe
         script = studio_pipeline.get_script(body.project_id, ctx.owner_profile_id)
         if not script:
             raise HTTPException(404, "项目不存在或当前用户无权访问")
-        parts: list[dict] = [{"type": "text", "text": user_content}]
+        labels = []
         for index, reference in enumerate(body.reference_assets):
             try:
-                media_path, _stable_reference = studio_pipeline._resolve_asset_library_reference(
+                media_path, stable_reference = studio_pipeline._resolve_asset_library_reference(
                     script,
                     reference.model_dump(),
                 )
@@ -582,29 +586,47 @@ def character_design_draft(body: CharacterDesignRequest, ctx: UserContext = Depe
                 reference.asset_type,
             )
             label = getattr(asset, "name", None) or f"{reference.asset_type}素材"
-            parts.append({"type": "text", "text": f"角色参考图 @{index + 1}：{label}（只读视觉证据）"})
-            parts.append({"type": "image_url", "image_url": {"url": media_url}})
-        user_content = parts
-    answer = complete(ctx, body.model, [{"role": "system", "content": system}, {"role": "user", "content": user_content}])
+            labels.append(f"角色参考图 @{index + 1}：{label}（只读视觉证据）")
+            media.append({"label": labels[-1], "url": media_url})
+            resolved_references.append({"path": media_path, "identity": stable_reference})
+        user_content += "\n" + "\n".join(labels)
+    messages = {"system": system, "user": user_content}
+    token = hashlib.sha256(json.dumps({"owner": ctx.owner_profile_id, "source": source,
+                                      "references": resolved_references, "compiled": messages},
+                                     ensure_ascii=False, sort_keys=True, default=str).encode()).hexdigest()
+    return {"messages": messages, "media": media, "review_token": token,
+            "format_note": "模型只返回 identity、look 和 review_items 的 JSON；不符合格式时本次不会自动重试。",
+            "route_skill_revision": route_skill["revision"], "identity_skill_revision": identity_skill["revision"],
+            "allowed_age_stages": allowed_age_stages, "allowed_routes": allowed_routes}
+
+
+@router.post("/character-design/draft/preview")
+def preview_character_design_draft(body: CharacterDesignRequest, ctx: UserContext = Depends(require_user_context)):
+    return _compile_character_design_draft_input(body, ctx)
+
+
+@router.post("/character-design/draft")
+def character_design_draft(body: CharacterDesignRequest, ctx: UserContext = Depends(require_user_context)):
+    prepared = _compile_character_design_draft_input(body, ctx)
+    allowed_age_stages = prepared["allowed_age_stages"]
+    allowed_routes = prepared["allowed_routes"]
+    messages = body.reviewed_messages
+    if not body.review_token or body.review_token != prepared["review_token"] or not messages:
+        raise HTTPException(409, "角色设计输入已变化，请重新预览并确认")
+    if set(messages) != {"system", "user"} or not messages["user"].strip():
+        raise HTTPException(422, "确认后的模型输入缺少用户消息")
+    if "identity" not in messages["system"] or "look" not in messages["system"]:
+        raise HTTPException(422, "角色设计输出格式已被移除，请恢复后再提交")
+    user_content: str | list[dict] = messages["user"]
+    if prepared["media"]:
+        user_content = [{"type": "text", "text": messages["user"]}, *(
+            {"type": "image_url", "image_url": {"url": item["url"]}} for item in prepared["media"])]
+    answer = complete(ctx, body.model, [
+        {"role": "system", "content": messages["system"]}, {"role": "user", "content": user_content}])
     try:
         result = _parse_character_design_object(answer)
         if _character_design_review_needs_revision(result):
-            correction = (
-                "上一版把未描述的外貌或造型列成待核对，未完成角色设计。"
-                "请根据已有输入给出一套具体、可编辑的 identity.visual_notes 和 look.visual_notes，"
-                "缺少依据的细节标为 creative_choice，不得声称是剧本事实。"
-                "只有输入中确实互相矛盾的关键设定才能进入 review_items，且必须有可直接采纳的 suggestion。"
-                "不要输出 unresolved；只返回修正后的 JSON。"
-            )
-            answer = complete(ctx, body.model, [
-                {"role": "system", "content": system},
-                {"role": "user", "content": user_content},
-                {"role": "assistant", "content": answer},
-                {"role": "user", "content": correction},
-            ])
-            result = _parse_character_design_object(answer)
-            if _character_design_review_needs_revision(result):
-                raise ValueError("Model returned review items without design suggestions")
+            raise ValueError("Model returned review items without design suggestions")
         identity = result.get("identity") or {}
         look = result.get("look") or {}
         if not isinstance(identity, dict) or not isinstance(look, dict):
@@ -698,8 +720,8 @@ def character_design_draft(body: CharacterDesignRequest, ctx: UserContext = Depe
         "unresolved": unresolved,
         "field_suggestions": suggestions,
         "field_suggestion_choices": suggestion_choices,
-        "skill_revision": route_skill["revision"],
-        "identity_skill_revision": identity_skill["revision"],
+        "skill_revision": prepared["route_skill_revision"],
+        "identity_skill_revision": prepared["identity_skill_revision"],
     }
 
 
