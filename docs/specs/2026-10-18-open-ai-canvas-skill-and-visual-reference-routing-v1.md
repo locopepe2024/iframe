@@ -1,0 +1,42 @@
+# open-ai-canvas Skill 与视觉参考资源分流 V1
+
+Date: 2026-10-18. Status: first routing slice implemented; media and workbench template import pending.
+
+## Observed
+
+- 当前平台目录的四个 `active` 条目均来自 open-ai-canvas 的 `backend/builtin/*/cards/*.md`；原始 frontmatter 的 `skill_type` 分别为 `template`、`technique`、`template`、`framework`。四条均无可用媒体变体和结构化视觉 `definition`。
+- iFrame 的 `GET /platform-reference-library` 目前只按 `status=active` 过滤，故这四张方法卡被显示为“已发布的平台资源”。资产库页面没有把它们绑定到角色、场景或分镜的操作。
+- 设置页已有 Skill 目录、安装/启用/卸载及版本快照；创作台 Agent 读取已启用 Skill。分镜润色支持显式 `optimization_skills`，但前端选择列表目前是固定的五项。设置页安装状态与分镜显式选择是两条不同路径。
+- open-ai-canvas 除 Skill 卡外，还有 `backend/internal/workbench/seed/catalog.json` 的图片/视频工作台模板，以及 `web/public/short-drama-styles/` 的风格样图。模板中的示例媒体引用不等于已验证可再分发的图片版权或可用于模型输入的稳定媒体身份。
+
+## 决策与作用域
+
+1. `skill_type` 非空的 Markdown 方法卡进入 **设置 → Skill**，不作为平台视觉资产展示。Skill 可以指导一次规划或优化，但不能被当成参考图、人物、场景或道具 `@` 引用。
+2. 可复用视觉资源进入 **资产库 → 平台参考库**，需有明确的结构化定义，或持久媒体身份和经逐条核对的许可。图片封面使用 WebP 预览；原图及许可证仍由媒体/来源记录管理。
+3. 工作台模板是第三类：它有任务、输入槽位和示例，不等同于实际素材图。先作为可检索的模板候选，用户显式选择并预览输入/输出后才应用。
+4. Skill 的“安装并启用”是用户级偏好；分镜某次润色的显式 Skill 选择是请求级输入。后端须记录实际选择的 Skill ID + revision。不能仅凭设置页启用就推断某个镜头用了该 Skill。
+5. 六块组装卡适用图片提示词的草稿检查与多概念图一致性。它不改写 H3/Seedance 的视频输出契约，也不替代镜头结构、首尾帧约束或模型能力字段。缺少画面文字时，文字块记录“无画面文字”，不能编造标签；画幅由已选择模型能力和用户设置决定。
+6. 所有 Skill 只在优化请求发出前参与上下文准备；优化结果仍由用户审核。不得在优化结果尾部暗中追加 Skill 文本或一致性约束。
+
+## 首批迁移
+
+- `shortfilm-5stage-structure`：短片整体规划 Skill；不默认套到单个 H3 镜头。
+- `shortfilm-micro-drama`：竖屏短剧结构 Skill；适用于剧集/序列规划，单镜头只使用相关子规则。
+- `freestyle-prompt-blocks`：图片提示词六块检查 Skill；用于图片草稿和多概念变体，不决定视频模型语法。
+- `freestyle-template-match`：风格模板选择 Skill；用于检索和评估视觉方向，不是风格图片本身。
+
+平台目录保留来源、许可、审核和 revision 记录，但 `skill_type` 卡从视觉资产读取面排除。迁移不改变现有四条审核记录，也不自动把 Skill 安装到任一用户账户。
+
+首批代码在 `config/agent_skills` 放置四份经 iFrame 工位约束改写的指导，并在设置页既有 Skill 目录中提供安装。原平台目录中的四条审核记录留作来源审计；视觉资产 API 会过滤这些方法卡。当前分镜选择器仍只列已有的视频 Skill，图片六块卡不进入该列表。图片工作台的显式 Skill 选择、模板资源绑定、平台视觉图片导入属于后续独立批次。
+
+## 验收与验证
+
+- 设置 → Skill 可检索这四个条目，显示来源、许可、版本和使用边界；安装后能在创作台 Agent 的相关任务中生效，未安装或禁用时不进入请求。
+- 资产库平台视觉资源列表不再显示这四张方法卡；真实图片/视觉资源仍按独立审核和媒体预览流程显示。
+- 分镜润色对显式选择的 Skill 做服务端 ID 与 revision 校验，并保持模型专用输出格式。图片六块 Skill 不被错误地塞入 H3 视频提示词。
+- 图片模板、风格样图逐项核对作者、许可证、媒体来源、再分发/模型输入权利后才可导入资产库。未核对项保持候选，不借用仓库整体许可证推定。
+- 测试命令：`pytest -q tests/test_agent_skills.py tests/test_platform_reference_catalog.py tests/test_storyboard_skill_contract.py`；`cd frontend && npm run typecheck`；相关 UI 用前端既有测试配置运行。
+
+## 影响路径
+
+`src/apps/platform_reference_catalog.py`、`src/apps/agent_skills.py`、`config/agent_skills/`、`frontend/src/components/settings/SkillsSettings.tsx`、`frontend/src/components/library/AssetLibraryPage.tsx`、分镜优化器选择与测试。平台媒体导入另开独立批次，不与 Skill 分流混合。
