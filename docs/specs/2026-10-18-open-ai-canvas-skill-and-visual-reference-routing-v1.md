@@ -29,6 +29,17 @@ Date: 2026-10-18. Status: first routing slice implemented; media and workbench t
 
 首批代码在 `config/agent_skills` 放置四份经 iFrame 工位约束改写的指导，并在设置页既有 Skill 目录中提供安装。原平台目录中的四条审核记录留作来源审计；视觉资产 API 会过滤这些方法卡。当前分镜选择器仍只列已有的视频 Skill，图片六块卡不进入该列表。图片工作台的显式 Skill 选择、模板资源绑定、平台视觉图片导入属于后续独立批次。
 
+## open-ai-canvas 后续候选清单
+
+| 来源 | 已观察到的内容 | iFrame 目标 | 当前闸门 |
+| --- | --- | --- | --- |
+| `backend/internal/workbench/seed/catalog.json` | 图片、视频工作台任务模板，含名称、任务重点和输入槽位；例如场景母版、关键帧、首尾帧过渡、运镜测试 | 工作台模板目录，用户选择后投影到当前角色/场景/分镜 | 需确定输入槽位 schema、兼容模型、输出预览和模板 revision；它们不是成品图片 |
+| `web/src/components/canvas/canvas-style-picker-modal.tsx` | 短剧风格名称、描述、提示词与示例封面 | 结构化风格预设候选 | 需拆分可复用参数与展示文案；每张封面逐一核对来源与使用权 |
+| `web/public/short-drama-styles/*.jpg` | 18 张本地风格封面 | 平台视觉资产候选 | 仓库路径证明文件存在，不证明每张图片可向 iFrame 用户再分发或传给模型 |
+| `scripts/workbench-catalog-seed.ts` | 工作台种子图片使用 Unsplash URL，另有内部 image ID | 仅作展示来源线索 | 需逐项确认摄影作者、许可、允许的访问用途和稳定媒体身份；不直接拷贝为共享资产 |
+
+优先顺序：先导入无媒体的工作台模板定义并完成显式选择交互；再挑少量来源清楚的风格预设与封面做媒体试点。不得因为 open-ai-canvas 仓库整体为 MIT 就推断其引用的第三方照片、视频也为 MIT。
+
 ## 验收与验证
 
 - 设置 → Skill 可检索这四个条目，显示来源、许可、版本和使用边界；安装后能在创作台 Agent 的相关任务中生效，未安装或禁用时不进入请求。
