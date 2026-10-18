@@ -171,7 +171,7 @@ app.include_router(director_depth_router)
 def get_platform_reference_library(
     kind: Optional[str] = None,
     query: str = "",
-    user: UserContext = Depends(require_studio_user),
+    user: UserContext = Depends(require_user_context),
 ):
     """Read active deployment-scoped resources; mutations are not exposed here."""
     try:
@@ -185,7 +185,7 @@ class PlatformReferencePromotionRequest(BaseModel):
 
 
 @app.get("/platform-reference-library/reviewer")
-def get_platform_reference_reviewer(user: UserContext = Depends(require_studio_user)):
+def get_platform_reference_reviewer(user: UserContext = Depends(require_user_context)):
     """Return only whether this API-key identity may review platform candidates."""
     return {"authorized": reviewer_is_authorized(user.owner_profile_id)}
 
@@ -194,7 +194,7 @@ def get_platform_reference_reviewer(user: UserContext = Depends(require_studio_u
 def promote_platform_reference(
     resource_id: str,
     request: PlatformReferencePromotionRequest,
-    user: UserContext = Depends(require_studio_user),
+    user: UserContext = Depends(require_user_context),
 ):
     if not reviewer_is_authorized(user.owner_profile_id):
         raise HTTPException(status_code=403, detail="平台参考资源审核权限不足")
