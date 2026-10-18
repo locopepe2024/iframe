@@ -18,6 +18,7 @@ import PreviewImage from "@/components/shared/preview/PreviewImage";
 import { toast } from "@/store/toastStore";
 import { resolveAssetGenerationModel } from "@/lib/modelCatalog";
 import AssetImageSubmissionReview from "@/components/shared/AssetImageSubmissionReview";
+import VideoPolishReview, { type VideoPolishMessages } from "./storyboard-r2v/VideoPolishReview";
 import {
     buildCharacterImagePrompt,
     buildCharacterMotionPrompt,
@@ -349,6 +350,10 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
     const [designRevision, setDesignRevision] = useState<number>(asset.character_design?.design_revisions?.at(-1)?.revision || 0);
     const [savingDesign, setSavingDesign] = useState(false);
     const [designError, setDesignError] = useState("");
+    const [designReview, setDesignReview] = useState<{
+        source: string; request: Record<string, unknown>; messages: VideoPolishMessages;
+        media: { label: string; url: string }[]; reviewToken: string; formatNote: string;
+    } | null>(null);
     const updateProject = useProjectStore(state => state.updateProject);
     const currentProject = useProjectStore(state => state.currentProject);
     const [assetIndex, setAssetIndex] = useState<AssetReferenceIndexEntry[]>([]);
@@ -544,8 +549,55 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
         setHeadshotPrompt(buildCharacterImagePrompt("headshot", asset.name, currentDesignDescription, hasFullBodyImage || hasAnyUpload));
         setPromptsNeedDesignApply(false);
     };
+    const characterDesignRequest = {
+        model: designModel,
+        project_id: currentProject?.id,
+        reference_assets: designReferences,
+        character_name: asset.name,
+        profile: asset.description,
+        current_draft: designPromptDescription(
+            characterSectionText(identityFeatures, IDENTITY_FIELDS.map(([key]) => key), designNotes),
+            characterSectionText(lookFeatures, LOOK_FIELDS.map(([key]) => key), lookNotes)),
+        user_visual_requirements: userVisualRequirements,
+        user_answers: Object.fromEntries(Object.entries(designFieldAnswers).filter(([, answer]) => answer.trim())),
+        route: designRoute,
+        age_stage: designAgeStage,
+        style: stylePrompt,
+        confirmed_design: confirmedDesignDescription(asset.character_design?.design_revisions?.at(-1)?.design),
+    };
+    const characterDesignSource = JSON.stringify(characterDesignRequest);
+    const characterDesignSourceRef = useRef(characterDesignSource);
+    characterDesignSourceRef.current = characterDesignSource;
+    useEffect(() => { setDesignReview(null); }, [characterDesignSource]);
+
     const generateDesignDraft = async () => {
         if (!designModel || designing) return;
+        setDesigning(true);
+        setDesignError("");
+        setDesignReview(null);
+        try {
+            const source = characterDesignSource;
+            const preview = await agentRequest<{ messages: VideoPolishMessages; media: { label: string; url: string }[];
+                review_token: string; format_note: string }>("/character-design/draft/preview", "POST", characterDesignRequest);
+            if (characterDesignSourceRef.current === source) setDesignReview({
+                source, request: characterDesignRequest, messages: preview.messages, media: preview.media,
+                reviewToken: preview.review_token, formatNote: preview.format_note,
+            });
+        } catch (error) {
+            setDesignError(error instanceof Error ? error.message : "预览角色设计输入失败，请重试。");
+        } finally {
+            setDesigning(false);
+        }
+    };
+
+    const confirmDesignDraft = async () => {
+        const review = designReview;
+        if (!review) return;
+        if (review.source !== characterDesignSourceRef.current) {
+            setDesignReview(null);
+            setDesignError("角色输入已变化，请重新预览。");
+            return;
+        }
         setDesigning(true);
         setDesignError("");
         try {
@@ -557,21 +609,10 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
                 field_suggestion_choices?: Record<string, { age_stage?: string; route?: string }>;
                 skill_revision: string;
             }>("/character-design/draft", "POST", {
-                model: designModel,
-                project_id: currentProject?.id,
-                reference_assets: designReferences,
-                character_name: asset.name,
-                profile: asset.description,
-                current_draft: designPromptDescription(
-                    characterSectionText(identityFeatures, IDENTITY_FIELDS.map(([key]) => key), designNotes),
-                    characterSectionText(lookFeatures, LOOK_FIELDS.map(([key]) => key), lookNotes)),
-                user_visual_requirements: userVisualRequirements,
-                user_answers: Object.fromEntries(Object.entries(designFieldAnswers).filter(([, answer]) => answer.trim())),
-                route: designRoute,
-                age_stage: designAgeStage,
-                style: stylePrompt,
-                confirmed_design: confirmedDesignDescription(asset.character_design?.design_revisions?.at(-1)?.design),
+                ...review.request, reviewed_messages: review.messages, review_token: review.reviewToken,
             });
+            setDesignReview(null);
+            if (review.source !== characterDesignSourceRef.current) return;
             const nextIdentity = preserveVisualRequirement(result.identity.visual_notes, userVisualRequirements.identity);
             const nextLook = preserveVisualRequirement(result.look.visual_notes, userVisualRequirements.look);
             const nextIdentityFeatures = normalizeCharacterFeatures(result.identity.features, IDENTITY_FIELDS.map(([key]) => key));
@@ -1017,6 +1058,12 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
                                 </select>
                                 <button type="button" disabled={!designModel || designing || !asset.description} onClick={() => void generateDesignDraft()} className="inline-flex min-h-10 items-center gap-1.5 rounded-md border border-glass-border px-3 text-sm text-foreground hover:bg-hover-bg disabled:opacity-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary"><Sparkles size={15} />{designing ? "设计中" : "生成草稿"}</button>
                             </div>
+                            {designReview && <div className="mt-3"><VideoPolishReview
+                                messages={designReview.messages} media={designReview.media} formatNote={designReview.formatNote}
+                                isContextIr={false} isSubmitting={designing} error={designError}
+                                userLabel="角色档案与视觉要求" confirmLabel="确认输入并生成角色草稿"
+                                onChange={messages => setDesignReview(current => current && ({ ...current, messages }))}
+                                onCancel={() => setDesignReview(null)} onConfirm={() => void confirmDesignDraft()} /></div>}
                             {designUnresolved.length > 0 && (
                                 <section className="mt-3 rounded-md border border-amber-400/30 bg-amber-400/5 p-3" aria-labelledby="character-design-unresolved-title">
                                     <div className="flex items-start justify-between gap-2">

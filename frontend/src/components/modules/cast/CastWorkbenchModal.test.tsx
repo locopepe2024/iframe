@@ -183,9 +183,12 @@ it('separates scene content from continuity and submits only reviewed text', asy
 
 it('lets scene designers ask AI for an editable draft and save it without replacing the asset description', async () => {
  const scene = { id: 'scene-1', name: '粮铺门前', description: '青溪镇街边粮铺' };
- vi.mocked(agentRequest).mockResolvedValueOnce({
-  visual_notes: '青石板长街，灰青木构粮铺，暮秋残阳从右后方斜照。', unresolved: [],
- } as any);
+ vi.mocked(agentRequest).mockImplementationOnce((path: string, _method?: string, body?: any) => Promise.resolve(
+  path === '/asset-design/draft/preview'
+   ? { messages: { system: '返回 visual_notes 和 unresolved', user: JSON.stringify(body) }, review_token: 'reviewed', format_note: 'JSON' }
+   : { visual_notes: '青石板长街，灰青木构粮铺，暮秋残阳从右后方斜照。', unresolved: [] }
+ ) as any);
+ vi.mocked(agentRequest).mockResolvedValueOnce({ visual_notes: '青石板长街，灰青木构粮铺，暮秋残阳从右后方斜照。', unresolved: [] } as any);
  vi.mocked(api.generateAsset).mockResolvedValue({ ...project, scenes: [scene] } as any);
  vi.mocked(api.updateAssetAttributes).mockResolvedValue({ ...project, scenes: [{
   ...scene, asset_design: { visual_notes: '用户调整后的粮铺外观', confirmed: true },
@@ -194,8 +197,12 @@ it('lets scene designers ask AI for an editable draft and save it without replac
 
  fireEvent.change(screen.getByLabelText('设计要求'), { target: { value: '南北要道，暮秋黄昏，画面简洁' } });
  fireEvent.click(screen.getByRole('button', { name: '生成设计草稿' }));
+ await screen.findByRole('button', { name: '确认输入并生成草稿' });
+ expect(agentRequest).not.toHaveBeenCalledWith('/asset-design/draft', 'POST', expect.anything());
+ fireEvent.click(screen.getByRole('button', { name: '确认输入并生成草稿' }));
  await waitFor(() => expect(agentRequest).toHaveBeenCalledWith('/asset-design/draft', 'POST', expect.objectContaining({
   asset_type: 'scene', asset_name: '粮铺门前', user_requirements: '南北要道，暮秋黄昏，画面简洁',
+  project_id: 'project', asset_id: 'scene-1', review_token: 'reviewed',
  })));
  expect((screen.getByLabelText('视觉设计草稿') as HTMLTextAreaElement).value).toContain('青石板长街');
  expect(document.querySelector('[contenteditable="true"]')?.textContent).not.toContain('不出现人物');
@@ -205,6 +212,20 @@ it('lets scene designers ask AI for an editable draft and save it without replac
  await waitFor(() => expect(api.updateAssetAttributes).toHaveBeenCalledWith('project', 'scene-1', 'scene', {
   asset_design: expect.objectContaining({ visual_notes: '用户调整后的粮铺外观', confirmed: true }),
  }));
+});
+
+it('drops the asset design preview when the user changes design requirements', async () => {
+ const scene = { id: 'scene-1', name: '粮铺门前', description: '青溪镇街边粮铺' };
+ vi.mocked(agentRequest).mockImplementationOnce((_path: string, _method?: string, body?: any) => Promise.resolve({
+  messages: { system: '返回 visual_notes 和 unresolved', user: JSON.stringify(body) }, review_token: 'reviewed', format_note: 'JSON',
+ } as any));
+ showScene(scene);
+ fireEvent.change(screen.getByLabelText('设计要求'), { target: { value: '蓝灰长街' } });
+ fireEvent.click(screen.getByRole('button', { name: '生成设计草稿' }));
+ await screen.findByRole('button', { name: '确认输入并生成草稿' });
+ fireEvent.change(screen.getByLabelText('设计要求'), { target: { value: '蓝灰长街，仅远处暖红' } });
+ await waitFor(() => expect(screen.queryByRole('button', { name: '确认输入并生成草稿' })).not.toBeInTheDocument());
+ expect(agentRequest).not.toHaveBeenCalledWith('/asset-design/draft', 'POST', expect.anything());
 });
 
 it('keeps only the remaining selected scene image after an external prompt replacement', async () => {
@@ -230,9 +251,14 @@ it('keeps only the remaining selected scene image after an external prompt repla
  expect(screen.getByRole('textbox', { name: 'Generation description (editable template)' })).toHaveTextContent('青溪镇青石');
  // The AI draft path replaces the prompt with plain text while the selected
  // scene remains. The editor must rebuild the stable token and drop grain.
+ vi.mocked(agentRequest).mockImplementationOnce((_path: string, _method?: string, body?: any) => Promise.resolve({
+  messages: { system: '返回 visual_notes 和 unresolved', user: JSON.stringify(body) }, review_token: 'reviewed', format_note: 'JSON',
+ } as any));
  vi.mocked(agentRequest).mockResolvedValueOnce({ visual_notes: '粮铺人群退避，背景与@青溪镇青石板长街一致。', unresolved: [] } as any);
  fireEvent.change(screen.getByLabelText('设计要求'), { target: { value: '沿用长街背景' } });
  fireEvent.click(screen.getByRole('button', { name: '生成设计草稿' }));
+ await screen.findByRole('button', { name: '确认输入并生成草稿' });
+ fireEvent.click(screen.getByRole('button', { name: '确认输入并生成草稿' }));
  await waitFor(() => expect((screen.getByRole('textbox', { name: 'Generation description (editable template)' }) as any).editor.getText()).toContain('背景与@青溪镇青石板长街'));
  fireEvent.click(screen.getByRole('button', { name: /Generate first batch/ }));
  await approveImageReview();

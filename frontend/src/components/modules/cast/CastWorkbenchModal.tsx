@@ -42,6 +42,7 @@ import ReferencePromptEditor, {
 } from "@/components/modules/playground/ReferencePromptEditor";
 import { getAssetPlanEntries } from "@/lib/episodeAssetPlan";
 import type { EpisodeVisualContext } from "@/lib/directorShootingPlan";
+import VideoPolishReview, { type VideoPolishMessages } from "../storyboard-r2v/VideoPolishReview";
 
 export type CastKind = "character" | "scene" | "prop";
 
@@ -342,6 +343,10 @@ export default function CastWorkbenchModal({ isOpen, kind, entityId, onClose }: 
     const [assetDesignRequirements, setAssetDesignRequirements] = useState("");
     const [assetDesignUnresolved, setAssetDesignUnresolved] = useState<string[]>([]);
     const [assetDesigning, setAssetDesigning] = useState(false);
+    const [assetDesignReview, setAssetDesignReview] = useState<{
+        source: string; request: Record<string, unknown>; messages: VideoPolishMessages;
+        reviewToken: string; formatNote: string;
+    } | null>(null);
     const [assetDesignSaving, setAssetDesignSaving] = useState(false);
     const [episodeVisualContext, setEpisodeVisualContext] = useState<EpisodeVisualContext | null>(null);
     const [batchSize, setBatchSize] = useState(1);
@@ -502,6 +507,22 @@ export default function CastWorkbenchModal({ isOpen, kind, entityId, onClose }: 
         setLibraryPickerOpen(false);
     }, [currentProject?.id, entity?.id, kind]);
 
+    const assetDesignRequest = {
+        model: selectedModelId,
+        project_id: currentProject?.id || "",
+        asset_id: entity?.id || "",
+        asset_type: kind,
+        asset_name: entity?.name || "",
+        description: entity?.description || entity?.name || "",
+        current_draft: assetDesignNotes,
+        user_requirements: assetDesignRequirements,
+        confirmed_design: entity?.asset_design?.design_revisions?.at(-1)?.design?.visual_notes || "",
+    };
+    const assetDesignSource = JSON.stringify(assetDesignRequest);
+    const assetDesignSourceRef = useRef(assetDesignSource);
+    assetDesignSourceRef.current = assetDesignSource;
+    useEffect(() => { setAssetDesignReview(null); }, [assetDesignSource]);
+
     if (!isOpen || !kind || !entity || !currentProject) return null;
 
     const ms = currentProject.model_settings;
@@ -522,16 +543,37 @@ export default function CastWorkbenchModal({ isOpen, kind, entityId, onClose }: 
     const handleGenerateAssetDesign = async () => {
         if (kind === "character" || !selectedModelId || assetDesigning) return;
         setAssetDesigning(true);
+        setAssetDesignReview(null);
+        try {
+            const source = assetDesignSource;
+            const preview = await agentRequest<{ messages: VideoPolishMessages; review_token: string; format_note: string }>(
+                "/asset-design/draft/preview", "POST", assetDesignRequest);
+            if (assetDesignSourceRef.current === source) setAssetDesignReview({
+                source, request: assetDesignRequest, messages: preview.messages,
+                reviewToken: preview.review_token, formatNote: preview.format_note,
+            });
+        } catch (error: any) {
+            toast.error("设计草稿预览失败", { body: String(error?.message || "请重试") });
+        } finally {
+            setAssetDesigning(false);
+        }
+    };
+
+    const confirmAssetDesign = async () => {
+        const review = assetDesignReview;
+        if (!review) return;
+        if (review.source !== assetDesignSourceRef.current) {
+            setAssetDesignReview(null);
+            toast.error("资产输入已变化，请重新预览");
+            return;
+        }
+        setAssetDesigning(true);
         try {
             const result = await agentRequest<{ visual_notes: string; unresolved?: string[] }>("/asset-design/draft", "POST", {
-                model: selectedModelId,
-                asset_type: kind,
-                asset_name: entity.name,
-                description: entity.description || entity.name,
-                current_draft: assetDesignNotes,
-                user_requirements: assetDesignRequirements,
-                confirmed_design: entity.asset_design?.design_revisions?.at(-1)?.design?.visual_notes || "",
+                ...review.request, reviewed_messages: review.messages, review_token: review.reviewToken,
             });
+            setAssetDesignReview(null);
+            if (review.source !== assetDesignSourceRef.current) return;
             const notes = String(result?.visual_notes || "").trim();
             if (!notes) throw new Error("设计模型未返回视觉方案");
             setAssetDesignNotes(notes);
@@ -1121,6 +1163,12 @@ export default function CastWorkbenchModal({ isOpen, kind, entityId, onClose }: 
                                         className="mt-2 w-full resize-y rounded-md border border-glass-border bg-surface px-2.5 py-2 text-xs leading-5 text-foreground placeholder:text-text-muted focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary"
                                         aria-label="设计要求"
                                     />
+                                    {assetDesignReview && <div className="mt-2"><VideoPolishReview
+                                        messages={assetDesignReview.messages} media={[]} formatNote={assetDesignReview.formatNote}
+                                        isContextIr={false} isSubmitting={assetDesigning} userLabel="资产档案与设计要求"
+                                        confirmLabel="确认输入并生成草稿"
+                                        onChange={messages => setAssetDesignReview(current => current && ({ ...current, messages }))}
+                                        onCancel={() => setAssetDesignReview(null)} onConfirm={() => void confirmAssetDesign()} /></div>}
                                     {assetDesignNotes && (
                                         <div className="mt-2 rounded-md border border-glass-border bg-surface/70 p-2.5">
                                             <label className="text-[0.625rem] uppercase tracking-[0.14em] text-text-muted">视觉设计草稿</label>
