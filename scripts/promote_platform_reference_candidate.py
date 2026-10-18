@@ -8,10 +8,11 @@ from __future__ import annotations
 
 import argparse
 import hashlib
-import json
 import os
-from datetime import datetime, timezone
 from pathlib import Path
+
+from src.apps.platform_reference_catalog import configured_reviewer_identity, promote_resource
+from src.utils import get_user_data_dir
 
 
 def reviewer_from_api_key(api_key: str) -> str:
@@ -21,51 +22,15 @@ def reviewer_from_api_key(api_key: str) -> str:
     return "apikey-" + hashlib.sha256(normalized.encode("utf-8")).hexdigest()
 
 
-def _find_config_value(value, key: str):
-    if isinstance(value, dict):
-        if isinstance(value.get(key), str) and value[key].strip():
-            return value[key]
-        for child in value.values():
-            found = _find_config_value(child, key)
-            if found:
-                return found
-    elif isinstance(value, list):
-        for child in value:
-            found = _find_config_value(child, key)
-            if found:
-                return found
-    return None
-
-
 def reviewer_from_iframe_config(path: Path, key: str = "UNIART_API_KEY") -> str:
-    if not path.exists():
-        raise ValueError(f"iFrame config not found: {path}")
-    config = json.loads(path.read_text(encoding="utf-8"))
-    api_key = _find_config_value(config, key)
-    if not api_key:
+    identity = configured_reviewer_identity(path, key)
+    if not identity:
         raise ValueError(f"{key} not found in iFrame config")
-    return reviewer_from_api_key(api_key)
+    return identity
 
 
 def promote(path: Path, resource_id: str, reviewer: str, expected_hash: str | None = None) -> dict:
-    manifest = json.loads(path.read_text(encoding="utf-8"))
-    resources = manifest.get("resources", [])
-    resource = next((item for item in resources if item.get("platform_resource_id") == resource_id), None)
-    if resource is None:
-        raise ValueError(f"platform resource not found: {resource_id}")
-    if resource.get("status") != "candidate":
-        raise ValueError(f"platform resource is not a candidate: {resource_id}")
-    actual_hash = resource.get("provenance", {}).get("content_sha256")
-    if expected_hash and expected_hash != actual_hash:
-        raise ValueError("content hash does not match reviewed candidate")
-    resource["status"] = "active"
-    resource["review"] = {
-        "reviewer": reviewer,
-        "reviewed_at": datetime.now(timezone.utc).isoformat(),
-        "content_sha256": actual_hash,
-    }
-    path.write_text(json.dumps(manifest, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
-    return resource
+    return promote_resource(resource_id, reviewer, expected_hash, path)
 
 
 def main() -> None:
@@ -73,7 +38,7 @@ def main() -> None:
     parser.add_argument("resource_id")
     parser.add_argument("--reviewer")
     parser.add_argument("--reviewer-api-key-env", default="IFRAME_PLATFORM_REVIEW_API_KEY")
-    parser.add_argument("--reviewer-config", type=Path, default=Path.home() / ".iframe" / "config.json")
+    parser.add_argument("--reviewer-config", type=Path)
     parser.add_argument("--reviewer-config-key", default="UNIART_API_KEY")
     parser.add_argument("--expected-hash")
     parser.add_argument("--manifest", type=Path, default=Path("config/platform_reference_catalog/manifest.json"))
@@ -82,8 +47,9 @@ def main() -> None:
     if not reviewer:
         api_key = os.getenv(args.reviewer_api_key_env)
         if not api_key:
+            config_path = args.reviewer_config or Path(get_user_data_dir()) / "config.json"
             try:
-                reviewer = reviewer_from_iframe_config(args.reviewer_config, args.reviewer_config_key)
+                reviewer = reviewer_from_iframe_config(config_path, args.reviewer_config_key)
             except ValueError as exc:
                 parser.error(f"provide --reviewer, set the reviewer API key environment variable, or use .iframe config: {exc}")
         else:

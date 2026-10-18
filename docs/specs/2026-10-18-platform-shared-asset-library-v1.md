@@ -146,27 +146,23 @@ source
 
 导入候选未通过来源、许可证和质量检查时，只能留在候选区，不得出现在普通共享搜索结果中。
 
-审核人可以使用当前 iFrame API Key 作为审核身份，但 manifest 只保存不可逆身份指纹（格式为 `apikey-<sha256>`），绝不保存 API Key 原文：
+审核权限由后端部署实例上的 iFrame 配置决定。审核页面请求携带浏览器已有的 API Key 身份指纹，后端将它与主机 `.iframe/config.json` 中 `UNIART_API_KEY` 的不可逆指纹比较；浏览器不保存审核专用密钥，后端也不把主机密钥返回给前端。manifest 只保存不可逆身份指纹（格式为 `apikey-<sha256>`），绝不保存 API Key 原文。
 
 ```bash
-export IFRAME_PLATFORM_REVIEW_API_KEY='当前 iFrame API Key'
-python3 scripts/promote_platform_reference_candidate.py \
-  open-ai-canvas.style.freestyle-template-match.v1 \
-  --reviewer-api-key-env IFRAME_PLATFORM_REVIEW_API_KEY \
-  --expected-hash <sha256>
+后端审核接口会在每次请求时读取主机配置并完成比较；没有匹配身份时只读候选，禁止 promote。
 ```
 
-桌面版也可以直接读取 `~/.iframe/config.json` 中的 `UNIART_API_KEY`：
+部署脚本或离线维护命令也可以直接读取主机数据目录中的 `config.json`：
 
 ```bash
 python3 scripts/promote_platform_reference_candidate.py \
   open-ai-canvas.style.freestyle-template-match.v1 \
-  --reviewer-config ~/.iframe/config.json \
+  --reviewer-config <iframe-data-dir>/config.json \
   --reviewer-config-key UNIART_API_KEY \
   --expected-hash <sha256>
 ```
 
-配置文件中的密钥只用于计算 `apikey-<sha256>`，不会写入审核记录或 manifest。
+配置文件中的密钥只用于计算 `apikey-<sha256>`，不会写入审核记录、manifest 或浏览器存储。
 
 这与现有 `owner_profile_id=apikey-<sha256>` 的身份规则一致。
 

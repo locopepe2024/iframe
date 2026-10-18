@@ -1,18 +1,76 @@
-"""Deployment-scoped, read-only platform reference catalog.
+"""Deployment-scoped platform reference catalog.
 
 The catalog is intentionally file-backed in this first slice. API keys may
-read active resources, but no user request can mutate this directory. Import
-and promotion will be added behind a separate manifest/review workflow.
+read active resources; promotion is restricted to the deployment reviewer
+identity derived from the host iFrame configuration.
 """
 from __future__ import annotations
 
 import json
+import hashlib
+import os
 from pathlib import Path
 from typing import Any, Optional
 
 
 CATALOG_ROOT = Path(__file__).resolve().parents[1] / ".." / "config" / "platform_reference_catalog"
 MANIFEST_PATH = CATALOG_ROOT / "manifest.json"
+
+
+def _default_review_config() -> Path:
+    # Keep the reviewer secret on the iFrame host.  This follows the same data
+    # directory resolution as the packaged backend and does not create a local
+    # browser-side reviewer credential.
+    from ..utils import get_user_data_dir
+
+    return Path(get_user_data_dir()) / "config.json"
+
+
+def _find_config_value(value: Any, key: str) -> Optional[str]:
+    if isinstance(value, dict):
+        candidate = value.get(key)
+        if isinstance(candidate, str) and candidate.strip():
+            return candidate.strip()
+        for child in value.values():
+            found = _find_config_value(child, key)
+            if found:
+                return found
+    elif isinstance(value, list):
+        for child in value:
+            found = _find_config_value(child, key)
+            if found:
+                return found
+    return None
+
+
+def configured_reviewer_identity(
+    config_path: Path | None = None,
+    key_name: str | None = None,
+) -> Optional[str]:
+    """Return the server configured reviewer identity without exposing its key."""
+    configured_path = os.getenv("IFRAME_PLATFORM_REVIEW_CONFIG", "").strip()
+    if config_path is not None:
+        path = config_path
+    elif configured_path:
+        path = Path(configured_path).expanduser()
+    else:
+        path = _default_review_config()
+    field = key_name or os.getenv("IFRAME_PLATFORM_REVIEW_KEY_FIELD", "UNIART_API_KEY")
+    if not path.exists():
+        return None
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return None
+    key = _find_config_value(payload, field)
+    if not key:
+        return None
+    return "apikey-" + hashlib.sha256(key.encode("utf-8")).hexdigest()
+
+
+def reviewer_is_authorized(owner_profile_id: str, config_path: Path | None = None) -> bool:
+    expected = configured_reviewer_identity(config_path)
+    return bool(expected and owner_profile_id == expected)
 
 
 def _read_manifest(path: Path = MANIFEST_PATH) -> dict[str, Any]:
@@ -72,3 +130,29 @@ def list_resources(*, kind: Optional[str] = None, query: str = "", path: Path = 
         "catalog_revision": manifest.get("catalog_revision", "unknown"),
         "resources": resources,
     }
+
+
+def promote_resource(
+    resource_id: str,
+    reviewer_identity: str,
+    expected_hash: Optional[str] = None,
+    path: Path = MANIFEST_PATH,
+) -> dict[str, Any]:
+    manifest = _read_manifest(path)
+    resource = next((item for item in manifest["resources"] if item.get("platform_resource_id") == resource_id), None)
+    if resource is None:
+        raise ValueError("platform resource not found")
+    if resource.get("status") != "candidate":
+        raise ValueError("platform resource is not a candidate")
+    actual_hash = resource.get("provenance", {}).get("content_sha256")
+    if expected_hash and expected_hash != actual_hash:
+        raise ValueError("content hash does not match reviewed candidate")
+    resource["status"] = "active"
+    resource["review"] = {
+        "reviewer": reviewer_identity,
+        "content_sha256": actual_hash,
+    }
+    temporary = path.with_suffix(path.suffix + ".tmp")
+    temporary.write_text(json.dumps(manifest, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    os.replace(temporary, path)
+    return resource

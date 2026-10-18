@@ -89,7 +89,11 @@ from ...utils.oss_utils import OSSImageUploader, is_object_key, managed_object_k
 from ...utils.uniart_catalog import fetch_uniart_catalog, normalize_uniart_catalog
 from ...utils import setup_logging, get_user_data_dir
 from ...utils.storage_config import media_root, storage_backend
-from ..platform_reference_catalog import list_resources as list_platform_reference_resources
+from ..platform_reference_catalog import (
+    list_resources as list_platform_reference_resources,
+    promote_resource as promote_platform_reference_resource,
+    reviewer_is_authorized,
+)
 from fastapi.responses import FileResponse, JSONResponse, Response
 from pathlib import Path
 from dotenv import load_dotenv, set_key
@@ -174,6 +178,34 @@ def get_platform_reference_library(
         return private_no_store_signed_response(list_platform_reference_resources(kind=kind, query=query))
     except ValueError as exc:
         raise HTTPException(status_code=500, detail=str(exc))
+
+
+class PlatformReferencePromotionRequest(BaseModel):
+    expected_hash: Optional[str] = None
+
+
+@app.get("/platform-reference-library/reviewer")
+def get_platform_reference_reviewer(user: UserContext = Depends(require_studio_user)):
+    """Return only whether this API-key identity may review platform candidates."""
+    return {"authorized": reviewer_is_authorized(user.owner_profile_id)}
+
+
+@app.post("/platform-reference-library/{resource_id}/promote")
+def promote_platform_reference(
+    resource_id: str,
+    request: PlatformReferencePromotionRequest,
+    user: UserContext = Depends(require_studio_user),
+):
+    if not reviewer_is_authorized(user.owner_profile_id):
+        raise HTTPException(status_code=403, detail="平台参考资源审核权限不足")
+    try:
+        return private_no_store_signed_response(promote_platform_reference_resource(
+            resource_id,
+            user.owner_profile_id,
+            request.expected_hash,
+        ))
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc))
 
 # Debug: Print OSS configuration at startup
 logger.info(f"STARTUP: OSS_ENDPOINT={os.getenv('OSS_ENDPOINT')}, OSS_BUCKET_NAME={os.getenv('OSS_BUCKET_NAME')}, OSS_BASE_PATH={os.getenv('OSS_BASE_PATH')}")
