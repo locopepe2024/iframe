@@ -18,9 +18,12 @@ MANIFEST_PATH = CATALOG_ROOT / "manifest.json"
 
 
 def _default_review_config() -> Path:
-    # Keep the reviewer secret on the iFrame host.  This follows the same data
-    # directory resolution as the packaged backend and does not create a local
-    # browser-side reviewer credential.
+    # Production iFrame hosts keep the deployment credential under /opt/.iframe.
+    # The application data directory remains the local/dev fallback. Neither
+    # path creates or stores a browser-side reviewer credential.
+    host_config = Path("/opt/.iframe/config.json")
+    if host_config.exists() or Path("/opt/.iframe").exists():
+        return host_config
     from ..utils import get_user_data_dir
 
     return Path(get_user_data_dir()) / "config.json"
