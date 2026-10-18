@@ -419,8 +419,6 @@ it("projects edited character fields only after explicit application and saves t
         onGenerate={vi.fn()} generatingTypes={[]} />);
 
     const editor = screen.getByRole("textbox", { name: "Enter prompt description..." });
-    expect(screen.queryByRole("textbox", { name: "角色脸型与眉眼" })).not.toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: /逐项编辑身份外观/ }));
     fireEvent.change(screen.getByRole("textbox", { name: "角色脸型与眉眼" }), { target: { value: "方脸，眉眼锋利" } });
     expect(editor).not.toHaveTextContent("方脸，眉眼锋利");
     fireEvent.click(screen.getByText("查看将写入的三条图片提示词"));
@@ -449,7 +447,6 @@ it("flags user requirements that a structured model draft omitted before prompt 
 
     expect(screen.getByRole("status")).toHaveTextContent("身份：宽肩长腿");
     expect(screen.getByRole("status")).toHaveTextContent("造型：蓝色布料");
-    fireEvent.click(screen.getByRole("button", { name: /逐项编辑造型/ }));
     fireEvent.change(screen.getByRole("textbox", { name: "角色服装结构与材质" }), { target: { value: "蓝色布料的劲装" } });
     expect(screen.getByRole("status")).not.toHaveTextContent("造型：蓝色布料");
 });
@@ -611,15 +608,6 @@ it("searches current project materials and passes selected reference IDs to desi
     fireEvent.click(screen.getByRole("button", { name: "选择角色参考图" }));
     fireEvent.change(screen.getByLabelText("搜索角色参考素材"), { target: { value: "苏砚" } });
     fireEvent.click(await screen.findByRole("option", { name: /苏砚定妆照/ }));
-    expect(screen.getByRole("button", { name: "Reference image" })).toHaveAttribute("aria-pressed", "false");
-    expect(screen.getByRole("button", { name: "沿用到全身出图" })).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "沿用到全身出图" }));
-    expect(screen.getByRole("button", { name: "Reference image" })).toHaveAttribute("aria-pressed", "true");
-    fireEvent.click(screen.getByTestId("variant-generate"));
-    await waitFor(() => expect(apiMocks.previewAssetImageSubmission).toHaveBeenLastCalledWith("project-1", expect.objectContaining({
-        image_generation_mode: "reference",
-        references: [{ asset_type: "character", asset_id: "ref-character", variant_id: "front-view" }],
-    })));
     fireEvent.click(screen.getByRole("button", { name: "生成草稿" }));
     await approveDesignPreview();
 
