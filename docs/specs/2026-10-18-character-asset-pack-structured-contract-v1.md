@@ -1,6 +1,6 @@
 # 角色资产包结构化契约 V1
 
-日期：2026-10-18。状态：分阶段实施；正面全身锚点的项目级确认与版本记录已进入实现，其余资产包类型、本集多状态和分镜状态选择尚未实现。
+日期：2026-10-18。状态：分阶段实施；正面全身锚点的项目级确认与版本记录已进入实现。导演计划可把已存在的角色视觉资产按镜头投影，分镜变体选择和确认包的版本边界已加校验；独立的本集多状态 `use_id`、资产包派生链和分镜状态选择界面尚未实现。
 
 ## 目标与事实边界
 
@@ -47,6 +47,8 @@
 对于系列项目，当前 `Series.id` 可作为项目容器，带 `series_id` 的 `Script.id` 是剧集；独立项目只有 `Script.id`，实现时仍须用不同的**逻辑类型**区分项目资产包、角色状态／造型和具体产物，不能仅凭同一个物理容器混写。项目角色资产包在剧集工作台可作为来源候选，不能显示成“本集已生成资产”。同一角色在本集可有多个 `use_id`，每项固定 `source_pack_id + source_pack_revision + source_entry_id + source_variant_id + source_design_revision`。正常造型可以直接使用已确认包内变体，不复制媒体；受伤、换装等本集专属状态从来源派生具体资产，保存覆写和生成结果，不回写项目资产包。每个分镜按 `character_id + use_id` 显式选择造型并显示媒体真实的项目或剧集作用域；选择不能只凭镜头编号或人物名称自动推断。
 
 **现有边界：** `episode_person_asset_bindings` 只将导演计划中的 `person_id` 关联到一个当前可见的 `Character.id`；`episode_asset_bindings` 按资产 ID 记录计划适用镜头、选中变体与审核状态；确认的分镜 `reference_package.asset_revision_pins` 固定资产 revision 和媒体变体。它们尚未表达同一角色在本集不同分镜选择不同状态，也未表达角色包 revision 与派生链。人物身份映射仍由现有绑定负责；需增加或关联每个分镜的状态／造型选择，并扩充版本来源，避免建立第二套人物身份 owner。
+
+**2026-10-18 边界核对：** `DirectorPlanCastBinding.era_variant_id` 既可能是已有 `Character.id`，也可能只是旧拍摄计划中的时代标签。仅当它命中同一人物的可用视觉资产时，才把它作为镜头造型选择；否则保留原有镜头资产 ID／剧集默认绑定。镜头明确选中的视觉资产优先于剧集默认。`StoryboardFrame.character_ids` 可保存镜头的视觉资产 ID，`workbench_reference_variant_ids` 可保存镜头选择的媒体变体；变体选择变更后，涉及该资产的已确认参考包必须撤销确认并清除旧 pins，预览要显示实际新选择。此路径尚不等同于 `use_id`、项目包来源 revision 或受伤状态的完整契约。
 
 项目资产包检索支持 `project_id`、`character_id`、`layer`、`kind`、`pack_revision`、`status`；剧集资产检索支持 `script_id`、`character_id`、场景／镜头、状态、来源包版本和本集变体。两者都允许名称和标签搜索，结果返回真实 owner、完整面包屑、确认状态、来源 revision、所选变体 ID 和 WebP 封面身份。缩图 URL 按需续签，不能充当检索键。跨剧集搜索可从项目节点进入，但选择到当前镜头时须再次核对该变体在目标剧集的作用域。
 
