@@ -31,7 +31,7 @@ import ReferencePromptEditor, {
 } from "./playground/ReferencePromptEditor";
 import { searchReferenceCandidates } from "@/lib/referenceCandidateSearch";
 import { IDENTITY_FIELDS, LOOK_FIELDS, characterSectionText, normalizeCharacterFeatures,
-    type IdentityFeatures, type LookFeatures } from "@/lib/characterStructuredDesign";
+    requirementNeedsReview, type IdentityFeatures, type LookFeatures } from "@/lib/characterStructuredDesign";
 
 import type { AssetPlanEntry } from "@/lib/episodeAssetPlan";
 import EpisodeAssetPlanPanel from "./EpisodeAssetPlanPanel";
@@ -526,9 +526,15 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
     // User's own negative prompt (initially empty or with sensible defaults)
     const [negativePrompt, setNegativePrompt] = useState(DEFAULT_CHARACTER_NEGATIVE_PROMPT);
 
+    const projectedIdentity = characterSectionText(identityFeatures, IDENTITY_FIELDS.map(([key]) => key), designNotes);
+    const projectedLook = characterSectionText(lookFeatures, LOOK_FIELDS.map(([key]) => key), lookNotes);
+    const requirementsToReview = ([
+        ["身份", userVisualRequirements.identity, projectedIdentity],
+        ["造型", userVisualRequirements.look, projectedLook],
+    ] as const).filter(([, requirement, projected]) => requirementNeedsReview(requirement, projected));
     const currentDesignDescription = designPromptDescription(
-        characterSectionText(identityFeatures, IDENTITY_FIELDS.map(([key]) => key), designNotes),
-        characterSectionText(lookFeatures, LOOK_FIELDS.map(([key]) => key), lookNotes),
+        projectedIdentity,
+        projectedLook,
         [...Object.values(designFieldAnswers), ...designScopeDescription(designRoute, designAgeStage)],
     );
 
@@ -1079,6 +1085,10 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
                             <div className="min-w-0">
                                 <p className="text-xs font-medium text-foreground">角色设计草稿尚未应用到图片提示词</p>
                                 <p className="mt-0.5 text-[11px] leading-4 text-text-muted">应用会更新全身、三视图和肖像提示词，不保存角色设计或创建版本；之后仍可编辑提示词。</p>
+                                {requirementsToReview.length > 0 && <div role="status" className="mt-2 rounded border border-amber-500/40 bg-amber-500/10 p-2 text-[11px] text-amber-200">
+                                    <p>以下用户原话未逐字出现在结构化投影中。请核对上方字段与预览，必要时补回，再应用：</p>
+                                    {requirementsToReview.map(([section, requirement]) => <p key={section}>{section}：{requirement}</p>)}
+                                </div>}
                                 <details className="mt-2 text-xs text-text-secondary">
                                     <summary className="cursor-pointer">查看将写入的三条图片提示词</summary>
                                     <div className="mt-2 space-y-2 whitespace-pre-wrap rounded border border-glass-border bg-surface-inset p-2 text-foreground">

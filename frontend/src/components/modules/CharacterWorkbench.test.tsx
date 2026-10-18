@@ -406,6 +406,23 @@ it("projects edited character fields only after explicit application and saves t
     }) }));
 });
 
+it("flags user requirements that a structured model draft omitted before prompt application", async () => {
+    apiMocks.getAssetReferenceIndex.mockResolvedValueOnce({ assets: [] } as any);
+    render(<CharacterWorkbench asset={{ id: "character-1", name: "苏砚", description: "少年剑客",
+        character_design: { design_draft: {
+            identity: { visual_notes: "宽肩长腿", features: { face: "窄长脸" } },
+            look: { visual_notes: "蓝色布料", features: { clothing: "黑色劲装" } },
+            user_visual_requirements: { identity: "宽肩长腿", look: "蓝色布料" },
+            confirmed: false,
+        } },
+    }} onClose={vi.fn()} onUpdateDescription={vi.fn()} onGenerate={vi.fn()} generatingTypes={[]} />);
+
+    expect(screen.getByRole("status")).toHaveTextContent("身份：宽肩长腿");
+    expect(screen.getByRole("status")).toHaveTextContent("造型：蓝色布料");
+    fireEvent.change(screen.getByRole("textbox", { name: "角色服装结构与材质" }), { target: { value: "蓝色布料的劲装" } });
+    expect(screen.getByRole("status")).not.toHaveTextContent("造型：蓝色布料");
+});
+
 it("uses visual fields as editable inputs before generating a draft", async () => {
     apiMocks.getAssetReferenceIndex.mockResolvedValueOnce({ assets: [] } as any);
     const onUpdateAttributes = vi.fn().mockResolvedValue(undefined);

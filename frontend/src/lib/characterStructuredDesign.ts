@@ -24,3 +24,10 @@ export function characterSectionText<T extends string>(features: Partial<Record<
   const values = keys.flatMap((key) => features[key]?.trim() ? [features[key]!.trim()] : []);
   return values.length ? values.join('；') : typeof legacyNotes === 'string' ? legacyNotes.trim() : '';
 }
+
+/** A review cue, not a semantic equivalence check. */
+export function requirementNeedsReview(requirement: string, projectedSection: string): boolean {
+  const normalize = (value: string) => value.replace(/[\s，。；;、,.!！?？]/g, '').toLocaleLowerCase();
+  const expected = normalize(requirement.trim());
+  return Boolean(expected && !normalize(projectedSection).includes(expected));
+}
