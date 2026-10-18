@@ -2,7 +2,7 @@ from threading import RLock
 
 import pytest
 
-from src.apps.comic_gen.models import GlobalAssetLibrary, Prop, Scene, Script
+from src.apps.comic_gen.models import GlobalAssetLibrary, Prop, Scene, Script, ShotVisualDesignSnapshot
 from src.apps.comic_gen.pipeline import ComicGenPipeline
 
 
@@ -124,3 +124,25 @@ def test_scene_visual_constraints_reject_invalid_values_without_mutation(tmp_pat
             "asset_design": {"visual_notes": "Street", "visual_constraints": constraints},
         })
     assert scene.asset_design["design_revisions"] == []
+
+
+def test_shot_visual_preset_is_snapshot_and_apply_is_frame_owned(tmp_path):
+    pipeline, scene, _ = make_pipeline(tmp_path)
+    from src.apps.comic_gen.models import StoryboardFrame
+
+    source = StoryboardFrame(id="frame-1", scene_id="street", action_description="first")
+    target = StoryboardFrame(id="frame-2", scene_id="street", action_description="second")
+    pipeline.scripts["project"].frames = [source, target]
+    source.shot_visual_design = ShotVisualDesignSnapshot(
+        visual_design={"lighting": "side", "visible_face_limit": 3},
+        compiled_prompt="side light, no more than 3 visible faces",
+    )
+    preset = pipeline.save_shot_visual_preset("project", "frame-1", "长街侧面光", source_variant_id="variant-1")
+    assert preset is not None
+    applied = pipeline.apply_shot_visual_preset("project", "frame-2", preset.id, "parameters_with_reference")
+    assert applied is not None
+    assert applied.shot_visual_design.source_preset_id == preset.id
+    assert applied.shot_visual_design.source_variant_id == "variant-1"
+    assert applied.shot_visual_design.apply_mode == "parameters_with_reference"
+    preset.visual_design["lighting"] = "mutated test value"
+    assert applied.shot_visual_design.visual_design["lighting"] == "side"

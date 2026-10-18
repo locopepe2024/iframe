@@ -692,6 +692,32 @@ class StoryboardReferencePackage(BaseModel):
     updated_at: float = Field(default_factory=time.time)
 
 
+class ShotVisualPreset(BaseModel):
+    """Reusable snapshot of one reviewed shot's structured visual settings."""
+    id: str = Field(default_factory=lambda: f"visual_preset_{uuid.uuid4().hex[:10]}")
+    name: str = Field(..., min_length=1, max_length=120)
+    scene_id: str = Field(..., min_length=1)
+    source_frame_id: str = Field(..., min_length=1)
+    source_variant_id: Optional[str] = None
+    source_scene_revision: Optional[int] = Field(None, ge=1)
+    visual_design: Dict[str, Any] = Field(default_factory=dict)
+    compiled_prompt: str = Field("", max_length=12000)
+    created_at: float = Field(default_factory=time.time)
+    updated_at: float = Field(default_factory=time.time)
+
+
+class ShotVisualDesignSnapshot(BaseModel):
+    """Current frame-owned copy after a visual preset is applied."""
+    visual_design: Dict[str, Any] = Field(default_factory=dict)
+    compiled_prompt: str = Field("", max_length=12000)
+    source_preset_id: Optional[str] = None
+    source_variant_id: Optional[str] = None
+    source_scene_revision: Optional[int] = Field(None, ge=1)
+    apply_mode: Optional[Literal["parameters_only", "parameters_with_reference"]] = None
+    revision: int = Field(1, ge=1)
+    updated_at: float = Field(default_factory=time.time)
+
+
 class StoryboardFrame(BaseModel):
     id: str = Field(..., description="Unique identifier for the frame")
     owner_user_id: Optional[str] = Field(None, description="Authenticated user owner")
@@ -732,6 +758,10 @@ class StoryboardFrame(BaseModel):
     reference_package: StoryboardReferencePackage = Field(
         default_factory=StoryboardReferencePackage,
         description="Confirmed shot-scoped Storyboard references consumed by Shot Design",
+    )
+    shot_visual_design: Optional[ShotVisualDesignSnapshot] = Field(
+        None,
+        description="Frame-owned structured visual design snapshot and preset provenance",
     )
 
     # === Storyboard Schema v2: Rich frame fields ===
@@ -2816,6 +2846,10 @@ class Script(BaseModel):
     scenes: List[Scene] = Field(default_factory=list)
     props: List[Prop] = Field(default_factory=list)
     frames: List[StoryboardFrame] = Field(default_factory=list)
+    shot_visual_presets: List[ShotVisualPreset] = Field(
+        default_factory=list,
+        description="Project-scoped reusable structured visual preset snapshots",
+    )
     video_tasks: List[VideoTask] = Field(default_factory=list)
     
     # Global style settings (legacy, will be replaced by art_direction)

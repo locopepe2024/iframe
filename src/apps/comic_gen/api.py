@@ -77,6 +77,7 @@ from .models import (
     Series,
     StoryboardFrame,
     StoryboardReferencePackage,
+    ShotVisualPreset,
     VideoTask,
     AssemblyEditPlan,
     AssetLibraryReference,
@@ -3735,6 +3736,53 @@ class UpdateFrameWorkbenchRequest(BaseModel):
     workbench_reference_variant_ids: Optional[Dict[str, List[str]]] = None
     workbench_pose_reference_variant_ids: Optional[Dict[str, List[str]]] = None
     workbench_director_snapshot_media_id: Optional[str] = None
+
+
+class SaveShotVisualPresetRequest(BaseModel):
+    name: str
+    visual_design: Optional[Dict[str, Any]] = None
+    compiled_prompt: str = ""
+    source_variant_id: Optional[str] = None
+    source_scene_revision: Optional[int] = None
+
+
+class ApplyShotVisualPresetRequest(BaseModel):
+    apply_mode: Literal["parameters_only", "parameters_with_reference"] = "parameters_only"
+
+
+@app.get("/projects/{script_id}/shot-visual-presets", response_model=List[ShotVisualPreset])
+def list_shot_visual_presets(script_id: str, scene_id: Optional[str] = None):
+    return pipeline.list_shot_visual_presets(script_id, scene_id=scene_id)
+
+
+@app.post("/projects/{script_id}/frames/{frame_id}/shot-visual-presets", response_model=ShotVisualPreset)
+def save_shot_visual_preset(script_id: str, frame_id: str, request: SaveShotVisualPresetRequest):
+    try:
+        preset = pipeline.save_shot_visual_preset(
+            script_id,
+            frame_id,
+            request.name,
+            visual_design=request.visual_design,
+            compiled_prompt=request.compiled_prompt,
+            source_variant_id=request.source_variant_id,
+            source_scene_revision=request.source_scene_revision,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    if preset is None:
+        raise HTTPException(status_code=404, detail="Script or frame not found")
+    return preset
+
+
+@app.post("/projects/{script_id}/frames/{frame_id}/shot-visual-presets/{preset_id}/apply", response_model=StoryboardFrame)
+def apply_shot_visual_preset(script_id: str, frame_id: str, preset_id: str, request: ApplyShotVisualPresetRequest):
+    try:
+        frame = pipeline.apply_shot_visual_preset(script_id, frame_id, preset_id, request.apply_mode)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    if frame is None:
+        raise HTTPException(status_code=404, detail="Script, frame, or visual preset not found")
+    return signed_response(frame)
 
 
 @app.patch("/projects/{script_id}/frames/{frame_id}/workbench", response_model=StoryboardFrame)

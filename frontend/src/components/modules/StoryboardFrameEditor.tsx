@@ -34,6 +34,11 @@ export default function StoryboardFrameEditor({ frame: initialFrame, onClose }: 
     const [stylePromptOverride, setStylePromptOverride] = useState(frame.style_prompt_override || "");
     const [lightingOverride, setLightingOverride] = useState(frame.lighting_override || "");
     const [negativePromptOverride, setNegativePromptOverride] = useState(frame.negative_prompt_override || "");
+    const [visualPresets, setVisualPresets] = useState<any[]>([]);
+    const [selectedVisualPresetId, setSelectedVisualPresetId] = useState("");
+    const [visualPresetApplyMode, setVisualPresetApplyMode] = useState<"parameters_only" | "parameters_with_reference">("parameters_only");
+    const [visualPresetName, setVisualPresetName] = useState("");
+    const [visualPresetBusy, setVisualPresetBusy] = useState(false);
     const [isGenerating, setIsGenerating] = useState(false);
     const [pendingRender, setPendingRender] = useState<FrameRenderPreview | null>(null);
 
@@ -51,6 +56,47 @@ export default function StoryboardFrameEditor({ frame: initialFrame, onClose }: 
         frame.lighting_override,
         frame.negative_prompt_override,
     ]);
+
+    useEffect(() => {
+        if (!currentProject?.id || !frame.scene_id) return;
+        api.listShotVisualPresets(currentProject.id, frame.scene_id)
+            .then((presets: any[]) => setVisualPresets(Array.isArray(presets) ? presets : []))
+            .catch(() => setVisualPresets([]));
+    }, [currentProject?.id, frame.id, frame.scene_id]);
+
+    const saveVisualPreset = async () => {
+        if (!currentProject || !visualPresetName.trim()) return;
+        setVisualPresetBusy(true);
+        try {
+            const preset = await api.saveShotVisualPreset(currentProject.id, frame.id, {
+                name: visualPresetName.trim(),
+                visual_design: { style_prompt: stylePromptOverride, lighting_prompt: lightingOverride },
+                compiled_prompt: prompt,
+                source_variant_id: frame.rendered_image_asset?.selected_id || null,
+            });
+            setVisualPresets(current => [...current, preset]);
+            setVisualPresetName("");
+        } finally {
+            setVisualPresetBusy(false);
+        }
+    };
+
+    const applyVisualPreset = async () => {
+        if (!currentProject || !selectedVisualPresetId) return;
+        setVisualPresetBusy(true);
+        try {
+            const updatedFrame = await api.applyShotVisualPreset(currentProject.id, frame.id, selectedVisualPresetId, visualPresetApplyMode);
+            updateProject(currentProject.id, {
+                frames: (currentProject.frames ?? []).map((item: any) => item.id === frame.id ? updatedFrame : item),
+            });
+            const design = updatedFrame.shot_visual_design?.visual_design || {};
+            setPrompt(updatedFrame.shot_visual_design?.compiled_prompt || prompt);
+            setStylePromptOverride(String(design.style_prompt || ""));
+            setLightingOverride(String(design.lighting_prompt || ""));
+        } finally {
+            setVisualPresetBusy(false);
+        }
+    };
 
     const saveFrameStyleField = async (field: "style_prompt_override" | "lighting_override" | "negative_prompt_override", value: string) => {
         if (!currentProject) return;
@@ -223,6 +269,28 @@ export default function StoryboardFrameEditor({ frame: initialFrame, onClose }: 
                                 {ts("promptHint")}
                             </p>
                             <div className="mt-4 space-y-3 border-t border-border-subtle pt-4">
+                                <div className="rounded-lg border border-primary/20 bg-primary/5 p-3 space-y-2">
+                                    <div>
+                                        <label className="mb-1 block text-xs font-medium text-text-secondary">结构化视觉预设</label>
+                                        <p className="text-[0.6875rem] text-text-muted">预设只作为当前分镜的起始模板，应用后会保存为当前分镜自己的参数快照。</p>
+                                    </div>
+                                    <select aria-label="选择结构化视觉预设" value={selectedVisualPresetId} onChange={event => setSelectedVisualPresetId(event.target.value)} className="w-full rounded border border-glass-border bg-surface p-2 text-xs text-foreground">
+                                        <option value="">选择同场景视觉预设</option>
+                                        {visualPresets.map((preset: any) => <option key={preset.id} value={preset.id}>{preset.name} · 来源 {preset.source_frame_id}</option>)}
+                                    </select>
+                                    <div className="flex gap-2">
+                                        <select aria-label="视觉预设应用模式" value={visualPresetApplyMode} onChange={event => setVisualPresetApplyMode(event.target.value as "parameters_only" | "parameters_with_reference")} className="min-w-0 flex-1 rounded border border-glass-border bg-surface p-2 text-xs text-foreground">
+                                            <option value="parameters_only">仅复用结构化参数</option>
+                                            <option value="parameters_with_reference">参数并附带第一帧参考图</option>
+                                        </select>
+                                        <button type="button" onClick={() => void applyVisualPreset()} disabled={!selectedVisualPresetId || visualPresetBusy} className="rounded bg-primary px-2 py-1 text-xs text-white disabled:opacity-40">应用</button>
+                                    </div>
+                                    {frame.shot_visual_design?.source_preset_id && <p className="text-[0.6875rem] text-text-muted">当前来源：预设 {frame.shot_visual_design.source_preset_id} · {frame.shot_visual_design.apply_mode === "parameters_with_reference" ? "含参考图" : "仅参数"}</p>}
+                                    <div className="flex gap-2">
+                                        <input aria-label="视觉预设名称" value={visualPresetName} onChange={event => setVisualPresetName(event.target.value)} placeholder="保存当前参数为预设" className="min-w-0 flex-1 rounded border border-glass-border bg-surface p-2 text-xs text-foreground" />
+                                        <button type="button" onClick={() => void saveVisualPreset()} disabled={!visualPresetName.trim() || visualPresetBusy} className="rounded border border-glass-border px-2 py-1 text-xs text-foreground disabled:opacity-40">保存预设</button>
+                                    </div>
+                                </div>
                                 <div>
                                     <label className="mb-1 block text-xs font-medium text-text-secondary">{ts("shotStyleOverride")}</label>
                                     <textarea

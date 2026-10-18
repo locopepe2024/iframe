@@ -20,6 +20,8 @@ from .models import (
     Scene,
     Prop,
     StoryboardFrame,
+    ShotVisualPreset,
+    ShotVisualDesignSnapshot,
     DialogueStructured,
     LightingData,
     Series,
@@ -554,6 +556,91 @@ class ComicGenPipeline(StudioOwnerMixin):
                 self._save_data()
             except Exception:
                 logger.warning("update_frame_workbench: save failed")
+            return frame
+
+    def list_shot_visual_presets(self, script_id: str, scene_id: Optional[str] = None) -> List[ShotVisualPreset]:
+        script = self.scripts.get(script_id)
+        if not script:
+            return []
+        presets = list(getattr(script, "shot_visual_presets", []) or [])
+        if scene_id:
+            presets = [preset for preset in presets if preset.scene_id == scene_id]
+        return presets
+
+    def save_shot_visual_preset(
+        self,
+        script_id: str,
+        frame_id: str,
+        name: str,
+        visual_design: Optional[Dict[str, Any]] = None,
+        compiled_prompt: str = "",
+        source_variant_id: Optional[str] = None,
+        source_scene_revision: Optional[int] = None,
+    ) -> Optional[ShotVisualPreset]:
+        """Save a reviewed shot design as a project-scoped immutable snapshot."""
+        with self._save_lock:
+            script = self.scripts.get(script_id)
+            if not script:
+                return None
+            frame = next((item for item in (script.frames or []) if item.id == frame_id), None)
+            if not frame:
+                return None
+            design = copy.deepcopy(visual_design)
+            if design is None:
+                current_design = frame.shot_visual_design
+                if isinstance(current_design, dict):
+                    design = copy.deepcopy(current_design.get("visual_design") or {})
+                else:
+                    design = copy.deepcopy(current_design.visual_design if current_design else {})
+            if not isinstance(design, dict):
+                raise ValueError("visual_design must be an object")
+            if not str(name or "").strip():
+                raise ValueError("visual preset name is required")
+            preset = ShotVisualPreset(
+                name=str(name).strip(),
+                scene_id=frame.scene_id,
+                source_frame_id=frame.id,
+                source_variant_id=source_variant_id or (frame.shot_visual_design.get("source_variant_id") if isinstance(frame.shot_visual_design, dict) else (frame.shot_visual_design.source_variant_id if frame.shot_visual_design else None)),
+                source_scene_revision=source_scene_revision or (frame.shot_visual_design.get("source_scene_revision") if isinstance(frame.shot_visual_design, dict) else (frame.shot_visual_design.source_scene_revision if frame.shot_visual_design else None)),
+                visual_design=design,
+                compiled_prompt=str(compiled_prompt or (frame.shot_visual_design.get("compiled_prompt") if isinstance(frame.shot_visual_design, dict) else (frame.shot_visual_design.compiled_prompt if frame.shot_visual_design else ""))),
+            )
+            existing_presets = list(getattr(script, "shot_visual_presets", []) or [])
+            script.shot_visual_presets = [*existing_presets, preset]
+            self._save_data()
+            return preset
+
+    def apply_shot_visual_preset(
+        self,
+        script_id: str,
+        frame_id: str,
+        preset_id: str,
+        apply_mode: str = "parameters_only",
+    ) -> Optional[StoryboardFrame]:
+        """Copy a preset into the current frame; never create a live link."""
+        if apply_mode not in ("parameters_only", "parameters_with_reference"):
+            raise ValueError("invalid visual preset apply_mode")
+        with self._save_lock:
+            script = self.scripts.get(script_id)
+            if not script:
+                return None
+            frame = next((item for item in (script.frames or []) if item.id == frame_id), None)
+            preset = next((item for item in (getattr(script, "shot_visual_presets", []) or []) if item.id == preset_id), None)
+            if not frame or not preset:
+                return None
+            if frame.scene_id != preset.scene_id:
+                raise ValueError("visual preset belongs to another scene")
+            frame.shot_visual_design = ShotVisualDesignSnapshot(
+                visual_design=copy.deepcopy(preset.visual_design),
+                compiled_prompt=preset.compiled_prompt,
+                source_preset_id=preset.id,
+                source_variant_id=preset.source_variant_id if apply_mode == "parameters_with_reference" else None,
+                source_scene_revision=preset.source_scene_revision,
+                apply_mode=apply_mode,
+                revision=(frame.shot_visual_design.revision + 1) if frame.shot_visual_design else 1,
+            )
+            frame.updated_at = time.time()
+            self._save_data()
             return frame
 
     def upload_t2i_frame(

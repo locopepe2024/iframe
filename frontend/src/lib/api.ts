@@ -877,6 +877,45 @@ export const api = {
         return res.data;
     },
 
+    listShotVisualPresets: async (scriptId: string, sceneId?: string) => {
+        const res = await axios.get(
+            `${API_URL}/projects/${scriptId}/shot-visual-presets`,
+            { params: sceneId ? { scene_id: sceneId } : undefined },
+        );
+        return res.data;
+    },
+
+    saveShotVisualPreset: async (
+        scriptId: string,
+        frameId: string,
+        payload: {
+            name: string;
+            visual_design?: Record<string, unknown>;
+            compiled_prompt?: string;
+            source_variant_id?: string | null;
+            source_scene_revision?: number | null;
+        },
+    ) => {
+        const res = await axios.post(
+            `${API_URL}/projects/${scriptId}/frames/${frameId}/shot-visual-presets`,
+            payload,
+        );
+        return res.data;
+    },
+
+    applyShotVisualPreset: async (
+        scriptId: string,
+        frameId: string,
+        presetId: string,
+        applyMode: "parameters_only" | "parameters_with_reference" = "parameters_only",
+    ) => {
+        const res = await axios.post(
+            `${API_URL}/projects/${scriptId}/frames/${frameId}/shot-visual-presets/${presetId}/apply`,
+            { apply_mode: applyMode },
+        );
+        return res.data;
+    },
+
 
     uploadFile: async (file: File) => {
         const formData = new FormData();
