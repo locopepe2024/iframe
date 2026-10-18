@@ -1247,7 +1247,6 @@ function CharacterDetailModal({ asset, type, onClose, onUpdateDescription, onUpd
                     sceneDesign.visual_notes && `场景空间：${sceneDesign.visual_notes}`,
                     sceneDesign.style && `场景风格：${sceneDesign.style}`,
                     sceneDesign.ambient_lighting && `环境光：${sceneDesign.ambient_lighting}`,
-                    sceneDesign.local_effect && `局部光（${sceneDesign.local_target}）：${sceneDesign.local_effect}`,
                     sceneDesign.reference_viewpoint && `参考图视角：${sceneDesign.reference_viewpoint}`,
                     sceneDesign.reference_framing && `参考图构图：${sceneDesign.reference_framing}`,
                     sceneDesign.visual_constraints.key_light_direction !== "unspecified" && `主光方向：${sceneDesign.visual_constraints.key_light_direction}`,
@@ -1327,16 +1326,11 @@ function CharacterDetailModal({ asset, type, onClose, onUpdateDescription, onUpd
     };
 
     const applySceneDesign = () => {
-        if (sceneDesign.local_effect.trim() && !sceneDesign.local_target.trim()) {
-            toast.warning("请指定局部光的作用区域或对象。");
-            return;
-        }
         const visualConstraints = sceneDesign.visual_constraints;
         const lines = [
             sceneDesign.visual_notes && `场景空间：${sceneDesign.visual_notes}`,
             sceneDesign.style && `场景风格：${sceneDesign.style}`,
             sceneDesign.ambient_lighting && `环境光：${sceneDesign.ambient_lighting}`,
-            sceneDesign.local_effect && `局部光（${sceneDesign.local_target}）：${sceneDesign.local_effect}`,
             sceneDesign.reference_viewpoint && `参考图视角：${sceneDesign.reference_viewpoint}`,
             sceneDesign.reference_framing && `参考图构图：${sceneDesign.reference_framing}`,
             visualConstraints.key_light_direction !== "unspecified" && `主光方向：${({ front: "正面", back: "背面", side: "侧面", top: "顶部", bottom: "底部", mixed: "混合" } as Record<string, string>)[visualConstraints.key_light_direction]}`,
@@ -1366,10 +1360,6 @@ function CharacterDetailModal({ asset, type, onClose, onUpdateDescription, onUpd
 
     const saveSceneDesign = async (confirmed: boolean) => {
         if (!sceneDesign.visual_notes.trim() || sceneDesignSaving) return;
-        if (sceneDesign.local_effect.trim() && !sceneDesign.local_target.trim()) {
-            toast.warning("请指定局部光的作用区域或对象。");
-            return;
-        }
         setSceneDesignSaving(true);
         try {
             await onUpdateAttributes({ asset_design: {
@@ -1517,36 +1507,36 @@ function CharacterDetailModal({ asset, type, onClose, onUpdateDescription, onUpd
                             <section className="space-y-3 rounded-lg border border-glass-border bg-glass p-4" aria-label="场景结构化设置">
                                 <div>
                                     <h3 className="text-sm font-bold text-foreground">场景结构化设置</h3>
-                                    <p className="mt-1 text-xs text-text-muted">流程：先保存 Description → 从已保存描述解析结构化设置 → 检查并应用到可见提示词 → AI 优化 → 生成。参考图视角与构图只控制场景参考图。</p>
+                                    <p className="mt-1 text-xs text-text-muted">流程：先保存 Description → 开始结构化 → 检查并应用到可见提示词 → AI 优化 → 生成。占位和深度用于后续白模参考图。</p>
                                 </div>
                                 <div className="flex flex-wrap items-center gap-2 text-xs">
                                     <span className={descriptionSaved ? "text-status-success-fg" : "text-status-warning-fg"}>{descriptionSaved ? "Description 已保存" : "Description 有未保存修改"}</span>
-                                    <button type="button" onClick={parseSavedDescription} disabled={!descriptionSaved} className="rounded border border-glass-border px-2 py-1 text-foreground disabled:opacity-40">从已保存 Description 解析</button>
+                                    <button type="button" onClick={parseSavedDescription} disabled={!descriptionSaved} className="rounded border border-glass-border px-2 py-1 text-foreground disabled:opacity-40">开始结构化</button>
                                 </div>
-                                <label className="block text-xs text-text-secondary">空间与固定外观
+                                <label className="block text-xs text-text-secondary">场景描述
                                     <textarea aria-label="场景空间与固定外观" value={sceneDesign.visual_notes} onChange={event => updateSceneDesign("visual_notes", event.target.value)} className="mt-1 w-full rounded border border-glass-border bg-input-bg p-2 text-sm text-foreground" rows={3} />
                                 </label>
                                 <label className="block text-xs text-text-secondary">风格
                                     <textarea aria-label="场景风格" value={sceneDesign.style} onChange={event => updateSceneDesign("style", event.target.value)} className="mt-1 w-full rounded border border-glass-border bg-input-bg p-2 text-sm text-foreground" rows={2} />
                                 </label>
-                                {stylePrompt && <p className="text-xs text-text-muted">导演／项目风格建议：{stylePrompt} <button type="button" className="text-primary" onClick={() => updateSceneDesign("style", stylePrompt)}>采用</button></p>}
-                                <label className="block text-xs text-text-secondary">环境光与整体色调
+                                <p className="text-xs text-text-muted">默认继承全局风格；后续可在这里选择风格参考图。</p>
+                                <label className="block text-xs text-text-secondary">光影
                                     <textarea aria-label="场景环境光" value={sceneDesign.ambient_lighting} onChange={event => updateSceneDesign("ambient_lighting", event.target.value)} className="mt-1 w-full rounded border border-glass-border bg-input-bg p-2 text-sm text-foreground" rows={2} />
                                 </label>
-                                {(asset.time_of_day || asset.lighting_mood) && <p className="text-xs text-text-muted">场景档案时段／光影建议：{[asset.time_of_day, asset.lighting_mood].filter(Boolean).join(" · ")} <button type="button" className="text-primary" onClick={() => updateSceneDesign("ambient_lighting", [asset.time_of_day, asset.lighting_mood].filter(Boolean).join("；"))}>采用</button></p>}
+                                <p className="text-xs text-text-muted">初版从已保存 Description 结构化光影文字；参数化光影将在后续版本启用。</p>
                                 <div className="grid gap-2 md:grid-cols-2">
-                                    <label className="block text-xs text-text-secondary">局部光作用区域／对象
-                                        <input aria-label="局部光作用区域" value={sceneDesign.local_target} onChange={event => updateSceneDesign("local_target", event.target.value)} className="mt-1 w-full rounded border border-glass-border bg-input-bg p-2 text-sm text-foreground" placeholder="例如：远处落日；树荫外街面" />
+                                    <label className="block text-xs text-text-secondary opacity-60">局部光作用区域／对象（暂未启用）
+                                        <input aria-label="局部光作用区域" disabled value={sceneDesign.local_target} onChange={event => updateSceneDesign("local_target", event.target.value)} className="mt-1 w-full rounded border border-glass-border bg-input-bg p-2 text-sm text-foreground" placeholder="需要蒙板后启用" />
                                     </label>
-                                    <label className="block text-xs text-text-secondary">局部光效果
-                                        <input aria-label="局部光效果" value={sceneDesign.local_effect} onChange={event => updateSceneDesign("local_effect", event.target.value)} className="mt-1 w-full rounded border border-glass-border bg-input-bg p-2 text-sm text-foreground" placeholder="例如：限定的暖红轮廓光" />
+                                    <label className="block text-xs text-text-secondary opacity-60">局部光效果（暂未启用）
+                                        <input aria-label="局部光效果" disabled value={sceneDesign.local_effect} onChange={event => updateSceneDesign("local_effect", event.target.value)} className="mt-1 w-full rounded border border-glass-border bg-input-bg p-2 text-sm text-foreground" placeholder="需要蒙板后启用" />
                                     </label>
                                 </div>
                                 <div className="grid gap-2 md:grid-cols-2">
-                                    <label className="block text-xs text-text-secondary">参考图视角／机位
+                                    <label className="block text-xs text-text-secondary">镜头
                                         <input aria-label="场景参考图视角" value={sceneDesign.reference_viewpoint} onChange={event => updateSceneDesign("reference_viewpoint", event.target.value)} className="mt-1 w-full rounded border border-glass-border bg-input-bg p-2 text-sm text-foreground" />
                                     </label>
-                                    <label className="block text-xs text-text-secondary">参考图构图
+                                    <label className="block text-xs text-text-secondary">占位和深度（白模参考图）
                                         <input aria-label="场景参考图构图" value={sceneDesign.reference_framing} onChange={event => updateSceneDesign("reference_framing", event.target.value)} className="mt-1 w-full rounded border border-glass-border bg-input-bg p-2 text-sm text-foreground" />
                                     </label>
                                 </div>
