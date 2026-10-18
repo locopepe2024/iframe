@@ -1,12 +1,32 @@
+export type AvatarFeatureReviewStatus = "verified" | "internal_test_only" | "needs_verification";
+
+export type AvatarFeatureProvenance = {
+  sourceRepo?: string;
+  sourceCommit?: string;
+  license?: string;
+  sourcePath?: string;
+  reviewStatus: AvatarFeatureReviewStatus;
+};
+
 export type AvatarFeatureOption = {
   id: string;
   zh: string;
   en: string;
+  provenance?: AvatarFeatureProvenance;
+};
+
+const AGENTARA_PORTRAIT_CLONE_PROVENANCE: AvatarFeatureProvenance = {
+  sourceRepo: "https://github.com/agentara/skills",
+  sourceCommit: "950e1bfb11e1df67b46df19804ed85ada9012c33",
+  license: "MIT",
+  sourcePath: "skills/aigc/portrait-clone/SKILL.md",
+  reviewStatus: "internal_test_only",
 };
 
 export const AVATAR_FEATURE_LIBRARY: Record<string, AvatarFeatureOption[]> = {
   face: [
     { id: "oval", zh: "椭圆脸", en: "Oval face" },
+    { id: "long-oval", zh: "窄长椭圆脸", en: "Long oval face", provenance: AGENTARA_PORTRAIT_CLONE_PROVENANCE },
     { id: "round", zh: "圆脸", en: "Round face" },
     { id: "square", zh: "方脸", en: "Square face" },
     { id: "heart", zh: "心形脸", en: "Heart-shaped face" },
@@ -19,6 +39,7 @@ export const AVATAR_FEATURE_LIBRARY: Record<string, AvatarFeatureOption[]> = {
   ],
   eye_shape: [
     { id: "almond", zh: "杏眼", en: "Almond-shaped eyes" },
+    { id: "narrow-set", zh: "偏窄眼型，保留自然眼睑结构", en: "Narrower eyes with natural lid structure", provenance: AGENTARA_PORTRAIT_CLONE_PROVENANCE },
     { id: "round", zh: "圆眼", en: "Round eyes" },
     { id: "hooded", zh: "内双眼", en: "Hooded eyes" },
   ],
@@ -39,12 +60,14 @@ export const AVATAR_FEATURE_LIBRARY: Record<string, AvatarFeatureOption[]> = {
   ],
   facial_mark: [
     { id: "freckles", zh: "鼻颊少量雀斑", en: "Light freckles across nose and cheeks" },
+    { id: "natural-asymmetry", zh: "轻微自然面部不对称", en: "Subtle natural facial asymmetry", provenance: AGENTARA_PORTRAIT_CLONE_PROVENANCE },
     { id: "left-cheek-mole", zh: "左颊小痣", en: "Small mole on left cheek" },
     { id: "right-brow-scar", zh: "右眉浅疤", en: "Faint scar on right brow" },
   ],
   skin: [
     { id: "warm-light", zh: "暖调浅肤色，自然肤质", en: "Warm light skin with natural texture" },
     { id: "neutral-medium", zh: "中等中性肤色，自然肤质", en: "Neutral medium skin with natural texture" },
+    { id: "visible-microtexture", zh: "保留可见的自然皮肤纹理", en: "Visible natural skin microtexture", provenance: AGENTARA_PORTRAIT_CLONE_PROVENANCE },
     { id: "warm-deep", zh: "暖调深肤色，自然肤质", en: "Warm deep skin with natural texture" },
   ],
   body: [

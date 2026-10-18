@@ -1,10 +1,10 @@
 "use client";
 
-import { useState, useEffect, useMemo, useRef } from "react";
+import { useState, useEffect, useMemo, useRef, useId } from "react";
 import { useTranslations } from "next-intl";
 import { motion, AnimatePresence } from "framer-motion";
-import { X, RefreshCw, Check, Image as ImageIcon, Lock, ChevronRight, Video, Upload, Loader2 } from "lucide-react";
-import { api, type AssetLibraryReference, type AssetReferenceIndexEntry } from "@/lib/api";
+import { X, RefreshCw, Check, Image as ImageIcon, Lock, ChevronRight, Video, PanelLeft, Sparkles, Search } from "lucide-react";
+import { agentRequest, api, type AssetLibraryReference, type AssetReferenceIndexEntry, type ChatModel } from "@/lib/api";
 
 import { VariantSelector } from "../common/VariantSelector";
 import { VideoVariantSelector } from "../common/VideoVariantSelector";
@@ -19,16 +19,81 @@ import {
     DEFAULT_CHARACTER_NEGATIVE_PROMPT,
     hasCharacterReferenceConstraint,
 } from "@/lib/characterPrompts";
+import { AVATAR_FEATURE_LIBRARY, type AvatarFeatureOption } from "@/lib/avatarFeatureLibrary";
 import ReferencePromptEditor, {
     type ReferenceCandidate,
     type ReferenceSuggestion,
 } from "./playground/ReferencePromptEditor";
 
-import { CHARACTER_IDENTITY_FACETS_FALLBACK } from "./cast/characterIdentityFacets";
 import type { AssetPlanEntry } from "@/lib/episodeAssetPlan";
 import EpisodeAssetPlanPanel from "./EpisodeAssetPlanPanel";
 
-type CharacterEditUploadType = "reference_sheet" | "full_body" | "three_views" | "head_shot";
+type DesignDraft = {
+    route?: string;
+    age_stage?: string;
+    identity?: Record<string, unknown> & { basis?: DesignBasis[] };
+    look?: Record<string, unknown> & { basis?: DesignBasis[] };
+    unresolved?: string[];
+    field_answers?: Record<string, string>;
+    field_suggestions?: Record<string, string>;
+    field_suggestion_choices?: Record<string, { age_stage?: string; route?: string }>;
+    reference_assets?: AssetLibraryReference[];
+    field_status?: Record<string, "stated" | "inferred" | "default" | "creative-choice">;
+    skill_id?: string;
+    skill_revision?: string;
+    confirmed?: boolean;
+};
+
+type DesignBasis = "script_fact" | "user_specified" | "confirmed_design" | "verified_reference" | "creative_choice";
+
+function normalizeDesignBasis(value: unknown): DesignBasis[] {
+    const allowed: DesignBasis[] = ["script_fact", "user_specified", "confirmed_design", "verified_reference", "creative_choice"];
+    const values = Array.isArray(value) ? value : [value];
+    const normalized = values.filter((item): item is DesignBasis => typeof item === "string" && allowed.includes(item as DesignBasis));
+    return normalized.length ? Array.from(new Set(normalized)) : ["creative_choice"];
+}
+
+function designPromptDescription(identity: unknown, look: unknown, answers: unknown[] = []): string {
+    return [identity, look, ...answers]
+        .filter((value): value is string => typeof value === "string" && !!value.trim())
+        .join("。 ");
+}
+
+function designScopeDescription(route?: string, ageStage?: string): string[] {
+    const routeLabels: Record<string, string> = {
+        "realistic-modern": "真人写实造型",
+        "historical-costume": "古装武侠造型",
+        "xianxia-fantasy": "仙侠幻想造型",
+        "anime-stylized": "动漫国漫造型",
+    };
+    const ageLabels: Record<string, string> = {
+        child: "儿童年龄表现",
+        teen: "少年少女年龄表现",
+        "young-adult": "青年年龄表现",
+        adult: "成年人年龄表现",
+        "older-adult": "老年年龄表现",
+    };
+    return [route ? routeLabels[route] || route : "", ageStage ? ageLabels[ageStage] || ageStage : ""];
+}
+
+function confirmedDesignDescription(design: DesignDraft | undefined): string {
+    // The question remains in the saved design draft for auditability; only
+    // the user's confirmed value belongs in an image prompt.
+    const answers = Object.values(design?.field_answers || {});
+    return designPromptDescription(
+        design?.identity?.visual_notes,
+        design?.look?.visual_notes,
+        [...answers, ...designScopeDescription(design?.route, design?.age_stage)],
+    );
+}
+
+function normalizeDesignQuestions(values: unknown): string[] {
+    if (!Array.isArray(values)) return [];
+    return values.flatMap((value) => typeof value === "string" ? value.split(/[；;\n]+/) : [])
+        .map((value) => value.trim().replace(/[。.!！?？]+$/, ""))
+        .filter(Boolean)
+        .filter((value, index, all) => all.indexOf(value) === index);
+}
 
 function selectedVariantUrl(unit: any, fallback?: string): string | undefined {
     const variants = Array.isArray(unit?.variants)
@@ -53,14 +118,172 @@ function selectedReferenceSheetUrl(referenceSheet: any): string | undefined {
     return variants[0]?.url;
 }
 
-function selectedVariant(unit: any): any | undefined {
-    const variants = Array.isArray(unit?.variants)
-        ? unit.variants
-        : Array.isArray(unit?.image_variants)
-            ? unit.image_variants
-            : [];
-    const selectedId = unit?.selected_id || unit?.selected_image_id;
-    return variants.find((variant: any) => variant?.id === selectedId) || variants.at(-1);
+function referenceKey(reference?: AssetLibraryReference): string {
+    return reference ? `${reference.asset_type}:${reference.asset_id}:${reference.variant_id}` : "";
+}
+
+function referenceScopeLabel(scope?: AssetReferenceIndexEntry["source_scope"]): string {
+    switch (scope) {
+        case "episode": return "本集";
+        case "project": return "项目";
+        case "series": return "系列";
+        case "global": return "全局素材";
+        default: return "素材库";
+    }
+}
+
+const platformFeatureGroups: Array<{ key: string; label: string }> = [
+    { key: "face", label: "脸部结构" },
+    { key: "eye_shape", label: "眼型" },
+    { key: "facial_mark", label: "识别标记" },
+    { key: "skin", label: "肤色与肤质" },
+    { key: "base_hair", label: "基础发型" },
+];
+
+function featureProvenance(option: AvatarFeatureOption): string {
+    const provenance = option.provenance;
+    if (!provenance) return "";
+    const repo = provenance.sourceRepo?.replace(/^https?:\/\//, "").replace(/\/$/, "");
+    const status = provenance.reviewStatus === "internal_test_only" ? "内部测试" : provenance.reviewStatus === "needs_verification" ? "待核验" : "已核验";
+    return [status, provenance.license, repo].filter(Boolean).join(" · ");
+}
+
+function AssetReferencePicker({
+    candidates,
+    selected,
+    onChange,
+    title,
+    description,
+}: {
+    candidates: ReferenceCandidate[];
+    selected: AssetLibraryReference[];
+    onChange: (references: AssetLibraryReference[]) => void;
+    title: string;
+    description: string;
+}) {
+    const [query, setQuery] = useState("");
+    const [isOpen, setIsOpen] = useState(false);
+    const generatedId = useId().replace(/:/g, "");
+    const searchId = `character-reference-search-${generatedId}`;
+    const optionId = (index: number) => `${searchId}-option-${index}`;
+    const selectedKeys = new Set(selected.map(referenceKey));
+    const normalizedQuery = query.trim().toLocaleLowerCase();
+    const filtered = candidates.filter((candidate) => {
+        if (!normalizedQuery) return true;
+        return [candidate.label, candidate.sourceLabel, candidate.variantLabel]
+            .filter(Boolean)
+            .some((value) => value!.toLocaleLowerCase().includes(normalizedQuery));
+    }).slice(0, 20);
+
+    const toggle = (candidate: ReferenceCandidate) => {
+        if (!candidate.reference) return;
+        const key = referenceKey(candidate.reference);
+        onChange(selectedKeys.has(key)
+            ? selected.filter((item) => referenceKey(item) !== key)
+            : [...selected, candidate.reference]);
+    };
+
+    return (
+        <section className="mt-3 rounded-md border border-glass-border bg-surface/60 p-3">
+            <button
+                type="button"
+                aria-expanded={isOpen}
+                onClick={() => setIsOpen((open) => !open)}
+                className="flex min-h-8 w-full items-center justify-between gap-2 text-left text-xs font-medium text-foreground focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary"
+            >
+                <span>{title}{selected.length > 0 ? ` · ${selected.length}` : ""}</span>
+                <ImageIcon size={15} className="shrink-0 text-text-muted" aria-hidden="true" />
+            </button>
+            {isOpen && <>
+            <p className="mt-1 text-[11px] leading-4 text-text-muted">{description}</p>
+            <label className="sr-only" htmlFor={searchId}>搜索角色参考素材</label>
+            <div className="relative mt-2">
+                <Search size={14} className="pointer-events-none absolute left-2.5 top-3 text-text-muted" aria-hidden="true" />
+                <input
+                    id={searchId}
+                    value={query}
+                    onChange={(event) => setQuery(event.target.value)}
+                    onKeyDown={(event) => {
+                        if (event.key === "ArrowDown" && filtered.length > 0) {
+                            event.preventDefault();
+                            document.getElementById(optionId(0))?.focus();
+                        } else if (event.key === "Enter" && filtered.length > 0) {
+                            event.preventDefault();
+                            toggle(filtered[0]);
+                        }
+                    }}
+                    aria-label="搜索角色参考素材"
+                    placeholder="搜索名称、来源或变体"
+                    className="h-9 w-full rounded-md border border-glass-border bg-surface pl-8 pr-2 text-xs text-foreground placeholder:text-text-muted focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary"
+                />
+            </div>
+            {selected.length > 0 && (
+                <div className="mt-2 flex flex-wrap gap-1.5" aria-label="已选择的角色参考图">
+                    {selected.map((reference) => {
+                        const candidate = candidates.find((item) => referenceKey(item.reference) === referenceKey(reference));
+                        return (
+                            <button
+                                type="button"
+                                key={referenceKey(reference)}
+                                onClick={() => onChange(selected.filter((item) => referenceKey(item) !== referenceKey(reference)))}
+                                className="inline-flex min-h-8 items-center gap-1 rounded-full border border-primary/50 bg-primary/10 px-2 text-[11px] text-primary hover:bg-primary/20 focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary"
+                                aria-label={`移除参考图 ${candidate?.label || reference.variant_id}`}
+                            >
+                                <span className="max-w-[12rem] truncate">{candidate?.label || reference.variant_id}</span>
+                                <X size={12} aria-hidden="true" />
+                            </button>
+                        );
+                    })}
+                </div>
+            )}
+            <div className="mt-2 max-h-44 space-y-1 overflow-y-auto" role="listbox" aria-label="角色参考素材结果" aria-multiselectable="true">
+                {filtered.length === 0 ? (
+                    <p className="px-2 py-2 text-xs text-text-muted">{candidates.length ? "没有匹配的参考素材" : "暂无可用参考素材"}</p>
+                ) : filtered.map((candidate, index) => {
+                    const key = referenceKey(candidate.reference);
+                    const isSelected = selectedKeys.has(key);
+                    return (
+                        <button
+                            type="button"
+                            id={optionId(index)}
+                            key={key}
+                            role="option"
+                            aria-selected={isSelected}
+                            onKeyDown={(event) => {
+                                if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+                                    event.preventDefault();
+                                    const nextIndex = event.key === "ArrowDown"
+                                        ? Math.min(index + 1, filtered.length - 1)
+                                        : Math.max(index - 1, 0);
+                                    document.getElementById(optionId(nextIndex))?.focus();
+                                } else if (event.key === "Enter") {
+                                    event.preventDefault();
+                                    toggle(candidate);
+                                } else if (event.key === "Escape") {
+                                    event.preventDefault();
+                                    document.getElementById(searchId)?.focus();
+                                }
+                            }}
+                            onClick={() => toggle(candidate)}
+                            className={`flex min-h-11 w-full items-center gap-2 rounded-md px-2 py-1.5 text-left transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary ${isSelected ? "bg-primary/10" : "hover:bg-hover-bg"}`}
+                        >
+                            <span className="inline-flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded bg-surface-inset">
+                                {candidate.previewUrl ? <img src={candidate.previewUrl} alt="" className="h-full w-full object-cover" /> : <ImageIcon size={14} className="text-text-muted" aria-hidden="true" />}
+                            </span>
+                            <span className="min-w-0 flex-1">
+                                <span className="block truncate text-xs text-foreground">{candidate.label}</span>
+                                <span className="block truncate text-[11px] text-text-muted">
+                                    {[candidate.sourceLabel || "素材库", candidate.variantLabel ? `变体：${candidate.variantLabel}` : ""].filter(Boolean).join(" · ")}
+                                </span>
+                            </span>
+                            {isSelected && <Check size={14} className="shrink-0 text-primary" aria-label="已选择" />}
+                        </button>
+                    );
+                })}
+            </div>
+            </>}
+        </section>
+    );
 }
 
 interface CharacterWorkbenchProps {
@@ -83,7 +306,28 @@ interface CharacterWorkbenchProps {
 export default function CharacterWorkbench({ asset, onClose, onUpdateDescription, onUpdateAttributes, onGenerate, generatingTypes = [], stylePrompt = "", styleNegativePrompt = "", onGenerateVideo, onDeleteVideo, isGeneratingVideo, planEntries = [], onCreateSceneAsset, creatingSceneAsset = false }: CharacterWorkbenchProps) {
     const tc = useTranslations("character");
     const [activePanel, setActivePanel] = useState<"full_body" | "three_view" | "headshot" | "video">("full_body");
-    const [activeGuidanceTab, setActiveGuidanceTab] = useState<"constraints" | "facets" | "plan">("constraints");
+    const [showProfile, setShowProfile] = useState(false);
+    const savedDesign = (asset.character_design?.design_draft || {}) as DesignDraft;
+    const [designRoute, setDesignRoute] = useState(savedDesign.route || "realistic-modern");
+    const [designAgeStage, setDesignAgeStage] = useState(savedDesign.age_stage || "");
+    const [designNotes, setDesignNotes] = useState(String(savedDesign.identity?.visual_notes || ""));
+    const [lookNotes, setLookNotes] = useState(String(savedDesign.look?.visual_notes || ""));
+    const [designIdentityBasis, setDesignIdentityBasis] = useState<DesignBasis[]>(normalizeDesignBasis(savedDesign.identity?.basis));
+    const [designLookBasis, setDesignLookBasis] = useState<DesignBasis[]>(normalizeDesignBasis(savedDesign.look?.basis));
+    const [designSource, setDesignSource] = useState<"stated" | "creative-choice">(savedDesign.field_status?.visual_notes === "creative-choice" ? "creative-choice" : "stated");
+    const [designUnresolved, setDesignUnresolved] = useState<string[]>(normalizeDesignQuestions(savedDesign.unresolved));
+    const [designFieldAnswers, setDesignFieldAnswers] = useState<Record<string, string>>(savedDesign.field_answers || {});
+    const [designFieldSuggestions, setDesignFieldSuggestions] = useState<Record<string, string>>(savedDesign.field_suggestions || {});
+    const [designFieldSuggestionChoices, setDesignFieldSuggestionChoices] = useState<Record<string, { age_stage?: string; route?: string }>>(savedDesign.field_suggestion_choices || {});
+    const [designReferences, setDesignReferences] = useState<AssetLibraryReference[]>(savedDesign.reference_assets || []);
+    const [designSkillRevision, setDesignSkillRevision] = useState(savedDesign.skill_revision || "");
+    const [designModels, setDesignModels] = useState<ChatModel[]>([]);
+    const [designModel, setDesignModel] = useState("");
+    const [designing, setDesigning] = useState(false);
+    const [designStatus, setDesignStatus] = useState(savedDesign.confirmed ? "confirmed" : "draft");
+    const [designRevision, setDesignRevision] = useState<number>(asset.character_design?.design_revisions?.at(-1)?.revision || 0);
+    const [savingDesign, setSavingDesign] = useState(false);
+    const [designError, setDesignError] = useState("");
     const updateProject = useProjectStore(state => state.updateProject);
     const currentProject = useProjectStore(state => state.currentProject);
     const [assetIndex, setAssetIndex] = useState<AssetReferenceIndexEntry[]>([]);
@@ -94,11 +338,27 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
         three_view: [],
         headshot: [],
     });
+    const [promptPickerReferences, setPromptPickerReferences] = useState<Record<"full_body" | "three_view" | "headshot", AssetLibraryReference[]>>({
+        full_body: [],
+        three_view: [],
+        headshot: [],
+    });
     const [promptModes, setPromptModes] = useState<Record<"full_body" | "three_view" | "headshot", "text" | "reference">>({
         full_body: "text",
         three_view: "text",
         headshot: "text",
     });
+
+    useEffect(() => {
+        let active = true;
+        void agentRequest<{ models: ChatModel[] }>("/models").then(({ models }) => {
+            if (!active) return;
+            const available = models.filter((model) => model.agent_capability !== "h3_prompt_optimization");
+            setDesignModels(available);
+            setDesignModel((current) => current || available[0]?.api_model_id || "");
+        }).catch(() => { if (active) setDesignModels([]); });
+        return () => { active = false; };
+    }, []);
 
     useEffect(() => {
         const projectId = currentProject?.id;
@@ -119,6 +379,7 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
 
     useEffect(() => {
         setPromptReferences({ full_body: [], three_view: [], headshot: [] });
+        setPromptPickerReferences({ full_body: [], three_view: [], headshot: [] });
         setPromptModes({ full_body: "text", three_view: "text", headshot: "text" });
     }, [asset.id]);
 
@@ -130,7 +391,7 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
             variants.forEach((variant, index) => {
                 if (!variant.id) return;
                 const variantLabel = variant.reference_view_role || variant.reference_distance || `View ${index + 1}`;
-                const baseLabel = variants.length > 1 ? `${entry.name} · ${variantLabel}` : entry.name;
+                const baseLabel = `${entry.name} · ${variantLabel}`;
                 let label = baseLabel;
                 let suffix = 2;
                 while (usedLabels.has(label)) label = `${baseLabel} ${suffix++}`;
@@ -138,67 +399,15 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
                 candidates.push({
                     label,
                     previewUrl: getAssetUrl(variant.url),
-                    sourceLabel: entry.source_name || entry.source_scope,
+                    sourceLabel: [referenceScopeLabel(entry.source_scope), entry.source_name].filter(Boolean).join(" · "),
                     variantLabel,
+                    description: entry.description,
                     reference: { asset_type: entry.asset_type, asset_id: entry.asset_id, variant_id: variant.id },
                 });
             });
         }
         return candidates;
     }, [assetIndex]);
-
-    // Uploads are immediately usable in the same explicit @ index. The
-    // project asset index is fetched once per workbench session, so merge the
-    // newly created selected variant locally instead of requiring a reload.
-    const retainUploadedVariantInIndex = (updatedProject: any, uploadType: CharacterEditUploadType) => {
-        const updatedAsset = updatedProject?.characters?.find((item: any) => item.id === asset.id);
-        const unit = uploadType === "reference_sheet"
-            ? updatedAsset?.reference_sheet
-            : uploadType === "full_body"
-                ? updatedAsset?.full_body_asset
-                : uploadType === "three_views"
-                ? updatedAsset?.three_view_asset
-                : updatedAsset?.headshot_asset;
-        const variant = selectedVariant(unit);
-        if (!variant?.id) return;
-        setAssetIndex((current) => {
-            const existing = current.find((entry) => entry.asset_type === "character" && entry.asset_id === asset.id);
-            if (!existing) {
-                return [...current, {
-                    asset_type: "character",
-                    asset_id: asset.id,
-                    name: updatedAsset?.name || asset.name,
-                    source_scope: "episode",
-                    source_container_id: currentProject?.id || null,
-                    selected_variant_id: variant.id,
-                    variants: [{ id: variant.id, url: variant.url, is_favorited: variant.is_favorited, reference_view_role: variant.reference_view_role, reference_distance: variant.reference_distance }],
-                }];
-            }
-            if (existing.variants.some((item) => item.id === variant.id)) return current;
-            return current.map((entry) => entry === existing
-                ? {
-                    ...entry,
-                    selected_variant_id: variant.id,
-                    variants: [...entry.variants, { id: variant.id, url: variant.url, is_favorited: variant.is_favorited, reference_view_role: variant.reference_view_role, reference_distance: variant.reference_distance }],
-                }
-                : entry);
-        });
-    };
-
-    const uploadCharacterImage = async (file: File, uploadType: CharacterEditUploadType) => {
-        if (!currentProject) throw new Error("Project is no longer available");
-        const updatedProject = await api.uploadAsset(
-            currentProject.id,
-            "character",
-            asset.id,
-            file,
-            uploadType,
-            asset.description,
-        );
-        updateProject(currentProject.id, updatedProject);
-        retainUploadedVariantInIndex(updatedProject, uploadType);
-        toast.success(tc("uploadRef"));
-    };
 
     // Mode state for Asset Activation v2 (Static/Motion)
     const [fullBodyMode, setFullBodyMode] = useState<'static' | 'motion'>('static');
@@ -237,21 +446,25 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
             ? undefined : selectedVariantUrl(asset.full_body_asset, asset.full_body_image_url);
     const masterAsset = referenceSheetImageAsset || asset.full_body_asset;
     const masterGenerationType = referenceSheetImageAsset ? "reference_sheet" : "full_body";
-    const masterImageUploadType: CharacterEditUploadType = referenceSheetImageAsset ? "reference_sheet" : "full_body";
     const hasFullBodyImage = !!masterImageUrl;
 
     // Local state for prompts
     const getInitialPrompt = (type: string, existingPrompt: string) => {
-        if (existingPrompt) return existingPrompt;
+        const confirmedDesign = asset.character_design?.design_revisions?.at(-1)?.design;
+        const confirmedNotes = confirmedDesignDescription(confirmedDesign);
+        if (!confirmedNotes && existingPrompt) return existingPrompt;
+        const promptDescription = confirmedNotes
+            ? confirmedNotes
+            : asset.description;
 
         if (type === "full_body") {
-            return buildCharacterImagePrompt("full_body", asset.name, asset.description, hasNonFullBodyUpload);
+            return buildCharacterImagePrompt("full_body", asset.name, promptDescription, hasNonFullBodyUpload);
         }
         if (type === "three_view") {
-            return buildCharacterImagePrompt("three_view", asset.name, asset.description, hasFullBodyImage || hasAnyUpload);
+            return buildCharacterImagePrompt("three_view", asset.name, promptDescription, hasFullBodyImage || hasAnyUpload);
         }
         if (type === "headshot") {
-            return buildCharacterImagePrompt("headshot", asset.name, asset.description, hasFullBodyImage || hasAnyUpload);
+            return buildCharacterImagePrompt("headshot", asset.name, promptDescription, hasFullBodyImage || hasAnyUpload);
         }
         return "";
     };
@@ -260,62 +473,129 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
     const [threeViewPrompt, setThreeViewPrompt] = useState(getInitialPrompt("three_view", asset.three_view_prompt));
     const [headshotPrompt, setHeadshotPrompt] = useState(getInitialPrompt("headshot", asset.headshot_prompt));
     const [videoPrompt, setVideoPrompt] = useState(asset.video_prompt || "");
+    const [promptsNeedDesignApply, setPromptsNeedDesignApply] = useState(
+        Boolean(savedDesign.identity?.visual_notes || savedDesign.look?.visual_notes) && !savedDesign.confirmed,
+    );
 
     // New State for Style Control
     const [applyStyle, setApplyStyle] = useState(true);
     // User's own negative prompt (initially empty or with sensible defaults)
     const [negativePrompt, setNegativePrompt] = useState(DEFAULT_CHARACTER_NEGATIVE_PROMPT);
+
+    const applyDesignToPrompts = (
+        identityNotes = designNotes,
+        currentLookNotes = lookNotes,
+        answers: Record<string, string> = designFieldAnswers,
+    ) => {
+        const description = designPromptDescription(
+            identityNotes,
+            currentLookNotes,
+            [...Object.values(answers), ...designScopeDescription(designRoute, designAgeStage)],
+        );
+        setFullBodyPrompt(buildCharacterImagePrompt("full_body", asset.name, description, hasNonFullBodyUpload));
+        setThreeViewPrompt(buildCharacterImagePrompt("three_view", asset.name, description, hasFullBodyImage || hasAnyUpload));
+        setHeadshotPrompt(buildCharacterImagePrompt("headshot", asset.name, description, hasFullBodyImage || hasAnyUpload));
+        setPromptsNeedDesignApply(false);
+    };
+
+    const generateDesignDraft = async () => {
+        if (!designModel || designing) return;
+        setDesigning(true);
+        setDesignError("");
+        try {
+            const result = await agentRequest<{
+                identity: { visual_notes: string; basis?: string | string[] };
+                look: { visual_notes: string; basis?: string | string[] };
+                unresolved: string[];
+                field_suggestions?: Record<string, string>;
+                field_suggestion_choices?: Record<string, { age_stage?: string; route?: string }>;
+                skill_revision: string;
+            }>("/character-design/draft", "POST", {
+                model: designModel,
+                project_id: currentProject?.id,
+                reference_assets: designReferences,
+                character_name: asset.name,
+                profile: asset.description,
+                current_draft: designPromptDescription(designNotes, lookNotes),
+                user_answers: Object.fromEntries(Object.entries(designFieldAnswers).filter(([, answer]) => answer.trim())),
+                route: designRoute,
+                age_stage: designAgeStage,
+                style: stylePrompt,
+                confirmed_design: confirmedDesignDescription(asset.character_design?.design_revisions?.at(-1)?.design),
+            });
+            setDesignNotes(result.identity.visual_notes);
+            setLookNotes(result.look.visual_notes);
+            setDesignIdentityBasis(normalizeDesignBasis(result.identity.basis));
+            setDesignLookBasis(normalizeDesignBasis(result.look.basis));
+            const questions = normalizeDesignQuestions(result.unresolved);
+            const retainedAnswers = Object.fromEntries(
+                Object.entries(designFieldAnswers).filter(([question]) => questions.includes(question)),
+            );
+            setDesignFieldSuggestions(Object.fromEntries(
+                Object.entries(result.field_suggestions || {}).filter(([question, suggestion]) => questions.includes(question) && !!suggestion.trim()),
+            ));
+            setDesignFieldSuggestionChoices(Object.fromEntries(
+                Object.entries(result.field_suggestion_choices || {}).filter(([question]) => questions.includes(question)),
+            ));
+            setDesignUnresolved(questions);
+            setDesignFieldAnswers((current) => Object.fromEntries(
+                Object.entries(current).filter(([question]) => questions.includes(question)),
+            ));
+            setDesignSource(
+                [...normalizeDesignBasis(result.identity.basis), ...normalizeDesignBasis(result.look.basis)].includes("creative_choice")
+                    ? "creative-choice"
+                    : "stated",
+            );
+            setDesignSkillRevision(result.skill_revision);
+            setDesignStatus("draft");
+            applyDesignToPrompts(result.identity.visual_notes, result.look.visual_notes, retainedAnswers);
+        } catch (error) {
+            setDesignError(error instanceof Error ? error.message : "生成视觉草稿失败，请重试。");
+        } finally {
+            setDesigning(false);
+        }
+    };
+
+    const saveDesignDraft = async (confirmed: boolean) => {
+        if (!onUpdateAttributes || savingDesign) return;
+        if (confirmed && !designNotes.trim()) {
+            setDesignError("请先填写具体的角色视觉值，再确认设计。 ");
+            return;
+        }
+        const unanswered = designUnresolved.filter((question) => !designFieldAnswers[question]?.trim());
+        const draft: DesignDraft = {
+            route: designRoute,
+            age_stage: designAgeStage || undefined,
+            identity: { visual_notes: designNotes || undefined, basis: designIdentityBasis },
+            look: { route: designRoute, visual_notes: lookNotes || undefined, basis: designLookBasis },
+            unresolved: designNotes ? unanswered : [],
+            field_answers: Object.fromEntries(Object.entries(designFieldAnswers).filter(([, answer]) => answer.trim())),
+            field_suggestions: Object.fromEntries(Object.entries(designFieldSuggestions).filter(([question]) => !designFieldAnswers[question]?.trim())),
+            field_suggestion_choices: Object.fromEntries(Object.entries(designFieldSuggestionChoices).filter(([question]) => !designFieldAnswers[question]?.trim())),
+            reference_assets: designReferences,
+            field_status: { route: "stated", age_stage: designAgeStage ? "stated" : "default", visual_notes: designNotes ? designSource : "default" },
+            skill_id: "character-style-routes",
+            skill_revision: designSkillRevision || undefined,
+            confirmed,
+        };
+        setSavingDesign(true);
+        setDesignError("");
+        try {
+            await onUpdateAttributes({ character_design: draft });
+            setDesignUnresolved(draft.unresolved || []);
+            setDesignStatus(confirmed ? "confirmed" : "draft");
+            if (confirmed) {
+                setDesignRevision((revision) => revision + 1);
+                applyDesignToPrompts(designNotes, lookNotes, draft.field_answers || {});
+            }
+        } catch (error) {
+            setDesignError(error instanceof Error ? error.message : "保存视觉设计失败，请重试。");
+        } finally {
+            setSavingDesign(false);
+        }
+    };
     // Art Direction Style expanded state (collapsed by default to save space)
     const [showStyleExpanded, setShowStyleExpanded] = useState(false);
-    const [acceptedFacetIds, setAcceptedFacetIds] = useState<string[]>(() => {
-        const avatar = asset.digital_avatar || {};
-        return [
-            ...(Array.isArray(avatar.identity_facet_ids) ? avatar.identity_facet_ids : []),
-            ...(Array.isArray(avatar.look_facet_ids) ? avatar.look_facet_ids : []),
-            ...(Array.isArray(avatar.continuity_lock_ids) ? avatar.continuity_lock_ids : []),
-        ];
-    });
-    const activePromptSetter = activePanel === "full_body" ? setFullBodyPrompt : activePanel === "three_view" ? setThreeViewPrompt : setHeadshotPrompt;
-    const activePrompt = activePanel === "full_body" ? fullBodyPrompt : activePanel === "three_view" ? threeViewPrompt : headshotPrompt;
-    useEffect(() => {
-        const avatar = asset.digital_avatar || {};
-        setAcceptedFacetIds([
-            ...(Array.isArray(avatar.identity_facet_ids) ? avatar.identity_facet_ids : []),
-            ...(Array.isArray(avatar.look_facet_ids) ? avatar.look_facet_ids : []),
-            ...(Array.isArray(avatar.continuity_lock_ids) ? avatar.continuity_lock_ids : []),
-        ]);
-    }, [asset.id, asset.digital_avatar]);
-
-    const persistAcceptedFacets = (acceptedIds: string[]) => {
-        const avatar = asset.digital_avatar || {};
-        const accepted = new Set(acceptedIds);
-        onUpdateAttributes?.({
-            digital_avatar: {
-                schema_version: "digital-avatar-character.v1",
-                character_id: asset.id,
-                ...avatar,
-                identity_facet_ids: CHARACTER_IDENTITY_FACETS_FALLBACK.filter((facet) => facet.section === "identity" && accepted.has(facet.id)).map((facet) => facet.id),
-                look_facet_ids: CHARACTER_IDENTITY_FACETS_FALLBACK.filter((facet) => facet.section === "look" && accepted.has(facet.id)).map((facet) => facet.id),
-                continuity_lock_ids: CHARACTER_IDENTITY_FACETS_FALLBACK.filter((facet) => facet.section === "continuity" && accepted.has(facet.id)).map((facet) => facet.id),
-                review_status: "needs_user_review",
-            },
-        });
-    };
-    const appendCharacterFacet = (facet: typeof CHARACTER_IDENTITY_FACETS_FALLBACK[number]) => {
-        const value = facet.prompt_zh;
-        if (!acceptedFacetIds.includes(facet.id)) {
-            const next = [...acceptedFacetIds, facet.id];
-            setAcceptedFacetIds(next);
-            persistAcceptedFacets(next);
-        }
-        if (!activePrompt.includes(value)) activePromptSetter((current) => `${current.trimEnd()}${current.trim() ? "，" : ""}${value}`);
-    };
-    const removeCharacterFacet = (facet: typeof CHARACTER_IDENTITY_FACETS_FALLBACK[number]) => {
-        const next = acceptedFacetIds.filter((id) => id !== facet.id);
-        setAcceptedFacetIds(next);
-        persistAcceptedFacets(next);
-    };
-
     // Get the uploaded image URL for reverse generation reference
     const getUploadedReferenceUrl = () => {
         if (hasUploadedThreeViews) {
@@ -438,18 +718,19 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
 
     // Update local state when asset updates (e.g. after generation)
     useEffect(() => {
-        if (asset.full_body_prompt) setFullBodyPrompt(asset.full_body_prompt);
-        else if (hasNonFullBodyUpload && !hasCharacterReferenceConstraint(fullBodyPrompt)) {
+        const hasConfirmedDesign = !!asset.character_design?.design_revisions?.at(-1)?.design;
+        if (!hasConfirmedDesign && asset.full_body_prompt) setFullBodyPrompt(asset.full_body_prompt);
+        else if (!hasConfirmedDesign && hasNonFullBodyUpload && !hasCharacterReferenceConstraint(fullBodyPrompt)) {
             setFullBodyPrompt(getInitialPrompt("full_body", ""));
         }
 
-        if (asset.three_view_prompt) setThreeViewPrompt(asset.three_view_prompt);
-        else if (hasAnyUpload && !hasCharacterReferenceConstraint(threeViewPrompt)) {
+        if (!hasConfirmedDesign && asset.three_view_prompt) setThreeViewPrompt(asset.three_view_prompt);
+        else if (!hasConfirmedDesign && hasAnyUpload && !hasCharacterReferenceConstraint(threeViewPrompt)) {
             setThreeViewPrompt(getInitialPrompt("three_view", ""));
         }
 
-        if (asset.headshot_prompt) setHeadshotPrompt(asset.headshot_prompt);
-        else if (hasAnyUpload && !hasCharacterReferenceConstraint(headshotPrompt)) {
+        if (!hasConfirmedDesign && asset.headshot_prompt) setHeadshotPrompt(asset.headshot_prompt);
+        else if (!hasConfirmedDesign && hasAnyUpload && !hasCharacterReferenceConstraint(headshotPrompt)) {
             setHeadshotPrompt(getInitialPrompt("headshot", ""));
         }
 
@@ -463,7 +744,8 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
         else if (type === "headshot") prompt = headshotPrompt;
 
         const promptType = type === "reference_sheet" ? "full_body" : type;
-        const references = promptReferences[promptType];
+        const references = [...promptReferences[promptType], ...promptPickerReferences[promptType]]
+            .filter((reference, index, all) => all.findIndex((candidate) => referenceKey(candidate) === referenceKey(reference)) === index);
         const imageGenerationMode = promptModes[promptType];
         if (imageGenerationMode === "reference" && references.length === 0) {
             toast.warning("Add at least one explicit @ reference before generating.");
@@ -479,6 +761,11 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
     const setPanelReferences = (type: "full_body" | "three_view" | "headshot", references: AssetLibraryReference[]) => {
         setPromptReferences((current) => ({ ...current, [type]: references }));
     };
+
+    const setPanelPickerReferences = (type: "full_body" | "three_view" | "headshot", references: AssetLibraryReference[]) => {
+        setPromptPickerReferences((current) => ({ ...current, [type]: references }));
+    };
+
 
     const setPanelMode = (type: "full_body" | "three_view" | "headshot", mode: "text" | "reference") => {
         setPromptModes((current) => ({ ...current, [type]: mode }));
@@ -539,22 +826,167 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
                 exit={{ opacity: 0, scale: 0.95 }}
                 className="bg-surface border border-glass-border rounded-lg w-full h-[calc(100dvh-1rem)] lg:h-full lg:rounded-r-none flex flex-col overflow-hidden shadow-lg"
             >
-                <div className="h-16 border-b border-glass-border flex justify-between items-center px-6 bg-surface">
-                    <div className="flex items-center gap-4">
-                        <h2 className="text-xl font-bold text-foreground">{asset.name} <span className="text-text-muted font-normal text-sm ml-2">{tc("workbench")}</span></h2>
-                        <div className="flex items-center gap-2 px-3 py-1 bg-blue-500/10 border border-blue-500/20 rounded-full">
-                            <span className="text-xs text-blue-400 font-medium">{tc("tipConsistency")}</span>
-                        </div>
+                <div className="shrink-0 min-h-14 border-b border-glass-border flex justify-between items-center gap-3 px-4 sm:px-6 bg-surface">
+                    <div className="min-w-0 flex items-center gap-3">
+                        <button type="button" onClick={() => setShowProfile(current => !current)} aria-label={tc("dossier")} title={tc("dossier")} aria-expanded={showProfile} className="lg:hidden flex min-h-11 shrink-0 items-center gap-2 rounded-md px-2 text-text-secondary hover:bg-hover-bg focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary">
+                            <PanelLeft size={18} />
+                            <span className="text-xs">{tc("dossier")}</span>
+                            {designUnresolved.length > 0 && <span className="rounded-full border border-amber-400/40 px-1.5 py-0.5 text-[11px] text-amber-300">{tc("pendingDesignQuestions", { count: designUnresolved.length })}</span>}
+                        </button>
+                        <h2 className="min-w-0 truncate text-base font-semibold text-foreground sm:text-lg" title={asset.name}>{asset.name} <span className="text-text-muted font-normal text-sm">{tc("workbench")}</span></h2>
                     </div>
-                    <button onClick={onClose} className="p-2 hover:bg-hover-bg rounded-full text-text-secondary hover:text-foreground transition-colors">
-                        <X size={24} />
+                    <button type="button" onClick={onClose} aria-label={tc("closeWorkbench")} title={tc("closeWorkbench")} className="flex h-11 w-11 shrink-0 items-center justify-center rounded-md hover:bg-hover-bg text-text-secondary hover:text-foreground focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary">
+                        <X size={20} />
                     </button>
                 </div>
 
-                {/* Main Content - 3 Columns */}
-                <div className="min-h-0 flex-1 flex overflow-hidden">
+                <div className="min-h-0 flex-1 flex flex-col lg:flex-row overflow-hidden">
+                    <aside className={`${showProfile ? "block max-h-[45%]" : "hidden"} lg:block lg:max-h-none lg:w-80 xl:w-[340px] shrink-0 overflow-y-auto border-b lg:border-b-0 lg:border-r border-glass-border bg-surface-inset p-4`} aria-label={tc("dossier")}>
+                        <h3 className="text-sm font-semibold text-foreground">{tc("dossier")}</h3>
+                        <p className="mt-2 whitespace-pre-wrap break-words text-sm leading-6 text-text-secondary">{asset.description || tc("noDossier")}</p>
+                        <section className="mt-5 border-t border-glass-border pt-4" aria-labelledby="character-visual-design-title">
+                            <div className="flex items-center justify-between gap-2">
+                                <h3 id="character-visual-design-title" className="text-sm font-semibold text-foreground">角色视觉设计</h3>
+                                <span className={`text-[11px] ${designStatus === "confirmed" ? "text-emerald-400" : "text-text-muted"}`}>
+                                    {designStatus === "confirmed" ? `已确认 r${designRevision}` : "草稿"}
+                                </span>
+                            </div>
+                            <p className="mt-1 text-xs leading-5 text-text-muted">AI 会补全可创作的外观与造型细节，并标明创意选择；只有影响角色设定的关键歧义才需要核对。</p>
+                            <label className="mt-3 block text-xs text-text-secondary" htmlFor="character-style-route">题材 / 画风</label>
+                            <select id="character-style-route" value={designRoute} onChange={(event) => { setDesignRoute(event.target.value); setDesignStatus("draft"); setPromptsNeedDesignApply(true); }} className="mt-1 h-10 w-full rounded-md border border-glass-border bg-surface px-2 text-sm text-foreground focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary">
+                                <option value="realistic-modern">真人现代</option>
+                                <option value="historical-costume">古装 / 武侠</option>
+                                <option value="xianxia-fantasy">修仙 / 仙侠</option>
+                                <option value="anime-stylized">动漫 / 国漫</option>
+                            </select>
+                            <label className="mt-3 block text-xs text-text-secondary" htmlFor="character-age-stage">年龄阶段</label>
+                            <select id="character-age-stage" value={designAgeStage} onChange={(event) => { setDesignAgeStage(event.target.value); setDesignStatus("draft"); setPromptsNeedDesignApply(true); }} className="mt-1 h-10 w-full rounded-md border border-glass-border bg-surface px-2 text-sm text-foreground focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary">
+                                <option value="">未指定</option>
+                                <option value="child">儿童</option>
+                                <option value="teen">少年 / 少女</option>
+                                <option value="young-adult">青年</option>
+                                <option value="adult">成年人</option>
+                                <option value="older-adult">老年</option>
+                            </select>
+                            <label className="mt-3 block text-xs text-text-secondary" htmlFor="character-design-model">设计模型</label>
+                            <div className="mt-1 flex gap-2">
+                                <select id="character-design-model" value={designModel} onChange={(event) => setDesignModel(event.target.value)} disabled={!designModels.length || designing} className="h-10 min-w-0 flex-1 rounded-md border border-glass-border bg-surface px-2 text-sm text-foreground focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary">
+                                    {!designModels.length && <option value="">暂无可用模型</option>}
+                                    {designModels.map((model) => <option key={model.api_model_id} value={model.api_model_id}>{model.display_name}</option>)}
+                                </select>
+                                <button type="button" disabled={!designModel || designing || !asset.description} onClick={() => void generateDesignDraft()} className="inline-flex min-h-10 items-center gap-1.5 rounded-md border border-glass-border px-3 text-sm text-foreground hover:bg-hover-bg disabled:opacity-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary"><Sparkles size={15} />{designing ? "设计中" : "生成草稿"}</button>
+                            </div>
+                            <label className="mt-3 block text-xs text-text-secondary" htmlFor="character-visual-notes">身份视觉值</label>
+                            <textarea id="character-visual-notes" value={designNotes} onChange={(event) => { setDesignNotes(event.target.value); setDesignIdentityBasis(["user_specified"]); setDesignSource("stated"); setDesignStatus("draft"); setPromptsNeedDesignApply(true); }} placeholder="AI 会提出可编辑的人物外观方案；可直接微调。" rows={4} className="mt-1 w-full resize-y rounded-md border border-glass-border bg-surface px-3 py-2 text-sm leading-5 text-foreground placeholder:text-text-muted focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary" />
+                            <div className="mt-2 rounded-md border border-glass-border bg-surface/40 p-2" aria-label="平台角色词条">
+                                <p className="text-[11px] leading-4 text-text-muted">平台词条只写入当前草稿，点击后仍可编辑；不会自动提交模型。</p>
+                                <div className="mt-2 space-y-2">
+                                    {platformFeatureGroups.map((group) => <div key={group.key}>
+                                        <p className="mb-1 text-[11px] text-text-secondary">{group.label}</p>
+                                        <div className="flex flex-wrap gap-1">
+                                            {(AVATAR_FEATURE_LIBRARY[group.key] || []).map((option) => {
+                                                const provenance = featureProvenance(option);
+                                                return <button key={option.id} type="button" title={provenance ? `${option.zh} · ${provenance}` : option.zh}
+                                                    className="rounded border border-glass-border px-2 py-1 text-[11px] text-text-secondary hover:border-primary hover:text-foreground focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary"
+                                                    onClick={() => { setDesignNotes((current) => current ? `${current}；${option.zh}` : option.zh); setDesignIdentityBasis(["user_specified"]); setDesignSource("stated"); setDesignStatus("draft"); setPromptsNeedDesignApply(true); }}>{option.zh}{provenance && <span className="ml-1 text-[9px] text-text-muted">{provenance.split(" · ").slice(0, 2).join(" · ")}</span>}</button>;
+                                            })}
+                                        </div>
+                                    </div>)}
+                                </div>
+                            </div>
+                            {designSource === "creative-choice" && <p className="mt-1 text-xs text-amber-400">AI 创意设计选择，确认前请核对剧本与参考素材。</p>}
+                            <label className="mt-3 block text-xs text-text-secondary" htmlFor="character-look-notes">造型视觉值</label>
+                            <textarea id="character-look-notes" value={lookNotes} onChange={(event) => { setLookNotes(event.target.value); setDesignLookBasis(["user_specified"]); setDesignStatus("draft"); setPromptsNeedDesignApply(true); }} placeholder="AI 会补全版型、面料、鞋履、发式及配饰；可直接微调。" rows={3} className="mt-1 w-full resize-y rounded-md border border-glass-border bg-surface px-3 py-2 text-sm leading-5 text-foreground placeholder:text-text-muted focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary" />
+                            <AssetReferencePicker
+                                candidates={referenceCandidates}
+                                selected={designReferences}
+                                onChange={(references) => { setDesignReferences(references); setDesignStatus("draft"); }}
+                                title="选择角色参考图"
+                                description="可搜索本集、系列或全局素材；只有明确选中的变体才会作为本次草稿参考，不会自动附加其他图片。"
+                            />
+                            {designUnresolved.length > 0 && (
+                                <section className="mt-3 rounded-md border border-amber-400/30 bg-amber-400/5 p-3" aria-labelledby="character-design-unresolved-title">
+                                    <div className="flex items-start justify-between gap-2">
+                                        <div>
+                                            <h4 id="character-design-unresolved-title" className="text-xs font-medium text-foreground">待核对 · {designUnresolved.length}</h4>
+                                            <p className="mt-1 text-[11px] leading-4 text-text-muted">只有关键设定歧义才会列在这里。可以采用 Agent 建议，也可以改成自己的方案。</p>
+                                        </div>
+                                        <span className="text-[11px] text-amber-300">{designUnresolved.filter((item) => designFieldAnswers[item]?.trim()).length}/{designUnresolved.length} 已回答</span>
+                                    </div>
+                                    <div className="mt-2 space-y-2">
+                                        {designUnresolved.map((question, index) => {
+                                            const fieldId = `character-design-answer-${index}`;
+                                            const suggestion = designFieldSuggestions[question];
+                                            const answer = designFieldAnswers[question] || "";
+                                            return (
+                                                <label key={`${question}-${index}`} htmlFor={fieldId} className="block rounded-md border border-glass-border bg-surface/60 p-2">
+                                                    <span className="block text-xs leading-5 text-text-secondary">{question}</span>
+                                                    {suggestion && <div className="mt-1 rounded border border-primary/20 bg-primary/5 p-2">
+                                                        <span className="text-[10px] font-medium uppercase tracking-wide text-primary">Agent 建议</span>
+                                                        <p className="mt-0.5 text-xs leading-5 text-foreground">{suggestion}</p>
+                                                        <button
+                                                            type="button"
+                                                            disabled={answer === suggestion}
+                                                            onClick={() => {
+                                                                setDesignFieldAnswers((current) => ({ ...current, [question]: suggestion }));
+                                                                const choice = designFieldSuggestionChoices[question];
+                                                                if (choice?.age_stage) setDesignAgeStage(choice.age_stage);
+                                                                if (choice?.route) setDesignRoute(choice.route);
+                                                                setDesignStatus("draft");
+                                                                setPromptsNeedDesignApply(true);
+                                                            }}
+                                                            className="mt-1 inline-flex min-h-8 items-center gap-1 rounded px-2 text-[11px] font-medium text-primary hover:bg-primary/10 disabled:opacity-60 focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary"
+                                                        >
+                                                            <Check size={13} aria-hidden="true" />{answer === suggestion ? "已采用" : "采用此建议"}
+                                                        </button>
+                                                    </div>}
+                                                    <textarea
+                                                        id={fieldId}
+                                                        value={answer}
+                                                        onChange={(event) => { setDesignFieldAnswers((current) => ({ ...current, [question]: event.target.value })); setDesignStatus("draft"); setPromptsNeedDesignApply(true); }}
+                                                        placeholder={suggestion ? "可直接修改建议，或留空稍后决定" : "补充你的决定；如果暂时无法决定可留空"}
+                                                        rows={2}
+                                                        className="mt-1 w-full resize-y rounded border border-glass-border bg-surface px-2 py-1.5 text-xs leading-5 text-foreground placeholder:text-text-muted focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary"
+                                                    />
+                                                </label>
+                                            );
+                                        })}
+                                    </div>
+                                </section>
+                            )}
+                            {designError && <p role="alert" className="mt-2 text-xs text-red-400">{designError}</p>}
+                            <div className="mt-3 flex gap-2">
+                                <button type="button" disabled={savingDesign || !onUpdateAttributes} onClick={() => void saveDesignDraft(false)} className="inline-flex min-h-10 flex-1 items-center justify-center gap-2 rounded-md border border-glass-border px-3 text-sm text-text-secondary hover:bg-hover-bg disabled:opacity-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary"><Sparkles size={15} />保存草稿</button>
+                                <button type="button" disabled={savingDesign || !onUpdateAttributes} onClick={() => void saveDesignDraft(true)} className="inline-flex min-h-10 flex-1 items-center justify-center gap-2 rounded-md bg-primary px-3 text-sm font-medium text-primary-foreground hover:opacity-90 disabled:opacity-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary"><Check size={15} />确认设计</button>
+                            </div>
+                        </section>
+                    </aside>
+
+                    <div className="min-h-0 min-w-0 flex-1 flex flex-col">
+                        {promptsNeedDesignApply && <div className="mx-3 mt-3 flex flex-col gap-2 rounded-md border border-primary/30 bg-primary/5 p-3 sm:mx-5 sm:flex-row sm:items-center sm:justify-between">
+                            <div className="min-w-0">
+                                <p className="text-xs font-medium text-foreground">角色设计草稿尚未应用到图片提示词</p>
+                                <p className="mt-0.5 text-[11px] leading-4 text-text-muted">应用会更新全身、三视图和肖像提示词，不保存角色设计或创建版本；之后仍可编辑提示词。</p>
+                            </div>
+                            <button type="button" onClick={() => applyDesignToPrompts()} className="inline-flex min-h-10 shrink-0 items-center justify-center gap-1.5 rounded-md bg-primary px-3 text-xs font-medium text-primary-foreground hover:opacity-90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary">
+                                <Sparkles size={14} aria-hidden="true" />应用到图片提示词
+                            </button>
+                        </div>}
+                        <div role="tablist" aria-label={tc("materialTypes")} className="flex shrink-0 gap-1 overflow-x-auto border-b border-glass-border px-3 sm:px-5">
+                            {([ ["full_body", tc("masterAsset")], ["three_view", tc("threeViews")], ["headshot", tc("avatar")] ] as const).map(([id, label]) => <button key={id} type="button" role="tab" aria-selected={activePanel === id} tabIndex={activePanel === id ? 0 : -1} onClick={() => setActivePanel(id)} onKeyDown={(event) => {
+                                if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
+                                event.preventDefault();
+                                const tabs = Array.from(event.currentTarget.parentElement?.querySelectorAll<HTMLElement>('[role="tab"]') || []);
+                                const next = tabs[(tabs.indexOf(event.currentTarget) + (event.key === "ArrowRight" ? 1 : tabs.length - 1)) % tabs.length];
+                                next?.click();
+                                next?.focus();
+                            }} className={`min-h-11 shrink-0 border-b-2 px-3 text-sm transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary ${activePanel === id ? "border-primary text-primary" : "border-transparent text-text-secondary hover:text-foreground"}`}>{label}</button>)}
+                        </div>
+                        <div className="min-h-0 flex-1 flex overflow-hidden">
+
 
                     {/* Panel 1: Full Body (Master) */}
+                    {activePanel === "full_body" &&
                     <WorkbenchPanel
                         assetScope={asset.id}
                         title={tc("masterAsset")}
@@ -563,7 +995,6 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
 
                         asset={masterAsset}
                         currentImageUrl={masterImageUrl}
-                        onUploadImage={(file: File) => uploadCharacterImage(file, masterImageUploadType)}
                         onSelect={(id: string) => handleSelectVariant(masterGenerationType, id)}
                         onDelete={(id: string) => handleDeleteVariant(masterGenerationType, id)}
                         onFavorite={(id: string, isFav: boolean) => handleFavoriteVariant(masterGenerationType, id, isFav)}
@@ -572,6 +1003,9 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
                         setPrompt={setFullBodyPrompt}
                         referenceCandidates={referenceCandidates}
                         onReferencesChange={(references: AssetLibraryReference[]) => setPanelReferences("full_body", references)}
+                        showReferencePicker
+                        pickerReferences={promptPickerReferences.full_body}
+                        onPickerReferencesChange={(references: AssetLibraryReference[]) => setPanelPickerReferences("full_body", references)}
                         imageGenerationMode={promptModes.full_body}
                         onImageGenerationModeChange={(mode: "text" | "reference") => setPanelMode("full_body", mode)}
                         onGenerate={(batchSize: number) => handleGenerateClick(masterGenerationType, batchSize)}
@@ -599,15 +1033,10 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
                         isVideoLoading={isVideoLoading}
                         setIsVideoLoading={setIsVideoLoading}
                         onResetPrompt={() => handleResetMotionPrompt('full_body')}
-                    />
-
-
-                    {/* Divider */}
-                    <div className="w-px bg-glass flex items-center justify-center">
-                        <ChevronRight size={16} className="text-text-muted" />
-                    </div>
+                    />}
 
                     {/* Panel 2: Three View (Derived) */}
+                    {activePanel === "three_view" &&
                     <WorkbenchPanel
                         assetScope={asset.id}
                         title={tc("threeViews")}
@@ -616,7 +1045,6 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
 
                         asset={asset.three_view_asset}
                         currentImageUrl={asset.three_view_image_url}
-                        onUploadImage={(file: File) => uploadCharacterImage(file, "three_views")}
                         onSelect={(id: string) => handleSelectVariant("three_view", id)}
                         onDelete={(id: string) => handleDeleteVariant("three_view", id)}
                         onFavorite={(id: string, isFav: boolean) => handleFavoriteVariant("three_view", id, isFav)}
@@ -625,6 +1053,9 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
                         setPrompt={setThreeViewPrompt}
                         referenceCandidates={referenceCandidates}
                         onReferencesChange={(references: AssetLibraryReference[]) => setPanelReferences("three_view", references)}
+                        showReferencePicker
+                        pickerReferences={promptPickerReferences.three_view}
+                        onPickerReferencesChange={(references: AssetLibraryReference[]) => setPanelPickerReferences("three_view", references)}
                         imageGenerationMode={promptModes.three_view}
                         onImageGenerationModeChange={(mode: "text" | "reference") => setPanelMode("three_view", mode)}
                         onGenerate={(batchSize: number) => handleGenerateClick("three_view", batchSize)}
@@ -633,14 +1064,10 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
                         isLocked={!hasFullBodyImage && !hasAnyUpload}
                         description="Front, side, and back views for 3D-like consistency."
                         aspectRatio="16:9"
-                    />
-
-                    {/* Divider */}
-                    <div className="w-px bg-glass flex items-center justify-center">
-                        <ChevronRight size={16} className="text-text-muted" />
-                    </div>
+                    />}
 
                     {/* Panel 3: Headshot (Derived) */}
+                    {activePanel === "headshot" &&
                     <WorkbenchPanel
                         assetScope={asset.id}
                         title={tc("avatar")}
@@ -649,7 +1076,6 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
 
                         asset={asset.headshot_asset}
                         currentImageUrl={asset.headshot_image_url || asset.avatar_url}
-                        onUploadImage={(file: File) => uploadCharacterImage(file, "head_shot")}
                         onSelect={(id: string) => handleSelectVariant("headshot", id)}
                         onDelete={(id: string) => handleDeleteVariant("headshot", id)}
                         onFavorite={(id: string, isFav: boolean) => handleFavoriteVariant("headshot", id, isFav)}
@@ -658,6 +1084,9 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
                         setPrompt={setHeadshotPrompt}
                         referenceCandidates={referenceCandidates}
                         onReferencesChange={(references: AssetLibraryReference[]) => setPanelReferences("headshot", references)}
+                        showReferencePicker
+                        pickerReferences={promptPickerReferences.headshot}
+                        onPickerReferencesChange={(references: AssetLibraryReference[]) => setPanelPickerReferences("headshot", references)}
                         imageGenerationMode={promptModes.headshot}
                         onImageGenerationModeChange={(mode: "text" | "reference") => setPanelMode("headshot", mode)}
                         onGenerate={(batchSize: number) => handleGenerateClick("headshot", batchSize)}
@@ -682,41 +1111,14 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
                         isVideoLoading={isVideoLoading}
                         setIsVideoLoading={setIsVideoLoading}
                         onResetPrompt={() => handleResetMotionPrompt('headshot')}
-                    />
-
-
+                    />}
+                        </div>
+                    </div>
                 </div>
 
-                <div className="shrink-0 border-t border-glass-border bg-surface">
-                    <div role="tablist" aria-label={tc("guidanceTabsLabel")} className="flex overflow-x-auto border-b border-glass-border px-4 sm:px-6">
-                        {([
-                            ["constraints", tc("workbenchConstraints")],
-                            ["facets", tc("characterFacetSuggestions")],
-                            ["plan", `${tc("shootingPlanConstraints")}${planEntries.length ? ` (${planEntries.length})` : ""}`],
-                        ] as const).map(([id, label]) => (
-                            <button
-                                key={id}
-                                type="button"
-                                role="tab"
-                                id={`character-guidance-tab-${id}`}
-                                aria-controls={`character-guidance-panel-${id}`}
-                                aria-selected={activeGuidanceTab === id}
-                                tabIndex={activeGuidanceTab === id ? 0 : -1}
-                                onClick={() => setActiveGuidanceTab(id)}
-                                onKeyDown={(event) => {
-                                    if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
-                                    event.preventDefault();
-                                    const tabs = Array.from(event.currentTarget.parentElement?.querySelectorAll<HTMLElement>('[role="tab"]') || []);
-                                    const next = tabs[(tabs.indexOf(event.currentTarget) + (event.key === "ArrowRight" ? 1 : tabs.length - 1)) % tabs.length];
-                                    next?.click();
-                                    next?.focus();
-                                }}
-                                className={`shrink-0 border-b-2 px-3 py-2.5 text-xs font-medium transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary ${activeGuidanceTab === id ? "border-primary text-primary" : "border-transparent text-text-secondary hover:text-foreground"}`}
-                            >{label}</button>
-                        ))}
-                    </div>
-                    <div className="h-44 overflow-y-auto">
-                        <div role="tabpanel" id="character-guidance-panel-constraints" aria-labelledby="character-guidance-tab-constraints" hidden={activeGuidanceTab !== "constraints"}>
+                <details className="shrink-0 border-t border-glass-border bg-surface">
+                    <summary className="flex min-h-11 cursor-pointer items-center px-4 text-sm font-medium text-text-secondary hover:text-foreground sm:px-6">{tc("advancedSettings")}</summary>
+                    <div className="max-h-[30vh] overflow-y-auto">
                 {/* Footer: Negative Prompt & Art Direction Settings */}
                 <div className="flex flex-col">
                     {/* Top Row: User's Negative Prompt + Apply Style Toggle */}
@@ -799,33 +1201,12 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
                         </div>
                     )}
                 </div>
-                        </div>
-                        <section role="tabpanel" id="character-guidance-panel-facets" aria-labelledby="character-guidance-tab-facets" hidden={activeGuidanceTab !== "facets"} className="px-6 py-3">
-                    {(["identity", "look", "continuity"] as const).map((section) => {
-                        const facets = CHARACTER_IDENTITY_FACETS_FALLBACK.filter((facet) => facet.section === section);
-                        const title = section === "identity" ? "永久角色身份" : section === "look" ? "本集造型变体" : "连续性锁";
-                        return <div key={section} className="mt-2">
-                            <div className="mb-1 text-[0.6875rem] font-medium text-text-secondary">{title}</div>
-                            <div className="flex flex-wrap gap-1.5">
-                                {facets.map((facet) => {
-                                    const accepted = acceptedFacetIds.includes(facet.id);
-                                    return <button
-                                        key={facet.id}
-                                        type="button"
-                                        aria-pressed={accepted}
-                                        onClick={() => accepted ? removeCharacterFacet(facet) : appendCharacterFacet(facet)}
-                                        className={`rounded border px-2 py-1 text-[0.6875rem] transition-colors ${accepted ? "border-primary/60 bg-primary/15 text-primary" : "border-primary/20 bg-background/40 text-text-secondary hover:border-primary/50 hover:text-primary"}`}
-                                    >{accepted ? "✓ " : "+ "}{facet.label_zh}</button>;
-                                })}
-                            </div>
-                        </div>;
-                    })}
-                        </section>
-                        <div role="tabpanel" id="character-guidance-panel-plan" aria-labelledby="character-guidance-tab-plan" hidden={activeGuidanceTab !== "plan"}>
-                            {planEntries.length ? <EpisodeAssetPlanPanel entries={planEntries} onUse={onCreateSceneAsset} busy={creatingSceneAsset} compact /> : <p className="px-6 py-4 text-sm text-text-muted">{tc("noShootingPlanConstraints")}</p>}
-                        </div>
+                        {planEntries.length > 0 && <details className="border-t border-border-subtle px-6 py-3">
+                            <summary className="cursor-pointer text-sm text-text-secondary">{tc("shootingPlanConstraints")} ({planEntries.length})</summary>
+                            <div className="mt-3"><EpisodeAssetPlanPanel entries={planEntries} onUse={onCreateSceneAsset} busy={creatingSceneAsset} compact /></div>
+                        </details>}
                     </div>
-                </div>
+                </details>
             </motion.div>
         </div>
     );
@@ -840,7 +1221,6 @@ export function WorkbenchPanel({
     // Variant Props
     asset,
     currentImageUrl,
-    onUploadImage,
     onSelect,
     onDelete,
     onFavorite,
@@ -849,6 +1229,9 @@ export function WorkbenchPanel({
     setPrompt,
     referenceCandidates = [],
     onReferencesChange,
+    showReferencePicker = false,
+    pickerReferences = [],
+    onPickerReferencesChange,
     imageGenerationMode = "text",
     onImageGenerationModeChange,
     onGenerate,
@@ -886,15 +1269,17 @@ export function WorkbenchPanel({
 }: any) {
     const tc = useTranslations("character");
     const ti = useTranslations("imageEditor");
-    const [isUploadingImage, setIsUploadingImage] = useState(false);
     const [mention, setMention] = useState<ReferenceSuggestion | null>(null);
+    const mentionQuery = mention?.query.toLocaleLowerCase() ?? "";
     const matchingReferenceCandidates = referenceCandidates.filter((candidate: ReferenceCandidate) =>
-        candidate.label.toLocaleLowerCase().includes(mention?.query.toLocaleLowerCase() ?? ""),
+        [candidate.label, candidate.description, candidate.sourceLabel, candidate.variantLabel]
+            .filter(Boolean)
+            .some((value) => value!.toLocaleLowerCase().includes(mentionQuery)),
     );
 
     return (
         <div
-            className={`flex-1 flex flex-col min-w-[300px] transition-colors ${isActive ? 'bg-glass' : 'bg-transparent hover:bg-hover-bg'}`}
+            className={`min-w-0 min-h-0 flex-1 flex flex-col transition-colors ${isActive ? 'bg-glass' : 'bg-transparent hover:bg-hover-bg'}`}
             onClick={onClick}
         >
             {/* Panel Header */}
@@ -903,37 +1288,6 @@ export function WorkbenchPanel({
                     <h3 className={`font-bold text-sm uppercase tracking-wider ${isActive ? 'text-primary' : 'text-text-secondary'}`}>
                         {title}
                     </h3>
-
-                    {mode === 'static' && (
-                        <div className="flex items-center gap-1">
-                            {onUploadImage && (
-                                <label
-                                    className="inline-flex min-h-11 min-w-11 cursor-pointer items-center justify-center gap-2 rounded-lg border border-glass-border px-2 text-text-secondary transition-colors hover:bg-hover-bg hover:text-foreground focus-within:outline focus-within:outline-2 focus-within:outline-primary"
-                                    title={tc("uploadRef")}
-                                >
-                                    <input
-                                        type="file"
-                                        accept="image/png,image/jpeg,image/webp"
-                                        className="sr-only"
-                                        aria-label={`${tc("uploadRef")}: ${title}`}
-                                        disabled={isUploadingImage}
-                                        onClick={(event) => event.stopPropagation()}
-                                        onChange={async (event) => {
-                                            event.stopPropagation();
-                                            const file = event.target.files?.[0];
-                                            event.target.value = "";
-                                            if (!file) return;
-                                            setIsUploadingImage(true);
-                                            try { await onUploadImage(file); }
-                                            finally { setIsUploadingImage(false); }
-                                        }}
-                                    />
-                                    {isUploadingImage ? <Loader2 size={16} className="animate-spin" /> : <Upload size={16} />}
-                                    <span className="hidden text-xs sm:inline">{tc("uploadRef")}</span>
-                                </label>
-                            )}
-                        </div>
-                    )}
 
                     {/* Mode Switcher (Asset Activation v2) */}
                     {supportsMotion && (
@@ -1172,7 +1526,7 @@ export function WorkbenchPanel({
             </div>
 
             {/* Prompt Editor (Bottom) */}
-            <div className="h-1/3 border-t border-glass-border flex flex-col bg-surface">
+            <div className="h-1/3 min-h-[180px] border-t border-glass-border flex flex-col bg-surface">
                 <div className="p-2 border-b border-border-subtle flex justify-between items-center bg-surface">
                     <span className="text-xs font-bold text-text-muted uppercase px-2">Prompt</span>
                     <div className="flex items-center gap-1 rounded-md border border-glass-border bg-black/20 p-1" role="group" aria-label={`Image generation mode: ${title}`}>
@@ -1189,6 +1543,18 @@ export function WorkbenchPanel({
                         ))}
                     </div>
                 </div>
+                {showReferencePicker && <div className="px-4 pt-2">
+                    <AssetReferencePicker
+                        candidates={referenceCandidates}
+                        selected={pickerReferences}
+                        onChange={(references) => {
+                            onPickerReferencesChange?.(references);
+                            if (references.length > 0) onImageGenerationModeChange?.("reference");
+                        }}
+                        title="选择参考素材"
+                        description="搜索并选择要传给图片模型的素材变体；未选择时不会隐式附加参考图。"
+                    />
+                </div>}
                 <div className="relative min-h-0 flex-1 overflow-visible p-4">
                     <ReferencePromptEditor
                         value={prompt}

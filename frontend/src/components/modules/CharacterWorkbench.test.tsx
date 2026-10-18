@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { expect, it, vi } from "vitest";
 import CharacterWorkbench, { WorkbenchPanel } from "./CharacterWorkbench";
 import {
@@ -10,6 +10,9 @@ import {
 
 const apiMocks = vi.hoisted(() => ({
     getAssetReferenceIndex: vi.fn(),
+    agentRequest: vi.fn((path: string) => path === "/models"
+        ? Promise.resolve({ models: [{ api_model_id: "qwen", display_name: "Qwen" }] })
+        : Promise.resolve({ identity: { visual_notes: "深棕眼" }, look: { visual_notes: "黑色劲装" }, skill_revision: "skill-hash" })),
 }));
 
 const projectStoreMocks = vi.hoisted(() => ({
@@ -31,7 +34,7 @@ vi.mock("../common/VariantSelector", () => ({
 vi.mock("../common/VideoVariantSelector", () => ({
     VideoVariantSelector: () => null,
 }));
-vi.mock("@/lib/api", () => ({ API_URL: "", api: apiMocks }));
+vi.mock("@/lib/api", () => ({ API_URL: "", api: apiMocks, agentRequest: apiMocks.agentRequest }));
 vi.mock("@/store/projectStore", () => ({
     useProjectStore: (selector: (state: unknown) => unknown) => selector(projectStoreMocks),
 }));
@@ -56,7 +59,7 @@ it("keeps image editing out of the character workbench", () => {
     expect(screen.queryByText("title")).not.toBeInTheDocument();
 });
 
-it("unlocks derived asset prompts when the canonical reference sheet is available", () => {
+it("shows one task at a time and unlocks derived prompts when the reference sheet is available", () => {
     apiMocks.getAssetReferenceIndex.mockResolvedValueOnce({ assets: [] } as any);
     const { container } = render(
         <CharacterWorkbench
@@ -76,21 +79,32 @@ it("unlocks derived asset prompts when the canonical reference sheet is availabl
         />,
     );
 
-    const promptFields = Array.from(container.querySelectorAll("[contenteditable]"));
-    expect(promptFields).toHaveLength(3);
-    expect(promptFields[1]).toHaveAttribute("contenteditable", "true");
-    expect(promptFields[2]).toHaveAttribute("contenteditable", "true");
+    expect(container.querySelectorAll("[contenteditable]")).toHaveLength(1);
+    fireEvent.click(screen.getByRole("tab", { name: "threeViews" }));
+    expect(container.querySelectorAll("[contenteditable]")).toHaveLength(1);
+    expect(container.querySelector("[contenteditable]")).toHaveAttribute("contenteditable", "true");
+    fireEvent.click(screen.getByRole("tab", { name: "avatar" }));
+    expect(container.querySelector("[contenteditable]")).toHaveAttribute("contenteditable", "true");
     expect(screen.queryByText("Generate Master Asset first")).not.toBeInTheDocument();
 });
 
-it("uploads a new image directly from the static asset panel", async () => {
-    const onUploadImage = vi.fn().mockResolvedValue(undefined);
-    render(<WorkbenchPanel {...baseProps} onUploadImage={onUploadImage} />);
-    const file = new File(["image"], "actor.png", { type: "image/png" });
+it("preserves each task prompt while switching views", () => {
+    apiMocks.getAssetReferenceIndex.mockResolvedValueOnce({ assets: [] } as any);
+    render(<CharacterWorkbench asset={{ id: "character-1", name: "Hero", description: "A hero" }} onClose={vi.fn()} onUpdateDescription={vi.fn()} onGenerate={vi.fn()} generatingTypes={[]} />);
+    const fullBody = document.querySelector("[contenteditable]") as HTMLElement & { editor: import("@tiptap/core").Editor };
+    act(() => { fullBody.editor.commands.setContent("<p>full body detail</p>"); });
+    fireEvent.click(screen.getByRole("tab", { name: "threeViews" }));
+    const threeView = document.querySelector("[contenteditable]") as HTMLElement & { editor: import("@tiptap/core").Editor };
+    act(() => { threeView.editor.commands.setContent("<p>three view detail</p>"); });
+    fireEvent.click(screen.getByRole("tab", { name: "masterAsset" }));
+    expect((document.querySelector("[contenteditable]") as HTMLElement & { editor: import("@tiptap/core").Editor }).editor.getText()).toBe("full body detail");
+    fireEvent.click(screen.getByRole("tab", { name: "threeViews" }));
+    expect((document.querySelector("[contenteditable]") as HTMLElement & { editor: import("@tiptap/core").Editor }).editor.getText()).toBe("three view detail");
+});
 
-    fireEvent.change(screen.getByLabelText("uploadRef: Full body"), { target: { files: [file] } });
-
-    await waitFor(() => expect(onUploadImage).toHaveBeenCalledWith(file));
+it("keeps image references separate from generated variants", () => {
+    render(<WorkbenchPanel {...baseProps} />);
+    expect(screen.queryByLabelText("uploadRef: Full body")).not.toBeInTheDocument();
 });
 
 it("shows indexed clips when typing @ and emits the stable selected reference", () => {
@@ -120,11 +134,64 @@ it("shows indexed clips when typing @ and emits the stable selected reference", 
     expect(editor.editor.getText()).toBe("@wat");
 
     expect(screen.getByRole("listbox")).toHaveTextContent("Pocket watch");
-    fireEvent.mouseDown(screen.getByRole("option"));
-    fireEvent.click(screen.getByRole("option"));
+    fireEvent.mouseDown(within(screen.getByRole("listbox")).getByRole("option"));
+    fireEvent.click(within(screen.getByRole("listbox")).getByRole("option"));
 
     expect(setPrompt).toHaveBeenLastCalledWith("@Pocket watch ");
     expect(onReferencesChange).toHaveBeenLastCalledWith([candidate.reference]);
+});
+
+it("provides a searchable reference picker without requiring an @ prefix", () => {
+    const onPickerReferencesChange = vi.fn();
+    const onImageGenerationModeChange = vi.fn();
+    const candidate = {
+        label: "Pocket watch · front",
+        previewUrl: "/files/watch.png",
+        sourceLabel: "global",
+        reference: { asset_type: "prop" as const, asset_id: "watch-1", variant_id: "watch-front" },
+    };
+    render(<WorkbenchPanel {...baseProps}
+        referenceCandidates={[candidate]}
+        showReferencePicker
+        pickerReferences={[]}
+        onPickerReferencesChange={onPickerReferencesChange}
+        onImageGenerationModeChange={onImageGenerationModeChange}
+    />);
+
+    fireEvent.click(screen.getByRole("button", { name: "选择参考素材" }));
+    fireEvent.change(screen.getByLabelText("搜索角色参考素材"), { target: { value: "pocket" } });
+    const option = screen.getByRole("option", { name: /Pocket watch/ });
+    expect(option).toHaveTextContent("front");
+    fireEvent.click(option);
+
+    expect(onPickerReferencesChange).toHaveBeenCalledWith([candidate.reference]);
+    expect(onImageGenerationModeChange).toHaveBeenCalledWith("reference");
+});
+
+it("supports selecting a searched reference with the keyboard", () => {
+    const onPickerReferencesChange = vi.fn();
+    const candidate = {
+        label: "Pocket watch · front",
+        sourceLabel: "全局素材",
+        variantLabel: "front",
+        reference: { asset_type: "prop" as const, asset_id: "watch-1", variant_id: "watch-front" },
+    };
+    render(<WorkbenchPanel {...baseProps}
+        referenceCandidates={[candidate]}
+        showReferencePicker
+        pickerReferences={[]}
+        onPickerReferencesChange={onPickerReferencesChange}
+    />);
+
+    fireEvent.click(screen.getByRole("button", { name: "选择参考素材" }));
+    const search = screen.getByRole("textbox", { name: "搜索角色参考素材" });
+    fireEvent.change(search, { target: { value: "pocket" } });
+    fireEvent.keyDown(search, { key: "ArrowDown" });
+    const option = screen.getByRole("option", { name: /Pocket watch/ });
+    expect(document.activeElement).toBe(option);
+    fireEvent.keyDown(option, { key: "Enter" });
+
+    expect(onPickerReferencesChange).toHaveBeenCalledWith([candidate.reference]);
 });
 
 it("does not turn a manually typed @name into an implicit reference", () => {
@@ -177,16 +244,18 @@ it("loads the project reference index for the character workbench", async () => 
     );
 
     await waitFor(() => expect(apiMocks.getAssetReferenceIndex).toHaveBeenCalledWith("project-1"));
-    const editors = screen.getAllByRole("textbox") as Array<HTMLElement & { editor: import("@tiptap/core").Editor }>;
-    act(() => { editors[0].editor.commands.setContent("<p>@wat</p>"); });
+    const editors = screen.getAllByRole("textbox") as Array<HTMLElement & { editor?: import("@tiptap/core").Editor }>;
+    const promptEditor = editors.find((editor) => editor.editor);
+    expect(promptEditor?.editor).toBeDefined();
+    act(() => { promptEditor!.editor!.commands.setContent("<p>@wat</p>"); });
     expect(await screen.findByRole("listbox")).toHaveTextContent("Pocket watch");
-    fireEvent.mouseDown(screen.getByRole("option"));
-    fireEvent.click(screen.getByRole("option"));
+    fireEvent.mouseDown(within(screen.getByRole("listbox")).getByRole("option"));
+    fireEvent.click(within(screen.getByRole("listbox")).getByRole("option"));
     fireEvent.click(screen.getAllByRole("button", { name: "Reference image" })[0]);
     fireEvent.click(screen.getAllByTestId("variant-generate")[0]);
     await waitFor(() => expect(onGenerate).toHaveBeenCalledWith(
         "full_body",
-        "@Pocket watch ",
+        "@Pocket watch · View 1 ",
         true,
         expect.any(String),
         1,
@@ -195,7 +264,7 @@ it("loads the project reference index for the character workbench", async () => 
     ));
 });
 
-it("persists accepted identity facets separately from the provider prompt", async () => {
+it("does not expose generic facet suggestions as character design values", () => {
     apiMocks.getAssetReferenceIndex.mockResolvedValueOnce({ assets: [] } as any);
     const onUpdateAttributes = vi.fn();
     render(
@@ -209,25 +278,176 @@ it("persists accepted identity facets separately from the provider prompt", asyn
         />,
     );
 
-    fireEvent.click(screen.getByRole("tab", { name: "characterFacetSuggestions" }));
-    const facet = screen.getByRole("button", { name: /眼神/ });
-    fireEvent.click(facet);
-    expect(facet).toHaveAttribute("aria-pressed", "true");
-    expect(onUpdateAttributes).toHaveBeenLastCalledWith(expect.objectContaining({
-        digital_avatar: expect.objectContaining({
-            schema_version: "digital-avatar-character.v1",
-            identity_facet_ids: ["eyes-gaze"],
-        }),
-    }));
-
-    fireEvent.click(facet);
-    expect(facet).toHaveAttribute("aria-pressed", "false");
-    expect(onUpdateAttributes).toHaveBeenLastCalledWith(expect.objectContaining({
-        digital_avatar: expect.objectContaining({ identity_facet_ids: [] }),
-    }));
+    fireEvent.click(screen.getByText("advancedSettings"));
+    expect(screen.queryByRole("button", { name: /眼神/ })).not.toBeInTheDocument();
+    expect(onUpdateAttributes).not.toHaveBeenCalled();
 });
 
-it("keeps shooting plan actions below the asset panels in a separate tab", () => {
+it("keeps an AI design as an editable draft until the user confirms it", async () => {
+    apiMocks.getAssetReferenceIndex.mockResolvedValueOnce({ assets: [] } as any);
+    const onUpdateAttributes = vi.fn().mockResolvedValue(undefined);
+    const onGenerate = vi.fn();
+    render(<CharacterWorkbench asset={{ id: "character-1", name: "Hero", description: "A hero" }}
+        onClose={vi.fn()} onUpdateDescription={vi.fn()} onUpdateAttributes={onUpdateAttributes}
+        onGenerate={onGenerate} generatingTypes={[]} />);
+
+    await waitFor(() => expect(screen.getByLabelText("设计模型")).toHaveValue("qwen"));
+    const editor = document.querySelector("[contenteditable]") as HTMLElement & { editor: import("@tiptap/core").Editor };
+    expect(editor.editor.getText()).not.toContain("深棕眼");
+    fireEvent.click(screen.getByRole("button", { name: "生成草稿" }));
+    await waitFor(() => expect(screen.getByLabelText("身份视觉值")).toHaveValue("深棕眼"));
+    expect(apiMocks.agentRequest).toHaveBeenCalledWith("/character-design/draft", "POST", expect.objectContaining({
+        profile: "A hero",
+        current_draft: "",
+        user_answers: {},
+    }));
+    expect(onUpdateAttributes).not.toHaveBeenCalled();
+    expect(editor.editor.getText()).toContain("深棕眼");
+
+    fireEvent.click(screen.getByRole("button", { name: "确认设计" }));
+    await waitFor(() => expect(onUpdateAttributes).toHaveBeenCalledWith({ character_design: expect.objectContaining({
+        confirmed: true,
+        skill_revision: "skill-hash",
+        field_status: expect.objectContaining({ visual_notes: "creative-choice" }),
+    }) }));
+    await waitFor(() => expect(screen.getByText("已确认 r1")).toBeInTheDocument());
+    expect(editor.editor.getText()).toContain("深棕眼");
+    expect(editor.editor.getText()).toContain("黑色劲装");
+});
+
+it("lets the user answer unresolved design questions and carries answers into confirmed prompts", async () => {
+    apiMocks.getAssetReferenceIndex.mockResolvedValueOnce({ assets: [] } as any);
+    const question = "少年外观与青年年龄阶段之间的具体年龄表现需确认";
+    const onUpdateAttributes = vi.fn().mockResolvedValue(undefined);
+    render(<CharacterWorkbench asset={{
+        id: "character-1", name: "苏砚", description: "少年剑客",
+        character_design: { design_draft: {
+            route: "historical-costume", age_stage: "young-adult",
+            identity: { visual_notes: "短黑发，沉静面容" },
+            look: { visual_notes: "素黑色劲装" },
+            unresolved: [question], confirmed: false,
+        }, design_revisions: [] },
+    }} onClose={vi.fn()} onUpdateDescription={vi.fn()} onUpdateAttributes={onUpdateAttributes} onGenerate={vi.fn()} generatingTypes={[]} />);
+
+    expect(screen.getByRole("button", { name: /dossier/ })).toHaveTextContent("pendingDesignQuestions");
+
+    fireEvent.change(screen.getByPlaceholderText(/可直接修改建议|补充你的决定/), { target: { value: "按十七岁少年表现，身形尚未完全长成" } });
+    fireEvent.click(screen.getByRole("button", { name: "确认设计" }));
+
+    await waitFor(() => expect(onUpdateAttributes).toHaveBeenCalledWith({ character_design: expect.objectContaining({
+        confirmed: true,
+        unresolved: [],
+        field_answers: { [question]: "按十七岁少年表现，身形尚未完全长成" },
+    }) }));
+    await waitFor(() => expect(screen.getByText("已确认 r1")).toBeInTheDocument());
+    const editor = screen.getByRole("textbox", { name: "Enter prompt description..." });
+    expect(editor).toHaveTextContent("按十七岁少年表现，身形尚未完全长成");
+});
+
+it("applies edited identity and look values to image prompts without saving a revision", async () => {
+    apiMocks.getAssetReferenceIndex.mockResolvedValueOnce({ assets: [] } as any);
+    const onUpdateAttributes = vi.fn().mockResolvedValue(undefined);
+    render(<CharacterWorkbench asset={{ id: "character-1", name: "苏砚", description: "少年剑客" }}
+        onClose={vi.fn()} onUpdateDescription={vi.fn()} onUpdateAttributes={onUpdateAttributes}
+        onGenerate={vi.fn()} generatingTypes={[]} />);
+
+    await waitFor(() => expect(screen.getByLabelText("设计模型")).toHaveValue("qwen"));
+    fireEvent.change(screen.getByLabelText("身份视觉值"), { target: { value: "窄长脸，深棕眼，短黑发" } });
+    fireEvent.change(screen.getByLabelText("造型视觉值"), { target: { value: "黑色窄袖劲装，哑光棉布，布靴" } });
+    fireEvent.click(screen.getByRole("button", { name: "应用到图片提示词" }));
+
+    const editor = screen.getByRole("textbox", { name: "Enter prompt description..." });
+    expect(editor).toHaveTextContent("窄长脸，深棕眼，短黑发");
+    expect(editor).toHaveTextContent("黑色窄袖劲装，哑光棉布，布靴");
+    fireEvent.click(screen.getByRole("tab", { name: "threeViews" }));
+    expect(screen.getByRole("textbox", { name: "Enter prompt description..." })).toHaveTextContent("黑色窄袖劲装，哑光棉布，布靴");
+    fireEvent.click(screen.getByRole("tab", { name: "avatar" }));
+    expect(screen.getByRole("textbox", { name: "Enter prompt description..." })).toHaveTextContent("窄长脸，深棕眼，短黑发");
+    expect(onUpdateAttributes).not.toHaveBeenCalled();
+});
+
+it("applies a platform feature term to the editable identity draft without submitting", async () => {
+    apiMocks.getAssetReferenceIndex.mockResolvedValueOnce({ assets: [] } as any);
+    apiMocks.agentRequest.mockClear();
+    const onUpdateAttributes = vi.fn();
+    render(<CharacterWorkbench asset={{ id: "character-1", name: "苏砚", description: "少年剑客" }}
+        onClose={vi.fn()} onUpdateDescription={vi.fn()} onUpdateAttributes={onUpdateAttributes}
+        onGenerate={vi.fn()} generatingTypes={[]} />);
+
+    fireEvent.click(screen.getByRole("button", { name: /窄长椭圆脸/ }));
+    expect(screen.getByLabelText("身份视觉值")).toHaveValue("窄长椭圆脸");
+    expect(screen.getByRole("button", { name: /窄长椭圆脸/ })).toHaveAttribute("title", expect.stringContaining("内部测试"));
+    expect(onUpdateAttributes).not.toHaveBeenCalled();
+    expect(apiMocks.agentRequest.mock.calls.some(([path]) => path === "/character-design/draft")).toBe(false);
+});
+
+it("lets the user adopt an Agent suggestion for a genuine character decision", async () => {
+    apiMocks.getAssetReferenceIndex.mockResolvedValueOnce({ assets: [] } as any);
+    const defaultAgentRequest = apiMocks.agentRequest.getMockImplementation();
+    const designResult = {
+            identity: { visual_notes: "少年感面容，短黑发", basis: ["creative_choice"] },
+            look: { visual_notes: "窄袖黑色劲装，哑光布面，布靴", basis: ["script_fact", "creative_choice"] },
+            unresolved: ["剧本写少年，但年龄阶段选择为青年"],
+            field_suggestions: { "剧本写少年，但年龄阶段选择为青年": "十七八岁少年感，脸部线条尚未完全成熟。" },
+            field_suggestion_choices: { "剧本写少年，但年龄阶段选择为青年": { age_stage: "teen" } },
+            skill_revision: "skill-hash",
+        };
+    apiMocks.agentRequest.mockImplementation((path: string) => path === "/models"
+        ? Promise.resolve({ models: [{ api_model_id: "qwen", display_name: "Qwen" }] })
+        : Promise.resolve(designResult as any));
+    const onUpdateAttributes = vi.fn();
+    render(<CharacterWorkbench asset={{ id: "character-1", name: "苏砚", description: "少年剑客" }}
+        onClose={vi.fn()} onUpdateDescription={vi.fn()} onUpdateAttributes={onUpdateAttributes}
+        onGenerate={vi.fn()} generatingTypes={[]} />);
+
+    await waitFor(() => expect(screen.getByLabelText("设计模型")).toHaveValue("qwen"));
+    fireEvent.click(screen.getByRole("button", { name: "生成草稿" }));
+    await waitFor(() => expect(apiMocks.agentRequest).toHaveBeenCalledWith("/character-design/draft", "POST", expect.anything()));
+    await waitFor(() => expect(screen.getByLabelText("身份视觉值")).toHaveValue("少年感面容，短黑发"));
+    fireEvent.click(screen.getByText("采用此建议"));
+    expect(screen.getByLabelText("年龄阶段")).toHaveValue("teen");
+    fireEvent.click(screen.getByRole("button", { name: "应用到图片提示词" }));
+
+    expect(screen.getByRole("textbox", { name: "Enter prompt description..." })).toHaveTextContent("十七八岁少年感");
+    expect(screen.getByRole("textbox", { name: "Enter prompt description..." })).toHaveTextContent("少年少女年龄表现");
+    expect(screen.getByRole("textbox", { name: "Enter prompt description..." })).not.toHaveTextContent("青年年龄表现");
+    expect(onUpdateAttributes).not.toHaveBeenCalled();
+    apiMocks.agentRequest.mockImplementation(defaultAgentRequest!);
+});
+
+it("searches current project materials and passes selected reference IDs to design drafting", async () => {
+    apiMocks.getAssetReferenceIndex.mockResolvedValueOnce({ assets: [{
+        asset_type: "character", asset_id: "ref-character", name: "苏砚定妆照", source_scope: "episode",
+        variants: [{ id: "front-view", url: "/files/front.png" }],
+    }] } as any);
+    render(<CharacterWorkbench asset={{ id: "character-1", name: "苏砚", description: "少年剑客" }}
+        onClose={vi.fn()} onUpdateDescription={vi.fn()} onGenerate={vi.fn()} generatingTypes={[]} />);
+
+    await waitFor(() => expect(apiMocks.getAssetReferenceIndex).toHaveBeenCalledWith("project-1"));
+    fireEvent.click(screen.getByRole("button", { name: "选择角色参考图" }));
+    fireEvent.change(screen.getByLabelText("搜索角色参考素材"), { target: { value: "苏砚" } });
+    fireEvent.click(await screen.findByRole("option", { name: /苏砚定妆照/ }));
+    fireEvent.click(screen.getByRole("button", { name: "生成草稿" }));
+
+    await waitFor(() => expect(apiMocks.agentRequest).toHaveBeenCalledWith("/character-design/draft", "POST", expect.objectContaining({
+        project_id: "project-1",
+        reference_assets: [{ asset_type: "character", asset_id: "ref-character", variant_id: "front-view" }],
+    })));
+});
+
+it("uses the latest confirmed design instead of an older saved image prompt", () => {
+    apiMocks.getAssetReferenceIndex.mockResolvedValueOnce({ assets: [] } as any);
+    render(<CharacterWorkbench asset={{
+        id: "character-1", name: "Hero", description: "Old personality text", full_body_prompt: "Old image prompt",
+        character_design: { design_revisions: [{ revision: 2, design: { identity: { visual_notes: "深棕眼" }, look: { visual_notes: "黑色劲装" } } }] },
+    }} onClose={vi.fn()} onUpdateDescription={vi.fn()} onGenerate={vi.fn()} generatingTypes={[]} />);
+    const editor = document.querySelector("[contenteditable]") as HTMLElement & { editor: import("@tiptap/core").Editor };
+    expect(editor.editor.getText()).toContain("深棕眼");
+    expect(editor.editor.getText()).toContain("黑色劲装");
+    expect(editor.editor.getText()).not.toContain("Old image prompt");
+});
+
+it("keeps shooting plan actions in the collapsed context panel", () => {
     apiMocks.getAssetReferenceIndex.mockResolvedValueOnce({ assets: [] } as any);
     const createSceneAsset = vi.fn();
     const entry = {
@@ -249,16 +469,10 @@ it("keeps shooting plan actions below the asset panels in a separate tab", () =>
         />,
     );
 
-    const tabs = screen.getAllByRole("tab");
-    expect(tabs.map(tab => tab.textContent)).toEqual([
-        "workbenchConstraints", "characterFacetSuggestions", "shootingPlanConstraints (1)",
-    ]);
-    expect(tabs[0]).toHaveAttribute("aria-selected", "true");
-    expect(screen.queryByRole("button", { name: "新建场景资产" })).not.toBeInTheDocument();
-
-    fireEvent.keyDown(tabs[0], { key: "ArrowRight" });
-    expect(tabs[1]).toHaveAttribute("aria-selected", "true");
-    fireEvent.click(tabs[2]);
+    fireEvent.click(screen.getByText("advancedSettings"));
+    expect(screen.getByText("shootingPlanConstraints (1)").closest("details")).not.toHaveAttribute("open");
+    fireEvent.click(screen.getByText("shootingPlanConstraints (1)"));
+    expect(screen.getByText("shootingPlanConstraints (1)").closest("details")).toHaveAttribute("open");
     expect(screen.getByRole("button", { name: "新建场景资产" })).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "新建场景资产" }));
     expect(createSceneAsset).toHaveBeenCalledWith(entry);
@@ -309,15 +523,16 @@ it("refreshes the reference index when a generated project snapshot arrives", as
     rerender(workbench(vi.fn()));
     await waitFor(() => expect(apiMocks.getAssetReferenceIndex).toHaveBeenCalledTimes(2));
 
-    const editor = screen.getAllByRole("textbox")[0] as HTMLElement & { editor: import("@tiptap/core").Editor };
-    act(() => { editor.editor.commands.setContent("<p>@Hero</p>"); });
-    fireEvent.click(screen.getByRole("option"));
+    const editor = (screen.getAllByRole("textbox") as Array<HTMLElement & { editor?: import("@tiptap/core").Editor }>).find((item) => item.editor);
+    expect(editor?.editor).toBeDefined();
+    act(() => { editor!.editor!.commands.setContent("<p>@Hero</p>"); });
+    fireEvent.click(within(screen.getByRole("listbox")).getByRole("option"));
     fireEvent.click(screen.getAllByRole("button", { name: "Reference image" })[0]);
     fireEvent.click(screen.getAllByTestId("variant-generate")[0]);
 
     await waitFor(() => expect(onGenerate).toHaveBeenCalledWith(
         "full_body",
-        "@Hero ",
+        "@Hero · View 1 ",
         true,
         expect.any(String),
         1,
@@ -334,6 +549,7 @@ it("builds Chinese character defaults without duplicate punctuation", () => {
     );
 
     expect(prompt).toContain("全身角色设计：周涵（大学时期）");
+    expect(prompt).not.toMatch(/^false。/);
     expect(prompt).not.toMatch(/Full body|concept art|Standing pose|Clean white background/);
     expect(prompt).not.toMatch(/。\./);
 });
