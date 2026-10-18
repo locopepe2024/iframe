@@ -27,7 +27,9 @@ def test_asset_image_prompt_refine_returns_reviewable_suggestion(ctx, monkeypatc
         current_prompt='粮铺', plan_context=['第一集黄昏，粮铺门前'],
     )
 
-    assert agent.refine_asset_image_prompt(body, ctx) == {'prompt': '黄昏粮铺门前，青石板反射暖光'}
+    preview = agent.preview_asset_image_prompt_refine(body, ctx)
+    reviewed = body.model_copy(update={"reviewed_messages": preview["messages"], "review_token": preview["review_token"]})
+    assert agent.refine_asset_image_prompt(reviewed, ctx) == {'prompt': '黄昏粮铺门前，青石板反射暖光'}
     assert '第一集黄昏，粮铺门前' in calls[0][1]['content']
 
 
@@ -38,9 +40,73 @@ def test_asset_image_prompt_refine_rejects_empty_suggestion(ctx, monkeypatch):
         model='qwen', asset_type='prop', asset_name='双手剑', description='长柄双手剑',
     )
 
+    preview = agent.preview_asset_image_prompt_refine(body, ctx)
     with pytest.raises(HTTPException) as exc:
-        agent.refine_asset_image_prompt(body, ctx)
+        agent.refine_asset_image_prompt(body.model_copy(update={
+            "reviewed_messages": preview["messages"], "review_token": preview["review_token"]}), ctx)
     assert exc.value.status_code == 502
+
+
+def test_asset_refine_sends_only_reviewed_text_and_rejects_stale_source(ctx, monkeypatch):
+    calls = []
+    monkeypatch.setattr(agent, 'validate_model', lambda *_: None)
+    monkeypatch.setattr(agent, 'complete', lambda _ctx, _model, messages: (
+        calls.append(messages) or '{"prompt":"冷灰蓝长街"}'
+    ))
+    body = agent.AssetImagePromptRequest(model='qwen', asset_type='scene', asset_name='长街',
+                                         description='残阳如血', current_prompt='残阳染红全街')
+    with pytest.raises(HTTPException) as unreviewed:
+        agent.refine_asset_image_prompt(body, ctx)
+    assert unreviewed.value.status_code == 409
+    assert calls == []
+    preview = agent.preview_asset_image_prompt_refine(body, ctx)
+    edited = {**preview['messages'], 'user': '{"current_prompt":"冷灰蓝长街"}'}
+    reviewed = body.model_copy(update={'reviewed_messages': edited, 'review_token': preview['review_token']})
+    assert agent.refine_asset_image_prompt(reviewed, ctx)['prompt'] == '冷灰蓝长街'
+    assert calls[0][1]['content'] == edited['user']
+    assert '残阳染红全街' not in str(calls)
+    reviewed.current_prompt = '另一条街'
+    with pytest.raises(HTTPException) as stale:
+        agent.refine_asset_image_prompt(reviewed, ctx)
+    assert stale.value.status_code == 409
+    assert len(calls) == 1
+
+
+def test_asset_refine_rejects_removed_required_output_format(ctx, monkeypatch):
+    complete = Mock()
+    monkeypatch.setattr(agent, 'validate_model', lambda *_: None)
+    monkeypatch.setattr(agent, 'complete', complete)
+    body = agent.AssetImagePromptRequest(model='qwen', asset_type='prop', asset_name='剑', description='旧剑')
+    preview = agent.preview_asset_image_prompt_refine(body, ctx)
+    body.review_token = preview['review_token']
+    body.reviewed_messages = {'system': '只写散文', 'user': '旧剑'}
+    with pytest.raises(HTTPException) as rejected:
+        agent.refine_asset_image_prompt(body, ctx)
+    assert rejected.value.status_code == 422
+    complete.assert_not_called()
+
+
+def test_asset_refine_rejects_changed_saved_asset_and_foreign_project(ctx, monkeypatch):
+    from src.apps.comic_gen.api import pipeline
+    asset = SimpleNamespace(name='长街', description='蓝调街道', image_prompt='蓝调', asset_design={'style': '写实'}, updated_at=1)
+    monkeypatch.setattr(pipeline, 'get_script', lambda project_id, owner: SimpleNamespace(id=project_id) if owner == ctx.owner_profile_id else None)
+    monkeypatch.setattr(pipeline, '_find_asset_with_source', lambda *_: (asset, 'script'))
+    monkeypatch.setattr(agent, 'validate_model', lambda *_: None)
+    complete = Mock(return_value='{"prompt":"写实长街"}')
+    monkeypatch.setattr(agent, 'complete', complete)
+    body = agent.AssetImagePromptRequest(model='qwen', asset_type='scene', asset_name='长街',
+        description='蓝调街道', project_id='episode-1', asset_id='scene-1')
+    preview = agent.preview_asset_image_prompt_refine(body, ctx)
+    reviewed = body.model_copy(update={'reviewed_messages': preview['messages'], 'review_token': preview['review_token']})
+    asset.asset_design = {'style': '油画'}
+    with pytest.raises(HTTPException) as changed:
+        agent.refine_asset_image_prompt(reviewed, ctx)
+    assert changed.value.status_code == 409
+    complete.assert_not_called()
+    foreign = UserContext('other', 'foreign-profile', 'name', 'token')
+    with pytest.raises(HTTPException) as denied:
+        agent.preview_asset_image_prompt_refine(body, foreign)
+    assert denied.value.status_code == 404
 
 
 def test_catalog_is_self_contained_and_attributed():
