@@ -14,31 +14,36 @@
 
 | 对象 | 唯一职责 | 稳定身份 |
 | --- | --- | --- |
-| 角色资产 | 当前项目／系列中的语义角色和可见设定 | `scope + container_id + character_id` |
+| 项目角色 | 项目中的语义角色和长期可复用视觉设定 | `project_id + character_id` |
 | 角色设计 revision | 已审核的身份、造型字段和来源快照 | `character_id + design_revision` |
+| 角色资产包 | 围绕角色母版建立的四层通用规范资产 | `project_id + character_id + pack_id + pack_revision` |
 | 媒体变体 | 一张原图／生成图或视频的不可变结果 | `variant_id + media_id`，URL 仅供访问 |
 | 锚点绑定 revision | 用户认定哪张图作为这版角色的正面全身母版 | `character_id + anchor_revision` |
 | 派生任务 | 一次明确目标和输入的生成／上传任务 | `derivative_task_id` |
-| 派生资产条目 | 一个目标类型的候选、选中变体和来源 | `character_id + kind + entry_id` |
+| 资产包条目 | 一个通用目标类型的候选、选中变体和来源 | `pack_id + kind + entry_id` |
+| 剧集角色资产 | 使用已确认资产包版本生成的本集具体造型、状态或媒体 | `script_id + episode_character_asset_id` |
 
-`character_design` 管视觉文字设定；新增 `character_asset_pack` 管媒体依赖图。两者不能互相假定已经确认。`digital_avatar` 保持独立的虚拟演员资料，不复制成第二套角色母版 owner。现有 `AssetRevision` 可记录整体资产快照，但不足以代替每张派生图的来源边；资产包必须记录自己的版本和引用。
+`character_design` 管视觉文字设定；新增项目级 `character_asset_pack` 管通用母版与媒体依赖图；剧集角色资产记录一次具体使用和产物。三者不能互相假定已经确认。`digital_avatar` 保持独立的虚拟演员资料，不复制成第二套角色母版 owner。现有 `AssetRevision` 可记录整体资产快照，但不足以代替每张派生图的来源边；资产包和剧集产物均必须记录自己的版本与引用。
 
 ### 多级检索与工作域
 
-用户导航路径为 **项目／系列 → 剧集 → 角色 → 四层分类 → 资产类型 → 变体**。在当前代码中，`Series.id` 是系列级容器，剧集是带 `series_id` 和 `episode_number` 的 `Script.id`；独立项目只有 `Script.id`，没有系列节点。界面可称“项目 → 剧集”，但持久化身份必须保存真实 `series_id`、`script_id` 和 owner 范围，不能按标题或集数反查。
+检索分为两棵树，不能把项目资产包挂在剧集之下：
 
 ```text
-项目／系列 series_id
+项目 project_id
+├── 角色 character_id
+│   └── 资产包 pack_id / pack_revision
+│       └── 层级 layer → 通用资产 kind / entry_id → 变体 variant_id
 └── 剧集 script_id
-    └── 角色 character_id
-        └── 层级 layer（身份锚点／表演控制／视觉规范／环境融合）
-            └── 资产 kind / entry_id
-                └── 变体 variant_id
+    └── 角色 character_id 的本集使用
+        └── 具体资产 episode_character_asset_id → 本集变体 variant_id
 ```
 
-这是浏览路径，不是每层都复制一份媒体。系列共享角色在剧集中作为继承项可见，仍由 `source_scope=series + source_container_id=series_id` 持有；剧集专属角色由其 `script_id` 持有。若用户把共享角色改为本集造型或状态，显式建立本集 revision／fork，记录 `source_character_id + source_design_revision + source_anchor_revision`，不回写系列母版。独立项目直接从 `script_id` 进入角色；平台素材先经明确导入或绑定，不能伪装成本集资产。
+**代码事实：** 当前 `Series.characters` 与 `Script.characters` 都使用 `Character` 模型；素材索引把本集条目与系列条目并列展示，并按 ID 去重。这只说明现有存储和视图，不能把“本集角色”解释成已经有明确来源的资产包派生物。新契约需要显式分离这两种角色资产身份。
 
-检索 API 至少支持 `series_id`、`script_id`、`character_id`、`layer`、`kind`、`status`、`source_scope` 的逐级过滤，并允许在角色节点内按标签／名称搜索。结果返回面包屑、真实 owner、继承／本集标记、确认状态、设计及锚点 revision、所选变体 ID 和 WebP 封面身份。缩图 URL 是按需续签的展示字段，不能充当检索键。跨剧集搜索可从系列节点进入，但选择到当前镜头时须再次核对该变体在目标剧集的可用作用域。
+对于系列项目，当前 `Series.id` 可作为项目容器，带 `series_id` 的 `Script.id` 是剧集；独立项目只有 `Script.id`，实现时仍须用不同的**逻辑类型**区分项目资产包和具体产物，不能仅凭同一个物理容器混写。项目角色资产包在剧集工作台可作为只读来源候选，不能显示成“本集已生成资产”。用户从包内选定条目与变体、设定本集需要的造型或状态、审核提交后，才创建 `episode_character_asset`。它固定 `source_pack_id + source_pack_revision + source_entry_id + source_variant_id + source_design_revision`，保存本集覆写和自己的生成结果，不回写项目资产包。分镜默认引用本集具体资产；如要直接引用包内通用图，必须显式选择并显示其来源作用域。
+
+项目资产包检索支持 `project_id`、`character_id`、`layer`、`kind`、`pack_revision`、`status`；剧集资产检索支持 `script_id`、`character_id`、场景／镜头、状态、来源包版本和本集变体。两者都允许名称和标签搜索，结果返回真实 owner、完整面包屑、确认状态、来源 revision、所选变体 ID 和 WebP 封面身份。缩图 URL 按需续签，不能充当检索键。跨剧集搜索可从项目节点进入，但选择到当前镜头时须再次核对该变体在目标剧集的作用域。
 
 ## 角色设计结构
 
@@ -57,6 +62,8 @@
 ```json
 {
   "schema_version": 1,
+  "project_id": "series-1",
+  "pack_id": "pack-character-1",
   "pack_revision": 3,
   "character_id": "character-1",
   "design_revision": 2,
@@ -89,6 +96,30 @@
 
 该 JSON 是逻辑契约，不要求原样新增一个可随意写入的字典。实现时使用有界类型、枚举和服务端校验；媒体可继续存现有容器，资产包保存稳定索引，不复制媒体文件或签名 URL。上传图的 `created_by` 为 `upload`，其来源锚点可空，但确认它为标准派生物仍需人工审核。
 
+剧集具体资产另存独立记录，不能直接复用资产包条目 ID 充当本集产物。例如：
+
+```json
+{
+  "episode_character_asset_id": "ep1-character-rain-look",
+  "script_id": "episode-1",
+  "character_id": "character-1",
+  "purpose": "scene_costume_state",
+  "scene_ids": ["scene-rain-street"],
+  "source": {
+    "pack_id": "pack-character-1",
+    "pack_revision": 3,
+    "design_revision": 2,
+    "entry_id": "entry-three-view",
+    "variant_id": "variant-b"
+  },
+  "episode_overrides": {"condition": "rain_wet_clothing"},
+  "selected_variant_id": "episode-variant-a",
+  "status": "selected"
+}
+```
+
+`episode_overrides` 必须是可审核的有界字段；例子仅表示本集状态，不证明原剧本存在雨景。实际来源可选资产包锚点或任何已确认包内条目，`entry_id` 在选用锚点时可为空；每次生成记录真实所选来源。审核通过后才成为分镜可默认使用的本集资产。
+
 锚点角色为 `front_full_body_neutral`，要求正面、全身、可见面容、发型、衣装和鞋履。角色已有其他图片时只能作为候选；不得凭容器名推断其满足锚点条件。选定或替换锚点是单独确认动作，记录操作者工作区身份、时间、来源变体和设计 revision。
 
 ## 四层资产分类与类型目录
@@ -107,8 +138,8 @@
 | 视觉规范层 `visual_specification` | 这个角色长什么样 | `palette_card` 配色规范卡 | 锚点、确认的配色字段；尚无独立类型 |
 | 视觉规范层 | 这个角色长什么样 | `costume_breakdown` 服装拆解图 | 锚点、确认的服装字段；尚无独立类型 |
 | 视觉规范层 | 这个角色长什么样 | `prop_standalone` 道具独立图 | 道具资产为媒体 owner；角色资产包只保存持有／使用关系，不能复制成角色图 |
-| 环境融合层 `environment_integration` | 这个角色在哪里 | `makeup_scene_still` 妆造定妆照 | 锚点、当前场景与光影 revision；有妆造容器，缺场景来源边 |
-| 环境融合层 | 这个角色在哪里 | `condition_variant` 破损／状态变化图 | 锚点、显式状态与适用集／镜头范围；尚无独立类型 |
+| 环境融合层 `environment_integration` | 这个角色在哪里 | `makeup_scene_still` 妆造定妆照 | 包内可绑定项目级可复用场景与光影 revision；本集场景版本作为剧集具体资产另生；有妆造容器，缺来源边 |
+| 环境融合层 | 这个角色在哪里 | `condition_variant` 破损／状态变化图 | 包内为可复用状态规范；本集受伤／雨淋等实际状态另生且标适用场景／镜头；尚无独立类型 |
 
 工作台按这四层呈现资产包，但初次创建只要求身份锚点；其他项由用户按剧情与交付需要选择。表演控制图不写回永久面容字段，环境融合图不写回基础服装或场景基线。`prop_standalone` 在四层目录中可查，但其源媒体与 revision 仍由道具资产管理。
 
@@ -116,24 +147,25 @@
 
 ## 状态、版本与失效
 
-派生条目可处于 `missing → candidate → selected → confirmed`，也可标记 `stale` 或 `retired`。`candidate` 说明有结果，不说明质量合格；`selected` 说明工作台选中，不等于项目确认。一次任务冻结 `source_anchor_revision`、`source_design_revision`、目标类型、实际媒体引用、结构化参数和用户审过的提示词。任务重试产生新候选，不覆盖旧变体。
+资产包条目和剧集具体资产各自处于 `missing → candidate → selected → confirmed`，也可标记 `stale` 或 `retired`；它们的确认状态相互独立。`candidate` 说明有结果，不说明质量合格；`selected` 说明工作台选中，不等于确认。资产包任务冻结 `source_anchor_revision`、`source_design_revision`、目标类型、实际媒体引用、结构化参数和用户审过的提示词。剧集任务另外冻结 `source_pack_id/revision`、源条目／变体、本集场景／状态和覆写。重试产生新候选，不覆盖旧变体。
 
-锚点或设计 revision 变化时，旧派生物保持原始引用并显示“基于旧版本”。它们是否视觉失效需要人工判断，系统只做确定性的版本不匹配提示。已在分镜中引用的旧变体继续有效；替换需由分镜 owner 明确选择并确认。删除母版、派生图或平台资源前检查引用；已引用项先 retire，不能让历史分镜悬空。
+锚点或设计 revision 变化时，旧资产包派生物保持原始引用并显示“基于旧版本”。项目资产包 revision 变化时，已生成的剧集资产同样保持冻结来源；不会自动重生或改写本集结果。它们是否视觉失效需要人工判断，系统只做确定性的版本不匹配提示。已在分镜中引用的旧变体继续有效；替换需由分镜 owner 明确选择并确认。删除母版、派生图、剧集产物或平台资源前检查引用；已引用项先 retire，不能让历史分镜悬空。
 
 ## 平台库和提示词投影
 
 平台库分为任务模板、字段片段、带许可的图片／视频参考三种，不混用。当前公开平台参考库的 `resources` 为空；工作台模板只有文字任务分类，不能被呈现为可用脸型或服装图。未来平台资源需有 `resource_id + revision + kind + tags + provenance/license + media_id`；用户选中后先形成项目可解析的绑定或导入，再在角色字段或引用列表中明确应用。
 
-角色设计、锚点和派生条目分别投影到当前任务的可见审核输入。用户可修改后确认；仅被选择并显示的参考图进入模型请求。派生任务即使推荐母版，也必须在提交审核显示该母版，不允许隐藏附加。平台资源升级不改变已有确认 revision，用户可显式 fork 新版本。
+项目角色设计、锚点、资产包条目与本集覆写分别投影到当前任务的可见审核输入。用户可修改后确认；仅被选择并显示的参考图进入模型请求。派生任务即使推荐母版，也必须在提交审核显示该母版，不允许隐藏附加。平台资源升级不改变已有确认 revision，用户可显式 fork 新版本。
 
 ## 落地顺序与验证
 
-1. **数据与检索契约：** 定义有界模型、系列／剧集真实 owner、多级索引、序列化兼容和迁移读取；旧容器仍可浏览，不把旧图自动确认为新锚点。
-2. **最小纵切：** 人工选定一张正面全身锚点，基于它生成一张三视图候选；提交审核展示母版与文本；结果保存来源 revision；更换锚点后显示旧版提示。
-3. **工作台：** 基于 schema 收起可选输入，候选设计逐项审核，参考图一键沿用但不自动提交。再增加平台字段和素材检索。
-4. **扩类型：** 按需求与模型能力逐项实现表情、配色、服装、状态等；每类有独立质量审核，不承诺一次生成全包。
-5. **分镜消费：** 只引用用户确认的角色设计和指定变体／状态；分镜保留所用 revision 快照。
+1. **数据与检索契约：** 分开定义项目角色资产包与剧集具体资产的有界模型、真实 owner、两棵检索树、序列化兼容和迁移读取；旧容器仍可浏览，不把旧图自动确认为新锚点或本集产物。
+2. **项目资产包纵切：** 人工选定一张正面全身锚点，基于它生成一张三视图候选；提交审核展示母版与文本；结果保存来源 revision；更换锚点后显示旧版提示。
+3. **剧集派生纵切：** 用户从已确认包内变体生成一个本集具体资产；冻结包版本、来源变体、本集覆写、结果变体和审核状态；分镜选中它时显示完整来源。
+4. **工作台与检索：** 项目入口浏览角色资产包；剧集入口浏览本集具体资产并搜索可用包内来源。候选设计逐项审核，参考图可显式沿用但不自动提交。再增加平台字段和素材检索。
+5. **扩类型：** 按需求与模型能力逐项实现表情、配色、服装、状态等；每类有独立质量审核，不承诺一次生成全包。
+6. **分镜消费：** 默认引用本集已确认的具体资产和指定变体／状态；直接用项目资产包图需显式选择；分镜保留所用 revision 快照。
 
-验收重点：旧数据可读；同名角色与同编号剧集不串库；系列继承项显示真实 owner；本集 fork 不回写系列；层级与类型过滤能定位到正确变体；确认与候选不混淆；换锚点不重写历史；一个派生变体能追溯完整输入；项目外媒体被拒；所有模型输入与实际发送一致；模板不能暗中附加参考图。Blender／3D 导演台不在此契约的验证范围。
+验收重点：旧数据可读；同名角色与同编号剧集不串库；项目包图不会冒充本集生成资产；本集具体资产可追溯固定的包版本且不回写项目；两棵检索树能定位到正确变体；确认与候选不混淆；换锚点不重写历史；一个派生变体能追溯完整输入；项目外媒体被拒；所有模型输入与实际发送一致；模板不能暗中附加参考图。Blender／3D 导演台不在此契约的验证范围。
 
 实施前需核对的路径：`src/apps/comic_gen/models.py`、`assets.py`、`pipeline.py`、`api.py`，`frontend/src/components/modules/CharacterWorkbench.tsx`，资产索引、分镜引用解析及相应测试。先完成模型和校验测试，再调整 UI。
