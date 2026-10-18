@@ -1,12 +1,13 @@
 "use client";
 
 import { motion, AnimatePresence } from "framer-motion";
-import { Check, X, User, MapPin, Package } from "lucide-react";
+import { Check, X, User, MapPin, Package, Search } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { useState } from "react";
 import { AssetIndexPreview } from "@/components/shared/AssetIndexPreview";
 import type { AssetReferenceIndexEntry } from "@/lib/api";
 import { projectReferenceIndex } from "@/lib/assetReferenceIndex";
+import { searchStructuredAssets, type AssetSearchScope, type AssetSearchType } from "@/lib/structuredAssetSearch";
 
 interface AssetDrawerProps {
     isOpen: boolean;
@@ -48,14 +49,18 @@ export default function AssetDrawer({
     const t = useTranslations("storyboardR2V");
     const [frameError, setFrameError] = useState("");
     const [selectingFrame, setSelectingFrame] = useState(false);
+    const [query, setQuery] = useState("");
+    const [searchType, setSearchType] = useState<AssetSearchType>("all");
+    const [searchScope, setSearchScope] = useState<AssetSearchScope>("all");
     // Frame inputs require server-confirmed project membership. Legacy UI
     // arrays lack a reliable source container and must not become selectable.
     const entries = frameSlot
         ? projectReferenceIndex(assetIndex ?? [], [], [], [])
         : projectReferenceIndex(assetIndex, legacyCharacters, legacyScenes, legacyProps);
-    const characters = entries.filter((entry) => entry.asset_type === "character");
-    const scenes = entries.filter((entry) => entry.asset_type === "scene");
-    const props = entries.filter((entry) => entry.asset_type === "prop");
+    const filteredEntries = searchStructuredAssets(entries, { query, type: searchType, scope: searchScope });
+    const characters = filteredEntries.filter((entry) => entry.asset_type === "character");
+    const scenes = filteredEntries.filter((entry) => entry.asset_type === "scene");
+    const props = filteredEntries.filter((entry) => entry.asset_type === "prop");
 
     const hasAnyAssets = characters.length > 0 || scenes.length > 0 || props.length > 0;
 
@@ -92,6 +97,32 @@ export default function AssetDrawer({
 
                         {/* Content */}
                         <div className="flex-1 overflow-y-auto p-4 space-y-5">
+                            <div className="space-y-2 rounded-lg border border-glass-border bg-glass p-2">
+                                <label className="flex items-center gap-2 rounded-md border border-glass-border bg-surface-inset px-2 py-1.5">
+                                    <Search size={14} className="text-text-muted" aria-hidden="true" />
+                                    <input
+                                        value={query}
+                                        onChange={(event) => setQuery(event.target.value)}
+                                        placeholder="搜索资产名称、描述或作用域"
+                                        className="min-w-0 flex-1 bg-transparent text-xs text-foreground outline-none placeholder:text-text-muted"
+                                        aria-label="搜索结构化资产"
+                                    />
+                                </label>
+                                <div className="flex gap-1.5 overflow-x-auto text-[0.625rem]">
+                                    {([["all", "全部"], ["character", "角色"], ["scene", "场景"], ["prop", "道具"]] as const).map(([value, label]) => (
+                                        <button key={value} type="button" onClick={() => setSearchType(value)}
+                                            className={`rounded px-2 py-1 ${searchType === value ? "bg-primary/20 text-primary" : "bg-surface-inset text-text-secondary"}`}>
+                                            {label}
+                                        </button>
+                                    ))}
+                                    {([["all", "全部作用域"], ["episode", "剧集"], ["series", "系列"], ["global", "共享"]] as const).map(([value, label]) => (
+                                        <button key={value} type="button" onClick={() => setSearchScope(value)}
+                                            className={`rounded px-2 py-1 ${searchScope === value ? "bg-primary/20 text-primary" : "bg-surface-inset text-text-secondary"}`}>
+                                            {label}
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
                             {frameSlot ? (
                                 <div className="space-y-3">
                                     <p className="text-xs text-text-secondary">选择{frameSlot === "first" ? "首帧" : "尾帧"}资产变体</p>
