@@ -1023,6 +1023,7 @@ function CharacterDetailModal({ asset, type, onClose, onUpdateDescription, onUpd
     const tv = useTranslations("vault");
     const [description, setDescription] = useState(asset.description);
     const [isEditing, setIsEditing] = useState(false);
+    const [descriptionSaved, setDescriptionSaved] = useState(true);
     const currentProject = useProjectStore((state) => state.currentProject);
     const updateProject = useProjectStore((state) => state.updateProject);
     const selectionQueue = useRef<Promise<void>>(Promise.resolve());
@@ -1038,14 +1039,23 @@ function CharacterDetailModal({ asset, type, onClose, onUpdateDescription, onUpd
         local_effect: String(savedSceneDesign.local_lighting?.effect || ""),
         reference_viewpoint: String(savedSceneDesign.reference_viewpoint || ""),
         reference_framing: String(savedSceneDesign.reference_framing || ""),
+        visual_constraints: {
+            key_light_direction: String(savedSceneDesign.visual_constraints?.key_light_direction || "unspecified"),
+            forbidden_light_directions: Array.isArray(savedSceneDesign.visual_constraints?.forbidden_light_directions) ? savedSceneDesign.visual_constraints.forbidden_light_directions : [],
+            visible_face_limit: savedSceneDesign.visual_constraints?.visible_face_limit ?? "",
+            secondary_people_view: String(savedSceneDesign.visual_constraints?.secondary_people_view || ""),
+        },
     }));
-    const [sceneDesignNeedsApply, setSceneDesignNeedsApply] = useState(() =>
+        const [sceneDesignNeedsApply, setSceneDesignNeedsApply] = useState(() =>
         type === "scene" && !String(asset.image_prompt || "").includes("【场景结构化设置】") && Boolean(
             (typeof savedSceneDesign.style === "string" ? savedSceneDesign.style : stylePrompt)
             || (typeof savedSceneDesign.ambient_lighting === "string" ? savedSceneDesign.ambient_lighting : inheritedSceneLighting)
             || savedSceneDesign.local_lighting?.effect
             || savedSceneDesign.reference_viewpoint
-            || savedSceneDesign.reference_framing,
+            || savedSceneDesign.reference_framing
+            || savedSceneDesign.visual_constraints?.key_light_direction
+            || savedSceneDesign.visual_constraints?.forbidden_light_directions?.length
+            || savedSceneDesign.visual_constraints?.visible_face_limit !== undefined,
         ));
     const [sceneDesignSaving, setSceneDesignSaving] = useState(false);
     const [promptModels, setPromptModels] = useState<ChatModel[]>([]);
@@ -1173,8 +1183,13 @@ function CharacterDetailModal({ asset, type, onClose, onUpdateDescription, onUpd
         }
     }, [styleNegativePrompt]);
 
-    const handleSave = () => {
-        onUpdateDescription(description);
+    const handleSave = async () => {
+        await onUpdateDescription(description);
+        setDescriptionSaved(true);
+        if (type === "scene") {
+            setSceneDesign(current => ({ ...current, visual_notes: description }));
+            setSceneDesignNeedsApply(true);
+        }
         setIsEditing(false);
     };
 
@@ -1214,6 +1229,10 @@ function CharacterDetailModal({ asset, type, onClose, onUpdateDescription, onUpd
 
     const handleOptimizePrompt = async () => {
         if (!promptModel || optimizingPrompt) return;
+        if (type === "scene" && sceneDesignNeedsApply) {
+            toast.warning("请先检查并应用场景结构化设置到可见提示词，再进行 AI 优化。");
+            return;
+        }
         setOptimizingPrompt(true);
         setPromptError("");
         setOptimizedPrompt("");
@@ -1222,15 +1241,18 @@ function CharacterDetailModal({ asset, type, onClose, onUpdateDescription, onUpd
                 model: promptModel,
                 asset_type: type,
                 asset_name: asset.name,
-                description: asset.description,
+                description,
                 current_prompt: imagePrompt,
                 style: type === "scene" ? [
                     sceneDesign.visual_notes && `场景空间：${sceneDesign.visual_notes}`,
                     sceneDesign.style && `场景风格：${sceneDesign.style}`,
                     sceneDesign.ambient_lighting && `环境光：${sceneDesign.ambient_lighting}`,
-                    sceneDesign.local_effect && `局部光（${sceneDesign.local_target}）：${sceneDesign.local_effect}`,
                     sceneDesign.reference_viewpoint && `参考图视角：${sceneDesign.reference_viewpoint}`,
                     sceneDesign.reference_framing && `参考图构图：${sceneDesign.reference_framing}`,
+                    sceneDesign.visual_constraints.key_light_direction !== "unspecified" && `主光方向：${sceneDesign.visual_constraints.key_light_direction}`,
+                    sceneDesign.visual_constraints.forbidden_light_directions.length > 0 && `禁止光线方向：${sceneDesign.visual_constraints.forbidden_light_directions.join("、")}`,
+                    sceneDesign.visual_constraints.visible_face_limit !== "" && `可见人脸上限：${sceneDesign.visual_constraints.visible_face_limit}`,
+                    sceneDesign.visual_constraints.secondary_people_view && `其他人物呈现：${sceneDesign.visual_constraints.secondary_people_view}`,
                 ].filter(Boolean).join("\n") : "",
                 // A shooting-plan clause is sent only after the user adds it to the visible prompt.
                 plan_context: [],
@@ -1280,18 +1302,41 @@ function CharacterDetailModal({ asset, type, onClose, onUpdateDescription, onUpd
         setSceneDesignNeedsApply(true);
     };
 
+    const updateVisualConstraint = (key: keyof typeof sceneDesign.visual_constraints, value: string | string[] | number | "") => {
+        setSceneDesign(current => ({
+            ...current,
+            visual_constraints: { ...current.visual_constraints, [key]: value },
+        }));
+        setSceneDesignNeedsApply(true);
+    };
+
+    const extractVisualConstraints = (text: string) => {
+        const next = { ...sceneDesign.visual_constraints };
+        if (/侧面光|侧光|侧面照明/.test(text)) next.key_light_direction = "side";
+        else if (/正面光|正面照明/.test(text)) next.key_light_direction = "front";
+        else if (/背光|逆光|背面光/.test(text)) next.key_light_direction = "back";
+        const forbidden = new Set(next.forbidden_light_directions);
+        if (/不允许[^。；\n]*(?:正面光|正面照明)/.test(text) || /禁止[^。；\n]*(?:正面光|正面照明)/.test(text)) forbidden.add("front");
+        if (/不允许[^。；\n]*(?:背光|逆光|背面光)/.test(text) || /禁止[^。；\n]*(?:背光|逆光|背面光)/.test(text)) forbidden.add("back");
+        next.forbidden_light_directions = Array.from(forbidden);
+        const faceMatch = text.match(/(?:不超过|最多|上限为?)\s*(\d+)\s*(?:个|名)?\s*(?:可见)?人脸/);
+        if (faceMatch) next.visible_face_limit = Number(faceMatch[1]);
+        if (/侧身|侧面|远景/.test(text) && /其他|其余/.test(text)) next.secondary_people_view = "其他人物保持侧身或远景";
+        return next;
+    };
+
     const applySceneDesign = () => {
-        if (sceneDesign.local_effect.trim() && !sceneDesign.local_target.trim()) {
-            toast.warning("请指定局部光的作用区域或对象。");
-            return;
-        }
+        const visualConstraints = sceneDesign.visual_constraints;
         const lines = [
             sceneDesign.visual_notes && `场景空间：${sceneDesign.visual_notes}`,
             sceneDesign.style && `场景风格：${sceneDesign.style}`,
             sceneDesign.ambient_lighting && `环境光：${sceneDesign.ambient_lighting}`,
-            sceneDesign.local_effect && `局部光（${sceneDesign.local_target}）：${sceneDesign.local_effect}`,
             sceneDesign.reference_viewpoint && `参考图视角：${sceneDesign.reference_viewpoint}`,
             sceneDesign.reference_framing && `参考图构图：${sceneDesign.reference_framing}`,
+            visualConstraints.key_light_direction !== "unspecified" && `主光方向：${({ front: "正面", back: "背面", side: "侧面", top: "顶部", bottom: "底部", mixed: "混合" } as Record<string, string>)[visualConstraints.key_light_direction]}`,
+            visualConstraints.forbidden_light_directions.length > 0 && `禁止光线方向：${visualConstraints.forbidden_light_directions.map((item: string) => ({ front: "正面光", back: "背光", side: "侧面光", top: "顶部光", bottom: "底部光", mixed: "混合光" } as Record<string, string>)[item] || item).join("、")}`,
+            visualConstraints.visible_face_limit !== "" && `可见人脸上限：${visualConstraints.visible_face_limit} 张；其他人物保持侧身或远景。`,
+            visualConstraints.secondary_people_view && `其他人物呈现：${visualConstraints.secondary_people_view}`,
         ].filter(Boolean);
         const block = `【场景结构化设置】\n${lines.join("\n")}\n【/场景结构化设置】`;
         setImagePrompt((current: string) => {
@@ -1302,12 +1347,19 @@ function CharacterDetailModal({ asset, type, onClose, onUpdateDescription, onUpd
         setSceneDesignNeedsApply(false);
     };
 
-    const saveSceneDesign = async (confirmed: boolean) => {
-        if (!sceneDesign.visual_notes.trim() || sceneDesignSaving) return;
-        if (sceneDesign.local_effect.trim() && !sceneDesign.local_target.trim()) {
-            toast.warning("请指定局部光的作用区域或对象。");
+    const parseSavedDescription = () => {
+        if (!descriptionSaved || !description.trim()) {
+            toast.warning("请先保存 Description，再解析结构化设置。");
             return;
         }
+        const visualConstraints = extractVisualConstraints(description);
+        setSceneDesign(current => ({ ...current, visual_notes: description, visual_constraints: visualConstraints }));
+        setSceneDesignNeedsApply(true);
+        toast.success("已从已保存的 Description 解析结构化设置，请检查后再应用到提示词。");
+    };
+
+    const saveSceneDesign = async (confirmed: boolean) => {
+        if (!sceneDesign.visual_notes.trim() || sceneDesignSaving) return;
         setSceneDesignSaving(true);
         try {
             await onUpdateAttributes({ asset_design: {
@@ -1317,6 +1369,12 @@ function CharacterDetailModal({ asset, type, onClose, onUpdateDescription, onUpd
                 local_lighting: { target: sceneDesign.local_target.trim(), effect: sceneDesign.local_effect.trim() },
                 reference_viewpoint: sceneDesign.reference_viewpoint.trim(),
                 reference_framing: sceneDesign.reference_framing.trim(),
+                visual_constraints: {
+                    key_light_direction: sceneDesign.visual_constraints.key_light_direction,
+                    forbidden_light_directions: sceneDesign.visual_constraints.forbidden_light_directions,
+                    visible_face_limit: sceneDesign.visual_constraints.visible_face_limit === "" ? null : Number(sceneDesign.visual_constraints.visible_face_limit),
+                    secondary_people_view: sceneDesign.visual_constraints.secondary_people_view.trim(),
+                },
                 confirmed,
             } });
             toast.success(confirmed ? "场景设计已确认" : "场景草稿已保存");
@@ -1430,12 +1488,12 @@ function CharacterDetailModal({ asset, type, onClose, onUpdateDescription, onUpd
                                 <div className="space-y-2">
                                     <textarea
                                         value={description}
-                                        onChange={(e) => setDescription(e.target.value)}
+                                        onChange={(e) => { setDescription(e.target.value); setDescriptionSaved(false); }}
                                         className="w-full h-32 bg-input-bg border border-glass-border rounded-lg p-3 text-sm text-text-secondary resize-none focus:border-primary focus:outline-none"
                                     />
                                     <div className="flex justify-end gap-2">
                                         <button onClick={() => { setIsEditing(false); setDescription(asset.description); }} className="px-3 py-1.5 text-xs text-text-secondary hover:text-foreground">Cancel</button>
-                                        <button onClick={handleSave} className="px-3 py-1.5 bg-primary text-white text-xs rounded hover:bg-primary/90">Save Description</button>
+                                        <button onClick={() => void handleSave()} className="px-3 py-1.5 bg-primary text-white text-xs rounded hover:bg-primary/90">Save Description</button>
                                     </div>
                                 </div>
                             ) : (
@@ -1449,34 +1507,58 @@ function CharacterDetailModal({ asset, type, onClose, onUpdateDescription, onUpd
                             <section className="space-y-3 rounded-lg border border-glass-border bg-glass p-4" aria-label="场景结构化设置">
                                 <div>
                                     <h3 className="text-sm font-bold text-foreground">场景结构化设置</h3>
-                                    <p className="mt-1 text-xs text-text-muted">设置可保存为场景设计；点击“应用到图片提示词”后才进入本次生成。参考图视角与构图只控制场景参考图。</p>
+                                    <p className="mt-1 text-xs text-text-muted">流程：先保存 Description → 开始结构化 → 检查并应用到可见提示词 → AI 优化 → 生成。占位和深度用于后续白模参考图。</p>
                                 </div>
-                                <label className="block text-xs text-text-secondary">空间与固定外观
+                                <div className="flex flex-wrap items-center gap-2 text-xs">
+                                    <span className={descriptionSaved ? "text-status-success-fg" : "text-status-warning-fg"}>{descriptionSaved ? "Description 已保存" : "Description 有未保存修改"}</span>
+                                    <button type="button" onClick={parseSavedDescription} disabled={!descriptionSaved} className="rounded border border-glass-border px-2 py-1 text-foreground disabled:opacity-40">开始结构化</button>
+                                </div>
+                                <label className="block text-xs text-text-secondary">场景描述
                                     <textarea aria-label="场景空间与固定外观" value={sceneDesign.visual_notes} onChange={event => updateSceneDesign("visual_notes", event.target.value)} className="mt-1 w-full rounded border border-glass-border bg-input-bg p-2 text-sm text-foreground" rows={3} />
                                 </label>
                                 <label className="block text-xs text-text-secondary">风格
                                     <textarea aria-label="场景风格" value={sceneDesign.style} onChange={event => updateSceneDesign("style", event.target.value)} className="mt-1 w-full rounded border border-glass-border bg-input-bg p-2 text-sm text-foreground" rows={2} />
                                 </label>
-                                {stylePrompt && <p className="text-xs text-text-muted">导演／项目风格建议：{stylePrompt} <button type="button" className="text-primary" onClick={() => updateSceneDesign("style", stylePrompt)}>采用</button></p>}
-                                <label className="block text-xs text-text-secondary">环境光与整体色调
+                                <p className="text-xs text-text-muted">默认继承全局风格；后续可在这里选择风格参考图。</p>
+                                <label className="block text-xs text-text-secondary">光影
                                     <textarea aria-label="场景环境光" value={sceneDesign.ambient_lighting} onChange={event => updateSceneDesign("ambient_lighting", event.target.value)} className="mt-1 w-full rounded border border-glass-border bg-input-bg p-2 text-sm text-foreground" rows={2} />
                                 </label>
-                                {(asset.time_of_day || asset.lighting_mood) && <p className="text-xs text-text-muted">场景档案时段／光影建议：{[asset.time_of_day, asset.lighting_mood].filter(Boolean).join(" · ")} <button type="button" className="text-primary" onClick={() => updateSceneDesign("ambient_lighting", [asset.time_of_day, asset.lighting_mood].filter(Boolean).join("；"))}>采用</button></p>}
+                                <p className="text-xs text-text-muted">初版从已保存 Description 结构化光影文字；参数化光影将在后续版本启用。</p>
                                 <div className="grid gap-2 md:grid-cols-2">
-                                    <label className="block text-xs text-text-secondary">局部光作用区域／对象
-                                        <input aria-label="局部光作用区域" value={sceneDesign.local_target} onChange={event => updateSceneDesign("local_target", event.target.value)} className="mt-1 w-full rounded border border-glass-border bg-input-bg p-2 text-sm text-foreground" placeholder="例如：远处落日；树荫外街面" />
+                                    <label className="block text-xs text-text-secondary opacity-60">局部光作用区域／对象（暂未启用）
+                                        <input aria-label="局部光作用区域" disabled value={sceneDesign.local_target} onChange={event => updateSceneDesign("local_target", event.target.value)} className="mt-1 w-full rounded border border-glass-border bg-input-bg p-2 text-sm text-foreground" placeholder="需要蒙板后启用" />
                                     </label>
-                                    <label className="block text-xs text-text-secondary">局部光效果
-                                        <input aria-label="局部光效果" value={sceneDesign.local_effect} onChange={event => updateSceneDesign("local_effect", event.target.value)} className="mt-1 w-full rounded border border-glass-border bg-input-bg p-2 text-sm text-foreground" placeholder="例如：限定的暖红轮廓光" />
+                                    <label className="block text-xs text-text-secondary opacity-60">局部光效果（暂未启用）
+                                        <input aria-label="局部光效果" disabled value={sceneDesign.local_effect} onChange={event => updateSceneDesign("local_effect", event.target.value)} className="mt-1 w-full rounded border border-glass-border bg-input-bg p-2 text-sm text-foreground" placeholder="需要蒙板后启用" />
                                     </label>
                                 </div>
                                 <div className="grid gap-2 md:grid-cols-2">
-                                    <label className="block text-xs text-text-secondary">参考图视角／机位
+                                    <label className="block text-xs text-text-secondary">镜头
                                         <input aria-label="场景参考图视角" value={sceneDesign.reference_viewpoint} onChange={event => updateSceneDesign("reference_viewpoint", event.target.value)} className="mt-1 w-full rounded border border-glass-border bg-input-bg p-2 text-sm text-foreground" />
                                     </label>
-                                    <label className="block text-xs text-text-secondary">参考图构图
+                                    <label className="block text-xs text-text-secondary">占位和深度（白模参考图）
                                         <input aria-label="场景参考图构图" value={sceneDesign.reference_framing} onChange={event => updateSceneDesign("reference_framing", event.target.value)} className="mt-1 w-full rounded border border-glass-border bg-input-bg p-2 text-sm text-foreground" />
                                     </label>
+                                </div>
+                                <div className="rounded border border-glass-border/70 bg-input-bg/40 p-3 space-y-2">
+                                    <p className="text-xs font-semibold text-foreground">可执行一致性约束</p>
+                                    <div className="grid gap-2 md:grid-cols-2">
+                                        <label className="block text-xs text-text-secondary">主光方向
+                                            <select aria-label="主光方向" value={sceneDesign.visual_constraints.key_light_direction} onChange={event => updateVisualConstraint("key_light_direction", event.target.value)} className="mt-1 w-full rounded border border-glass-border bg-input-bg p-2 text-sm text-foreground">
+                                                <option value="unspecified">未指定</option><option value="front">正面光</option><option value="back">背面光</option><option value="side">侧面光</option><option value="top">顶部光</option><option value="bottom">底部光</option><option value="mixed">混合光</option>
+                                            </select>
+                                        </label>
+                                        <label className="block text-xs text-text-secondary">可见人脸上限
+                                            <input aria-label="可见人脸上限" type="number" min={0} max={50} value={sceneDesign.visual_constraints.visible_face_limit} onChange={event => updateVisualConstraint("visible_face_limit", event.target.value === "" ? "" : Number(event.target.value))} className="mt-1 w-full rounded border border-glass-border bg-input-bg p-2 text-sm text-foreground" placeholder="例如：3" />
+                                        </label>
+                                    </div>
+                                    <div className="flex flex-wrap gap-3 text-xs text-text-secondary">
+                                        {[["front", "禁止正面光"], ["back", "禁止背光"], ["top", "禁止顶部光"], ["bottom", "禁止底部光"]].map(([value, label]) => <label key={value} className="inline-flex items-center gap-1"><input type="checkbox" checked={sceneDesign.visual_constraints.forbidden_light_directions.includes(value)} onChange={event => updateVisualConstraint("forbidden_light_directions", event.target.checked ? [...sceneDesign.visual_constraints.forbidden_light_directions, value] : sceneDesign.visual_constraints.forbidden_light_directions.filter((item: string) => item !== value))} />{label}</label>)}
+                                    </div>
+                                    <label className="block text-xs text-text-secondary">其他人物呈现方式
+                                        <input aria-label="其他人物呈现方式" value={sceneDesign.visual_constraints.secondary_people_view} onChange={event => updateVisualConstraint("secondary_people_view", event.target.value)} className="mt-1 w-full rounded border border-glass-border bg-input-bg p-2 text-sm text-foreground" placeholder="例如：其他人物保持侧身或远景" />
+                                    </label>
+                                    <p className="text-[11px] text-text-muted">应用时会从上方描述识别“侧面光”“禁止正面光”“最多 3 个可见人脸”等明确表达；识别结果会显示在下方可见提示词中。</p>
                                 </div>
                                 <div className="flex flex-wrap items-center gap-2">
                                     <button type="button" onClick={() => void saveSceneDesign(false)} disabled={sceneDesignSaving || !sceneDesign.visual_notes.trim()} className="rounded border border-glass-border px-2 py-1 text-xs text-foreground disabled:opacity-40">保存草稿</button>
@@ -1517,7 +1599,7 @@ function CharacterDetailModal({ asset, type, onClose, onUpdateDescription, onUpd
                                         {promptModels.map(model => <option key={model.api_model_id} value={model.api_model_id}>{model.display_name}</option>)}
                                     </select>
                                     <button type="button" onClick={() => void handleOptimizePrompt()}
-                                        disabled={!promptModel || optimizingPrompt || !asset.description?.trim()}
+                                        disabled={!promptModel || optimizingPrompt || !descriptionSaved || !description.trim() || (type === "scene" && sceneDesignNeedsApply)}
                                         className="inline-flex h-9 items-center gap-1.5 rounded border border-glass-border px-3 text-xs text-foreground hover:bg-hover-bg disabled:opacity-50">
                                         <Sparkles size={14} />{optimizingPrompt ? "优化中…" : "优化提示词"}
                                     </button>

@@ -233,6 +233,10 @@ export interface AssetLibraryReference {
     asset_type: "character" | "scene" | "prop";
     asset_id: string;
     variant_id: string;
+    source_scope?: "shared" | "project" | "episode" | "series" | "private";
+    revision?: number;
+    application_mode?: "reference_only" | "parameters_only" | "parameters_with_media" | "parameters_with_video";
+    applied_fields?: string[];
 }
 
 export interface AssetImageReviewRequest {
@@ -326,6 +330,36 @@ export interface AssetReferenceIndex {
     schema_version: 1;
     project_id: string;
     assets: AssetReferenceIndexEntry[];
+}
+
+export interface PlatformReferenceResource {
+    platform_resource_id: string;
+    revision: number;
+    kind: string;
+    title: string;
+    summary?: string;
+    tags?: string[];
+    status: "active" | "retired" | "candidate" | "review";
+    provenance: {
+        license: string;
+        content_sha256: string;
+        source?: string;
+        source_url?: string;
+        attribution?: string;
+        notice_text?: string;
+    };
+    [key: string]: unknown;
+}
+
+export interface PlatformReferenceCatalog {
+    scope: "platform_shared";
+    schema_version: number;
+    catalog_revision: string;
+    resources: PlatformReferenceResource[];
+}
+
+export interface PlatformReferenceReviewer {
+    authorized: boolean;
 }
 
 /**
@@ -650,6 +684,32 @@ export const api = {
         return res.data;
     },
 
+    getPlatformReferenceLibrary: async (query = "", kind?: string): Promise<PlatformReferenceCatalog> => {
+        const res = await axios.get<PlatformReferenceCatalog>(`${API_URL}/platform-reference-library`, {
+            params: { query: query || undefined, kind: kind || undefined },
+            headers: { "Cache-Control": "no-cache" },
+        });
+        return res.data;
+    },
+
+    getPlatformReferenceReviewer: async (): Promise<PlatformReferenceReviewer> => {
+        const res = await axios.get<PlatformReferenceReviewer>(`${API_URL}/platform-reference-library/reviewer`, {
+            headers: { "Cache-Control": "no-cache" },
+        });
+        return res.data;
+    },
+
+    promotePlatformReferenceResource: async (
+        resourceId: string,
+        expectedHash?: string,
+    ): Promise<PlatformReferenceResource> => {
+        const res = await axios.post<PlatformReferenceResource>(
+            `${API_URL}/platform-reference-library/${encodeURIComponent(resourceId)}/promote`,
+            expectedHash ? { expected_hash: expectedHash } : {},
+        );
+        return res.data;
+    },
+
     getAssemblyPlan: async (scope: AssemblyScope, resourceId: string): Promise<AssemblyEditPlan | null> => {
         const base = scope === "series" ? "series" : "projects";
         const res = await axios.get<AssemblyEditPlan | null>(`${API_URL}/${base}/${resourceId}/assembly-plan`);
@@ -873,6 +933,45 @@ export const api = {
         const res = await axios.patch(
             `${API_URL}/projects/${scriptId}/frames/${frameId}/workbench`,
             patch,
+        );
+        return res.data;
+    },
+
+    listShotVisualPresets: async (scriptId: string, sceneId?: string) => {
+        const res = await axios.get(
+            `${API_URL}/projects/${scriptId}/shot-visual-presets`,
+            { params: sceneId ? { scene_id: sceneId } : undefined },
+        );
+        return res.data;
+    },
+
+    saveShotVisualPreset: async (
+        scriptId: string,
+        frameId: string,
+        payload: {
+            name: string;
+            visual_design?: Record<string, unknown>;
+            compiled_prompt?: string;
+            source_variant_id?: string | null;
+            source_scene_revision?: number | null;
+        },
+    ) => {
+        const res = await axios.post(
+            `${API_URL}/projects/${scriptId}/frames/${frameId}/shot-visual-presets`,
+            payload,
+        );
+        return res.data;
+    },
+
+    applyShotVisualPreset: async (
+        scriptId: string,
+        frameId: string,
+        presetId: string,
+        applyMode: "parameters_only" | "parameters_with_reference" = "parameters_only",
+    ) => {
+        const res = await axios.post(
+            `${API_URL}/projects/${scriptId}/frames/${frameId}/shot-visual-presets/${presetId}/apply`,
+            { apply_mode: applyMode },
         );
         return res.data;
     },

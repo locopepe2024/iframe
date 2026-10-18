@@ -295,6 +295,41 @@ def test_duplicate_structured_references_fail_before_task_creation(tmp_path):
     assert pipeline.asset_generation_tasks == {}
 
 
+def test_structured_reference_preserves_application_scope_and_revision(tmp_path):
+    pipeline, _target = _pipeline_with_assets(tmp_path)
+    reference = pipeline._normalize_asset_reference({
+        "asset_type": "scene",
+        "asset_id": "street",
+        "variant_id": "blue-hour",
+        "source_scope": "episode",
+        "revision": 4,
+        "application_mode": "parameters_with_media",
+        "applied_fields": ["environment", "lighting"],
+    })
+    assert reference == {
+        "asset_type": "scene",
+        "asset_id": "street",
+        "variant_id": "blue-hour",
+        "source_scope": "episode",
+        "revision": 4,
+        "application_mode": "parameters_with_media",
+        "applied_fields": ["environment", "lighting"],
+    }
+
+
+@pytest.mark.parametrize("field,value", [
+    ("source_scope", "unknown"),
+    ("application_mode", "all"),
+    ("revision", 0),
+    ("applied_fields", ["lighting"] * 17),
+])
+def test_structured_reference_rejects_invalid_application_metadata(tmp_path, field, value):
+    pipeline, _target = _pipeline_with_assets(tmp_path)
+    reference = {"asset_type": "scene", "asset_id": "street", "variant_id": "blue-hour", field: value}
+    with pytest.raises(InvalidAssetReference, match=field):
+        pipeline._normalize_asset_reference(reference)
+
+
 @pytest.mark.parametrize(
     "mode,references,error",
     [

@@ -77,6 +77,7 @@ from .models import (
     Series,
     StoryboardFrame,
     StoryboardReferencePackage,
+    ShotVisualPreset,
     VideoTask,
     AssemblyEditPlan,
     AssetLibraryReference,
@@ -88,6 +89,11 @@ from ...utils.oss_utils import OSSImageUploader, is_object_key, managed_object_k
 from ...utils.uniart_catalog import fetch_uniart_catalog, normalize_uniart_catalog
 from ...utils import setup_logging, get_user_data_dir
 from ...utils.storage_config import media_root, storage_backend
+from ..platform_reference_catalog import (
+    list_resources as list_platform_reference_resources,
+    promote_resource as promote_platform_reference_resource,
+    reviewer_is_authorized,
+)
 from fastapi.responses import FileResponse, JSONResponse, Response
 from pathlib import Path
 from dotenv import load_dotenv, set_key
@@ -159,6 +165,47 @@ app.include_router(agent_router)
 app.include_router(knowledge_router)
 app.include_router(recreation_router)
 app.include_router(director_depth_router)
+
+
+@app.get("/platform-reference-library")
+def get_platform_reference_library(
+    kind: Optional[str] = None,
+    query: str = "",
+    user: UserContext = Depends(require_studio_user),
+):
+    """Read active deployment-scoped resources; mutations are not exposed here."""
+    try:
+        return private_no_store_signed_response(list_platform_reference_resources(kind=kind, query=query))
+    except ValueError as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
+class PlatformReferencePromotionRequest(BaseModel):
+    expected_hash: Optional[str] = None
+
+
+@app.get("/platform-reference-library/reviewer")
+def get_platform_reference_reviewer(user: UserContext = Depends(require_studio_user)):
+    """Return only whether this API-key identity may review platform candidates."""
+    return {"authorized": reviewer_is_authorized(user.owner_profile_id)}
+
+
+@app.post("/platform-reference-library/{resource_id}/promote")
+def promote_platform_reference(
+    resource_id: str,
+    request: PlatformReferencePromotionRequest,
+    user: UserContext = Depends(require_studio_user),
+):
+    if not reviewer_is_authorized(user.owner_profile_id):
+        raise HTTPException(status_code=403, detail="平台参考资源审核权限不足")
+    try:
+        return private_no_store_signed_response(promote_platform_reference_resource(
+            resource_id,
+            user.owner_profile_id,
+            request.expected_hash,
+        ))
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc))
 
 # Debug: Print OSS configuration at startup
 logger.info(f"STARTUP: OSS_ENDPOINT={os.getenv('OSS_ENDPOINT')}, OSS_BUCKET_NAME={os.getenv('OSS_BUCKET_NAME')}, OSS_BASE_PATH={os.getenv('OSS_BASE_PATH')}")
@@ -3736,6 +3783,53 @@ class UpdateFrameWorkbenchRequest(BaseModel):
     workbench_reference_variant_ids: Optional[Dict[str, List[str]]] = None
     workbench_pose_reference_variant_ids: Optional[Dict[str, List[str]]] = None
     workbench_director_snapshot_media_id: Optional[str] = None
+
+
+class SaveShotVisualPresetRequest(BaseModel):
+    name: str
+    visual_design: Optional[Dict[str, Any]] = None
+    compiled_prompt: str = ""
+    source_variant_id: Optional[str] = None
+    source_scene_revision: Optional[int] = None
+
+
+class ApplyShotVisualPresetRequest(BaseModel):
+    apply_mode: Literal["parameters_only", "parameters_with_reference"] = "parameters_only"
+
+
+@app.get("/projects/{script_id}/shot-visual-presets", response_model=List[ShotVisualPreset])
+def list_shot_visual_presets(script_id: str, scene_id: Optional[str] = None):
+    return pipeline.list_shot_visual_presets(script_id, scene_id=scene_id)
+
+
+@app.post("/projects/{script_id}/frames/{frame_id}/shot-visual-presets", response_model=ShotVisualPreset)
+def save_shot_visual_preset(script_id: str, frame_id: str, request: SaveShotVisualPresetRequest):
+    try:
+        preset = pipeline.save_shot_visual_preset(
+            script_id,
+            frame_id,
+            request.name,
+            visual_design=request.visual_design,
+            compiled_prompt=request.compiled_prompt,
+            source_variant_id=request.source_variant_id,
+            source_scene_revision=request.source_scene_revision,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    if preset is None:
+        raise HTTPException(status_code=404, detail="Script or frame not found")
+    return preset
+
+
+@app.post("/projects/{script_id}/frames/{frame_id}/shot-visual-presets/{preset_id}/apply", response_model=StoryboardFrame)
+def apply_shot_visual_preset(script_id: str, frame_id: str, preset_id: str, request: ApplyShotVisualPresetRequest):
+    try:
+        frame = pipeline.apply_shot_visual_preset(script_id, frame_id, preset_id, request.apply_mode)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    if frame is None:
+        raise HTTPException(status_code=404, detail="Script, frame, or visual preset not found")
+    return signed_response(frame)
 
 
 @app.patch("/projects/{script_id}/frames/{frame_id}/workbench", response_model=StoryboardFrame)

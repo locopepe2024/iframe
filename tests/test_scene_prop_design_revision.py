@@ -2,7 +2,7 @@ from threading import RLock
 
 import pytest
 
-from src.apps.comic_gen.models import GlobalAssetLibrary, Prop, Scene, Script
+from src.apps.comic_gen.models import GlobalAssetLibrary, Prop, Scene, Script, ShotVisualDesignSnapshot, ImageAsset, ImageVariant
 from src.apps.comic_gen.pipeline import ComicGenPipeline
 
 
@@ -91,3 +91,101 @@ def test_scene_local_light_requires_a_target_and_prop_rejects_scene_fields(tmp_p
         })
     assert scene.asset_design["design_revisions"] == []
     assert prop.asset_design["design_revisions"] == []
+
+
+def test_scene_visual_constraints_are_saved_and_versioned(tmp_path):
+    pipeline, scene, _ = make_pipeline(tmp_path)
+    design = {
+        "visual_notes": "Autumn street with a busy crowd",
+        "visual_constraints": {
+            "key_light_direction": "side",
+            "forbidden_light_directions": ["front", "back"],
+            "visible_face_limit": 3,
+            "secondary_people_view": "其他人物保持侧身或远景",
+        },
+        "confirmed": True,
+    }
+    pipeline.update_asset_attributes("project", "street", "scene", {"asset_design": design})
+    saved = scene.asset_design["design_revisions"][0]["design"]["visual_constraints"]
+    assert saved == design["visual_constraints"]
+
+
+@pytest.mark.parametrize("constraints, message", [
+    ({"key_light_direction": "diagonal"}, "key_light_direction is invalid"),
+    ({"forbidden_light_directions": ["unspecified"]}, "forbidden_light_directions is invalid"),
+    ({"visible_face_limit": 51}, "visible_face_limit is invalid"),
+    ({"visible_face_limit": True}, "visible_face_limit is invalid"),
+    ({"secondary_people_view": "x" * 301}, "secondary_people_view must be bounded text"),
+])
+def test_scene_visual_constraints_reject_invalid_values_without_mutation(tmp_path, constraints, message):
+    pipeline, scene, _ = make_pipeline(tmp_path)
+    with pytest.raises(ValueError, match=message):
+        pipeline.update_asset_attributes("project", "street", "scene", {
+            "asset_design": {"visual_notes": "Street", "visual_constraints": constraints},
+        })
+    assert scene.asset_design["design_revisions"] == []
+
+
+def test_shot_visual_preset_is_snapshot_and_apply_is_frame_owned(tmp_path):
+    pipeline, scene, _ = make_pipeline(tmp_path)
+    from src.apps.comic_gen.models import StoryboardFrame
+
+    source = StoryboardFrame(id="frame-1", scene_id="street", action_description="first")
+    target = StoryboardFrame(id="frame-2", scene_id="street", action_description="second")
+    pipeline.scripts["project"].frames = [source, target]
+    source.shot_visual_design = ShotVisualDesignSnapshot(
+        visual_design={"lighting": "side", "visible_face_limit": 3},
+        compiled_prompt="side light, no more than 3 visible faces",
+    )
+    source.rendered_image_asset = ImageAsset(variants=[ImageVariant(id="variant-1", url="output/storyboard/frame-1.webp")], selected_id="variant-1")
+    preset = pipeline.save_shot_visual_preset("project", "frame-1", "长街侧面光", source_variant_id="variant-1")
+    assert preset is not None
+    applied = pipeline.apply_shot_visual_preset("project", "frame-2", preset.id, "parameters_with_reference")
+    assert applied is not None
+    assert applied.shot_visual_design.source_preset_id == preset.id
+    assert applied.shot_visual_design.source_variant_id == "variant-1"
+    assert applied.shot_visual_design.apply_mode == "parameters_with_reference"
+    preset.visual_design["lighting"] = "mutated test value"
+    assert applied.shot_visual_design.visual_design["lighting"] == "side"
+
+
+def test_scene_asset_submission_snapshot_captures_structured_visual_design(tmp_path):
+    pipeline, scene, _ = make_pipeline(tmp_path)
+    scene.asset_design["design_draft"] = {
+        "visual_notes": "Autumn street",
+        "visual_constraints": {
+            "key_light_direction": "side",
+            "visible_face_limit": 3,
+        },
+    }
+    snapshot = pipeline._asset_submission_snapshot(
+        scene,
+        "scene",
+        prompt="Autumn street, side light",
+        negative_prompt="",
+        model_id="image-model",
+        aspect_ratio="16:9",
+        generation_type="all",
+        image_generation_mode="text",
+    )
+    assert snapshot["visual_design"]["visual_constraints"]["visible_face_limit"] == 3
+
+
+def test_scene_variant_visual_snapshot_is_projected_as_reusable_preset(tmp_path):
+    pipeline, scene, _ = make_pipeline(tmp_path)
+    scene.image_asset.variants = [ImageVariant(
+        id="scene-variant-1",
+        url="output/assets/scenes/street-1.webp",
+        submission_snapshot={
+            "positive_prompt": "cool side-lit autumn street",
+            "selected_model_id": "image-model",
+            "aspect_ratio": "16:9",
+            "generation_type": "all",
+            "image_generation_mode": "text",
+            "visual_design": {"visual_constraints": {"key_light_direction": "side"}},
+        },
+    )]
+    presets = pipeline.list_shot_visual_presets("project", "street")
+    assert len(presets) == 1
+    assert presets[0].source_asset_id == "street"
+    assert presets[0].source_variant_id == "scene-variant-1"

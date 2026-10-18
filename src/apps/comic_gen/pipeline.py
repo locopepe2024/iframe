@@ -20,6 +20,8 @@ from .models import (
     Scene,
     Prop,
     StoryboardFrame,
+    ShotVisualPreset,
+    ShotVisualDesignSnapshot,
     DialogueStructured,
     LightingData,
     Series,
@@ -556,6 +558,124 @@ class ComicGenPipeline(StudioOwnerMixin):
                 logger.warning("update_frame_workbench: save failed")
             return frame
 
+    def list_shot_visual_presets(self, script_id: str, scene_id: Optional[str] = None) -> List[ShotVisualPreset]:
+        script = self.scripts.get(script_id)
+        if not script:
+            return []
+        presets = list(getattr(script, "shot_visual_presets", []) or [])
+        scenes = [scene for scene in (script.scenes or []) if not scene_id or scene.id == scene_id]
+        for scene in scenes:
+            for variant in (scene.image_asset.variants or []):
+                snapshot = variant.submission_snapshot
+                if not snapshot or not snapshot.visual_design:
+                    continue
+                derived_id = f"asset_variant_visual_{scene.id}_{variant.id}"
+                if any(item.id == derived_id for item in presets):
+                    continue
+                presets.append(ShotVisualPreset(
+                    id=derived_id,
+                    name=f"{scene.name} · {variant.display_name or variant.id[:8]}",
+                    scene_id=scene.id,
+                    source_asset_id=scene.id,
+                    source_variant_id=variant.id,
+                    source_scene_revision=snapshot.design_revision_at_submission,
+                    visual_design=copy.deepcopy(snapshot.visual_design),
+                    compiled_prompt=snapshot.positive_prompt,
+                ))
+        if scene_id:
+            presets = [preset for preset in presets if preset.scene_id == scene_id]
+        return presets
+
+    def save_shot_visual_preset(
+        self,
+        script_id: str,
+        frame_id: str,
+        name: str,
+        visual_design: Optional[Dict[str, Any]] = None,
+        compiled_prompt: str = "",
+        source_variant_id: Optional[str] = None,
+        source_scene_revision: Optional[int] = None,
+    ) -> Optional[ShotVisualPreset]:
+        """Save a reviewed shot design as a project-scoped immutable snapshot."""
+        with self._save_lock:
+            script = self.scripts.get(script_id)
+            if not script:
+                return None
+            frame = next((item for item in (script.frames or []) if item.id == frame_id), None)
+            if not frame:
+                return None
+            design = copy.deepcopy(visual_design)
+            if design is None:
+                current_design = frame.shot_visual_design
+                if isinstance(current_design, dict):
+                    design = copy.deepcopy(current_design.get("visual_design") or {})
+                else:
+                    design = copy.deepcopy(current_design.visual_design if current_design else {})
+            if not isinstance(design, dict):
+                raise ValueError("visual_design must be an object")
+            if not str(name or "").strip():
+                raise ValueError("visual preset name is required")
+            preset = ShotVisualPreset(
+                name=str(name).strip(),
+                scene_id=frame.scene_id,
+                source_frame_id=frame.id,
+                source_variant_id=source_variant_id or (frame.shot_visual_design.get("source_variant_id") if isinstance(frame.shot_visual_design, dict) else (frame.shot_visual_design.source_variant_id if frame.shot_visual_design else None)),
+                source_scene_revision=source_scene_revision or (frame.shot_visual_design.get("source_scene_revision") if isinstance(frame.shot_visual_design, dict) else (frame.shot_visual_design.source_scene_revision if frame.shot_visual_design else None)),
+                visual_design=design,
+                compiled_prompt=str(compiled_prompt or (frame.shot_visual_design.get("compiled_prompt") if isinstance(frame.shot_visual_design, dict) else (frame.shot_visual_design.compiled_prompt if frame.shot_visual_design else ""))),
+            )
+            existing_presets = list(getattr(script, "shot_visual_presets", []) or [])
+            script.shot_visual_presets = [*existing_presets, preset]
+            self._save_data()
+            return preset
+
+    def apply_shot_visual_preset(
+        self,
+        script_id: str,
+        frame_id: str,
+        preset_id: str,
+        apply_mode: str = "parameters_only",
+    ) -> Optional[StoryboardFrame]:
+        """Copy a preset into the current frame; never create a live link."""
+        if apply_mode not in ("parameters_only", "parameters_with_reference"):
+            raise ValueError("invalid visual preset apply_mode")
+        with self._save_lock:
+            script = self.scripts.get(script_id)
+            if not script:
+                return None
+            frame = next((item for item in (script.frames or []) if item.id == frame_id), None)
+            preset = next((item for item in (getattr(script, "shot_visual_presets", []) or []) if item.id == preset_id), None)
+            if not frame or not preset:
+                return None
+            if frame.scene_id != preset.scene_id:
+                raise ValueError("visual preset belongs to another scene")
+            source_frame = next((item for item in (script.frames or []) if item.id == preset.source_frame_id), None)
+            source_variant = None
+            if preset.source_asset_id and preset.source_variant_id:
+                source_asset = next((item for item in (script.scenes or []) if item.id == preset.source_asset_id), None)
+                source_variant = next((item for item in ((source_asset.image_asset.variants if source_asset else []) or []) if item.id == preset.source_variant_id), None)
+            elif source_frame and preset.source_variant_id:
+                source_asset = source_frame.rendered_image_asset or source_frame.image_asset
+                source_variant = next((item for item in (source_asset.variants or []) if item.id == preset.source_variant_id), None)
+            if apply_mode == "parameters_with_reference":
+                if not source_variant:
+                    raise ValueError("visual preset reference variant is unavailable")
+                source_key = image_variant_storage_key(source_variant)
+                frame.t2i_image_urls = [*([u for u in (frame.t2i_image_urls or []) if u != source_key]), source_key][-self._T2I_HISTORY_LIMIT:]
+                frame.t2i_selected_index = len(frame.t2i_image_urls) - 1
+            frame.shot_visual_design = ShotVisualDesignSnapshot(
+                visual_design=copy.deepcopy(preset.visual_design),
+                compiled_prompt=preset.compiled_prompt,
+                source_preset_id=preset.id,
+                source_variant_id=preset.source_variant_id if apply_mode == "parameters_with_reference" else None,
+                source_scene_revision=preset.source_scene_revision,
+                apply_mode=apply_mode,
+                revision=(frame.shot_visual_design.revision + 1) if frame.shot_visual_design else 1,
+            )
+            frame.updated_at = time.time()
+            self._save_data()
+            return frame
+
     def upload_t2i_frame(
         self,
         script_id: str,
@@ -1054,6 +1174,8 @@ class ComicGenPipeline(StudioOwnerMixin):
         edit_mode: str = "freeform",
     ) -> Dict[str, Any]:
         identities = ([reference] if reference else []) + list(references or [])
+        asset_design = getattr(asset, "asset_design", None) if asset_type == "scene" else None
+        visual_design = copy.deepcopy(asset_design.get("design_draft")) if isinstance(asset_design, dict) else None
         return AssetImageSubmissionSnapshot(
             positive_prompt=prompt,
             negative_prompt=negative_prompt or "",
@@ -1065,6 +1187,7 @@ class ComicGenPipeline(StudioOwnerMixin):
             edit_mode=edit_mode,
             reference_inputs=[AssetImageReferenceIdentity.model_validate(item) for item in identities],
             scene_tool=scene_tool,
+            visual_design=visual_design,
             design_revision_at_submission=cls._confirmed_asset_design_revision(asset, asset_type),
         ).model_dump()
 
@@ -1971,7 +2094,7 @@ class ComicGenPipeline(StudioOwnerMixin):
             self._save_data()
 
     @staticmethod
-    def _normalize_asset_reference(reference: Any) -> Optional[Dict[str, str]]:
+    def _normalize_asset_reference(reference: Any) -> Optional[Dict[str, Any]]:
         """Normalize the public reference contract before resolving it.
 
         This deliberately keeps only the three stable identifiers. Provider
@@ -1995,14 +2118,35 @@ class ComicGenPipeline(StudioOwnerMixin):
             raise InvalidAssetReference("reference.asset_id is required")
         if not isinstance(variant_id, str) or not variant_id.strip():
             raise InvalidAssetReference("reference.variant_id is required")
-        return {
+        stable: Dict[str, Any] = {
             "asset_type": asset_type,
             "asset_id": asset_id.strip(),
             "variant_id": variant_id.strip(),
         }
+        # Optional provenance/application metadata is durable intent, not a
+        # provider URL. Preserve it when supplied so previews and snapshots can
+        # explain how a selected asset was applied; legacy callers retain the
+        # original three-key shape.
+        source_scope = raw.get("source_scope")
+        if source_scope not in (None, "shared", "project", "episode", "series", "private"):
+            raise InvalidAssetReference("reference.source_scope is invalid")
+        revision = raw.get("revision")
+        if revision is not None and (isinstance(revision, bool) or not isinstance(revision, int) or revision < 1):
+            raise InvalidAssetReference("reference.revision is invalid")
+        application_mode = raw.get("application_mode")
+        if application_mode not in (None, "reference_only", "parameters_only", "parameters_with_media", "parameters_with_video"):
+            raise InvalidAssetReference("reference.application_mode is invalid")
+        applied_fields = raw.get("applied_fields")
+        if applied_fields is not None:
+            if not isinstance(applied_fields, list) or len(applied_fields) > 16 or any(not isinstance(item, str) or not item.strip() for item in applied_fields):
+                raise InvalidAssetReference("reference.applied_fields is invalid")
+        for key in ("source_scope", "revision", "application_mode", "applied_fields"):
+            if key in raw and raw[key] not in (None, "", []):
+                stable[key] = raw[key]
+        return stable
 
     @classmethod
-    def _normalize_asset_references(cls, references: Any) -> List[Dict[str, str]]:
+    def _normalize_asset_references(cls, references: Any) -> List[Dict[str, Any]]:
         if references is None:
             return []
         if not isinstance(references, (list, tuple)):
@@ -2532,7 +2676,7 @@ class ComicGenPipeline(StudioOwnerMixin):
             design = attributes["asset_design"]
             if not isinstance(design, dict):
                 raise ValueError("Asset design must be an object")
-            scene_fields = {"style", "ambient_lighting", "local_lighting", "reference_viewpoint", "reference_framing"} if asset_type == "scene" else set()
+            scene_fields = {"style", "ambient_lighting", "local_lighting", "reference_viewpoint", "reference_framing", "visual_constraints"} if asset_type == "scene" else set()
             if set(design) - {"visual_notes", "user_requirements", "unresolved", "confirmed"} - scene_fields:
                 raise ValueError("Asset design contains unknown fields")
             notes = design.get("visual_notes")
@@ -2545,7 +2689,7 @@ class ComicGenPipeline(StudioOwnerMixin):
                 raise ValueError("Asset design unresolved items must be text")
             if not isinstance(design.get("confirmed", False), bool):
                 raise ValueError("Asset design confirmation must be boolean")
-            for field in scene_fields - {"local_lighting"}:
+            for field in scene_fields - {"local_lighting", "visual_constraints"}:
                 value = design.get(field, "")
                 if not isinstance(value, str) or len(value) > 2000:
                     raise ValueError(f"Asset design {field} must be bounded text")
@@ -2557,6 +2701,25 @@ class ComicGenPipeline(StudioOwnerMixin):
                     raise ValueError("Asset design local_lighting must be bounded text")
                 if local.get("effect", "").strip() and not local.get("target", "").strip():
                     raise ValueError("Asset design local lighting needs a target")
+            if "visual_constraints" in design:
+                constraints = design.get("visual_constraints")
+                if not isinstance(constraints, dict) or set(constraints) - {
+                    "key_light_direction", "forbidden_light_directions", "visible_face_limit", "secondary_people_view",
+                }:
+                    raise ValueError("Asset design visual_constraints contains unknown fields")
+                direction = constraints.get("key_light_direction", "unspecified")
+                allowed_directions = {"front", "back", "side", "top", "bottom", "mixed", "unspecified"}
+                if not isinstance(direction, str) or direction not in allowed_directions:
+                    raise ValueError("Asset design key_light_direction is invalid")
+                forbidden = constraints.get("forbidden_light_directions", [])
+                if not isinstance(forbidden, list) or any(not isinstance(item, str) or item not in allowed_directions - {"unspecified"} for item in forbidden):
+                    raise ValueError("Asset design forbidden_light_directions is invalid")
+                face_limit = constraints.get("visible_face_limit")
+                if face_limit is not None and (isinstance(face_limit, bool) or not isinstance(face_limit, int) or not 0 <= face_limit <= 50):
+                    raise ValueError("Asset design visible_face_limit is invalid")
+                people_view = constraints.get("secondary_people_view", "")
+                if not isinstance(people_view, str) or len(people_view) > 300:
+                    raise ValueError("Asset design secondary_people_view must be bounded text")
             record = dict(target_asset.asset_design or {})
             record["design_draft"] = design
             revisions = list(record.get("design_revisions") or [])
