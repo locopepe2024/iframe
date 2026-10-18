@@ -23,7 +23,7 @@ function showScene(scene: any) {
  return render(<NextIntlClientProvider locale="en" messages={messages}><CastWorkbenchModal isOpen kind="scene" entityId={scene.id} onClose={() => {}} /></NextIntlClientProvider>);
 }
 function promptEditor() {
- return screen.getByRole('textbox') as HTMLElement & { editor: import('@tiptap/core').Editor };
+ return document.querySelector('[contenteditable="true"]') as HTMLElement & { editor: import('@tiptap/core').Editor };
 }
 function setPromptDocument(html: string) {
  act(() => { promptEditor().editor.commands.focus(); promptEditor().editor.commands.setContent(html); });
@@ -277,6 +277,24 @@ it('shows the Cast generation-description @ menu and submits only selected stabl
  ]);
  expect(args[14]).toBe('reference');
  expect(JSON.stringify(args)).not.toContain('scene.png');
+});
+it('finds an indexed variant by description and binds it from @ without opening the image picker', async () => {
+ const withScene = { ...project, scenes: [{ id: 'street', name: '青溪镇长街', description: '冷灰蓝黄昏' }] };
+ useProjectStore.setState({ currentProject: withScene, projects: [withScene] });
+ vi.mocked(api.getProject).mockResolvedValue(withScene as any);
+ vi.mocked(api.getAssetReferenceIndex).mockResolvedValue({ schema_version: 1, project_id: 'project', assets: [
+  { asset_type: 'scene', asset_id: 'street', name: '青溪镇长街', description: '冷灰蓝黄昏', source_scope: 'episode', source_container_id: 'project', selected_variant_id: 'blue', variants: [{ id: 'blue', url: 'street.png' }] },
+ ] });
+ vi.mocked(api.generateAsset).mockResolvedValue(withScene as any);
+ show();
+ await waitFor(() => expect(api.getAssetReferenceIndex).toHaveBeenCalled());
+ setPromptDocument('<p>@冷灰蓝</p>');
+ fireEvent.click(await screen.findByRole('option', { name: /青溪镇长街/ }));
+ fireEvent.click(screen.getByRole('button', { name: 'Reference image' }));
+ fireEvent.click(screen.getByRole('button', { name: /Generate first batch/ }));
+ await approveImageReview();
+ await waitFor(() => expect(api.generateAsset).toHaveBeenCalled());
+ expect(vi.mocked(api.generateAsset).mock.calls[0][13]).toEqual([{ asset_type: 'scene', asset_id: 'street', variant_id: 'blue' }]);
 });
 it('selects a canonical output without silently using it as generation input', async () => {
  const withVariants = { ...project, characters: [{ ...character, reference_sheet: { image_variants: [{ id: 'one', url: 'one.png' }, { id: 'two', url: 'two.png' }], selected_image_id: 'two' } }] };

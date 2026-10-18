@@ -137,10 +137,10 @@ export default function AssetDrawer({
                                                     className="text-primary hover:underline">重试加载项目资产</button>
                                             ) : null}
                                         </div>
-                                    ) : entries.every((entry) => entry.variants.length === 0) ? (
+                                    ) : filteredEntries.every((entry) => entry.variants.length === 0) ? (
                                         <p className="text-xs text-text-secondary">当前项目没有可用的图片资产。</p>
                                     ) : null}
-                                    {entries.filter((entry) => entry.variants.length > 0).map((entry) => (
+                                    {filteredEntries.filter((entry) => entry.variants.length > 0).map((entry) => (
                                         <div key={`${entry.asset_type}:${entry.asset_id}`} className="rounded-lg border border-glass-border p-2">
                                             <div className="mb-2 truncate text-xs text-foreground">{entry.name}</div>
                                             <div className="grid grid-cols-3 gap-2">

@@ -5,6 +5,16 @@ import pytest
 from src.apps.platform_reference_catalog import list_resources
 
 
+def test_active_skill_cards_are_not_visual_assets(tmp_path):
+    import json
+    manifest = tmp_path / "manifest.json"
+    manifest.write_text(json.dumps({"schema_version": 1, "resources": [
+        {"platform_resource_id": "method", "revision": 1, "kind": "style", "title": "Six blocks", "status": "active", "payload": {"source_metadata": {"skill_type": "template"}}, "provenance": {"license": "MIT", "content_sha256": "a" * 64}},
+        {"platform_resource_id": "visual", "revision": 1, "kind": "style", "title": "Visual style", "status": "active", "definition": {"palette": "blue"}, "provenance": {"license": "MIT", "content_sha256": "b" * 64}},
+    ]}), encoding="utf-8")
+    assert [item["platform_resource_id"] for item in list_resources(path=manifest)["resources"]] == ["visual"]
+
+
 def _manifest(tmp_path, resources):
     path = tmp_path / "manifest.json"
     path.write_text(json.dumps({"schema_version": 1, "catalog_revision": "r1", "resources": resources}), encoding="utf-8")

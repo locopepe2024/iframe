@@ -1,0 +1,225 @@
+{
+  "schema_version": 1,
+  "catalog_revision": "open-ai-canvas-86ebb6c-v1",
+  "templates": [
+    {
+      "template_id": "open-ai-canvas:drama-character-bible",
+      "revision": 1,
+      "kind": "image",
+      "station": "character",
+      "title": "短剧角色定妆立绘",
+      "focus": "建立可复用的角色外貌锚点：年龄感、脸型、发型、肤色、体态与服装层次固定",
+      "input_slots": [
+        {
+          "id": "primary",
+          "label": "角色参考图",
+          "required": true
+        },
+        {
+          "id": "secondary",
+          "label": "服装参考图",
+          "required": false
+        }
+      ],
+      "source": {
+        "repository": "open-ai-canvas",
+        "commit": "86ebb6c5345287c645e857a8f550901bb6fd4bd8",
+        "path": "backend/internal/workbench/seed/catalog.json",
+        "license": "MIT",
+        "content_sha256": "fceed84f3b1219f8a9bc8b7d541409e89504fb8aff389c779476db18bb3f28b5"
+      },
+      "media": []
+    },
+    {
+      "template_id": "open-ai-canvas:drama-turnaround",
+      "revision": 1,
+      "kind": "image",
+      "station": "character",
+      "title": "短剧角色四视图",
+      "focus": "同一角色生成正面、侧面、背面和四分之三角度，发型、服装、体型和配件一致",
+      "input_slots": [
+        {
+          "id": "primary",
+          "label": "角色参考图",
+          "required": true
+        },
+        {
+          "id": "secondary",
+          "label": "服装/道具参考",
+          "required": false
+        }
+      ],
+      "source": {
+        "repository": "open-ai-canvas",
+        "commit": "86ebb6c5345287c645e857a8f550901bb6fd4bd8",
+        "path": "backend/internal/workbench/seed/catalog.json",
+        "license": "MIT",
+        "content_sha256": "da7dd55dfe60b1698746fa33f24f4a6ce57328932af964f97f2b963d53c84757"
+      },
+      "media": []
+    },
+    {
+      "template_id": "open-ai-canvas:drama-prop-turnaround",
+      "revision": 1,
+      "kind": "image",
+      "station": "prop",
+      "title": "短剧关键道具三视图",
+      "focus": "生成关键道具正侧背与细节参考，锁定形状、材质、磨损、握持方式和剧情状态",
+      "input_slots": [
+        {
+          "id": "primary",
+          "label": "道具参考图",
+          "required": true
+        }
+      ],
+      "source": {
+        "repository": "open-ai-canvas",
+        "commit": "86ebb6c5345287c645e857a8f550901bb6fd4bd8",
+        "path": "backend/internal/workbench/seed/catalog.json",
+        "license": "MIT",
+        "content_sha256": "1a422a71afc68d9bdb0e4c80163cac8645e1d990a2cd5224a49afc7b0540a9fb"
+      },
+      "media": []
+    },
+    {
+      "template_id": "open-ai-canvas:drama-location-master",
+      "revision": 1,
+      "kind": "image",
+      "station": "scene",
+      "title": "短剧场景空间母版",
+      "focus": "建立场景空间母版，明确入口、窗口、主要家具、主光方向和可表演区域",
+      "input_slots": [
+        {
+          "id": "primary",
+          "label": "场景参考图",
+          "required": true
+        },
+        {
+          "id": "secondary",
+          "label": "美术风格参考",
+          "required": false
+        }
+      ],
+      "source": {
+        "repository": "open-ai-canvas",
+        "commit": "86ebb6c5345287c645e857a8f550901bb6fd4bd8",
+        "path": "backend/internal/workbench/seed/catalog.json",
+        "license": "MIT",
+        "content_sha256": "b4ecf77c722ff183c719e310b0f3a5b8d8eeeca53e089d98221604e263043f62"
+      },
+      "media": []
+    },
+    {
+      "template_id": "open-ai-canvas:drama-location-coverage",
+      "revision": 1,
+      "kind": "image",
+      "station": "scene",
+      "title": "短剧场景多角度",
+      "focus": "从同一空间生成全景、反打和侧面角度，门窗位置、地标、光线方向与空间轴线保持一致",
+      "input_slots": [
+        {
+          "id": "primary",
+          "label": "场景母版",
+          "required": true
+        },
+        {
+          "id": "secondary",
+          "label": "镜头角度参考",
+          "required": false
+        }
+      ],
+      "source": {
+        "repository": "open-ai-canvas",
+        "commit": "86ebb6c5345287c645e857a8f550901bb6fd4bd8",
+        "path": "backend/internal/workbench/seed/catalog.json",
+        "license": "MIT",
+        "content_sha256": "4a82ead290b9c0e47ca9d177b6653298c3722cdff298ffa9290b1daec5afe229"
+      },
+      "media": []
+    },
+    {
+      "template_id": "open-ai-canvas:drama-keyframe",
+      "revision": 1,
+      "kind": "image",
+      "station": "shot",
+      "title": "短剧镜头关键帧",
+      "focus": "生成单镜头首帧构图，明确主体位置、视线、手部、持物、景别和画面左右关系",
+      "input_slots": [
+        {
+          "id": "primary",
+          "label": "镜头描述",
+          "required": true
+        },
+        {
+          "id": "secondary",
+          "label": "角色/场景参考",
+          "required": false
+        }
+      ],
+      "source": {
+        "repository": "open-ai-canvas",
+        "commit": "86ebb6c5345287c645e857a8f550901bb6fd4bd8",
+        "path": "backend/internal/workbench/seed/catalog.json",
+        "license": "MIT",
+        "content_sha256": "8730a6ddf687e79ba434bff6c45cfcfe7c2cdf40e6c998454f40cac3ebe26d46"
+      },
+      "media": []
+    },
+    {
+      "template_id": "open-ai-canvas:drama-first-last-frame",
+      "revision": 1,
+      "kind": "video",
+      "station": "shot",
+      "title": "短剧首尾帧过渡",
+      "focus": "严格从指定首帧移动到指定尾帧，只补足两帧间合理动作，不新增人物或改变道具状态",
+      "input_slots": [
+        {
+          "id": "primary",
+          "label": "首帧",
+          "required": true
+        },
+        {
+          "id": "secondary",
+          "label": "尾帧",
+          "required": false
+        }
+      ],
+      "source": {
+        "repository": "open-ai-canvas",
+        "commit": "86ebb6c5345287c645e857a8f550901bb6fd4bd8",
+        "path": "backend/internal/workbench/seed/catalog.json",
+        "license": "MIT",
+        "content_sha256": "54f122bf9f6e7fa4d57b31a287d08618599566c5aacaa9645eb7f95198465b90"
+      },
+      "media": []
+    },
+    {
+      "template_id": "open-ai-canvas:camera-motion-study",
+      "revision": 1,
+      "kind": "video",
+      "station": "shot",
+      "title": "镜头运动测试",
+      "focus": "对同一静态主体测试一种明确机位运动，主体不变形，背景透视连续，不叠加多余动作",
+      "input_slots": [
+        {
+          "id": "primary",
+          "label": "测试首帧",
+          "required": true
+        },
+        {
+          "id": "secondary",
+          "label": "机位参考图",
+          "required": false
+        }
+      ],
+      "source": {
+        "repository": "open-ai-canvas",
+        "commit": "86ebb6c5345287c645e857a8f550901bb6fd4bd8",
+        "path": "backend/internal/workbench/seed/catalog.json",
+        "license": "MIT",
+        "content_sha256": "1f3f61271711837a51faaca740d604733ee47232b2549733568787c12f69cd65"
+      },
+      "media": []
+    }
+  ]
+}

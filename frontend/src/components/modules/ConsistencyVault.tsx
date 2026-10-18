@@ -22,6 +22,7 @@ import {
     normalizeTaskFailureDetail,
 } from "@/lib/assetTaskPolling";
 import ReferencePromptEditor, { type ReferenceCandidate, type ReferenceSuggestion } from "./playground/ReferencePromptEditor";
+import { searchReferenceCandidates } from "@/lib/referenceCandidateSearch";
 import { toast } from "@/store/toastStore";
 import type { EpisodeAssetSyncDiff, EpisodeVisualContext, EpisodeVisualContextState } from "@/lib/directorShootingPlan";
 import { getAssetPlanEntries, getUnboundCharacterRequirements, type AssetPlanEntry } from "@/lib/episodeAssetPlan";
@@ -1147,6 +1148,7 @@ function CharacterDetailModal({ asset, type, onClose, onUpdateDescription, onUpd
                 label,
                 previewUrl: getAssetUrl(variant.url),
                 sourceLabel: entry.source_scope,
+                description: entry.description,
                 variantLabel,
                 isActive,
                 reference: { asset_type: entry.asset_type, asset_id: entry.asset_id, variant_id: variant.id },
@@ -1154,9 +1156,8 @@ function CharacterDetailModal({ asset, type, onClose, onUpdateDescription, onUpd
         }).filter(Boolean) as ReferenceCandidate[]);
     }, [assetIndex]);
 
-    const matchingReferenceCandidates = referenceCandidates.filter((candidate) =>
-        candidate.label.toLocaleLowerCase().includes(mention?.query.trim().toLocaleLowerCase() ?? ""),
-    ).sort((left, right) => Number(Boolean(right.isActive)) - Number(Boolean(left.isActive)));
+    const matchingReferenceCandidates = searchReferenceCandidates(referenceCandidates, mention?.query ?? "")
+        .sort((left, right) => Number(Boolean(right.isActive)) - Number(Boolean(left.isActive)));
     const lightingReferences = useMemo<LightingReference[]>(() => referenceCandidates.flatMap((candidate) => candidate.reference && candidate.previewUrl ? [{ key: `${candidate.reference.asset_type}:${candidate.reference.asset_id}:${candidate.reference.variant_id}`, label: candidate.label, url: candidate.previewUrl, reference: candidate.reference }] : []), [referenceCandidates]);
 
     const handleMentionKeyDown = (event: KeyboardEvent) => {
@@ -1736,6 +1737,7 @@ function CharacterDetailModal({ asset, type, onClose, onUpdateDescription, onUpd
             {pendingImageReview && currentProject?.id && <AssetImageSubmissionReview
                 projectId={currentProject.id}
                 request={pendingImageReview}
+                referenceIndex={assetIndex}
                 onBack={() => setPendingImageReview(null)}
                 onConfirm={(review) => {
                     const request = pendingImageReview;

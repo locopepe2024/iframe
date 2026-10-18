@@ -173,13 +173,120 @@ function recencyOf(asset: Character | Scene | Prop, type: AssetTab): number {
 
 export default function AssetLibraryPage() {
   const t = useTranslations("recreationMedia");
+  const tl = useTranslations("library");
   const [section, setSection] = useState("assets");
+  const [reviewer, setReviewer] = useState(false);
+  useEffect(() => {
+    void api.getPlatformReferenceReviewer?.().then((result) => setReviewer(!!result.authorized)).catch(() => setReviewer(false));
+  }, []);
   return <div className="flex h-full min-h-0 flex-col">
     <div className="flex flex-wrap gap-2 px-4 pt-3 md:px-7" role="group" aria-label={t("sections")}>
-      {["assets", "media"].map(value => <button key={value} type="button" aria-pressed={section === value}
-        className="glass-button px-4 py-2 aria-pressed:text-primary" onClick={() => setSection(value)}>{t(value)}</button>)}
+      {["assets", "platform", "templates", "media"].map(value => <button key={value} type="button" aria-pressed={section === value}
+        className="glass-button px-4 py-2 aria-pressed:text-primary" onClick={() => setSection(value)}>{value === "platform" ? tl("platform") : value === "templates" ? "工作台模板" : t(value)}</button>)}
     </div>
-    {section === "assets" ? <SemanticAssetLibrary /> : <RecreationMediaLibrary />}
+    {section === "assets" ? <SemanticAssetLibrary /> : section === "platform" ? <PlatformReferenceReviewQueue /> : section === "templates" ? <WorkbenchTemplateLibrary /> : <RecreationMediaLibrary />}
+  </div>;
+}
+
+function WorkbenchTemplateLibrary() {
+  const [templates, setTemplates] = useState<import("@/lib/api").WorkbenchTemplate[]>([]);
+  const [station, setStation] = useState("");
+  const [query, setQuery] = useState("");
+  const [error, setError] = useState("");
+  useEffect(() => {
+    let active = true;
+    void api.getWorkbenchTemplates(station, query).then((result) => {
+      if (active) { setTemplates(result.templates); setError(""); }
+    }).catch(() => { if (active) { setTemplates([]); setError("模板目录读取失败"); } });
+    return () => { active = false; };
+  }, [station, query]);
+  return <div className="flex-1 min-h-0 overflow-y-auto px-4 py-6 md:px-7">
+    <h1 className="text-2xl font-display font-semibold text-foreground">工作台模板</h1>
+    <p className="mt-1 text-sm text-text-secondary">任务模板只说明用途和所需输入；没有参考图，也不会自动写入提示词。</p>
+    <div className="my-4 flex flex-wrap gap-2">
+      <input aria-label="搜索工作台模板" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="搜索名称或任务重点"
+        className="glass-input min-w-52 flex-1 px-3 py-2 text-sm" />
+      <select aria-label="筛选模板工位" value={station} onChange={(event) => setStation(event.target.value)} className="glass-input px-3 py-2 text-sm">
+        <option value="">全部工位</option><option value="character">角色</option><option value="scene">场景</option><option value="prop">道具</option><option value="shot">分镜</option>
+      </select>
+    </div>
+    {error ? <p role="alert" className="text-sm text-status-failed-fg">{error}</p> : null}
+    {!error && templates.length === 0 ? <p className="text-sm text-text-secondary">没有匹配的任务模板。</p> : null}
+    <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
+      {templates.map((item) => <article key={item.template_id} className="glass-panel rounded-xl border border-glass-border p-4">
+        <h2 className="font-semibold text-foreground">{item.title}</h2>
+        <p className="mt-1 text-xs text-text-muted">{item.station} · {item.kind} · v{item.revision}</p>
+        <p className="mt-3 text-sm text-text-secondary">{item.focus}</p>
+        <p className="mt-3 text-xs text-text-muted">输入：{item.input_slots.map((slot) => `${slot.label}${slot.required ? "（必填）" : "（可选）"}`).join("、")}</p>
+        <p className="mt-3 text-xs text-text-muted">来源：{item.source.repository} · {item.source.commit.slice(0, 8)} · {item.source.license}</p>
+      </article>)}
+    </div>
+  </div>;
+}
+
+function PlatformReferenceReviewQueue() {
+  const t = useTranslations("library");
+  const [catalog, setCatalog] = useState<import("@/lib/api").PlatformReferenceCatalog | null>(null);
+  const [activeCatalog, setActiveCatalog] = useState<import("@/lib/api").PlatformReferenceCatalog | null>(null);
+  const [canReview, setCanReview] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [publishing, setPublishing] = useState<string | null>(null);
+  const load = async () => {
+    setLoading(true);
+    try {
+      setActiveCatalog(await api.getPlatformReferenceLibrary());
+      const reviewer = await api.getPlatformReferenceReviewer();
+      setCanReview(!!reviewer.authorized);
+      setCatalog(reviewer.authorized ? await api.getPlatformReferenceReviewQueue() : null);
+    }
+    catch { toast.error(t("reviewLoadFailed")); }
+    finally { setLoading(false); }
+  };
+  useEffect(() => { void load(); }, []);
+  const promote = async (resource: import("@/lib/api").PlatformReferenceResource) => {
+    setPublishing(resource.platform_resource_id);
+    try {
+      await api.promotePlatformReferenceResource(resource.platform_resource_id, resource.provenance.content_sha256);
+      toast.success(t("reviewPromoted"));
+      await load();
+    } catch { toast.error(t("reviewPromoteFailed")); }
+    finally { setPublishing(null); }
+  };
+  return <div className="flex-1 min-h-0 overflow-y-auto px-4 py-6 md:px-7">
+    <div className="mb-5">
+      <div className="font-mono text-[0.625rem] uppercase tracking-[0.2em] text-text-muted">PLATFORM REFERENCE LIBRARY</div>
+      <h1 className="text-2xl font-display font-semibold text-foreground mt-1">{t("reviewTitle")}</h1>
+      <p className="text-sm text-text-secondary mt-1">{t("reviewDescription")}</p>
+    </div>
+    {loading ? <div className="py-12 text-text-secondary">{t("reviewLoading")}</div> : <>
+      {canReview && <>
+        <h2 className="text-lg font-semibold text-foreground mb-3">{t("reviewPendingTitle")}</h2>
+        {!catalog?.resources.length ? <div className="glass-panel rounded-xl p-5 text-text-secondary mb-7">{t("reviewEmpty")}</div> :
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 mb-8">
+        {catalog.resources.map((resource) => <article key={resource.platform_resource_id} className="glass-panel rounded-xl border border-glass-border p-4">
+          <div className="flex items-start justify-between gap-3">
+            <div><h2 className="font-semibold text-foreground">{resource.title}</h2><div className="text-xs text-text-muted mt-1">{resource.kind} · v{resource.revision} · {resource.status}</div></div>
+            <span className="text-[0.625rem] rounded-full bg-amber-500/15 text-amber-700 px-2 py-1">{t("reviewPending")}</span>
+          </div>
+          {resource.summary && <p className="text-sm text-text-secondary mt-3">{resource.summary}</p>}
+          {!!resource.tags?.length && <div className="flex flex-wrap gap-1 mt-3">{resource.tags.map((tag) => <span key={tag} className="text-xs rounded bg-surface-inset px-2 py-1 text-text-muted">{tag}</span>)}</div>}
+          <dl className="mt-4 space-y-1 text-xs text-text-muted"><div><dt className="inline font-medium">{t("reviewSource")}：</dt> <dd className="inline">{resource.provenance.source || "—"}</dd></div><div><dt className="inline font-medium">{t("reviewLicense")}：</dt> <dd className="inline">{resource.provenance.license}</dd></div></dl>
+          <button type="button" disabled={publishing === resource.platform_resource_id} onClick={() => void promote(resource)} className="mt-4 w-full glass-button font-semibold disabled:opacity-50">{publishing === resource.platform_resource_id ? t("reviewPublishing") : t("reviewPublish")}</button>
+        </article>)}
+        </div>}
+      </>}
+      <h2 className="text-lg font-semibold text-foreground mb-3">{t("publishedTitle")}</h2>
+      {!activeCatalog?.resources.length ? <div className="glass-panel rounded-xl p-8 text-text-secondary">{t("publishedEmpty")}</div> :
+      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+        {activeCatalog.resources.map((resource) => <article key={resource.platform_resource_id} className="glass-panel rounded-xl border border-glass-border p-4">
+          <h2 className="font-semibold text-foreground">{resource.title}</h2>
+          <div className="text-xs text-text-muted mt-1">{resource.kind} · v{resource.revision}</div>
+          {resource.summary && <p className="text-sm text-text-secondary mt-3">{resource.summary}</p>}
+          {!!resource.tags?.length && <div className="flex flex-wrap gap-1 mt-3">{resource.tags.map((tag) => <span key={tag} className="text-xs rounded bg-surface-inset px-2 py-1 text-text-muted">{tag}</span>)}</div>}
+          <div className="mt-4 text-xs text-text-muted">{t("reviewSource")}：{resource.provenance.source || "—"} · {t("reviewLicense")}：{resource.provenance.license}</div>
+        </article>)}
+      </div>}
+    </>}
   </div>;
 }
 

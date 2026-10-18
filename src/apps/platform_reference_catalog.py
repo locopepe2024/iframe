@@ -14,7 +14,10 @@ from typing import Any, Optional
 
 
 CATALOG_ROOT = Path(__file__).resolve().parents[1] / ".." / "config" / "platform_reference_catalog"
-MANIFEST_PATH = CATALOG_ROOT / "manifest.json"
+PACKAGED_MANIFEST_PATH = CATALOG_ROOT / "manifest.json"
+# Runtime approvals live on the persistent output mount, not in the container
+# image. The packaged manifest seeds an installation only on first read.
+MANIFEST_PATH = Path(os.getenv("IFRAME_PLATFORM_REFERENCE_MANIFEST", "output/platform_reference_catalog/manifest.json"))
 
 
 def _default_review_config() -> Path:
@@ -97,8 +100,12 @@ def reviewer_is_authorized(owner_profile_id: str, config_path: Path | None = Non
 
 def _read_manifest(path: Path = MANIFEST_PATH) -> dict[str, Any]:
     if not path.exists():
-        return {"schema_version": 1, "catalog_revision": "empty", "resources": []}
-    payload = json.loads(path.read_text(encoding="utf-8"))
+        if path != MANIFEST_PATH or not PACKAGED_MANIFEST_PATH.exists():
+            return {"schema_version": 1, "catalog_revision": "empty", "resources": []}
+        source = PACKAGED_MANIFEST_PATH
+    else:
+        source = path
+    payload = json.loads(source.read_text(encoding="utf-8"))
     if not isinstance(payload, dict) or payload.get("schema_version") != 1:
         raise ValueError("platform reference catalog schema is invalid")
     resources = payload.get("resources", [])
@@ -127,12 +134,52 @@ def _validate_resource(resource: Any) -> None:
         raise ValueError("platform reference provenance requires license and content_sha256")
 
 
+def _is_skill_card(resource: dict[str, Any]) -> bool:
+    payload = resource.get("payload")
+    metadata = payload.get("source_metadata", {}) if isinstance(payload, dict) else {}
+    return isinstance(metadata, dict) and bool(metadata.get("skill_type"))
+
+
 def list_resources(*, kind: Optional[str] = None, query: str = "", path: Path = MANIFEST_PATH) -> dict[str, Any]:
     manifest = _read_manifest(path)
     needle = query.strip().casefold()
     resources = []
     for resource in manifest.get("resources", []):
         if resource.get("status") != "active":
+            continue
+        if _is_skill_card(resource):
+            continue
+        if kind and resource.get("kind") != kind:
+            continue
+        if needle:
+            haystack = " ".join([
+                str(resource.get("title", "")),
+                str(resource.get("summary", "")),
+                " ".join(str(tag) for tag in resource.get("tags", [])),
+                str(resource.get("kind", "")),
+            ]).casefold()
+            if needle not in haystack:
+                continue
+        resources.append(resource)
+    return {
+        "scope": "platform_shared",
+        "schema_version": manifest.get("schema_version", 1),
+        "catalog_revision": manifest.get("catalog_revision", "unknown"),
+        "resources": resources,
+    }
+
+
+def list_review_candidates(*, kind: Optional[str] = None, query: str = "", path: Path = MANIFEST_PATH) -> dict[str, Any]:
+    """Return unpublished candidates for the deployment reviewer queue.
+
+    The public catalog deliberately exposes active resources only; review UI
+    callers must use this separate, server-authorized boundary.
+    """
+    manifest = _read_manifest(path)
+    needle = query.strip().casefold()
+    resources = []
+    for resource in manifest.get("resources", []):
+        if resource.get("status") not in ("candidate", "review"):
             continue
         if kind and resource.get("kind") != kind:
             continue
@@ -174,6 +221,7 @@ def promote_resource(
         "reviewer": reviewer_identity,
         "content_sha256": actual_hash,
     }
+    path.parent.mkdir(parents=True, exist_ok=True)
     temporary = path.with_suffix(path.suffix + ".tmp")
     temporary.write_text(json.dumps(manifest, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     os.replace(temporary, path)

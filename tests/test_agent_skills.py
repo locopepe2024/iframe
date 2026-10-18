@@ -45,7 +45,7 @@ def test_asset_image_prompt_refine_rejects_empty_suggestion(ctx, monkeypatch):
 
 def test_catalog_is_self_contained_and_attributed():
     packages = skills.catalog()
-    assert len(packages) == len({p['id'] for p in packages}) == 8
+    assert len(packages) == len({p['id'] for p in packages}) == 12
     for p in packages:
         assert len(p['revision']) == 64
         assert len(p['source_revision']) == 40
@@ -53,6 +53,15 @@ def test_catalog_is_self_contained_and_attributed():
         assert p['source'].startswith('https://github.com/')
         assert p['license_text'] and p['adaptation'] and p['instructions']
         assert '[ref:' not in p['instructions']
+
+
+def test_open_ai_canvas_cards_are_curated_as_scoped_skills():
+    packages = {p['id']: p for p in skills.catalog()}
+    image = packages['open-ai-canvas-freestyle-prompt-blocks']
+    assert image['targets'] == ['Creative Agent']
+    assert '图片生成' in image['instructions']
+    assert '视频模型的专用提示词结构' in image['instructions']
+    assert image['source_revision'] in image['source']
 
 
 def test_h3_skill_keeps_ethnicity_skin_tone_and_skin_condition_independent():
