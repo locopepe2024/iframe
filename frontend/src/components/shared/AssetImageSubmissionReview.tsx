@@ -1,17 +1,19 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { api, type AssetImageReviewProjection, type AssetImageReviewRequest } from "@/lib/api";
+import { api, type AssetImageReviewProjection, type AssetImageReviewRequest, type AssetReferenceIndexEntry } from "@/lib/api";
 import { extractErrorDetail } from "@/lib/utils";
+import { AssetIndexPreview } from "@/components/shared/AssetIndexPreview";
 
 type Props = {
     projectId: string;
     request: AssetImageReviewRequest;
+    referenceIndex?: AssetReferenceIndexEntry[];
     onBack: () => void;
     onConfirm: (review: AssetImageReviewProjection) => void;
 };
 
-export default function AssetImageSubmissionReview({ projectId, request, onBack, onConfirm }: Props) {
+export default function AssetImageSubmissionReview({ projectId, request, referenceIndex, onBack, onConfirm }: Props) {
     const [review, setReview] = useState<AssetImageReviewProjection | null>(null);
     const [error, setError] = useState("");
     const confirmRef = useRef<HTMLButtonElement>(null);
@@ -77,9 +79,16 @@ export default function AssetImageSubmissionReview({ projectId, request, onBack,
                             <p className="mt-1 max-h-24 overflow-y-auto whitespace-pre-wrap break-words rounded border border-glass-border bg-surface-inset p-3 text-sm text-foreground">{review.negative_prompt || "无"}</p></div>
                         <div><h3 className="text-xs font-medium text-text-secondary">参考图（稳定资产与变体 ID）</h3>
                             {review.reference_inputs.length ? <ul className="mt-1 space-y-1 rounded border border-glass-border bg-surface-inset p-3 text-xs text-foreground">
-                                {review.reference_inputs.map((item) => <li key={`${item.asset_type}:${item.asset_id}:${item.variant_id}`} className="break-all">
-                                    {item.asset_type} · {item.asset_id} · {item.variant_id}
-                                </li>)}
+                                {review.reference_inputs.map((item) => {
+                                    const indexed = referenceIndex?.find((entry) => entry.asset_type === item.asset_type && entry.asset_id === item.asset_id
+                                        && entry.variants.some((variant) => variant.id === item.variant_id));
+                                    return <li key={`${item.asset_type}:${item.asset_id}:${item.variant_id}`} className="flex items-center gap-2 break-all">
+                                        {indexed && <span className="h-12 w-12 shrink-0 overflow-hidden rounded bg-black/20">
+                                            <AssetIndexPreview asset={{ ...indexed, variant_id: item.variant_id }} alt={`${indexed.name} 参考图`} />
+                                        </span>}
+                                        <span>{indexed ? `${indexed.name} · ${indexed.source_scope} · ` : ""}{item.asset_type} · {item.asset_id} · {item.variant_id}</span>
+                                    </li>;
+                                })}
                             </ul> : <p className="mt-1 text-xs text-text-muted">无参考图</p>}</div>
                     </div>
                 </>}

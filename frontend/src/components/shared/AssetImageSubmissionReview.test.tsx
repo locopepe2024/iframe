@@ -4,6 +4,7 @@ import AssetImageSubmissionReview from "./AssetImageSubmissionReview";
 
 const preview = vi.hoisted(() => vi.fn());
 vi.mock("@/lib/api", () => ({ api: { previewAssetImageSubmission: preview } }));
+vi.mock("@/components/shared/AssetIndexPreview", () => ({ AssetIndexPreview: ({ alt }: { alt: string }) => <span data-testid="reference-preview">{alt}</span> }));
 
 const request = {
     asset_id: "street", asset_type: "scene" as const, generation_type: "all",
@@ -31,6 +32,21 @@ it("shows the server-effective request and confirms its fingerprint", async () =
     expect(screen.getByText("scene · long-street · blue-1")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "确认并生成" }));
     expect(confirm).toHaveBeenCalledWith(projection);
+});
+
+it("shows the selected variant image and scope when the project index is available", async () => {
+    preview.mockResolvedValueOnce({
+        positive_prompt: request.prompt, negative_prompt: request.negative_prompt,
+        selected_model_id: "model", aspect_ratio: "16:9", generation_type: "all",
+        image_generation_mode: "reference", batch_size: 2, reference_inputs: request.references,
+        design_revision_at_submission: null, fingerprint: "reviewed",
+    });
+    render(<AssetImageSubmissionReview projectId="project" request={request}
+        referenceIndex={[{ asset_type: "scene", asset_id: "long-street", name: "青溪镇长街", source_scope: "episode",
+            source_container_id: "project", variants: [{ id: "blue-1", url: "street.png" }] }]}
+        onBack={vi.fn()} onConfirm={vi.fn()} />);
+    expect(await screen.findByTestId("reference-preview")).toHaveTextContent("青溪镇长街 参考图");
+    expect(screen.getByText(/青溪镇长街 · episode · scene · long-street · blue-1/)).toBeInTheDocument();
 });
 
 it("blocks confirmation when the preview text differs from the edited request", async () => {

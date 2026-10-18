@@ -1737,6 +1737,7 @@ function CharacterDetailModal({ asset, type, onClose, onUpdateDescription, onUpd
             {pendingImageReview && currentProject?.id && <AssetImageSubmissionReview
                 projectId={currentProject.id}
                 request={pendingImageReview}
+                referenceIndex={assetIndex}
                 onBack={() => setPendingImageReview(null)}
                 onConfirm={(review) => {
                     const request = pendingImageReview;

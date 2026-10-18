@@ -1772,6 +1772,7 @@ export default function CastWorkbenchModal({ isOpen, kind, entityId, onClose }: 
         {pendingImageReview && <AssetImageSubmissionReview
             projectId={currentProject.id}
             request={pendingImageReview}
+            referenceIndex={visibleReferenceLibraryAssets}
             onBack={() => setPendingImageReview(null)}
             onConfirm={(review) => {
                 const request = pendingImageReview;
