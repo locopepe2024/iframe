@@ -7,6 +7,17 @@ from fastapi import HTTPException
 from src.apps.comic_gen import api
 
 
+def test_storyboard_polish_requires_reviewed_model_input(monkeypatch):
+    pipeline = Mock()
+    pipeline.get_script.return_value = SimpleNamespace()
+    monkeypatch.setattr(api, "pipeline", pipeline)
+    request = api.RefinePromptRequest(frame_id="frame", raw_prompt="草稿")
+    with pytest.raises(HTTPException) as error:
+        api.refine_storyboard_prompt("episode", request, SimpleNamespace(owner_profile_id="owner"))
+    assert error.value.status_code == 422
+    pipeline.refine_frame_prompt.assert_not_called()
+
+
 def test_preview_returns_confirmed_scene_design_source_separately_from_prompt(monkeypatch):
     pipeline = Mock()
     pipeline.get_script.return_value = SimpleNamespace()

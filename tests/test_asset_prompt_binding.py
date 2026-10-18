@@ -121,12 +121,30 @@ def test_frame_polish_receives_default_contract_and_current_shot_context():
     }
     pipeline._save_data = MagicMock()
 
-    pipeline.refine_frame_prompt(script.id, frame.id, "苏砚出场", [])
+    preview = pipeline.preview_frame_polish_input(script.id, frame.id, "苏砚出场", [])
+    assert "苏砚出场" in preview["message"] and "长街" in preview["message"] and "黄昏" in preview["message"]
+    assert "写实风格" in preview["message"] and "已确认的导演摘要" in preview["message"]
+    reviewed = preview["message"].replace("写实风格", "冷蓝色调")
+    pipeline.refine_frame_prompt(script.id, frame.id, "苏砚出场", [],
+                                 reviewed_message=reviewed, context_token=preview["context_token"])
+    assert pipeline.script_processor.polish_storyboard_prompt.call_args.kwargs["prepared_message"] == reviewed
+    frame.director_shot_context["scene"]["time_anchor"] = "夜间"
+    with pytest.raises(ValueError, match="context changed"):
+        pipeline.refine_frame_prompt(script.id, frame.id, "苏砚出场", [],
+                                     reviewed_message=reviewed, context_token=preview["context_token"])
+    assert pipeline.script_processor.polish_storyboard_prompt.call_count == 1
 
-    draft, _assets, _feedback, instructions = pipeline.script_processor.polish_storyboard_prompt.call_args.args
-    assert "苏砚出场" in draft and "长街" in draft and "黄昏" in draft
-    assert "写实风格" in instructions and "已确认的导演摘要" in instructions
-    assert "{DRAFT}" in instructions and "{ASSETS}" in instructions
+
+def test_storyboard_polish_sends_edited_review_text_exactly():
+    from types import SimpleNamespace
+    from src.apps.comic_gen.llm import ScriptProcessor
+
+    processor = ScriptProcessor.__new__(ScriptProcessor)
+    processor.llm = SimpleNamespace(is_configured=True, chat=MagicMock(return_value='{"prompt_cn":"中","prompt_en":"English"}'))
+    reviewed = "用户确认的输入：保留 {DRAFT} 和 {ASSETS} 字样；删除旧光影约束。"
+    processor.polish_storyboard_prompt("未经审核草稿", [{"name": "不应追加的素材"}],
+                                       "不应追加的反馈", prepared_message=reviewed)
+    assert processor.llm.chat.call_args.kwargs["messages"] == [{"role": "user", "content": reviewed}]
 
 
 def test_storyboard_generator_preserves_accepted_polish_prompt(tmp_path):

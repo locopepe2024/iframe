@@ -1894,12 +1894,20 @@ export const api = {
      * Refines a raw prompt into bilingual (CN/EN) prompts using AI.
      * Returns { prompt_cn, prompt_en, frame_updated }.
      */
-    refineFramePrompt: async (scriptId: string, frameId: string, rawPrompt: string, assets: any[] = [], feedback: string = "") => {
+    previewFramePolish: async (scriptId: string, frameId: string, rawPrompt: string, assets: any[] = [], feedback: string = "") => {
+        const res = await axios.post(`${API_URL}/projects/${scriptId}/storyboard/refine-preview`, {
+            frame_id: frameId, raw_prompt: rawPrompt, assets, feedback,
+        });
+        return res.data as { message: string; context_token: string };
+    },
+    refineFramePrompt: async (scriptId: string, frameId: string, rawPrompt: string, assets: any[] = [], feedback: string = "", reviewedMessage: string, contextToken: string) => {
         const res = await axios.post(`${API_URL}/projects/${scriptId}/storyboard/refine_prompt`, {
             frame_id: frameId,
             raw_prompt: rawPrompt,
             assets: assets,
-            feedback: feedback
+            feedback: feedback,
+            reviewed_message: reviewedMessage,
+            context_token: contextToken,
         });
         return res.data;
     },

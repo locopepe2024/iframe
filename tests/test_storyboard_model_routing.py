@@ -36,15 +36,19 @@ def test_accepted_image_polish_flags_new_confirmed_design_but_not_draft():
     }
     pipeline._save_data = Mock()
 
-    pipeline.refine_frame_prompt(script.id, frame.id, "街上行人", [])
-    polish_call = pipeline.script_processor.polish_storyboard_prompt.call_args.args
-    assert "冷灰蓝长街" in polish_call[3] and "素衣" in polish_call[3]
+    prepared = pipeline.preview_frame_polish_input(script.id, frame.id, "街上行人", [])
+    pipeline.refine_frame_prompt(script.id, frame.id, "街上行人", [],
+                                 reviewed_message=prepared["message"], context_token=prepared["context_token"])
+    polish_message = pipeline.script_processor.polish_storyboard_prompt.call_args.kwargs["prepared_message"]
+    assert "冷灰蓝长街" in polish_message and "素衣" in polish_message
     assert pipeline.storyboard_image_polish_review(script.id, frame.id, frame.image_prompt_en) is None
     scene.asset_design["design_draft"] = {"visual_notes": "红色草稿"}
     assert pipeline.storyboard_image_polish_review(script.id, frame.id, frame.image_prompt_en) is None
     scene.asset_design["design_revisions"].append({"revision": 2, "design": {"visual_notes": "新街景"}})
     assert "场景设计已变化" in pipeline.storyboard_image_polish_review(script.id, frame.id, frame.image_prompt_en)
-    pipeline.refine_frame_prompt(script.id, frame.id, "街上行人", [])
+    prepared = pipeline.preview_frame_polish_input(script.id, frame.id, "街上行人", [])
+    pipeline.refine_frame_prompt(script.id, frame.id, "街上行人", [],
+                                 reviewed_message=prepared["message"], context_token=prepared["context_token"])
     assert pipeline.storyboard_image_polish_review(script.id, frame.id, frame.image_prompt_en) is None
     character.character_design["design_revisions"].append({"revision": 2, "design": {"identity": "蓝衣"}})
     assert "角色设计已变化" in pipeline.storyboard_image_polish_review(script.id, frame.id, frame.image_prompt_en)

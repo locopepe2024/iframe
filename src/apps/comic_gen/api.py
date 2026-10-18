@@ -3623,10 +3623,26 @@ class RefinePromptRequest(BaseModel):
     raw_prompt: str
     assets: list = []  # List of asset references
     feedback: str = Field("", max_length=2000)  # User feedback for iterative refinement
+    reviewed_message: Optional[str] = None
+    context_token: Optional[str] = None
+
+
+@app.post("/projects/{script_id}/storyboard/refine-preview")
+def preview_storyboard_polish(script_id: str, request: RefinePromptRequest,
+                              user: UserContext = Depends(require_studio_user)):
+    if not pipeline.get_script(script_id, user.owner_profile_id):
+        raise HTTPException(status_code=404, detail="Script not found")
+    try:
+        return pipeline.preview_frame_polish_input(
+            script_id, request.frame_id, request.raw_prompt, request.assets, request.feedback,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
 
 
 @app.post("/projects/{script_id}/storyboard/refine_prompt")
-def refine_storyboard_prompt(script_id: str, request: RefinePromptRequest):
+def refine_storyboard_prompt(script_id: str, request: RefinePromptRequest,
+                             user: UserContext = Depends(require_studio_user)):
     """
     Refines a raw prompt into bilingual (CN/EN) prompts using AI (Prompt C).
     Returns the refined prompts and optionally updates the frame.
@@ -3635,6 +3651,10 @@ def refine_storyboard_prompt(script_id: str, request: RefinePromptRequest):
     Declared `def` (not `async def`) so FastAPI runs it on the threadpool
     and the event loop stays free for concurrent GETs.
     """
+    if not pipeline.get_script(script_id, user.owner_profile_id):
+        raise HTTPException(status_code=404, detail="Script not found")
+    if not request.context_token or not request.reviewed_message:
+        raise HTTPException(status_code=422, detail="Review and confirm the complete model input before polishing")
     try:
         result = pipeline.refine_frame_prompt(
             script_id,
@@ -3642,10 +3662,12 @@ def refine_storyboard_prompt(script_id: str, request: RefinePromptRequest):
             request.raw_prompt,
             request.assets,
             request.feedback,
+            reviewed_message=request.reviewed_message,
+            context_token=request.context_token,
         )
         return result
     except ValueError as e:
-        raise HTTPException(status_code=404, detail=str(e))
+        raise HTTPException(status_code=409, detail=str(e))
     except Exception as e:
         logger.error(f"Error in refine_storyboard_prompt: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))

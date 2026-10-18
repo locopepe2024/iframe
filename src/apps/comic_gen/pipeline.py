@@ -6101,49 +6101,56 @@ class ComicGenPipeline(StudioOwnerMixin):
 
         yield ("batch_complete", {"total": total, "success": success, "failed": failed})
 
-    def refine_frame_prompt(self, script_id: str, frame_id: str, raw_prompt: str, assets: List[Dict[str, Any]], feedback: str = "") -> Dict[str, Any]:
-        """
-        Refines a raw prompt into bilingual (CN/EN) prompts using LLM.
-        Also updates the frame with the refined prompts.
-        """
+    def preview_frame_polish_input(self, script_id: str, frame_id: str, raw_prompt: str,
+                                   assets: List[Dict[str, Any]], feedback: str = "") -> Dict[str, Any]:
+        """Show the complete model message before the creator approves a polish call."""
         script = self.scripts.get(script_id)
         if not script:
             raise ValueError("Script not found")
-
-        logger.debug(f"Refining prompt for frame {frame_id}")
-
-        # Read custom prompt config with 3-level fallback (Episode → Series → default)
+        frame = next((item for item in script.frames if item.id == frame_id), None)
+        if not frame:
+            raise ValueError("Frame not found")
         series = self.series_store.get(script.series_id) if script.series_id else None
         custom_prompt = self.get_effective_prompt("storyboard_polish", script, series)
-        # Keep the output contract when adding frame-specific instructions.
-        from .llm import DEFAULT_STORYBOARD_POLISH_PROMPT
+        from .llm import DEFAULT_STORYBOARD_POLISH_PROMPT, assemble_storyboard_polish_message
         if not custom_prompt or custom_prompt == DEFAULT_STORYBOARD_POLISH_PROMPT:
             custom_prompt = DEFAULT_STORYBOARD_POLISH_PROMPT
-        frame = next((item for item in script.frames if item.id == frame_id), None)
         director_context = self.director_prompt_context(script)
         if director_context:
             custom_prompt = "\n\n".join(filter(None, [
                 custom_prompt, "CONFIRMED DIRECTOR PROFILE:\n" + director_context,
             ]))
-        if frame:
-            polish_source = self._storyboard_image_polish_source(script, frame)
-            design_context = self._storyboard_image_polish_design_context(script, frame)
-            if design_context:
-                custom_prompt = "\n\n".join([custom_prompt,
-                    "CONFIRMED DESIGN BASELINE (integrate into the rewritten prompt; these are text constraints, not additional reference images):\n"
-                    + design_context])
-            art_direction = self.effective_art_direction(script)
-            style_config = (art_direction.style_config or {}) if art_direction else {}
-            style = frame.style_prompt_override or style_config.get("positive_prompt", "")
-            lighting = frame.lighting_override or ""
-            if style or lighting:
-                custom_prompt = "\n\n".join(filter(None, [
-                    custom_prompt, "VISUAL STYLE AND LIGHTING (integrate into the rewritten prompt):\n" + "\n".join(filter(None, [style, lighting])),
-                ]))
-            raw_prompt = append_projected_shot_context(raw_prompt, frame.director_shot_context)
+        polish_source = self._storyboard_image_polish_source(script, frame)
+        design_context = self._storyboard_image_polish_design_context(script, frame)
+        if design_context:
+            custom_prompt = "\n\n".join([custom_prompt,
+                "CONFIRMED DESIGN BASELINE (integrate into the rewritten prompt; these are text constraints, not additional reference images):\n"
+                + design_context])
+        art_direction = self.effective_art_direction(script)
+        style_config = (art_direction.style_config or {}) if art_direction else {}
+        style = frame.style_prompt_override or style_config.get("positive_prompt", "")
+        lighting = frame.lighting_override or ""
+        if style or lighting:
+            custom_prompt = "\n\n".join(filter(None, [
+                custom_prompt, "VISUAL STYLE AND LIGHTING (integrate into the rewritten prompt):\n" + "\n".join(filter(None, [style, lighting])),
+            ]))
+        projected_draft = append_projected_shot_context(raw_prompt, frame.director_shot_context)
+        message = assemble_storyboard_polish_message(projected_draft, assets, feedback, custom_prompt)
+        token_payload = json.dumps([polish_source, raw_prompt, assets, feedback, message], ensure_ascii=False, sort_keys=True)
+        return {"message": message, "context_token": hashlib.sha256(token_payload.encode("utf-8")).hexdigest()}
 
-        # Call LLM to refine prompt
-        result = self.script_processor.polish_storyboard_prompt(raw_prompt, assets, feedback, custom_prompt)
+    def refine_frame_prompt(self, script_id: str, frame_id: str, raw_prompt: str, assets: List[Dict[str, Any]],
+                            feedback: str = "", *, reviewed_message: str, context_token: str) -> Dict[str, Any]:
+        """Call the model only with the creator-reviewed message."""
+        prepared = self.preview_frame_polish_input(script_id, frame_id, raw_prompt, assets, feedback)
+        if context_token != prepared["context_token"] or not reviewed_message.strip():
+            raise ValueError("Polish context changed or reviewed message is empty")
+        script = self.scripts[script_id]
+        frame = next(item for item in script.frames if item.id == frame_id)
+        polish_source = self._storyboard_image_polish_source(script, frame)
+        result = self.script_processor.polish_storyboard_prompt(
+            raw_prompt, [], "", prepared_message=reviewed_message,
+        )
         
         # Find and update the frame
         frame_found = False
