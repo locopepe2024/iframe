@@ -13,6 +13,7 @@ export type FrameRenderPreview = {
     sourceLabel?: string;
     referenceLabels?: string[];
     omittedPlanLighting?: string;
+    polishReview?: string;
 };
 
 export default function RenderPromptPreviewDialog({
@@ -39,6 +40,9 @@ export default function RenderPromptPreviewDialog({
                     </p>}
                     {preview.omittedPlanLighting && <p role="note" className="rounded border border-amber-500/30 bg-amber-500/10 p-3 text-xs text-text-secondary">
                         拍摄计划原光影：{preview.omittedPlanLighting}。系统不会在当前正文后额外追加这条；请核对正向提示词是否仍保留该描述。
+                    </p>}
+                    {preview.polishReview && <p role="alert" className="rounded border border-amber-500/50 bg-amber-500/10 p-3 text-xs text-text-secondary">
+                        {preview.polishReview} 系统不会自动改写正文；重新润色可更新设计来源。
                     </p>}
                     {preview.referenceLabels && <p className="text-text-secondary">镜头关联素材：{preview.referenceLabels.length ? preview.referenceLabels.join("、") : "无"}。生成器会尝试使用这些素材当前选中的参考图。</p>}
                     <div>

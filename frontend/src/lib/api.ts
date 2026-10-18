@@ -1825,14 +1825,15 @@ export const api = {
         return res.data;
     },
 
-    previewFrameRender: async (scriptId: string, frameId: string, prompt: string): Promise<{ prompt: string; contextToken: string; sourceLabel?: string; omittedPlanLighting?: string }> => {
+    previewFrameRender: async (scriptId: string, frameId: string, prompt: string): Promise<{ prompt: string; contextToken: string; sourceLabel?: string; omittedPlanLighting?: string; polishReview?: string }> => {
         const res = await axios.post(`${API_URL}/projects/${scriptId}/storyboard/render-preview`, {
             frame_id: frameId,
             prompt,
         });
         return { prompt: res.data.prompt, contextToken: res.data.context_token,
             sourceLabel: res.data.source_label || undefined,
-            omittedPlanLighting: res.data.omitted_plan_lighting || undefined };
+            omittedPlanLighting: res.data.omitted_plan_lighting || undefined,
+            polishReview: res.data.polish_review || undefined };
     },
 
     submitFrameRender: async (
