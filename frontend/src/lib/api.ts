@@ -1825,12 +1825,12 @@ export const api = {
         return res.data;
     },
 
-    previewFrameRender: async (scriptId: string, frameId: string, prompt: string): Promise<{ prompt: string; contextToken: string }> => {
+    previewFrameRender: async (scriptId: string, frameId: string, prompt: string): Promise<{ prompt: string; contextToken: string; sourceLabel?: string }> => {
         const res = await axios.post(`${API_URL}/projects/${scriptId}/storyboard/render-preview`, {
             frame_id: frameId,
             prompt,
         });
-        return { prompt: res.data.prompt, contextToken: res.data.context_token };
+        return { prompt: res.data.prompt, contextToken: res.data.context_token, sourceLabel: res.data.source_label || undefined };
     },
 
     submitFrameRender: async (
