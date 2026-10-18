@@ -630,6 +630,17 @@ class ComicGenPipeline(StudioOwnerMixin):
                 return None
             if frame.scene_id != preset.scene_id:
                 raise ValueError("visual preset belongs to another scene")
+            source_frame = next((item for item in (script.frames or []) if item.id == preset.source_frame_id), None)
+            source_variant = None
+            if source_frame and preset.source_variant_id:
+                source_asset = source_frame.rendered_image_asset or source_frame.image_asset
+                source_variant = next((item for item in (source_asset.variants or []) if item.id == preset.source_variant_id), None)
+            if apply_mode == "parameters_with_reference":
+                if not source_variant:
+                    raise ValueError("visual preset reference variant is unavailable")
+                source_key = image_variant_storage_key(source_variant)
+                frame.t2i_image_urls = [*([u for u in (frame.t2i_image_urls or []) if u != source_key]), source_key][-self._T2I_HISTORY_LIMIT:]
+                frame.t2i_selected_index = len(frame.t2i_image_urls) - 1
             frame.shot_visual_design = ShotVisualDesignSnapshot(
                 visual_design=copy.deepcopy(preset.visual_design),
                 compiled_prompt=preset.compiled_prompt,

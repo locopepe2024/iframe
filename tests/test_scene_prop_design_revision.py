@@ -2,7 +2,7 @@ from threading import RLock
 
 import pytest
 
-from src.apps.comic_gen.models import GlobalAssetLibrary, Prop, Scene, Script, ShotVisualDesignSnapshot
+from src.apps.comic_gen.models import GlobalAssetLibrary, Prop, Scene, Script, ShotVisualDesignSnapshot, ImageAsset, ImageVariant
 from src.apps.comic_gen.pipeline import ComicGenPipeline
 
 
@@ -137,6 +137,7 @@ def test_shot_visual_preset_is_snapshot_and_apply_is_frame_owned(tmp_path):
         visual_design={"lighting": "side", "visible_face_limit": 3},
         compiled_prompt="side light, no more than 3 visible faces",
     )
+    source.rendered_image_asset = ImageAsset(variants=[ImageVariant(id="variant-1", url="output/storyboard/frame-1.webp")], selected_id="variant-1")
     preset = pipeline.save_shot_visual_preset("project", "frame-1", "长街侧面光", source_variant_id="variant-1")
     assert preset is not None
     applied = pipeline.apply_shot_visual_preset("project", "frame-2", preset.id, "parameters_with_reference")
