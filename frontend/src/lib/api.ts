@@ -358,6 +358,10 @@ export interface PlatformReferenceCatalog {
     resources: PlatformReferenceResource[];
 }
 
+export interface PlatformReferenceReviewer {
+    authorized: boolean;
+}
+
 /**
  * PR-3g #3 · TTS voice metadata returned by GET /voices.
  * Family-aware fields (family/dialect/lang_primary/supports_instruction)
@@ -685,6 +689,24 @@ export const api = {
             params: { query: query || undefined, kind: kind || undefined },
             headers: { "Cache-Control": "no-cache" },
         });
+        return res.data;
+    },
+
+    getPlatformReferenceReviewer: async (): Promise<PlatformReferenceReviewer> => {
+        const res = await axios.get<PlatformReferenceReviewer>(`${API_URL}/platform-reference-library/reviewer`, {
+            headers: { "Cache-Control": "no-cache" },
+        });
+        return res.data;
+    },
+
+    promotePlatformReferenceResource: async (
+        resourceId: string,
+        expectedHash?: string,
+    ): Promise<PlatformReferenceResource> => {
+        const res = await axios.post<PlatformReferenceResource>(
+            `${API_URL}/platform-reference-library/${encodeURIComponent(resourceId)}/promote`,
+            expectedHash ? { expected_hash: expectedHash } : {},
+        );
         return res.data;
     },
 

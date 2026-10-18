@@ -152,12 +152,12 @@ source
 后端审核接口会在每次请求时读取主机配置并完成比较；没有匹配身份时只读候选，禁止 promote。
 ```
 
-部署脚本或离线维护命令也可以直接读取主机数据目录中的 `config.json`：
+部署脚本或离线维护命令也可以直接读取生产主机 `/opt/.iframe/config.json`：
 
 ```bash
 python3 scripts/promote_platform_reference_candidate.py \
   open-ai-canvas.style.freestyle-template-match.v1 \
-  --reviewer-config <iframe-data-dir>/config.json \
+  --reviewer-config /opt/.iframe/config.json \
   --reviewer-config-key UNIART_API_KEY \
   --expected-hash <sha256>
 ```
