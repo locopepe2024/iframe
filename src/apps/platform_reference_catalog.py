@@ -134,12 +134,20 @@ def _validate_resource(resource: Any) -> None:
         raise ValueError("platform reference provenance requires license and content_sha256")
 
 
+def _is_skill_card(resource: dict[str, Any]) -> bool:
+    payload = resource.get("payload")
+    metadata = payload.get("source_metadata", {}) if isinstance(payload, dict) else {}
+    return isinstance(metadata, dict) and bool(metadata.get("skill_type"))
+
+
 def list_resources(*, kind: Optional[str] = None, query: str = "", path: Path = MANIFEST_PATH) -> dict[str, Any]:
     manifest = _read_manifest(path)
     needle = query.strip().casefold()
     resources = []
     for resource in manifest.get("resources", []):
         if resource.get("status") != "active":
+            continue
+        if _is_skill_card(resource):
             continue
         if kind and resource.get("kind") != kind:
             continue
