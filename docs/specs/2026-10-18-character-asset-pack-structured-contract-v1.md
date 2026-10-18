@@ -1,12 +1,12 @@
 # 角色资产包结构化契约 V1
 
-日期：2026-10-18。状态：设计规范，尚未实现。
+日期：2026-10-18。状态：分阶段实施；正面全身锚点的项目级确认与版本记录已进入实现，其余资产包类型、本集多状态和分镜状态选择尚未实现。
 
 ## 目标与事实边界
 
 角色是一个有版本的视觉身份；一张参考图只是这个身份的一个媒体变体。先定义角色设计、锚点和派生资产之间的稳定关系，再调整工作台输入与平台库。本文参考 [献丑AI 的角色资产包介绍](https://xianchou.com/blog/character-design-asset-pack) 的分类与依赖思路；文章对生成效果的表述属于产品主张，不作为 iFrame 已达到该效果的证据。
 
-**代码事实：** `Character.character_design` 当前是可扩展字典；已有 `identity/look` 草稿、确认 revision、九项可见特征、`reference_assets`。`reference_sheet` 是统一母版媒体容器，`full_body_asset/three_view_asset/headshot_asset` 仍由工作台读取和写入，但模型标为 legacy。`ImageVariant` 已有稳定 `id`、媒体身份、来源引用和提交快照。尚无完整角色资产包、统一的派生类型目录或每个派生物对锚点 revision 的明确绑定。
+**代码事实：** `Character.character_design` 当前是可扩展字典；已有 `identity/look` 草稿、确认 revision、九项可见特征、`reference_assets`。`reference_sheet` 是统一母版媒体容器，`full_body_asset/three_view_asset/headshot_asset` 仍由工作台读取和写入，但模型标为 legacy。`ImageVariant` 已有稳定 `id`、媒体身份、来源引用和提交快照。第一段实现增加了 `Character.asset_pack` 的正面全身锚点历史、CAS 确认接口和工作台确认入口；尚无完整四层资产包、统一的派生类型目录或每个派生物对锚点 revision 的明确绑定。
 
 **直接推论：** 仅新增十个图片按钮或十段提示词，无法表示“哪张锚点生了哪张表情表”、基准变更后的过期关系，也无法在分镜检索时选对角色状态。
 
