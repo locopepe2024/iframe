@@ -40,3 +40,26 @@ def test_character_design_confirmation_requires_concrete_visual_value():
             "character_design": {"route": "anime-stylized", "identity": {}, "confirmed": True},
         })
     assert character.character_design == {}
+
+
+def test_character_design_accepts_structured_identity_and_rejects_invalid_features():
+    pipeline = ComicGenPipeline.__new__(ComicGenPipeline)
+    character = SimpleNamespace(character_design={})
+    script = SimpleNamespace(id="project")
+    pipeline.scripts = {script.id: script}
+    pipeline._find_asset_with_source = lambda *_: (character, script)
+    pipeline._save_after_asset_mutation = lambda *_: None
+
+    design = {"identity": {"features": {"face": "窄长脸"}}, "look": {"features": {"clothing": "深蓝劲装"}},
+              "reference_assets": [{"asset_type": "scene", "asset_id": "street", "variant_id": "blue"}], "confirmed": True}
+    pipeline.update_asset_attributes("project", "character", "character", {"character_design": design})
+    revision = character.character_design["design_revisions"][0]
+    assert revision["design"]["identity"]["features"] == {"face": "窄长脸"}
+    assert revision["design"]["reference_assets"] == design["reference_assets"]
+
+    for bad in ({"face": 42}, {"camera_angle": "俯拍"}, {"face": "x" * 501}):
+        with pytest.raises(ValueError, match="features"):
+            pipeline.update_asset_attributes("project", "character", "character", {
+                "character_design": {**design, "identity": {"features": bad}},
+            })
+    assert len(character.character_design["design_revisions"]) == 1
