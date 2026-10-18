@@ -3,5 +3,20 @@
     "path": "backend/builtin/freestyle-风格库/cards/freestyle-template-match.md",
     "kind": "style",
     "expected_license": "MIT"
+  },
+  {
+    "path": "backend/builtin/freestyle-风格库/cards/freestyle-prompt-blocks.md",
+    "kind": "style",
+    "expected_license": "MIT"
+  },
+  {
+    "path": "backend/builtin/短片五阶段结构/cards/shortfilm-5stage-structure.md",
+    "kind": "genre",
+    "expected_license": "MIT"
+  },
+  {
+    "path": "backend/builtin/短片五阶段结构/cards/shortfilm-micro-drama.md",
+    "kind": "genre",
+    "expected_license": "MIT"
   }
 ]

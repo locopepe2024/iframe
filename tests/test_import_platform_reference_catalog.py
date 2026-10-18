@@ -33,3 +33,18 @@ def test_importer_rejects_license_mismatch(tmp_path):
         assert "license mismatch" in str(exc)
     else:
         raise AssertionError("expected license mismatch")
+
+
+def test_importer_increments_revision_when_source_changes(tmp_path):
+    source = tmp_path / "canvas"
+    source.mkdir()
+    card = source / "card.md"
+    card.write_text("---\nname: card\nsource_license: MIT\n---\nv1\n", encoding="utf-8")
+    allowlist = tmp_path / "allowlist.json"
+    allowlist.write_text(json.dumps([{"path": "card.md", "kind": "style", "expected_license": "MIT"}]), encoding="utf-8")
+    manifest = tmp_path / "manifest.json"
+    first = import_candidates(source, allowlist, manifest)
+    manifest.write_text(json.dumps(first), encoding="utf-8")
+    card.write_text("---\nname: card\nsource_license: MIT\n---\nv2\n", encoding="utf-8")
+    second = import_candidates(source, allowlist, manifest)
+    assert second["resources"][0]["revision"] == 2

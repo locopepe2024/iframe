@@ -65,7 +65,7 @@ def import_candidates(source_root: Path, allowlist_path: Path, existing_manifest
         digest = hashlib.sha256(text.encode("utf-8")).hexdigest()
         source_name = str(metadata.get("name") or relative.stem)
         resource_id = f"open-ai-canvas.{item.get('kind', 'reference')}.{source_name}.v1"
-        resources.append({
+        resource = {
             "platform_resource_id": resource_id,
             "revision": 1,
             "kind": item.get("kind", "reference"),
@@ -89,7 +89,8 @@ def import_candidates(source_root: Path, allowlist_path: Path, existing_manifest
                 "content_sha256": digest,
                 "imported_at": imported_at,
             },
-        })
+        }
+        resources.append(resource)
     existing = {"schema_version": 1, "catalog_revision": "imported", "resources": []}
     if existing_manifest.exists():
         existing = json.loads(existing_manifest.read_text(encoding="utf-8"))
@@ -98,7 +99,11 @@ def import_candidates(source_root: Path, allowlist_path: Path, existing_manifest
         for item in existing.get("resources", [])
         if isinstance(item, dict) and item.get("platform_resource_id")
     }
-    previous.update({item["platform_resource_id"]: item for item in resources})
+    for item in resources:
+        prior = previous.get(item["platform_resource_id"])
+        if prior and prior.get("provenance", {}).get("content_sha256") != item["provenance"]["content_sha256"]:
+            item["revision"] = int(prior.get("revision", 0)) + 1
+        previous[item["platform_resource_id"]] = item
     existing["catalog_revision"] = f"open-ai-canvas-{commit[:12]}"
     existing["resources"] = sorted(previous.values(), key=lambda item: item["platform_resource_id"])
     return existing

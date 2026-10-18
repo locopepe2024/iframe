@@ -1,5 +1,240 @@
 {
   "schema_version": 1,
-  "catalog_revision": "empty-v1",
-  "resources": []
+  "catalog_revision": "open-ai-canvas-86ebb6c53452",
+  "resources": [
+    {
+      "platform_resource_id": "open-ai-canvas.genre.shortfilm-5stage-structure.v1",
+      "revision": 1,
+      "kind": "genre",
+      "title": "shortfilm-5stage-structure",
+      "summary": "当用户要做一条电影感短片/多镜叙事视频（Seedance/可灵/Veo/即梦/Sora 通用），或写好提示词但\"没有电影感、结构散\"时调用。核心能力：五段式结构（核心主题|角色与场景|氛围与质感|镜头规则|分镜）+ 模型无关核心+模型尾注一行。关键触发：五段式、短片提示词、电影感、多镜叙事、five-stage、cinematic prompt。工位边界：本技能只做短片提示词五段式骨架，不产出风格化分镜生产；后者由上游市场技能『叙事短片导演分镜』等负责，两者接力不抢戏。",
+      "tags": [
+        "五段式",
+        "短片提示词",
+        "电影感",
+        "模型无关",
+        "AI生成友好"
+      ],
+      "status": "candidate",
+      "payload": {
+        "source_path": "backend/builtin/短片五阶段结构/cards/shortfilm-5stage-structure.md",
+        "source_text": "# 短片提示词五段式结构\n\n## R — 原文要点 (Reading)\n\n来源方法（MIT，整理自 jnMetaCode/ai-shortfilm-prompts）：一条电影感 AI 短片提示词按五段组装——①**核心主题**（3-6 个标签，用 `|` 分隔）；②**角色与场景**（脸/服装/场景）；③**氛围与质感**（视觉基底/色调/风格核心）；④**镜头规则**（单镜还是多镜/角度/呼吸感）；⑤**分镜**（按秒切片或按镜切片）。**模型无关核心**：五段式结构在所有模型上相同，输出末尾只追加一行模型特定建议（Sora 偏好简洁/可灵对 IP 名更宽松/Seedance 屏蔽 IP 名等）。工作流纪律：先判断用户是否已给全五类信息（类型/时长/主体/场景/风格）——不全则最多问 2-3 个关键问题，**不过度提问**（先写一版再迭代胜过一次问十个细节）；写完后只解释 2-3 个最可能被调参的写作选择，不说教。\n\n## I — 方法论骨架 (Interpretation)\n\n1. **结构先行**：五段是组装顺序也是检查表——缺段即缺指令。\n2. **模型差异后置**：模型特性只影响一行注，别让模型语法绑架内容结构。\n3. **少问多写**：默认先产出一版可迭代的草稿，把提问留给真正影响成败的分叉。\n4. **解释要吝啬**：只点用户最可能要调的 2-3 处，不逐段讲解。\n5. **分镜粒度按时长**：≤10s 按镜切，>10s 按秒切。\n\n## A1 — 应用案例 (Past Application)\n\n- 来源实践：Mx-Shell 的《僵尸清道夫》首次验证该五段式；21 类型模板库均按五段式展开。\n- 尾注示例：「触发短语写成自创音节而非具体 IP 词——Seedance 屏蔽 IP 名」。\n\n## A2 — 触发场景 (Future Trigger)\n\n- 用户要「电影感短片/预告片/产品微电影」类视频。\n- 已有提示词「结构散、没电影感」的重组。\n- 影策 Agent 生成多镜视频提示词的默认骨架。\n\n## E — 可执行步骤 (Execution)\n\n1. **信息盘点**：类型/时长/主体/场景/风格五类是否齐全。\n   *完成标准*：五类已盘点，缺项进提问或假设。\n2. **五段组装**：主题标签→角色场景→氛围质感→镜头规则→分镜。\n   *完成标准*：五段齐全无空段。\n3. **分镜切片**：按时长选按镜或按秒。\n   *完成标准*：切片方式与时长匹配。\n4. **模型尾注**：末尾一行模型特定建议。\n   *完成标准*：尾注非空且具体。\n5. **两点解释**：只讲 2-3 个最可能被调的决策。\n   *完成标准*：解释 ≤3 点。\n",
+        "source_metadata": {
+          "name": "shortfilm-5stage-structure",
+          "description": "当用户要做一条电影感短片/多镜叙事视频（Seedance/可灵/Veo/即梦/Sora 通用），或写好提示词但\"没有电影感、结构散\"时调用。核心能力：五段式结构（核心主题|角色与场景|氛围与质感|镜头规则|分镜）+ 模型无关核心+模型尾注一行。关键触发：五段式、短片提示词、电影感、多镜叙事、five-stage、cinematic prompt。工位边界：本技能只做短片提示词五段式骨架，不产出风格化分镜生产；后者由上游市场技能『叙事短片导演分镜』等负责，两者接力不抢戏。",
+          "source_book": "shortfilm-prompt（GitHub: jnMetaCode/ai-shortfilm-prompts，MIT License）",
+          "source_chapter": "SKILL.md Step 3 五段式结构",
+          "tags": [
+            "五段式",
+            "短片提示词",
+            "电影感",
+            "模型无关",
+            "AI生成友好"
+          ],
+          "layer_confidence": "candidate",
+          "pack": "shortfilm-prompt 短片五段式",
+          "core_stance": "五段式是模型无关的骨架：模型只影响最后一行注，不影响结构本身",
+          "skill_type": "template",
+          "consult_tier": "A（绿区·MIT 署名整理，可公开）",
+          "verify_state": "raw",
+          "card_type": "open-source-skill",
+          "publish_tier": "tier-attrib",
+          "source_repo": "https://github.com/jnMetaCode/ai-shortfilm-prompts",
+          "source_license": "MIT",
+          "source_url": "https://github.com/jnMetaCode/ai-shortfilm-prompts",
+          "upstream_defer": [
+            "叙事短片导演分镜"
+          ],
+          "first_seen": "2026-09-21",
+          "source_card": "shortfilm-prompt 短片五段式/shortfilm-5stage-structure",
+          "evidence": "E4"
+        }
+      },
+      "provenance": {
+        "source": "open-ai-canvas",
+        "source_repository": "open-ai-canvas",
+        "source_commit": "86ebb6c5345287c645e857a8f550901bb6fd4bd8",
+        "source_path": "backend/builtin/短片五阶段结构/cards/shortfilm-5stage-structure.md",
+        "source_url": "https://github.com/jnMetaCode/ai-shortfilm-prompts",
+        "license": "MIT",
+        "attribution": null,
+        "content_sha256": "a26bde44c8f30e8554c4df23ce9a8d8efb82d37146cb7a9ab019c46b4a42d5ba",
+        "imported_at": "2026-10-18T04:56:46.813851+00:00"
+      }
+    },
+    {
+      "platform_resource_id": "open-ai-canvas.genre.shortfilm-micro-drama.v1",
+      "revision": 1,
+      "kind": "genre",
+      "title": "shortfilm-micro-drama",
+      "summary": "当用户要做竖屏短剧/微短剧片段（9:16，红果/抖音形态），或要\"钩子+正反打+断章\"结构的竖屏叙事时调用。核心能力：竖屏短剧三件套——黄金 3 秒钩子 + 正反打对话 + 集尾断章，含竖屏构图约束。关键触发：竖屏短剧、微短剧、红果短剧、抖音短剧片段、正反打、断章、vertical drama、micro-drama。",
+      "tags": [
+        "竖屏短剧",
+        "微短剧",
+        "钩子",
+        "正反打",
+        "断章",
+        "AI生成友好"
+      ],
+      "status": "candidate",
+      "payload": {
+        "source_path": "backend/builtin/短片五阶段结构/cards/shortfilm-micro-drama.md",
+        "source_text": "# 竖屏短剧三件套\n\n## R — 原文要点 (Reading)\n\n来源方法（MIT，整理自 shortfilm-prompt micro-drama 模板）：竖屏短剧（9:16）提示词三件套——①**黄金 3 秒钩子**：开场即冲突/悬念/反差，零铺垫（红果形态：外力施压或反常识状态）；②**正反打对话**（shot-reverse-shot）：对话戏按正反打机位写，每镜一个方向一个主体，轴线不越界；③**集尾断章**（cliffhanger）：结尾停在悬念/反转前一刻/狠话/神秘细节，逼下集。竖屏构图约束：主体居中偏上，关键信息避开底部 UI 区（约 18%）与顶部（约 12%）。\n\n## I — 方法论骨架 (Interpretation)\n\n1. **钩子是唯一KPI**：前 3 秒决定留存——钩子必须可见可听，不能是铺垫。\n2. **正反打是短剧呼吸**：对话戏默认正反打；每镜单方向，遵守 180° 轴线。\n3. **断章是商业模型**：不断章=无下集=无付费墙/无追更——断章位置就是钩位。\n4. **竖屏安全区**：构图按平台 UI 遮挡设计，字幕与主体在安全区内。\n5. **与节奏系统衔接**：单集时长变奏与 7 节点配 onlyshot-redfruit-7beats / onlyshot-duration-variation。\n\n## A1 — 应用案例 (Past Application)\n\n- 来源实践：竖屏短剧模板的断章位置设计直接服务红果付费墙集数（一卡/二卡/三卡）。\n- 正反打示范：A 左朝右 / B 右朝左，轴线稳定，特写只给反应方。\n\n## A2 — 触发场景 (Future Trigger)\n\n- 用户做红果/抖音竖屏短剧的单集片段。\n- 对话戏分镜编写。\n- 影策 Agent 生成竖屏短剧分镜与提示词。\n\n## E — 可执行步骤 (Execution)\n\n1. **写钩子**：前 3 秒冲突/悬念/反差，零铺垫。\n   *完成标准*：钩子句可见可听。\n2. **排正反打**：对话镜按方向分配机位，检查轴线。\n   *完成标准*：无越轴镜。\n3. **设断章**：结尾停在悬念位（反转前/狠话/神秘细节）。\n   *完成标准*：断章类型明确。\n4. **竖屏安全区**：主体与字幕避开顶 12% 底 18%。\n   *完成标准*：安全区合规。\n5. **节奏挂接**：时长分配挂变奏分布与 7 节点。\n   *完成标准*：节奏参数对齐。\n",
+        "source_metadata": {
+          "name": "shortfilm-micro-drama",
+          "description": "当用户要做竖屏短剧/微短剧片段（9:16，红果/抖音形态），或要\"钩子+正反打+断章\"结构的竖屏叙事时调用。核心能力：竖屏短剧三件套——黄金 3 秒钩子 + 正反打对话 + 集尾断章，含竖屏构图约束。关键触发：竖屏短剧、微短剧、红果短剧、抖音短剧片段、正反打、断章、vertical drama、micro-drama。",
+          "source_book": "shortfilm-prompt（GitHub: jnMetaCode/ai-shortfilm-prompts，MIT License）",
+          "source_chapter": "templates/micro-drama.md",
+          "tags": [
+            "竖屏短剧",
+            "微短剧",
+            "钩子",
+            "正反打",
+            "断章",
+            "AI生成友好"
+          ],
+          "layer_confidence": "candidate",
+          "pack": "shortfilm-prompt 短片五段式",
+          "core_stance": "竖屏短剧的呼吸是钩子-对峙-断章：三秒不留人，后面全是成本",
+          "skill_type": "technique",
+          "consult_tier": "A（绿区·MIT 署名整理，可公开）",
+          "verify_state": "raw",
+          "card_type": "open-source-skill",
+          "publish_tier": "tier-attrib",
+          "source_repo": "https://github.com/jnMetaCode/ai-shortfilm-prompts",
+          "source_license": "MIT",
+          "source_url": "https://github.com/jnMetaCode/ai-shortfilm-prompts",
+          "first_seen": "2026-09-21",
+          "source_card": "shortfilm-prompt 短片五段式/shortfilm-micro-drama",
+          "evidence": "E4"
+        }
+      },
+      "provenance": {
+        "source": "open-ai-canvas",
+        "source_repository": "open-ai-canvas",
+        "source_commit": "86ebb6c5345287c645e857a8f550901bb6fd4bd8",
+        "source_path": "backend/builtin/短片五阶段结构/cards/shortfilm-micro-drama.md",
+        "source_url": "https://github.com/jnMetaCode/ai-shortfilm-prompts",
+        "license": "MIT",
+        "attribution": null,
+        "content_sha256": "cc485d8b2a6caaaf5565bec3ffddd0af558eb689d3eef68bad72b78e7309ad9d",
+        "imported_at": "2026-10-18T04:56:46.813851+00:00"
+      }
+    },
+    {
+      "platform_resource_id": "open-ai-canvas.style.freestyle-prompt-blocks.v1",
+      "revision": 1,
+      "kind": "style",
+      "title": "freestyle-prompt-blocks",
+      "summary": "当用户要把风格库模板落成最终提示词，或提示词\"缺块导致模型自由发挥\"，或多概念图\"风格飘了/概念互相污染\"时调用。核心能力：六块组装（主体与任务/构图与布局/视觉风格与材质/文字与标签要求/画幅与输出格式/约束与负向细节）+ 多概念同模板复用变体法。关键触发：六块组装、prompt blocks、缺块、多概念复用、文字约束、aspect ratio、negative details。",
+      "tags": [
+        "六块组装",
+        "提示词结构",
+        "文字约束",
+        "多概念复用",
+        "AI生成友好"
+      ],
+      "status": "candidate",
+      "payload": {
+        "source_path": "backend/builtin/freestyle-风格库/cards/freestyle-prompt-blocks.md",
+        "source_text": "# 风格库六块组装\n\n## R — 原文要点 (Reading)\n\n来源方法（MIT，整理自 freestylefly style-library SKILL.md）：最终提示词按六块组装——①**主体与任务**（subject and task）；②**构图与布局**（composition and layout）；③**视觉风格与材质**（visual style and materials）；④**文字与标签要求**（text and label requirements——精确文字内容、可读性、层级）；⑤**画幅与输出格式**（aspect ratio and output format）；⑥**约束与负向细节**（constraints and negative details——要避免的工件）。**约束要具体**：精确文字、画幅、可读标签、布局层级、避免的工件——不写约束等于让模型猜。**多概念复用**：用户要多个概念时，复用同一模板、只变主体/构图/色板/场景——保系列一致性。**语言跟随用户**：中文请求最终提示词用中文（除非用户要英文）——gpt-image 对中文请求出中文提示词表现好。\n\n## I — 方法论骨架 (Interpretation):\n\n1. **六块=六个施工面**：缺块即缺指令，模型必自由发挥。\n2. **文字块是 GPT-Image 强项**：画面文字要精确到内容+可读性+层级，别只说「带标题」。\n3. **约束块防工件**：把常见工件（乱码/多余元素/水印感）写进负向。\n4. **同模板变主体=系列感**：系列图锁模板变变量，不锁模板必散。\n5. **语言策略**：中文请求默认中文提示词——别无脑翻译成英文。\n\n## A1 — 应用案例 (Past Application)\n\n- 来源实践：UI 截图系统模板六块化——平台锁定+比例+层级+可见文字+UI chrome（状态栏/Tab/操作行/评论层）+约束（避平台描述过泛/文字可读）。\n- 反例：只写「做个科技感海报」——六块缺五块，模型交啥全靠运气。\n\n## A2 — 触发场景 (Future Trigger)\n\n- 风格库模板落成提示词的组装步。\n- 系列图/多概念批量出图。\n- 画面文字类需求（海报/UI/信息图）。\n\n## E — 可执行步骤 (Execution)\n\n1. **六块铺满**：主体/构图/风格材质/文字/画幅/约束逐块写实。\n   *完成标准*：六块无空块。\n2. **文字精确化**：画面文字内容+可读性+层级三要素。\n   *完成标准*：文字块含三要素。\n3. **负向列工件**：常见工件写进约束块。\n   *完成标准*：负向清单非空。\n4. **系列锁模板**：多概念同模板变变量。\n   *完成标准*：系列模板一致。\n5. **语言核对**：提示词语言与请求语言策略一致。\n   *完成标准*：语言策略已声明。\n",
+        "source_metadata": {
+          "name": "freestyle-prompt-blocks",
+          "description": "当用户要把风格库模板落成最终提示词，或提示词\"缺块导致模型自由发挥\"，或多概念图\"风格飘了/概念互相污染\"时调用。核心能力：六块组装（主体与任务/构图与布局/视觉风格与材质/文字与标签要求/画幅与输出格式/约束与负向细节）+ 多概念同模板复用变体法。关键触发：六块组装、prompt blocks、缺块、多概念复用、文字约束、aspect ratio、negative details。",
+          "source_book": "awesome-gpt-image-2 style-library（GitHub: freestylefly/awesome-gpt-image-2，MIT License）",
+          "source_chapter": "SKILL.md Workflow Step 5-6",
+          "tags": [
+            "六块组装",
+            "提示词结构",
+            "文字约束",
+            "多概念复用",
+            "AI生成友好"
+          ],
+          "layer_confidence": "candidate",
+          "pack": "freestylefly 风格库",
+          "core_stance": "六块是施工单：缺一块，模型就用想象补一块",
+          "skill_type": "template",
+          "consult_tier": "A（绿区·MIT 署名整理，可公开）",
+          "verify_state": "raw",
+          "card_type": "open-source-skill",
+          "publish_tier": "tier-attrib",
+          "source_repo": "https://github.com/freestylefly/awesome-gpt-image-2",
+          "source_license": "MIT",
+          "source_url": "https://github.com/freestylefly/awesome-gpt-image-2",
+          "first_seen": "2026-09-21",
+          "source_card": "freestylefly 风格库/freestyle-prompt-blocks",
+          "evidence": "E4"
+        }
+      },
+      "provenance": {
+        "source": "open-ai-canvas",
+        "source_repository": "open-ai-canvas",
+        "source_commit": "86ebb6c5345287c645e857a8f550901bb6fd4bd8",
+        "source_path": "backend/builtin/freestyle-风格库/cards/freestyle-prompt-blocks.md",
+        "source_url": "https://github.com/freestylefly/awesome-gpt-image-2",
+        "license": "MIT",
+        "attribution": null,
+        "content_sha256": "02ebe92646774b030d3702f3d422b2278f042cd58b4f1f4a17f37262072d0d07",
+        "imported_at": "2026-10-18T04:56:46.813851+00:00"
+      }
+    },
+    {
+      "platform_resource_id": "open-ai-canvas.style.freestyle-template-match.v1",
+      "revision": 1,
+      "kind": "style",
+      "title": "freestyle-template-match",
+      "summary": "当用户要用 GPT-Image2 风格库做图（产品/海报/UI/信息图/品牌/摄影/角色/场景），或\"不知道选哪个模板/风格标签混乱\"，或要把请求匹配到工业模板时调用。核心能力：四级匹配序（模板类目→视觉风格标签→场景标签→最近案例）+ 请求模糊时呈现 2-3 个方向让用户选 + 输出必带模板名。关键触发：模板选择、风格标签、场景标签、gpt-image-2、工业模板、哪个模板、template match。工位边界：本技能只做风格库模板匹配，不产出系列套图生产；后者由上游市场技能『系列套图生成』等负责，两者接力不抢戏。",
+      "tags": [
+        "模板匹配",
+        "风格标签",
+        "场景标签",
+        "AI生成友好"
+      ],
+      "status": "candidate",
+      "payload": {
+        "source_path": "backend/builtin/freestyle-风格库/cards/freestyle-template-match.md",
+        "source_text": "# 风格库四级匹配序\n\n## R — 原文要点 (Reading)\n\n来源方法（MIT，整理自 freestylefly gpt-image-2-style-library）：**四级匹配序**——①显式产品类型对**模板类目**（product/poster/UI/infographic/brand/photography/character/document）；②视觉词对**风格标签**（realistic/3D/illustration/classical/brand/poster/UI）；③语境词对**场景标签**（commerce/education/social/food/travel/story/history/tech/creative）；④仍不定则对**最近示例案例**。**请求模糊时**：呈现 2-3 个强模板方向+短理由让用户选，不独自决定。**输出三件套**：选中的模板名、可直贴的 GPT-Image2 提示词、文字/画幅/布局/负向细节的简明约束。**模板实例（风格库节选）**：UI 截图系统（锁平台/比例/层级/画面文字，避平台描述过泛）、信息图引擎（3-5 模块/信息流/层级/短标签，避长段塞图）、科学尺度缩放图（6-8 尺度框/单位/倍率）、海报排版系统等。**维护纪律**：源库变动时重新生成参考文件，以参考文件为准而非记忆。\n\n## I — 方法论骨架 (Interpretation):\n\n1. **漏斗不跳级**：类目没定不要先看风格——行当错则全错。\n2. **模糊即呈现**：拿不准就给 2-3 个方向+理由（配 options-presentation）。\n3. **模板名是溯源键**：输出带模板名，用户与后续迭代都能对上账。\n4. **约束是交付一部分**：文字/画幅/布局/负向细节不写=模板白选。\n5. **参考文件优先于记忆**：模板名/类目/封面以生成参考为准。\n\n## A1 — 应用案例 (Past Application)\n\n- 来源实践：用户「生成城市生命系统图谱」→类目 infographic→风格 infographic/charts→场景 tech→输出带模板名+可贴提示词+约束。\n- 反例：凭记忆写模板名——模板早已更新，名不对版。\n\n## A2 — 触发场景 (Future Trigger)\n\n- 用 GPT-Image2 风格库做任何图。\n- 用户说「找个合适的模板」。\n- 影策 Agent 生图前的模板决策。\n\n## E — 可执行步骤 (Execution)\n\n1. **判类目**：按产品类型定模板类目。\n   *完成标准*：类目唯一确定。\n2. **对风格**：视觉词对风格标签。\n   *完成标准*：风格标签命中。\n3. **对场景**：语境词对场景标签。\n   *完成标准*：场景标签命中。\n4. **兜底案例**：仍不定则对最近案例/呈现 2-3 方向。\n   *完成标准*：候选收敛或已呈现选项。\n5. **输出三件套**：模板名+可贴提示词+约束清单。\n   *完成标准*：三件齐全。\n",
+        "source_metadata": {
+          "name": "freestyle-template-match",
+          "description": "当用户要用 GPT-Image2 风格库做图（产品/海报/UI/信息图/品牌/摄影/角色/场景），或\"不知道选哪个模板/风格标签混乱\"，或要把请求匹配到工业模板时调用。核心能力：四级匹配序（模板类目→视觉风格标签→场景标签→最近案例）+ 请求模糊时呈现 2-3 个方向让用户选 + 输出必带模板名。关键触发：模板选择、风格标签、场景标签、gpt-image-2、工业模板、哪个模板、template match。工位边界：本技能只做风格库模板匹配，不产出系列套图生产；后者由上游市场技能『系列套图生成』等负责，两者接力不抢戏。",
+          "source_book": "awesome-gpt-image-2 style-library（GitHub: freestylefly/awesome-gpt-image-2，MIT License）",
+          "source_chapter": "agents/skills/gpt-image-2-style-library",
+          "tags": [
+            "模板匹配",
+            "风格标签",
+            "场景标签",
+            "AI生成友好"
+          ],
+          "layer_confidence": "candidate",
+          "pack": "freestylefly 风格库",
+          "core_stance": "匹配序是漏斗：类目定行当、风格定脸、场景定处境、案例定细节",
+          "skill_type": "framework",
+          "consult_tier": "A（绿区·MIT 署名整理，可公开）",
+          "verify_state": "raw",
+          "card_type": "open-source-skill",
+          "publish_tier": "tier-attrib",
+          "source_repo": "https://github.com/freestylefly/awesome-gpt-image-2",
+          "source_license": "MIT",
+          "source_url": "https://github.com/freestylefly/awesome-gpt-image-2",
+          "upstream_defer": [
+            "系列套图生成"
+          ],
+          "first_seen": "2026-09-21",
+          "source_card": "freestylefly 风格库/freestyle-template-match",
+          "evidence": "E4"
+        }
+      },
+      "provenance": {
+        "source": "open-ai-canvas",
+        "source_repository": "open-ai-canvas",
+        "source_commit": "86ebb6c5345287c645e857a8f550901bb6fd4bd8",
+        "source_path": "backend/builtin/freestyle-风格库/cards/freestyle-template-match.md",
+        "source_url": "https://github.com/freestylefly/awesome-gpt-image-2",
+        "license": "MIT",
+        "attribution": null,
+        "content_sha256": "5b3590b8353d7ffb6429205ab5d28342c00d3dba57c19509cdb2aee3d6098009",
+        "imported_at": "2026-10-18T04:56:46.813851+00:00"
+      }
+    }
+  ]
 }
