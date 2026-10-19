@@ -109,7 +109,7 @@
 | 5. 派生资产包 | 分层任务、明确父锚点、按需生成、过期提示 | 转面／表情等条目能追溯所用锚点；锚点换版不会改写历史结果 |
 | 6. 剧集状态衔接 | 项目包作为来源，本集多造型和分镜实时检索 | 同一集正常与受伤造型可分别选择；既有首帧和视频不自动变化 |
 
-切片 1 是本轮代码起点。涉及 schema、后端生成和资产包的切片应先写对应数据契约与兼容测试，保持每一步可构建、可回退。实施路径：`frontend/src/components/modules/CharacterWorkbench.tsx`、`CharacterSlashPanel.tsx`、`frontend/src/lib/characterStructuredDesign.ts`／`characterQuickActions.ts`、共享资源选择器、相关前端测试；后续切片再涉及角色资产模型与 API。
+切片 1 已开始：身份和造型各有“整体描述／逐项编辑”显式切换；两套草稿保留，`editor_mode` 随设计 revision 保存，图片 Prompt 只采用当前模式的投影。曾由用户明确输入的整体要求仍在设计模型输入审核中列出，并在与逐项投影不一致时提示核对；切换编辑视图不会悄悄撤销用户要求。现有字段和历史 revision 保持可读。下一步仍需补齐转换预览、撤销反馈和真实浏览器操作验收，故切片 1 尚未整体完成。涉及 schema、后端生成和资产包的后续切片应先写对应数据契约与兼容测试，保持每一步可构建、可回退。实施路径：`frontend/src/components/modules/CharacterWorkbench.tsx`、`CharacterSlashPanel.tsx`、`frontend/src/lib/characterStructuredDesign.ts`／`characterQuickActions.ts`、共享资源选择器、相关前端测试；后续切片再涉及角色资产模型与 API。
 
 ## Not yet proven / What would verify it
 
