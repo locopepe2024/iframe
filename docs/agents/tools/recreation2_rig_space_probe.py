@@ -55,6 +55,20 @@ def project(point):
     return [value.x * 640, (1 - value.y) * 360]
 
 
+def projected_support_y(arm, sides):
+    return sum(project(arm.matrix_world @ arm.pose.bones[f'foot_{side}'].head)[1]
+               for side in sides) / len(sides)
+
+
+def pelvis_target_frame(joints, mode):
+    right = solver['vec'](joints, 'left_hip', 'right_hip')
+    if mode == 'horizontal':
+        # Keep pelvic up independent of the shoulder/hip tilt.  The torso
+        # vector remains available to the spine channels below.
+        return body_frame(right, Vector((0, 0, 1)))
+    return body_frame(right, solver['torso'](joints))
+
+
 parser = argparse.ArgumentParser()
 parser.add_argument('--track', required=True)
 parser.add_argument('--rig', required=True)
@@ -95,17 +109,22 @@ renderer.setup_scene(bundle_base, out)
 parts = {'shoulder': 'upper_arm', 'elbow': 'lower_arm', 'wrist': 'wrist',
          'hip': 'upper_leg', 'knee': 'lower_leg', 'ankle': 'ankle'}
 selected = {1, 17, 23, 29, 41, 55}
-cases = [('no_pelvis', False, False, False),
-         ('no_pelvis_own_basis', False, True, False),
-         ('no_pelvis_root', False, False, True),
-         ('body_basis_only', True, False, False),
-         ('body_and_own_basis', True, True, False),
-         ('body_own_basis_root', True, True, True),
-         ('no_pelvis_own_basis_root', False, True, True)]
+support_by_source = {1: ('l',), 17: ('l',), 23: ('l',), 29: ('l', 'r'),
+                     41: ('l',), 55: ('l',)}
+contact_ground_z = 0.159
+cases = [('no_pelvis', False, False, False, 'torso', False),
+         ('no_pelvis_root', False, False, True, 'torso', False),
+         ('no_pelvis_root_contact', False, False, True, 'torso', True),
+         ('no_pelvis_root_pixel_contact', False, False, True, 'torso', 'pixel'),
+         ('pelvis_horizontal_root', True, True, True, 'horizontal', False),
+         ('pelvis_horizontal_root_contact', True, True, True, 'horizontal', True),
+         ('pelvis_horizontal_root_pixel_contact', True, True, True, 'horizontal', 'pixel'),
+         ('body_own_basis_root', True, True, True, 'torso', False),
+         ('no_pelvis_own_basis_root', False, True, True, 'torso', False)]
 report = {'rig_sha256': hashlib.sha256(Path(args.rig).read_bytes()).hexdigest(),
           'track_sha256': hashlib.sha256(Path(args.track).read_bytes()).hexdigest(),
           'blender': bpy.app.version_string, 'rest': rest_axes, 'cases': {}}
-for label, orient, own_basis, include_root in cases:
+for label, orient, own_basis, include_root, pelvis_mode, contact in cases:
     frames = []
     rows = []
     previous_yaw = previous_axis = first_yaw = None
@@ -123,7 +142,7 @@ for label, orient, own_basis, include_root in cases:
             bone.rotation_quaternion = (1, 0, 0, 0)
         bpy.context.view_layer.update()
         pelvis_error = None
-        target_body = body_frame(solver['vec'](joints, 'left_hip', 'right_hip'), solver['torso'](joints))
+        target_body = pelvis_target_frame(joints, pelvis_mode)
         if orient:
             target = (target_body @ rest_body.inverted()).to_quaternion() @ rest_pelvis
             pelvis = arm.pose.bones['pelvis']
@@ -160,6 +179,29 @@ for label, orient, own_basis, include_root in cases:
         root.rotation_euler[2] = root_yaw
         root.location = position
         bpy.context.view_layer.update()
+        if contact is True and src['source_frame'] in support_by_source:
+            support_z = [float((arm.matrix_world @ arm.pose.bones[f'foot_{side}'].head).z)
+                         for side in support_by_source[src['source_frame']]]
+            root.location.z += contact_ground_z - sum(support_z) / len(support_z)
+            bpy.context.view_layer.update()
+        elif contact == 'pixel' and src['source_frame'] in support_by_source:
+            sides = support_by_source[src['source_frame']]
+            target_y = sum(joints[f'{"left" if side == "l" else "right"}_ankle'][1] * 360
+                           for side in sides) / len(sides)
+            for _ in range(3):
+                current_y = projected_support_y(arm, sides)
+                probe_z = root.location.z + 0.001
+                root.location.z = probe_z
+                bpy.context.view_layer.update()
+                derivative = (projected_support_y(arm, sides) - current_y) / 0.001
+                root.location.z -= 0.001
+                if abs(derivative) < 1e-5:
+                    break
+                root.location.z += max(-0.25, min(0.25, (target_y - current_y) / derivative))
+                bpy.context.view_layer.update()
+        # Persist any contact-induced root correction into the diagnostic
+        # bundle; otherwise renderer round-trip would silently discard it.
+        item['rootPosition'] = list(root.location)
         errors = {}
         projections = {}
         for side, suffix in [('left', 'l'), ('right', 'r')]:
@@ -176,6 +218,7 @@ for label, orient, own_basis, include_root in cases:
                             'tail_world': list(arm.matrix_world @ bone.tail)}
         if src['source_frame'] in selected:
             rows.append({'source_frame': src['source_frame'], 'source_pts_s': pts_by_source[src['source_frame']],
+                         'pelvis_mode': pelvis_mode, 'contact_constraint': contact,
                          'mean_error_px': sum(errors.values()) / 12,
                          'joint_error_px': errors, 'joint_projection_px': projections,
                          'pelvis_rotation_error_deg_before_render_root': pelvis_error,

@@ -24,6 +24,19 @@
 
 ## Direct implication
 
+### 2026-10-19 CozyClay / media 白模与源 PTS 验证
+
+- media Blender 4.5.9 已将合成 24 帧 bundle 和真实轨迹 31 key bundle 分别渲染为白模 MP4。真实轨迹输出为 48 帧、24 fps、2 秒，证明渲染链路可执行，不证明源动作精度。[运行证据](../agents/deliverables/2026-10-19-real-motion-track-media-white-model-v1.md)
+- CozyClay 浏览器编译/导出 48 帧已通过；固定脚位的诊断 spec 可达 `qa.ok=true`，但从真实轨迹直接映射脚踝/根位置的 spec 有 168 个 QA 问题。空间代理校准将数量降至 10，但修改了源脚步，不能作为保真结果。[QA 隔离对照](../agents/deliverables/2026-10-19-cozyclay-real-track-qa-isolation-v1.md)
+- 对 `recreation2-final120.json` 对应原片复核后发现：轨迹时间戳使用平均 FPS，源第 11→12 帧实际 PTS 跨 0.271265 秒；源第 61 帧 PTS 为 2.170123 秒，而轨迹记录 1.955224 秒。旧 48 帧白模把约 2.17 秒源内容压成 2.0 秒，不能用于节奏验收。[源帧证据与脚部阶段](../agents/deliverables/2026-10-19-recreation2-source-pts-foot-evidence-v1.md)
+- 之后任何动作 bundle 的时间主键须为源视频逐帧 PTS，并同时保留源帧号；平均 FPS 只能作视频总体统计，不能代替可变时间间隔。接触约束须按源帧阶段切换，不能全段固定双脚。
+- 已用源 PTS 对齐的前 2 秒重新输出 48 帧 media 白模；长停顿在时间线上得到保留，但白模仍明显漂浮、朝向与源片不符。时间轴修复通过工程验证，空间动作重定向仍失败；当前不得送入 H3 作为合格白模参考。[PTS 对照和新产物](../agents/deliverables/2026-10-19-recreation2-source-pts-foot-evidence-v1.md)
+- 对同一 `recreation2` 源片跟踪三处舞台背景灯位：已测的源第 1、11、17、23 帧相对首帧无整数像素位移，第 55 帧（PTS 1.959139 秒）在原画幅出现约 +64、+42、+2 像素的横向位移及 +14–18 像素的纵向位移。三点横向位置符合二维缩小/重构图代理，但不能由此断定真实三维相机移动或恢复公制深度；固定相机全段假设不宜直接沿用。首帧白模已明显出现朝向和肢体姿态失配，因此后段背景运动并非全部失败的充分解释。[背景位移与首帧隔离报告](../agents/deliverables/2026-10-19-recreation2-background-motion-and-first-frame-v1.md)
+- 对相同源轨迹和 pinned rig 做骨盆朝向开关消融：原 PTS bundle 可由 `--enable-pelvis-orientation` 逐值重现；关闭该开关并**重算所有子骨骼**后，12 个语义关节的首帧平均投影误差由 37.62 降至 12.76 px，首次抬脚第 17/23 帧由 48.99/44.56 降至 17.57/14.04 px。第 55 帧仍有 41.72 px，落脚、地面和后段转身未通过；这是诊断基线，不是 H3 合格白模。不能仅删除旧 bundle 的骨盆四元数，因子骨骼以旧父空间求解。[骨盆朝向隔离报告与 2 秒诊断视频](../agents/deliverables/2026-10-19-recreation2-pelvis-orientation-isolation-v1.md)
+- 同一隔离进一步发现现有 `pelvis_target` 的 `(right, forward, up)` 三列行列式为 −1，目标矩阵是反射，不能由四元数准确表达。仅改叉积使行列式 +1 后，首帧平均关节误差反而为 47.89 px，说明还需核对 rig 静止轴、前向和父空间变换；不能将单一叉积修改当成已验证的修复。[逐轴诊断](../agents/deliverables/2026-10-19-recreation2-pelvis-orientation-isolation-v1.md)
+- 后续七组 rig 空间隔离已确认骨盆骨轴与静止身体轴不重合，并发现求解时未包含渲染 root yaw。仅纳入 root 后，源17/23/29帧平均误差为 15.74/12.25/18.46 px；完整身体/骨盆与子骨基底/root 校准在源55帧为 19.35 px，但前四帧没有优于无骨盆基线。全七组 bundle 重导入投影差为 0；旋转方向对齐不等于关节位置或鞋底接触合格。主 builder 未改，仍不得送 H3。[身体轴、骨盆与 root 空间实验](../agents/deliverables/2026-10-19-recreation2-rig-space-calibration-v1.md)
+- 躯干分离与接触约束隔离显示：水平骨盆目标改善后段但使前四帧变差；支持脚世界高度或单点像素 y 锁定会改善指定脚，却把另一只脚和全身投影推偏。脚接触需要鞋底点、地面证据和局部 IK/根高度联合求解，不能只平移 root。[躯干与脚接触隔离](../agents/deliverables/2026-10-19-recreation2-torso-contact-isolation-v1.md)
+
 复刻链路须把 `视频取证 → 相机轨迹 → GVHMR 原生人体重建 → 目标骨架重定向 → Blender/GLB 输出 → 源帧验收` 分层记录。GLB 能导入 Blender/Unity 只证明资产可用，不证明源动作、世界轨迹、脚接触或双手持枪关系准确。照片输入只提供单帧姿态线索，不能作为连续动作恢复的时间证据。
 
 动态相机样本不得用 `-s` 的输出宣称世界空间轨迹合格。SimpleVO 失败时，应先检查相机估计条件，再在具备 DPVO/CUDA 环境时做同片对照；安装 DPVO 本身不等于轨迹正确。现有 CPU 验证未运行 DPVO。
