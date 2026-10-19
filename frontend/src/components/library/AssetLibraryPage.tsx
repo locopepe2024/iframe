@@ -267,6 +267,14 @@ function PlatformReferenceReviewQueue() {
   const [publisherGrants, setPublisherGrants] = useState<string[]>([]);
   const [publisherProfileId, setPublisherProfileId] = useState("");
   const [grantBusy, setGrantBusy] = useState(false);
+  const [platformSearch, setPlatformSearch] = useState("");
+  const [platformTag, setPlatformTag] = useState("");
+  const activeTags = Array.from(new Set((activeCatalog?.resources ?? []).flatMap((resource) => resource.tags ?? []))).sort();
+  const visibleActive = (activeCatalog?.resources ?? []).filter((resource) => {
+    if (platformTag && !resource.tags?.includes(platformTag)) return false;
+    const needle = platformSearch.trim().toLocaleLowerCase();
+    return !needle || [resource.title, resource.summary ?? "", ...(resource.tags ?? [])].join(" ").toLocaleLowerCase().includes(needle);
+  });
   const load = async () => {
     setLoading(true);
     try {
@@ -343,12 +351,24 @@ function PlatformReferenceReviewQueue() {
         </div>}
       </>}
       <h2 className="text-lg font-semibold text-foreground mb-3">{t("publishedTitle")}</h2>
-      {!activeCatalog?.resources.length ? <div className="glass-panel rounded-xl p-8 text-text-secondary">{t("publishedEmpty")}</div> :
+      {!!activeCatalog?.resources.length && <div className="mb-3 flex flex-wrap gap-2">
+        <input aria-label="搜索平台参考" value={platformSearch} onChange={(event) => setPlatformSearch(event.target.value)} placeholder="搜索名称、描述或标签"
+          className="glass-input min-w-48 flex-1 px-3 py-2 text-sm" />
+        <select aria-label="筛选平台标签" value={platformTag} onChange={(event) => setPlatformTag(event.target.value)} className="glass-input px-3 py-2 text-sm">
+          <option value="">全部标签</option>
+          {activeTags.map((tag) => <option key={tag} value={tag}>{tag}</option>)}
+        </select>
+      </div>}
+      {!activeCatalog?.resources.length ? <div className="glass-panel rounded-xl p-8 text-text-secondary">{t("publishedEmpty")}</div> : !visibleActive.length ? <div className="glass-panel rounded-xl p-8 text-text-secondary">没有匹配的已发布资源</div> :
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-        {activeCatalog.resources.map((resource) => <article key={resource.platform_resource_id} className="glass-panel rounded-xl border border-glass-border p-4">
+        {visibleActive.map((resource) => <article key={resource.platform_resource_id} className="glass-panel rounded-xl border border-glass-border p-4">
           <h2 className="font-semibold text-foreground">{resource.title}</h2>
           <div className="text-xs text-text-muted mt-1">{resource.kind} · v{resource.revision}</div>
-          {resource.summary && <p className="text-sm text-text-secondary mt-3">{resource.summary}</p>}
+          {!!resource.payload?.media_file && <PlatformCandidatePreview resourceId={resource.platform_resource_id} kind={resource.kind} />}
+          {(resource.payload?.structured_prompt?.content || resource.summary) && <details className="mt-3 text-sm text-text-secondary">
+            <summary>查看配套 Prompt</summary>
+            <pre className="mt-2 max-h-48 overflow-auto whitespace-pre-wrap break-words text-xs leading-5">{resource.payload?.structured_prompt?.content || resource.summary}</pre>
+          </details>}
           {!!resource.tags?.length && <div className="flex flex-wrap gap-1 mt-3">{resource.tags.map((tag) => <span key={tag} className="text-xs rounded bg-surface-inset px-2 py-1 text-text-muted">{tag}</span>)}</div>}
           <div className="mt-4 text-xs text-text-muted">{t("reviewSource")}：{resource.provenance.source || "—"} · {t("reviewLicense")}：{resource.provenance.license}</div>
         </article>)}

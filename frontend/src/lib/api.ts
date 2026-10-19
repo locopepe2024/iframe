@@ -750,9 +750,9 @@ export const api = {
         return res.data;
     },
 
-    getPlatformReferenceLibrary: async (query = "", kind?: string, category?: string): Promise<PlatformReferenceCatalog> => {
+    getPlatformReferenceLibrary: async (query = "", kind?: string, category?: string, tag?: string): Promise<PlatformReferenceCatalog> => {
         const res = await axios.get<PlatformReferenceCatalog>(`${API_URL}/platform-reference-library`, {
-            params: { query: query || undefined, kind: kind || undefined, category: category || undefined },
+            params: { query: query || undefined, kind: kind || undefined, category: category || undefined, tag: tag || undefined },
             headers: { "Cache-Control": "no-cache" },
         });
         return res.data;
@@ -790,7 +790,7 @@ export const api = {
         return res.data;
     },
 
-    getPlatformReferenceCategories: async (): Promise<{ categories: { id: string; label: string }[] }> => {
+    getPlatformReferenceCategories: async (): Promise<{ categories: { id: string; label: string }[]; suggested_tags: string[] }> => {
         const res = await axios.get(`${API_URL}/platform-reference-library/categories`);
         return res.data;
     },
@@ -800,6 +800,7 @@ export const api = {
         source_output_id?: string;
         kind: "image" | "video" | "prompt_preset";
         category_path: string;
+        tags: string[];
         title: string;
         description: string;
         rights_confirmed: boolean;

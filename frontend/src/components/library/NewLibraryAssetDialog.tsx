@@ -47,6 +47,8 @@ export default function NewLibraryAssetDialog({ onClose, onCreated, initialImage
   const [platformKind, setPlatformKind] = useState<"image" | "video" | "prompt_preset">(initialMediaType);
   const [platformCategory, setPlatformCategory] = useState("character/reference");
   const [platformCategories, setPlatformCategories] = useState<{ id: string; label: string }[]>([]);
+  const [platformSuggestedTags, setPlatformSuggestedTags] = useState<string[]>([]);
+  const [platformTagsText, setPlatformTagsText] = useState("");
   const [platformError, setPlatformError] = useState("");
   const [publisher, setPublisher] = useState<{ profile_id: string; authorized: boolean } | null>(null);
   const [rightsConfirmed, setRightsConfirmed] = useState(false);
@@ -69,6 +71,7 @@ export default function NewLibraryAssetDialog({ onClose, onCreated, initialImage
     void api.getPlatformReferenceCategories().then((result) => {
       if (!active) return;
       setPlatformCategories(result.categories);
+      setPlatformSuggestedTags(result.suggested_tags ?? []);
       setPlatformCategory((current) => result.categories.some((item) => item.id === current) ? current : result.categories[0]?.id ?? "");
       if (!result.categories.length) setPlatformError("平台类别暂不可用，请联系管理员。");
     }).catch(() => { if (active) setPlatformError("无法读取平台类别，请刷新后重试。"); });
@@ -131,11 +134,16 @@ export default function NewLibraryAssetDialog({ onClose, onCreated, initialImage
         if (!publisher?.authorized || !initialSourceGenerationId || !platformCategory || !rightsConfirmed) {
           throw new Error("请先确认平台录入权限、类别和内容发布权。");
         }
+        const tags = Array.from(new Set(platformTagsText.split(/[,，]/).map((tag) => tag.trim()).filter(Boolean)));
+        if (tags.length > 12 || tags.some((tag) => tag.length > 32)) {
+          throw new Error("最多填写 12 个标签，每个不超过 32 字。");
+        }
         await api.submitPlatformCandidate({
           source_generation_id: initialSourceGenerationId,
           source_output_id: platformKind === "prompt_preset" ? undefined : initialSourceOutputId,
           kind: platformKind,
           category_path: platformCategory,
+          tags,
           title: trimmed,
           description: description.trim(),
           rights_confirmed: rightsConfirmed,
@@ -248,6 +256,21 @@ export default function NewLibraryAssetDialog({ onClose, onCreated, initialImage
                 {platformCategories.map((item) => <option key={item.id} value={item.id}>{item.label} · {item.id}</option>)}
               </select>
             </label>
+            <div>
+              <label htmlFor="platform-character-tags" className="text-xs text-text-secondary">角色标签</label>
+              <input id="platform-character-tags" value={platformTagsText} onChange={(event) => setPlatformTagsText(event.target.value)}
+                placeholder="如：角色设定稿，转面三视图，配色卡" className="mt-2 w-full rounded-lg border border-glass-border bg-surface-inset px-3 py-2 text-sm text-foreground" />
+              <p className="mt-1 text-xs text-text-muted">逗号分隔，最多 12 个；仅用于检索，不会加入生成提示词。</p>
+              {!!platformSuggestedTags.length && <div className="mt-2 flex flex-wrap gap-1.5" aria-label="建议角色标签">
+                {platformSuggestedTags.map((tag) => {
+                  const selected = platformTagsText.split(/[,，]/).some((value) => value.trim() === tag);
+                  return <button key={tag} type="button" aria-pressed={selected} onClick={() => {
+                    const current = platformTagsText.split(/[,，]/).map((value) => value.trim()).filter(Boolean);
+                    setPlatformTagsText((selected ? current.filter((value) => value !== tag) : [...current, tag]).join("，"));
+                  }} className={`rounded-full border px-2 py-1 text-xs ${selected ? "border-primary text-primary" : "border-glass-border text-text-secondary hover:text-foreground"}`}>{tag}</button>;
+                })}
+              </div>}
+            </div>
             <label className="text-xs text-text-secondary">发布内容
               <select aria-label="发布内容" value={platformKind} onChange={(event) => setPlatformKind(event.target.value as typeof platformKind)}
                 className="mt-2 w-full rounded-lg border border-glass-border bg-surface-inset px-3 py-2 text-sm text-foreground">
@@ -283,13 +306,13 @@ export default function NewLibraryAssetDialog({ onClose, onCreated, initialImage
               htmlFor="lib-asset-desc"
               className="font-mono text-[0.625rem] font-semibold uppercase tracking-[0.1em] text-text-secondary"
             >
-              {t("descLabel")}
+              {targetScope === "platform" ? "配套 Prompt（可编辑）" : t("descLabel")}
             </label>
             <textarea
               id="lib-asset-desc"
               value={description}
               onChange={(e) => setDescription(e.target.value)}
-              placeholder={t("descPlaceholder")}
+              placeholder={targetScope === "platform" ? "输入与图片配套的完整 Prompt；可修改角色、版式和细节。" : t("descPlaceholder")}
               rows={targetScope === "platform" ? 8 : 3}
               maxLength={targetScope === "platform" ? 20000 : undefined}
               className="mt-2 w-full bg-surface-inset border border-glass-border rounded-lg px-3.5 py-2.5 text-[0.8125rem] text-foreground placeholder-text-muted focus:outline-none focus:border-primary/60 resize-none"
@@ -396,7 +419,7 @@ export default function NewLibraryAssetDialog({ onClose, onCreated, initialImage
             </button>
             <button
               type="submit"
-              disabled={submitting || uploading || (targetScope === "platform" && (!publisher?.authorized || !platformCategories.length || !rightsConfirmed))}
+              disabled={submitting || uploading || (targetScope === "platform" && (!publisher?.authorized || !platformCategories.length || !description.trim() || !rightsConfirmed))}
               className="inline-flex items-center justify-center gap-2 px-4 py-2 rounded-lg bg-primary text-on-accent text-sm font-semibold hover:bg-primary-hover transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
             >
               {submitting ? <Loader2 size={15} className="animate-spin" /> : <Plus size={15} />}

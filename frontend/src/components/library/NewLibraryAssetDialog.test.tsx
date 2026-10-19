@@ -10,7 +10,7 @@ vi.mock('@/lib/api', () => ({
     createLibraryAsset: vi.fn().mockResolvedValue({ id: 'asset' }),
     uploadLibraryImage: vi.fn(),
     getPlatformPublisher: vi.fn().mockResolvedValue({ profile_id: 'apikey-test', authorized: false }),
-    getPlatformReferenceCategories: vi.fn().mockResolvedValue({ categories: [{ id: 'character/reference', label: '角色参考' }, { id: 'character/identity/face', label: '面容' }] }),
+    getPlatformReferenceCategories: vi.fn().mockResolvedValue({ categories: [{ id: 'character/reference', label: '角色参考' }, { id: 'character/identity/face', label: '面容' }], suggested_tags: ['角色设定稿', '转面三视图'] }),
     submitPlatformCandidate: vi.fn().mockResolvedValue({ platform_resource_id: 'candidate-1' }),
   },
 }));
@@ -74,12 +74,14 @@ it('submits an authorized image with the reviewed description and stable output 
   fireEvent.change(screen.getByLabelText('录入目标'), { target: { value: 'platform' } });
   fireEvent.change(screen.getByLabelText('平台类别'), { target: { value: 'character/identity/face' } });
   fireEvent.change(screen.getByLabelText('nameLabel'), { target: { value: '面部基准' } });
-  fireEvent.change(screen.getByLabelText('descLabel'), { target: { value: '编辑后的可复用描述' } });
+  fireEvent.change(screen.getByLabelText('配套 Prompt（可编辑）'), { target: { value: '编辑后的可复用描述' } });
+  fireEvent.click(screen.getByRole('button', { name: '角色设定稿' }));
+  fireEvent.change(screen.getByLabelText('角色标签'), { target: { value: '角色设定稿，转面三视图' } });
   fireEvent.click(screen.getByRole('checkbox', { name: '我确认拥有将此内容提交平台审核的权利' }));
   fireEvent.click(screen.getByRole('button', { name: '提交平台审核' }));
   await waitFor(() => expect(api.submitPlatformCandidate).toHaveBeenCalledWith({
     source_generation_id: 'generation-1', source_output_id: 'output-1', kind: 'image',
-    category_path: 'character/identity/face', title: '面部基准',
+    category_path: 'character/identity/face', tags: ['角色设定稿', '转面三视图'], title: '面部基准',
     description: '编辑后的可复用描述', rights_confirmed: true,
   }));
   expect(api.createLibraryAsset).not.toHaveBeenCalled();
@@ -105,6 +107,6 @@ it('submits a video candidate only after choosing a category and confirming righ
   fireEvent.click(screen.getByRole('button', { name: '提交平台审核' }));
   await waitFor(() => expect(api.submitPlatformCandidate).toHaveBeenCalledWith(expect.objectContaining({
     source_generation_id: 'g', source_output_id: 'v', kind: 'video',
-    category_path: 'character/reference', description: '视频生成提示词',
+    category_path: 'character/reference', tags: [], description: '视频生成提示词',
   })));
 });
