@@ -30,16 +30,17 @@ export function dictionaryCategoryPath(id: string): string {
 }
 
 export function dictionaryCategorySearch(id: string): string {
-  const aliases: Record<string, string> = { "eye-detail": "眼纹 眼周纹理 细纹", build: "身材 体型 比例", posture: "身材 站姿 姿态", outfit: "服饰 整套 服装", material: "面料 材质", shoes: "靴子 鞋子 布靴 皮靴", render: "画风 真人 二次元 国漫", palette: "配色 颜色", garment: "女装 男装 款式" };
+  const aliases: Record<string, string> = { "eye-detail": "眼纹 眼周纹理 眼角纹 鱼尾纹 下眼睑纹 眼袋 细纹", build: "身材 体型 比例", posture: "身材 站姿 姿态", outfit: "服饰 整套 服装", material: "面料 材质", shoes: "靴子 鞋子 布靴 皮靴", render: "画风 真人 二次元 国漫", palette: "配色 颜色", garment: "女装 男装 款式" };
   return `${dictionaryCategoryPath(id)} ${aliases[id] || ""}`;
 }
 
 export function localDictionaryCategories(id: string): string[] {
   if (id.startsWith("character.style.")) return [id.endsWith("historical-costume") || id.endsWith("xianxia-fantasy") ? "genre" : "render"];
   if (id.startsWith("character.style-note.")) return [ ["natural-cinema", "soft-natural", "low-saturation", "film-grain"].some((key) => id.endsWith(`.${key}`)) ? "texture" : "render" ];
-  if (id === "character.facial_mark.under-eye") return ["eye-detail", "marks"];
+  if (id === "character.facial_mark.freckles") return ["marks", "skin"];
+  if (id === "character.facial_mark.under-eye" || id === "character.facial_mark.classical-crows-feet") return ["eye-detail", "marks"];
   if (["warm-light", "neutral-medium", "warm-deep", "cool-light", "warm-medium", "cool-deep"].some((key) => id === `character.skin.${key}`)) return ["skin-tone"];
-  if (id === "character.skin.classical-aged-skin") return ["eye-detail", "skin"];
+  if (id === "character.skin.classical-aged-skin") return ["skin"];
   if (["rounded-posture", "upright-posture", "classical-traveler-posture", "classical-shopkeeper-posture"].some((key) => id === `character.body.${key}`)) return ["posture"];
   const prefix = id.split(".")[1];
   const category: Record<string, string> = { face: "face-shape", eye_shape: "eyes", brow_shape: "brows", nose_shape: "nose",
@@ -74,6 +75,7 @@ export function dictionarySlotCategory(label: string | undefined): string | null
   if (/身高/.test(label)) return "height";
   if (/肤色/.test(label)) return "skin-tone";
   if (/肤质|皮肤纹理/.test(label)) return "skin";
+  if (/眼周|眼角纹|鱼尾纹|下眼睑纹|眼袋/.test(label)) return "eye-detail";
   if (/脸型/.test(label)) return "face-shape";
   if (/眉形/.test(label)) return "brows";
   if (/眼型/.test(label)) return "eyes";

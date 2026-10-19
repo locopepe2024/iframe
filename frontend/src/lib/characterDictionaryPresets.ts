@@ -47,7 +47,7 @@ const configurationPanels: CharacterDictionaryPreset[] = [
   ...CLASSICAL_CHARACTER_PANELS,
   MODERN_MALE_PANEL,
   panel("modern-clothing", "现代服装搭配 · 女装", "穿着[女装款式]，颜色为[颜色]，面料为[面料]，版型为[版型]，搭配要求为[搭配单品]，衣物状态为[衣物状态]。衣片连接清楚，保留自然褶皱。", ["clothing-panel"], "服装 现代 女装"),
-  panel("face", "面容选择面板", "脸型为[脸型]，眼型为[眼型]，眉形为[眉形]，妆容为[妆容]。", ["face-overview"], "面容 面部 五官"),
+  panel("face", "面容选择面板", "脸型为[脸型]，眼型为[眼型]，眉形为[眉形]，眼周细节为[眼周纹理]，肤色为[肤色]，肤质为[肤质]，妆容为[妆容]。", ["face-overview"], "面容 面部 五官 眼角纹 眼袋 肤色 肤质"),
   panel("height", "身高选择面板", "[身高]。", ["height"], "身高 高矮 厘米 height stature"),
   panel("skin", "肤色与肤质选择面板", "肤色为[肤色]，肤质为[肤质]。", ["skin-tone", "skin"], "肤色 肤质 皮肤 skin tone complexion"),
   panel("hair", "发型选择面板", "发型为[发型]，发束结构和固定关系自然。", ["hair"], "发型 头发"),
@@ -156,6 +156,19 @@ export const CHARACTER_DICTIONARY_PRESETS: CharacterDictionaryPreset[] = [
     term(`height.${index}`, name, `人物${name}，人体比例自然。`, "height", "身体")),
   ...["瓷白肤色", "浅白肤色", "浅米色肤色", "自然米色肤色", "暖小麦肤色", "古铜肤色", "深棕肤色", "深褐肤色"].map((name, index) =>
     term(`skin-tone.${index}`, name, `人物肤色为${name.replace("肤色", "")}，面部、颈部及外露肢体肤色一致，保留自然明暗层次。`, "skin-tone", "身体")),
+  ...[
+    ["fine-static", "静态眼角细纹", "表情放松时，眼角仍可见少量浅细纹"],
+    ["crows-feet-static", "静态鱼尾纹", "表情放松时，外眼角仍可见放射状鱼尾纹"],
+    ["smile-only", "仅微笑时出现眼角纹", "眼角细纹仅在微笑时出现，表情放松时不明显"],
+    ["lower-lid", "下眼睑细纹", "下眼睑有浅细纹，纹理范围局限于下眼睑"],
+    ["eye-bags", "轻微眼袋", "下眼睑有轻微自然隆起的眼袋，区别于眼下阴影"],
+  ].map(([id, title, text]) => ({ ...term(`eye-detail.${id}`, title, `${text}。`, "eye-detail", "面容"), slotValue: text })),
+  ...[
+    ["fine", "细腻自然肤质", "皮肤纹理细腻自然，保留细微起伏，不过度磨皮"],
+    ["dry", "轻微干燥肤质", "面颊皮肤略显干燥，保留细微干燥纹理"],
+    ["oily", "局部轻微油光", "额头与鼻翼有轻微自然油光，面颊不过度反光"],
+    ["acne-marks", "少量浅痘印", "面颊有少量浅痘印，分布自然且不过度夸张"],
+  ].map(([id, title, text]) => ({ ...term(`skin-texture.${id}`, title, `${text}。`, "skin", "面容"), slotValue: text })),
   ...MODERN_MALE_TERMS,
   MODERN_MALE_TEMPLATE,
   ...CLASSICAL_CHARACTER_TERMS,

@@ -3,6 +3,27 @@ import { CHARACTER_DICTIONARY_PRESETS, dictionaryPresetFields, renderDictionaryP
 import { CLASSICAL_FOOTWEAR_STYLES } from "@/lib/classicalFootwearDictionary";
 import { dictionarySlotCategory, localDictionaryCategories } from "@/lib/characterDictionaryCategories";
 
+it("keeps optional face texture precise and reuses skin choices", () => {
+  const face = CHARACTER_DICTIONARY_PRESETS.find((entry) => entry.id === "dictionary.panel.face")!;
+  const skin = CHARACTER_DICTIONARY_PRESETS.find((entry) => entry.id === "dictionary.panel.skin")!;
+  const fields = dictionaryPresetFields(face);
+  const options = (key: string) => fields.find((field) => field.key === key)!.options;
+  expect(renderDictionaryPreset(face)).toBe("");
+  expect(fields.every((field) => field.value === "")).toBe(true);
+  for (const key of ["肤色", "肤质"]) expect(options(key)).toEqual(dictionaryPresetFields(skin).find((field) => field.key === key)!.options);
+  expect(options("肤质")).toContain("鼻颊少量雀斑");
+  expect(options("肤质")).toContain("面颊和鼻翼保留细微毛孔纹理");
+  expect(options("眼周纹理")).toContain("仅微笑时出现眼角纹");
+  expect(options("眼周纹理")).not.toContain("眼周与嘴角有自然细纹，肤色分布不完全均匀");
+  expect(renderDictionaryPreset(face, { "肤色": "暖小麦肤色" })).toBe("面容：肤色为暖小麦肤色。");
+  expect(renderDictionaryPreset(face, { "眼周纹理": "仅微笑时出现眼角纹", "肤质": "轻微干燥肤质" }))
+    .toBe("面容：眼周细节为眼角细纹仅在微笑时出现，表情放松时不明显。肤质为面颊皮肤略显干燥，保留细微干燥纹理。");
+  expect(renderDictionaryPreset(face, { "眼周纹理": "静态鱼尾纹" })).toContain("表情放松时，外眼角仍可见放射状鱼尾纹");
+  expect(renderDictionaryPreset(face, { "眼周纹理": "[眼周纹理]" })).toBe("面容：眼周细节为[眼周纹理]。");
+  for (const label of ["眼周纹理", "眼角纹", "鱼尾纹", "下眼睑纹", "眼袋"]) expect(dictionarySlotCategory(label)).toBe("eye-detail");
+  expect(localDictionaryCategories("character.facial_mark.classical-crows-feet")).toContain("eye-detail");
+});
+
 it("routes clothing shapes, materials, ornament and condition to distinct fields", () => {
   const category = (label: string) => dictionarySlotCategory(label);
   expect(category("裙装款式")).toBe("bottoms");

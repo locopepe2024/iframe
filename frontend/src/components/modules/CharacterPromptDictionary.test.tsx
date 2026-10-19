@@ -116,10 +116,11 @@ it("keeps body build and posture separate and supports going back through catego
   expect(replaceWithText).not.toHaveBeenCalled();
 });
 
-it("finds existing eye-area detail through the eye-wrinkle category alias", () => {
+it("finds dedicated eye-area detail through the eye-wrinkle category alias", () => {
   getPlatformReferenceLibrary.mockResolvedValueOnce({ resources: [] });
   setup("眼纹");
-  expect(screen.getByRole("option", { name: /眼周与嘴角有自然细纹/ })).toBeInTheDocument();
+  expect(screen.getByRole("option", { name: /词条 · 静态眼角细纹/ })).toBeInTheDocument();
+  expect(screen.queryByRole("option", { name: /眼周与嘴角有自然细纹/ })).not.toBeInTheDocument();
   expect(screen.getByRole("option", { name: /浏览 面部 › 眼周细节/ })).toBeInTheDocument();
 });
 
@@ -319,6 +320,31 @@ it("opens skin configuration from slash and inserts the selected tone without as
   expect(screen.getByRole("textbox", { name: "将插入的完整文字" })).toHaveValue("皮肤：肤色为暖小麦肤色。");
   fireEvent.click(screen.getByRole("button", { name: "应用配置" }));
   expect(replaceWithText).toHaveBeenCalledWith("皮肤：肤色为暖小麦肤色。");
+});
+
+it("previews and applies optional face eye texture and skin details", () => {
+  getPlatformReferenceLibrary.mockResolvedValueOnce({ resources: [] });
+  const { replaceWithText } = setup("面容");
+  fireEvent.click(screen.getByRole("option", { name: /配置面板 · 面容选择面板/ }));
+  for (const label of ["眼周纹理", "肤色", "肤质"]) expect(screen.getByRole("combobox", { name: label })).toHaveValue("");
+  expect(screen.getByRole("textbox", { name: "将插入的完整文字" })).toHaveValue("");
+  fireEvent.change(screen.getByRole("combobox", { name: "眼周纹理" }), { target: { value: "仅微笑时出现眼角纹" } });
+  fireEvent.change(screen.getByRole("combobox", { name: "肤色" }), { target: { value: "暖小麦肤色" } });
+  fireEvent.change(screen.getByRole("combobox", { name: "肤质" }), { target: { value: "细腻自然肤质" } });
+  const expected = "面容：眼周细节为眼角细纹仅在微笑时出现，表情放松时不明显。肤色为暖小麦肤色。肤质为皮肤纹理细腻自然，保留细微起伏，不过度磨皮。";
+  expect(screen.getByRole("textbox", { name: "将插入的完整文字" })).toHaveValue(expected);
+  expect(replaceWithText).not.toHaveBeenCalled();
+  fireEvent.click(screen.getByRole("button", { name: "应用配置" }));
+  expect(replaceWithText).toHaveBeenCalledWith(expected);
+});
+
+it("fills eye texture slots with descriptions preserving smile-only constraints", () => {
+  getPlatformReferenceLibrary.mockResolvedValueOnce({ resources: [] });
+  const { replaceWithText } = setup("", "眼周纹理");
+  expect(screen.queryByRole("option", { name: /词条 · 暖小麦肤色|配置面板/ })).not.toBeInTheDocument();
+  fireEvent.click(screen.getByRole("option", { name: /词条 · 仅微笑时出现眼角纹/ }));
+  fireEvent.click(screen.getByRole("button", { name: "填写当前槽位" }));
+  expect(replaceWithText).toHaveBeenCalledWith("眼角细纹仅在微笑时出现，表情放松时不明显");
 });
 
 it("fills skin tone slots with tone vocabulary only", () => {
