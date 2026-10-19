@@ -11,11 +11,13 @@ import { FrameManifestImporter } from "./reference/FrameManifestImporter";
 import { ActionProposalPanel } from "./action/ActionProposalPanel";
 import { MotionTrackImporter } from "./reference/MotionTrackImporter";
 import { MotionTrackReviewPanel } from "./reference/MotionTrackReviewPanel";
+import { BlockingReferencePanel } from "./reference/BlockingReferencePanel";
 import { useWorkbenchStore } from "./state/workbench-store";
 
-type TemporalTool = "depth" | "dialogue" | "focus" | "interaction" | "actor-path" | "path-event" | "frame-reference" | "motion-track" | "motion-review" | "action";
+type TemporalTool = "blocking-reference" | "depth" | "dialogue" | "focus" | "interaction" | "actor-path" | "path-event" | "frame-reference" | "motion-track" | "motion-review" | "action";
 
 const TEMPORAL_TOOLS: ReadonlyArray<{ id: TemporalTool; label: string }> = [
+  { id: "blocking-reference", label: "占位图" },
   { id: "depth", label: "深度" },
   { id: "dialogue", label: "对白" },
   { id: "focus", label: "焦点" },
@@ -29,6 +31,7 @@ const TEMPORAL_TOOLS: ReadonlyArray<{ id: TemporalTool; label: string }> = [
 ];
 
 function renderTemporalTool(tool: TemporalTool) {
+  if (tool === "blocking-reference") return <BlockingReferencePanel />;
   if (tool === "depth") return <DepthPanel />;
   if (tool === "dialogue") return <DialogueTimelinePanel />;
   if (tool === "focus") return <FocusTimelinePanel />;
