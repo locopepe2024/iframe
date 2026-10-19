@@ -84,14 +84,14 @@ def setup():
     return arm, root
 
 
-report = {'schema': 'recreation2-xyz-scale.v1', 'blender': bpy.app.version_string,
+report = {'schema': 'recreation2-xyz-scale-rotation-basis.v1', 'blender': bpy.app.version_string,
           'sha256': {key: digest(getattr(args, key)) for key in ('track', 'rig', 'anchors', 'baseline', 'patches')},
           'builder_sha256': digest(builder), 'renderer_sha256': digest(renderer.__file__),
           'probe_sha256': digest(__file__),
           'units': '640x360 image pixels; Blender world units, metric scale unverified',
           'limits': ['No recovered floor or physical contact truth', 'No source depth accuracy test',
-                     'Root and original mixed rotation bases frozen; pelvis/IK disabled'], 'cases': {}}
-for label, factor in [('raw', 1.0), ('image_y_width_units', 792 / 1394)]:
+                     'Root/yaw and pelvis/IK frozen; each case declares mixed or own bone basis'], 'cases': {}}
+for label, factor, own_basis in [('raw_mixed', 1.0, False), ('scaled_mixed', 792 / 1394, False), ('raw_own', 1.0, True), ('scaled_own', 792 / 1394, True)]:
     arm, root = setup()
     solved, solved_pixels = {}, {}
     previous_yaw = previous_axis = first_yaw = None
@@ -117,7 +117,7 @@ for label, factor in [('raw', 1.0), ('image_y_width_units', 792 / 1394)]:
             else:
                 target = solver['vec'](joints, *solver['PAIRS'][name])
             delta = solver['wd'](arm, bone).rotation_difference(target)
-            reference = bone if name.startswith(('upper_arm_', 'upper_leg_')) else bone.parent
+            reference = bone if (own_basis or name.startswith(('upper_arm_', 'upper_leg_'))) else bone.parent
             basis = (arm.matrix_world @ reference.matrix).to_quaternion() if reference else arm.matrix_world.to_quaternion()
             bone.rotation_quaternion = basis.inverted() @ delta @ basis
             update()
@@ -133,7 +133,7 @@ for label, factor in [('raw', 1.0), ('image_y_width_units', 792 / 1394)]:
         solved[src['source_frame']] = item
         solved_pixels[src['source_frame']] = pixels()
     frames = [dict(solved[a['source_frame']], frame=a['new_bundle_frame']) for a in anchors]
-    if label == 'raw':
+    if label == 'raw_mixed':
         for old, new in zip(baseline['frames'], frames, strict=True):
             for key in ('frame', 'rootPosition', 'rootYaw', 'pelvisQuaternion', 'localQuaternions'):
                 assert old[key] == new[key], ('baseline mismatch', key, old['frame'])
@@ -143,7 +143,7 @@ for label, factor in [('raw', 1.0), ('image_y_width_units', 792 / 1394)]:
         assert all((f['frame'], f['rootPosition'], f['rootYaw']) ==
                    (r['frame'], r['rootPosition'], r['rootYaw']) for f, r in zip(frames, raw_frames, strict=True))
         report['candidate_root_and_keys_exact_match'] = True
-    bundle = dict(baseline, frames=frames, request_id='recreation2-xyz-' + label,
+    bundle = dict(baseline, frames=frames, request_id='recreation2-xyz-basis-' + label,
                   review_status='diagnostic_only', diagnostic_direction_y_scale=factor)
     (out / (label + '.bundle.json')).write_text(json.dumps(bundle, indent=2) + '\n')
     arm, root = setup()
@@ -172,7 +172,7 @@ for label, factor in [('raw', 1.0), ('image_y_width_units', 792 / 1394)]:
         observations.append(dict(anchor, mean_px=sum(errors.values()) / 12, per_joint_px=errors))
     assert max(roundtrip) < .01, (label, max(roundtrip))
     assert len(observations) == 28
-    summary = {'direction_y_scale': factor,
+    summary = {'direction_y_scale': factor, 'rotation_basis': 'own_bone' if own_basis else 'mixed_parent_and_own',
                'all_joint_error_px': stats([e for row in observations for e in row['per_joint_px'].values()]),
                'ankle_error_px': stats([e for row in observations for k, e in row['per_joint_px'].items() if k.endswith('_ankle')]),
                'selected_source_mean_px': {r['source_frame']: r['mean_px'] for r in observations if r['source_frame'] in (1, 17, 23, 29, 41, 55)},
@@ -188,5 +188,6 @@ assert report['sha256']['track'] == digest(args.track)
     'schema': report['schema'], 'sha256': report['sha256'], 'blender': report['blender'],
     'baseline_channels_exact_match': report['baseline_channels_exact_match'],
     'candidate_root_and_keys_exact_match': report['candidate_root_and_keys_exact_match'],
+    'rotation_basis_cases': list(report['cases']),
     'cases': {k: v['summary'] for k, v in report['cases'].items()}}, indent=2) + '\n')
 print('XYZ_SCALE_PROBE_COMPLETE')
