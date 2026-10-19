@@ -4,11 +4,12 @@ import { useEffect, useId, useState, type MutableRefObject } from "react";
 import { API_URL, api, authenticatedFetch, type PlatformReferenceResource } from "@/lib/api";
 import { searchCharacterQuickPresets } from "@/lib/characterQuickActions";
 import { editablePlatformPrompt, isUsablePlatformPrompt } from "@/lib/platformPrompts";
+import { CHARACTER_DICTIONARY_GROUPS, dictionaryCategoryPath, dictionaryCategorySearch, localDictionaryCategories, platformDictionaryCategories } from "@/lib/characterDictionaryCategories";
 import type { PromptSlashSuggestion } from "./playground/ReferencePromptEditor";
 
 type Entry = {
   id: string; title: string; text: string; type: "词条" | "组合方案" | "Prompt 案例" | "Skill";
-  domain: string; source: string; search: string; resource?: PlatformReferenceResource;
+  categories: string[]; domain: string; source: string; search: string; resource?: PlatformReferenceResource;
 };
 const DOMAINS: Record<string, string> = {
   "character.identity": "身份", "character.look": "造型", "character.performance": "表演", "world.style": "风格",
@@ -29,7 +30,9 @@ export default function CharacterPromptDictionary({ suggestion, onClose, onApply
   const [error, setError] = useState(false);
   const [refresh, setRefresh] = useState(0);
   const [type, setType] = useState("全部");
-  const [domain, setDomain] = useState("全部");
+  const [section, setSection] = useState<"词典" | "Skill">("词典");
+  const [category, setCategory] = useState<string | null>(null);
+  const [browsing, setBrowsing] = useState(!suggestion.query.trim());
   const [selected, setSelected] = useState<Entry | null>(null);
   const [previewUrl, setPreviewUrl] = useState("");
   const [active, setActive] = useState(0);
@@ -62,13 +65,13 @@ export default function CharacterPromptDictionary({ suggestion, onClose, onApply
     && resource.payload?.structured_prompt?.content?.trim());
   const entries: Entry[] = searchCharacterQuickPresets("").map((preset) => ({
     id: preset.id, title: preset.label, text: preset.target === "route" ? preset.label : preset.value,
-    type: "词条", domain: DOMAINS[preset.semanticDomain], source: `${preset.source} · v${preset.revision}`, search: preset.searchText,
+    type: "词条", categories: localDictionaryCategories(preset.id), domain: DOMAINS[preset.semanticDomain], source: `${preset.source} · v${preset.revision}`, search: preset.searchText,
   }));
   for (const resource of resources) {
     if (resource.status !== "active") continue;
     const source = `平台 · ${resource.platform_resource_id} · r${resource.revision} · ${resource.provenance.license}`;
     const common = { id: resource.platform_resource_id, title: resource.title, source, resource,
-      domain: DOMAINS[resource.dictionary?.semantic_domain || ""] || "案例",
+      categories: platformDictionaryCategories(resource.category_path), domain: DOMAINS[resource.dictionary?.semantic_domain || ""] || "案例",
       search: [resource.title, resource.summary, resource.category_path, ...(resource.tags || [])].join(" ") };
     if (terms.includes(resource)) entries.push({ ...common, type: "词条", text: resource.payload!.structured_prompt!.content! });
     else if (isUsablePlatformPrompt(resource, "character/")) entries.push({ ...common, type: "Prompt 案例", text: editablePlatformPrompt(resource) });
@@ -78,15 +81,39 @@ export default function CharacterPromptDictionary({ suggestion, onClose, onApply
         && term.revision === member.revision && term.dictionary?.semantic_domain === resource.dictionary?.semantic_domain));
       if (members.length >= 2 && members.length <= 12 && resolved.every(Boolean)
         && new Set(members.map((member) => `${member.platform_resource_id}@${member.revision}`)).size === members.length) {
-        entries.push({ ...common, type: "组合方案", text: resolved.map((term) => term!.payload!.structured_prompt!.content).join("；") });
+        entries.push({ ...common, categories: Array.from(new Set(resolved.flatMap((term) => platformDictionaryCategories(term!.category_path)))), type: "组合方案", text: resolved.map((term) => term!.payload!.structured_prompt!.content).join("；") });
       }
     }
   }
-  if (onSkill) entries.unshift({ id: "character-visual-design", title: "生成角色视觉设计草稿", type: "Skill", domain: "Skill",
+  if (onSkill) entries.unshift({ id: "character-visual-design", title: "生成角色视觉设计草稿", type: "Skill", categories: [], domain: "Skill",
     text: "角色身份与造型双 Skill 流程。输入：角色描述、侧栏身份与造型草稿及已选设计参考。下一步审核实际模型输入，确认后才执行。", source: "当前角色台已接入 Skill", search: "skill 技能 角色设计 身份 外观 草稿" });
-  const visible = entries.filter((entry) => (!needle || `${entry.title} ${entry.search} ${entry.text}`.toLocaleLowerCase().includes(needle))
-    && (type === "全部" || entry.type === type) && (domain === "全部" || entry.domain === domain));
-  useEffect(() => { setActive(0); setSelected(null); }, [needle, type, domain]);
+  const group = CHARACTER_DICTIONARY_GROUPS.find((item) => item.id === category);
+  const inCategory = (entry: Entry, key: string) => entry.categories.includes(key)
+    || CHARACTER_DICTIONARY_GROUPS.find((item) => item.id === key)?.children.some(([child]) => entry.categories.includes(child));
+  const count = (key: string) => entries.filter((entry) => entry.type === "词条" && inCategory(entry, key)).length;
+  const showCategories = section === "词典" && browsing && (type === "全部" || type === "词条") && (!category || !!group);
+  const navigation = !showCategories ? [] : group ? group.children.map(([key, label]) => ({ id: key, label, detail: `${count(key)} 个词条` }))
+    : CHARACTER_DICTIONARY_GROUPS.filter((item) => item.id !== "performance" || count(item.id) > 0)
+      .map((item) => ({ id: item.id, label: item.label, detail: item.children.map(([, label]) => label).join("、") }));
+  const visible = showCategories ? [] : entries.filter((entry) =>
+    (section === "Skill" ? entry.type === "Skill" : entry.type !== "Skill")
+    && (browsing || !needle || `${entry.title} ${entry.search} ${entry.text} ${entry.categories.map(dictionaryCategorySearch).join(" ")}`.toLocaleLowerCase().includes(needle))
+    && (section === "Skill" || type === "全部" || entry.type === type)
+    && (!browsing || !category || inCategory(entry, category)));
+  const related = section === "词典" && !browsing ? Array.from(new Set(visible.flatMap((entry) => entry.categories))) : [];
+  const enterCategory = (key: string) => { setCategory(key); setBrowsing(true); setType("全部"); setActive(0); };
+  const options = [
+    ...navigation.map((item) => ({ id: `category-${item.id}`, label: item.label, detail: item.detail, choose: () => enterCategory(item.id) })),
+    ...visible.map((entry) => ({ id: entry.id, label: `${entry.type} · ${entry.title}`, detail: `${entry.domain} · ${entry.source}`, choose: () => setSelected(entry) })),
+    ...related.map((key) => ({ id: `browse-${key}`, label: `浏览 ${dictionaryCategoryPath(key)}`, detail: `${count(key)} 个词条，可比较其他选项`, choose: () => enterCategory(key) })),
+  ];
+  useEffect(() => { setActive(0); setSelected(null); setCategory(null); setBrowsing(!needle); }, [needle]);
+  useEffect(() => { setActive(0); setSelected(null); }, [type, section, category, browsing]);
+  const back = () => {
+    if (selected) setSelected(null);
+    else if (category) { setCategory(group ? null : CHARACTER_DICTIONARY_GROUPS.find((item) => item.children.some(([key]) => key === category))?.id || null); }
+    else onClose();
+  };
   const apply = () => {
     if (!selected) return;
     if (selected.type === "Skill") {
@@ -97,11 +124,11 @@ export default function CharacterPromptDictionary({ suggestion, onClose, onApply
   useEffect(() => {
     keyHandler.current = (event) => {
       if (event.isComposing) return false;
-      if (event.key === "Escape") { if (selected) setSelected(null); else onClose(); return true; }
+      if (event.key === "Escape") { back(); return true; }
       if (event.key === "ArrowDown" || event.key === "ArrowUp") {
-        setActive((index) => visible.length ? (index + (event.key === "ArrowDown" ? 1 : visible.length - 1)) % visible.length : 0); return true;
+        setActive((index) => options.length ? (index + (event.key === "ArrowDown" ? 1 : options.length - 1)) % options.length : 0); return true;
       }
-      if (event.key === "Enter") { if (selected) apply(); else if (visible.length) setSelected(visible[Math.min(active, visible.length - 1)]); return true; }
+      if (event.key === "Enter") { if (selected) apply(); else if (options.length) options[Math.min(active, options.length - 1)].choose(); return true; }
       return false;
     };
     return () => { keyHandler.current = null; };
@@ -123,14 +150,29 @@ export default function CharacterPromptDictionary({ suggestion, onClose, onApply
       {selected.type === "Skill" && !canRunSkill && <p className="text-xs text-text-muted">请先填写角色描述并选择设计模型，或等待当前设计完成。</p>}
       <button type="button" onClick={() => setSelected(null)} className={`${buttonStyle} ml-2`}>返回结果</button>
     </> : <>
-      <div role="group" aria-label="词典内容类型" className="mt-2 flex flex-wrap gap-1">{["全部", "词条", "组合方案", "Prompt 案例", "Skill"].map((label) => <button key={label} type="button" aria-pressed={type === label} onClick={() => setType(label)} className={`${buttonStyle} ${type === label ? "bg-primary/15 text-foreground" : "text-text-muted"}`}>{label}</button>)}</div>
-      <div role="group" aria-label="词典语义层" className="flex flex-wrap gap-1">{["全部", ...Object.values(DOMAINS)].map((label) => <button key={label} type="button" aria-pressed={domain === label} onClick={() => setDomain(label)} className={`${buttonStyle} ${domain === label ? "bg-primary/15 text-foreground" : "text-text-muted"}`}>{label}</button>)}</div>
+      <div role="tablist" aria-label="检索范围" className="mt-2 flex gap-2">{(["词典", "Skill"] as const).map((label) => <button key={label} type="button" role="tab" aria-selected={section === label} tabIndex={section === label ? 0 : -1}
+        onClick={() => { setSection(label); setCategory(null); }}
+        onKeyDown={(event) => {
+          if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
+          event.preventDefault();
+          const next = event.key === "Home" ? "词典" : event.key === "End" ? "Skill" : section === "词典" ? "Skill" : "词典";
+          setSection(next); setCategory(null);
+          const tabs = event.currentTarget.parentElement?.querySelectorAll<HTMLButtonElement>('[role="tab"]');
+          tabs?.[next === "词典" ? 0 : 1]?.focus();
+        }}
+        className={`${buttonStyle} ${section === label ? "bg-primary/15 text-foreground" : "text-text-muted"}`}>{label}</button>)}</div>
+      {section === "词典" && <div role="group" aria-label="词典内容类型" className="flex flex-wrap gap-1">{["全部", "词条", "组合方案", "Prompt 案例"].map((label) => <button key={label} type="button" aria-pressed={type === label} onClick={() => { setType(label); setCategory(null); }} className={`${buttonStyle} ${type === label ? "bg-primary/15 text-foreground" : "text-text-muted"}`}>{label}</button>)}</div>}
+      {section === "词典" && <div className="flex flex-wrap items-center gap-1 text-xs text-text-muted">
+        {category ? <><button type="button" onClick={back} className={buttonStyle}>返回上一级</button><span>{dictionaryCategoryPath(category)}</span></>
+          : <p className="py-2">{browsing ? "先选择分类，再比较候选词条。也可继续输入 /关键词直接搜索。" : "搜索结果 · 选择所属分类可比较其他选项"}</p>}
+        {browsing && needle && <button type="button" onClick={() => { setCategory(null); setBrowsing(false); }} className={buttonStyle}>返回搜索结果</button>}
+      </div>}
       {loading && <p role="status" className="text-xs text-text-muted">正在读取平台词典…</p>}
       {error && <p role="status" className="text-xs text-text-muted">平台词典读取失败，本地词条仍可使用。<button type="button" onClick={() => setRefresh((value) => value + 1)} className={buttonStyle}>重试</button></p>}
-      {!loading && visible.length === 0 && <p role="status" className="py-2 text-xs text-text-muted">{type === "Prompt 案例" && !needle ? "平台尚无可用的已发布角色 Prompt 案例。可在创作台提交角色素材，经审核发布后在此选择。" : "没有匹配项，请更换关键词或分类。"}</p>}
-      <div role="listbox" aria-label="词典和 Skill 结果" aria-activedescendant={visible.length ? `${id}-${Math.min(active, visible.length - 1)}` : undefined}>
-        {visible.map((entry, index) => <button key={entry.id} id={`${id}-${index}`} type="button" role="option" aria-selected={active === index} onClick={() => setSelected(entry)} className={`${buttonStyle} block w-full py-2 text-left ${active === index ? "bg-primary/10" : ""}`}>
-          <span className="block text-foreground">{entry.type} · {entry.title}</span><span className="block text-text-muted">{entry.domain} · {entry.source}</span>
+      {!loading && options.length === 0 && <p role="status" className="py-2 text-xs text-text-muted">{type === "Prompt 案例" && !needle ? "平台尚无可用的已发布角色 Prompt 案例。可在创作台提交角色素材，经审核发布后在此选择。" : "没有匹配项，请更换关键词或分类。"}</p>}
+      <div role="listbox" aria-label="词典和 Skill 结果" aria-activedescendant={options.length ? `${id}-${Math.min(active, options.length - 1)}` : undefined}>
+        {options.map((option, index) => <button key={option.id} id={`${id}-${index}`} type="button" role="option" aria-selected={active === index} onClick={option.choose} className={`${buttonStyle} block w-full py-2 text-left ${active === index ? "bg-primary/10" : ""}`}>
+          <span className="block text-foreground">{option.label}</span><span className="block text-text-muted">{option.detail}</span>
         </button>)}
       </div>
       <button type="button" onClick={() => setRefresh((value) => value + 1)} className={buttonStyle}>刷新目录</button>

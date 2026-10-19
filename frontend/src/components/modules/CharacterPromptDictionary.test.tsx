@@ -15,6 +15,69 @@ function setup(query: string) {
   return { replaceWithText, onApply, onClose, keyHandler };
 }
 
+it("starts with categories and lets creators compare face shapes without changing the Prompt", async () => {
+  getPlatformReferenceLibrary.mockResolvedValueOnce({ resources: [] });
+  const { replaceWithText } = setup("");
+  expect(screen.queryByRole("option", { name: /词条 · 圆脸/ })).not.toBeInTheDocument();
+  fireEvent.click(screen.getByRole("option", { name: /^面部/ }));
+  fireEvent.click(screen.getByRole("option", { name: /^脸型/ }));
+  expect(screen.getByRole("option", { name: /词条 · 圆脸/ })).toBeInTheDocument();
+  expect(screen.getByRole("option", { name: /词条 · 方脸/ })).toBeInTheDocument();
+  expect(screen.queryByRole("option", { name: /杏眼/ })).not.toBeInTheDocument();
+  expect(replaceWithText).not.toHaveBeenCalled();
+});
+
+it("offers the containing category for an exact search so other options can be compared", async () => {
+  getPlatformReferenceLibrary.mockResolvedValueOnce({ resources: [] });
+  const { replaceWithText } = setup("圆脸");
+  expect(screen.getByRole("option", { name: /词条 · 圆脸/ })).toBeInTheDocument();
+  fireEvent.click(screen.getByRole("option", { name: /浏览 面部 › 脸型/ }));
+  expect(screen.getByRole("option", { name: /词条 · 方脸/ })).toBeInTheDocument();
+  expect(replaceWithText).not.toHaveBeenCalled();
+  fireEvent.click(screen.getByRole("option", { name: /词条 · 方脸/ }));
+  fireEvent.click(screen.getByRole("button", { name: "插入到当前 Prompt" }));
+  expect(replaceWithText).toHaveBeenCalledWith("方脸");
+});
+
+it("keeps body build and posture separate and supports going back through categories with Escape", () => {
+  getPlatformReferenceLibrary.mockResolvedValueOnce({ resources: [] });
+  const { keyHandler, replaceWithText, onClose } = setup("");
+  act(() => { keyHandler.current!(new KeyboardEvent("keydown", { key: "ArrowDown" })); });
+  act(() => { keyHandler.current!(new KeyboardEvent("keydown", { key: "Enter" })); });
+  fireEvent.click(screen.getByRole("option", { name: /^体型与比例/ }));
+  expect(screen.getByRole("option", { name: /匀称体型/ })).toBeInTheDocument();
+  expect(screen.queryByRole("option", { name: /站姿略松弛/ })).not.toBeInTheDocument();
+  act(() => { keyHandler.current!(new KeyboardEvent("keydown", { key: "Escape" })); });
+  fireEvent.click(screen.getByRole("option", { name: /^体态/ }));
+  expect(screen.getByRole("option", { name: /站姿略松弛/ })).toBeInTheDocument();
+  act(() => { keyHandler.current!(new KeyboardEvent("keydown", { key: "Escape" })); });
+  act(() => { keyHandler.current!(new KeyboardEvent("keydown", { key: "Escape" })); });
+  expect(screen.getByRole("option", { name: /^面部/ })).toBeInTheDocument();
+  expect(onClose).not.toHaveBeenCalled();
+  expect(replaceWithText).not.toHaveBeenCalled();
+});
+
+it("finds existing eye-area detail through the eye-wrinkle category alias", () => {
+  getPlatformReferenceLibrary.mockResolvedValueOnce({ resources: [] });
+  setup("眼纹");
+  expect(screen.getByRole("option", { name: /眼周与嘴角有自然细纹/ })).toBeInTheDocument();
+  expect(screen.getByRole("option", { name: /浏览 面部 › 眼周细节/ })).toBeInTheDocument();
+});
+
+it("switches between dictionary and Skill using the keyboard without mixing their results", () => {
+  getPlatformReferenceLibrary.mockResolvedValueOnce({ resources: [] });
+  setup("");
+  const dictionary = screen.getByRole("tab", { name: "词典" });
+  fireEvent.keyDown(dictionary, { key: "ArrowRight" });
+  const skill = screen.getByRole("tab", { name: "Skill" });
+  expect(skill).toHaveAttribute("aria-selected", "true");
+  expect(document.activeElement).toBe(skill);
+  expect(screen.queryByRole("option", { name: /^面部/ })).not.toBeInTheDocument();
+  fireEvent.keyDown(skill, { key: "ArrowLeft" });
+  expect(dictionary).toHaveAttribute("aria-selected", "true");
+  expect(screen.getByRole("option", { name: /^面部/ })).toBeInTheDocument();
+});
+
 it("previews fixed-version performance patterns and excludes unavailable members and unpublished terms", async () => {
   const term = (id: string, content: string, status = "active") => ({
     platform_resource_id: id, revision: 1, kind: "prompt_preset", title: id, status,

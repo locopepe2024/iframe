@@ -267,9 +267,10 @@ it("previews an active platform Prompt before inserting editable text without se
         onClose={vi.fn()} onUpdateDescription={vi.fn()} onGenerate={onGenerate} generatingTypes={[]} />);
 
     fireEvent.click(screen.getByRole("button", { name: "/ 词典和 Skill" }));
+    fireEvent.click(screen.getByRole("button", { name: "Prompt 案例" }));
     expect(await screen.findByRole("option", { name: /古典行旅设定/ })).toBeInTheDocument();
     expect(screen.queryByRole("option", { name: /未审核提示词/ })).not.toBeInTheDocument();
-    expect(screen.getByRole("option", { name: /窄长脸词条/ })).toBeInTheDocument();
+    expect(screen.queryByRole("option", { name: /窄长脸词条/ })).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("option", { name: /古典行旅设定/ }));
     expect(screen.getByRole("textbox", { name: "将插入的完整文字" })).toHaveValue("古典行旅人物，正面全身，灰蓝长袍");
     const editor = document.querySelector("[contenteditable]") as HTMLElement & { editor: import("@tiptap/core").Editor };
@@ -309,6 +310,7 @@ it("opens Skill input review from the Prompt slash panel without executing it", 
     render(<CharacterWorkbench asset={{ id: "character-1", name: "苏砚", description: "少年剑客" }}
         onClose={vi.fn()} onUpdateDescription={vi.fn()} onGenerate={vi.fn()} generatingTypes={[]} />);
     fireEvent.click(screen.getByRole("button", { name: "/ 词典和 Skill" }));
+    fireEvent.click(screen.getByRole("tab", { name: "Skill" }));
     fireEvent.click(await screen.findByRole("option", { name: /Skill · 生成角色视觉设计草稿/ }));
     expect(apiMocks.agentRequest.mock.calls.some(([path]) => path === "/character-design/draft/preview")).toBe(false);
     const button = screen.getByRole("button", { name: "审核 Skill 输入" });
