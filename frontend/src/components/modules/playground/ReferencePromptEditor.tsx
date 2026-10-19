@@ -28,6 +28,7 @@ export type ReferenceCandidate = {
 export type ReferenceSuggestion = {
   query: string;
   choose: (candidate: string | ReferenceCandidate) => void;
+  replaceWithText: (text: string) => string;
 };
 
 function candidateAttrs(candidate: string | ReferenceCandidate): Record<string, string> {
@@ -54,6 +55,9 @@ function referenceSuggestion(editor: Editor): ReferenceSuggestion | null {
     editor.chain().focus().insertContentAt({ from, to }, [
       { type: 'referenceToken', attrs: candidateAttrs(candidate) }, { type: 'text', text: ' ' },
     ]).run();
+  }, replaceWithText: (text) => {
+    editor.chain().focus().insertContentAt({ from, to }, text).run();
+    return editor.getText({ blockSeparator: '\n' });
   } };
 }
 

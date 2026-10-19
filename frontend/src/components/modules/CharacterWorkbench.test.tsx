@@ -10,6 +10,7 @@ import {
 
 const apiMocks = vi.hoisted(() => ({
     getAssetReferenceIndex: vi.fn(),
+    getPlatformReferenceLibrary: vi.fn().mockResolvedValue({ scope: "platform_shared", schema_version: 1, catalog_revision: "test", resources: [] }),
     getCharacterAssetPack: vi.fn().mockResolvedValue({
         character_id: "character", source_scope: "project", asset_revision: 1, pack: null,
     }),
@@ -176,6 +177,58 @@ it("opens the existing two-skill review from slash without calling the model", a
     await waitFor(() => expect(apiMocks.agentRequest).toHaveBeenCalledWith("/character-design/draft/preview", "POST", expect.anything()));
     expect(apiMocks.agentRequest.mock.calls.some(([path]) => path === "/character-design/draft")).toBe(false);
     expect(await screen.findByRole("button", { name: "确认输入并生成角色草稿" })).toBeInTheDocument();
+});
+
+it("previews an active platform Prompt before inserting editable text without selecting an image", async () => {
+    apiMocks.getAssetReferenceIndex.mockResolvedValueOnce({ assets: [] } as any);
+    apiMocks.previewAssetImageSubmission.mockClear();
+    apiMocks.getPlatformReferenceLibrary.mockResolvedValueOnce({ scope: "platform_shared", schema_version: 1, catalog_revision: "test", resources: [
+        { platform_resource_id: "platform-prompt-1", revision: 2, kind: "prompt_preset", category_path: "character/reference",
+            title: "古典行旅设定", summary: "古典角色", tags: ["古装"], status: "active",
+            payload: { prompt_used: "古典行旅人物，正面全身，浅灰背景" },
+            provenance: { license: "MIT", content_sha256: "abc" } },
+        { platform_resource_id: "candidate-1", revision: 1, kind: "prompt_preset", category_path: "character/reference",
+            title: "未审核提示词", status: "candidate", payload: { prompt_used: "不应可用" },
+            provenance: { license: "MIT", content_sha256: "def" } },
+    ] });
+    const onGenerate = vi.fn();
+    render(<CharacterWorkbench asset={{ id: "character-1", name: "苏砚", description: "少年剑客" }}
+        onClose={vi.fn()} onUpdateDescription={vi.fn()} onGenerate={onGenerate} generatingTypes={[]} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "@ 平台 Prompt" }));
+    expect(await screen.findByRole("button", { name: /古典行旅设定/ })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /未审核提示词/ })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /古典行旅设定/ }));
+    expect(screen.getByRole("textbox", { name: "将插入的完整 Prompt" })).toHaveValue("古典行旅人物，正面全身，浅灰背景");
+    const editor = document.querySelector("[contenteditable]") as HTMLElement & { editor: import("@tiptap/core").Editor };
+    expect(editor.editor.getText()).not.toContain("古典行旅人物");
+    fireEvent.click(screen.getByRole("button", { name: "替换当前 Prompt" }));
+    await waitFor(() => expect(editor.editor.getText()).toContain("古典行旅人物，正面全身，浅灰背景"));
+    expect(screen.getByLabelText("平台 Prompt 来源")).toHaveTextContent("古典行旅设定 · r2");
+    expect(onGenerate).not.toHaveBeenCalled();
+    expect(apiMocks.previewAssetImageSubmission).not.toHaveBeenCalled();
+});
+
+it("resolves @ platform Prompt as reviewed editable text, not as an image reference", async () => {
+    apiMocks.getAssetReferenceIndex.mockResolvedValue({ assets: [] } as any);
+    apiMocks.getPlatformReferenceLibrary.mockResolvedValueOnce({ scope: "platform_shared", schema_version: 1, catalog_revision: "test", resources: [
+        { platform_resource_id: "platform-prompt-2", revision: 3, kind: "prompt_preset", category_path: "character/reference",
+            title: "古典行旅设定", status: "active", payload: { prompt_used: "正面全身，灰蓝行旅衣" },
+            provenance: { license: "MIT", content_sha256: "xyz" } },
+    ] });
+    const onGenerate = vi.fn();
+    render(<CharacterWorkbench asset={{ id: "character-1", name: "苏砚", description: "少年剑客" }}
+        onClose={vi.fn()} onUpdateDescription={vi.fn()} onGenerate={onGenerate} generatingTypes={[]} />);
+    const editor = document.querySelector("[contenteditable]") as HTMLElement & { editor: import("@tiptap/core").Editor };
+    act(() => editor.editor.commands.insertContent("@古典"));
+    fireEvent.click(await screen.findByRole("option", { name: /古典行旅设定/ }));
+    expect(screen.getByRole("dialog", { name: "预览平台 Prompt" })).toHaveTextContent("正面全身，灰蓝行旅衣");
+    expect(editor.editor.getText()).toContain("@古典");
+    fireEvent.click(screen.getByRole("button", { name: "插入到当前 Prompt" }));
+    expect(editor.editor.getText()).toContain("正面全身，灰蓝行旅衣");
+    expect(editor.editor.getText()).not.toContain("@古典");
+    expect(screen.getByLabelText("平台 Prompt 来源")).toHaveTextContent("古典行旅设定 · r3");
+    expect(onGenerate).not.toHaveBeenCalled();
 });
 
 it("keeps image editing out of the character workbench", () => {
