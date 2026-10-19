@@ -4,6 +4,12 @@
 
 交互参考：[Aidec 角色提示词生成器](https://blog.aidec.tw/project/page/AI%E8%A7%92%E8%89%B2%E6%8F%90%E7%A4%BA%E8%A9%9E%E7%94%9F%E6%88%90%E5%99%A8.html)的维度选择与[Creatify AI Avatar](https://creatify.ai/tool/ai-avatar?classic=true)的分类浏览。本文词条由 iFrame 独立撰写，不复制两站的图片或提示词目录。
 
+### 古风 Skill 对比
+
+[TangDouOVO/ancient-beauty-prompt-generate](https://github.com/TangDouOVO/ancient-beauty-prompt-generate) 的已读版本为 `83d1f886df12fd6e43ac490723a0ef317273ea7f`，仓库标注 MIT；`.skill` 包含 `SKILL.md`、关键词库、模板和 Python 脚本。代码可按朝代、颜色、发饰、服装、场景等识别输入；宋代词条提供褙子、窄袖襦裙、包髻和低髻等检索线索。这些分类适合成为经人工筛选的古典服饰词条候选，但不能直接确定本剧角色外观。
+
+该脚本会随机选取脸、妆容、服装、光影和后期效果；没有明确气质词时默认补入“美人／高贵优雅／妩媚”，并固定加入 `9:16`。其测试文件主要打印输出，没有对视觉一致性、用户审阅或确定性作断言。因此不把整包 Skill 接入生成链，不复制其完整提示词，也不让朝代词自动推导妆容、镜头或画幅。若借用分类结构，需在 `/` 面板展示词条来源、目标字段和选中后的完整文本，并由用户改写确认；本剧“北宋市井质感参考”仍不得变成真实朝代标识或隐形光影约束。
+
 ## Observed
 
 - 当前 `/` 面板能搜索 Skill 与风格、面容、皮肤、身材体态、服装、发型词条；空搜索时把全部词条纵向列出。词条写入可编辑设计字段，保存时记录来源与 revision。
