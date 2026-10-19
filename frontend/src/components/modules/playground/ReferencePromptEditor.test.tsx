@@ -1,5 +1,6 @@
-import { describe, expect, it } from "vitest";
-import { referencePromptDocument } from "./ReferencePromptEditor";
+import { describe, expect, it, vi } from "vitest";
+import { act, render } from "@testing-library/react";
+import ReferencePromptEditor, { referencePromptDocument, type PromptSlashSuggestion } from "./ReferencePromptEditor";
 
 describe("reference prompt restoration", () => {
   it("rebinds a selected scene reference after plain-text prompt replacement", () => {
@@ -19,4 +20,35 @@ describe("reference prompt restoration", () => {
     const token = document.content?.[0]?.content?.find((item: any) => item.type === "referenceToken") as any;
     expect(token?.attrs).toMatchObject(reference);
   });
+});
+
+it("replaces only the slash range with literal text and preserves reference tokens, suffix and undo", () => {
+  const suggestion: { current: PromptSlashSuggestion | null } = { current: null };
+  const reference = { asset_type: "prop", asset_id: "watch", variant_id: "front" } as const;
+  const onReferencesChange = vi.fn();
+  const view = render(<ReferencePromptEditor value="" placeholder="Prompt" candidates={[{ label: "怀表", reference }]}
+    onChange={vi.fn()} onReferencesChange={onReferencesChange} onSlashChange={(next) => { suggestion.current = next; }} />);
+  const editor = (view.getByRole("textbox") as any).editor;
+  act(() => {
+    editor.commands.setContent({ type: "doc", content: [{ type: "paragraph", content: [
+      { type: "referenceToken", attrs: { label: "怀表", ...reference } },
+      { type: "text", text: " 前文 /发型 后文" },
+    ] }] });
+    editor.commands.setTextSelection(9);
+  });
+  expect(suggestion.current?.query).toBe("发型");
+  act(() => suggestion.current!.replaceWithText("<b>高束发</b>\n自然碎发"));
+  expect(editor.getText({ blockSeparator: "\n" })).toContain("@怀表 前文 <b>高束发</b>\n自然碎发 后文");
+  expect(editor.getHTML()).toContain("&lt;b&gt;高束发&lt;/b&gt;");
+  expect(onReferencesChange).toHaveBeenLastCalledWith([reference]);
+  act(() => editor.commands.undo());
+  expect(editor.getText()).toContain("/发型 后文");
+});
+
+it("does not open slash discovery for a URL", () => {
+  const onSlashChange = vi.fn();
+  const view = render(<ReferencePromptEditor value="" placeholder="Prompt" onChange={vi.fn()} onSlashChange={onSlashChange} />);
+  const editor = (view.getByRole("textbox") as any).editor;
+  act(() => editor.commands.insertContent("https://example.com/path"));
+  expect(onSlashChange).toHaveBeenLastCalledWith(null);
 });

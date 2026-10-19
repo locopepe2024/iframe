@@ -1,5 +1,7 @@
 # 创作词典分层架构 V1
 
+> 符号入口已按用户确认更新：`/` 为词典和 Skill，`@` 为资产检索。当前约定与角色图片 Prompt 实施边界见 `2026-10-19-prompt-dictionary-skill-entry-v3.md`；本文中相反的旧入口描述作为历史记录保留。
+
 日期：2026-10-19。状态：设计契约，待分切片实施。首个接入工位为角色设计台；场景、道具、分镜、3D 导演台沿用同一词典身份与检索模型，各自声明可用动作。本文承接 `2026-10-19-character-design-workbench-system-plan-v1.md` 与 `2026-10-19-martial-arts-director-dictionary-review.md`。
 
 ## Observed

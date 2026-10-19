@@ -222,21 +222,28 @@ it("opens the existing two-skill review from slash without calling the model", a
     expect(await screen.findByRole("button", { name: "确认输入并生成角色草稿" })).toBeInTheDocument();
 });
 
-it("explains an unpublished platform Prompt catalog and lets users refresh it", async () => {
+it("opens dictionary content directly from slash in the Prompt and keeps preview separate from insertion", async () => {
+    apiMocks.getAssetReferenceIndex.mockResolvedValueOnce({ assets: [] } as any);
+    render(<CharacterWorkbench asset={{ id: "character-1", name: "苏砚", description: "少年剑客" }}
+        onClose={vi.fn()} onUpdateDescription={vi.fn()} onGenerate={vi.fn()} generatingTypes={[]} />);
+    const editor = (document.querySelector("[contenteditable]") as any).editor;
+    act(() => editor.chain().selectAll().insertContent({ type: "text", text: "前文 /长发高束" }).run());
+    fireEvent.click(await screen.findByRole("option", { name: /长发高束/ }));
+    expect(editor.getText()).toBe("前文 /长发高束");
+    fireEvent.click(screen.getByRole("button", { name: "插入到当前 Prompt" }));
+    expect(editor.getText()).toBe("前文 长发高束，发际线和鬓角保留自然碎发");
+    expect(screen.queryByRole("dialog", { name: "词典和 Skill 检索" })).not.toBeInTheDocument();
+});
+
+it("explains an unpublished Prompt catalog within the slash dictionary", async () => {
     apiMocks.getAssetReferenceIndex.mockResolvedValueOnce({ assets: [] } as any);
     apiMocks.getPlatformReferenceLibrary.mockResolvedValueOnce({ resources: [] });
     render(<CharacterWorkbench asset={{ id: "character-1", name: "苏砚", description: "少年剑客" }}
         onClose={vi.fn()} onUpdateDescription={vi.fn()} onGenerate={vi.fn()} generatingTypes={[]} />);
-    fireEvent.click(screen.getByRole("button", { name: "@ 平台 Prompt" }));
-    expect(await screen.findByText("平台尚无可用的已发布角色 Prompt 案例。")).toBeInTheDocument();
-    expect(screen.getByText(/可在创作台提交角色素材，经审核发布后在此选择/)).toBeInTheDocument();
-    apiMocks.getPlatformReferenceLibrary.mockResolvedValueOnce({ resources: [{
-        platform_resource_id: "new-case", revision: 1, kind: "prompt_preset", category_path: "character/reference",
-        title: "新发布的角色案例", status: "active", payload: { prompt_used: "灰蓝长袍" }, provenance: { license: "MIT" },
-    }] });
-    fireEvent.click(screen.getByRole("button", { name: "刷新目录" }));
-    expect(await screen.findByRole("button", { name: /新发布的角色案例/ })).toBeInTheDocument();
-    expect(screen.queryByText("平台尚无可用的已发布角色 Prompt 案例。")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "/ 词典和 Skill" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Prompt 案例" }));
+    expect(await screen.findByText(/平台尚无可用的已发布角色 Prompt 案例/)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "@ 平台 Prompt" })).not.toBeInTheDocument();
 });
 
 it("previews an active platform Prompt before inserting editable text without selecting an image", async () => {
@@ -259,26 +266,22 @@ it("previews an active platform Prompt before inserting editable text without se
     render(<CharacterWorkbench asset={{ id: "character-1", name: "苏砚", description: "少年剑客" }}
         onClose={vi.fn()} onUpdateDescription={vi.fn()} onGenerate={onGenerate} generatingTypes={[]} />);
 
-    fireEvent.click(screen.getByRole("button", { name: "@ 平台 Prompt" }));
-    expect(await screen.findByRole("button", { name: /古典行旅设定/ })).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: /未审核提示词/ })).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: /窄长脸词条/ })).not.toBeInTheDocument();
-    fireEvent.change(screen.getByRole("textbox", { name: "搜索平台角色 Prompt" }), { target: { value: "不存在的案例" } });
-    expect(screen.getByText("没有匹配的角色 Prompt 案例，请更换关键词。")).toBeInTheDocument();
-    expect(screen.queryByText("平台尚无可用的已发布角色 Prompt 案例。")).not.toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "清空搜索" }));
-    fireEvent.click(screen.getByRole("button", { name: /古典行旅设定/ }));
-    expect(screen.getByRole("textbox", { name: "将插入的完整 Prompt" })).toHaveValue("古典行旅人物，正面全身，灰蓝长袍");
+    fireEvent.click(screen.getByRole("button", { name: "/ 词典和 Skill" }));
+    expect(await screen.findByRole("option", { name: /古典行旅设定/ })).toBeInTheDocument();
+    expect(screen.queryByRole("option", { name: /未审核提示词/ })).not.toBeInTheDocument();
+    expect(screen.getByRole("option", { name: /窄长脸词条/ })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("option", { name: /古典行旅设定/ }));
+    expect(screen.getByRole("textbox", { name: "将插入的完整文字" })).toHaveValue("古典行旅人物，正面全身，灰蓝长袍");
     const editor = document.querySelector("[contenteditable]") as HTMLElement & { editor: import("@tiptap/core").Editor };
     expect(editor.editor.getText()).not.toContain("古典行旅人物");
-    fireEvent.click(screen.getByRole("button", { name: "替换当前 Prompt" }));
+    fireEvent.click(screen.getByRole("button", { name: "插入到当前 Prompt" }));
     await waitFor(() => expect(editor.editor.getText()).toContain("古典行旅人物，正面全身，灰蓝长袍"));
     expect(screen.getByLabelText("平台 Prompt 来源")).toHaveTextContent("古典行旅设定 · r2");
     expect(onGenerate).not.toHaveBeenCalled();
     expect(apiMocks.previewAssetImageSubmission).not.toHaveBeenCalled();
 });
 
-it("resolves @ platform Prompt as reviewed editable text, not as an image reference", async () => {
+it("resolves slash platform Prompt as editable text without an image reference", async () => {
     apiMocks.getAssetReferenceIndex.mockResolvedValue({ assets: [] } as any);
     apiMocks.getPlatformReferenceLibrary.mockResolvedValueOnce({ scope: "platform_shared", schema_version: 1, catalog_revision: "test", resources: [
         { platform_resource_id: "platform-prompt-2", revision: 3, kind: "prompt_preset", category_path: "character/reference",
@@ -289,15 +292,30 @@ it("resolves @ platform Prompt as reviewed editable text, not as an image refere
     render(<CharacterWorkbench asset={{ id: "character-1", name: "苏砚", description: "少年剑客" }}
         onClose={vi.fn()} onUpdateDescription={vi.fn()} onGenerate={onGenerate} generatingTypes={[]} />);
     const editor = document.querySelector("[contenteditable]") as HTMLElement & { editor: import("@tiptap/core").Editor };
-    act(() => editor.editor.commands.insertContent("@古典"));
+    act(() => editor.editor.commands.insertContent("/古典"));
     fireEvent.click(await screen.findByRole("option", { name: /古典行旅设定/ }));
-    expect(screen.getByRole("dialog", { name: "预览平台 Prompt" })).toHaveTextContent("正面全身，灰蓝行旅衣");
-    expect(editor.editor.getText()).toContain("@古典");
+    expect(screen.getByRole("dialog", { name: "词典和 Skill 检索" })).toHaveTextContent("正面全身，灰蓝行旅衣");
+    expect(editor.editor.getText()).toContain("/古典");
     fireEvent.click(screen.getByRole("button", { name: "插入到当前 Prompt" }));
     expect(editor.editor.getText()).toContain("正面全身，灰蓝行旅衣");
-    expect(editor.editor.getText()).not.toContain("@古典");
+    expect(editor.editor.getText()).not.toContain("/古典");
     expect(screen.getByLabelText("平台 Prompt 来源")).toHaveTextContent("古典行旅设定 · r3");
     expect(onGenerate).not.toHaveBeenCalled();
+});
+
+it("opens Skill input review from the Prompt slash panel without executing it", async () => {
+    apiMocks.getAssetReferenceIndex.mockResolvedValueOnce({ assets: [] } as any);
+    apiMocks.agentRequest.mockClear();
+    render(<CharacterWorkbench asset={{ id: "character-1", name: "苏砚", description: "少年剑客" }}
+        onClose={vi.fn()} onUpdateDescription={vi.fn()} onGenerate={vi.fn()} generatingTypes={[]} />);
+    fireEvent.click(screen.getByRole("button", { name: "/ 词典和 Skill" }));
+    fireEvent.click(await screen.findByRole("option", { name: /Skill · 生成角色视觉设计草稿/ }));
+    expect(apiMocks.agentRequest.mock.calls.some(([path]) => path === "/character-design/draft/preview")).toBe(false);
+    const button = screen.getByRole("button", { name: "审核 Skill 输入" });
+    await waitFor(() => expect(button).toBeEnabled());
+    fireEvent.click(button);
+    expect(await screen.findByRole("button", { name: "确认输入并生成角色草稿" })).toBeInTheDocument();
+    expect(apiMocks.agentRequest.mock.calls.some(([path]) => path === "/character-design/draft")).toBe(false);
 });
 
 it("keeps image editing out of the character workbench", () => {
@@ -415,6 +433,7 @@ it("keeps image references separate from generated variants", () => {
 });
 
 it("shows indexed clips when typing @ and emits the stable selected reference", () => {
+    apiMocks.getPlatformReferenceLibrary.mockClear();
     const setPrompt = vi.fn();
     const onReferencesChange = vi.fn();
     const candidate = {
@@ -441,6 +460,8 @@ it("shows indexed clips when typing @ and emits the stable selected reference", 
     expect(editor.editor.getText()).toBe("@wat");
 
     expect(screen.getByRole("listbox")).toHaveTextContent("Pocket watch");
+    expect(screen.getByRole("listbox", { name: "资产检索" })).not.toHaveTextContent("Prompt");
+    expect(apiMocks.getPlatformReferenceLibrary).not.toHaveBeenCalled();
     fireEvent.mouseDown(within(screen.getByRole("listbox")).getByRole("option"));
     fireEvent.click(within(screen.getByRole("listbox")).getByRole("option"));
 
@@ -687,7 +708,7 @@ it("projects edited character fields only after explicit application and saves t
     }} onClose={vi.fn()} onUpdateDescription={vi.fn()} onUpdateAttributes={onUpdateAttributes}
         onGenerate={vi.fn()} generatingTypes={[]} />);
 
-    const editor = screen.getByRole("textbox", { name: "Enter prompt description..." });
+    const editor = screen.getByRole("textbox", { name: "输入 Prompt，/ 检索词典和 Skill，@ 检索资产" });
     fireEvent.change(screen.getByRole("textbox", { name: "角色脸型与眉眼" }), { target: { value: "方脸，眉眼锋利" } });
     expect(editor).not.toHaveTextContent("方脸，眉眼锋利");
     fireEvent.click(screen.getByText("查看将写入的三条图片提示词"));
@@ -725,7 +746,7 @@ it("keeps detailed identity values when switching to the whole description and b
     fireEvent.click(within(identityModes).getByRole("button", { name: "逐项编辑" }));
     expect(screen.getByRole("textbox", { name: "角色脸型与眉眼" })).toHaveValue("窄长脸");
     fireEvent.click(screen.getByRole("button", { name: "应用到图片提示词" }));
-    expect(screen.getByRole("textbox", { name: "Enter prompt description..." })).toHaveTextContent("窄长脸");
+    expect(screen.getByRole("textbox", { name: "输入 Prompt，/ 检索词典和 Skill，@ 检索资产" })).toHaveTextContent("窄长脸");
     await waitFor(() => expect(screen.getByLabelText("设计模型")).toHaveValue("qwen"));
     fireEvent.click(screen.getByRole("button", { name: "生成草稿" }));
     await waitFor(() => expect(apiMocks.agentRequest).toHaveBeenCalledWith("/character-design/draft/preview", "POST", expect.objectContaining({
@@ -813,7 +834,7 @@ it("lets the user answer a design conflict and carries answers into confirmed pr
         field_answers: { [question]: "按十七岁少年表现，身形尚未完全长成" },
     }) }));
     await waitFor(() => expect(screen.getByText("已确认 r1")).toBeInTheDocument());
-    const editor = screen.getByRole("textbox", { name: "Enter prompt description..." });
+    const editor = screen.getByRole("textbox", { name: "输入 Prompt，/ 检索词典和 Skill，@ 检索资产" });
     expect(editor).not.toHaveTextContent("按十七岁少年表现，身形尚未完全长成");
     fireEvent.click(screen.getByRole("button", { name: "应用到图片提示词" }));
     expect(editor).toHaveTextContent("按十七岁少年表现，身形尚未完全长成");
@@ -851,13 +872,13 @@ it("applies edited identity and look values to image prompts without saving a re
     fireEvent.change(screen.getByLabelText("造型视觉值"), { target: { value: "黑色窄袖劲装，哑光棉布，布靴" } });
     fireEvent.click(screen.getByRole("button", { name: "应用到图片提示词" }));
 
-    const editor = screen.getByRole("textbox", { name: "Enter prompt description..." });
+    const editor = screen.getByRole("textbox", { name: "输入 Prompt，/ 检索词典和 Skill，@ 检索资产" });
     expect(editor).toHaveTextContent("窄长脸，深棕眼，短黑发");
     expect(editor).toHaveTextContent("黑色窄袖劲装，哑光棉布，布靴");
     fireEvent.click(screen.getByRole("tab", { name: "threeViews" }));
-    expect(screen.getByRole("textbox", { name: "Enter prompt description..." })).toHaveTextContent("黑色窄袖劲装，哑光棉布，布靴");
+    expect(screen.getByRole("textbox", { name: "输入 Prompt，/ 检索词典和 Skill，@ 检索资产" })).toHaveTextContent("黑色窄袖劲装，哑光棉布，布靴");
     fireEvent.click(screen.getByRole("tab", { name: "avatar" }));
-    expect(screen.getByRole("textbox", { name: "Enter prompt description..." })).toHaveTextContent("窄长脸，深棕眼，短黑发");
+    expect(screen.getByRole("textbox", { name: "输入 Prompt，/ 检索词典和 Skill，@ 检索资产" })).toHaveTextContent("窄长脸，深棕眼，短黑发");
     expect(onUpdateAttributes).not.toHaveBeenCalled();
 });
 
@@ -892,9 +913,9 @@ it("lets the user adopt an Agent suggestion for a genuine character decision", a
     expect(screen.getByLabelText("年龄阶段")).toHaveValue("teen");
     fireEvent.click(screen.getByRole("button", { name: "应用到图片提示词" }));
 
-    expect(screen.getByRole("textbox", { name: "Enter prompt description..." })).toHaveTextContent("十七八岁少年感");
-    expect(screen.getByRole("textbox", { name: "Enter prompt description..." })).toHaveTextContent("少年少女年龄表现");
-    expect(screen.getByRole("textbox", { name: "Enter prompt description..." })).not.toHaveTextContent("青年年龄表现");
+    expect(screen.getByRole("textbox", { name: "输入 Prompt，/ 检索词典和 Skill，@ 检索资产" })).toHaveTextContent("十七八岁少年感");
+    expect(screen.getByRole("textbox", { name: "输入 Prompt，/ 检索词典和 Skill，@ 检索资产" })).toHaveTextContent("少年少女年龄表现");
+    expect(screen.getByRole("textbox", { name: "输入 Prompt，/ 检索词典和 Skill，@ 检索资产" })).not.toHaveTextContent("青年年龄表现");
     expect(onUpdateAttributes).not.toHaveBeenCalled();
     apiMocks.agentRequest.mockImplementation(defaultAgentRequest!);
 });
@@ -953,7 +974,7 @@ it("shows linked shooting-plan scenes without adding scene context to character 
     expect(screen.getByText("拍摄计划关联场景（仅供核对）")).toBeInTheDocument();
     expect(screen.getByText("2018年秋天 · 室外")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "加入提示词" })).not.toBeInTheDocument();
-    expect(screen.getByRole("textbox", { name: "Enter prompt description..." })).not.toHaveTextContent("电影院");
+    expect(screen.getByRole("textbox", { name: "输入 Prompt，/ 检索词典和 Skill，@ 检索资产" })).not.toHaveTextContent("电影院");
 });
 
 it("refreshes the reference index when a generated project snapshot arrives", async () => {

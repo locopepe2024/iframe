@@ -1,5 +1,7 @@
 # 角色设计台与项目／平台／Skill 检索引用交互 V2
 
+> 符号入口已按用户确认更新：`/` 为词典和 Skill，`@` 为资产检索。当前约定与角色图片 Prompt 实施边界见 `2026-10-19-prompt-dictionary-skill-entry-v3.md`；本文中相反的旧入口描述作为历史记录保留。
+
 日期：2026-10-19。状态：分阶段实施；`/` 动作首层、角色平台 Prompt 的显式文字插入与分镜通用 `[]` 类型匹配已进入本轮切片，统一跨工位检索及平台图片导入尚未实现。范围：角色设计台的任务入口、就地发现、草稿应用、参考图选择和提交审核；资产库的项目／平台检索与 Skill 管理入口。五个维度的整体实施顺序见 `2026-10-19-character-design-workbench-system-plan-v1.md`，跨工位符号语义见 `2026-10-19-ai-workbench-command-context-index-v1.md`。此文将 `/` 与 `@` 的交互语义作为后续实现基线，替代 `2026-10-19-character-slash-quick-panel-v1.md` 中“`/` 直接搜索文字预设”的目标定义，以及 `2026-10-19-platform-reference-discovery-in-design-v1.md` 中“带图 Prompt 案例直接出现在 `/`”的目标定义。两份旧文仍记录 V1 的代码与决策历史。
 
 ## Observed：当前代码事实

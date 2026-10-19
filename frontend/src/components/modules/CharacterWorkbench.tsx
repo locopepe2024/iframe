@@ -4,7 +4,7 @@ import { useState, useEffect, useMemo, useRef, useId, useCallback, type Keyboard
 import { useTranslations } from "next-intl";
 import { motion, AnimatePresence } from "framer-motion";
 import { X, RefreshCw, Check, Image as ImageIcon, Lock, ChevronRight, ChevronDown, Video, PanelLeft, Sparkles, Search } from "lucide-react";
-import { agentRequest, api, type AssetImageReviewRequest, type AssetLibraryReference, type AssetReferenceIndexEntry, type ChatModel, type CharacterAssetPackView, type PlatformReferenceResource } from "@/lib/api";
+import { agentRequest, api, type AssetImageReviewRequest, type AssetLibraryReference, type AssetReferenceIndexEntry, type ChatModel, type CharacterAssetPackView } from "@/lib/api";
 
 import { VariantSelector } from "../common/VariantSelector";
 import { VideoVariantSelector } from "../common/VideoVariantSelector";
@@ -29,13 +29,14 @@ import {
 import ReferencePromptEditor, {
     type ReferenceCandidate,
     type ReferenceSuggestion,
+    type PromptSlashSuggestion,
 } from "./playground/ReferencePromptEditor";
 import { searchReferenceCandidates } from "@/lib/referenceCandidateSearch";
 import { IDENTITY_FIELDS, LOOK_FIELDS, characterSectionText, normalizeCharacterFeatures,
     requirementNeedsReview, type CharacterSectionEditorMode, type IdentityFeatures, type LookFeatures } from "@/lib/characterStructuredDesign";
 import { type CharacterQuickPreset, type CharacterPresetTarget } from "@/lib/characterQuickActions";
 import CharacterSlashPanel from "./CharacterSlashPanel";
-import PlatformPromptPicker, { editablePlatformPrompt, isUsablePlatformPrompt, type PromptResource } from "@/components/shared/PlatformPromptPicker";
+import CharacterPromptDictionary from "./CharacterPromptDictionary";
 
 import type { AssetPlanEntry } from "@/lib/episodeAssetPlan";
 import EpisodeAssetPlanPanel from "./EpisodeAssetPlanPanel";
@@ -1399,6 +1400,8 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
 
                         prompt={fullBodyPrompt}
                         setPrompt={setFullBodyPrompt}
+                        onDesignSkill={() => void generateDesignDraft()}
+                        canRunDesignSkill={!!designModel && !!asset.description && !designing}
                         platformPromptSource={platformPromptSources.full_body}
                         onPlatformPromptSourceChange={(source: AppliedPlatformPrompt | null) => setPlatformPromptSources((current) => ({ ...current, full_body: source }))}
                         referenceCandidates={referenceCandidates}
@@ -1453,6 +1456,8 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
 
                         prompt={threeViewPrompt}
                         setPrompt={setThreeViewPrompt}
+                        onDesignSkill={() => void generateDesignDraft()}
+                        canRunDesignSkill={!!designModel && !!asset.description && !designing}
                         platformPromptSource={platformPromptSources.three_view}
                         onPlatformPromptSourceChange={(source: AppliedPlatformPrompt | null) => setPlatformPromptSources((current) => ({ ...current, three_view: source }))}
                         referenceCandidates={referenceCandidates}
@@ -1488,6 +1493,8 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
 
                         prompt={headshotPrompt}
                         setPrompt={setHeadshotPrompt}
+                        onDesignSkill={() => void generateDesignDraft()}
+                        canRunDesignSkill={!!designModel && !!asset.description && !designing}
                         platformPromptSource={platformPromptSources.headshot}
                         onPlatformPromptSourceChange={(source: AppliedPlatformPrompt | null) => setPlatformPromptSources((current) => ({ ...current, headshot: source }))}
                         referenceCandidates={referenceCandidates}
@@ -1644,6 +1651,8 @@ export function WorkbenchPanel({
     setPrompt,
     platformPromptSource,
     onPlatformPromptSourceChange,
+    onDesignSkill,
+    canRunDesignSkill = false,
     referenceCandidates = [],
     onRefreshReferences,
     onReferencesChange,
@@ -1689,31 +1698,15 @@ export function WorkbenchPanel({
     const ti = useTranslations("imageEditor");
     const currentProject = useProjectStore((state) => state.currentProject);
     const [mention, setMention] = useState<ReferenceSuggestion | null>(null);
-    const [platformMentionPrompts, setPlatformMentionPrompts] = useState<PromptResource[]>([]);
-    const [platformMentionLoading, setPlatformMentionLoading] = useState(false);
-    const [platformMentionError, setPlatformMentionError] = useState(false);
-    const [selectedMentionPrompt, setSelectedMentionPrompt] = useState<PromptResource | null>(null);
+    const [promptSlash, setPromptSlash] = useState<PromptSlashSuggestion | null>(null);
+    const [openSlashRequest, setOpenSlashRequest] = useState(0);
+    const slashKeyHandler = useRef<((event: globalThis.KeyboardEvent) => boolean) | null>(null);
     const mentionQuery = mention?.query.toLocaleLowerCase() ?? "";
     const matchingReferenceCandidates = referenceCandidates.filter((candidate: ReferenceCandidate) =>
         [candidate.label, candidate.description, candidate.sourceLabel, candidate.variantLabel]
             .filter(Boolean)
             .some((value) => value!.toLocaleLowerCase().includes(mentionQuery)),
     );
-    const matchingPlatformPrompts = platformMentionPrompts.filter((resource) =>
-        [resource.title, resource.summary, resource.category_path, ...(resource.tags ?? [])]
-            .filter(Boolean).join(" ").toLocaleLowerCase().includes(mentionQuery),
-    );
-    const mentionIsOpen = !!mention;
-    useEffect(() => {
-        if (!mentionIsOpen) return;
-        let active = true;
-        setPlatformMentionLoading(true); setPlatformMentionError(false);
-        void api.getPlatformReferenceLibrary().then((catalog) => {
-            if (active) setPlatformMentionPrompts(catalog.resources.filter((resource): resource is PromptResource => isUsablePlatformPrompt(resource, "character/")));
-        }).catch(() => { if (active) { setPlatformMentionPrompts([]); setPlatformMentionError(true); } })
-            .finally(() => { if (active) setPlatformMentionLoading(false); });
-        return () => { active = false; };
-    }, [mentionIsOpen]);
 
     return (
         <div
@@ -2001,17 +1994,8 @@ export function WorkbenchPanel({
                     />
                 </div>}
                 {!isVideo && <div className="px-4 pt-2">
-                    <PlatformPromptPicker currentPrompt={prompt || ""} disabled={isLocked} categoryPrefix="character/" stationLabel="角色"
-                        onApply={(text: string, resource: PlatformReferenceResource) => {
-                            setPrompt(text);
-                            onPlatformPromptSourceChange?.({
-                                resourceId: resource.platform_resource_id,
-                                revision: resource.revision,
-                                title: resource.title,
-                                appliedText: text,
-                                customized: false,
-                            });
-                        }} />
+                    <button type="button" disabled={isLocked} onClick={() => setOpenSlashRequest((value) => value + 1)}
+                        className="min-h-11 rounded border border-glass-border px-3 text-xs text-foreground hover:bg-hover-bg disabled:opacity-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary">/ 词典和 Skill</button>
                     {platformPromptSource && <p className="mt-1 break-words text-[11px] text-text-muted" aria-label="平台 Prompt 来源">
                         来源：{platformPromptSource.title} · r{platformPromptSource.revision}
                         {platformPromptSource.customized ? " · 已由用户修改" : " · 当前草稿"}
@@ -2030,38 +2014,34 @@ export function WorkbenchPanel({
                         onReferencesChange={onReferencesChange}
                         onMentionChange={(next) => {
                             if (next && !mention) onRefreshReferences?.();
-                            if (!next || next.query !== mention?.query) setSelectedMentionPrompt(null);
                             setMention(next);
                         }}
+                        onSlashChange={!isVideo ? (next) => { setPromptSlash(next); if (next) setMention(null); } : undefined}
+                        onSlashKeyDown={(event) => slashKeyHandler.current?.(event) || false}
+                        openSlashRequest={openSlashRequest}
                         allowImplicitMentions={false}
                         pruneUnlistedReferences
                         expanded
                         editable={!isLocked}
-                        placeholder="Enter prompt description..."
+                        placeholder={isVideo ? "输入视频 Prompt，@ 检索资产" : "输入 Prompt，/ 检索词典和 Skill，@ 检索资产"}
                     />
+                    {!isVideo && !isLocked && promptSlash && <CharacterPromptDictionary suggestion={promptSlash} onClose={() => setPromptSlash(null)}
+                        keyHandler={slashKeyHandler} onSkill={onDesignSkill} canRunSkill={canRunDesignSkill && !isLocked}
+                        onApply={(text, entry) => {
+                            setPrompt(text);
+                            if (entry.resource) onPlatformPromptSourceChange?.({ resourceId: entry.resource.platform_resource_id,
+                                revision: entry.resource.revision, title: entry.title, appliedText: text, customized: false });
+                        }} />}
                     {mention && (
                         <div
-                            role={selectedMentionPrompt ? "dialog" : "listbox"}
-                            aria-label={selectedMentionPrompt ? "预览平台 Prompt" : "选择参考素材或 Prompt"}
+                            role="listbox"
+                            aria-label="资产检索"
                             className="absolute bottom-full left-3 z-50 mb-2 max-h-64 w-[min(100%-1.5rem,24rem)] overflow-y-auto rounded-xl border border-glass-border bg-elevated p-2 shadow-2xl"
                         >
-                            {selectedMentionPrompt ? <>
-                                <p className="px-2 text-xs font-medium text-foreground">{selectedMentionPrompt.title}</p>
-                                <p className="px-2 text-[11px] text-text-muted">平台参考 · r{selectedMentionPrompt.revision} · {selectedMentionPrompt.provenance.license}</p>
-                                <p className="mt-2 max-h-28 overflow-y-auto whitespace-pre-wrap break-words rounded bg-surface p-2 text-xs leading-5 text-foreground">{editablePlatformPrompt(selectedMentionPrompt)}</p>
-                                <button type="button" onMouseDown={(event) => event.preventDefault()} onClick={() => {
-                                    const fullText = mention.replaceWithText(editablePlatformPrompt(selectedMentionPrompt));
-                                    onPlatformPromptSourceChange?.({ resourceId: selectedMentionPrompt.platform_resource_id,
-                                        revision: selectedMentionPrompt.revision, title: selectedMentionPrompt.title,
-                                        appliedText: fullText, customized: false });
-                                    setSelectedMentionPrompt(null); setMention(null);
-                                }} className="mt-2 min-h-11 rounded bg-primary px-3 text-xs text-primary-foreground focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary">插入到当前 Prompt</button>
-                                <button type="button" onMouseDown={(event) => event.preventDefault()} onClick={() => setSelectedMentionPrompt(null)} className="ml-2 min-h-11 px-2 text-xs text-text-secondary">返回结果</button>
-                            </> : <>
                             <div className="px-2 pb-1.5 pt-1 font-mono text-[0.625rem] uppercase tracking-[0.12em] text-text-muted">项目参考图</div>
-                            {matchingReferenceCandidates.length === 0 && matchingPlatformPrompts.length === 0 && !platformMentionLoading ? (
+                            {matchingReferenceCandidates.length === 0 ? (
                                 <div className="px-2 py-2 text-xs text-text-muted">
-                                    没有匹配的参考素材或 Prompt
+                                    没有匹配的参考资产
                                 </div>
                             ) : matchingReferenceCandidates.map((candidate: ReferenceCandidate) => (
                                 <button
@@ -2086,16 +2066,7 @@ export function WorkbenchPanel({
                                     </span>
                                 </button>
                             ))}
-                            {platformMentionLoading && <p className="px-2 py-2 text-xs text-text-muted">正在读取平台 Prompt…</p>}
-                            {platformMentionError && <p className="px-2 py-2 text-xs text-failed-fg">平台 Prompt 暂不可用；项目参考图仍可选择。</p>}
-                            {matchingPlatformPrompts.length > 0 && <p className="px-2 pb-1 pt-2 font-mono text-[0.625rem] uppercase tracking-[0.12em] text-text-muted">平台 Prompt · 仅插入文字</p>}
-                            {matchingPlatformPrompts.map((resource) => <button key={resource.platform_resource_id} type="button" role="option"
-                                onMouseDown={(event) => event.preventDefault()} onClick={() => setSelectedMentionPrompt(resource)}
-                                className="flex min-h-11 w-full flex-col justify-center rounded-lg px-2 py-2 text-left hover:bg-hover-bg focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary">
-                                <span className="text-xs text-foreground">{resource.title}</span>
-                                <span className="text-[11px] text-text-muted">{resource.kind === "image" ? "带图案例" : "仅 Prompt"} · r{resource.revision}</span>
-                            </button>)}
-                            </>}
+
                         </div>
                     )}
                 </div>

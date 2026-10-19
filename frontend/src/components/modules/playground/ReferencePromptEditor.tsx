@@ -3,6 +3,7 @@
 import { useEffect, useRef } from 'react';
 import { Node, type JSONContent } from '@tiptap/core';
 import { EditorContent, useEditor } from '@tiptap/react';
+import { closeHistory } from '@tiptap/pm/history';
 import StarterKit from '@tiptap/starter-kit';
 import Placeholder from '@tiptap/extension-placeholder';
 import { shortReferenceLabel } from './referenceMedia';
@@ -30,6 +31,28 @@ export type ReferenceSuggestion = {
   choose: (candidate: string | ReferenceCandidate) => void;
   replaceWithText: (text: string) => string;
 };
+
+export type PromptSlashSuggestion = {
+  query: string;
+  replaceWithText: (text: string) => string;
+};
+
+function slashSuggestion(editor: Editor): PromptSlashSuggestion | null {
+  const { selection } = editor.state;
+  if (!selection.empty) return null;
+  const before = selection.$from.parent.textBetween(0, selection.$from.parentOffset, '\n', '\ufffc');
+  const match = before.match(/(?:^|[\s（(，。！？、\u3400-\u9fff])\/([^/@\n]*)$/);
+  if (!match) return null;
+  const from = selection.from - match[1].length - 1;
+  const to = selection.from;
+  return { query: match[1], replaceWithText: (text) => {
+    editor.view.dispatch(closeHistory(editor.state.tr));
+    if (text) {
+      editor.chain().focus().insertContentAt({ from, to }, { type: 'text', text }).run();
+    } else editor.chain().focus().deleteRange({ from, to }).run();
+    return editor.getText({ blockSeparator: '\n' });
+  } };
+}
 
 function candidateAttrs(candidate: string | ReferenceCandidate): Record<string, string> {
   const normalized = typeof candidate === 'string' ? { label: candidate } : candidate;
@@ -140,10 +163,13 @@ export function referenceSelectionsFromEditor(editor: Editor): AssetLibraryRefer
   return references;
 }
 
-export default function ReferencePromptEditor({ value, labels = EMPTY_LABELS, candidates, placeholder, onChange, onSubmit, onMentionChange, onMentionKeyDown, onReferencesChange, allowImplicitMentions = true, editable = true, pruneUnlistedReferences = false, restoreSelectedReferences = EMPTY_REFERENCES, expanded = false }: {
+export default function ReferencePromptEditor({ value, labels = EMPTY_LABELS, candidates, placeholder, onChange, onSubmit, onMentionChange, onMentionKeyDown, onSlashChange, onSlashKeyDown, onReferencesChange, allowImplicitMentions = true, editable = true, pruneUnlistedReferences = false, restoreSelectedReferences = EMPTY_REFERENCES, expanded = false, openSlashRequest = 0 }: {
   value: string; labels?: string[]; candidates?: ReferenceCandidate[]; placeholder: string; onChange: (text: string) => void; onSubmit?: () => void;
   onMentionChange?: (suggestion: ReferenceSuggestion | null) => void;
   onMentionKeyDown?: (event: KeyboardEvent) => boolean;
+  onSlashChange?: (suggestion: PromptSlashSuggestion | null) => void;
+  onSlashKeyDown?: (event: KeyboardEvent) => boolean;
+  openSlashRequest?: number;
   onReferencesChange?: (references: AssetLibraryReference[]) => void;
   allowImplicitMentions?: boolean;
   editable?: boolean;
@@ -154,10 +180,11 @@ export default function ReferencePromptEditor({ value, labels = EMPTY_LABELS, ca
   restoreSelectedReferences?: AssetLibraryReference[];
 }) {
   const lastLocalValue = useRef<string | null>(null);
+  const lastSlashRequest = useRef(0);
   const currentCandidates = useRef<ReferenceCandidate[]>(candidates ?? labels.map((label) => ({ label })));
   currentCandidates.current = candidates ?? labels.map((label) => ({ label }));
-  const callbacks = useRef({ onChange, onSubmit, onMentionChange, onMentionKeyDown, onReferencesChange });
-  callbacks.current = { onChange, onSubmit, onMentionChange, onMentionKeyDown, onReferencesChange };
+  const callbacks = useRef({ onChange, onSubmit, onMentionChange, onMentionKeyDown, onSlashChange, onSlashKeyDown, onReferencesChange });
+  callbacks.current = { onChange, onSubmit, onMentionChange, onMentionKeyDown, onSlashChange, onSlashKeyDown, onReferencesChange };
   const initialCandidates = candidates ?? labels.map((label) => ({ label }));
   const editor = useEditor({
     immediatelyRender: false,
@@ -168,8 +195,10 @@ export default function ReferencePromptEditor({ value, labels = EMPTY_LABELS, ca
     editorProps: {
       attributes: { role: 'textbox', 'aria-label': placeholder, 'aria-multiline': 'true', style: 'outline: none; box-shadow: none;', class: `${expanded ? 'min-h-[280px] max-h-[420px]' : 'min-h-[100px] max-h-[160px]'} overflow-y-auto whitespace-pre-wrap break-words border-0 bg-transparent text-[0.9375rem] leading-[1.65] text-foreground outline-none focus:outline-none focus:ring-0 [&_p]:m-0 [&_p.is-editor-empty:first-child::before]:content-[attr(data-placeholder)] [&_p.is-editor-empty:first-child::before]:text-text-muted [&_p.is-editor-empty:first-child::before]:float-left [&_p.is-editor-empty:first-child::before]:h-0 [&_p.is-editor-empty:first-child::before]:pointer-events-none` },
       handleKeyDown: (_view, event) => {
+        if (event.isComposing) return false;
+        if (callbacks.current.onSlashKeyDown?.(event)) return true;
         if (callbacks.current.onMentionKeyDown?.(event)) return true;
-        if (event.key === 'Escape') callbacks.current.onMentionChange?.(null);
+        if (event.key === 'Escape') { callbacks.current.onMentionChange?.(null); callbacks.current.onSlashChange?.(null); }
         if (!event.isComposing && (event.metaKey || event.ctrlKey) && event.key === 'Enter') {
           callbacks.current.onSubmit?.(); return true;
         }
@@ -189,10 +218,16 @@ export default function ReferencePromptEditor({ value, labels = EMPTY_LABELS, ca
       callbacks.current.onChange(text);
       callbacks.current.onReferencesChange?.(referenceSelectionsFromEditor(editor));
       callbacks.current.onMentionChange?.(referenceSuggestion(editor));
+      callbacks.current.onSlashChange?.(slashSuggestion(editor));
     },
-    onSelectionUpdate: ({ editor }) => callbacks.current.onMentionChange?.(referenceSuggestion(editor)),
-    onBlur: ({ editor }) => {
+    onSelectionUpdate: ({ editor }) => {
+      callbacks.current.onMentionChange?.(referenceSuggestion(editor));
+      callbacks.current.onSlashChange?.(slashSuggestion(editor));
+    },
+    onBlur: ({ editor, event }) => {
+      if ((event.relatedTarget as HTMLElement | null)?.closest?.('[data-prompt-discovery]')) return;
       callbacks.current.onMentionChange?.(null);
+      callbacks.current.onSlashChange?.(null);
       const text = editor.getText({ blockSeparator: '\n' });
       const document = referencePromptDocument(text, currentCandidates.current, true, allowImplicitMentions);
       if (allowImplicitMentions && !editor.state.doc.eq(editor.schema.nodeFromJSON(document))) {
@@ -200,6 +235,12 @@ export default function ReferencePromptEditor({ value, labels = EMPTY_LABELS, ca
       }
     },
   });
+  useEffect(() => {
+    if (!editor || !openSlashRequest || !editable || lastSlashRequest.current === openSlashRequest) return;
+    lastSlashRequest.current = openSlashRequest;
+    if (!slashSuggestion(editor)) editor.chain().focus().insertContent({ type: 'text', text: ' /' }).run();
+    callbacks.current.onSlashChange?.(slashSuggestion(editor));
+  }, [editor, openSlashRequest, editable]);
   useEffect(() => {
     if (!editor) return;
     const existingNames: string[] = [];
