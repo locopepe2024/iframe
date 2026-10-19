@@ -58,6 +58,8 @@ export const VariantSelector: React.FC<VariantSelectorProps> = ({
     const [savingName, setSavingName] = useState(false);
     const [renameError, setRenameError] = useState(false);
     const [previewUrls, setPreviewUrls] = useState<Record<string, string>>({});
+    const [previewErrors, setPreviewErrors] = useState<string[]>([]);
+    const [previewAttempt, setPreviewAttempt] = useState(0);
     const prevIsGenerating = useRef(isGenerating);
 
     // Automatically save batchSize when generation starts
@@ -76,7 +78,7 @@ export const VariantSelector: React.FC<VariantSelectorProps> = ({
     const variants = (asset?.variants || []).filter(variant => !pendingDeletions.includes(variant.id));
     const selectedId = pendingSelection && variants.some(variant => variant.id === pendingSelection)
         ? pendingSelection
-        : pendingDeletions.includes(asset?.selected_id || '') ? variants.at(-1)?.id : asset?.selected_id;
+        : pendingDeletions.includes(asset?.selected_id || '') ? variants.at(-1)?.id : asset?.selected_id || variants.find(variant => variant.url === currentImageUrl)?.id || variants[0]?.id;
     const selectedVariant = variants.find(v => v.id === selectedId);
     useEffect(() => {
         setVariantName(selectedVariant?.display_name || '');
@@ -85,8 +87,8 @@ export const VariantSelector: React.FC<VariantSelectorProps> = ({
     const apiBase = getApiBaseUrl();
     const displayUrl = selectedVariant
         ? (previewLocator ? previewUrls[selectedVariant.id] || '' : getAssetUrl(selectedVariant.url))
-        : pendingDeletions.includes(asset?.selected_id || '') ? '' : getAssetUrl(currentImageUrl);
-    const fullImageUrl = selectedVariant ? getAssetUrl(selectedVariant.url) : getAssetUrl(currentImageUrl);
+        : variants.length || pendingDeletions.includes(asset?.selected_id || '') ? '' : getAssetUrl(currentImageUrl);
+    const fullImageUrl = selectedVariant ? getAssetUrl(selectedVariant.url) : displayUrl;
 
     useEffect(() => {
         if (pendingSelection && asset?.selected_id === pendingSelection) setPendingSelection(null);
@@ -110,6 +112,7 @@ export const VariantSelector: React.FC<VariantSelectorProps> = ({
         const controller = new AbortController();
         const objectUrls: string[] = [];
         setPreviewUrls({});
+        setPreviewErrors([]);
         variants.forEach((variant) => {
             const params = new URLSearchParams({
                 scope: previewLocator.scope,
@@ -128,13 +131,15 @@ export const VariantSelector: React.FC<VariantSelectorProps> = ({
                     }
                     objectUrls.push(objectUrl);
                     setPreviewUrls((current) => ({ ...current, [variant.id]: objectUrl }));
-                }).catch(() => undefined);
+                }).catch(() => {
+                    if (!controller.signal.aborted) setPreviewErrors((current) => [...current, variant.id]);
+                });
         });
         return () => {
             controller.abort();
             objectUrls.forEach((url) => URL.revokeObjectURL(url));
         };
-    }, [apiBase, previewLocator?.scope, previewLocator?.containerId, previewLocator?.assetType, previewLocator?.assetId, variants.map((variant) => variant.id).join('|')]);
+    }, [apiBase, previewLocator?.scope, previewLocator?.containerId, previewLocator?.assetType, previewLocator?.assetId, variants.map((variant) => variant.id).join('|'), previewAttempt]);
 
     const deleteVariant = (variantId: string) => {
         setPendingDeletions(current => [...current, variantId]);
@@ -190,8 +195,13 @@ export const VariantSelector: React.FC<VariantSelectorProps> = ({
                         </div>
                     </>
                 ) : (
-                    <div className="w-full h-full flex items-center justify-center text-text-muted">
-                        {t("noImageGenerated")}
+                    <div className="w-full h-full flex flex-col gap-3 items-center justify-center text-text-muted">
+                        {selectedVariant && previewLocator ? previewErrors.includes(selectedVariant.id) ? <>
+                            <p role="alert">{t("previewLoadFailed")}</p>
+                            <button type="button" onClick={(event) => { event.stopPropagation(); setPreviewAttempt((current) => current + 1); }}
+                                className="min-h-11 rounded border border-glass-border px-3 text-sm text-foreground focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary">{t("retryPreview")}</button>
+                        </> : <p role="status">{t("previewLoading")}</p>
+                            : variants.length ? <p role="alert">{t("selectedVariantUnavailable")}</p> : t("noImageGenerated")}
                     </div>
                 )}
 

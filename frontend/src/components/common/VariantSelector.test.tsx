@@ -4,7 +4,8 @@ import { expect, it, vi } from 'vitest';
 import { VariantSelector } from './VariantSelector';
 
 vi.mock('next-intl', () => ({ useTranslations: () => (key: string) => key }));
-vi.mock('@/lib/api', () => ({ API_URL: '' }));
+const { authenticatedFetch } = vi.hoisted(() => ({ authenticatedFetch: vi.fn() }));
+vi.mock('@/lib/api', () => ({ API_URL: '', authenticatedFetch }));
 
 const asset = {
   selected_id: 'first',
@@ -59,4 +60,47 @@ it('does not show a stale fallback when the only image is being deleted', () => 
   expect(screen.queryByAltText('Selected Variant')).toBeNull();
   expect(screen.getByText('noImageGenerated')).toBeTruthy();
   vi.restoreAllMocks();
+});
+
+
+it('shows an authenticated preview after loading and keeps errors distinct from an empty variant list', async () => {
+  vi.stubGlobal('URL', class extends URL {
+    static createObjectURL = vi.fn(() => 'blob:character-preview');
+    static revokeObjectURL = vi.fn();
+  });
+  authenticatedFetch.mockRejectedValueOnce(new Error('preview unavailable'));
+  authenticatedFetch.mockResolvedValueOnce({ ok: true, blob: async () => new Blob(['image']) });
+  const { unmount } = render(<VariantSelector asset={asset} previewLocator={{ scope: 'project', containerId: 'project-1', assetType: 'character', assetId: 'hero' }}
+    onSelect={vi.fn()} onDelete={vi.fn()} onGenerate={vi.fn()} isGenerating={false} />);
+  expect(screen.queryByText('noImageGenerated')).not.toBeInTheDocument();
+  await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('previewLoadFailed'));
+  authenticatedFetch.mockResolvedValue({ ok: true, blob: async () => new Blob(['image']) });
+  fireEvent.click(screen.getByRole('button', { name: 'retryPreview' }));
+  await waitFor(() => expect(screen.getByAltText('Selected Variant')).toHaveAttribute('src', 'blob:character-preview'));
+  expect(screen.queryByText('noImageGenerated')).not.toBeInTheDocument();
+  unmount();
+  vi.unstubAllGlobals();
+});
+
+
+it('displays a returned generation result without persisting an implicit selection', () => {
+  const onSelect = vi.fn();
+  const props = { onSelect, onDelete: vi.fn(), onGenerate: vi.fn(), isGenerating: false };
+  const { rerender } = render(<VariantSelector asset={{ selected_id: null, variants: [] }} {...props} />);
+  expect(screen.getByText('noImageGenerated')).toBeInTheDocument();
+  rerender(<VariantSelector asset={{ selected_id: null, variants: [asset.variants[0]] }} {...props} />);
+  expect(screen.getByAltText('Selected Variant')).toHaveAttribute('src', expect.stringContaining('first.png'));
+  expect(screen.queryByText('noImageGenerated')).not.toBeInTheDocument();
+  expect(onSelect).not.toHaveBeenCalled();
+});
+
+it('distinguishes a stale selection from an empty pool and permits choosing an available variant', async () => {
+  const onSelect = vi.fn();
+  render(<VariantSelector asset={{ ...asset, selected_id: 'removed' }} currentImageUrl="legacy.png" onSelect={onSelect} onDelete={vi.fn()} onGenerate={vi.fn()} isGenerating={false} />);
+  expect(screen.getByRole('alert')).toHaveTextContent('selectedVariantUnavailable');
+  expect(screen.queryByAltText('Selected Variant')).not.toBeInTheDocument();
+  expect(screen.queryByText('noImageGenerated')).not.toBeInTheDocument();
+  fireEvent.click(screen.getByAltText('未命名素材 2'));
+  expect(screen.getByAltText('Selected Variant')).toHaveAttribute('src', expect.stringContaining('second.png'));
+  await waitFor(() => expect(onSelect).toHaveBeenCalledWith('second'));
 });

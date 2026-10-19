@@ -1236,6 +1236,10 @@
   "assets": {
     "clickToZoom": "点击放大",
     "noImageGenerated": "暂无生成图片",
+    "previewLoading": "正在加载图片预览…",
+    "previewLoadFailed": "图片预览加载失败",
+    "retryPreview": "重试预览",
+    "selectedVariantUnavailable": "当前选择的图片不可用，请在下方选择变体",
     "deleteVariant": "删除此变体",
     "generatingVariants": "正在生成 {count} 个变体...",
     "generate": "生成",

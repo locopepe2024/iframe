@@ -1236,6 +1236,10 @@
   "assets": {
     "clickToZoom": "Click to zoom",
     "noImageGenerated": "No image generated",
+    "previewLoading": "Loading image preview…",
+    "previewLoadFailed": "Image preview could not be loaded",
+    "retryPreview": "Retry preview",
+    "selectedVariantUnavailable": "The selected image is unavailable. Choose a variant below.",
     "deleteVariant": "Delete this variant",
     "generatingVariants": "Generating {count} variant(s)...",
     "generate": "Generate",

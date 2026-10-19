@@ -586,6 +586,12 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
     const masterImageUrl = hasReferenceSheetVariants
         ? referenceSheetImageUrl
         : selectedVariantUrl(asset.full_body_asset, asset.full_body_image_url);
+    const characterPreviewLocator = currentProject?.id ? {
+        scope: asset.source === "series" && currentProject.series_id ? "series" : "project",
+        containerId: asset.source === "series" && currentProject.series_id ? currentProject.series_id : currentProject.id,
+        assetType: "character",
+        assetId: asset.id,
+    } : undefined;
     const masterAsset = referenceSheetImageAsset || asset.full_body_asset;
     const masterGenerationType = referenceSheetImageAsset ? "reference_sheet" : "full_body";
     const hasFullBodyImage = !!masterImageUrl;
@@ -1390,6 +1396,7 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
                     {activePanel === "full_body" &&
                     <WorkbenchPanel
                         assetScope={asset.id}
+                        previewLocator={characterPreviewLocator}
                         hideTitle
                         title={tc("masterAsset")}
                         isActive={activePanel === "full_body"}
@@ -1447,6 +1454,7 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
                     {activePanel === "three_view" &&
                     <WorkbenchPanel
                         assetScope={asset.id}
+                        previewLocator={characterPreviewLocator}
                         hideTitle
                         title={tc("threeViews")}
                         isActive={activePanel === "three_view"}
@@ -1485,6 +1493,7 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
                     {activePanel === "headshot" &&
                     <WorkbenchPanel
                         assetScope={asset.id}
+                        previewLocator={characterPreviewLocator}
                         hideTitle
                         title={tc("avatar")}
                         isActive={activePanel === "headshot"}
@@ -1642,6 +1651,7 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
 export function WorkbenchPanel({
     title,
     assetScope,
+    previewLocator,
     isActive,
     onClick,
 
@@ -1703,7 +1713,6 @@ export function WorkbenchPanel({
 }: any) {
     const tc = useTranslations("character");
     const ti = useTranslations("imageEditor");
-    const currentProject = useProjectStore((state) => state.currentProject);
     const [mention, setMention] = useState<ReferenceSuggestion | null>(null);
     const [promptSlash, setPromptSlash] = useState<PromptSlashSuggestion | null>(null);
     const [openSlashRequest, setOpenSlashRequest] = useState(0);
@@ -1949,12 +1958,7 @@ export function WorkbenchPanel({
                             aspectRatio={aspectRatio}
                             className="h-full"
                             viewerClassName="max-h-[min(64dvh,760px)] min-h-[240px]"
-                            previewLocator={currentProject?.id ? {
-                                scope: asset?.source === "series" && currentProject.series_id ? "series" : "project",
-                                containerId: asset?.source === "series" && currentProject.series_id ? currentProject.series_id : currentProject.id,
-                                assetType: "character",
-                                assetId: asset?.id,
-                            } : undefined}
+                            previewLocator={previewLocator}
                         />
                     )}
                 </div>

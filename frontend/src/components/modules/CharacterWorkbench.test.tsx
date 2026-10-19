@@ -42,9 +42,10 @@ vi.mock("next/dynamic", () => ({
     default: () => function DynamicComponent() { return null; },
 }));
 vi.mock("../common/VariantSelector", () => ({
-    VariantSelector: ({ onGenerate, filmstripTitle }: { onGenerate?: (batchSize: number) => void; filmstripTitle?: string }) => (
+    VariantSelector: ({ onGenerate, filmstripTitle, previewLocator }: { onGenerate?: (batchSize: number) => void; filmstripTitle?: string; previewLocator?: unknown }) => (
         <div>
             <span>{filmstripTitle}</span>
+            <span data-testid="preview-locator">{JSON.stringify(previewLocator)}</span>
             <button type="button" data-testid="variant-generate" onClick={() => onGenerate?.(1)}>Generate</button>
         </div>
     ),
@@ -1103,4 +1104,33 @@ it("restores a saved height and carries a custom value through AI input, prompt 
     expect(screen.getByRole("textbox", { name: "输入 Prompt，/ 检索词典和 Skill，@ 检索资产" })).toHaveTextContent("身高约182厘米");
     fireEvent.click(screen.getByRole("button", { name: "确认设计" }));
     await waitFor(() => expect(onUpdateAttributes).toHaveBeenCalledWith({ character_design: expect.objectContaining({ identity: expect.objectContaining({ features: expect.objectContaining({ height: "身高约182厘米" }) }) }) }));
+});
+
+
+it("locates character previews by the owning character rather than its image container", () => {
+    apiMocks.getAssetReferenceIndex.mockResolvedValueOnce({ assets: [] } as any);
+    render(<CharacterWorkbench asset={{ id: "character-owner", name: "Hero", description: "Hero",
+        reference_sheet: { selected_image_id: "front", image_variants: [{ id: "front", url: "front.webp" }] },
+        three_view_asset: { selected_id: "views", variants: [{ id: "views", url: "views.webp" }] },
+        headshot_asset: { selected_id: "head", variants: [{ id: "head", url: "head.webp" }] },
+    }} onClose={vi.fn()} onUpdateDescription={vi.fn()} onGenerate={vi.fn()} generatingTypes={[]} />);
+    for (const tab of ["masterAsset", "threeViews", "avatar"]) {
+        fireEvent.click(screen.getByRole("tab", { name: tab }));
+        expect(JSON.parse(screen.getByTestId("preview-locator").textContent!)).toEqual({ scope: "project", containerId: "project-1", assetType: "character", assetId: "character-owner" });
+    }
+});
+
+
+it("retains a series character's owner scope when requesting its previews", () => {
+    apiMocks.getAssetReferenceIndex.mockResolvedValueOnce({ assets: [] } as any);
+    const project = projectStoreMocks.currentProject;
+    projectStoreMocks.currentProject = { ...project, series_id: "series-owner" } as typeof project;
+    try {
+        render(<CharacterWorkbench asset={{ id: "series-character", source: "series", name: "Hero", description: "Hero",
+            full_body_asset: { selected_id: "front", variants: [{ id: "front", url: "front.webp" }] },
+        }} onClose={vi.fn()} onUpdateDescription={vi.fn()} onGenerate={vi.fn()} generatingTypes={[]} />);
+        expect(JSON.parse(screen.getByTestId("preview-locator").textContent!)).toEqual({ scope: "series", containerId: "series-owner", assetType: "character", assetId: "series-character" });
+    } finally {
+        projectStoreMocks.currentProject = project;
+    }
 });
