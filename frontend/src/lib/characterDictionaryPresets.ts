@@ -34,7 +34,7 @@ const colors = ["米白色", "月白色", "浅灰色", "深灰色", "靛蓝色",
 const materials = ["哑光棉麻", "低光泽丝织", "细密素布"];
 const shoes = ["黑色素面布靴", "深棕色素面皮靴", "黑色平底布鞋"];
 const panel = (id: string, title: string, text: string, categories: string[], search: string, defaults?: Record<string, string>): CharacterDictionaryPreset => {
-  const labels: Record<string, string> = { "modern-clothing": "服装", skin: "皮肤", face: "面容", hair: "发型", posture: "姿态与动作", condition: "新旧", expression: "表情" };
+  const labels: Record<string, string> = { "modern-clothing": "服装", height: "身高", skin: "皮肤", face: "面容", hair: "发型", posture: "姿态与动作", condition: "新旧", expression: "表情" };
   return sectionedDictionaryPreset({
     id: `dictionary.panel.${id}`, title, categories, defaults, type: "配置面板", domain: "局部配置", source,
     search: `${title} ${search}`,
@@ -48,6 +48,7 @@ const configurationPanels: CharacterDictionaryPreset[] = [
   MODERN_MALE_PANEL,
   panel("modern-clothing", "现代服装搭配 · 女装", "穿着[女装款式]，颜色为[颜色]，面料为[面料]，版型为[版型]，搭配要求为[搭配单品]，衣物状态为[衣物状态]。衣片连接清楚，保留自然褶皱。", ["clothing-panel"], "服装 现代 女装"),
   panel("face", "面容选择面板", "脸型为[脸型]，眼型为[眼型]，眉形为[眉形]，妆容为[妆容]。", ["face-overview"], "面容 面部 五官"),
+  panel("height", "身高选择面板", "[身高]。", ["height"], "身高 高矮 厘米 height stature"),
   panel("skin", "肤色与肤质选择面板", "肤色为[肤色]，肤质为[肤质]。", ["skin-tone", "skin"], "肤色 肤质 皮肤 skin tone complexion"),
   panel("hair", "发型选择面板", "发型为[发型]，发束结构和固定关系自然。", ["hair"], "发型 头发"),
   panel("posture", "体态选择面板", "人物体态：[体态]。", ["posture"], "体态 姿态 站姿"),
@@ -56,7 +57,7 @@ const configurationPanels: CharacterDictionaryPreset[] = [
 ];
 
 export function configurationQueryCategory(query: string): string | null {
-  const categories: Record<string, string> = { "服装": "clothing", "鞋履": "footwear", "鞋靴": "footwear", "鞋子": "footwear", "靴子": "footwear", "面容": "face", "面部": "face", "发型": "look", "首饰": "jewelry", "饰品": "jewelry", "装饰": "decoration", "男装": "modern-male-garment", "现代男装": "modern-male-garment", "体态": "posture", "肤色": "skin-tone", "肤质": "skin", "皮肤": "skin-tone", "新旧": "condition", "使用状态": "condition", "表情": "expression", "情绪": "expression" };
+  const categories: Record<string, string> = { "服装": "clothing", "鞋履": "footwear", "鞋靴": "footwear", "鞋子": "footwear", "靴子": "footwear", "面容": "face", "面部": "face", "发型": "look", "首饰": "jewelry", "饰品": "jewelry", "装饰": "decoration", "男装": "modern-male-garment", "现代男装": "modern-male-garment", "体态": "posture", "身高": "height", "肤色": "skin-tone", "肤质": "skin", "皮肤": "skin-tone", "新旧": "condition", "使用状态": "condition", "表情": "expression", "情绪": "expression" };
   return categories[query.trim()] || null;
 }
 
@@ -151,6 +152,8 @@ function classicalBaseTemplate(id: string, title: string, style: string): Charac
 
 export const CHARACTER_DICTIONARY_PRESETS: CharacterDictionaryPreset[] = [
   ...configurationPanels,
+  ...["身高偏矮", "中等身高", "身高偏高", "身形高挑", "身高约150厘米", "身高约160厘米", "身高约170厘米", "身高约180厘米", "身高约190厘米"].map((name, index) =>
+    term(`height.${index}`, name, `人物${name}，人体比例自然。`, "height", "身体")),
   ...["瓷白肤色", "浅白肤色", "浅米色肤色", "自然米色肤色", "暖小麦肤色", "古铜肤色", "深棕肤色", "深褐肤色"].map((name, index) =>
     term(`skin-tone.${index}`, name, `人物肤色为${name.replace("肤色", "")}，面部、颈部及外露肢体肤色一致，保留自然明暗层次。`, "skin-tone", "身体")),
   ...MODERN_MALE_TERMS,

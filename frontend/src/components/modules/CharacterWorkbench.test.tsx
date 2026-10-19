@@ -73,7 +73,7 @@ const baseProps = {
 };
 
 async function approveDesignPreview() {
-    const confirm = await screen.findByRole("button", { name: "确认输入并生成角色草稿" });
+    const confirm = await screen.findByRole("button", { name: "确认输入并完善角色设计" });
     fireEvent.click(confirm);
 }
 
@@ -215,11 +215,11 @@ it("opens the existing two-skill review from slash without calling the model", a
     fireEvent.click(screen.getByRole("button", { name: "展开角色设计" }));
     const search = screen.getByRole("combobox", { name: "/ 角色操作" });
     fireEvent.change(search, { target: { value: "/角色设计" } });
-    await waitFor(() => expect(screen.getByRole("option", { name: /生成角色视觉设计草稿/ })).not.toBeDisabled());
-    fireEvent.click(screen.getByRole("option", { name: /生成角色视觉设计草稿/ }));
+    await waitFor(() => expect(screen.getByRole("option", { name: /AI 完善角色设计/ })).not.toBeDisabled());
+    fireEvent.click(screen.getByRole("option", { name: /AI 完善角色设计/ }));
     await waitFor(() => expect(apiMocks.agentRequest).toHaveBeenCalledWith("/character-design/draft/preview", "POST", expect.anything()));
     expect(apiMocks.agentRequest.mock.calls.some(([path]) => path === "/character-design/draft")).toBe(false);
-    expect(await screen.findByRole("button", { name: "确认输入并生成角色草稿" })).toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: "确认输入并完善角色设计" })).toBeInTheDocument();
 });
 
 it("opens dictionary content directly from slash in the Prompt and keeps preview separate from insertion", async () => {
@@ -311,12 +311,12 @@ it("opens Skill input review from the Prompt slash panel without executing it", 
         onClose={vi.fn()} onUpdateDescription={vi.fn()} onGenerate={vi.fn()} generatingTypes={[]} />);
     fireEvent.click(screen.getByRole("button", { name: "/ 词典和 Skill" }));
     fireEvent.click(screen.getByRole("tab", { name: "Skill" }));
-    fireEvent.click(await screen.findByRole("option", { name: /Skill · 生成角色视觉设计草稿/ }));
+    fireEvent.click(await screen.findByRole("option", { name: /Skill · AI 完善角色设计/ }));
     expect(apiMocks.agentRequest.mock.calls.some(([path]) => path === "/character-design/draft/preview")).toBe(false);
     const button = screen.getByRole("button", { name: "审核 Skill 输入" });
     await waitFor(() => expect(button).toBeEnabled());
     fireEvent.click(button);
-    expect(await screen.findByRole("button", { name: "确认输入并生成角色草稿" })).toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: "确认输入并完善角色设计" })).toBeInTheDocument();
     expect(apiMocks.agentRequest.mock.calls.some(([path]) => path === "/character-design/draft")).toBe(false);
 });
 
@@ -655,8 +655,8 @@ it("keeps an AI design as an editable draft until the user confirms it", async (
     await waitFor(() => expect(screen.getByLabelText("设计模型")).toHaveValue("qwen"));
     const editor = document.querySelector("[contenteditable]") as HTMLElement & { editor: import("@tiptap/core").Editor };
     expect(editor.editor.getText()).not.toContain("深棕眼");
-    fireEvent.click(screen.getByRole("button", { name: "生成草稿" }));
-    await screen.findByRole("button", { name: "确认输入并生成角色草稿" });
+    fireEvent.click(screen.getByRole("button", { name: "AI 完善" }));
+    await screen.findByRole("button", { name: "确认输入并完善角色设计" });
     expect(apiMocks.agentRequest).not.toHaveBeenCalledWith("/character-design/draft", "POST", expect.anything());
     fireEvent.change(screen.getByRole("textbox", { name: "角色档案与视觉要求" }), {
         target: { value: '{"profile":"A hero","style":"冷灰蓝"}' },
@@ -691,10 +691,10 @@ it("drops the role design preview after a visual requirement changes", async () 
     render(<CharacterWorkbench asset={{ id: "character-1", name: "Hero", description: "A hero" }}
         onClose={vi.fn()} onUpdateDescription={vi.fn()} onGenerate={vi.fn()} generatingTypes={[]} />);
     await waitFor(() => expect(screen.getByLabelText("设计模型")).toHaveValue("qwen"));
-    fireEvent.click(screen.getByRole("button", { name: "生成草稿" }));
-    await screen.findByRole("button", { name: "确认输入并生成角色草稿" });
+    fireEvent.click(screen.getByRole("button", { name: "AI 完善" }));
+    await screen.findByRole("button", { name: "确认输入并完善角色设计" });
     fireEvent.change(screen.getByRole("textbox", { name: "身份视觉值" }), { target: { value: "宽肩长腿" } });
-    await waitFor(() => expect(screen.queryByRole("button", { name: "确认输入并生成角色草稿" })).not.toBeInTheDocument());
+    await waitFor(() => expect(screen.queryByRole("button", { name: "确认输入并完善角色设计" })).not.toBeInTheDocument());
     expect(apiMocks.agentRequest).not.toHaveBeenCalledWith("/character-design/draft", "POST", expect.anything());
 });
 
@@ -750,7 +750,7 @@ it("keeps detailed identity values when switching to the whole description and b
     fireEvent.click(screen.getByRole("button", { name: "应用到图片提示词" }));
     expect(screen.getByRole("textbox", { name: "输入 Prompt，/ 检索词典和 Skill，@ 检索资产" })).toHaveTextContent("窄长脸");
     await waitFor(() => expect(screen.getByLabelText("设计模型")).toHaveValue("qwen"));
-    fireEvent.click(screen.getByRole("button", { name: "生成草稿" }));
+    fireEvent.click(screen.getByRole("button", { name: "AI 完善" }));
     await waitFor(() => expect(apiMocks.agentRequest).toHaveBeenCalledWith("/character-design/draft/preview", "POST", expect.objectContaining({
         current_draft: "窄长脸。 深蓝劲装",
         user_visual_requirements: { identity: "自然面部不对称", look: "" },
@@ -783,7 +783,7 @@ it("uses visual fields as editable inputs before generating a draft", async () =
 
     const identity = screen.getByLabelText("身份视觉值");
     const look = screen.getByLabelText("造型视觉值");
-    const generate = screen.getByRole("button", { name: "生成草稿" });
+    const generate = screen.getByRole("button", { name: "AI 完善" });
     expect(identity.compareDocumentPosition(generate) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(look.compareDocumentPosition(generate) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
 
@@ -907,7 +907,7 @@ it("lets the user adopt an Agent suggestion for a genuine character decision", a
         onGenerate={vi.fn()} generatingTypes={[]} />);
 
     await waitFor(() => expect(screen.getByLabelText("设计模型")).toHaveValue("qwen"));
-    fireEvent.click(screen.getByRole("button", { name: "生成草稿" }));
+    fireEvent.click(screen.getByRole("button", { name: "AI 完善" }));
     await approveDesignPreview();
     await waitFor(() => expect(apiMocks.agentRequest).toHaveBeenCalledWith("/character-design/draft", "POST", expect.anything()));
     await waitFor(() => expect(screen.getByLabelText("身份视觉值")).toHaveValue("少年感面容，短黑发"));
@@ -934,7 +934,7 @@ it("searches current project materials and passes selected reference IDs to desi
     fireEvent.click(screen.getByRole("button", { name: "选择角色参考图" }));
     fireEvent.change(screen.getByLabelText("搜索角色参考素材"), { target: { value: "苏砚" } });
     fireEvent.click(await screen.findByRole("option", { name: /苏砚定妆照/ }));
-    fireEvent.click(screen.getByRole("button", { name: "生成草稿" }));
+    fireEvent.click(screen.getByRole("button", { name: "AI 完善" }));
     await approveDesignPreview();
 
     await waitFor(() => expect(apiMocks.agentRequest).toHaveBeenCalledWith("/character-design/draft", "POST", expect.objectContaining({
@@ -1066,4 +1066,41 @@ it("keeps motion, video, and negative defaults in Chinese", () => {
     expect(buildCharacterVideoPrompt("周涵（大学时期）", "黑色短发")).toContain("电影感镜头");
     expect(DEFAULT_CHARACTER_NEGATIVE_PROMPT).toContain("低质量");
     expect(DEFAULT_CHARACTER_NEGATIVE_PROMPT).not.toContain("low quality");
+});
+
+
+it("keeps asset navigation singular and the source description read-only beside one AI action", async () => {
+    apiMocks.getAssetReferenceIndex.mockResolvedValueOnce({ assets: [] } as any);
+    render(<CharacterWorkbench asset={{ id: "character-height", name: "Hero", description: "剧本提取的角色描述" }}
+        onClose={vi.fn()} onUpdateDescription={vi.fn()} onGenerate={vi.fn()} generatingTypes={[]} />);
+    expect(screen.getAllByRole("tab")).toHaveLength(3);
+    expect(screen.getByRole("heading", { name: "masterAsset" })).toHaveClass("sr-only");
+    expect(screen.getByRole("button", { name: "staticMode" })).toHaveAttribute("aria-pressed", "true");
+    fireEvent.click(screen.getByRole("button", { name: "展开角色设计" }));
+    expect(screen.getByText("角色描述 · 设计依据").closest("details")).not.toHaveAttribute("open");
+    fireEvent.click(screen.getByText("角色描述 · 设计依据"));
+    expect(screen.getByText("剧本提取的角色描述")).toBeInTheDocument();
+    expect(screen.getAllByRole("button", { name: "AI 完善" })).toHaveLength(1);
+    expect(screen.queryByRole("button", { name: "AI 润色" })).not.toBeInTheDocument();
+});
+
+it("restores a saved height and carries a custom value through AI input, prompt projection and confirmation", async () => {
+    apiMocks.getAssetReferenceIndex.mockResolvedValueOnce({ assets: [] } as any);
+    apiMocks.agentRequest.mockClear();
+    const onUpdateAttributes = vi.fn().mockResolvedValue(undefined);
+    render(<CharacterWorkbench asset={{ id: "character-height", name: "Hero", description: "成年剑客",
+        character_design: { design_draft: {
+            identity: { features: { height: "身高约178厘米", build: "体型匀称" }, editor_mode: "fields" },
+        } },
+    }} onClose={vi.fn()} onUpdateDescription={vi.fn()} onUpdateAttributes={onUpdateAttributes} onGenerate={vi.fn()} generatingTypes={[]} />);
+    fireEvent.click(screen.getByRole("button", { name: "展开角色设计" }));
+    expect(screen.getByRole("textbox", { name: "角色身高" })).toHaveValue("身高约178厘米");
+    fireEvent.change(screen.getByRole("textbox", { name: "角色身高" }), { target: { value: "身高约182厘米" } });
+    await waitFor(() => expect(screen.getByRole("button", { name: "AI 完善" })).not.toBeDisabled());
+    fireEvent.click(screen.getByRole("button", { name: "AI 完善" }));
+    await waitFor(() => expect(apiMocks.agentRequest).toHaveBeenCalledWith("/character-design/draft/preview", "POST", expect.objectContaining({ current_draft: expect.stringContaining("身高约182厘米") })));
+    fireEvent.click(screen.getByRole("button", { name: "应用到图片提示词" }));
+    expect(screen.getByRole("textbox", { name: "输入 Prompt，/ 检索词典和 Skill，@ 检索资产" })).toHaveTextContent("身高约182厘米");
+    fireEvent.click(screen.getByRole("button", { name: "确认设计" }));
+    await waitFor(() => expect(onUpdateAttributes).toHaveBeenCalledWith({ character_design: expect.objectContaining({ identity: expect.objectContaining({ features: expect.objectContaining({ height: "身高约182厘米" }) }) }) }));
 });

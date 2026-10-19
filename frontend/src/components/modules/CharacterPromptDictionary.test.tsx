@@ -366,3 +366,23 @@ it("fills a male garment slot with a menswear combination", () => {
   fireEvent.click(screen.getByRole("button", { name: "填写当前槽位" }));
   expect(replaceWithText).toHaveBeenCalledWith("商务西装套装");
 });
+
+
+it("opens height configuration and defers a height slot without body-build vocabulary", () => {
+  getPlatformReferenceLibrary.mockResolvedValueOnce({ resources: [] });
+  const { replaceWithText } = setup("身高");
+  fireEvent.click(screen.getByRole("option", { name: /配置面板 · 身高选择面板/ }));
+  fireEvent.change(screen.getByRole("combobox", { name: "身高" }), { target: { value: "身高约180厘米" } });
+  expect(screen.getByRole("textbox", { name: "将插入的完整文字" })).toHaveValue("身高：身高约180厘米。");
+  fireEvent.click(screen.getByRole("button", { name: "应用配置" }));
+  expect(replaceWithText).toHaveBeenCalledWith("身高：身高约180厘米。");
+});
+
+it("fills a height slot with just the selected height", () => {
+  getPlatformReferenceLibrary.mockResolvedValueOnce({ resources: [] });
+  const { replaceWithText } = setup("", "身高");
+  expect(screen.queryByRole("option", { name: /自然站立|圆脸|配置面板/ })).not.toBeInTheDocument();
+  fireEvent.click(screen.getByRole("option", { name: /词条 · 身高偏高/ }));
+  fireEvent.click(screen.getByRole("button", { name: "填写当前槽位" }));
+  expect(replaceWithText).toHaveBeenCalledWith("身高偏高");
+});

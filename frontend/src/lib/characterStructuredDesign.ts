@@ -1,6 +1,6 @@
 export const IDENTITY_FIELDS = [
   ['face', '脸型与眉眼'], ['hair', '发型'], ['skin', '肤色与肤质'],
-  ['build', '体态与比例'], ['recognition_marks', '识别锚点'],
+  ['height', '身高'], ['build', '体态与比例'], ['recognition_marks', '识别锚点'],
 ] as const;
 export const LOOK_FIELDS = [
   ['clothing', '服装结构与材质'], ['palette', '主色与配色'],

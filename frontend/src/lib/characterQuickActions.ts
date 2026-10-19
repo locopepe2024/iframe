@@ -1,7 +1,7 @@
 import { AVATAR_FEATURE_LIBRARY } from "@/lib/avatarFeatureLibrary";
 import type { PlatformReferenceResource } from "@/lib/api";
 
-export type CharacterPresetTarget = "route" | "style_notes" | "face" | "skin" | "build" | "clothing" | "hair" | "recognition_marks";
+export type CharacterPresetTarget = "route" | "style_notes" | "face" | "skin" | "height" | "build" | "clothing" | "hair" | "recognition_marks";
 export type CharacterPresetCategory = "风格" | "面容" | "皮肤" | "身材体态" | "服装" | "发型";
 export type CharacterSemanticDomain = "character.identity" | "character.look" | "world.style";
 export type CharacterDictionaryEntryType = "term" | "pattern";

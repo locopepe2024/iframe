@@ -274,11 +274,11 @@ def test_character_design_draft_accepts_annotated_visual_notes(ctx, monkeypatch)
 
 def test_character_design_draft_returns_bounded_visual_features(ctx, monkeypatch):
     monkeypatch.setattr(agent, 'validate_model', lambda *_: None)
-    monkeypatch.setattr(agent, 'complete', lambda *_: '{"identity":{"features":{"face":"窄长脸","hair":"黑发束起"}},"look":{"features":{"clothing":"深蓝劲装"}},"review_items":[]}')
+    monkeypatch.setattr(agent, 'complete', lambda *_: '{"identity":{"features":{"face":"窄长脸","hair":"黑发束起","height":"身高约178厘米"}},"look":{"features":{"clothing":"深蓝劲装"}},"review_items":[]}')
     body = agent.CharacterDesignRequest(model='qwen', character_name='苏砚', profile='少年剑客', route='historical-costume')
     result = run_reviewed_character_draft(body, ctx)
-    assert result['identity']['features'] == {'face': '窄长脸', 'hair': '黑发束起'}
-    assert result['identity']['visual_notes'] == '窄长脸；黑发束起'
+    assert result['identity']['features'] == {'face': '窄长脸', 'hair': '黑发束起', 'height': '身高约178厘米'}
+    assert result['identity']['visual_notes'] == '窄长脸；黑发束起；身高约178厘米'
     assert result['look']['features'] == {'clothing': '深蓝劲装'}
 
 
@@ -622,3 +622,14 @@ def test_product_recreation_installs_alone_reaches_chat_and_respects_target(ctx,
     assert package['instructions'] not in skills.creative_guidance('other-owner', '用H3换商品')
     skills.patch(package['id'], skills.SkillPatch(enabled=False), ctx)
     assert package['instructions'] not in skills.creative_guidance(ctx.owner_profile_id, '用H3换商品')
+
+
+def test_character_design_unifies_completion_and_polish_while_preserving_constraints(ctx, monkeypatch):
+    monkeypatch.setattr(agent, 'validate_model', lambda *_: None)
+    body = agent.CharacterDesignRequest(model='qwen', character_name='苏砚', profile='成年剑客',
+        current_draft='身高178厘米，肤色小麦色，上身仅两件衣物', route='historical-costume')
+    preview = agent.preview_character_design_draft(body, ctx)
+    assert '一次完成当前草稿的表达整理与缺失细节提案' in preview['messages']['system']
+    assert '不得为了丰富细节擅自改写' in preview['messages']['system']
+    assert '不得由单张参考图推断精确厘米数' in preview['messages']['system']
+    assert '身高178厘米，肤色小麦色，上身仅两件衣物' in preview['messages']['user']

@@ -50,11 +50,11 @@ def test_character_design_accepts_structured_identity_and_rejects_invalid_featur
     pipeline._find_asset_with_source = lambda *_: (character, script)
     pipeline._save_after_asset_mutation = lambda *_: None
 
-    design = {"identity": {"features": {"face": "窄长脸"}}, "look": {"features": {"clothing": "深蓝劲装"}},
+    design = {"identity": {"features": {"face": "窄长脸", "height": "身高约178厘米"}}, "look": {"features": {"clothing": "深蓝劲装"}},
               "reference_assets": [{"asset_type": "scene", "asset_id": "street", "variant_id": "blue"}], "confirmed": True}
     pipeline.update_asset_attributes("project", "character", "character", {"character_design": design})
     revision = character.character_design["design_revisions"][0]
-    assert revision["design"]["identity"]["features"] == {"face": "窄长脸"}
+    assert revision["design"]["identity"]["features"] == {"face": "窄长脸", "height": "身高约178厘米"}
     assert revision["design"]["reference_assets"] == design["reference_assets"]
 
     for bad in ({"face": 42}, {"camera_angle": "俯拍"}, {"face": "x" * 501}):

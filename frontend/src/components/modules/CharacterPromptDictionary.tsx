@@ -100,8 +100,8 @@ export default function CharacterPromptDictionary({ suggestion, onClose, onApply
       }
     }
   }
-  if (onSkill && !suggestion.slot) entries.unshift({ id: "character-visual-design", title: "生成角色视觉设计草稿", type: "Skill", categories: [], domain: "Skill",
-    text: "角色身份与造型双 Skill 流程。输入：角色描述、侧栏身份与造型草稿及已选设计参考。下一步审核实际模型输入，确认后才执行。", source: "当前角色台已接入 Skill", search: "skill 技能 角色设计 身份 外观 草稿" });
+  if (onSkill && !suggestion.slot) entries.unshift({ id: "character-visual-design", title: "AI 完善角色设计", type: "Skill", categories: [], domain: "Skill",
+    text: "一次整理当前角色设计并提出缺失细节。输入：角色描述、侧栏身份与造型草稿及已选设计参考。下一步审核实际模型输入，确认后才执行。", source: "当前角色台已接入 Skill", search: "skill 技能 角色设计 完善 润色 身份 外观 草稿" });
   const group = CHARACTER_DICTIONARY_GROUPS.find((item) => item.id === category);
   const inCategory = (entry: Entry, key: string) => entry.categories.includes(key)
     || CHARACTER_DICTIONARY_GROUPS.find((item) => item.id === key)?.children.some(([child]) => entry.categories.includes(child));

@@ -144,3 +144,12 @@ it("separates modern men's garment slots and renders optional outerwear without 
   expect(dictionaryPresetFields(female).find((field) => field.key === "女装款式")?.options).toContain("连衣裙");
   expect(dictionaryPresetFields(female).find((field) => field.key === "女装款式")?.options).not.toContain("商务西装套装");
 });
+
+
+it("routes height independently from build, posture and skin with no forced default", () => {
+  expect(dictionarySlotCategory("身高")).toBe("height");
+  const panel = CHARACTER_DICTIONARY_PRESETS.find((entry) => entry.id === "dictionary.panel.height")!;
+  expect(renderDictionaryPreset(panel)).toBe("");
+  expect(renderDictionaryPreset(panel, { "身高": "身高约180厘米" })).toBe("身高：身高约180厘米。");
+  expect(dictionaryPresetFields(panel)[0].options).not.toContain("自然站立");
+});

@@ -23,7 +23,7 @@ const DOMAIN_LABELS: Record<CharacterSemanticDomain, string> = {
   "world.style": "风格",
 };
 const COMMANDS = [
-  { id: "design", title: "生成角色视觉设计草稿", detail: "双 Skill 流程；先审核模型输入", search: "角色设计 草稿 skill 技能 身份 外观" },
+  { id: "design", title: "AI 完善角色设计", detail: "整理当前草稿并提出补充；先审核模型输入", search: "角色设计 完善 润色 草稿 skill 技能 身份 外观" },
   { id: "terms", title: "插入描述词", detail: "选择词条，写入可编辑草稿", search: "插入 添加 描述词 风格 面容 皮肤 身材 体态 服装 发型" },
 ] as const;
 

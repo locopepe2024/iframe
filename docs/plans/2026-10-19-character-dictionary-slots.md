@@ -67,3 +67,10 @@ Split body skin tone from skin texture. `/肤色` and `/肤质` open a shared op
 ## Follow-up: modern menswear
 
 Add `/男装` and `/现代男装` configuration, a complete modern menswear display template and distinct modern male upper/outer/trouser/footwear categories. Reuse color, material, fit and wear vocabulary. Configure upper, outer and trousers with separate colors, plus independent upper/trouser materials; outerwear and accessories are optional and omitted when unspecified. Keep the existing women's preset IDs and give women's garment slots their own category. These categories describe garment search destinations, not restrictions on who may wear them. Validate male/female slot separation, upper/lower output, optional outerwear and complete template preview/application.
+
+
+## Follow-up: unified AI action, workbench hierarchy and height
+
+Acceptance: one optional “AI 完善” action reuses the existing reviewed design request; no second polish service or automatic model call. It organizes the current design and proposes missing details while preserving explicit constraints and surfacing conflicting inputs. Keep the role description read-only and collapsible, labelled as description rather than claiming verbatim script provenance. Keep one asset-type tab bar without step numbers, hide the duplicate active-panel title, and label static/motion modes consistently.
+
+Height is independent of body build and posture: add a dictionary category/panel, `[身高]` destination, and an optional identity `height` feature. Support descriptive presets and user-entered centimetres in the identity editor; do not infer exact height from a single image. Extend AI output normalization and revision validation together so height survives draft review, save and reload. Existing drafts remain valid. Verify dictionary preview/slots, workbench hierarchy, AI input review, height projection, backend output and persisted revisions; typecheck and build. No image-generation outcome or automatic conflict detection is implied by prompt instructions alone.

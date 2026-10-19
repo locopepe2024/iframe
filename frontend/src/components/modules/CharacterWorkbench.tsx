@@ -1157,8 +1157,11 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
 
                 <div className="min-h-0 flex-1 flex flex-col lg:flex-row overflow-hidden">
                     <aside id="character-design-dossier" className={`${showProfile ? "block max-h-[45%] lg:max-h-none" : "hidden"} lg:w-[min(30vw,420px)] shrink-0 overflow-y-auto border-b lg:border-b-0 lg:border-r border-glass-border bg-surface-inset p-4`} aria-label={tc("dossier")}>
-                        <h3 className="text-sm font-semibold text-foreground">{tc("dossier")}</h3>
-                        <p className="mt-2 whitespace-pre-wrap break-words text-sm leading-6 text-text-secondary">{asset.description || tc("noDossier")}</p>
+                        <details className="rounded-md border border-glass-border p-3">
+                            <summary className="cursor-pointer text-sm font-semibold text-foreground focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary">角色描述 · 设计依据</summary>
+                            <p className="mt-2 whitespace-pre-wrap break-words text-sm leading-6 text-text-secondary">{asset.description || tc("noDossier")}</p>
+                            <p className="mt-2 text-[11px] text-text-muted">供设计核对，不随 AI 完善改写。</p>
+                        </details>
                         <section className="mt-5 border-t border-glass-border pt-4" aria-labelledby="character-visual-design-title">
                             <div className="flex items-center justify-between gap-2">
                                 <h3 id="character-visual-design-title" className="text-sm font-semibold text-foreground">角色视觉设计</h3>
@@ -1166,7 +1169,7 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
                                     {designStatus === "confirmed" ? `已确认 r${designRevision}` : "草稿"}
                                 </span>
                             </div>
-                            <p className="mt-1 text-xs leading-5 text-text-muted">AI 会补全可创作的外观与造型细节，并标明创意选择；只有影响角色设定的关键歧义才需要核对。</p>
+                            <p className="mt-1 text-xs leading-5 text-text-muted">可用词典和面板完成设计，也可选用 AI 完善，一次整理表达并提出缺失细节；确认后再应用到图片提示词。</p>
                             <CharacterSlashPanel open={slashOpen} query={slashQuery} onQueryChange={setSlashQuery}
                                 onOpenChange={setSlashOpen} onPreset={applyQuickPreset}
                                 onPattern={(presets) => presets.forEach(applyQuickPreset)}
@@ -1208,7 +1211,7 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
                                 <div className="mt-2 space-y-2">
                                     {IDENTITY_FIELDS.map(([key, label]) => <div key={key}>
                                         <label className="block text-xs text-text-secondary" htmlFor={`character-identity-${key}`}>{label}</label>
-                                        <textarea id={`character-identity-${key}`} aria-label={`角色${label}`} value={identityFeatures[key] || ""} maxLength={500} rows={2}
+                                        <textarea id={`character-identity-${key}`} aria-label={`角色${label}`} value={identityFeatures[key] || ""} maxLength={500} rows={2} placeholder={key === "height" ? "例如：身高约178厘米，或身高偏高；可留空" : undefined}
                                             onChange={(event) => { setIdentityFeatures((current) => ({ ...current, [key]: event.target.value })); clearPresetTarget(key); setDesignIdentityBasis(["user_specified"]); setDesignSource("stated"); setDesignStatus("draft"); setPromptsNeedDesignApply(true); }}
                                             onKeyDown={openSlashFromField}
                                             className="mt-1 w-full resize-y rounded border border-glass-border bg-surface px-2 py-1.5 text-xs text-foreground" />
@@ -1253,12 +1256,12 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
                                     {!designModels.length && <option value="">暂无可用模型</option>}
                                     {designModels.map((model) => <option key={model.api_model_id} value={model.api_model_id}>{model.display_name}</option>)}
                                 </select>
-                                <button type="button" disabled={!designModel || designing || !asset.description} onClick={() => void generateDesignDraft()} className="inline-flex min-h-10 items-center gap-1.5 rounded-md border border-glass-border px-3 text-sm text-foreground hover:bg-hover-bg disabled:opacity-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary"><Sparkles size={15} />{designing ? "设计中" : "生成草稿"}</button>
+                                <button type="button" disabled={!designModel || designing || !asset.description} onClick={() => void generateDesignDraft()} className="inline-flex min-h-10 items-center gap-1.5 rounded-md border border-glass-border px-3 text-sm text-foreground hover:bg-hover-bg disabled:opacity-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary"><Sparkles size={15} />{designing ? "完善中" : "AI 完善"}</button>
                             </div>
                             {designReview && <div className="mt-3"><VideoPolishReview
                                 messages={designReview.messages} media={designReview.media} formatNote={designReview.formatNote}
                                 isContextIr={false} isSubmitting={designing} error={designError}
-                                userLabel="角色档案与视觉要求" confirmLabel="确认输入并生成角色草稿"
+                                userLabel="角色档案与视觉要求" confirmLabel="确认输入并完善角色设计"
                                 onChange={messages => setDesignReview(current => current && ({ ...current, messages }))}
                                 onCancel={() => setDesignReview(null)} onConfirm={() => void confirmDesignDraft()} /></div>}
                             {designUnresolved.length > 0 && (
@@ -1387,6 +1390,7 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
                     {activePanel === "full_body" &&
                     <WorkbenchPanel
                         assetScope={asset.id}
+                        hideTitle
                         title={tc("masterAsset")}
                         isActive={activePanel === "full_body"}
                         onClick={() => setActivePanel("full_body")}
@@ -1443,6 +1447,7 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
                     {activePanel === "three_view" &&
                     <WorkbenchPanel
                         assetScope={asset.id}
+                        hideTitle
                         title={tc("threeViews")}
                         isActive={activePanel === "three_view"}
                         onClick={() => setActivePanel("three_view")}
@@ -1480,6 +1485,7 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
                     {activePanel === "headshot" &&
                     <WorkbenchPanel
                         assetScope={asset.id}
+                        hideTitle
                         title={tc("avatar")}
                         isActive={activePanel === "headshot"}
                         onClick={() => setActivePanel("headshot")}
@@ -1667,6 +1673,7 @@ export function WorkbenchPanel({
     status,
     isLocked,
     description,
+    hideTitle = false,
     aspectRatio = "9:16",
     // Video specific
     isVideo = false,
@@ -1716,24 +1723,25 @@ export function WorkbenchPanel({
             {/* Panel Header */}
             <div className="p-4 border-b border-border-subtle">
                 <div className="flex items-center justify-between mb-1">
-                    <h3 className={`font-bold text-sm uppercase tracking-wider ${isActive ? 'text-primary' : 'text-text-secondary'}`}>
+                    <h3 className={`${hideTitle ? "sr-only" : ""} font-bold text-sm uppercase tracking-wider ${isActive ? 'text-primary' : 'text-text-secondary'}`}>
                         {title}
                     </h3>
 
                     {/* Mode Switcher (Asset Activation v2) */}
                     {supportsMotion && (
-                        <div className="flex items-center gap-1 bg-surface p-1 rounded-lg border border-glass-border">
+                        <div role="group" aria-label="资产呈现方式" className="flex items-center gap-1 bg-surface p-1 rounded-lg border border-glass-border">
                             <button
+                                type="button" aria-pressed={mode === 'static'}
                                 onClick={(e) => { e.stopPropagation(); onModeChange?.('static'); }}
-                                className={`flex items-center gap-1 px-2 py-1 rounded text-xs font-medium transition-colors ${mode === 'static'
+                                className={`min-h-11 flex items-center gap-1 px-3 py-1 rounded text-xs font-medium transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary ${mode === 'static'
                                     ? 'bg-primary/20 text-primary'
                                     : 'text-text-secondary hover:text-foreground'
                                     }`}
                             >
                                 <PhotoIcon size={12} />
-                                Static
+                                {tc("staticMode")}
                             </button>
-                            <button
+                            <button type="button" aria-pressed={mode === 'motion'}
                                 onClick={(e) => {
                                     e.stopPropagation();
                                     if (!hasStaticImage) {
@@ -1742,7 +1750,7 @@ export function WorkbenchPanel({
                                     }
                                     onModeChange?.('motion');
                                 }}
-                                className={`flex items-center gap-1 px-2 py-1 rounded text-xs font-medium transition-colors ${mode === 'motion'
+                                className={`min-h-11 flex items-center gap-1 px-3 py-1 rounded text-xs font-medium transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary ${mode === 'motion'
                                     ? 'bg-purple-500/20 text-purple-400'
                                     : 'text-text-secondary hover:text-foreground'
                                     }`}

@@ -2690,7 +2690,7 @@ class ComicGenPipeline(StudioOwnerMixin):
             look = design.get("look", {})
             if not isinstance(identity, dict) or not isinstance(look, dict):
                 raise ValueError("Character design identity and look must be objects")
-            for section, allowed in ((identity, {"face", "hair", "skin", "build", "recognition_marks"}),
+            for section, allowed in ((identity, {"face", "hair", "skin", "height", "build", "recognition_marks"}),
                                      (look, {"clothing", "palette", "accessories", "weapon"})):
                 if section.get("editor_mode") not in (None, "notes", "fields"):
                     raise ValueError("Character design editor mode is invalid")
