@@ -544,13 +544,16 @@ def _compile_character_design_draft_input(body: CharacterDesignRequest, ctx: Use
               + "只返回 JSON 对象：identity.visual_notes、identity.features、identity.basis、look.visual_notes、look.features、look.basis、review_items（对象数组，每项含 question 和 suggestion，可选 suggested_age_stage 或 suggested_route）。"
               + "identity.features 仅含 face、hair、skin、height、build、recognition_marks；look.features 仅含 clothing、palette、accessories、weapon。每项是简短、可观察的视觉值，无依据可留空，不得把性格或场景光影填入。visual_notes 是兼容旧工作台的摘要，不应增加 features 中没有的新事实。"
               + "一次完成当前草稿的表达整理与缺失细节提案，不要求用户再进行一次润色。保留用户已明确选择或填写的身高、肤色、服装件数、穿着关系、材质和配饰，不得为了丰富细节擅自改写。height 单独描述身高，不混入体型或姿态；未给出数值时可以提出身高感，不得由单张参考图推断精确厘米数。"
+              + '严格格式示例（只说明形状，不是默认设计）：{"identity":{"visual_notes":"面容与体态摘要","features":{"face":"具体面容","height":"用户指定的身高描述"},"basis":["user_specified"]},"look":{"visual_notes":"穿搭摘要","features":{"clothing":"具体穿着关系"},"basis":["user_specified"]},"review_items": []}。'
+              + "identity 和 look 必须为对象，features 必须为对象，其值必须为字符串；每个 features 值最多 500 个字符，不要使用对象或数组包装。未指定项可省略或用空字符串，不得将缺失字段写成 null。visual_notes 必须为字符串，review_items 必须为数组，无冲突时返回空数组 []。不要输出 Markdown 或 JSON 之外的解释。"
+              + "current_draft 是当前由用户编辑的角色细节，其中明确的视觉选择视为 user_specified；与 profile 中外观描述不同时保留用户选择，并仅对确实需要确认的冲突给出具体建议，不得直接拒绝设计或只返回问题。"
               + "basis 只能使用 script_fact、user_specified、confirmed_design、verified_reference、creative_choice；可用字符串数组表示混合来源。"
               + "每段视觉值必须具体、可观察、彼此协调。不得把角色性格、镜头动作或通用质量词写入视觉值。"
               + "群体角色须先给出统一主色、统一服装轮廓和一个视觉焦点，再用少量面孔或体型差异区分成员；杂色、拼凑和脏污应在受控色系内表现，不要扩展成多种抢眼颜色与层叠碎片。用户要求简化服装时，减少层数、配饰和兵器展示，不得一边保留满屏装饰一边只追加‘简化’字样。"
-              + "profile 是项目角色档案；user_visual_requirements.identity 和 .look 是用户在生成前明确填写的视觉约束，必须保留并据此补全设计。current_draft 是上一轮可编辑草稿，优先级低于用户视觉约束；user_answers 是用户明确回答。不得把 current_draft 当成剧本事实，也不得覆盖 confirmed_design 的已确认识别特征。"
+              + "profile 是项目角色档案；user_visual_requirements.identity 和 .look 是用户在生成前明确填写的视觉约束，必须保留并据此补全设计。current_draft 是用户当前编辑的角色视觉要求，优先采用其中明确的选择；user_answers 是用户明确回答。不得把 current_draft 当成剧本事实；与 confirmed_design 的已确认识别特征冲突时保留具体设计并给出冲突建议。"
               + "对缺少描写但可创作的外貌和造型细节，结合人物档案、选定题材 / 时代 / 年龄阶段、项目画风及参考素材，给出一套明确方案并标为 creative_choice；尤其需要补齐可用于出图的服装结构、面料、鞋履、发式和配饰。少年感与 young-adult 可以兼容，请设计年轻成年人中偏少年的可见年龄表现，不要仅因此列待核对。不要把每个缺失字段变成 review_item。"
               + "不得把创意选择伪装成剧本事实；不要依据姓名、职业或族裔刻板推断肤色、阶层或其他身份事实。没有可靠史实上下文时，将服饰方案明确写成与题材相容的架空设计，而不是声称具体朝代规制。"
-              + "review_items 只用于输入中有明确相互矛盾的事实或已确认设定时的关键抉择；资料未提及年龄观感、画风、五官、体型或服饰细节不是冲突，请直接设计并标为 creative_choice。每项只写一个原子问题并提供一条可直接采纳的 suggestion；没有具体建议时不要输出 review_item。suggestion 必须是可直接加入图片 Prompt 的视觉值，不能是让用户修改表单、选择路由或回答问题的操作指令。不要把常规的造型细节放入 review_items，也不要输出旧字段 unresolved。"
+              + "review_items 只用于输入中有明确相互矛盾的事实或已确认设定时的关键抉择；资料未提及年龄观感、画风、五官、体型或服饰细节不是冲突，请直接设计并标为 creative_choice。每项只写一个原子问题，question 直接引用相互冲突的两项要求并包含“冲突”或“矛盾”，同时提供一条可直接采纳的 suggestion；没有具体建议时不要输出 review_item。suggestion 必须是可直接加入图片 Prompt 的视觉值，不能是让用户修改表单、选择路由或回答问题的操作指令。不要把常规的造型细节放入 review_items，也不要输出旧字段 unresolved。"
               + "若建议改变年龄阶段或题材画风，同时提供与 suggestion 一致的 suggested_age_stage 或 suggested_route；否则工作台选项与图片 Prompt 会冲突。"
               + "route 为空表示用户未另外指定题材路由，依据 profile 与 current_draft 中明确给出的时代、服装和画风设计，不默认补成现代写实。current_draft 可以是用户当前编辑的图片 Prompt，应保留其中明确的角色细节；白底、构图、拍摄景别等资产出图指令不写入 identity 或 look。"
               + "参考图片是只读视觉证据，只能描述图中清晰可见的内容；不要推断图外事实。不要把图中其他人物或物品混为本角色。")
@@ -714,8 +717,25 @@ def character_design_draft(body: CharacterDesignRequest, ctx: UserContext = Depe
             else:
                 raise ValueError("Invalid unresolved item")
         unresolved = list(dict.fromkeys(unresolved))
-    except (ValueError, TypeError):
-        raise HTTPException(502, "角色设计模型未返回可编辑的结构化草稿，请重试")
+    except (ValueError, TypeError) as exc:
+        # Report bounded validation reasons; never log the profile, model prose or credentials.
+        reasons = {
+            "Missing character design object": ("missing_object", "未返回包含 identity 和 look 的 JSON 对象"),
+            "Model returned review items without design suggestions": ("invalid_review", "返回了待办问题或不完整的冲突建议"),
+            "Invalid design sections": ("invalid_sections", "identity 或 look 不是对象"),
+            "Invalid character design features": ("invalid_features", "视觉字段名称或结构不符合要求"),
+            "Invalid character design feature value": ("invalid_feature_value", "视觉字段的类型或长度不符合要求"),
+            "Missing concrete identity design": ("missing_identity", "缺少具体的角色外观设计"),
+            "Invalid review items": ("invalid_review_items", "冲突建议不是数组"),
+            "Invalid review item": ("invalid_review_item", "冲突建议字段格式不符合要求"),
+            "Invalid suggested age stage": ("invalid_age_stage", "建议的年龄阶段不符合要求"),
+            "Invalid suggested route": ("invalid_route", "建议的题材路由不符合要求"),
+        }
+        reason, detail = reasons.get(str(exc), ("invalid_schema", "返回字段结构不符合要求"))
+        diagnostic_id = uuid.uuid4().hex[:12]
+        logger.warning("Character design rejected: diagnostic_id=%s model=%s reason=%s answer_chars=%s",
+                       diagnostic_id, body.model, reason, len(answer))
+        raise HTTPException(502, f"角色设计模型返回校验失败：{detail}。请重试或切换设计模型（诊断编号 {diagnostic_id}）") from None
     return {
         "identity": {"visual_notes": identity_notes.strip(), "features": identity_features, "basis": identity.get("basis", ["creative_choice"])},
         "look": {"visual_notes": look_notes.strip(), "features": look_features, "basis": look.get("basis", ["creative_choice"])},

@@ -98,3 +98,10 @@ An unspecified style route must remain unspecified rather than silently selectin
 ### Optional face texture details
 
 The face configuration panel includes independent optional eye-area texture, skin tone and skin texture fields. Reuse the existing skin categories and tone vocabulary without duplicating dictionaries. Add descriptions distinguishing lines visible at rest from smile-only lines, lower-eyelid lines and eye bags. Reuse pores, microtexture and freckles; add fine texture, mild dryness, localized oiliness and light acne marks. Eye-area slots exclude combined aged-skin/tone descriptions; freckles remain searchable as identifying marks and skin details. All fields start unspecified, and omitted fields produce no clause. Selected eye/texture labels expand to observable descriptions in both panel and bracket slots. Verify optional output, shared choices, slot isolation and preview/application. Image fidelity and wrinkle visibility in generated results still require generation testing.
+
+
+### Garment material classification and AI draft rejection diagnostics
+
+Reproduction: the legacy clothing-material library includes wear and fold descriptions, exposing them in material slots and allowing wear prose between garment color and shape. Classify wear as garment condition, folds and leather structural accents as garment detail while preserving IDs and saved prose. Verify garment material choices and labelled condition output.
+
+The design endpoint maps multiple validation failures to one generic error, and does not record which check rejected the result. Add bounded diagnostic reasons and a correlation ID without logging character input or model text. Keep invalid output rejected and do not silently retry. Align the system contract with existing parser requirements: exact JSON shape, string feature values of at most 500 characters, no null fields, empty review array for no conflict, and current user-edited details treated as explicit visual choices. The reported live rejection's exact cause remains unproven without a corresponding model response or new diagnostic record. Prompt-contract changes alone do not establish model compliance.

@@ -355,7 +355,7 @@ def test_character_design_draft_keeps_previous_ai_draft_separate_from_profile(ct
     assert '"profile": "剧本写少年剑客"' in user_data
     assert '"current_draft": "上一轮 AI 草稿：深棕眼"' in user_data
     assert '"user_answers": {"年龄表现": "十七八岁少年感"}' in user_data
-    assert 'current_draft 是上一轮可编辑草稿' in complete.call_args.args[2][0]['content']
+    assert 'current_draft 是用户当前编辑的角色视觉要求' in complete.call_args.args[2][0]['content']
 
 
 def test_character_design_draft_receives_user_visual_requirements_separately(ctx, monkeypatch):
@@ -665,3 +665,43 @@ def test_character_design_still_rejects_an_unknown_explicit_style_route(ctx, mon
     with pytest.raises(HTTPException) as exc:
         agent.preview_character_design_draft(body, ctx)
     assert exc.value.status_code == 422
+
+
+def test_character_design_output_contract_defines_types_bounds_and_current_details(ctx, monkeypatch):
+    monkeypatch.setattr(agent, 'validate_model', lambda *_: None)
+    body = agent.CharacterDesignRequest(model='qwen', character_name='角色', profile='少年，素黑劲装',
+        current_draft='靛蓝色交领长袍，米白里衣，上身仅两件，身高约180厘米')
+    system = agent.preview_character_design_draft(body, ctx)['messages']['system']
+    assert '每个 features 值最多 500 个字符' in system
+    assert '"review_items": []' in system
+    assert '当前由用户编辑的角色细节' in system
+    assert '不得将缺失字段写成 null' in system
+
+
+def test_character_design_rejection_has_safe_reason_and_reference(ctx, monkeypatch, caplog):
+    monkeypatch.setattr(agent, 'validate_model', lambda *_: None)
+    monkeypatch.setattr(agent, 'complete', lambda *_: '{"identity":{"features":{"height":180}},"look":{},"review_items":[]}')
+    body = agent.CharacterDesignRequest(model='qwen', character_name='角色', profile='PRIVATE_PROFILE')
+    with pytest.raises(HTTPException) as exc:
+        run_reviewed_character_draft(body, ctx)
+    assert exc.value.status_code == 502
+    assert '视觉字段的类型或长度不符合要求' in exc.value.detail
+    assert '诊断编号' in exc.value.detail
+    assert 'reason=invalid_feature_value' in caplog.text
+    assert 'PRIVATE_PROFILE' not in caplog.text
+    assert '"height":180' not in caplog.text
+
+
+def test_character_design_distinguishes_missing_object_from_review_failure(ctx, monkeypatch):
+    monkeypatch.setattr(agent, 'validate_model', lambda *_: None)
+    body = agent.CharacterDesignRequest(model='qwen', character_name='角色', profile='少年')
+    for answer, reason in [
+        ('设计：黑发少年。', '未返回包含 identity 和 look 的 JSON 对象'),
+        ('{"identity":{"visual_notes":"黑发"},"look":{},"review_items":[{"question":"发型未指定","suggestion":"长发"}]}', '返回了待办问题或不完整的冲突建议'),
+    ]:
+        complete = Mock(return_value=answer)
+        monkeypatch.setattr(agent, 'complete', complete)
+        with pytest.raises(HTTPException) as exc:
+            run_reviewed_character_draft(body, ctx)
+        assert reason in exc.value.detail
+        assert complete.call_count == 1
