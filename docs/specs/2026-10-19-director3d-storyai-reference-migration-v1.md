@@ -172,3 +172,23 @@ Required behavior:
 - `frontend/src/components/director3d/scene/`
 - `frontend/src/components/director3d/reference/director-shot-package.ts`
 
+
+## Scene reference browser slice (2026-10-19)
+
+- Scope: current camera-view PNG and a self-contained JSON record containing
+  the exact PNG, dimensions, evaluated DirectorShotPackage and limitations.
+- No authoring state changes: users select camera view and pause playback.
+  Capture waits two animation frames and rejects a changed package/view.
+- This slice retains canvas stage helpers and excludes DOM framing overlays;
+  the UI and record state this explicitly. It is a browser reference, not a
+  confirmed scene asset or metric depth. No generation API is invoked.
+- Package projection includes render scene settings and panorama source checksum /
+  admission identity. Object revisions, material and source identity are retained.
+  Blocking, depth, scene reference and video use the same projection helper.
+- Old browser results remain viewable and downloadable with a stale notice.
+  Failed recapture preserves the previous result.
+- Verify: focused package/reference/depth/video tests and frontend typecheck.
+  Test source checksum, background, frame, camera and object changes; PNG/JSON
+  binding; wrong view, missing canvas, loading panorama and changed-state failure.
+- Deferred: helper-free scene render, generated scene asset admission and
+  downstream image/video consistency comparisons. No improvement claim is made.

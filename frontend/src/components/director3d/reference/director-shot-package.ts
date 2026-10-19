@@ -1,6 +1,8 @@
 import type { CharacterAuthoringState } from "../state/workbench-store";
 import type {
   ActorPathState,
+  RenderSceneState,
+  EnvironmentInputEntry,
   CameraCompositionState,
   CameraPathState,
   SceneObjectAuthoringState,
@@ -18,7 +20,8 @@ export interface DirectorShotPackage {
   activeCameraId: string;
   aspectRatio: CameraCompositionState["aspectRatio"];
   characters: Array<Pick<CharacterAuthoringState, "characterId" | "actorMappingId" | "proxyAssetId" | "label" | "transform" | "jointRotations" | "visible">>;
-  objects: Array<Pick<SceneObjectAuthoringState, "sceneObjectId" | "label" | "objectKind" | "primitiveKind" | "transform" | "dimensionsM" | "visible">>;
+  objects: SceneObjectAuthoringState[];
+  environment: { renderScene: RenderSceneState; panoramaSource: Pick<EnvironmentInputEntry, "inputId" | "checksum" | "admissionChecksum" | "environmentAllowed"> | null };
   camera: Pick<CameraCompositionState, "cameraId" | "label" | "transform" | "fovDeg" | "focalLengthMm" | "depthOfField" | "aspectRatio" | "lookAt" | "subjectTargetIds" | "visible">;
   actorPaths: ActorPathState[];
   cameraPaths: CameraPathState[];
@@ -42,6 +45,8 @@ function packageChecksum(value: Omit<DirectorShotPackage, "packageChecksum">): s
 }
 
 export interface DirectorShotPackageInput {
+  renderScene: RenderSceneState;
+  environmentInputs: EnvironmentInputEntry[];
   frame: number;
   durationSeconds: number;
   fps: number;
@@ -69,7 +74,14 @@ export function projectDirectorShotPackage(input: DirectorShotPackageInput): Dir
     activeCameraId: evaluated.activeCameraId,
     aspectRatio: camera.aspectRatio,
     characters: Object.values(evaluated.characters).map(({ characterId, actorMappingId, proxyAssetId, label, transform, jointRotations, visible }) => ({ characterId, actorMappingId, proxyAssetId, label, transform, jointRotations, visible })),
-    objects: Object.values(evaluated.sceneObjects).map(({ sceneObjectId, label, objectKind, primitiveKind, transform, dimensionsM, visible }) => ({ sceneObjectId, label, objectKind, primitiveKind, transform, dimensionsM, visible })),
+    objects: Object.values(evaluated.sceneObjects).map((object) => structuredClone(object)),
+    environment: {
+      renderScene: structuredClone(input.renderScene),
+      panoramaSource: (() => {
+        const source = input.environmentInputs.find((entry) => entry.inputId === input.renderScene.panorama.inputId);
+        return source ? { inputId: source.inputId, checksum: source.checksum, admissionChecksum: source.admissionChecksum, environmentAllowed: source.environmentAllowed } : null;
+      })(),
+    },
     camera: { cameraId: camera.cameraId, label: camera.label, transform: camera.transform, fovDeg: camera.fovDeg, focalLengthMm: camera.focalLengthMm, depthOfField: camera.depthOfField, aspectRatio: camera.aspectRatio, lookAt: camera.lookAt, subjectTargetIds: camera.subjectTargetIds, visible: camera.visible },
     actorPaths: Object.values(input.actorPaths).map((path) => structuredClone(path)),
     cameraPaths: Object.values(input.cameraPaths).map((path) => structuredClone(path)),

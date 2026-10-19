@@ -3,7 +3,7 @@ import { Download, Film, Square, X } from "lucide-react";
 
 import { useWorkbenchStore } from "../state/workbench-store";
 import { activeCameraAtFrame } from "../timeline/timeline-evaluation";
-import { projectDirectorShotPackage } from "./director-shot-package";
+import { currentDirectorShotPackage } from "./current-shot-package";
 import { recordWhiteModelVideo } from "./record-white-model-video";
 
 interface VideoResult { url: string; extension: "webm" | "mp4"; signature: string; snapshotId: string; packageChecksum: string; }
@@ -63,12 +63,7 @@ export function WhiteModelVideoRecorder({ recording, setRecording, stopPlayback 
       setError("单次录制最长 10 秒；请先缩短时间轴时长。");
       return;
     }
-    const first = projectDirectorShotPackage({
-      frame: 1, durationSeconds: state.dialogueTimeline.durationSeconds, fps: state.dialogueTimeline.fps,
-      tracks: state.dialogueTimeline.tracks, activeCameraTrackId: state.dialogueTimeline.activeCameraTrackId,
-      selectedCameraId: state.selectedCameraId, characters: state.characters, cameras: state.cameras,
-      sceneObjects: state.sceneObjects, actorPaths: state.actorPaths, cameraPaths: state.cameraPaths,
-    });
+    const first = currentDirectorShotPackage(state, 1);
     const aspect = aspectValue(first.aspectRatio);
     const authoredFrameCount = Math.round(state.dialogueTimeline.durationSeconds * state.dialogueTimeline.fps) + 1;
     for (let frame = 2; frame <= authoredFrameCount; frame += 1) {
