@@ -745,6 +745,7 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
 
     const generateDesignDraft = async () => {
         if (!designModel || designing) return;
+        setShowProfile(true);
         setDesigning(true);
         setDesignError("");
         setDesignReview(null);
@@ -1350,15 +1351,22 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
                                 <Sparkles size={14} aria-hidden="true" />应用到图片提示词
                             </button>
                         </div>}
-                        <div role="tablist" aria-label={tc("materialTypes")} className="flex shrink-0 gap-1 overflow-x-auto border-b border-glass-border px-3 sm:px-5">
-                            {([ ["full_body", tc("masterAsset")], ["three_view", tc("threeViews")], ["headshot", tc("avatar")] ] as const).map(([id, label]) => <button key={id} type="button" role="tab" aria-selected={activePanel === id} tabIndex={activePanel === id ? 0 : -1} onClick={() => setActivePanel(id)} onKeyDown={(event) => {
-                                if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
-                                event.preventDefault();
-                                const tabs = Array.from(event.currentTarget.parentElement?.querySelectorAll<HTMLElement>('[role="tab"]') || []);
-                                const next = tabs[(tabs.indexOf(event.currentTarget) + (event.key === "ArrowRight" ? 1 : tabs.length - 1)) % tabs.length];
-                                next?.click();
-                                next?.focus();
-                            }} className={`min-h-11 shrink-0 border-b-2 px-3 text-sm transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary ${activePanel === id ? "border-primary text-primary" : "border-transparent text-text-secondary hover:text-foreground"}`}>{label}</button>)}
+                        <div className="flex shrink-0 flex-wrap items-center justify-between gap-x-3 border-b border-glass-border px-3 sm:px-5" data-testid="character-asset-toolbar">
+                            <div role="tablist" aria-label={tc("materialTypes")} className="flex min-w-0 gap-1 overflow-x-auto">
+                                {([ ["full_body", tc("masterAsset")], ["three_view", tc("threeViews")], ["headshot", tc("avatar")] ] as const).map(([id, label]) => <button key={id} type="button" role="tab" aria-selected={activePanel === id} tabIndex={activePanel === id ? 0 : -1} onClick={() => setActivePanel(id)} onKeyDown={(event) => {
+                                    if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
+                                    event.preventDefault();
+                                    const tabs = Array.from(event.currentTarget.parentElement?.querySelectorAll<HTMLElement>('[role="tab"]') || []);
+                                    const next = tabs[(tabs.indexOf(event.currentTarget) + (event.key === "ArrowRight" ? 1 : tabs.length - 1)) % tabs.length];
+                                    next?.click();
+                                    next?.focus();
+                                }} className={`min-h-11 shrink-0 border-b-2 px-3 text-sm transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary ${activePanel === id ? "border-primary text-primary" : "border-transparent text-text-secondary hover:text-foreground"}`}>{label}</button>)}
+                            </div>
+                            {activePanel !== "three_view" && <CharacterPresentationSwitch
+                                mode={activePanel === "full_body" ? fullBodyMode : headshotMode}
+                                onModeChange={activePanel === "full_body" ? setFullBodyMode : setHeadshotMode}
+                                hasStaticImage={activePanel === "full_body" ? hasFullBodyImage : !!asset.headshot_image_url || !!asset.headshot_asset?.variants?.length}
+                            />}
                         </div>
                         {activePanel === "full_body" && <div className="flex flex-wrap items-center gap-2 border-b border-glass-border px-3 py-2 text-xs text-text-secondary sm:px-5">
                             <span>{asset.base_character_id ? "来源项目角色锚点" : "项目角色锚点"}：{assetPackView?.pack ? `r${assetPackView.pack.current_revision} · ${assetPackView.pack.revisions.at(-1)?.variant_id}` : "未确认"}</span>
@@ -1648,6 +1656,46 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
     );
 }
 
+function CharacterPresentationSwitch({ mode, onModeChange, hasStaticImage }: {
+    mode: "static" | "motion";
+    onModeChange?: (mode: "static" | "motion") => void;
+    hasStaticImage: boolean;
+}) {
+    const tc = useTranslations("character");
+    return (
+        <div role="group" aria-label="资产呈现方式" className="flex items-center gap-1 bg-surface p-1 rounded-lg border border-glass-border">
+            <button
+                type="button" aria-pressed={mode === 'static'}
+                onClick={(e) => { e.stopPropagation(); onModeChange?.('static'); }}
+                className={`min-h-11 flex items-center gap-1 px-3 py-1 rounded text-xs font-medium transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary ${mode === 'static'
+                    ? 'bg-primary/20 text-primary'
+                    : 'text-text-secondary hover:text-foreground'
+                    }`}
+            >
+                <PhotoIcon size={12} />
+                {tc("staticMode")}
+            </button>
+            <button type="button" aria-pressed={mode === 'motion'}
+                onClick={(e) => {
+                    e.stopPropagation();
+                    if (!hasStaticImage) {
+                        alert(tc('generateFirstStatic', { type: tc('fullBodyType') }));
+                        return;
+                    }
+                    onModeChange?.('motion');
+                }}
+                className={`min-h-11 flex items-center gap-1 px-3 py-1 rounded text-xs font-medium transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary ${mode === 'motion'
+                    ? 'bg-purple-500/20 text-purple-400'
+                    : 'text-text-secondary hover:text-foreground'
+                    }`}
+            >
+                <Video size={12} />
+                {tc("motionMode")}
+            </button>
+        </div>
+    );
+}
+
 export function WorkbenchPanel({
     title,
     assetScope,
@@ -1730,48 +1778,19 @@ export function WorkbenchPanel({
             onClick={onClick}
         >
             {/* Panel Header */}
-            <div className="p-4 border-b border-border-subtle">
+            {hideTitle ? <h3 className="sr-only">{title}</h3> : <div className="p-4 border-b border-border-subtle">
                 <div className="flex items-center justify-between mb-1">
-                    <h3 className={`${hideTitle ? "sr-only" : ""} font-bold text-sm uppercase tracking-wider ${isActive ? 'text-primary' : 'text-text-secondary'}`}>
+                    <h3 className={`font-bold text-sm uppercase tracking-wider ${isActive ? 'text-primary' : 'text-text-secondary'}`}>
                         {title}
                     </h3>
 
                     {/* Mode Switcher (Asset Activation v2) */}
                     {supportsMotion && (
-                        <div role="group" aria-label="资产呈现方式" className="flex items-center gap-1 bg-surface p-1 rounded-lg border border-glass-border">
-                            <button
-                                type="button" aria-pressed={mode === 'static'}
-                                onClick={(e) => { e.stopPropagation(); onModeChange?.('static'); }}
-                                className={`min-h-11 flex items-center gap-1 px-3 py-1 rounded text-xs font-medium transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary ${mode === 'static'
-                                    ? 'bg-primary/20 text-primary'
-                                    : 'text-text-secondary hover:text-foreground'
-                                    }`}
-                            >
-                                <PhotoIcon size={12} />
-                                {tc("staticMode")}
-                            </button>
-                            <button type="button" aria-pressed={mode === 'motion'}
-                                onClick={(e) => {
-                                    e.stopPropagation();
-                                    if (!hasStaticImage) {
-                                        alert(tc('generateFirstStatic', { type: tc('fullBodyType') }));
-                                        return;
-                                    }
-                                    onModeChange?.('motion');
-                                }}
-                                className={`min-h-11 flex items-center gap-1 px-3 py-1 rounded text-xs font-medium transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary ${mode === 'motion'
-                                    ? 'bg-purple-500/20 text-purple-400'
-                                    : 'text-text-secondary hover:text-foreground'
-                                    }`}
-                            >
-                                <Video size={12} />
-                                {tc("motionMode")}
-                            </button>
-                        </div>
+                        <CharacterPresentationSwitch mode={mode} onModeChange={onModeChange} hasStaticImage={hasStaticImage} />
                     )}
                 </div>
                 <p className="text-xs text-text-muted">{description}</p>
-            </div>
+            </div>}
 
             {/* Image Area with Variant Selector */}
             <div className="flex-1 min-h-0 flex flex-col lg:flex-row-reverse">
@@ -2006,8 +2025,15 @@ export function WorkbenchPanel({
                     />
                 </div>}
                 {!isVideo && <div className="px-4 pt-2">
-                    <button type="button" disabled={isLocked} onClick={() => setOpenSlashRequest((value) => value + 1)}
-                        className="min-h-11 rounded border border-glass-border px-3 text-xs text-foreground hover:bg-hover-bg disabled:opacity-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary">/ 词典和 Skill</button>
+                    <div className="flex flex-wrap items-center gap-2">
+                        <button type="button" disabled={isLocked} onClick={() => setOpenSlashRequest((value) => value + 1)}
+                            className="min-h-11 rounded border border-glass-border px-3 text-xs text-foreground hover:bg-hover-bg disabled:opacity-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary">/ 词典和 Skill</button>
+                        {onDesignSkill && <button type="button" disabled={isLocked || !canRunDesignSkill}
+                            onClick={() => onDesignSkill()}
+                            className="inline-flex min-h-11 items-center gap-1.5 rounded border border-glass-border px-3 text-xs text-foreground hover:bg-hover-bg disabled:opacity-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary">
+                            <Sparkles size={14} aria-hidden="true" />AI 完善角色设计
+                        </button>}
+                    </div>
                     {platformPromptSource && <p className="mt-1 break-words text-[11px] text-text-muted" aria-label="平台 Prompt 来源">
                         来源：{platformPromptSource.title} · r{platformPromptSource.revision}
                         {platformPromptSource.customized ? " · 已由用户修改" : " · 当前草稿"}

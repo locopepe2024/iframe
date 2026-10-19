@@ -1134,3 +1134,48 @@ it("retains a series character's owner scope when requesting its previews", () =
         projectStoreMocks.currentProject = project;
     }
 });
+
+
+it("keeps presentation controls with asset tabs and omits the embedded panel description", () => {
+    render(<CharacterWorkbench asset={{ id: "compact-character", name: "Hero", description: "A hero" }}
+        onClose={vi.fn()} onUpdateDescription={vi.fn()} onGenerate={vi.fn()} generatingTypes={[]} />);
+    const toolbar = screen.getByTestId("character-asset-toolbar");
+    expect(toolbar).toContainElement(screen.getByRole("tablist"));
+    expect(toolbar).toContainElement(screen.getByRole("group", { name: "资产呈现方式" }));
+    expect(screen.queryByText("The primary reference for character consistency.")).not.toBeInTheDocument();
+    const alert = vi.spyOn(window, "alert").mockImplementation(() => {});
+    fireEvent.click(screen.getByRole("button", { name: "motionMode" }));
+    expect(alert).toHaveBeenCalled();
+    expect(screen.getByRole("button", { name: "staticMode" })).toHaveAttribute("aria-pressed", "true");
+    alert.mockRestore();
+    fireEvent.click(screen.getByRole("tab", { name: "threeViews" }));
+    expect(screen.queryByRole("group", { name: "资产呈现方式" })).not.toBeInTheDocument();
+});
+
+it("opens the design review from the visible Prompt toolbar before executing AI completion", async () => {
+    apiMocks.agentRequest.mockClear();
+    render(<CharacterWorkbench asset={{ id: "visible-ai-character", name: "Hero", description: "A hero" }}
+        onClose={vi.fn()} onUpdateDescription={vi.fn()} onGenerate={vi.fn()} generatingTypes={[]} />);
+    expect(screen.getByRole("button", { name: "展开角色设计" })).toHaveAttribute("aria-expanded", "false");
+    const action = screen.getByRole("button", { name: "AI 完善角色设计" });
+    expect(action.parentElement).toContainElement(screen.getByRole("button", { name: "/ 词典和 Skill" }));
+    await waitFor(() => expect(action).not.toBeDisabled());
+    fireEvent.click(action);
+    expect(screen.getByRole("button", { name: "收起角色设计" })).toHaveAttribute("aria-expanded", "true");
+    await screen.findByRole("button", { name: "确认输入并完善角色设计" });
+    expect(apiMocks.agentRequest).toHaveBeenCalledWith("/character-design/draft/preview", "POST", expect.anything());
+    expect(apiMocks.agentRequest).not.toHaveBeenCalledWith("/character-design/draft", "POST", expect.anything());
+});
+
+
+it("preserves independent full-body and headshot presentation modes in the shared toolbar", () => {
+    render(<CharacterWorkbench asset={{ id: "mode-character", name: "Hero", description: "A hero",
+        full_body_image_url: "front.webp", headshot_image_url: "head.webp" }}
+        onClose={vi.fn()} onUpdateDescription={vi.fn()} onGenerate={vi.fn()} generatingTypes={[]} />);
+    fireEvent.click(screen.getByRole("button", { name: "motionMode" }));
+    expect(screen.getByRole("button", { name: "motionMode" })).toHaveAttribute("aria-pressed", "true");
+    fireEvent.click(screen.getByRole("tab", { name: "avatar" }));
+    expect(screen.getByRole("button", { name: "staticMode" })).toHaveAttribute("aria-pressed", "true");
+    fireEvent.click(screen.getByRole("tab", { name: "masterAsset" }));
+    expect(screen.getByRole("button", { name: "motionMode" })).toHaveAttribute("aria-pressed", "true");
+});

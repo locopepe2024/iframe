@@ -81,3 +81,9 @@ Height is independent of body build and posture: add a dictionary category/panel
 Reproduced: CharacterWorkbench constructs an authenticated preview locator from the image container (`ImageAsset`) rather than its owning character. Image containers have variants and a selected ID, but no character ID; the emitted locator omits assetId. The preview endpoint requires a visible owner asset and exact variant. Pass the owning character ID and project/series scope explicitly to all three image panels. Keep authenticated previews; do not replace a failed authorized request with an unrelated raw image fallback.
 
 VariantSelector must distinguish no variants, preview loading and preview failure, with an explicit retry. A variant pool without a stored selection may preview its first member without persisting a selection; a stale explicit selected ID must remain an unavailable selection rather than switching to legacy assets. Verify locator ownership, asynchronous loading/failure/retry, generation-result refresh, and existing selection/deletion behavior. This code reproduction does not establish the exact live request until runtime inspection.
+
+### Compact asset toolbar and visible AI completion
+
+Asset type tabs and the static/motion switch share a wrapping toolbar. The embedded panel retains an accessible heading but omits its duplicate header and explanatory description. Standalone panels retain their header. Three-view mode has no motion switch; static-image prerequisites and independent full-body/headshot mode state remain enforced.
+
+The image Prompt toolbar exposes “AI 完善角色设计” alongside dictionary discovery. It opens the role design sidebar and starts the existing input review, using the role design draft rather than silently rewriting the task Prompt. The user still confirms AI input and reviews the resulting design before applying it. Preview repair is automatic; retry is shown only after a preview load failure.
