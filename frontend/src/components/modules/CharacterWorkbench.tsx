@@ -1891,6 +1891,7 @@ export function WorkbenchPanel({
                         }}
                         allowImplicitMentions={false}
                         pruneUnlistedReferences
+                        expanded
                         editable={!isLocked}
                         placeholder="Enter prompt description..."
                     />
