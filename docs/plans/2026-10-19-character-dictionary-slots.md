@@ -62,3 +62,8 @@ Verify bilingual lookup, all supplied directions, style-change defaults, indepen
 ## Follow-up: skin tone
 
 Split body skin tone from skin texture. `/肤色` and `/肤质` open a shared optional skin panel, and `[肤色]` resolves only to skin-tone terms, independently of clothing palette, makeup and skin texture. Provide eight tone choices without inferring age, ethnicity, occupation or character traits. Neither field is preselected; omitted fields produce no clause. Existing saved prose and platform skin classifications remain compatible. Validate slash discovery, preview/application, slot isolation and optional rendering. This does not establish model color fidelity under different lighting.
+
+
+## Follow-up: modern menswear
+
+Add `/男装` and `/现代男装` configuration, a complete modern menswear display template and distinct modern male upper/outer/trouser/footwear categories. Reuse color, material, fit and wear vocabulary. Configure upper, outer and trousers with separate colors, plus independent upper/trouser materials; outerwear and accessories are optional and omitted when unspecified. Keep the existing women's preset IDs and give women's garment slots their own category. These categories describe garment search destinations, not restrictions on who may wear them. Validate male/female slot separation, upper/lower output, optional outerwear and complete template preview/application.

@@ -125,3 +125,22 @@ it("keeps skin tone slots separate from garment colors and skin texture", () => 
   expect(renderDictionaryPreset(panel, { "肤色": "暖小麦肤色" })).toBe("皮肤：肤色为暖小麦肤色。");
   expect(renderDictionaryPreset(panel, { "肤色": "[肤色]" })).toContain("[肤色]");
 });
+
+
+it("separates modern men's garment slots and renders optional outerwear without orphaned clauses", () => {
+  const male = CHARACTER_DICTIONARY_PRESETS.find((entry) => entry.id === "dictionary.panel.modern-male-clothing")!;
+  const fields = dictionaryPresetFields(male);
+  expect(dictionarySlotCategory("男装款式")).toBe("modern-male-garment");
+  expect(dictionarySlotCategory("女装款式")).toBe("modern-female-garment");
+  expect(fields.find((field) => field.key === "男装上衣款式")?.options).toContain("商务衬衫");
+  expect(fields.find((field) => field.key === "男装裤装款式")?.options).toContain("直筒西裤");
+  expect(fields.find((field) => field.key === "男装裤装款式")?.options).not.toContain("连衣裙");
+  expect(renderDictionaryPreset(male)).not.toMatch(/外穿|外套|鞋履|\[/);
+  const text = renderDictionaryPreset(male, { "男装外套款式": "单排扣西装外套", "外套颜色": "靛蓝色", "男装裤装款式": "直筒西裤", "男装鞋履": "德比皮鞋" });
+  expect(text).toContain("外穿靛蓝色单排扣西装外套");
+  expect(text).toContain("下穿深灰色直筒西裤");
+  expect(text).toContain("鞋履：脚穿德比皮鞋");
+  const female = CHARACTER_DICTIONARY_PRESETS.find((entry) => entry.id === "dictionary.panel.modern-clothing")!;
+  expect(dictionaryPresetFields(female).find((field) => field.key === "女装款式")?.options).toContain("连衣裙");
+  expect(dictionaryPresetFields(female).find((field) => field.key === "女装款式")?.options).not.toContain("商务西装套装");
+});

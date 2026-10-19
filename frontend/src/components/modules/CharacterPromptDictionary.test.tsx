@@ -329,3 +329,40 @@ it("fills skin tone slots with tone vocabulary only", () => {
   fireEvent.click(screen.getByRole("button", { name: "填写当前槽位" }));
   expect(replaceWithText).toHaveBeenCalledWith("古铜肤色");
 });
+
+
+it("configures modern menswear from slash with independent upper, trousers and footwear", () => {
+  getPlatformReferenceLibrary.mockResolvedValueOnce({ resources: [] });
+  const { replaceWithText } = setup("男装");
+  fireEvent.click(screen.getByRole("option", { name: /配置面板 · 现代男装搭配/ }));
+  fireEvent.change(screen.getByRole("combobox", { name: "男装上衣款式" }), { target: { value: "商务衬衫" } });
+  fireEvent.change(screen.getByRole("combobox", { name: "男装裤装款式" }), { target: { value: "直筒西裤" } });
+  fireEvent.change(screen.getByRole("combobox", { name: "男装鞋履" }), { target: { value: "德比皮鞋" } });
+  const text = (screen.getByRole("textbox", { name: "将插入的完整文字" }) as HTMLTextAreaElement).value;
+  expect(text).toContain("米白色商务衬衫");
+  expect(text).toContain("深灰色直筒西裤");
+  expect(text).not.toMatch(/连衣裙|外穿/);
+  fireEvent.click(screen.getByRole("button", { name: "应用配置" }));
+  expect(replaceWithText).toHaveBeenCalledWith(text);
+});
+
+it("previews and applies a complete modern male template", () => {
+  getPlatformReferenceLibrary.mockResolvedValueOnce({ resources: [] });
+  const { replaceWithText } = setup("现代");
+  fireEvent.click(screen.getByRole("option", { name: /Prompt 模板 · 写实现代男装展示/ }));
+  const text = (screen.getByRole("textbox", { name: "将插入的完整文字" }) as HTMLTextAreaElement).value;
+  expect(text).toContain("成年男装模特");
+  expect(text).toContain("真实摄影质感");
+  expect(text).not.toMatch(/连衣裙|\[/);
+  fireEvent.click(screen.getByRole("button", { name: "使用此模板" }));
+  expect(replaceWithText).toHaveBeenCalledWith(text);
+});
+
+it("fills a male garment slot with a menswear combination", () => {
+  getPlatformReferenceLibrary.mockResolvedValueOnce({ resources: [] });
+  const { replaceWithText } = setup("", "男装款式");
+  expect(screen.queryByRole("option", { name: /连衣裙/ })).not.toBeInTheDocument();
+  fireEvent.click(screen.getByRole("option", { name: /词条 · 商务西装套装/ }));
+  fireEvent.click(screen.getByRole("button", { name: "填写当前槽位" }));
+  expect(replaceWithText).toHaveBeenCalledWith("商务西装套装");
+});

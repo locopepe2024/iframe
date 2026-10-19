@@ -9,7 +9,7 @@ export const CHARACTER_DICTIONARY_GROUPS = [
   { id: "style", label: "表现风格", children: [["render", "写实与绘画风格"], ["texture", "光影与质感"]] },
   { id: "setting", label: "时代与题材", children: [["era", "时代背景"], ["genre", "题材类型"]] },
   { id: "role", label: "角色定位", children: [["civilian-role", "日常身份"], ["jianghu-role", "江湖身份"]] },
-  { id: "clothing", label: "服装", children: [["clothing-panel", "穿搭选择面板"], ["classical-garment", "古装衣裙形制"], ["classical-male-outer", "古代男子外衣"], ["classical-female-upper", "古代女子上衣"], ["classical-inner", "古装里衣"], ["classical-skirt", "古装裙装"], ["classical-trousers", "古装裤装"], ["garment", "现代服装款式"], ["inner", "贴身里衣"], ["outer", "外衣"], ["bottoms", "下装"], ["scarf", "纱巾与披帛"], ["fit", "版型"], ["collar", "领口"], ["sleeve", "袖型"], ["clothing-detail", "廓形与细节"], ["material", "面料材质"], ["palette", "服装颜色"], ["accessory", "搭配单品"], ["layers", "衣层结构"]] },
+  { id: "clothing", label: "服装", children: [["clothing-panel", "穿搭选择面板"], ["classical-garment", "古装衣裙形制"], ["classical-male-outer", "古代男子外衣"], ["classical-female-upper", "古代女子上衣"], ["classical-inner", "古装里衣"], ["classical-skirt", "古装裙装"], ["classical-trousers", "古装裤装"], ["garment", "现代通用服装款式"], ["modern-female-garment", "现代女装款式"], ["modern-male-garment", "现代男装搭配"], ["modern-male-upper", "现代男装上衣"], ["modern-male-outer", "现代男装外套"], ["modern-male-bottoms", "现代男装裤装"], ["modern-male-shoes", "现代男装鞋履"], ["inner", "贴身里衣"], ["outer", "外衣"], ["bottoms", "下装"], ["scarf", "纱巾与披帛"], ["fit", "版型"], ["collar", "领口"], ["sleeve", "袖型"], ["clothing-detail", "廓形与细节"], ["material", "面料材质"], ["palette", "服装颜色"], ["accessory", "搭配单品"], ["layers", "衣层结构"]] },
   { id: "footwear", label: "鞋履", children: [["footwear-panel", "鞋履选择面板"], ["classical-shoes", "古装鞋履"], ["shoes", "通用鞋靴"], ["shoe-color", "鞋履颜色"], ["shoe-material", "鞋履材质"], ["shoe-craft", "鞋履工艺"], ["shoe-pattern", "鞋履图案"], ["shoe-toe", "鞋头形状"], ["shoe-sole", "鞋底结构"], ["shoe-decoration", "鞋履装饰"], ["shoe-lining", "鞋履内衬"]] },
   { id: "look", label: "发型", children: [["hair", "发型描述"]] },
   { id: "expression", label: "表情", children: [["expression-basic", "基础微表情"], ["expression-happy", "开心与松弛"], ["expression-fear", "紧张与恐惧"], ["expression-sad", "悲伤与崩溃"], ["expression-angry", "愤怒与对抗"], ["expression-complex", "复杂情绪与转折"]] },
@@ -60,6 +60,8 @@ export function platformDictionaryCategories(path: string | undefined): string[]
 /** Slot labels describe a destination; they are not text to append to the Prompt. */
 export function dictionarySlotCategory(label: string | undefined): string | null {
   if (!label) return null;
+  const modernFields: Record<string, string> = { "男装款式": "modern-male-garment", "女装款式": "modern-female-garment", "男装上衣款式": "modern-male-upper", "男装外套款式": "modern-male-outer", "男装裤装款式": "modern-male-bottoms", "男装鞋履": "modern-male-shoes" };
+  if (modernFields[label]) return modernFields[label];
   if (/男装外衣款式/.test(label)) return "classical-male-outer";
   if (/女装上衣款式/.test(label)) return "classical-female-upper";
   if (/古装里衣款式/.test(label)) return "classical-inner";

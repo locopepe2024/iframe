@@ -4,6 +4,7 @@ import { CHARACTER_DICTIONARY_GROUPS, dictionarySlotCategory, localDictionaryCat
 import { CHARACTER_QUICK_PRESETS } from "./characterQuickActions";
 import { CLASSICAL_CHARACTER_TERMS, CLASSICAL_CHARACTER_TEMPLATES } from "./classicalCharacterDictionary";
 import { CLASSICAL_CHARACTER_PANELS, sectionedDictionaryPreset } from "./classicalCharacterPanels";
+import { MODERN_MALE_PANEL, MODERN_MALE_TEMPLATE, MODERN_MALE_TERMS } from "./modernMaleDictionary";
 import { CHARACTER_EXPRESSION_TERMS } from "./characterExpressionDictionary";
 export type DictionarySection = { label: string; parts: string[] };
 export type OutfitField = { key: string; label: string; value: string; options: readonly string[]; output?: Record<string, string>; dependentKeys?: readonly string[] };
@@ -44,7 +45,8 @@ const panel = (id: string, title: string, text: string, categories: string[], se
 
 const configurationPanels: CharacterDictionaryPreset[] = [
   ...CLASSICAL_CHARACTER_PANELS,
-  panel("modern-clothing", "现代服装搭配", "穿着[女装款式]，颜色为[颜色]，面料为[面料]，版型为[版型]，搭配要求为[搭配单品]，衣物状态为[衣物状态]。衣片连接清楚，保留自然褶皱。", ["clothing-panel"], "服装 现代 女装"),
+  MODERN_MALE_PANEL,
+  panel("modern-clothing", "现代服装搭配 · 女装", "穿着[女装款式]，颜色为[颜色]，面料为[面料]，版型为[版型]，搭配要求为[搭配单品]，衣物状态为[衣物状态]。衣片连接清楚，保留自然褶皱。", ["clothing-panel"], "服装 现代 女装"),
   panel("face", "面容选择面板", "脸型为[脸型]，眼型为[眼型]，眉形为[眉形]，妆容为[妆容]。", ["face-overview"], "面容 面部 五官"),
   panel("skin", "肤色与肤质选择面板", "肤色为[肤色]，肤质为[肤质]。", ["skin-tone", "skin"], "肤色 肤质 皮肤 skin tone complexion"),
   panel("hair", "发型选择面板", "发型为[发型]，发束结构和固定关系自然。", ["hair"], "发型 头发"),
@@ -54,7 +56,7 @@ const configurationPanels: CharacterDictionaryPreset[] = [
 ];
 
 export function configurationQueryCategory(query: string): string | null {
-  const categories: Record<string, string> = { "服装": "clothing", "鞋履": "footwear", "鞋靴": "footwear", "鞋子": "footwear", "靴子": "footwear", "面容": "face", "面部": "face", "发型": "look", "首饰": "jewelry", "饰品": "jewelry", "装饰": "decoration", "体态": "posture", "肤色": "skin-tone", "肤质": "skin", "皮肤": "skin-tone", "新旧": "condition", "使用状态": "condition", "表情": "expression", "情绪": "expression" };
+  const categories: Record<string, string> = { "服装": "clothing", "鞋履": "footwear", "鞋靴": "footwear", "鞋子": "footwear", "靴子": "footwear", "面容": "face", "面部": "face", "发型": "look", "首饰": "jewelry", "饰品": "jewelry", "装饰": "decoration", "男装": "modern-male-garment", "现代男装": "modern-male-garment", "体态": "posture", "肤色": "skin-tone", "肤质": "skin", "皮肤": "skin-tone", "新旧": "condition", "使用状态": "condition", "表情": "expression", "情绪": "expression" };
   return categories[query.trim()] || null;
 }
 
@@ -151,6 +153,8 @@ export const CHARACTER_DICTIONARY_PRESETS: CharacterDictionaryPreset[] = [
   ...configurationPanels,
   ...["瓷白肤色", "浅白肤色", "浅米色肤色", "自然米色肤色", "暖小麦肤色", "古铜肤色", "深棕肤色", "深褐肤色"].map((name, index) =>
     term(`skin-tone.${index}`, name, `人物肤色为${name.replace("肤色", "")}，面部、颈部及外露肢体肤色一致，保留自然明暗层次。`, "skin-tone", "身体")),
+  ...MODERN_MALE_TERMS,
+  MODERN_MALE_TEMPLATE,
   ...CLASSICAL_CHARACTER_TERMS,
   ...CLASSICAL_FOOTWEAR_TERMS,
   ...CLASSICAL_CHARACTER_TEMPLATES,
@@ -181,8 +185,8 @@ export const CHARACTER_DICTIONARY_PRESETS: CharacterDictionaryPreset[] = [
   term("shoes.cloth-boots", "素面布靴", "脚穿黑色素面平底布靴，靴筒结构简洁，鞋底适合步行。", "shoes", "造型"),
   term("shoes.leather-boots", "素面皮靴", "脚穿深棕色素面平底皮靴，皮面柔韧，靴口与鞋底连接自然。", "shoes", "造型"),
   term("shoes.cloth-shoes", "平底布鞋", "脚穿黑色平底布鞋，鞋面素净，鞋底厚度适中。", "shoes", "造型"),
-  ...["米白色", "月白色", "靛蓝色", "深青色", "朱红色", "黑色", "浅灰色", "浅杏色"].map((color, index) => term(`palette.${index}`, color, `服装主色为${color}，辅色保持克制。`, "palette", "造型")),
-  ...["衬衫", "连衣裙", "针织开衫", "西装外套", "半身裙", "直筒长裤"].map((name, index) => term(`garment.${index}`, name, `现代${name}，衣片连接与穿着关系清楚，保留自然褶皱。`, "garment", "造型")),
+  ...["米白色", "月白色", "靛蓝色", "深青色", "朱红色", "黑色", "浅灰色", "浅杏色", "深灰色"].map((color, index) => term(`palette.${index}`, color, `服装主色为${color}，辅色保持克制。`, "palette", "造型")),
+  ...["衬衫", "连衣裙", "针织开衫", "西装外套", "半身裙", "直筒长裤"].map((name, index) => term(`garment.${index}`, name, `现代${name}，衣片连接与穿着关系清楚，保留自然褶皱。`, "garment", "造型")).map((entry) => ({ ...entry, categories: [...entry.categories, "modern-female-garment"] })),
   ...["合身版型", "宽松版型", "直筒版型", "收腰版型", "A字版型"].map((name, index) => term(`fit.${index}`, name, `服装采用${name}，轮廓与人体比例协调。`, "fit", "造型")),
   ...["圆领", "V领", "方领", "翻领", "立领"].map((name, index) => term(`collar.${index}`, name, `服装领口为${name}，领缘结构清楚。`, "collar", "造型")),
   ...["短袖", "长袖", "无袖", "泡泡袖", "直筒袖"].map((name, index) => term(`sleeve.${index}`, name, `服装采用${name}设计，袖型与肩部连接自然。`, "sleeve", "造型")),
