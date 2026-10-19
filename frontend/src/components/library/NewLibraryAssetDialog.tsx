@@ -186,16 +186,16 @@ export default function NewLibraryAssetDialog({ onClose, onCreated, initialImage
       <div
         role="dialog"
         aria-modal="true"
-        aria-label={t("newAssetTitle")}
+        aria-label={initialSourceGenerationId ? "录入生成结果" : t("newAssetTitle")}
         className="relative z-[1] w-full max-w-[440px] glass-panel border border-glass-border rounded-2xl shadow-2xl atelier-reveal overflow-hidden"
       >
         {/* header */}
         <div className="flex items-start justify-between gap-3 px-5 pt-5 pb-3 border-b border-glass-border">
           <div>
             <div className="font-display atelier-display text-lg font-semibold text-foreground tracking-tight">
-              {t("newAssetTitle")}
+              {initialSourceGenerationId ? "录入生成结果" : t("newAssetTitle")}
             </div>
-            <div className="text-[0.75rem] text-text-muted mt-0.5">{t("newAssetSubtitle")}</div>
+            <div className="text-[0.75rem] text-text-muted mt-0.5">{targetScope === "platform" ? "提交平台参考库审核；审核发布后所有用户可检索。" : initialSourceGenerationId ? "保存到当前账户的跨项目资产库。" : t("newAssetSubtitle")}</div>
           </div>
           <button
             type="button"
@@ -212,7 +212,7 @@ export default function NewLibraryAssetDialog({ onClose, onCreated, initialImage
             <label htmlFor="library-target-scope" className="font-mono text-[0.625rem] font-semibold uppercase text-text-secondary">录入目标</label>
             <select id="library-target-scope" value={targetScope} onChange={(event) => setTargetScope(event.target.value as "asset" | "platform")}
               className="mt-2 w-full rounded-lg border border-glass-border bg-surface-inset px-3 py-2 text-sm text-foreground">
-              {initialMediaType === "image" && <option value="asset">共享资产库</option>}
+              {initialMediaType === "image" && <option value="asset">当前账户跨项目资产库</option>}
               <option value="platform" disabled={!publisher?.authorized}>平台参考库 · 提交审核</option>
             </select>
             {publisher && !publisher.authorized && <p className="mt-2 break-all text-xs text-text-muted">当前账户无平台录入权限。账户身份：{publisher.profile_id}</p>}

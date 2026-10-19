@@ -30,6 +30,7 @@ it('registers a workbench image as the initial variant of a typed asset', async 
       onCreated={vi.fn()}
     />,
   );
+  expect(screen.getByRole('dialog', { name: '录入生成结果' })).toHaveTextContent('保存到当前账户的跨项目资产库');
   fireEvent.change(screen.getByLabelText('nameLabel'), { target: { value: '女主播' } });
   expect(screen.getByLabelText('descLabel')).toHaveValue('正面全身角色设定图，冷灰蓝色调');
   fireEvent.submit(screen.getByRole('button', { name: 'create' }).closest('form')!);
@@ -72,6 +73,7 @@ it('submits an authorized image with the reviewed description and stable output 
     initialDescription="原始模型提示词" onClose={vi.fn()} onCreated={vi.fn()} />);
   await waitFor(() => expect(screen.getByRole('option', { name: '平台参考库 · 提交审核' })).toBeEnabled());
   fireEvent.change(screen.getByLabelText('录入目标'), { target: { value: 'platform' } });
+  expect(screen.getByRole('dialog', { name: '录入生成结果' })).toHaveTextContent('提交平台参考库审核；审核发布后所有用户可检索。');
   fireEvent.change(screen.getByLabelText('平台类别'), { target: { value: 'character/identity/face' } });
   fireEvent.change(screen.getByLabelText('nameLabel'), { target: { value: '面部基准' } });
   fireEvent.change(screen.getByLabelText('配套 Prompt（可编辑）'), { target: { value: '编辑后的可复用描述' } });
