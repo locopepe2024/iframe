@@ -55,4 +55,4 @@
 
 ## 输出
 
-输出 `identity`、`look` 和 `review_items` 三部分。每个非空字段带 `basis`，值只写具体、可编辑的设计文本；每条 `review_item` 给出一个关键设定问题和一条可直接采纳的视觉建议。涉及年龄或画风的建议还须给出 `suggested_age_stage` 或 `suggested_route`，以便工作台同步选项与 Prompt。把路由名称、通用质量词和“保持一致”等说明留在元数据，不作为角色字段。草稿可由用户应用到图片 Prompt；确认后才保存设计 revision，并记录本 Skill 的 revision。
+输出 `identity`、`look` 和 `review_items` 三部分。来源依据放在 `identity.basis` 和 `look.basis` 数组中；features 各值只写具体、可编辑的字符串，不嵌套 `{value, basis}` 对象；每条 `review_item` 给出一个关键设定问题和一条可直接采纳的视觉建议。涉及年龄或画风的建议还须给出 `suggested_age_stage` 或 `suggested_route`，以便工作台同步选项与 Prompt。把路由名称、通用质量词和“保持一致”等说明留在元数据，不作为角色字段。草稿可由用户应用到图片 Prompt；确认后才保存设计 revision，并记录本 Skill 的 revision。

@@ -676,6 +676,9 @@ def test_character_design_output_contract_defines_types_bounds_and_current_detai
     assert '"review_items": []' in system
     assert '当前由用户编辑的角色细节' in system
     assert '不得将缺失字段写成 null' in system
+    assert '每个非空字段附 `basis`' not in system
+    assert '每个非空字段带 `basis`' not in system
+    assert '来源依据统一放在 `identity.basis` 和 `look.basis`' in system
 
 
 def test_character_design_rejection_has_safe_reason_and_reference(ctx, monkeypatch, caplog):
