@@ -182,11 +182,16 @@ def get_platform_reference_library(
     category: Optional[str] = None,
     tag: Optional[str] = None,
     query: str = "",
+    semantic_domain: Optional[str] = None,
+    entry_type: Optional[str] = None,
     user: UserContext = Depends(require_user_context),
 ):
     """Read active deployment-scoped resources; mutations are not exposed here."""
     try:
-        return private_no_store_signed_response(list_platform_reference_resources(kind=kind, category=category, tag=tag, query=query))
+        return private_no_store_signed_response(list_platform_reference_resources(
+            kind=kind, category=category, tag=tag, query=query,
+            semantic_domain=semantic_domain, entry_type=entry_type,
+        ))
     except ValueError as exc:
         raise HTTPException(status_code=500, detail=str(exc))
 
@@ -235,6 +240,7 @@ class PlatformCandidateRequest(BaseModel):
     title: str = Field(min_length=1, max_length=200)
     description: str = Field(max_length=20000)
     rights_confirmed: bool
+    dictionary_entry_type: Optional[Literal["term", "case"]] = None
 
 
 @app.post("/platform-reference-library/candidates")
@@ -261,6 +267,7 @@ def submit_platform_candidate(request: PlatformCandidateRequest, user: UserConte
             media_source=Path(output.media_path) if output else None,
             media_owner_root=Path(storage.output_dir),
             rights_confirmed=request.rights_confirmed,
+            dictionary_entry_type=request.dictionary_entry_type,
         )
         return private_no_store_signed_response(resource)
     except PermissionError as exc:

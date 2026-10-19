@@ -86,6 +86,38 @@ def test_prompt_only_candidate_keeps_actual_prompt_separate(monkeypatch, tmp_pat
     assert resource["payload"]["prompt_used"] != resource["payload"]["structured_prompt"]["content"]
 
 
+def test_explicit_dictionary_label_survives_review_and_filters(monkeypatch, tmp_path):
+    monkeypatch.setattr(catalog, "publisher_is_authorized", lambda owner: owner == OWNER)
+    owner = tmp_path / "owner"
+    owner.mkdir()
+    manifest = tmp_path / "manifest.json"
+    values = dict(
+        creator_profile_id=OWNER, generation_id="g", output_id=None, kind="prompt_preset",
+        category_path="character/identity/face", title="窄长脸", description="窄长脸型",
+        prompt_used="完整生成提示词", model_id="model", parameters={}, media_source=None,
+        media_owner_root=owner, rights_confirmed=True, path=manifest,
+    )
+    ordinary = catalog.submit_generation_candidate(**values)
+    term = catalog.submit_generation_candidate(**{**values, "dictionary_entry_type": "term"})
+    assert ordinary["platform_resource_id"] != term["platform_resource_id"]
+    assert "dictionary" not in ordinary
+    assert term["dictionary"] == {"semantic_domain": "character.identity", "entry_type": "term"}
+    assert catalog.list_resources(semantic_domain="character.identity", entry_type="term", path=manifest)["resources"] == []
+    catalog.promote_resource(term["platform_resource_id"], OWNER, term["provenance"]["content_sha256"], manifest)
+    assert [item["platform_resource_id"] for item in catalog.list_resources(
+        semantic_domain="character.identity", entry_type="term", path=manifest
+    )["resources"]] == [term["platform_resource_id"]]
+    assert catalog.list_resources(semantic_domain="character.look", path=manifest)["resources"] == []
+    for kind, category, entry_type in [
+        ("image", "character/identity/face", "term"),
+        ("prompt_preset", "character/identity/face", "case"),
+        ("prompt_preset", "character/reference", "term"),
+        ("prompt_preset", "character/identity/face", "pattern"),
+    ]:
+        with pytest.raises(ValueError, match="Dictionary type"):
+            catalog.submit_generation_candidate(**{**values, "kind": kind, "category_path": category, "dictionary_entry_type": entry_type})
+
+
 def test_character_tags_reject_invalid_values_and_are_searchable_after_review(monkeypatch, tmp_path):
     monkeypatch.setattr(catalog, "publisher_is_authorized", lambda owner: owner == OWNER)
     owner = tmp_path / "owner"

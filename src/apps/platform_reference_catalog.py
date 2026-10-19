@@ -54,6 +54,23 @@ CHARACTER_CATEGORIES = {
     "character/performance": "表演",
     "character/reference": "角色参考",
 }
+DICTIONARY_DOMAINS = {
+    "character/identity/": "character.identity",
+    "character/look/": "character.look",
+    "character/performance": "character.performance",
+    "character/style": "world.style",
+}
+
+
+def validate_dictionary_label(kind: str, category_path: str, entry_type: str | None) -> dict[str, str] | None:
+    if entry_type is None:
+        return None
+    domain = next((value for prefix, value in DICTIONARY_DOMAINS.items() if category_path.startswith(prefix)), None)
+    if not domain or (entry_type, kind) not in {
+        ("term", "prompt_preset"), ("case", "image"), ("case", "video")
+    }:
+        raise ValueError("Dictionary type is incompatible with media kind or category")
+    return {"semantic_domain": domain, "entry_type": entry_type}
 CHARACTER_TAG_SUGGESTIONS = (
     "角色设定稿", "设定总览", "基准锚点", "转面三视图", "脸部特写", "表情表", "姿态参考",
     "服装拆解", "装备拆解", "配色卡", "识别标记", "世界观说明", "写实", "插画", "动漫", "三维", "古装", "现代",
@@ -130,6 +147,7 @@ def submit_generation_candidate(
     media_source: Path | None,
     media_owner_root: Path,
     rights_confirmed: bool,
+    dictionary_entry_type: str | None = None,
     path: Path = MANIFEST_PATH,
 ) -> dict[str, Any]:
     """Freeze an owned Playground result as a review candidate, never as active content."""
@@ -137,6 +155,7 @@ def submit_generation_candidate(
         raise PermissionError("Platform candidate submission is not authorized")
     if kind not in {"image", "video", "prompt_preset"} or category_path not in CHARACTER_CATEGORIES:
         raise ValueError("Platform candidate kind or category is invalid")
+    dictionary = validate_dictionary_label(kind, category_path, dictionary_entry_type)
     tags = normalize_character_tags(tags or [])
     if not rights_confirmed:
         raise ValueError("Creator rights confirmation is required")
@@ -176,7 +195,8 @@ def submit_generation_candidate(
         "media_sha256": media_hash,
     }
     fingerprint = hashlib.sha256(json.dumps(
-        [creator_profile_id, kind, category_path, sorted(tags, key=str.casefold), title, payload], ensure_ascii=False, sort_keys=True,
+        [creator_profile_id, kind, category_path, sorted(tags, key=str.casefold), title, payload]
+        + ([dictionary] if dictionary else []), ensure_ascii=False, sort_keys=True,
     ).encode("utf-8")).hexdigest()
     with _MUTATION_LOCK, _file_lock(path):
         manifest = _read_manifest(path)
@@ -207,6 +227,7 @@ def submit_generation_candidate(
             "revision": 1,
             "kind": kind,
             "category_path": category_path,
+            **({"dictionary": dictionary} if dictionary else {}),
             "tags": tags,
             "title": title,
             "summary": description,
@@ -341,6 +362,12 @@ def _validate_resource(resource: Any) -> None:
         raise ValueError("platform reference category is invalid")
     if "tags" in resource and (not isinstance(resource["tags"], list) or any(not isinstance(tag, str) for tag in resource["tags"])):
         raise ValueError("platform reference tags are invalid")
+    if "dictionary" in resource:
+        dictionary = resource["dictionary"]
+        if not isinstance(dictionary, dict) or dictionary != validate_dictionary_label(
+            resource.get("kind", ""), resource.get("category_path", ""), dictionary.get("entry_type")
+        ):
+            raise ValueError("platform reference dictionary label is invalid")
     provenance = resource["provenance"]
     if not isinstance(provenance, dict) or not provenance.get("license") or not provenance.get("content_sha256"):
         raise ValueError("platform reference provenance requires license and content_sha256")
@@ -352,7 +379,7 @@ def _is_skill_card(resource: dict[str, Any]) -> bool:
     return isinstance(metadata, dict) and bool(metadata.get("skill_type"))
 
 
-def list_resources(*, kind: Optional[str] = None, category: Optional[str] = None, tag: Optional[str] = None, query: str = "", path: Path = MANIFEST_PATH) -> dict[str, Any]:
+def list_resources(*, kind: Optional[str] = None, category: Optional[str] = None, tag: Optional[str] = None, query: str = "", semantic_domain: Optional[str] = None, entry_type: Optional[str] = None, path: Path = MANIFEST_PATH) -> dict[str, Any]:
     manifest = _read_manifest(path)
     needle = query.strip().casefold()
     resources = []
@@ -366,6 +393,11 @@ def list_resources(*, kind: Optional[str] = None, category: Optional[str] = None
         if category and resource.get("category_path") != category:
             continue
         if tag and tag not in resource.get("tags", []):
+            continue
+        dictionary = resource.get("dictionary") or {}
+        if semantic_domain and dictionary.get("semantic_domain") != semantic_domain:
+            continue
+        if entry_type and dictionary.get("entry_type") != entry_type:
             continue
         if needle:
             haystack = " ".join([
