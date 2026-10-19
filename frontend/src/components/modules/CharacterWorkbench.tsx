@@ -673,9 +673,9 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
     const characterDesignSourceRef = useRef(characterDesignSource);
     characterDesignSourceRef.current = characterDesignSource;
     const designPromptBaseline = useRef(fullBodyPrompt);
-    const openDesignEditor = () => {
+    const openDesignEditor = (promptOverride?: string) => {
         if (!showProfile) {
-            const currentPrompt = activePanel === "three_view" ? threeViewPrompt : activePanel === "headshot" ? headshotPrompt : fullBodyPrompt;
+            const currentPrompt = promptOverride ?? (activePanel === "three_view" ? threeViewPrompt : activePanel === "headshot" ? headshotPrompt : fullBodyPrompt);
             if (!designInput || currentPrompt !== designPromptBaseline.current) {
                 setDesignInput(currentPrompt);
                 if (currentPrompt !== designPromptBaseline.current) { setDesignResult(null); setDesignStatus("draft"); }

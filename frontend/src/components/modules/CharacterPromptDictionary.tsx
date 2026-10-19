@@ -24,7 +24,7 @@ export default function CharacterPromptDictionary({ suggestion, onClose, onApply
   suggestion: PromptSlashSuggestion;
   onClose: () => void;
   onApply: (text: string, source: Entry) => void;
-  onSkill?: () => void;
+  onSkill?: (currentPrompt: string) => void;
   canRunSkill: boolean;
   keyHandler: MutableRefObject<((event: KeyboardEvent) => boolean) | null>;
 }) {
@@ -137,7 +137,7 @@ export default function CharacterPromptDictionary({ suggestion, onClose, onApply
     if (!selected || !selectedText.trim()) return;
     if (selected.type === "Skill") {
       if (!canRunSkill) return;
-      suggestion.replaceWithText(""); onClose(); onSkill?.();
+      const currentPrompt = suggestion.replaceWithText(""); onClose(); onSkill?.(currentPrompt);
     } else { onApply(suggestion.replaceWithText(selectedText), { ...selected, text: selectedText }); onClose(); }
   };
   useEffect(() => {

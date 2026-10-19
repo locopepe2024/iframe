@@ -726,6 +726,8 @@ it("opens the same design form from slash Skill without an input-inspection stag
     fireEvent.click(await screen.findByRole("option", { name: /Skill · AI 完善角色设计/ }));
     fireEvent.click(screen.getByRole("button", { name: "打开角色设计" }));
     expect(await screen.findByRole("region", { name: "角色设计" })).toBeInTheDocument();
+    expect(designDetailsEditor().getText().replace(/\s+/g, " ").trim()).toBe("脸部：眉目清冽。 服装：素黑劲装，布靴。");
+    expect(designDetailsEditor().getText()).not.toContain("/");
     expect(screen.getByRole("button", { name: "提交 AI 完善" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "确认输入并完善角色设计" })).not.toBeInTheDocument();
     expect(apiMocks.agentRequest.mock.calls.filter(([path]) => path.startsWith("/character-design/"))).toHaveLength(0);
