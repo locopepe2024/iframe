@@ -561,7 +561,10 @@ it("lets the user answer a design conflict and carries answers into confirmed pr
         }, design_revisions: [] },
     }} onClose={vi.fn()} onUpdateDescription={vi.fn()} onUpdateAttributes={onUpdateAttributes} onGenerate={vi.fn()} generatingTypes={[]} />);
 
-    expect(screen.getByRole("button", { name: /dossier/ })).toHaveTextContent("pendingDesignQuestions");
+    const designToggle = screen.getByRole("button", { name: "展开角色设计" });
+    expect(designToggle).toHaveTextContent("pendingDesignQuestions");
+    fireEvent.click(designToggle);
+    expect(designToggle).toHaveAttribute("aria-expanded", "true");
 
     fireEvent.change(screen.getByPlaceholderText(/可直接修改建议|补充你的决定/), { target: { value: "按十七岁少年表现，身形尚未完全长成" } });
     fireEvent.click(screen.getByRole("button", { name: "确认设计" }));

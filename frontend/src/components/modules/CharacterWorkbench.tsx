@@ -1043,12 +1043,12 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
     };
 
     return (
-        <div className="absolute inset-0 z-50 flex items-center justify-center bg-overlay backdrop-blur-md p-4 md:p-8">
+        <div className="absolute inset-0 z-50 flex items-center justify-center bg-overlay backdrop-blur-md">
             <motion.div
                 initial={{ opacity: 0, scale: 0.95 }}
                 animate={{ opacity: 1, scale: 1 }}
                 exit={{ opacity: 0, scale: 0.95 }}
-                className="bg-surface border border-glass-border rounded-lg w-full max-w-7xl h-[min(92dvh,920px)] flex flex-col overflow-hidden shadow-lg"
+                className="bg-surface border border-glass-border w-full h-full flex flex-col overflow-hidden shadow-lg"
             >
                 <div className="relative z-40 flex h-16 shrink-0 items-center justify-between gap-3 border-b border-glass-border bg-surface px-4 md:px-6">
                     <div className="flex min-w-0 items-center gap-3">
@@ -1059,6 +1059,10 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
                         </div>
                     </div>
                     <div className="flex shrink-0 items-center gap-2">
+                        <button type="button" onClick={() => setShowProfile(current => !current)} aria-label={showProfile ? "收起角色设计" : "展开角色设计"} aria-expanded={showProfile} aria-controls="character-design-dossier" className="inline-flex min-h-11 items-center gap-2 rounded border border-glass-border px-3 text-xs text-text-secondary hover:text-foreground focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary">
+                            <PanelLeft size={16} aria-hidden="true" />{showProfile ? "收起设计" : "角色设计"}
+                            {designUnresolved.length > 0 && <span className="rounded border border-amber-400/40 px-1.5 py-0.5 text-[11px] text-amber-300">{tc("pendingDesignQuestions", { count: designUnresolved.length })}</span>}
+                        </button>
                         {planEntries.length > 0 && (
                             <button type="button" aria-expanded={isPlanOpen} aria-controls="character-plan-constraints" onClick={() => setIsPlanOpen(open => !open)} className="flex items-center gap-1 rounded border border-glass-border px-2 py-1.5 text-xs text-text-secondary hover:text-foreground" title="拍摄计划约束">
                                 拍摄计划 · {planEntries.length} 条
@@ -1076,14 +1080,8 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
                     )}
                 </div>
 
-                <div className="lg:hidden border-b border-glass-border px-4 py-2">
-                    <button type="button" onClick={() => setShowProfile(current => !current)} aria-label={tc("dossier")} title={tc("dossier")} aria-expanded={showProfile} className="flex min-h-10 items-center gap-2 text-sm text-text-secondary hover:text-foreground">
-                        <PanelLeft size={18} />{tc("dossier")}
-                        {designUnresolved.length > 0 && <span className="rounded border border-amber-400/40 px-1.5 py-0.5 text-[11px] text-amber-300">{tc("pendingDesignQuestions", { count: designUnresolved.length })}</span>}
-                    </button>
-                </div>
                 <div className="min-h-0 flex-1 flex flex-col lg:flex-row overflow-hidden">
-                    <aside className={`${showProfile ? "block max-h-[45%]" : "hidden"} lg:block lg:max-h-none lg:w-80 xl:w-[340px] shrink-0 overflow-y-auto border-b lg:border-b-0 lg:border-r border-glass-border bg-surface-inset p-4`} aria-label={tc("dossier")}>
+                    <aside id="character-design-dossier" className={`${showProfile ? "block max-h-[45%] lg:max-h-none" : "hidden"} lg:w-[min(30vw,420px)] shrink-0 overflow-y-auto border-b lg:border-b-0 lg:border-r border-glass-border bg-surface-inset p-4`} aria-label={tc("dossier")}>
                         <h3 className="text-sm font-semibold text-foreground">{tc("dossier")}</h3>
                         <p className="mt-2 whitespace-pre-wrap break-words text-sm leading-6 text-text-secondary">{asset.description || tc("noDossier")}</p>
                         <section className="mt-5 border-t border-glass-border pt-4" aria-labelledby="character-visual-design-title">
@@ -1110,8 +1108,8 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
                                 <option value="adult">成年人</option>
                                 <option value="older-adult">老年</option>
                             </select>
-                            <div className="mt-4 rounded-md border border-glass-border bg-surface/60 p-3">
-                                <h4 className="text-xs font-medium text-foreground">身份外观字段</h4>
+                            <details className="mt-4 rounded-md border border-glass-border bg-surface/60 p-3">
+                                <summary className="cursor-pointer text-xs font-medium text-foreground">身份外观字段 · {Object.values(identityFeatures).filter((value) => value?.trim()).length} 项已填</summary>
                                 <p className="mt-1 text-[11px] leading-4 text-text-muted">这些字段优先编入角色图片提示词；留空的内容不会由系统补写。</p>
                                 <div className="mt-2 space-y-2">
                                     {IDENTITY_FIELDS.map(([key, label]) => <div key={key}>
@@ -1127,13 +1125,13 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
                                         </span>
                                     </div>)}
                                 </div>
-                            </div>
+                            </details>
                             <label className="mt-3 block text-xs text-text-secondary" htmlFor="character-visual-notes">身份视觉值</label>
                             <textarea id="character-visual-notes" value={designNotes} onChange={(event) => { setDesignNotes(event.target.value); setIdentityFeatures({}); setUserVisualRequirements(current => ({ ...current, identity: event.target.value })); setDesignIdentityBasis(["user_specified"]); setDesignSource("stated"); setDesignStatus("draft"); setPromptsNeedDesignApply(true); }} placeholder="可先写年龄感、面容、体态等要求；留空由 AI 设计。" rows={4} className="mt-1 w-full resize-y rounded-md border border-glass-border bg-surface px-3 py-2 text-sm leading-5 text-foreground placeholder:text-text-muted focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary" />
                             {Object.values(identityFeatures).some((value) => value?.trim()) && <p className="mt-1 text-[11px] text-text-muted">当前使用上方结构化字段；编辑本段会切回整段文本并清空上方字段。</p>}
                             {designSource === "creative-choice" && <p className="mt-1 text-xs text-amber-400">AI 创意设计选择，确认前请核对剧本与参考素材。</p>}
-                            <div className="mt-4 rounded-md border border-glass-border bg-surface/60 p-3">
-                                <h4 className="text-xs font-medium text-foreground">造型字段</h4>
+                            <details className="mt-4 rounded-md border border-glass-border bg-surface/60 p-3">
+                                <summary className="cursor-pointer text-xs font-medium text-foreground">造型字段 · {Object.values(lookFeatures).filter((value) => value?.trim()).length} 项已填</summary>
                                 <p className="mt-1 text-[11px] leading-4 text-text-muted">服装、配色和配件分别确认；武器未在剧本或用户要求中出现时可留空。</p>
                                 <div className="mt-2 space-y-2">
                                     {LOOK_FIELDS.map(([key, label]) => <label key={key} className="block text-xs text-text-secondary">
@@ -1143,7 +1141,7 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
                                             className="mt-1 w-full resize-y rounded border border-glass-border bg-surface px-2 py-1.5 text-xs text-foreground" />
                                     </label>)}
                                 </div>
-                            </div>
+                            </details>
                             <label className="mt-3 block text-xs text-text-secondary" htmlFor="character-look-notes">造型视觉值</label>
                             <textarea id="character-look-notes" value={lookNotes} onChange={(event) => { setLookNotes(event.target.value); setLookFeatures({}); setUserVisualRequirements(current => ({ ...current, look: event.target.value })); setDesignLookBasis(["user_specified"]); setDesignStatus("draft"); setPromptsNeedDesignApply(true); }} placeholder="可先写服装、鞋履、武器等要求；留空由 AI 设计。" rows={3} className="mt-1 w-full resize-y rounded-md border border-glass-border bg-surface px-3 py-2 text-sm leading-5 text-foreground placeholder:text-text-muted focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary" />
                             {Object.values(lookFeatures).some((value) => value?.trim()) && <p className="mt-1 text-[11px] text-text-muted">当前使用上方结构化字段；编辑本段会切回整段文本并清空上方字段。</p>}
@@ -1645,7 +1643,8 @@ export function WorkbenchPanel({
             </div>
 
             {/* Image Area with Variant Selector */}
-            <div className="flex-1 relative bg-surface p-4 flex flex-col overflow-y-auto group">
+            <div className="flex-1 min-h-0 flex flex-col lg:flex-row-reverse">
+            <div className="flex-1 min-h-0 min-w-0 relative bg-surface p-4 flex flex-col overflow-hidden group">
 
                 {/* Locked Overlay */}
                 {isLocked && (
@@ -1827,6 +1826,7 @@ export function WorkbenchPanel({
                             generatingBatchSize={generatingBatchSize}
                             aspectRatio={aspectRatio}
                             className="h-full"
+                            viewerClassName="max-h-[min(64dvh,760px)] min-h-[240px]"
                             previewLocator={currentProject?.id ? {
                                 scope: asset?.source === "series" && currentProject.series_id ? "series" : "project",
                                 containerId: asset?.source === "series" && currentProject.series_id ? currentProject.series_id : currentProject.id,
@@ -1848,8 +1848,8 @@ export function WorkbenchPanel({
                 )}
             </div>
 
-            {/* Prompt Editor (Bottom) */}
-            <div className="h-1/3 min-h-[180px] border-t border-glass-border flex flex-col bg-surface">
+            {/* Task-specific generation inputs sit beside the image on wide screens. */}
+            <div className="min-h-[180px] max-h-[42%] shrink-0 border-t border-glass-border flex flex-col overflow-y-auto bg-surface lg:max-h-none lg:min-h-0 lg:w-[min(34%,440px)] lg:border-r lg:border-t-0">
                 <div className="p-2 border-b border-border-subtle flex justify-between items-center bg-surface">
                     <span className="text-xs font-bold text-text-muted uppercase px-2">Prompt</span>
                     <div className="flex items-center gap-1 rounded-md border border-glass-border bg-black/20 p-1" role="group" aria-label={`Image generation mode: ${title}`}>
@@ -1879,7 +1879,7 @@ export function WorkbenchPanel({
                         onOpen={onRefreshReferences}
                     />
                 </div>}
-                <div className="relative min-h-0 flex-1 overflow-visible p-4">
+                <div className="relative min-h-[150px] flex-1 p-4">
                     <ReferencePromptEditor
                         value={prompt}
                         candidates={referenceCandidates}
@@ -1891,6 +1891,7 @@ export function WorkbenchPanel({
                         }}
                         allowImplicitMentions={false}
                         pruneUnlistedReferences
+                        expanded
                         editable={!isLocked}
                         placeholder="Enter prompt description..."
                     />
@@ -1933,6 +1934,7 @@ export function WorkbenchPanel({
                         </div>
                     )}
                 </div>
+            </div>
             </div>
         </div>
     );

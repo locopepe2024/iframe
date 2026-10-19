@@ -19,6 +19,7 @@ interface VariantSelectorProps {
     isGenerating: boolean;
     generatingBatchSize?: number; // Persisted batch size from parent/store
     className?: string;
+    viewerClassName?: string;
     aspectRatio?: string; // e.g., "9:16", "16:9", "1:1"
     previewLocator?: {
         scope: 'global' | 'series' | 'project';
@@ -43,6 +44,7 @@ export const VariantSelector: React.FC<VariantSelectorProps> = ({
     isGenerating,
     generatingBatchSize: propGeneratingBatchSize,
     className = "",
+    viewerClassName = "",
     aspectRatio = "9:16",
     previewLocator,
 }) => {
@@ -169,7 +171,7 @@ export const VariantSelector: React.FC<VariantSelectorProps> = ({
         <div className={`flex flex-col gap-4 ${className}`}>
             {/* Main Viewer */}
             <div
-                className={`relative w-full ${getAspectRatioClass()} bg-elevated rounded-lg overflow-hidden border border-glass-border group cursor-pointer`}
+                className={`relative w-full ${getAspectRatioClass()} ${viewerClassName} bg-elevated rounded-lg overflow-hidden border border-glass-border group cursor-pointer`}
                 onClick={() => fullImageUrl && setZoomedImage(fullImageUrl)}
             >
                 {displayUrl ? (
