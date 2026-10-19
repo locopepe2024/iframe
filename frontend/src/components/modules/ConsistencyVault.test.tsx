@@ -68,6 +68,23 @@ beforeEach(() => {
     vi.spyOn(window, "alert").mockImplementation(() => {});
 });
 
+it("clears a stale generation overlay when a new character variant is already present", async () => {
+    const project = {
+        id: "episode-1",
+        characters: [{ id: "hero", name: "Hero", reference_sheet: {
+            selected_image_id: "new-cover",
+            image_variants: [{ id: "old-cover", url: "/old.png" }, { id: "new-cover", url: "/new.png" }],
+        } }], scenes: [], props: [],
+    };
+    useProjectStore.setState({
+        currentProject: project as any,
+        generatingTasks: [{ assetId: "hero", generationType: "reference_sheet", batchSize: 1, initialVariantIds: ["old-cover"] }],
+    });
+    mocks.getEpisodeVisualContext.mockResolvedValue({ context: null, bindings: [] });
+    render(<ConsistencyVault />);
+    await waitFor(() => expect(useProjectStore.getState().generatingTasks).toEqual([]));
+});
+
 it("submits a derived character master as one stable reference identity", async () => {
     const character = { id: "hero", name: "Hero", source: "episode" };
     const project = { id: "episode-1", characters: [character], scenes: [], props: [] };

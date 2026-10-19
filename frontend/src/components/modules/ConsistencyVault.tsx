@@ -50,6 +50,27 @@ export default function ConsistencyVault() {
     const addGeneratingTask = useProjectStore((state) => state.addGeneratingTask);
     const removeGeneratingTask = useProjectStore((state) => state.removeGeneratingTask);
 
+    // A completed result can arrive through a project refresh after the polling
+    // callback has gone away (for example after switching panels or reloading).
+    // Clear only tasks whose asset now contains a genuinely new variant; this
+    // preserves the overlay while an older variant pool is still unchanged.
+    useEffect(() => {
+        if (!currentProject || generatingTasks.length === 0) return;
+        for (const task of generatingTasks) {
+            const asset = [...(currentProject.characters || []), ...(currentProject.scenes || []), ...(currentProject.props || [])]
+                .find((item: any) => item.id === task.assetId) as any;
+            if (!asset) continue;
+            const units = [asset.reference_sheet, asset.full_body_asset, asset.three_view_asset, asset.headshot_asset];
+            const variantIds = units.flatMap((unit: any) => [
+                ...(Array.isArray(unit?.variants) ? unit.variants : []),
+                ...(Array.isArray(unit?.image_variants) ? unit.image_variants : []),
+            ]).map((variant: any) => variant?.id).filter(Boolean);
+            if (variantIds.some((id: string) => !(task.initialVariantIds || []).includes(id))) {
+                removeGeneratingTask(task.assetId, task.generationType);
+            }
+        }
+    }, [currentProject, generatingTasks, removeGeneratingTask]);
+
     const taskFailureMessage = (error?: unknown) => {
         const detail = normalizeTaskFailureDetail(error);
         return detail ? tv("genFailedDetail", { error: detail }) : tv("genFailed");
@@ -221,7 +242,14 @@ export default function ConsistencyVault() {
 
         // Add task with specific generation type and batch size
         if (addGeneratingTask) {
-            addGeneratingTask(assetId, generationType, batchSize);
+            const asset = [...(currentProject.characters || []), ...(currentProject.scenes || []), ...(currentProject.props || [])]
+                .find((item: any) => item.id === assetId) as any;
+            const initialVariantIds = [asset?.reference_sheet, asset?.full_body_asset, asset?.three_view_asset, asset?.headshot_asset]
+                .flatMap((unit: any) => [
+                    ...(Array.isArray(unit?.variants) ? unit.variants : []),
+                    ...(Array.isArray(unit?.image_variants) ? unit.image_variants : []),
+                ]).map((variant: any) => variant?.id).filter(Boolean);
+            addGeneratingTask(assetId, generationType, batchSize, initialVariantIds);
         }
 
         try {
