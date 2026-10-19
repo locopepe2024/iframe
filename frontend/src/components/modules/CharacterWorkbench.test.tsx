@@ -222,6 +222,23 @@ it("opens the existing two-skill review from slash without calling the model", a
     expect(await screen.findByRole("button", { name: "确认输入并生成角色草稿" })).toBeInTheDocument();
 });
 
+it("explains an unpublished platform Prompt catalog and lets users refresh it", async () => {
+    apiMocks.getAssetReferenceIndex.mockResolvedValueOnce({ assets: [] } as any);
+    apiMocks.getPlatformReferenceLibrary.mockResolvedValueOnce({ resources: [] });
+    render(<CharacterWorkbench asset={{ id: "character-1", name: "苏砚", description: "少年剑客" }}
+        onClose={vi.fn()} onUpdateDescription={vi.fn()} onGenerate={vi.fn()} generatingTypes={[]} />);
+    fireEvent.click(screen.getByRole("button", { name: "@ 平台 Prompt" }));
+    expect(await screen.findByText("平台尚无可用的已发布角色 Prompt 案例。")).toBeInTheDocument();
+    expect(screen.getByText(/可在创作台提交角色素材，经审核发布后在此选择/)).toBeInTheDocument();
+    apiMocks.getPlatformReferenceLibrary.mockResolvedValueOnce({ resources: [{
+        platform_resource_id: "new-case", revision: 1, kind: "prompt_preset", category_path: "character/reference",
+        title: "新发布的角色案例", status: "active", payload: { prompt_used: "灰蓝长袍" }, provenance: { license: "MIT" },
+    }] });
+    fireEvent.click(screen.getByRole("button", { name: "刷新目录" }));
+    expect(await screen.findByRole("button", { name: /新发布的角色案例/ })).toBeInTheDocument();
+    expect(screen.queryByText("平台尚无可用的已发布角色 Prompt 案例。")).not.toBeInTheDocument();
+});
+
 it("previews an active platform Prompt before inserting editable text without selecting an image", async () => {
     apiMocks.getAssetReferenceIndex.mockResolvedValueOnce({ assets: [] } as any);
     apiMocks.previewAssetImageSubmission.mockClear();
@@ -246,6 +263,10 @@ it("previews an active platform Prompt before inserting editable text without se
     expect(await screen.findByRole("button", { name: /古典行旅设定/ })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /未审核提示词/ })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /窄长脸词条/ })).not.toBeInTheDocument();
+    fireEvent.change(screen.getByRole("textbox", { name: "搜索平台角色 Prompt" }), { target: { value: "不存在的案例" } });
+    expect(screen.getByText("没有匹配的角色 Prompt 案例，请更换关键词。")).toBeInTheDocument();
+    expect(screen.queryByText("平台尚无可用的已发布角色 Prompt 案例。")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "清空搜索" }));
     fireEvent.click(screen.getByRole("button", { name: /古典行旅设定/ }));
     expect(screen.getByRole("textbox", { name: "将插入的完整 Prompt" })).toHaveValue("古典行旅人物，正面全身，灰蓝长袍");
     const editor = document.querySelector("[contenteditable]") as HTMLElement & { editor: import("@tiptap/core").Editor };

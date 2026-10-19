@@ -99,7 +99,16 @@ export default function PlatformPromptPicker({ currentPrompt, onApply, disabled 
         <label className="mt-2 flex min-h-11 items-center gap-2 rounded-md border border-glass-border px-2 text-xs text-foreground focus-within:ring-2 focus-within:ring-primary"><Search size={14} aria-hidden="true" /><input aria-label={`搜索平台${stationLabel} Prompt`} value={query} onChange={(event) => setQuery(event.target.value)} className="min-w-0 flex-1 bg-transparent outline-none" /></label>
         {loading && <p className="mt-2 text-xs text-text-muted">正在读取平台目录…</p>}
         {error && <div className="mt-2 text-xs text-failed-fg">{error}<button type="button" onClick={() => setRefresh((value) => value + 1)} className="ml-2 underline">重试</button></div>}
-        {!loading && !error && visible.length === 0 && <p className="mt-2 text-xs text-text-muted">没有可用的{stationLabel} Prompt 案例。</p>}
+        {!loading && !error && visible.length === 0 && <div role="status" className="mt-2 text-xs leading-5 text-text-muted">
+          {resources.length === 0 ? <>
+            <p>平台尚无可用的已发布{stationLabel} Prompt 案例。</p>
+            <p>可在创作台提交{stationLabel}素材，经审核发布后在此选择。描述词和组合方案请使用词典入口。</p>
+            <button type="button" onClick={() => setRefresh((value) => value + 1)} className="min-h-11 underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary">刷新目录</button>
+          </> : <>
+            <p>没有匹配的{stationLabel} Prompt 案例，请更换关键词。</p>
+            <button type="button" onClick={() => setQuery("")} className="min-h-11 underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary">清空搜索</button>
+          </>}
+        </div>}
         <div className="mt-2 max-h-64 overflow-y-auto">
           {visible.map((resource) => <button key={resource.platform_resource_id} type="button" onClick={() => setSelectedId(resource.platform_resource_id)}
             className="flex min-h-11 w-full flex-col justify-center rounded-md px-2 py-1.5 text-left hover:bg-hover-bg focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary">
