@@ -355,7 +355,7 @@ class CharacterDesignRequest(BaseModel):
     current_draft: str = Field(default="", max_length=8000)
     user_visual_requirements: CharacterDesignVisualRequirements = Field(default_factory=CharacterDesignVisualRequirements)
     user_answers: dict[str, str] = Field(default_factory=dict, max_length=20)
-    route: str
+    route: str = ""
     age_stage: str = ""
     style: str = Field(default="", max_length=4000)
     confirmed_design: str = Field(default="", max_length=4000)
@@ -528,7 +528,7 @@ def _character_design_review_needs_revision(result: dict) -> bool:
 def _compile_character_design_draft_input(body: CharacterDesignRequest, ctx: UserContext) -> dict:
     validate_model(ctx, body.model)
     allowed_routes = {"realistic-modern", "historical-costume", "xianxia-fantasy", "anime-stylized"}
-    if body.route not in allowed_routes:
+    if body.route and body.route not in allowed_routes:
         raise HTTPException(422, "不支持的角色设计路由")
     allowed_age_stages = {"child", "teen", "young-adult", "adult", "older-adult"}
     if len(body.user_answers) > 12 or any(
@@ -552,6 +552,7 @@ def _compile_character_design_draft_input(body: CharacterDesignRequest, ctx: Use
               + "不得把创意选择伪装成剧本事实；不要依据姓名、职业或族裔刻板推断肤色、阶层或其他身份事实。没有可靠史实上下文时，将服饰方案明确写成与题材相容的架空设计，而不是声称具体朝代规制。"
               + "review_items 只用于输入中有明确相互矛盾的事实或已确认设定时的关键抉择；资料未提及年龄观感、画风、五官、体型或服饰细节不是冲突，请直接设计并标为 creative_choice。每项只写一个原子问题并提供一条可直接采纳的 suggestion；没有具体建议时不要输出 review_item。suggestion 必须是可直接加入图片 Prompt 的视觉值，不能是让用户修改表单、选择路由或回答问题的操作指令。不要把常规的造型细节放入 review_items，也不要输出旧字段 unresolved。"
               + "若建议改变年龄阶段或题材画风，同时提供与 suggestion 一致的 suggested_age_stage 或 suggested_route；否则工作台选项与图片 Prompt 会冲突。"
+              + "route 为空表示用户未另外指定题材路由，依据 profile 与 current_draft 中明确给出的时代、服装和画风设计，不默认补成现代写实。current_draft 可以是用户当前编辑的图片 Prompt，应保留其中明确的角色细节；白底、构图、拍摄景别等资产出图指令不写入 identity 或 look。"
               + "参考图片是只读视觉证据，只能描述图中清晰可见的内容；不要推断图外事实。不要把图中其他人物或物品混为本角色。")
     source = body.model_dump(exclude={"reviewed_messages", "review_token"})
     user_data = body.model_dump(exclude={"model", "project_id", "reference_assets", "reviewed_messages", "review_token"})

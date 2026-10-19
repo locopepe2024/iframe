@@ -633,3 +633,35 @@ def test_character_design_unifies_completion_and_polish_while_preserving_constra
     assert '不得为了丰富细节擅自改写' in preview['messages']['system']
     assert '不得由单张参考图推断精确厘米数' in preview['messages']['system']
     assert '身高178厘米，肤色小麦色，上身仅两件衣物' in preview['messages']['user']
+
+
+def test_character_design_accepts_profile_and_current_details_without_an_implicit_style_route(ctx, monkeypatch):
+    calls = []
+    monkeypatch.setattr(agent, 'validate_model', lambda *_: None)
+    monkeypatch.setattr(agent, 'complete', lambda _ctx, _model, messages: (
+        calls.append(messages) or json.dumps({
+            'identity': {'features': {'face': '眉目清冽', 'height': '身姿挺拔'}},
+            'look': {'features': {'clothing': '素黑劲装', 'accessories': '窄红发带'}},
+            'review_items': [],
+        })
+    ))
+    profile = '外观：少年，身姿挺拔；性格：沉静淡漠，坚守本心。'
+    details = '里衣一件、素黑外衣一件，布靴，无额外披风。'
+    body = agent.CharacterDesignRequest(model='qwen', character_name='苏砚', profile=profile, current_draft=details)
+    result = run_reviewed_character_draft(body, ctx)
+    assert len(calls) == 1
+    data = json.loads(calls[0][1]['content'])
+    assert data['profile'] == profile
+    assert data['current_draft'] == details
+    assert data['route'] == ''
+    assert '不默认补成现代写实' in calls[0][0]['content']
+    assert '资产出图指令不写入 identity 或 look' in calls[0][0]['content']
+    assert result['look']['features']['clothing'] == '素黑劲装'
+
+
+def test_character_design_still_rejects_an_unknown_explicit_style_route(ctx, monkeypatch):
+    monkeypatch.setattr(agent, 'validate_model', lambda *_: None)
+    body = agent.CharacterDesignRequest(model='qwen', character_name='苏砚', profile='少年剑客', route='invented-route')
+    with pytest.raises(HTTPException) as exc:
+        agent.preview_character_design_draft(body, ctx)
+    assert exc.value.status_code == 422
