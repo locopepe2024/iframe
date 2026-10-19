@@ -4,7 +4,7 @@ import PromptInput from './PromptInput';
 import { usePlaygroundStore } from './usePlaygroundStore';
 
 vi.mock('next-intl', () => ({ useTranslations: () => (key: string) => key }));
-vi.mock('@/lib/api', () => ({ API_URL: 'https://garage.uniart.fun', authenticatedFetch: vi.fn(async () => ({
+vi.mock('@/lib/api', () => ({ api: { getPlatformReferenceLibrary: vi.fn(async () => ({ resources: [] })) }, API_URL: 'https://garage.uniart.fun', authenticatedFetch: vi.fn(async () => ({
     ok: true, json: async () => ({ url: '/studio/media/preview.webp?signature=fresh' }),
 })) }));
 vi.mock('./PromptTemplateModal', () => ({ default: () => null }));
@@ -31,6 +31,18 @@ describe('selected reference mentions', () => {
                 ],
             }] as ReturnType<typeof usePlaygroundStore.getState>['history'],
         });
+    });
+
+    it('fills a modern clothing Skill slot without changing the template or selected media', async () => {
+        usePlaygroundStore.setState({ prompt: '模特穿着[女装款式]，颜色为[颜色]，面料为[面料]。' });
+        render(<PromptInput />);
+        const editor = (screen.getByRole('textbox') as HTMLElement & { editor: import('@tiptap/core').Editor }).editor;
+        act(() => { editor.commands.setTextSelection(8); });
+        fireEvent.click(await screen.findByRole('option', { name: /词条 · 连衣裙 / }));
+        expect(usePlaygroundStore.getState().prompt).toContain('[女装款式]');
+        fireEvent.click(screen.getByRole('button', { name: '填写当前槽位' }));
+        expect(usePlaygroundStore.getState().prompt).toBe('模特穿着连衣裙，颜色为[颜色]，面料为[面料]。');
+        expect(usePlaygroundStore.getState().inputMedia).toEqual(selected);
     });
 
     it('lists selected history and library images in reference order, excluding unselected history', async () => {

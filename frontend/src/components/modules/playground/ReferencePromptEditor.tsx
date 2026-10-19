@@ -34,11 +34,32 @@ export type ReferenceSuggestion = {
 
 export type PromptSlashSuggestion = {
   query: string;
+  /** A Skill's [label] placeholder. The replacement covers just this occurrence. */
+  slot?: string;
+  contextKey?: string;
   replaceWithText: (text: string) => string;
 };
 
 function slashSuggestion(editor: Editor): PromptSlashSuggestion | null {
   const { selection } = editor.state;
+  const parentText = selection.$from.parent.textBetween(0, selection.$from.parent.content.size, '\n', '\ufffc');
+  const offset = selection.$from.parentOffset;
+  const slot = Array.from(parentText.matchAll(/\[([^\[\]\n/@]{1,40})\]/g)).find((match) => {
+    const start = match.index!;
+    return selection.empty ? offset > start && offset < start + match[0].length
+      : selection.$from.sameParent(selection.$to) && offset === start && selection.$to.parentOffset === start + match[0].length;
+  });
+  if (slot) {
+    const from = selection.$from.start() + slot.index!;
+    const to = from + slot[0].length;
+    return { query: '', slot: slot[1].trim(), contextKey: `slot:${from}:${to}`, replaceWithText: (text) => {
+      // Refuse a stale selection if the source template changed while browsing.
+      if (to > editor.state.doc.content.size || editor.state.doc.textBetween(from, to) !== slot[0]) return editor.getText({ blockSeparator: '\n' });
+      editor.view.dispatch(closeHistory(editor.state.tr));
+      editor.chain().focus().insertContentAt({ from, to }, text ? { type: 'text', text } : []).run();
+      return editor.getText({ blockSeparator: '\n' });
+    } };
+  }
   if (!selection.empty) return null;
   const before = selection.$from.parent.textBetween(0, selection.$from.parentOffset, '\n', '\ufffc');
   const match = before.match(/(?:^|[\s（(，。！？、\u3400-\u9fff])\/([^/@\n]*)$/);

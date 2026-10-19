@@ -5,12 +5,12 @@ import CharacterPromptDictionary from "./CharacterPromptDictionary";
 const { getPlatformReferenceLibrary } = vi.hoisted(() => ({ getPlatformReferenceLibrary: vi.fn() }));
 vi.mock("@/lib/api", () => ({ api: { getPlatformReferenceLibrary } }));
 
-function setup(query: string) {
+function setup(query: string, slot?: string) {
   const replaceWithText = vi.fn((text: string) => `前文 ${text} 后文`);
   const onApply = vi.fn();
   const onClose = vi.fn();
   const keyHandler = { current: null as ((event: KeyboardEvent) => boolean) | null };
-  render(<CharacterPromptDictionary suggestion={{ query, replaceWithText }} onApply={onApply}
+  render(<CharacterPromptDictionary suggestion={{ query, slot, replaceWithText }} onApply={onApply}
     onClose={onClose} canRunSkill={false} keyHandler={keyHandler} />);
   return { replaceWithText, onApply, onClose, keyHandler };
 }
@@ -25,6 +25,49 @@ it("starts with categories and lets creators compare face shapes without changin
   expect(screen.getByRole("option", { name: /词条 · 方脸/ })).toBeInTheDocument();
   expect(screen.queryByRole("option", { name: /杏眼/ })).not.toBeInTheDocument();
   expect(replaceWithText).not.toHaveBeenCalled();
+});
+
+it("separates rendering style from genre and inserts a complete style without assigning identity or clothing", () => {
+  getPlatformReferenceLibrary.mockResolvedValueOnce({ resources: [] });
+  const { replaceWithText } = setup("");
+  fireEvent.click(screen.getByRole("option", { name: /^表现风格/ }));
+  fireEvent.click(screen.getByRole("option", { name: /^写实与绘画风格/ }));
+  expect(screen.queryByRole("option", { name: /古装 \/ 武侠/ })).not.toBeInTheDocument();
+  fireEvent.click(screen.getByRole("option", { name: /词条 · 二次元国漫 / }));
+  const text = (screen.getByRole("textbox", { name: "将插入的完整文字" }) as HTMLTextAreaElement).value;
+  expect(text).toContain("二维手绘线条清晰");
+  expect(text).not.toMatch(/侠客|里衣|少女|裙子/);
+  fireEvent.click(screen.getByRole("button", { name: "插入到当前 Prompt" }));
+  expect(replaceWithText).toHaveBeenCalledWith(text);
+});
+
+it("configures one consistent outfit before insertion without appending conflicting garments", () => {
+  getPlatformReferenceLibrary.mockResolvedValueOnce({ resources: [] });
+  const { replaceWithText } = setup("");
+  fireEvent.click(screen.getByRole("option", { name: /^服装 / }));
+  fireEvent.click(screen.getByRole("option", { name: /^完整穿搭方案/ }));
+  fireEvent.click(screen.getByRole("option", { name: /服装方案 · 简洁江湖行装/ }));
+  fireEvent.change(screen.getByRole("combobox", { name: "外衣颜色" }), { target: { value: "月白色" } });
+  fireEvent.change(screen.getByRole("combobox", { name: "鞋靴" }), { target: { value: "深棕色素面皮靴" } });
+  const text = (screen.getByRole("textbox", { name: "将插入的完整文字" }) as HTMLTextAreaElement).value;
+  expect(text).toContain("上身穿两件衣物");
+  expect(text).toContain("月白色哑光棉麻窄袖交领长袍");
+  expect(text).toContain("脚穿深棕色素面皮靴");
+  expect(text).not.toMatch(/深青色|黑色素面布靴|\{\w+\}/);
+  expect(replaceWithText).not.toHaveBeenCalled();
+  fireEvent.click(screen.getByRole("button", { name: "插入到当前 Prompt" }));
+  expect(replaceWithText).toHaveBeenCalledWith(text);
+});
+
+it("fills a Skill color slot with just the color rather than a full sentence", () => {
+  getPlatformReferenceLibrary.mockResolvedValueOnce({ resources: [] });
+  const { replaceWithText } = setup("", "颜色");
+  expect(screen.getByText("填写 [颜色]")).toBeInTheDocument();
+  expect(screen.queryByRole("option", { name: /连衣裙/ })).not.toBeInTheDocument();
+  fireEvent.click(screen.getByRole("option", { name: /词条 · 靛蓝色 / }));
+  expect(screen.getByRole("textbox", { name: "将插入的完整文字" })).toHaveValue("靛蓝色");
+  fireEvent.click(screen.getByRole("button", { name: "填写当前槽位" }));
+  expect(replaceWithText).toHaveBeenCalledWith("靛蓝色");
 });
 
 it("offers the containing category for an exact search so other options can be compared", async () => {

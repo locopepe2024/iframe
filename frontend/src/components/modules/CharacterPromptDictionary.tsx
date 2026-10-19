@@ -3,13 +3,16 @@
 import { useEffect, useId, useState, type MutableRefObject } from "react";
 import { API_URL, api, authenticatedFetch, type PlatformReferenceResource } from "@/lib/api";
 import { searchCharacterQuickPresets } from "@/lib/characterQuickActions";
+import { CHARACTER_DICTIONARY_PRESETS, renderDictionaryPreset, type CharacterDictionaryPreset } from "@/lib/characterDictionaryPresets";
 import { editablePlatformPrompt, isUsablePlatformPrompt } from "@/lib/platformPrompts";
-import { CHARACTER_DICTIONARY_GROUPS, dictionaryCategoryPath, dictionaryCategorySearch, localDictionaryCategories, platformDictionaryCategories } from "@/lib/characterDictionaryCategories";
+import { CHARACTER_DICTIONARY_GROUPS, dictionaryCategoryPath, dictionaryCategorySearch, dictionarySlotCategory, localDictionaryCategories, platformDictionaryCategories } from "@/lib/characterDictionaryCategories";
 import type { PromptSlashSuggestion } from "./playground/ReferencePromptEditor";
 
 type Entry = {
-  id: string; title: string; text: string; type: "词条" | "组合方案" | "Prompt 案例" | "Skill";
+  id: string; title: string; text: string; type: "词条" | "服装方案" | "组合方案" | "Prompt 案例" | "Skill";
   categories: string[]; domain: string; source: string; search: string; resource?: PlatformReferenceResource;
+  preset?: CharacterDictionaryPreset;
+  slotValue?: string;
 };
 const DOMAINS: Record<string, string> = {
   "character.identity": "身份", "character.look": "造型", "character.performance": "表演", "world.style": "风格",
@@ -34,9 +37,12 @@ export default function CharacterPromptDictionary({ suggestion, onClose, onApply
   const [category, setCategory] = useState<string | null>(null);
   const [browsing, setBrowsing] = useState(!suggestion.query.trim());
   const [selected, setSelected] = useState<Entry | null>(null);
+  const [fieldValues, setFieldValues] = useState<Record<string, string>>({});
   const [previewUrl, setPreviewUrl] = useState("");
   const [active, setActive] = useState(0);
   const needle = suggestion.query.trim().toLocaleLowerCase();
+  const selectedText = selected ? suggestion.slot ? selected.slotValue || selected.text
+    : selected.preset ? renderDictionaryPreset(selected.preset, fieldValues) : selected.text : "";
   useEffect(() => {
     setPreviewUrl("");
     const resource = selected?.resource;
@@ -63,10 +69,12 @@ export default function CharacterPromptDictionary({ suggestion, onClose, onApply
   const terms = resources.filter((resource) => resource.status === "active" && resource.kind === "prompt_preset"
     && resource.dictionary?.entry_type === "term" && DOMAINS[resource.dictionary.semantic_domain]
     && resource.payload?.structured_prompt?.content?.trim());
-  const entries: Entry[] = searchCharacterQuickPresets("").map((preset) => ({
+  // Design routes select a Skill workflow; they are not descriptions to insert.
+  const entries: Entry[] = searchCharacterQuickPresets("").filter((preset) => preset.target !== "route").map((preset) => ({
     id: preset.id, title: preset.label, text: preset.target === "route" ? preset.label : preset.value,
     type: "词条", categories: localDictionaryCategories(preset.id), domain: DOMAINS[preset.semanticDomain], source: `${preset.source} · v${preset.revision}`, search: preset.searchText,
   }));
+  entries.push(...CHARACTER_DICTIONARY_PRESETS.map((preset) => ({ ...preset, preset, text: renderDictionaryPreset(preset) })));
   for (const resource of resources) {
     if (resource.status !== "active") continue;
     const source = `平台 · ${resource.platform_resource_id} · r${resource.revision} · ${resource.provenance.license}`;
@@ -85,29 +93,30 @@ export default function CharacterPromptDictionary({ suggestion, onClose, onApply
       }
     }
   }
-  if (onSkill) entries.unshift({ id: "character-visual-design", title: "生成角色视觉设计草稿", type: "Skill", categories: [], domain: "Skill",
+  if (onSkill && !suggestion.slot) entries.unshift({ id: "character-visual-design", title: "生成角色视觉设计草稿", type: "Skill", categories: [], domain: "Skill",
     text: "角色身份与造型双 Skill 流程。输入：角色描述、侧栏身份与造型草稿及已选设计参考。下一步审核实际模型输入，确认后才执行。", source: "当前角色台已接入 Skill", search: "skill 技能 角色设计 身份 外观 草稿" });
   const group = CHARACTER_DICTIONARY_GROUPS.find((item) => item.id === category);
   const inCategory = (entry: Entry, key: string) => entry.categories.includes(key)
     || CHARACTER_DICTIONARY_GROUPS.find((item) => item.id === key)?.children.some(([child]) => entry.categories.includes(child));
-  const count = (key: string) => entries.filter((entry) => entry.type === "词条" && inCategory(entry, key)).length;
-  const showCategories = section === "词典" && browsing && (type === "全部" || type === "词条") && (!category || !!group);
-  const navigation = !showCategories ? [] : group ? group.children.map(([key, label]) => ({ id: key, label, detail: `${count(key)} 个词条` }))
+  const count = (key: string) => entries.filter((entry) => (entry.type === "词条" || entry.type === "服装方案") && inCategory(entry, key)).length;
+  const showCategories = section === "词典" && browsing && (type === "全部" || type === "词条" || type === "服装方案") && (!category || !!group);
+  const navigation = !showCategories ? [] : group ? group.children.map(([key, label]) => ({ id: key, label, detail: `${count(key)} 个条目` }))
     : CHARACTER_DICTIONARY_GROUPS.filter((item) => item.id !== "performance" || count(item.id) > 0)
       .map((item) => ({ id: item.id, label: item.label, detail: item.children.map(([, label]) => label).join("、") }));
   const visible = showCategories ? [] : entries.filter((entry) =>
     (section === "Skill" ? entry.type === "Skill" : entry.type !== "Skill")
     && (browsing || !needle || `${entry.title} ${entry.search} ${entry.text} ${entry.categories.map(dictionaryCategorySearch).join(" ")}`.toLocaleLowerCase().includes(needle))
+    && (!suggestion.slot || entry.type === "词条")
     && (section === "Skill" || type === "全部" || entry.type === type)
     && (!browsing || !category || inCategory(entry, category)));
   const related = section === "词典" && !browsing ? Array.from(new Set(visible.flatMap((entry) => entry.categories))) : [];
   const enterCategory = (key: string) => { setCategory(key); setBrowsing(true); setType("全部"); setActive(0); };
   const options = [
     ...navigation.map((item) => ({ id: `category-${item.id}`, label: item.label, detail: item.detail, choose: () => enterCategory(item.id) })),
-    ...visible.map((entry) => ({ id: entry.id, label: `${entry.type} · ${entry.title}`, detail: `${entry.domain} · ${entry.source}`, choose: () => setSelected(entry) })),
+    ...visible.map((entry) => ({ id: entry.id, label: `${entry.type} · ${entry.title}`, detail: `${entry.domain} · ${entry.source}`, choose: () => { setSelected(entry); setFieldValues({}); } })),
     ...related.map((key) => ({ id: `browse-${key}`, label: `浏览 ${dictionaryCategoryPath(key)}`, detail: `${count(key)} 个词条，可比较其他选项`, choose: () => enterCategory(key) })),
   ];
-  useEffect(() => { setActive(0); setSelected(null); setCategory(null); setBrowsing(!needle); }, [needle]);
+  useEffect(() => { setActive(0); setSelected(null); setFieldValues({}); setCategory(dictionarySlotCategory(suggestion.slot)); setBrowsing(!needle); setType("全部"); setSection("词典"); }, [needle, suggestion.slot, suggestion.contextKey]);
   useEffect(() => { setActive(0); setSelected(null); }, [type, section, category, browsing]);
   const back = () => {
     if (selected) setSelected(null);
@@ -119,7 +128,7 @@ export default function CharacterPromptDictionary({ suggestion, onClose, onApply
     if (selected.type === "Skill") {
       if (!canRunSkill) return;
       suggestion.replaceWithText(""); onClose(); onSkill?.();
-    } else { onApply(suggestion.replaceWithText(selected.text), selected); onClose(); }
+    } else { onApply(suggestion.replaceWithText(selectedText), { ...selected, text: selectedText }); onClose(); }
   };
   useEffect(() => {
     keyHandler.current = (event) => {
@@ -136,21 +145,33 @@ export default function CharacterPromptDictionary({ suggestion, onClose, onApply
   useEffect(() => {
     document.getElementById(`${id}-${active}`)?.scrollIntoView?.({ block: "nearest" });
   }, [id, active]);
-  return <div data-prompt-discovery role="dialog" aria-label="词典和 Skill 检索" onMouseDown={(event) => event.preventDefault()}
+  return <div data-prompt-discovery role="dialog" aria-label="词典和 Skill 检索" onMouseDown={(event) => {
+    if (!(event.target as HTMLElement).closest("input, select, textarea")) event.preventDefault();
+  }}
     className="absolute top-12 left-3 right-3 z-50 mb-2 max-h-[min(60vh,440px)] overflow-y-auto rounded-lg border border-glass-border bg-elevated p-3 shadow-xl">
-    <div className="flex items-center justify-between gap-2"><p className="text-xs font-medium text-foreground">/ 词典和 Skill</p><button type="button" onClick={onClose} className={buttonStyle}>关闭</button></div>
+    <div className="flex items-center justify-between gap-2"><p className="text-xs font-medium text-foreground">{suggestion.slot ? `填写 [${suggestion.slot}]` : "/ 词典和 Skill"}</p><button type="button" onClick={onClose} className={buttonStyle}>关闭</button></div>
     {selected ? <>
       <h4 className="mt-2 text-sm text-foreground">{selected.type} · {selected.title}</h4>
       <p className="mt-1 break-all text-xs text-text-muted">{selected.source}</p>
+      {!suggestion.slot && selected.preset?.fields && <fieldset className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-2">
+        <legend className="text-xs text-text-secondary">调整穿搭，完整描述会同步更新</legend>
+        {selected.preset.fields.map((field) => <label key={field.key} className="text-xs text-text-secondary">
+          {field.label}<select aria-label={field.label} value={fieldValues[field.key] || field.value}
+            onChange={(event) => setFieldValues((values) => ({ ...values, [field.key]: event.target.value }))}
+            className="mt-1 min-h-11 w-full rounded border border-glass-border bg-surface px-2 text-sm text-foreground focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary">
+            {field.options.map((value) => <option key={value} value={value}>{value}</option>)}
+          </select>
+        </label>)}
+      </fieldset>}
       {previewUrl && <img src={previewUrl} alt={`${selected.title} 案例预览`} className="mt-2 max-h-40 w-full rounded object-contain" />}
       <label className="mt-2 block text-xs text-text-secondary" htmlFor={`${id}-preview`}>{selected.type === "Skill" ? "Skill 操作说明" : "将插入的完整文字"}</label>
-      <textarea id={`${id}-preview`} readOnly value={selected.text} rows={5} className="mt-1 w-full rounded border border-glass-border bg-surface p-2 text-xs text-foreground" />
-      <p className="mt-1 text-xs text-text-muted">{selected.type === "Skill" ? "确认后进入输入审核。" : "替换光标处的 /检索词，保留其他文字与参考图；插入后可编辑。"}</p>
-      <button type="button" disabled={selected.type === "Skill" && !canRunSkill} onClick={apply} className={`${buttonStyle} mt-2 bg-primary text-primary-foreground disabled:opacity-50`}>{selected.type === "Skill" ? "审核 Skill 输入" : "插入到当前 Prompt"}</button>
+      <textarea id={`${id}-preview`} readOnly value={selectedText} rows={5} className="mt-1 w-full rounded border border-glass-border bg-surface p-2 text-xs text-foreground" />
+      <p className="mt-1 text-xs text-text-muted">{selected.type === "Skill" ? "确认后进入输入审核。" : suggestion.slot ? `仅替换当前 [${suggestion.slot}]，保留模板其他文字与参考图；也可关闭后手动填写。` : "替换光标处的 /检索词，保留其他文字与参考图；插入后可编辑。"}</p>
+      <button type="button" disabled={selected.type === "Skill" && !canRunSkill} onClick={apply} className={`${buttonStyle} mt-2 bg-primary text-primary-foreground disabled:opacity-50`}>{selected.type === "Skill" ? "审核 Skill 输入" : suggestion.slot ? "填写当前槽位" : "插入到当前 Prompt"}</button>
       {selected.type === "Skill" && !canRunSkill && <p className="text-xs text-text-muted">请先填写角色描述并选择设计模型，或等待当前设计完成。</p>}
       <button type="button" onClick={() => setSelected(null)} className={`${buttonStyle} ml-2`}>返回结果</button>
     </> : <>
-      <div role="tablist" aria-label="检索范围" className="mt-2 flex gap-2">{(["词典", "Skill"] as const).map((label) => <button key={label} type="button" role="tab" aria-selected={section === label} tabIndex={section === label ? 0 : -1}
+      {!suggestion.slot && <div role="tablist" aria-label="检索范围" className="mt-2 flex gap-2">{(["词典", "Skill"] as const).map((label) => <button key={label} type="button" role="tab" aria-selected={section === label} tabIndex={section === label ? 0 : -1}
         onClick={() => { setSection(label); setCategory(null); }}
         onKeyDown={(event) => {
           if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
@@ -160,8 +181,8 @@ export default function CharacterPromptDictionary({ suggestion, onClose, onApply
           const tabs = event.currentTarget.parentElement?.querySelectorAll<HTMLButtonElement>('[role="tab"]');
           tabs?.[next === "词典" ? 0 : 1]?.focus();
         }}
-        className={`${buttonStyle} ${section === label ? "bg-primary/15 text-foreground" : "text-text-muted"}`}>{label}</button>)}</div>
-      {section === "词典" && <div role="group" aria-label="词典内容类型" className="flex flex-wrap gap-1">{["全部", "词条", "组合方案", "Prompt 案例"].map((label) => <button key={label} type="button" aria-pressed={type === label} onClick={() => { setType(label); setCategory(null); }} className={`${buttonStyle} ${type === label ? "bg-primary/15 text-foreground" : "text-text-muted"}`}>{label}</button>)}</div>}
+        className={`${buttonStyle} ${section === label ? "bg-primary/15 text-foreground" : "text-text-muted"}`}>{label}</button>)}</div>}
+      {section === "词典" && !suggestion.slot && <div role="group" aria-label="词典内容类型" className="flex flex-wrap gap-1">{["全部", "词条", "服装方案", "组合方案", "Prompt 案例"].map((label) => <button key={label} type="button" aria-pressed={type === label} onClick={() => { setType(label); setCategory(label === "服装方案" ? "outfit" : null); }} className={`${buttonStyle} ${type === label ? "bg-primary/15 text-foreground" : "text-text-muted"}`}>{label}</button>)}</div>}
       {section === "词典" && <div className="flex flex-wrap items-center gap-1 text-xs text-text-muted">
         {category ? <><button type="button" onClick={back} className={buttonStyle}>返回上一级</button><span>{dictionaryCategoryPath(category)}</span></>
           : <p className="py-2">{browsing ? "先选择分类，再比较候选词条。也可继续输入 /关键词直接搜索。" : "搜索结果 · 选择所属分类可比较其他选项"}</p>}

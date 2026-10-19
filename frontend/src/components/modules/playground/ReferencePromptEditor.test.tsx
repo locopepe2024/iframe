@@ -52,3 +52,37 @@ it("does not open slash discovery for a URL", () => {
   act(() => editor.commands.insertContent("https://example.com/path"));
   expect(onSlashChange).toHaveBeenLastCalledWith(null);
 });
+
+it("replaces only the selected Skill placeholder occurrence, preserving references, other slots and undo", () => {
+  const suggestion: { current: PromptSlashSuggestion | null } = { current: null };
+  const reference = { asset_type: "character", asset_id: "model", variant_id: "front" } as const;
+  const onReferencesChange = vi.fn();
+  const view = render(<ReferencePromptEditor value="" placeholder="Prompt" onChange={vi.fn()}
+    onReferencesChange={onReferencesChange} onSlashChange={(next) => { suggestion.current = next; }} />);
+  const editor = (view.getByRole("textbox") as any).editor;
+  act(() => {
+    editor.commands.setContent({ type: "doc", content: [{ type: "paragraph", content: [
+      { type: "referenceToken", attrs: { label: "模特", ...reference } },
+      { type: "text", text: " 外衣[颜色]，下装[颜色]，面料[面料]。" },
+    ] }] });
+    editor.commands.setTextSelection(13);
+  });
+  expect(suggestion.current?.slot).toBe("颜色");
+  act(() => suggestion.current!.replaceWithText("靛蓝色"));
+  expect(editor.getText()).toBe("@模特 外衣[颜色]，下装靛蓝色，面料[面料]。");
+  expect(onReferencesChange).toHaveBeenLastCalledWith([reference]);
+  act(() => editor.commands.undo());
+  expect(editor.getText()).toBe("@模特 外衣[颜色]，下装[颜色]，面料[面料]。");
+});
+
+it("does not replace a stale placeholder after the template has been removed", () => {
+  const suggestion: { current: PromptSlashSuggestion | null } = { current: null };
+  const view = render(<ReferencePromptEditor value="" placeholder="Prompt" onChange={vi.fn()}
+    onSlashChange={(next) => { suggestion.current = next; }} />);
+  const editor = (view.getByRole("textbox") as any).editor;
+  act(() => { editor.commands.insertContent("颜色[颜色]"); editor.commands.setTextSelection(5); });
+  const stale = suggestion.current!;
+  act(() => editor.commands.clearContent());
+  act(() => stale.replaceWithText("黑色"));
+  expect(editor.getText()).toBe("");
+});
