@@ -3,12 +3,23 @@
 import { useEffect, useRef, useState, type RefObject } from "react";
 import { ArrowLeft, Search, Sparkles, TextCursorInput, X } from "lucide-react";
 import {
-  searchCharacterQuickPresets, type CharacterQuickPreset, type CharacterPresetCategory,
+  searchCharacterQuickPresets, type CharacterQuickPreset, type CharacterPresetCategory, type CharacterSemanticDomain,
 } from "@/lib/characterQuickActions";
 
 const CATEGORY_ORDER: CharacterPresetCategory[] = ["风格", "面容", "皮肤", "身材体态", "服装", "发型"];
 type BrowseCategory = "全部" | CharacterPresetCategory;
 const BROWSE_CATEGORIES: BrowseCategory[] = ["全部", ...CATEGORY_ORDER];
+const DOMAIN_OPTIONS: { label: string; value: CharacterSemanticDomain | null }[] = [
+  { label: "全部", value: null },
+  { label: "身份", value: "character.identity" },
+  { label: "造型", value: "character.look" },
+  { label: "风格", value: "world.style" },
+];
+const DOMAIN_LABELS: Record<CharacterSemanticDomain, string> = {
+  "character.identity": "身份",
+  "character.look": "造型",
+  "world.style": "风格",
+};
 const COMMANDS = [
   { id: "design", title: "生成角色视觉设计草稿", detail: "双 Skill 流程；先审核模型输入", search: "角色设计 草稿 skill 技能 身份 外观" },
   { id: "terms", title: "插入描述词", detail: "选择词条，写入可编辑草稿", search: "插入 添加 描述词 风格 面容 皮肤 身材 体态 服装 发型" },
@@ -27,15 +38,17 @@ export default function CharacterSlashPanel({ open, query, onQueryChange, onOpen
   const rootRef = useRef<HTMLDivElement>(null);
   const [activeIndex, setActiveIndex] = useState(0);
   const [activeCategory, setActiveCategory] = useState<BrowseCategory>("全部");
+  const [activeDomain, setActiveDomain] = useState<CharacterSemanticDomain | null>(null);
   const [stage, setStage] = useState<"commands" | "terms">("commands");
   const needle = query.replace(/^\//, "").trim().toLocaleLowerCase();
   const commands = COMMANDS.filter((command) => !needle || `${command.title} ${command.search}`.toLocaleLowerCase().includes(needle));
-  const presets = searchCharacterQuickPresets(needle).filter((preset) => !!needle || activeCategory === "全部" || preset.category === activeCategory);
+  const presets = searchCharacterQuickPresets(needle, needle ? undefined : activeDomain || undefined)
+    .filter((preset) => !!needle || activeCategory === "全部" || preset.category === activeCategory);
   const options: Array<{ kind: "command"; id: "design" | "terms" } | { kind: "preset"; preset: CharacterQuickPreset }> = stage === "commands"
     ? commands.map((command) => ({ kind: "command", id: command.id }))
     : presets.map((preset) => ({ kind: "preset", preset }));
 
-  useEffect(() => { setActiveIndex(0); }, [query, stage, activeCategory]);
+  useEffect(() => { setActiveIndex(0); }, [query, stage, activeCategory, activeDomain]);
   useEffect(() => { if (!open) setStage("commands"); }, [open]);
   useEffect(() => {
     if (!open) return;
@@ -49,7 +62,7 @@ export default function CharacterSlashPanel({ open, query, onQueryChange, onOpen
   const choose = (option: typeof options[number]) => {
     if (option.kind === "command") {
       if (option.id === "terms") {
-        setStage("terms"); setActiveCategory("全部"); onQueryChange("/"); inputRef.current?.focus();
+        setStage("terms"); setActiveCategory("全部"); setActiveDomain(null); onQueryChange("/"); inputRef.current?.focus();
         return;
       }
       if (!canRunSkill) return;
@@ -91,7 +104,17 @@ export default function CharacterSlashPanel({ open, query, onQueryChange, onOpen
           onClick={() => { setActiveCategory(category); setActiveIndex(0); onQueryChange("/"); inputRef.current?.focus(); }}
           className={`mb-1 min-h-10 w-full rounded px-2 py-1.5 text-left text-xs leading-4 focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary ${!needle && activeCategory === category ? "bg-primary/15 font-medium text-foreground" : "text-text-secondary hover:bg-hover-bg"}`}>{category}</button>)}
       </nav>}
-      <div id="character-slash-options" role="listbox" aria-label={stage === "commands" ? "角色操作" : "角色描述词"} className="max-h-[min(52vh,420px)] min-w-0 overflow-y-auto p-2">
+      <div className="max-h-[min(52vh,420px)] min-w-0 overflow-y-auto p-2">
+      {stage === "terms" && <div className="sticky top-0 z-10 bg-elevated pb-2">
+        <div role="group" aria-label="描述词语义层" className="flex flex-wrap gap-1">
+          {DOMAIN_OPTIONS.map(({ label, value }) => <button key={label} type="button"
+            aria-pressed={!needle && activeDomain === value}
+            onClick={() => { setActiveDomain(value); setActiveCategory("全部"); setActiveIndex(0); onQueryChange("/"); inputRef.current?.focus(); }}
+            className={`min-h-9 rounded px-2 text-xs focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary ${!needle && activeDomain === value ? "bg-primary/15 text-foreground" : "text-text-secondary hover:bg-hover-bg"}`}>{label}</button>)}
+        </div>
+        {needle && <p className="px-1 pt-1 text-[11px] text-text-muted">搜索全部语义层</p>}
+      </div>}
+      <div id="character-slash-options" role="listbox" aria-label={stage === "commands" ? "角色操作" : "角色描述词"}>
       {options.length === 0 && <p className="px-2 py-3 text-xs text-text-muted">没有匹配项；原文不会被改动。</p>}
       {stage === "commands" && commands.map((command, index) => <button key={command.id} id={`character-slash-option-${index}`} type="button" role="option" aria-selected={activeIndex === index} disabled={command.id === "design" && !canRunSkill}
         onClick={() => choose({ kind: "command", id: command.id })}
@@ -110,11 +133,12 @@ export default function CharacterSlashPanel({ open, query, onQueryChange, onOpen
               onClick={() => choose({ kind: "preset", preset })}
               className={`flex min-h-11 w-full flex-col justify-center rounded px-2 py-1.5 text-left hover:bg-hover-bg focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary ${activeIndex === index ? "bg-primary/10" : ""}`}>
               <span className="text-xs leading-4 text-foreground">{preset.label}</span>
-              <span className="mt-0.5 text-[11px] leading-4 text-text-muted">写入{preset.target === "recognition_marks" ? "识别标记" : category} · {preset.source} · v{preset.revision}</span>
+              <span className="mt-0.5 text-[11px] leading-4 text-text-muted">{DOMAIN_LABELS[preset.semanticDomain]} · 写入{preset.target === "recognition_marks" ? "识别标记" : category} · {preset.source} · v{preset.revision}</span>
             </button>;
           })}
         </div>;
       })}
+      </div>
       </div>
     </div>}
   </div>;

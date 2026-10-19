@@ -123,6 +123,26 @@ it("browses classical character terms by category and keeps selection in the edi
     expect(apiMocks.agentRequest.mock.calls.some(([path]) => path === "/character-design/draft")).toBe(false);
 });
 
+it("browses semantic layers and lets exact search cross the selected layer", () => {
+    apiMocks.getAssetReferenceIndex.mockResolvedValueOnce({ assets: [] } as any);
+    const onGenerate = vi.fn();
+    render(<CharacterWorkbench asset={{ id: "character-1", name: "苏砚", description: "少年剑客" }}
+        onClose={vi.fn()} onUpdateDescription={vi.fn()} onGenerate={onGenerate} generatingTypes={[]} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "展开角色设计" }));
+    fireEvent.click(screen.getByRole("button", { name: "打开快捷面板" }));
+    fireEvent.click(screen.getByRole("option", { name: /插入描述词/ }));
+    const layers = screen.getByRole("group", { name: "描述词语义层" });
+    fireEvent.click(within(layers).getByRole("button", { name: "造型" }));
+    expect(screen.getAllByRole("option", { name: /交领长衣/ }).length).toBeGreaterThan(0);
+    expect(screen.queryByRole("option", { name: /长发高束/ })).not.toBeInTheDocument();
+    const search = screen.getByRole("combobox", { name: "/ 角色操作" });
+    fireEvent.change(search, { target: { value: "/长发高束" } });
+    expect(screen.getByText("搜索全部语义层")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("option", { name: /长发高束/ }));
+    expect(onGenerate).not.toHaveBeenCalled();
+});
+
 it("keeps inserted terms editable and saves their exact field and source", async () => {
     apiMocks.getAssetReferenceIndex.mockResolvedValueOnce({ assets: [] } as any);
     const onUpdateAttributes = vi.fn().mockResolvedValue(undefined);

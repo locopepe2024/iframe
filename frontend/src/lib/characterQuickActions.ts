@@ -2,11 +2,15 @@ import { AVATAR_FEATURE_LIBRARY } from "@/lib/avatarFeatureLibrary";
 
 export type CharacterPresetTarget = "route" | "style_notes" | "face" | "skin" | "build" | "clothing" | "hair" | "recognition_marks";
 export type CharacterPresetCategory = "风格" | "面容" | "皮肤" | "身材体态" | "服装" | "发型";
+export type CharacterSemanticDomain = "character.identity" | "character.look" | "world.style";
+export type CharacterDictionaryEntryType = "term";
 
 export type CharacterQuickPreset = {
   id: string;
   revision: "1";
   category: CharacterPresetCategory;
+  semanticDomain: CharacterSemanticDomain;
+  entryType: CharacterDictionaryEntryType;
   target: CharacterPresetTarget;
   label: string;
   value: string;
@@ -54,10 +58,13 @@ const MOTUART_INSPIRED_STYLE_IDS = new Set([
 ]);
 
 function libraryPresets(category: CharacterPresetCategory, target: CharacterPresetTarget, keys: string[]): CharacterQuickPreset[] {
+  const semanticDomain: CharacterSemanticDomain = category === "服装" ? "character.look" : "character.identity";
   return keys.flatMap((key) => (AVATAR_FEATURE_LIBRARY[key] || []).map((option) => ({
     id: `character.${key}.${option.id}`,
     revision: "1" as const,
     category,
+    semanticDomain,
+    entryType: "term" as const,
     target,
     label: option.zh,
     value: option.zh,
@@ -72,12 +79,14 @@ export const CHARACTER_QUICK_PRESETS: CharacterQuickPreset[] = [
   ...styleRoutes.map(([value, label]) => ({
     id: `character.style.${value}`, revision: "1" as const,
     category: "风格" as const, target: "route" as const,
+    semanticDomain: "world.style" as const, entryType: "term" as const,
     label, value, searchText: `风格 题材 画风 ${label} ${value}`,
     source: "iFrame 角色设计路由",
   })),
   ...styleTerms.map(([id, value]) => ({
     id: `character.style-note.${id}`, revision: "1" as const,
     category: "风格" as const, target: "style_notes" as const,
+    semanticDomain: "world.style" as const, entryType: "term" as const,
     label: value, value, searchText: `风格 画风 ${value}`,
     source: MOTUART_INSPIRED_STYLE_IDS.has(id)
       ? "iFrame 重写测试词条 · MotuArt 动漫分类参考" : "iFrame V1 测试词条",
@@ -90,7 +99,9 @@ export const CHARACTER_QUICK_PRESETS: CharacterQuickPreset[] = [
   ...libraryPresets("发型", "hair", ["base_hair"]),
 ];
 
-export function searchCharacterQuickPresets(query: string): CharacterQuickPreset[] {
+export function searchCharacterQuickPresets(query: string, domain?: CharacterSemanticDomain): CharacterQuickPreset[] {
   const needle = query.trim().toLocaleLowerCase();
-  return CHARACTER_QUICK_PRESETS.filter((item) => !needle || item.searchText.toLocaleLowerCase().includes(needle));
+  return CHARACTER_QUICK_PRESETS.filter((item) =>
+    (!domain || item.semanticDomain === domain) && (!needle || item.searchText.toLocaleLowerCase().includes(needle))
+  );
 }
