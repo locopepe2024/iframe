@@ -123,6 +123,7 @@ parser = argparse.ArgumentParser()
 for name in ('rig', 'bundle', 'track', 'anchors', 'out'):
     parser.add_argument('--' + name, required=True)
 parser.add_argument('--render', action='store_true')
+parser.add_argument('--sequence', action='store_true')
 args = parser.parse_args(sys.argv[sys.argv.index('--') + 1:])
 out = Path(args.out)
 out.mkdir(parents=True, exist_ok=True)
@@ -163,6 +164,10 @@ report = {'schema': 'recreation2-two-bone-ik.v1', 'units': 'Blender units; metri
           'patch_vertex_ids': patches, 'ground_proxy_z': ground_z,
           'ground_definition': 'first-frame left fixed-patch centroid; not recovered source floor',
           'frames': []}
+if args.sequence:
+    from recreation2_sequence_metrics import run
+    run(globals())
+    raise SystemExit(0)
 for source, side in [(1, 'l'), (17, 'l'), (23, 'l'), (29, 'l'), (41, 'l'), (55, 'r')]:
     fd = by_output[anchors[source]['new_bundle_frame']]
     load_pose(fd)
