@@ -3,6 +3,8 @@
 ## Contract
 
 - `/` opens descriptions and reusable outfits. `@` remains the asset/reference picker.
+- Main template flow: type `/古装 `, choose a complete Prompt template, then click its `[变量]` slots to fill details from the dictionary. Generic `古装`/`古风` and `现代`/`女装` searches default to the Prompt-template filter; users can switch to all content or atomic terms. Templates also appear first in mixed results.
+- Built-in classical live-action and donghua templates contain editable slots for role, facial features, hair, garment colors/material and footwear. A modern fashion template contains garment, color, material, fit and accessory slots. These are reusable starting texts; they do not call a Skill/model or change generation parameters when selected.
 - Rendering style, era/genre, role and clothing are separate categories. A rendering description does not choose identity, garments or a scene.
 - Skill design-route identifiers remain supported in the design sidebar; they are not inserted as prompt descriptions by the inline dictionary.
 - A Skill can output plain-text `[变量]` slots. Clicking inside a slot, or selecting the whole bracketed slot, opens its dictionary destination. Confirmation replaces only that occurrence, including brackets. Other text, unresolved slots and reference tokens remain intact; replacement supports undo.

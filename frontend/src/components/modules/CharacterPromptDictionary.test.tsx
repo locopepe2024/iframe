@@ -70,6 +70,21 @@ it("fills a Skill color slot with just the color rather than a full sentence", (
   expect(replaceWithText).toHaveBeenCalledWith("靛蓝色");
 });
 
+it("searches classical Prompt templates first and inserts unresolved slots for the next step", () => {
+  getPlatformReferenceLibrary.mockResolvedValueOnce({ resources: [] });
+  const { replaceWithText } = setup("古装 ");
+  expect(screen.getByRole("button", { name: "Prompt 模板" })).toHaveAttribute("aria-pressed", "true");
+  expect(screen.getAllByRole("option").filter((item) => item.textContent?.startsWith("Prompt 模板"))).toHaveLength(2);
+  expect(screen.queryByRole("option", { name: /词条 ·/ })).not.toBeInTheDocument();
+  fireEvent.click(screen.getByRole("option", { name: /Prompt 模板 · 写实真人古装/ }));
+  const text = (screen.getByRole("textbox", { name: "将插入的完整文字" }) as HTMLTextAreaElement).value;
+  expect(text).toContain("[外衣颜色][外衣面料]");
+  expect(screen.queryByRole("combobox")).not.toBeInTheDocument();
+  expect(replaceWithText).not.toHaveBeenCalled();
+  fireEvent.click(screen.getByRole("button", { name: "使用此模板" }));
+  expect(replaceWithText).toHaveBeenCalledWith(text);
+});
+
 it("offers the containing category for an exact search so other options can be compared", async () => {
   getPlatformReferenceLibrary.mockResolvedValueOnce({ resources: [] });
   const { replaceWithText } = setup("圆脸");

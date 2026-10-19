@@ -9,7 +9,7 @@ import { CHARACTER_DICTIONARY_GROUPS, dictionaryCategoryPath, dictionaryCategory
 import type { PromptSlashSuggestion } from "./playground/ReferencePromptEditor";
 
 type Entry = {
-  id: string; title: string; text: string; type: "词条" | "服装方案" | "组合方案" | "Prompt 案例" | "Skill";
+  id: string; title: string; text: string; type: "词条" | "服装方案" | "Prompt 模板" | "组合方案" | "Prompt 案例" | "Skill";
   categories: string[]; domain: string; source: string; search: string; resource?: PlatformReferenceResource;
   preset?: CharacterDictionaryPreset;
   slotValue?: string;
@@ -98,7 +98,7 @@ export default function CharacterPromptDictionary({ suggestion, onClose, onApply
   const group = CHARACTER_DICTIONARY_GROUPS.find((item) => item.id === category);
   const inCategory = (entry: Entry, key: string) => entry.categories.includes(key)
     || CHARACTER_DICTIONARY_GROUPS.find((item) => item.id === key)?.children.some(([child]) => entry.categories.includes(child));
-  const count = (key: string) => entries.filter((entry) => (entry.type === "词条" || entry.type === "服装方案") && inCategory(entry, key)).length;
+  const count = (key: string) => entries.filter((entry) => ["词条", "服装方案", "Prompt 模板"].includes(entry.type) && inCategory(entry, key)).length;
   const showCategories = section === "词典" && browsing && (type === "全部" || type === "词条" || type === "服装方案") && (!category || !!group);
   const navigation = !showCategories ? [] : group ? group.children.map(([key, label]) => ({ id: key, label, detail: `${count(key)} 个条目` }))
     : CHARACTER_DICTIONARY_GROUPS.filter((item) => item.id !== "performance" || count(item.id) > 0)
@@ -108,7 +108,8 @@ export default function CharacterPromptDictionary({ suggestion, onClose, onApply
     && (browsing || !needle || `${entry.title} ${entry.search} ${entry.text} ${entry.categories.map(dictionaryCategorySearch).join(" ")}`.toLocaleLowerCase().includes(needle))
     && (!suggestion.slot || entry.type === "词条")
     && (section === "Skill" || type === "全部" || entry.type === type)
-    && (!browsing || !category || inCategory(entry, category)));
+    && (!browsing || !category || inCategory(entry, category)))
+    .sort((a, b) => Number(b.type === "Prompt 模板") - Number(a.type === "Prompt 模板"));
   const related = section === "词典" && !browsing ? Array.from(new Set(visible.flatMap((entry) => entry.categories))) : [];
   const enterCategory = (key: string) => { setCategory(key); setBrowsing(true); setType("全部"); setActive(0); };
   const options = [
@@ -116,7 +117,7 @@ export default function CharacterPromptDictionary({ suggestion, onClose, onApply
     ...visible.map((entry) => ({ id: entry.id, label: `${entry.type} · ${entry.title}`, detail: `${entry.domain} · ${entry.source}`, choose: () => { setSelected(entry); setFieldValues({}); } })),
     ...related.map((key) => ({ id: `browse-${key}`, label: `浏览 ${dictionaryCategoryPath(key)}`, detail: `${count(key)} 个词条，可比较其他选项`, choose: () => enterCategory(key) })),
   ];
-  useEffect(() => { setActive(0); setSelected(null); setFieldValues({}); setCategory(dictionarySlotCategory(suggestion.slot)); setBrowsing(!needle); setType("全部"); setSection("词典"); }, [needle, suggestion.slot, suggestion.contextKey]);
+  useEffect(() => { setActive(0); setSelected(null); setFieldValues({}); setCategory(dictionarySlotCategory(suggestion.slot)); setBrowsing(!needle); setType(!suggestion.slot && /^(古装|古风|现代|女装)$/.test(needle) ? "Prompt 模板" : "全部"); setSection("词典"); }, [needle, suggestion.slot, suggestion.contextKey]);
   useEffect(() => { setActive(0); setSelected(null); }, [type, section, category, browsing]);
   const back = () => {
     if (selected) setSelected(null);
@@ -166,8 +167,8 @@ export default function CharacterPromptDictionary({ suggestion, onClose, onApply
       {previewUrl && <img src={previewUrl} alt={`${selected.title} 案例预览`} className="mt-2 max-h-40 w-full rounded object-contain" />}
       <label className="mt-2 block text-xs text-text-secondary" htmlFor={`${id}-preview`}>{selected.type === "Skill" ? "Skill 操作说明" : "将插入的完整文字"}</label>
       <textarea id={`${id}-preview`} readOnly value={selectedText} rows={5} className="mt-1 w-full rounded border border-glass-border bg-surface p-2 text-xs text-foreground" />
-      <p className="mt-1 text-xs text-text-muted">{selected.type === "Skill" ? "确认后进入输入审核。" : suggestion.slot ? `仅替换当前 [${suggestion.slot}]，保留模板其他文字与参考图；也可关闭后手动填写。` : "替换光标处的 /检索词，保留其他文字与参考图；插入后可编辑。"}</p>
-      <button type="button" disabled={selected.type === "Skill" && !canRunSkill} onClick={apply} className={`${buttonStyle} mt-2 bg-primary text-primary-foreground disabled:opacity-50`}>{selected.type === "Skill" ? "审核 Skill 输入" : suggestion.slot ? "填写当前槽位" : "插入到当前 Prompt"}</button>
+      <p className="mt-1 text-xs text-text-muted">{selected.type === "Skill" ? "确认后进入输入审核。" : suggestion.slot ? `仅替换当前 [${suggestion.slot}]，保留模板其他文字与参考图；也可关闭后手动填写。` : selected.type === "Prompt 模板" ? "先插入完整模板，再点击其中的 [变量] 从词典选择细节；所有文字均可编辑。" : "替换光标处的 /检索词，保留其他文字与参考图；插入后可编辑。"}</p>
+      <button type="button" disabled={selected.type === "Skill" && !canRunSkill} onClick={apply} className={`${buttonStyle} mt-2 bg-primary text-primary-foreground disabled:opacity-50`}>{selected.type === "Skill" ? "审核 Skill 输入" : suggestion.slot ? "填写当前槽位" : selected.type === "Prompt 模板" ? "使用此模板" : "插入到当前 Prompt"}</button>
       {selected.type === "Skill" && !canRunSkill && <p className="text-xs text-text-muted">请先填写角色描述并选择设计模型，或等待当前设计完成。</p>}
       <button type="button" onClick={() => setSelected(null)} className={`${buttonStyle} ml-2`}>返回结果</button>
     </> : <>
@@ -182,7 +183,7 @@ export default function CharacterPromptDictionary({ suggestion, onClose, onApply
           tabs?.[next === "词典" ? 0 : 1]?.focus();
         }}
         className={`${buttonStyle} ${section === label ? "bg-primary/15 text-foreground" : "text-text-muted"}`}>{label}</button>)}</div>}
-      {section === "词典" && !suggestion.slot && <div role="group" aria-label="词典内容类型" className="flex flex-wrap gap-1">{["全部", "词条", "服装方案", "组合方案", "Prompt 案例"].map((label) => <button key={label} type="button" aria-pressed={type === label} onClick={() => { setType(label); setCategory(label === "服装方案" ? "outfit" : null); }} className={`${buttonStyle} ${type === label ? "bg-primary/15 text-foreground" : "text-text-muted"}`}>{label}</button>)}</div>}
+      {section === "词典" && !suggestion.slot && <div role="group" aria-label="词典内容类型" className="flex flex-wrap gap-1">{["全部", "Prompt 模板", "词条", "服装方案", "组合方案", "Prompt 案例"].map((label) => <button key={label} type="button" aria-pressed={type === label} onClick={() => { setType(label); setCategory(label === "服装方案" ? "outfit" : null); }} className={`${buttonStyle} ${type === label ? "bg-primary/15 text-foreground" : "text-text-muted"}`}>{label}</button>)}</div>}
       {section === "词典" && <div className="flex flex-wrap items-center gap-1 text-xs text-text-muted">
         {category ? <><button type="button" onClick={back} className={buttonStyle}>返回上一级</button><span>{dictionaryCategoryPath(category)}</span></>
           : <p className="py-2">{browsing ? "先选择分类，再比较候选词条。也可继续输入 /关键词直接搜索。" : "搜索结果 · 选择所属分类可比较其他选项"}</p>}

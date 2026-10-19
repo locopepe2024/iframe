@@ -4,6 +4,7 @@ export const CHARACTER_DICTIONARY_GROUPS = [
     ["lips", "唇形"], ["eye-detail", "眼周细节"], ["marks", "识别标记"], ["face-overview", "面部综合"],
   ] },
   { id: "body", label: "身体", children: [["build", "体型与比例"], ["posture", "体态"], ["skin", "肤色与肤质"]] },
+  { id: "templates", label: "Prompt 模板", children: [["classical-template", "古装模板"], ["modern-template", "现代模板"]] },
   { id: "style", label: "表现风格", children: [["render", "写实与绘画风格"], ["texture", "光影与质感"]] },
   { id: "setting", label: "时代与题材", children: [["era", "时代背景"], ["genre", "题材类型"]] },
   { id: "role", label: "角色定位", children: [["civilian-role", "日常身份"], ["jianghu-role", "江湖身份"]] },
@@ -51,6 +52,11 @@ export function platformDictionaryCategories(path: string | undefined): string[]
 /** Slot labels describe a destination; they are not text to append to the Prompt. */
 export function dictionarySlotCategory(label: string | undefined): string | null {
   if (!label) return null;
+  if (/角色定位|身份/.test(label)) return "role";
+  if (/脸型/.test(label)) return "face-shape";
+  if (/眉形/.test(label)) return "brows";
+  if (/眼型/.test(label)) return "eyes";
+  if (/发型/.test(label)) return "hair";
   if (/颜色|配色/.test(label)) return "palette";
   if (/面料|材质/.test(label)) return "material";
   if (/版型/.test(label)) return "fit";

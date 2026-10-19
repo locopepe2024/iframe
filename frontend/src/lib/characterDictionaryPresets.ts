@@ -8,7 +8,7 @@ export type CharacterDictionaryPreset = {
   domain: string;
   source: string;
   search: string;
-  type: "词条" | "服装方案";
+  type: "词条" | "服装方案" | "Prompt 模板";
   slotValue?: string;
   fields?: OutfitField[];
 };
@@ -46,6 +46,21 @@ export function renderDictionaryPreset(preset: CharacterDictionaryPreset, values
 }
 
 export const CHARACTER_DICTIONARY_PRESETS: CharacterDictionaryPreset[] = [
+  {
+    id: "dictionary.template.classical-live-action", title: "写实真人古装", type: "Prompt 模板", categories: ["classical-template"], domain: "完整 Prompt", source,
+    search: "古装 古风 武侠 写实 真人 完整 prompt 模板 人物 角色",
+    text: "一位成年[角色定位]，古风创作设定。写实真人影像风格，人体比例自然，皮肤保留真实纹理，光影自然克制。人物为[脸型]，眉形为[眉形]，眼型为[眼型]，发型为[发型]。上身穿两件衣物：[里衣颜色]贴身里衣一件，外穿[外衣颜色][外衣面料]窄袖交领长袍一件，领口仅露出一道里衣领缘。下穿[下装颜色]长裤，脚穿[鞋靴]，腰束窄布带。无额外中衣、披风、护甲或装饰性叠领。人物自然站立，简洁浅色背景，全身服装完整可见，布料具有可信的重量和自然褶皱。",
+  },
+  {
+    id: "dictionary.template.classical-donghua", title: "二次元国漫古装", type: "Prompt 模板", categories: ["classical-template"], domain: "完整 Prompt", source,
+    search: "古装 古风 武侠 二次元 国漫 动漫 完整 prompt 模板 人物 角色",
+    text: "一位成年[角色定位]，古风创作设定。二次元国漫风格，二维手绘线条清晰，赛璐璐明暗分区明确，色块干净，人物比例与五官造型统一。人物为[脸型]，眉形为[眉形]，眼型为[眼型]，发型为[发型]。上身穿两件衣物：[里衣颜色]贴身里衣一件，外穿[外衣颜色][外衣面料]窄袖交领长袍一件，领口仅露出一道里衣领缘。下穿[下装颜色]长裤，脚穿[鞋靴]，腰束窄布带。无额外中衣、披风、护甲或装饰性叠领。人物自然站立，简洁浅色背景，全身服装完整可见，衣片连接和穿着关系清楚。",
+  },
+  {
+    id: "dictionary.template.modern-fashion", title: "写实现代女装展示", type: "Prompt 模板", categories: ["modern-template"], domain: "完整 Prompt", source,
+    search: "现代 女装 电商 商品 模特 写实 真人 完整 prompt 模板",
+    text: "成年女装模特穿着[女装款式]，颜色为[颜色]，面料为[面料]，版型为[版型]，搭配要求为[搭配单品]。浅色棚拍背景，主体居中，服装完整可见，边缘清楚。重点展示服装的领口、袖型、腰线、下摆、面料纹理、自然褶皱和上身比例，服装主体不被手、头发或道具遮挡。真实摄影质感，光线柔和，人物姿态自然，身体比例可信，皮肤保留自然纹理。画面无随机品牌标识、水印或乱码文字。",
+  },
   term("render.live-action", "写实真人", "写实真人影像风格，人体比例自然，皮肤保留真实纹理，衣料与饰物具有可信的材质和重量，光影符合现场照明，色彩自然克制。", "render", "风格"),
   term("render.donghua", "二次元国漫", "二次元国漫风格，二维手绘线条清晰，人物比例与五官造型统一，赛璐璐明暗分区明确，色块干净，服装结构清楚，各视角保持设计一致。", "render", "风格"),
   term("era.classical", "古风创作", "古风创作设定，采用中国传统服饰与器物的视觉元素。", "era", "时代／题材"),

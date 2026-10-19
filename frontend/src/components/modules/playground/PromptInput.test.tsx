@@ -45,6 +45,23 @@ describe('selected reference mentions', () => {
         expect(usePlaygroundStore.getState().inputMedia).toEqual(selected);
     });
 
+    it('uses /古装 to choose a full Prompt and then fills one bracketed detail', async () => {
+        render(<PromptInput />);
+        const editor = (screen.getByRole('textbox') as HTMLElement & { editor: import('@tiptap/core').Editor }).editor;
+        act(() => { editor.commands.insertContent('/古装 '); });
+        fireEvent.click(await screen.findByRole('option', { name: /Prompt 模板 · 写实真人古装/ }));
+        fireEvent.click(screen.getByRole('button', { name: '使用此模板' }));
+        const template = usePlaygroundStore.getState().prompt;
+        expect(template).toContain('[外衣颜色]');
+        expect(template).not.toContain('/古装');
+        act(() => { editor.commands.setTextSelection(template.indexOf('[外衣颜色]') + 2); });
+        fireEvent.click(await screen.findByRole('option', { name: /词条 · 靛蓝色 / }));
+        fireEvent.click(screen.getByRole('button', { name: '填写当前槽位' }));
+        expect(usePlaygroundStore.getState().prompt).toBe(template.replace('[外衣颜色]', '靛蓝色'));
+        expect(usePlaygroundStore.getState().prompt).toContain('[里衣颜色]');
+        expect(usePlaygroundStore.getState().inputMedia).toEqual(selected);
+    });
+
     it('lists selected history and library images in reference order, excluding unselected history', async () => {
         render(<PromptInput />);
         openMentions();
