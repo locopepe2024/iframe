@@ -33,7 +33,7 @@ def test_owned_generation_media_becomes_review_candidate(monkeypatch, tmp_path):
     manifest = tmp_path / "catalog" / "manifest.json"
     values = dict(
         creator_profile_id=OWNER, generation_id="generation-1", output_id="output-1",
-        kind="image", category_path="character/reference", title="角色锚点",
+        kind="image", category_path="character/reference", tags=[" 角色设定稿 ", "转面三视图", "角色设定稿"], title="角色锚点",
         description="用户可编辑的角色描述", prompt_used="实际模型提示词",
         model_id="model-1", parameters={"aspect_ratio": "1:1"},
         media_source=media, media_owner_root=owner, rights_confirmed=True, path=manifest,
@@ -42,10 +42,14 @@ def test_owned_generation_media_becomes_review_candidate(monkeypatch, tmp_path):
     assert resource["status"] == "candidate"
     assert resource["payload"]["prompt_used"] == "实际模型提示词"
     assert resource["payload"]["structured_prompt"]["content"] == "用户可编辑的角色描述"
+    assert resource["tags"] == ["角色设定稿", "转面三视图"]
     assert (manifest.parent / "media" / resource["payload"]["media_file"]).read_bytes() == b"example-media"
     assert catalog.list_resources(path=manifest)["resources"] == []
     assert catalog.list_review_candidates(category="character/reference", path=manifest)["resources"] == [resource]
+    assert catalog.list_review_candidates(tag="转面三视图", path=manifest)["resources"] == [resource]
+    assert catalog.list_review_candidates(tag="表情表", path=manifest)["resources"] == []
     assert catalog.submit_generation_candidate(**values)["platform_resource_id"] == resource["platform_resource_id"]
+    assert catalog.submit_generation_candidate(**{**values, "tags": ["转面三视图", "角色设定稿"]})["platform_resource_id"] == resource["platform_resource_id"]
     assert len(json.loads(manifest.read_text(encoding="utf-8"))["resources"]) == 1
 
 
@@ -57,7 +61,7 @@ def test_candidate_rejects_unowned_media_and_unknown_category(monkeypatch, tmp_p
     outside.write_bytes(b"media")
     values = dict(
         creator_profile_id=OWNER, generation_id="g", output_id="o", kind="image",
-        category_path="character/reference", title="Reference", description="",
+        category_path="character/reference", title="Reference", description="Paired prompt",
         prompt_used="prompt", model_id="model", parameters={}, media_source=outside,
         media_owner_root=owner, rights_confirmed=True, path=tmp_path / "manifest.json",
     )
@@ -80,6 +84,28 @@ def test_prompt_only_candidate_keeps_actual_prompt_separate(monkeypatch, tmp_pat
     )
     assert resource["payload"]["media_file"] is None
     assert resource["payload"]["prompt_used"] != resource["payload"]["structured_prompt"]["content"]
+
+
+def test_character_tags_reject_invalid_values_and_are_searchable_after_review(monkeypatch, tmp_path):
+    monkeypatch.setattr(catalog, "publisher_is_authorized", lambda owner: owner == OWNER)
+    owner = tmp_path / "owner"
+    owner.mkdir()
+    values = dict(
+        creator_profile_id=OWNER, generation_id="g", output_id=None, kind="prompt_preset",
+        category_path="character/reference", tags=["三视图", "配色卡"], title="角色设定稿",
+        description="可编辑全文", prompt_used="生成时的提示词", model_id="model", parameters={},
+        media_source=None, media_owner_root=owner, rights_confirmed=True, path=tmp_path / "manifest.json",
+    )
+    with pytest.raises(ValueError, match="tags"):
+        catalog.submit_generation_candidate(**{**values, "tags": ["x"] * 13})
+    with pytest.raises(ValueError, match="tag"):
+        catalog.submit_generation_candidate(**{**values, "tags": ["含\n换行"]})
+    with pytest.raises(ValueError, match="description"):
+        catalog.submit_generation_candidate(**{**values, "description": ""})
+    resource = catalog.submit_generation_candidate(**values)
+    catalog.promote_resource(resource["platform_resource_id"], OWNER, resource["provenance"]["content_sha256"], values["path"])
+    assert [item["title"] for item in catalog.list_resources(tag="配色卡", path=values["path"])["resources"]] == ["角色设定稿"]
+    assert catalog.list_resources(tag="服装拆解", path=values["path"])["resources"] == []
 
 
 def test_candidate_api_rejects_unapproved_and_foreign_generation(monkeypatch, tmp_path):

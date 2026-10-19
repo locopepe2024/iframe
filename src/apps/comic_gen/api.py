@@ -91,6 +91,7 @@ from ...utils import setup_logging, get_user_data_dir
 from ...utils.storage_config import media_root, storage_backend
 from ..platform_reference_catalog import (
     CHARACTER_CATEGORIES,
+    CHARACTER_TAG_SUGGESTIONS,
     MANIFEST_PATH as PLATFORM_REFERENCE_MANIFEST,
     list_resources as list_platform_reference_resources,
     list_review_candidates as list_platform_reference_review_candidates,
@@ -179,19 +180,23 @@ app.include_router(director_depth_router)
 def get_platform_reference_library(
     kind: Optional[str] = None,
     category: Optional[str] = None,
+    tag: Optional[str] = None,
     query: str = "",
     user: UserContext = Depends(require_user_context),
 ):
     """Read active deployment-scoped resources; mutations are not exposed here."""
     try:
-        return private_no_store_signed_response(list_platform_reference_resources(kind=kind, category=category, query=query))
+        return private_no_store_signed_response(list_platform_reference_resources(kind=kind, category=category, tag=tag, query=query))
     except ValueError as exc:
         raise HTTPException(status_code=500, detail=str(exc))
 
 
 @app.get("/platform-reference-library/categories")
 def get_platform_reference_categories(user: UserContext = Depends(require_user_context)):
-    return {"categories": [{"id": key, "label": value} for key, value in CHARACTER_CATEGORIES.items()]}
+    return {
+        "categories": [{"id": key, "label": value} for key, value in CHARACTER_CATEGORIES.items()],
+        "suggested_tags": list(CHARACTER_TAG_SUGGESTIONS),
+    }
 
 
 @app.get("/platform-reference-library/publisher")
@@ -226,6 +231,7 @@ class PlatformCandidateRequest(BaseModel):
     source_output_id: Optional[str] = None
     kind: Literal["image", "video", "prompt_preset"]
     category_path: str
+    tags: list[str] = Field(default_factory=list, max_length=12)
     title: str = Field(min_length=1, max_length=200)
     description: str = Field(max_length=20000)
     rights_confirmed: bool
@@ -248,7 +254,7 @@ def submit_platform_candidate(request: PlatformCandidateRequest, user: UserConte
         resource = submit_generation_candidate(
             creator_profile_id=user.owner_profile_id,
             generation_id=generation.id, output_id=output.id if output else None,
-            kind=request.kind, category_path=request.category_path,
+            kind=request.kind, category_path=request.category_path, tags=request.tags,
             title=request.title, description=request.description,
             prompt_used=generation.prompt, negative_prompt=generation.negative_prompt, model_id=generation.model_id,
             parameters=generation.parameters,
@@ -315,6 +321,7 @@ def get_platform_reference_reviewer(user: UserContext = Depends(require_user_con
 def get_platform_reference_review_queue(
     kind: Optional[str] = None,
     category: Optional[str] = None,
+    tag: Optional[str] = None,
     query: str = "",
     user: UserContext = Depends(require_user_context),
 ):
@@ -323,7 +330,7 @@ def get_platform_reference_review_queue(
         raise HTTPException(status_code=403, detail="平台参考资源审核权限不足")
     try:
         return private_no_store_signed_response(
-            list_platform_reference_review_candidates(kind=kind, category=category, query=query)
+            list_platform_reference_review_candidates(kind=kind, category=category, tag=tag, query=query)
         )
     except ValueError as exc:
         raise HTTPException(status_code=500, detail=str(exc))
