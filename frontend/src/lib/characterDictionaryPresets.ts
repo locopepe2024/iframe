@@ -1,5 +1,9 @@
 /** Reusable descriptions, deliberately independent of generation model/style routes. */
-export type OutfitField = { key: string; label: string; value: string; options: readonly string[] };
+import { CHARACTER_DICTIONARY_GROUPS, dictionarySlotCategory, localDictionaryCategories } from "./characterDictionaryCategories";
+import { CHARACTER_QUICK_PRESETS } from "./characterQuickActions";
+import { CLASSICAL_CHARACTER_TERMS, CLASSICAL_CHARACTER_TEMPLATES } from "./classicalCharacterDictionary";
+import { CHARACTER_EXPRESSION_TERMS } from "./characterExpressionDictionary";
+export type OutfitField = { key: string; label: string; value: string; options: readonly string[]; output?: Record<string, string> };
 export type CharacterDictionaryPreset = {
   id: string;
   title: string;
@@ -8,9 +12,11 @@ export type CharacterDictionaryPreset = {
   domain: string;
   source: string;
   search: string;
-  type: "词条" | "服装方案" | "Prompt 模板";
+  type: "词条" | "Prompt 模板" | "配置面板";
   slotValue?: string;
   fields?: OutfitField[];
+  defaults?: Record<string, string>;
+  motionText?: string;
 };
 
 const source = "iFrame 创作词典 · v1 · 非历史考据方案";
@@ -20,13 +26,41 @@ const term = (id: string, title: string, text: string, category: string, domain:
 const colors = ["米白色", "月白色", "浅灰色", "深灰色", "靛蓝色", "深青色", "墨黑色", "朱红色"];
 const materials = ["哑光棉麻", "低光泽丝织", "细密素布"];
 const shoes = ["黑色素面布靴", "深棕色素面皮靴", "黑色平底布鞋"];
+const panel = (id: string, title: string, text: string, categories: string[], search: string, defaults?: Record<string, string>): CharacterDictionaryPreset => ({
+  id: `dictionary.panel.${id}`, title, text, categories, defaults, type: "配置面板", domain: "局部配置", source,
+  search: `${title} ${search}`,
+});
+
+const configurationPanels: CharacterDictionaryPreset[] = [
+  panel("classical-robe", "古装长袍搭配", "上身穿[里衣颜色]里衣与[外衣颜色][面料]交领长袍，领口仅露出一道里衣领缘。下穿[下装颜色]长裤，脚穿[鞋靴]。服装纹样为[花纹]，工艺为[刺绣工艺]，肩颈搭配为[纱巾披帛]，衣物状态为[衣物状态]。衣物穿着关系清楚，不增加未指定的衣层。", ["clothing-panel"], "服装 古装 男装 长袍", { "花纹": "素面无纹", "刺绣工艺": "无额外刺绣", "纱巾披帛": "不加纱巾或披帛" }),
+  panel("classical-skirt", "古装衣裙搭配", "上身内穿[里衣颜色]里衣，外穿[外衣颜色][面料][外衣款式]，下搭[裙装颜色][裙装款式]，脚穿[鞋靴]。服装纹样为[花纹]，工艺为[刺绣工艺]，肩臂搭配为[纱巾披帛]，衣物状态为[衣物状态]。各件衣物边缘清楚，不增加未指定的衣层。", ["clothing-panel"], "服装 古装 女装 衣裙 马面裙 褙子", { "外衣款式": "立领长袄", "裙装款式": "马面裙", "纱巾披帛": "不加纱巾或披帛" }),
+  panel("modern-clothing", "现代服装搭配", "穿着[女装款式]，颜色为[颜色]，面料为[面料]，版型为[版型]，搭配要求为[搭配单品]，衣物状态为[衣物状态]。衣片连接清楚，保留自然褶皱。", ["clothing-panel"], "服装 现代 女装"),
+  panel("face", "面容选择面板", "脸型为[脸型]，眼型为[眼型]，眉形为[眉形]，妆容为[妆容]。", ["face-overview"], "面容 面部 五官"),
+  panel("hair", "发型选择面板", "发型为[发型]，发束结构和固定关系自然。", ["hair"], "发型 头发"),
+  panel("jewelry", "首饰选择面板", "头饰为[头饰]，佩饰为[佩饰]，首饰表面状态为[首饰状态]。饰物尺寸与人体比例协调，固定关系清楚。", ["hair-jewelry", "body-jewelry"], "首饰 饰品 发簪 步摇 玉佩"),
+  panel("decoration", "装饰选择面板", "服装纹样为[花纹]，工艺为[刺绣工艺]，装饰带为[飘带]，肩颈搭配为[纱巾披帛]。", ["pattern", "craft"], "装饰 花纹 刺绣 流苏 纱巾"),
+  panel("posture", "体态选择面板", "人物体态：[体态]。", ["posture"], "体态 姿态 站姿"),
+  panel("condition", "新旧状态选择面板", "衣物状态为[衣物状态]，首饰状态为[首饰状态]。", ["garment-condition", "jewelry-condition"], "新旧 使用状态 磨损 旧化"),
+  panel("expression", "表情选择面板", "[表情]", ["expression-basic", "expression-happy", "expression-fear", "expression-sad", "expression-angry", "expression-complex"], "表情 情绪 微表情", { "表情": "平静克制" }),
+];
+
+export function configurationQueryCategory(query: string): string | null {
+  const categories: Record<string, string> = { "服装": "clothing", "面容": "face", "面部": "face", "发型": "look", "首饰": "jewelry", "饰品": "jewelry", "装饰": "decoration", "体态": "posture", "新旧": "condition", "使用状态": "condition", "表情": "expression", "情绪": "expression" };
+  return categories[query.trim()] || null;
+}
+
+export function isConfigurationQuery(query: string): boolean {
+  return configurationQueryCategory(query) !== null;
+}
 
 function outfit(id: string, title: string, outer: string, lower: string, color: string): CharacterDictionaryPreset {
   return {
-    id: `dictionary.outfit.${id}`, title, type: "服装方案", categories: ["outfit"], domain: "造型", source,
+    id: `dictionary.outfit.${id}`, title, type: "Prompt 模板", categories: ["classical-template"], domain: "完整 Prompt", source,
     search: `${title} 古装 穿搭 里衣 外衣 下装 鞋靴 靴子 完整服装 两层`,
-    text: `上身穿两件衣物：{innerColor}贴身里衣一件，外穿{outerColor}{material}${outer}一件。领口仅露出一道里衣领缘，袖口不叠加装饰袖。下穿{lowerColor}${lower}，脚穿{shoes}，腰束窄布带。衣物{wear}，穿着关系清楚，无额外中衣、披风、护甲或装饰性叠领。`,
+    text: `{style}。一位成年{role}，古风创作设定。上身穿两件衣物：{innerColor}贴身里衣一件，外穿{outerColor}{material}${outer}一件。领口仅露出一道里衣领缘，袖口不叠加装饰袖。下穿{lowerColor}${lower}，脚穿{shoes}，腰束窄布带。衣物{wear}，穿着关系清楚，无额外中衣、披风、护甲或装饰性叠领。人物自然站立，简洁浅色背景，全身服装完整可见，人体比例自然。`,
     fields: [
+      { key: "style", label: "表现风格", value: "写实真人影像风格，材质和光影自然可信", options: ["写实真人影像风格，材质和光影自然可信", "二次元国漫风格，二维线条清晰，赛璐璐明暗分区明确"] },
+      { key: "role", label: "角色定位", value: id === "travel" ? "行旅侠客" : "书生", options: ["行旅侠客", "书生", "掌柜"] },
       { key: "innerColor", label: "里衣颜色", value: "米白色", options: colors },
       { key: "outerColor", label: "外衣颜色", value: color, options: colors },
       { key: "material", label: "外衣材质", value: "哑光棉麻", options: materials },
@@ -38,14 +72,40 @@ function outfit(id: string, title: string, outer: string, lower: string, color: 
 }
 
 export function renderDictionaryPreset(preset: CharacterDictionaryPreset, values: Record<string, string> = {}): string {
-  return preset.text.replace(/\{(\w+)\}/g, (placeholder, key: string) => {
-    const field = preset.fields?.find((item) => item.key === key);
+  const fields = dictionaryPresetFields(preset);
+  return preset.text.replace(/\{(\w+)\}|\[([^\[\]\n]+)\]/g, (placeholder, key: string, label: string) => {
+    const field = fields.find((item) => item.key === (key || label));
     if (!field) return placeholder;
-    return values[key] && field.options.includes(values[key]) ? values[key] : field.value;
+    const value = values[field.key] && field.options.includes(values[field.key]) ? values[field.key] : field.value;
+    return field.output?.[value] || value;
   });
 }
 
+/** Both reusable templates and Skill [slots] draw their choices from the dictionary. */
+export function dictionaryPresetFields(preset: CharacterDictionaryPreset): OutfitField[] {
+  if (preset.fields) return preset.fields;
+  if (preset.type !== "Prompt 模板" && preset.type !== "配置面板") return [];
+  const defaults: Record<string, string> = { "角色定位": "行旅侠客", "外衣颜色": "靛蓝色", "下装颜色": "浅灰色", "外衣面料": "棉布", "表情": "平静克制", ...preset.defaults };
+  return Array.from(new Set(Array.from(preset.text.matchAll(/\[([^\[\]\n]+)\]/g), (match) => match[1])))
+    .map((label) => {
+      const category = dictionarySlotCategory(label);
+      const children: readonly string[] = CHARACTER_DICTIONARY_GROUPS.find((group) => group.id === category)?.children.map(([key]) => key) || [];
+      const matches = (categories: string[]) => categories.some((key) => key === category || children.includes(key));
+      const terms = CHARACTER_DICTIONARY_PRESETS.filter((item) => item.type === "词条" && matches(item.categories));
+      const options = Array.from(new Set([
+        ...terms.map((item) => item.title),
+        ...CHARACTER_QUICK_PRESETS.filter((item) => item.target !== "route" && matches(localDictionaryCategories(item.id))).map((item) => item.value),
+      ]));
+      const output = Object.fromEntries(terms.map((item) => [item.title, item.slotValue || item.title]));
+      return { key: label, label, value: options.includes(defaults[label]) ? defaults[label] : options[0] || `[${label}]`, options: [...options, `[${label}]`], output };
+    });
+}
+
 export const CHARACTER_DICTIONARY_PRESETS: CharacterDictionaryPreset[] = [
+  ...configurationPanels,
+  ...CLASSICAL_CHARACTER_TERMS,
+  ...CLASSICAL_CHARACTER_TEMPLATES,
+  ...CHARACTER_EXPRESSION_TERMS,
   {
     id: "dictionary.template.classical-live-action", title: "写实真人古装", type: "Prompt 模板", categories: ["classical-template"], domain: "完整 Prompt", source,
     search: "古装 古风 武侠 写实 真人 完整 prompt 模板 人物 角色",
@@ -85,6 +145,6 @@ export const CHARACTER_DICTIONARY_PRESETS: CharacterDictionaryPreset[] = [
   ...["合身版型", "宽松版型", "直筒版型", "收腰版型", "A字版型"].map((name, index) => term(`fit.${index}`, name, `服装采用${name}，轮廓与人体比例协调。`, "fit", "造型")),
   ...["圆领", "V领", "方领", "翻领", "立领"].map((name, index) => term(`collar.${index}`, name, `服装领口为${name}，领缘结构清楚。`, "collar", "造型")),
   ...["短袖", "长袖", "无袖", "泡泡袖", "直筒袖"].map((name, index) => term(`sleeve.${index}`, name, `服装采用${name}设计，袖型与肩部连接自然。`, "sleeve", "造型")),
-  ...["棉布", "亚麻", "丝绸", "针织面料", "牛仔布", "雪纺"].map((name, index) => term(`material.${index}`, name, `服装采用${name}，纹理、光泽与垂坠符合材质特征。`, "material", "造型")),
+  ...["棉布", "亚麻", "丝绸", "针织面料", "牛仔布", "雪纺"].map((name, index) => term(`material.${index}`, name, `服装采用${name}，纹理、光泽与垂坠符合材质特征。`, "material", "造型")).filter((item) => item.title !== "丝绸"),
   ...["平底鞋", "短靴", "简洁手提包", "细腰带", "不额外搭配单品"].map((name, index) => term(`accessory.${index}`, name, name === "不额外搭配单品" ? name : `搭配${name}，不遮挡服装主体。`, "accessory", "造型")),
 ];

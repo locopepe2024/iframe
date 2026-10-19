@@ -50,6 +50,8 @@ describe('selected reference mentions', () => {
         const editor = (screen.getByRole('textbox') as HTMLElement & { editor: import('@tiptap/core').Editor }).editor;
         act(() => { editor.commands.insertContent('/古装 '); });
         fireEvent.click(await screen.findByRole('option', { name: /Prompt 模板 · 写实真人古装/ }));
+        fireEvent.change(screen.getByRole('combobox', { name: '外衣颜色' }), { target: { value: '[外衣颜色]' } });
+        fireEvent.change(screen.getByRole('combobox', { name: '里衣颜色' }), { target: { value: '[里衣颜色]' } });
         fireEvent.click(screen.getByRole('button', { name: '使用此模板' }));
         const template = usePlaygroundStore.getState().prompt;
         expect(template).toContain('[外衣颜色]');

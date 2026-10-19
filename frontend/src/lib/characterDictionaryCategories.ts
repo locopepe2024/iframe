@@ -2,14 +2,20 @@ export const CHARACTER_DICTIONARY_GROUPS = [
   { id: "face", label: "面部", children: [
     ["face-shape", "脸型"], ["eyes", "眼型"], ["brows", "眉形"], ["nose", "鼻形"],
     ["lips", "唇形"], ["eye-detail", "眼周细节"], ["marks", "识别标记"], ["face-overview", "面部综合"],
+    ["makeup", "妆容"],
   ] },
   { id: "body", label: "身体", children: [["build", "体型与比例"], ["posture", "体态"], ["skin", "肤色与肤质"]] },
   { id: "templates", label: "Prompt 模板", children: [["classical-template", "古装模板"], ["modern-template", "现代模板"]] },
   { id: "style", label: "表现风格", children: [["render", "写实与绘画风格"], ["texture", "光影与质感"]] },
   { id: "setting", label: "时代与题材", children: [["era", "时代背景"], ["genre", "题材类型"]] },
   { id: "role", label: "角色定位", children: [["civilian-role", "日常身份"], ["jianghu-role", "江湖身份"]] },
-  { id: "clothing", label: "服装", children: [["outfit", "完整穿搭方案"], ["garment", "现代服装款式"], ["inner", "贴身里衣"], ["outer", "外衣"], ["bottoms", "下装"], ["shoes", "鞋靴"], ["fit", "版型"], ["collar", "领口"], ["sleeve", "袖型"], ["clothing-detail", "廓形与细节"], ["material", "面料材质"], ["palette", "服装颜色"], ["accessory", "搭配单品"]] },
+  { id: "clothing", label: "服装", children: [["clothing-panel", "穿搭选择面板"], ["classical-garment", "古装衣裙形制"], ["garment", "现代服装款式"], ["inner", "贴身里衣"], ["outer", "外衣"], ["bottoms", "下装"], ["scarf", "纱巾与披帛"], ["shoes", "鞋靴"], ["fit", "版型"], ["collar", "领口"], ["sleeve", "袖型"], ["clothing-detail", "廓形与细节"], ["material", "面料材质"], ["palette", "服装颜色"], ["accessory", "搭配单品"], ["layers", "衣层结构"]] },
   { id: "look", label: "发型", children: [["hair", "发型描述"]] },
+  { id: "expression", label: "表情", children: [["expression-basic", "基础微表情"], ["expression-happy", "开心与松弛"], ["expression-fear", "紧张与恐惧"], ["expression-sad", "悲伤与崩溃"], ["expression-angry", "愤怒与对抗"], ["expression-complex", "复杂情绪与转折"]] },
+  { id: "jewelry", label: "首饰", children: [["hair-jewelry", "发簪与头饰"], ["body-jewelry", "耳饰项链与佩饰"], ["jewelry-material", "首饰材质"]] },
+  { id: "decoration", label: "装饰", children: [["pattern", "花纹图案"], ["craft", "刺绣与织造工艺"], ["trim", "流苏飘带与腰带"]] },
+  { id: "condition", label: "新旧与使用状态", children: [["garment-condition", "衣物状态"], ["jewelry-condition", "首饰状态"]] },
+  { id: "scene", label: "场景与构图", children: [["background", "背景场景"], ["composition", "构图"], ["lighting", "光线"], ["constraints", "画面约束"]] },
   { id: "performance", label: "表演", children: [["performance", "姿态与动作"]] },
 ] as const;
 
@@ -57,6 +63,24 @@ export function dictionarySlotCategory(label: string | undefined): string | null
   if (/眉形/.test(label)) return "brows";
   if (/眼型/.test(label)) return "eyes";
   if (/发型/.test(label)) return "hair";
+  if (/表情|情绪/.test(label)) return "expression";
+  if (/体态|姿态/.test(label)) return "posture";
+  if (/首饰材质/.test(label)) return "jewelry-material";
+  if (/首饰状态/.test(label)) return "jewelry-condition";
+  if (/新旧|衣物状态|使用状态/.test(label)) return "garment-condition";
+  if (/头饰|发簪|发钗/.test(label)) return "hair-jewelry";
+  if (/首饰|耳饰|项链|佩饰/.test(label)) return "body-jewelry";
+  if (/纹样|花纹|图案/.test(label)) return "pattern";
+  if (/刺绣|工艺/.test(label)) return "craft";
+  if (/披帛|纱巾|面纱/.test(label)) return "scarf";
+  if (/腰带|飘带|流苏/.test(label)) return "trim";
+  if (/衣层/.test(label)) return "layers";
+  if (/妆容/.test(label)) return "makeup";
+  if (/背景|场景/.test(label)) return "background";
+  if (/构图/.test(label)) return "composition";
+  if (/光线|照明/.test(label)) return "lighting";
+  if (/朝代|时代/.test(label)) return "era";
+  if (/古装款式|衣裙款式/.test(label)) return "classical-garment";
   if (/颜色|配色/.test(label)) return "palette";
   if (/面料|材质/.test(label)) return "material";
   if (/版型/.test(label)) return "fit";
@@ -65,7 +89,7 @@ export function dictionarySlotCategory(label: string | undefined): string | null
   if (/鞋|靴/.test(label)) return "shoes";
   if (/里衣|内衣/.test(label)) return "inner";
   if (/外衣|外套/.test(label)) return "outer";
-  if (/下装/.test(label)) return "bottoms";
+  if (/下装|裙装款式/.test(label)) return "bottoms";
   if (/搭配|配饰/.test(label)) return "accessory";
   if (/款式|女装|男装/.test(label)) return "garment";
   if (/风格|画风/.test(label)) return "render";

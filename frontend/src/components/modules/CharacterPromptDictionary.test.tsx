@@ -41,21 +41,21 @@ it("separates rendering style from genre and inserts a complete style without as
   expect(replaceWithText).toHaveBeenCalledWith(text);
 });
 
-it("configures one consistent outfit before insertion without appending conflicting garments", () => {
+it("uses one template entry with the existing outfit selection panel and a complete character Prompt", () => {
   getPlatformReferenceLibrary.mockResolvedValueOnce({ resources: [] });
-  const { replaceWithText } = setup("");
-  fireEvent.click(screen.getByRole("option", { name: /^服装 / }));
-  fireEvent.click(screen.getByRole("option", { name: /^完整穿搭方案/ }));
-  fireEvent.click(screen.getByRole("option", { name: /服装方案 · 简洁江湖行装/ }));
+  const { replaceWithText } = setup("古装");
+  expect(screen.queryByRole("button", { name: "服装方案" })).not.toBeInTheDocument();
+  fireEvent.click(screen.getByRole("option", { name: /Prompt 模板 · 素雅长衫便服/ }));
   fireEvent.change(screen.getByRole("combobox", { name: "外衣颜色" }), { target: { value: "月白色" } });
   fireEvent.change(screen.getByRole("combobox", { name: "鞋靴" }), { target: { value: "深棕色素面皮靴" } });
   const text = (screen.getByRole("textbox", { name: "将插入的完整文字" }) as HTMLTextAreaElement).value;
-  expect(text).toContain("上身穿两件衣物");
-  expect(text).toContain("月白色哑光棉麻窄袖交领长袍");
+  expect(text).toContain("写实真人");
+  expect(text).toContain("一位成年");
+  expect(text).toContain("月白色哑光棉麻素面交领长衫");
   expect(text).toContain("脚穿深棕色素面皮靴");
-  expect(text).not.toMatch(/深青色|黑色素面布靴|\{\w+\}/);
+  expect(text).not.toMatch(/靛蓝色|黑色素面布靴|\{\w+\}/);
   expect(replaceWithText).not.toHaveBeenCalled();
-  fireEvent.click(screen.getByRole("button", { name: "插入到当前 Prompt" }));
+  fireEvent.click(screen.getByRole("button", { name: "使用此模板" }));
   expect(replaceWithText).toHaveBeenCalledWith(text);
 });
 
@@ -70,16 +70,17 @@ it("fills a Skill color slot with just the color rather than a full sentence", (
   expect(replaceWithText).toHaveBeenCalledWith("靛蓝色");
 });
 
-it("searches classical Prompt templates first and inserts unresolved slots for the next step", () => {
+it("configures a full classical template in the panel and optionally keeps slots for later", () => {
   getPlatformReferenceLibrary.mockResolvedValueOnce({ resources: [] });
   const { replaceWithText } = setup("古装 ");
   expect(screen.getByRole("button", { name: "Prompt 模板" })).toHaveAttribute("aria-pressed", "true");
-  expect(screen.getAllByRole("option").filter((item) => item.textContent?.startsWith("Prompt 模板"))).toHaveLength(2);
+  expect(screen.getByRole("option", { name: /Prompt 模板 · 明风长袄马面裙/ })).toBeInTheDocument();
   expect(screen.queryByRole("option", { name: /词条 ·/ })).not.toBeInTheDocument();
   fireEvent.click(screen.getByRole("option", { name: /Prompt 模板 · 写实真人古装/ }));
+  fireEvent.change(screen.getByRole("combobox", { name: "外衣颜色" }), { target: { value: "[外衣颜色]" } });
   const text = (screen.getByRole("textbox", { name: "将插入的完整文字" }) as HTMLTextAreaElement).value;
-  expect(text).toContain("[外衣颜色][外衣面料]");
-  expect(screen.queryByRole("combobox")).not.toBeInTheDocument();
+  expect(text).toContain("[外衣颜色]");
+  expect(screen.getByRole("combobox", { name: "外衣面料" })).toBeInTheDocument();
   expect(replaceWithText).not.toHaveBeenCalled();
   fireEvent.click(screen.getByRole("button", { name: "使用此模板" }));
   expect(replaceWithText).toHaveBeenCalledWith(text);
@@ -184,4 +185,63 @@ it("uses arrow keys, Enter and Escape without applying during preview or composi
   act(() => { keyHandler.current!(new KeyboardEvent("keydown", { key: "Escape" })); });
   expect(onClose).toHaveBeenCalled();
   expect(replaceWithText).not.toHaveBeenCalled();
+});
+
+it("configures clothing direction, textile, pattern and scarf before applying", () => {
+  getPlatformReferenceLibrary.mockResolvedValueOnce({ resources: [] });
+  const { replaceWithText } = setup("服装");
+  expect(screen.getByRole("button", { name: "配置面板" })).toHaveAttribute("aria-pressed", "true");
+  expect(screen.getByRole("option", { name: /配置面板 · 现代服装搭配/ })).toBeInTheDocument();
+  fireEvent.click(screen.getByRole("option", { name: /配置面板 · 古装衣裙搭配/ }));
+  fireEvent.change(screen.getByRole("combobox", { name: "面料" }), { target: { value: "丝绸" } });
+  fireEvent.change(screen.getByRole("combobox", { name: "花纹" }), { target: { value: "祥云暗纹" } });
+  fireEvent.change(screen.getByRole("combobox", { name: "纱巾披帛" }), { target: { value: "素色披帛" } });
+  const text = (screen.getByRole("textbox", { name: "将插入的完整文字" }) as HTMLTextAreaElement).value;
+  expect(text).toContain("丝绸立领长袄");
+  expect(text).toContain("马面裙");
+  expect(text).toContain("祥云暗纹");
+  expect(text).toContain("素色披帛");
+  expect(text).not.toMatch(/\[|写实真人|成年/);
+  expect(replaceWithText).not.toHaveBeenCalled();
+  fireEvent.click(screen.getByRole("button", { name: "应用配置" }));
+  expect(replaceWithText).toHaveBeenCalledWith(text);
+});
+
+it("groups 60 expressions and inserts static state while retaining original motion reference", () => {
+  getPlatformReferenceLibrary.mockResolvedValueOnce({ resources: [] });
+  const { replaceWithText } = setup("表情");
+  fireEvent.click(screen.getByRole("option", { name: /配置面板 · 表情选择面板/ }));
+  const select = screen.getByRole("combobox", { name: "表情" });
+  expect(select.querySelectorAll("optgroup")).toHaveLength(6);
+  expect(select.querySelectorAll("optgroup option")).toHaveLength(60);
+  fireEvent.change(select, { target: { value: "被背叛的怒" } });
+  const text = (screen.getByRole("textbox", { name: "将插入的完整文字" }) as HTMLTextAreaElement).value;
+  expect(text).toContain("目光冰冷");
+  expect(text).not.toMatch(/先震惊后|被背叛的怒/);
+  fireEvent.click(screen.getByText("动态表演参考（不随图片表情插入）"));
+  expect(screen.getByText(/眼神先震惊后变冷/)).toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button", { name: "应用配置" }));
+  expect(replaceWithText).toHaveBeenCalledWith(text);
+});
+
+it("browses expression groups independently of facial identity", () => {
+  getPlatformReferenceLibrary.mockResolvedValueOnce({ resources: [] });
+  setup("");
+  fireEvent.click(screen.getByRole("option", { name: /^表情 / }));
+  expect(screen.getByRole("option", { name: /^基础微表情/ })).toBeInTheDocument();
+  expect(screen.getByRole("option", { name: /^复杂情绪与转折/ })).toBeInTheDocument();
+  fireEvent.click(screen.getByRole("option", { name: /^悲伤与崩溃/ }));
+  expect(screen.getByRole("option", { name: /词条 · 无声落泪/ })).toBeInTheDocument();
+  expect(screen.queryByRole("option", { name: /词条 · 圆脸/ })).not.toBeInTheDocument();
+});
+
+
+it("fills an expression slot with static text and hides configuration panels", () => {
+  getPlatformReferenceLibrary.mockResolvedValueOnce({ resources: [] });
+  const { replaceWithText } = setup("", "表情");
+  expect(screen.queryByRole("option", { name: /配置面板/ })).not.toBeInTheDocument();
+  fireEvent.click(screen.getByRole("option", { name: /^基础微表情/ }));
+  fireEvent.click(screen.getByRole("option", { name: /词条 · 平静克制/ }));
+  fireEvent.click(screen.getByRole("button", { name: "填写当前槽位" }));
+  expect(replaceWithText).toHaveBeenCalledWith("眼神稳定，眉头放松，嘴唇自然闭合，脸上没有明显笑意。");
 });
