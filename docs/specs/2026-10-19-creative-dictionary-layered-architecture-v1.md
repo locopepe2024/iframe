@@ -74,6 +74,12 @@
 
 ## 现有数据迁移与实施切片
 
+### 实施切片 2A：平台目录显式词典标注
+
+本切片只允许发布者在现有创作台候选提交流程中**显式**标注 `term`（仅文字）或 `case`（带图／视频）。类别映射到 `character.identity`、`character.look`、`character.performance` 或 `world.style`；`character/reference` 不属于词典领域。未标注的历史资源仍是普通参考资源，不能根据 `kind` 或分类自动升级为词条。候选及审核队列保留标注，公共检索只返回已审核 active 项。按 `semantic_domain` 与 `entry_type` 过滤时，未标注资源不匹配。去重 hash 纳入标注，避免不同粒度误合并。
+
+受影响路径：`src/apps/platform_reference_catalog.py`、`src/apps/comic_gen/api.py`、`frontend/src/lib/api.ts`、`frontend/src/components/library/NewLibraryAssetDialog.tsx` 及对应测试。成功条件：非法领域／粒度组合返回 422，旧目录可读，候选不可公开检索，筛选只命中显式标注且 active 的资源，用户提交前看得到标注并可选“普通参考”。本切片不新增 `pattern`，也不把词典条目自动加入模型请求。
+
 1. **清点与映射**：给现有 `CharacterQuickPreset` 和 `AVATAR_FEATURE_LIBRARY` 增加迁移映射表，保留原 ID／revision／来源；风格与面容等分别映射语义领域。验收旧草稿 `preset_id` 可读、原文字不变。
 2. **词典载体**：扩展平台目录或建立独立词典索引，明确 `entry_type`、`semantic_domain`、关系和来源验证；不要把所有条目塞成 `prompt_preset`。验收候选与已发布隔离、按领域和粒度过滤、同名不合并。
 3. **角色台第一批**：面容／皮肤／发型／服装 `term`，古典造型 `pattern`，已审核效果 `case`；姿态任务再接入 3 个武术体系及少量动作词。验收选词只改可编辑草稿、选案例图不自动附图。
