@@ -43,6 +43,9 @@ export default function CharacterPromptDictionary({ suggestion, onClose, onApply
   const [active, setActive] = useState(0);
   const needle = suggestion.query.trim().toLocaleLowerCase();
   const selectedFields = selected?.preset ? dictionaryPresetFields(selected.preset) : [];
+  const fieldGroups = selected?.preset?.sections
+    ? selected.preset.sections.map((section) => ({ label: section.label, fields: selectedFields.filter((field) => section.parts.some((part) => part.includes(`[${field.key}]`))) })).filter((group) => group.fields.length > 0)
+    : [{ label: "选择细节，预览同步更新", fields: selectedFields }];
   const selectedText = selected ? suggestion.slot ? selected.slotValue || selected.text
     : selected.preset ? renderDictionaryPreset(selected.preset, fieldValues) : selected.text : "";
   useEffect(() => {
@@ -131,7 +134,7 @@ export default function CharacterPromptDictionary({ suggestion, onClose, onApply
     else onClose();
   };
   const apply = () => {
-    if (!selected) return;
+    if (!selected || !selectedText.trim()) return;
     if (selected.type === "Skill") {
       if (!canRunSkill) return;
       suggestion.replaceWithText(""); onClose(); onSkill?.();
@@ -160,30 +163,33 @@ export default function CharacterPromptDictionary({ suggestion, onClose, onApply
     {selected ? <>
       <h4 className="mt-2 text-sm text-foreground">{selected.type} · {selected.title}</h4>
       <p className="mt-1 break-all text-xs text-text-muted">{selected.source}</p>
-      {!suggestion.slot && selectedFields.length > 0 && <fieldset className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-2">
-        <legend className="text-xs text-text-secondary">选择细节，预览同步更新</legend>
-        {selectedFields.map((field) => <label key={field.key} className="text-xs text-text-secondary">
-          {field.label}<select aria-label={field.label} value={fieldValues[field.key] || field.value}
+      {!suggestion.slot && selectedFields.length > 0 && <div className="mt-2 space-y-3">
+        {fieldGroups.map((group) => <fieldset key={group.label} className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+        <legend className="mb-1 text-xs font-medium text-text-secondary">{group.label}</legend>
+        {group.fields.map((field) => <label key={field.key} className="text-xs text-text-secondary">
+          {field.label}<select aria-label={field.label} value={fieldValues[field.key] ?? field.value}
             onChange={(event) => setFieldValues((values) => ({ ...values, [field.key]: event.target.value }))}
             className="mt-1 min-h-11 w-full rounded border border-glass-border bg-surface px-2 text-sm text-foreground focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary">
             {dictionarySlotCategory(field.label) === "expression" ? <>
+              {field.options.includes("") && <option value="">不指定</option>}
               {CHARACTER_DICTIONARY_GROUPS.find((group) => group.id === "expression")!.children.map(([key, label]) => <optgroup key={key} label={label}>
                 {CHARACTER_DICTIONARY_PRESETS.filter((term) => term.type === "词条" && term.categories.includes(key)).map((term) => <option key={term.id} value={term.title}>{term.title}</option>)}
               </optgroup>)}
               <option value={`[${field.label}]`}>稍后填写 [{field.label}]</option>
-            </> : field.options.map((value) => <option key={value} value={value}>{value.startsWith("[") ? `稍后填写 ${value}` : value}</option>)}
+            </> : field.options.map((value) => <option key={value} value={value}>{value === "" ? "不指定" : value.startsWith("[") ? `稍后填写 ${value}` : value}</option>)}
           </select>
         </label>)}
-      </fieldset>}
+      </fieldset>)}
+      </div>}
       {(selected.motionText || selectedFields.some((field) => dictionarySlotCategory(field.label) === "expression")) && <details className="mt-2 text-xs text-text-secondary">
         <summary className="min-h-11 cursor-pointer py-3">动态表演参考（不随图片表情插入）</summary>
-        <p>{selected.motionText || CHARACTER_DICTIONARY_PRESETS.find((term) => term.type === "词条" && term.motionText && term.title === (fieldValues["表情"] || selectedFields.find((field) => field.label === "表情")?.value))?.motionText || "选择表情后可查看原始动态描述。"}</p>
+        <p>{selected.motionText || CHARACTER_DICTIONARY_PRESETS.find((term) => term.type === "词条" && term.motionText && term.title === (fieldValues["表情"] ?? selectedFields.find((field) => field.label === "表情")?.value))?.motionText || "选择表情后可查看原始动态描述。"}</p>
       </details>}
       {previewUrl && <img src={previewUrl} alt={`${selected.title} 案例预览`} className="mt-2 max-h-40 w-full rounded object-contain" />}
       <label className="mt-2 block text-xs text-text-secondary" htmlFor={`${id}-preview`}>{selected.type === "Skill" ? "Skill 操作说明" : "将插入的完整文字"}</label>
-      <textarea id={`${id}-preview`} readOnly value={selectedText} rows={5} className="mt-1 w-full rounded border border-glass-border bg-surface p-2 text-xs text-foreground" />
+      <textarea id={`${id}-preview`} readOnly value={selectedText} placeholder="选择项目后在此预览；不指定的项目不会写入。" rows={5} className="mt-1 w-full rounded border border-glass-border bg-surface p-2 text-xs text-foreground" />
       <p className="mt-1 text-xs text-text-muted">{selected.type === "Skill" ? "确认后进入输入审核。" : suggestion.slot ? `仅替换当前 [${suggestion.slot}]，保留模板其他文字与参考图；也可关闭后手动填写。` : (selected.type === "Prompt 模板" || selected.type === "配置面板") ? "先在面板选择细节，确认后插入预览文字；也可保留 [变量] 稍后填写。" : "替换光标处的 /检索词，保留其他文字与参考图；插入后可编辑。"}</p>
-      <button type="button" disabled={selected.type === "Skill" && !canRunSkill} onClick={apply} className={`${buttonStyle} mt-2 bg-primary text-primary-foreground disabled:opacity-50`}>{selected.type === "Skill" ? "审核 Skill 输入" : suggestion.slot ? "填写当前槽位" : selected.type === "配置面板" ? "应用配置" : selected.type === "Prompt 模板" ? "使用此模板" : "插入到当前 Prompt"}</button>
+      <button type="button" disabled={!selectedText.trim() || (selected.type === "Skill" && !canRunSkill)} onClick={apply} className={`${buttonStyle} mt-2 bg-primary text-primary-foreground disabled:opacity-50`}>{selected.type === "Skill" ? "审核 Skill 输入" : suggestion.slot ? "填写当前槽位" : selected.type === "配置面板" ? "应用配置" : selected.type === "Prompt 模板" ? "使用此模板" : "插入到当前 Prompt"}</button>
       {selected.type === "Skill" && !canRunSkill && <p className="text-xs text-text-muted">请先填写角色描述并选择设计模型，或等待当前设计完成。</p>}
       <button type="button" onClick={() => setSelected(null)} className={`${buttonStyle} ml-2`}>返回结果</button>
     </> : <>

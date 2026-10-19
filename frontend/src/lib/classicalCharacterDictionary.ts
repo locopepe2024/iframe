@@ -1,14 +1,61 @@
+import { sectionedDictionaryPreset } from "./classicalCharacterPanels";
 import type { CharacterDictionaryPreset } from "./characterDictionaryPresets";
 
 const source = "用户提供的古装提示词 · iFrame 分类整理 · 创作参考，未作历史考据";
 const domain = "造型";
+function relatedCategories(category: string, id: string): string[] {
+  if (category === "outer") return ["classical-female-upper"];
+  if (category === "bottoms") return [id === "trousers" ? "classical-trousers" : "classical-skirt"];
+  if (category === "body-jewelry") {
+    const jewelry: Record<string, string> = { pearl: "ear-jewelry", "jade-bracelet": "wrist-jewelry", yingluo: "neck-jewelry", "jade-pendant": "waist-jewelry" };
+    return jewelry[id] ? [jewelry[id]] : [];
+  }
+  return [];
+}
+
 const terms = (category: string, rows: readonly (readonly [string, string, string])[]): CharacterDictionaryPreset[] => rows.map(([id, title, text]) => ({
-  id: `dictionary.classical.${category}.${id}`, title, text, slotValue: category === "composition" || category === "constraints" ? text : title, categories: [category], domain, source,
+  id: `dictionary.classical.${category}.${id}`, title, text, slotValue: category === "composition" || category === "constraints" ? text : title,
+  categories: [category, ...relatedCategories(category, id)], domain, source,
   type: "词条", search: `${title} ${text}`,
 }));
 
 // Garment shapes, textiles, ornaments and accessories remain distinct choices.
 export const CLASSICAL_CHARACTER_TERMS: CharacterDictionaryPreset[] = [
+  ...terms("classical-inner", [
+    ["cross", "素面交领里衣", "贴身穿素面交领里衣，领缘平整，仅露出一道里衣领缘。"],
+    ["plain", "素面贴身内衫", "内穿素面贴身内衫，内搭边缘平整，不叠加装饰领。"],
+  ]),
+  ...terms("classical-male-outer", [
+    ["cross", "交领长袍", "外穿交领长袍，左右衣襟交叠走向清楚，衣身为单件外衣。"],
+    ["round", "圆领袍", "外穿圆领袍，领口圆整，衣襟闭合关系清楚，内搭只露出一道领缘。"],
+    ["zhiduo", "直裰", "外穿直裰长衣，衣身简洁连贯，领襟和侧部接缝清楚。"],
+    ["lanshan", "襕衫", "古风创作采用襕衫长衣造型，下摆横襕与主体衣片连接清楚。"],
+    ["narrow", "窄袖长衫", "外穿窄袖长衫，袖型利落，衣身和下摆便于步行。"],
+  ]),
+  ...terms("classical-shoes", [
+    ["cloth-boots", "素面布靴", "脚穿黑色素面平底布靴，靴口与裤脚连接清楚。"],
+    ["leather-boots", "素面皮靴", "脚穿深棕色平底皮靴，靴筒和鞋底结构完整。"],
+    ["cloth-shoes", "平底布鞋", "脚穿黑色素面平底布鞋，鞋面和鞋底连接自然。"],
+    ["embroidered", "绣花布鞋", "脚穿平底绣花布鞋，鞋面刺绣清楚，鞋底比例自然。"],
+    ["cloud", "云纹靴", "脚穿平底云纹靴，靴面云纹克制，靴筒结构清楚。"],
+  ]),
+  ...terms("ear-jewelry", [
+    ["silver", "银耳坠", "双耳佩戴银耳坠，耳钩连接和垂坠方向清楚。"],
+    ["jade", "玉耳坠", "双耳佩戴小巧玉耳坠，玉件温润，挂接位置自然。"],
+    ["gold", "金耳环", "佩戴小型金耳环，金属反光克制，左右尺寸协调。"],
+  ]),
+  ...terms("neck-jewelry", [
+    ["pearl", "珍珠项链", "颈间佩戴一串珍珠项链，珠体大小协调，串联结构清楚。"],
+    ["lock", "银锁项饰", "颈间佩戴银锁项饰，系绳和锁片连接自然，不与衣领融合。"],
+  ]),
+  ...terms("wrist-jewelry", [
+    ["silver", "银镯", "手腕佩戴银镯，镯体尺寸与腕部比例协调。"],
+    ["gold", "金镯", "手腕佩戴金镯，饰面反光自然，不与手腕融合。"],
+  ]),
+  ...terms("waist-jewelry", [
+    ["xiangnang", "绣纹香囊", "腰间系一个绣纹香囊，系绳和囊体连接清楚，贴合衣物自然垂落。"],
+    ["jade-set", "组玉佩", "腰间悬挂一组玉佩，佩件与系绳分明，不堆叠成衣物。"],
+  ]),
   ...terms("classical-garment", [
     ["quju", "曲裾深衣", "古装衣裙采用曲裾深衣造型，衣襟曲绕身体，交叠走向清楚，腰间束带。"],
     ["zhiju", "直裾深衣", "古装衣裙采用直裾深衣造型，衣身连贯，衣襟与长下摆结构清楚。"],
@@ -49,6 +96,9 @@ export const CLASSICAL_CHARACTER_TERMS: CharacterDictionaryPreset[] = [
     ["orchid", "兰草纹", "服装以疏朗兰草纹点缀，枝叶纹样清晰。"],
     ["peony", "牡丹纹", "服装采用牡丹花卉纹，花瓣与枝叶结构清楚。"],
     ["plum", "梅花暗纹", "衣料带素雅梅花暗纹，图案不抢占人物轮廓。"],
+    ["lotus", "莲花纹", "衣物以莲花纹点缀，纹样顺着衣片分布。"],
+    ["bamboo", "竹叶纹", "衣物以疏朗竹叶纹点缀，不遮盖剪裁与接缝。"],
+    ["geometric", "几何回纹", "衣缘采用几何回纹，边界顺着领缘和袖缘分布。"],
     ["flow-cloud", "流云纹", "服装采用流云纹样，曲线顺着衣片展开。"],
     ["crabapple", "海棠纹", "服装以海棠花纹点缀，纹样密度克制。"],
     ["phoenix", "凤凰纹", "古风创作中的凤凰纹装饰，图案完整，随衣片褶皱自然变形。"],
@@ -70,6 +120,10 @@ export const CLASSICAL_CHARACTER_TERMS: CharacterDictionaryPreset[] = [
   ]),
   ...terms("hair-jewelry", [
     ["none", "不加头饰", "发型不额外搭配头饰。"],
+    ["wood-pin", "木簪", "以一支木簪固定发束，木纹自然，固定关系清楚。"],
+    ["silver-crown", "束发银冠", "以束发银冠固定发髻，冠体与发束连接清楚，反光克制。"],
+    ["jade-crown-male", "束发玉冠", "以束发玉冠固定发髻，冠体重心自然，不额外叠加冠饰。"],
+    ["comb", "花钿发梳", "发髻中插一枚花钿发梳，梳背与发束连接清楚。"],
     ["jade-pin", "素玉发簪", "以一支素玉发簪固定发髻，连接自然，玉面温润。"],
     ["silver-pin", "银质发钗", "银质发钗固定在发髻中，金属光泽克制。"],
     ["tassel", "流苏步摇", "发髻点缀流苏步摇，垂链和固定位置清楚。"],
@@ -159,20 +213,34 @@ export const CLASSICAL_CHARACTER_TERMS: CharacterDictionaryPreset[] = [
   ]),
 ];
 
-const template = (id: string, title: string, outfit: string, defaults: Record<string, string>): CharacterDictionaryPreset => ({
+const template = (id: string, title: string, outfit: string, defaults: Record<string, string>): CharacterDictionaryPreset => sectionedDictionaryPreset({
   id: `dictionary.classical.template.${id}`, title, type: "Prompt 模板", domain: "完整 Prompt", categories: ["classical-template"], source,
   search: `古装 古风 女装 女子 衣裙 完整 Prompt ${title} ${outfit}`,
-  text: `[表现风格]。一位成年女子，${title}创作造型。${outfit}发型为[发型]，头饰为[头饰]，佩饰为[佩饰]，妆容为[妆容]。人物[体态]，背景为[背景]，采用[光线]。[构图]。衣物状态为[衣物状态]。服装与配饰结构清楚，人体比例自然，无水印、乱码文字或随机品牌标识。`,
+  sections: [
+    { label: "表现风格", parts: ["[表现风格]。"] },
+    { label: "角色身份", parts: [`一位成年女子，${title}创作造型。`] },
+    { label: "服装", parts: [outfit, "服装穿着关系清楚，不增加未指定的衣层。"] },
+    { label: "装饰", parts: ["花纹为[花纹]。", "工艺为[刺绣工艺]。", "肩臂搭配为[纱巾披帛]。", "装饰带为[飘带]。"] },
+    { label: "发型", parts: ["发型为[发型]。"] },
+    { label: "面容", parts: ["妆容为[妆容]。"] },
+    { label: "首饰", parts: ["头饰为[头饰]。", "耳饰为[耳饰]。", "颈饰为[颈饰]。", "腕饰为[腕饰]。", "腰间佩饰为[腰间佩饰]。"] },
+    { label: "姿态与动作", parts: ["人物[体态]。"] },
+    { label: "背景与光线", parts: ["背景为[背景]，采用[光线]。"] },
+    { label: "构图", parts: ["[构图]。"] },
+    { label: "新旧", parts: ["衣物状态为[衣物状态]。", "首饰状态为[首饰状态]。"] },
+    { label: "画面约束", parts: ["服装与配饰结构清楚，人体比例自然，无水印、乱码文字或随机品牌标识。"] },
+  ],
+  optionalFields: ["花纹", "刺绣工艺", "纱巾披帛", "飘带", "头饰", "耳饰", "颈饰", "腕饰", "腰间佩饰", "首饰状态"],
   defaults,
 });
 
 export const CLASSICAL_CHARACTER_TEMPLATES: CharacterDictionaryPreset[] = [
-  template("han", "汉代风格曲裾深衣（创作参考）", "内穿[里衣颜色]里衣，外穿[外衣颜色][面料]曲裾深衣，衣襟曲绕方向清楚，腰间束带，服装纹样为[花纹]，脚穿[鞋靴]。", { "头饰": "素玉发簪", "外衣颜色": "月白色" }),
-  template("weijin", "魏晋风广袖衣裙（创作参考）", "内穿[里衣颜色]里衣，外穿[外衣颜色][面料]广袖上衫，下穿[裙装颜色]长裙，服装纹样为[花纹]，肩颈搭配为[纱巾披帛]，脚穿[鞋靴]。", { "面料": "轻纱", "花纹": "兰草纹", "头饰": "素玉发簪", "发型": "半披长发" }),
-  template("tang", "唐风齐胸襦裙（创作参考）", "穿着[上衣颜色][面料]短襦与[裙装颜色]齐胸长裙，高束裙腰与上衣关系清楚，服装纹样为[花纹]，工艺为[刺绣工艺]，肩臂搭配为[纱巾披帛]，脚穿[鞋靴]。", { "裙装颜色": "朱红色", "花纹": "牡丹纹", "面料": "绸缎", "头饰": "金色凤钗", "发型": "高盘发髻", "纱巾披帛": "素色披帛" }),
-  template("song", "宋风褙子衣裙（创作参考）", "内穿[里衣颜色]里衣，外搭[外衣颜色][面料]对襟褙子，下配[裙装颜色]百迭裙，服装纹样为[花纹]，脚穿[鞋靴]，内搭、褙子与裙腰关系清楚。", { "花纹": "梅花暗纹", "头饰": "银质发钗", "裙装颜色": "浅杏色", "发型": "低盘发髻" }),
-  template("ming", "明风长袄马面裙（创作参考）", "上穿[上衣颜色][面料]立领长袄，下搭[裙装颜色]马面裙，裙门与两侧褶裥清楚，服装纹样为[花纹]，工艺为[刺绣工艺]，脚穿[鞋靴]。", { "花纹": "祥云暗纹", "刺绣工艺": "织金", "面料": "织锦", "头饰": "银质发钗" }),
-  template("xianxia", "仙侠轻纱衣裙", "衣层方案为[衣层方案]，外衫为[外衣颜色][面料]，长裙为[裙装颜色]，服装纹样为[花纹]，肩臂搭配为[纱巾披帛]，脚穿[鞋靴]。超自然光效克制，衣层领缘与裙摆可辨。", { "面料": "轻纱", "花纹": "流云纹", "头饰": "白玉发冠", "背景": "云雾仙山", "光线": "仙侠柔光" }),
-  template("qing", "清宫风旗装长袍（创作参考）", "穿着[外衣颜色][面料]旗装长袍，袍身与袖部结构完整，服装纹样为[花纹]，工艺为[刺绣工艺]，脚穿[鞋靴]，不采用现代修身旗袍剪裁。", { "面料": "织锦", "花纹": "海棠纹", "头饰": "清宫风旗头", "背景": "宫墙庭院" }),
-  template("wuxia", "江湖侠女行装", "内穿[里衣颜色]里衣，外穿[外衣颜色][面料]窄袖交领短衣，下穿[下装颜色]长裤，腰间束带，脚穿[鞋靴]，服装纹样为[花纹]。仅有里衣与外衣两件上身衣物，不额外叠加披风或护甲。", { "面料": "粗麻", "外衣颜色": "黑色", "发型": "高束马尾", "头饰": "不加头饰", "背景": "竹林溪边" }),
+  template("han", "汉代风格曲裾深衣（创作参考）", "内穿[里衣颜色]里衣，外穿[外衣颜色][面料]曲裾深衣，衣襟曲绕方向清楚，腰间束带，脚穿[鞋靴]。", { "头饰": "素玉发簪", "外衣颜色": "月白色" }),
+  template("weijin", "魏晋风广袖衣裙（创作参考）", "内穿[里衣颜色]里衣，外穿[外衣颜色][面料]广袖上衫，下穿[裙装颜色]长裙，脚穿[鞋靴]。", { "面料": "轻纱", "花纹": "兰草纹", "头饰": "素玉发簪", "发型": "半披长发" }),
+  template("tang", "唐风齐胸襦裙（创作参考）", "穿着[上衣颜色][面料]短襦与[裙装颜色]齐胸长裙，高束裙腰与上衣关系清楚，脚穿[鞋靴]。", { "裙装颜色": "朱红色", "花纹": "牡丹纹", "面料": "绸缎", "头饰": "金色凤钗", "发型": "高盘发髻", "纱巾披帛": "素色披帛" }),
+  template("song", "宋风褙子衣裙（创作参考）", "内穿[里衣颜色]里衣，外搭[外衣颜色][面料]对襟褙子，下配[裙装颜色]百迭裙，脚穿[鞋靴]，内搭、褙子与裙腰关系清楚。", { "花纹": "梅花暗纹", "头饰": "银质发钗", "裙装颜色": "浅杏色", "发型": "低盘发髻" }),
+  template("ming", "明风长袄马面裙（创作参考）", "上穿[上衣颜色][面料]立领长袄，下搭[裙装颜色]马面裙，裙门与两侧褶裥清楚，脚穿[鞋靴]。", { "花纹": "祥云暗纹", "刺绣工艺": "织金", "面料": "织锦", "头饰": "银质发钗" }),
+  template("xianxia", "仙侠轻纱衣裙", "衣层方案为[衣层方案]，外衫为[外衣颜色][面料]，长裙为[裙装颜色]，脚穿[鞋靴]。超自然光效克制，衣层领缘与裙摆可辨。", { "面料": "轻纱", "花纹": "流云纹", "头饰": "白玉发冠", "背景": "云雾仙山", "光线": "仙侠柔光" }),
+  template("qing", "清宫风旗装长袍（创作参考）", "穿着[外衣颜色][面料]旗装长袍，袍身与袖部结构完整，脚穿[鞋靴]，不采用现代修身旗袍剪裁。", { "面料": "织锦", "花纹": "海棠纹", "头饰": "清宫风旗头", "背景": "宫墙庭院" }),
+  template("wuxia", "江湖侠女行装", "内穿[里衣颜色]里衣，外穿[外衣颜色][面料]窄袖交领短衣，下穿[下装颜色]长裤，腰间束带，脚穿[鞋靴]，仅有里衣与外衣两件上身衣物，不额外叠加披风或护甲。", { "面料": "粗麻", "外衣颜色": "黑色", "发型": "高束马尾", "头饰": "不加头饰", "背景": "竹林溪边" }),
 ];

@@ -56,7 +56,14 @@ describe('selected reference mentions', () => {
         const template = usePlaygroundStore.getState().prompt;
         expect(template).toContain('[外衣颜色]');
         expect(template).not.toContain('/古装');
-        act(() => { editor.commands.setTextSelection(template.indexOf('[外衣颜色]') + 2); });
+        act(() => {
+            editor.state.doc.descendants((node, position) => {
+                if (node.isText && node.text?.includes('[外衣颜色]')) {
+                    editor.commands.setTextSelection(position + node.text.indexOf('[外衣颜色]') + 1);
+                    return false;
+                }
+            });
+        });
         fireEvent.click(await screen.findByRole('option', { name: /词条 · 靛蓝色 / }));
         fireEvent.click(screen.getByRole('button', { name: '填写当前槽位' }));
         expect(usePlaygroundStore.getState().prompt).toBe(template.replace('[外衣颜色]', '靛蓝色'));

@@ -245,3 +245,23 @@ it("fills an expression slot with static text and hides configuration panels", (
   fireEvent.click(screen.getByRole("button", { name: "填写当前槽位" }));
   expect(replaceWithText).toHaveBeenCalledWith("眼神稳定，眉头放松，嘴唇自然闭合，脸上没有明显笑意。");
 });
+
+
+it("selects multiple ancient jewelry pieces independently and omits cleared sections", () => {
+  getPlatformReferenceLibrary.mockResolvedValueOnce({ resources: [] });
+  const { replaceWithText } = setup("首饰");
+  fireEvent.click(screen.getByRole("option", { name: /配置面板 · 首饰选择面板/ }));
+  const apply = screen.getByRole("button", { name: "应用配置" });
+  expect(apply).toBeDisabled();
+  fireEvent.change(screen.getByRole("combobox", { name: "头饰" }), { target: { value: "束发玉冠" } });
+  fireEvent.change(screen.getByRole("combobox", { name: "耳饰" }), { target: { value: "珍珠耳饰" } });
+  fireEvent.change(screen.getByRole("combobox", { name: "腕饰" }), { target: { value: "玉镯" } });
+  const preview = screen.getByRole("textbox", { name: "将插入的完整文字" });
+  expect(preview).toHaveValue("首饰：头饰为束发玉冠。耳饰为珍珠耳饰。腕饰为玉镯。");
+  fireEvent.change(screen.getByRole("combobox", { name: "头饰" }), { target: { value: "" } });
+  expect(preview).toHaveValue("首饰：耳饰为珍珠耳饰。腕饰为玉镯。");
+  expect(screen.getByRole("combobox", { name: "头饰" })).toHaveValue("");
+  expect(replaceWithText).not.toHaveBeenCalled();
+  fireEvent.click(apply);
+  expect(replaceWithText).toHaveBeenCalledWith("首饰：耳饰为珍珠耳饰。腕饰为玉镯。");
+});

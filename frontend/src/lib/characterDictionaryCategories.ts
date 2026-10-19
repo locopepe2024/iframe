@@ -9,10 +9,10 @@ export const CHARACTER_DICTIONARY_GROUPS = [
   { id: "style", label: "表现风格", children: [["render", "写实与绘画风格"], ["texture", "光影与质感"]] },
   { id: "setting", label: "时代与题材", children: [["era", "时代背景"], ["genre", "题材类型"]] },
   { id: "role", label: "角色定位", children: [["civilian-role", "日常身份"], ["jianghu-role", "江湖身份"]] },
-  { id: "clothing", label: "服装", children: [["clothing-panel", "穿搭选择面板"], ["classical-garment", "古装衣裙形制"], ["garment", "现代服装款式"], ["inner", "贴身里衣"], ["outer", "外衣"], ["bottoms", "下装"], ["scarf", "纱巾与披帛"], ["shoes", "鞋靴"], ["fit", "版型"], ["collar", "领口"], ["sleeve", "袖型"], ["clothing-detail", "廓形与细节"], ["material", "面料材质"], ["palette", "服装颜色"], ["accessory", "搭配单品"], ["layers", "衣层结构"]] },
+  { id: "clothing", label: "服装", children: [["clothing-panel", "穿搭选择面板"], ["classical-garment", "古装衣裙形制"], ["classical-male-outer", "古代男子外衣"], ["classical-female-upper", "古代女子上衣"], ["classical-inner", "古装里衣"], ["classical-skirt", "古装裙装"], ["classical-trousers", "古装裤装"], ["classical-shoes", "古装鞋履"], ["garment", "现代服装款式"], ["inner", "贴身里衣"], ["outer", "外衣"], ["bottoms", "下装"], ["scarf", "纱巾与披帛"], ["shoes", "鞋靴"], ["fit", "版型"], ["collar", "领口"], ["sleeve", "袖型"], ["clothing-detail", "廓形与细节"], ["material", "面料材质"], ["palette", "服装颜色"], ["accessory", "搭配单品"], ["layers", "衣层结构"]] },
   { id: "look", label: "发型", children: [["hair", "发型描述"]] },
   { id: "expression", label: "表情", children: [["expression-basic", "基础微表情"], ["expression-happy", "开心与松弛"], ["expression-fear", "紧张与恐惧"], ["expression-sad", "悲伤与崩溃"], ["expression-angry", "愤怒与对抗"], ["expression-complex", "复杂情绪与转折"]] },
-  { id: "jewelry", label: "首饰", children: [["hair-jewelry", "发簪与头饰"], ["body-jewelry", "耳饰项链与佩饰"], ["jewelry-material", "首饰材质"]] },
+  { id: "jewelry", label: "首饰", children: [["hair-jewelry", "发簪与头饰"], ["body-jewelry", "通用佩饰"], ["ear-jewelry", "耳饰"], ["neck-jewelry", "颈饰与项链"], ["wrist-jewelry", "腕饰与手镯"], ["waist-jewelry", "腰佩与香囊"], ["jewelry-material", "首饰材质"]] },
   { id: "decoration", label: "装饰", children: [["pattern", "花纹图案"], ["craft", "刺绣与织造工艺"], ["trim", "流苏飘带与腰带"]] },
   { id: "condition", label: "新旧与使用状态", children: [["garment-condition", "衣物状态"], ["jewelry-condition", "首饰状态"]] },
   { id: "scene", label: "场景与构图", children: [["background", "背景场景"], ["composition", "构图"], ["lighting", "光线"], ["constraints", "画面约束"]] },
@@ -58,6 +58,12 @@ export function platformDictionaryCategories(path: string | undefined): string[]
 /** Slot labels describe a destination; they are not text to append to the Prompt. */
 export function dictionarySlotCategory(label: string | undefined): string | null {
   if (!label) return null;
+  if (/男装外衣款式/.test(label)) return "classical-male-outer";
+  if (/女装上衣款式/.test(label)) return "classical-female-upper";
+  if (/古装里衣款式/.test(label)) return "classical-inner";
+  if (/古装裤装款式/.test(label)) return "classical-trousers";
+  if (/古装裙装款式/.test(label)) return "classical-skirt";
+  if (/古装鞋履/.test(label)) return "classical-shoes";
   if (/角色定位|身份/.test(label)) return "role";
   if (/脸型/.test(label)) return "face-shape";
   if (/眉形/.test(label)) return "brows";
@@ -69,7 +75,11 @@ export function dictionarySlotCategory(label: string | undefined): string | null
   if (/首饰状态/.test(label)) return "jewelry-condition";
   if (/新旧|衣物状态|使用状态/.test(label)) return "garment-condition";
   if (/头饰|发簪|发钗/.test(label)) return "hair-jewelry";
-  if (/首饰|耳饰|项链|佩饰/.test(label)) return "body-jewelry";
+  if (/耳饰/.test(label)) return "ear-jewelry";
+  if (/颈饰|项链/.test(label)) return "neck-jewelry";
+  if (/腕饰|手镯/.test(label)) return "wrist-jewelry";
+  if (/腰间佩饰|腰佩|香囊/.test(label)) return "waist-jewelry";
+  if (/首饰|佩饰/.test(label)) return "body-jewelry";
   if (/纹样|花纹|图案/.test(label)) return "pattern";
   if (/刺绣|工艺/.test(label)) return "craft";
   if (/披帛|纱巾|面纱/.test(label)) return "scarf";

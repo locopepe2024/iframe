@@ -38,3 +38,14 @@ Modern fashion field structure was informed by GPTImg2.art's [ai-nvzhuang-prompt
 5. Existing category discovery, platform revision checks, reference picker and keyboard behavior continue to pass.
 
 Validation commands: focused dictionary/editor/playground/character-workbench UI tests, character quick-action unit tests, frontend typecheck and production build. These checks establish frontend behavior, not model compliance with clothing constraints or historical accuracy. No paid image generation is part of this validation.
+
+## Follow-up: sectioned classical configuration
+
+User acceptance: category-labelled Prompt lines; expand ancient men's and women's garments, decoration and jewelry beyond modern example vocabulary. Preserve concrete garment count and wearing relationships.
+
+Implementation boundary: built-in dictionary presets and inline selection panel only. Store section/field definitions in presets and render labelled lines; do not reverse-parse or silently rewrite arbitrary user prose. Existing insertion, slots, references and undo stay intact.
+
+- Offer ancient men's robe and women's skirt directions with distinct garment selector categories; retain existing preset IDs.
+- Expand inner garments, men's outer garments, women's upper garments/skirts, footwear, headwear, earrings, necklaces, wrist jewelry and waist pendants. Separate garment pattern/craft/scarf/trim from wearable jewelry.
+- Add structured sections for clothing, decoration, jewelry and condition. Optional fields expose “不指定”; omitted choices contribute no clause or empty section. Complete outfits retain coherent default core garments.
+- Validate selector separation, optional omission, labelled output, explicit upper-layer constraints, template defaults, UI preview/application and existing reference/slot behavior. Run focused tests, typecheck and production build. Tests do not establish historical accuracy or image-model compliance.
