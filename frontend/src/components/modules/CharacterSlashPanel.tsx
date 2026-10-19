@@ -7,6 +7,8 @@ import {
 } from "@/lib/characterQuickActions";
 
 const CATEGORY_ORDER: CharacterPresetCategory[] = ["风格", "面容", "皮肤", "身材体态", "服装", "发型"];
+type BrowseCategory = "全部" | "Skill" | CharacterPresetCategory;
+const BROWSE_CATEGORIES: BrowseCategory[] = ["Skill", ...CATEGORY_ORDER];
 const SKILL_SEARCH = "角色设计 skill 技能 身份 外观 题材 画风";
 
 export default function CharacterSlashPanel({ open, query, onQueryChange, onOpenChange, onPreset, onSkill, canRunSkill, inputRef }: {
@@ -21,9 +23,11 @@ export default function CharacterSlashPanel({ open, query, onQueryChange, onOpen
 }) {
   const rootRef = useRef<HTMLDivElement>(null);
   const [activeIndex, setActiveIndex] = useState(0);
+  const [activeCategory, setActiveCategory] = useState<BrowseCategory>("面容");
   const needle = query.replace(/^\//, "").trim();
-  const showSkill = !needle || SKILL_SEARCH.includes(needle.toLocaleLowerCase());
-  const presets = searchCharacterQuickPresets(needle);
+  const browsingAll = !!needle || activeCategory === "全部";
+  const showSkill = (browsingAll || activeCategory === "Skill") && (!needle || SKILL_SEARCH.includes(needle.toLocaleLowerCase()));
+  const presets = searchCharacterQuickPresets(needle).filter((preset) => browsingAll || preset.category === activeCategory);
   const options: Array<{ kind: "skill" } | { kind: "preset"; preset: CharacterQuickPreset }> = [
     ...(showSkill ? [{ kind: "skill" as const }] : []),
     ...presets.map((preset) => ({ kind: "preset" as const, preset })),
@@ -57,7 +61,7 @@ export default function CharacterSlashPanel({ open, query, onQueryChange, onOpen
           aria-autocomplete="list" aria-expanded={open} aria-controls="character-slash-options"
           aria-activedescendant={open && options.length ? `character-slash-option-${Math.min(activeIndex, options.length - 1)}` : undefined}
           placeholder="输入 / 搜索风格、面容、皮肤…"
-          onChange={(event) => { onQueryChange(event.target.value); onOpenChange(event.target.value.startsWith("/")); }}
+          onChange={(event) => { onQueryChange(event.target.value); setActiveCategory("全部"); onOpenChange(event.target.value.startsWith("/")); }}
           onKeyDown={(event) => {
             if (event.nativeEvent.isComposing || !open) return;
             if (event.key === "Escape") { event.preventDefault(); onOpenChange(false); return; }
@@ -73,7 +77,14 @@ export default function CharacterSlashPanel({ open, query, onQueryChange, onOpen
         onQueryChange("/"); onOpenChange(!open); inputRef.current?.focus();
       }} className="min-h-10 min-w-10 rounded-md border border-glass-border text-sm text-foreground hover:bg-hover-bg focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary">{open ? <X size={16} className="mx-auto" /> : "/"}</button>
     </div>
-    {open && <div id="character-slash-options" role="listbox" aria-label="角色 Skill 与快捷描述词" className="mt-2 max-h-[min(52vh,420px)] overflow-y-auto rounded-md border border-glass-border bg-elevated p-2 shadow-xl">
+    {open && <div className="mt-2 grid min-h-0 grid-cols-[6.5rem_minmax(0,1fr)] overflow-hidden rounded-md border border-glass-border bg-elevated shadow-xl">
+      <nav aria-label="角色快捷分类" className="max-h-[min(52vh,420px)] overflow-y-auto border-r border-glass-border p-1.5">
+        {BROWSE_CATEGORIES.map((category) => <button key={category} type="button"
+          aria-pressed={!needle && activeCategory === category}
+          onClick={() => { setActiveCategory(category); setActiveIndex(0); onQueryChange("/"); inputRef.current?.focus(); }}
+          className={`mb-1 min-h-10 w-full rounded px-2 py-1.5 text-left text-xs leading-4 focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary ${!needle && activeCategory === category ? "bg-primary/15 font-medium text-foreground" : "text-text-secondary hover:bg-hover-bg"}`}>{category}</button>)}
+      </nav>
+      <div id="character-slash-options" role="listbox" aria-label="角色 Skill 与快捷描述词" className="max-h-[min(52vh,420px)] min-w-0 overflow-y-auto p-2">
       {options.length === 0 && <p className="px-2 py-3 text-xs text-text-muted">没有匹配项；原文不会被改动。</p>}
       {showSkill && <>
         <p className="px-2 py-1 text-[11px] font-medium text-text-muted">Skill · 当前可执行</p>
@@ -94,12 +105,13 @@ export default function CharacterSlashPanel({ open, query, onQueryChange, onOpen
             return <button key={preset.id} id={`character-slash-option-${index}`} type="button" role="option" aria-selected={activeIndex === index}
               onClick={() => choose({ kind: "preset", preset })}
               className={`flex min-h-11 w-full flex-col justify-center rounded px-2 py-1.5 text-left hover:bg-hover-bg focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary ${activeIndex === index ? "bg-primary/10" : ""}`}>
-              <span className="text-xs text-foreground">{preset.label}</span>
-              <span className="text-[11px] text-text-muted">{preset.source} · v{preset.revision}</span>
+              <span className="text-xs leading-4 text-foreground">{preset.label}</span>
+              <span className="mt-0.5 text-[11px] leading-4 text-text-muted">写入{preset.target === "recognition_marks" ? "识别标记" : category} · {preset.source} · v{preset.revision}</span>
             </button>;
           })}
         </div>;
       })}
+      </div>
     </div>}
   </div>;
 }

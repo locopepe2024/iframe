@@ -96,6 +96,26 @@ it("applies platform terms only to the selected identity field draft", () => {
     expect(apiMocks.agentRequest.mock.calls.some(([path]) => path === "/character-design/draft")).toBe(false);
 });
 
+it("browses classical character terms by category and keeps selection in the editable draft", () => {
+    apiMocks.getAssetReferenceIndex.mockResolvedValueOnce({ assets: [] } as any);
+    apiMocks.agentRequest.mockClear();
+    const onGenerate = vi.fn();
+    render(<CharacterWorkbench asset={{ id: "character-1", name: "苏砚", description: "少年剑客" }}
+        onClose={vi.fn()} onUpdateDescription={vi.fn()} onGenerate={onGenerate} generatingTypes={[]} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "展开角色设计" }));
+    fireEvent.click(screen.getByRole("button", { name: "打开快捷面板" }));
+    const categories = screen.getByRole("navigation", { name: "角色快捷分类" });
+    fireEvent.click(within(categories).getByRole("button", { name: "发型" }));
+    expect(screen.getByRole("option", { name: /长发高束/ })).toBeInTheDocument();
+    expect(screen.queryByRole("option", { name: /交领长衣/ })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("option", { name: /长发高束/ }));
+    fireEvent.click(screen.getByText(/身份外观字段/));
+    expect(screen.getByRole("textbox", { name: "角色发型" })).toHaveValue("长发高束，发际线和鬓角保留自然碎发");
+    expect(onGenerate).not.toHaveBeenCalled();
+    expect(apiMocks.agentRequest.mock.calls.some(([path]) => path === "/character-design/draft")).toBe(false);
+});
+
 it("keeps slash presets editable and saves their exact field and source", async () => {
     apiMocks.getAssetReferenceIndex.mockResolvedValueOnce({ assets: [] } as any);
     const onUpdateAttributes = vi.fn().mockResolvedValue(undefined);
