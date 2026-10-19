@@ -376,9 +376,16 @@ export interface PlatformReferenceResource {
     platform_resource_id: string;
     revision: number;
     kind: string;
+    category_path?: string;
     title: string;
     summary?: string;
     tags?: string[];
+    payload?: {
+        prompt_used?: string;
+        structured_prompt?: { content?: string };
+        media_file?: string | null;
+        [key: string]: unknown;
+    };
     status: "active" | "retired" | "candidate" | "review";
     provenance: {
         license: string;
@@ -387,6 +394,7 @@ export interface PlatformReferenceResource {
         source_url?: string;
         attribution?: string;
         notice_text?: string;
+        rights_confirmed?: boolean;
     };
     [key: string]: unknown;
 }
@@ -742,9 +750,9 @@ export const api = {
         return res.data;
     },
 
-    getPlatformReferenceLibrary: async (query = "", kind?: string): Promise<PlatformReferenceCatalog> => {
+    getPlatformReferenceLibrary: async (query = "", kind?: string, category?: string, tag?: string): Promise<PlatformReferenceCatalog> => {
         const res = await axios.get<PlatformReferenceCatalog>(`${API_URL}/platform-reference-library`, {
-            params: { query: query || undefined, kind: kind || undefined },
+            params: { query: query || undefined, kind: kind || undefined, category: category || undefined, tag: tag || undefined },
             headers: { "Cache-Control": "no-cache" },
         });
         return res.data;
@@ -764,6 +772,40 @@ export const api = {
         const res = await axios.get<PlatformReferenceReviewer>(`${API_URL}/platform-reference-library/reviewer`, {
             headers: { "Cache-Control": "no-cache" },
         });
+        return res.data;
+    },
+
+    getPlatformPublisher: async (): Promise<{ profile_id: string; authorized: boolean }> => {
+        const res = await axios.get(`${API_URL}/platform-reference-library/publisher`);
+        return res.data;
+    },
+
+    getPlatformPublisherGrants: async (): Promise<{ profile_ids: string[] }> => {
+        const res = await axios.get(`${API_URL}/platform-reference-library/publisher-grants`);
+        return res.data;
+    },
+
+    setPlatformPublisherGrant: async (profileId: string, enabled: boolean): Promise<{ profile_ids: string[] }> => {
+        const res = await axios.post(`${API_URL}/platform-reference-library/publisher-grants`, { profile_id: profileId, enabled });
+        return res.data;
+    },
+
+    getPlatformReferenceCategories: async (): Promise<{ categories: { id: string; label: string }[]; suggested_tags: string[] }> => {
+        const res = await axios.get(`${API_URL}/platform-reference-library/categories`);
+        return res.data;
+    },
+
+    submitPlatformCandidate: async (request: {
+        source_generation_id: string;
+        source_output_id?: string;
+        kind: "image" | "video" | "prompt_preset";
+        category_path: string;
+        tags: string[];
+        title: string;
+        description: string;
+        rights_confirmed: boolean;
+    }): Promise<PlatformReferenceResource> => {
+        const res = await axios.post(`${API_URL}/platform-reference-library/candidates`, request);
         return res.data;
     },
 

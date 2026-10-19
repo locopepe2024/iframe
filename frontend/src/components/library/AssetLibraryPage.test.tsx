@@ -5,6 +5,7 @@ const mocked = vi.hoisted(() => ({
   getAssetLibraryIndex: vi.fn(), deleteLibraryAsset: vi.fn(), authenticatedFetch: vi.fn(), error: vi.fn(),
   updateLibraryAsset: vi.fn(), updateSeriesAssetAttributes: vi.fn(), updateAssetAttributes: vi.fn(),
   getWorkbenchTemplates: vi.fn(),
+  getPlatformReferenceLibrary: vi.fn(), getPlatformReferenceReviewer: vi.fn(),
 }));
 vi.mock('@/lib/api', () => ({ api: mocked, API_URL: '', authenticatedFetch: mocked.authenticatedFetch }));
 vi.mock('next-intl', () => ({ useTranslations: () => (key: string, values?: { name?: string }) => values?.name ? `${key} ${values.name}` : key }));
@@ -27,6 +28,21 @@ beforeEach(() => {
   mocked.updateAssetAttributes.mockResolvedValue({});
   mocked.getAssetLibraryIndex.mockResolvedValue({ schema_version: 1, project_id: 'library', assets: [{ asset_type: 'character', asset_id: 'character-1', name: 'Test character', source_scope: 'global', source_container_id: null, selected_variant_id: null, cover_variant_id: null, variants: [] }] });
   mocked.getWorkbenchTemplates.mockResolvedValue({ schema_version: 1, catalog_revision: 'test', templates: [] });
+  mocked.getPlatformReferenceReviewer.mockResolvedValue({ authorized: false });
+  mocked.getPlatformReferenceLibrary.mockResolvedValue({ scope: 'platform_shared', schema_version: 1, catalog_revision: 'test', resources: [] });
+});
+
+it('filters published platform character references by exact tag', async () => {
+  mocked.getPlatformReferenceLibrary.mockResolvedValue({ scope: 'platform_shared', schema_version: 1, catalog_revision: 'test', resources: [
+    { platform_resource_id: 'a', revision: 1, kind: 'image', title: '剑客设定稿', tags: ['角色设定稿', '转面三视图'], status: 'active', provenance: { license: 'MIT', content_sha256: 'a' } },
+    { platform_resource_id: 'b', revision: 1, kind: 'image', title: '表情案例', tags: ['表情表'], status: 'active', provenance: { license: 'MIT', content_sha256: 'b' } },
+  ] });
+  render(<AssetLibraryPage />);
+  fireEvent.click(screen.getByRole('button', { name: 'platform' }));
+  expect(await screen.findByText('剑客设定稿')).toBeInTheDocument();
+  fireEvent.change(screen.getByRole('combobox', { name: '筛选平台标签' }), { target: { value: '表情表' } });
+  expect(screen.queryByText('剑客设定稿')).not.toBeInTheDocument();
+  expect(screen.getByText('表情案例')).toBeInTheDocument();
 });
 
 it('searches text-only workbench templates separately from image assets', async () => {

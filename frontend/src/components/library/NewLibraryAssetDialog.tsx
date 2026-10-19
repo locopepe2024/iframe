@@ -19,6 +19,8 @@ interface NewLibraryAssetDialogProps {
   /** Optional existing material to register as the first asset variant. */
   initialImageUrl?: string;
   initialName?: string;
+  initialDescription?: string;
+  initialMediaType?: "image" | "video";
   initialImageOrigin?: "upload" | "workbench";
   initialSourceGenerationId?: string;
   initialSourceOutputId?: string;
@@ -35,12 +37,21 @@ interface ImportedVariant {
  * 选类型(角色/场景/道具) + 名称 + 描述 +（可选）图片（上传本地文件或填 URL）→ POST /library/assets。
  * 本地上传走 POST /library/assets/upload（multipart 字段 "file" → { image_url }），结果写入 imageUrl。
  */
-export default function NewLibraryAssetDialog({ onClose, onCreated, initialImageUrl = "", initialName = "", initialImageOrigin, initialSourceGenerationId, initialSourceOutputId }: NewLibraryAssetDialogProps) {
+export default function NewLibraryAssetDialog({ onClose, onCreated, initialImageUrl = "", initialName = "", initialDescription = "", initialMediaType = "image", initialImageOrigin, initialSourceGenerationId, initialSourceOutputId }: NewLibraryAssetDialogProps) {
   const t = useTranslations("library");
   const tc = useTranslations("common");
   const [assetType, setAssetType] = useState<AssetTab>("characters");
   const [name, setName] = useState(initialName);
-  const [description, setDescription] = useState("");
+  const [description, setDescription] = useState(initialDescription);
+  const [targetScope, setTargetScope] = useState<"asset" | "platform">(initialMediaType === "video" ? "platform" : "asset");
+  const [platformKind, setPlatformKind] = useState<"image" | "video" | "prompt_preset">(initialMediaType);
+  const [platformCategory, setPlatformCategory] = useState("character/reference");
+  const [platformCategories, setPlatformCategories] = useState<{ id: string; label: string }[]>([]);
+  const [platformSuggestedTags, setPlatformSuggestedTags] = useState<string[]>([]);
+  const [platformTagsText, setPlatformTagsText] = useState("");
+  const [platformError, setPlatformError] = useState("");
+  const [publisher, setPublisher] = useState<{ profile_id: string; authorized: boolean } | null>(null);
+  const [rightsConfirmed, setRightsConfirmed] = useState(false);
   const [imageUrl, setImageUrl] = useState(initialImageUrl);
   const [submitting, setSubmitting] = useState(false);
   const [uploading, setUploading] = useState(false);
@@ -53,6 +64,19 @@ export default function NewLibraryAssetDialog({ onClose, onCreated, initialImage
   useEffect(() => {
     onCloseRef.current = onClose;
   });
+  useEffect(() => {
+    if (!initialSourceGenerationId) return;
+    let active = true;
+    void api.getPlatformPublisher().then((result) => { if (active) setPublisher(result); }).catch(() => { if (active) setPlatformError("无法读取平台录入权限，请刷新后重试。"); });
+    void api.getPlatformReferenceCategories().then((result) => {
+      if (!active) return;
+      setPlatformCategories(result.categories);
+      setPlatformSuggestedTags(result.suggested_tags ?? []);
+      setPlatformCategory((current) => result.categories.some((item) => item.id === current) ? current : result.categories[0]?.id ?? "");
+      if (!result.categories.length) setPlatformError("平台类别暂不可用，请联系管理员。");
+    }).catch(() => { if (active) setPlatformError("无法读取平台类别，请刷新后重试。"); });
+    return () => { active = false; };
+  }, [initialSourceGenerationId]);
   // a11y：打开时聚焦名称、Escape 关闭、关闭后还原焦点。
   useEffect(() => {
     const prevFocused = document.activeElement as HTMLElement | null;
@@ -106,6 +130,29 @@ export default function NewLibraryAssetDialog({ onClose, onCreated, initialImage
     }
     setSubmitting(true);
     try {
+      if (targetScope === "platform") {
+        if (!publisher?.authorized || !initialSourceGenerationId || !platformCategory || !rightsConfirmed) {
+          throw new Error("请先确认平台录入权限、类别和内容发布权。");
+        }
+        const tags = Array.from(new Set(platformTagsText.split(/[,，]/).map((tag) => tag.trim()).filter(Boolean)));
+        if (tags.length > 12 || tags.some((tag) => tag.length > 32)) {
+          throw new Error("最多填写 12 个标签，每个不超过 32 字。");
+        }
+        await api.submitPlatformCandidate({
+          source_generation_id: initialSourceGenerationId,
+          source_output_id: platformKind === "prompt_preset" ? undefined : initialSourceOutputId,
+          kind: platformKind,
+          category_path: platformCategory,
+          tags,
+          title: trimmed,
+          description: description.trim(),
+          rights_confirmed: rightsConfirmed,
+        });
+        toast.success("已提交平台参考库审核", { body: trimmed });
+        onCreated();
+        onClose();
+        return;
+      }
       const payload = {
         name: trimmed,
         description: description.trim() || undefined,
@@ -139,16 +186,16 @@ export default function NewLibraryAssetDialog({ onClose, onCreated, initialImage
       <div
         role="dialog"
         aria-modal="true"
-        aria-label={t("newAssetTitle")}
+        aria-label={initialSourceGenerationId ? "录入生成结果" : t("newAssetTitle")}
         className="relative z-[1] w-full max-w-[440px] glass-panel border border-glass-border rounded-2xl shadow-2xl atelier-reveal overflow-hidden"
       >
         {/* header */}
         <div className="flex items-start justify-between gap-3 px-5 pt-5 pb-3 border-b border-glass-border">
           <div>
             <div className="font-display atelier-display text-lg font-semibold text-foreground tracking-tight">
-              {t("newAssetTitle")}
+              {initialSourceGenerationId ? "录入生成结果" : t("newAssetTitle")}
             </div>
-            <div className="text-[0.75rem] text-text-muted mt-0.5">{t("newAssetSubtitle")}</div>
+            <div className="text-[0.75rem] text-text-muted mt-0.5">{targetScope === "platform" ? "提交平台参考库审核；审核发布后所有用户可检索。" : initialSourceGenerationId ? "保存到当前账户的跨项目资产库。" : t("newAssetSubtitle")}</div>
           </div>
           <button
             type="button"
@@ -161,8 +208,18 @@ export default function NewLibraryAssetDialog({ onClose, onCreated, initialImage
         </div>
 
         <form onSubmit={handleSubmit} className="px-5 py-4 flex flex-col gap-4">
+          {initialSourceGenerationId && <div>
+            <label htmlFor="library-target-scope" className="font-mono text-[0.625rem] font-semibold uppercase text-text-secondary">录入目标</label>
+            <select id="library-target-scope" value={targetScope} onChange={(event) => setTargetScope(event.target.value as "asset" | "platform")}
+              className="mt-2 w-full rounded-lg border border-glass-border bg-surface-inset px-3 py-2 text-sm text-foreground">
+              {initialMediaType === "image" && <option value="asset">当前账户跨项目资产库</option>}
+              <option value="platform" disabled={!publisher?.authorized}>平台参考库 · 提交审核</option>
+            </select>
+            {publisher && !publisher.authorized && <p className="mt-2 break-all text-xs text-text-muted">当前账户无平台录入权限。账户身份：{publisher.profile_id}</p>}
+            {platformError && <p role="alert" className="mt-2 text-xs text-red-400">{platformError}</p>}
+          </div>}
           {/* 类型选择 */}
-          <div>
+          {targetScope === "asset" && <div>
             <span className="font-mono text-[0.625rem] font-semibold uppercase tracking-[0.1em] text-text-secondary">
               {t("assetTypeAria")}
             </span>
@@ -190,7 +247,39 @@ export default function NewLibraryAssetDialog({ onClose, onCreated, initialImage
                 );
               })}
             </div>
-          </div>
+          </div>}
+
+          {targetScope === "platform" && <div className="grid gap-3">
+            <label className="text-xs text-text-secondary">平台类别
+              <select aria-label="平台类别" value={platformCategory} onChange={(event) => setPlatformCategory(event.target.value)}
+                className="mt-2 w-full rounded-lg border border-glass-border bg-surface-inset px-3 py-2 text-sm text-foreground">
+                {platformCategories.map((item) => <option key={item.id} value={item.id}>{item.label} · {item.id}</option>)}
+              </select>
+            </label>
+            <div>
+              <label htmlFor="platform-character-tags" className="text-xs text-text-secondary">角色标签</label>
+              <input id="platform-character-tags" value={platformTagsText} onChange={(event) => setPlatformTagsText(event.target.value)}
+                placeholder="如：角色设定稿，转面三视图，配色卡" className="mt-2 w-full rounded-lg border border-glass-border bg-surface-inset px-3 py-2 text-sm text-foreground" />
+              <p className="mt-1 text-xs text-text-muted">逗号分隔，最多 12 个；仅用于检索，不会加入生成提示词。</p>
+              {!!platformSuggestedTags.length && <div className="mt-2 flex flex-wrap gap-1.5" aria-label="建议角色标签">
+                {platformSuggestedTags.map((tag) => {
+                  const selected = platformTagsText.split(/[,，]/).some((value) => value.trim() === tag);
+                  return <button key={tag} type="button" aria-pressed={selected} onClick={() => {
+                    const current = platformTagsText.split(/[,，]/).map((value) => value.trim()).filter(Boolean);
+                    setPlatformTagsText((selected ? current.filter((value) => value !== tag) : [...current, tag]).join("，"));
+                  }} className={`rounded-full border px-2 py-1 text-xs ${selected ? "border-primary text-primary" : "border-glass-border text-text-secondary hover:text-foreground"}`}>{tag}</button>;
+                })}
+              </div>}
+            </div>
+            <label className="text-xs text-text-secondary">发布内容
+              <select aria-label="发布内容" value={platformKind} onChange={(event) => setPlatformKind(event.target.value as typeof platformKind)}
+                className="mt-2 w-full rounded-lg border border-glass-border bg-surface-inset px-3 py-2 text-sm text-foreground">
+                <option value={initialMediaType}>{initialMediaType === "video" ? "视频与提示词" : "图片与提示词"}</option>
+                <option value="prompt_preset">仅提示词</option>
+              </select>
+            </label>
+            <p className="text-xs text-text-muted">描述可编辑；审核记录会另存实际生成提示词、模型、参数与来源结果。</p>
+          </div>}
 
           {/* 名称 */}
           <div>
@@ -217,20 +306,21 @@ export default function NewLibraryAssetDialog({ onClose, onCreated, initialImage
               htmlFor="lib-asset-desc"
               className="font-mono text-[0.625rem] font-semibold uppercase tracking-[0.1em] text-text-secondary"
             >
-              {t("descLabel")}
+              {targetScope === "platform" ? "配套 Prompt（可编辑）" : t("descLabel")}
             </label>
             <textarea
               id="lib-asset-desc"
               value={description}
               onChange={(e) => setDescription(e.target.value)}
-              placeholder={t("descPlaceholder")}
-              rows={3}
+              placeholder={targetScope === "platform" ? "输入与图片配套的完整 Prompt；可修改角色、版式和细节。" : t("descPlaceholder")}
+              rows={targetScope === "platform" ? 8 : 3}
+              maxLength={targetScope === "platform" ? 20000 : undefined}
               className="mt-2 w-full bg-surface-inset border border-glass-border rounded-lg px-3.5 py-2.5 text-[0.8125rem] text-foreground placeholder-text-muted focus:outline-none focus:border-primary/60 resize-none"
             />
           </div>
 
           {/* 图片（可选）— 上传本地图片，或填图片 URL（备选） */}
-          <div>
+          {targetScope === "asset" && <div>
             <span className="font-mono text-[0.625rem] font-semibold uppercase tracking-[0.1em] text-text-secondary">
               {t("imageLabel")}
             </span>
@@ -306,7 +396,17 @@ export default function NewLibraryAssetDialog({ onClose, onCreated, initialImage
               className="mt-2 w-full bg-surface-inset border border-glass-border rounded-lg px-3.5 py-2.5 text-[0.8125rem] text-foreground placeholder-text-muted focus:outline-none focus:border-primary/60"
             />
             <div className="text-[0.6875rem] text-text-muted mt-1.5">{t("imageUrlHint")}</div>
-          </div>
+          </div>}
+
+          {targetScope === "platform" && <>
+            {platformKind !== "prompt_preset" && imageUrl && (initialMediaType === "video"
+              ? <video src={getAssetUrl(imageUrl)} controls className="max-h-28 w-full rounded-lg object-contain" />
+              : <img src={getAssetUrl(imageUrl)} alt="待审核图片" className="max-h-28 w-full rounded-lg object-contain" />)}
+            <label className="flex items-start gap-2 text-xs text-text-secondary">
+              <input type="checkbox" checked={rightsConfirmed} onChange={(event) => setRightsConfirmed(event.target.checked)} />
+              我确认拥有将此内容提交平台审核的权利
+            </label>
+          </>}
 
           {/* actions */}
           <div className="flex items-center justify-end gap-2.5 pt-1">
@@ -319,11 +419,11 @@ export default function NewLibraryAssetDialog({ onClose, onCreated, initialImage
             </button>
             <button
               type="submit"
-              disabled={submitting || uploading}
+              disabled={submitting || uploading || (targetScope === "platform" && (!publisher?.authorized || !platformCategories.length || !description.trim() || !rightsConfirmed))}
               className="inline-flex items-center justify-center gap-2 px-4 py-2 rounded-lg bg-primary text-on-accent text-sm font-semibold hover:bg-primary-hover transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
             >
               {submitting ? <Loader2 size={15} className="animate-spin" /> : <Plus size={15} />}
-              {submitting ? t("creating") : tc("create")}
+              {submitting ? t("creating") : targetScope === "platform" ? "提交平台审核" : tc("create")}
             </button>
           </div>
         </form>

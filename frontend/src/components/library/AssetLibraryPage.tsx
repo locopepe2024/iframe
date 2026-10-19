@@ -224,6 +224,39 @@ function WorkbenchTemplateLibrary() {
   </div>;
 }
 
+function PlatformCandidatePreview({ resourceId, kind }: { resourceId: string; kind: string }) {
+  const [url, setUrl] = useState("");
+  const [videoUrl, setVideoUrl] = useState("");
+  const [videoLoading, setVideoLoading] = useState(false);
+  useEffect(() => {
+    const controller = new AbortController();
+    let objectUrl = "";
+    void authenticatedFetch(`${API_URL}/platform-reference-library/${encodeURIComponent(resourceId)}/media?preview=true`, { signal: controller.signal })
+      .then(async (response) => {
+        if (!response.ok) throw new Error("preview unavailable");
+        objectUrl = URL.createObjectURL(await response.blob());
+        setUrl(objectUrl);
+      }).catch(() => setUrl(""));
+    return () => { controller.abort(); if (objectUrl) URL.revokeObjectURL(objectUrl); };
+  }, [resourceId]);
+  useEffect(() => () => { if (videoUrl) URL.revokeObjectURL(videoUrl); }, [videoUrl]);
+  const showVideo = async () => {
+    setVideoLoading(true);
+    try {
+      const response = await authenticatedFetch(`${API_URL}/platform-reference-library/${encodeURIComponent(resourceId)}/media`);
+      if (!response.ok) throw new Error("video unavailable");
+      setVideoUrl(URL.createObjectURL(await response.blob()));
+    } catch { toast.error("视频预览暂不可用"); }
+    finally { setVideoLoading(false); }
+  };
+  return <div className="mt-3">
+    {url ? <img src={url} alt="平台候选预览" className="max-h-44 rounded-md object-contain" /> : <p className="text-xs text-text-muted">预览暂不可用</p>}
+    {kind === "video" && (videoUrl
+      ? <video src={videoUrl} controls className="mt-2 max-h-44 w-full rounded-md object-contain" />
+      : <button type="button" disabled={videoLoading} onClick={() => void showVideo()} className="mt-2 glass-button px-2 py-1 text-xs disabled:opacity-50">{videoLoading ? "正在读取视频…" : "查看原视频"}</button>)}
+  </div>;
+}
+
 function PlatformReferenceReviewQueue() {
   const t = useTranslations("library");
   const [catalog, setCatalog] = useState<import("@/lib/api").PlatformReferenceCatalog | null>(null);
@@ -231,6 +264,17 @@ function PlatformReferenceReviewQueue() {
   const [canReview, setCanReview] = useState(false);
   const [loading, setLoading] = useState(true);
   const [publishing, setPublishing] = useState<string | null>(null);
+  const [publisherGrants, setPublisherGrants] = useState<string[]>([]);
+  const [publisherProfileId, setPublisherProfileId] = useState("");
+  const [grantBusy, setGrantBusy] = useState(false);
+  const [platformSearch, setPlatformSearch] = useState("");
+  const [platformTag, setPlatformTag] = useState("");
+  const activeTags = Array.from(new Set((activeCatalog?.resources ?? []).flatMap((resource) => resource.tags ?? []))).sort();
+  const visibleActive = (activeCatalog?.resources ?? []).filter((resource) => {
+    if (platformTag && !resource.tags?.includes(platformTag)) return false;
+    const needle = platformSearch.trim().toLocaleLowerCase();
+    return !needle || [resource.title, resource.summary ?? "", ...(resource.tags ?? [])].join(" ").toLocaleLowerCase().includes(needle);
+  });
   const load = async () => {
     setLoading(true);
     try {
@@ -238,6 +282,7 @@ function PlatformReferenceReviewQueue() {
       const reviewer = await api.getPlatformReferenceReviewer();
       setCanReview(!!reviewer.authorized);
       setCatalog(reviewer.authorized ? await api.getPlatformReferenceReviewQueue() : null);
+      setPublisherGrants(reviewer.authorized ? (await api.getPlatformPublisherGrants()).profile_ids : []);
     }
     catch { toast.error(t("reviewLoadFailed")); }
     finally { setLoading(false); }
@@ -252,6 +297,15 @@ function PlatformReferenceReviewQueue() {
     } catch { toast.error(t("reviewPromoteFailed")); }
     finally { setPublishing(null); }
   };
+  const changePublisherGrant = async (profileId: string, enabled: boolean) => {
+    setGrantBusy(true);
+    try {
+      const result = await api.setPlatformPublisherGrant(profileId.trim(), enabled);
+      setPublisherGrants(result.profile_ids);
+      setPublisherProfileId("");
+    } catch { toast.error("平台发布者授权失败，请核对账户身份"); }
+    finally { setGrantBusy(false); }
+  };
   return <div className="flex-1 min-h-0 overflow-y-auto px-4 py-6 md:px-7">
     <div className="mb-5">
       <div className="font-mono text-[0.625rem] uppercase tracking-[0.2em] text-text-muted">PLATFORM REFERENCE LIBRARY</div>
@@ -260,6 +314,19 @@ function PlatformReferenceReviewQueue() {
     </div>
     {loading ? <div className="py-12 text-text-secondary">{t("reviewLoading")}</div> : <>
       {canReview && <>
+        <section className="mb-7 rounded-xl border border-glass-border bg-surface-inset p-4" aria-label="平台候选发布者">
+          <h2 className="text-sm font-semibold text-foreground">平台候选发布者</h2>
+          <p className="mt-1 text-xs text-text-muted">目标账户在创作台录入窗口可看到自己的账户身份。授权只允许提交候选，仍需管理员审核。</p>
+          <div className="mt-3 flex flex-wrap gap-2">
+            <input aria-label="发布者账户身份" value={publisherProfileId} onChange={(event) => setPublisherProfileId(event.target.value)}
+              placeholder="apikey-…" className="glass-input min-w-56 flex-1 px-3 py-2 text-xs" />
+            <button type="button" disabled={grantBusy || !publisherProfileId.trim()} onClick={() => void changePublisherGrant(publisherProfileId, true)} className="glass-button px-3 py-2 text-xs disabled:opacity-50">授权提交候选</button>
+          </div>
+          {publisherGrants.map((profileId) => <div key={profileId} className="mt-2 flex items-center justify-between gap-3 text-xs text-text-secondary">
+            <span className="min-w-0 break-all">{profileId}</span>
+            <button type="button" disabled={grantBusy} onClick={() => void changePublisherGrant(profileId, false)} className="glass-button shrink-0 px-2 py-1 disabled:opacity-50">撤销</button>
+          </div>)}
+        </section>
         <h2 className="text-lg font-semibold text-foreground mb-3">{t("reviewPendingTitle")}</h2>
         {!catalog?.resources.length ? <div className="glass-panel rounded-xl p-5 text-text-secondary mb-7">{t("reviewEmpty")}</div> :
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 mb-8">
@@ -269,19 +336,39 @@ function PlatformReferenceReviewQueue() {
             <span className="text-[0.625rem] rounded-full bg-amber-500/15 text-amber-700 px-2 py-1">{t("reviewPending")}</span>
           </div>
           {resource.summary && <p className="text-sm text-text-secondary mt-3">{resource.summary}</p>}
+          {resource.category_path && <p className="mt-2 text-xs text-text-muted">类别：{resource.category_path}</p>}
+          {!!resource.payload && typeof resource.payload === "object" && <details className="mt-3 text-xs text-text-secondary">
+            <summary>提示词与生成来源</summary>
+            {typeof resource.payload.prompt_used === "string" && <div className="mt-2"><strong>模型原始提示词</strong><pre className="mt-1 max-h-40 overflow-auto whitespace-pre-wrap break-words">{resource.payload.prompt_used}</pre></div>}
+            {typeof resource.payload.structured_prompt === "object" && resource.payload.structured_prompt !== null && <div className="mt-2"><strong>用户编辑描述</strong><pre className="mt-1 max-h-40 overflow-auto whitespace-pre-wrap break-words">{String((resource.payload.structured_prompt as { content?: unknown }).content ?? "")}</pre></div>}
+            <div className="mt-2"><strong>完整生成记录</strong><pre className="mt-1 max-h-44 overflow-auto whitespace-pre-wrap break-all">{JSON.stringify(resource.payload, null, 2)}</pre></div>
+          </details>}
+          {!!resource.payload && typeof resource.payload === "object" && !!(resource.payload as { media_file?: string }).media_file && <PlatformCandidatePreview resourceId={resource.platform_resource_id} kind={resource.kind} />}
           {!!resource.tags?.length && <div className="flex flex-wrap gap-1 mt-3">{resource.tags.map((tag) => <span key={tag} className="text-xs rounded bg-surface-inset px-2 py-1 text-text-muted">{tag}</span>)}</div>}
-          <dl className="mt-4 space-y-1 text-xs text-text-muted"><div><dt className="inline font-medium">{t("reviewSource")}：</dt> <dd className="inline">{resource.provenance.source || "—"}</dd></div><div><dt className="inline font-medium">{t("reviewLicense")}：</dt> <dd className="inline">{resource.provenance.license}</dd></div></dl>
+          <dl className="mt-4 space-y-1 text-xs text-text-muted"><div><dt className="inline font-medium">{t("reviewSource")}：</dt> <dd className="inline">{resource.provenance.source || "—"}</dd></div><div><dt className="inline font-medium">{t("reviewLicense")}：</dt> <dd className="inline">{resource.provenance.license}</dd></div><div><dt className="inline font-medium">发布权声明：</dt> <dd className="inline">{resource.provenance.rights_confirmed ? "已确认，待审核" : "未提供"}</dd></div></dl>
           <button type="button" disabled={publishing === resource.platform_resource_id} onClick={() => void promote(resource)} className="mt-4 w-full glass-button font-semibold disabled:opacity-50">{publishing === resource.platform_resource_id ? t("reviewPublishing") : t("reviewPublish")}</button>
         </article>)}
         </div>}
       </>}
       <h2 className="text-lg font-semibold text-foreground mb-3">{t("publishedTitle")}</h2>
-      {!activeCatalog?.resources.length ? <div className="glass-panel rounded-xl p-8 text-text-secondary">{t("publishedEmpty")}</div> :
+      {!!activeCatalog?.resources.length && <div className="mb-3 flex flex-wrap gap-2">
+        <input aria-label="搜索平台参考" value={platformSearch} onChange={(event) => setPlatformSearch(event.target.value)} placeholder="搜索名称、描述或标签"
+          className="glass-input min-w-48 flex-1 px-3 py-2 text-sm" />
+        <select aria-label="筛选平台标签" value={platformTag} onChange={(event) => setPlatformTag(event.target.value)} className="glass-input px-3 py-2 text-sm">
+          <option value="">全部标签</option>
+          {activeTags.map((tag) => <option key={tag} value={tag}>{tag}</option>)}
+        </select>
+      </div>}
+      {!activeCatalog?.resources.length ? <div className="glass-panel rounded-xl p-8 text-text-secondary">{t("publishedEmpty")}</div> : !visibleActive.length ? <div className="glass-panel rounded-xl p-8 text-text-secondary">没有匹配的已发布资源</div> :
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-        {activeCatalog.resources.map((resource) => <article key={resource.platform_resource_id} className="glass-panel rounded-xl border border-glass-border p-4">
+        {visibleActive.map((resource) => <article key={resource.platform_resource_id} className="glass-panel rounded-xl border border-glass-border p-4">
           <h2 className="font-semibold text-foreground">{resource.title}</h2>
           <div className="text-xs text-text-muted mt-1">{resource.kind} · v{resource.revision}</div>
-          {resource.summary && <p className="text-sm text-text-secondary mt-3">{resource.summary}</p>}
+          {!!resource.payload?.media_file && <PlatformCandidatePreview resourceId={resource.platform_resource_id} kind={resource.kind} />}
+          {(resource.payload?.structured_prompt?.content || resource.summary) && <details className="mt-3 text-sm text-text-secondary">
+            <summary>查看配套 Prompt</summary>
+            <pre className="mt-2 max-h-48 overflow-auto whitespace-pre-wrap break-words text-xs leading-5">{resource.payload?.structured_prompt?.content || resource.summary}</pre>
+          </details>}
           {!!resource.tags?.length && <div className="flex flex-wrap gap-1 mt-3">{resource.tags.map((tag) => <span key={tag} className="text-xs rounded bg-surface-inset px-2 py-1 text-text-muted">{tag}</span>)}</div>}
           <div className="mt-4 text-xs text-text-muted">{t("reviewSource")}：{resource.provenance.source || "—"} · {t("reviewLicense")}：{resource.provenance.license}</div>
         </article>)}
