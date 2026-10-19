@@ -36,6 +36,7 @@
 - 同一隔离进一步发现现有 `pelvis_target` 的 `(right, forward, up)` 三列行列式为 −1，目标矩阵是反射，不能由四元数准确表达。仅改叉积使行列式 +1 后，首帧平均关节误差反而为 47.89 px，说明还需核对 rig 静止轴、前向和父空间变换；不能将单一叉积修改当成已验证的修复。[逐轴诊断](../agents/deliverables/2026-10-19-recreation2-pelvis-orientation-isolation-v1.md)
 - 后续七组 rig 空间隔离已确认骨盆骨轴与静止身体轴不重合，并发现求解时未包含渲染 root yaw。仅纳入 root 后，源17/23/29帧平均误差为 15.74/12.25/18.46 px；完整身体/骨盆与子骨基底/root 校准在源55帧为 19.35 px，但前四帧没有优于无骨盆基线。全七组 bundle 重导入投影差为 0；旋转方向对齐不等于关节位置或鞋底接触合格。主 builder 未改，仍不得送 H3。[身体轴、骨盆与 root 空间实验](../agents/deliverables/2026-10-19-recreation2-rig-space-calibration-v1.md)
 - 躯干分离与接触约束隔离显示：水平骨盆目标改善后段但使前四帧变差；支持脚世界高度或单点像素 y 锁定会改善指定脚，却把另一只脚和全身投影推偏。脚接触需要鞋底点、地面证据和局部 IK/根高度联合求解，不能只平移 root。[躯干与脚接触隔离](../agents/deliverables/2026-10-19-recreation2-torso-contact-isolation-v1.md)
+- pinned rig 只读标定发现网格鞋底代理点与 `foot_l/r` 骨头头部相差约 5.5 cm；直接把骨头 head 当接触点会产生系统偏差。成熟 two-bone IK 可用，但末端骨、pole vector、支持段和鞋底目标仍需标定；粗略 IK 目标保持诊断未命中，不应当作算法失败或生产修复。[鞋底与 IK 接入边界](../agents/deliverables/2026-10-19-recreation2-foot-sole-and-ik-boundary-v1.md)
 
 复刻链路须把 `视频取证 → 相机轨迹 → GVHMR 原生人体重建 → 目标骨架重定向 → Blender/GLB 输出 → 源帧验收` 分层记录。GLB 能导入 Blender/Unity 只证明资产可用，不证明源动作、世界轨迹、脚接触或双手持枪关系准确。照片输入只提供单帧姿态线索，不能作为连续动作恢复的时间证据。
 
