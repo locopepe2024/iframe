@@ -57,3 +57,8 @@ Add a footwear category and `/鞋履` / `/鞋靴` / `/鞋子` / `/靴子` config
 A selected footwear scheme initializes its own detail defaults; changing scheme clears the previous scheme's field overrides. Generated wording uses neutral shoe shape plus current fields so changing damask to leather does not leave a contradictory damask descriptor. Optional detail fields support omission. Outfit panels and classical complete presets share footwear controls. Deferred slots retain footwear-specific destinations. These are creative references; occupation/dynasty labels are search context, not compatibility guarantees.
 
 Verify bilingual lookup, all supplied directions, style-change defaults, independent garment/shoe fields, optional omission, neutral shape rendering and shared preset integration. No paid generation or historical validation.
+
+
+## Follow-up: skin tone
+
+Split body skin tone from skin texture. `/肤色` and `/肤质` open a shared optional skin panel, and `[肤色]` resolves only to skin-tone terms, independently of clothing palette, makeup and skin texture. Provide eight tone choices without inferring age, ethnicity, occupation or character traits. Neither field is preselected; omitted fields produce no clause. Existing saved prose and platform skin classifications remain compatible. Validate slash discovery, preview/application, slot isolation and optional rendering. This does not establish model color fidelity under different lighting.

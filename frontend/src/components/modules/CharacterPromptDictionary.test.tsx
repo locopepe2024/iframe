@@ -309,3 +309,23 @@ it("searches the supplied English footwear terms without matching unrelated mate
   expect(screen.getByRole("option", { name: /词条 · 真皮/ })).toBeInTheDocument();
   expect(screen.queryByRole("option", { name: /词条 · 丝绸/ })).not.toBeInTheDocument();
 });
+
+
+it("opens skin configuration from slash and inserts the selected tone without assigning texture", () => {
+  getPlatformReferenceLibrary.mockResolvedValueOnce({ resources: [] });
+  const { replaceWithText } = setup("肤色");
+  fireEvent.click(screen.getByRole("option", { name: /配置面板 · 肤色与肤质选择面板/ }));
+  fireEvent.change(screen.getByRole("combobox", { name: "肤色" }), { target: { value: "暖小麦肤色" } });
+  expect(screen.getByRole("textbox", { name: "将插入的完整文字" })).toHaveValue("皮肤：肤色为暖小麦肤色。");
+  fireEvent.click(screen.getByRole("button", { name: "应用配置" }));
+  expect(replaceWithText).toHaveBeenCalledWith("皮肤：肤色为暖小麦肤色。");
+});
+
+it("fills skin tone slots with tone vocabulary only", () => {
+  getPlatformReferenceLibrary.mockResolvedValueOnce({ resources: [] });
+  const { replaceWithText } = setup("", "肤色");
+  expect(screen.queryByRole("option", { name: /靛蓝色|配置面板/ })).not.toBeInTheDocument();
+  fireEvent.click(screen.getByRole("option", { name: /词条 · 古铜肤色/ }));
+  fireEvent.click(screen.getByRole("button", { name: "填写当前槽位" }));
+  expect(replaceWithText).toHaveBeenCalledWith("古铜肤色");
+});

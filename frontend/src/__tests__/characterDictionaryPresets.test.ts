@@ -1,7 +1,7 @@
 import { expect, it } from "vitest";
 import { CHARACTER_DICTIONARY_PRESETS, dictionaryPresetFields, renderDictionaryPreset } from "@/lib/characterDictionaryPresets";
 import { CLASSICAL_FOOTWEAR_STYLES } from "@/lib/classicalFootwearDictionary";
-import { dictionarySlotCategory } from "@/lib/characterDictionaryCategories";
+import { dictionarySlotCategory, localDictionaryCategories } from "@/lib/characterDictionaryCategories";
 
 it("routes clothing shapes, materials, ornament and condition to distinct fields", () => {
   const category = (label: string) => dictionarySlotCategory(label);
@@ -107,4 +107,21 @@ it("retains all supplied footwear directions and valid defaults in the shared se
   const text = renderDictionaryPreset(template, { "古装鞋履": "翘头履" });
   expect(text).toMatch(/\n鞋履：.*翘头/);
   expect(text).toContain("平底");
+});
+
+
+it("keeps skin tone slots separate from garment colors and skin texture", () => {
+  expect(dictionarySlotCategory("肤色")).toBe("skin-tone");
+  expect(localDictionaryCategories("character.skin.warm-light")).toEqual(["skin-tone"]);
+  expect(localDictionaryCategories("character.skin.pores")).toEqual(["skin"]);
+  expect(dictionarySlotCategory("肤质")).toBe("skin");
+  const panel = CHARACTER_DICTIONARY_PRESETS.find((entry) => entry.id === "dictionary.panel.skin")!;
+  const fields = dictionaryPresetFields(panel);
+  expect(fields.find((field) => field.key === "肤色")?.options).toContain("暖小麦肤色");
+  expect(fields.find((field) => field.key === "肤色")?.options).not.toContain("靛蓝色");
+  expect(fields.find((field) => field.key === "肤质")?.options).not.toContain("暖小麦肤色");
+  expect(fields.find((field) => field.key === "肤质")?.options).not.toContain("暖调浅肤色，自然肤质");
+  expect(renderDictionaryPreset(panel)).toBe("");
+  expect(renderDictionaryPreset(panel, { "肤色": "暖小麦肤色" })).toBe("皮肤：肤色为暖小麦肤色。");
+  expect(renderDictionaryPreset(panel, { "肤色": "[肤色]" })).toContain("[肤色]");
 });
