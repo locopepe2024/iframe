@@ -6,7 +6,7 @@ import { activeCameraAtFrame } from "../timeline/timeline-evaluation";
 import { projectDirectorShotPackage } from "./director-shot-package";
 import { recordWhiteModelVideo } from "./record-white-model-video";
 
-interface VideoResult { url: string; extension: "webm" | "mp4"; signature: string; snapshotId: string; }
+interface VideoResult { url: string; extension: "webm" | "mp4"; signature: string; snapshotId: string; packageChecksum: string; }
 
 function recordingSignature(state: ReturnType<typeof useWorkbenchStore.getState>): string {
   return JSON.stringify({
@@ -102,7 +102,7 @@ export function WhiteModelVideoRecorder({ recording, setRecording, stopPlayback 
       const url = URL.createObjectURL(video.blob);
       if (resultRef.current) URL.revokeObjectURL(resultRef.current);
       resultRef.current = url;
-      setResult({ url, extension: video.extension, signature, snapshotId: recordingSnapshotId(signature) });
+      setResult({ url, extension: video.extension, signature, snapshotId: recordingSnapshotId(signature), packageChecksum: first.packageChecksum });
       setReviewOpen(true);
     } catch (caught) {
       if (!controller.signal.aborted) setError(caught instanceof Error ? caught.message : "录制失败。");
@@ -121,7 +121,7 @@ export function WhiteModelVideoRecorder({ recording, setRecording, stopPlayback 
         : <button type="button" onClick={() => void start()}><Film size={16} aria-hidden="true"/>录制白模视频</button>}
       {result && <a href={result.url} download={`director-reference.${result.extension}`} title="下载白模参考视频"><Download size={16} aria-hidden="true"/>下载</a>}
       {result && <button type="button" onClick={() => setReviewOpen(true)}>查看视频</button>}
-      {result && <span>录制快照 {result.snapshotId}</span>}
+      {result && <span>录制快照 {result.snapshotId} · package {result.packageChecksum}</span>}
       {stale && <span role="status">当前导演设置已变化，视频为旧版本；请重新录制。</span>}
       {recording && <span role="status">录制中 · {progress} 帧</span>}
       {error && <span role="alert">{error}</span>}
