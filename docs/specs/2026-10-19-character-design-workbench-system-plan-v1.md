@@ -53,7 +53,7 @@
 
 每个词条至少有稳定 ID、revision、分类、目标字段、可编辑中文描述、同义检索词、来源、许可和审核状态。图像不是原子词条的必备条件；先用组合案例记录“词条 ID/revision 集合＋完整 Prompt＋模型／参数＋效果图媒体 ID＋人工评价”。当前三组古典角色图只作为待审核组合案例，不能作为已确认角色锚点。后续入库需核对生成记录、版权与可见效果。
 
-词典不能只建设脸、发型和服装。`martial-arts-director-cy` 的[专项评估](../research/2026-10-19-martial-arts-director-dictionary-review.md)显示，表演层还需要“体系 → 招式 → 可见姿态／重心／朝向 → 动作骨架”的词典，并与道具持用、分镜镜头调性分开。角色台在姿态／体态库任务中检索这些词；项目级面容字段不接收武术流派或招式。源 Skill 和模板存在白模默认值冲突，因此只吸收明确的词典结构，不整包接入自动规则。
+词典不能只建设脸、发型和服装。完整的[分层架构](2026-10-19-creative-dictionary-layered-architecture-v1.md)同时区分语义领域与内容粒度。`martial-arts-director-cy` 的[专项评估](../research/2026-10-19-martial-arts-director-dictionary-review.md)显示，表演层还需要“体系 → 招式 → 可见姿态／重心／朝向 → 动作骨架”的词典，并与道具持用、分镜镜头调性分开。角色台在姿态／体态库任务中检索这些词；项目级面容字段不接收武术流派或招式。源 Skill 和模板存在白模默认值冲突，因此只吸收明确的词典结构，不整包接入自动规则。
 
 词典质量分开记录：术语是否准确、描述是否可观察、与字段是否匹配、参考图是否兑现 Prompt、跨图是否保持身份。一次生成通过只证明该张图可用，不证明该词条具有稳定一致性。外部仓库与文章提供分类和工作流参考，具体条目按许可和来源逐项记录；不因仓库整体标注 MIT 就推断所有图片均可再分发。
 
@@ -128,3 +128,4 @@
 - `2026-10-19-classical-character-quick-library-slice-v1.md`：古典词条与三组样本的实际状态。
 - `2026-10-19-character-workbench-layout-v1.md`：大图与布局验收。
 - `../research/2026-10-19-martial-arts-director-dictionary-review.md`：武术词典和表演层的来源评估。
+- `2026-10-19-creative-dictionary-layered-architecture-v1.md`：跨工位词典领域、粒度、检索和迁移契约。
