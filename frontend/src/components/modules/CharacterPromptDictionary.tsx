@@ -42,7 +42,7 @@ export default function CharacterPromptDictionary({ suggestion, onClose, onApply
   const [previewUrl, setPreviewUrl] = useState("");
   const [active, setActive] = useState(0);
   const needle = suggestion.query.trim().toLocaleLowerCase();
-  const selectedFields = selected?.preset ? dictionaryPresetFields(selected.preset) : [];
+  const selectedFields = selected?.preset ? dictionaryPresetFields(selected.preset, fieldValues) : [];
   const fieldGroups = selected?.preset?.sections
     ? selected.preset.sections.map((section) => ({ label: section.label, fields: selectedFields.filter((field) => section.parts.some((part) => part.includes(`[${field.key}]`))) })).filter((group) => group.fields.length > 0)
     : [{ label: "选择细节，预览同步更新", fields: selectedFields }];
@@ -168,7 +168,14 @@ export default function CharacterPromptDictionary({ suggestion, onClose, onApply
         <legend className="mb-1 text-xs font-medium text-text-secondary">{group.label}</legend>
         {group.fields.map((field) => <label key={field.key} className="text-xs text-text-secondary">
           {field.label}<select aria-label={field.label} value={fieldValues[field.key] ?? field.value}
-            onChange={(event) => setFieldValues((values) => ({ ...values, [field.key]: event.target.value }))}
+            onChange={(event) => {
+              const value = event.target.value;
+              setFieldValues((values) => {
+                const next = { ...values, [field.key]: value };
+                for (const key of field.dependentKeys || []) delete next[key];
+                return next;
+              });
+            }}
             className="mt-1 min-h-11 w-full rounded border border-glass-border bg-surface px-2 text-sm text-foreground focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary">
             {dictionarySlotCategory(field.label) === "expression" ? <>
               {field.options.includes("") && <option value="">不指定</option>}

@@ -49,3 +49,11 @@ Implementation boundary: built-in dictionary presets and inline selection panel 
 - Expand inner garments, men's outer garments, women's upper garments/skirts, footwear, headwear, earrings, necklaces, wrist jewelry and waist pendants. Separate garment pattern/craft/scarf/trim from wearable jewelry.
 - Add structured sections for clothing, decoration, jewelry and condition. Optional fields expose “不指定”; omitted choices contribute no clause or empty section. Complete outfits retain coherent default core garments.
 - Validate selector separation, optional omission, labelled output, explicit upper-layer constraints, template defaults, UI preview/application and existing reference/slot behavior. Run focused tests, typecheck and production build. Tests do not establish historical accuracy or image-model compliance.
+
+## Follow-up: classical footwear
+
+Add a footwear category and `/鞋履` / `/鞋靴` / `/鞋子` / `/靴子` configuration route. Preserve user-supplied Chinese/English search descriptions for ten footwear directions (and separate straw shoes from cloth footwear). Configure footwear independently of clothing: shape, color, material, craft, motif, toe, sole, ornament and lining. Preview emits a dedicated footwear line.
+
+A selected footwear scheme initializes its own detail defaults; changing scheme clears the previous scheme's field overrides. Generated wording uses neutral shoe shape plus current fields so changing damask to leather does not leave a contradictory damask descriptor. Optional detail fields support omission. Outfit panels and classical complete presets share footwear controls. Deferred slots retain footwear-specific destinations. These are creative references; occupation/dynasty labels are search context, not compatibility guarantees.
+
+Verify bilingual lookup, all supplied directions, style-change defaults, independent garment/shoe fields, optional omission, neutral shape rendering and shared preset integration. No paid generation or historical validation.

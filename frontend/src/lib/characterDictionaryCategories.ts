@@ -9,7 +9,8 @@ export const CHARACTER_DICTIONARY_GROUPS = [
   { id: "style", label: "表现风格", children: [["render", "写实与绘画风格"], ["texture", "光影与质感"]] },
   { id: "setting", label: "时代与题材", children: [["era", "时代背景"], ["genre", "题材类型"]] },
   { id: "role", label: "角色定位", children: [["civilian-role", "日常身份"], ["jianghu-role", "江湖身份"]] },
-  { id: "clothing", label: "服装", children: [["clothing-panel", "穿搭选择面板"], ["classical-garment", "古装衣裙形制"], ["classical-male-outer", "古代男子外衣"], ["classical-female-upper", "古代女子上衣"], ["classical-inner", "古装里衣"], ["classical-skirt", "古装裙装"], ["classical-trousers", "古装裤装"], ["classical-shoes", "古装鞋履"], ["garment", "现代服装款式"], ["inner", "贴身里衣"], ["outer", "外衣"], ["bottoms", "下装"], ["scarf", "纱巾与披帛"], ["shoes", "鞋靴"], ["fit", "版型"], ["collar", "领口"], ["sleeve", "袖型"], ["clothing-detail", "廓形与细节"], ["material", "面料材质"], ["palette", "服装颜色"], ["accessory", "搭配单品"], ["layers", "衣层结构"]] },
+  { id: "clothing", label: "服装", children: [["clothing-panel", "穿搭选择面板"], ["classical-garment", "古装衣裙形制"], ["classical-male-outer", "古代男子外衣"], ["classical-female-upper", "古代女子上衣"], ["classical-inner", "古装里衣"], ["classical-skirt", "古装裙装"], ["classical-trousers", "古装裤装"], ["garment", "现代服装款式"], ["inner", "贴身里衣"], ["outer", "外衣"], ["bottoms", "下装"], ["scarf", "纱巾与披帛"], ["fit", "版型"], ["collar", "领口"], ["sleeve", "袖型"], ["clothing-detail", "廓形与细节"], ["material", "面料材质"], ["palette", "服装颜色"], ["accessory", "搭配单品"], ["layers", "衣层结构"]] },
+  { id: "footwear", label: "鞋履", children: [["footwear-panel", "鞋履选择面板"], ["classical-shoes", "古装鞋履"], ["shoes", "通用鞋靴"], ["shoe-color", "鞋履颜色"], ["shoe-material", "鞋履材质"], ["shoe-craft", "鞋履工艺"], ["shoe-pattern", "鞋履图案"], ["shoe-toe", "鞋头形状"], ["shoe-sole", "鞋底结构"], ["shoe-decoration", "鞋履装饰"], ["shoe-lining", "鞋履内衬"]] },
   { id: "look", label: "发型", children: [["hair", "发型描述"]] },
   { id: "expression", label: "表情", children: [["expression-basic", "基础微表情"], ["expression-happy", "开心与松弛"], ["expression-fear", "紧张与恐惧"], ["expression-sad", "悲伤与崩溃"], ["expression-angry", "愤怒与对抗"], ["expression-complex", "复杂情绪与转折"]] },
   { id: "jewelry", label: "首饰", children: [["hair-jewelry", "发簪与头饰"], ["body-jewelry", "通用佩饰"], ["ear-jewelry", "耳饰"], ["neck-jewelry", "颈饰与项链"], ["wrist-jewelry", "腕饰与手镯"], ["waist-jewelry", "腰佩与香囊"], ["jewelry-material", "首饰材质"]] },
@@ -63,6 +64,8 @@ export function dictionarySlotCategory(label: string | undefined): string | null
   if (/古装里衣款式/.test(label)) return "classical-inner";
   if (/古装裤装款式/.test(label)) return "classical-trousers";
   if (/古装裙装款式/.test(label)) return "classical-skirt";
+  const footwearFields: Record<string, string> = { "鞋履颜色": "shoe-color", "鞋履材质": "shoe-material", "鞋履工艺": "shoe-craft", "鞋履图案": "shoe-pattern", "鞋头形状": "shoe-toe", "鞋底结构": "shoe-sole", "鞋履装饰": "shoe-decoration", "鞋履内衬": "shoe-lining" };
+  if (footwearFields[label]) return footwearFields[label];
   if (/古装鞋履/.test(label)) return "classical-shoes";
   if (/角色定位|身份/.test(label)) return "role";
   if (/脸型/.test(label)) return "face-shape";

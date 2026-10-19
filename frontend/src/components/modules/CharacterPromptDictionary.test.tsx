@@ -265,3 +265,47 @@ it("selects multiple ancient jewelry pieces independently and omits cleared sect
   fireEvent.click(apply);
   expect(replaceWithText).toHaveBeenCalledWith("首饰：耳饰为珍珠耳饰。腕饰为玉镯。");
 });
+
+it("opens footwear schemes and clears the previous scheme's detail overrides when switching", () => {
+  getPlatformReferenceLibrary.mockResolvedValueOnce({ resources: [] });
+  const { replaceWithText } = setup("鞋履");
+  fireEvent.click(screen.getByRole("option", { name: /配置面板 · 古装鞋履选择面板/ }));
+  expect(screen.getByRole("combobox", { name: "鞋履材质" })).toHaveValue("缎面");
+  fireEvent.change(screen.getByRole("combobox", { name: "古装鞋履" }), { target: { value: "锦缎翘头靴" } });
+  expect(screen.getByRole("combobox", { name: "鞋履材质" })).toHaveValue("锦缎");
+  fireEvent.change(screen.getByRole("combobox", { name: "鞋履材质" }), { target: { value: "真皮" } });
+  fireEvent.change(screen.getByRole("combobox", { name: "鞋头形状" }), { target: { value: "方头" } });
+  const preview = screen.getByRole("textbox", { name: "将插入的完整文字" });
+  expect((preview as HTMLTextAreaElement).value).toContain("真皮");
+  expect((preview as HTMLTextAreaElement).value).not.toMatch(/锦缎|翘头/);
+  fireEvent.change(screen.getByRole("combobox", { name: "古装鞋履" }), { target: { value: "毛边雪地靴" } });
+  expect(screen.getByRole("combobox", { name: "鞋履材质" })).toHaveValue("厚皮革");
+  expect(screen.getByRole("combobox", { name: "鞋头形状" })).toHaveValue("");
+  expect((preview as HTMLTextAreaElement).value).toContain("白色毛边");
+  expect((preview as HTMLTextAreaElement).value).toContain("保暖毡衬");
+  expect((preview as HTMLTextAreaElement).value).not.toMatch(/锦缎|金丝|方头|真皮/);
+  expect(replaceWithText).not.toHaveBeenCalled();
+  fireEvent.click(screen.getByRole("button", { name: "应用配置" }));
+  expect(replaceWithText).toHaveBeenCalledWith((preview as HTMLTextAreaElement).value);
+});
+
+it("keeps footwear material separate from garment material in outfit configuration", () => {
+  getPlatformReferenceLibrary.mockResolvedValueOnce({ resources: [] });
+  setup("服装");
+  fireEvent.click(screen.getByRole("option", { name: /配置面板 · 古装衣裙搭配/ }));
+  fireEvent.change(screen.getByRole("combobox", { name: "古装鞋履" }), { target: { value: "云纹皂靴" } });
+  expect(screen.getByRole("combobox", { name: "面料" })).toHaveValue("丝绸");
+  expect(screen.getByRole("combobox", { name: "鞋履材质" })).toHaveValue("缎面");
+  fireEvent.change(screen.getByRole("combobox", { name: "鞋履材质" }), { target: { value: "真皮" } });
+  expect(screen.getByRole("combobox", { name: "面料" })).toHaveValue("丝绸");
+  const text = (screen.getByRole("textbox", { name: "将插入的完整文字" }) as HTMLTextAreaElement).value;
+  expect(text).toContain("丝绸立领长袄");
+  expect(text).toMatch(/\n鞋履：.*真皮/);
+});
+
+it("searches the supplied English footwear terms without matching unrelated material options", () => {
+  getPlatformReferenceLibrary.mockResolvedValueOnce({ resources: [] });
+  setup("genuine leather");
+  expect(screen.getByRole("option", { name: /词条 · 真皮/ })).toBeInTheDocument();
+  expect(screen.queryByRole("option", { name: /词条 · 丝绸/ })).not.toBeInTheDocument();
+});

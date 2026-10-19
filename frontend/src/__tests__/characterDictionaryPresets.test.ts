@@ -1,5 +1,6 @@
 import { expect, it } from "vitest";
 import { CHARACTER_DICTIONARY_PRESETS, dictionaryPresetFields, renderDictionaryPreset } from "@/lib/characterDictionaryPresets";
+import { CLASSICAL_FOOTWEAR_STYLES } from "@/lib/classicalFootwearDictionary";
 import { dictionarySlotCategory } from "@/lib/characterDictionaryCategories";
 
 it("routes clothing shapes, materials, ornament and condition to distinct fields", () => {
@@ -51,7 +52,7 @@ it("offers distinct classical men's and women's garments with optional decoratio
   expect(femaleFields.find((field) => field.label === "古装裙装款式")?.options).toContain("马面裙");
   expect(femaleFields.find((field) => field.label === "古装裙装款式")?.options).not.toContain("束脚长裤");
   const text = renderDictionaryPreset(female, { "花纹": "牡丹纹", "刺绣工艺": "金线刺绣", "头饰": "流苏步摇", "耳饰": "珍珠耳饰", "腕饰": "玉镯", "腰间佩饰": "玉佩" });
-  expect(text.split("\n").map((line) => line.split("：")[0])).toEqual(["服装", "装饰", "首饰"]);
+  expect(text.split("\n").map((line) => line.split("：")[0])).toEqual(["服装", "鞋履", "装饰", "首饰"]);
   expect(text).toContain("上身仅有里衣和外衣两件");
   expect(text).toContain("牡丹纹");
   expect(text).toContain("流苏步摇");
@@ -73,4 +74,37 @@ it("preserves garment direction when a field is deferred to a bracket slot", () 
   const text = renderDictionaryPreset(male, { "男装外衣款式": "[男装外衣款式]" });
   expect(text).toContain("[男装外衣款式]");
   expect(text).toContain("上身仅有里衣和外衣两件");
+});
+
+it("configures footwear independently of garments and replaces scheme defaults without stale material", () => {
+  const preset = CHARACTER_DICTIONARY_PRESETS.find((entry) => entry.id === "dictionary.panel.classical-footwear")!;
+  expect(preset).toBeDefined();
+  const silk = renderDictionaryPreset(preset, { "古装鞋履": "锦缎翘头靴" });
+  expect(silk).toContain("鞋履：");
+  expect(silk).toContain("锦缎");
+  expect(silk).toContain("金丝编织");
+  const leather = renderDictionaryPreset(preset, { "古装鞋履": "锦缎翘头靴", "鞋履材质": "真皮", "鞋履工艺": "" });
+  expect(leather).toContain("真皮");
+  expect(leather).not.toMatch(/锦缎|金丝编织/);
+  expect(dictionarySlotCategory("鞋履材质")).toBe("shoe-material");
+  expect(dictionarySlotCategory("鞋履图案")).toBe("shoe-pattern");
+  expect(dictionarySlotCategory("鞋头形状")).toBe("shoe-toe");
+});
+
+
+it("retains all supplied footwear directions and valid defaults in the shared selectors", () => {
+  const panel = CHARACTER_DICTIONARY_PRESETS.find((entry) => entry.id === "dictionary.panel.classical-footwear")!;
+  expect(CLASSICAL_FOOTWEAR_STYLES).toHaveLength(11);
+  for (const style of CLASSICAL_FOOTWEAR_STYLES) {
+    const values = { "古装鞋履": style.title };
+    const fields = dictionaryPresetFields(panel, values);
+    for (const [key, value] of Object.entries(style.defaults)) {
+      expect(fields.find((field) => field.key === key)?.value, `${style.title}: ${key}`).toBe(value);
+    }
+    expect(renderDictionaryPreset(panel, values)).not.toMatch(/\[|undefined|不指定/);
+  }
+  const template = CHARACTER_DICTIONARY_PRESETS.find((entry) => entry.id === "dictionary.template.classical-live-action")!;
+  const text = renderDictionaryPreset(template, { "古装鞋履": "翘头履" });
+  expect(text).toMatch(/\n鞋履：.*翘头/);
+  expect(text).toContain("平底");
 });

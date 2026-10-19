@@ -1,3 +1,4 @@
+import { CLASSICAL_FOOTWEAR_STYLES, CLASSICAL_FOOTWEAR_TERMS, CLASSICAL_FOOTWEAR_SECTION, FOOTWEAR_DETAIL_FIELDS } from "./classicalFootwearDictionary";
 /** Reusable descriptions, deliberately independent of generation model/style routes. */
 import { CHARACTER_DICTIONARY_GROUPS, dictionarySlotCategory, localDictionaryCategories } from "./characterDictionaryCategories";
 import { CHARACTER_QUICK_PRESETS } from "./characterQuickActions";
@@ -5,7 +6,7 @@ import { CLASSICAL_CHARACTER_TERMS, CLASSICAL_CHARACTER_TEMPLATES } from "./clas
 import { CLASSICAL_CHARACTER_PANELS, sectionedDictionaryPreset } from "./classicalCharacterPanels";
 import { CHARACTER_EXPRESSION_TERMS } from "./characterExpressionDictionary";
 export type DictionarySection = { label: string; parts: string[] };
-export type OutfitField = { key: string; label: string; value: string; options: readonly string[]; output?: Record<string, string> };
+export type OutfitField = { key: string; label: string; value: string; options: readonly string[]; output?: Record<string, string>; dependentKeys?: readonly string[] };
 export type CharacterDictionaryPreset = {
   id: string;
   title: string;
@@ -52,7 +53,7 @@ const configurationPanels: CharacterDictionaryPreset[] = [
 ];
 
 export function configurationQueryCategory(query: string): string | null {
-  const categories: Record<string, string> = { "服装": "clothing", "面容": "face", "面部": "face", "发型": "look", "首饰": "jewelry", "饰品": "jewelry", "装饰": "decoration", "体态": "posture", "新旧": "condition", "使用状态": "condition", "表情": "expression", "情绪": "expression" };
+  const categories: Record<string, string> = { "服装": "clothing", "鞋履": "footwear", "鞋靴": "footwear", "鞋子": "footwear", "靴子": "footwear", "面容": "face", "面部": "face", "发型": "look", "首饰": "jewelry", "饰品": "jewelry", "装饰": "decoration", "体态": "posture", "新旧": "condition", "使用状态": "condition", "表情": "expression", "情绪": "expression" };
   return categories[query.trim()] || null;
 }
 
@@ -79,7 +80,7 @@ function outfit(id: string, title: string, outer: string, lower: string, color: 
 }
 
 export function renderDictionaryPreset(preset: CharacterDictionaryPreset, values: Record<string, string> = {}): string {
-  const fields = dictionaryPresetFields(preset);
+  const fields = dictionaryPresetFields(preset, values);
   const fieldValue = (field: OutfitField) => values[field.key] !== undefined && field.options.includes(values[field.key]) ? values[field.key] : field.value;
   const substitute = (text: string) => text.replace(/\{(\w+)\}|\[([^\[\]\n]+)\]/g, (placeholder, key: string, label: string) => {
     const field = fields.find((item) => item.key === (key || label));
@@ -103,10 +104,13 @@ export function renderDictionaryPreset(preset: CharacterDictionaryPreset, values
 }
 
 /** Both reusable templates and Skill [slots] draw their choices from the dictionary. */
-export function dictionaryPresetFields(preset: CharacterDictionaryPreset): OutfitField[] {
+export function dictionaryPresetFields(preset: CharacterDictionaryPreset, values: Record<string, string> = {}): OutfitField[] {
   if (preset.fields) return preset.fields;
   if (preset.type !== "Prompt 模板" && preset.type !== "配置面板") return [];
   const defaults: Record<string, string> = { "角色定位": "行旅侠客", "外衣颜色": "靛蓝色", "下装颜色": "浅灰色", "外衣面料": "棉布", "表情": "平静克制", ...preset.defaults };
+  const shoeTitle = values["古装鞋履"] ?? preset.defaults?.["古装鞋履"];
+  const footwearStyle = CLASSICAL_FOOTWEAR_STYLES.find((style) => style.title === shoeTitle);
+  Object.assign(defaults, footwearStyle?.defaults);
   return Array.from(new Set(Array.from(preset.text.matchAll(/\[([^\[\]\n]+)\]/g), (match) => match[1])))
     .map((label) => {
       const category = preset.fieldCategories?.[label] || dictionarySlotCategory(label);
@@ -119,26 +123,37 @@ export function dictionaryPresetFields(preset: CharacterDictionaryPreset): Outfi
       ]));
       const output = Object.fromEntries(terms.map((item) => [item.title, item.slotValue || item.title]));
       const optional = preset.optionalFields?.includes(label);
-      const defaultValue = optional ? preset.defaults?.[label] : defaults[label];
-      return { key: label, label, value: defaultValue !== undefined && options.includes(defaultValue) ? defaultValue : optional ? "" : options[0] || `[${label}]`, options: [...(optional ? [""] : []), ...options, `[${label}]`], output };
+      const defaultValue = optional ? footwearStyle?.defaults[label] ?? preset.defaults?.[label] : defaults[label];
+      if (label === "古装鞋履") for (const style of CLASSICAL_FOOTWEAR_STYLES) output[style.title] = style.shape;
+      return { key: label, label, value: defaultValue !== undefined && options.includes(defaultValue) ? defaultValue : optional ? "" : options[0] || `[${label}]`, options: [...(optional ? [""] : []), ...options, `[${label}]`], output, dependentKeys: label === "古装鞋履" ? FOOTWEAR_DETAIL_FIELDS : undefined };
     });
+}
+
+function classicalBaseTemplate(id: string, title: string, style: string): CharacterDictionaryPreset {
+  return sectionedDictionaryPreset({
+    id: `dictionary.template.${id}`, title, type: "Prompt 模板", categories: ["classical-template"], domain: "完整 Prompt", source,
+    search: `古装 古风 武侠 完整 prompt 模板 人物 角色 ${title}`,
+    optionalFields: [...FOOTWEAR_DETAIL_FIELDS],
+    sections: [
+      { label: "角色身份", parts: ["一位成年[角色定位]，古风创作设定。"] },
+      { label: "表现风格", parts: [style] },
+      { label: "面容", parts: ["人物为[脸型]，眉形为[眉形]，眼型为[眼型]。"] },
+      { label: "发型", parts: ["[发型]。"] },
+      { label: "服装", parts: ["上身穿两件衣物：[里衣颜色]贴身里衣一件，外穿[外衣颜色][外衣面料]窄袖交领长袍一件，领口仅露出一道里衣领缘。下穿[下装颜色]长裤，腰束窄布带。无额外中衣、披风、护甲或装饰性叠领。"] },
+      CLASSICAL_FOOTWEAR_SECTION,
+      { label: "构图与背景", parts: ["人物自然站立，简洁浅色背景，全身服装与鞋履完整可见，布料具有可信的重量和自然褶皱。"] },
+    ],
+  });
 }
 
 export const CHARACTER_DICTIONARY_PRESETS: CharacterDictionaryPreset[] = [
   ...configurationPanels,
   ...CLASSICAL_CHARACTER_TERMS,
+  ...CLASSICAL_FOOTWEAR_TERMS,
   ...CLASSICAL_CHARACTER_TEMPLATES,
   ...CHARACTER_EXPRESSION_TERMS,
-  {
-    id: "dictionary.template.classical-live-action", title: "写实真人古装", type: "Prompt 模板", categories: ["classical-template"], domain: "完整 Prompt", source,
-    search: "古装 古风 武侠 写实 真人 完整 prompt 模板 人物 角色",
-    text: "角色身份：一位成年[角色定位]，古风创作设定。\n表现风格：写实真人影像风格，人体比例自然，皮肤保留真实纹理，光影自然克制。\n面容：人物为[脸型]，眉形为[眉形]，眼型为[眼型]。\n发型：[发型]。\n服装：上身穿两件衣物：[里衣颜色]贴身里衣一件，外穿[外衣颜色][外衣面料]窄袖交领长袍一件，领口仅露出一道里衣领缘。下穿[下装颜色]长裤，脚穿[鞋靴]，腰束窄布带。无额外中衣、披风、护甲或装饰性叠领。\n构图与背景：人物自然站立，简洁浅色背景，全身服装完整可见，布料具有可信的重量和自然褶皱。",
-  },
-  {
-    id: "dictionary.template.classical-donghua", title: "二次元国漫古装", type: "Prompt 模板", categories: ["classical-template"], domain: "完整 Prompt", source,
-    search: "古装 古风 武侠 二次元 国漫 动漫 完整 prompt 模板 人物 角色",
-    text: "角色身份：一位成年[角色定位]，古风创作设定。\n表现风格：二次元国漫风格，二维手绘线条清晰，赛璐璐明暗分区明确，色块干净，人物比例与五官造型统一。\n面容：人物为[脸型]，眉形为[眉形]，眼型为[眼型]。\n发型：[发型]。\n服装：上身穿两件衣物：[里衣颜色]贴身里衣一件，外穿[外衣颜色][外衣面料]窄袖交领长袍一件，领口仅露出一道里衣领缘。下穿[下装颜色]长裤，脚穿[鞋靴]，腰束窄布带。无额外中衣、披风、护甲或装饰性叠领。\n构图与背景：人物自然站立，简洁浅色背景，全身服装完整可见，衣片连接和穿着关系清楚。",
-  },
+  classicalBaseTemplate("classical-live-action", "写实真人古装", "写实真人影像风格，人体比例自然，皮肤保留真实纹理，光影自然克制。"),
+  classicalBaseTemplate("classical-donghua", "二次元国漫古装", "二次元国漫风格，二维手绘线条清晰，赛璐璐明暗分区明确，色块干净，人物比例与五官造型统一。"),
   {
     id: "dictionary.template.modern-fashion", title: "写实现代女装展示", type: "Prompt 模板", categories: ["modern-template"], domain: "完整 Prompt", source,
     search: "现代 女装 电商 商品 模特 写实 真人 完整 prompt 模板",
