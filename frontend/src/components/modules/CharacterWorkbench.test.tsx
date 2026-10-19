@@ -86,7 +86,11 @@ it("applies platform terms only to the selected identity field draft", () => {
         onGenerate={onGenerate} generatingTypes={[]} />);
 
     fireEvent.click(screen.getByRole("button", { name: "展开角色设计" }));
-    fireEvent.change(screen.getByRole("combobox", { name: "/ Skill 与快捷描述词" }), { target: { value: "/窄长椭圆脸" } });
+    const search = screen.getByRole("combobox", { name: "/ 角色操作" });
+    fireEvent.change(search, { target: { value: "/" } });
+    expect(screen.queryByRole("option", { name: /窄长椭圆脸/ })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("option", { name: /插入描述词/ }));
+    fireEvent.change(search, { target: { value: "/窄长椭圆脸" } });
     fireEvent.click(screen.getByRole("option", { name: /窄长椭圆脸/ }));
     fireEvent.click(screen.getByText(/身份外观字段/));
     expect(screen.getByRole("textbox", { name: "角色脸型与眉眼" })).toHaveValue("窄长椭圆脸");
@@ -105,7 +109,9 @@ it("browses classical character terms by category and keeps selection in the edi
 
     fireEvent.click(screen.getByRole("button", { name: "展开角色设计" }));
     fireEvent.click(screen.getByRole("button", { name: "打开快捷面板" }));
-    const categories = screen.getByRole("navigation", { name: "角色快捷分类" });
+    expect(screen.getByRole("option", { name: /插入描述词/ })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("option", { name: /插入描述词/ }));
+    const categories = screen.getByRole("navigation", { name: "角色描述词分类" });
     fireEvent.click(within(categories).getByRole("button", { name: "发型" }));
     expect(screen.getByRole("option", { name: /长发高束/ })).toBeInTheDocument();
     expect(screen.queryByRole("option", { name: /交领长衣/ })).not.toBeInTheDocument();
@@ -116,7 +122,7 @@ it("browses classical character terms by category and keeps selection in the edi
     expect(apiMocks.agentRequest.mock.calls.some(([path]) => path === "/character-design/draft")).toBe(false);
 });
 
-it("keeps slash presets editable and saves their exact field and source", async () => {
+it("keeps inserted terms editable and saves their exact field and source", async () => {
     apiMocks.getAssetReferenceIndex.mockResolvedValueOnce({ assets: [] } as any);
     const onUpdateAttributes = vi.fn().mockResolvedValue(undefined);
     apiMocks.agentRequest.mockClear();
@@ -125,11 +131,15 @@ it("keeps slash presets editable and saves their exact field and source", async 
         onGenerate={vi.fn()} generatingTypes={[]} />);
 
     fireEvent.click(screen.getByRole("button", { name: "展开角色设计" }));
-    const search = screen.getByRole("combobox", { name: "/ Skill 与快捷描述词" });
+    const search = screen.getByRole("combobox", { name: "/ 角色操作" });
+    fireEvent.change(search, { target: { value: "/" } });
+    fireEvent.click(screen.getByRole("option", { name: /插入描述词/ }));
     fireEvent.change(search, { target: { value: "/水墨晕染" } });
     fireEvent.click(screen.getByRole("option", { name: /水墨晕染层次/ }));
     expect(screen.getByRole("textbox", { name: "局部风格描述" })).toHaveValue("水墨晕染层次，保留人物清晰轮廓");
 
+    fireEvent.change(search, { target: { value: "/" } });
+    fireEvent.click(screen.getByRole("option", { name: /插入描述词/ }));
     fireEvent.change(search, { target: { value: "/亚麻纹理" } });
     fireEvent.click(screen.getByRole("option", { name: /亚麻纹理清晰/ }));
     fireEvent.click(screen.getByText(/造型字段/));
@@ -159,7 +169,7 @@ it("opens the existing two-skill review from slash without calling the model", a
     render(<CharacterWorkbench asset={{ id: "character-1", name: "苏砚", description: "少年剑客" }}
         onClose={vi.fn()} onUpdateDescription={vi.fn()} onGenerate={vi.fn()} generatingTypes={[]} />);
     fireEvent.click(screen.getByRole("button", { name: "展开角色设计" }));
-    const search = screen.getByRole("combobox", { name: "/ Skill 与快捷描述词" });
+    const search = screen.getByRole("combobox", { name: "/ 角色操作" });
     fireEvent.change(search, { target: { value: "/角色设计" } });
     await waitFor(() => expect(screen.getByRole("option", { name: /生成角色视觉设计草稿/ })).not.toBeDisabled());
     fireEvent.click(screen.getByRole("option", { name: /生成角色视觉设计草稿/ }));
