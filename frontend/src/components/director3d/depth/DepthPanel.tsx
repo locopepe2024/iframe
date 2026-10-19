@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { directorDepthApi, type DepthTask } from '@/lib/directorDepth';
 import { captureDepthSnapshot } from '../state/depth-snapshot';
 import { useWorkbenchStore } from '../state/workbench-store';
-import { projectDirectorShotPackage } from '../reference/director-shot-package';
+import { currentDirectorShotPackage } from '../reference/current-shot-package';
 
 export function DepthPanel() {
   const [near, setNear] = useState(0.5);
@@ -13,19 +13,7 @@ export function DepthPanel() {
   const [submitting, setSubmitting] = useState(false);
   const [preview, setPreview] = useState('');
   const mounted = useRef(true);
-  const currentPackageChecksum = useWorkbenchStore((state) => projectDirectorShotPackage({
-    frame: state.playheadFrame,
-    durationSeconds: state.dialogueTimeline.durationSeconds,
-    fps: state.dialogueTimeline.fps,
-    tracks: state.dialogueTimeline.tracks,
-    activeCameraTrackId: state.dialogueTimeline.activeCameraTrackId,
-    selectedCameraId: state.selectedCameraId,
-    characters: state.characters,
-    cameras: state.cameras,
-    sceneObjects: state.sceneObjects,
-    actorPaths: state.actorPaths,
-    cameraPaths: state.cameraPaths,
-  }).packageChecksum);
+  const currentPackageChecksum = useWorkbenchStore((state) => currentDirectorShotPackage(state).packageChecksum);
   useEffect(() => {
     mounted.current = true;
     void Promise.all([directorDepthApi.capability(), directorDepthApi.list()]).then(([capability, tasks]) => {
