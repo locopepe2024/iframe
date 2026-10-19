@@ -190,6 +190,15 @@ class PlaygroundService:
         model_lower = gen.model_id.lower()
         failures = []
 
+        # GreenA's Seedream route is image-only.  Reject a stale or malformed
+        # video request before it can fall through to Wanx/DashScope, where the
+        # resulting error misleadingly asks for DASHSCOPE_API_KEY.
+        from ...models.nsfw_new_one import SEEDREAM_IDS
+        if gen.model_id in SEEDREAM_IDS:
+            raise ValueError(
+                "GreenA Seedream 5.0 Pro is image-only; choose t2i or i2i instead of a video mode"
+            )
+
         for idx in range(gen.batch_size):
             ext = "jpg" if gen.model_id in {"nsfw/seedream_5.0Pro_nsfw", "uniart/seedream_5.0Pro_nsfw"} else "png"
             out_filename = f"{gen.mode.value}_{gen.id}_{idx}.{ext}"
@@ -293,6 +302,14 @@ class PlaygroundService:
 
         model_lower = gen.model_id.lower()
         failures = []
+
+        # GreenA Seedream is image-only. Reject stale/malformed video jobs
+        # before they fall through to the DashScope Wanx adapter.
+        from ...models.nsfw_new_one import SEEDREAM_IDS
+        if gen.model_id in SEEDREAM_IDS:
+            raise ValueError(
+                "GreenA Seedream 5.0 Pro is image-only; choose t2i or i2i instead of a video mode"
+            )
 
         for idx in range(gen.batch_size):
             out_filename = f"{gen.mode.value}_{gen.id}_{idx}.mp4"

@@ -56,3 +56,12 @@ def test_agent_wan_rejects_video_reference_before_submission(monkeypatch, tmp_pa
     with pytest.raises(RuntimeError, match="image references only"):
         service._process_video_generation(gen)
     adapter.generate.assert_not_called()
+
+
+def test_seedream_video_request_is_rejected_before_dashscope_fallback(tmp_path):
+    storage = Mock(output_dir=str(tmp_path))
+    service = PlaygroundService(storage)
+    gen = generation(model="nsfw/seedream_5.0Pro_nsfw")
+
+    with pytest.raises(ValueError, match="image-only"):
+        service._process_video_generation(gen)
