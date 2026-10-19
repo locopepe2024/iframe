@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useMemo, useRef, useId, useCallback } from "react";
+import { useState, useEffect, useMemo, useRef, useId, useCallback, type KeyboardEvent } from "react";
 import { useTranslations } from "next-intl";
 import { motion, AnimatePresence } from "framer-motion";
 import { X, RefreshCw, Check, Image as ImageIcon, Lock, ChevronRight, ChevronDown, Video, PanelLeft, Sparkles, Search } from "lucide-react";
@@ -33,22 +33,8 @@ import ReferencePromptEditor, {
 import { searchReferenceCandidates } from "@/lib/referenceCandidateSearch";
 import { IDENTITY_FIELDS, LOOK_FIELDS, characterSectionText, normalizeCharacterFeatures,
     requirementNeedsReview, type IdentityFeatures, type LookFeatures } from "@/lib/characterStructuredDesign";
-import { AVATAR_FEATURE_LIBRARY, type AvatarFeatureOption } from "@/lib/avatarFeatureLibrary";
-
-const PLATFORM_IDENTITY_TERMS: Partial<Record<keyof IdentityFeatures, string[]>> = {
-    face: ["face", "eye_shape", "brow_shape", "nose_shape", "lip_shape"],
-    hair: ["base_hair"],
-    skin: ["skin"],
-    build: ["body"],
-    recognition_marks: ["facial_mark"],
-};
-
-function termSource(option: AvatarFeatureOption): string {
-    const provenance = option.provenance;
-    if (!provenance) return "平台基础词条";
-    const status = provenance.reviewStatus === "internal_test_only" ? "内部测试" : provenance.reviewStatus === "needs_verification" ? "待核验" : "已核验";
-    return [status, provenance.license, provenance.sourceRepo, provenance.sourcePath].filter(Boolean).join(" · ");
-}
+import { type CharacterQuickPreset, type CharacterPresetTarget } from "@/lib/characterQuickActions";
+import CharacterSlashPanel from "./CharacterSlashPanel";
 
 import type { AssetPlanEntry } from "@/lib/episodeAssetPlan";
 import EpisodeAssetPlanPanel from "./EpisodeAssetPlanPanel";
@@ -56,6 +42,7 @@ import AssetNameEditor from "@/components/common/AssetNameEditor";
 
 type DesignDraft = {
     route?: string;
+    style_notes?: string;
     age_stage?: string;
     identity?: Record<string, unknown> & { basis?: DesignBasis[]; features?: IdentityFeatures };
     look?: Record<string, unknown> & { basis?: DesignBasis[]; features?: LookFeatures };
@@ -68,7 +55,16 @@ type DesignDraft = {
     field_status?: Record<string, "stated" | "inferred" | "default" | "creative-choice">;
     skill_id?: string;
     skill_revision?: string;
+    preset_selections?: CharacterPresetSelection[];
     confirmed?: boolean;
+};
+
+type CharacterPresetSelection = {
+    preset_id: string;
+    revision: string;
+    applied_target: CharacterPresetTarget | "identity_notes" | "look_notes";
+    value: string;
+    source: string;
 };
 
 type DesignBasis = "script_fact" | "user_specified" | "confirmed_design" | "verified_reference" | "creative_choice";
@@ -117,7 +113,7 @@ function confirmedDesignDescription(design: DesignDraft | undefined): string {
             IDENTITY_FIELDS.map(([key]) => key), design?.identity?.visual_notes),
         characterSectionText(normalizeCharacterFeatures(design?.look?.features, LOOK_FIELDS.map(([key]) => key)),
             LOOK_FIELDS.map(([key]) => key), design?.look?.visual_notes),
-        [...answers, ...designScopeDescription(design?.route, design?.age_stage)],
+        [...answers, ...designScopeDescription(design?.route, design?.age_stage), design?.style_notes || ""],
     );
 }
 
@@ -337,6 +333,7 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
     const [showProfile, setShowProfile] = useState(false);
     const savedDesign = (asset.character_design?.design_draft || {}) as DesignDraft;
     const [designRoute, setDesignRoute] = useState(savedDesign.route || "realistic-modern");
+    const [styleNotes, setStyleNotes] = useState(savedDesign.style_notes || "");
     const [designAgeStage, setDesignAgeStage] = useState(savedDesign.age_stage || "");
     const [designNotes, setDesignNotes] = useState(String(savedDesign.identity?.visual_notes || ""));
     const [lookNotes, setLookNotes] = useState(String(savedDesign.look?.visual_notes || ""));
@@ -344,6 +341,10 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
         normalizeCharacterFeatures(savedDesign.identity?.features, IDENTITY_FIELDS.map(([key]) => key)));
     const [lookFeatures, setLookFeatures] = useState<LookFeatures>(
         normalizeCharacterFeatures(savedDesign.look?.features, LOOK_FIELDS.map(([key]) => key)));
+    const [presetSelections, setPresetSelections] = useState<CharacterPresetSelection[]>(savedDesign.preset_selections || []);
+    const [slashOpen, setSlashOpen] = useState(false);
+    const [slashQuery, setSlashQuery] = useState("");
+    const slashInputRef = useRef<HTMLInputElement>(null);
     const [userVisualRequirements, setUserVisualRequirements] = useState({
         identity: savedDesign.user_visual_requirements?.identity || "",
         look: savedDesign.user_visual_requirements?.look || "",
@@ -412,6 +413,54 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
         headshot: "text",
     });
     const [pendingImageReview, setPendingImageReview] = useState<AssetImageReviewRequest | null>(null);
+
+    const clearPresetTarget = (target: CharacterPresetSelection["applied_target"]) => {
+        setPresetSelections((current) => current.filter((item) => item.applied_target !== target));
+    };
+    const appendPresetText = (current: string | undefined, value: string) => {
+        const text = (current || "").trim();
+        return text.split("；").some((part) => part.trim() === value) ? text : [text, value].filter(Boolean).join("；");
+    };
+    const applyQuickPreset = (preset: CharacterQuickPreset) => {
+        let appliedTarget: CharacterPresetSelection["applied_target"] = preset.target;
+        if (preset.target === "route") {
+            setDesignRoute(preset.value);
+        } else if (preset.target === "style_notes") {
+            setStyleNotes((current) => appendPresetText(current, preset.value));
+        } else if (preset.target === "clothing") {
+            if (lookNotes.trim() && !Object.values(lookFeatures).some((value) => value?.trim())) {
+                appliedTarget = "look_notes";
+                setLookNotes((current) => appendPresetText(current, preset.value));
+                setUserVisualRequirements((current) => ({ ...current, look: appendPresetText(current.look, preset.value) }));
+            } else setLookFeatures((current) => ({ ...current, clothing: appendPresetText(current.clothing, preset.value) }));
+            setDesignLookBasis(["user_specified"]);
+        } else {
+            const identityTarget = preset.target;
+            if (designNotes.trim() && !Object.values(identityFeatures).some((value) => value?.trim())) {
+                appliedTarget = "identity_notes";
+                setDesignNotes((current) => appendPresetText(current, preset.value));
+                setUserVisualRequirements((current) => ({ ...current, identity: appendPresetText(current.identity, preset.value) }));
+            } else setIdentityFeatures((current) => ({ ...current, [identityTarget]: appendPresetText(current[identityTarget], preset.value) }));
+            setDesignIdentityBasis(["user_specified"]);
+            setDesignSource("stated");
+        }
+        setPresetSelections((current) => [
+            ...current.filter((item) => item.preset_id !== preset.id && !(preset.target === "route" && item.applied_target === "route")),
+            { preset_id: preset.id, revision: preset.revision, applied_target: appliedTarget, value: preset.value, source: preset.source },
+        ]);
+        setDesignStatus("draft");
+        setPromptsNeedDesignApply(true);
+    };
+    const openSlashFromField = (event: KeyboardEvent<HTMLTextAreaElement>) => {
+        if (event.nativeEvent.isComposing || event.key !== "/") return;
+        const field = event.currentTarget;
+        const at = field.selectionStart;
+        if (at !== field.selectionEnd || (at > 0 && !/\s/.test(field.value[at - 1]))) return;
+        event.preventDefault();
+        setSlashQuery("/");
+        setSlashOpen(true);
+        slashInputRef.current?.focus();
+    };
 
     useEffect(() => {
         let active = true;
@@ -638,7 +687,7 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
     const currentDesignDescription = designPromptDescription(
         projectedIdentity,
         projectedLook,
-        [...Object.values(designFieldAnswers), ...designScopeDescription(designRoute, designAgeStage)],
+        [...Object.values(designFieldAnswers), ...designScopeDescription(designRoute, designAgeStage), styleNotes],
     );
 
     const applyDesignToPrompts = () => {
@@ -660,7 +709,7 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
         user_answers: Object.fromEntries(Object.entries(designFieldAnswers).filter(([, answer]) => answer.trim())),
         route: designRoute,
         age_stage: designAgeStage,
-        style: stylePrompt,
+        style: [stylePrompt, styleNotes].filter(Boolean).join("；"),
         confirmed_design: confirmedDesignDescription(asset.character_design?.design_revisions?.at(-1)?.design),
     };
     const characterDesignSource = JSON.stringify(characterDesignRequest);
@@ -676,10 +725,11 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
         try {
             const source = characterDesignSource;
             const preview = await agentRequest<{ messages: VideoPolishMessages; media: { label: string; url: string }[];
-                review_token: string; format_note: string }>("/character-design/draft/preview", "POST", characterDesignRequest);
+                review_token: string; format_note: string; identity_skill_revision?: string; route_skill_revision?: string }>("/character-design/draft/preview", "POST", characterDesignRequest);
             if (characterDesignSourceRef.current === source) setDesignReview({
                 source, request: characterDesignRequest, messages: preview.messages, media: preview.media,
-                reviewToken: preview.review_token, formatNote: preview.format_note,
+                reviewToken: preview.review_token,
+                formatNote: `${preview.format_note} · Skill：character-identity-design${preview.identity_skill_revision ? ` r${preview.identity_skill_revision}` : ""} + character-style-routes${preview.route_skill_revision ? ` r${preview.route_skill_revision}` : ""}`,
             });
         } catch (error) {
             setDesignError(error instanceof Error ? error.message : "预览角色设计输入失败，请重试。");
@@ -719,6 +769,7 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
             setLookNotes(nextLook);
             setIdentityFeatures(nextIdentityFeatures);
             setLookFeatures(nextLookFeatures);
+            setPresetSelections((current) => current.filter((item) => ["route", "style_notes"].includes(item.applied_target)));
             setDesignIdentityBasis(userVisualRequirements.identity.trim()
                 ? Array.from(new Set([...normalizeDesignBasis(result.identity.basis), "user_specified" as const]))
                 : normalizeDesignBasis(result.identity.basis));
@@ -760,6 +811,7 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
         const unanswered = designUnresolved.filter((question) => !designFieldAnswers[question]?.trim());
         const draft: DesignDraft = {
             route: designRoute,
+            style_notes: styleNotes || undefined,
             age_stage: designAgeStage || undefined,
             identity: { visual_notes: designNotes || undefined, features: identityFeatures, basis: designIdentityBasis },
             look: { route: designRoute, visual_notes: lookNotes || undefined, features: lookFeatures, basis: designLookBasis },
@@ -772,6 +824,7 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
             field_status: { route: "stated", age_stage: designAgeStage ? "stated" : "default", visual_notes: designNotes ? designSource : "default" },
             skill_id: "character-style-routes",
             skill_revision: designSkillRevision || undefined,
+            preset_selections: presetSelections,
             confirmed,
         };
         setSavingDesign(true);
@@ -1092,13 +1145,26 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
                                 </span>
                             </div>
                             <p className="mt-1 text-xs leading-5 text-text-muted">AI 会补全可创作的外观与造型细节，并标明创意选择；只有影响角色设定的关键歧义才需要核对。</p>
+                            <CharacterSlashPanel open={slashOpen} query={slashQuery} onQueryChange={setSlashQuery}
+                                onOpenChange={setSlashOpen} onPreset={applyQuickPreset}
+                                onSkill={() => void generateDesignDraft()}
+                                canRunSkill={!!designModel && !!asset.description && !designing} inputRef={slashInputRef} />
+                            {presetSelections.length > 0 && <div className="mt-2 rounded border border-primary/30 bg-primary/5 p-2 text-[11px] text-text-secondary" aria-label="已选择的快捷描述词">
+                                <p className="font-medium text-foreground">已填入草稿 · 保存前可编辑</p>
+                                {presetSelections.map((item) => <p key={item.preset_id} className="mt-1 break-words">{item.applied_target}：{item.value} · {item.source} · v{item.revision}</p>)}
+                            </div>}
                             <label className="mt-3 block text-xs text-text-secondary" htmlFor="character-style-route">题材 / 画风</label>
-                            <select id="character-style-route" value={designRoute} onChange={(event) => { setDesignRoute(event.target.value); setDesignStatus("draft"); setPromptsNeedDesignApply(true); }} className="mt-1 h-10 w-full rounded-md border border-glass-border bg-surface px-2 text-sm text-foreground focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary">
+                            <select id="character-style-route" value={designRoute} onChange={(event) => { setDesignRoute(event.target.value); clearPresetTarget("route"); setDesignStatus("draft"); setPromptsNeedDesignApply(true); }} className="mt-1 h-10 w-full rounded-md border border-glass-border bg-surface px-2 text-sm text-foreground focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary">
                                 <option value="realistic-modern">真人现代</option>
                                 <option value="historical-costume">古装 / 武侠</option>
                                 <option value="xianxia-fantasy">修仙 / 仙侠</option>
                                 <option value="anime-stylized">动漫 / 国漫</option>
                             </select>
+                            <label className="mt-3 block text-xs text-text-secondary" htmlFor="character-style-notes">局部风格描述</label>
+                            <textarea id="character-style-notes" aria-label="局部风格描述" value={styleNotes}
+                                onChange={(event) => { setStyleNotes(event.target.value); clearPresetTarget("style_notes"); setDesignStatus("draft"); setPromptsNeedDesignApply(true); }}
+                                onKeyDown={openSlashFromField} rows={2} maxLength={1000} placeholder="可用 / 选择风格词条；仅作用于当前角色，不修改项目风格。"
+                                className="mt-1 w-full resize-y rounded-md border border-glass-border bg-surface px-3 py-2 text-sm text-foreground placeholder:text-text-muted focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary" />
                             <label className="mt-3 block text-xs text-text-secondary" htmlFor="character-age-stage">年龄阶段</label>
                             <select id="character-age-stage" value={designAgeStage} onChange={(event) => { setDesignAgeStage(event.target.value); setDesignStatus("draft"); setPromptsNeedDesignApply(true); }} className="mt-1 h-10 w-full rounded-md border border-glass-border bg-surface px-2 text-sm text-foreground focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary">
                                 <option value="">未指定</option>
@@ -1110,24 +1176,19 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
                             </select>
                             <details className="mt-4 rounded-md border border-glass-border bg-surface/60 p-3">
                                 <summary className="cursor-pointer text-xs font-medium text-foreground">身份外观字段 · {Object.values(identityFeatures).filter((value) => value?.trim()).length} 项已填</summary>
-                                <p className="mt-1 text-[11px] leading-4 text-text-muted">这些字段优先编入角色图片提示词；留空的内容不会由系统补写。</p>
+                                <p className="mt-1 text-[11px] leading-4 text-text-muted">这些字段优先编入角色图片提示词；输入 / 可搜索平台词条。</p>
                                 <div className="mt-2 space-y-2">
                                     {IDENTITY_FIELDS.map(([key, label]) => <div key={key}>
                                         <label className="block text-xs text-text-secondary" htmlFor={`character-identity-${key}`}>{label}</label>
                                         <textarea id={`character-identity-${key}`} aria-label={`角色${label}`} value={identityFeatures[key] || ""} maxLength={500} rows={2}
-                                            onChange={(event) => { setIdentityFeatures((current) => ({ ...current, [key]: event.target.value })); setDesignIdentityBasis(["user_specified"]); setDesignSource("stated"); setDesignStatus("draft"); setPromptsNeedDesignApply(true); }}
+                                            onChange={(event) => { setIdentityFeatures((current) => ({ ...current, [key]: event.target.value })); clearPresetTarget(key); setDesignIdentityBasis(["user_specified"]); setDesignSource("stated"); setDesignStatus("draft"); setPromptsNeedDesignApply(true); }}
+                                            onKeyDown={openSlashFromField}
                                             className="mt-1 w-full resize-y rounded border border-glass-border bg-surface px-2 py-1.5 text-xs text-foreground" />
-                                        <span className="mt-1 flex flex-wrap gap-1" aria-label={`${label}平台词条`}>
-                                            {(PLATFORM_IDENTITY_TERMS[key] || []).flatMap((category) => (AVATAR_FEATURE_LIBRARY[category] || []).map((option) => ({ category, option }))).map(({ category, option }) => <button
-                                                key={`${category}-${option.id}`} type="button" title={termSource(option)}
-                                                onClick={() => { setIdentityFeatures((current) => ({ ...current, [key]: [current[key]?.trim(), option.zh].filter(Boolean).join("；") })); setDesignIdentityBasis(["user_specified"]); setDesignSource("stated"); setDesignStatus("draft"); setPromptsNeedDesignApply(true); }}
-                                                className="rounded border border-glass-border px-2 py-1 text-[11px] text-text-secondary hover:border-primary hover:text-foreground focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary">{option.zh}{option.provenance?.reviewStatus === "internal_test_only" && <span className="ml-1 text-text-muted">内部测试</span>}</button>)}
-                                        </span>
                                     </div>)}
                                 </div>
                             </details>
                             <label className="mt-3 block text-xs text-text-secondary" htmlFor="character-visual-notes">身份视觉值</label>
-                            <textarea id="character-visual-notes" value={designNotes} onChange={(event) => { setDesignNotes(event.target.value); setIdentityFeatures({}); setUserVisualRequirements(current => ({ ...current, identity: event.target.value })); setDesignIdentityBasis(["user_specified"]); setDesignSource("stated"); setDesignStatus("draft"); setPromptsNeedDesignApply(true); }} placeholder="可先写年龄感、面容、体态等要求；留空由 AI 设计。" rows={4} className="mt-1 w-full resize-y rounded-md border border-glass-border bg-surface px-3 py-2 text-sm leading-5 text-foreground placeholder:text-text-muted focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary" />
+                            <textarea id="character-visual-notes" value={designNotes} onChange={(event) => { setDesignNotes(event.target.value); setIdentityFeatures({}); setPresetSelections((current) => current.filter((item) => !["face", "hair", "skin", "build", "identity_notes"].includes(item.applied_target))); setUserVisualRequirements(current => ({ ...current, identity: event.target.value })); setDesignIdentityBasis(["user_specified"]); setDesignSource("stated"); setDesignStatus("draft"); setPromptsNeedDesignApply(true); }} onKeyDown={openSlashFromField} placeholder="可先写年龄感、面容、体态等要求；留空由 AI 设计。" rows={4} className="mt-1 w-full resize-y rounded-md border border-glass-border bg-surface px-3 py-2 text-sm leading-5 text-foreground placeholder:text-text-muted focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary" />
                             {Object.values(identityFeatures).some((value) => value?.trim()) && <p className="mt-1 text-[11px] text-text-muted">当前使用上方结构化字段；编辑本段会切回整段文本并清空上方字段。</p>}
                             {designSource === "creative-choice" && <p className="mt-1 text-xs text-amber-400">AI 创意设计选择，确认前请核对剧本与参考素材。</p>}
                             <details className="mt-4 rounded-md border border-glass-border bg-surface/60 p-3">
@@ -1137,13 +1198,14 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
                                     {LOOK_FIELDS.map(([key, label]) => <label key={key} className="block text-xs text-text-secondary">
                                         {label}
                                         <textarea aria-label={`角色${label}`} value={lookFeatures[key] || ""} maxLength={500} rows={2}
-                                            onChange={(event) => { setLookFeatures((current) => ({ ...current, [key]: event.target.value })); setDesignLookBasis(["user_specified"]); setDesignStatus("draft"); setPromptsNeedDesignApply(true); }}
+                                            onChange={(event) => { setLookFeatures((current) => ({ ...current, [key]: event.target.value })); if (key === "clothing") clearPresetTarget("clothing"); setDesignLookBasis(["user_specified"]); setDesignStatus("draft"); setPromptsNeedDesignApply(true); }}
+                                            onKeyDown={openSlashFromField}
                                             className="mt-1 w-full resize-y rounded border border-glass-border bg-surface px-2 py-1.5 text-xs text-foreground" />
                                     </label>)}
                                 </div>
                             </details>
                             <label className="mt-3 block text-xs text-text-secondary" htmlFor="character-look-notes">造型视觉值</label>
-                            <textarea id="character-look-notes" value={lookNotes} onChange={(event) => { setLookNotes(event.target.value); setLookFeatures({}); setUserVisualRequirements(current => ({ ...current, look: event.target.value })); setDesignLookBasis(["user_specified"]); setDesignStatus("draft"); setPromptsNeedDesignApply(true); }} placeholder="可先写服装、鞋履、武器等要求；留空由 AI 设计。" rows={3} className="mt-1 w-full resize-y rounded-md border border-glass-border bg-surface px-3 py-2 text-sm leading-5 text-foreground placeholder:text-text-muted focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary" />
+                            <textarea id="character-look-notes" value={lookNotes} onChange={(event) => { setLookNotes(event.target.value); setLookFeatures({}); setPresetSelections((current) => current.filter((item) => !["clothing", "look_notes"].includes(item.applied_target))); setUserVisualRequirements(current => ({ ...current, look: event.target.value })); setDesignLookBasis(["user_specified"]); setDesignStatus("draft"); setPromptsNeedDesignApply(true); }} onKeyDown={openSlashFromField} placeholder="可先写服装、鞋履、武器等要求；留空由 AI 设计。" rows={3} className="mt-1 w-full resize-y rounded-md border border-glass-border bg-surface px-3 py-2 text-sm leading-5 text-foreground placeholder:text-text-muted focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary" />
                             {Object.values(lookFeatures).some((value) => value?.trim()) && <p className="mt-1 text-[11px] text-text-muted">当前使用上方结构化字段；编辑本段会切回整段文本并清空上方字段。</p>}
                             <AssetReferencePicker
                                 candidates={referenceCandidates}

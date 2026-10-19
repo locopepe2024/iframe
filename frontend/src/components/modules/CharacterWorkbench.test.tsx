@@ -85,12 +85,67 @@ it("applies platform terms only to the selected identity field draft", () => {
         onClose={vi.fn()} onUpdateDescription={vi.fn()} onUpdateAttributes={onUpdateAttributes}
         onGenerate={onGenerate} generatingTypes={[]} />);
 
-    fireEvent.click(screen.getByRole("button", { name: /窄长椭圆脸/ }));
+    fireEvent.click(screen.getByRole("button", { name: "展开角色设计" }));
+    fireEvent.change(screen.getByRole("combobox", { name: "/ Skill 与快捷描述词" }), { target: { value: "/窄长椭圆脸" } });
+    fireEvent.click(screen.getByRole("option", { name: /窄长椭圆脸/ }));
+    fireEvent.click(screen.getByText(/身份外观字段/));
     expect(screen.getByRole("textbox", { name: "角色脸型与眉眼" })).toHaveValue("窄长椭圆脸");
-    expect(screen.getByRole("button", { name: /窄长椭圆脸/ })).toHaveAttribute("title", expect.stringContaining("MIT"));
+    expect(screen.getByLabelText("已选择的快捷描述词")).toHaveTextContent("MIT");
     expect(onUpdateAttributes).not.toHaveBeenCalled();
     expect(onGenerate).not.toHaveBeenCalled();
     expect(apiMocks.agentRequest.mock.calls.some(([path]) => path === "/character-design/draft")).toBe(false);
+});
+
+it("keeps slash presets editable and saves their exact field and source", async () => {
+    apiMocks.getAssetReferenceIndex.mockResolvedValueOnce({ assets: [] } as any);
+    const onUpdateAttributes = vi.fn().mockResolvedValue(undefined);
+    apiMocks.agentRequest.mockClear();
+    render(<CharacterWorkbench asset={{ id: "character-1", name: "苏砚", description: "少年剑客" }}
+        onClose={vi.fn()} onUpdateDescription={vi.fn()} onUpdateAttributes={onUpdateAttributes}
+        onGenerate={vi.fn()} generatingTypes={[]} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "展开角色设计" }));
+    const search = screen.getByRole("combobox", { name: "/ Skill 与快捷描述词" });
+    fireEvent.change(search, { target: { value: "/水墨晕染" } });
+    fireEvent.click(screen.getByRole("option", { name: /水墨晕染层次/ }));
+    expect(screen.getByRole("textbox", { name: "局部风格描述" })).toHaveValue("水墨晕染层次，保留人物清晰轮廓");
+
+    fireEvent.change(search, { target: { value: "/亚麻纹理" } });
+    fireEvent.click(screen.getByRole("option", { name: /亚麻纹理清晰/ }));
+    fireEvent.click(screen.getByText(/造型字段/));
+    expect(screen.getByRole("textbox", { name: "角色服装结构与材质" })).toHaveValue("亚麻纹理清晰，布面有自然起伏");
+    expect(apiMocks.agentRequest.mock.calls.some(([path]) => path === "/character-design/draft/preview" || path === "/character-design/draft")).toBe(false);
+
+    fireEvent.click(screen.getByRole("button", { name: "保存草稿" }));
+    await waitFor(() => expect(onUpdateAttributes).toHaveBeenCalledWith({ character_design: expect.objectContaining({
+        style_notes: "水墨晕染层次，保留人物清晰轮廓",
+        look: expect.objectContaining({ features: expect.objectContaining({ clothing: "亚麻纹理清晰，布面有自然起伏" }) }),
+        preset_selections: expect.arrayContaining([
+            expect.objectContaining({ preset_id: "character.style-note.ink-wash", applied_target: "style_notes", revision: "1" }),
+            expect.objectContaining({ preset_id: "character.clothing_material.linen", applied_target: "clothing", revision: "1" }),
+        ]),
+    }) }));
+    fireEvent.change(screen.getByRole("textbox", { name: "角色服装结构与材质" }), { target: { value: "手工修改的布料" } });
+    expect(screen.getByLabelText("已选择的快捷描述词")).not.toHaveTextContent("亚麻纹理清晰");
+    const editor = document.querySelector("[contenteditable]") as HTMLElement & { editor: import("@tiptap/core").Editor };
+    fireEvent.click(screen.getByRole("button", { name: "应用到图片提示词" }));
+    expect(editor.editor.getText()).toContain("水墨晕染层次，保留人物清晰轮廓");
+    expect(editor.editor.getText()).toContain("手工修改的布料");
+});
+
+it("opens the existing two-skill review from slash without calling the model", async () => {
+    apiMocks.getAssetReferenceIndex.mockResolvedValueOnce({ assets: [] } as any);
+    apiMocks.agentRequest.mockClear();
+    render(<CharacterWorkbench asset={{ id: "character-1", name: "苏砚", description: "少年剑客" }}
+        onClose={vi.fn()} onUpdateDescription={vi.fn()} onGenerate={vi.fn()} generatingTypes={[]} />);
+    fireEvent.click(screen.getByRole("button", { name: "展开角色设计" }));
+    const search = screen.getByRole("combobox", { name: "/ Skill 与快捷描述词" });
+    fireEvent.change(search, { target: { value: "/角色设计" } });
+    await waitFor(() => expect(screen.getByRole("option", { name: /生成角色视觉设计草稿/ })).not.toBeDisabled());
+    fireEvent.click(screen.getByRole("option", { name: /生成角色视觉设计草稿/ }));
+    await waitFor(() => expect(apiMocks.agentRequest).toHaveBeenCalledWith("/character-design/draft/preview", "POST", expect.anything()));
+    expect(apiMocks.agentRequest.mock.calls.some(([path]) => path === "/character-design/draft")).toBe(false);
+    expect(await screen.findByRole("button", { name: "确认输入并生成角色草稿" })).toBeInTheDocument();
 });
 
 it("keeps image editing out of the character workbench", () => {
