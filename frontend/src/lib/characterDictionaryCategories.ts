@@ -42,6 +42,8 @@ export function localDictionaryCategories(id: string): string[] {
   if (["warm-light", "neutral-medium", "warm-deep", "cool-light", "warm-medium", "cool-deep"].some((key) => id === `character.skin.${key}`)) return ["skin-tone"];
   if (id === "character.skin.classical-aged-skin") return ["skin"];
   if (["rounded-posture", "upright-posture", "classical-traveler-posture", "classical-shopkeeper-posture"].some((key) => id === `character.body.${key}`)) return ["posture"];
+  if (id === "character.clothing_material.subtle-wear") return ["garment-condition"];
+  if (id === "character.clothing_material.natural-folds" || id === "character.clothing_material.leather-accents") return ["clothing-detail"];
   const prefix = id.split(".")[1];
   const category: Record<string, string> = { face: "face-shape", eye_shape: "eyes", brow_shape: "brows", nose_shape: "nose",
     lip_shape: "lips", facial_mark: "marks", skin: "skin", body: "build", base_hair: "hair", clothing_silhouette: "clothing-detail",

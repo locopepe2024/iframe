@@ -174,3 +174,16 @@ it("routes height independently from build, posture and skin with no forced defa
   expect(renderDictionaryPreset(panel, { "身高": "身高约180厘米" })).toBe("身高：身高约180厘米。");
   expect(dictionaryPresetFields(panel)[0].options).not.toContain("自然站立");
 });
+
+it("keeps garment wear and folds out of material slots", () => {
+  expect(localDictionaryCategories("character.clothing_material.subtle-wear")).toEqual(["garment-condition"]);
+  expect(localDictionaryCategories("character.clothing_material.natural-folds")).toEqual(["clothing-detail"]);
+  const panel = CHARACTER_DICTIONARY_PRESETS.find((entry) => entry.id === "dictionary.panel.classical-robe")!;
+  const fields = dictionaryPresetFields(panel);
+  const wear = "衣物有轻微使用痕迹，不改变原有版型";
+  expect(fields.find((field) => field.key === "面料")!.options).not.toContain(wear);
+  expect(fields.find((field) => field.key === "衣物状态")!.options).toContain(wear);
+  const text = renderDictionaryPreset(panel, { "面料": "棉布", "衣物状态": wear });
+  expect(text).toContain("外穿靛蓝色棉布交领长袍一件");
+  expect(text).toContain(`新旧：衣物状态为${wear}`);
+});
