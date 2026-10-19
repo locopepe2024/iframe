@@ -90,10 +90,16 @@ from ...utils.uniart_catalog import fetch_uniart_catalog, normalize_uniart_catal
 from ...utils import setup_logging, get_user_data_dir
 from ...utils.storage_config import media_root, storage_backend
 from ..platform_reference_catalog import (
+    CHARACTER_CATEGORIES,
+    MANIFEST_PATH as PLATFORM_REFERENCE_MANIFEST,
     list_resources as list_platform_reference_resources,
     list_review_candidates as list_platform_reference_review_candidates,
+    list_publisher_grants,
+    publisher_is_authorized,
     promote_resource as promote_platform_reference_resource,
     reviewer_is_authorized,
+    set_publisher_grant,
+    submit_generation_candidate,
 )
 from ..workbench_templates import list_workbench_templates
 from fastapi.responses import FileResponse, JSONResponse, Response
@@ -172,14 +178,113 @@ app.include_router(director_depth_router)
 @app.get("/platform-reference-library")
 def get_platform_reference_library(
     kind: Optional[str] = None,
+    category: Optional[str] = None,
     query: str = "",
     user: UserContext = Depends(require_user_context),
 ):
     """Read active deployment-scoped resources; mutations are not exposed here."""
     try:
-        return private_no_store_signed_response(list_platform_reference_resources(kind=kind, query=query))
+        return private_no_store_signed_response(list_platform_reference_resources(kind=kind, category=category, query=query))
     except ValueError as exc:
         raise HTTPException(status_code=500, detail=str(exc))
+
+
+@app.get("/platform-reference-library/categories")
+def get_platform_reference_categories(user: UserContext = Depends(require_user_context)):
+    return {"categories": [{"id": key, "label": value} for key, value in CHARACTER_CATEGORIES.items()]}
+
+
+@app.get("/platform-reference-library/publisher")
+def get_platform_publisher(user: UserContext = Depends(require_user_context)):
+    return {"profile_id": user.owner_profile_id, "authorized": publisher_is_authorized(user.owner_profile_id)}
+
+
+class PlatformPublisherGrantRequest(BaseModel):
+    profile_id: str
+    enabled: bool
+
+
+@app.get("/platform-reference-library/publisher-grants")
+def get_platform_publisher_grants(user: UserContext = Depends(require_user_context)):
+    if not reviewer_is_authorized(user.owner_profile_id):
+        raise HTTPException(status_code=403, detail="平台发布者授权权限不足")
+    return {"profile_ids": list_publisher_grants()}
+
+
+@app.post("/platform-reference-library/publisher-grants")
+def update_platform_publisher_grant(request: PlatformPublisherGrantRequest, user: UserContext = Depends(require_user_context)):
+    if not reviewer_is_authorized(user.owner_profile_id):
+        raise HTTPException(status_code=403, detail="平台发布者授权权限不足")
+    try:
+        return {"profile_ids": set_publisher_grant(request.profile_id, request.enabled)}
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
+
+
+class PlatformCandidateRequest(BaseModel):
+    source_generation_id: str
+    source_output_id: Optional[str] = None
+    kind: Literal["image", "video", "prompt_preset"]
+    category_path: str
+    title: str = Field(min_length=1, max_length=200)
+    description: str = Field(max_length=20000)
+    rights_confirmed: bool
+
+
+@app.post("/platform-reference-library/candidates")
+def submit_platform_candidate(request: PlatformCandidateRequest, user: UserContext = Depends(require_user_context)):
+    if not publisher_is_authorized(user.owner_profile_id):
+        raise HTTPException(status_code=403, detail="平台候选提交权限不足")
+    storage = playground_storage_for(user)
+    generation = storage.get_generation(request.source_generation_id)
+    if generation is None or generation.status != "completed" or generation.owner_profile_id != user.owner_profile_id:
+        raise HTTPException(status_code=404, detail="创作台已完成结果不存在")
+    output = next((item for item in generation.outputs if item.id == request.source_output_id), None) if request.source_output_id else None
+    if request.kind != "prompt_preset" and (output is None or output.media_type != request.kind):
+        raise HTTPException(status_code=422, detail="所选图像或视频结果与提交类型不符")
+    if request.kind == "prompt_preset" and request.source_output_id:
+        raise HTTPException(status_code=422, detail="提示词候选不附加媒体")
+    try:
+        resource = submit_generation_candidate(
+            creator_profile_id=user.owner_profile_id,
+            generation_id=generation.id, output_id=output.id if output else None,
+            kind=request.kind, category_path=request.category_path,
+            title=request.title, description=request.description,
+            prompt_used=generation.prompt, negative_prompt=generation.negative_prompt, model_id=generation.model_id,
+            parameters=generation.parameters,
+            media_source=Path(output.media_path) if output else None,
+            media_owner_root=Path(storage.output_dir),
+            rights_confirmed=request.rights_confirmed,
+        )
+        return private_no_store_signed_response(resource)
+    except PermissionError as exc:
+        raise HTTPException(status_code=403, detail=str(exc))
+    except (ValueError, FileNotFoundError) as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
+
+
+@app.get("/platform-reference-library/{resource_id}/media")
+def get_platform_reference_media(resource_id: str, preview: bool = False, user: UserContext = Depends(require_user_context)):
+    from ..platform_reference_catalog import _read_manifest
+    resource = next((item for item in _read_manifest().get("resources", []) if item["platform_resource_id"] == resource_id), None)
+    if resource is None or (resource.get("status") != "active" and not (
+        reviewer_is_authorized(user.owner_profile_id) or resource.get("provenance", {}).get("creator_profile_id") == user.owner_profile_id
+    )):
+        raise HTTPException(status_code=404, detail="平台媒体不存在")
+    filename = resource.get("payload", {}).get("media_file")
+    if not isinstance(filename, str) or Path(filename).name != filename:
+        raise HTTPException(status_code=404, detail="平台媒体不存在")
+    media_dir = PLATFORM_REFERENCE_MANIFEST.parent / "media"
+    source = (media_dir / filename).resolve()
+    if not source.is_relative_to(media_dir.resolve()) or not source.is_file():
+        raise HTTPException(status_code=404, detail="平台媒体不存在")
+    if preview:
+        try:
+            source = Path(create_media_thumbnail(str(source), str(media_dir), 320))
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc))
+    media_type = "image/webp" if preview else ("video/mp4" if source.suffix == ".mp4" else "image/jpeg" if source.suffix in {".jpg", ".jpeg"} else "image/png" if source.suffix == ".png" else "image/webp" if source.suffix == ".webp" else "video/quicktime" if source.suffix == ".mov" else "video/webm")
+    return FileResponse(source, media_type=media_type, headers={"Cache-Control": "private, no-store"})
 
 
 @app.get("/workbench-templates")
@@ -209,6 +314,7 @@ def get_platform_reference_reviewer(user: UserContext = Depends(require_user_con
 @app.get("/platform-reference-library/review-queue")
 def get_platform_reference_review_queue(
     kind: Optional[str] = None,
+    category: Optional[str] = None,
     query: str = "",
     user: UserContext = Depends(require_user_context),
 ):
@@ -217,7 +323,7 @@ def get_platform_reference_review_queue(
         raise HTTPException(status_code=403, detail="平台参考资源审核权限不足")
     try:
         return private_no_store_signed_response(
-            list_platform_reference_review_candidates(kind=kind, query=query)
+            list_platform_reference_review_candidates(kind=kind, category=category, query=query)
         )
     except ValueError as exc:
         raise HTTPException(status_code=500, detail=str(exc))
