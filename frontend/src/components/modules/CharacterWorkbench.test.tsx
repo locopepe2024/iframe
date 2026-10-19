@@ -634,6 +634,37 @@ it("projects edited character fields only after explicit application and saves t
     }) }));
 });
 
+it("keeps detailed identity values when switching to the whole description and back", async () => {
+    apiMocks.getAssetReferenceIndex.mockResolvedValueOnce({ assets: [] } as any);
+    const onUpdateAttributes = vi.fn().mockResolvedValue(undefined);
+    render(<CharacterWorkbench asset={{ id: "character-1", name: "苏砚", description: "少年剑客",
+        character_design: { design_draft: {
+            identity: { visual_notes: "旧摘要", features: { face: "窄长脸" } },
+            look: { visual_notes: "深蓝劲装", features: {} }, confirmed: false,
+        } },
+    }} onClose={vi.fn()} onUpdateDescription={vi.fn()} onUpdateAttributes={onUpdateAttributes}
+        onGenerate={vi.fn()} generatingTypes={[]} />);
+
+    const identityModes = screen.getByRole("group", { name: "身份视觉编辑方式" });
+    expect(screen.getByRole("textbox", { name: "角色脸型与眉眼" })).toHaveValue("窄长脸");
+    fireEvent.click(within(identityModes).getByRole("button", { name: "整体描述" }));
+    fireEvent.change(screen.getByRole("textbox", { name: "身份视觉值" }), { target: { value: "自然面部不对称" } });
+    fireEvent.click(screen.getByRole("button", { name: "保存草稿" }));
+    await waitFor(() => expect(onUpdateAttributes).toHaveBeenCalledWith({ character_design: expect.objectContaining({
+        identity: expect.objectContaining({ editor_mode: "notes", visual_notes: "自然面部不对称", features: { face: "窄长脸" } }),
+    }) }));
+    fireEvent.click(within(identityModes).getByRole("button", { name: "逐项编辑" }));
+    expect(screen.getByRole("textbox", { name: "角色脸型与眉眼" })).toHaveValue("窄长脸");
+    fireEvent.click(screen.getByRole("button", { name: "应用到图片提示词" }));
+    expect(screen.getByRole("textbox", { name: "Enter prompt description..." })).toHaveTextContent("窄长脸");
+    await waitFor(() => expect(screen.getByLabelText("设计模型")).toHaveValue("qwen"));
+    fireEvent.click(screen.getByRole("button", { name: "生成草稿" }));
+    await waitFor(() => expect(apiMocks.agentRequest).toHaveBeenCalledWith("/character-design/draft/preview", "POST", expect.objectContaining({
+        current_draft: "窄长脸。 深蓝劲装",
+        user_visual_requirements: { identity: "自然面部不对称", look: "" },
+    })));
+});
+
 it("flags user requirements that a structured model draft omitted before prompt application", async () => {
     apiMocks.getAssetReferenceIndex.mockResolvedValueOnce({ assets: [] } as any);
     render(<CharacterWorkbench asset={{ id: "character-1", name: "苏砚", description: "少年剑客",

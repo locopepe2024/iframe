@@ -20,8 +20,11 @@ export function normalizeCharacterFeatures<T extends string>(value: unknown, key
   )) as Partial<Record<T, string>>;
 }
 
-export function characterSectionText<T extends string>(features: Partial<Record<T, string>>, keys: readonly T[], legacyNotes: unknown): string {
+export type CharacterSectionEditorMode = 'fields' | 'notes';
+
+export function characterSectionText<T extends string>(features: Partial<Record<T, string>>, keys: readonly T[], legacyNotes: unknown, mode?: CharacterSectionEditorMode): string {
   const values = keys.flatMap((key) => features[key]?.trim() ? [features[key]!.trim()] : []);
+  if (mode === 'notes') return typeof legacyNotes === 'string' ? legacyNotes.trim() : '';
   return values.length ? values.join('；') : typeof legacyNotes === 'string' ? legacyNotes.trim() : '';
 }
 

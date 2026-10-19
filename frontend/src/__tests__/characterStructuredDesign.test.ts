@@ -12,4 +12,10 @@ describe('character structured prompt projection', () => {
   it('preserves legacy drafts when no structured values exist', () => {
     expect(characterSectionText({}, keys, '深棕眼，黑发束起')).toBe('深棕眼，黑发束起');
   });
+
+  it('projects the selected editor mode while retaining the other draft', () => {
+    const features = { face: '窄长脸' };
+    expect(characterSectionText(features, keys, '自然面部不对称', 'notes')).toBe('自然面部不对称');
+    expect(characterSectionText(features, keys, '自然面部不对称', 'fields')).toBe('窄长脸');
+  });
 });

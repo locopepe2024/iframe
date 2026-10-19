@@ -63,3 +63,27 @@ def test_character_design_accepts_structured_identity_and_rejects_invalid_featur
                 "character_design": {**design, "identity": {"features": bad}},
             })
     assert len(character.character_design["design_revisions"]) == 1
+
+
+def test_character_design_editor_mode_preserves_both_drafts_but_confirms_active_value():
+    pipeline = ComicGenPipeline.__new__(ComicGenPipeline)
+    character = SimpleNamespace(character_design={})
+    script = SimpleNamespace(id="project")
+    pipeline.scripts = {script.id: script}
+    pipeline._find_asset_with_source = lambda *_: (character, script)
+    pipeline._save_after_asset_mutation = lambda *_: None
+
+    identity = {"visual_notes": "自然面部不对称", "features": {"face": "窄长脸"}, "editor_mode": "notes"}
+    pipeline.update_asset_attributes("project", "character", "character", {
+        "character_design": {"identity": identity, "confirmed": True},
+    })
+    assert character.character_design["design_revisions"][0]["design"]["identity"] == identity
+
+    with pytest.raises(ValueError, match="concrete visual design"):
+        pipeline.update_asset_attributes("project", "character", "character", {
+            "character_design": {"identity": {**identity, "visual_notes": ""}, "confirmed": True},
+        })
+    with pytest.raises(ValueError, match="editor mode"):
+        pipeline.update_asset_attributes("project", "character", "character", {
+            "character_design": {"identity": {**identity, "editor_mode": "hidden"}, "confirmed": False},
+        })

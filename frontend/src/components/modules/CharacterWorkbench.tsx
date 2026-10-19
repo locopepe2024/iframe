@@ -32,7 +32,7 @@ import ReferencePromptEditor, {
 } from "./playground/ReferencePromptEditor";
 import { searchReferenceCandidates } from "@/lib/referenceCandidateSearch";
 import { IDENTITY_FIELDS, LOOK_FIELDS, characterSectionText, normalizeCharacterFeatures,
-    requirementNeedsReview, type IdentityFeatures, type LookFeatures } from "@/lib/characterStructuredDesign";
+    requirementNeedsReview, type CharacterSectionEditorMode, type IdentityFeatures, type LookFeatures } from "@/lib/characterStructuredDesign";
 import { type CharacterQuickPreset, type CharacterPresetTarget } from "@/lib/characterQuickActions";
 import CharacterSlashPanel from "./CharacterSlashPanel";
 import PlatformPromptPicker, { isUsablePlatformPrompt, type PromptResource } from "@/components/shared/PlatformPromptPicker";
@@ -54,8 +54,8 @@ type DesignDraft = {
     route?: string;
     style_notes?: string;
     age_stage?: string;
-    identity?: Record<string, unknown> & { basis?: DesignBasis[]; features?: IdentityFeatures };
-    look?: Record<string, unknown> & { basis?: DesignBasis[]; features?: LookFeatures };
+    identity?: Record<string, unknown> & { basis?: DesignBasis[]; features?: IdentityFeatures; editor_mode?: CharacterSectionEditorMode };
+    look?: Record<string, unknown> & { basis?: DesignBasis[]; features?: LookFeatures; editor_mode?: CharacterSectionEditorMode };
     unresolved?: string[];
     field_answers?: Record<string, string>;
     field_suggestions?: Record<string, string>;
@@ -120,9 +120,9 @@ function confirmedDesignDescription(design: DesignDraft | undefined): string {
     const answers = Object.values(design?.field_answers || {});
     return designPromptDescription(
         characterSectionText(normalizeCharacterFeatures(design?.identity?.features, IDENTITY_FIELDS.map(([key]) => key)),
-            IDENTITY_FIELDS.map(([key]) => key), design?.identity?.visual_notes),
+            IDENTITY_FIELDS.map(([key]) => key), design?.identity?.visual_notes, design?.identity?.editor_mode),
         characterSectionText(normalizeCharacterFeatures(design?.look?.features, LOOK_FIELDS.map(([key]) => key)),
-            LOOK_FIELDS.map(([key]) => key), design?.look?.visual_notes),
+            LOOK_FIELDS.map(([key]) => key), design?.look?.visual_notes, design?.look?.editor_mode),
         [...answers, ...designScopeDescription(design?.route, design?.age_stage), design?.style_notes || ""],
     );
 }
@@ -351,6 +351,10 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
         normalizeCharacterFeatures(savedDesign.identity?.features, IDENTITY_FIELDS.map(([key]) => key)));
     const [lookFeatures, setLookFeatures] = useState<LookFeatures>(
         normalizeCharacterFeatures(savedDesign.look?.features, LOOK_FIELDS.map(([key]) => key)));
+    const [identityEditorMode, setIdentityEditorMode] = useState<CharacterSectionEditorMode>(
+        savedDesign.identity?.editor_mode || (Object.values(savedDesign.identity?.features || {}).some((value) => typeof value === "string" && value.trim()) ? "fields" : "notes"));
+    const [lookEditorMode, setLookEditorMode] = useState<CharacterSectionEditorMode>(
+        savedDesign.look?.editor_mode || (Object.values(savedDesign.look?.features || {}).some((value) => typeof value === "string" && value.trim()) ? "fields" : "notes"));
     const [presetSelections, setPresetSelections] = useState<CharacterPresetSelection[]>(savedDesign.preset_selections || []);
     const [slashOpen, setSlashOpen] = useState(false);
     const [slashQuery, setSlashQuery] = useState("");
@@ -444,16 +448,18 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
             if (lookNotes.trim() && !Object.values(lookFeatures).some((value) => value?.trim())) {
                 appliedTarget = "look_notes";
                 setLookNotes((current) => appendPresetText(current, preset.value));
+                setLookEditorMode("notes");
                 setUserVisualRequirements((current) => ({ ...current, look: appendPresetText(current.look, preset.value) }));
-            } else setLookFeatures((current) => ({ ...current, clothing: appendPresetText(current.clothing, preset.value) }));
+            } else { setLookFeatures((current) => ({ ...current, clothing: appendPresetText(current.clothing, preset.value) })); setLookEditorMode("fields"); }
             setDesignLookBasis(["user_specified"]);
         } else {
             const identityTarget = preset.target;
             if (designNotes.trim() && !Object.values(identityFeatures).some((value) => value?.trim())) {
                 appliedTarget = "identity_notes";
                 setDesignNotes((current) => appendPresetText(current, preset.value));
+                setIdentityEditorMode("notes");
                 setUserVisualRequirements((current) => ({ ...current, identity: appendPresetText(current.identity, preset.value) }));
-            } else setIdentityFeatures((current) => ({ ...current, [identityTarget]: appendPresetText(current[identityTarget], preset.value) }));
+            } else { setIdentityFeatures((current) => ({ ...current, [identityTarget]: appendPresetText(current[identityTarget], preset.value) })); setIdentityEditorMode("fields"); }
             setDesignIdentityBasis(["user_specified"]);
             setDesignSource("stated");
         }
@@ -692,8 +698,8 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
     // User's own negative prompt (initially empty or with sensible defaults)
     const [negativePrompt, setNegativePrompt] = useState(DEFAULT_CHARACTER_NEGATIVE_PROMPT);
 
-    const projectedIdentity = characterSectionText(identityFeatures, IDENTITY_FIELDS.map(([key]) => key), designNotes);
-    const projectedLook = characterSectionText(lookFeatures, LOOK_FIELDS.map(([key]) => key), lookNotes);
+    const projectedIdentity = characterSectionText(identityFeatures, IDENTITY_FIELDS.map(([key]) => key), designNotes, identityEditorMode);
+    const projectedLook = characterSectionText(lookFeatures, LOOK_FIELDS.map(([key]) => key), lookNotes, lookEditorMode);
     const requirementsToReview = ([
         ["身份", userVisualRequirements.identity, projectedIdentity],
         ["造型", userVisualRequirements.look, projectedLook],
@@ -717,8 +723,7 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
         character_name: asset.name,
         profile: asset.description,
         current_draft: designPromptDescription(
-            characterSectionText(identityFeatures, IDENTITY_FIELDS.map(([key]) => key), designNotes),
-            characterSectionText(lookFeatures, LOOK_FIELDS.map(([key]) => key), lookNotes)),
+            projectedIdentity, projectedLook),
         user_visual_requirements: userVisualRequirements,
         user_answers: Object.fromEntries(Object.entries(designFieldAnswers).filter(([, answer]) => answer.trim())),
         route: designRoute,
@@ -783,6 +788,8 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
             setLookNotes(nextLook);
             setIdentityFeatures(nextIdentityFeatures);
             setLookFeatures(nextLookFeatures);
+            setIdentityEditorMode(Object.values(nextIdentityFeatures).some((value) => value?.trim()) ? "fields" : "notes");
+            setLookEditorMode(Object.values(nextLookFeatures).some((value) => value?.trim()) ? "fields" : "notes");
             setPresetSelections((current) => current.filter((item) => ["route", "style_notes"].includes(item.applied_target)));
             setDesignIdentityBasis(userVisualRequirements.identity.trim()
                 ? Array.from(new Set([...normalizeDesignBasis(result.identity.basis), "user_specified" as const]))
@@ -818,7 +825,7 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
 
     const saveDesignDraft = async (confirmed: boolean) => {
         if (!onUpdateAttributes || savingDesign) return;
-        if (confirmed && !characterSectionText(identityFeatures, IDENTITY_FIELDS.map(([key]) => key), designNotes)) {
+        if (confirmed && !projectedIdentity) {
             setDesignError("请先填写具体的角色视觉值，再确认设计。 ");
             return;
         }
@@ -827,8 +834,8 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
             route: designRoute,
             style_notes: styleNotes || undefined,
             age_stage: designAgeStage || undefined,
-            identity: { visual_notes: designNotes || undefined, features: identityFeatures, basis: designIdentityBasis },
-            look: { route: designRoute, visual_notes: lookNotes || undefined, features: lookFeatures, basis: designLookBasis },
+            identity: { visual_notes: designNotes || undefined, features: identityFeatures, editor_mode: identityEditorMode, basis: designIdentityBasis },
+            look: { route: designRoute, visual_notes: lookNotes || undefined, features: lookFeatures, editor_mode: lookEditorMode, basis: designLookBasis },
             unresolved: designNotes ? unanswered : [],
             field_answers: Object.fromEntries(Object.entries(designFieldAnswers).filter(([, answer]) => answer.trim())),
             user_visual_requirements: userVisualRequirements,
@@ -1188,7 +1195,12 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
                                 <option value="adult">成年人</option>
                                 <option value="older-adult">老年</option>
                             </select>
-                            <details className="mt-4 rounded-md border border-glass-border bg-surface/60 p-3">
+                            <div className="mt-4 flex flex-wrap gap-2" role="group" aria-label="身份视觉编辑方式">
+                                <button type="button" aria-pressed={identityEditorMode === "notes"} onClick={() => { setIdentityEditorMode("notes"); setDesignStatus("draft"); setPromptsNeedDesignApply(true); }} className={`min-h-11 rounded-md border px-3 text-xs focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary ${identityEditorMode === "notes" ? "border-primary text-primary" : "border-glass-border text-text-secondary"}`}>整体描述</button>
+                                <button type="button" aria-pressed={identityEditorMode === "fields"} onClick={() => { setIdentityEditorMode("fields"); setDesignStatus("draft"); setPromptsNeedDesignApply(true); }} className={`min-h-11 rounded-md border px-3 text-xs focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary ${identityEditorMode === "fields" ? "border-primary text-primary" : "border-glass-border text-text-secondary"}`}>逐项编辑</button>
+                            </div>
+                            <p className="mt-1 text-[11px] text-text-muted">切换不会删除另一边草稿；已有整体要求仍会在设计模型输入预览中列出。</p>
+                            {identityEditorMode === "fields" ? <details open className="mt-2 rounded-md border border-glass-border bg-surface/60 p-3">
                                 <summary className="cursor-pointer text-xs font-medium text-foreground">身份外观字段 · {Object.values(identityFeatures).filter((value) => value?.trim()).length} 项已填</summary>
                                 <p className="mt-1 text-[11px] leading-4 text-text-muted">这些字段优先编入角色图片提示词；输入 / 可搜索平台词条。</p>
                                 <div className="mt-2 space-y-2">
@@ -1200,12 +1212,17 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
                                             className="mt-1 w-full resize-y rounded border border-glass-border bg-surface px-2 py-1.5 text-xs text-foreground" />
                                     </div>)}
                                 </div>
-                            </details>
+                            </details> : <div>
                             <label className="mt-3 block text-xs text-text-secondary" htmlFor="character-visual-notes">身份视觉值</label>
-                            <textarea id="character-visual-notes" value={designNotes} onChange={(event) => { setDesignNotes(event.target.value); setIdentityFeatures({}); setPresetSelections((current) => current.filter((item) => !["face", "hair", "skin", "build", "identity_notes"].includes(item.applied_target))); setUserVisualRequirements(current => ({ ...current, identity: event.target.value })); setDesignIdentityBasis(["user_specified"]); setDesignSource("stated"); setDesignStatus("draft"); setPromptsNeedDesignApply(true); }} onKeyDown={openSlashFromField} placeholder="可先写年龄感、面容、体态等要求；留空由 AI 设计。" rows={4} className="mt-1 w-full resize-y rounded-md border border-glass-border bg-surface px-3 py-2 text-sm leading-5 text-foreground placeholder:text-text-muted focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary" />
-                            {Object.values(identityFeatures).some((value) => value?.trim()) && <p className="mt-1 text-[11px] text-text-muted">当前使用上方结构化字段；编辑本段会切回整段文本并清空上方字段。</p>}
+                            <textarea id="character-visual-notes" value={designNotes} onChange={(event) => { setDesignNotes(event.target.value); clearPresetTarget("identity_notes"); setUserVisualRequirements(current => ({ ...current, identity: event.target.value })); setDesignIdentityBasis(["user_specified"]); setDesignSource("stated"); setDesignStatus("draft"); setPromptsNeedDesignApply(true); }} onKeyDown={openSlashFromField} placeholder="可先写年龄感、面容、体态等要求；留空由 AI 设计。" rows={4} className="mt-1 w-full resize-y rounded-md border border-glass-border bg-surface px-3 py-2 text-sm leading-5 text-foreground placeholder:text-text-muted focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary" />
+                            </div>}
                             {designSource === "creative-choice" && <p className="mt-1 text-xs text-amber-400">AI 创意设计选择，确认前请核对剧本与参考素材。</p>}
-                            <details className="mt-4 rounded-md border border-glass-border bg-surface/60 p-3">
+                            <div className="mt-4 flex flex-wrap gap-2" role="group" aria-label="基础造型编辑方式">
+                                <button type="button" aria-pressed={lookEditorMode === "notes"} onClick={() => { setLookEditorMode("notes"); setDesignStatus("draft"); setPromptsNeedDesignApply(true); }} className={`min-h-11 rounded-md border px-3 text-xs focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary ${lookEditorMode === "notes" ? "border-primary text-primary" : "border-glass-border text-text-secondary"}`}>整体描述</button>
+                                <button type="button" aria-pressed={lookEditorMode === "fields"} onClick={() => { setLookEditorMode("fields"); setDesignStatus("draft"); setPromptsNeedDesignApply(true); }} className={`min-h-11 rounded-md border px-3 text-xs focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary ${lookEditorMode === "fields" ? "border-primary text-primary" : "border-glass-border text-text-secondary"}`}>逐项编辑</button>
+                            </div>
+                            <p className="mt-1 text-[11px] text-text-muted">配件和武器可留空；具体物件可在生成任务中单独选择道具参考。</p>
+                            {lookEditorMode === "fields" ? <details open className="mt-2 rounded-md border border-glass-border bg-surface/60 p-3">
                                 <summary className="cursor-pointer text-xs font-medium text-foreground">造型字段 · {Object.values(lookFeatures).filter((value) => value?.trim()).length} 项已填</summary>
                                 <p className="mt-1 text-[11px] leading-4 text-text-muted">服装、配色和配件分别确认；武器未在剧本或用户要求中出现时可留空。</p>
                                 <div className="mt-2 space-y-2">
@@ -1217,10 +1234,10 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
                                             className="mt-1 w-full resize-y rounded border border-glass-border bg-surface px-2 py-1.5 text-xs text-foreground" />
                                     </label>)}
                                 </div>
-                            </details>
+                            </details> : <div>
                             <label className="mt-3 block text-xs text-text-secondary" htmlFor="character-look-notes">造型视觉值</label>
-                            <textarea id="character-look-notes" value={lookNotes} onChange={(event) => { setLookNotes(event.target.value); setLookFeatures({}); setPresetSelections((current) => current.filter((item) => !["clothing", "look_notes"].includes(item.applied_target))); setUserVisualRequirements(current => ({ ...current, look: event.target.value })); setDesignLookBasis(["user_specified"]); setDesignStatus("draft"); setPromptsNeedDesignApply(true); }} onKeyDown={openSlashFromField} placeholder="可先写服装、鞋履、武器等要求；留空由 AI 设计。" rows={3} className="mt-1 w-full resize-y rounded-md border border-glass-border bg-surface px-3 py-2 text-sm leading-5 text-foreground placeholder:text-text-muted focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary" />
-                            {Object.values(lookFeatures).some((value) => value?.trim()) && <p className="mt-1 text-[11px] text-text-muted">当前使用上方结构化字段；编辑本段会切回整段文本并清空上方字段。</p>}
+                            <textarea id="character-look-notes" value={lookNotes} onChange={(event) => { setLookNotes(event.target.value); clearPresetTarget("look_notes"); setUserVisualRequirements(current => ({ ...current, look: event.target.value })); setDesignLookBasis(["user_specified"]); setDesignStatus("draft"); setPromptsNeedDesignApply(true); }} onKeyDown={openSlashFromField} placeholder="可先写服装和鞋履等要求；留空由 AI 设计。" rows={3} className="mt-1 w-full resize-y rounded-md border border-glass-border bg-surface px-3 py-2 text-sm leading-5 text-foreground placeholder:text-text-muted focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary" />
+                            </div>}
                             <AssetReferencePicker
                                 candidates={referenceCandidates}
                                 selected={designReferences}
