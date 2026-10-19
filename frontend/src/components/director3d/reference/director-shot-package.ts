@@ -10,6 +10,7 @@ import { evaluateDirectorFrame } from "../timeline/timeline-evaluation";
 
 export interface DirectorShotPackage {
   schemaVersion: "iframe.director3d.shot-package.v1";
+  packageChecksum: string;
   frame: number;
   timeSeconds: number;
   fps: number;
@@ -28,6 +29,16 @@ export interface DirectorShotPackage {
     source: "browser-workbench-evaluation";
     limitations: string[];
   };
+}
+
+function packageChecksum(value: Omit<DirectorShotPackage, "packageChecksum">): string {
+  const text = JSON.stringify(value);
+  let hash = 0x811c9dc5;
+  for (let index = 0; index < text.length; index += 1) {
+    hash ^= text.charCodeAt(index);
+    hash = Math.imul(hash, 0x01000193);
+  }
+  return `fnv1a32:${(hash >>> 0).toString(16).padStart(8, "0")}`;
 }
 
 export interface DirectorShotPackageInput {
@@ -49,7 +60,7 @@ export function projectDirectorShotPackage(input: DirectorShotPackageInput): Dir
   const evaluated = evaluateDirectorFrame(input);
   const camera = evaluated.cameras[evaluated.activeCameraId];
   if (!camera) throw new Error("当前时间线没有可用的活动机位。");
-  return {
+  const projected: Omit<DirectorShotPackage, "packageChecksum"> = {
     schemaVersion: "iframe.director3d.shot-package.v1",
     frame: Math.round(input.frame),
     timeSeconds: evaluated.timeSeconds,
@@ -70,4 +81,5 @@ export function projectDirectorShotPackage(input: DirectorShotPackageInput): Dir
       limitations: ["lights are not authored in the browser workbench manifest yet", "depth is not implied by browser preview geometry"],
     },
   };
+  return { ...projected, packageChecksum: packageChecksum(projected) };
 }
