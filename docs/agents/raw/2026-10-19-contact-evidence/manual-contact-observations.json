@@ -1,0 +1,107 @@
+{
+  "schema": "recreation2-manual-contact-observations.v1",
+  "method": "assistant visual review of original-resolution shoe crops; source evidence independent of rig output",
+  "limitations": [
+    "screen sides only; no automatic semantic left/right or force inference",
+    "reflection and tilted distal edge make full separation uncertain in frames43-55",
+    "stage line is image-space evidence; no metric 3D plane or pixel threshold fitted"
+  ],
+  "observations": [
+    {
+      "source_frame": 1,
+      "source_pts_s": 0.0,
+      "screen_left_shoe": "near_flat_floor_contact_candidate",
+      "screen_right_shoe": "tilted_shoe_edge_contact_candidate"
+    },
+    {
+      "source_frame": 17,
+      "source_pts_s": 0.783655,
+      "screen_left_shoe": "lifting_edge_near_floor_uncertain",
+      "screen_right_shoe": "near_flat_floor_contact_candidate"
+    },
+    {
+      "source_frame": 23,
+      "source_pts_s": 0.964499,
+      "screen_left_shoe": "visible_separation_candidate",
+      "screen_right_shoe": "near_flat_floor_contact_candidate"
+    },
+    {
+      "source_frame": 27,
+      "source_pts_s": 1.085061,
+      "screen_left_shoe": "visible_separation_candidate",
+      "screen_right_shoe": "near_flat_floor_contact_candidate"
+    },
+    {
+      "source_frame": 29,
+      "source_pts_s": 1.145343,
+      "screen_left_shoe": "visible_separation_candidate",
+      "screen_right_shoe": "near_flat_floor_contact_candidate"
+    },
+    {
+      "source_frame": 31,
+      "source_pts_s": 1.205624,
+      "screen_left_shoe": "descending_edge_near_floor_uncertain",
+      "screen_right_shoe": "near_flat_floor_contact_candidate"
+    },
+    {
+      "source_frame": 33,
+      "source_pts_s": 1.265905,
+      "screen_left_shoe": "descending_edge_near_floor_uncertain",
+      "screen_right_shoe": "near_flat_floor_contact_candidate"
+    },
+    {
+      "source_frame": 35,
+      "source_pts_s": 1.326186,
+      "screen_left_shoe": "tilted_shoe_edge_contact_candidate",
+      "screen_right_shoe": "near_flat_floor_contact_candidate"
+    },
+    {
+      "source_frame": 37,
+      "source_pts_s": 1.386467,
+      "screen_left_shoe": "tilted_shoe_edge_contact_candidate",
+      "screen_right_shoe": "near_flat_floor_contact_candidate"
+    },
+    {
+      "source_frame": 41,
+      "source_pts_s": 1.50703,
+      "screen_left_shoe": "near_flat_floor_contact_candidate",
+      "screen_right_shoe": "near_flat_floor_contact_candidate"
+    },
+    {
+      "source_frame": 43,
+      "source_pts_s": 1.567311,
+      "screen_left_shoe": "near_flat_floor_contact_candidate",
+      "screen_right_shoe": "tilted_distal_edge_near_reflective_floor_uncertain"
+    },
+    {
+      "source_frame": 45,
+      "source_pts_s": 1.657733,
+      "screen_left_shoe": "near_flat_floor_contact_candidate",
+      "screen_right_shoe": "tilted_distal_edge_near_reflective_floor_uncertain"
+    },
+    {
+      "source_frame": 47,
+      "source_pts_s": 1.718014,
+      "screen_left_shoe": "near_flat_floor_contact_candidate",
+      "screen_right_shoe": "tilted_distal_edge_near_reflective_floor_uncertain"
+    },
+    {
+      "source_frame": 49,
+      "source_pts_s": 1.778295,
+      "screen_left_shoe": "near_flat_floor_contact_candidate",
+      "screen_right_shoe": "tilted_distal_edge_near_reflective_floor_uncertain"
+    },
+    {
+      "source_frame": 51,
+      "source_pts_s": 1.838576,
+      "screen_left_shoe": "near_flat_floor_contact_candidate",
+      "screen_right_shoe": "tilted_distal_edge_near_reflective_floor_uncertain"
+    },
+    {
+      "source_frame": 55,
+      "source_pts_s": 1.959139,
+      "screen_left_shoe": "near_flat_floor_contact_candidate",
+      "screen_right_shoe": "tilted_distal_edge_near_reflective_floor_uncertain"
+    }
+  ]
+}

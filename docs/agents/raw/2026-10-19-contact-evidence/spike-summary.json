@@ -1,0 +1,728 @@
+{
+  "schema": "recreation2-motion-spike.v1",
+  "units": "Blender units; source proxy depth is normalized, no metric truth",
+  "output_steps": [
+    {
+      "output_frame": 28,
+      "max_joint_step": "right_wrist",
+      "joint_steps_px": {
+        "left_shoulder": 2.9488694875632,
+        "left_elbow": 5.416066459889153,
+        "left_wrist": 21.38951215332745,
+        "left_hip": 2.186597818714006,
+        "left_knee": 8.527538907000176,
+        "left_ankle": 13.74602543291289,
+        "right_shoulder": 4.261726951698046,
+        "right_elbow": 38.254132077227226,
+        "right_wrist": 52.364133146476675,
+        "right_hip": 4.243192361646797,
+        "right_knee": 17.13901757886541,
+        "right_ankle": 52.18690701558615
+      },
+      "patch_step_decomposition": {
+        "l": {
+          "total_delta": [
+            0.002562284469604492,
+            0.03179490566253662,
+            -0.09461705386638641
+          ],
+          "root_only_delta": [
+            -0.027583256363868713,
+            -0.014586672186851501,
+            0.018787488341331482
+          ],
+          "local_pose_delta": [
+            0.030145540833473206,
+            0.04638157784938812,
+            -0.1134045422077179
+          ],
+          "total_horizontal_speed": 0.7655515951316678,
+          "root_horizontal_speed": 0.7488642422909675,
+          "local_horizontal_speed": 1.3276153554634247
+        },
+        "r": {
+          "total_delta": [
+            -0.14270922541618347,
+            -0.1440437287092209,
+            -0.18323761224746704
+          ],
+          "root_only_delta": [
+            -0.009953062981367111,
+            0.018825482577085495,
+            0.018787473440170288
+          ],
+          "local_pose_delta": [
+            -0.13275615870952606,
+            -0.16286921501159668,
+            -0.20202508568763733
+          ],
+          "total_horizontal_speed": 4.866411699437419,
+          "root_horizontal_speed": 0.5110716779625113,
+          "local_horizontal_speed": 5.04288939312675
+        }
+      }
+    },
+    {
+      "output_frame": 33,
+      "max_joint_step": "right_elbow",
+      "joint_steps_px": {
+        "left_shoulder": 2.6171758577642814,
+        "left_elbow": 5.884736567544079,
+        "left_wrist": 6.359491014276305,
+        "left_hip": 4.001932089542871,
+        "left_knee": 3.043815436715746,
+        "left_ankle": 9.042210365974697,
+        "right_shoulder": 3.8265902322307537,
+        "right_elbow": 10.8078483023799,
+        "right_wrist": 5.610326907541383,
+        "right_hip": 4.569562150416604,
+        "right_knee": 4.592715831557392,
+        "right_ankle": 8.243766931018289
+      },
+      "patch_step_decomposition": {
+        "l": {
+          "total_delta": [
+            0.041133373975753784,
+            0.12593016028404236,
+            -0.006290198303759098
+          ],
+          "root_only_delta": [
+            -0.018103182315826416,
+            0.007035665214061737,
+            -0.008816003799438477
+          ],
+          "local_pose_delta": [
+            0.0592365562915802,
+            0.11889450252056122,
+            0.0025258054956793785
+          ],
+          "total_horizontal_speed": 3.179466496270284,
+          "root_horizontal_speed": 0.46613523563393,
+          "local_horizontal_speed": 3.1880160700029165
+        },
+        "r": {
+          "total_delta": [
+            -0.039781466126441956,
+            0.10956481099128723,
+            -0.02917647734284401
+          ],
+          "root_only_delta": [
+            -0.012895599007606506,
+            -0.018669292330741882,
+            -0.008816003799438477
+          ],
+          "local_pose_delta": [
+            -0.02688586711883545,
+            0.1282341033220291,
+            -0.020360473543405533
+          ],
+          "total_horizontal_speed": 2.797520224113139,
+          "root_horizontal_speed": 0.5445615072146684,
+          "local_horizontal_speed": 3.1445344680554914
+        }
+      }
+    }
+  ],
+  "source_steps": [
+    {
+      "source_frames": [
+        25,
+        27
+      ],
+      "joints": {
+        "left_shoulder": {
+          "image_delta_px": [
+            0.00507354736328125,
+            0.384521484375
+          ],
+          "proxy_depth_delta": 0.010297194123268127
+        },
+        "right_shoulder": {
+          "image_delta_px": [
+            0.45482635498046875,
+            -0.0853586196899414
+          ],
+          "proxy_depth_delta": 0.020640032831579447
+        },
+        "left_elbow": {
+          "image_delta_px": [
+            -0.8917617797851562,
+            1.4897525310516357
+          ],
+          "proxy_depth_delta": 0.0030633658170700073
+        },
+        "right_elbow": {
+          "image_delta_px": [
+            1.0592460632324219,
+            0.3334629535675049
+          ],
+          "proxy_depth_delta": 0.030017272452823818
+        },
+        "left_wrist": {
+          "image_delta_px": [
+            -0.51239013671875,
+            1.2010395526885986
+          ],
+          "proxy_depth_delta": -0.002460002899169922
+        },
+        "right_wrist": {
+          "image_delta_px": [
+            0.41110992431640625,
+            1.2948203086853027
+          ],
+          "proxy_depth_delta": 0.03922620415687561
+        },
+        "left_hip": {
+          "image_delta_px": [
+            -0.22613525390625,
+            0.2762031555175781
+          ],
+          "proxy_depth_delta": -0.004162587225437164
+        },
+        "right_hip": {
+          "image_delta_px": [
+            -0.28347015380859375,
+            0.5291247367858887
+          ],
+          "proxy_depth_delta": 0.004153963178396225
+        },
+        "left_knee": {
+          "image_delta_px": [
+            -0.7018280029296875,
+            0.47968626022338867
+          ],
+          "proxy_depth_delta": -0.013338282704353333
+        },
+        "right_knee": {
+          "image_delta_px": [
+            0.038585662841796875,
+            0.298154354095459
+          ],
+          "proxy_depth_delta": 0.009241193532943726
+        },
+        "left_ankle": {
+          "image_delta_px": [
+            0.01667022705078125,
+            0.16466617584228516
+          ],
+          "proxy_depth_delta": -0.02382228523492813
+        },
+        "right_ankle": {
+          "image_delta_px": [
+            0.3903961181640625,
+            0.1505899429321289
+          ],
+          "proxy_depth_delta": 0.003096960484981537
+        },
+        "left_heel": {
+          "image_delta_px": [
+            0.16483306884765625,
+            -0.8318495750427246
+          ],
+          "proxy_depth_delta": -0.024860404431819916
+        },
+        "right_heel": {
+          "image_delta_px": [
+            0.868988037109375,
+            -0.015707015991210938
+          ],
+          "proxy_depth_delta": 0.002430848777294159
+        },
+        "left_foot_index": {
+          "image_delta_px": [
+            -0.99456787109375,
+            0.1162576675415039
+          ],
+          "proxy_depth_delta": -0.02664940059185028
+        },
+        "right_foot_index": {
+          "image_delta_px": [
+            -0.19639968872070312,
+            0.28360605239868164
+          ],
+          "proxy_depth_delta": 0.003354668617248535
+        }
+      }
+    },
+    {
+      "source_frames": [
+        27,
+        29
+      ],
+      "joints": {
+        "left_shoulder": {
+          "image_delta_px": [
+            0.8649063110351562,
+            4.310159683227539
+          ],
+          "proxy_depth_delta": -0.053473860025405884
+        },
+        "right_shoulder": {
+          "image_delta_px": [
+            3.7611770629882812,
+            -3.500819206237793
+          ],
+          "proxy_depth_delta": -0.007565333507955074
+        },
+        "left_elbow": {
+          "image_delta_px": [
+            0.02498626708984375,
+            -0.8990335464477539
+          ],
+          "proxy_depth_delta": -0.023477807641029358
+        },
+        "right_elbow": {
+          "image_delta_px": [
+            -0.21871566772460938,
+            -9.716291427612305
+          ],
+          "proxy_depth_delta": 0.11840038478840142
+        },
+        "left_wrist": {
+          "image_delta_px": [
+            6.91802978515625,
+            21.235885620117188
+          ],
+          "proxy_depth_delta": -0.008645296096801758
+        },
+        "right_wrist": {
+          "image_delta_px": [
+            -1.9089508056640625,
+            9.556174278259277
+          ],
+          "proxy_depth_delta": 0.24930064380168915
+        },
+        "left_hip": {
+          "image_delta_px": [
+            -2.1102142333984375,
+            -3.1983089447021484
+          ],
+          "proxy_depth_delta": -0.009580433368682861
+        },
+        "right_hip": {
+          "image_delta_px": [
+            0.9693145751953125,
+            -4.316682815551758
+          ],
+          "proxy_depth_delta": 0.009573351591825485
+        },
+        "left_knee": {
+          "image_delta_px": [
+            -1.4550018310546875,
+            -0.6928896903991699
+          ],
+          "proxy_depth_delta": 0.07857857644557953
+        },
+        "right_knee": {
+          "image_delta_px": [
+            3.8857650756835938,
+            14.120757579803467
+          ],
+          "proxy_depth_delta": 0.13577796518802643
+        },
+        "left_ankle": {
+          "image_delta_px": [
+            -1.4839935302734375,
+            0.5428791046142578
+          ],
+          "proxy_depth_delta": 0.06069885566830635
+        },
+        "right_ankle": {
+          "image_delta_px": [
+            -23.732547760009766,
+            19.793500900268555
+          ],
+          "proxy_depth_delta": 0.03583114966750145
+        },
+        "left_heel": {
+          "image_delta_px": [
+            -0.5657196044921875,
+            1.986379623413086
+          ],
+          "proxy_depth_delta": 0.057483017444610596
+        },
+        "right_heel": {
+          "image_delta_px": [
+            -26.201953887939453,
+            26.66632890701294
+          ],
+          "proxy_depth_delta": 0.022032402455806732
+        },
+        "left_foot_index": {
+          "image_delta_px": [
+            1.4155960083007812,
+            -0.29416322708129883
+          ],
+          "proxy_depth_delta": 0.05745765566825867
+        },
+        "right_foot_index": {
+          "image_delta_px": [
+            -33.024349212646484,
+            9.42403793334961
+          ],
+          "proxy_depth_delta": -0.011594489216804504
+        }
+      }
+    },
+    {
+      "source_frames": [
+        31,
+        33
+      ],
+      "joints": {
+        "left_shoulder": {
+          "image_delta_px": [
+            -0.6929397583007812,
+            -0.2923715114593506
+          ],
+          "proxy_depth_delta": 0.020702332258224487
+        },
+        "right_shoulder": {
+          "image_delta_px": [
+            -0.595245361328125,
+            0.0935983657836914
+          ],
+          "proxy_depth_delta": 0.004066864028573036
+        },
+        "left_elbow": {
+          "image_delta_px": [
+            -0.8694839477539062,
+            0.39748191833496094
+          ],
+          "proxy_depth_delta": 0.01813165843486786
+        },
+        "right_elbow": {
+          "image_delta_px": [
+            -0.256805419921875,
+            -0.42256593704223633
+          ],
+          "proxy_depth_delta": -0.02316950261592865
+        },
+        "left_wrist": {
+          "image_delta_px": [
+            -0.48458099365234375,
+            0.29953837394714355
+          ],
+          "proxy_depth_delta": 0.0070258378982543945
+        },
+        "right_wrist": {
+          "image_delta_px": [
+            -2.06146240234375,
+            0.945897102355957
+          ],
+          "proxy_depth_delta": -0.05199422687292099
+        },
+        "left_hip": {
+          "image_delta_px": [
+            0.26275634765625,
+            -0.4441094398498535
+          ],
+          "proxy_depth_delta": 0.005621250718832016
+        },
+        "right_hip": {
+          "image_delta_px": [
+            -0.19561767578125,
+            -0.041027069091796875
+          ],
+          "proxy_depth_delta": -0.005584366619586945
+        },
+        "left_knee": {
+          "image_delta_px": [
+            0.7010269165039062,
+            -0.16951560974121094
+          ],
+          "proxy_depth_delta": 0.003872908651828766
+        },
+        "right_knee": {
+          "image_delta_px": [
+            1.7635726928710938,
+            0.13275861740112305
+          ],
+          "proxy_depth_delta": 0.010351166129112244
+        },
+        "left_ankle": {
+          "image_delta_px": [
+            -0.289154052734375,
+            -0.009505748748779297
+          ],
+          "proxy_depth_delta": -0.0027882717549800873
+        },
+        "right_ankle": {
+          "image_delta_px": [
+            -0.9675788879394531,
+            -0.23607730865478516
+          ],
+          "proxy_depth_delta": 0.01408194936811924
+        },
+        "left_heel": {
+          "image_delta_px": [
+            -0.72174072265625,
+            0.011844635009765625
+          ],
+          "proxy_depth_delta": -0.004085943102836609
+        },
+        "right_heel": {
+          "image_delta_px": [
+            -1.4271736145019531,
+            -3.762838840484619
+          ],
+          "proxy_depth_delta": 0.01441694051027298
+        },
+        "left_foot_index": {
+          "image_delta_px": [
+            3.7723159790039062,
+            -0.12542009353637695
+          ],
+          "proxy_depth_delta": -0.006038859486579895
+        },
+        "right_foot_index": {
+          "image_delta_px": [
+            0.136566162109375,
+            -1.1562037467956543
+          ],
+          "proxy_depth_delta": 0.017032280564308167
+        }
+      }
+    },
+    {
+      "source_frames": [
+        33,
+        35
+      ],
+      "joints": {
+        "left_shoulder": {
+          "image_delta_px": [
+            -1.1098861694335938,
+            -2.6828527450561523
+          ],
+          "proxy_depth_delta": -0.0013668090105056763
+        },
+        "right_shoulder": {
+          "image_delta_px": [
+            -3.6944961547851562,
+            -0.6717216968536377
+          ],
+          "proxy_depth_delta": -0.002359643578529358
+        },
+        "left_elbow": {
+          "image_delta_px": [
+            3.4344100952148438,
+            -4.409122467041016
+          ],
+          "proxy_depth_delta": -0.04178668558597565
+        },
+        "right_elbow": {
+          "image_delta_px": [
+            -12.15057373046875,
+            -10.398752689361572
+          ],
+          "proxy_depth_delta": -0.04733937233686447
+        },
+        "left_wrist": {
+          "image_delta_px": [
+            10.296440124511719,
+            -8.094971179962158
+          ],
+          "proxy_depth_delta": -0.06906765699386597
+        },
+        "right_wrist": {
+          "image_delta_px": [
+            -26.685314178466797,
+            -11.999602317810059
+          ],
+          "proxy_depth_delta": -0.10003742948174477
+        },
+        "left_hip": {
+          "image_delta_px": [
+            -8.844146728515625,
+            4.5732951164245605
+          ],
+          "proxy_depth_delta": 0.005150919780135155
+        },
+        "right_hip": {
+          "image_delta_px": [
+            -8.733253479003906,
+            2.479519844055176
+          ],
+          "proxy_depth_delta": -0.0051566921174526215
+        },
+        "left_knee": {
+          "image_delta_px": [
+            -9.682121276855469,
+            -1.2255334854125977
+          ],
+          "proxy_depth_delta": 0.048373717814683914
+        },
+        "right_knee": {
+          "image_delta_px": [
+            -1.7064857482910156,
+            5.832302570343018
+          ],
+          "proxy_depth_delta": 0.05411580950021744
+        },
+        "left_ankle": {
+          "image_delta_px": [
+            -0.33184051513671875,
+            -1.1044692993164062
+          ],
+          "proxy_depth_delta": 0.07843186147511005
+        },
+        "right_ankle": {
+          "image_delta_px": [
+            -12.841205596923828,
+            1.0939335823059082
+          ],
+          "proxy_depth_delta": 0.07962551526725292
+        },
+        "left_heel": {
+          "image_delta_px": [
+            -0.16170501708984375,
+            -0.07922172546386719
+          ],
+          "proxy_depth_delta": 0.08044817112386227
+        },
+        "right_heel": {
+          "image_delta_px": [
+            -12.953567504882812,
+            7.327945232391357
+          ],
+          "proxy_depth_delta": 0.08159874379634857
+        },
+        "left_foot_index": {
+          "image_delta_px": [
+            4.794578552246094,
+            -0.6201267242431641
+          ],
+          "proxy_depth_delta": 0.08163657784461975
+        },
+        "right_foot_index": {
+          "image_delta_px": [
+            -6.945209503173828,
+            10.184540748596191
+          ],
+          "proxy_depth_delta": 0.07934649661183357
+        }
+      }
+    },
+    {
+      "source_frames": [
+        35,
+        37
+      ],
+      "joints": {
+        "left_shoulder": {
+          "image_delta_px": [
+            -2.00897216796875,
+            -0.08224725723266602
+          ],
+          "proxy_depth_delta": 0.00792142003774643
+        },
+        "right_shoulder": {
+          "image_delta_px": [
+            -0.5821418762207031,
+            -2.554224729537964
+          ],
+          "proxy_depth_delta": -0.02961968630552292
+        },
+        "left_elbow": {
+          "image_delta_px": [
+            -1.6946029663085938,
+            -1.1948275566101074
+          ],
+          "proxy_depth_delta": 0.04211001098155975
+        },
+        "right_elbow": {
+          "image_delta_px": [
+            -2.7240371704101562,
+            -2.143278121948242
+          ],
+          "proxy_depth_delta": -0.031325049698352814
+        },
+        "left_wrist": {
+          "image_delta_px": [
+            -1.2452316284179688,
+            0.8891844749450684
+          ],
+          "proxy_depth_delta": 0.06050071120262146
+        },
+        "right_wrist": {
+          "image_delta_px": [
+            0.09023666381835938,
+            -3.2043707370758057
+          ],
+          "proxy_depth_delta": -0.034874748438596725
+        },
+        "left_hip": {
+          "image_delta_px": [
+            -3.1582260131835938,
+            -3.2171273231506348
+          ],
+          "proxy_depth_delta": 0.01405650470405817
+        },
+        "right_hip": {
+          "image_delta_px": [
+            -2.1410179138183594,
+            -4.176220893859863
+          ],
+          "proxy_depth_delta": -0.013993486762046814
+        },
+        "left_knee": {
+          "image_delta_px": [
+            -1.3514328002929688,
+            -0.26296377182006836
+          ],
+          "proxy_depth_delta": 0.044271040707826614
+        },
+        "right_knee": {
+          "image_delta_px": [
+            -2.0511817932128906,
+            -0.7234454154968262
+          ],
+          "proxy_depth_delta": -0.0020301323384046555
+        },
+        "left_ankle": {
+          "image_delta_px": [
+            -1.6695022583007812,
+            -1.1675548553466797
+          ],
+          "proxy_depth_delta": 0.04785194993019104
+        },
+        "right_ankle": {
+          "image_delta_px": [
+            0.7576942443847656,
+            -0.5502605438232422
+          ],
+          "proxy_depth_delta": -0.0019975267350673676
+        },
+        "left_heel": {
+          "image_delta_px": [
+            -2.261810302734375,
+            -1.0934185981750488
+          ],
+          "proxy_depth_delta": 0.047614578157663345
+        },
+        "right_heel": {
+          "image_delta_px": [
+            -0.07253646850585938,
+            -1.6016650199890137
+          ],
+          "proxy_depth_delta": -0.0020837821066379547
+        },
+        "left_foot_index": {
+          "image_delta_px": [
+            2.56134033203125,
+            -3.2552146911621094
+          ],
+          "proxy_depth_delta": 0.04880954814143479
+        },
+        "right_foot_index": {
+          "image_delta_px": [
+            -1.0625076293945312,
+            -7.6764607429504395
+          ],
+          "proxy_depth_delta": -0.0056069232523441315
+        }
+      }
+    }
+  ]
+}
