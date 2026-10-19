@@ -2,6 +2,8 @@
 
 2026-10-19。本轮只读检查 pinned rig，并在无骨盆、含 root yaw 的 bundle 上做局部 IK 诊断；没有修改主 builder 或发布配置。
 
+后续更正：下文米/cm数值依赖未经验证的资产单位假设，应按 Blender units 解读（5.5 cm 对应数值 0.055 units）；它是静止姿态世界 Z 偏移。上轮 IK 还存在链未包含大腿及跨帧累积约束的问题，不能用其判定 pole vector 或求解器失效。固定网格patch及正确两节腿的后续结果见[两节腿验证](2026-10-19-recreation2-two-bone-ik-validation-v1.md)。
+
 ## Observed
 
 - 脚部几何位于 `white-model-neutral-female-03`。左右脚可由 `DEF_foot_{l/r}`、`toe_{l/r}`、`toe_attachment_{l/r}` 蒙皮组筛选。
