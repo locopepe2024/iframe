@@ -1,0 +1,34 @@
+{
+  "schema": "recreation2-xyz-contract-audit.v1",
+  "sha256": {
+    "legacy-track.json": "e556a4991e1e879445cc1ca3f3ce050af1e628d149a6119c28281c36acfaf153",
+    "track.json": "b353617bc7dfc3d1cb63dc93d2e0b889a90fe58c29668cef5199d1e5526cbf2f",
+    "track-2s.json": "0fed823bf39bd206ebeafec922a29394ee87a942b1bcc0395610a603d598550a"
+  },
+  "normalizer_sha256": "07425bac24c37922bbfc3b620613e624552bb8c92bb130c0a1055a7259c4d675",
+  "source_revision_matches_raw": true,
+  "full_conversion_exact_match": true,
+  "raw_to_full_coordinate_count": 3786,
+  "raw_to_full_max_abs_difference": 0,
+  "full_to_window_coordinate_count": 1488,
+  "full_to_window_max_abs_difference": 0,
+  "source_dimensions": [
+    1394,
+    792
+  ],
+  "image_y_to_width_units_factor": 0.5681492109038737,
+  "uncompensated_y_relative_scale": 1.7601010101010102,
+  "window_hip_mean_proxy_z_range": [
+    -3.7904828786849976e-06,
+    8.850451558828354e-05
+  ],
+  "window_builder_root_depth_range": [
+    -0.0001327567733824253,
+    5.685724318027496e-06
+  ],
+  "limits": [
+    "No camera unprojection or world-space accuracy test",
+    "Aspect factor is a coordinate-scale fact, not a validated retargeting fix",
+    "Current remote extractor is not an immutable record of the original run"
+  ]
+}
