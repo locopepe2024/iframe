@@ -33,6 +33,7 @@ def test_bounds():
         with pytest.raises(ValueError): depth.Snapshot(**{**snapshot(), **changes})
     bad = snapshot(); bad['meshes'][0]['triangles'] = [[0,1,9]]
     with pytest.raises(ValueError): depth.Snapshot(**bad)
+    with pytest.raises(ValueError): depth.Snapshot(**{**snapshot(), 'packageChecksum': 'invalid'})
 
 
 def test_runtime_unavailable(client, monkeypatch):
