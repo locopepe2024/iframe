@@ -64,6 +64,7 @@ class Camera(BaseModel):
 class Snapshot(BaseModel):
     model_config = ConfigDict(extra="forbid", allow_inf_nan=False)
     schema_version: str = Field(default="director-scene-depth-snapshot.v1", pattern=r"^director-scene-depth-snapshot\.v1$")
+    packageChecksum: str | None = Field(default=None, pattern=r"^fnv1a32:[0-9a-f]{8}$")
     frame: StrictInt = Field(ge=1, le=100000)
     fps: StrictInt = Field(ge=1, le=120)
     cameraLabel: str = Field(min_length=1, max_length=120)
@@ -145,6 +146,9 @@ def run_task(path, binary):
             manifest = json.loads((path / "result" / "depth-reference.v1.json").read_text())
             if manifest.get("status") != "completed" or any(len(manifest["outputs"][kind]) != 1 for kind in ("meters", "preview")):
                 raise ValueError("invalid depth result")
+            if record.get("packageChecksum"):
+                manifest["packageChecksum"] = record["packageChecksum"]
+                (path / "result" / "depth-reference.v1.json").write_text(json.dumps(manifest, ensure_ascii=False))
             outputs = {"preview": manifest["outputs"]["preview"][0],
                        "meters": manifest["outputs"]["meters"][0], "manifest": "depth-reference.v1.json"}
             if any(Path(name).name != name or not (path / "result" / name).is_file() for name in outputs.values()):
@@ -190,6 +194,7 @@ def submit(snapshot: Snapshot, background: BackgroundTasks, user: UserContext = 
         record = {"id": task_id, "status": "queued", "createdAt": time.time(),
                   "frame": snapshot.frame, "cameraLabel": snapshot.cameraLabel,
                   "nearM": snapshot.nearM, "farM": snapshot.farM,
+                  "packageChecksum": snapshot.packageChecksum,
                   "snapshotChecksum": hashlib.sha256(payload.encode()).hexdigest(), "outputs": {}, "error": None}
         write_record(path / "task.json", record)
         _active.add(str(path / "task.json"))

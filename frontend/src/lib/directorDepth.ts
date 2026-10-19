@@ -4,6 +4,7 @@ import type { DepthSnapshot } from '@/components/director3d/state/depth-snapshot
 export interface DepthTask {
   id: string; status: 'queued' | 'running' | 'completed' | 'failed';
   frame: number; cameraLabel: string; nearM: number; farM: number; error: string | null;
+  packageChecksum?: string | null;
 }
 export const directorDepthApi = {
   async capability() { return (await axios.get<{available: boolean; message: string}>(`${API_URL}/director3d/depth-capability`)).data; },
