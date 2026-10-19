@@ -67,7 +67,7 @@ def validate_dictionary_label(kind: str, category_path: str, entry_type: str | N
         return None
     domain = next((value for prefix, value in DICTIONARY_DOMAINS.items() if category_path.startswith(prefix)), None)
     if not domain or (entry_type, kind) not in {
-        ("term", "prompt_preset"), ("case", "image"), ("case", "video")
+        ("term", "prompt_preset"), ("pattern", "prompt_preset"), ("case", "image"), ("case", "video")
     }:
         raise ValueError("Dictionary type is incompatible with media kind or category")
     return {"semantic_domain": domain, "entry_type": entry_type}
@@ -148,6 +148,7 @@ def submit_generation_candidate(
     media_owner_root: Path,
     rights_confirmed: bool,
     dictionary_entry_type: str | None = None,
+    dictionary_members: list[dict[str, Any]] | None = None,
     path: Path = MANIFEST_PATH,
 ) -> dict[str, Any]:
     """Freeze an owned Playground result as a review candidate, never as active content."""
@@ -156,12 +157,16 @@ def submit_generation_candidate(
     if kind not in {"image", "video", "prompt_preset"} or category_path not in CHARACTER_CATEGORIES:
         raise ValueError("Platform candidate kind or category is invalid")
     dictionary = validate_dictionary_label(kind, category_path, dictionary_entry_type)
+    if dictionary_entry_type != "pattern" and dictionary_members:
+        raise ValueError("Dictionary members require a pattern")
     tags = normalize_character_tags(tags or [])
     if not rights_confirmed:
         raise ValueError("Creator rights confirmation is required")
     title, description = title.strip(), description.strip()
     if not title or len(title) > 200 or not description or len(description) > 20000 or not prompt_used.strip():
         raise ValueError("Candidate title, description or source prompt is invalid")
+    if dictionary_entry_type == "term" and (len(description) > 500 or "\n" in description):
+        raise ValueError("Dictionary term must be a single editable phrase of at most 500 characters")
     if kind == "prompt_preset" and media_source is not None:
         raise ValueError("Prompt presets cannot attach a media output")
     if kind != "prompt_preset" and (media_source is None or not output_id):
@@ -200,6 +205,12 @@ def submit_generation_candidate(
     ).encode("utf-8")).hexdigest()
     with _MUTATION_LOCK, _file_lock(path):
         manifest = _read_manifest(path)
+        if dictionary_entry_type == "pattern":
+            dictionary["members"] = _validate_pattern_members(dictionary_members, dictionary["semantic_domain"], manifest["resources"])
+            fingerprint = hashlib.sha256(json.dumps(
+                [creator_profile_id, kind, category_path, sorted(tags, key=str.casefold), title, payload, dictionary],
+                ensure_ascii=False, sort_keys=True,
+            ).encode("utf-8")).hexdigest()
         existing = next((item for item in manifest["resources"] if item.get("provenance", {}).get("content_sha256") == fingerprint), None)
         if existing:
             return existing
@@ -364,13 +375,49 @@ def _validate_resource(resource: Any) -> None:
         raise ValueError("platform reference tags are invalid")
     if "dictionary" in resource:
         dictionary = resource["dictionary"]
-        if not isinstance(dictionary, dict) or dictionary != validate_dictionary_label(
+        if not isinstance(dictionary, dict):
+            raise ValueError("platform reference dictionary label is invalid")
+        expected = validate_dictionary_label(
             resource.get("kind", ""), resource.get("category_path", ""), dictionary.get("entry_type")
-        ):
+        )
+        if expected and dictionary.get("entry_type") == "pattern":
+            members = dictionary.get("members")
+            if not isinstance(members, list) or not 2 <= len(members) <= 12 or any(
+                not isinstance(member, dict) or set(member) != {"platform_resource_id", "revision", "role"}
+                or not isinstance(member["platform_resource_id"], str) or not member["platform_resource_id"]
+                or type(member["revision"]) is not int or member["revision"] < 1
+                or not isinstance(member["role"], str) or not member["role"].strip()
+                for member in members
+            ):
+                raise ValueError("platform reference pattern members are invalid")
+            expected["members"] = members
+        if dictionary != expected:
             raise ValueError("platform reference dictionary label is invalid")
     provenance = resource["provenance"]
     if not isinstance(provenance, dict) or not provenance.get("license") or not provenance.get("content_sha256"):
         raise ValueError("platform reference provenance requires license and content_sha256")
+
+
+def _validate_pattern_members(members: list[dict[str, Any]] | None, domain: str, resources: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    if not isinstance(members, list) or not 2 <= len(members) <= 12:
+        raise ValueError("Pattern requires 2–12 published terms")
+    normalized = []
+    seen = set()
+    for member in members:
+        if not isinstance(member, dict) or set(member) != {"platform_resource_id", "revision", "role"}:
+            raise ValueError("Pattern member identity, revision and role are required")
+        resource_id, revision, role = member["platform_resource_id"], member["revision"], member["role"]
+        if not isinstance(resource_id, str) or type(revision) is not int or not isinstance(role, str) or not role.strip() or len(role) > 80:
+            raise ValueError("Pattern member is invalid")
+        identity = (resource_id, revision)
+        if identity in seen:
+            raise ValueError("Pattern members must be unique")
+        seen.add(identity)
+        target = next((item for item in resources if item.get("platform_resource_id") == resource_id and item.get("revision") == revision), None)
+        if not target or target.get("status") != "active" or target.get("dictionary") != {"semantic_domain": domain, "entry_type": "term"}:
+            raise ValueError("Pattern member must reference an active term in the same domain and revision")
+        normalized.append({"platform_resource_id": resource_id, "revision": revision, "role": role.strip()})
+    return normalized
 
 
 def _is_skill_card(resource: dict[str, Any]) -> bool:

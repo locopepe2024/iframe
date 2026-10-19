@@ -240,7 +240,8 @@ class PlatformCandidateRequest(BaseModel):
     title: str = Field(min_length=1, max_length=200)
     description: str = Field(max_length=20000)
     rights_confirmed: bool
-    dictionary_entry_type: Optional[Literal["term", "case"]] = None
+    dictionary_entry_type: Optional[Literal["term", "pattern", "case"]] = None
+    dictionary_members: Optional[list[dict[str, Any]]] = None
 
 
 @app.post("/platform-reference-library/candidates")
@@ -268,6 +269,7 @@ def submit_platform_candidate(request: PlatformCandidateRequest, user: UserConte
             media_owner_root=Path(storage.output_dir),
             rights_confirmed=request.rights_confirmed,
             dictionary_entry_type=request.dictionary_entry_type,
+            dictionary_members=request.dictionary_members,
         )
         return private_no_store_signed_response(resource)
     except PermissionError as exc:

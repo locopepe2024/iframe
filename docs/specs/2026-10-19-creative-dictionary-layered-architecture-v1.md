@@ -80,6 +80,12 @@
 
 受影响路径：`src/apps/platform_reference_catalog.py`、`src/apps/comic_gen/api.py`、`frontend/src/lib/api.ts`、`frontend/src/components/library/NewLibraryAssetDialog.tsx` 及对应测试。成功条件：非法领域／粒度组合返回 422，旧目录可读，候选不可公开检索，筛选只命中显式标注且 active 的资源，用户提交前看得到标注并可选“普通参考”。本切片不新增 `pattern`，也不把词典条目自动加入模型请求。
 
+### 实施切片 2B：平台词条与组合方案落到角色台
+
+平台 `term` 的可应用文字取已审核资源中用户编辑的 `structured_prompt.content`，不取生成时完整 `prompt_used`；类别明确映射到角色草稿目标字段。没有对应编辑字段的 `character.performance`、`look/palette` 等类别先只在平台库检索，不强行写入身份。选择词条仅修改当前草稿并记录平台资源 ID、revision 和来源，用户可编辑、移除，模型仍需现有审核确认。带图 `case` 仍供 `@` 预览 Prompt；图像是否附加由用户另行选择。
+
+`pattern` 由 2–12 个**已发布**同领域 `term` 的 `{platform_resource_id, revision, role}` 有序引用组成；后端提交时校验有效性，保存固定版本，不依赖未来的同名查找。角色台应用时展开成员的已审文字到可编辑草稿，并显示组合来源；若成员下架或修订不匹配，保持现有草稿并提示不可应用。发布者可在创作台发布窗口选择成员，审核员可看到完整关系。验收：旧资源可读、候选不进入检索、不同领域混用和悬空引用被拒绝、选择组合不会发起模型请求或自动附图。
+
 1. **清点与映射**：给现有 `CharacterQuickPreset` 和 `AVATAR_FEATURE_LIBRARY` 增加迁移映射表，保留原 ID／revision／来源；风格与面容等分别映射语义领域。验收旧草稿 `preset_id` 可读、原文字不变。
 2. **词典载体**：扩展平台目录或建立独立词典索引，明确 `entry_type`、`semantic_domain`、关系和来源验证；不要把所有条目塞成 `prompt_preset`。验收候选与已发布隔离、按领域和粒度过滤、同名不合并。
 3. **角色台第一批**：面容／皮肤／发型／服装 `term`，古典造型 `pattern`，已审核效果 `case`；姿态任务再接入 3 个武术体系及少量动作词。验收选词只改可编辑草稿、选案例图不自动附图。
