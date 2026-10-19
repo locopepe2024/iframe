@@ -143,6 +143,29 @@ it("browses semantic layers and lets exact search cross the selected layer", () 
     expect(onGenerate).not.toHaveBeenCalled();
 });
 
+it("applies a reviewed platform pattern as editable identity terms without model calls", async () => {
+    apiMocks.getAssetReferenceIndex.mockResolvedValueOnce({ assets: [] } as any);
+    apiMocks.getPlatformReferenceLibrary.mockResolvedValueOnce({ scope: "platform_shared", schema_version: 1, catalog_revision: "test", resources: [
+        { platform_resource_id: "face-1", revision: 1, kind: "prompt_preset", category_path: "character/identity/face", title: "窄长脸", status: "active", dictionary: { semantic_domain: "character.identity", entry_type: "term" }, payload: { prompt_used: "完整模型提示词", structured_prompt: { content: "窄长脸型" } }, provenance: { license: "MIT", content_sha256: "face" } },
+        { platform_resource_id: "skin-1", revision: 1, kind: "prompt_preset", category_path: "character/identity/skin", title: "浅麦色", status: "active", dictionary: { semantic_domain: "character.identity", entry_type: "term" }, payload: { prompt_used: "另一完整模型提示词", structured_prompt: { content: "浅麦色皮肤" } }, provenance: { license: "MIT", content_sha256: "skin" } },
+        { platform_resource_id: "pattern-1", revision: 1, kind: "prompt_preset", category_path: "character/identity/face", title: "古典面容", status: "active", dictionary: { semantic_domain: "character.identity", entry_type: "pattern", members: [{ platform_resource_id: "face-1", revision: 1, role: "face" }, { platform_resource_id: "skin-1", revision: 1, role: "skin" }] }, payload: { prompt_used: "组合模型提示词" }, provenance: { license: "MIT", content_sha256: "pattern" } },
+    ] });
+    apiMocks.agentRequest.mockClear();
+    const onGenerate = vi.fn();
+    render(<CharacterWorkbench asset={{ id: "character-1", name: "苏砚", description: "少年剑客" }}
+        onClose={vi.fn()} onUpdateDescription={vi.fn()} onGenerate={onGenerate} generatingTypes={[]} />);
+    fireEvent.click(screen.getByRole("button", { name: "展开角色设计" }));
+    fireEvent.click(screen.getByRole("button", { name: "打开快捷面板" }));
+    fireEvent.click(screen.getByRole("option", { name: /插入描述词/ }));
+    fireEvent.click(await screen.findByRole("option", { name: /组合方案 · 古典面容/ }));
+    fireEvent.click(screen.getByText(/身份外观字段/));
+    expect(screen.getByRole("textbox", { name: "角色脸型与眉眼" })).toHaveValue("窄长脸型");
+    expect(screen.getByRole("textbox", { name: "角色肤色与肤质" })).toHaveValue("浅麦色皮肤");
+    expect(screen.getByLabelText("已选择的快捷描述词")).toHaveTextContent("组合 pattern-1 r1");
+    expect(onGenerate).not.toHaveBeenCalled();
+    expect(apiMocks.agentRequest.mock.calls.some(([path]) => path === "/character-design/draft")).toBe(false);
+});
+
 it("keeps inserted terms editable and saves their exact field and source", async () => {
     apiMocks.getAssetReferenceIndex.mockResolvedValueOnce({ assets: [] } as any);
     const onUpdateAttributes = vi.fn().mockResolvedValue(undefined);
@@ -205,8 +228,12 @@ it("previews an active platform Prompt before inserting editable text without se
     apiMocks.getPlatformReferenceLibrary.mockResolvedValueOnce({ scope: "platform_shared", schema_version: 1, catalog_revision: "test", resources: [
         { platform_resource_id: "platform-prompt-1", revision: 2, kind: "prompt_preset", category_path: "character/reference",
             title: "古典行旅设定", summary: "古典角色", tags: ["古装"], status: "active",
-            payload: { prompt_used: "古典行旅人物，正面全身，浅灰背景" },
+            payload: { prompt_used: "古典行旅人物，正面全身，浅灰背景", structured_prompt: { content: "古典行旅人物，正面全身，灰蓝长袍" } },
             provenance: { license: "MIT", content_sha256: "abc" } },
+        { platform_resource_id: "dictionary-term", revision: 1, kind: "prompt_preset", category_path: "character/identity/face",
+            title: "窄长脸词条", status: "active", dictionary: { semantic_domain: "character.identity", entry_type: "term" },
+            payload: { prompt_used: "不应作为完整 Prompt", structured_prompt: { content: "窄长脸" } },
+            provenance: { license: "MIT", content_sha256: "term" } },
         { platform_resource_id: "candidate-1", revision: 1, kind: "prompt_preset", category_path: "character/reference",
             title: "未审核提示词", status: "candidate", payload: { prompt_used: "不应可用" },
             provenance: { license: "MIT", content_sha256: "def" } },
@@ -218,12 +245,13 @@ it("previews an active platform Prompt before inserting editable text without se
     fireEvent.click(screen.getByRole("button", { name: "@ 平台 Prompt" }));
     expect(await screen.findByRole("button", { name: /古典行旅设定/ })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /未审核提示词/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /窄长脸词条/ })).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: /古典行旅设定/ }));
-    expect(screen.getByRole("textbox", { name: "将插入的完整 Prompt" })).toHaveValue("古典行旅人物，正面全身，浅灰背景");
+    expect(screen.getByRole("textbox", { name: "将插入的完整 Prompt" })).toHaveValue("古典行旅人物，正面全身，灰蓝长袍");
     const editor = document.querySelector("[contenteditable]") as HTMLElement & { editor: import("@tiptap/core").Editor };
     expect(editor.editor.getText()).not.toContain("古典行旅人物");
     fireEvent.click(screen.getByRole("button", { name: "替换当前 Prompt" }));
-    await waitFor(() => expect(editor.editor.getText()).toContain("古典行旅人物，正面全身，浅灰背景"));
+    await waitFor(() => expect(editor.editor.getText()).toContain("古典行旅人物，正面全身，灰蓝长袍"));
     expect(screen.getByLabelText("平台 Prompt 来源")).toHaveTextContent("古典行旅设定 · r2");
     expect(onGenerate).not.toHaveBeenCalled();
     expect(apiMocks.previewAssetImageSubmission).not.toHaveBeenCalled();

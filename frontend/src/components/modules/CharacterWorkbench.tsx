@@ -35,7 +35,7 @@ import { IDENTITY_FIELDS, LOOK_FIELDS, characterSectionText, normalizeCharacterF
     requirementNeedsReview, type CharacterSectionEditorMode, type IdentityFeatures, type LookFeatures } from "@/lib/characterStructuredDesign";
 import { type CharacterQuickPreset, type CharacterPresetTarget } from "@/lib/characterQuickActions";
 import CharacterSlashPanel from "./CharacterSlashPanel";
-import PlatformPromptPicker, { isUsablePlatformPrompt, type PromptResource } from "@/components/shared/PlatformPromptPicker";
+import PlatformPromptPicker, { editablePlatformPrompt, isUsablePlatformPrompt, type PromptResource } from "@/components/shared/PlatformPromptPicker";
 
 import type { AssetPlanEntry } from "@/lib/episodeAssetPlan";
 import EpisodeAssetPlanPanel from "./EpisodeAssetPlanPanel";
@@ -1168,6 +1168,7 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
                             <p className="mt-1 text-xs leading-5 text-text-muted">AI 会补全可创作的外观与造型细节，并标明创意选择；只有影响角色设定的关键歧义才需要核对。</p>
                             <CharacterSlashPanel open={slashOpen} query={slashQuery} onQueryChange={setSlashQuery}
                                 onOpenChange={setSlashOpen} onPreset={applyQuickPreset}
+                                onPattern={(presets) => presets.forEach(applyQuickPreset)}
                                 onSkill={() => void generateDesignDraft()}
                                 canRunSkill={!!designModel && !!asset.description && !designing} inputRef={slashInputRef} />
                             {presetSelections.length > 0 && <div className="mt-2 rounded border border-primary/30 bg-primary/5 p-2 text-[11px] text-text-secondary" aria-label="已选择的快捷描述词">
@@ -2047,9 +2048,9 @@ export function WorkbenchPanel({
                             {selectedMentionPrompt ? <>
                                 <p className="px-2 text-xs font-medium text-foreground">{selectedMentionPrompt.title}</p>
                                 <p className="px-2 text-[11px] text-text-muted">平台参考 · r{selectedMentionPrompt.revision} · {selectedMentionPrompt.provenance.license}</p>
-                                <p className="mt-2 max-h-28 overflow-y-auto whitespace-pre-wrap break-words rounded bg-surface p-2 text-xs leading-5 text-foreground">{selectedMentionPrompt.payload.prompt_used}</p>
+                                <p className="mt-2 max-h-28 overflow-y-auto whitespace-pre-wrap break-words rounded bg-surface p-2 text-xs leading-5 text-foreground">{editablePlatformPrompt(selectedMentionPrompt)}</p>
                                 <button type="button" onMouseDown={(event) => event.preventDefault()} onClick={() => {
-                                    const fullText = mention.replaceWithText(selectedMentionPrompt.payload.prompt_used.trim());
+                                    const fullText = mention.replaceWithText(editablePlatformPrompt(selectedMentionPrompt));
                                     onPlatformPromptSourceChange?.({ resourceId: selectedMentionPrompt.platform_resource_id,
                                         revision: selectedMentionPrompt.revision, title: selectedMentionPrompt.title,
                                         appliedText: fullText, customized: false });

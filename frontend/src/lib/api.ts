@@ -377,7 +377,7 @@ export interface PlatformReferenceResource {
     revision: number;
     kind: string;
     category_path?: string;
-    dictionary?: { semantic_domain: "character.identity" | "character.look" | "character.performance" | "world.style"; entry_type: "term" | "case" };
+    dictionary?: { semantic_domain: "character.identity" | "character.look" | "character.performance" | "world.style"; entry_type: "term" | "pattern" | "case"; members?: { platform_resource_id: string; revision: number; role: string }[] };
     title: string;
     summary?: string;
     tags?: string[];
@@ -801,7 +801,8 @@ export const api = {
         source_output_id?: string;
         kind: "image" | "video" | "prompt_preset";
         category_path: string;
-        dictionary_entry_type?: "term" | "case";
+        dictionary_entry_type?: "term" | "pattern" | "case";
+        dictionary_members?: { platform_resource_id: string; revision: number; role: string }[];
         tags: string[];
         title: string;
         description: string;

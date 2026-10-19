@@ -11,6 +11,7 @@ vi.mock('@/lib/api', () => ({
     uploadLibraryImage: vi.fn(),
     getPlatformPublisher: vi.fn().mockResolvedValue({ profile_id: 'apikey-test', authorized: false }),
     getPlatformReferenceCategories: vi.fn().mockResolvedValue({ categories: [{ id: 'character/reference', label: '角色参考' }, { id: 'character/identity/face', label: '面容' }], suggested_tags: ['角色设定稿', '转面三视图'] }),
+    getPlatformReferenceLibrary: vi.fn().mockResolvedValue({ scope: 'platform_shared', schema_version: 1, catalog_revision: 'test', resources: [] }),
     submitPlatformCandidate: vi.fn().mockResolvedValue({ platform_resource_id: 'candidate-1' }),
   },
 }));
@@ -103,6 +104,32 @@ it('submits an explicitly labeled effect case without changing the media kind', 
   fireEvent.click(screen.getByRole('button', { name: '提交平台审核' }));
   await waitFor(() => expect(api.submitPlatformCandidate).toHaveBeenCalledWith(expect.objectContaining({
     kind: 'image', category_path: 'character/identity/face', dictionary_entry_type: 'case',
+  })));
+});
+
+it('submits a pattern with ordered pinned active terms', async () => {
+  vi.mocked(api.getPlatformPublisher).mockResolvedValueOnce({ profile_id: 'apikey-test', authorized: true });
+  vi.mocked(api.getPlatformReferenceLibrary).mockResolvedValueOnce({ scope: 'platform_shared', schema_version: 1, catalog_revision: 'test', resources: [
+    { platform_resource_id: 'face-1', revision: 1, kind: 'prompt_preset', category_path: 'character/identity/face', title: '窄长脸', status: 'active', dictionary: { semantic_domain: 'character.identity', entry_type: 'term' }, payload: { structured_prompt: { content: '窄长脸' } }, provenance: { license: 'MIT', content_sha256: 'a' } },
+    { platform_resource_id: 'eyes-1', revision: 2, kind: 'prompt_preset', category_path: 'character/identity/face', title: '细长眼', status: 'active', dictionary: { semantic_domain: 'character.identity', entry_type: 'term' }, payload: { structured_prompt: { content: '细长眼' } }, provenance: { license: 'MIT', content_sha256: 'b' } },
+  ] });
+  render(<NewLibraryAssetDialog initialSourceGenerationId="generation-1" initialDescription="面容组合"
+    onClose={vi.fn()} onCreated={vi.fn()} />);
+  await waitFor(() => expect(screen.getByRole('option', { name: '平台参考库 · 提交审核' })).toBeEnabled());
+  fireEvent.change(screen.getByLabelText('录入目标'), { target: { value: 'platform' } });
+  fireEvent.change(screen.getByLabelText('平台类别'), { target: { value: 'character/identity/face' } });
+  fireEvent.change(screen.getByLabelText('发布内容'), { target: { value: 'prompt_preset' } });
+  fireEvent.change(screen.getByLabelText('词典归类'), { target: { value: 'pattern' } });
+  fireEvent.click(await screen.findByRole('button', { name: /窄长脸 · r1/ }));
+  fireEvent.click(screen.getByRole('button', { name: /细长眼 · r2/ }));
+  fireEvent.change(screen.getByLabelText('nameLabel'), { target: { value: '古典面容' } });
+  fireEvent.click(screen.getByRole('checkbox', { name: '我确认拥有将此内容提交平台审核的权利' }));
+  fireEvent.click(screen.getByRole('button', { name: '提交平台审核' }));
+  await waitFor(() => expect(api.submitPlatformCandidate).toHaveBeenCalledWith(expect.objectContaining({
+    kind: 'prompt_preset', dictionary_entry_type: 'pattern', dictionary_members: [
+      { platform_resource_id: 'face-1', revision: 1, role: 'part_1' },
+      { platform_resource_id: 'eyes-1', revision: 2, role: 'part_2' },
+    ],
   })));
 });
 

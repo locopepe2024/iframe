@@ -2,8 +2,10 @@
 
 import { useEffect, useRef, useState, type RefObject } from "react";
 import { ArrowLeft, Search, Sparkles, TextCursorInput, X } from "lucide-react";
+import { api, type PlatformReferenceResource } from "@/lib/api";
 import {
-  searchCharacterQuickPresets, type CharacterQuickPreset, type CharacterPresetCategory, type CharacterSemanticDomain,
+  searchCharacterQuickPresets, platformCharacterTerm, platformCharacterPattern,
+  type CharacterQuickPreset, type CharacterPresetCategory, type CharacterSemanticDomain, type CharacterPlatformPattern,
 } from "@/lib/characterQuickActions";
 
 const CATEGORY_ORDER: CharacterPresetCategory[] = ["风格", "面容", "皮肤", "身材体态", "服装", "发型"];
@@ -25,12 +27,13 @@ const COMMANDS = [
   { id: "terms", title: "插入描述词", detail: "选择词条，写入可编辑草稿", search: "插入 添加 描述词 风格 面容 皮肤 身材 体态 服装 发型" },
 ] as const;
 
-export default function CharacterSlashPanel({ open, query, onQueryChange, onOpenChange, onPreset, onSkill, canRunSkill, inputRef }: {
+export default function CharacterSlashPanel({ open, query, onQueryChange, onOpenChange, onPreset, onPattern, onSkill, canRunSkill, inputRef }: {
   open: boolean;
   query: string;
   onQueryChange: (query: string) => void;
   onOpenChange: (open: boolean) => void;
   onPreset: (preset: CharacterQuickPreset) => void;
+  onPattern: (presets: CharacterQuickPreset[]) => void;
   onSkill: () => void;
   canRunSkill: boolean;
   inputRef: RefObject<HTMLInputElement>;
@@ -39,17 +42,42 @@ export default function CharacterSlashPanel({ open, query, onQueryChange, onOpen
   const [activeIndex, setActiveIndex] = useState(0);
   const [activeCategory, setActiveCategory] = useState<BrowseCategory>("全部");
   const [activeDomain, setActiveDomain] = useState<CharacterSemanticDomain | null>(null);
+  const [platformResources, setPlatformResources] = useState<PlatformReferenceResource[]>([]);
+  const [platformLoading, setPlatformLoading] = useState(false);
+  const [platformError, setPlatformError] = useState(false);
+  const [refresh, setRefresh] = useState(0);
   const [stage, setStage] = useState<"commands" | "terms">("commands");
   const needle = query.replace(/^\//, "").trim().toLocaleLowerCase();
   const commands = COMMANDS.filter((command) => !needle || `${command.title} ${command.search}`.toLocaleLowerCase().includes(needle));
-  const presets = searchCharacterQuickPresets(needle, needle ? undefined : activeDomain || undefined)
+  const platformPresets = platformResources.map(platformCharacterTerm).filter((item): item is CharacterQuickPreset => item !== null);
+  const presets = [...searchCharacterQuickPresets(needle, needle ? undefined : activeDomain || undefined), ...platformPresets]
+    .filter((preset) => !preset.id.startsWith("platform.") || !needle || preset.searchText.toLocaleLowerCase().includes(needle))
+    .filter((preset) => !!needle || !activeDomain || preset.semanticDomain === activeDomain)
     .filter((preset) => !!needle || activeCategory === "全部" || preset.category === activeCategory);
-  const options: Array<{ kind: "command"; id: "design" | "terms" } | { kind: "preset"; preset: CharacterQuickPreset }> = stage === "commands"
+  const patterns = platformResources.map((resource) => platformCharacterPattern(resource, platformResources))
+    .filter((item): item is CharacterPlatformPattern => item !== null)
+    .filter((item) => (!needle || item.searchText.toLocaleLowerCase().includes(needle))
+      && (!!needle || !activeDomain || item.semanticDomain === activeDomain)
+      && (!!needle || activeCategory === "全部" || item.members.some((member) => member.category === activeCategory)));
+  const unavailablePatterns = platformResources.filter((resource) => resource.status === "active"
+    && resource.dictionary?.entry_type === "pattern"
+    && !platformCharacterPattern(resource, platformResources));
+  const options: Array<{ kind: "command"; id: "design" | "terms" } | { kind: "preset"; preset: CharacterQuickPreset } | { kind: "pattern"; pattern: CharacterPlatformPattern }> = stage === "commands"
     ? commands.map((command) => ({ kind: "command", id: command.id }))
-    : presets.map((preset) => ({ kind: "preset", preset }));
+    : [...patterns.map((pattern) => ({ kind: "pattern" as const, pattern })), ...presets.map((preset) => ({ kind: "preset" as const, preset }))];
 
   useEffect(() => { setActiveIndex(0); }, [query, stage, activeCategory, activeDomain]);
   useEffect(() => { if (!open) setStage("commands"); }, [open]);
+  useEffect(() => {
+    if (!open || stage !== "terms") return;
+    let active = true;
+    setPlatformLoading(true); setPlatformError(false);
+    void api.getPlatformReferenceLibrary().then((catalog) => {
+      if (active) setPlatformResources(catalog.resources);
+    }).catch(() => { if (active) { setPlatformResources([]); setPlatformError(true); } })
+      .finally(() => { if (active) setPlatformLoading(false); });
+    return () => { active = false; };
+  }, [open, stage, refresh]);
   useEffect(() => {
     if (!open) return;
     const closeOutside = (event: PointerEvent) => {
@@ -67,7 +95,8 @@ export default function CharacterSlashPanel({ open, query, onQueryChange, onOpen
       }
       if (!canRunSkill) return;
       onSkill();
-    } else onPreset(option.preset);
+    } else if (option.kind === "pattern") onPattern(option.pattern.members);
+    else onPreset(option.preset);
     onQueryChange(""); onOpenChange(false);
   };
 
@@ -115,12 +144,21 @@ export default function CharacterSlashPanel({ open, query, onQueryChange, onOpen
         {needle && <p className="px-1 pt-1 text-[11px] text-text-muted">搜索全部语义层</p>}
       </div>}
       <div id="character-slash-options" role="listbox" aria-label={stage === "commands" ? "角色操作" : "角色描述词"}>
+      {stage === "terms" && platformLoading && <p className="px-2 py-2 text-xs text-text-muted">正在读取平台词典…</p>}
+      {stage === "terms" && platformError && <p className="px-2 py-2 text-xs text-status-failed-fg">平台词典读取失败。<button type="button" onClick={() => setRefresh((value) => value + 1)} className="underline">重试</button></p>}
+      {stage === "terms" && unavailablePatterns.length > 0 && <p className="px-2 py-2 text-xs text-text-muted">{unavailablePatterns.length} 个组合方案的成员已失效或当前工位不支持，无法应用；草稿保持原样。</p>}
       {options.length === 0 && <p className="px-2 py-3 text-xs text-text-muted">没有匹配项；原文不会被改动。</p>}
       {stage === "commands" && commands.map((command, index) => <button key={command.id} id={`character-slash-option-${index}`} type="button" role="option" aria-selected={activeIndex === index} disabled={command.id === "design" && !canRunSkill}
         onClick={() => choose({ kind: "command", id: command.id })}
         className={`flex min-h-11 w-full items-start gap-2 rounded px-2 py-2 text-left text-xs hover:bg-hover-bg focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary disabled:opacity-50 ${activeIndex === index ? "bg-primary/10" : ""}`}>
         {command.id === "design" ? <Sparkles size={15} className="mt-0.5 shrink-0 text-primary" aria-hidden="true" /> : <TextCursorInput size={15} className="mt-0.5 shrink-0 text-primary" aria-hidden="true" />}
         <span><span className="block font-medium text-foreground">{command.title}</span><span className="mt-0.5 block leading-4 text-text-muted">{command.detail}</span></span>
+      </button>)}
+      {stage === "terms" && patterns.map((pattern, index) => <button key={pattern.id} id={`character-slash-option-${index}`} type="button" role="option" aria-selected={activeIndex === index}
+        onClick={() => choose({ kind: "pattern", pattern })}
+        className={`flex min-h-11 w-full flex-col justify-center rounded px-2 py-1.5 text-left hover:bg-hover-bg focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary ${activeIndex === index ? "bg-primary/10" : ""}`}>
+        <span className="text-xs font-medium text-foreground">组合方案 · {pattern.title}</span>
+        <span className="mt-0.5 text-[11px] leading-4 text-text-muted">{DOMAIN_LABELS[pattern.semanticDomain]} · {pattern.members.map((member) => member.label).join(" → ")} · r{pattern.revision} · 点击写入可编辑草稿</span>
       </button>)}
       {stage === "terms" && CATEGORY_ORDER.map((category) => {
         const group = presets.filter((preset) => preset.category === category);

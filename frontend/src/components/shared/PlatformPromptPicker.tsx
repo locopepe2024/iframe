@@ -6,8 +6,13 @@ import { API_URL, api, authenticatedFetch, type PlatformReferenceResource } from
 
 export type PromptResource = PlatformReferenceResource & { payload: { prompt_used: string; media_file?: string | null } };
 
+export function editablePlatformPrompt(resource: PromptResource): string {
+  return resource.payload.structured_prompt?.content?.trim() || resource.payload.prompt_used.trim();
+}
+
 export function isUsablePlatformPrompt(resource: PlatformReferenceResource, categoryPrefix: string): resource is PromptResource {
   return resource.status === "active" && resource.category_path?.startsWith(categoryPrefix) === true
+    && (!resource.dictionary || resource.dictionary.entry_type === "case")
     && (resource.kind === "prompt_preset" || resource.kind === "image")
     && typeof resource.payload?.prompt_used === "string" && resource.payload.prompt_used.trim().length > 0;
 }
@@ -64,7 +69,7 @@ export default function PlatformPromptPicker({ currentPrompt, onApply, disabled 
 
   const apply = (operation: "replace" | "append") => {
     if (!selected) return;
-    const sourcePrompt = selected.payload.prompt_used.trim();
+    const sourcePrompt = editablePlatformPrompt(selected);
     const text = operation === "append" && currentPrompt.trim()
       ? `${currentPrompt.trim()}\n${sourcePrompt}` : sourcePrompt;
     onApply(text, selected, operation);
@@ -84,7 +89,7 @@ export default function PlatformPromptPicker({ currentPrompt, onApply, disabled 
         <p className="mt-1 break-all text-xs text-text-muted">平台参考 · {selected.category_path} · r{selected.revision} · {selected.provenance.license}</p>
         {previewUrl && <img src={previewUrl} alt={`${selected.title} 案例预览`} className="mt-2 max-h-48 w-full rounded-md object-contain" />}
         <label className="mt-2 block text-xs text-text-secondary" htmlFor="platform-character-prompt-preview">将插入的完整 Prompt</label>
-        <textarea id="platform-character-prompt-preview" readOnly value={selected.payload.prompt_used} rows={8}
+        <textarea id="platform-character-prompt-preview" readOnly value={editablePlatformPrompt(selected)} rows={8}
           className="mt-1 w-full resize-y rounded-md border border-glass-border bg-surface p-2 text-xs leading-5 text-foreground" />
         <div className="mt-2 flex flex-wrap gap-2">
           <button type="button" onClick={() => apply("replace")} className="min-h-11 rounded-md bg-primary px-3 text-xs text-primary-foreground focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary">替换当前 Prompt</button>
