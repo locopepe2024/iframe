@@ -46,6 +46,7 @@ export default function NewLibraryAssetDialog({ onClose, onCreated, initialImage
   const [targetScope, setTargetScope] = useState<"asset" | "platform">(initialMediaType === "video" ? "platform" : "asset");
   const [platformKind, setPlatformKind] = useState<"image" | "video" | "prompt_preset">(initialMediaType);
   const [platformCategory, setPlatformCategory] = useState("character/reference");
+  const [dictionaryEntryType, setDictionaryEntryType] = useState<"" | "term" | "case">("");
   const [platformCategories, setPlatformCategories] = useState<{ id: string; label: string }[]>([]);
   const [platformSuggestedTags, setPlatformSuggestedTags] = useState<string[]>([]);
   const [platformTagsText, setPlatformTagsText] = useState("");
@@ -143,6 +144,7 @@ export default function NewLibraryAssetDialog({ onClose, onCreated, initialImage
           source_output_id: platformKind === "prompt_preset" ? undefined : initialSourceOutputId,
           kind: platformKind,
           category_path: platformCategory,
+          ...(dictionaryEntryType ? { dictionary_entry_type: dictionaryEntryType } : {}),
           tags,
           title: trimmed,
           description: description.trim(),
@@ -251,7 +253,7 @@ export default function NewLibraryAssetDialog({ onClose, onCreated, initialImage
 
           {targetScope === "platform" && <div className="grid gap-3">
             <label className="text-xs text-text-secondary">平台类别
-              <select aria-label="平台类别" value={platformCategory} onChange={(event) => setPlatformCategory(event.target.value)}
+              <select aria-label="平台类别" value={platformCategory} onChange={(event) => { setPlatformCategory(event.target.value); setDictionaryEntryType(""); }}
                 className="mt-2 w-full rounded-lg border border-glass-border bg-surface-inset px-3 py-2 text-sm text-foreground">
                 {platformCategories.map((item) => <option key={item.id} value={item.id}>{item.label} · {item.id}</option>)}
               </select>
@@ -272,12 +274,22 @@ export default function NewLibraryAssetDialog({ onClose, onCreated, initialImage
               </div>}
             </div>
             <label className="text-xs text-text-secondary">发布内容
-              <select aria-label="发布内容" value={platformKind} onChange={(event) => setPlatformKind(event.target.value as typeof platformKind)}
+              <select aria-label="发布内容" value={platformKind} onChange={(event) => { setPlatformKind(event.target.value as typeof platformKind); setDictionaryEntryType(""); }}
                 className="mt-2 w-full rounded-lg border border-glass-border bg-surface-inset px-3 py-2 text-sm text-foreground">
                 <option value={initialMediaType}>{initialMediaType === "video" ? "视频与提示词" : "图片与提示词"}</option>
                 <option value="prompt_preset">仅提示词</option>
               </select>
             </label>
+            {platformCategory !== "character/reference" && <label className="text-xs text-text-secondary">词典归类
+              <select aria-label="词典归类" value={dictionaryEntryType} onChange={(event) => setDictionaryEntryType(event.target.value as typeof dictionaryEntryType)}
+                className="mt-2 w-full rounded-lg border border-glass-border bg-surface-inset px-3 py-2 text-sm text-foreground">
+                <option value="">普通参考素材</option>
+                {platformKind === "prompt_preset"
+                  ? <option value="term">原子描述词 · 供检索引用</option>
+                  : <option value="case">效果案例 · 媒体与 Prompt</option>}
+              </select>
+              <span className="mt-1 block text-xs text-text-muted">仅供检索与审核；不会自动加入模型请求。组合方案需单独建立成员引用。</span>
+            </label>}
             <p className="text-xs text-text-muted">描述可编辑；审核记录会另存实际生成提示词、模型、参数与来源结果。</p>
           </div>}
 

@@ -89,6 +89,23 @@ it('submits an authorized image with the reviewed description and stable output 
   expect(api.createLibraryAsset).not.toHaveBeenCalled();
 });
 
+it('submits an explicitly labeled effect case without changing the media kind', async () => {
+  vi.mocked(api.getPlatformPublisher).mockResolvedValueOnce({ profile_id: 'apikey-test', authorized: true });
+  render(<NewLibraryAssetDialog initialImageUrl="output/result.png" initialImageOrigin="workbench"
+    initialSourceGenerationId="generation-1" initialSourceOutputId="output-1"
+    initialDescription="角色侧面效果" onClose={vi.fn()} onCreated={vi.fn()} />);
+  await waitFor(() => expect(screen.getByRole('option', { name: '平台参考库 · 提交审核' })).toBeEnabled());
+  fireEvent.change(screen.getByLabelText('录入目标'), { target: { value: 'platform' } });
+  fireEvent.change(screen.getByLabelText('平台类别'), { target: { value: 'character/identity/face' } });
+  fireEvent.change(screen.getByLabelText('词典归类'), { target: { value: 'case' } });
+  fireEvent.change(screen.getByLabelText('nameLabel'), { target: { value: '侧面效果' } });
+  fireEvent.click(screen.getByRole('checkbox', { name: '我确认拥有将此内容提交平台审核的权利' }));
+  fireEvent.click(screen.getByRole('button', { name: '提交平台审核' }));
+  await waitFor(() => expect(api.submitPlatformCandidate).toHaveBeenCalledWith(expect.objectContaining({
+    kind: 'image', category_path: 'character/identity/face', dictionary_entry_type: 'case',
+  })));
+});
+
 it('does not allow an unapproved account to submit a platform candidate', async () => {
   render(<NewLibraryAssetDialog initialImageUrl="output/result.png" initialSourceGenerationId="generation-1"
     initialSourceOutputId="output-1" onClose={vi.fn()} onCreated={vi.fn()} />);

@@ -337,6 +337,7 @@ function PlatformReferenceReviewQueue() {
           </div>
           {resource.summary && <p className="text-sm text-text-secondary mt-3">{resource.summary}</p>}
           {resource.category_path && <p className="mt-2 text-xs text-text-muted">类别：{resource.category_path}</p>}
+          {resource.dictionary && <p className="mt-1 text-xs text-text-muted">词典：{resource.dictionary.semantic_domain} · {resource.dictionary.entry_type}</p>}
           {!!resource.payload && typeof resource.payload === "object" && <details className="mt-3 text-xs text-text-secondary">
             <summary>提示词与生成来源</summary>
             {typeof resource.payload.prompt_used === "string" && <div className="mt-2"><strong>模型原始提示词</strong><pre className="mt-1 max-h-40 overflow-auto whitespace-pre-wrap break-words">{resource.payload.prompt_used}</pre></div>}
@@ -364,6 +365,7 @@ function PlatformReferenceReviewQueue() {
         {visibleActive.map((resource) => <article key={resource.platform_resource_id} className="glass-panel rounded-xl border border-glass-border p-4">
           <h2 className="font-semibold text-foreground">{resource.title}</h2>
           <div className="text-xs text-text-muted mt-1">{resource.kind} · v{resource.revision}</div>
+          {resource.dictionary && <div className="mt-1 text-xs text-text-muted">词典：{resource.dictionary.semantic_domain} · {resource.dictionary.entry_type}</div>}
           {!!resource.payload?.media_file && <PlatformCandidatePreview resourceId={resource.platform_resource_id} kind={resource.kind} />}
           {(resource.payload?.structured_prompt?.content || resource.summary) && <details className="mt-3 text-sm text-text-secondary">
             <summary>查看配套 Prompt</summary>

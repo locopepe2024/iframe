@@ -377,6 +377,7 @@ export interface PlatformReferenceResource {
     revision: number;
     kind: string;
     category_path?: string;
+    dictionary?: { semantic_domain: "character.identity" | "character.look" | "character.performance" | "world.style"; entry_type: "term" | "case" };
     title: string;
     summary?: string;
     tags?: string[];
@@ -750,9 +751,9 @@ export const api = {
         return res.data;
     },
 
-    getPlatformReferenceLibrary: async (query = "", kind?: string, category?: string, tag?: string): Promise<PlatformReferenceCatalog> => {
+    getPlatformReferenceLibrary: async (query = "", kind?: string, category?: string, tag?: string, semanticDomain?: string, entryType?: string): Promise<PlatformReferenceCatalog> => {
         const res = await axios.get<PlatformReferenceCatalog>(`${API_URL}/platform-reference-library`, {
-            params: { query: query || undefined, kind: kind || undefined, category: category || undefined, tag: tag || undefined },
+            params: { query: query || undefined, kind: kind || undefined, category: category || undefined, tag: tag || undefined, semantic_domain: semanticDomain || undefined, entry_type: entryType || undefined },
             headers: { "Cache-Control": "no-cache" },
         });
         return res.data;
@@ -800,6 +801,7 @@ export const api = {
         source_output_id?: string;
         kind: "image" | "video" | "prompt_preset";
         category_path: string;
+        dictionary_entry_type?: "term" | "case";
         tags: string[];
         title: string;
         description: string;
