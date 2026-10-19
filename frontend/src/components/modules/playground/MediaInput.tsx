@@ -104,7 +104,6 @@ export default function MediaInput({ agentMode = false }: { agentMode?: boolean 
   const t = useTranslations('playground');
 
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const documentInputRef = useRef<HTMLInputElement>(null);
   const pickerButtonRef = useRef<HTMLButtonElement>(null);
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState('');
@@ -320,7 +319,7 @@ export default function MediaInput({ agentMode = false }: { agentMode?: boolean 
         </div>
 
         {/* Action buttons */}
-        <div className={`grid grid-cols-2 gap-2 ${agentMode ? "sm:grid-cols-3" : ""}`}>
+        <div className="grid grid-cols-2 gap-2">
           <button
             type="button"
             onClick={handleClick}
@@ -329,20 +328,12 @@ export default function MediaInput({ agentMode = false }: { agentMode?: boolean 
           >
             {t('media.localUpload')}
           </button>
-          {agentMode && <button
-            type="button"
-            onClick={() => documentInputRef.current?.click()}
-            disabled={uploading || atLimit}
-            className={ACTION_BTN_CLASS}
-          >
-            {t('media.documentUpload')}
-          </button>}
           <button
             ref={pickerButtonRef}
             type="button"
             onClick={() => setShowAssetPicker(true)}
             disabled={uploading || atLimit}
-            className={`${ACTION_BTN_CLASS} ${agentMode ? 'col-span-2 sm:col-span-1' : ''}`}
+            className={ACTION_BTN_CLASS}
           >
             {t('media.pickFromLibrary')}
           </button>
@@ -350,12 +341,7 @@ export default function MediaInput({ agentMode = false }: { agentMode?: boolean 
 
         {uploadError && <p role="alert" className="text-xs text-status-failed-fg">{uploadError}</p>}
         {fileInput}
-        {agentMode && <>
-          <input ref={documentInputRef} type="file" accept={DOCUMENT_ACCEPT} multiple
-            aria-label={t('media.documentUpload')} disabled={uploading || atLimit}
-            onChange={handleFileChange} className="hidden" />
-          <p className="text-xs leading-5 text-text-muted">{t('media.documentHint')}</p>
-        </>}
+        {agentMode && <p className="text-xs leading-5 text-text-muted">{t('media.documentHint')}</p>}
 
         <AssetPickerModal
           isOpen={showAssetPicker}

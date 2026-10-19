@@ -2928,7 +2928,6 @@
       "uploading": "Uploading…",
       "dragOrClick": "Drag or click to upload",
       "localUpload": "Local upload",
-      "documentUpload": "Upload documents",
       "documentHint": "Word .docx, PDF and PPTX, up to 10 MB each. PDF: up to 100 pages; extracted text: up to 50,000 characters. Run OCR on scanned PDFs first. Save legacy .doc files as .docx.",
       "agentHint": "Add images, videos, audio, Word (.docx), PDF, PPTX and text files. Audio formats are converted automatically. Total request size is checked on send; model-specific limits may still apply.",
       "omniHint": "Add images, videos, audio and TXT/MD/CSV/JSON/SRT/VTT text. Text joins the prompt; media counts and durations depend on the selected model.",
