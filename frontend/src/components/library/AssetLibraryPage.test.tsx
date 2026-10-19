@@ -45,6 +45,23 @@ it('filters published platform character references by exact tag', async () => {
   expect(screen.getByText('表情案例')).toBeInTheDocument();
 });
 
+it('filters published dictionary entries without treating legacy media as terms', async () => {
+  mocked.getPlatformReferenceLibrary.mockResolvedValue({ scope: 'platform_shared', schema_version: 1, catalog_revision: 'test', resources: [
+    { platform_resource_id: 'legacy', revision: 1, kind: 'prompt_preset', title: '旧提示词', status: 'active', provenance: { license: 'MIT', content_sha256: 'a' } },
+    { platform_resource_id: 'term', revision: 1, kind: 'prompt_preset', title: '窄长脸', status: 'active', dictionary: { semantic_domain: 'character.identity', entry_type: 'term' }, provenance: { license: 'MIT', content_sha256: 'b' } },
+    { platform_resource_id: 'case', revision: 1, kind: 'image', title: '造型案例', status: 'active', dictionary: { semantic_domain: 'character.look', entry_type: 'case' }, provenance: { license: 'MIT', content_sha256: 'c' } },
+  ] });
+  render(<AssetLibraryPage />);
+  fireEvent.click(screen.getByRole('button', { name: 'platform' }));
+  expect(await screen.findByText('窄长脸')).toBeInTheDocument();
+  fireEvent.change(screen.getByRole('combobox', { name: '筛选词典领域' }), { target: { value: 'character.identity' } });
+  expect(screen.getByText('窄长脸')).toBeInTheDocument();
+  expect(screen.queryByText('旧提示词')).not.toBeInTheDocument();
+  expect(screen.queryByText('造型案例')).not.toBeInTheDocument();
+  fireEvent.change(screen.getByRole('combobox', { name: '筛选词典类型' }), { target: { value: 'case' } });
+  expect(screen.getByText('没有匹配的已发布资源')).toBeInTheDocument();
+});
+
 it('searches text-only workbench templates separately from image assets', async () => {
   mocked.getWorkbenchTemplates.mockResolvedValue({ schema_version: 1, catalog_revision: 'test', templates: [{
     template_id: 'open-ai-canvas:drama-location-master', revision: 1, kind: 'image', station: 'scene',

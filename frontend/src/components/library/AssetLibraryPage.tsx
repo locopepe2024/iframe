@@ -269,9 +269,13 @@ function PlatformReferenceReviewQueue() {
   const [grantBusy, setGrantBusy] = useState(false);
   const [platformSearch, setPlatformSearch] = useState("");
   const [platformTag, setPlatformTag] = useState("");
+  const [platformDomain, setPlatformDomain] = useState("");
+  const [platformEntryType, setPlatformEntryType] = useState("");
   const activeTags = Array.from(new Set((activeCatalog?.resources ?? []).flatMap((resource) => resource.tags ?? []))).sort();
   const visibleActive = (activeCatalog?.resources ?? []).filter((resource) => {
     if (platformTag && !resource.tags?.includes(platformTag)) return false;
+    if (platformDomain && resource.dictionary?.semantic_domain !== platformDomain) return false;
+    if (platformEntryType && resource.dictionary?.entry_type !== platformEntryType) return false;
     const needle = platformSearch.trim().toLocaleLowerCase();
     return !needle || [resource.title, resource.summary ?? "", ...(resource.tags ?? [])].join(" ").toLocaleLowerCase().includes(needle);
   });
@@ -358,6 +362,14 @@ function PlatformReferenceReviewQueue() {
         <select aria-label="筛选平台标签" value={platformTag} onChange={(event) => setPlatformTag(event.target.value)} className="glass-input px-3 py-2 text-sm">
           <option value="">全部标签</option>
           {activeTags.map((tag) => <option key={tag} value={tag}>{tag}</option>)}
+        </select>
+        <select aria-label="筛选词典领域" value={platformDomain} onChange={(event) => setPlatformDomain(event.target.value)} className="glass-input px-3 py-2 text-sm">
+          <option value="">全部语义层</option>
+          <option value="character.identity">身份</option><option value="character.look">造型</option>
+          <option value="character.performance">表演</option><option value="world.style">风格</option>
+        </select>
+        <select aria-label="筛选词典类型" value={platformEntryType} onChange={(event) => setPlatformEntryType(event.target.value)} className="glass-input px-3 py-2 text-sm">
+          <option value="">全部内容</option><option value="term">原子词条</option><option value="case">效果案例</option>
         </select>
       </div>}
       {!activeCatalog?.resources.length ? <div className="glass-panel rounded-xl p-8 text-text-secondary">{t("publishedEmpty")}</div> : !visibleActive.length ? <div className="glass-panel rounded-xl p-8 text-text-secondary">没有匹配的已发布资源</div> :
