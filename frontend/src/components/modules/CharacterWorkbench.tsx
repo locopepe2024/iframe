@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useMemo, useRef, useId, useCallback, type KeyboardEvent } from "react";
+import { useState, useEffect, useMemo, useRef, useId, useCallback } from "react";
 import { useTranslations } from "next-intl";
 import { motion, AnimatePresence } from "framer-motion";
 import { X, RefreshCw, Check, Image as ImageIcon, Lock, ChevronRight, ChevronDown, Video, PanelLeft, Sparkles, Search } from "lucide-react";
@@ -18,7 +18,7 @@ import PreviewImage from "@/components/shared/preview/PreviewImage";
 import { toast } from "@/store/toastStore";
 import { resolveAssetGenerationModel } from "@/lib/modelCatalog";
 import AssetImageSubmissionReview from "@/components/shared/AssetImageSubmissionReview";
-import VideoPolishReview, { type VideoPolishMessages } from "./storyboard-r2v/VideoPolishReview";
+import { type VideoPolishMessages } from "./storyboard-r2v/VideoPolishReview";
 import {
     buildCharacterImagePrompt,
     buildCharacterMotionPrompt,
@@ -33,9 +33,9 @@ import ReferencePromptEditor, {
 } from "./playground/ReferencePromptEditor";
 import { searchReferenceCandidates } from "@/lib/referenceCandidateSearch";
 import { IDENTITY_FIELDS, LOOK_FIELDS, characterSectionText, normalizeCharacterFeatures,
-    requirementNeedsReview, type CharacterSectionEditorMode, type IdentityFeatures, type LookFeatures } from "@/lib/characterStructuredDesign";
-import { type CharacterQuickPreset, type CharacterPresetTarget } from "@/lib/characterQuickActions";
-import CharacterSlashPanel from "./CharacterSlashPanel";
+    type CharacterSectionEditorMode, type IdentityFeatures, type LookFeatures } from "@/lib/characterStructuredDesign";
+import { type CharacterPresetTarget } from "@/lib/characterQuickActions";
+import CharacterDesignPanel from "./CharacterDesignPanel";
 import CharacterPromptDictionary from "./CharacterPromptDictionary";
 
 import type { AssetPlanEntry } from "@/lib/episodeAssetPlan";
@@ -91,11 +91,6 @@ function designPromptDescription(identity: unknown, look: unknown, answers: unkn
     return [identity, look, ...answers]
         .filter((value): value is string => typeof value === "string" && !!value.trim())
         .join("。 ");
-}
-
-function preserveVisualRequirement(proposal: string, requirement: string): string {
-    const specified = requirement.trim();
-    return specified && !proposal.includes(specified) ? designPromptDescription(specified, proposal) : proposal;
 }
 
 function designScopeDescription(route?: string, ageStage?: string): string[] {
@@ -343,7 +338,7 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
     const [isPlanOpen, setIsPlanOpen] = useState(false);
     const [showProfile, setShowProfile] = useState(false);
     const savedDesign = (asset.character_design?.design_draft || {}) as DesignDraft;
-    const [designRoute, setDesignRoute] = useState(savedDesign.route || "realistic-modern");
+    const [designRoute, setDesignRoute] = useState(savedDesign.route || "");
     const [styleNotes, setStyleNotes] = useState(savedDesign.style_notes || "");
     const [designAgeStage, setDesignAgeStage] = useState(savedDesign.age_stage || "");
     const [designNotes, setDesignNotes] = useState(String(savedDesign.identity?.visual_notes || ""));
@@ -357,13 +352,6 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
     const [lookEditorMode, setLookEditorMode] = useState<CharacterSectionEditorMode>(
         savedDesign.look?.editor_mode || (Object.values(savedDesign.look?.features || {}).some((value) => typeof value === "string" && value.trim()) ? "fields" : "notes"));
     const [presetSelections, setPresetSelections] = useState<CharacterPresetSelection[]>(savedDesign.preset_selections || []);
-    const [slashOpen, setSlashOpen] = useState(false);
-    const [slashQuery, setSlashQuery] = useState("");
-    const slashInputRef = useRef<HTMLInputElement>(null);
-    const [userVisualRequirements, setUserVisualRequirements] = useState({
-        identity: savedDesign.user_visual_requirements?.identity || "",
-        look: savedDesign.user_visual_requirements?.look || "",
-    });
     const [designIdentityBasis, setDesignIdentityBasis] = useState<DesignBasis[]>(normalizeDesignBasis(savedDesign.identity?.basis));
     const [designLookBasis, setDesignLookBasis] = useState<DesignBasis[]>(normalizeDesignBasis(savedDesign.look?.basis));
     const [designSource, setDesignSource] = useState<"stated" | "creative-choice">(savedDesign.field_status?.visual_notes === "creative-choice" ? "creative-choice" : "stated");
@@ -373,7 +361,6 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
     const [designFieldAnswers, setDesignFieldAnswers] = useState<Record<string, string>>(savedDesign.field_answers || {});
     const [designFieldSuggestions, setDesignFieldSuggestions] = useState<Record<string, string>>(savedDesign.field_suggestions || {});
     const [designFieldSuggestionChoices, setDesignFieldSuggestionChoices] = useState<Record<string, { age_stage?: string; route?: string }>>(savedDesign.field_suggestion_choices || {});
-    const [designReferences, setDesignReferences] = useState<AssetLibraryReference[]>(savedDesign.reference_assets || []);
     const [designSkillRevision, setDesignSkillRevision] = useState(savedDesign.skill_revision || "");
     const [designModels, setDesignModels] = useState<ChatModel[]>([]);
     const [designModel, setDesignModel] = useState("");
@@ -382,10 +369,9 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
     const [designRevision, setDesignRevision] = useState<number>(asset.character_design?.design_revisions?.at(-1)?.revision || 0);
     const [savingDesign, setSavingDesign] = useState(false);
     const [designError, setDesignError] = useState("");
-    const [designReview, setDesignReview] = useState<{
-        source: string; request: Record<string, unknown>; messages: VideoPolishMessages;
-        media: { label: string; url: string }[]; reviewToken: string; formatNote: string;
-    } | null>(null);
+    const [designInput, setDesignInput] = useState([savedDesign.user_visual_requirements?.identity, savedDesign.user_visual_requirements?.look].filter(Boolean).join("\n"));
+    const [designResult, setDesignResult] = useState<string | null>(
+        confirmedDesignDescription(savedDesign) || null);
     const updateProject = useProjectStore(state => state.updateProject);
     const currentProject = useProjectStore(state => state.currentProject);
     const [assetPackView, setAssetPackView] = useState<CharacterAssetPackView | null>(null);
@@ -431,56 +417,6 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
         full_body: null, three_view: null, headshot: null,
     });
     const [pendingImageReview, setPendingImageReview] = useState<AssetImageReviewRequest | null>(null);
-
-    const clearPresetTarget = (target: CharacterPresetSelection["applied_target"]) => {
-        setPresetSelections((current) => current.filter((item) => item.applied_target !== target));
-    };
-    const appendPresetText = (current: string | undefined, value: string) => {
-        const text = (current || "").trim();
-        return text.split("；").some((part) => part.trim() === value) ? text : [text, value].filter(Boolean).join("；");
-    };
-    const applyQuickPreset = (preset: CharacterQuickPreset) => {
-        let appliedTarget: CharacterPresetSelection["applied_target"] = preset.target;
-        if (preset.target === "route") {
-            setDesignRoute(preset.value);
-        } else if (preset.target === "style_notes") {
-            setStyleNotes((current) => appendPresetText(current, preset.value));
-        } else if (preset.target === "clothing") {
-            if (lookNotes.trim() && !Object.values(lookFeatures).some((value) => value?.trim())) {
-                appliedTarget = "look_notes";
-                setLookNotes((current) => appendPresetText(current, preset.value));
-                setLookEditorMode("notes");
-                setUserVisualRequirements((current) => ({ ...current, look: appendPresetText(current.look, preset.value) }));
-            } else { setLookFeatures((current) => ({ ...current, clothing: appendPresetText(current.clothing, preset.value) })); setLookEditorMode("fields"); }
-            setDesignLookBasis(["user_specified"]);
-        } else {
-            const identityTarget = preset.target;
-            if (designNotes.trim() && !Object.values(identityFeatures).some((value) => value?.trim())) {
-                appliedTarget = "identity_notes";
-                setDesignNotes((current) => appendPresetText(current, preset.value));
-                setIdentityEditorMode("notes");
-                setUserVisualRequirements((current) => ({ ...current, identity: appendPresetText(current.identity, preset.value) }));
-            } else { setIdentityFeatures((current) => ({ ...current, [identityTarget]: appendPresetText(current[identityTarget], preset.value) })); setIdentityEditorMode("fields"); }
-            setDesignIdentityBasis(["user_specified"]);
-            setDesignSource("stated");
-        }
-        setPresetSelections((current) => [
-            ...current.filter((item) => item.preset_id !== preset.id && !(preset.target === "route" && item.applied_target === "route")),
-            { preset_id: preset.id, revision: preset.revision, applied_target: appliedTarget, value: preset.value, source: preset.source },
-        ]);
-        setDesignStatus("draft");
-        setPromptsNeedDesignApply(true);
-    };
-    const openSlashFromField = (event: KeyboardEvent<HTMLTextAreaElement>) => {
-        if (event.nativeEvent.isComposing || event.key !== "/") return;
-        const field = event.currentTarget;
-        const at = field.selectionStart;
-        if (at !== field.selectionEnd || (at > 0 && !/\s/.test(field.value[at - 1]))) return;
-        event.preventDefault();
-        setSlashQuery("/");
-        setSlashOpen(true);
-        slashInputRef.current?.focus();
-    };
 
     useEffect(() => {
         let active = true;
@@ -707,75 +643,58 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
 
     const projectedIdentity = characterSectionText(identityFeatures, IDENTITY_FIELDS.map(([key]) => key), designNotes, identityEditorMode);
     const projectedLook = characterSectionText(lookFeatures, LOOK_FIELDS.map(([key]) => key), lookNotes, lookEditorMode);
-    const requirementsToReview = ([
-        ["身份", userVisualRequirements.identity, projectedIdentity],
-        ["造型", userVisualRequirements.look, projectedLook],
-    ] as const).filter(([, requirement, projected]) => requirementNeedsReview(requirement, projected));
-    const currentDesignDescription = designPromptDescription(
+    const currentDesignDescription = designResult ?? (designInput || designPromptDescription(
         projectedIdentity,
         projectedLook,
         [...Object.values(designFieldAnswers), ...designScopeDescription(designRoute, designAgeStage), styleNotes],
-    );
+    ));
 
     const applyDesignToPrompts = () => {
         setFullBodyPrompt(buildCharacterImagePrompt("full_body", asset.name, currentDesignDescription, hasNonFullBodyUpload));
         setThreeViewPrompt(buildCharacterImagePrompt("three_view", asset.name, currentDesignDescription, hasFullBodyImage || hasAnyUpload));
         setHeadshotPrompt(buildCharacterImagePrompt("headshot", asset.name, currentDesignDescription, hasFullBodyImage || hasAnyUpload));
+        designPromptBaseline.current = buildCharacterImagePrompt(
+            activePanel === "three_view" ? "three_view" : activePanel === "headshot" ? "headshot" : "full_body",
+            asset.name, currentDesignDescription,
+            activePanel === "full_body" ? hasNonFullBodyUpload : hasFullBodyImage || hasAnyUpload);
         setPromptsNeedDesignApply(false);
     };
     const characterDesignRequest = {
         model: designModel,
         project_id: currentProject?.id,
-        reference_assets: designReferences,
+        reference_assets: [],
         character_name: asset.name,
         profile: asset.description,
-        current_draft: designPromptDescription(
-            projectedIdentity, projectedLook),
-        user_visual_requirements: userVisualRequirements,
-        user_answers: Object.fromEntries(Object.entries(designFieldAnswers).filter(([, answer]) => answer.trim())),
-        route: designRoute,
-        age_stage: designAgeStage,
-        style: [stylePrompt, styleNotes].filter(Boolean).join("；"),
-        confirmed_design: confirmedDesignDescription(asset.character_design?.design_revisions?.at(-1)?.design),
+        current_draft: designInput,
+        route: "",
+
     };
-    const characterDesignSource = JSON.stringify(characterDesignRequest);
+    const characterDesignSource = JSON.stringify({ ...characterDesignRequest, asset_id: asset.id, result: designResult });
     const characterDesignSourceRef = useRef(characterDesignSource);
     characterDesignSourceRef.current = characterDesignSource;
-    useEffect(() => { setDesignReview(null); }, [characterDesignSource]);
-
-    const generateDesignDraft = async () => {
-        if (!designModel || designing) return;
-        setShowProfile(true);
-        setDesigning(true);
-        setDesignError("");
-        setDesignReview(null);
-        try {
-            const source = characterDesignSource;
-            const preview = await agentRequest<{ messages: VideoPolishMessages; media: { label: string; url: string }[];
-                review_token: string; format_note: string; identity_skill_revision?: string; route_skill_revision?: string }>("/character-design/draft/preview", "POST", characterDesignRequest);
-            if (characterDesignSourceRef.current === source) setDesignReview({
-                source, request: characterDesignRequest, messages: preview.messages, media: preview.media,
-                reviewToken: preview.review_token,
-                formatNote: `${preview.format_note} · Skill：character-identity-design${preview.identity_skill_revision ? ` r${preview.identity_skill_revision}` : ""} + character-style-routes${preview.route_skill_revision ? ` r${preview.route_skill_revision}` : ""}`,
-            });
-        } catch (error) {
-            setDesignError(error instanceof Error ? error.message : "预览角色设计输入失败，请重试。");
-        } finally {
-            setDesigning(false);
+    const designPromptBaseline = useRef(fullBodyPrompt);
+    const openDesignEditor = () => {
+        if (!showProfile) {
+            const currentPrompt = activePanel === "three_view" ? threeViewPrompt : activePanel === "headshot" ? headshotPrompt : fullBodyPrompt;
+            if (!designInput || currentPrompt !== designPromptBaseline.current) {
+                setDesignInput(currentPrompt);
+                if (currentPrompt !== designPromptBaseline.current) { setDesignResult(null); setDesignStatus("draft"); }
+            }
+            designPromptBaseline.current = currentPrompt;
         }
+        setShowProfile(true);
     };
 
-    const confirmDesignDraft = async () => {
-        const review = designReview;
-        if (!review) return;
-        if (review.source !== characterDesignSourceRef.current) {
-            setDesignReview(null);
-            setDesignError("角色输入已变化，请重新预览。");
-            return;
-        }
+    const generateDesignDraft = async () => {
+        if (!designModel || designing || !asset.description.trim() || designInput.length > 8000) return;
         setDesigning(true);
         setDesignError("");
+        const source = characterDesignSource;
+        const request = characterDesignRequest;
         try {
+            const preview = await agentRequest<{ messages: VideoPolishMessages; review_token: string }>(
+                "/character-design/draft/preview", "POST", request);
+            if (characterDesignSourceRef.current !== source) return;
             const result = await agentRequest<{
                 identity: { visual_notes: string; features?: IdentityFeatures; basis?: string | string[] };
                 look: { visual_notes: string; features?: LookFeatures; basis?: string | string[] };
@@ -784,28 +703,27 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
                 field_suggestion_choices?: Record<string, { age_stage?: string; route?: string }>;
                 skill_revision: string;
             }>("/character-design/draft", "POST", {
-                ...review.request, reviewed_messages: review.messages, review_token: review.reviewToken,
+                ...request, reviewed_messages: preview.messages, review_token: preview.review_token,
             });
-            setDesignReview(null);
-            if (review.source !== characterDesignSourceRef.current) return;
-            const nextIdentity = preserveVisualRequirement(result.identity.visual_notes, userVisualRequirements.identity);
-            const nextLook = preserveVisualRequirement(result.look.visual_notes, userVisualRequirements.look);
+            if (source !== characterDesignSourceRef.current) return;
+            const nextIdentity = result.identity.visual_notes;
+            const nextLook = result.look.visual_notes;
             const nextIdentityFeatures = normalizeCharacterFeatures(result.identity.features, IDENTITY_FIELDS.map(([key]) => key));
             const nextLookFeatures = normalizeCharacterFeatures(result.look.features, LOOK_FIELDS.map(([key]) => key));
+            const identityText = characterSectionText(nextIdentityFeatures, IDENTITY_FIELDS.map(([key]) => key), nextIdentity);
+            const lookText = characterSectionText(nextLookFeatures, LOOK_FIELDS.map(([key]) => key), nextLook);
+            setDesignResult([identityText && `身份：${identityText}`, lookText && `造型：${lookText}`].filter(Boolean).join("\n"));
             setDesignNotes(nextIdentity);
             setLookNotes(nextLook);
             setIdentityFeatures(nextIdentityFeatures);
             setLookFeatures(nextLookFeatures);
             setIdentityEditorMode(Object.values(nextIdentityFeatures).some((value) => value?.trim()) ? "fields" : "notes");
             setLookEditorMode(Object.values(nextLookFeatures).some((value) => value?.trim()) ? "fields" : "notes");
-            setPresetSelections((current) => current.filter((item) => ["route", "style_notes"].includes(item.applied_target)));
-            setDesignIdentityBasis(userVisualRequirements.identity.trim()
-                ? Array.from(new Set([...normalizeDesignBasis(result.identity.basis), "user_specified" as const]))
-                : normalizeDesignBasis(result.identity.basis));
-            setDesignLookBasis(userVisualRequirements.look.trim()
-                ? Array.from(new Set([...normalizeDesignBasis(result.look.basis), "user_specified" as const]))
-                : normalizeDesignBasis(result.look.basis));
-            const questions = actionableDesignQuestions(result.unresolved, designFieldAnswers, result.field_suggestions);
+            setPresetSelections([]);
+            setDesignRoute(""); setDesignAgeStage(""); setStyleNotes("");
+            setDesignIdentityBasis(normalizeDesignBasis(result.identity.basis));
+            setDesignLookBasis(normalizeDesignBasis(result.look.basis));
+            const questions = actionableDesignQuestions(result.unresolved, {}, result.field_suggestions);
             setDesignFieldSuggestions(Object.fromEntries(
                 Object.entries(result.field_suggestions || {}).filter(([question, suggestion]) => questions.includes(question) && !!suggestion.trim()),
             ));
@@ -813,9 +731,7 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
                 Object.entries(result.field_suggestion_choices || {}).filter(([question]) => questions.includes(question)),
             ));
             setDesignUnresolved(questions);
-            setDesignFieldAnswers((current) => Object.fromEntries(
-                Object.entries(current).filter(([question]) => questions.includes(question)),
-            ));
+            setDesignFieldAnswers({});
             setDesignSource(
                 [...normalizeDesignBasis(result.identity.basis), ...normalizeDesignBasis(result.look.basis)].includes("creative_choice")
                     ? "creative-choice"
@@ -825,7 +741,7 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
             setDesignStatus("draft");
             setPromptsNeedDesignApply(true);
         } catch (error) {
-            setDesignError(error instanceof Error ? error.message : "生成视觉草稿失败，请重试。");
+            if (source === characterDesignSourceRef.current) setDesignError(error instanceof Error ? error.message : "完善角色设计失败，请重试。");
         } finally {
             setDesigning(false);
         }
@@ -833,23 +749,27 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
 
     const saveDesignDraft = async (confirmed: boolean) => {
         if (!onUpdateAttributes || savingDesign) return;
-        if (confirmed && !projectedIdentity) {
+        if (confirmed && !(designResult ?? designInput).trim()) {
             setDesignError("请先填写具体的角色视觉值，再确认设计。 ");
             return;
         }
         const unanswered = designUnresolved.filter((question) => !designFieldAnswers[question]?.trim());
+        const manualInput = designResult === null ? designInput : null;
         const draft: DesignDraft = {
-            route: designRoute,
-            style_notes: styleNotes || undefined,
-            age_stage: designAgeStage || undefined,
-            identity: { visual_notes: designNotes || undefined, features: identityFeatures, editor_mode: identityEditorMode, basis: designIdentityBasis },
-            look: { route: designRoute, visual_notes: lookNotes || undefined, features: lookFeatures, editor_mode: lookEditorMode, basis: designLookBasis },
-            unresolved: designNotes ? unanswered : [],
-            field_answers: Object.fromEntries(Object.entries(designFieldAnswers).filter(([, answer]) => answer.trim())),
-            user_visual_requirements: userVisualRequirements,
-            field_suggestions: Object.fromEntries(Object.entries(designFieldSuggestions).filter(([question]) => !designFieldAnswers[question]?.trim())),
-            field_suggestion_choices: Object.fromEntries(Object.entries(designFieldSuggestionChoices).filter(([question]) => !designFieldAnswers[question]?.trim())),
-            reference_assets: designReferences,
+            route: manualInput !== null ? "" : designRoute,
+            style_notes: manualInput !== null ? undefined : styleNotes || undefined,
+            age_stage: manualInput !== null ? undefined : designAgeStage || undefined,
+            identity: manualInput !== null
+                ? { visual_notes: manualInput, features: {}, editor_mode: "notes", basis: ["user_specified"] }
+                : { visual_notes: designNotes || undefined, features: identityFeatures, editor_mode: identityEditorMode, basis: designIdentityBasis },
+            look: manualInput !== null ? { features: {}, editor_mode: "notes" }
+                : { route: designRoute, visual_notes: lookNotes || undefined, features: lookFeatures, editor_mode: lookEditorMode, basis: designLookBasis },
+            unresolved: manualInput !== null ? [] : designNotes ? unanswered : [],
+            field_answers: manualInput !== null ? {} : Object.fromEntries(Object.entries(designFieldAnswers).filter(([, answer]) => answer.trim())),
+            user_visual_requirements: { identity: designInput, look: "" },
+            field_suggestions: manualInput !== null ? {} : Object.fromEntries(Object.entries(designFieldSuggestions).filter(([question]) => !designFieldAnswers[question]?.trim())),
+            field_suggestion_choices: manualInput !== null ? {} : Object.fromEntries(Object.entries(designFieldSuggestionChoices).filter(([question]) => !designFieldAnswers[question]?.trim())),
+            reference_assets: savedDesign.reference_assets || [],
             field_status: { route: "stated", age_stage: designAgeStage ? "stated" : "default", visual_notes: designNotes ? designSource : "default" },
             skill_id: "character-style-routes",
             skill_revision: designSkillRevision || undefined,
@@ -860,12 +780,21 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
         setDesignError("");
         try {
             await onUpdateAttributes({ character_design: draft });
+            if (manualInput !== null) {
+                setDesignResult(manualInput);
+                setDesignNotes(manualInput); setLookNotes("");
+                setIdentityFeatures({}); setLookFeatures({});
+                setIdentityEditorMode("notes"); setLookEditorMode("notes");
+                setDesignRoute(""); setDesignAgeStage(""); setStyleNotes("");
+            }
             setDesignUnresolved(draft.unresolved || []);
             setDesignStatus(confirmed ? "confirmed" : "draft");
             if (confirmed) {
                 setDesignRevision((revision) => revision + 1);
+                applyDesignToPrompts();
+            } else {
+                setPromptsNeedDesignApply(true);
             }
-            setPromptsNeedDesignApply(true);
         } catch (error) {
             setDesignError(error instanceof Error ? error.message : "保存视觉设计失败，请重试。");
         } finally {
@@ -1124,6 +1053,31 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
         updateProject(currentProject.id, updatedProject);
     };
 
+    const designEditor = showProfile ? <CharacterDesignPanel
+        description={asset.description} details={designInput}
+        onDetailsChange={value => { setDesignInput(value); setDesignResult(null); setDesignStatus("draft"); }}
+        reviewItems={designUnresolved.map(question => [question, designFieldSuggestions[question]].filter(Boolean).join("："))}
+        result={designResult} onResultChange={value => {
+            setDesignResult(value);
+            const sections = value.match(/^身份：[\s\S]*?\n造型：/);
+            if (sections) {
+                const boundary = value.indexOf("\n造型：");
+                setDesignNotes(value.slice(3, boundary));
+                setLookNotes(value.slice(boundary + 4));
+            } else { setDesignNotes(value); setLookNotes(""); }
+            setIdentityFeatures({}); setLookFeatures({});
+            setIdentityEditorMode("notes"); setLookEditorMode("notes");
+            setDesignRoute(""); setDesignAgeStage(""); setStyleNotes("");
+            setDesignIdentityBasis(["user_specified"]); setDesignLookBasis(["user_specified"]);
+            setDesignSource("stated"); setDesignStatus("draft"); setPromptsNeedDesignApply(true);
+        }}
+        models={designModels} model={designModel} onModelChange={setDesignModel}
+        busy={designing} saving={savingDesign} canSave={!!onUpdateAttributes} error={designError}
+        status={designStatus === "confirmed" ? `已确认 r${designRevision}` : "草稿 · 确认前不会创建角色设计版本"}
+        onSubmit={() => void generateDesignDraft()} onSave={() => void saveDesignDraft(false)}
+        onConfirm={() => void saveDesignDraft(true)} onBack={() => setShowProfile(false)}
+    /> : null;
+
     return (
         <div className="absolute inset-0 z-50 flex items-center justify-center bg-overlay backdrop-blur-md">
             <motion.div
@@ -1141,7 +1095,7 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
                         </div>
                     </div>
                     <div className="flex shrink-0 items-center gap-2">
-                        <button type="button" onClick={() => setShowProfile(current => !current)} aria-label={showProfile ? "收起角色设计" : "展开角色设计"} aria-expanded={showProfile} aria-controls="character-design-dossier" className="inline-flex min-h-11 items-center gap-2 rounded border border-glass-border px-3 text-xs text-text-secondary hover:text-foreground focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary">
+                        <button type="button" onClick={() => showProfile ? setShowProfile(false) : openDesignEditor()} aria-label={showProfile ? "收起角色设计" : "展开角色设计"} aria-expanded={showProfile} aria-controls="character-design-dossier" className="inline-flex min-h-11 items-center gap-2 rounded border border-glass-border px-3 text-xs text-text-secondary hover:text-foreground focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary">
                             <PanelLeft size={16} aria-hidden="true" />{showProfile ? "收起设计" : "角色设计"}
                             {designUnresolved.length > 0 && <span className="rounded border border-amber-400/40 px-1.5 py-0.5 text-[11px] text-amber-300">{tc("pendingDesignQuestions", { count: designUnresolved.length })}</span>}
                         </button>
@@ -1163,181 +1117,12 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
                 </div>
 
                 <div className="min-h-0 flex-1 flex flex-col lg:flex-row overflow-hidden">
-                    <aside id="character-design-dossier" className={`${showProfile ? "block max-h-[45%] lg:max-h-none" : "hidden"} lg:w-[min(30vw,420px)] shrink-0 overflow-y-auto border-b lg:border-b-0 lg:border-r border-glass-border bg-surface-inset p-4`} aria-label={tc("dossier")}>
-                        <details className="rounded-md border border-glass-border p-3">
-                            <summary className="cursor-pointer text-sm font-semibold text-foreground focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary">角色描述 · 设计依据</summary>
-                            <p className="mt-2 whitespace-pre-wrap break-words text-sm leading-6 text-text-secondary">{asset.description || tc("noDossier")}</p>
-                            <p className="mt-2 text-[11px] text-text-muted">供设计核对，不随 AI 完善改写。</p>
-                        </details>
-                        <section className="mt-5 border-t border-glass-border pt-4" aria-labelledby="character-visual-design-title">
-                            <div className="flex items-center justify-between gap-2">
-                                <h3 id="character-visual-design-title" className="text-sm font-semibold text-foreground">角色视觉设计</h3>
-                                <span className={`text-[11px] ${designStatus === "confirmed" ? "text-emerald-400" : "text-text-muted"}`}>
-                                    {designStatus === "confirmed" ? `已确认 r${designRevision}` : "草稿"}
-                                </span>
-                            </div>
-                            <p className="mt-1 text-xs leading-5 text-text-muted">可用词典和面板完成设计，也可选用 AI 完善，一次整理表达并提出缺失细节；确认后再应用到图片提示词。</p>
-                            <CharacterSlashPanel open={slashOpen} query={slashQuery} onQueryChange={setSlashQuery}
-                                onOpenChange={setSlashOpen} onPreset={applyQuickPreset}
-                                onPattern={(presets) => presets.forEach(applyQuickPreset)}
-                                onSkill={() => void generateDesignDraft()}
-                                canRunSkill={!!designModel && !!asset.description && !designing} inputRef={slashInputRef} />
-                            {presetSelections.length > 0 && <div className="mt-2 rounded border border-primary/30 bg-primary/5 p-2 text-[11px] text-text-secondary" aria-label="已选择的快捷描述词">
-                                <p className="font-medium text-foreground">已填入草稿 · 保存前可编辑</p>
-                                {presetSelections.map((item) => <p key={item.preset_id} className="mt-1 break-words">{item.applied_target}：{item.value} · {item.source} · v{item.revision}</p>)}
-                            </div>}
-                            <label className="mt-3 block text-xs text-text-secondary" htmlFor="character-style-route">题材 / 画风</label>
-                            <select id="character-style-route" value={designRoute} onChange={(event) => { setDesignRoute(event.target.value); clearPresetTarget("route"); setDesignStatus("draft"); setPromptsNeedDesignApply(true); }} className="mt-1 h-10 w-full rounded-md border border-glass-border bg-surface px-2 text-sm text-foreground focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary">
-                                <option value="realistic-modern">真人现代</option>
-                                <option value="historical-costume">古装 / 武侠</option>
-                                <option value="xianxia-fantasy">修仙 / 仙侠</option>
-                                <option value="anime-stylized">动漫 / 国漫</option>
-                            </select>
-                            <label className="mt-3 block text-xs text-text-secondary" htmlFor="character-style-notes">局部风格描述</label>
-                            <textarea id="character-style-notes" aria-label="局部风格描述" value={styleNotes}
-                                onChange={(event) => { setStyleNotes(event.target.value); clearPresetTarget("style_notes"); setDesignStatus("draft"); setPromptsNeedDesignApply(true); }}
-                                onKeyDown={openSlashFromField} rows={2} maxLength={1000} placeholder="可用 / 选择风格词条；仅作用于当前角色，不修改项目风格。"
-                                className="mt-1 w-full resize-y rounded-md border border-glass-border bg-surface px-3 py-2 text-sm text-foreground placeholder:text-text-muted focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary" />
-                            <label className="mt-3 block text-xs text-text-secondary" htmlFor="character-age-stage">年龄阶段</label>
-                            <select id="character-age-stage" value={designAgeStage} onChange={(event) => { setDesignAgeStage(event.target.value); setDesignStatus("draft"); setPromptsNeedDesignApply(true); }} className="mt-1 h-10 w-full rounded-md border border-glass-border bg-surface px-2 text-sm text-foreground focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary">
-                                <option value="">未指定</option>
-                                <option value="child">儿童</option>
-                                <option value="teen">少年 / 少女</option>
-                                <option value="young-adult">青年</option>
-                                <option value="adult">成年人</option>
-                                <option value="older-adult">老年</option>
-                            </select>
-                            <div className="mt-4 flex flex-wrap gap-2" role="group" aria-label="身份视觉编辑方式">
-                                <button type="button" aria-pressed={identityEditorMode === "notes"} onClick={() => { setIdentityEditorMode("notes"); setDesignStatus("draft"); setPromptsNeedDesignApply(true); }} className={`min-h-11 rounded-md border px-3 text-xs focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary ${identityEditorMode === "notes" ? "border-primary text-primary" : "border-glass-border text-text-secondary"}`}>整体描述</button>
-                                <button type="button" aria-pressed={identityEditorMode === "fields"} onClick={() => { setIdentityEditorMode("fields"); setDesignStatus("draft"); setPromptsNeedDesignApply(true); }} className={`min-h-11 rounded-md border px-3 text-xs focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary ${identityEditorMode === "fields" ? "border-primary text-primary" : "border-glass-border text-text-secondary"}`}>逐项编辑</button>
-                            </div>
-                            <p className="mt-1 text-[11px] text-text-muted">切换不会删除另一边草稿；已有整体要求仍会在设计模型输入预览中列出。</p>
-                            {identityEditorMode === "fields" ? <details open className="mt-2 rounded-md border border-glass-border bg-surface/60 p-3">
-                                <summary className="cursor-pointer text-xs font-medium text-foreground">身份外观字段 · {Object.values(identityFeatures).filter((value) => value?.trim()).length} 项已填</summary>
-                                <p className="mt-1 text-[11px] leading-4 text-text-muted">这些字段优先编入角色图片提示词；输入 / 可搜索平台词条。</p>
-                                <div className="mt-2 space-y-2">
-                                    {IDENTITY_FIELDS.map(([key, label]) => <div key={key}>
-                                        <label className="block text-xs text-text-secondary" htmlFor={`character-identity-${key}`}>{label}</label>
-                                        <textarea id={`character-identity-${key}`} aria-label={`角色${label}`} value={identityFeatures[key] || ""} maxLength={500} rows={2} placeholder={key === "height" ? "例如：身高约178厘米，或身高偏高；可留空" : undefined}
-                                            onChange={(event) => { setIdentityFeatures((current) => ({ ...current, [key]: event.target.value })); clearPresetTarget(key); setDesignIdentityBasis(["user_specified"]); setDesignSource("stated"); setDesignStatus("draft"); setPromptsNeedDesignApply(true); }}
-                                            onKeyDown={openSlashFromField}
-                                            className="mt-1 w-full resize-y rounded border border-glass-border bg-surface px-2 py-1.5 text-xs text-foreground" />
-                                    </div>)}
-                                </div>
-                            </details> : <div>
-                            <label className="mt-3 block text-xs text-text-secondary" htmlFor="character-visual-notes">身份视觉值</label>
-                            <textarea id="character-visual-notes" value={designNotes} onChange={(event) => { setDesignNotes(event.target.value); clearPresetTarget("identity_notes"); setUserVisualRequirements(current => ({ ...current, identity: event.target.value })); setDesignIdentityBasis(["user_specified"]); setDesignSource("stated"); setDesignStatus("draft"); setPromptsNeedDesignApply(true); }} onKeyDown={openSlashFromField} placeholder="可先写年龄感、面容、体态等要求；留空由 AI 设计。" rows={4} className="mt-1 w-full resize-y rounded-md border border-glass-border bg-surface px-3 py-2 text-sm leading-5 text-foreground placeholder:text-text-muted focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary" />
-                            </div>}
-                            {designSource === "creative-choice" && <p className="mt-1 text-xs text-amber-400">AI 创意设计选择，确认前请核对剧本与参考素材。</p>}
-                            <div className="mt-4 flex flex-wrap gap-2" role="group" aria-label="基础造型编辑方式">
-                                <button type="button" aria-pressed={lookEditorMode === "notes"} onClick={() => { setLookEditorMode("notes"); setDesignStatus("draft"); setPromptsNeedDesignApply(true); }} className={`min-h-11 rounded-md border px-3 text-xs focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary ${lookEditorMode === "notes" ? "border-primary text-primary" : "border-glass-border text-text-secondary"}`}>整体描述</button>
-                                <button type="button" aria-pressed={lookEditorMode === "fields"} onClick={() => { setLookEditorMode("fields"); setDesignStatus("draft"); setPromptsNeedDesignApply(true); }} className={`min-h-11 rounded-md border px-3 text-xs focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary ${lookEditorMode === "fields" ? "border-primary text-primary" : "border-glass-border text-text-secondary"}`}>逐项编辑</button>
-                            </div>
-                            <p className="mt-1 text-[11px] text-text-muted">配件和武器可留空；具体物件可在生成任务中单独选择道具参考。</p>
-                            {lookEditorMode === "fields" ? <details open className="mt-2 rounded-md border border-glass-border bg-surface/60 p-3">
-                                <summary className="cursor-pointer text-xs font-medium text-foreground">造型字段 · {Object.values(lookFeatures).filter((value) => value?.trim()).length} 项已填</summary>
-                                <p className="mt-1 text-[11px] leading-4 text-text-muted">服装、配色和配件分别确认；武器未在剧本或用户要求中出现时可留空。</p>
-                                <div className="mt-2 space-y-2">
-                                    {LOOK_FIELDS.map(([key, label]) => <label key={key} className="block text-xs text-text-secondary">
-                                        {label}
-                                        <textarea aria-label={`角色${label}`} value={lookFeatures[key] || ""} maxLength={500} rows={2}
-                                            onChange={(event) => { setLookFeatures((current) => ({ ...current, [key]: event.target.value })); if (key === "clothing") clearPresetTarget("clothing"); setDesignLookBasis(["user_specified"]); setDesignStatus("draft"); setPromptsNeedDesignApply(true); }}
-                                            onKeyDown={openSlashFromField}
-                                            className="mt-1 w-full resize-y rounded border border-glass-border bg-surface px-2 py-1.5 text-xs text-foreground" />
-                                    </label>)}
-                                </div>
-                            </details> : <div>
-                            <label className="mt-3 block text-xs text-text-secondary" htmlFor="character-look-notes">造型视觉值</label>
-                            <textarea id="character-look-notes" value={lookNotes} onChange={(event) => { setLookNotes(event.target.value); clearPresetTarget("look_notes"); setUserVisualRequirements(current => ({ ...current, look: event.target.value })); setDesignLookBasis(["user_specified"]); setDesignStatus("draft"); setPromptsNeedDesignApply(true); }} onKeyDown={openSlashFromField} placeholder="可先写服装和鞋履等要求；留空由 AI 设计。" rows={3} className="mt-1 w-full resize-y rounded-md border border-glass-border bg-surface px-3 py-2 text-sm leading-5 text-foreground placeholder:text-text-muted focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary" />
-                            </div>}
-                            <AssetReferencePicker
-                                candidates={referenceCandidates}
-                                selected={designReferences}
-                                onChange={(references) => { setDesignReferences(references); setDesignStatus("draft"); }}
-                                title="选择角色参考图"
-                                description="可搜索本集、系列或全局素材；也可在下方图片 Prompt 输入 @ 选择。"
-                            />
-                            <label className="mt-3 block text-xs text-text-secondary" htmlFor="character-design-model">设计模型</label>
-                            <div className="mt-1 flex gap-2">
-                                <select id="character-design-model" value={designModel} onChange={(event) => setDesignModel(event.target.value)} disabled={!designModels.length || designing} className="h-10 min-w-0 flex-1 rounded-md border border-glass-border bg-surface px-2 text-sm text-foreground focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary">
-                                    {!designModels.length && <option value="">暂无可用模型</option>}
-                                    {designModels.map((model) => <option key={model.api_model_id} value={model.api_model_id}>{model.display_name}</option>)}
-                                </select>
-                                <button type="button" disabled={!designModel || designing || !asset.description} onClick={() => void generateDesignDraft()} className="inline-flex min-h-10 items-center gap-1.5 rounded-md border border-glass-border px-3 text-sm text-foreground hover:bg-hover-bg disabled:opacity-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary"><Sparkles size={15} />{designing ? "完善中" : "AI 完善"}</button>
-                            </div>
-                            {designReview && <div className="mt-3"><VideoPolishReview
-                                messages={designReview.messages} media={designReview.media} formatNote={designReview.formatNote}
-                                isContextIr={false} isSubmitting={designing} error={designError}
-                                userLabel="角色档案与视觉要求" confirmLabel="确认输入并完善角色设计"
-                                onChange={messages => setDesignReview(current => current && ({ ...current, messages }))}
-                                onCancel={() => setDesignReview(null)} onConfirm={() => void confirmDesignDraft()} /></div>}
-                            {designUnresolved.length > 0 && (
-                                <section className="mt-3 rounded-md border border-amber-400/30 bg-amber-400/5 p-3" aria-labelledby="character-design-unresolved-title">
-                                    <div className="flex items-start justify-between gap-2">
-                                        <div>
-                                            <h4 id="character-design-unresolved-title" className="text-xs font-medium text-foreground">待核对 · {designUnresolved.length}</h4>
-                                            <p className="mt-1 text-[11px] leading-4 text-text-muted">只有关键设定歧义才会列在这里。可以采用 Agent 建议，也可以改成自己的方案。</p>
-                                        </div>
-                                        <span className="text-[11px] text-amber-300">{designUnresolved.filter((item) => designFieldAnswers[item]?.trim()).length}/{designUnresolved.length} 已回答</span>
-                                    </div>
-                                    <div className="mt-2 space-y-2">
-                                        {designUnresolved.map((question, index) => {
-                                            const fieldId = `character-design-answer-${index}`;
-                                            const suggestion = designFieldSuggestions[question];
-                                            const answer = designFieldAnswers[question] || "";
-                                            return (
-                                                <label key={`${question}-${index}`} htmlFor={fieldId} className="block rounded-md border border-glass-border bg-surface/60 p-2">
-                                                    <span className="block text-xs leading-5 text-text-secondary">{question}</span>
-                                                    {suggestion && <div className="mt-1 rounded border border-primary/20 bg-primary/5 p-2">
-                                                        <span className="text-[10px] font-medium uppercase tracking-wide text-primary">Agent 建议</span>
-                                                        <p className="mt-0.5 text-xs leading-5 text-foreground">{suggestion}</p>
-                                                        <button
-                                                            type="button"
-                                                            disabled={answer === suggestion}
-                                                            onClick={() => {
-                                                                setDesignFieldAnswers((current) => ({ ...current, [question]: suggestion }));
-                                                                const choice = designFieldSuggestionChoices[question];
-                                                                if (choice?.age_stage) setDesignAgeStage(choice.age_stage);
-                                                                if (choice?.route) setDesignRoute(choice.route);
-                                                                setDesignStatus("draft");
-                                                                setPromptsNeedDesignApply(true);
-                                                            }}
-                                                            className="mt-1 inline-flex min-h-8 items-center gap-1 rounded px-2 text-[11px] font-medium text-primary hover:bg-primary/10 disabled:opacity-60 focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary"
-                                                        >
-                                                            <Check size={13} aria-hidden="true" />{answer === suggestion ? "已采用" : "采用此建议"}
-                                                        </button>
-                                                    </div>}
-                                                    <textarea
-                                                        id={fieldId}
-                                                        value={answer}
-                                                        onChange={(event) => { setDesignFieldAnswers((current) => ({ ...current, [question]: event.target.value })); setDesignStatus("draft"); setPromptsNeedDesignApply(true); }}
-                                                        placeholder={suggestion ? "可直接修改建议，或留空稍后决定" : "补充你的决定；如果暂时无法决定可留空"}
-                                                        rows={2}
-                                                        className="mt-1 w-full resize-y rounded border border-glass-border bg-surface px-2 py-1.5 text-xs leading-5 text-foreground placeholder:text-text-muted focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary"
-                                                    />
-                                                </label>
-                                            );
-                                        })}
-                                    </div>
-                                </section>
-                            )}
-                            {designError && <p role="alert" className="mt-2 text-xs text-red-400">{designError}</p>}
-                            <div className="mt-3 flex gap-2">
-                                <button type="button" disabled={savingDesign || !onUpdateAttributes} onClick={() => void saveDesignDraft(false)} className="inline-flex min-h-10 flex-1 items-center justify-center gap-2 rounded-md border border-glass-border px-3 text-sm text-text-secondary hover:bg-hover-bg disabled:opacity-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary"><Sparkles size={15} />保存草稿</button>
-                                <button type="button" disabled={savingDesign || !onUpdateAttributes} onClick={() => void saveDesignDraft(true)} className="inline-flex min-h-10 flex-1 items-center justify-center gap-2 rounded-md bg-primary px-3 text-sm font-medium text-primary-foreground hover:opacity-90 disabled:opacity-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary"><Check size={15} />确认设计</button>
-                            </div>
-                        </section>
-                    </aside>
 
                     <div className="min-h-0 min-w-0 flex-1 flex flex-col">
-                        {promptsNeedDesignApply && <div className="mx-3 mt-3 flex flex-col gap-2 rounded-md border border-primary/30 bg-primary/5 p-3 sm:mx-5 sm:flex-row sm:items-center sm:justify-between">
+                        {promptsNeedDesignApply && !showProfile && <div className="mx-3 mt-3 flex flex-col gap-2 rounded-md border border-primary/30 bg-primary/5 p-3 sm:mx-5 sm:flex-row sm:items-center sm:justify-between">
                             <div className="min-w-0">
                                 <p className="text-xs font-medium text-foreground">角色设计草稿尚未应用到图片提示词</p>
                                 <p className="mt-0.5 text-[11px] leading-4 text-text-muted">应用会更新全身、三视图和肖像提示词，不保存角色设计或创建版本；之后仍可编辑提示词。</p>
-                                {requirementsToReview.length > 0 && <div role="status" className="mt-2 rounded border border-amber-500/40 bg-amber-500/10 p-2 text-[11px] text-amber-200">
-                                    <p>以下用户原话未逐字出现在结构化投影中。请核对上方字段与预览，必要时补回，再应用：</p>
-                                    {requirementsToReview.map(([section, requirement]) => <p key={section}>{section}：{requirement}</p>)}
-                                </div>}
                                 <details className="mt-2 text-xs text-text-secondary">
                                     <summary className="cursor-pointer">查看将写入的三条图片提示词</summary>
                                     <div className="mt-2 space-y-2 whitespace-pre-wrap rounded border border-glass-border bg-surface-inset p-2 text-foreground">
@@ -1406,6 +1191,7 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
                         assetScope={asset.id}
                         previewLocator={characterPreviewLocator}
                         hideTitle
+                        designEditor={designEditor}
                         title={tc("masterAsset")}
                         isActive={activePanel === "full_body"}
                         onClick={() => setActivePanel("full_body")}
@@ -1419,8 +1205,8 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
 
                         prompt={fullBodyPrompt}
                         setPrompt={setFullBodyPrompt}
-                        onDesignSkill={() => void generateDesignDraft()}
-                        canRunDesignSkill={!!designModel && !!asset.description && !designing}
+                        onDesignSkill={openDesignEditor}
+                        canRunDesignSkill={!designing}
                         platformPromptSource={platformPromptSources.full_body}
                         onPlatformPromptSourceChange={(source: AppliedPlatformPrompt | null) => setPlatformPromptSources((current) => ({ ...current, full_body: source }))}
                         referenceCandidates={referenceCandidates}
@@ -1464,6 +1250,7 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
                         assetScope={asset.id}
                         previewLocator={characterPreviewLocator}
                         hideTitle
+                        designEditor={designEditor}
                         title={tc("threeViews")}
                         isActive={activePanel === "three_view"}
                         onClick={() => setActivePanel("three_view")}
@@ -1477,8 +1264,8 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
 
                         prompt={threeViewPrompt}
                         setPrompt={setThreeViewPrompt}
-                        onDesignSkill={() => void generateDesignDraft()}
-                        canRunDesignSkill={!!designModel && !!asset.description && !designing}
+                        onDesignSkill={openDesignEditor}
+                        canRunDesignSkill={!designing}
                         platformPromptSource={platformPromptSources.three_view}
                         onPlatformPromptSourceChange={(source: AppliedPlatformPrompt | null) => setPlatformPromptSources((current) => ({ ...current, three_view: source }))}
                         referenceCandidates={referenceCandidates}
@@ -1503,6 +1290,7 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
                         assetScope={asset.id}
                         previewLocator={characterPreviewLocator}
                         hideTitle
+                        designEditor={designEditor}
                         title={tc("avatar")}
                         isActive={activePanel === "headshot"}
                         onClick={() => setActivePanel("headshot")}
@@ -1516,8 +1304,8 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
 
                         prompt={headshotPrompt}
                         setPrompt={setHeadshotPrompt}
-                        onDesignSkill={() => void generateDesignDraft()}
-                        canRunDesignSkill={!!designModel && !!asset.description && !designing}
+                        onDesignSkill={openDesignEditor}
+                        canRunDesignSkill={!designing}
                         platformPromptSource={platformPromptSources.headshot}
                         onPlatformPromptSourceChange={(source: AppliedPlatformPrompt | null) => setPlatformPromptSources((current) => ({ ...current, headshot: source }))}
                         referenceCandidates={referenceCandidates}
@@ -1732,6 +1520,7 @@ export function WorkbenchPanel({
     isLocked,
     description,
     hideTitle = false,
+    designEditor,
     aspectRatio = "9:16",
     // Video specific
     isVideo = false,
@@ -1995,6 +1784,8 @@ export function WorkbenchPanel({
 
             {/* Task-specific generation inputs sit beside the image on wide screens. */}
             <div className="min-h-[180px] max-h-[42%] shrink-0 border-t border-glass-border flex flex-col overflow-y-auto bg-surface lg:max-h-none lg:min-h-0 lg:w-[min(34%,440px)] lg:border-r lg:border-t-0">
+                {designEditor}
+                <div className={designEditor ? "hidden" : "contents"}>
                 <div className="p-2 border-b border-border-subtle flex justify-between items-center bg-surface">
                     <span className="text-xs font-bold text-text-muted uppercase px-2">Prompt</span>
                     <div className="flex items-center gap-1 rounded-md border border-glass-border bg-black/20 p-1" role="group" aria-label={`Image generation mode: ${title}`}>
@@ -2107,6 +1898,7 @@ export function WorkbenchPanel({
 
                         </div>
                     )}
+                </div>
                 </div>
             </div>
             </div>

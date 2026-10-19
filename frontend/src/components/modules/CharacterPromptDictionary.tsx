@@ -101,7 +101,7 @@ export default function CharacterPromptDictionary({ suggestion, onClose, onApply
     }
   }
   if (onSkill && !suggestion.slot) entries.unshift({ id: "character-visual-design", title: "AI 完善角色设计", type: "Skill", categories: [], domain: "Skill",
-    text: "一次整理当前角色设计并提出缺失细节。输入：角色描述、侧栏身份与造型草稿及已选设计参考。下一步审核实际模型输入，确认后才执行。", source: "当前角色台已接入 Skill", search: "skill 技能 角色设计 完善 润色 身份 外观 草稿" });
+    text: "使用角色描述和当前 Prompt 细节完善角色设计。打开后选择设计模型并提交，检查返回的提示词，再保存草稿或确认设计。", source: "当前角色台已接入 Skill", search: "skill 技能 角色设计 完善 润色 身份 外观 草稿" });
   const group = CHARACTER_DICTIONARY_GROUPS.find((item) => item.id === category);
   const inCategory = (entry: Entry, key: string) => entry.categories.includes(key)
     || CHARACTER_DICTIONARY_GROUPS.find((item) => item.id === key)?.children.some(([child]) => entry.categories.includes(child));
@@ -195,9 +195,9 @@ export default function CharacterPromptDictionary({ suggestion, onClose, onApply
       {previewUrl && <img src={previewUrl} alt={`${selected.title} 案例预览`} className="mt-2 max-h-40 w-full rounded object-contain" />}
       <label className="mt-2 block text-xs text-text-secondary" htmlFor={`${id}-preview`}>{selected.type === "Skill" ? "Skill 操作说明" : "将插入的完整文字"}</label>
       <textarea id={`${id}-preview`} readOnly value={selectedText} placeholder="选择项目后在此预览；不指定的项目不会写入。" rows={5} className="mt-1 w-full rounded border border-glass-border bg-surface p-2 text-xs text-foreground" />
-      <p className="mt-1 text-xs text-text-muted">{selected.type === "Skill" ? "确认后进入输入审核。" : suggestion.slot ? `仅替换当前 [${suggestion.slot}]，保留模板其他文字与参考图；也可关闭后手动填写。` : (selected.type === "Prompt 模板" || selected.type === "配置面板") ? "先在面板选择细节，确认后插入预览文字；也可保留 [变量] 稍后填写。" : "替换光标处的 /检索词，保留其他文字与参考图；插入后可编辑。"}</p>
-      <button type="button" disabled={!selectedText.trim() || (selected.type === "Skill" && !canRunSkill)} onClick={apply} className={`${buttonStyle} mt-2 bg-primary text-primary-foreground disabled:opacity-50`}>{selected.type === "Skill" ? "审核 Skill 输入" : suggestion.slot ? "填写当前槽位" : selected.type === "配置面板" ? "应用配置" : selected.type === "Prompt 模板" ? "使用此模板" : "插入到当前 Prompt"}</button>
-      {selected.type === "Skill" && !canRunSkill && <p className="text-xs text-text-muted">请先填写角色描述并选择设计模型，或等待当前设计完成。</p>}
+      <p className="mt-1 text-xs text-text-muted">{selected.type === "Skill" ? "打开角色设计后可调整细节和模型，点击提交才会执行 AI 完善。" : suggestion.slot ? `仅替换当前 [${suggestion.slot}]，保留模板其他文字与参考图；也可关闭后手动填写。` : (selected.type === "Prompt 模板" || selected.type === "配置面板") ? "先在面板选择细节，确认后插入预览文字；也可保留 [变量] 稍后填写。" : "替换光标处的 /检索词，保留其他文字与参考图；插入后可编辑。"}</p>
+      <button type="button" disabled={!selectedText.trim() || (selected.type === "Skill" && !canRunSkill)} onClick={apply} className={`${buttonStyle} mt-2 bg-primary text-primary-foreground disabled:opacity-50`}>{selected.type === "Skill" ? "打开角色设计" : suggestion.slot ? "填写当前槽位" : selected.type === "配置面板" ? "应用配置" : selected.type === "Prompt 模板" ? "使用此模板" : "插入到当前 Prompt"}</button>
+      {selected.type === "Skill" && !canRunSkill && <p className="text-xs text-text-muted">请等待当前设计完成；此入口需在角色工作台中使用。</p>}
       <button type="button" onClick={() => setSelected(null)} className={`${buttonStyle} ml-2`}>返回结果</button>
     </> : <>
       {!suggestion.slot && <div role="tablist" aria-label="检索范围" className="mt-2 flex gap-2">{(["词典", "Skill"] as const).map((label) => <button key={label} type="button" role="tab" aria-selected={section === label} tabIndex={section === label ? 0 : -1}
