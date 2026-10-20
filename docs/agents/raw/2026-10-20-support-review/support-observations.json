@@ -1,0 +1,118 @@
+{
+  "source_sha256": "6614a5f7afdc5dd7342058e99027f2f42eee19594dcfd90c46017ddcfce114c0",
+  "decoded_source_frames": [
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8,
+    9,
+    10,
+    11,
+    12,
+    13,
+    14,
+    15,
+    16,
+    17,
+    18,
+    19,
+    20,
+    21,
+    22,
+    23,
+    24,
+    25,
+    26,
+    27,
+    28,
+    29,
+    30,
+    31,
+    32,
+    33,
+    34,
+    35,
+    36,
+    37,
+    38,
+    39,
+    40,
+    41,
+    42,
+    43,
+    44,
+    45,
+    46,
+    47,
+    48,
+    49,
+    50,
+    51,
+    52,
+    53,
+    54,
+    55,
+    56,
+    57,
+    58,
+    59,
+    60,
+    61
+  ],
+  "crop_xywh": [
+    490,
+    440,
+    440,
+    300
+  ],
+  "output_crop_size": [
+    308,
+    210
+  ],
+  "fps_mode": "passthrough",
+  "method": "assistant visual review of every decoded source frame 1\u201361, independent of rig output; semantic association checked using original ankle XY",
+  "support_candidates": [
+    {
+      "source_first": 17,
+      "source_last": 37,
+      "screen_side": "right",
+      "semantic_side": "left",
+      "appearance": "near-flat sole close to reflective floor",
+      "other_shoe": "lifted or descending/tilted edge; not locked"
+    },
+    {
+      "source_first": 43,
+      "source_last": 55,
+      "screen_side": "left",
+      "semantic_side": "right",
+      "appearance": "near-flat sole close to reflective floor",
+      "other_shoe": "tilted distal edge near reflection; not locked"
+    }
+  ],
+  "excluded_intervals": [
+    {
+      "first": 1,
+      "last": 15,
+      "reason": "screen-right shoe tilted, no full-sole lock"
+    },
+    {
+      "first": 39,
+      "last": 41,
+      "reason": "support transition; both near-flat, not force truth"
+    },
+    {
+      "first": 57,
+      "last": 61,
+      "reason": "outside diagnostic 48-output-frame window"
+    }
+  ],
+  "limits": [
+    "no force or metric floor truth",
+    "no independent 2D joint-center annotation",
+    "flat contact appearance alone does not prove a stationary world point"
+  ]
+}

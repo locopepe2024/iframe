@@ -1,6 +1,8 @@
 """Source-aligned range audit and six-event overlays for the isolated experiment."""
 import argparse
 import json
+import math
+import statistics
 from pathlib import Path
 from PIL import Image, ImageDraw
 
@@ -13,7 +15,8 @@ out.mkdir(parents=True, exist_ok=True)
 r = json.loads(Path(a.report).read_text())
 t = json.loads(Path(a.track).read_text())
 src = {f['source_frame']: f['semantic_joints'] for f in t['frames']}
-rows = r['cases']['original']['source_observations']
+baseline_label = 'original' if 'original' in r['cases'] else 'baseline'
+rows = r['cases'][baseline_label]['source_observations']
 audit = {}
 for joint in rows[0]['per_joint_px']:
     source = [[src[row['source_frame']][joint][i]*v for i, v in enumerate((640, 360))] for row in rows]
@@ -22,8 +25,30 @@ for joint in rows[0]['per_joint_px']:
         pixels = [c['output'][row['new_bundle_frame']-1]['pixels'][joint] for row in rows]
         audit[joint][label+'_range_xy_px'] = [max(v[i] for v in pixels)-min(v[i] for v in pixels) for i in (0, 1)]
 (out/'motion-range-audit.json').write_text(json.dumps(audit, indent=2)+'\n')
+if 'pelvis_diagnostics' in rows[0]:
+    regions = {}
+    for label, c in r['cases'].items():
+        regions[label] = []
+        for ob in c['source_observations']:
+            sf = ob['source_frame']
+            pix = c['output'][ob['new_bundle_frame']-1]['pixels']
+            actual = [pix['right_hip'][i]-pix['left_hip'][i] for i in (0, 1)]
+            expected = [(src[sf]['right_hip'][i]-src[sf]['left_hip'][i])*s
+                        for i, s in enumerate((640, 360))]
+            cross = actual[0]*expected[1]-actual[1]*expected[0]
+            dot = sum(x*y for x, y in zip(actual, expected))
+            regions[label].append({
+                'source_frame': sf, 'mean_px': ob['mean_px'],
+                'upper6_mean_px': statistics.mean(e for k, e in ob['per_joint_px'].items()
+                                                  if k.endswith(('shoulder', 'elbow', 'wrist'))),
+                'lower6_mean_px': statistics.mean(e for k, e in ob['per_joint_px'].items()
+                                                  if k.endswith(('hip', 'knee', 'ankle'))),
+                'hip_screen_direction_error_deg': math.degrees(math.atan2(abs(cross), dot)),
+                'hip_screen_length_ratio': math.hypot(*actual)/math.hypot(*expected),
+                'diagnostics': ob['pelvis_diagnostics']})
+    (out/'body-region-audit.json').write_text(json.dumps(regions, indent=2)+'\n')
 events = (1, 17, 23, 29, 41, 55)
-canvas = Image.new('RGB', (640*3, 388*len(events)), '#151515')
+canvas = Image.new('RGB', (640*len(r['cases']), 388*len(events)), '#151515')
 pairs = [(f'{s}_{b}', f'{s}_{e}') for s in ('left', 'right')
          for b, e in [('shoulder', 'elbow'), ('elbow', 'wrist'), ('hip', 'knee'), ('knee', 'ankle'), ('shoulder', 'hip')]]
 pairs += [('left_hip', 'right_hip'), ('left_shoulder', 'right_shoulder')]

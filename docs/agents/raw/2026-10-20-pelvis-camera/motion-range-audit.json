@@ -1,0 +1,218 @@
+{
+  "left_shoulder": {
+    "source_range_xy_px": [
+      41.676483154296875,
+      16.073395013809204
+    ],
+    "original_range_xy_px": [
+      35.644569396972656,
+      16.487603187561035
+    ],
+    "pelvis_hip_torso_range_xy_px": [
+      22.046127319335938,
+      23.068928718566895
+    ],
+    "pelvis_hip_upright_range_xy_px": [
+      17.23316192626953,
+      17.055373191833496
+    ]
+  },
+  "left_elbow": {
+    "source_range_xy_px": [
+      56.75861358642578,
+      48.064069747924805
+    ],
+    "original_range_xy_px": [
+      54.71214294433594,
+      49.00475263595581
+    ],
+    "pelvis_hip_torso_range_xy_px": [
+      36.463470458984375,
+      49.81608867645264
+    ],
+    "pelvis_hip_upright_range_xy_px": [
+      30.68805694580078,
+      49.9568510055542
+    ]
+  },
+  "left_wrist": {
+    "source_range_xy_px": [
+      79.67395782470703,
+      70.24308443069458
+    ],
+    "original_range_xy_px": [
+      71.9888687133789,
+      64.69794988632202
+    ],
+    "pelvis_hip_torso_range_xy_px": [
+      43.34075927734375,
+      65.22385597229004
+    ],
+    "pelvis_hip_upright_range_xy_px": [
+      45.798492431640625,
+      65.44641494750977
+    ]
+  },
+  "left_hip": {
+    "source_range_xy_px": [
+      49.755191802978516,
+      16.100614070892334
+    ],
+    "original_range_xy_px": [
+      67.74900436401367,
+      11.837307214736938
+    ],
+    "pelvis_hip_torso_range_xy_px": [
+      45.19620895385742,
+      16.10769510269165
+    ],
+    "pelvis_hip_upright_range_xy_px": [
+      45.34740447998047,
+      15.995460748672485
+    ]
+  },
+  "left_knee": {
+    "source_range_xy_px": [
+      30.898094177246094,
+      17.339022159576416
+    ],
+    "original_range_xy_px": [
+      57.35595703125,
+      18.5858416557312
+    ],
+    "pelvis_hip_torso_range_xy_px": [
+      32.69493103027344,
+      9.78531002998352
+    ],
+    "pelvis_hip_upright_range_xy_px": [
+      33.283348083496094,
+      9.828836917877197
+    ]
+  },
+  "left_ankle": {
+    "source_range_xy_px": [
+      35.13195037841797,
+      19.661643505096436
+    ],
+    "original_range_xy_px": [
+      62.40804672241211,
+      20.7878977060318
+    ],
+    "pelvis_hip_torso_range_xy_px": [
+      43.31514358520508,
+      13.578559756278992
+    ],
+    "pelvis_hip_upright_range_xy_px": [
+      43.163700103759766,
+      13.564172387123108
+    ]
+  },
+  "right_shoulder": {
+    "source_range_xy_px": [
+      39.23912048339844,
+      20.568734407424927
+    ],
+    "original_range_xy_px": [
+      23.440837860107422,
+      11.955463886260986
+    ],
+    "pelvis_hip_torso_range_xy_px": [
+      24.647235870361328,
+      16.93963050842285
+    ],
+    "pelvis_hip_upright_range_xy_px": [
+      29.144649505615234,
+      13.876290321350098
+    ]
+  },
+  "right_elbow": {
+    "source_range_xy_px": [
+      44.94190216064453,
+      48.2720160484314
+    ],
+    "original_range_xy_px": [
+      30.71300506591797,
+      29.80638027191162
+    ],
+    "pelvis_hip_torso_range_xy_px": [
+      29.546070098876953,
+      29.227795600891113
+    ],
+    "pelvis_hip_upright_range_xy_px": [
+      36.08543395996094,
+      29.087097644805908
+    ]
+  },
+  "right_wrist": {
+    "source_range_xy_px": [
+      43.13484191894531,
+      44.56653356552124
+    ],
+    "original_range_xy_px": [
+      34.5623779296875,
+      39.770143032073975
+    ],
+    "pelvis_hip_torso_range_xy_px": [
+      41.94732666015625,
+      37.55802869796753
+    ],
+    "pelvis_hip_upright_range_xy_px": [
+      40.641117095947266,
+      33.541131019592285
+    ]
+  },
+  "right_hip": {
+    "source_range_xy_px": [
+      52.64486312866211,
+      14.002740383148193
+    ],
+    "original_range_xy_px": [
+      33.990478515625,
+      22.840951681137085
+    ],
+    "pelvis_hip_torso_range_xy_px": [
+      51.0235595703125,
+      15.93394160270691
+    ],
+    "pelvis_hip_upright_range_xy_px": [
+      51.62221908569336,
+      15.859322547912598
+    ]
+  },
+  "right_knee": {
+    "source_range_xy_px": [
+      37.33135223388672,
+      39.94832754135132
+    ],
+    "original_range_xy_px": [
+      22.720394134521484,
+      45.09513258934021
+    ],
+    "pelvis_hip_torso_range_xy_px": [
+      42.155303955078125,
+      36.07855439186096
+    ],
+    "pelvis_hip_upright_range_xy_px": [
+      42.79804229736328,
+      35.97439885139465
+    ]
+  },
+  "right_ankle": {
+    "source_range_xy_px": [
+      46.28740310668945,
+      43.8554048538208
+    ],
+    "original_range_xy_px": [
+      46.4715576171875,
+      48.994619250297546
+    ],
+    "pelvis_hip_torso_range_xy_px": [
+      54.64649200439453,
+      40.10913670063019
+    ],
+    "pelvis_hip_upright_range_xy_px": [
+      54.7503662109375,
+      40.13685464859009
+    ]
+  }
+}

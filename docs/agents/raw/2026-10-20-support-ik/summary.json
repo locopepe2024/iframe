@@ -1,0 +1,290 @@
+{
+  "schema": "recreation2-support-ik.v1",
+  "sha256": {
+    "rig": "95eeb19c8abce2325479804b3dda429ebddfa6e8d07a2688541cc990fb676855",
+    "bundle": "f9e5b0f9f19636fbfd5a5c7659921ce0d5739bd44769dcf56e962bcc1ba88746",
+    "track": "0fed823bf39bd206ebeafec922a29394ee87a942b1bcc0395610a603d598550a",
+    "anchors": "ea9df0be27780d21061d198d7d2e90895c5d5b61c1a856af3a2ff4f85c2e89e3",
+    "patches": "ebf857d9229cad61d704da0ae053303410e5f767383c838e539955ac7af7d17b",
+    "supports": "83b2301a25de4bd1ef7e97b892059c42bcdbfcdd7238e0c7c734161f2194a9ca"
+  },
+  "probe_sha256": "c2849b83c03e2b5d81eb2a46702d6bd6c0e93b8f0292f23e66e51659d4bb9a26",
+  "ik_helper_sha256": "c9dd3335631687e3060211ec7cd52f2fc00822b8555252f8cf13172335ea7744",
+  "renderer_sha256": "87c2795303222ca6df54bb2c9bc3818afd3f640a2dec9fbf106a8a20d53e8598",
+  "cap_units": 0.04,
+  "intervals": [
+    {
+      "source_first": 17,
+      "source_last": 37,
+      "screen_side": "right",
+      "semantic_side": "left",
+      "appearance": "near-flat sole close to reflective floor",
+      "other_shoe": "lifted or descending/tilted edge; not locked",
+      "side": "l",
+      "first_output": 20,
+      "last_output": 34,
+      "reference_world": [
+        0.23408406972885132,
+        -0.25864377617836,
+        0.38519716262817383
+      ]
+    },
+    {
+      "source_first": 43,
+      "source_last": 55,
+      "screen_side": "left",
+      "semantic_side": "right",
+      "appearance": "near-flat sole close to reflective floor",
+      "other_shoe": "tilted distal edge near reflection; not locked",
+      "side": "r",
+      "first_output": 39,
+      "last_output": 48,
+      "reference_world": [
+        -0.2230278104543686,
+        -0.3647715449333191,
+        0.3547525107860565
+      ]
+    }
+  ],
+  "units": "Blender units, metric unverified; pixels 640x360",
+  "limits": [
+    "Reference is candidate patch at support entry, not recovered ground",
+    "Visual support candidate is not force/stationarity truth",
+    "No pelvis change; no foot orientation flattening"
+  ],
+  "dense_baseline_reproduction_max_px": 0.0,
+  "cases": {
+    "baseline": {
+      "all_joint_error_px": {
+        "count": 336,
+        "median": 8.58409041182938,
+        "p95": 21.536845623991262,
+        "max": 28.365834272029797
+      },
+      "ankle_error_px": {
+        "count": 56,
+        "median": 12.27483968880377,
+        "p95": 26.77854320353977,
+        "max": 28.365834272029797
+      },
+      "selected_source_mean_px": {
+        "1": 8.718073826726586,
+        "17": 6.864091162725938,
+        "23": 7.454897037696516,
+        "29": 8.60039285894885,
+        "41": 9.289501163763415,
+        "55": 18.32365810528381
+      },
+      "output_max_joint_step_px": {
+        "count": 47,
+        "median": 7.520927913597191,
+        "p95": 20.51420938107386,
+        "max": 25.963953808903234
+      },
+      "renderer_roundtrip_max_px": 0.0,
+      "zero_target_max_px": 0,
+      "unchanged_upper_and_other_leg_max_px": 0,
+      "cap_hit_count": 0,
+      "support_metrics": [
+        {
+          "source_first": 17,
+          "source_last": 37,
+          "screen_side": "right",
+          "semantic_side": "left",
+          "appearance": "near-flat sole close to reflective floor",
+          "other_shoe": "lifted or descending/tilted edge; not locked",
+          "side": "l",
+          "first_output": 20,
+          "last_output": 34,
+          "reference_world": [
+            0.23408406972885132,
+            -0.25864377617836,
+            0.38519716262817383
+          ],
+          "horizontal_speed": {
+            "count": 15,
+            "median": 0.17527482587515436,
+            "p95": 1.020214665033556,
+            "max": 1.2361656681054516
+          },
+          "reference_distance": {
+            "count": 15,
+            "median": 0.025270294236135277,
+            "p95": 0.044103819200620245,
+            "max": 0.0665514767229174
+          },
+          "height_reference_abs": {
+            "count": 15,
+            "median": 0.00590851902961731,
+            "p95": 0.013283273577690125,
+            "max": 0.013308912515640259
+          },
+          "active_ankle_error_px": {
+            "count": 11,
+            "median": 11.433446169389493,
+            "p95": 13.972882959692452,
+            "max": 15.634565096778875
+          },
+          "min_patch_center_height_relative_to_entry": -0.013308912515640259
+        },
+        {
+          "source_first": 43,
+          "source_last": 55,
+          "screen_side": "left",
+          "semantic_side": "right",
+          "appearance": "near-flat sole close to reflective floor",
+          "other_shoe": "tilted distal edge near reflection; not locked",
+          "side": "r",
+          "first_output": 39,
+          "last_output": 48,
+          "reference_world": [
+            -0.2230278104543686,
+            -0.3647715449333191,
+            0.3547525107860565
+          ],
+          "horizontal_speed": {
+            "count": 10,
+            "median": 0.7565793644200904,
+            "p95": 1.347457234189053,
+            "max": 1.3927601565651941
+          },
+          "reference_distance": {
+            "count": 10,
+            "median": 0.1263413907097902,
+            "p95": 0.15720719349204615,
+            "max": 0.15844373287898922
+          },
+          "height_reference_abs": {
+            "count": 10,
+            "median": 0.004006028175354004,
+            "p95": 0.013781625032424919,
+            "max": 0.016818851232528687
+          },
+          "active_ankle_error_px": {
+            "count": 7,
+            "median": 16.52649627270802,
+            "p95": 18.813076383894593,
+            "max": 18.895926149660003
+          },
+          "min_patch_center_height_relative_to_entry": -0.016818851232528687
+        }
+      ]
+    },
+    "support_ik": {
+      "all_joint_error_px": {
+        "count": 336,
+        "median": 8.553654063846455,
+        "p95": 21.536845623991262,
+        "max": 28.365834272029797
+      },
+      "ankle_error_px": {
+        "count": 56,
+        "median": 12.24645367840996,
+        "p95": 26.77854320353977,
+        "max": 28.365834272029797
+      },
+      "selected_source_mean_px": {
+        "1": 8.718073826726586,
+        "17": 6.864087917465134,
+        "23": 7.688896867741579,
+        "29": 8.720706510691707,
+        "41": 9.289501163763415,
+        "55": 17.711782552026833
+      },
+      "output_max_joint_step_px": {
+        "count": 47,
+        "median": 7.520927913597191,
+        "p95": 20.51420938107386,
+        "max": 25.963953808903234
+      },
+      "renderer_roundtrip_max_px": 0.0,
+      "zero_target_max_px": 3.9627004000174194e-05,
+      "unchanged_upper_and_other_leg_max_px": 0,
+      "cap_hit_count": 8,
+      "support_metrics": [
+        {
+          "source_first": 17,
+          "source_last": 37,
+          "screen_side": "right",
+          "semantic_side": "left",
+          "appearance": "near-flat sole close to reflective floor",
+          "other_shoe": "lifted or descending/tilted edge; not locked",
+          "side": "l",
+          "first_output": 20,
+          "last_output": 34,
+          "reference_world": [
+            0.23408406972885132,
+            -0.25864377617836,
+            0.38519716262817383
+          ],
+          "horizontal_speed": {
+            "count": 15,
+            "median": 0.0013755980592730652,
+            "p95": 0.547567435924157,
+            "max": 1.4012425577102536
+          },
+          "reference_distance": {
+            "count": 15,
+            "median": 0.0001486602044575009,
+            "p95": 0.026083066993513607,
+            "max": 0.06655136428310894
+          },
+          "height_reference_abs": {
+            "count": 15,
+            "median": 3.886222839355469e-05,
+            "p95": 0.0069308996200561435,
+            "max": 0.012630671262741089
+          },
+          "active_ankle_error_px": {
+            "count": 11,
+            "median": 11.942363742392997,
+            "p95": 15.200877045392486,
+            "max": 15.63455437113874
+          },
+          "min_patch_center_height_relative_to_entry": -0.004488140344619751
+        },
+        {
+          "source_first": 43,
+          "source_last": 55,
+          "screen_side": "left",
+          "semantic_side": "right",
+          "appearance": "near-flat sole close to reflective floor",
+          "other_shoe": "tilted distal edge near reflection; not locked",
+          "side": "r",
+          "first_output": 39,
+          "last_output": 48,
+          "reference_world": [
+            -0.2230278104543686,
+            -0.3647715449333191,
+            0.3547525107860565
+          ],
+          "horizontal_speed": {
+            "count": 10,
+            "median": 0.5794247989196007,
+            "p95": 1.0977761157177195,
+            "max": 1.292086249520226
+          },
+          "reference_distance": {
+            "count": 10,
+            "median": 0.0861420847515195,
+            "p95": 0.11700594805174337,
+            "max": 0.11824215576476098
+          },
+          "height_reference_abs": {
+            "count": 10,
+            "median": 0.0029419809579849243,
+            "p95": 0.007921317219734192,
+            "max": 0.00836154818534851
+          },
+          "active_ankle_error_px": {
+            "count": 7,
+            "median": 9.664940387462476,
+            "p95": 11.89363732049056,
+            "max": 12.083135993497727
+          },
+          "min_patch_center_height_relative_to_entry": -0.00836154818534851
+        }
+      ]
+    }
+  }
+}
