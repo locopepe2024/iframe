@@ -165,6 +165,8 @@ export default function CharacterPromptDictionary({ suggestion, onClose, onApply
   const related = section === "词典" && !browsing ? Array.from(new Set(visible.flatMap(entry => entry.categories))) : [];
   const enterCategory = (key: string) => { setCategory(key); setBrowsing(true); setActive(0); };
   const showTasks = section === "Prompt 模板" && !task && browsing;
+  const templateTiles = section === "Prompt 模板" && !suggestion.slot;
+  const tileLayout = quickPanels || templateTiles;
   const options = [
     ...(showTasks ? PROMPT_TASKS.map(([key, label]) => ({ id: `task-${key}`, label, detail: "选择任务，再按题材和画风筛选", choose: () => { setTask(key); setPromptTag(""); setTopic(""); setStyle(""); } })) : []),
     ...navigation.map(item => ({ id: `category-${item.id}`, label: item.label, detail: item.detail, choose: () => enterCategory(item.id) })),
@@ -305,9 +307,9 @@ export default function CharacterPromptDictionary({ suggestion, onClose, onApply
       {loading && <p role="status" className="text-xs text-text-muted">正在读取平台词典…</p>}
       {error && <p role="status" className="text-xs text-text-muted">平台词典读取失败，本地词条仍可使用。<button type="button" onClick={() => setRefresh((value) => value + 1)} className={buttonStyle}>重试</button></p>}
       {!loading && options.length === 0 && <p role="status" className="py-2 text-xs text-text-muted">{section === "Prompt 模板" ? "当前分类暂无可用模板，请调整题材、画风或选择其他任务。" : "没有匹配项，请更换关键词或分类。"}</p>}
-      <div role="listbox" aria-label="面板和模板结果" className={quickPanels ? "grid grid-cols-3 gap-2" : ""} aria-activedescendant={options.length ? `${id}-${Math.min(active, options.length - 1)}` : undefined}>
-        {options.map((option, index) => <button key={option.id} id={`${id}-${index}`} type="button" role="option" aria-selected={active === index} onClick={option.choose} className={`${buttonStyle} min-w-0 w-full py-2 ${quickPanels ? "border border-glass-border text-center" : "block text-left"} ${active === index ? "bg-primary/10" : ""}`}>
-          <span className="block break-words text-foreground">{option.label}</span>{!quickPanels && <span className="block text-text-muted">{option.detail}</span>}
+      <div role="listbox" aria-label="面板和模板结果" className={tileLayout ? "grid grid-cols-3 gap-2" : ""} aria-activedescendant={options.length ? `${id}-${Math.min(active, options.length - 1)}` : undefined}>
+        {options.map((option, index) => <button key={option.id} id={`${id}-${index}`} type="button" role="option" aria-label={templateTiles ? option.label : undefined} aria-selected={active === index} onClick={option.choose} className={`${templateTiles ? buttonStyle.replace("text-xs", "text-sm leading-relaxed") : buttonStyle} min-w-0 w-full py-2 ${tileLayout ? "border border-glass-border text-center" : "block text-left"} ${active === index ? "bg-primary/10" : ""}`}>
+          <span className="block break-words text-foreground">{templateTiles ? option.label.replace(/^Prompt 模板 · /, "") : option.label}</span>{!tileLayout && <span className="block text-text-muted">{option.detail}</span>}
         </button>)}
       </div>
       <button type="button" onClick={() => setRefresh((value) => value + 1)} className={buttonStyle}>刷新目录</button>
