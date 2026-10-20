@@ -104,3 +104,47 @@ it('distinguishes a stale selection from an empty pool and permits choosing an a
   expect(screen.getByAltText('Selected Variant')).toHaveAttribute('src', expect.stringContaining('second.png'));
   await waitFor(() => expect(onSelect).toHaveBeenCalledWith('second'));
 });
+
+
+it('sets the displayed variant as cover and labels character variants', async () => {
+  const onSetCover = vi.fn().mockResolvedValue(undefined);
+  const onSelect = vi.fn();
+  render(<VariantSelector asset={asset} onSelect={onSelect} onDelete={vi.fn()} onGenerate={vi.fn()} isGenerating={false}
+    onRename={vi.fn()} variantNameLabel="变体名称" variantNameFallback={(index) => `苏砚-${index + 1}`} onSetCover={onSetCover} />);
+  expect(screen.getByAltText('苏砚-1')).toBeInTheDocument();
+  expect(screen.getByLabelText('变体名称')).toHaveAttribute('placeholder', '苏砚-1');
+  fireEvent.click(screen.getByRole('button', { name: '设为角色封面' }));
+  await waitFor(() => expect(onSetCover).toHaveBeenCalledWith('first'));
+  expect(onSelect).not.toHaveBeenCalled();
+});
+
+it('reports favorite errors and allows retrying', async () => {
+  const onFavorite = vi.fn().mockRejectedValueOnce(new Error('offline')).mockResolvedValue(undefined);
+  render(<VariantSelector asset={{ ...asset, variants: [{ ...asset.variants[0], is_favorited: true }] }}
+    onSelect={vi.fn()} onDelete={vi.fn()} onGenerate={vi.fn()} isGenerating={false} onFavorite={onFavorite} />);
+  fireEvent.click(screen.getByRole('button', { name: 'clickToUnfavorite' }));
+  await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('收藏更新失败'));
+  fireEvent.click(screen.getByRole('button', { name: 'clickToUnfavorite' }));
+  await waitFor(() => expect(onFavorite).toHaveBeenCalledTimes(2));
+  await waitFor(() => expect(screen.queryByRole('alert')).not.toBeInTheDocument());
+});
+
+
+it('reports cover errors and permits retrying without changing the selection', async () => {
+  const onSetCover = vi.fn().mockRejectedValueOnce(new Error('offline')).mockResolvedValue(undefined);
+  render(<VariantSelector asset={asset} onSelect={vi.fn()} onDelete={vi.fn()} onGenerate={vi.fn()} isGenerating={false}
+    onRename={vi.fn()} onSetCover={onSetCover} />);
+  fireEvent.click(screen.getByRole('button', { name: '设为角色封面' }));
+  await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('角色封面保存失败'));
+  fireEvent.click(screen.getByRole('button', { name: '设为角色封面' }));
+  await waitFor(() => expect(onSetCover).toHaveBeenCalledTimes(2));
+  await waitFor(() => expect(screen.queryByRole('alert')).not.toBeInTheDocument());
+});
+
+it('keeps authored names and identifies the current cover', () => {
+  render(<VariantSelector asset={{ ...asset, variants: [{ ...asset.variants[0], display_name: '黑衣正面' }] }}
+    onSelect={vi.fn()} onDelete={vi.fn()} onGenerate={vi.fn()} isGenerating={false} onRename={vi.fn()}
+    variantNameFallback={(index) => `苏砚-${index + 1}`} coverVariantId="first" onSetCover={vi.fn()} />);
+  expect(screen.getByAltText('黑衣正面')).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: '当前角色封面' })).toBeDisabled();
+});

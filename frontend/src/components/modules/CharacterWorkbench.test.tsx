@@ -15,6 +15,7 @@ const apiMocks = vi.hoisted(() => ({
         character_id: "character", source_scope: "project", asset_revision: 1, pack: null,
     }),
     confirmCharacterAnchor: vi.fn(),
+    setAssetCoverVariant: vi.fn(),
     previewAssetImageSubmission: vi.fn((_id: string, request: any) => Promise.resolve({
         positive_prompt: request.prompt, negative_prompt: request.negative_prompt,
         selected_model_id: "test-model", aspect_ratio: "9:16",
@@ -32,6 +33,7 @@ const apiMocks = vi.hoisted(() => ({
 
 const projectStoreMocks = vi.hoisted(() => ({
     currentProject: { id: "project-1" } as { id: string; revision?: number; characters?: any[]; scenes?: any[]; props?: any[] },
+    currentSeries: null as { id: string; title: string } | null,
     updateProject: vi.fn(),
 }));
 
@@ -42,9 +44,11 @@ vi.mock("next/dynamic", () => ({
     default: () => function DynamicComponent() { return null; },
 }));
 vi.mock("../common/VariantSelector", () => ({
-    VariantSelector: ({ onGenerate, filmstripTitle, previewLocator }: { onGenerate?: (batchSize: number) => void; filmstripTitle?: string; previewLocator?: unknown }) => (
+    VariantSelector: ({ onGenerate, filmstripTitle, previewLocator, onSetCover, variantNameFallback }: any) => (
         <div>
             <span>{filmstripTitle}</span>
+            <span>{variantNameFallback?.(0)}</span>
+            {onSetCover && <button onClick={() => onSetCover("front")}>设为角色封面</button>}
             <span data-testid="preview-locator">{JSON.stringify(previewLocator)}</span>
             <button type="button" data-testid="variant-generate" onClick={() => onGenerate?.(1)}>Generate</button>
         </div>
@@ -193,45 +197,38 @@ it("shows one task at a time and unlocks derived prompts when the reference shee
     expect(screen.queryByText("Generate Master Asset first")).not.toBeInTheDocument();
 });
 
-it("confirms a selected project master as an explicit versioned anchor", async () => {
+it("sets a cover directly without creating an anchor or episode look", async () => {
     apiMocks.getAssetReferenceIndex.mockResolvedValue({ assets: [] } as any);
-    apiMocks.getCharacterAssetPack.mockResolvedValue({
-        character_id: "hero", source_scope: "project", asset_revision: 3, pack: null,
-    });
-    apiMocks.confirmCharacterAnchor.mockResolvedValue({
-        character_id: "hero", source_scope: "project", asset_revision: 4,
-        pack: { pack_id: "character-pack-hero", current_revision: 1,
-            revisions: [{ revision: 1, variant_id: "front" }] },
-    });
-    const review = vi.spyOn(window, "confirm").mockReturnValue(true);
-    render(<CharacterWorkbench asset={{
-        id: "hero", name: "Hero", description: "Hero",
-        character_design: { design_revisions: [{ revision: 1, design: {} }] },
+    apiMocks.confirmCharacterAnchor.mockClear();
+    apiMocks.setAssetCoverVariant.mockResolvedValue({ asset_id: "hero", cover_variant_id: "front" });
+    projectStoreMocks.currentProject = { id: "project-1", characters: [{ id: "hero", name: "苏砚" }] };
+    render(<CharacterWorkbench asset={{ id: "hero", name: "苏砚", description: "Hero",
         reference_sheet: { selected_image_id: "front", image_variants: [{ id: "front", url: "front.webp" }] },
     }} onClose={vi.fn()} onUpdateDescription={vi.fn()} onGenerate={vi.fn()} generatingTypes={[]} />);
-    fireEvent.click(await screen.findByRole("button", { name: "将选中图确认为正面全身锚点" }));
-    await waitFor(() => expect(apiMocks.confirmCharacterAnchor).toHaveBeenCalledWith(
-        "project-1", "hero", "front", 3, 0,
-    ));
-    expect(await screen.findByText("项目角色锚点：r1 · front")).toBeInTheDocument();
-    review.mockRestore();
+    expect(screen.queryByText(/项目角色锚点/)).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("本集造型名称")).not.toBeInTheDocument();
+    expect(screen.getByText("苏砚-1")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "设为角色封面" }));
+    await waitFor(() => expect(apiMocks.setAssetCoverVariant).toHaveBeenCalledWith("project-1", "hero", "character", "front"));
+    expect(apiMocks.confirmCharacterAnchor).not.toHaveBeenCalled();
+    expect(projectStoreMocks.updateProject).toHaveBeenCalledWith("project-1", {
+        characters: [expect.objectContaining({ id: "hero", cover_variant_id: "front" })],
+    });
 });
 
-it("keeps the character anchor unchanged when review is cancelled", async () => {
-    apiMocks.getAssetReferenceIndex.mockResolvedValue({ assets: [] } as any);
-    apiMocks.getCharacterAssetPack.mockResolvedValue({
-        character_id: "hero", source_scope: "project", asset_revision: 3, pack: null,
-    });
-    apiMocks.confirmCharacterAnchor.mockClear();
-    const review = vi.spyOn(window, "confirm").mockReturnValue(false);
-    render(<CharacterWorkbench asset={{
-        id: "hero", name: "Hero", description: "Hero",
-        character_design: { design_revisions: [{ revision: 1, design: {} }] },
-        reference_sheet: { selected_image_id: "front", image_variants: [{ id: "front", url: "front.webp" }] },
-    }} onClose={vi.fn()} onUpdateDescription={vi.fn()} onGenerate={vi.fn()} generatingTypes={[]} />);
-    fireEvent.click(await screen.findByRole("button", { name: "将选中图确认为正面全身锚点" }));
-    expect(apiMocks.confirmCharacterAnchor).not.toHaveBeenCalled();
-    review.mockRestore();
+it("uses project and episode context for an unnamed character variant", () => {
+    const previous = projectStoreMocks.currentProject;
+    projectStoreMocks.currentProject = { id: "project-1", title: "第二集", series_id: "series-1" } as typeof previous;
+    projectStoreMocks.currentSeries = { id: "series-1", title: "雪痕" };
+    try {
+        render(<CharacterWorkbench asset={{ id: "hero", name: "", description: "Hero",
+            reference_sheet: { selected_image_id: "front", image_variants: [{ id: "front", url: "front.webp" }] },
+        }} onClose={vi.fn()} onUpdateDescription={vi.fn()} onGenerate={vi.fn()} generatingTypes={[]} />);
+        expect(screen.getByText("雪痕.第二集.view 1")).toBeInTheDocument();
+    } finally {
+        projectStoreMocks.currentProject = previous;
+        projectStoreMocks.currentSeries = null;
+    }
 });
 
 it("does not offer direct image upload from the character panel", () => {

@@ -5,7 +5,7 @@ import { useState, useEffect, useMemo, useRef, useId, useCallback } from "react"
 import { useTranslations } from "next-intl";
 import { motion } from "framer-motion";
 import { X, RefreshCw, Check, Image as ImageIcon, Lock, ChevronRight, ChevronDown, Video, Sparkles, Search } from "lucide-react";
-import { agentRequest, api, type AssetImageReviewRequest, type AssetLibraryReference, type AssetReferenceIndexEntry, type ChatModel, type CharacterAssetPackView } from "@/lib/api";
+import { agentRequest, api, type AssetImageReviewRequest, type AssetLibraryReference, type AssetReferenceIndexEntry, type ChatModel } from "@/lib/api";
 
 import { VariantSelector } from "../common/VariantSelector";
 import { VideoVariantSelector } from "../common/VideoVariantSelector";
@@ -442,13 +442,12 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
     const [resultLookBasis, setResultLookBasis] = useState<DesignBasis[]>(normalizeDesignBasis(savedResult?.look?.basis || savedDesign.look?.basis));
     const updateProject = useProjectStore(state => state.updateProject);
     const currentProject = useProjectStore(state => state.currentProject);
-    const [assetPackView, setAssetPackView] = useState<CharacterAssetPackView | null>(null);
-    const [anchorBusy, setAnchorBusy] = useState(false);
-    const [anchorError, setAnchorError] = useState("");
-    const [episodeLookLabel, setEpisodeLookLabel] = useState("");
-    const [episodeLookCondition, setEpisodeLookCondition] = useState("");
-    const [episodeLookBusy, setEpisodeLookBusy] = useState(false);
-    const [episodeLookError, setEpisodeLookError] = useState("");
+    const currentProjectRef = useRef(currentProject);
+    currentProjectRef.current = currentProject;
+    const currentSeries = useProjectStore(state => state.currentSeries);
+    const variantNameFallback = (index: number) => asset.name?.trim()
+        ? `${asset.name.trim()}-${index + 1}`
+        : `${currentSeries?.id === currentProject?.series_id ? currentSeries?.title || "项目" : "项目"}.${currentProject?.title || "剧集"}.view ${index + 1}`;
     const [assetIndex, setAssetIndex] = useState<AssetReferenceIndexEntry[]>([]);
     const assetIndexRequest = useRef(0);
     const assetIndexRevision = JSON.stringify(
@@ -599,82 +598,6 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
     const masterAsset = referenceSheetImageAsset || asset.full_body_asset;
     const masterGenerationType = referenceSheetImageAsset ? "reference_sheet" : "full_body";
     const hasFullBodyImage = !!masterImageUrl;
-    const selectedMasterVariantId = masterAsset?.selected_id as string | undefined;
-
-    useEffect(() => {
-        let active = true;
-        setAssetPackView(null);
-        setAnchorError("");
-        const projectCharacterId = asset.base_character_id || asset.id;
-        if (currentProject?.id && projectCharacterId) {
-            void api.getCharacterAssetPack(currentProject.id, projectCharacterId)
-                .then((view) => { if (active) setAssetPackView(view); })
-                .catch(() => { if (active) setAssetPackView(null); });
-        }
-        return () => { active = false; };
-    }, [currentProject?.id, asset.id, asset.base_character_id]);
-
-    useEffect(() => {
-        const projectId = currentProject?.id;
-        if (!projectId || typeof api.listEpisodeCharacterUses !== "function") return;
-        let active = true;
-        void api.listEpisodeCharacterUses(projectId)
-            .then((uses) => {
-                if (active) updateProject(projectId, { episode_character_uses: uses });
-            })
-            .catch(() => { /* retain the current snapshot if refresh is unavailable */ });
-        return () => { active = false; };
-    }, [currentProject?.id, updateProject]);
-
-    const confirmMasterAnchor = async () => {
-        if (!currentProject?.id || !selectedMasterVariantId || anchorBusy) return;
-        if (!window.confirm(`确认当前选中的图片 ${selectedMasterVariantId} 是该角色正面全身锚点图？请核对面容、发型、服装与鞋履。`)) return;
-        setAnchorBusy(true);
-        setAnchorError("");
-        try {
-            await selectionQueue.current;
-            const current = await api.getCharacterAssetPack(currentProject.id, asset.id);
-            const updated = await api.confirmCharacterAnchor(
-                currentProject.id, asset.id, selectedMasterVariantId,
-                current.asset_revision, current.pack?.current_revision || 0,
-            );
-            setAssetPackView(updated);
-        } catch (error) {
-            setAnchorError(error instanceof Error ? error.message : "锚点确认失败，请刷新后重试");
-        } finally {
-            setAnchorBusy(false);
-        }
-    };
-
-    const confirmEpisodeLook = async () => {
-        if (!currentProject?.id || !assetPackView?.pack || !selectedMasterVariantId || episodeLookBusy) return;
-        const projectCharacterId = asset.base_character_id || asset.id;
-        const label = episodeLookLabel.trim() || asset.name;
-        if (!window.confirm(`确认本集造型“${label}”使用当前图片 ${selectedMasterVariantId}？\n来源：${projectCharacterId} / 资产包 r${assetPackView.pack.current_revision}\n状态：${episodeLookCondition.trim() || "无额外状态"}`)) return;
-        setEpisodeLookBusy(true);
-        setEpisodeLookError("");
-        try {
-            await selectionQueue.current;
-            const latest = await api.getCharacterAssetPack(currentProject.id, projectCharacterId);
-            if (!latest.pack) throw new Error("请先确认项目角色正面全身锚点");
-            const use = await api.confirmEpisodeCharacterUse(currentProject.id, projectCharacterId, {
-                label, condition: episodeLookCondition.trim(), selected_asset_id: asset.id,
-                selected_variant_id: selectedMasterVariantId,
-                expected_pack_revision: latest.pack.current_revision, reviewed: true,
-            });
-            updateProject(currentProject.id, {
-                episode_character_uses: [...(currentProject.episode_character_uses || []), use],
-            });
-            setEpisodeLookLabel("");
-            setEpisodeLookCondition("");
-            toast.success(`已确认本集造型：${use.label}`);
-        } catch (error: any) {
-            setEpisodeLookError(String(error?.response?.data?.detail || error?.message || "本集造型确认失败"));
-        } finally {
-            setEpisodeLookBusy(false);
-        }
-    };
-
     // Local state for prompts
     const getInitialPrompt = (type: string, existingPrompt: string) => {
         const confirmedDesign = asset.character_design?.design_revisions?.at(-1)?.design || (savedDesign.confirmed ? savedDesign : undefined);
@@ -1203,12 +1126,20 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
     const handleFavoriteVariant = async (type: "reference_sheet" | "full_body" | "three_view" | "headshot", variantId: string, isFavorited: boolean) => {
         if (!currentProject) return;
 
-        try {
-            const updatedProject = await api.favoriteAssetVariant(currentProject.id, asset.id, "character", variantId, isFavorited, type);
-            updateProject(currentProject.id, updatedProject);
-        } catch (error) {
-            console.error("Failed to favorite variant:", error);
-        }
+        const updatedProject = await api.favoriteAssetVariant(currentProject.id, asset.id, "character", variantId, isFavorited, type);
+        updateProject(currentProject.id, updatedProject);
+    };
+
+    const handleSetCover = async (variantId: string) => {
+        if (!currentProject?.id) return;
+        const projectId = currentProject.id;
+        const result = await api.setAssetCoverVariant(projectId, asset.id, "character", variantId);
+        const latest = currentProjectRef.current;
+        if (latest?.id !== projectId) return;
+        updateProject(projectId, {
+            characters: (latest.characters || []).map(character => character.id === asset.id
+                ? { ...character, cover_variant_id: result.cover_variant_id } : character),
+        });
     };
 
     const handleRenameVariant = async (variantId: string, displayName: string) => {
@@ -1431,36 +1362,6 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
                                 hasStaticImage={activePanel === "full_body" ? hasFullBodyImage : !!asset.headshot_image_url || !!asset.headshot_asset?.variants?.length}
                             />}
                         </div>
-                        {activePanel === "full_body" && <div className="flex flex-wrap items-center gap-2 border-b border-glass-border px-3 py-2 text-xs text-text-secondary sm:px-5">
-                            <span>{asset.base_character_id ? "来源项目角色锚点" : "项目角色锚点"}：{assetPackView?.pack ? `r${assetPackView.pack.current_revision} · ${assetPackView.pack.revisions.at(-1)?.variant_id}` : "未确认"}</span>
-                            {!asset.base_character_id && <button type="button" onClick={() => void confirmMasterAnchor()}
-                                disabled={!selectedMasterVariantId || !designRevision || !assetPackView || anchorBusy}
-                                className="rounded border border-glass-border px-2 py-1 text-foreground hover:bg-hover-bg disabled:opacity-50">
-                                {anchorBusy ? "确认中…" : "将选中图确认为正面全身锚点"}
-                            </button>}
-                            {anchorError && <span role="alert" className="text-red-400">{anchorError}</span>}
-                        </div>}
-                        {activePanel === "full_body" && assetPackView?.pack && <div className="border-b border-glass-border px-3 py-2 text-xs text-text-secondary sm:px-5">
-                            <div className="mb-2 font-medium text-foreground">本集造型 · 人工确认后可在分镜中选择</div>
-                            <div className="flex flex-wrap items-center gap-2">
-                                <input aria-label="本集造型名称" value={episodeLookLabel} onChange={(event) => setEpisodeLookLabel(event.target.value)}
-                                    placeholder={asset.base_character_id ? "例如：受伤造型" : "例如：正常造型"} maxLength={120}
-                                    className="min-w-36 rounded border border-glass-border bg-surface-inset px-2 py-1 text-foreground" />
-                                <input aria-label="本集造型状态" value={episodeLookCondition} onChange={(event) => setEpisodeLookCondition(event.target.value)}
-                                    placeholder="状态说明，可留空" maxLength={500}
-                                    className="min-w-40 flex-1 rounded border border-glass-border bg-surface-inset px-2 py-1 text-foreground" />
-                                <button type="button" onClick={() => void confirmEpisodeLook()}
-                                    disabled={!selectedMasterVariantId || episodeLookBusy || (!asset.base_character_id && selectedMasterVariantId !== assetPackView.pack.revisions.at(-1)?.variant_id)}
-                                    className="rounded border border-primary/50 px-2 py-1 text-primary hover:bg-primary/10 disabled:opacity-50">
-                                    {episodeLookBusy ? "确认中…" : "确认选中图为本集造型"}
-                                </button>
-                            </div>
-                            {episodeLookError && <p role="alert" className="mt-1 text-red-400">{episodeLookError}</p>}
-                            {(currentProject?.episode_character_uses || []).filter((item) => item.project_character_id === (asset.base_character_id || asset.id)).length > 0 &&
-                                <p className="mt-2">本集已确认：{(currentProject?.episode_character_uses || [])
-                                    .filter((item) => item.project_character_id === (asset.base_character_id || asset.id))
-                                    .map((item) => `${item.label} · ${item.selected_asset_id}/${item.selected_variant_id}`).join("；")}</p>}
-                        </div>}
                         <div className="min-h-0 flex-1 flex overflow-hidden">
 
                     {/* Panel 1: Full Body (Master) */}
@@ -1482,6 +1383,9 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
                         onDelete={(id: string) => handleDeleteVariant(masterGenerationType, id)}
                         onFavorite={(id: string, isFav: boolean) => handleFavoriteVariant(masterGenerationType, id, isFav)}
                         onRename={handleRenameVariant}
+                        onSetCover={handleSetCover}
+                        coverVariantId={asset.cover_variant_id}
+                        variantNameFallback={variantNameFallback}
 
                         prompt={fullBodyPrompt}
                         setPrompt={setFullBodyPrompt}
@@ -1545,6 +1449,9 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
                         onDelete={(id: string) => handleDeleteVariant("three_view", id)}
                         onFavorite={(id: string, isFav: boolean) => handleFavoriteVariant("three_view", id, isFav)}
                         onRename={handleRenameVariant}
+                        onSetCover={handleSetCover}
+                        coverVariantId={asset.cover_variant_id}
+                        variantNameFallback={(index: number) => variantNameFallback((masterAsset?.variants?.length || 0) + index)}
 
                         prompt={threeViewPrompt}
                         setPrompt={setThreeViewPrompt}
@@ -1589,6 +1496,9 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
                         onDelete={(id: string) => handleDeleteVariant("headshot", id)}
                         onFavorite={(id: string, isFav: boolean) => handleFavoriteVariant("headshot", id, isFav)}
                         onRename={handleRenameVariant}
+                        onSetCover={handleSetCover}
+                        coverVariantId={asset.cover_variant_id}
+                        variantNameFallback={(index: number) => variantNameFallback((masterAsset?.variants?.length || 0) + (asset.three_view_asset?.variants?.length || 0) + index)}
 
                         prompt={headshotPrompt}
                         setPrompt={setHeadshotPrompt}
@@ -1710,6 +1620,9 @@ export function WorkbenchPanel({
     onDelete,
     onFavorite,
     onRename,
+    onSetCover,
+    coverVariantId,
+    variantNameFallback,
 
     prompt,
     setPrompt,
@@ -2088,6 +2001,10 @@ export function WorkbenchPanel({
                             onDelete={onDelete}
                             onFavorite={onFavorite}
                             onRename={onRename}
+                            onSetCover={onSetCover}
+                            coverVariantId={coverVariantId}
+                            variantNameLabel="变体名称"
+                            variantNameFallback={variantNameFallback}
                             onGenerate={onGenerate}
                             isGenerating={isGenerating}
                             generatingBatchSize={generatingBatchSize}

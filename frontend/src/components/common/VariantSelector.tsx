@@ -13,7 +13,11 @@ interface VariantSelectorProps {
     currentImageUrl?: string; // Fallback/Legacy URL
     onSelect: (variantId: string) => void | Promise<void>;
     onDelete: (variantId: string) => void | Promise<void>;
-    onFavorite?: (variantId: string, isFavorited: boolean) => void;
+    onFavorite?: (variantId: string, isFavorited: boolean) => void | Promise<void>;
+    onSetCover?: (variantId: string) => Promise<void>;
+    coverVariantId?: string | null;
+    variantNameLabel?: string;
+    variantNameFallback?: (index: number) => string;
     onRename?: (variantId: string, displayName: string) => Promise<void>;
     onGenerate: (batchSize: number) => void;
     isGenerating: boolean;
@@ -40,6 +44,10 @@ export const VariantSelector: React.FC<VariantSelectorProps> = ({
     onDelete,
     onFavorite,
     onRename,
+    onSetCover,
+    coverVariantId,
+    variantNameLabel = "素材名称",
+    variantNameFallback = (index: number) => `未命名素材 ${index + 1}`,
     onGenerate,
     isGenerating,
     generatingBatchSize: propGeneratingBatchSize,
@@ -57,6 +65,10 @@ export const VariantSelector: React.FC<VariantSelectorProps> = ({
     const [variantName, setVariantName] = useState('');
     const [savingName, setSavingName] = useState(false);
     const [renameError, setRenameError] = useState(false);
+    const [coverBusy, setCoverBusy] = useState(false);
+    const [coverError, setCoverError] = useState(false);
+    const [favoriteBusy, setFavoriteBusy] = useState<string[]>([]);
+    const [favoriteError, setFavoriteError] = useState(false);
     const [previewUrls, setPreviewUrls] = useState<Record<string, string>>({});
     const [previewErrors, setPreviewErrors] = useState<string[]>([]);
     const [previewAttempt, setPreviewAttempt] = useState(0);
@@ -147,6 +159,24 @@ export const VariantSelector: React.FC<VariantSelectorProps> = ({
         Promise.resolve().then(() => onDelete(variantId)).catch(() => {
             setPendingDeletions(current => current.filter(id => id !== variantId));
         });
+    };
+
+    const setCover = async () => {
+        if (!onSetCover || !selectedVariant || coverBusy) return;
+        setCoverBusy(true);
+        setCoverError(false);
+        try { await onSetCover(selectedVariant.id); }
+        catch { setCoverError(true); }
+        finally { setCoverBusy(false); }
+    };
+
+    const toggleFavorite = async (variantId: string, isFavorited: boolean) => {
+        if (!onFavorite || favoriteBusy.includes(variantId)) return;
+        setFavoriteBusy(current => [...current, variantId]);
+        setFavoriteError(false);
+        try { await onFavorite(variantId, isFavorited); }
+        catch { setFavoriteError(true); }
+        finally { setFavoriteBusy(current => current.filter(id => id !== variantId)); }
     };
 
     const saveVariantName = async () => {
@@ -267,7 +297,7 @@ export const VariantSelector: React.FC<VariantSelectorProps> = ({
                         <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-thin scrollbar-thumb-gray-700 scrollbar-track-transparent snap-x">
                             {variants.map((variant, index) => {
                                 const isSelected = variant.id === selectedId;
-                                const isFavorited = (variant as any).is_favorited || false;
+                                const isFavorited = variant.is_favorited || false;
                                 const url = previewLocator ? previewUrls[variant.id] : getAssetUrl(variant.url);
 
                                 return (
@@ -281,13 +311,21 @@ export const VariantSelector: React.FC<VariantSelectorProps> = ({
                                         {/* Clickable image area */}
                                         {url ? <img
                                             src={url}
-                                            alt={variant.display_name || `未命名素材 ${index + 1}`}
+                                            alt={variant.display_name || variantNameFallback(index)}
                                             loading="lazy"
-                                            className="h-20 w-full object-cover cursor-pointer"
+                                            className="h-20 w-full object-cover cursor-pointer focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary"
+                                            role="button"
+                                            tabIndex={0}
+                                            onKeyDown={(event) => {
+                                                if (event.key === 'Enter' || event.key === ' ') {
+                                                    event.preventDefault();
+                                                    selectVariant(variant.id);
+                                                }
+                                            }}
                                             onClick={() => selectVariant(variant.id)}
                                         /> : <div className="h-20 w-full bg-elevated" />}
-                                        <span className="block truncate bg-surface px-1 py-1 text-[0.6875rem] text-foreground" title={variant.display_name || `未命名素材 ${index + 1}`}>
-                                            {variant.display_name || `未命名素材 ${index + 1}`}
+                                        <span className="block truncate bg-surface px-1 py-1 text-[0.6875rem] text-foreground" title={variant.display_name || variantNameFallback(index)}>
+                                            {variant.display_name || variantNameFallback(index)}
                                         </span>
 
                                         {/* Selected indicator */}
@@ -302,12 +340,16 @@ export const VariantSelector: React.FC<VariantSelectorProps> = ({
                                             <button
                                                 onClick={(e) => {
                                                     e.stopPropagation();
-                                                    onFavorite(variant.id, !isFavorited);
+                                                    void toggleFavorite(variant.id, !isFavorited);
                                                 }}
-                                                className={`absolute top-1 right-1 p-1 rounded-full transition-all ${isFavorited
+                                                className={`absolute top-1 right-1 grid h-11 w-11 place-items-center rounded-full transition-all focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary disabled:opacity-50 sm:h-6 sm:w-6 ${isFavorited
                                                     ? 'bg-yellow-500 text-white'
-                                                    : 'bg-overlay/50 text-text-secondary opacity-0 group-hover/variant:opacity-100 hover:bg-yellow-500 hover:text-white'
+                                                    : 'bg-overlay/50 text-text-secondary sm:opacity-0 sm:group-hover/variant:opacity-100 focus-visible:opacity-100 hover:bg-yellow-500 hover:text-white'
                                                     }`}
+                                                type="button"
+                                                disabled={favoriteBusy.includes(variant.id)}
+                                                aria-pressed={isFavorited}
+                                                aria-label={isFavorited ? t("clickToUnfavorite") : t("clickToFavorite")}
                                                 title={isFavorited ? t("clickToUnfavorite") : t("clickToFavorite")}
                                             >
                                                 <Star size={12} fill={isFavorited ? 'currentColor' : 'none'} />
@@ -343,23 +385,30 @@ export const VariantSelector: React.FC<VariantSelectorProps> = ({
                     </div>
                 )}
                 {onRename && selectedVariant && (
-                    <div className="flex min-w-0 items-center gap-2">
-                        <label htmlFor={`variant-name-${selectedVariant.id}`} className="shrink-0 text-xs text-text-secondary">素材名称</label>
+                    <div className="flex min-w-0 flex-wrap items-center gap-2">
+                        <label htmlFor={`variant-name-${selectedVariant.id}`} className="shrink-0 text-xs text-text-secondary">{variantNameLabel}</label>
                         <input
                             id={`variant-name-${selectedVariant.id}`}
                             value={variantName}
                             maxLength={120}
                             onChange={(event) => { setVariantName(event.target.value); setRenameError(false); }}
                             onKeyDown={(event) => { if (event.key === 'Enter') void saveVariantName(); }}
-                            placeholder="例如：粮店黄昏·黑衣持剑·近景"
+                            placeholder={variantNameFallback(variants.indexOf(selectedVariant))}
                             className="h-9 min-w-0 flex-1 rounded border border-glass-border bg-surface px-2 text-sm text-foreground focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary"
                         />
-                        <button type="button" onClick={() => void saveVariantName()} disabled={savingName || variantName.trim() === (selectedVariant.display_name || '')} title="保存素材名称" aria-label="保存素材名称" className="grid h-9 w-9 shrink-0 place-items-center rounded border border-glass-border text-foreground hover:bg-hover-bg disabled:opacity-50">
+                        <button type="button" onClick={() => void saveVariantName()} disabled={savingName || variantName.trim() === (selectedVariant.display_name || '')} title={`保存${variantNameLabel}`} aria-label={`保存${variantNameLabel}`} className="grid h-11 w-11 shrink-0 place-items-center rounded border border-glass-border text-foreground hover:bg-hover-bg disabled:opacity-50">
                             <Save size={16} />
                         </button>
+                        {onSetCover && <button type="button" onClick={() => void setCover()}
+                            disabled={coverBusy || coverVariantId === selectedVariant.id}
+                            className="min-h-11 shrink-0 rounded border border-glass-border px-3 text-xs text-foreground hover:bg-hover-bg focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary disabled:opacity-50">
+                            {coverBusy ? "保存中…" : coverVariantId === selectedVariant.id ? "当前角色封面" : "设为角色封面"}
+                        </button>}
                     </div>
                 )}
-                {renameError && <p role="alert" className="text-xs text-red-400">素材名称保存失败</p>}
+                {coverError && <p role="alert" className="text-xs text-red-400">角色封面保存失败，请重试</p>}
+                {favoriteError && <p role="alert" className="text-xs text-red-400">收藏更新失败，请重试</p>}
+                {renameError && <p role="alert" className="text-xs text-red-400">{variantNameLabel}保存失败</p>}
             </div>
 
             {/* Lightbox Modal */}
