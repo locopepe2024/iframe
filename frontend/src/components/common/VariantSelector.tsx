@@ -14,8 +14,7 @@ interface VariantSelectorProps {
     onSelect: (variantId: string) => void | Promise<void>;
     onDelete: (variantId: string) => void | Promise<void>;
     onFavorite?: (variantId: string, isFavorited: boolean) => void | Promise<void>;
-    onSetCover?: (variantId: string) => Promise<void>;
-    coverVariantId?: string | null;
+    markedVariantId?: string | null;
     variantNameLabel?: string;
     variantNameFallback?: (index: number) => string;
     onRename?: (variantId: string, displayName: string) => Promise<void>;
@@ -44,8 +43,7 @@ export const VariantSelector: React.FC<VariantSelectorProps> = ({
     onDelete,
     onFavorite,
     onRename,
-    onSetCover,
-    coverVariantId,
+    markedVariantId,
     variantNameLabel = "素材名称",
     variantNameFallback = (index: number) => `未命名素材 ${index + 1}`,
     onGenerate,
@@ -65,8 +63,7 @@ export const VariantSelector: React.FC<VariantSelectorProps> = ({
     const [variantName, setVariantName] = useState('');
     const [savingName, setSavingName] = useState(false);
     const [renameError, setRenameError] = useState(false);
-    const [coverBusy, setCoverBusy] = useState(false);
-    const [coverError, setCoverError] = useState(false);
+    const [selectionError, setSelectionError] = useState(false);
     const [favoriteBusy, setFavoriteBusy] = useState<string[]>([]);
     const [favoriteError, setFavoriteError] = useState(false);
     const [previewUrls, setPreviewUrls] = useState<Record<string, string>>({});
@@ -114,8 +111,10 @@ export const VariantSelector: React.FC<VariantSelectorProps> = ({
 
     const selectVariant = (variantId: string) => {
         setPendingSelection(variantId);
+        setSelectionError(false);
         Promise.resolve().then(() => onSelect(variantId)).catch(() => {
             setPendingSelection(current => current === variantId ? null : current);
+            setSelectionError(true);
         });
     };
 
@@ -159,15 +158,6 @@ export const VariantSelector: React.FC<VariantSelectorProps> = ({
         Promise.resolve().then(() => onDelete(variantId)).catch(() => {
             setPendingDeletions(current => current.filter(id => id !== variantId));
         });
-    };
-
-    const setCover = async () => {
-        if (!onSetCover || !selectedVariant || coverBusy) return;
-        setCoverBusy(true);
-        setCoverError(false);
-        try { await onSetCover(selectedVariant.id); }
-        catch { setCoverError(true); }
-        finally { setCoverBusy(false); }
     };
 
     const toggleFavorite = async (variantId: string, isFavorited: boolean) => {
@@ -296,7 +286,7 @@ export const VariantSelector: React.FC<VariantSelectorProps> = ({
                     <div className="relative">
                         <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-thin scrollbar-thumb-gray-700 scrollbar-track-transparent snap-x">
                             {variants.map((variant, index) => {
-                                const isSelected = variant.id === selectedId;
+                                const isSelected = variant.id === (pendingSelection || markedVariantId || selectedId);
                                 const isFavorited = variant.is_favorited || false;
                                 const url = previewLocator ? previewUrls[variant.id] : getAssetUrl(variant.url);
 
@@ -330,7 +320,7 @@ export const VariantSelector: React.FC<VariantSelectorProps> = ({
 
                                         {/* Selected indicator */}
                                         {isSelected && (
-                                            <div className="absolute top-1 left-1 bg-blue-500 rounded-full p-0.5">
+                                            <div aria-label={markedVariantId ? "角色封面" : "已选择"} className="absolute top-1 left-1 bg-blue-500 rounded-full p-0.5">
                                                 <Check size={10} className="text-white" />
                                             </div>
                                         )}
@@ -399,14 +389,10 @@ export const VariantSelector: React.FC<VariantSelectorProps> = ({
                         <button type="button" onClick={() => void saveVariantName()} disabled={savingName || variantName.trim() === (selectedVariant.display_name || '')} title={`保存${variantNameLabel}`} aria-label={`保存${variantNameLabel}`} className="grid h-11 w-11 shrink-0 place-items-center rounded border border-glass-border text-foreground hover:bg-hover-bg disabled:opacity-50">
                             <Save size={16} />
                         </button>
-                        {onSetCover && <button type="button" onClick={() => void setCover()}
-                            disabled={coverBusy || coverVariantId === selectedVariant.id}
-                            className="min-h-11 shrink-0 rounded border border-glass-border px-3 text-xs text-foreground hover:bg-hover-bg focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary disabled:opacity-50">
-                            {coverBusy ? "保存中…" : coverVariantId === selectedVariant.id ? "当前角色封面" : "设为角色封面"}
-                        </button>}
+
                     </div>
                 )}
-                {coverError && <p role="alert" className="text-xs text-red-400">角色封面保存失败，请重试</p>}
+                {selectionError && <p role="alert" className="text-xs text-red-400">图片选择保存失败，请重试</p>}
                 {favoriteError && <p role="alert" className="text-xs text-red-400">收藏更新失败，请重试</p>}
                 {renameError && <p role="alert" className="text-xs text-red-400">{variantNameLabel}保存失败</p>}
             </div>

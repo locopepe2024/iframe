@@ -16,6 +16,7 @@ const apiMocks = vi.hoisted(() => ({
     }),
     confirmCharacterAnchor: vi.fn(),
     setAssetCoverVariant: vi.fn(),
+    selectAssetVariant: vi.fn(),
     previewAssetImageSubmission: vi.fn((_id: string, request: any) => Promise.resolve({
         positive_prompt: request.prompt, negative_prompt: request.negative_prompt,
         selected_model_id: "test-model", aspect_ratio: "9:16",
@@ -44,11 +45,11 @@ vi.mock("next/dynamic", () => ({
     default: () => function DynamicComponent() { return null; },
 }));
 vi.mock("../common/VariantSelector", () => ({
-    VariantSelector: ({ onGenerate, filmstripTitle, previewLocator, onSetCover, variantNameFallback }: any) => (
+    VariantSelector: ({ onGenerate, filmstripTitle, previewLocator, onSelect, variantNameFallback }: any) => (
         <div>
             <span>{filmstripTitle}</span>
             <span>{variantNameFallback?.(0)}</span>
-            {onSetCover && <button onClick={() => onSetCover("front")}>设为角色封面</button>}
+            {onSelect && <button onClick={() => onSelect("front")}>选择变体</button>}
             <span data-testid="preview-locator">{JSON.stringify(previewLocator)}</span>
             <button type="button" data-testid="variant-generate" onClick={() => onGenerate?.(1)}>Generate</button>
         </div>
@@ -197,10 +198,11 @@ it("shows one task at a time and unlocks derived prompts when the reference shee
     expect(screen.queryByText("Generate Master Asset first")).not.toBeInTheDocument();
 });
 
-it("sets a cover directly without creating an anchor or episode look", async () => {
+it("selects the character cover with one thumbnail action", async () => {
     apiMocks.getAssetReferenceIndex.mockResolvedValue({ assets: [] } as any);
     apiMocks.confirmCharacterAnchor.mockClear();
-    apiMocks.setAssetCoverVariant.mockResolvedValue({ asset_id: "hero", cover_variant_id: "front" });
+    apiMocks.setAssetCoverVariant.mockClear();
+    apiMocks.selectAssetVariant.mockResolvedValue({ id: "project-1", characters: [{ id: "hero", cover_variant_id: "front" }] });
     projectStoreMocks.currentProject = { id: "project-1", characters: [{ id: "hero", name: "苏砚" }] };
     render(<CharacterWorkbench asset={{ id: "hero", name: "苏砚", description: "Hero",
         reference_sheet: { selected_image_id: "front", image_variants: [{ id: "front", url: "front.webp" }] },
@@ -208,12 +210,14 @@ it("sets a cover directly without creating an anchor or episode look", async () 
     expect(screen.queryByText(/项目角色锚点/)).not.toBeInTheDocument();
     expect(screen.queryByLabelText("本集造型名称")).not.toBeInTheDocument();
     expect(screen.getByText("苏砚-1")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "设为角色封面" }));
-    await waitFor(() => expect(apiMocks.setAssetCoverVariant).toHaveBeenCalledWith("project-1", "hero", "character", "front"));
+    expect(screen.queryByRole("button", { name: "设为角色封面" })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "选择变体" }));
+    await waitFor(() => expect(apiMocks.selectAssetVariant).toHaveBeenCalledWith("project-1", "hero", "character", "front", "reference_sheet"));
+    expect(apiMocks.setAssetCoverVariant).not.toHaveBeenCalled();
     expect(apiMocks.confirmCharacterAnchor).not.toHaveBeenCalled();
-    expect(projectStoreMocks.updateProject).toHaveBeenCalledWith("project-1", {
+    expect(projectStoreMocks.updateProject).toHaveBeenCalledWith("project-1", expect.objectContaining({
         characters: [expect.objectContaining({ id: "hero", cover_variant_id: "front" })],
-    });
+    }));
 });
 
 it("uses project and episode context for an unnamed character variant", () => {

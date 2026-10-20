@@ -29,3 +29,14 @@ describe('character image resolution', () => {
         expect(characterReferenceVariants(character).map((variant) => variant.id)).toEqual(['deleted-view']);
     });
 });
+
+
+it('uses the chosen cover for display and reference without a stale category override', () => {
+    const character = {
+        id: 'actor', name: 'Actor', cover_variant_id: 'cover',
+        reference_sheet: { selected_image_id: currentView.id, image_variants: [currentView] },
+        headshot_asset: { selected_id: 'cover', variants: [{ id: 'cover', url: '/cover.png' }] },
+    } as any;
+    expect(characterImageUrl(character)).toBe('/cover.png');
+    expect(characterReferenceVariants(character).map(variant => variant.id)).toEqual(['cover', currentView.id]);
+});

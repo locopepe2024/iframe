@@ -442,8 +442,6 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
     const [resultLookBasis, setResultLookBasis] = useState<DesignBasis[]>(normalizeDesignBasis(savedResult?.look?.basis || savedDesign.look?.basis));
     const updateProject = useProjectStore(state => state.updateProject);
     const currentProject = useProjectStore(state => state.currentProject);
-    const currentProjectRef = useRef(currentProject);
-    currentProjectRef.current = currentProject;
     const currentSeries = useProjectStore(state => state.currentSeries);
     const variantNameFallback = (index: number) => asset.name?.trim()
         ? `${asset.name.trim()}-${index + 1}`
@@ -1130,18 +1128,6 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
         updateProject(currentProject.id, updatedProject);
     };
 
-    const handleSetCover = async (variantId: string) => {
-        if (!currentProject?.id) return;
-        const projectId = currentProject.id;
-        const result = await api.setAssetCoverVariant(projectId, asset.id, "character", variantId);
-        const latest = currentProjectRef.current;
-        if (latest?.id !== projectId) return;
-        updateProject(projectId, {
-            characters: (latest.characters || []).map(character => character.id === asset.id
-                ? { ...character, cover_variant_id: result.cover_variant_id } : character),
-        });
-    };
-
     const handleRenameVariant = async (variantId: string, displayName: string) => {
         if (!currentProject) return;
         const updatedProject = await api.updateAssetVariantMetadata(currentProject.id, asset.id, "character", variantId, undefined, undefined, displayName);
@@ -1383,8 +1369,7 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
                         onDelete={(id: string) => handleDeleteVariant(masterGenerationType, id)}
                         onFavorite={(id: string, isFav: boolean) => handleFavoriteVariant(masterGenerationType, id, isFav)}
                         onRename={handleRenameVariant}
-                        onSetCover={handleSetCover}
-                        coverVariantId={asset.cover_variant_id}
+                        markedVariantId={asset.cover_variant_id}
                         variantNameFallback={variantNameFallback}
 
                         prompt={fullBodyPrompt}
@@ -1449,8 +1434,7 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
                         onDelete={(id: string) => handleDeleteVariant("three_view", id)}
                         onFavorite={(id: string, isFav: boolean) => handleFavoriteVariant("three_view", id, isFav)}
                         onRename={handleRenameVariant}
-                        onSetCover={handleSetCover}
-                        coverVariantId={asset.cover_variant_id}
+                        markedVariantId={asset.cover_variant_id}
                         variantNameFallback={(index: number) => variantNameFallback((masterAsset?.variants?.length || 0) + index)}
 
                         prompt={threeViewPrompt}
@@ -1496,8 +1480,7 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
                         onDelete={(id: string) => handleDeleteVariant("headshot", id)}
                         onFavorite={(id: string, isFav: boolean) => handleFavoriteVariant("headshot", id, isFav)}
                         onRename={handleRenameVariant}
-                        onSetCover={handleSetCover}
-                        coverVariantId={asset.cover_variant_id}
+                        markedVariantId={asset.cover_variant_id}
                         variantNameFallback={(index: number) => variantNameFallback((masterAsset?.variants?.length || 0) + (asset.three_view_asset?.variants?.length || 0) + index)}
 
                         prompt={headshotPrompt}
@@ -1620,8 +1603,7 @@ export function WorkbenchPanel({
     onDelete,
     onFavorite,
     onRename,
-    onSetCover,
-    coverVariantId,
+    markedVariantId,
     variantNameFallback,
 
     prompt,
@@ -2001,8 +1983,7 @@ export function WorkbenchPanel({
                             onDelete={onDelete}
                             onFavorite={onFavorite}
                             onRename={onRename}
-                            onSetCover={onSetCover}
-                            coverVariantId={coverVariantId}
+                            markedVariantId={markedVariantId}
                             variantNameLabel="变体名称"
                             variantNameFallback={variantNameFallback}
                             onGenerate={onGenerate}
