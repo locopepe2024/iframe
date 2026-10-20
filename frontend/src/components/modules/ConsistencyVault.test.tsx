@@ -171,6 +171,7 @@ it("edits scene light and view before refinement and submits only the applied vi
     fireEvent.click(screen.getByRole("button", { name: /基础面板 ·/ }));
     expect(screen.getByRole("textbox", { name: "场景风格" })).toBeEnabled();
     fireEvent.change(screen.getByRole("textbox", { name: "场景风格" }), { target: { value: "写实蓝调" } });
+    fireEvent.click(screen.getByText("补充描述与旧版设置", { selector: "summary" }));
     fireEvent.change(screen.getByRole("textbox", { name: "场景环境光" }), { target: { value: "街道保持蓝色黄昏" } });
     fireEvent.change(screen.getByRole("textbox", { name: "场景参考图视角" }), { target: { value: "沿街向北" } });
     fireEvent.click(screen.getByRole("button", { name: "保存并使用场景设计" }));
@@ -663,4 +664,70 @@ it('stops a missing-task spinner and refreshes the asset without resubmitting ge
     expect(useProjectStore.getState().generatingTasks).toEqual([]);
     expect(mocks.generateAsset).toHaveBeenCalledTimes(1);
     expect(mocks.getProject).toHaveBeenCalledWith('episode-1');
+});
+
+it("applies, saves and restores selected scene layers without rewriting the AI source", async () => {
+    const asset = { id: "street", name: "三层场景", description: "青石街道", source: "episode",
+        asset_design: { design_draft: { visual_notes: "青石街道", prompt_workspace: {
+            active_source: "design", settings_pending: false,
+            design: { prompt: "手工场景正文", mode: "text", references: [] },
+            ai: { prompt: "已有 AI 正文", mode: "text", references: [] },
+        } } } };
+    const project = { id: "episode-1", characters: [], scenes: [asset], props: [] };
+    useProjectStore.setState({ currentProject: project as any });
+    mocks.getEpisodeVisualContext.mockResolvedValue({ context: null, bindings: [] });
+    mocks.updateAssetAttributes.mockImplementation((_id, _assetId, _type, attributes) => Promise.resolve({ ...project,
+        scenes: [{ ...asset, asset_design: { design_draft: attributes.asset_design } }] }));
+    render(<ConsistencyVault />);
+    fireEvent.click(screen.getByRole("button", { name: /Scenes/ }));
+    fireEvent.click(screen.getByText(asset.name));
+    fireEvent.click(screen.getByRole("button", { name: /基础面板 ·/ }));
+    for (const title of ["光影", "镜头", "构图"]) fireEvent.click(screen.getByText(title, { selector: "summary" }));
+    fireEvent.click(screen.getByRole("button", { name: "月光" }));
+    fireEvent.click(screen.getByRole("button", { name: "长焦" }));
+    fireEvent.click(screen.getByRole("button", { name: "深景深" }));
+    fireEvent.click(screen.getByRole("button", { name: "前中后景" }));
+    fireEvent.click(screen.getByRole("button", { name: "应用到图片提示词" }));
+    const prompt = (screen.getByRole("textbox", { name: "图像提示词" }) as HTMLTextAreaElement).value;
+    expect(prompt).toContain("手工场景正文");
+    expect(prompt).toContain("光影：光源：月光");
+    expect(prompt).toContain("焦距观感：长焦观感");
+    expect(prompt).toContain("景深：深景深");
+    expect(prompt).toContain("构图：空间层次：");
+    expect(prompt).not.toMatch(/奶油|柔肤|ARRI|剪辑/);
+    fireEvent.click(screen.getByRole("button", { name: "保存并使用场景设计" }));
+    await waitFor(() => expect(mocks.success).toHaveBeenCalled());
+    const saved = mocks.updateAssetAttributes.mock.calls[0][3].asset_design;
+    expect(saved.prompt_layers.lighting.source).toBe("月光");
+    expect(saved.prompt_layers.camera.focal_length).toContain("长焦");
+    expect(saved.prompt_workspace.design.prompt).toBe(prompt);
+    expect(saved.prompt_workspace.ai.prompt).toBe("已有 AI 正文");
+    // Reopen from the returned record, then restore the saved panel after edits.
+    fireEvent.click(screen.getByRole("button", { name: "关闭工作台" }));
+    await waitFor(() => expect(screen.queryByRole("tab", { name: "AI 优化" })).not.toBeInTheDocument());
+    fireEvent.click(screen.getByText(asset.name));
+    fireEvent.click(screen.getByRole("button", { name: /基础面板 ·/ }));
+    fireEvent.click(screen.getByText("镜头", { selector: "summary" }));
+    expect(screen.getByRole("button", { name: "长焦" })).toHaveAttribute("aria-pressed", "true");
+    fireEvent.click(screen.getByRole("button", { name: "长焦" }));
+    fireEvent.click(screen.getByRole("button", { name: "编辑已保存设计" }));
+    expect(screen.getByRole("button", { name: "长焦" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("textbox", { name: "图像提示词" })).toHaveValue(prompt);
+});
+
+it("blocks applying a scene light direction forbidden by the same design", async () => {
+    const asset = { id: "street", name: "方向冲突场景", description: "街道" };
+    useProjectStore.setState({ currentProject: { id: "episode-1", characters: [], scenes: [asset], props: [] } as any });
+    mocks.getEpisodeVisualContext.mockResolvedValue({ context: null, bindings: [] });
+    render(<ConsistencyVault />);
+    fireEvent.click(screen.getByRole("button", { name: /Scenes/ }));
+    fireEvent.click(screen.getByText(asset.name));
+    fireEvent.click(screen.getByRole("button", { name: /基础面板 ·/ }));
+    fireEvent.click(screen.getByText("光影", { selector: "summary" }));
+    fireEvent.click(screen.getByRole("button", { name: "顶部" }));
+    fireEvent.click(screen.getByRole("checkbox", { name: "禁止顶部光" }));
+    const previous = (screen.getByRole("textbox", { name: "图像提示词" }) as HTMLTextAreaElement).value;
+    fireEvent.click(screen.getByRole("button", { name: "应用到图片提示词" }));
+    expect(screen.getByRole("alert")).toHaveTextContent("所选光源方向与禁止方向冲突");
+    expect(screen.getByRole("textbox", { name: "图像提示词" })).toHaveValue(previous);
 });
