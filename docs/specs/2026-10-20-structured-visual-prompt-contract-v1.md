@@ -125,3 +125,59 @@ AI 请求显式传递 structured_identity/structured_look，服务端校验并�
 此阶段没有实现四域统一封套、分镜继承运行时或全部服装细分属性；场景/道具/分镜沿此前实施顺序推进。图像一致性与肤质仍需真实出图验收。
 
 词典配置本身也保存结构：dictionary_configurations 记录 preset_id、schema_version、source、preset_text、selections、resolved_fields、rendered_text。全部本地配置面板/模板都输出配置快照，不依赖从 Prompt 反解析；角色常用面板另映射到独立身份字段。服装模板的全部颜色、材质和鞋履选择可在配置快照中保存并送给 AI，但尚未全部提升为角色独立编辑字段。当前目录尚无不可变版本 ID，因此使用当次 preset_text/source 快照，不虚称已建立词典版本系统。同 preset_id 的最新配置替换当前配置记录；它是配置来源快照，不替代用户后来手动编辑的字段。自由文本更改后旧配置只能作来源记录，当前显式字段/current_draft 优先。
+
+## 人像摄影企划参考补充（用户提供，2026-10-20）
+
+来源：用户粘贴的人像摄影企划文章全文。未访问文中 X 链接，未独立验证作者实验。关于单张优于九宫格、特定词句改善相似度/互动的结论均为用户提供的经验，作为待验证假设；不作为模型通用能力保证。
+
+### 参考素材用途必须显式选择
+
+引用增加用途 role：identity_only、wardrobe、pose、scene、style、composition；并定义 preserve/replace 字段路径。identity_only 保留身份锚点，不继承原图背景、服装、道具、姿态和构图。它与当前“严格保持参考图中的角色外观、脸型、发型、肤色和服装”的全外观绑定不同，不能静默替换全局行为。角色母版/三视图可能需要 identity + wardrobe；写真换装可能只需 identity_only。以当前用户任务选择为准，未明确用途时不擅自假定换装。
+
+同一画面有多人物时，每张参考图绑定明确 subject_id，避免把甲的面容或服装绑定到乙。identity_only 的锚点可包含脸型、五官比例、眉眼、肤色、年龄观感、发际线等；不得由参考照片推断不可见事实。发型是保持还是允许改动亦须逐项明确。
+
+### 摄影企划字段归属
+
+| 模块 | 所属数据与生命周期 | 约束 |
+| --- | --- | --- |
+| 身份保留 | character.identity + reference policy，固定设计版本 | 不用笼统“像本人”替代已有具体锚点 |
+| 发型变量 | hair.length、bangs、color、structure；保留/允许变化分别定义 | 不默认把黑发改为棕黑，不强制加刘海 |
+| 妆容、衣装、首饰 | look version 或整组拍摄 styling | 一组可统一，但不改写永久身份 |
+| 重建场景 | scene revision + shot 状态 | 身份参考不隐式继承背景 |
+| 表情、视线、动作、姿态 | shot.subjects[subject_id].performance | 不写回角色固定脸型/识别特征 |
+| 构图、景别、机位、光线 | shot.camera / lighting | 不在身份字段中塞镜头要求 |
+| 左右前后与交互 | shot.blocking / interactions | 坐标约定与身体归属必须明确 |
+| 整组节奏与变化 | shoot_plan.shots，计划级 | 分镜表列出每镜差异，不能只追加“不重复” |
+| 比例与结构限制 | shot.constraints，必要时计划级共用 | 指令不能保证解剖正确，结果仍需验收 |
+
+### 交互结构示意（设计提案，非当前 API）
+
+```json
+{
+  "subjects": [
+    {"subject_id": "A", "character_revision": 3, "position": {"screen_side": "left", "depth": "foreground"}, "gaze": {"target": "offscreen_lower_left"}, "expression": "低头轻笑"},
+    {"subject_id": "B", "character_revision": 2, "position": {"screen_side": "right", "depth": "behind_A"}, "gaze": {"target": "camera"}, "expression": "自然微笑"}
+  ],
+  "interactions": [
+    {"actor": "B", "actor_body_part": "right_hand", "action": "rest_on", "target": "A", "target_body_part": "right_shoulder"}
+  ],
+  "coordinate_convention": "screen_side 按观众画面左右；身体左右按人物自身解剖左右",
+  "constraints": {"avoid": ["肢体归属错误", "脸部融合", "手臂穿插"]}
+}
+```
+
+视频另用时间点/动作区间描述起始、发展与结束；静态图只描述可见瞬间。主动方/回应方通过明确 actor/target/action 表达，避免再维护含义重复的情绪氛围标签。
+
+### 整组拍摄计划
+
+固定项：身份参考、选定造型、妆容方向、色彩与场景连续性。变化项：景别、视角、构图、表情、视线、姿态、互动关系。每镜显式指定变化，不随机改动固定身份。单张任务与最终拼版分别记录；九宫格预览不等于九个独立高质量资产。
+
+去重仅能先检查计划字段相同或近似；实际图片是否重复另做人工/视觉评审。单张与多格效果需固定模型、参考、参数和样本数量对比，不能把“模型偷懒”当根因诊断。
+
+### 默认值与冲突检查
+
+“奶油肌/瓷肌/光滑”与“自然干燥纹理”可能冲突，作为具体用户选择核对；不能把文章里的少女妆默认用于所有年龄、性别和题材。不能默认改变肤色、发色、体型或五官来提升“审美”。“不要欧美化”不作为身份推断或全局负面词，改为保留用户选定的具体面部结构与肤色。
+
+### 后续实施边界
+
+本次记录参考用途、头发细分、计划与交互规范，不增加分镜 UI，遵守此前“等优化分镜时再加”约定。尚未实现 identity_only provider 编译、双人 blocking 或整组拍摄运行时；不得宣称已部署这些能力。优先下一步在参考素材面板显式区分身份/衣装/姿态用途，然后在分镜优化阶段实现镜头表现词典与 subject_id 绑定的交互字段。
