@@ -1,0 +1,111 @@
+{
+  "camera": {
+    "type": "PERSP",
+    "location": [
+      0.0,
+      -5.199999809265137,
+      2.5999999046325684
+    ],
+    "right_world": [
+      1.0,
+      0.0,
+      0.0
+    ],
+    "up_world": [
+      0.0,
+      0.29408586025238037,
+      0.9557790160179138
+    ],
+    "forward_world": [
+      0.0,
+      0.9557790160179138,
+      -0.29408586025238037
+    ],
+    "lens_mm": 55.0,
+    "sensor_width_mm": 36.0,
+    "sensor_fit": "AUTO",
+    "pixel_aspect": [
+      1.0,
+      1.0
+    ]
+  },
+  "camera_down_pitch_deg": 17.10272965333518,
+  "cases": {
+    "raw_root_yaw": {
+      "current_screen_angle_deg": {
+        "median": 6.1214952956006154,
+        "max": 109.41491762534882
+      },
+      "camera_axes_screen_angle_deg": {
+        "median": 6.065280373022674,
+        "max": 22.69642048850391
+      },
+      "pixel_aspect_camera_screen_angle_deg": {
+        "median": 2.6533383686694005,
+        "max": 14.291290027203983
+      },
+      "jacobian_direction_consistency_deg": {
+        "median": 0.03830833920128959,
+        "max": 0.24668526806752367
+      },
+      "segment_count": 48
+    },
+    "scaled_root_yaw": {
+      "current_screen_angle_deg": {
+        "median": 10.032603617665128,
+        "max": 120.39668988626505
+      },
+      "camera_axes_screen_angle_deg": {
+        "median": 2.642155296981157,
+        "max": 14.63735691962329
+      },
+      "pixel_aspect_camera_screen_angle_deg": {
+        "median": 2.686285668022035,
+        "max": 14.485290285804375
+      },
+      "jacobian_direction_consistency_deg": {
+        "median": 0.05915311518439503,
+        "max": 0.5376851261163956
+      },
+      "segment_count": 48
+    },
+    "raw_own_root_yaw": {
+      "current_screen_angle_deg": {
+        "median": 6.247136968954059,
+        "max": 99.96012651784811
+      },
+      "camera_axes_screen_angle_deg": {
+        "median": 6.0652771103425245,
+        "max": 20.841009934159594
+      },
+      "pixel_aspect_camera_screen_angle_deg": {
+        "median": 2.6884340395251245,
+        "max": 8.074836467959104
+      },
+      "jacobian_direction_consistency_deg": {
+        "median": 0.049324426250896045,
+        "max": 0.3348425290341277
+      },
+      "segment_count": 48
+    },
+    "scaled_own_root_yaw": {
+      "current_screen_angle_deg": {
+        "median": 10.032603617665128,
+        "max": 113.07501884156216
+      },
+      "camera_axes_screen_angle_deg": {
+        "median": 2.642155296981157,
+        "max": 8.062712185894238
+      },
+      "pixel_aspect_camera_screen_angle_deg": {
+        "median": 2.6862470445527666,
+        "max": 8.136434184419313
+      },
+      "jacobian_direction_consistency_deg": {
+        "median": 0.06956758290326209,
+        "max": 0.40686354468405955
+      },
+      "segment_count": 48
+    }
+  }
+}
