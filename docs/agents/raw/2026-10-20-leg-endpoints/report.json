@@ -1,0 +1,2672 @@
+{
+  "schema": "recreation2-leg-endpoints.v1",
+  "blender": "4.5.9 LTS",
+  "sha256": {
+    "rig": "95eeb19c8abce2325479804b3dda429ebddfa6e8d07a2688541cc990fb676855",
+    "track": "0fed823bf39bd206ebeafec922a29394ee87a942b1bcc0395610a603d598550a",
+    "anchors": "ea9df0be27780d21061d198d7d2e90895c5d5b61c1a856af3a2ff4f85c2e89e3",
+    "probe": "8ad342132117de2a4485a1fb7e2d393c47d765913a1297923db0098c01da0195"
+  },
+  "cases": {
+    "raw_root_yaw": {
+      "bundle_sha256": "938afaf66b0c35dcfa889a2e6d5a4be13b97ee7f6443fe9f4c24efff2856cd18",
+      "rows": [
+        {
+          "source_frame": 1,
+          "side": "left",
+          "joint_residual_vectors_px": {
+            "hip": [
+              5.7977294921875,
+              5.2823333740234375
+            ],
+            "knee": [
+              3.4324951171875,
+              25.645126342773438
+            ],
+            "ankle": [
+              -1.9000244140625,
+              17.2794189453125
+            ]
+          },
+          "joint_errors_px": {
+            "hip": 7.843259028536588,
+            "knee": 25.873818964887242,
+            "ankle": 17.3835669810258
+          },
+          "segments": [
+            {
+              "bone": "upper_leg_l",
+              "world_direction_error_deg": 0.0,
+              "world_bone_length": 0.40986504506083143,
+              "tail_to_next_head_units": 1.4901161193847656e-08,
+              "screen_direction_error_deg": 5.228921333509484,
+              "rig_projected_length_px": 66.90629016744948,
+              "source_projected_length_px": 47.05598994363199,
+              "segment_vector_residual_px": [
+                -2.365234375,
+                20.36279296875
+              ],
+              "actual_tail_to_target_direction_endpoint_px": 6.103515625e-05,
+              "target_direction_endpoint_to_source_px": 25.873880297626094
+            },
+            {
+              "bone": "lower_leg_l",
+              "world_direction_error_deg": 0.24698253949471333,
+              "world_bone_length": 0.46610110669807425,
+              "tail_to_next_head_units": 6.664001874625056e-08,
+              "screen_direction_error_deg": 3.955890512921,
+              "rig_projected_length_px": 51.23496569182162,
+              "source_projected_length_px": 60.382596566723166,
+              "segment_vector_residual_px": [
+                -5.33251953125,
+                -8.365707397460938
+              ],
+              "actual_tail_to_target_direction_endpoint_px": 0.3478021971679549,
+              "target_direction_endpoint_to_source_px": 17.45435408838175
+            }
+          ]
+        },
+        {
+          "source_frame": 1,
+          "side": "right",
+          "joint_residual_vectors_px": {
+            "hip": [
+              -7.366729736328125,
+              4.615264892578125
+            ],
+            "knee": [
+              1.436187744140625,
+              21.020828247070312
+            ],
+            "ankle": [
+              1.663116455078125,
+              1.872100830078125
+            ]
+          },
+          "joint_errors_px": {
+            "hip": 8.693064931263882,
+            "knee": 21.069832671532566,
+            "ankle": 2.5041401436956736
+          },
+          "segments": [
+            {
+              "bone": "upper_leg_r",
+              "world_direction_error_deg": 0.007819656855134518,
+              "world_bone_length": 0.40986512558426447,
+              "tail_to_next_head_units": 2.9802322387695312e-08,
+              "screen_direction_error_deg": 13.702430428183144,
+              "rig_projected_length_px": 63.67902243721688,
+              "source_projected_length_px": 50.95340679784464,
+              "segment_vector_residual_px": [
+                8.80291748046875,
+                16.405563354492188
+              ],
+              "actual_tail_to_target_direction_endpoint_px": 4.315837287515549e-05,
+              "target_direction_endpoint_to_source_px": 21.069861011526488
+            },
+            {
+              "bone": "lower_leg_r",
+              "world_direction_error_deg": 0.9285100372026264,
+              "world_bone_length": 0.4661015213062902,
+              "tail_to_next_head_units": 6.828569911354542e-08,
+              "screen_direction_error_deg": 6.627596392464427,
+              "rig_projected_length_px": 31.5664124131831,
+              "source_projected_length_px": 50.155778448912606,
+              "segment_vector_residual_px": [
+                0.2269287109375,
+                -19.148727416992188
+              ],
+              "actual_tail_to_target_direction_endpoint_px": 1.2764399317330792,
+              "target_direction_endpoint_to_source_px": 1.7171837519430366
+            }
+          ]
+        },
+        {
+          "source_frame": 17,
+          "side": "left",
+          "joint_residual_vectors_px": {
+            "hip": [
+              2.423675537109375,
+              6.1259002685546875
+            ],
+            "knee": [
+              2.007781982421875,
+              26.123443603515625
+            ],
+            "ankle": [
+              -2.507171630859375,
+              15.86590576171875
+            ]
+          },
+          "joint_errors_px": {
+            "hip": 6.587932641952524,
+            "knee": 26.200486916465533,
+            "ankle": 16.0627789899888
+          },
+          "segments": [
+            {
+              "bone": "upper_leg_l",
+              "world_direction_error_deg": 0.015565831834258914,
+              "world_bone_length": 0.4098649865499672,
+              "tail_to_next_head_units": 1.4901161193847656e-08,
+              "screen_direction_error_deg": 1.7502550466269533,
+              "rig_projected_length_px": 68.30120479811303,
+              "source_projected_length_px": 48.37656459200305,
+              "segment_vector_residual_px": [
+                -0.4158935546875,
+                19.997543334960938
+              ],
+              "actual_tail_to_target_direction_endpoint_px": 3.0517578125e-05,
+              "target_direction_endpoint_to_source_px": 26.200489255108028
+            },
+            {
+              "bone": "lower_leg_l",
+              "world_direction_error_deg": 0.5471490062999312,
+              "world_bone_length": 0.4661010805665049,
+              "tail_to_next_head_units": 7.82310962677002e-08,
+              "screen_direction_error_deg": 4.369831350781588,
+              "rig_projected_length_px": 47.922037589845566,
+              "source_projected_length_px": 58.378459362311794,
+              "segment_vector_residual_px": [
+                -4.51495361328125,
+                -10.257537841796875
+              ],
+              "actual_tail_to_target_direction_endpoint_px": 0.7660968674213703,
+              "target_direction_endpoint_to_source_px": 15.903573798460036
+            }
+          ]
+        },
+        {
+          "source_frame": 17,
+          "side": "right",
+          "joint_residual_vectors_px": {
+            "hip": [
+              -9.70245361328125,
+              4.308807373046875
+            ],
+            "knee": [
+              -0.79290771484375,
+              23.90313720703125
+            ],
+            "ankle": [
+              -0.24139404296875,
+              10.931976318359375
+            ]
+          },
+          "joint_errors_px": {
+            "hip": 10.616186907441643,
+            "knee": 23.916284995627894,
+            "ankle": 10.934640986377786
+          },
+          "segments": [
+            {
+              "bone": "upper_leg_r",
+              "world_direction_error_deg": 0.014836755739843227,
+              "world_bone_length": 0.4098651994329016,
+              "tail_to_next_head_units": 2.9802322387695312e-08,
+              "screen_direction_error_deg": 16.04327921468317,
+              "rig_projected_length_px": 63.25919778764451,
+              "source_projected_length_px": 48.238424701432585,
+              "segment_vector_residual_px": [
+                8.9095458984375,
+                19.594329833984375
+              ],
+              "actual_tail_to_target_direction_endpoint_px": 0.0,
+              "target_direction_endpoint_to_source_px": 23.916284995627894
+            },
+            {
+              "bone": "lower_leg_r",
+              "world_direction_error_deg": 0.19638725956746114,
+              "world_bone_length": 0.4661013121094856,
+              "tail_to_next_head_units": 6.664001874625056e-08,
+              "screen_direction_error_deg": 1.5428487589281101,
+              "rig_projected_length_px": 40.61896243494012,
+              "source_projected_length_px": 53.54096149865854,
+              "segment_vector_residual_px": [
+                0.551513671875,
+                -12.971160888671875
+              ],
+              "actual_tail_to_target_direction_endpoint_px": 0.274080204062908,
+              "target_direction_endpoint_to_source_px": 10.975746662732448
+            }
+          ]
+        },
+        {
+          "source_frame": 23,
+          "side": "left",
+          "joint_residual_vectors_px": {
+            "hip": [
+              0.22406005859375,
+              6.3014678955078125
+            ],
+            "knee": [
+              0.52227783203125,
+              21.671463012695312
+            ],
+            "ankle": [
+              -3.931365966796875,
+              6.239471435546875
+            ]
+          },
+          "joint_errors_px": {
+            "hip": 6.305449944580246,
+            "knee": 21.67775558867956,
+            "ankle": 7.37472992741974
+          },
+          "segments": [
+            {
+              "bone": "upper_leg_l",
+              "world_direction_error_deg": 0.011507456030735656,
+              "world_bone_length": 0.4098650881895108,
+              "tail_to_next_head_units": 2.9802322387695312e-08,
+              "screen_direction_error_deg": 0.5412103994811098,
+              "rig_projected_length_px": 63.577164675288905,
+              "source_projected_length_px": 48.21319366600915,
+              "segment_vector_residual_px": [
+                0.2982177734375,
+                15.3699951171875
+              ],
+              "actual_tail_to_target_direction_endpoint_px": 4.315837287515549e-05,
+              "target_direction_endpoint_to_source_px": 21.677817562667826
+            },
+            {
+              "bone": "lower_leg_l",
+              "world_direction_error_deg": 1.4080212531750196,
+              "world_bone_length": 0.4661014455966096,
+              "tail_to_next_head_units": 4.726863481271833e-08,
+              "screen_direction_error_deg": 6.953735723339232,
+              "rig_projected_length_px": 38.062971265659684,
+              "source_projected_length_px": 53.16952878498928,
+              "segment_vector_residual_px": [
+                -4.453643798828125,
+                -15.431991577148438
+              ],
+              "actual_tail_to_target_direction_endpoint_px": 1.9703629240712501,
+              "target_direction_endpoint_to_source_px": 6.411846674901092
+            }
+          ]
+        },
+        {
+          "source_frame": 23,
+          "side": "right",
+          "joint_residual_vectors_px": {
+            "hip": [
+              -10.82476806640625,
+              2.8398284912109375
+            ],
+            "knee": [
+              7.378692626953125,
+              20.428436279296875
+            ],
+            "ankle": [
+              -0.522857666015625,
+              -0.127197265625
+            ]
+          },
+          "joint_errors_px": {
+            "hip": 11.191078210520068,
+            "knee": 21.72017773662648,
+            "ankle": 0.53810712215309
+          },
+          "segments": [
+            {
+              "bone": "upper_leg_r",
+              "world_direction_error_deg": 0.0,
+              "world_bone_length": 0.4098654789214695,
+              "tail_to_next_head_units": 3.0719530773294423e-08,
+              "screen_direction_error_deg": 42.52933915162442,
+              "rig_projected_length_px": 35.834030736006554,
+              "source_projected_length_px": 33.75490280144154,
+              "segment_vector_residual_px": [
+                18.203460693359375,
+                17.588607788085938
+              ],
+              "actual_tail_to_target_direction_endpoint_px": 3.0517578125e-05,
+              "target_direction_endpoint_to_source_px": 21.720188098746334
+            },
+            {
+              "bone": "lower_leg_r",
+              "world_direction_error_deg": 0.35470626922049464,
+              "world_bone_length": 0.46610130276284883,
+              "tail_to_next_head_units": 6.008293895531189e-08,
+              "screen_direction_error_deg": 2.8262720022627517,
+              "rig_projected_length_px": 33.417065574440336,
+              "source_projected_length_px": 55.33668753021278,
+              "segment_vector_residual_px": [
+                -7.90155029296875,
+                -20.555633544921875
+              ],
+              "actual_tail_to_target_direction_endpoint_px": 0.495237460942966,
+              "target_direction_endpoint_to_source_px": 1.0250298914570508
+            }
+          ]
+        },
+        {
+          "source_frame": 29,
+          "side": "left",
+          "joint_residual_vectors_px": {
+            "hip": [
+              2.575531005859375,
+              7.7007293701171875
+            ],
+            "knee": [
+              2.894256591796875,
+              30.526473999023438
+            ],
+            "ankle": [
+              -1.804351806640625,
+              23.627960205078125
+            ]
+          },
+          "joint_errors_px": {
+            "hip": 8.120011779137698,
+            "knee": 30.663371014421728,
+            "ankle": 23.696755113465688
+          },
+          "segments": [
+            {
+              "bone": "upper_leg_l",
+              "world_direction_error_deg": 0.0,
+              "world_bone_length": 0.40986477000999105,
+              "tail_to_next_head_units": 1.4901161193847656e-08,
+              "screen_direction_error_deg": 0.5985379474578658,
+              "rig_projected_length_px": 70.82833918150507,
+              "source_projected_length_px": 48.00849129652431,
+              "segment_vector_residual_px": [
+                0.3187255859375,
+                22.82574462890625
+              ],
+              "actual_tail_to_target_direction_endpoint_px": 4.315837287515549e-05,
+              "target_direction_endpoint_to_source_px": 30.6634047438909
+            },
+            {
+              "bone": "lower_leg_l",
+              "world_direction_error_deg": 1.6358595393679491,
+              "world_bone_length": 0.466100878585347,
+              "tail_to_next_head_units": 7.028863677424642e-08,
+              "screen_direction_error_deg": 5.507577175369903,
+              "rig_projected_length_px": 48.65576373514518,
+              "source_projected_length_px": 55.34912676388638,
+              "segment_vector_residual_px": [
+                -4.6986083984375,
+                -6.8985137939453125
+              ],
+              "actual_tail_to_target_direction_endpoint_px": 2.2685070336633033,
+              "target_direction_endpoint_to_source_px": 23.317303429212945
+            }
+          ]
+        },
+        {
+          "source_frame": 29,
+          "side": "right",
+          "joint_residual_vectors_px": {
+            "hip": [
+              -9.56842041015625,
+              2.5544586181640625
+            ],
+            "knee": [
+              -0.100067138671875,
+              24.033203125
+            ],
+            "ankle": [
+              -0.55816650390625,
+              26.756072998046875
+            ]
+          },
+          "joint_errors_px": {
+            "hip": 9.903531251990639,
+            "knee": 24.03341136969645,
+            "ankle": 26.76189457071813
+          },
+          "segments": [
+            {
+              "bone": "upper_leg_r",
+              "world_direction_error_deg": 0.0,
+              "world_bone_length": 0.40986529714030884,
+              "tail_to_next_head_units": 3.0719530773294423e-08,
+              "screen_direction_error_deg": 21.133719721922603,
+              "rig_projected_length_px": 56.717270206031806,
+              "source_projected_length_px": 41.377912620527766,
+              "segment_vector_residual_px": [
+                9.468353271484375,
+                21.478744506835938
+              ],
+              "actual_tail_to_target_direction_endpoint_px": 4.315837287515549e-05,
+              "target_direction_endpoint_to_source_px": 24.033456955336188
+            },
+            {
+              "bone": "lower_leg_r",
+              "world_direction_error_deg": 1.6249478228474195,
+              "world_bone_length": 0.46610101709519597,
+              "tail_to_next_head_units": 6.188917057900187e-08,
+              "screen_direction_error_deg": 0.24652409637377998,
+              "rig_projected_length_px": 60.05262506863182,
+              "source_projected_length_px": 57.30321215269138,
+              "segment_vector_residual_px": [
+                -0.458099365234375,
+                2.722869873046875
+              ],
+              "actual_tail_to_target_direction_endpoint_px": 2.3140261372910267,
+              "target_direction_endpoint_to_source_px": 27.070986903653697
+            }
+          ]
+        },
+        {
+          "source_frame": 41,
+          "side": "left",
+          "joint_residual_vectors_px": {
+            "hip": [
+              3.425201416015625,
+              2.7469635009765625
+            ],
+            "knee": [
+              1.1824951171875,
+              24.859786987304688
+            ],
+            "ankle": [
+              -4.187225341796875,
+              17.8472900390625
+            ]
+          },
+          "joint_errors_px": {
+            "hip": 4.3906506846481,
+            "knee": 24.887895208120675,
+            "ankle": 18.33190150594003
+          },
+          "segments": [
+            {
+              "bone": "upper_leg_l",
+              "world_direction_error_deg": 0.014205112133177962,
+              "world_bone_length": 0.4098644595257626,
+              "tail_to_next_head_units": 8.33000234328132e-09,
+              "screen_direction_error_deg": 5.394208685667984,
+              "rig_projected_length_px": 71.89393666132152,
+              "source_projected_length_px": 50.401786781609324,
+              "segment_vector_residual_px": [
+                -2.242706298828125,
+                22.112823486328125
+              ],
+              "actual_tail_to_target_direction_endpoint_px": 0.0,
+              "target_direction_endpoint_to_source_px": 24.887895208120675
+            },
+            {
+              "bone": "lower_leg_l",
+              "world_direction_error_deg": 0.5289136637149326,
+              "world_bone_length": 0.46610061940806713,
+              "tail_to_next_head_units": 3.332000937312528e-08,
+              "screen_direction_error_deg": 3.7940440693362456,
+              "rig_projected_length_px": 51.61134737907635,
+              "source_projected_length_px": 59.643539009732386,
+              "segment_vector_residual_px": [
+                -5.369720458984375,
+                -7.0124969482421875
+              ],
+              "actual_tail_to_target_direction_endpoint_px": 0.6987641744261444,
+              "target_direction_endpoint_to_source_px": 18.436510065949715
+            }
+          ]
+        },
+        {
+          "source_frame": 41,
+          "side": "right",
+          "joint_residual_vectors_px": {
+            "hip": [
+              -5.423583984375,
+              7.9793548583984375
+            ],
+            "knee": [
+              -3.220611572265625,
+              29.433029174804688
+            ],
+            "ankle": [
+              2.73480224609375,
+              25.116424560546875
+            ]
+          },
+          "joint_errors_px": {
+            "hip": 9.64807592787844,
+            "knee": 29.608707535198278,
+            "ankle": 25.264875241622143
+          },
+          "segments": [
+            {
+              "bone": "upper_leg_r",
+              "world_direction_error_deg": 0.012363963105980754,
+              "world_bone_length": 0.409864506959389,
+              "tail_to_next_head_units": 1.4901161193847656e-08,
+              "screen_direction_error_deg": 4.624876471580073,
+              "rig_projected_length_px": 73.37884389241594,
+              "source_projected_length_px": 52.400902945623,
+              "segment_vector_residual_px": [
+                2.202972412109375,
+                21.45367431640625
+              ],
+              "actual_tail_to_target_direction_endpoint_px": 3.0517578125e-05,
+              "target_direction_endpoint_to_source_px": 29.608710852751027
+            },
+            {
+              "bone": "lower_leg_r",
+              "world_direction_error_deg": 0.4399844813575579,
+              "world_bone_length": 0.46610063127187396,
+              "tail_to_next_head_units": 6.828569911354542e-08,
+              "screen_direction_error_deg": 5.166568211184186,
+              "rig_projected_length_px": 56.09737350108919,
+              "source_projected_length_px": 61.21561148495977,
+              "segment_vector_residual_px": [
+                5.955413818359375,
+                -4.3166046142578125
+              ],
+              "actual_tail_to_target_direction_endpoint_px": 0.6036120032232308,
+              "target_direction_endpoint_to_source_px": 25.066848149386654
+            }
+          ]
+        },
+        {
+          "source_frame": 55,
+          "side": "left",
+          "joint_residual_vectors_px": {
+            "hip": [
+              -17.585296630859375,
+              -0.3054962158203125
+            ],
+            "knee": [
+              -28.332244873046875,
+              24.524093627929688
+            ],
+            "ankle": [
+              -10.850830078125,
+              14.2314453125
+            ]
+          },
+          "joint_errors_px": {
+            "hip": 17.587949658876735,
+            "knee": 37.47195321613261,
+            "ankle": 17.896216332537893
+          },
+          "segments": [
+            {
+              "bone": "upper_leg_l",
+              "world_direction_error_deg": 0.0,
+              "world_bone_length": 0.4098642933660103,
+              "tail_to_next_head_units": 3.332000937312528e-08,
+              "screen_direction_error_deg": 29.20822581957867,
+              "rig_projected_length_px": 52.55735247396187,
+              "source_projected_length_px": 37.25930321771371,
+              "segment_vector_residual_px": [
+                -10.7469482421875,
+                24.82958984375
+              ],
+              "actual_tail_to_target_direction_endpoint_px": 1.52587890625e-05,
+              "target_direction_endpoint_to_source_px": 37.471963803476626
+            },
+            {
+              "bone": "lower_leg_l",
+              "world_direction_error_deg": 9.898152908178156,
+              "world_bone_length": 0.4661004483194507,
+              "tail_to_next_head_units": 6.879190099470089e-08,
+              "screen_direction_error_deg": 20.455210991322907,
+              "rig_projected_length_px": 45.05345742425221,
+              "source_projected_length_px": 55.004494153989185,
+              "segment_vector_residual_px": [
+                17.481414794921875,
+                -10.292648315429688
+              ],
+              "actual_tail_to_target_direction_endpoint_px": 13.894655711045825,
+              "target_direction_endpoint_to_source_px": 28.409966388321315
+            }
+          ]
+        },
+        {
+          "source_frame": 55,
+          "side": "right",
+          "joint_residual_vectors_px": {
+            "hip": [
+              17.5869140625,
+              13.653213500976562
+            ],
+            "knee": [
+              16.31488037109375,
+              34.17460632324219
+            ],
+            "ankle": [
+              28.531402587890625,
+              21.94757080078125
+            ]
+          },
+          "joint_errors_px": {
+            "hip": 22.26454116057235,
+            "knee": 37.86923566709217,
+            "ankle": 35.9963444867149
+          },
+          "segments": [
+            {
+              "bone": "upper_leg_r",
+              "world_direction_error_deg": 0.01656638417649926,
+              "world_bone_length": 0.409864375133903,
+              "tail_to_next_head_units": 2.9802322387695312e-08,
+              "screen_direction_error_deg": 1.3666471588848226,
+              "rig_projected_length_px": 66.6849377326706,
+              "source_projected_length_px": 46.1668137624471,
+              "segment_vector_residual_px": [
+                -1.27203369140625,
+                20.521392822265625
+              ],
+              "actual_tail_to_target_direction_endpoint_px": 3.0517578125e-05,
+              "target_direction_endpoint_to_source_px": 37.869248963900034
+            },
+            {
+              "bone": "lower_leg_r",
+              "world_direction_error_deg": 8.24391570080631,
+              "world_bone_length": 0.4661006283995839,
+              "tail_to_next_head_units": 7.598131170262075e-08,
+              "screen_direction_error_deg": 17.015627222542566,
+              "rig_projected_length_px": 43.49138108731241,
+              "source_projected_length_px": 53.28233927846633,
+              "segment_vector_residual_px": [
+                12.216522216796875,
+                -12.227035522460938
+              ],
+              "actual_tail_to_target_direction_endpoint_px": 11.58179737903501,
+              "target_direction_endpoint_to_source_px": 26.042150516338413
+            }
+          ]
+        }
+      ]
+    },
+    "scaled_root_yaw": {
+      "bundle_sha256": "503bfecec06d74ed21623d518a2eec64533c84875de69435c963fbfce60f0b02",
+      "rows": [
+        {
+          "source_frame": 1,
+          "side": "left",
+          "joint_residual_vectors_px": {
+            "hip": [
+              5.7977294921875,
+              5.2823333740234375
+            ],
+            "knee": [
+              5.16070556640625,
+              15.00604248046875
+            ],
+            "ankle": [
+              3.974517822265625,
+              -11.037445068359375
+            ]
+          },
+          "joint_errors_px": {
+            "hip": 7.843259028536588,
+            "knee": 15.868654199275735,
+            "ankle": 11.731239804165392
+          },
+          "segments": [
+            {
+              "bone": "upper_leg_l",
+              "world_direction_error_deg": 0.0,
+              "world_bone_length": 0.40986529458401066,
+              "tail_to_next_head_units": 3.332000937312528e-08,
+              "screen_direction_error_deg": 2.4608426960511744,
+              "rig_projected_length_px": 56.54540669668627,
+              "source_projected_length_px": 47.05598994363199,
+              "segment_vector_residual_px": [
+                -0.63702392578125,
+                9.723709106445312
+              ],
+              "actual_tail_to_target_direction_endpoint_px": 4.57763671875e-05,
+              "target_direction_endpoint_to_source_px": 15.868697469773851
+            },
+            {
+              "bone": "lower_leg_l",
+              "world_direction_error_deg": 1.0021743349030812,
+              "world_bone_length": 0.4661014156561593,
+              "tail_to_next_head_units": 6.664001874625056e-08,
+              "screen_direction_error_deg": 6.740877885618832,
+              "rig_projected_length_px": 34.876628441203735,
+              "source_projected_length_px": 60.382596566723166,
+              "segment_vector_residual_px": [
+                -1.186187744140625,
+                -26.043487548828125
+              ],
+              "actual_tail_to_target_direction_endpoint_px": 1.409499974641194,
+              "target_direction_endpoint_to_source_px": 11.131170511791895
+            }
+          ]
+        },
+        {
+          "source_frame": 1,
+          "side": "right",
+          "joint_residual_vectors_px": {
+            "hip": [
+              -7.366729736328125,
+              4.615264892578125
+            ],
+            "knee": [
+              -1.03643798828125,
+              9.505172729492188
+            ],
+            "ankle": [
+              0.744476318359375,
+              -29.135894775390625
+            ]
+          },
+          "joint_errors_px": {
+            "hip": 8.693064931263882,
+            "knee": 9.561512229117275,
+            "ankle": 29.145405051570602
+          },
+          "segments": [
+            {
+              "bone": "upper_leg_r",
+              "world_direction_error_deg": 0.012114160322359619,
+              "world_bone_length": 0.4098653062293688,
+              "tail_to_next_head_units": 2.9802322387695312e-08,
+              "screen_direction_error_deg": 8.469192595361838,
+              "rig_projected_length_px": 53.167178654771575,
+              "source_projected_length_px": 50.95340679784464,
+              "segment_vector_residual_px": [
+                6.330291748046875,
+                4.8899078369140625
+              ],
+              "actual_tail_to_target_direction_endpoint_px": 3.411968959808029e-05,
+              "target_direction_endpoint_to_source_px": 9.561530693642878
+            },
+            {
+              "bone": "lower_leg_r",
+              "world_direction_error_deg": 0.8305085772430569,
+              "world_bone_length": 0.4661016114710401,
+              "tail_to_next_head_units": 6.143906154658885e-08,
+              "screen_direction_error_deg": 34.7932280388211,
+              "rig_projected_length_px": 15.16539269990024,
+              "source_projected_length_px": 50.155778448912606,
+              "segment_vector_residual_px": [
+                1.780914306640625,
+                -38.64106750488281
+              ],
+              "actual_tail_to_target_direction_endpoint_px": 1.153027561123429,
+              "target_direction_endpoint_to_source_px": 29.35705159907863
+            }
+          ]
+        },
+        {
+          "source_frame": 17,
+          "side": "left",
+          "joint_residual_vectors_px": {
+            "hip": [
+              2.423675537109375,
+              6.1259002685546875
+            ],
+            "knee": [
+              3.283935546875,
+              16.047225952148438
+            ],
+            "ankle": [
+              -0.75714111328125,
+              -12.58160400390625
+            ]
+          },
+          "joint_errors_px": {
+            "hip": 6.587932641952524,
+            "knee": 16.379795216827798,
+            "ankle": 12.604364943192708
+          },
+          "segments": [
+            {
+              "bone": "upper_leg_l",
+              "world_direction_error_deg": 0.028717949579518027,
+              "world_bone_length": 0.40986519307765884,
+              "tail_to_next_head_units": 2.9802322387695312e-08,
+              "screen_direction_error_deg": 0.02339371614504936,
+              "rig_projected_length_px": 58.335084358455795,
+              "source_projected_length_px": 48.37656459200305,
+              "segment_vector_residual_px": [
+                0.860260009765625,
+                9.92132568359375
+              ],
+              "actual_tail_to_target_direction_endpoint_px": 7.62939453125e-05,
+              "target_direction_endpoint_to_source_px": 16.379852158434694
+            },
+            {
+              "bone": "lower_leg_l",
+              "world_direction_error_deg": 0.7608133953435297,
+              "world_bone_length": 0.466101463954257,
+              "tail_to_next_head_units": 8.429369702178807e-08,
+              "screen_direction_error_deg": 3.2194762350852635,
+              "rig_projected_length_px": 29.560178135266103,
+              "source_projected_length_px": 58.378459362311794,
+              "segment_vector_residual_px": [
+                -4.04107666015625,
+                -28.628829956054688
+              ],
+              "actual_tail_to_target_direction_endpoint_px": 1.0704164737298867,
+              "target_direction_endpoint_to_source_px": 12.690112214999507
+            }
+          ]
+        },
+        {
+          "source_frame": 17,
+          "side": "right",
+          "joint_residual_vectors_px": {
+            "hip": [
+              -9.70245361328125,
+              4.308807373046875
+            ],
+            "knee": [
+              -3.39752197265625,
+              12.334213256835938
+            ],
+            "ankle": [
+              -3.0076904296875,
+              -20.588348388671875
+            ]
+          },
+          "joint_errors_px": {
+            "hip": 10.616186907441643,
+            "knee": 12.793590902094925,
+            "ankle": 20.806881028676052
+          },
+          "segments": [
+            {
+              "bone": "upper_leg_r",
+              "world_direction_error_deg": 0.0,
+              "world_bone_length": 0.4098654465417062,
+              "tail_to_next_head_units": 2.9802322387695312e-08,
+              "screen_direction_error_deg": 10.303104228132453,
+              "rig_projected_length_px": 52.912413867255815,
+              "source_projected_length_px": 48.238424701432585,
+              "segment_vector_residual_px": [
+                6.304931640625,
+                8.025405883789062
+              ],
+              "actual_tail_to_target_direction_endpoint_px": 1.52587890625e-05,
+              "target_direction_endpoint_to_source_px": 12.793620719312385
+            },
+            {
+              "bone": "lower_leg_r",
+              "world_direction_error_deg": 0.9873174895996408,
+              "world_bone_length": 0.4661015968071715,
+              "tail_to_next_head_units": 8.429369702178807e-08,
+              "screen_direction_error_deg": 4.887479001633945,
+              "rig_projected_length_px": 20.738947705488815,
+              "source_projected_length_px": 53.54096149865854,
+              "segment_vector_residual_px": [
+                0.38983154296875,
+                -32.92256164550781
+              ],
+              "actual_tail_to_target_direction_endpoint_px": 1.377691755292641,
+              "target_direction_endpoint_to_source_px": 20.365697445520357
+            }
+          ]
+        },
+        {
+          "source_frame": 23,
+          "side": "left",
+          "joint_residual_vectors_px": {
+            "hip": [
+              0.22406005859375,
+              6.3014678955078125
+            ],
+            "knee": [
+              1.3404541015625,
+              10.277420043945312
+            ],
+            "ankle": [
+              -4.546112060546875,
+              -25.1087646484375
+            ]
+          },
+          "joint_errors_px": {
+            "hip": 6.305449944580246,
+            "knee": 10.364467347357126,
+            "ankle": 25.51699842224463
+          },
+          "segments": [
+            {
+              "bone": "upper_leg_l",
+              "world_direction_error_deg": 0.0,
+              "world_bone_length": 0.40986537508076654,
+              "tail_to_next_head_units": 4.2146848510894035e-08,
+              "screen_direction_error_deg": 0.9669144937140112,
+              "rig_projected_length_px": 52.25507364781995,
+              "source_projected_length_px": 48.21319366600915,
+              "segment_vector_residual_px": [
+                1.11639404296875,
+                3.9759521484375
+              ],
+              "actual_tail_to_target_direction_endpoint_px": 4.315837287515549e-05,
+              "target_direction_endpoint_to_source_px": 10.364501472929428
+            },
+            {
+              "bone": "lower_leg_l",
+              "world_direction_error_deg": 2.035519842872111,
+              "world_bone_length": 0.4661016351673825,
+              "tail_to_next_head_units": 8.560065398421926e-08,
+              "screen_direction_error_deg": 19.277906889468397,
+              "rig_projected_length_px": 18.90415895106081,
+              "source_projected_length_px": 53.16952878498928,
+              "segment_vector_residual_px": [
+                -5.886566162109375,
+                -35.38618469238281
+              ],
+              "actual_tail_to_target_direction_endpoint_px": 2.862099115960639,
+              "target_direction_endpoint_to_source_px": 25.372487531029908
+            }
+          ]
+        },
+        {
+          "source_frame": 23,
+          "side": "right",
+          "joint_residual_vectors_px": {
+            "hip": [
+              -10.82476806640625,
+              2.8398284912109375
+            ],
+            "knee": [
+              7.274871826171875,
+              16.194854736328125
+            ],
+            "ankle": [
+              3.1011962890625,
+              -24.324020385742188
+            ]
+          },
+          "joint_errors_px": {
+            "hip": 11.191078210520068,
+            "knee": 17.753790437259777,
+            "ankle": 24.52091713769205
+          },
+          "segments": [
+            {
+              "bone": "upper_leg_r",
+              "world_direction_error_deg": 0.010919556546551133,
+              "world_bone_length": 0.40986541856445247,
+              "tail_to_next_head_units": 3.332000937312528e-08,
+              "screen_direction_error_deg": 39.954667646479805,
+              "rig_projected_length_px": 31.88086840893473,
+              "source_projected_length_px": 33.75490280144154,
+              "segment_vector_residual_px": [
+                18.099639892578125,
+                13.355026245117188
+              ],
+              "actual_tail_to_target_direction_endpoint_px": 5.501634636633284e-05,
+              "target_direction_endpoint_to_source_px": 17.753761752540413
+            },
+            {
+              "bone": "lower_leg_r",
+              "world_direction_error_deg": 1.1201137384788362,
+              "world_bone_length": 0.46610131175435243,
+              "tail_to_next_head_units": 8.632712234747758e-08,
+              "screen_direction_error_deg": 38.69021108938845,
+              "rig_projected_length_px": 21.68354642598646,
+              "source_projected_length_px": 55.33668753021278,
+              "segment_vector_residual_px": [
+                -4.173675537109375,
+                -40.51887512207031
+              ],
+              "actual_tail_to_target_direction_endpoint_px": 1.5512326205830058,
+              "target_direction_endpoint_to_source_px": 24.27756396168448
+            }
+          ]
+        },
+        {
+          "source_frame": 29,
+          "side": "left",
+          "joint_residual_vectors_px": {
+            "hip": [
+              2.575531005859375,
+              7.7007293701171875
+            ],
+            "knee": [
+              4.134796142578125,
+              21.991928100585938
+            ],
+            "ankle": [
+              -3.196624755859375,
+              -3.037078857421875
+            ]
+          },
+          "joint_errors_px": {
+            "hip": 8.120011779137698,
+            "knee": 22.37725264648542,
+            "ankle": 4.4093375784991276
+          },
+          "segments": [
+            {
+              "bone": "upper_leg_l",
+              "world_direction_error_deg": 0.010288867847157565,
+              "world_bone_length": 0.4098649719755061,
+              "tail_to_next_head_units": 1.4901161193847656e-08,
+              "screen_direction_error_deg": 0.8224745767322211,
+              "rig_projected_length_px": 62.36302627430113,
+              "source_projected_length_px": 48.00849129652431,
+              "segment_vector_residual_px": [
+                1.55926513671875,
+                14.29119873046875
+              ],
+              "actual_tail_to_target_direction_endpoint_px": 8.631674575031098e-05,
+              "target_direction_endpoint_to_source_px": 22.37732394632793
+            },
+            {
+              "bone": "lower_leg_l",
+              "world_direction_error_deg": 3.13338661729116,
+              "world_bone_length": 0.4661013537771413,
+              "tail_to_next_head_units": 4.485843546238652e-08,
+              "screen_direction_error_deg": 13.420137483101866,
+              "rig_projected_length_px": 31.140163726376226,
+              "source_projected_length_px": 55.34912676388638,
+              "segment_vector_residual_px": [
+                -7.3314208984375,
+                -25.029006958007812
+              ],
+              "actual_tail_to_target_direction_endpoint_px": 4.387433490629455,
+              "target_direction_endpoint_to_source_px": 3.773925449580098
+            }
+          ]
+        },
+        {
+          "source_frame": 29,
+          "side": "right",
+          "joint_residual_vectors_px": {
+            "hip": [
+              -9.56842041015625,
+              2.5544586181640625
+            ],
+            "knee": [
+              -1.62274169921875,
+              13.016998291015625
+            ],
+            "ankle": [
+              -5.48822021484375,
+              1.400390625
+            ]
+          },
+          "joint_errors_px": {
+            "hip": 9.903531251990639,
+            "knee": 13.117756515984338,
+            "ankle": 5.664067046064986
+          },
+          "segments": [
+            {
+              "bone": "upper_leg_r",
+              "world_direction_error_deg": 0.02211732967542711,
+              "world_bone_length": 0.4098653920073621,
+              "tail_to_next_head_units": 3.725290298461914e-08,
+              "screen_direction_error_deg": 15.67955291465522,
+              "rig_projected_length_px": 46.73356494565011,
+              "source_projected_length_px": 41.377912620527766,
+              "segment_vector_residual_px": [
+                7.9456787109375,
+                10.462539672851562
+              ],
+              "actual_tail_to_target_direction_endpoint_px": 3.411968959808029e-05,
+              "target_direction_endpoint_to_source_px": 13.117767866426622
+            },
+            {
+              "bone": "lower_leg_r",
+              "world_direction_error_deg": 3.088260177251093,
+              "world_bone_length": 0.4661010015473777,
+              "tail_to_next_head_units": 4.998001405968792e-08,
+              "screen_direction_error_deg": 5.827602816112257,
+              "rig_projected_length_px": 46.235138273497505,
+              "source_projected_length_px": 57.30321215269138,
+              "segment_vector_residual_px": [
+                -3.865478515625,
+                -11.616607666015625
+              ],
+              "actual_tail_to_target_direction_endpoint_px": 4.383412828316854,
+              "target_direction_endpoint_to_source_px": 2.4428262715990297
+            }
+          ]
+        },
+        {
+          "source_frame": 41,
+          "side": "left",
+          "joint_residual_vectors_px": {
+            "hip": [
+              3.425201416015625,
+              2.7469635009765625
+            ],
+            "knee": [
+              6.63714599609375,
+              24.453689575195312
+            ],
+            "ankle": [
+              6.7061767578125,
+              0.41583251953125
+            ]
+          },
+          "joint_errors_px": {
+            "hip": 4.3906506846481,
+            "knee": 25.33840204862346,
+            "ankle": 6.719056608168127
+          },
+          "segments": [
+            {
+              "bone": "upper_leg_l",
+              "world_direction_error_deg": 0.0,
+              "world_bone_length": 0.4098645995543563,
+              "tail_to_next_head_units": 7.450580596923828e-09,
+              "screen_direction_error_deg": 1.0600791361641935,
+              "rig_projected_length_px": 72.31642967103818,
+              "source_projected_length_px": 50.401786781609324,
+              "segment_vector_residual_px": [
+                3.211944580078125,
+                21.70672607421875
+              ],
+              "actual_tail_to_target_direction_endpoint_px": 4.315837287515549e-05,
+              "target_direction_endpoint_to_source_px": 25.338424104193702
+            },
+            {
+              "bone": "lower_leg_l",
+              "world_direction_error_deg": 1.5673937082433251,
+              "world_bone_length": 0.46610101603369836,
+              "tail_to_next_head_units": 5.1619136559035694e-08,
+              "screen_direction_error_deg": 9.610033933584697,
+              "rig_projected_length_px": 36.92773659598621,
+              "source_projected_length_px": 59.643539009732386,
+              "segment_vector_residual_px": [
+                0.06903076171875,
+                -24.037857055664062
+              ],
+              "actual_tail_to_target_direction_endpoint_px": 2.090559539140715,
+              "target_direction_endpoint_to_source_px": 4.645809042728826
+            }
+          ]
+        },
+        {
+          "source_frame": 41,
+          "side": "right",
+          "joint_residual_vectors_px": {
+            "hip": [
+              -5.423583984375,
+              7.9793548583984375
+            ],
+            "knee": [
+              -7.68243408203125,
+              27.725784301757812
+            ],
+            "ankle": [
+              -4.193756103515625,
+              8.689300537109375
+            ]
+          },
+          "joint_errors_px": {
+            "hip": 9.64807592787844,
+            "knee": 28.770452041548616,
+            "ankle": 9.648395491906273
+          },
+          "segments": [
+            {
+              "bone": "upper_leg_r",
+              "world_direction_error_deg": 0.03261837529770597,
+              "world_bone_length": 0.4098645969980538,
+              "tail_to_next_head_units": 0.0,
+              "screen_direction_error_deg": 0.9719166735615179,
+              "rig_projected_length_px": 72.24870272729032,
+              "source_projected_length_px": 52.400902945623,
+              "segment_vector_residual_px": [
+                -2.25885009765625,
+                19.746429443359375
+              ],
+              "actual_tail_to_target_direction_endpoint_px": 6.103515625e-05,
+              "target_direction_endpoint_to_source_px": 28.770468350212447
+            },
+            {
+              "bone": "lower_leg_r",
+              "world_direction_error_deg": 1.0971901389689707,
+              "world_bone_length": 0.46610117388461136,
+              "tail_to_next_head_units": 7.028863677424642e-08,
+              "screen_direction_error_deg": 0.13996970812486287,
+              "rig_projected_length_px": 41.86248975032067,
+              "source_projected_length_px": 61.21561148495977,
+              "segment_vector_residual_px": [
+                3.488677978515625,
+                -19.036483764648438
+              ],
+              "actual_tail_to_target_direction_endpoint_px": 1.5202075512330633,
+              "target_direction_endpoint_to_source_px": 10.063437281961791
+            }
+          ]
+        },
+        {
+          "source_frame": 55,
+          "side": "left",
+          "joint_residual_vectors_px": {
+            "hip": [
+              -17.585296630859375,
+              -0.3054962158203125
+            ],
+            "knee": [
+              -27.356231689453125,
+              14.71234130859375
+            ],
+            "ankle": [
+              -7.224365234375,
+              -15.485076904296875
+            ]
+          },
+          "joint_errors_px": {
+            "hip": 17.587949658876735,
+            "knee": 31.06149370186841,
+            "ankle": 17.087394913836523
+          },
+          "segments": [
+            {
+              "bone": "upper_leg_l",
+              "world_direction_error_deg": 0.0,
+              "world_bone_length": 0.40986428086852195,
+              "tail_to_next_head_units": 3.0719530773294423e-08,
+              "screen_direction_error_deg": 23.84871934040139,
+              "rig_projected_length_px": 43.776340075884065,
+              "source_projected_length_px": 37.25930321771371,
+              "segment_vector_residual_px": [
+                -9.77093505859375,
+                15.017837524414062
+              ],
+              "actual_tail_to_target_direction_endpoint_px": 1.52587890625e-05,
+              "target_direction_endpoint_to_source_px": 31.061500824913367
+            },
+            {
+              "bone": "lower_leg_l",
+              "world_direction_error_deg": 13.12877367469163,
+              "world_bone_length": 0.4661005045164484,
+              "tail_to_next_head_units": 3.332000937312528e-08,
+              "screen_direction_error_deg": 34.80644952588269,
+              "rig_projected_length_px": 26.958667342304718,
+              "source_projected_length_px": 55.004494153989185,
+              "segment_vector_residual_px": [
+                20.131866455078125,
+                -30.197418212890625
+              ],
+              "actual_tail_to_target_direction_endpoint_px": 18.342371561275186,
+              "target_direction_endpoint_to_source_px": 29.9244889116104
+            }
+          ]
+        },
+        {
+          "source_frame": 55,
+          "side": "right",
+          "joint_residual_vectors_px": {
+            "hip": [
+              17.5869140625,
+              13.653213500976562
+            ],
+            "knee": [
+              16.0330810546875,
+              22.905258178710938
+            ],
+            "ankle": [
+              34.72589111328125,
+              -8.652923583984375
+            ]
+          },
+          "joint_errors_px": {
+            "hip": 22.26454116057235,
+            "knee": 27.95908745451222,
+            "ankle": 35.787716583545254
+          },
+          "segments": [
+            {
+              "bone": "upper_leg_r",
+              "world_direction_error_deg": 0.0,
+              "world_bone_length": 0.40986442457574634,
+              "tail_to_next_head_units": 2.9802322387695312e-08,
+              "screen_direction_error_deg": 1.7551008148219662,
+              "rig_projected_length_px": 55.41959752892853,
+              "source_projected_length_px": 46.1668137624471,
+              "segment_vector_residual_px": [
+                -1.5538330078125,
+                9.252044677734375
+              ],
+              "actual_tail_to_target_direction_endpoint_px": 6.823937919616058e-05,
+              "target_direction_endpoint_to_source_px": 27.959146395902362
+            },
+            {
+              "bone": "lower_leg_r",
+              "world_direction_error_deg": 12.329245857894616,
+              "world_bone_length": 0.46610071331945613,
+              "tail_to_next_head_units": 1.666000468656264e-08,
+              "screen_direction_error_deg": 41.601298763400344,
+              "rig_projected_length_px": 30.156150825614127,
+              "source_projected_length_px": 53.28233927846633,
+              "segment_vector_residual_px": [
+                18.69281005859375,
+                -31.558181762695312
+              ],
+              "actual_tail_to_target_direction_endpoint_px": 17.462290816805186,
+              "target_direction_endpoint_to_source_px": 21.532361183228375
+            }
+          ]
+        }
+      ]
+    },
+    "raw_own_root_yaw": {
+      "bundle_sha256": "800e85a368bf194ace3b38055787f7708c09c7cf8a7d3757a3eadc7854e1d25e",
+      "rows": [
+        {
+          "source_frame": 1,
+          "side": "left",
+          "joint_residual_vectors_px": {
+            "hip": [
+              5.7977294921875,
+              5.2823333740234375
+            ],
+            "knee": [
+              3.4324951171875,
+              25.645126342773438
+            ],
+            "ankle": [
+              -2.246551513671875,
+              17.30902099609375
+            ]
+          },
+          "joint_errors_px": {
+            "hip": 7.843259028536588,
+            "knee": 25.873818964887242,
+            "ankle": 17.454202849216376
+          },
+          "segments": [
+            {
+              "bone": "upper_leg_l",
+              "world_direction_error_deg": 0.0,
+              "world_bone_length": 0.40986504506083143,
+              "tail_to_next_head_units": 1.4901161193847656e-08,
+              "screen_direction_error_deg": 5.228921333509484,
+              "rig_projected_length_px": 66.90629016744948,
+              "source_projected_length_px": 47.05598994363199,
+              "segment_vector_residual_px": [
+                -2.365234375,
+                20.36279296875
+              ],
+              "actual_tail_to_target_direction_endpoint_px": 6.103515625e-05,
+              "target_direction_endpoint_to_source_px": 25.873880297626094
+            },
+            {
+              "bone": "lower_leg_l",
+              "world_direction_error_deg": 0.0,
+              "world_bone_length": 0.4661010637386477,
+              "tail_to_next_head_units": 6.664001874625056e-08,
+              "screen_direction_error_deg": 4.344526128441569,
+              "rig_projected_length_px": 51.219133190609185,
+              "source_projected_length_px": 60.382596566723166,
+              "segment_vector_residual_px": [
+                -5.679046630859375,
+                -8.336105346679688
+              ],
+              "actual_tail_to_target_direction_endpoint_px": 0.0001220703125,
+              "target_direction_endpoint_to_source_px": 17.454324365181037
+            }
+          ]
+        },
+        {
+          "source_frame": 1,
+          "side": "right",
+          "joint_residual_vectors_px": {
+            "hip": [
+              -7.366729736328125,
+              4.615264892578125
+            ],
+            "knee": [
+              1.436187744140625,
+              21.020828247070312
+            ],
+            "ankle": [
+              0.40283203125,
+              1.6690673828125
+            ]
+          },
+          "joint_errors_px": {
+            "hip": 8.693064931263882,
+            "knee": 21.069832671532566,
+            "ankle": 1.716991426556466
+          },
+          "segments": [
+            {
+              "bone": "upper_leg_r",
+              "world_direction_error_deg": 0.007819656855134518,
+              "world_bone_length": 0.40986512558426447,
+              "tail_to_next_head_units": 2.9802322387695312e-08,
+              "screen_direction_error_deg": 13.702430428183144,
+              "rig_projected_length_px": 63.67902243721688,
+              "source_projected_length_px": 50.95340679784464,
+              "segment_vector_residual_px": [
+                8.80291748046875,
+                16.405563354492188
+              ],
+              "actual_tail_to_target_direction_endpoint_px": 4.315837287515549e-05,
+              "target_direction_endpoint_to_source_px": 21.069861011526488
+            },
+            {
+              "bone": "lower_leg_r",
+              "world_direction_error_deg": 0.012114160322359619,
+              "world_bone_length": 0.46610150332329087,
+              "tail_to_next_head_units": 6.828569911354542e-08,
+              "screen_direction_error_deg": 4.509639308590877,
+              "rig_projected_length_px": 31.026658255304504,
+              "source_projected_length_px": 50.155778448912606,
+              "segment_vector_residual_px": [
+                -1.033355712890625,
+                -19.351760864257812
+              ],
+              "actual_tail_to_target_direction_endpoint_px": 0.00019301011109426145,
+              "target_direction_endpoint_to_source_px": 1.7171837519430366
+            }
+          ]
+        },
+        {
+          "source_frame": 17,
+          "side": "left",
+          "joint_residual_vectors_px": {
+            "hip": [
+              2.423675537109375,
+              6.1259002685546875
+            ],
+            "knee": [
+              2.007781982421875,
+              26.123443603515625
+            ],
+            "ankle": [
+              -1.743255615234375,
+              15.807586669921875
+            ]
+          },
+          "joint_errors_px": {
+            "hip": 6.587932641952524,
+            "knee": 26.200486916465533,
+            "ankle": 15.903418860453703
+          },
+          "segments": [
+            {
+              "bone": "upper_leg_l",
+              "world_direction_error_deg": 0.015565831834258914,
+              "world_bone_length": 0.4098649865499672,
+              "tail_to_next_head_units": 1.4901161193847656e-08,
+              "screen_direction_error_deg": 1.7502550466269533,
+              "rig_projected_length_px": 68.30120479811303,
+              "source_projected_length_px": 48.37656459200305,
+              "segment_vector_residual_px": [
+                -0.4158935546875,
+                19.997543334960938
+              ],
+              "actual_tail_to_target_direction_endpoint_px": 3.0517578125e-05,
+              "target_direction_endpoint_to_source_px": 26.200489255108028
+            },
+            {
+              "bone": "lower_leg_l",
+              "world_direction_error_deg": 0.008385647759608827,
+              "world_bone_length": 0.46610113351649335,
+              "tail_to_next_head_units": 6.749358375368058e-08,
+              "screen_direction_error_deg": 3.455084239287008,
+              "rig_projected_length_px": 47.87479316801208,
+              "source_projected_length_px": 58.378459362311794,
+              "segment_vector_residual_px": [
+                -3.75103759765625,
+                -10.31585693359375
+              ],
+              "actual_tail_to_target_direction_endpoint_px": 0.0001556097263669673,
+              "target_direction_endpoint_to_source_px": 15.903573798460036
+            }
+          ]
+        },
+        {
+          "source_frame": 17,
+          "side": "right",
+          "joint_residual_vectors_px": {
+            "hip": [
+              -9.70245361328125,
+              4.308807373046875
+            ],
+            "knee": [
+              -0.79290771484375,
+              23.90313720703125
+            ],
+            "ankle": [
+              0.029205322265625,
+              10.97552490234375
+            ]
+          },
+          "joint_errors_px": {
+            "hip": 10.616186907441643,
+            "knee": 23.916284995627894,
+            "ankle": 10.97556392740615
+          },
+          "segments": [
+            {
+              "bone": "upper_leg_r",
+              "world_direction_error_deg": 0.014836755739843227,
+              "world_bone_length": 0.4098651994329016,
+              "tail_to_next_head_units": 2.9802322387695312e-08,
+              "screen_direction_error_deg": 16.04327921468317,
+              "rig_projected_length_px": 63.25919778764451,
+              "source_projected_length_px": 48.238424701432585,
+              "segment_vector_residual_px": [
+                8.9095458984375,
+                19.594329833984375
+              ],
+              "actual_tail_to_target_direction_endpoint_px": 0.0,
+              "target_direction_endpoint_to_source_px": 23.916284995627894
+            },
+            {
+              "bone": "lower_leg_r",
+              "world_direction_error_deg": 0.01779401539917158,
+              "world_bone_length": 0.4661013279031549,
+              "tail_to_next_head_units": 4.280032699210963e-08,
+              "screen_direction_error_deg": 1.9188564464941726,
+              "rig_projected_length_px": 40.681882080756395,
+              "source_projected_length_px": 53.54096149865854,
+              "segment_vector_residual_px": [
+                0.822113037109375,
+                -12.9276123046875
+              ],
+              "actual_tail_to_target_direction_endpoint_px": 0.0001856311807341986,
+              "target_direction_endpoint_to_source_px": 10.975746662732448
+            }
+          ]
+        },
+        {
+          "source_frame": 23,
+          "side": "left",
+          "joint_residual_vectors_px": {
+            "hip": [
+              0.22406005859375,
+              6.3014678955078125
+            ],
+            "knee": [
+              0.52227783203125,
+              21.671463012695312
+            ],
+            "ankle": [
+              -1.96563720703125,
+              6.10296630859375
+            ]
+          },
+          "joint_errors_px": {
+            "hip": 6.305449944580246,
+            "knee": 21.67775558867956,
+            "ankle": 6.411702306109779
+          },
+          "segments": [
+            {
+              "bone": "upper_leg_l",
+              "world_direction_error_deg": 0.011507456030735656,
+              "world_bone_length": 0.4098650881895108,
+              "tail_to_next_head_units": 2.9802322387695312e-08,
+              "screen_direction_error_deg": 0.5412103994811098,
+              "rig_projected_length_px": 63.577164675288905,
+              "source_projected_length_px": 48.21319366600915,
+              "segment_vector_residual_px": [
+                0.2982177734375,
+                15.3699951171875
+              ],
+              "actual_tail_to_target_direction_endpoint_px": 4.315837287515549e-05,
+              "target_direction_endpoint_to_source_px": 21.677817562667826
+            },
+            {
+              "bone": "lower_leg_l",
+              "world_direction_error_deg": 0.0,
+              "world_bone_length": 0.46610141773524894,
+              "tail_to_next_head_units": 6.911894423991245e-08,
+              "screen_direction_error_deg": 4.019497652544807,
+              "rig_projected_length_px": 37.71955049008258,
+              "source_projected_length_px": 53.16952878498928,
+              "segment_vector_residual_px": [
+                -2.4879150390625,
+                -15.568496704101562
+              ],
+              "actual_tail_to_target_direction_endpoint_px": 0.00017794652999405825,
+              "target_direction_endpoint_to_source_px": 6.411846674901092
+            }
+          ]
+        },
+        {
+          "source_frame": 23,
+          "side": "right",
+          "joint_residual_vectors_px": {
+            "hip": [
+              -10.82476806640625,
+              2.8398284912109375
+            ],
+            "knee": [
+              7.378692626953125,
+              20.428436279296875
+            ],
+            "ankle": [
+              -1.01800537109375,
+              -0.119598388671875
+            ]
+          },
+          "joint_errors_px": {
+            "hip": 11.191078210520068,
+            "knee": 21.72017773662648,
+            "ankle": 1.0250067151136069
+          },
+          "segments": [
+            {
+              "bone": "upper_leg_r",
+              "world_direction_error_deg": 0.0,
+              "world_bone_length": 0.4098654789214695,
+              "tail_to_next_head_units": 3.0719530773294423e-08,
+              "screen_direction_error_deg": 42.52933915162442,
+              "rig_projected_length_px": 35.834030736006554,
+              "source_projected_length_px": 33.75490280144154,
+              "segment_vector_residual_px": [
+                18.203460693359375,
+                17.588607788085938
+              ],
+              "actual_tail_to_target_direction_endpoint_px": 3.0517578125e-05,
+              "target_direction_endpoint_to_source_px": 21.720188098746334
+            },
+            {
+              "bone": "lower_leg_r",
+              "world_direction_error_deg": 0.0,
+              "world_bone_length": 0.46610145761649785,
+              "tail_to_next_head_units": 2.9990900658265906e-08,
+              "screen_direction_error_deg": 2.066538265862074,
+              "rig_projected_length_px": 33.193129010031015,
+              "source_projected_length_px": 55.33668753021278,
+              "segment_vector_residual_px": [
+                -8.396697998046875,
+                -20.54803466796875
+              ],
+              "actual_tail_to_target_direction_endpoint_px": 6.823937919616058e-05,
+              "target_direction_endpoint_to_source_px": 1.0250298914570508
+            }
+          ]
+        },
+        {
+          "source_frame": 29,
+          "side": "left",
+          "joint_residual_vectors_px": {
+            "hip": [
+              2.575531005859375,
+              7.7007293701171875
+            ],
+            "knee": [
+              2.894256591796875,
+              30.526473999023438
+            ],
+            "ankle": [
+              0.442291259765625,
+              23.31298828125
+            ]
+          },
+          "joint_errors_px": {
+            "hip": 8.120011779137698,
+            "knee": 30.663371014421728,
+            "ankle": 23.317183447583577
+          },
+          "segments": [
+            {
+              "bone": "upper_leg_l",
+              "world_direction_error_deg": 0.0,
+              "world_bone_length": 0.40986477000999105,
+              "tail_to_next_head_units": 1.4901161193847656e-08,
+              "screen_direction_error_deg": 0.5985379474578658,
+              "rig_projected_length_px": 70.82833918150507,
+              "source_projected_length_px": 48.00849129652431,
+              "segment_vector_residual_px": [
+                0.3187255859375,
+                22.82574462890625
+              ],
+              "actual_tail_to_target_direction_endpoint_px": 4.315837287515549e-05,
+              "target_direction_endpoint_to_source_px": 30.6634047438909
+            },
+            {
+              "bone": "lower_leg_l",
+              "world_direction_error_deg": 0.01948366511941204,
+              "world_bone_length": 0.4661009396420844,
+              "tail_to_next_head_units": 6.999185021242475e-08,
+              "screen_direction_error_deg": 2.8811089396156295,
+              "rig_projected_length_px": 48.18641620312728,
+              "source_projected_length_px": 55.34912676388638,
+              "segment_vector_residual_px": [
+                -2.45196533203125,
+                -7.2134857177734375
+              ],
+              "actual_tail_to_target_direction_endpoint_px": 0.00017794652999405825,
+              "target_direction_endpoint_to_source_px": 23.317334840280004
+            }
+          ]
+        },
+        {
+          "source_frame": 29,
+          "side": "right",
+          "joint_residual_vectors_px": {
+            "hip": [
+              -9.56842041015625,
+              2.5544586181640625
+            ],
+            "knee": [
+              -0.100067138671875,
+              24.033203125
+            ],
+            "ankle": [
+              1.741424560546875,
+              27.01483154296875
+            ]
+          },
+          "joint_errors_px": {
+            "hip": 9.903531251990639,
+            "knee": 24.03341136969645,
+            "ankle": 27.070901478446814
+          },
+          "segments": [
+            {
+              "bone": "upper_leg_r",
+              "world_direction_error_deg": 0.0,
+              "world_bone_length": 0.40986529714030884,
+              "tail_to_next_head_units": 3.0719530773294423e-08,
+              "screen_direction_error_deg": 21.133719721922603,
+              "rig_projected_length_px": 56.717270206031806,
+              "source_projected_length_px": 41.377912620527766,
+              "segment_vector_residual_px": [
+                9.468353271484375,
+                21.478744506835938
+              ],
+              "actual_tail_to_target_direction_endpoint_px": 4.315837287515549e-05,
+              "target_direction_endpoint_to_source_px": 24.033456955336188
+            },
+            {
+              "bone": "lower_leg_r",
+              "world_direction_error_deg": 0.016952612138286458,
+              "world_bone_length": 0.46610106617384783,
+              "tail_to_next_head_units": 3.414284955677271e-08,
+              "screen_direction_error_deg": 1.9541333164425196,
+              "rig_projected_length_px": 60.17902303876321,
+              "source_projected_length_px": 57.30321215269138,
+              "segment_vector_residual_px": [
+                1.84149169921875,
+                2.98162841796875
+              ],
+              "actual_tail_to_target_direction_endpoint_px": 0.00012947511862546645,
+              "target_direction_endpoint_to_source_px": 27.070986903653697
+            }
+          ]
+        },
+        {
+          "source_frame": 41,
+          "side": "left",
+          "joint_residual_vectors_px": {
+            "hip": [
+              3.425201416015625,
+              2.7469635009765625
+            ],
+            "knee": [
+              1.1824951171875,
+              24.859786987304688
+            ],
+            "ankle": [
+              -4.88262939453125,
+              17.778106689453125
+            ]
+          },
+          "joint_errors_px": {
+            "hip": 4.3906506846481,
+            "knee": 24.887895208120675,
+            "ankle": 18.436407903881804
+          },
+          "segments": [
+            {
+              "bone": "upper_leg_l",
+              "world_direction_error_deg": 0.014205112133177962,
+              "world_bone_length": 0.4098644595257626,
+              "tail_to_next_head_units": 8.33000234328132e-09,
+              "screen_direction_error_deg": 5.394208685667984,
+              "rig_projected_length_px": 71.89393666132152,
+              "source_projected_length_px": 50.401786781609324,
+              "segment_vector_residual_px": [
+                -2.242706298828125,
+                22.112823486328125
+              ],
+              "actual_tail_to_target_direction_endpoint_px": 0.0,
+              "target_direction_endpoint_to_source_px": 24.887895208120675
+            },
+            {
+              "bone": "lower_leg_l",
+              "world_direction_error_deg": 0.0,
+              "world_bone_length": 0.46610063564275006,
+              "tail_to_next_head_units": 6.828569911354542e-08,
+              "screen_direction_error_deg": 4.540451289640719,
+              "rig_projected_length_px": 51.41626042350319,
+              "source_projected_length_px": 59.643539009732386,
+              "segment_vector_residual_px": [
+                -6.06512451171875,
+                -7.0816802978515625
+              ],
+              "actual_tail_to_target_direction_endpoint_px": 0.00013647875839232116,
+              "target_direction_endpoint_to_source_px": 18.436510065949715
+            }
+          ]
+        },
+        {
+          "source_frame": 41,
+          "side": "right",
+          "joint_residual_vectors_px": {
+            "hip": [
+              -5.423583984375,
+              7.9793548583984375
+            ],
+            "knee": [
+              -3.220611572265625,
+              29.433029174804688
+            ],
+            "ankle": [
+              2.148040771484375,
+              24.97454833984375
+            ]
+          },
+          "joint_errors_px": {
+            "hip": 9.64807592787844,
+            "knee": 29.608707535198278,
+            "ankle": 25.066754225018283
+          },
+          "segments": [
+            {
+              "bone": "upper_leg_r",
+              "world_direction_error_deg": 0.012363963105980754,
+              "world_bone_length": 0.409864506959389,
+              "tail_to_next_head_units": 1.4901161193847656e-08,
+              "screen_direction_error_deg": 4.624876471580073,
+              "rig_projected_length_px": 73.37884389241594,
+              "source_projected_length_px": 52.400902945623,
+              "segment_vector_residual_px": [
+                2.202972412109375,
+                21.45367431640625
+              ],
+              "actual_tail_to_target_direction_endpoint_px": 3.0517578125e-05,
+              "target_direction_endpoint_to_source_px": 29.608710852751027
+            },
+            {
+              "bone": "lower_leg_r",
+              "world_direction_error_deg": 0.0,
+              "world_bone_length": 0.466100665614471,
+              "tail_to_next_head_units": 6.420049048816445e-08,
+              "screen_direction_error_deg": 4.55514238570507,
+              "rig_projected_length_px": 56.01579300391037,
+              "source_projected_length_px": 61.21561148495977,
+              "segment_vector_residual_px": [
+                5.36865234375,
+                -4.4584808349609375
+              ],
+              "actual_tail_to_target_direction_endpoint_px": 0.00012582719804741396,
+              "target_direction_endpoint_to_source_px": 25.066848149386654
+            }
+          ]
+        },
+        {
+          "source_frame": 55,
+          "side": "left",
+          "joint_residual_vectors_px": {
+            "hip": [
+              -17.585296630859375,
+              -0.3054962158203125
+            ],
+            "knee": [
+              -28.332244873046875,
+              24.524093627929688
+            ],
+            "ankle": [
+              -24.742767333984375,
+              13.96124267578125
+            ]
+          },
+          "joint_errors_px": {
+            "hip": 17.587949658876735,
+            "knee": 37.47195321613261,
+            "ankle": 28.40987185982712
+          },
+          "segments": [
+            {
+              "bone": "upper_leg_l",
+              "world_direction_error_deg": 0.0,
+              "world_bone_length": 0.4098642933660103,
+              "tail_to_next_head_units": 3.332000937312528e-08,
+              "screen_direction_error_deg": 29.20822581957867,
+              "rig_projected_length_px": 52.55735247396187,
+              "source_projected_length_px": 37.25930321771371,
+              "segment_vector_residual_px": [
+                -10.7469482421875,
+                24.82958984375
+              ],
+              "actual_tail_to_target_direction_endpoint_px": 1.52587890625e-05,
+              "target_direction_endpoint_to_source_px": 37.471963803476626
+            },
+            {
+              "bone": "lower_leg_l",
+              "world_direction_error_deg": 0.013430701726847315,
+              "world_bone_length": 0.4661002619951342,
+              "tail_to_next_head_units": 6.05359673500061e-08,
+              "screen_direction_error_deg": 2.56083975098077,
+              "rig_projected_length_px": 44.067560173206104,
+              "source_projected_length_px": 55.004494153989185,
+              "segment_vector_residual_px": [
+                3.5894775390625,
+                -10.562850952148438
+              ],
+              "actual_tail_to_target_direction_endpoint_px": 9.1552734375e-05,
+              "target_direction_endpoint_to_source_px": 28.409951349718277
+            }
+          ]
+        },
+        {
+          "source_frame": 55,
+          "side": "right",
+          "joint_residual_vectors_px": {
+            "hip": [
+              17.5869140625,
+              13.653213500976562
+            ],
+            "knee": [
+              16.31488037109375,
+              34.17460632324219
+            ],
+            "ankle": [
+              17.19970703125,
+              19.55419921875
+            ]
+          },
+          "joint_errors_px": {
+            "hip": 22.26454116057235,
+            "knee": 37.86923566709217,
+            "ankle": 26.042208523008554
+          },
+          "segments": [
+            {
+              "bone": "upper_leg_r",
+              "world_direction_error_deg": 0.01656638417649926,
+              "world_bone_length": 0.409864375133903,
+              "tail_to_next_head_units": 2.9802322387695312e-08,
+              "screen_direction_error_deg": 1.3666471588848226,
+              "rig_projected_length_px": 66.6849377326706,
+              "source_projected_length_px": 46.1668137624471,
+              "segment_vector_residual_px": [
+                -1.27203369140625,
+                20.521392822265625
+              ],
+              "actual_tail_to_target_direction_endpoint_px": 3.0517578125e-05,
+              "target_direction_endpoint_to_source_px": 37.869248963900034
+            },
+            {
+              "bone": "lower_leg_r",
+              "world_direction_error_deg": 0.0,
+              "world_bone_length": 0.4661004551099216,
+              "tail_to_next_head_units": 5.4241045484546706e-08,
+              "screen_direction_error_deg": 2.2303773502812168,
+              "rig_projected_length_px": 38.74233194590813,
+              "source_projected_length_px": 53.28233927846633,
+              "segment_vector_residual_px": [
+                0.88482666015625,
+                -14.620407104492188
+              ],
+              "actual_tail_to_target_direction_endpoint_px": 0.00012582719804741396,
+              "target_direction_endpoint_to_source_px": 26.042150516338413
+            }
+          ]
+        }
+      ]
+    },
+    "scaled_own_root_yaw": {
+      "bundle_sha256": "5036c0e78ff1a2d69f6ca8d2768bf9b8fc8ca358a1ff990dd6f9a71d12ffe138",
+      "rows": [
+        {
+          "source_frame": 1,
+          "side": "left",
+          "joint_residual_vectors_px": {
+            "hip": [
+              5.7977294921875,
+              5.2823333740234375
+            ],
+            "knee": [
+              5.16070556640625,
+              15.00604248046875
+            ],
+            "ankle": [
+              2.58062744140625,
+              -10.8280029296875
+            ]
+          },
+          "joint_errors_px": {
+            "hip": 7.843259028536588,
+            "knee": 15.868654199275735,
+            "ankle": 11.131275271644585
+          },
+          "segments": [
+            {
+              "bone": "upper_leg_l",
+              "world_direction_error_deg": 0.0,
+              "world_bone_length": 0.40986529458401066,
+              "tail_to_next_head_units": 3.332000937312528e-08,
+              "screen_direction_error_deg": 2.4608426960511744,
+              "rig_projected_length_px": 56.54540669668627,
+              "source_projected_length_px": 47.05598994363199,
+              "segment_vector_residual_px": [
+                -0.63702392578125,
+                9.723709106445312
+              ],
+              "actual_tail_to_target_direction_endpoint_px": 4.57763671875e-05,
+              "target_direction_endpoint_to_source_px": 15.868697469773851
+            },
+            {
+              "bone": "lower_leg_l",
+              "world_direction_error_deg": 0.01049117057979558,
+              "world_bone_length": 0.466101405665602,
+              "tail_to_next_head_units": 6.664001874625056e-08,
+              "screen_direction_error_deg": 4.444664214023069,
+              "rig_projected_length_px": 34.66362582832913,
+              "source_projected_length_px": 60.382596566723166,
+              "segment_vector_residual_px": [
+                -2.580078125,
+                -25.83404541015625
+              ],
+              "actual_tail_to_target_direction_endpoint_px": 0.00013647875839232116,
+              "target_direction_endpoint_to_source_px": 11.131170511791895
+            }
+          ]
+        },
+        {
+          "source_frame": 1,
+          "side": "right",
+          "joint_residual_vectors_px": {
+            "hip": [
+              -7.366729736328125,
+              4.615264892578125
+            ],
+            "knee": [
+              -1.03643798828125,
+              9.505172729492188
+            ],
+            "ankle": [
+              -0.387664794921875,
+              -29.3546142578125
+            ]
+          },
+          "joint_errors_px": {
+            "hip": 8.693064931263882,
+            "knee": 9.561512229117275,
+            "ankle": 29.35717362702497
+          },
+          "segments": [
+            {
+              "bone": "upper_leg_r",
+              "world_direction_error_deg": 0.012114160322359619,
+              "world_bone_length": 0.4098653062293688,
+              "tail_to_next_head_units": 2.9802322387695312e-08,
+              "screen_direction_error_deg": 8.469192595361838,
+              "rig_projected_length_px": 53.167178654771575,
+              "source_projected_length_px": 50.95340679784464,
+              "segment_vector_residual_px": [
+                6.330291748046875,
+                4.8899078369140625
+              ],
+              "actual_tail_to_target_direction_endpoint_px": 3.411968959808029e-05,
+              "target_direction_endpoint_to_source_px": 9.561530693642878
+            },
+            {
+              "bone": "lower_leg_r",
+              "world_direction_error_deg": 0.0,
+              "world_bone_length": 0.466101672038764,
+              "tail_to_next_head_units": 8.560065398421926e-08,
+              "screen_direction_error_deg": 32.19610501050438,
+              "rig_projected_length_px": 14.22388219748977,
+              "source_projected_length_px": 50.155778448912606,
+              "segment_vector_residual_px": [
+                0.648773193359375,
+                -38.85978698730469
+              ],
+              "actual_tail_to_target_direction_endpoint_px": 0.0001556097263669673,
+              "target_direction_endpoint_to_source_px": 29.35705159907863
+            }
+          ]
+        },
+        {
+          "source_frame": 17,
+          "side": "left",
+          "joint_residual_vectors_px": {
+            "hip": [
+              2.423675537109375,
+              6.1259002685546875
+            ],
+            "knee": [
+              3.283935546875,
+              16.047225952148438
+            ],
+            "ankle": [
+              0.308197021484375,
+              -12.686553955078125
+            ]
+          },
+          "joint_errors_px": {
+            "hip": 6.587932641952524,
+            "knee": 16.379795216827798,
+            "ankle": 12.690297064211114
+          },
+          "segments": [
+            {
+              "bone": "upper_leg_l",
+              "world_direction_error_deg": 0.028717949579518027,
+              "world_bone_length": 0.40986519307765884,
+              "tail_to_next_head_units": 2.9802322387695312e-08,
+              "screen_direction_error_deg": 0.02339371614504936,
+              "rig_projected_length_px": 58.335084358455795,
+              "source_projected_length_px": 48.37656459200305,
+              "segment_vector_residual_px": [
+                0.860260009765625,
+                9.92132568359375
+              ],
+              "actual_tail_to_target_direction_endpoint_px": 7.62939453125e-05,
+              "target_direction_endpoint_to_source_px": 16.379852158434694
+            },
+            {
+              "bone": "lower_leg_l",
+              "world_direction_error_deg": 0.014576897531545938,
+              "world_bone_length": 0.466101540725431,
+              "tail_to_next_head_units": 6.991745672793485e-08,
+              "screen_direction_error_deg": 1.1454440010149465,
+              "rig_projected_length_px": 29.502917630372234,
+              "source_projected_length_px": 58.378459362311794,
+              "segment_vector_residual_px": [
+                -2.975738525390625,
+                -28.733779907226562
+              ],
+              "actual_tail_to_target_direction_endpoint_px": 0.00019301011109426145,
+              "target_direction_endpoint_to_source_px": 12.690112214999507
+            }
+          ]
+        },
+        {
+          "source_frame": 17,
+          "side": "right",
+          "joint_residual_vectors_px": {
+            "hip": [
+              -9.70245361328125,
+              4.308807373046875
+            ],
+            "knee": [
+              -3.39752197265625,
+              12.334213256835938
+            ],
+            "ankle": [
+              -1.66094970703125,
+              -20.2979736328125
+            ]
+          },
+          "joint_errors_px": {
+            "hip": 10.616186907441643,
+            "knee": 12.793590902094925,
+            "ankle": 20.365816334294937
+          },
+          "segments": [
+            {
+              "bone": "upper_leg_r",
+              "world_direction_error_deg": 0.0,
+              "world_bone_length": 0.4098654465417062,
+              "tail_to_next_head_units": 2.9802322387695312e-08,
+              "screen_direction_error_deg": 10.303104228132453,
+              "rig_projected_length_px": 52.912413867255815,
+              "source_projected_length_px": 48.238424701432585,
+              "segment_vector_residual_px": [
+                6.304931640625,
+                8.025405883789062
+              ],
+              "actual_tail_to_target_direction_endpoint_px": 1.52587890625e-05,
+              "target_direction_endpoint_to_source_px": 12.793620719312385
+            },
+            {
+              "bone": "lower_leg_r",
+              "world_direction_error_deg": 0.019164142866419792,
+              "world_bone_length": 0.4661016361508275,
+              "tail_to_next_head_units": 2.9802322387695312e-08,
+              "screen_direction_error_deg": 8.39433346137888,
+              "rig_projected_length_px": 21.237527799896853,
+              "source_projected_length_px": 53.54096149865854,
+              "segment_vector_residual_px": [
+                1.736572265625,
+                -32.63218688964844
+              ],
+              "actual_tail_to_target_direction_endpoint_px": 0.00012582719804741396,
+              "target_direction_endpoint_to_source_px": 20.365697445520357
+            }
+          ]
+        },
+        {
+          "source_frame": 23,
+          "side": "left",
+          "joint_residual_vectors_px": {
+            "hip": [
+              0.22406005859375,
+              6.3014678955078125
+            ],
+            "knee": [
+              1.3404541015625,
+              10.277420043945312
+            ],
+            "ankle": [
+              -1.69146728515625,
+              -25.316162109375
+            ]
+          },
+          "joint_errors_px": {
+            "hip": 6.305449944580246,
+            "knee": 10.364467347357126,
+            "ankle": 25.3726061457572
+          },
+          "segments": [
+            {
+              "bone": "upper_leg_l",
+              "world_direction_error_deg": 0.0,
+              "world_bone_length": 0.40986537508076654,
+              "tail_to_next_head_units": 4.2146848510894035e-08,
+              "screen_direction_error_deg": 0.9669144937140112,
+              "rig_projected_length_px": 52.25507364781995,
+              "source_projected_length_px": 48.21319366600915,
+              "segment_vector_residual_px": [
+                1.11639404296875,
+                3.9759521484375
+              ],
+              "actual_tail_to_target_direction_endpoint_px": 4.315837287515549e-05,
+              "target_direction_endpoint_to_source_px": 10.364501472929428
+            },
+            {
+              "bone": "lower_leg_l",
+              "world_direction_error_deg": 0.0,
+              "world_bone_length": 0.466101653788933,
+              "tail_to_next_head_units": 7.15604898046648e-08,
+              "screen_direction_error_deg": 10.89371892288708,
+              "rig_projected_length_px": 17.931282693880313,
+              "source_projected_length_px": 53.16952878498928,
+              "segment_vector_residual_px": [
+                -3.03192138671875,
+                -35.59358215332031
+              ],
+              "actual_tail_to_target_direction_endpoint_px": 0.00013647875839232116,
+              "target_direction_endpoint_to_source_px": 25.372487531029908
+            }
+          ]
+        },
+        {
+          "source_frame": 23,
+          "side": "right",
+          "joint_residual_vectors_px": {
+            "hip": [
+              -10.82476806640625,
+              2.8398284912109375
+            ],
+            "knee": [
+              7.274871826171875,
+              16.194854736328125
+            ],
+            "ankle": [
+              1.552978515625,
+              -24.2279052734375
+            ]
+          },
+          "joint_errors_px": {
+            "hip": 11.191078210520068,
+            "knee": 17.753790437259777,
+            "ankle": 24.277626248324957
+          },
+          "segments": [
+            {
+              "bone": "upper_leg_r",
+              "world_direction_error_deg": 0.010919556546551133,
+              "world_bone_length": 0.40986541856445247,
+              "tail_to_next_head_units": 3.332000937312528e-08,
+              "screen_direction_error_deg": 39.954667646479805,
+              "rig_projected_length_px": 31.88086840893473,
+              "source_projected_length_px": 33.75490280144154,
+              "segment_vector_residual_px": [
+                18.099639892578125,
+                13.355026245117188
+              ],
+              "actual_tail_to_target_direction_endpoint_px": 5.501634636633284e-05,
+              "target_direction_endpoint_to_source_px": 17.753761752540413
+            },
+            {
+              "bone": "lower_leg_r",
+              "world_direction_error_deg": 0.0,
+              "world_bone_length": 0.4661014346382177,
+              "tail_to_next_head_units": 8.632712234747758e-08,
+              "screen_direction_error_deg": 36.535964065328635,
+              "rig_projected_length_px": 20.34842732419071,
+              "source_projected_length_px": 55.33668753021278,
+              "segment_vector_residual_px": [
+                -5.721893310546875,
+                -40.422760009765625
+              ],
+              "actual_tail_to_target_direction_endpoint_px": 8.217109385886389e-05,
+              "target_direction_endpoint_to_source_px": 24.27756396168448
+            }
+          ]
+        },
+        {
+          "source_frame": 29,
+          "side": "left",
+          "joint_residual_vectors_px": {
+            "hip": [
+              2.575531005859375,
+              7.7007293701171875
+            ],
+            "knee": [
+              4.134796142578125,
+              21.991928100585938
+            ],
+            "ankle": [
+              1.155670166015625,
+              -3.592803955078125
+            ]
+          },
+          "joint_errors_px": {
+            "hip": 8.120011779137698,
+            "knee": 22.37725264648542,
+            "ankle": 3.7740977560653275
+          },
+          "segments": [
+            {
+              "bone": "upper_leg_l",
+              "world_direction_error_deg": 0.010288867847157565,
+              "world_bone_length": 0.4098649719755061,
+              "tail_to_next_head_units": 1.4901161193847656e-08,
+              "screen_direction_error_deg": 0.8224745767322211,
+              "rig_projected_length_px": 62.36302627430113,
+              "source_projected_length_px": 48.00849129652431,
+              "segment_vector_residual_px": [
+                1.55926513671875,
+                14.29119873046875
+              ],
+              "actual_tail_to_target_direction_endpoint_px": 8.631674575031098e-05,
+              "target_direction_endpoint_to_source_px": 22.37732394632793
+            },
+            {
+              "bone": "lower_leg_l",
+              "world_direction_error_deg": 0.0,
+              "world_bone_length": 0.4661014042150686,
+              "tail_to_next_head_units": 6.828569911354542e-08,
+              "screen_direction_error_deg": 5.51511955364872,
+              "rig_projected_length_px": 29.89060025730096,
+              "source_projected_length_px": 55.34912676388638,
+              "segment_vector_residual_px": [
+                -2.9791259765625,
+                -25.584732055664062
+              ],
+              "actual_tail_to_target_direction_endpoint_px": 0.00022006538546533137,
+              "target_direction_endpoint_to_source_px": 3.773925449580098
+            }
+          ]
+        },
+        {
+          "source_frame": 29,
+          "side": "right",
+          "joint_residual_vectors_px": {
+            "hip": [
+              -9.56842041015625,
+              2.5544586181640625
+            ],
+            "knee": [
+              -1.62274169921875,
+              13.016998291015625
+            ],
+            "ankle": [
+              -1.16845703125,
+              2.145111083984375
+            ]
+          },
+          "joint_errors_px": {
+            "hip": 9.903531251990639,
+            "knee": 13.117756515984338,
+            "ankle": 2.4427020486996187
+          },
+          "segments": [
+            {
+              "bone": "upper_leg_r",
+              "world_direction_error_deg": 0.02211732967542711,
+              "world_bone_length": 0.4098653920073621,
+              "tail_to_next_head_units": 3.725290298461914e-08,
+              "screen_direction_error_deg": 15.67955291465522,
+              "rig_projected_length_px": 46.73356494565011,
+              "source_projected_length_px": 41.377912620527766,
+              "segment_vector_residual_px": [
+                7.9456787109375,
+                10.462539672851562
+              ],
+              "actual_tail_to_target_direction_endpoint_px": 3.411968959808029e-05,
+              "target_direction_endpoint_to_source_px": 13.117767866426622
+            },
+            {
+              "bone": "lower_leg_r",
+              "world_direction_error_deg": 0.0,
+              "world_bone_length": 0.4661010264613513,
+              "tail_to_next_head_units": 5.5755039852469285e-08,
+              "screen_direction_error_deg": 0.409578493943882,
+              "rig_projected_length_px": 46.42810133937077,
+              "source_projected_length_px": 57.30321215269138,
+              "segment_vector_residual_px": [
+                0.45428466796875,
+                -10.87188720703125
+              ],
+              "actual_tail_to_target_direction_endpoint_px": 0.00012947511862546645,
+              "target_direction_endpoint_to_source_px": 2.4428262715990297
+            }
+          ]
+        },
+        {
+          "source_frame": 41,
+          "side": "left",
+          "joint_residual_vectors_px": {
+            "hip": [
+              3.425201416015625,
+              2.7469635009765625
+            ],
+            "knee": [
+              6.63714599609375,
+              24.453689575195312
+            ],
+            "ankle": [
+              4.61761474609375,
+              0.509765625
+            ]
+          },
+          "joint_errors_px": {
+            "hip": 4.3906506846481,
+            "knee": 25.33840204862346,
+            "ankle": 4.645667627683795
+          },
+          "segments": [
+            {
+              "bone": "upper_leg_l",
+              "world_direction_error_deg": 0.0,
+              "world_bone_length": 0.4098645995543563,
+              "tail_to_next_head_units": 7.450580596923828e-09,
+              "screen_direction_error_deg": 1.0600791361641935,
+              "rig_projected_length_px": 72.31642967103818,
+              "source_projected_length_px": 50.401786781609324,
+              "segment_vector_residual_px": [
+                3.211944580078125,
+                21.70672607421875
+              ],
+              "actual_tail_to_target_direction_endpoint_px": 4.315837287515549e-05,
+              "target_direction_endpoint_to_source_px": 25.338424104193702
+            },
+            {
+              "bone": "lower_leg_l",
+              "world_direction_error_deg": 0.0,
+              "world_bone_length": 0.4661010500016209,
+              "tail_to_next_head_units": 4.2146848510894035e-08,
+              "screen_direction_error_deg": 6.53522047651125,
+              "rig_projected_length_px": 36.20581371348079,
+              "source_projected_length_px": 59.643539009732386,
+              "segment_vector_residual_px": [
+                -2.01953125,
+                -23.943923950195312
+              ],
+              "actual_tail_to_target_direction_endpoint_px": 0.00022006538546533137,
+              "target_direction_endpoint_to_source_px": 4.645809042728826
+            }
+          ]
+        },
+        {
+          "source_frame": 41,
+          "side": "right",
+          "joint_residual_vectors_px": {
+            "hip": [
+              -5.423583984375,
+              7.9793548583984375
+            ],
+            "knee": [
+              -7.68243408203125,
+              27.725784301757812
+            ],
+            "ankle": [
+              -5.66748046875,
+              8.315673828125
+            ]
+          },
+          "joint_errors_px": {
+            "hip": 9.64807592787844,
+            "knee": 28.770452041548616,
+            "ankle": 10.063337587362197
+          },
+          "segments": [
+            {
+              "bone": "upper_leg_r",
+              "world_direction_error_deg": 0.03261837529770597,
+              "world_bone_length": 0.4098645969980538,
+              "tail_to_next_head_units": 0.0,
+              "screen_direction_error_deg": 0.9719166735615179,
+              "rig_projected_length_px": 72.24870272729032,
+              "source_projected_length_px": 52.400902945623,
+              "segment_vector_residual_px": [
+                -2.25885009765625,
+                19.746429443359375
+              ],
+              "actual_tail_to_target_direction_endpoint_px": 6.103515625e-05,
+              "target_direction_endpoint_to_source_px": 28.770468350212447
+            },
+            {
+              "bone": "lower_leg_r",
+              "world_direction_error_deg": 0.0,
+              "world_bone_length": 0.4661011933662077,
+              "tail_to_next_head_units": 8.429369702178807e-08,
+              "screen_direction_error_deg": 2.2205745629106066,
+              "rig_projected_length_px": 41.799907253472774,
+              "source_projected_length_px": 61.21561148495977,
+              "segment_vector_residual_px": [
+                2.01495361328125,
+                -19.410110473632812
+              ],
+              "actual_tail_to_target_direction_endpoint_px": 0.00017794652999405825,
+              "target_direction_endpoint_to_source_px": 10.063412263637987
+            }
+          ]
+        },
+        {
+          "source_frame": 55,
+          "side": "left",
+          "joint_residual_vectors_px": {
+            "hip": [
+              -17.585296630859375,
+              -0.3054962158203125
+            ],
+            "knee": [
+              -27.356231689453125,
+              14.71234130859375
+            ],
+            "ankle": [
+              -25.5665283203125,
+              -15.550689697265625
+            ]
+          },
+          "joint_errors_px": {
+            "hip": 17.587949658876735,
+            "knee": 31.06149370186841,
+            "ankle": 29.924427212465414
+          },
+          "segments": [
+            {
+              "bone": "upper_leg_l",
+              "world_direction_error_deg": 0.0,
+              "world_bone_length": 0.40986428086852195,
+              "tail_to_next_head_units": 3.0719530773294423e-08,
+              "screen_direction_error_deg": 23.84871934040139,
+              "rig_projected_length_px": 43.776340075884065,
+              "source_projected_length_px": 37.25930321771371,
+              "segment_vector_residual_px": [
+                -9.77093505859375,
+                15.017837524414062
+              ],
+              "actual_tail_to_target_direction_endpoint_px": 1.52587890625e-05,
+              "target_direction_endpoint_to_source_px": 31.061500824913367
+            },
+            {
+              "bone": "lower_leg_l",
+              "world_direction_error_deg": 0.0,
+              "world_bone_length": 0.46610038437974727,
+              "tail_to_next_head_units": 8.462232866585662e-08,
+              "screen_direction_error_deg": 6.340826697389177,
+              "rig_projected_length_px": 24.96698969626511,
+              "source_projected_length_px": 55.004494153989185,
+              "segment_vector_residual_px": [
+                1.789703369140625,
+                -30.263031005859375
+              ],
+              "actual_tail_to_target_direction_endpoint_px": 9.650505554713072e-05,
+              "target_direction_endpoint_to_source_px": 29.9244889116104
+            }
+          ]
+        },
+        {
+          "source_frame": 55,
+          "side": "right",
+          "joint_residual_vectors_px": {
+            "hip": [
+              17.5869140625,
+              13.653213500976562
+            ],
+            "knee": [
+              16.0330810546875,
+              22.905258178710938
+            ],
+            "ankle": [
+              17.6546630859375,
+              -12.327239990234375
+            ]
+          },
+          "joint_errors_px": {
+            "hip": 22.26454116057235,
+            "knee": 27.95908745451222,
+            "ankle": 21.532486612937394
+          },
+          "segments": [
+            {
+              "bone": "upper_leg_r",
+              "world_direction_error_deg": 0.0,
+              "world_bone_length": 0.40986442457574634,
+              "tail_to_next_head_units": 2.9802322387695312e-08,
+              "screen_direction_error_deg": 1.7551008148219662,
+              "rig_projected_length_px": 55.41959752892853,
+              "source_projected_length_px": 46.1668137624471,
+              "segment_vector_residual_px": [
+                -1.5538330078125,
+                9.252044677734375
+              ],
+              "actual_tail_to_target_direction_endpoint_px": 6.823937919616058e-05,
+              "target_direction_endpoint_to_source_px": 27.959146395902362
+            },
+            {
+              "bone": "lower_leg_r",
+              "world_direction_error_deg": 0.0,
+              "world_bone_length": 0.46610056266472366,
+              "tail_to_next_head_units": 1.3328003749250113e-07,
+              "screen_direction_error_deg": 9.762553970848222,
+              "rig_projected_length_px": 18.4177903167722,
+              "source_projected_length_px": 53.28233927846633,
+              "segment_vector_residual_px": [
+                1.62158203125,
+                -35.23249816894531
+              ],
+              "actual_tail_to_target_direction_endpoint_px": 0.000152587890625,
+              "target_direction_endpoint_to_source_px": 21.532361183228375
+            }
+          ]
+        }
+      ]
+    }
+  }
+}

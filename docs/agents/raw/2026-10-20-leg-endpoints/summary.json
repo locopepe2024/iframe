@@ -1,0 +1,122 @@
+{
+  "raw_root_yaw": {
+    "max_world_direction_error_deg": 9.898152908178156,
+    "max_tail_to_next_head_units": 7.82310962677002e-08,
+    "selected": {
+      "1": {
+        "upper_six_mean_px": 11.625743574083076,
+        "leg_six_mean_px": 13.89461658618182
+      },
+      "17": {
+        "upper_six_mean_px": 15.761823777510523,
+        "leg_six_mean_px": 15.719719287061222
+      },
+      "23": {
+        "upper_six_mean_px": 13.041701193359444,
+        "leg_six_mean_px": 11.467880337164535
+      },
+      "29": {
+        "upper_six_mean_px": 16.3922267760498,
+        "leg_six_mean_px": 20.52983190458593
+      },
+      "41": {
+        "upper_six_mean_px": 11.600548251329124,
+        "leg_six_mean_px": 18.688684981648223
+      },
+      "55": {
+        "upper_six_mean_px": 34.819651128555094,
+        "leg_six_mean_px": 28.181039595746757
+      }
+    }
+  },
+  "scaled_root_yaw": {
+    "max_world_direction_error_deg": 13.12877367469163,
+    "max_tail_to_next_head_units": 8.632712234747758e-08,
+    "selected": {
+      "1": {
+        "upper_six_mean_px": 15.26311578545868,
+        "leg_six_mean_px": 13.80719130588617
+      },
+      "17": {
+        "upper_six_mean_px": 20.616311403235123,
+        "leg_six_mean_px": 13.298128581602192
+      },
+      "23": {
+        "upper_six_mean_px": 17.15029434451229,
+        "leg_six_mean_px": 15.942115605800696
+      },
+      "29": {
+        "upper_six_mean_px": 14.54893329849923,
+        "leg_six_mean_px": 10.598662530015883
+      },
+      "41": {
+        "upper_six_mean_px": 14.921029126618377,
+        "leg_six_mean_px": 14.085830362036864
+      },
+      "55": {
+        "upper_six_mean_px": 34.858299990529666,
+        "leg_six_mean_px": 25.29135595652615
+      }
+    }
+  },
+  "raw_own_root_yaw": {
+    "max_world_direction_error_deg": 0.01948366511941204,
+    "max_tail_to_next_head_units": 6.999185021242475e-08,
+    "selected": {
+      "1": {
+        "upper_six_mean_px": 11.294073608659582,
+        "leg_six_mean_px": 13.77519590345095
+      },
+      "17": {
+        "upper_six_mean_px": 18.817603054487662,
+        "leg_six_mean_px": 15.699977135800316
+      },
+      "23": {
+        "upper_six_mean_px": 15.241029453376619,
+        "leg_six_mean_px": 11.388525813199733
+      },
+      "29": {
+        "upper_six_mean_px": 23.44456152396587,
+        "leg_six_mean_px": 20.518071178046046
+      },
+      "41": {
+        "upper_six_mean_px": 15.121232445658281,
+        "leg_six_mean_px": 18.673080642859315
+      },
+      "55": {
+        "upper_six_mean_px": 20.270419074502758,
+        "leg_six_mean_px": 28.274293814024045
+      }
+    }
+  },
+  "scaled_own_root_yaw": {
+    "max_world_direction_error_deg": 0.03261837529770597,
+    "max_tail_to_next_head_units": 1.3328003749250113e-07,
+    "selected": {
+      "1": {
+        "upper_six_mean_px": 18.09673069491019,
+        "leg_six_mean_px": 13.742491336484433
+      },
+      "17": {
+        "upper_six_mean_px": 27.118976327998464,
+        "leg_six_mean_px": 13.238942147722355
+      },
+      "23": {
+        "upper_six_mean_px": 18.151789698926454,
+        "leg_six_mean_px": 15.877502696799704
+      },
+      "29": {
+        "upper_six_mean_px": 21.219176198921534,
+        "leg_six_mean_px": 9.955899828726018
+      },
+      "41": {
+        "upper_six_mean_px": 20.719416952612963,
+        "leg_six_mean_px": 13.80942748216062
+      },
+      "55": {
+        "upper_six_mean_px": 21.204152006476875,
+        "leg_six_mean_px": 25.05499149980524
+      }
+    }
+  }
+}
