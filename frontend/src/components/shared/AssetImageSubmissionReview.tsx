@@ -4,6 +4,7 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import { api, type AssetImageReviewProjection, type AssetImageReviewRequest, type AssetReferenceIndexEntry } from "@/lib/api";
 import { extractErrorDetail } from "@/lib/utils";
 import { AssetIndexPreview } from "@/components/shared/AssetIndexPreview";
+import { describeSceneDirection } from "@/lib/sceneDirection";
 
 type Props = {
     projectId: string;
@@ -81,7 +82,9 @@ export default function AssetImageSubmissionReview({ projectId, request, referen
                             镜头 · {currentReview.scene_tool.preset} · 水平 {currentReview.scene_tool.yaw}° · 俯仰 {currentReview.scene_tool.pitch}° · 景别档位 {currentReview.scene_tool.zoom}
                             {currentReview.scene_tool.focus ? ` · 对焦 x=${currentReview.scene_tool.focus_x}%, y=${currentReview.scene_tool.focus_y}%, 范围 ${currentReview.scene_tool.focus_radius}%` : ""}
                         </p> : <p className="mt-1">
-                            光影 · {currentReview.scene_tool.light_side} 主光 · 亮度 {currentReview.scene_tool.brightness}% · 颜色 {currentReview.scene_tool.color}
+                            光影 · {currentReview.scene_tool.azimuth != null && currentReview.scene_tool.elevation != null
+                                ? `${describeSceneDirection(currentReview.scene_tool.azimuth, currentReview.scene_tool.elevation)} · 方位 ${currentReview.scene_tool.azimuth}° / 仰角 ${currentReview.scene_tool.elevation}°`
+                                : currentReview.scene_tool.light_side} 主光 · 亮度 {currentReview.scene_tool.brightness}% · 颜色 {currentReview.scene_tool.color}
                         </p>}
                         <p className="mt-1 text-text-muted">来源图为下方第一张参考图；光影参考图如有则为第二张。</p>
                     </div>}

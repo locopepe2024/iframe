@@ -1264,7 +1264,7 @@ class ComicGenPipeline(StudioOwnerMixin):
                 raise InvalidAssetReference("scene tool requires its source scene variant first and at most one lighting reference")
             if prompt != scene_tool_prompt(parsed, len(normalized_references) == 2):
                 raise InvalidAssetReference("scene tool prompt must match the reviewed compiled prompt")
-            normalized_scene_tool = parsed.model_dump()
+            normalized_scene_tool = parsed.model_dump(exclude_none=True)
             expected_mode = "scene_lighting" if parsed.kind == "lighting" else "scene_camera"
             edit_mode = edit_mode or expected_mode
             if edit_mode != expected_mode:

@@ -6,8 +6,35 @@ const apiMocks = vi.hoisted(() => ({
     uploadLibraryImage: vi.fn(), createLibraryAsset: vi.fn(),
 }));
 vi.mock("@/lib/api", () => ({ API_URL: "", api: apiMocks }));
+vi.mock("next/dynamic", () => ({ default: () => ({ onChange }: { onChange: (a: number, e: number) => void }) =>
+    <button type="button" onClick={() => onChange(45, 30)}>选择三维方向</button> }));
 
 const sources = [{ key: "source", label: "场景图片 · 1", url: "/source.png", variantId: "source" }];
+
+it("compiles picked light coordinates and resets to a cardinal direction explicitly", () => {
+    const onGenerate = vi.fn();
+    render(<SceneImageTools kind="lighting" sources={sources} busy={false} onGenerate={onGenerate} />);
+    fireEvent.click(screen.getByRole("button", { name: "选择三维方向" }));
+    expect(screen.getByLabelText("光源方位角")).toHaveValue("45");
+    expect(screen.getByLabelText("光源仰角")).toHaveValue("30");
+    fireEvent.click(screen.getByRole("button", { name: "查看并确认提示词" }));
+    fireEvent.click(screen.getByRole("button", { name: "确认并生成" }));
+    expect(onGenerate).toHaveBeenLastCalledWith(sources[0], expect.objectContaining({ azimuth: 45, elevation: 30 }), expect.stringContaining("右前方上方"), undefined);
+    fireEvent.click(screen.getByRole("button", { name: "左侧" }));
+    fireEvent.click(screen.getByRole("button", { name: "确认并生成" }));
+    fireEvent.click(screen.getByRole("button", { name: "确认并生成" }));
+    expect(onGenerate.mock.lastCall?.[1]).not.toHaveProperty("azimuth");
+    expect(onGenerate.mock.lastCall?.[2]).toContain("主光从左侧进入");
+});
+
+it("maps picked camera elevation to existing pitch and keeps focusing independent", () => {
+    const onGenerate = vi.fn();
+    render(<SceneImageTools kind="camera" sources={sources} busy={false} onGenerate={onGenerate} />);
+    fireEvent.click(screen.getByRole("button", { name: "选择三维方向" }));
+    fireEvent.click(screen.getByRole("button", { name: "查看并确认提示词" }));
+    fireEvent.click(screen.getByRole("button", { name: "确认并生成" }));
+    expect(onGenerate).toHaveBeenCalledWith(sources[0], expect.objectContaining({ yaw: 45, pitch: -30, focus: false, preset: "custom" }), expect.stringContaining("水平环绕 45°；垂直俯仰 -30°"), undefined);
+});
 
 it("requires a saved scene image and disables submission while busy", () => {
     const onGenerate = vi.fn();

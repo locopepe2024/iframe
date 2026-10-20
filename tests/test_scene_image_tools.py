@@ -117,6 +117,32 @@ def test_lighting_prompt_uses_reference_only_as_light_guide():
     assert "第二张图片仅供参考灯位" in prompt
 
 
+def test_spherical_light_direction_is_preserved_through_review_and_task(tmp_path, monkeypatch):
+    pipeline, _scene = make_pipeline(tmp_path, monkeypatch)
+    tool = {"kind": "lighting", "azimuth": 45, "elevation": 30}
+    prompt = scene_tool_prompt(parse_scene_tool(tool))
+    assert "主光从右前方上方进入" in prompt
+    assert "主光方位角 45°，仰角 30°" in prompt
+    reference = {"asset_type": "scene", "asset_id": "scene", "variant_id": "source"}
+    review = pipeline.preview_asset_image_submission("project", "scene", "scene", prompt=prompt,
+        image_generation_mode="reference", references=[reference], scene_tool=tool)
+    _, task_id = pipeline.create_asset_generation_task("project", "scene", "scene", prompt=prompt,
+        image_generation_mode="reference", references=[reference], scene_tool=tool,
+        expected_review_fingerprint=review["fingerprint"], preserve_prompt=True)
+    params = pipeline.asset_generation_tasks[task_id]["params"]["scene_tool"]
+    assert params["azimuth"] == 45 and params["elevation"] == 30
+    with pytest.raises(InvalidAssetReference, match="reviewed compiled prompt"):
+        pipeline.create_asset_generation_task("project", "scene", "scene", prompt=prompt,
+            image_generation_mode="reference", references=[reference], scene_tool={**tool, "azimuth": -45})
+
+
+@pytest.mark.parametrize("values", [{"azimuth": 181, "elevation": 0}, {"azimuth": 0, "elevation": 91},
+    {"azimuth": 30}, {"elevation": 30}, {"azimuth": 1.5, "elevation": 0}])
+def test_spherical_light_direction_rejects_invalid_or_incomplete_angles(values):
+    with pytest.raises(ValueError):
+        parse_scene_tool({"kind": "lighting", **values})
+
+
 def test_generated_tool_candidate_keeps_source_and_does_not_replace_selection(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     generator = AssetGenerator({"output_dir": str(tmp_path / "output")})

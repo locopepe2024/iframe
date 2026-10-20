@@ -2,7 +2,7 @@
 
 from typing import Literal, Optional
 
-from pydantic import BaseModel, ConfigDict, Field, ValidationError
+from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
 
 
 class SceneLightingParams(BaseModel):
@@ -13,9 +13,17 @@ class SceneLightingParams(BaseModel):
     brightness: int = Field(50, ge=0, le=100)
     color: str = Field("#f3f4f6", pattern=r"^#[0-9a-fA-F]{6}$")
     light_side: Literal["left", "top", "right", "front", "bottom", "back"] = "front"
+    azimuth: Optional[int] = Field(None, ge=-180, le=180, strict=True)
+    elevation: Optional[int] = Field(None, ge=-90, le=90, strict=True)
     rim_light: bool = False
     preset: Optional[Literal["nolan_cool_gray", "golden_hour", "mystic_shadow", "cyberpunk", "blue_rim", "expired_film", "cinematic_portrait", "studio_softbox"]] = None
     extra: str = Field("", max_length=2000)
+
+    @model_validator(mode="after")
+    def complete_direction(self):
+        if (self.azimuth is None) != (self.elevation is None):
+            raise ValueError("light direction requires both azimuth and elevation")
+        return self
 
 
 class SceneCameraParams(BaseModel):
@@ -50,6 +58,18 @@ CAMERA_PRESETS = {"custom": "自定义", "fisheye": "鱼眼视角", "tilted": "�
 DISTANCES = ["远景", "中远景", "中景", "近景", "特写"]
 
 
+def describe_scene_direction(azimuth: int, elevation: int) -> str:
+    if elevation >= 60:
+        return "顶部"
+    if elevation <= -60:
+        return "底部"
+    a = azimuth % 360
+    side = ("前方" if a < 22.5 or a >= 337.5 else "右前方" if a < 67.5
+            else "右侧" if a < 112.5 else "右后方" if a < 157.5 else "后方" if a < 202.5
+            else "左后方" if a < 247.5 else "左侧" if a < 292.5 else "左前方")
+    return side + ("上方" if elevation >= 20 else "下方" if elevation <= -20 else "")
+
+
 def parse_scene_tool(value: object) -> SceneToolParams:
     if not isinstance(value, dict):
         raise ValueError("scene_tool must be an object")
@@ -65,10 +85,12 @@ def parse_scene_tool(value: object) -> SceneToolParams:
 
 def scene_tool_prompt(tool: SceneToolParams, has_lighting_reference: bool = False) -> str:
     if isinstance(tool, SceneLightingParams):
+        side = describe_scene_direction(tool.azimuth, tool.elevation) if tool.azimuth is not None else LIGHT_SIDES[tool.light_side]
         brightness_guide = "受光区域明显，但高光不要过曝。" if tool.brightness >= 75 else "保持自然明暗层次和稳定反差。" if tool.brightness >= 45 else "阴影占比更高，整体照度克制。"
         return "\n".join(filter(None, [
             "任务目标：仅重塑来源场景图片的打光与光影氛围。保持主体、材质、结构、构图、物体位置和镜头语言连续；不要新增物体。",
-            f"观察模式：{'正面' if tool.view_mode == 'front' else '透视'}。主光从{LIGHT_SIDES[tool.light_side]}进入，受光方向必须与阴影方向一致。",
+            f"观察模式：{'正面' if tool.view_mode == 'front' else '透视'}。主光从{side}进入，受光方向必须与阴影方向一致。",
+            f"主光方位角 {tool.azimuth}°，仰角 {tool.elevation}°；坐标系 Z 向上，方位 0° 为前方、90° 为右侧。" if tool.azimuth is not None else "",
             f"主光颜色 {tool.color}，亮度 {tool.brightness}%。{brightness_guide}",
             "增加克制的轮廓光。" if tool.rim_light else "不额外增加明显轮廓光。",
             (LIGHT_PRESETS[tool.preset] if tool.preset else "") if tool.intelligent else "仅根据结构化灯位、光色和亮度重塑光照。",
