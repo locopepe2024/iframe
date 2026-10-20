@@ -1,0 +1,2890 @@
+{
+  "schema": "recreation2-projected-scale.v1",
+  "sha256": {
+    "input_report": "14bcbd9c41afe4e7c3d2c129adcd69c866d564e6d1cc93a3fab0378c585129c8",
+    "track": "b353617bc7dfc3d1cb63dc93d2e0b889a90fe58c29668cef5199d1e5526cbf2f",
+    "probe": "2647ba2f974792d321915bc78ab8133d804015e2179a53038ad7df10a9ac2cef"
+  },
+  "source_revision": "e556a4991e1e879445cc1ca3f3ce050af1e628d149a6119c28281c36acfaf153",
+  "input_experiment_sha256": {
+    "track": "0fed823bf39bd206ebeafec922a29394ee87a942b1bcc0395610a603d598550a",
+    "rig": "95eeb19c8abce2325479804b3dda429ebddfa6e8d07a2688541cc990fb676855",
+    "anchors": "ea9df0be27780d21061d198d7d2e90895c5d5b61c1a856af3a2ff4f85c2e89e3",
+    "baseline": "d4c784cc9e6f84e23f9809296fc4efe338907cff414b49ca90fc42e1f89a7f43",
+    "patches": "ebf857d9229cad61d704da0ae053303410e5f767383c838e539955ac7af7d17b"
+  },
+  "limits": [
+    "2D length-only fit; no new poses",
+    "Per-frame scale is an optimistic diagnostic, not recovered camera or physical bone scale",
+    "Midpoint proxy is average of projected endpoints"
+  ],
+  "summary": {
+    "groups": {
+      "shoulder_width": {
+        "ratio": {
+          "count": 28,
+          "min": 0.622753320404586,
+          "median": 1.1375856759888885,
+          "p95": 1.3160040918399019,
+          "max": 1.3402544430294125
+        },
+        "signed_error_px": {
+          "count": 28,
+          "min": -14.290967601649555,
+          "median": 6.431956541589734,
+          "p95": 13.961720815870999,
+          "max": 15.046034504145041
+        },
+        "required_scale": {
+          "count": 28,
+          "min": 0.746126979993197,
+          "median": 0.8796901455540989,
+          "p95": 1.4927166401864695,
+          "max": 1.6057722491954391
+        },
+        "after_common_scale_signed_error_px": {
+          "count": 28,
+          "min": -12.02841500156551,
+          "median": 4.08296150412653,
+          "p95": 12.333874195310301,
+          "max": 12.68637306352666
+        }
+      },
+      "hip_width": {
+        "ratio": {
+          "count": 28,
+          "min": 0.42992703164716495,
+          "median": 1.4495833638318465,
+          "p95": 1.5193071153285942,
+          "max": 1.5365181825748815
+        },
+        "signed_error_px": {
+          "count": 28,
+          "min": -16.89456080287239,
+          "median": 12.126752561398865,
+          "p95": 13.467556610682363,
+          "max": 13.501866593858374
+        },
+        "required_scale": {
+          "count": 28,
+          "min": 0.6508221063314787,
+          "median": 0.689853713522594,
+          "p95": 2.1246953409714484,
+          "max": 2.325976099173699
+        },
+        "after_common_scale_signed_error_px": {
+          "count": 28,
+          "min": -16.078281543732658,
+          "median": 10.799211145632164,
+          "p95": 13.287937872546307,
+          "max": 13.857897885341298
+        }
+      },
+      "torso_midpoints": {
+        "ratio": {
+          "count": 28,
+          "min": 0.9625688152591693,
+          "median": 1.1412564034834505,
+          "p95": 1.1789863214776268,
+          "max": 1.2138085825693121
+        },
+        "signed_error_px": {
+          "count": 28,
+          "min": -2.7297596323566324,
+          "median": 9.983041106422775,
+          "p95": 12.519138275636616,
+          "max": 14.905792737030922
+        },
+        "required_scale": {
+          "count": 28,
+          "min": 0.8238531300242284,
+          "median": 0.8762282917831727,
+          "p95": 0.9951639864964731,
+          "max": 1.0388867623254059
+        },
+        "after_common_scale_signed_error_px": {
+          "count": 28,
+          "min": -10.223661390904041,
+          "median": 8.457775484453485,
+          "p95": 22.438919908307902,
+          "max": 22.674671361163732
+        }
+      },
+      "shoulder_elbow": {
+        "ratio": {
+          "count": 56,
+          "min": 0.5054175844511652,
+          "median": 0.9445009717029191,
+          "p95": 1.4533047767664478,
+          "max": 1.5524033889234163
+        },
+        "signed_error_px": {
+          "count": 56,
+          "min": -14.910700947610716,
+          "median": -1.7477541504092944,
+          "p95": 13.061409130657017,
+          "max": 15.586177695209553
+        },
+        "required_scale": {
+          "count": 56,
+          "min": 0.6441624690690059,
+          "median": 1.0587601656965067,
+          "p95": 1.7443224915547468,
+          "max": 1.978561947119239
+        },
+        "after_common_scale_signed_error_px": {
+          "count": 56,
+          "min": -13.867221566127867,
+          "median": -3.145225193761071,
+          "p95": 11.727989170004939,
+          "max": 14.680471824408112
+        }
+      },
+      "elbow_wrist": {
+        "ratio": {
+          "count": 56,
+          "min": 0.4202759027253675,
+          "median": 0.7437617695355061,
+          "p95": 1.278952496193144,
+          "max": 1.8796828110671213
+        },
+        "signed_error_px": {
+          "count": 56,
+          "min": -18.85083906009435,
+          "median": -8.34186915709331,
+          "p95": 8.272072554836246,
+          "max": 18.53564910731228
+        },
+        "required_scale": {
+          "count": 56,
+          "min": 0.5320046521212196,
+          "median": 1.3445627534058735,
+          "p95": 2.145259961759935,
+          "max": 2.379389333329105
+        },
+        "after_common_scale_signed_error_px": {
+          "count": 56,
+          "min": -17.159809633487903,
+          "median": -9.3196276176759,
+          "p95": 4.21594289555119,
+          "max": 16.044451631399525
+        }
+      },
+      "hip_knee": {
+        "ratio": {
+          "count": 56,
+          "min": 0.40951462769119895,
+          "median": 0.796649934206263,
+          "p95": 1.4440270622379445,
+          "max": 1.5216107236949685
+        },
+        "signed_error_px": {
+          "count": 56,
+          "min": -23.250376650711488,
+          "median": -9.828585757934349,
+          "p95": 21.953390738641716,
+          "max": 24.33342935297552
+        },
+        "required_scale": {
+          "count": 56,
+          "min": 0.6571983125695072,
+          "median": 1.255271178124352,
+          "p95": 2.2684301122749693,
+          "max": 2.4419152146967167
+        },
+        "after_common_scale_signed_error_px": {
+          "count": 56,
+          "min": -21.811237715915702,
+          "median": -8.824921392945676,
+          "p95": 14.711924512888759,
+          "max": 19.271753602345377
+        }
+      },
+      "knee_ankle": {
+        "ratio": {
+          "count": 56,
+          "min": 0.6532913529619122,
+          "median": 0.8672428796493246,
+          "p95": 1.0994178445047935,
+          "max": 1.1730717837262075
+        },
+        "signed_error_px": {
+          "count": 56,
+          "min": -19.613861396566847,
+          "median": -7.036649681828489,
+          "p95": 6.227351139292681,
+          "max": 10.426337046864937
+        },
+        "required_scale": {
+          "count": 56,
+          "min": 0.8524627511059443,
+          "median": 1.1532120751734325,
+          "p95": 1.3819828799389728,
+          "max": 1.5307106017340801
+        },
+        "after_common_scale_signed_error_px": {
+          "count": 56,
+          "min": -17.614746285601733,
+          "median": -6.128390247588719,
+          "p95": 3.208189150046408,
+          "max": 5.288422283582655
+        }
+      }
+    },
+    "per_frame_common_length_fit_scale": {
+      "count": 28,
+      "min": 0.8865759569762479,
+      "median": 0.9622272707747787,
+      "p95": 1.1206648131973682,
+      "max": 1.1364868633355392
+    },
+    "all_11_lengths_abs_error_before_px": {
+      "count": 308,
+      "min": 0.048318223753213374,
+      "median": 10.545370754476501,
+      "p95": 17.765083796603523,
+      "max": 24.33342935297552
+    },
+    "all_11_lengths_abs_error_after_per_frame_scale_px": {
+      "count": 308,
+      "min": 0.010963194624558525,
+      "median": 9.340357885655306,
+      "p95": 16.815972693224577,
+      "max": 22.674671361163732
+    }
+  },
+  "rows": [
+    {
+      "source_frame": 1,
+      "common_length_fit_scale": 0.9682734016383611,
+      "segments": {
+        "shoulder_width": {
+          "rig_length_px": 57.37894364159868,
+          "source_length_px": 44.46632814880415,
+          "ratio": 1.2903908649615314,
+          "signed_error_px": 12.91261549279453,
+          "required_scale": 0.7749589889028016,
+          "after_common_scale_signed_error_px": 11.092176793462414
+        },
+        "hip_width": {
+          "rig_length_px": 39.43819046020508,
+          "source_length_px": 26.282212931110745,
+          "ratio": 1.5005658223520957,
+          "signed_error_px": 13.155977529094333,
+          "required_scale": 0.6664152848906871,
+          "after_common_scale_signed_error_px": 11.904737900253583
+        },
+        "torso_midpoints": {
+          "rig_length_px": 78.81020570196506,
+          "source_length_px": 67.5824141678116,
+          "ratio": 1.1661348099562425,
+          "signed_error_px": 11.227791534153454,
+          "required_scale": 0.857533787227845,
+          "after_common_scale_signed_error_px": 8.727411791049065
+        },
+        "left_shoulder_elbow": {
+          "rig_length_px": 29.760469704038066,
+          "source_length_px": 31.511493889654634,
+          "ratio": 0.944432206491123,
+          "signed_error_px": -1.7510241856165685,
+          "required_scale": 1.0588372496479441,
+          "after_common_scale_signed_error_px": -2.6952226549703084
+        },
+        "left_elbow_wrist": {
+          "rig_length_px": 28.30729819806423,
+          "source_length_px": 35.54708454616602,
+          "ratio": 0.7963324857570452,
+          "signed_error_px": -7.239786348101788,
+          "required_scale": 1.2557568828167738,
+          "after_common_scale_signed_error_px": -8.137880628734916
+        },
+        "left_hip_knee": {
+          "rig_length_px": 39.775115168564476,
+          "source_length_px": 47.055986029128,
+          "ratio": 0.8452721646071424,
+          "signed_error_px": -7.280870860563525,
+          "required_scale": 1.183050905816555,
+          "after_common_scale_signed_error_px": -8.5427999643045
+        },
+        "left_knee_ankle": {
+          "rig_length_px": 56.725257306446764,
+          "source_length_px": 60.38258620500444,
+          "ratio": 0.9394307344481617,
+          "signed_error_px": -3.6573288985576795,
+          "required_scale": 1.0644744347090345,
+          "after_common_scale_signed_error_px": -5.457028354079938
+        },
+        "right_shoulder_elbow": {
+          "rig_length_px": 41.66943605308455,
+          "source_length_px": 28.654366658669634,
+          "ratio": 1.4542089360916688,
+          "signed_error_px": 13.015069394414919,
+          "required_scale": 0.687659094357926,
+          "after_common_scale_signed_error_px": 11.693039932802709
+        },
+        "right_elbow_wrist": {
+          "rig_length_px": 24.248007071030152,
+          "source_length_px": 32.22847782689185,
+          "ratio": 0.7523782910652178,
+          "signed_error_px": -7.980470755861695,
+          "required_scale": 1.3291186253981349,
+          "after_common_scale_signed_error_px": -8.74977753727445
+        },
+        "right_hip_knee": {
+          "rig_length_px": 36.401293983271145,
+          "source_length_px": 50.953404513203296,
+          "ratio": 0.7144035679468418,
+          "signed_error_px": -14.55211052993215,
+          "required_scale": 1.3997690449306508,
+          "after_common_scale_signed_error_px": -15.70699976398334
+        },
+        "right_knee_ankle": {
+          "rig_length_px": 36.6705019398506,
+          "source_length_px": 50.15578651193477,
+          "ratio": 0.7311320286269404,
+          "signed_error_px": -13.485284572084169,
+          "required_scale": 1.3677420231172082,
+          "after_common_scale_signed_error_px": -14.648714858849509
+        }
+      }
+    },
+    {
+      "source_frame": 3,
+      "common_length_fit_scale": 0.9663350283942279,
+      "segments": {
+        "shoulder_width": {
+          "rig_length_px": 57.19465540970098,
+          "source_length_px": 44.4521315596067,
+          "ratio": 1.2866572063705783,
+          "signed_error_px": 12.74252385009428,
+          "required_scale": 0.7772077870070885,
+          "after_common_scale_signed_error_px": 10.817067399724777
+        },
+        "hip_width": {
+          "rig_length_px": 39.43642071148475,
+          "source_length_px": 26.167120000157624,
+          "ratio": 1.507098248154447,
+          "signed_error_px": 13.269300711327126,
+          "required_scale": 0.6635267483221972,
+          "after_common_scale_signed_error_px": 11.941674727841708
+        },
+        "torso_midpoints": {
+          "rig_length_px": 78.89589428464019,
+          "source_length_px": 67.60087173287653,
+          "ratio": 1.1670839777983295,
+          "signed_error_px": 11.295022551763665,
+          "required_scale": 0.8568363708380877,
+          "after_common_scale_signed_error_px": 8.638994510859263
+        },
+        "left_shoulder_elbow": {
+          "rig_length_px": 29.829174241013398,
+          "source_length_px": 31.53951444999247,
+          "ratio": 0.9457715111089962,
+          "signed_error_px": -1.7103402089790727,
+          "required_scale": 1.0573378329269154,
+          "after_common_scale_signed_error_px": -2.7145385128264152
+        },
+        "left_elbow_wrist": {
+          "rig_length_px": 28.429102599762732,
+          "source_length_px": 35.56653777572124,
+          "ratio": 0.7993216201991208,
+          "signed_error_px": -7.137435175958505,
+          "required_scale": 1.2510608680281758,
+          "after_common_scale_signed_error_px": -8.0945001077571
+        },
+        "left_hip_knee": {
+          "rig_length_px": 40.54358251824424,
+          "source_length_px": 47.016794559989684,
+          "ratio": 0.8623212811012427,
+          "signed_error_px": -6.473212041745441,
+          "required_scale": 1.1596605834926539,
+          "after_common_scale_signed_error_px": -7.83811059601841
+        },
+        "left_knee_ankle": {
+          "rig_length_px": 56.7135927015764,
+          "source_length_px": 60.16372225065399,
+          "ratio": 0.9426543202446208,
+          "signed_error_px": -3.4501295490775874,
+          "required_scale": 1.0608342618538023,
+          "after_common_scale_signed_error_px": -5.359391037037483
+        },
+        "right_shoulder_elbow": {
+          "rig_length_px": 41.608107222513176,
+          "source_length_px": 28.75918059517469,
+          "ratio": 1.4467765201034386,
+          "signed_error_px": 12.848926627338486,
+          "required_scale": 0.691191753601658,
+          "after_common_scale_signed_error_px": 11.448190879122656
+        },
+        "right_elbow_wrist": {
+          "rig_length_px": 24.200050777779488,
+          "source_length_px": 32.17917172317028,
+          "ratio": 0.7520408227398374,
+          "signed_error_px": -7.97912094539079,
+          "required_scale": 1.3297150497187067,
+          "after_common_scale_signed_error_px": -8.79381496768298
+        },
+        "right_hip_knee": {
+          "rig_length_px": 36.979768683478206,
+          "source_length_px": 51.038378700345696,
+          "ratio": 0.7245482639758644,
+          "signed_error_px": -14.05861001686749,
+          "required_scale": 1.38017030709953,
+          "after_common_scale_signed_error_px": -15.303532879584807
+        },
+        "right_knee_ankle": {
+          "rig_length_px": 36.89367236551496,
+          "source_length_px": 50.17920707173329,
+          "ratio": 0.735238249436144,
+          "signed_error_px": -13.285534706218328,
+          "required_scale": 1.3601033416948893,
+          "after_common_scale_signed_error_px": -14.527559138836047
+        }
+      }
+    },
+    {
+      "source_frame": 5,
+      "common_length_fit_scale": 0.9618239702764947,
+      "segments": {
+        "shoulder_width": {
+          "rig_length_px": 56.225831482304386,
+          "source_length_px": 44.26746301381471,
+          "ratio": 1.2701390062664712,
+          "signed_error_px": 11.958368468489674,
+          "required_scale": 0.7873154001777055,
+          "after_common_scale_signed_error_px": 9.811889454592418
+        },
+        "hip_width": {
+          "rig_length_px": 39.41491120993087,
+          "source_length_px": 26.03239752937237,
+          "ratio": 1.514071501307515,
+          "signed_error_px": 13.3825136805585,
+          "required_scale": 0.6604707896135846,
+          "after_common_scale_signed_error_px": 11.877808858658856
+        },
+        "torso_midpoints": {
+          "rig_length_px": 79.09996778326264,
+          "source_length_px": 67.63273868332152,
+          "ratio": 1.169551452790259,
+          "signed_error_px": 11.467229099941122,
+          "required_scale": 0.8550286501840073,
+          "after_common_scale_signed_error_px": 8.44750637871897
+        },
+        "left_shoulder_elbow": {
+          "rig_length_px": 30.031709610292932,
+          "source_length_px": 31.442224675595053,
+          "ratio": 0.9551394635762863,
+          "signed_error_px": -1.4105150653021212,
+          "required_scale": 1.046967524779831,
+          "after_common_scale_signed_error_px": -2.557006504032344
+        },
+        "left_elbow_wrist": {
+          "rig_length_px": 28.337012526386342,
+          "source_length_px": 35.528365361952176,
+          "ratio": 0.7975884124613525,
+          "signed_error_px": -7.191352835565834,
+          "required_scale": 1.2537794987693047,
+          "after_common_scale_signed_error_px": -8.2731474680485
+        },
+        "left_hip_knee": {
+          "rig_length_px": 43.500566997431214,
+          "source_length_px": 47.60764848256288,
+          "ratio": 0.9137306374912436,
+          "signed_error_px": -4.1070814851316655,
+          "required_scale": 1.094414435687107,
+          "after_common_scale_signed_error_px": -5.767760423814934
+        },
+        "left_knee_ankle": {
+          "rig_length_px": 54.331726907795634,
+          "source_length_px": 58.38660303616039,
+          "ratio": 0.9305512580368229,
+          "signed_error_px": -4.054876128364754,
+          "required_scale": 1.074631828567609,
+          "after_common_scale_signed_error_px": -6.1290457497261315
+        },
+        "right_shoulder_elbow": {
+          "rig_length_px": 42.13461906387275,
+          "source_length_px": 28.89069758466063,
+          "ratio": 1.4584147350683534,
+          "signed_error_px": 13.24392147921212,
+          "required_scale": 0.6856760124225786,
+          "after_common_scale_signed_error_px": 11.635389009441141
+        },
+        "right_elbow_wrist": {
+          "rig_length_px": 24.10460321340582,
+          "source_length_px": 32.220139863218506,
+          "ratio": 0.7481222401806789,
+          "signed_error_px": -8.115536649812686,
+          "required_scale": 1.3366799518732262,
+          "after_common_scale_signed_error_px": -9.035754698560968
+        },
+        "right_hip_knee": {
+          "rig_length_px": 39.07854827548473,
+          "source_length_px": 51.06701647930073,
+          "ratio": 0.7652404814235554,
+          "signed_error_px": -11.988468203816005,
+          "required_scale": 1.306778750308306,
+          "after_common_scale_signed_error_px": -13.480332024332348
+        },
+        "right_knee_ankle": {
+          "rig_length_px": 37.44620246882141,
+          "source_length_px": 50.39914036566015,
+          "ratio": 0.7429928803772946,
+          "signed_error_px": -12.95293789683874,
+          "required_scale": 1.3459079170344086,
+          "after_common_scale_signed_error_px": -14.382485235320864
+        }
+      }
+    },
+    {
+      "source_frame": 7,
+      "common_length_fit_scale": 0.9626305712730626,
+      "segments": {
+        "shoulder_width": {
+          "rig_length_px": 57.37384010036262,
+          "source_length_px": 44.21466754025476,
+          "ratio": 1.2976200725274534,
+          "signed_error_px": 13.159172560107862,
+          "required_scale": 0.7706415931531017,
+          "after_common_scale_signed_error_px": 11.015144931686656
+        },
+        "hip_width": {
+          "rig_length_px": 39.439331674662085,
+          "source_length_px": 25.93746508080371,
+          "ratio": 1.5205545935886806,
+          "signed_error_px": 13.501866593858374,
+          "required_scale": 0.6576547821541132,
+          "after_common_scale_signed_error_px": 12.028041299804045
+        },
+        "torso_midpoints": {
+          "rig_length_px": 78.94329310340177,
+          "source_length_px": 67.52518274811646,
+          "ratio": 1.1690941052003863,
+          "signed_error_px": 11.418110355285307,
+          "required_scale": 0.8553631359116272,
+          "after_common_scale_signed_error_px": 8.468044590188
+        },
+        "left_shoulder_elbow": {
+          "rig_length_px": 29.573904583843213,
+          "source_length_px": 31.570524726866978,
+          "ratio": 0.936756827442763,
+          "signed_error_px": -1.9966201430237653,
+          "required_scale": 1.0675129027133792,
+          "after_common_scale_signed_error_px": -3.10178006254694
+        },
+        "left_elbow_wrist": {
+          "rig_length_px": 27.77612569951642,
+          "source_length_px": 35.54330044398776,
+          "ratio": 0.7814728894771172,
+          "signed_error_px": -7.76717474447134,
+          "required_scale": 1.2796349220368974,
+          "after_common_scale_signed_error_px": -8.805152694109871
+        },
+        "left_hip_knee": {
+          "rig_length_px": 42.83729989972222,
+          "source_length_px": 47.56695037405769,
+          "ratio": 0.9005685578507266,
+          "signed_error_px": -4.729650474335472,
+          "required_scale": 1.110409630985312,
+          "after_common_scale_signed_error_px": -6.330455899792582
+        },
+        "left_knee_ankle": {
+          "rig_length_px": 54.65709631209596,
+          "source_length_px": 58.449044686559176,
+          "ratio": 0.93512386053873,
+          "signed_error_px": -3.7919483744632174,
+          "required_scale": 1.0693770549538695,
+          "after_common_scale_signed_error_px": -5.834452839519436
+        },
+        "right_shoulder_elbow": {
+          "rig_length_px": 41.12883705421324,
+          "source_length_px": 28.838104882541373,
+          "ratio": 1.4261976375261987,
+          "signed_error_px": 12.29073217167187,
+          "required_scale": 0.7011650935942813,
+          "after_common_scale_signed_error_px": 10.753771026752624
+        },
+        "right_elbow_wrist": {
+          "rig_length_px": 23.810086354507664,
+          "source_length_px": 32.201845452856226,
+          "ratio": 0.7394012988903332,
+          "signed_error_px": -8.391759098348562,
+          "required_scale": 1.352445554938521,
+          "after_common_scale_signed_error_px": -9.28152842335556
+        },
+        "right_hip_knee": {
+          "rig_length_px": 38.73784440024963,
+          "source_length_px": 51.129130741176866,
+          "ratio": 0.7576472323839468,
+          "signed_error_px": -12.391286340927238,
+          "required_scale": 1.31987547404283,
+          "after_common_scale_signed_error_px": -13.838897456277557
+        },
+        "right_knee_ankle": {
+          "rig_length_px": 37.57746854959926,
+          "source_length_px": 50.375421583057474,
+          "ratio": 0.7459484678980337,
+          "signed_error_px": -12.797953033458214,
+          "required_scale": 1.3405751778240713,
+          "after_common_scale_signed_error_px": -14.202201566161193
+        }
+      }
+    },
+    {
+      "source_frame": 9,
+      "common_length_fit_scale": 0.9605383077580661,
+      "segments": {
+        "shoulder_width": {
+          "rig_length_px": 58.559930835086554,
+          "source_length_px": 44.16606865072771,
+          "ratio": 1.3259031791619895,
+          "signed_error_px": 14.393862184358845,
+          "required_scale": 0.7542028827715986,
+          "after_common_scale_signed_error_px": 12.08298821603573
+        },
+        "hip_width": {
+          "rig_length_px": 39.3905677098717,
+          "source_length_px": 25.966260886792597,
+          "ratio": 1.516990369988434,
+          "signed_error_px": 13.424306823079107,
+          "required_scale": 0.6591999657899109,
+          "after_common_scale_signed_error_px": 11.869888362877091
+        },
+        "torso_midpoints": {
+          "rig_length_px": 79.1000598137033,
+          "source_length_px": 67.35812293591204,
+          "ratio": 1.1743210227066918,
+          "signed_error_px": 11.741936877791261,
+          "required_scale": 0.8515559039342586,
+          "after_common_scale_signed_error_px": 8.620514661104338
+        },
+        "left_shoulder_elbow": {
+          "rig_length_px": 29.72720694493176,
+          "source_length_px": 31.47169106013378,
+          "ratio": 0.9445697369147152,
+          "signed_error_px": -1.7444841152020203,
+          "required_scale": 1.0586830817450692,
+          "after_common_scale_signed_error_px": -2.917570006875195
+        },
+        "left_elbow_wrist": {
+          "rig_length_px": 27.515575510981197,
+          "source_length_px": 35.807554726819255,
+          "ratio": 0.7684293362364812,
+          "signed_error_px": -8.291979215838058,
+          "required_scale": 1.3013558343538485,
+          "after_common_scale_signed_error_px": -9.37779038851209
+        },
+        "left_hip_knee": {
+          "rig_length_px": 41.64404794197611,
+          "source_length_px": 47.75543633440357,
+          "ratio": 0.8720273782102428,
+          "signed_error_px": -6.1113883924274575,
+          "required_scale": 1.1467529861876693,
+          "after_common_scale_signed_error_px": -7.754732996022057
+        },
+        "left_knee_ankle": {
+          "rig_length_px": 57.118410001402246,
+          "source_length_px": 60.971178230892136,
+          "ratio": 0.9368100085765143,
+          "signed_error_px": -3.8527682294898895,
+          "required_scale": 1.0674523017954334,
+          "after_common_scale_signed_error_px": -6.10675734631382
+        },
+        "right_shoulder_elbow": {
+          "rig_length_px": 42.0195175171587,
+          "source_length_px": 29.201796831806906,
+          "ratio": 1.4389360270937368,
+          "signed_error_px": 12.81772068535179,
+          "required_scale": 0.6949579280600339,
+          "after_common_scale_signed_error_px": 11.159559416935128
+        },
+        "right_elbow_wrist": {
+          "rig_length_px": 24.293589182599366,
+          "source_length_px": 32.12266447384003,
+          "ratio": 0.7562756570951178,
+          "signed_error_px": -7.829075291240667,
+          "required_scale": 1.3222691893072909,
+          "after_common_scale_signed_error_px": -8.787741431016375
+        },
+        "right_hip_knee": {
+          "rig_length_px": 37.95470579544629,
+          "source_length_px": 51.30274120260189,
+          "ratio": 0.7398182807729066,
+          "signed_error_px": -13.3480354071556,
+          "required_scale": 1.351683279514633,
+          "after_common_scale_signed_error_px": -14.845792326388647
+        },
+        "right_knee_ankle": {
+          "rig_length_px": 37.797129198666966,
+          "source_length_px": 50.39333804842385,
+          "ratio": 0.7500421814158656,
+          "signed_error_px": -12.596208849756884,
+          "required_scale": 1.3332583483668683,
+          "after_common_scale_signed_error_px": -14.08774752982329
+        }
+      }
+    },
+    {
+      "source_frame": 11,
+      "common_length_fit_scale": 0.9565169148184206,
+      "segments": {
+        "shoulder_width": {
+          "rig_length_px": 59.26598463965118,
+          "source_length_px": 44.21995013550614,
+          "ratio": 1.3402544430294125,
+          "signed_error_px": 15.046034504145041,
+          "required_scale": 0.746126979993197,
+          "after_common_scale_signed_error_px": 12.468966645688916
+        },
+        "hip_width": {
+          "rig_length_px": 39.31239968782556,
+          "source_length_px": 26.154550102672594,
+          "ratio": 1.5030807080794877,
+          "signed_error_px": 13.157849585152967,
+          "required_scale": 0.6653002693898702,
+          "after_common_scale_signed_error_px": 11.448425160834951
+        },
+        "torso_midpoints": {
+          "rig_length_px": 79.29581586433889,
+          "source_length_px": 67.37851289622486,
+          "ratio": 1.1768709705194718,
+          "signed_error_px": 11.91730296811403,
+          "required_scale": 0.8497108222140948,
+          "after_common_scale_signed_error_px": 8.46927625234214
+        },
+        "left_shoulder_elbow": {
+          "rig_length_px": 29.72894587287646,
+          "source_length_px": 31.631130332142675,
+          "ratio": 0.9398635319290733,
+          "signed_error_px": -1.9021844592662163,
+          "required_scale": 1.063984255190215,
+          "after_common_scale_signed_error_px": -3.1948907450150656
+        },
+        "left_elbow_wrist": {
+          "rig_length_px": 27.250811124457332,
+          "source_length_px": 35.81355747862565,
+          "ratio": 0.7609076853289775,
+          "signed_error_px": -8.562746354168315,
+          "required_scale": 1.3142198709264596,
+          "after_common_scale_signed_error_px": -9.747695695560225
+        },
+        "left_hip_knee": {
+          "rig_length_px": 42.594490623682134,
+          "source_length_px": 47.8450055273751,
+          "ratio": 0.8902599164569263,
+          "signed_error_px": -5.250514903692967,
+          "required_scale": 1.123267465505826,
+          "after_common_scale_signed_error_px": -7.102654767748518
+        },
+        "left_knee_ankle": {
+          "rig_length_px": 57.142852318041456,
+          "source_length_px": 60.78583954862896,
+          "ratio": 0.9400684886868579,
+          "signed_error_px": -3.642987230587501,
+          "required_scale": 1.0637522819181588,
+          "after_common_scale_signed_error_px": -6.127734745451306
+        },
+        "right_shoulder_elbow": {
+          "rig_length_px": 41.258759849048474,
+          "source_length_px": 28.94359235958442,
+          "ratio": 1.4254885619056885,
+          "signed_error_px": 12.315167489464052,
+          "required_scale": 0.7015138716112411,
+          "after_common_scale_signed_error_px": 10.521109320461548
+        },
+        "right_elbow_wrist": {
+          "rig_length_px": 24.33758194541423,
+          "source_length_px": 32.24210787239373,
+          "ratio": 0.7548384256307418,
+          "signed_error_px": -7.9045259269795025,
+          "required_scale": 1.3247868233051354,
+          "after_common_scale_signed_error_px": -8.962799075825618
+        },
+        "right_hip_knee": {
+          "rig_length_px": 38.86090828363215,
+          "source_length_px": 51.26624075242923,
+          "ratio": 0.7580214135710884,
+          "signed_error_px": -12.405332468797084,
+          "required_scale": 1.3192239455201333,
+          "after_common_scale_signed_error_px": -14.095124653927805
+        },
+        "right_knee_ankle": {
+          "rig_length_px": 38.41435086163331,
+          "source_length_px": 50.16424711949904,
+          "ratio": 0.7657715019648227,
+          "signed_error_px": -11.749896257865728,
+          "required_scale": 1.3058725709094579,
+          "after_common_scale_signed_error_px": -13.42027074857721
+        }
+      }
+    },
+    {
+      "source_frame": 13,
+      "common_length_fit_scale": 0.9511496820602349,
+      "segments": {
+        "shoulder_width": {
+          "rig_length_px": 57.33207634118619,
+          "source_length_px": 44.21657366306251,
+          "ratio": 1.296619606441375,
+          "signed_error_px": 13.115502678123676,
+          "required_scale": 0.7712362168766986,
+          "after_common_scale_signed_error_px": 10.314812520709843
+        },
+        "hip_width": {
+          "rig_length_px": 39.44065624531907,
+          "source_length_px": 26.08889479042767,
+          "ratio": 1.5117794970674772,
+          "signed_error_px": 13.351761454891399,
+          "required_scale": 0.6614721273438237,
+          "after_common_scale_signed_error_px": 11.425072857554579
+        },
+        "torso_midpoints": {
+          "rig_length_px": 79.04804168280005,
+          "source_length_px": 67.01449147827579,
+          "ratio": 1.1795663883896694,
+          "signed_error_px": 12.03355020452426,
+          "required_scale": 0.8477691547019991,
+          "after_common_scale_signed_error_px": 8.172028235803666
+        },
+        "left_shoulder_elbow": {
+          "rig_length_px": 29.45299112575377,
+          "source_length_px": 31.546770605111565,
+          "ratio": 0.9336293560578103,
+          "signed_error_px": -2.0937794793577957,
+          "required_scale": 1.071088857169654,
+          "after_common_scale_signed_error_px": -3.5325674601279466
+        },
+        "left_elbow_wrist": {
+          "rig_length_px": 27.832630044688592,
+          "source_length_px": 35.83072402990194,
+          "ratio": 0.7767811228559415,
+          "signed_error_px": -7.998093985213345,
+          "required_scale": 1.287363931197715,
+          "after_common_scale_signed_error_px": -9.35772681199624
+        },
+        "left_hip_knee": {
+          "rig_length_px": 43.28355283894028,
+          "source_length_px": 47.773280439728765,
+          "ratio": 0.9060201108347005,
+          "signed_error_px": -4.489727600788484,
+          "required_scale": 1.1037282594960476,
+          "after_common_scale_signed_error_px": -6.604142918533341
+        },
+        "left_knee_ankle": {
+          "rig_length_px": 59.06241676701935,
+          "source_length_px": 60.23956760512992,
+          "ratio": 0.9804588431672221,
+          "signed_error_px": -1.1771508381105704,
+          "required_scale": 1.0199306242877602,
+          "after_common_scale_signed_error_px": -4.062368675470381
+        },
+        "right_shoulder_elbow": {
+          "rig_length_px": 41.90751247797697,
+          "source_length_px": 28.94401849812087,
+          "ratio": 1.4478816229577014,
+          "signed_error_px": 12.963493979856104,
+          "required_scale": 0.6906641980559306,
+          "after_common_scale_signed_error_px": 10.916298671242252
+        },
+        "right_elbow_wrist": {
+          "rig_length_px": 24.35697195978392,
+          "source_length_px": 32.23171027210928,
+          "ratio": 0.7556835102498571,
+          "signed_error_px": -7.874738312325363,
+          "required_scale": 1.3233053076272139,
+          "after_common_scale_signed_error_px": -9.064584136610751
+        },
+        "right_hip_knee": {
+          "rig_length_px": 38.997831206981125,
+          "source_length_px": 51.13589194025553,
+          "ratio": 0.7626312894384266,
+          "signed_error_px": -12.138060733274408,
+          "required_scale": 1.311249635110517,
+          "after_common_scale_signed_error_px": -14.043117186696733
+        },
+        "right_knee_ankle": {
+          "rig_length_px": 39.48292671853134,
+          "source_length_px": 49.88162557415653,
+          "ratio": 0.7915324784240249,
+          "signed_error_px": -10.398698855625192,
+          "required_scale": 1.2633720374823316,
+          "after_common_scale_signed_error_px": -12.327452379017892
+        }
+      }
+    },
+    {
+      "source_frame": 15,
+      "common_length_fit_scale": 0.9564886515296829,
+      "segments": {
+        "shoulder_width": {
+          "rig_length_px": 57.18087951055515,
+          "source_length_px": 44.3102692500104,
+          "ratio": 1.2904656297149837,
+          "signed_error_px": 12.870610260544751,
+          "required_scale": 0.7749140906766057,
+          "after_common_scale_signed_error_px": 10.38259308632177
+        },
+        "hip_width": {
+          "rig_length_px": 39.44195864677173,
+          "source_length_px": 26.166526623002927,
+          "ratio": 1.5073440665257576,
+          "signed_error_px": 13.275432023768804,
+          "required_scale": 0.6634185400715291,
+          "after_common_scale_signed_error_px": 11.559259216737285
+        },
+        "torso_midpoints": {
+          "rig_length_px": 78.85425730390119,
+          "source_length_px": 67.00713203111879,
+          "ratio": 1.1768039447991967,
+          "signed_error_px": 11.847125272782407,
+          "required_scale": 0.8497592181088707,
+          "after_common_scale_signed_error_px": 8.416070204864312
+        },
+        "left_shoulder_elbow": {
+          "rig_length_px": 29.3275421218017,
+          "source_length_px": 31.47063445151102,
+          "ratio": 0.9319018390617027,
+          "signed_error_px": -2.1430923297093223,
+          "required_scale": 1.0730743926923278,
+          "after_common_scale_signed_error_px": -3.419173234748939
+        },
+        "left_elbow_wrist": {
+          "rig_length_px": 27.78123437197283,
+          "source_length_px": 35.84529090114884,
+          "ratio": 0.7750316338228529,
+          "signed_error_px": -8.064056529176014,
+          "required_scale": 1.2902699146194692,
+          "after_common_scale_signed_error_px": -9.272855498870477
+        },
+        "left_hip_knee": {
+          "rig_length_px": 43.16437105947651,
+          "source_length_px": 48.01282729646319,
+          "ratio": 0.8990174811608347,
+          "signed_error_px": -4.848456236986685,
+          "required_scale": 1.1123254229815132,
+          "after_common_scale_signed_error_px": -6.726596227657637
+        },
+        "left_knee_ankle": {
+          "rig_length_px": 58.28558096485711,
+          "source_length_px": 60.398300676692315,
+          "ratio": 0.9650202126853794,
+          "signed_error_px": -2.1127197118352044,
+          "required_scale": 1.0362477250266933,
+          "after_common_scale_signed_error_px": -4.648803935991985
+        },
+        "right_shoulder_elbow": {
+          "rig_length_px": 42.17000035616636,
+          "source_length_px": 29.022644156902135,
+          "ratio": 1.4530033903247075,
+          "signed_error_px": 13.147356199264227,
+          "required_scale": 0.6882296398334808,
+          "after_common_scale_signed_error_px": 11.312482618773675
+        },
+        "right_elbow_wrist": {
+          "rig_length_px": 24.33628548829245,
+          "source_length_px": 32.19001794734187,
+          "ratio": 0.7560196309335095,
+          "signed_error_px": -7.8537324590494215,
+          "required_scale": 1.3227169759669217,
+          "after_common_scale_signed_error_px": -8.912637057403636
+        },
+        "right_hip_knee": {
+          "rig_length_px": 38.824369319585465,
+          "source_length_px": 51.225793893869266,
+          "ratio": 0.7579066397686809,
+          "signed_error_px": -12.401424574283801,
+          "required_scale": 1.3194237225645733,
+          "after_common_scale_signed_error_px": -14.090725236888574
+        },
+        "right_knee_ankle": {
+          "rig_length_px": 38.55790934031376,
+          "source_length_px": 50.032812519625146,
+          "ratio": 0.770652445836212,
+          "signed_error_px": -11.474903179311383,
+          "required_scale": 1.2976017988432256,
+          "after_common_scale_signed_error_px": -13.152609808904671
+        }
+      }
+    },
+    {
+      "source_frame": 17,
+      "common_length_fit_scale": 1.03295061372763,
+      "segments": {
+        "shoulder_width": {
+          "rig_length_px": 54.1447479128311,
+          "source_length_px": 46.35042150525723,
+          "ratio": 1.1681608527915934,
+          "signed_error_px": 7.79432640757387,
+          "required_scale": 0.8560464918938742,
+          "after_common_scale_signed_error_px": 9.57842908142947
+        },
+        "hip_width": {
+          "rig_length_px": 39.16057992845503,
+          "source_length_px": 26.996618003271717,
+          "ratio": 1.4505735467942378,
+          "signed_error_px": 12.163961925183312,
+          "required_scale": 0.6893824875064049,
+          "after_common_scale_signed_error_px": 13.454327067755816
+        },
+        "torso_midpoints": {
+          "rig_length_px": 72.67060416052269,
+          "source_length_px": 68.6692857852845,
+          "ratio": 1.0582694042828629,
+          "signed_error_px": 4.001318375238185,
+          "required_scale": 0.9449389691820967,
+          "after_common_scale_signed_error_px": 6.3958593822850816
+        },
+        "left_shoulder_elbow": {
+          "rig_length_px": 26.346567906802527,
+          "source_length_px": 32.79843724027334,
+          "ratio": 0.8032872942632604,
+          "signed_error_px": -6.45186933347081,
+          "required_scale": 1.2448846224029422,
+          "after_common_scale_signed_error_px": -5.583733751324985
+        },
+        "left_elbow_wrist": {
+          "rig_length_px": 22.347707987769535,
+          "source_length_px": 33.99798771715963,
+          "ratio": 0.6573244326601745,
+          "signed_error_px": -11.650279729390096,
+          "required_scale": 1.5213187739774507,
+          "after_common_scale_signed_error_px": -10.913909035787228
+        },
+        "left_hip_knee": {
+          "rig_length_px": 41.9097092475861,
+          "source_length_px": 48.376563167793364,
+          "ratio": 0.8663225848066742,
+          "signed_error_px": -6.466853920207264,
+          "required_scale": 1.1543044329418664,
+          "after_common_scale_signed_error_px": -5.08590327935277
+        },
+        "left_knee_ankle": {
+          "rig_length_px": 52.753657507022254,
+          "source_length_px": 58.37845306253256,
+          "ratio": 0.9036494586541158,
+          "signed_error_px": -5.624795555510303,
+          "required_scale": 1.106623802430411,
+          "after_common_scale_signed_error_px": -3.8865301642767207
+        },
+        "right_shoulder_elbow": {
+          "rig_length_px": 35.69517085315844,
+          "source_length_px": 29.766699924706572,
+          "ratio": 1.199164534310073,
+          "signed_error_px": 5.9284709284518655,
+          "required_scale": 0.8339139220585271,
+          "after_common_scale_signed_error_px": 7.104648715176047
+        },
+        "right_elbow_wrist": {
+          "rig_length_px": 19.54729741905214,
+          "source_length_px": 33.430002516467184,
+          "ratio": 0.5847231812029746,
+          "signed_error_px": -13.882705097415045,
+          "required_scale": 1.710210971869902,
+          "after_common_scale_signed_error_px": -13.238609650740756
+        },
+        "right_hip_knee": {
+          "rig_length_px": 36.49277303512876,
+          "source_length_px": 48.23842963971175,
+          "ratio": 0.7565083131372604,
+          "signed_error_px": -11.74565660458299,
+          "required_scale": 1.3218625395575272,
+          "after_common_scale_signed_error_px": -10.543197336452387
+        },
+        "right_knee_ankle": {
+          "rig_length_px": 45.162783120649586,
+          "source_length_px": 53.54096636468372,
+          "ratio": 0.8435182662380841,
+          "signed_error_px": -8.378183244034133,
+          "required_scale": 1.1855107826648401,
+          "after_common_scale_signed_error_px": -6.890041822560875
+        }
+      }
+    },
+    {
+      "source_frame": 19,
+      "common_length_fit_scale": 1.0669565099597254,
+      "segments": {
+        "shoulder_width": {
+          "rig_length_px": 56.69172290539845,
+          "source_length_px": 47.80122975122109,
+          "ratio": 1.185988795695162,
+          "signed_error_px": 8.890493154177356,
+          "required_scale": 0.8431782860257584,
+          "after_common_scale_signed_error_px": 12.68637306352666
+        },
+        "hip_width": {
+          "rig_length_px": 39.360417953773656,
+          "source_length_px": 29.05285525893523,
+          "ratio": 1.354786564107785,
+          "signed_error_px": 10.307562694838424,
+          "required_scale": 0.7381236472909406,
+          "after_common_scale_signed_error_px": 12.942998911579224
+        },
+        "torso_midpoints": {
+          "rig_length_px": 74.26557786868143,
+          "source_length_px": 66.95214252898097,
+          "ratio": 1.1092337759995472,
+          "signed_error_px": 7.313435339700462,
+          "required_scale": 0.9015232150669817,
+          "after_common_scale_signed_error_px": 12.285999243929595
+        },
+        "left_shoulder_elbow": {
+          "rig_length_px": 26.42522850930737,
+          "source_length_px": 34.13107202266976,
+          "ratio": 0.7742279085683511,
+          "signed_error_px": -7.705843513362392,
+          "required_scale": 1.2916093425889685,
+          "after_common_scale_signed_error_px": -5.936502437490937
+        },
+        "left_elbow_wrist": {
+          "rig_length_px": 21.608423499048957,
+          "source_length_px": 36.057017144201,
+          "ratio": 0.5992848330362849,
+          "signed_error_px": -14.448593645152041,
+          "required_scale": 1.6686556122795335,
+          "after_common_scale_signed_error_px": -13.001769021924005
+        },
+        "left_hip_knee": {
+          "rig_length_px": 31.262878776851288,
+          "source_length_px": 50.40107010860999,
+          "ratio": 0.620282043803484,
+          "signed_error_px": -19.138191331758705,
+          "required_scale": 1.6121698346580178,
+          "after_common_scale_signed_error_px": -17.044938077566776
+        },
+        "left_knee_ankle": {
+          "rig_length_px": 47.38838862484794,
+          "source_length_px": 58.7964627851293,
+          "ratio": 0.8059734613292644,
+          "signed_error_px": -11.408074160281359,
+          "required_scale": 1.2407356420281312,
+          "after_common_scale_signed_error_px": -8.235113045346395
+        },
+        "right_shoulder_elbow": {
+          "rig_length_px": 32.29889573210038,
+          "source_length_px": 28.41039617795515,
+          "ratio": 1.1368688958009843,
+          "signed_error_px": 3.888499554145227,
+          "required_scale": 0.8796089009854097,
+          "after_common_scale_signed_error_px": 6.051120887919737
+        },
+        "right_elbow_wrist": {
+          "rig_length_px": 19.84155009093939,
+          "source_length_px": 35.404822137039325,
+          "ratio": 0.5604194257533589,
+          "signed_error_px": -15.563272046099936,
+          "required_scale": 1.784377832113373,
+          "after_common_scale_signed_error_px": -14.234751099819562
+        },
+        "right_hip_knee": {
+          "rig_length_px": 21.625534326734396,
+          "source_length_px": 44.52947473073641,
+          "ratio": 0.4856453945954004,
+          "signed_error_px": -22.903940404002014,
+          "required_scale": 2.0591155833632837,
+          "after_common_scale_signed_error_px": -21.455970099469642
+        },
+        "right_knee_ankle": {
+          "rig_length_px": 42.24371595108666,
+          "source_length_px": 50.49657593889395,
+          "ratio": 0.8365659485943345,
+          "signed_error_px": -8.252859987807284,
+          "required_scale": 1.1953630215050954,
+          "after_common_scale_signed_error_px": -5.424368199992543
+        }
+      }
+    },
+    {
+      "source_frame": 21,
+      "common_length_fit_scale": 1.067467197661122,
+      "segments": {
+        "shoulder_width": {
+          "rig_length_px": 55.80376713450013,
+          "source_length_px": 47.68099153118442,
+          "ratio": 1.170356683920955,
+          "signed_error_px": 8.12277560331571,
+          "required_scale": 0.8544403716735123,
+          "after_common_scale_signed_error_px": 11.887699390814255
+        },
+        "hip_width": {
+          "rig_length_px": 39.29656435353553,
+          "source_length_px": 28.968864061021296,
+          "ratio": 1.356510364740554,
+          "signed_error_px": 10.327700292514233,
+          "required_scale": 0.7371856684569157,
+          "after_common_scale_signed_error_px": 12.978929367157217
+        },
+        "torso_midpoints": {
+          "rig_length_px": 74.73990858987419,
+          "source_length_px": 67.27267359352395,
+          "ratio": 1.1109995277052447,
+          "signed_error_px": 7.467234996350243,
+          "required_scale": 0.9000903916363377,
+          "after_common_scale_signed_error_px": 12.50972718235748
+        },
+        "left_shoulder_elbow": {
+          "rig_length_px": 25.66226553495799,
+          "source_length_px": 33.81555611975892,
+          "ratio": 0.7588893538841776,
+          "signed_error_px": -8.153290584800928,
+          "required_scale": 1.3177151515985308,
+          "after_common_scale_signed_error_px": -6.421929443521716
+        },
+        "left_elbow_wrist": {
+          "rig_length_px": 21.40586804796763,
+          "source_length_px": 36.010341193982974,
+          "ratio": 0.5944366906344217,
+          "signed_error_px": -14.604473146015344,
+          "required_scale": 1.6822649337690354,
+          "after_common_scale_signed_error_px": -13.160279215315214
+        },
+        "left_hip_knee": {
+          "rig_length_px": 29.381453979165094,
+          "source_length_px": 49.063363933449075,
+          "ratio": 0.5988471157220064,
+          "signed_error_px": -19.68190995428398,
+          "required_scale": 1.6698752882767738,
+          "after_common_scale_signed_error_px": -17.69962559110049
+        },
+        "left_knee_ankle": {
+          "rig_length_px": 48.688345002324645,
+          "source_length_px": 59.826283319162975,
+          "ratio": 0.8138286769809961,
+          "signed_error_px": -11.13793831683833,
+          "required_scale": 1.2287598462487592,
+          "after_common_scale_signed_error_px": -7.853072120773589
+        },
+        "right_shoulder_elbow": {
+          "rig_length_px": 32.988384198344626,
+          "source_length_px": 28.566156480166143,
+          "ratio": 1.1548065355326642,
+          "signed_error_px": 4.422227718178483,
+          "required_scale": 0.8659459132163135,
+          "after_common_scale_signed_error_px": 6.647861555409236
+        },
+        "right_elbow_wrist": {
+          "rig_length_px": 19.855577973721584,
+          "source_length_px": 35.405858690545905,
+          "ratio": 0.5607992210346654,
+          "signed_error_px": -15.550280716824322,
+          "required_scale": 1.783169381289468,
+          "after_common_scale_signed_error_px": -14.210680512995424
+        },
+        "right_hip_knee": {
+          "rig_length_px": 21.33094280904286,
+          "source_length_px": 44.58131945975435,
+          "ratio": 0.4784726667477687,
+          "signed_error_px": -23.250376650711488,
+          "required_scale": 2.089983544508634,
+          "after_common_scale_signed_error_px": -21.811237715915702
+        },
+        "right_knee_ankle": {
+          "rig_length_px": 42.31960183179921,
+          "source_length_px": 50.64189872810448,
+          "ratio": 0.8356638059527044,
+          "signed_error_px": -8.322296896305268,
+          "required_scale": 1.1966534782010128,
+          "after_common_scale_signed_error_px": -5.467111954579288
+        }
+      }
+    },
+    {
+      "source_frame": 23,
+      "common_length_fit_scale": 1.0382161069014393,
+      "segments": {
+        "shoulder_width": {
+          "rig_length_px": 46.90730126976606,
+          "source_length_px": 44.400494704518145,
+          "ratio": 1.0564589782598262,
+          "signed_error_px": 2.5068065652479135,
+          "required_scale": 0.9465582862925507,
+          "after_common_scale_signed_error_px": 4.299421005031313
+        },
+        "hip_width": {
+          "rig_length_px": 38.818669832380266,
+          "source_length_px": 27.70863331302396,
+          "ratio": 1.400959383086362,
+          "signed_error_px": 11.110036519356306,
+          "required_scale": 0.7137965683180374,
+          "after_common_scale_signed_error_px": 12.59353495544223
+        },
+        "torso_midpoints": {
+          "rig_length_px": 79.04368722964136,
+          "source_length_px": 68.21643513480878,
+          "ratio": 1.1587191132669987,
+          "signed_error_px": 10.827252094832588,
+          "required_scale": 0.863021925288268,
+          "after_common_scale_signed_error_px": 13.847994095884488
+        },
+        "left_shoulder_elbow": {
+          "rig_length_px": 22.750857338037395,
+          "source_length_px": 33.66704895409383,
+          "ratio": 0.6757603664360059,
+          "signed_error_px": -10.916191616056434,
+          "required_scale": 1.4798145166074923,
+          "after_common_scale_signed_error_px": -10.046742419926602
+        },
+        "left_elbow_wrist": {
+          "rig_length_px": 20.682557498213725,
+          "source_length_px": 34.55187038519803,
+          "ratio": 0.5985944398273184,
+          "signed_error_px": -13.869312886984304,
+          "required_scale": 1.6705801682496058,
+          "after_common_scale_signed_error_px": -13.078906058637404
+        },
+        "left_hip_knee": {
+          "rig_length_px": 33.81055427959745,
+          "source_length_px": 48.21319028342569,
+          "ratio": 0.7012718735441273,
+          "signed_error_px": -14.402636003828242,
+          "required_scale": 1.4259804759402992,
+          "after_common_scale_signed_error_px": -13.110528247082229
+        },
+        "left_knee_ankle": {
+          "rig_length_px": 42.377715520149344,
+          "source_length_px": 53.169529325846504,
+          "ratio": 0.7970301046006985,
+          "signed_error_px": -10.79181380569716,
+          "required_scale": 1.2546577528598957,
+          "after_common_scale_signed_error_px": -9.17230249914035
+        },
+        "right_shoulder_elbow": {
+          "rig_length_px": 43.11563500881112,
+          "source_length_px": 30.08287490102317,
+          "ratio": 1.4332285445013995,
+          "signed_error_px": 13.032760107787947,
+          "required_scale": 0.6977254282553285,
+          "after_common_scale_signed_error_px": 14.680471824408112
+        },
+        "right_elbow_wrist": {
+          "rig_length_px": 22.53962050626447,
+          "source_length_px": 33.860918759548476,
+          "ratio": 0.6656529513071319,
+          "signed_error_px": -11.321298253284006,
+          "required_scale": 1.5022843330542084,
+          "after_common_scale_signed_error_px": -10.45992170649873
+        },
+        "right_hip_knee": {
+          "rig_length_px": 13.823119642376975,
+          "source_length_px": 33.75488616929337,
+          "ratio": 0.40951462769119895,
+          "signed_error_px": -19.931766526916398,
+          "required_scale": 2.4419152146967167,
+          "after_common_scale_signed_error_px": -19.40350070895193
+        },
+        "right_knee_ankle": {
+          "rig_length_px": 38.840793786562244,
+          "source_length_px": 55.33669060574342,
+          "ratio": 0.7018994696175586,
+          "signed_error_px": -16.495896819181176,
+          "required_scale": 1.424705450404267,
+          "after_common_scale_signed_error_px": -15.011552891697157
+        }
+      }
+    },
+    {
+      "source_frame": 25,
+      "common_length_fit_scale": 1.062997395989031,
+      "segments": {
+        "shoulder_width": {
+          "rig_length_px": 48.43232742309882,
+          "source_length_px": 43.75055833589992,
+          "ratio": 1.1070104991861838,
+          "signed_error_px": 4.6817690871989015,
+          "required_scale": 0.9033337992143234,
+          "after_common_scale_signed_error_px": 7.7328795965422685
+        },
+        "hip_width": {
+          "rig_length_px": 38.754970353834906,
+          "source_length_px": 27.338534682417308,
+          "ratio": 1.4175950102680537,
+          "signed_error_px": 11.416435671417599,
+          "required_scale": 0.7054200901926916,
+          "after_common_scale_signed_error_px": 13.857897885341298
+        },
+        "torso_midpoints": {
+          "rig_length_px": 75.88659212153212,
+          "source_length_px": 68.34587493086885,
+          "ratio": 1.1103317090942304,
+          "signed_error_px": 7.540717190663273,
+          "required_scale": 0.9006317587883399,
+          "after_common_scale_signed_error_px": 12.321374884801514
+        },
+        "left_shoulder_elbow": {
+          "rig_length_px": 22.548394232045894,
+          "source_length_px": 33.79394650667613,
+          "ratio": 0.6672317548822352,
+          "signed_error_px": -11.245552274630235,
+          "required_scale": 1.4987296283230669,
+          "after_common_scale_signed_error_px": -9.825062154277255
+        },
+        "left_elbow_wrist": {
+          "rig_length_px": 20.905224787172756,
+          "source_length_px": 35.2738112356408,
+          "ratio": 0.5926556857584483,
+          "signed_error_px": -14.368586448468044,
+          "required_scale": 1.687320351479046,
+          "after_common_scale_signed_error_px": -13.051611724310813
+        },
+        "left_hip_knee": {
+          "rig_length_px": 30.31252939170119,
+          "source_length_px": 45.29420525459646,
+          "ratio": 0.6692363674628129,
+          "signed_error_px": -14.981675862895273,
+          "required_scale": 1.4942403739820167,
+          "after_common_scale_signed_error_px": -13.072065445377127
+        },
+        "left_knee_ankle": {
+          "rig_length_px": 44.63783201323214,
+          "source_length_px": 54.429839423844946,
+          "ratio": 0.8200985431104715,
+          "signed_error_px": -9.792007410612804,
+          "required_scale": 1.2193656584331902,
+          "after_common_scale_signed_error_px": -6.97994023118337
+        },
+        "right_shoulder_elbow": {
+          "rig_length_px": 39.92647245879078,
+          "source_length_px": 30.60889937311074,
+          "ratio": 1.3044073219393615,
+          "signed_error_px": 9.317573085680042,
+          "required_scale": 0.7666316979217994,
+          "after_common_scale_signed_error_px": 11.83283688161163
+        },
+        "right_elbow_wrist": {
+          "rig_length_px": 20.401132663902523,
+          "source_length_px": 33.55334554223018,
+          "ratio": 0.6080208198084359,
+          "signed_error_px": -13.15221287832766,
+          "required_scale": 1.6446805231358061,
+          "after_common_scale_signed_error_px": -11.866994645275035
+        },
+        "right_hip_knee": {
+          "rig_length_px": 13.862951409088977,
+          "source_length_px": 31.753858633814463,
+          "ratio": 0.4365753330628743,
+          "signed_error_px": -17.89090722472549,
+          "required_scale": 2.290555430569832,
+          "after_common_scale_signed_error_px": -17.01757738523041
+        },
+        "right_knee_ankle": {
+          "rig_length_px": 36.95773427641953,
+          "source_length_px": 56.571595672986376,
+          "ratio": 0.6532913529619122,
+          "signed_error_px": -19.613861396566847,
+          "required_scale": 1.5307106017340801,
+          "after_common_scale_signed_error_px": -17.285620375497857
+        }
+      }
+    },
+    {
+      "source_frame": 27,
+      "common_length_fit_scale": 1.0463529196041224,
+      "segments": {
+        "shoulder_width": {
+          "rig_length_px": 45.08335757275618,
+          "source_length_px": 43.3066008185883,
+          "ratio": 1.0410273889103125,
+          "signed_error_px": 1.7767567541678773,
+          "required_scale": 0.960589520172704,
+          "after_common_scale_signed_error_px": 3.866502003221747
+        },
+        "hip_width": {
+          "rig_length_px": 38.32244712145334,
+          "source_length_px": 27.40707355612839,
+          "ratio": 1.3982684814185207,
+          "signed_error_px": 10.915373565324948,
+          "required_scale": 0.7151702361091028,
+          "after_common_scale_signed_error_px": 12.691730875778902
+        },
+        "torso_midpoints": {
+          "rig_length_px": 78.43154051565176,
+          "source_length_px": 68.54346907917846,
+          "ratio": 1.144259862672708,
+          "signed_error_px": 9.888071436473297,
+          "required_scale": 0.8739273591789257,
+          "after_common_scale_signed_error_px": 13.523602328422768
+        },
+        "left_shoulder_elbow": {
+          "rig_length_px": 21.00693084739915,
+          "source_length_px": 33.86369267070066,
+          "ratio": 0.6203378660347529,
+          "signed_error_px": -12.856761823301508,
+          "required_scale": 1.6120247606229108,
+          "after_common_scale_signed_error_px": -11.883029246602657
+        },
+        "left_elbow_wrist": {
+          "rig_length_px": 20.47870122212997,
+          "source_length_px": 35.67848660862088,
+          "ratio": 0.5739789763723265,
+          "signed_error_px": -15.199785386490909,
+          "required_scale": 1.7422240903668984,
+          "after_common_scale_signed_error_px": -14.250537795144677
+        },
+        "left_hip_knee": {
+          "rig_length_px": 29.307546423017445,
+          "source_length_px": 45.47857627209367,
+          "ratio": 0.6444253278219044,
+          "signed_error_px": -16.171029849076223,
+          "required_scale": 1.5517701692140249,
+          "after_common_scale_signed_error_px": -14.812539505936012
+        },
+        "left_knee_ankle": {
+          "rig_length_px": 47.58908560714753,
+          "source_length_px": 54.11350031960003,
+          "ratio": 0.879430924373426,
+          "signed_error_px": -6.524414712452497,
+          "required_scale": 1.1370989719431084,
+          "after_common_scale_signed_error_px": -4.318521653270693
+        },
+        "right_shoulder_elbow": {
+          "rig_length_px": 41.96709331153685,
+          "source_length_px": 30.47062558969205,
+          "ratio": 1.3772967406922538,
+          "signed_error_px": 11.496467721844798,
+          "required_scale": 0.7260599480525759,
+          "after_common_scale_signed_error_px": 13.441765024133165
+        },
+        "right_elbow_wrist": {
+          "rig_length_px": 20.993685930650773,
+          "source_length_px": 33.06222225442807,
+          "ratio": 0.634975040972603,
+          "signed_error_px": -12.068536323777298,
+          "required_scale": 1.5748650505510917,
+          "after_common_scale_signed_error_px": -11.09541768763965
+        },
+        "right_hip_knee": {
+          "rig_length_px": 13.870109490430295,
+          "source_length_px": 31.36108049955612,
+          "ratio": 0.4422714163380503,
+          "signed_error_px": -17.490971009125825,
+          "required_scale": 2.2610550061766816,
+          "after_common_scale_signed_error_px": -16.848050939015536
+        },
+        "right_knee_ankle": {
+          "rig_length_px": 38.06137973414845,
+          "source_length_px": 56.58203461717164,
+          "ratio": 0.6726760533032777,
+          "signed_error_px": -18.520654883023184,
+          "required_scale": 1.4865996716983583,
+          "after_common_scale_signed_error_px": -16.75639880818423
+        }
+      }
+    },
+    {
+      "source_frame": 29,
+      "common_length_fit_scale": 0.9371012677988927,
+      "segments": {
+        "shoulder_width": {
+          "rig_length_px": 34.95995658031647,
+          "source_length_px": 41.30428742459588,
+          "ratio": 0.8464001865215212,
+          "signed_error_px": -6.344330844279405,
+          "required_scale": 1.1814742197892618,
+          "after_common_scale_signed_error_px": -8.543267790987073
+        },
+        "hip_width": {
+          "rig_length_px": 36.769056119715536,
+          "source_length_px": 24.29556917573406,
+          "ratio": 1.5134058335393827,
+          "signed_error_px": 12.473486943981477,
+          "required_scale": 0.6607612960373709,
+          "after_common_scale_signed_error_px": 10.160759929820003
+        },
+        "torso_midpoints": {
+          "rig_length_px": 73.12288563538424,
+          "source_length_px": 64.141018519223,
+          "ratio": 1.1400331226961946,
+          "signed_error_px": 8.98186711616124,
+          "required_scale": 0.8771674963574618,
+          "after_common_scale_signed_error_px": 4.382530314809017
+        },
+        "left_shoulder_elbow": {
+          "rig_length_px": 25.492194785214572,
+          "source_length_px": 29.86819191389272,
+          "ratio": 0.8534897210619997,
+          "signed_error_px": -4.375997128678147,
+          "required_scale": 1.1716602734895238,
+          "after_common_scale_signed_error_px": -5.979423861691824
+        },
+        "left_elbow_wrist": {
+          "rig_length_px": 16.053489479495408,
+          "source_length_px": 22.636761742702806,
+          "ratio": 0.7091778259613664,
+          "signed_error_px": -6.583272263207398,
+          "required_scale": 1.4100835691589666,
+          "after_common_scale_signed_error_px": -7.593016398871473
+        },
+        "left_hip_knee": {
+          "rig_length_px": 47.35951232042519,
+          "source_length_px": 48.00848506741569,
+          "ratio": 0.986482124022885,
+          "signed_error_px": -0.648972746990502,
+          "required_scale": 1.0137031129585896,
+          "after_common_scale_signed_error_px": -3.6278260296079665
+        },
+        "left_knee_ankle": {
+          "rig_length_px": 53.08760365630466,
+          "source_length_px": 55.349127170291375,
+          "ratio": 0.9591407556070625,
+          "signed_error_px": -2.2615235139867167,
+          "required_scale": 1.0425998417375943,
+          "after_common_scale_signed_error_px": -5.600666479563152
+        },
+        "right_shoulder_elbow": {
+          "rig_length_px": 16.959743440914156,
+          "source_length_px": 29.760218646152477,
+          "ratio": 0.569879665286222,
+          "signed_error_px": -12.800475205238321,
+          "required_scale": 1.7547564177390855,
+          "after_common_scale_signed_error_px": -13.867221566127867
+        },
+        "right_elbow_wrist": {
+          "rig_length_px": 39.606481541592935,
+          "source_length_px": 21.070832434280653,
+          "ratio": 1.8796828110671213,
+          "signed_error_px": 18.53564910731228,
+          "required_scale": 0.5320046521212196,
+          "after_common_scale_signed_error_px": 16.044451631399525
+        },
+        "right_hip_knee": {
+          "rig_length_px": 29.478136028054926,
+          "source_length_px": 41.37791882131964,
+          "ratio": 0.712412244688985,
+          "signed_error_px": -11.899782793264713,
+          "required_scale": 1.4036816568706874,
+          "after_common_scale_signed_error_px": -13.753920177081152
+        },
+        "right_knee_ankle": {
+          "rig_length_px": 66.79283347752684,
+          "source_length_px": 57.30322664808807,
+          "ratio": 1.1656033592613653,
+          "signed_error_px": 9.48960682943877,
+          "required_scale": 0.8579247752285932,
+          "after_common_scale_signed_error_px": 5.288422283582655
+        }
+      }
+    },
+    {
+      "source_frame": 31,
+      "common_length_fit_scale": 0.9201170377914083,
+      "segments": {
+        "shoulder_width": {
+          "rig_length_px": 40.75451915770682,
+          "source_length_px": 44.99254205401054,
+          "ratio": 0.9058061024599086,
+          "signed_error_px": -4.238022896303725,
+          "required_scale": 1.1039890295332389,
+          "after_common_scale_signed_error_px": -7.493614610008144
+        },
+        "hip_width": {
+          "rig_length_px": 37.94543257353011,
+          "source_length_px": 25.790242609543053,
+          "ratio": 1.4713096401617147,
+          "signed_error_px": 12.155189963987059,
+          "required_scale": 0.6796665859472572,
+          "after_common_scale_signed_error_px": 9.123996407727088
+        },
+        "torso_midpoints": {
+          "rig_length_px": 69.32959899843095,
+          "source_length_px": 65.445618761363,
+          "ratio": 1.0593466806575742,
+          "signed_error_px": 3.8839802370679593,
+          "required_scale": 0.9439780368965374,
+          "after_common_scale_signed_error_px": -1.654273499660519
+        },
+        "left_shoulder_elbow": {
+          "rig_length_px": 33.7004179333625,
+          "source_length_px": 24.34068641204009,
+          "ratio": 1.384530303002985,
+          "signed_error_px": 9.359731521322413,
+          "required_scale": 0.7222666039385662,
+          "after_common_scale_signed_error_px": 6.667642309137872
+        },
+        "left_elbow_wrist": {
+          "rig_length_px": 22.502264231716435,
+          "source_length_px": 27.445907699879612,
+          "ratio": 0.8198768456768926,
+          "signed_error_px": -4.943643468163177,
+          "required_scale": 1.21969537897414,
+          "after_common_scale_signed_error_px": -6.741190991393125
+        },
+        "left_hip_knee": {
+          "rig_length_px": 60.51854938979906,
+          "source_length_px": 52.18743138894005,
+          "ratio": 1.1596383991150905,
+          "signed_error_px": 8.331118000859014,
+          "required_scale": 0.8623377776754296,
+          "after_common_scale_signed_error_px": 3.4967170070349027
+        },
+        "left_knee_ankle": {
+          "rig_length_px": 54.68348014876141,
+          "source_length_px": 55.53998143725427,
+          "ratio": 0.9845786536774327,
+          "signed_error_px": -0.8565012884928578,
+          "required_scale": 1.015662889160727,
+          "after_common_scale_signed_error_px": -5.22477966665064
+        },
+        "right_shoulder_elbow": {
+          "rig_length_px": 16.488691424969396,
+          "source_length_px": 28.92378275028272,
+          "ratio": 0.5700738235840962,
+          "signed_error_px": -12.435091325313323,
+          "required_scale": 1.754158774933615,
+          "after_common_scale_signed_error_px": -13.752256839283284
+        },
+        "right_elbow_wrist": {
+          "rig_length_px": 38.03301740556401,
+          "source_length_px": 24.529039140647672,
+          "ratio": 1.5505302587470116,
+          "signed_error_px": 13.503978264916338,
+          "required_scale": 0.6449406545655569,
+          "after_common_scale_signed_error_px": 10.465788172828955
+        },
+        "right_hip_knee": {
+          "rig_length_px": 40.249305746140855,
+          "source_length_px": 47.82198280609811,
+          "ratio": 0.8416486181540843,
+          "signed_error_px": -7.5726770599572575,
+          "required_scale": 1.1881442901827775,
+          "after_common_scale_signed_error_px": -10.787910829798278
+        },
+        "right_knee_ankle": {
+          "rig_length_px": 70.66918439255926,
+          "source_length_px": 60.24284734569432,
+          "ratio": 1.1730717837262075,
+          "signed_error_px": 10.426337046864937,
+          "required_scale": 0.8524627511059443,
+          "after_common_scale_signed_error_px": 4.781073260722131
+        }
+      }
+    },
+    {
+      "source_frame": 33,
+      "common_length_fit_scale": 0.900677687370608,
+      "segments": {
+        "shoulder_width": {
+          "rig_length_px": 44.13095666383728,
+          "source_length_px": 44.82148914826463,
+          "ratio": 0.9845937183804148,
+          "signed_error_px": -0.6905324844273508,
+          "required_scale": 1.0156473490862075,
+          "after_common_scale_signed_error_px": -5.073721158827148
+        },
+        "hip_width": {
+          "rig_length_px": 38.651996138646595,
+          "source_length_px": 26.26814074112165,
+          "ratio": 1.4714401190236717,
+          "signed_error_px": 12.383855397524947,
+          "required_scale": 0.6796063170165014,
+          "after_common_scale_signed_error_px": 8.54484975329224
+        },
+        "torso_midpoints": {
+          "rig_length_px": 71.57005202456298,
+          "source_length_px": 65.34114447338138,
+          "ratio": 1.095329024328907,
+          "signed_error_px": 6.2289075511816066,
+          "required_scale": 0.912967681663221,
+          "after_common_scale_signed_error_px": -0.8795955309038845
+        },
+        "left_shoulder_elbow": {
+          "rig_length_px": 32.53219701688683,
+          "source_length_px": 24.472482529688925,
+          "ratio": 1.3293378380154208,
+          "signed_error_px": 8.059714487197908,
+          "required_scale": 0.7522542211639052,
+          "after_common_scale_signed_error_px": 4.828541444565701
+        },
+        "left_elbow_wrist": {
+          "rig_length_px": 21.122167098565352,
+          "source_length_px": 27.830974462681755,
+          "ratio": 0.758944575472477,
+          "signed_error_px": -6.708807364116403,
+          "required_scale": 1.3176192732881122,
+          "after_common_scale_signed_error_px": -8.806709848090367
+        },
+        "left_hip_knee": {
+          "rig_length_px": 59.959791729927474,
+          "source_length_px": 52.48451068916482,
+          "ratio": 1.1424283268073963,
+          "signed_error_px": 7.475281040762653,
+          "required_scale": 0.8753284355217074,
+          "after_common_scale_signed_error_px": 1.519935861369568
+        },
+        "left_knee_ankle": {
+          "rig_length_px": 57.468253083844964,
+          "source_length_px": 55.731956738058706,
+          "ratio": 1.0311544120718188,
+          "signed_error_px": 1.7362963457862577,
+          "required_scale": 0.9697868605253576,
+          "after_common_scale_signed_error_px": -3.971583453272409
+        },
+        "right_shoulder_elbow": {
+          "rig_length_px": 20.214369496690736,
+          "source_length_px": 28.42918694935391,
+          "ratio": 0.7110428283686859,
+          "signed_error_px": -8.214817452663173,
+          "required_scale": 1.4063850447577901,
+          "after_common_scale_signed_error_px": -10.222555379419536
+        },
+        "right_elbow_wrist": {
+          "rig_length_px": 43.22404263820814,
+          "source_length_px": 26.21519505176483,
+          "ratio": 1.6488163659609414,
+          "signed_error_px": 17.00884758644331,
+          "required_scale": 0.6064956781389013,
+          "after_common_scale_signed_error_px": 12.71573571042503
+        },
+        "right_hip_knee": {
+          "rig_length_px": 43.72304923394009,
+          "source_length_px": 47.06244235756252,
+          "ratio": 0.9290433526961692,
+          "signed_error_px": -3.339393123622429,
+          "required_scale": 1.0763760346574873,
+          "after_common_scale_signed_error_px": -7.682067488746121
+        },
+        "right_knee_ankle": {
+          "rig_length_px": 68.9876127171756,
+          "source_length_px": 60.46103543465136,
+          "ratio": 1.1410259884110006,
+          "signed_error_px": 8.526577282524237,
+          "required_scale": 0.8764042275606762,
+          "after_common_scale_signed_error_px": 1.6745680446735065
+        }
+      }
+    },
+    {
+      "source_frame": 35,
+      "common_length_fit_scale": 0.9286927065078954,
+      "segments": {
+        "shoulder_width": {
+          "rig_length_px": 45.532879321375624,
+          "source_length_px": 47.039200393446684,
+          "ratio": 0.967977324030344,
+          "signed_error_px": -1.50632107207106,
+          "required_scale": 1.0330820517946888,
+          "after_common_scale_signed_error_px": -4.753147461380976
+        },
+        "hip_width": {
+          "rig_length_px": 39.0812669282954,
+          "source_length_px": 26.12113812368641,
+          "ratio": 1.4961548284474198,
+          "signed_error_px": 12.960128804608988,
+          "required_scale": 0.668380023902816,
+          "after_common_scale_signed_error_px": 10.173349433709749
+        },
+        "torso_midpoints": {
+          "rig_length_px": 71.877403239391,
+          "source_length_px": 70.45780738927778,
+          "ratio": 1.020148169560117,
+          "signed_error_px": 1.4195958501132253,
+          "required_scale": 0.9802497615921767,
+          "after_common_scale_signed_error_px": -3.70578723812838
+        },
+        "left_shoulder_elbow": {
+          "rig_length_px": 23.28052458323672,
+          "source_length_px": 28.033629868981624,
+          "ratio": 0.8304498808053368,
+          "signed_error_px": -4.753105285744905,
+          "required_scale": 1.2041665886329471,
+          "after_common_scale_signed_error_px": -6.413176484851924
+        },
+        "left_elbow_wrist": {
+          "rig_length_px": 21.313068690753344,
+          "source_length_px": 34.89830837904557,
+          "ratio": 0.6107192491757171,
+          "signed_error_px": -13.585239688292223,
+          "required_scale": 1.637413592824677,
+          "after_common_scale_signed_error_px": -15.105016932641156
+        },
+        "left_hip_knee": {
+          "rig_length_px": 70.98398358353887,
+          "source_length_px": 46.65055423056335,
+          "ratio": 1.5216107236949685,
+          "signed_error_px": 24.33342935297552,
+          "required_scale": 0.6571983125695072,
+          "after_common_scale_signed_error_px": 19.271753602345377
+        },
+        "left_knee_ankle": {
+          "rig_length_px": 44.617463432581886,
+          "source_length_px": 56.249761386433505,
+          "ratio": 0.7932027146935217,
+          "signed_error_px": -11.63229795385162,
+          "required_scale": 1.2607117720044376,
+          "after_common_scale_signed_error_px": -14.813848513711982
+        },
+        "right_shoulder_elbow": {
+          "rig_length_px": 34.49861989083134,
+          "source_length_px": 35.23280496975692,
+          "ratio": 0.9791618896208863,
+          "signed_error_px": -0.7341850789255773,
+          "required_scale": 1.0212815782558509,
+          "after_common_scale_signed_error_px": -3.1941882925536476
+        },
+        "right_elbow_wrist": {
+          "rig_length_px": 34.25307592962666,
+          "source_length_px": 40.8226929194923,
+          "ratio": 0.8390694851311798,
+          "signed_error_px": -6.5696169898656365,
+          "required_scale": 1.1917964098571174,
+          "after_common_scale_signed_error_px": -9.01211112818687
+        },
+        "right_hip_knee": {
+          "rig_length_px": 63.021349326779806,
+          "source_length_px": 47.54403408496395,
+          "ratio": 1.3255364324818757,
+          "signed_error_px": 15.477315241815859,
+          "required_scale": 0.7544115540661861,
+          "after_common_scale_signed_error_px": 10.983433389102721
+        },
+        "right_knee_ankle": {
+          "rig_length_px": 56.11288107112862,
+          "source_length_px": 59.66598206847089,
+          "ratio": 0.9404501380155809,
+          "signed_error_px": -3.55310099734227,
+          "required_scale": 1.063320594657016,
+          "after_common_scale_signed_error_px": -7.554358676568803
+        }
+      }
+    },
+    {
+      "source_frame": 37,
+      "common_length_fit_scale": 0.9000571581530117,
+      "segments": {
+        "shoulder_width": {
+          "rig_length_px": 54.51825317521019,
+          "source_length_px": 46.046553200780984,
+          "ratio": 1.1839811969744898,
+          "signed_error_px": 8.471699974429207,
+          "required_scale": 0.8446080077583751,
+          "after_common_scale_signed_error_px": 3.022990819565109
+        },
+        "hip_width": {
+          "rig_length_px": 38.636022504507025,
+          "source_length_px": 25.145177546653677,
+          "ratio": 1.5365181825748815,
+          "signed_error_px": 13.490844957853348,
+          "required_scale": 0.6508221063314787,
+          "after_common_scale_signed_error_px": 9.629451071088724
+        },
+        "torso_midpoints": {
+          "rig_length_px": 70.03099331232549,
+          "source_length_px": 68.14060057373253,
+          "ratio": 1.027742531217456,
+          "signed_error_px": 1.8903927385929649,
+          "required_scale": 0.9730063412043557,
+          "after_common_scale_signed_error_px": -5.1087037504082815
+        },
+        "left_shoulder_elbow": {
+          "rig_length_px": 32.75663353077582,
+          "source_length_px": 28.000568601348732,
+          "ratio": 1.1698560124667612,
+          "signed_error_px": 4.75606492942709,
+          "required_scale": 0.854806052491364,
+          "after_common_scale_signed_error_px": 1.4822738850210087
+        },
+        "left_elbow_wrist": {
+          "rig_length_px": 23.914992907251168,
+          "source_length_px": 35.18317884921919,
+          "ratio": 0.6797280316750545,
+          "signed_error_px": -11.26818594196802,
+          "required_scale": 1.471176637420262,
+          "after_common_scale_signed_error_px": -13.658318295869272
+        },
+        "left_hip_knee": {
+          "rig_length_px": 71.74938988592733,
+          "source_length_px": 49.71155829289324,
+          "ratio": 1.4433140370130908,
+          "signed_error_px": 22.037831593034092,
+          "required_scale": 0.6928499095522411,
+          "after_common_scale_signed_error_px": 14.866993667046948
+        },
+        "left_knee_ankle": {
+          "rig_length_px": 41.884058593218704,
+          "source_length_px": 55.31279303492839,
+          "ratio": 0.7572219064542657,
+          "signed_error_px": -13.428734441709686,
+          "required_scale": 1.3206168383090717,
+          "after_common_scale_signed_error_px": -17.614746285601733
+        },
+        "right_shoulder_elbow": {
+          "rig_length_px": 36.03998225333593,
+          "source_length_px": 37.37501479784746,
+          "ratio": 0.9642800798412413,
+          "signed_error_px": -1.3350325445115345,
+          "required_scale": 1.0370430966121789,
+          "after_common_scale_signed_error_px": -4.9369707910249545
+        },
+        "right_elbow_wrist": {
+          "rig_length_px": 33.03762710229271,
+          "source_length_px": 38.11457976314007,
+          "ratio": 0.8667976220019303,
+          "signed_error_px": -5.076952660847361,
+          "required_scale": 1.1536718313675451,
+          "after_common_scale_signed_error_px": -8.378827001331576
+        },
+        "right_hip_knee": {
+          "rig_length_px": 68.24088639897762,
+          "source_length_px": 50.826760978059255,
+          "ratio": 1.342617256850887,
+          "signed_error_px": 17.414125420918367,
+          "required_scale": 0.744813903513726,
+          "after_common_scale_signed_error_px": 10.593937304047053
+        },
+        "right_knee_ankle": {
+          "rig_length_px": 55.1781795268132,
+          "source_length_px": 58.69091397543367,
+          "ratio": 0.9401485816000276,
+          "signed_error_px": -3.5127344486204706,
+          "required_scale": 1.0636616589881058,
+          "after_common_scale_signed_error_px": -9.02739851847349
+        }
+      }
+    },
+    {
+      "source_frame": 39,
+      "common_length_fit_scale": 0.893245700786119,
+      "segments": {
+        "shoulder_width": {
+          "rig_length_px": 54.39436022882787,
+          "source_length_px": 49.32477355322227,
+          "ratio": 1.1027797252862281,
+          "signed_error_px": 5.069586675605599,
+          "required_scale": 0.9067994061465434,
+          "after_common_scale_signed_error_px": -0.7372451318103188
+        },
+        "hip_width": {
+          "rig_length_px": 39.067773623074295,
+          "source_length_px": 26.969458464263624,
+          "ratio": 1.4485931808694552,
+          "signed_error_px": 12.09831515881067,
+          "required_scale": 0.690324939538783,
+          "after_common_scale_signed_error_px": 7.92766236383283
+        },
+        "torso_midpoints": {
+          "rig_length_px": 70.19765774054181,
+          "source_length_px": 72.92741737289845,
+          "ratio": 0.9625688152591693,
+          "signed_error_px": -2.7297596323566324,
+          "required_scale": 1.0388867623254059,
+          "after_common_scale_signed_error_px": -10.223661390904041
+        },
+        "left_shoulder_elbow": {
+          "rig_length_px": 40.19932344576568,
+          "source_length_px": 28.873457590334812,
+          "ratio": 1.3922587317433752,
+          "signed_error_px": 11.325865855430866,
+          "required_scale": 0.7182573017500906,
+          "after_common_scale_signed_error_px": 7.034415252106012
+        },
+        "left_elbow_wrist": {
+          "rig_length_px": 34.856825558298596,
+          "source_length_px": 34.90514378205181,
+          "ratio": 0.9986157276974731,
+          "signed_error_px": -0.048318223753213374,
+          "required_scale": 1.0013861911685675,
+          "after_common_scale_signed_error_px": -3.7694342090498765
+        },
+        "left_hip_knee": {
+          "rig_length_px": 72.66095235350147,
+          "source_length_px": 50.24384850995419,
+          "ratio": 1.446166137912506,
+          "signed_error_px": 22.41710384354728,
+          "required_scale": 0.6914834843550324,
+          "after_common_scale_signed_error_px": 14.660234794836029
+        },
+        "left_knee_ankle": {
+          "rig_length_px": 48.84567124432498,
+          "source_length_px": 57.90335254376857,
+          "ratio": 0.8435724202221802,
+          "signed_error_px": -9.057681299443587,
+          "required_scale": 1.1854346776019775,
+          "after_common_scale_signed_error_px": -14.272166702763123
+        },
+        "right_shoulder_elbow": {
+          "rig_length_px": 31.703860725161306,
+          "source_length_px": 34.785691156137275,
+          "ratio": 0.9114052264437402,
+          "signed_error_px": -3.0818304309759696,
+          "required_scale": 1.0972067868229727,
+          "after_common_scale_signed_error_px": -6.466353865065052
+        },
+        "right_elbow_wrist": {
+          "rig_length_px": 41.17345044385265,
+          "source_length_px": 34.645346459043104,
+          "ratio": 1.1884265753418548,
+          "signed_error_px": 6.5281039848095475,
+          "required_scale": 0.8414487026363802,
+          "after_common_scale_signed_error_px": 2.1326611364586014
+        },
+        "right_hip_knee": {
+          "rig_length_px": 67.26445614535723,
+          "source_length_px": 51.005372116434714,
+          "ratio": 1.3187719911503908,
+          "signed_error_px": 16.259084028922516,
+          "required_scale": 0.7582811939520192,
+          "after_common_scale_signed_error_px": 9.078314151122072
+        },
+        "right_knee_ankle": {
+          "rig_length_px": 60.03027491786612,
+          "source_length_px": 63.03148435636598,
+          "ratio": 0.9523855503460511,
+          "signed_error_px": -3.001209438499856,
+          "required_scale": 1.0499949307679521,
+          "after_common_scale_signed_error_px": -9.409699368973271
+        }
+      }
+    },
+    {
+      "source_frame": 41,
+      "common_length_fit_scale": 0.8865759569762479,
+      "segments": {
+        "shoulder_width": {
+          "rig_length_px": 57.3441533007587,
+          "source_length_px": 48.73618203872087,
+          "ratio": 1.176623832683463,
+          "signed_error_px": 8.607971262037829,
+          "required_scale": 0.8498892953063457,
+          "after_common_scale_signed_error_px": 2.1037655508919357
+        },
+        "hip_width": {
+          "rig_length_px": 37.41678908937843,
+          "source_length_px": 28.35164126077735,
+          "ratio": 1.3197397902019212,
+          "signed_error_px": 9.065147828601084,
+          "required_scale": 0.7577251268956581,
+          "after_common_scale_signed_error_px": 4.8211843331167685
+        },
+        "torso_midpoints": {
+          "rig_length_px": 71.85708776355435,
+          "source_length_px": 72.08665125335291,
+          "ratio": 0.9968154507692173,
+          "signed_error_px": -0.229563489798565,
+          "required_scale": 1.003194722983402,
+          "after_common_scale_signed_error_px": -8.37988490385348
+        },
+        "left_shoulder_elbow": {
+          "rig_length_px": 43.801387825591966,
+          "source_length_px": 28.215210130382413,
+          "ratio": 1.5524033889234163,
+          "signed_error_px": 15.586177695209553,
+          "required_scale": 0.6441624690690059,
+          "after_common_scale_signed_error_px": 10.61804719797956
+        },
+        "left_elbow_wrist": {
+          "rig_length_px": 35.41445084654769,
+          "source_length_px": 34.89408056144526,
+          "ratio": 1.0149128527454996,
+          "signed_error_px": 0.5203702851024303,
+          "required_scale": 0.9853062726468013,
+          "after_common_scale_signed_error_px": -3.496479911378948
+        },
+        "left_hip_knee": {
+          "rig_length_px": 67.93320360893821,
+          "source_length_px": 50.401791893132604,
+          "ratio": 1.3478331038899893,
+          "signed_error_px": 17.53141171580561,
+          "required_scale": 0.7419316212919047,
+          "after_common_scale_signed_error_px": 9.826153106924089
+        },
+        "left_knee_ankle": {
+          "rig_length_px": 56.22726960756145,
+          "source_length_px": 59.643530551046545,
+          "ratio": 0.9427220201097711,
+          "signed_error_px": -3.416260943485092,
+          "required_scale": 1.0607580799730967,
+          "after_common_scale_signed_error_px": -9.793785190561252
+        },
+        "right_shoulder_elbow": {
+          "rig_length_px": 32.41218834652646,
+          "source_length_px": 34.57347883245451,
+          "ratio": 0.9374870403871761,
+          "signed_error_px": -2.161290485928049,
+          "required_scale": 1.0666814120299801,
+          "after_common_scale_signed_error_px": -5.837611931438424
+        },
+        "right_elbow_wrist": {
+          "rig_length_px": 40.490205326110484,
+          "source_length_px": 34.24501792774052,
+          "ratio": 1.1823677654819094,
+          "signed_error_px": 6.245187398369964,
+          "required_scale": 0.8457605401585183,
+          "after_common_scale_signed_error_px": 1.6526246074206554
+        },
+        "right_hip_knee": {
+          "rig_length_px": 65.0455929816355,
+          "source_length_px": 52.400897838856714,
+          "ratio": 1.2413068413763397,
+          "signed_error_px": 12.64469514277878,
+          "required_scale": 0.8056025848461588,
+          "after_common_scale_signed_error_px": 5.266961005924287
+        },
+        "right_knee_ankle": {
+          "rig_length_px": 62.206353393968634,
+          "source_length_px": 61.21562054207337,
+          "ratio": 1.0161843144465772,
+          "signed_error_px": 0.9907328518952667,
+          "required_scale": 0.9840734459128201,
+          "after_common_scale_signed_error_px": -6.064963251812955
+        }
+      }
+    },
+    {
+      "source_frame": 43,
+      "common_length_fit_scale": 0.9454566660459852,
+      "segments": {
+        "shoulder_width": {
+          "rig_length_px": 56.39163383981887,
+          "source_length_px": 47.47847624997794,
+          "ratio": 1.1877304895572565,
+          "signed_error_px": 8.913157589840935,
+          "required_scale": 0.8419418452184083,
+          "after_common_scale_signed_error_px": 5.837369873103171
+        },
+        "hip_width": {
+          "rig_length_px": 30.113936081708218,
+          "source_length_px": 28.739227617695615,
+          "ratio": 1.0478338695214673,
+          "signed_error_px": 1.3747084640126026,
+          "required_scale": 0.9543497581889461,
+          "after_common_scale_signed_error_px": -0.2678060083618625
+        },
+        "torso_midpoints": {
+          "rig_length_px": 79.98694218129691,
+          "source_length_px": 71.95479094185873,
+          "ratio": 1.1116277475662233,
+          "signed_error_px": 8.032151239438178,
+          "required_scale": 0.8995817189606692,
+          "after_common_scale_signed_error_px": 3.6693967400832292
+        },
+        "left_shoulder_elbow": {
+          "rig_length_px": 26.260018859172174,
+          "source_length_px": 29.814425129873445,
+          "ratio": 0.8807823308610493,
+          "signed_error_px": -3.5544062707012714,
+          "required_scale": 1.1353542923850481,
+          "after_common_scale_signed_error_px": -4.986715248975827
+        },
+        "left_elbow_wrist": {
+          "rig_length_px": 19.613597777349653,
+          "source_length_px": 31.05141279899884,
+          "ratio": 0.6316491267019592,
+          "signed_error_px": -11.437815021649186,
+          "required_scale": 1.5831574171903282,
+          "after_common_scale_signed_error_px": -12.507606035258892
+        },
+        "left_hip_knee": {
+          "rig_length_px": 64.58980415536203,
+          "source_length_px": 48.6521785137481,
+          "ratio": 1.3275829804231745,
+          "signed_error_px": 15.937625641613934,
+          "required_scale": 0.753248583889833,
+          "after_common_scale_signed_error_px": 12.414682383543614
+        },
+        "left_knee_ankle": {
+          "rig_length_px": 45.09795170858348,
+          "source_length_px": 56.741704306399974,
+          "ratio": 0.7947937457968957,
+          "signed_error_px": -11.643752597816494,
+          "required_scale": 1.2581880585853824,
+          "after_common_scale_signed_error_px": -14.103545238499791
+        },
+        "right_shoulder_elbow": {
+          "rig_length_px": 37.86055610297393,
+          "source_length_px": 33.76530817569577,
+          "ratio": 1.1212856671104194,
+          "signed_error_px": 4.095247927278159,
+          "required_scale": 0.8918333920891226,
+          "after_common_scale_signed_error_px": 2.030206972068939
+        },
+        "right_elbow_wrist": {
+          "rig_length_px": 31.73885621534113,
+          "source_length_px": 32.901473992344066,
+          "ratio": 0.9646636567932042,
+          "signed_error_px": -1.1626177770029358,
+          "required_scale": 1.036630739592972,
+          "after_common_scale_signed_error_px": -2.8937608108747455
+        },
+        "right_hip_knee": {
+          "rig_length_px": 40.12413332511159,
+          "source_length_px": 50.53895839052275,
+          "ratio": 0.7939248176637494,
+          "signed_error_px": -10.414825065411158,
+          "required_scale": 1.2595651096317404,
+          "after_common_scale_signed_error_px": -12.603329068978134
+        },
+        "right_knee_ankle": {
+          "rig_length_px": 69.29543132670332,
+          "source_length_px": 63.83448890182116,
+          "ratio": 1.0855484632027244,
+          "signed_error_px": 5.4609424248821625,
+          "required_scale": 0.9211933265970197,
+          "after_common_scale_signed_error_px": 1.6813385725422876
+        }
+      }
+    },
+    {
+      "source_frame": 45,
+      "common_length_fit_scale": 0.9223130980599874,
+      "segments": {
+        "shoulder_width": {
+          "rig_length_px": 47.18826768744079,
+          "source_length_px": 47.026070893685386,
+          "ratio": 1.0034490824062698,
+          "signed_error_px": 0.16219679375540608,
+          "required_scale": 0.9965627728733392,
+          "after_common_scale_signed_error_px": -3.5037135307978744
+        },
+        "hip_width": {
+          "rig_length_px": 13.547335967813137,
+          "source_length_px": 28.57316695066589,
+          "ratio": 0.47412791137936566,
+          "signed_error_px": -15.025830982852753,
+          "required_scale": 2.109135480108587,
+          "after_common_scale_signed_error_px": -16.078281543732658
+        },
+        "torso_midpoints": {
+          "rig_length_px": 81.43176391851812,
+          "source_length_px": 72.15162450032314,
+          "ratio": 1.1286199650037458,
+          "signed_error_px": 9.280139418194977,
+          "required_scale": 0.8860378435682563,
+          "after_common_scale_signed_error_px": 2.9539579598548045
+        },
+        "left_shoulder_elbow": {
+          "rig_length_px": 34.184528664528585,
+          "source_length_px": 28.630272544045372,
+          "ratio": 1.1939994148479878,
+          "signed_error_px": 5.554256120483213,
+          "required_scale": 0.8375213484734525,
+          "after_common_scale_signed_error_px": 2.8985659942564297
+        },
+        "left_elbow_wrist": {
+          "rig_length_px": 21.675605795742687,
+          "source_length_px": 32.601967253323146,
+          "ratio": 0.6648557624550486,
+          "signed_error_px": -10.926361457580459,
+          "required_scale": 1.5040856325098193,
+          "after_common_scale_signed_error_px": -12.61027211952469
+        },
+        "left_hip_knee": {
+          "rig_length_px": 70.76108097819284,
+          "source_length_px": 48.835837191015244,
+          "ratio": 1.4489580817754748,
+          "signed_error_px": 21.925243787177592,
+          "required_scale": 0.6901510903439347,
+          "after_common_scale_signed_error_px": 16.42803462805543
+        },
+        "left_knee_ankle": {
+          "rig_length_px": 43.04929487555615,
+          "source_length_px": 53.796875647549285,
+          "ratio": 0.8002192387080989,
+          "signed_error_px": -10.747580771993135,
+          "required_scale": 1.2496575333710223,
+          "after_common_scale_signed_error_px": -14.09194712157715
+        },
+        "right_shoulder_elbow": {
+          "rig_length_px": 44.85804213942372,
+          "source_length_px": 32.49435058275481,
+          "ratio": 1.380487418118474,
+          "signed_error_px": 12.363691556668911,
+          "required_scale": 0.724381828385617,
+          "after_common_scale_signed_error_px": 8.878809235762546
+        },
+        "right_elbow_wrist": {
+          "rig_length_px": 28.95309348616198,
+          "source_length_px": 34.002991355095325,
+          "ratio": 0.8514866584472832,
+          "signed_error_px": -5.049897868933346,
+          "required_scale": 1.174416522066871,
+          "after_common_scale_signed_error_px": -7.29917400345283
+        },
+        "right_hip_knee": {
+          "rig_length_px": 54.82970831533122,
+          "source_length_px": 50.285465762424636,
+          "ratio": 1.0903689064823623,
+          "signed_error_px": 4.5442425529065815,
+          "required_scale": 0.9171207965073938,
+          "after_common_scale_signed_error_px": 0.28469237961395066
+        },
+        "right_knee_ankle": {
+          "rig_length_px": 59.8572470504254,
+          "source_length_px": 62.58340292286334,
+          "ratio": 0.956439635029146,
+          "signed_error_px": -2.7261558724379427,
+          "required_scale": 1.0455442909050152,
+          "after_common_scale_signed_error_px": -7.376279954443447
+        }
+      }
+    },
+    {
+      "source_frame": 47,
+      "common_length_fit_scale": 0.9639903396825131,
+      "segments": {
+        "shoulder_width": {
+          "rig_length_px": 48.78279881384067,
+          "source_length_px": 48.702178951720526,
+          "ratio": 1.001655364582354,
+          "signed_error_px": 0.0806198621201446,
+          "required_scale": 0.9983473711209602,
+          "after_common_scale_signed_error_px": -1.6760321525025574
+        },
+        "hip_width": {
+          "rig_length_px": 14.393391344384959,
+          "source_length_px": 29.203133130839696,
+          "ratio": 0.4928714764918478,
+          "signed_error_px": -14.809741786454737,
+          "required_scale": 2.0289265005104027,
+          "after_common_scale_signed_error_px": -15.328042919582694
+        },
+        "torso_midpoints": {
+          "rig_length_px": 83.01801328915418,
+          "source_length_px": 72.94000251278193,
+          "ratio": 1.1381685005372215,
+          "signed_error_px": 10.078010776372253,
+          "required_scale": 0.8786045295823902,
+          "after_common_scale_signed_error_px": 7.088560317597199
+        },
+        "left_shoulder_elbow": {
+          "rig_length_px": 25.319288049077837,
+          "source_length_px": 27.59621941192514,
+          "ratio": 0.9174911849750197,
+          "signed_error_px": -2.2769313628473036,
+          "required_scale": 1.0899287277917846,
+          "after_common_scale_signed_error_px": -3.1886703249752024
+        },
+        "left_elbow_wrist": {
+          "rig_length_px": 18.297183276961118,
+          "source_length_px": 32.31500336317448,
+          "ratio": 0.5662132561561858,
+          "signed_error_px": -14.017820086213366,
+          "required_scale": 1.7661190181039446,
+          "after_common_scale_signed_error_px": -14.676695440783536
+        },
+        "left_hip_knee": {
+          "rig_length_px": 58.879929937330296,
+          "source_length_px": 46.197771207051815,
+          "ratio": 1.2745188436350934,
+          "signed_error_px": 12.68215873027848,
+          "required_scale": 0.7846098196146476,
+          "after_common_scale_signed_error_px": 10.561912453717788
+        },
+        "left_knee_ankle": {
+          "rig_length_px": 43.98276897775896,
+          "source_length_px": 51.26526366323049,
+          "ratio": 0.8579448506631825,
+          "signed_error_px": -7.282494685471534,
+          "required_scale": 1.1655760847879795,
+          "after_common_scale_signed_error_px": -8.866299256183133
+        },
+        "right_shoulder_elbow": {
+          "rig_length_px": 40.928736785785404,
+          "source_length_px": 31.416134506633952,
+          "ratio": 1.3027935304116658,
+          "signed_error_px": 9.512602279151452,
+          "required_scale": 0.7675813370703591,
+          "after_common_scale_signed_error_px": 8.038772370271488
+        },
+        "right_elbow_wrist": {
+          "rig_length_px": 24.63326941162324,
+          "source_length_px": 34.089979939678386,
+          "ratio": 0.7225955971582081,
+          "signed_error_px": -9.456710528055147,
+          "required_scale": 1.3838999350850678,
+          "after_common_scale_signed_error_px": -10.34374619207684
+        },
+        "right_hip_knee": {
+          "rig_length_px": 41.04169855551399,
+          "source_length_px": 48.67084375326409,
+          "ratio": 0.8432501964332917,
+          "signed_error_px": -7.629145197750098,
+          "required_scale": 1.1858876573402715,
+          "after_common_scale_signed_error_px": -9.107042821586852
+        },
+        "right_knee_ankle": {
+          "rig_length_px": 65.11717015810854,
+          "source_length_px": 60.76341143606978,
+          "ratio": 1.071650992252458,
+          "signed_error_px": 4.353758722038755,
+          "required_scale": 0.933139620295729,
+          "after_common_scale_signed_error_px": 2.008911543809276
+        }
+      }
+    },
+    {
+      "source_frame": 49,
+      "common_length_fit_scale": 1.1364868633355392,
+      "segments": {
+        "shoulder_width": {
+          "rig_length_px": 33.939729076862506,
+          "source_length_px": 47.89504520033584,
+          "ratio": 0.7086271436825896,
+          "signed_error_px": -13.955316123473331,
+          "required_scale": 1.4111793612691796,
+          "after_common_scale_signed_error_px": -9.322988959314372
+        },
+        "hip_width": {
+          "rig_length_px": 13.855652127311853,
+          "source_length_px": 29.555127531394195,
+          "ratio": 0.46880704921993765,
+          "signed_error_px": -15.699475404082342,
+          "required_scale": 2.1330737275899123,
+          "after_common_scale_signed_error_px": -13.808360905757157
+        },
+        "torso_midpoints": {
+          "rig_length_px": 82.3439427349807,
+          "source_length_px": 70.90813783239574,
+          "ratio": 1.161276339390206,
+          "signed_error_px": 11.435804902584962,
+          "required_scale": 0.8611214799443057,
+          "after_common_scale_signed_error_px": 22.674671361163732
+        },
+        "left_shoulder_elbow": {
+          "rig_length_px": 16.234107673346585,
+          "source_length_px": 28.264291383780584,
+          "ratio": 0.5743681117957374,
+          "signed_error_px": -12.030183710433999,
+          "required_scale": 1.7410437304284574,
+          "after_common_scale_signed_error_px": -9.814441275047514
+        },
+        "left_elbow_wrist": {
+          "rig_length_px": 13.891125513179535,
+          "source_length_px": 29.49423233410075,
+          "ratio": 0.47097769339528944,
+          "signed_error_px": -15.603106820921216,
+          "required_scale": 2.1232428075117022,
+          "after_common_scale_signed_error_px": -13.70715067142706
+        },
+        "left_hip_knee": {
+          "rig_length_px": 15.957823125013816,
+          "source_length_px": 33.390476398460365,
+          "ratio": 0.47791540721322656,
+          "signed_error_px": -17.432653273446547,
+          "required_scale": 2.0924205097950326,
+          "after_common_scale_signed_error_px": -15.254620049450082
+        },
+        "left_knee_ankle": {
+          "rig_length_px": 40.92904348169559,
+          "source_length_px": 52.409872312073794,
+          "ratio": 0.7809414844208018,
+          "signed_error_px": -11.480828830378208,
+          "required_scale": 1.2805056716146495,
+          "after_common_scale_signed_error_px": -5.894552066237679
+        },
+        "right_shoulder_elbow": {
+          "rig_length_px": 19.407647919506246,
+          "source_length_px": 31.00382944161439,
+          "ratio": 0.6259758316647377,
+          "signed_error_px": -11.596181522108143,
+          "required_scale": 1.597505765263448,
+          "after_common_scale_signed_error_px": -8.947292532854235
+        },
+        "right_elbow_wrist": {
+          "rig_length_px": 19.54540436266151,
+          "source_length_px": 32.805532092883574,
+          "ratio": 0.5957959867049817,
+          "signed_error_px": -13.260127730222063,
+          "required_scale": 1.6784268815411922,
+          "after_common_scale_signed_error_px": -10.59243679613763
+        },
+        "right_hip_knee": {
+          "rig_length_px": 25.704046884348486,
+          "source_length_px": 43.15149401932111,
+          "ratio": 0.5956699175430514,
+          "signed_error_px": -17.447447134972627,
+          "required_scale": 1.6787821082600263,
+          "after_common_scale_signed_error_px": -13.939182400698265
+        },
+        "right_knee_ankle": {
+          "rig_length_px": 59.123891187148274,
+          "source_length_px": 63.57367189073523,
+          "ratio": 0.9300059195694275,
+          "signed_error_px": -4.449780703586953,
+          "required_scale": 1.0752619730237614,
+          "after_common_scale_signed_error_px": 3.619853752738649
+        }
+      }
+    },
+    {
+      "source_frame": 51,
+      "common_length_fit_scale": 1.1237392110754614,
+      "segments": {
+        "shoulder_width": {
+          "rig_length_px": 41.6960827977225,
+          "source_length_px": 46.86648638267435,
+          "ratio": 0.8896780197530819,
+          "signed_error_px": -5.170403584951856,
+          "required_scale": 1.1240021421205129,
+          "after_common_scale_signed_error_px": -0.010963194624558525
+        },
+        "hip_width": {
+          "rig_length_px": 12.741225738081164,
+          "source_length_px": 29.635786540953557,
+          "ratio": 0.42992703164716495,
+          "signed_error_px": -16.89456080287239,
+          "required_scale": 2.325976099173699,
+          "after_common_scale_signed_error_px": -15.317971581907866
+        },
+        "torso_midpoints": {
+          "rig_length_px": 81.89263082241867,
+          "source_length_px": 71.67972608168893,
+          "ratio": 1.1424796842707061,
+          "signed_error_px": 10.21290474072974,
+          "required_scale": 0.8752890872088837,
+          "after_common_scale_signed_error_px": 20.346234271589836
+        },
+        "left_shoulder_elbow": {
+          "rig_length_px": 15.237360283123524,
+          "source_length_px": 30.14806123073424,
+          "ratio": 0.5054175844511652,
+          "signed_error_px": -14.910700947610716,
+          "required_scale": 1.978561947119239,
+          "after_common_scale_signed_error_px": -13.025242007304442
+        },
+        "left_elbow_wrist": {
+          "rig_length_px": 13.666075708008087,
+          "source_length_px": 32.51691476810244,
+          "ratio": 0.4202759027253675,
+          "signed_error_px": -18.85083906009435,
+          "required_scale": 2.379389333329105,
+          "after_common_scale_signed_error_px": -17.159809633487903
+        },
+        "left_hip_knee": {
+          "rig_length_px": 14.657150684779172,
+          "source_length_px": 35.598929001638396,
+          "ratio": 0.41173010244506497,
+          "signed_error_px": -20.941778316859224,
+          "required_scale": 2.4287755353846756,
+          "after_common_scale_signed_error_px": -19.12811405451049
+        },
+        "left_knee_ankle": {
+          "rig_length_px": 47.46967006906397,
+          "source_length_px": 56.72917627421506,
+          "ratio": 0.8367770023595463,
+          "signed_error_px": -9.259506205151084,
+          "required_scale": 1.1950615243729177,
+          "after_common_scale_signed_error_px": -3.385646680792668
+        },
+        "right_shoulder_elbow": {
+          "rig_length_px": 18.83835749292338,
+          "source_length_px": 29.502761955011444,
+          "ratio": 0.6385286069707595,
+          "signed_error_px": -10.664404462088065,
+          "required_scale": 1.566100545978817,
+          "after_common_scale_signed_error_px": -8.33336096795622
+        },
+        "right_elbow_wrist": {
+          "rig_length_px": 17.44053345832684,
+          "source_length_px": 33.1143942345361,
+          "ratio": 0.5266752982042332,
+          "signed_error_px": -15.67386077620926,
+          "required_scale": 1.8987030593795229,
+          "after_common_scale_signed_error_px": -13.515782925340709
+        },
+        "right_hip_knee": {
+          "rig_length_px": 23.071946703131655,
+          "source_length_px": 42.620652565549456,
+          "ratio": 0.5413325539220123,
+          "signed_error_px": -19.5487058624178,
+          "required_scale": 1.8472933001255751,
+          "after_common_scale_signed_error_px": -16.693801379397197
+        },
+        "right_knee_ankle": {
+          "rig_length_px": 59.05133615975772,
+          "source_length_px": 63.28733429330234,
+          "ratio": 0.933067205613163,
+          "signed_error_px": -4.235998133544619,
+          "required_scale": 1.0717341623241943,
+          "after_common_scale_signed_error_px": 3.070967615815661
+        }
+      }
+    },
+    {
+      "source_frame": 53,
+      "common_length_fit_scale": 1.1149552171380521,
+      "segments": {
+        "shoulder_width": {
+          "rig_length_px": 26.631382007672556,
+          "source_length_px": 40.92234960932211,
+          "ratio": 0.6507784196635162,
+          "signed_error_px": -14.290967601649555,
+          "required_scale": 1.5366213288342414,
+          "after_common_scale_signed_error_px": -11.229551300271144
+        },
+        "hip_width": {
+          "rig_length_px": 14.943325577079385,
+          "source_length_px": 28.14563102832686,
+          "ratio": 0.5309287811681976,
+          "signed_error_px": -13.202305451247476,
+          "required_scale": 1.883491789237173,
+          "after_common_scale_signed_error_px": -11.484492214769705
+        },
+        "torso_midpoints": {
+          "rig_length_px": 84.61848584014392,
+          "source_length_px": 71.83787706467757,
+          "ratio": 1.177909054355262,
+          "signed_error_px": 12.780608775466348,
+          "required_scale": 0.848961977414596,
+          "after_common_scale_signed_error_px": 22.507945189113286
+        },
+        "left_shoulder_elbow": {
+          "rig_length_px": 18.780764446888107,
+          "source_length_px": 30.41354217772472,
+          "ratio": 0.6175132227986053,
+          "signed_error_px": -11.632777730836615,
+          "required_scale": 1.6193985214890503,
+          "after_common_scale_signed_error_px": -9.473830875825982
+        },
+        "left_elbow_wrist": {
+          "rig_length_px": 11.540012529184748,
+          "source_length_px": 26.953473730323072,
+          "ratio": 0.4281456499687481,
+          "signed_error_px": -15.413461201138324,
+          "required_scale": 2.3356537665931993,
+          "after_common_scale_signed_error_px": -14.086876555070049
+        },
+        "left_hip_knee": {
+          "rig_length_px": 21.089906803447473,
+          "source_length_px": 36.23201747372156,
+          "ratio": 0.5820792843993191,
+          "signed_error_px": -15.14211067027409,
+          "required_scale": 1.7179790224487326,
+          "after_common_scale_signed_error_px": -12.7177158542625
+        },
+        "left_knee_ankle": {
+          "rig_length_px": 48.28703528524683,
+          "source_length_px": 57.163919524806715,
+          "ratio": 0.8447117637602213,
+          "signed_error_px": -8.876884239559885,
+          "required_scale": 1.1838357684857088,
+          "after_common_scale_signed_error_px": -3.3260376133915486
+        },
+        "right_shoulder_elbow": {
+          "rig_length_px": 19.319215275461257,
+          "source_length_px": 31.274085861418754,
+          "ratio": 0.6177387681631452,
+          "signed_error_px": -11.954870585957497,
+          "required_scale": 1.6188072556519544,
+          "after_common_scale_signed_error_px": -9.734025999030074
+        },
+        "right_elbow_wrist": {
+          "rig_length_px": 17.912777834664215,
+          "source_length_px": 33.69653642327144,
+          "ratio": 0.5315910694694819,
+          "signed_error_px": -15.783758588607224,
+          "required_scale": 1.8811452212656272,
+          "after_common_scale_signed_error_px": -13.72459132307771
+        },
+        "right_hip_knee": {
+          "rig_length_px": 38.679179520100824,
+          "source_length_px": 49.495490157151316,
+          "ratio": 0.7814687640690491,
+          "signed_error_px": -10.816310637050492,
+          "required_scale": 1.2796416772860826,
+          "after_common_scale_signed_error_px": -6.369937156595604
+        },
+        "right_knee_ankle": {
+          "rig_length_px": 48.9021370361651,
+          "source_length_px": 54.203084477148714,
+          "ratio": 0.9022021072764148,
+          "signed_error_px": -5.300947440983613,
+          "required_scale": 1.108399095873118,
+          "after_common_scale_signed_error_px": 0.3206083405235276
+        }
+      }
+    },
+    {
+      "source_frame": 55,
+      "common_length_fit_scale": 1.0875066869678516,
+      "segments": {
+        "shoulder_width": {
+          "rig_length_px": 23.208979870986358,
+          "source_length_px": 37.26833580896544,
+          "ratio": 0.622753320404586,
+          "signed_error_px": -14.059355937979081,
+          "required_scale": 1.6057722491954391,
+          "after_common_scale_signed_error_px": -12.02841500156551
+        },
+        "hip_width": {
+          "rig_length_px": 15.08532080923749,
+          "source_length_px": 26.815492674527963,
+          "ratio": 0.5625598974568548,
+          "signed_error_px": -11.730171865290473,
+          "required_scale": 1.7775884923910605,
+          "after_common_scale_signed_error_px": -10.410105419426909
+        },
+        "torso_midpoints": {
+          "rig_length_px": 84.62138861213467,
+          "source_length_px": 69.71559587510374,
+          "ratio": 1.2138085825693121,
+          "signed_error_px": 14.905792737030922,
+          "required_scale": 0.8238531300242284,
+          "after_common_scale_signed_error_px": 22.310730101097903
+        },
+        "left_shoulder_elbow": {
+          "rig_length_px": 16.139775290095635,
+          "source_length_px": 26.448228070906524,
+          "ratio": 0.6102403248650766,
+          "signed_error_px": -10.308452780810889,
+          "required_scale": 1.6386986556830685,
+          "after_common_scale_signed_error_px": -8.896114516769025
+        },
+        "left_elbow_wrist": {
+          "rig_length_px": 7.794870041779305,
+          "source_length_px": 17.23688517591548,
+          "ratio": 0.4522203380846799,
+          "signed_error_px": -9.442015134136174,
+          "required_scale": 2.2113114245046326,
+          "after_common_scale_signed_error_px": -8.759911881435109
+        },
+        "left_hip_knee": {
+          "rig_length_px": 26.864327277971157,
+          "source_length_px": 37.25928290132852,
+          "ratio": 0.7210103143722415,
+          "signed_error_px": -10.394955623357362,
+          "required_scale": 1.386942710896813,
+          "after_common_scale_signed_error_px": -8.044147345642024
+        },
+        "left_knee_ankle": {
+          "rig_length_px": 48.21368792847465,
+          "source_length_px": 55.004492606660094,
+          "ratio": 0.8765409086354667,
+          "signed_error_px": -6.790804678185445,
+          "required_scale": 1.1408480655588855,
+          "after_common_scale_signed_error_px": -2.5717845810627296
+        },
+        "right_shoulder_elbow": {
+          "rig_length_px": 17.80796905237152,
+          "source_length_px": 30.5834972905456,
+          "ratio": 0.5822737956746551,
+          "signed_error_px": -12.775528238174083,
+          "required_scale": 1.7174051235490406,
+          "after_common_scale_signed_error_px": -11.21721186477502
+        },
+        "right_elbow_wrist": {
+          "rig_length_px": 16.579436417458524,
+          "source_length_px": 31.080670105378235,
+          "ratio": 0.5334323990199169,
+          "signed_error_px": -14.501233687919711,
+          "required_scale": 1.8746517868755528,
+          "after_common_scale_signed_error_px": -13.05042213523377
+        },
+        "right_hip_knee": {
+          "rig_length_px": 36.90460397251526,
+          "source_length_px": 46.166819865026596,
+          "ratio": 0.7993750507487766,
+          "signed_error_px": -9.262215892511335,
+          "required_scale": 1.2509772466169635,
+          "after_common_scale_signed_error_px": -6.03281626501591
+        },
+        "right_knee_ankle": {
+          "rig_length_px": 43.473637481000885,
+          "source_length_px": 53.28232300841087,
+          "ratio": 0.8159110756889928,
+          "signed_error_px": -9.808685527409985,
+          "required_scale": 1.225623759495548,
+          "after_common_scale_signed_error_px": -6.004451541006183
+        }
+      }
+    }
+  ]
+}
