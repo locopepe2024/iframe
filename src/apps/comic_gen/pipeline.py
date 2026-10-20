@@ -13,6 +13,7 @@ import tempfile
 import copy
 from .character_constraints import CharacterConstraints
 from urllib.parse import quote
+from .scene_prompt_layers import ScenePromptLayers
 from .models import (
     Script,
     GenerationStatus,
@@ -2813,7 +2814,7 @@ class ComicGenPipeline(StudioOwnerMixin):
             design = attributes["asset_design"]
             if not isinstance(design, dict):
                 raise ValueError("Asset design must be an object")
-            scene_fields = {"style", "ambient_lighting", "local_lighting", "reference_viewpoint", "reference_framing", "visual_constraints", "prompt_workspace"} if asset_type == "scene" else set()
+            scene_fields = {"style", "ambient_lighting", "local_lighting", "reference_viewpoint", "reference_framing", "visual_constraints", "prompt_workspace", "prompt_layers"} if asset_type == "scene" else set()
             if set(design) - {"visual_notes", "user_requirements", "unresolved", "confirmed"} - scene_fields:
                 raise ValueError("Asset design contains unknown fields")
             notes = design.get("visual_notes")
@@ -2834,7 +2835,23 @@ class ComicGenPipeline(StudioOwnerMixin):
                     if not getattr(workspace, workspace.active_source).prompt.strip():
                         raise ValueError("Selected scene design source must contain a prompt")
                 design = {**design, "prompt_workspace": workspace.model_dump(exclude_unset=True)}
-            for field in scene_fields - {"local_lighting", "visual_constraints", "prompt_workspace"}:
+            if "prompt_layers" in design:
+                layers = ScenePromptLayers.model_validate(design["prompt_layers"])
+                design = {**design, "prompt_layers": layers.model_dump(exclude_unset=True)}
+                constraints = design.get("visual_constraints") or {}
+                if not isinstance(constraints, dict):
+                    raise ValueError("Asset design visual_constraints must be an object")
+                if (layers.lighting.direction.strip() or layers.lighting.angles is not None) and constraints.get("key_light_direction", "unspecified") != "unspecified":
+                    raise ValueError("Select one scene light direction source")
+                forbidden = constraints.get("forbidden_light_directions", [])
+                if layers.lighting.angles is not None:
+                    a, e = layers.lighting.angles.azimuth, layers.lighting.angles.elevation
+                    direction = "top" if e >= 60 else "bottom" if e <= -60 else "front" if abs(a) <= 22.5 else "back" if abs(a) >= 157.5 else "side"
+                else:
+                    direction = {"正面来光": "front", "背面来光": "back", "左侧来光": "side", "右侧来光": "side", "顶部来光": "top", "底部来光": "bottom"}.get(layers.lighting.direction)
+                if isinstance(forbidden, list) and direction and direction in forbidden:
+                    raise ValueError("Scene light direction conflicts with a forbidden direction")
+            for field in scene_fields - {"local_lighting", "visual_constraints", "prompt_workspace", "prompt_layers"}:
                 value = design.get(field, "")
                 if not isinstance(value, str) or len(value) > 2000:
                     raise ValueError(f"Asset design {field} must be bounded text")

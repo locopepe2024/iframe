@@ -255,3 +255,54 @@ def test_scene_variant_visual_snapshot_is_projected_as_reusable_preset(tmp_path)
     assert len(presets) == 1
     assert presets[0].source_asset_id == "street"
     assert presets[0].source_variant_id == "scene-variant-1"
+
+
+def test_scene_prompt_layers_survive_reload_and_confirmed_snapshot(tmp_path):
+    pipeline, scene, _ = make_pipeline(tmp_path)
+    layers = {"version": 1,
+              "lighting": {"source": "月光", "angles": {"azimuth": 90, "elevation": 25}, "fill": "不额外补光"},
+              "camera": {"framing": "全景", "focal_length": "长焦观感", "depth_of_field": "深景深"},
+              "composition": {"spatial_layers": "前中后景分层"}}
+    pipeline.update_asset_attributes("project", "street", "scene", {"asset_design": {
+        "visual_notes": "Stone street", "prompt_layers": layers, "confirmed": True,
+    }})
+    restored = ComicGenPipeline.__new__(ComicGenPipeline)
+    restored.data_file = pipeline.data_file
+    saved = restored._load_data()["project"].scenes[0]
+    assert saved.asset_design["design_draft"]["prompt_layers"] == layers
+    assert saved.asset_design["design_revisions"][0]["design"]["prompt_layers"] == layers
+    assert "direction" not in saved.asset_design["design_draft"]["prompt_layers"]["lighting"]
+
+
+
+@pytest.mark.parametrize("layers", [
+    {"camera": {"brand": "hidden aesthetic"}},
+    {"camera": {"framing": ["全景"]}},
+    {"lighting": {"source": "x" * 501}},
+    {"lighting": {"angles": {"azimuth": 0}}},
+    {"lighting": {"angles": {"azimuth": 181, "elevation": 0}}},
+    {"lighting": {"angles": {"azimuth": True, "elevation": 0}}},
+    {"camera": {"angles": {"azimuth": 0, "elevation": 0}, "viewpoint": "侧面"}},
+    {"lighting": {"angles": {"azimuth": 0, "elevation": 0}, "direction": "左侧"}},
+    {"composition": {"continuity": "180 degree rule"}},
+])
+def test_scene_rejects_invalid_layers_before_mutation(tmp_path, layers):
+    pipeline, scene, _ = make_pipeline(tmp_path)
+    before = scene.model_dump()
+    with pytest.raises(ValueError):
+        pipeline.update_asset_attributes("project", "street", "scene", {"asset_design": {
+            "visual_notes": "Stone street", "prompt_layers": layers, "confirmed": True,
+        }})
+    assert scene.model_dump() == before
+
+
+@pytest.mark.parametrize("light", [{"direction": "顶部来光"}, {"angles": {"azimuth": 0, "elevation": 75}}])
+def test_scene_rejects_light_layer_contradicting_constraints(tmp_path, light):
+    pipeline, scene, _ = make_pipeline(tmp_path)
+    before = scene.model_dump()
+    with pytest.raises(ValueError, match="conflicts"):
+        pipeline.update_asset_attributes("project", "street", "scene", {"asset_design": {
+            "visual_notes": "Stone street", "prompt_layers": {"lighting": light},
+            "visual_constraints": {"forbidden_light_directions": ["top"]},
+        }})
+    assert scene.model_dump() == before
