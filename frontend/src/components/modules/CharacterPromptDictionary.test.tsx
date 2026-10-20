@@ -593,3 +593,17 @@ it('keeps motion and contact sheets in separate tasks and resets the upstream ta
   fireEvent.click(screen.getByRole('option', { name: /Prompt 模板 · 角色脸部三视图/ }));
   expect(screen.getByText(/原模板画幅：3:2/)).toHaveTextContent('另行选择来源参考图');
 });
+
+it('uses end-of-draft insertion for templates instead of replacing text at the cursor', () => {
+  getPlatformReferenceLibrary.mockResolvedValueOnce({ resources: [] });
+  const appendWithText = vi.fn(text => `原有角色设计。\n${text}`);
+  const replaceWithText = vi.fn();
+  const onApply = vi.fn();
+  render(<CharacterPromptDictionary suggestion={{ query: '风格', appendWithText, replaceWithText }}
+    onApply={onApply} onClose={vi.fn()} keyHandler={{ current: null }} />);
+  fireEvent.click(screen.getByRole('option', { name: /Prompt 模板 · 古装偶像/ }));
+  fireEvent.click(screen.getByRole('button', { name: '使用此模板' }));
+  expect(appendWithText).toHaveBeenCalledOnce();
+  expect(replaceWithText).not.toHaveBeenCalled();
+  expect(onApply.mock.calls[0][0]).toMatch(/^原有角色设计。\n古偶唯美柔光风格/);
+});

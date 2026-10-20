@@ -39,8 +39,37 @@ export type PromptSlashSuggestion = {
   /** A Skill's [label] placeholder. The replacement covers just this occurrence. */
   slot?: string;
   contextKey?: string;
+  /** Append a template after the complete draft, preserving references and suffix text. */
+  appendWithText?: (text: string) => string;
   replaceWithText: (text: string) => string;
 };
+
+function appendPromptTemplate(editor: Editor, source: Editor['state']['doc'], text: string, slashRange?: { from: number; to: number }): string {
+  if (!editor.state.doc.eq(source) || !text.trim()) return editor.getText({ blockSeparator: '\n' });
+  editor.view.dispatch(closeHistory(editor.state.tr));
+  editor.chain().focus().command(({ tr }) => {
+    if (slashRange) tr.delete(slashRange.from, slashRange.to);
+    // Keep the document and its reference nodes; only normalize trailing space.
+    let end = tr.doc.content.size - 1;
+    const lastBlock = tr.doc.lastChild;
+    const trailing = lastBlock?.textContent.match(/\s+$/)?.[0].length || 0;
+    if (trailing) { tr.delete(end - trailing, end); end -= trailing; }
+    const existing = tr.doc.textBetween(0, tr.doc.content.size, '\n', '\ufffc');
+    const trimmed = existing.trimEnd();
+    const nodes = [];
+    if (trimmed && !/[。！？.!?…][”’"')）\]]?$/.test(trimmed)) {
+      // Add punctuation to the last nonempty block, even if empty lines follow it.
+      let lastContentEnd = 0;
+      tr.doc.descendants((node, pos) => { if (node.isText || node.isAtom && node.isInline) lastContentEnd = pos + node.nodeSize; });
+      if (lastContentEnd) { tr.insertText('。', lastContentEnd); end = tr.doc.content.size - 1; }
+    }
+    if (trimmed && !existing.endsWith('\n')) nodes.push(editor.schema.nodes.hardBreak.create());
+    nodes.push(editor.schema.text(text.trim()));
+    tr.insert(end, nodes);
+    return true;
+  }).run();
+  return editor.getText({ blockSeparator: '\n' });
+}
 
 function slashSuggestion(editor: Editor): PromptSlashSuggestion | null {
   const { selection } = editor.state;
@@ -68,7 +97,8 @@ function slashSuggestion(editor: Editor): PromptSlashSuggestion | null {
   if (!match) return null;
   const from = selection.from - match[1].length - 1;
   const to = selection.from;
-  return { query: match[1], remainingText: editor.state.doc.textBetween(0, from, "\n") + editor.state.doc.textBetween(to, editor.state.doc.content.size, "\n"), replaceWithText: (text) => {
+  const sourceDocument = editor.state.doc;
+  return { query: match[1], appendWithText: text => appendPromptTemplate(editor, sourceDocument, text, { from, to }), remainingText: editor.state.doc.textBetween(0, from, "\n") + editor.state.doc.textBetween(to, editor.state.doc.content.size, "\n"), replaceWithText: (text) => {
     editor.view.dispatch(closeHistory(editor.state.tr));
     if (text) {
       editor.chain().focus().insertContentAt({ from, to }, { type: 'text', text }).run();
@@ -268,6 +298,7 @@ export default function ReferencePromptEditor({ value, labels = EMPTY_LABELS, ca
     const sourceDocument = editor.state.doc;
     callbacks.current.onSlashChange?.({
       query: '', contextKey: `panel:${openSlashRequest}:${from}:${to}`,
+      appendWithText: text => appendPromptTemplate(editor, sourceDocument, text),
       remainingText: sourceDocument.textBetween(0, from, '\n') + sourceDocument.textBetween(to, sourceDocument.content.size, '\n'),
       replaceWithText: (text) => {
         if (!editor.state.doc.eq(sourceDocument)) return editor.getText({ blockSeparator: '\n' });

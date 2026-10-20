@@ -104,3 +104,55 @@ it('opens the toolbar chooser without changing the draft and applies only on con
   expect(editor.getText()).toBe('原有新增细节角色细节');
   expect(onChange).toHaveBeenCalledOnce();
 });
+
+it.each(['原有角色细节', '原有角色细节。', '原有角色细节！'])('appends toolbar templates after the whole draft with sentence separation: %s', (value) => {
+  const suggestion: { current: PromptSlashSuggestion | null } = { current: null };
+  const props = { value, placeholder: 'Prompt', onChange: vi.fn(),
+    onSlashChange: (next: PromptSlashSuggestion | null) => { suggestion.current = next; } };
+  const view = render(<ReferencePromptEditor {...props} />);
+  const editor = (view.getByRole('textbox') as any).editor;
+  act(() => editor.commands.setTextSelection({ from: 1, to: 3 }));
+  view.rerender(<ReferencePromptEditor {...props} openSlashRequest={1} />);
+  act(() => suggestion.current!.appendWithText!('<b>古偶风格</b>'));
+  expect(editor.getText({ blockSeparator: '\n' })).toBe(`${value}${/[。！]$/.test(value) ? '' : '。'}\n<b>古偶风格</b>`);
+  expect(editor.getHTML()).toContain('&lt;b&gt;古偶风格&lt;/b&gt;');
+  act(() => editor.commands.undo());
+  expect(editor.getText()).toBe(value);
+});
+
+it('removes only the slash trigger and appends the template after suffix text while retaining reference nodes', () => {
+  const suggestion: { current: PromptSlashSuggestion | null } = { current: null };
+  const reference = { asset_type: 'prop', asset_id: 'watch', variant_id: 'front' } as const;
+  const onReferencesChange = vi.fn();
+  const view = render(<ReferencePromptEditor value="" placeholder="Prompt" candidates={[{ label: '怀表', reference }]}
+    onChange={vi.fn()} onReferencesChange={onReferencesChange} onSlashChange={next => { suggestion.current = next; }} />);
+  const editor = (view.getByRole('textbox') as any).editor;
+  act(() => {
+    editor.commands.setContent({ type: 'doc', content: [{ type: 'paragraph', content: [
+      { type: 'referenceToken', attrs: { label: '怀表', ...reference } },
+      { type: 'text', text: ' 前文 /风格 后文' },
+    ] }] });
+    editor.commands.setTextSelection(9);
+  });
+  const original = editor.getText();
+  const current = suggestion.current!;
+  act(() => current.appendWithText!('古偶唯美柔光风格'));
+  expect(editor.getText({ blockSeparator: '\n' })).toBe('@怀表 前文  后文。\n古偶唯美柔光风格');
+  expect(onReferencesChange).toHaveBeenLastCalledWith([reference]);
+  act(() => editor.commands.undo());
+  expect(editor.getText()).toBe(original);
+  act(() => editor.commands.clearContent());
+  act(() => current.appendWithText!('过期模板'));
+  expect(editor.getText()).toBe('');
+});
+
+it('inserts a template into an empty prompt without leading punctuation or newline', () => {
+  const suggestion: { current: PromptSlashSuggestion | null } = { current: null };
+  const props = { value: '', placeholder: 'Prompt', onChange: vi.fn(),
+    onSlashChange: (next: PromptSlashSuggestion | null) => { suggestion.current = next; } };
+  const view = render(<ReferencePromptEditor {...props} />);
+  const editor = (view.getByRole('textbox') as any).editor;
+  view.rerender(<ReferencePromptEditor {...props} openSlashRequest={1} />);
+  act(() => suggestion.current!.appendWithText!('古偶风格'));
+  expect(editor.getText()).toBe('古偶风格');
+});

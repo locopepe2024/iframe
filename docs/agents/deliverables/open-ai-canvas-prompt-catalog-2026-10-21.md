@@ -25,3 +25,13 @@ No automatic generation, aesthetic rewriting, or identity constraint mutation.
 Catalog counts and unique IDs, exact source-text parity, excluded media,
 explicit classification, editable insertion and scope/ratio hints. Run panel UI
 regressions, catalog unit tests, TypeScript and production build.
+
+## Template insertion correction
+
+Template application appends after the full current draft, regardless of cursor
+position. Remove only the active slash query; preserve following text, selected
+text from toolbar opening and reference nodes. Add a sentence terminator only
+when missing, then a line break. Empty drafts receive no leading punctuation.
+Placeholder and individual dictionary-term replacements retain their local range.
+Stale template selections must not overwrite a changed document; one undo restores
+the original draft.

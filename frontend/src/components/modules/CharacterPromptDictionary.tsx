@@ -193,7 +193,9 @@ export default function CharacterPromptDictionary({ suggestion, onClose, onApply
     if (!selected || !selectedText.trim()) return;
     if (!suggestion.slot && selected.preset) onConfiguration?.(dictionaryConfiguration(selected.preset, fieldValues));
     const fields = !suggestion.slot && selected.preset ? dictionaryStructuredFields(selected.preset, fieldValues) : undefined;
-    onApply(suggestion.replaceWithText(selectedText), { ...selected, text: selectedText,
+    const insertText = !suggestion.slot && (selected.type === "Prompt 模板" || selected.type === "Prompt 案例")
+      ? suggestion.appendWithText || suggestion.replaceWithText : suggestion.replaceWithText;
+    onApply(insertText(selectedText), { ...selected, text: selectedText,
       remainingText: suggestion.remainingText,
       structuredFields: fields && (Object.keys(fields.identity).length || Object.keys(fields.look).length) ? fields : undefined });
     onClose();
@@ -277,7 +279,7 @@ export default function CharacterPromptDictionary({ suggestion, onClose, onApply
       {previewUrl && <img src={previewUrl} alt={`${selected.title} 案例预览`} className="mt-2 max-h-40 w-full rounded object-contain" />}
       <label className="mt-2 block text-xs text-text-secondary" htmlFor={`${id}-preview`}>将插入的完整文字</label>
       <textarea id={`${id}-preview`} readOnly={!selected.editableText} value={selectedText} onChange={event => setEditedText(event.target.value)} placeholder="选择项目后在此预览；不指定的项目不会写入。" rows={5} className="mt-1 w-full rounded border border-glass-border bg-surface p-2 text-xs text-foreground" />
-      <p className="mt-1 text-xs text-text-muted">{suggestion.slot ? `仅替换当前 [${suggestion.slot}]，保留模板其他文字与参考图；也可关闭后手动填写。` : selected.editableText ? "可直接修改预览文字，确认后插入；参考图和出图参数由你另行选择。" : (selected.type === "Prompt 模板" || selected.type === "配置面板") ? "先在面板选择细节，确认后插入预览文字；也可保留 [变量] 稍后填写。" : "替换光标处的 /检索词，保留其他文字与参考图；插入后可编辑。"}</p>
+      <p className="mt-1 text-xs text-text-muted">{suggestion.slot ? `仅替换当前 [${suggestion.slot}]，保留模板其他文字与参考图；也可关闭后手动填写。` : selected.editableText ? "可直接修改预览文字，确认后换行追加到提示词末尾；参考图和出图参数由你另行选择。" : selected.type === "配置面板" ? "先在面板选择细节，确认后应用预览文字；也可保留 [变量] 稍后填写。" : selected.type === "Prompt 模板" ? "先选择细节并预览；模板将换行追加到提示词末尾，也可保留 [变量] 稍后填写。" : "替换光标处的 /检索词，保留其他文字与参考图；插入后可编辑。"}</p>
       <button type="button" disabled={!selectedText.trim()} onClick={apply} className={`${buttonStyle} mt-2 bg-primary text-primary-foreground disabled:opacity-50`}>{suggestion.slot ? "填写当前槽位" : selected.type === "配置面板" ? "应用配置" : selected.type === "Prompt 模板" ? "使用此模板" : "插入到当前 Prompt"}</button>
       <button type="button" onClick={() => setSelected(null)} className={`${buttonStyle} ml-2`}>返回结果</button>
     </> : <>
