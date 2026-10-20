@@ -1,8 +1,27 @@
 import { describe, expect, it, vi } from "vitest";
-import { act, render } from "@testing-library/react";
+import { act, render, waitFor } from "@testing-library/react";
 import ReferencePromptEditor, { referencePromptDocument, type PromptSlashSuggestion } from "./ReferencePromptEditor";
 
 describe("reference prompt restoration", () => {
+  it("restores only explicitly saved references when candidates arrive after mounting", async () => {
+    const reference = { asset_type: "scene", asset_id: "street", variant_id: "v1" } as const;
+    const onReferencesChange = vi.fn();
+    const props = { value: "@长街旁有@屋顶", placeholder: "Prompt", onChange: vi.fn(),
+      onReferencesChange, allowImplicitMentions: false, pruneUnlistedReferences: true,
+      restoreSelectedReferences: [reference] };
+    const view = render(<ReferencePromptEditor {...props} candidates={[]} />);
+    view.rerender(<ReferencePromptEditor {...props} candidates={[
+      { label: "长街", reference },
+      { label: "屋顶", reference: { ...reference, asset_id: "roof" } },
+    ]} />);
+    await waitFor(() => expect(onReferencesChange).toHaveBeenLastCalledWith([reference]));
+    const editor = (view.getByRole("textbox") as any).editor;
+    const tokens: any[] = [];
+    editor.state.doc.descendants((node: any) => { if (node.type.name === "referenceToken" && node.attrs.asset_id) tokens.push(node.attrs); });
+    expect(tokens).toHaveLength(1);
+    expect(tokens[0]).toMatchObject(reference);
+    expect(editor.getText()).toBe(props.value);
+  });
   it("rebinds a selected scene reference after plain-text prompt replacement", () => {
     const reference = { asset_type: "scene", asset_id: "long-street", variant_id: "v1" } as const;
     const document = referencePromptDocument(

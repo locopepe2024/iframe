@@ -336,7 +336,7 @@ export default function ReferencePromptEditor({ value, labels = EMPTY_LABELS, ca
     // Character prompts use explicit selection only. Keeping the current rich
     // document when its plain text is unchanged preserves selected token
     // metadata and avoids upgrading manually typed @names into references.
-    if (!allowImplicitMentions && editor.getText({ blockSeparator: '\n' }) === value) return;
+    if (!allowImplicitMentions && restoreSelectedReferences.length === 0 && editor.getText({ blockSeparator: '\n' }) === value) return;
     const selectedKeys = new Set(restoreSelectedReferences.map((reference) =>
       `${reference.asset_type}:${reference.asset_id}:${reference.variant_id}`,
     ));
