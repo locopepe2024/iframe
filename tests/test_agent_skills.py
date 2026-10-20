@@ -708,3 +708,12 @@ def test_character_design_distinguishes_missing_object_from_review_failure(ctx, 
             run_reviewed_character_draft(body, ctx)
         assert reason in exc.value.detail
         assert complete.call_count == 1
+
+
+def test_character_design_contract_preserves_realistic_prompt_baseline(ctx, monkeypatch):
+    monkeypatch.setattr(agent, 'validate_model', lambda *_: None)
+    body = agent.CharacterDesignRequest(model='qwen', character_name='苏砚', profile='雪痕客', current_draft='圆脸；自然皮肤纹理；纯白背景；真人写实')
+    system = agent.preview_character_design_draft(body, ctx)['messages']['system']
+    assert 'AI 完善是保守编辑，不是重写或概念设计改编' in system
+    assert '禁止新增概念设计、插画、动漫' in system
+    assert '不得用‘概念设计’作为开头' in system

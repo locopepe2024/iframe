@@ -111,3 +111,7 @@ Runtime Skill inspection also establishes a contract conflict: both character Sk
 ### Character generation overlay reconciliation
 
 Observed: a character variant and cover can be present in the project snapshot while the workbench still shows the generation overlay. Direct implication: the overlay is driven by persisted `generatingTasks`, independently of the variant pool. Record the variant IDs present before enqueue and reconcile a task when refreshed character data contains a new variant. This covers a completed result after a polling callback is lost or a panel is reloaded, while keeping the overlay during generation against an unchanged pool. A new variant is evidence that the task produced output; it does not prove image quality or cover selection correctness.
+
+### Conservative character design completion
+
+Observed: an AI-completed prompt retained most facts but reframed a realistic character as “概念设计”, added an unrequested high bun/accessories and generic quality language, weakening natural skin and photographic realism. Direct implication: the completion contract allowed semantic expansion beyond missing details. The contract now treats the current editable Prompt as the baseline, requires explicit face/skin/clothing/background/realism constraints to survive, and forbids concept/illustration/quality/smoothing language and unrequested adornments when realistic texture is already specified. This is a prompt-contract correction; model compliance still requires a live resubmission and generated-image comparison.
