@@ -1,0 +1,168 @@
+{
+  "rows": 60,
+  "exact_projection_max_difference_px": 6.823937919616058e-05,
+  "selected": [
+    {
+      "source_frame": 1,
+      "segment": "left_hip__right_hip",
+      "start_camera_xyz_right_down_forward": [
+        0.12015026062726974,
+        0.09449602663516998,
+        5.523806571960449
+      ],
+      "end_camera_xyz_right_down_forward": [
+        -0.1026497408747673,
+        0.09449602663516998,
+        5.523806571960449
+      ],
+      "rig_world_length": 0.22279999927962918,
+      "source_scaled_proxy_length": 0.05652584673836475,
+      "rig_signed_depth_fraction": 0.0,
+      "source_signed_depth_fraction": 0.6871627851543164,
+      "rig_target_direction_angle_deg": 43.42583588082487,
+      "source_screen_length_px": 26.282212907657684,
+      "rig_screen_length_px": 39.43820262349534,
+      "rig_source_length_ratio": 1.5005662864866482,
+      "same_length_target_screen_length_px": 28.444915975249646,
+      "same_length_target_source_length_ratio": 1.0822877082379099,
+      "rig_screen_direction_error_deg": 1.454276580844579,
+      "target_screen_direction_error_deg": 0.9230290459889644,
+      "exact_projection_difference_px": 3.0517578125e-05
+    },
+    {
+      "source_frame": 23,
+      "segment": "right_hip__right_knee",
+      "start_camera_xyz_right_down_forward": [
+        -0.01837155967950821,
+        0.10154947638511658,
+        5.548220634460449
+      ],
+      "end_camera_xyz_right_down_forward": [
+        -0.07737709581851959,
+        0.13473477959632874,
+        5.143984317779541
+      ],
+      "rig_world_length": 0.40986539797205634,
+      "source_scaled_proxy_length": 0.32008379001360954,
+      "rig_signed_depth_fraction": -0.9862660246046632,
+      "source_signed_depth_fraction": -0.9862653062808202,
+      "rig_target_direction_angle_deg": 0.026402200499925085,
+      "source_screen_length_px": 33.75488652775999,
+      "rig_screen_length_px": 13.823106378759302,
+      "rig_source_length_ratio": 0.4095142304030911,
+      "same_length_target_screen_length_px": 13.823063880042596,
+      "same_length_target_source_length_ratio": 0.4095129713641466,
+      "rig_screen_direction_error_deg": 4.8130602882077795,
+      "target_screen_direction_error_deg": 4.812816070468819,
+      "exact_projection_difference_px": 1.52587890625e-05
+    },
+    {
+      "source_frame": 23,
+      "segment": "left_hip__right_hip",
+      "start_camera_xyz_right_down_forward": [
+        0.19989916682243347,
+        0.11469390988349915,
+        5.505500793457031
+      ],
+      "end_camera_xyz_right_down_forward": [
+        -0.01837155967950821,
+        0.10154947638511658,
+        5.548220634460449
+      ],
+      "rig_world_length": 0.22279998099176362,
+      "source_scaled_proxy_length": 0.07542755977688978,
+      "rig_signed_depth_fraction": 0.19174077490157962,
+      "source_signed_depth_fraction": 0.8188564598366457,
+      "rig_target_direction_angle_deg": 44.13087227104962,
+      "source_screen_length_px": 27.708632936626614,
+      "rig_screen_length_px": 38.81868177440804,
+      "rig_source_length_ratio": 1.4009598331029758,
+      "same_length_target_screen_length_px": 23.10908833365255,
+      "same_length_target_source_length_ratio": 0.8340031926694528,
+      "rig_screen_direction_error_deg": 5.697115066659357,
+      "target_screen_direction_error_deg": 1.7004068162147112,
+      "exact_projection_difference_px": 3.411968959808029e-05
+    },
+    {
+      "source_frame": 29,
+      "segment": "left_elbow__left_wrist",
+      "start_camera_xyz_right_down_forward": [
+        0.253289133310318,
+        -0.2028995305299759,
+        4.9210124015808105
+      ],
+      "end_camera_xyz_right_down_forward": [
+        0.3062477707862854,
+        -0.23324628174304962,
+        4.679296016693115
+      ],
+      "rig_world_length": 0.24930402991733613,
+      "source_scaled_proxy_length": 0.1448216959282779,
+      "rig_signed_depth_fraction": -0.9695646916250944,
+      "source_signed_depth_fraction": -0.9695659028946101,
+      "rig_target_direction_angle_deg": 0.0,
+      "source_screen_length_px": 22.636761722079573,
+      "rig_screen_length_px": 16.053474948507667,
+      "rig_source_length_ratio": 0.7091771846875667,
+      "same_length_target_screen_length_px": 16.05352722578936,
+      "same_length_target_source_length_ratio": 0.7091794940851005,
+      "rig_screen_direction_error_deg": 2.0826230165183133,
+      "target_screen_direction_error_deg": 2.0827169889681385,
+      "exact_projection_difference_px": 3.411968959808029e-05
+    },
+    {
+      "source_frame": 29,
+      "segment": "right_elbow__right_wrist",
+      "start_camera_xyz_right_down_forward": [
+        -0.11193794012069702,
+        -0.2675071358680725,
+        5.616569995880127
+      ],
+      "end_camera_xyz_right_down_forward": [
+        -0.3243216574192047,
+        -0.36623403429985046,
+        5.702002048492432
+      ],
+      "rig_world_length": 0.24930402618164607,
+      "source_scaled_proxy_length": 0.035106892094308846,
+      "rig_signed_depth_fraction": 0.3426822018111244,
+      "source_signed_depth_fraction": 0.34268298127676566,
+      "rig_target_direction_angle_deg": 0.0,
+      "source_screen_length_px": 21.070832638938228,
+      "rig_screen_length_px": 39.606486426971074,
+      "rig_source_length_ratio": 1.8796830246650789,
+      "same_length_target_screen_length_px": 39.60647718073357,
+      "same_length_target_source_length_ratio": 1.8796825858481767,
+      "rig_screen_direction_error_deg": 0.5193588739128575,
+      "target_screen_direction_error_deg": 0.5189819780532116,
+      "exact_projection_difference_px": 1.52587890625e-05
+    },
+    {
+      "source_frame": 55,
+      "segment": "left_hip__right_hip",
+      "start_camera_xyz_right_down_forward": [
+        -0.17750166356563568,
+        0.14247971773147583,
+        5.584804534912109
+      ],
+      "end_camera_xyz_right_down_forward": [
+        -0.12475450336933136,
+        0.20613932609558105,
+        5.377910614013672
+      ],
+      "rig_world_length": 0.22279999091946226,
+      "source_scaled_proxy_length": 0.0844234560635587,
+      "rig_signed_depth_fraction": -0.9286083004070925,
+      "source_signed_depth_fraction": -0.8681440250992597,
+      "rig_target_direction_angle_deg": 47.06066338391148,
+      "source_screen_length_px": 26.815493183192093,
+      "rig_screen_length_px": 15.08533440623539,
+      "rig_source_length_ratio": 0.5625603938431702,
+      "same_length_target_screen_length_px": 21.141219370483924,
+      "same_length_target_source_length_ratio": 0.7883956944612603,
+      "rig_screen_direction_error_deg": 126.85828544581398,
+      "target_screen_direction_error_deg": 2.5544786757450972,
+      "exact_projection_difference_px": 1.52587890625e-05
+    }
+  ]
+}
