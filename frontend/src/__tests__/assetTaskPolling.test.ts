@@ -2,6 +2,7 @@ import { expect, it, vi } from 'vitest';
 import {
   createSingleFlightTaskStatusPoller,
   mergeAssetTaskResult,
+  isMissingAssetTask,
   normalizeTaskFailureDetail,
   waitForAssetTask,
 } from '../lib/assetTaskPolling';
@@ -124,4 +125,12 @@ it('rejects a task snapshot whose asset or project ID differs from the target', 
     asset_type: 'character',
     asset: { id: 'target' },
   })).toBeNull();
+});
+
+it('recognizes a lost task record without treating network failures or generic 404s as terminal', () => {
+  expect(isMissingAssetTask({ response: { status: 404, data: { detail: 'Task not found' } } })).toBe(true);
+  for (const error of [new Error('Network Error'), null, { response: { status: 503 } },
+    { response: { status: 404, data: { detail: 'Proxy route not found' } } }]) {
+    expect(isMissingAssetTask(error)).toBe(false);
+  }
 });

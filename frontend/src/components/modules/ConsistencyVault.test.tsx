@@ -13,7 +13,7 @@ const mocks = vi.hoisted(() => ({
     updateAssetAttributes: vi.fn(),
     saveCharacterDesign: vi.fn(),
     updateAssetVariantMetadata: vi.fn(), agentRequest: vi.fn(),
-    generateAsset: vi.fn(),
+    generateAsset: vi.fn(), getTaskStatus: vi.fn(),
     previewAssetImageSubmission: vi.fn((_id: string, request: any) => Promise.resolve({
         positive_prompt: request.prompt, negative_prompt: request.negative_prompt,
         selected_model_id: "test-model", aspect_ratio: "16:9",
@@ -507,4 +507,22 @@ it("discards a deletion refresh after switching episodes", async () => {
     await act(async () => { finishRefresh(state("character", "asset-1")); });
     expect(useProjectStore.getState().currentProject?.id).toBe("episode-2");
     expect(screen.queryByRole("region", { name: "拍摄计划资产需求" })).not.toBeInTheDocument();
+});
+
+it('stops a missing-task spinner and refreshes the asset without resubmitting generation', async () => {
+    const character = { id: 'hero', name: 'Hero', source: 'episode' };
+    const project = { id: 'episode-1', characters: [character], scenes: [], props: [] };
+    useProjectStore.setState({ currentProject: project as any, generatingTasks: [] });
+    mocks.getEpisodeVisualContext.mockResolvedValue({ context: null, bindings: [] });
+    mocks.generateAsset.mockResolvedValue({ _task_id: 'lost-task' });
+    mocks.getTaskStatus.mockRejectedValue({ response: { status: 404, data: { detail: 'Task not found' } } });
+    mocks.getProject.mockResolvedValue(project);
+    render(<ConsistencyVault />);
+    fireEvent.click(screen.getByText('Hero'));
+    fireEvent.click(screen.getByRole('button', { name: '生成三视图' }));
+    await waitFor(() => expect(useProjectStore.getState().generatingTasks).toHaveLength(1));
+    await waitFor(() => expect(mocks.error).toHaveBeenCalledWith(expect.stringContaining('找不到这次生成的任务记录')), { timeout: 4000 });
+    expect(useProjectStore.getState().generatingTasks).toEqual([]);
+    expect(mocks.generateAsset).toHaveBeenCalledTimes(1);
+    expect(mocks.getProject).toHaveBeenCalledWith('episode-1');
 });

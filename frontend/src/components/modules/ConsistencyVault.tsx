@@ -19,6 +19,7 @@ import { resolveAssetGenerationModel } from "@/lib/modelCatalog";
 import {
     createSingleFlightTaskStatusPoller,
     mergeAssetTaskResult,
+    isMissingAssetTask,
     normalizeTaskFailureDetail,
 } from "@/lib/assetTaskPolling";
 import ReferencePromptEditor, { type ReferenceCandidate, type ReferenceSuggestion } from "./playground/ReferencePromptEditor";
@@ -343,6 +344,15 @@ export default function ConsistencyVault() {
                 );
                 pollInterval = setInterval(() => {
                     void pollOnce().catch((pollError) => {
+                        if (isMissingAssetTask(pollError)) {
+                            clearInterval(pollInterval);
+                            removeGeneratingTask(assetId, generationType);
+                            toast.error("iFrame 已找不到这次生成的任务记录，可能在服务重启时中断。请先核对 UniArt 任务结果，避免重复提交。");
+                            void api.getProject(currentProject.id).then((fresh) => {
+                                useProjectStore.getState().updateProject(currentProject.id, fresh);
+                            }).catch((error) => console.error("Failed to refresh missing asset task:", error));
+                            return;
+                        }
                         console.error("Polling error:", pollError);
                         // A network failure does not cancel the backend task.
                         // Keep polling so its final provider error is shown.
@@ -535,6 +545,12 @@ export default function ConsistencyVault() {
                 );
                 pollInterval = setInterval(() => {
                     void pollOnce().catch((pollError) => {
+                        if (isMissingAssetTask(pollError)) {
+                            clearInterval(pollInterval);
+                            removeGeneratingTask(assetId, generationType);
+                            toast.error("iFrame 已找不到这次动态参考任务记录。请先核对 UniArt 任务结果，避免重复提交。");
+                            return;
+                        }
                         console.error("Video polling error:", pollError);
                         // The server task remains active; retry on the next tick.
                     });
