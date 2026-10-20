@@ -1,0 +1,26 @@
+{
+  "raw_root_yaw": {
+    "max_arm_direction_error_deg": 2.666011870480979,
+    "max_clavicle_direction_error_deg": 76.80614816139571,
+    "max_arm_tail_to_next_head_units": 1.7120130796843852e-07,
+    "max_clavicle_tail_to_shoulder_units": 0.012402295825661032
+  },
+  "scaled_root_yaw": {
+    "max_arm_direction_error_deg": 2.1308035120958575,
+    "max_clavicle_direction_error_deg": 86.41330313281493,
+    "max_arm_tail_to_next_head_units": 1.7881393432617188e-07,
+    "max_clavicle_tail_to_shoulder_units": 0.012402247132606457
+  },
+  "raw_own_root_yaw": {
+    "max_arm_direction_error_deg": 0.01850468559863808,
+    "max_clavicle_direction_error_deg": 0.020391170402929596,
+    "max_arm_tail_to_next_head_units": 1.812804499357408e-07,
+    "max_clavicle_tail_to_shoulder_units": 0.012402273899143551
+  },
+  "scaled_own_root_yaw": {
+    "max_arm_direction_error_deg": 0.03008282088999204,
+    "max_clavicle_direction_error_deg": 0.019470788626008685,
+    "max_arm_tail_to_next_head_units": 2.1490760299348766e-07,
+    "max_clavicle_tail_to_shoulder_units": 0.012402223372673077
+  }
+}

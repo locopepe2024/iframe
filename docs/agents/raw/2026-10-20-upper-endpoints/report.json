@@ -1,0 +1,4144 @@
+{
+  "schema": "recreation2-upper-endpoints.v1",
+  "blender": "4.5.9 LTS",
+  "sha256": {
+    "rig": "95eeb19c8abce2325479804b3dda429ebddfa6e8d07a2688541cc990fb676855",
+    "track": "0fed823bf39bd206ebeafec922a29394ee87a942b1bcc0395610a603d598550a",
+    "anchors": "ea9df0be27780d21061d198d7d2e90895c5d5b61c1a856af3a2ff4f85c2e89e3",
+    "probe": "588756decd6bf985a6afaa541f16dcc44f1ee7389677a71d9461f73900b4824c"
+  },
+  "cases": {
+    "raw_root_yaw": {
+      "bundle_sha256": "938afaf66b0c35dcfa889a2e6d5a4be13b97ee7f6443fe9f4c24efff2856cd18",
+      "rows": [
+        {
+          "source_frame": 1,
+          "side": "left",
+          "joint_residual_vectors_px": {
+            "shoulder": [
+              6.10211181640625,
+              -11.030067443847656
+            ],
+            "elbow": [
+              2.2098388671875,
+              -7.961708068847656
+            ],
+            "wrist": [
+              3.806549072265625,
+              0.9340438842773438
+            ]
+          },
+          "joint_errors_px": {
+            "shoulder": 12.605481006201433,
+            "elbow": 8.262698226836223,
+            "wrist": 3.9194710951765
+          },
+          "segments": [
+            {
+              "bone": "upper_arm_l",
+              "world_direction_error_deg": 0.0,
+              "world_bone_length": 0.24034215963134076,
+              "tail_to_next_head_units": 3.332000937312528e-08,
+              "screen_direction_error_deg": 3.295394456932505,
+              "rig_projected_length_px": 26.845989733373667,
+              "source_projected_length_px": 31.51150084761031,
+              "segment_vector_residual_px": [
+                -3.89227294921875,
+                3.068359375
+              ],
+              "actual_tail_to_target_direction_endpoint_px": 0.0,
+              "target_direction_endpoint_to_source_px": 8.262698226836223
+            },
+            {
+              "bone": "lower_arm_l",
+              "world_direction_error_deg": 0.3951372590483834,
+              "world_bone_length": 0.24930398263020864,
+              "tail_to_next_head_units": 1.228781230931777e-07,
+              "screen_direction_error_deg": 4.510525551307708,
+              "rig_projected_length_px": 26.842280604121466,
+              "source_projected_length_px": 35.54708659685477,
+              "segment_vector_residual_px": [
+                1.596710205078125,
+                8.895751953125
+              ],
+              "actual_tail_to_target_direction_endpoint_px": 0.30147133966335854,
+              "target_direction_endpoint_to_source_px": 3.7880786837660554
+            }
+          ],
+          "clavicle": {
+            "world_direction_error_deg": 62.084638758864216,
+            "tail_to_shoulder_head_units": 0.012402044035040836
+          }
+        },
+        {
+          "source_frame": 1,
+          "side": "right",
+          "joint_residual_vectors_px": {
+            "shoulder": [
+              -5.8489990234375,
+              -3.867279052734375
+            ],
+            "elbow": [
+              -19.012542724609375,
+              3.708648681640625
+            ],
+            "wrist": [
+              -13.25653076171875,
+              13.024238586425781
+            ]
+          },
+          "joint_errors_px": {
+            "shoulder": 7.011892502525975,
+            "elbow": 19.370876365652663,
+            "wrist": 18.584036410364618
+          },
+          "segments": [
+            {
+              "bone": "upper_arm_r",
+              "world_direction_error_deg": 0.016025527800052203,
+              "world_bone_length": 0.24034208697533674,
+              "tail_to_next_head_units": 3.0719530773294423e-08,
+              "screen_direction_error_deg": 8.61043715060234,
+              "rig_projected_length_px": 42.900861497600815,
+              "source_projected_length_px": 28.654355218409435,
+              "segment_vector_residual_px": [
+                -13.163543701171875,
+                7.575927734375
+              ],
+              "actual_tail_to_target_direction_endpoint_px": 0.0,
+              "target_direction_endpoint_to_source_px": 19.37084350301216
+            },
+            {
+              "bone": "lower_arm_r",
+              "world_direction_error_deg": 0.985686026951847,
+              "world_bone_length": 0.2493039720141342,
+              "tail_to_next_head_units": 1.6049041769309353e-07,
+              "screen_direction_error_deg": 6.309846805523946,
+              "rig_projected_length_px": 21.671511338310566,
+              "source_projected_length_px": 32.228489525718935,
+              "segment_vector_residual_px": [
+                5.756011962890625,
+                9.315589904785156
+              ],
+              "actual_tail_to_target_direction_endpoint_px": 0.7645541311988036,
+              "target_direction_endpoint_to_source_px": 18.854799892969066
+            }
+          ],
+          "clavicle": {
+            "world_direction_error_deg": 13.441611104891901,
+            "tail_to_shoulder_head_units": 0.012402295825661032
+          }
+        },
+        {
+          "source_frame": 17,
+          "side": "left",
+          "joint_residual_vectors_px": {
+            "shoulder": [
+              2.2271728515625,
+              -6.6678009033203125
+            ],
+            "elbow": [
+              -4.972412109375,
+              2.43841552734375
+            ],
+            "wrist": [
+              -1.6463623046875,
+              17.72368621826172
+            ]
+          },
+          "joint_errors_px": {
+            "shoulder": 7.0299265315312365,
+            "elbow": 5.538118139343868,
+            "wrist": 17.799987855649942
+          },
+          "segments": [
+            {
+              "bone": "upper_arm_l",
+              "world_direction_error_deg": 0.0,
+              "world_bone_length": 0.24034212449913822,
+              "tail_to_next_head_units": 4.2146848510894035e-08,
+              "screen_direction_error_deg": 19.704706398187994,
+              "rig_projected_length_px": 27.347741896112854,
+              "source_projected_length_px": 32.798437235346405,
+              "segment_vector_residual_px": [
+                -7.1995849609375,
+                9.106216430664062
+              ],
+              "actual_tail_to_target_direction_endpoint_px": 6.103515625e-05,
+              "target_direction_endpoint_to_source_px": 5.53817289926875
+            },
+            {
+              "bone": "lower_arm_l",
+              "world_direction_error_deg": 0.7135182331106499,
+              "world_bone_length": 0.24930405320064322,
+              "tail_to_next_head_units": 1.3328003749250113e-07,
+              "screen_direction_error_deg": 10.149019833609758,
+              "rig_projected_length_px": 19.01564879717627,
+              "source_projected_length_px": 33.99799235861078,
+              "segment_vector_residual_px": [
+                3.3260498046875,
+                15.285270690917969
+              ],
+              "actual_tail_to_target_direction_endpoint_px": 0.6021132487044625,
+              "target_direction_endpoint_to_source_px": 18.212654271778224
+            }
+          ],
+          "clavicle": {
+            "world_direction_error_deg": 65.27428722031648,
+            "tail_to_shoulder_head_units": 0.012402084639236557
+          }
+        },
+        {
+          "source_frame": 17,
+          "side": "right",
+          "joint_residual_vectors_px": {
+            "shoulder": [
+              -7.669586181640625,
+              1.2349395751953125
+            ],
+            "elbow": [
+              -9.974761962890625,
+              18.220382690429688
+            ],
+            "wrist": [
+              -4.1395263671875,
+              35.42140197753906
+            ]
+          },
+          "joint_errors_px": {
+            "shoulder": 7.768373544092818,
+            "elbow": 20.772053408842954,
+            "wrist": 35.66246399822484
+          },
+          "segments": [
+            {
+              "bone": "upper_arm_r",
+              "world_direction_error_deg": 0.0,
+              "world_bone_length": 0.2403420695378925,
+              "tail_to_next_head_units": 0.0,
+              "screen_direction_error_deg": 20.03567681393038,
+              "rig_projected_length_px": 41.7425676685851,
+              "source_projected_length_px": 29.766713552519928,
+              "segment_vector_residual_px": [
+                -2.30517578125,
+                16.985443115234375
+              ],
+              "actual_tail_to_target_direction_endpoint_px": 3.411968959808029e-05,
+              "target_direction_endpoint_to_source_px": 20.772052857905994
+            },
+            {
+              "bone": "lower_arm_r",
+              "world_direction_error_deg": 1.4787875696481583,
+              "world_bone_length": 0.24930406820815582,
+              "tail_to_next_head_units": 8.940696716308594e-08,
+              "screen_direction_error_deg": 13.859954917389453,
+              "rig_projected_length_px": 16.15344851496984,
+              "source_projected_length_px": 33.43000061929778,
+              "segment_vector_residual_px": [
+                5.835235595703125,
+                17.201019287109375
+              ],
+              "actual_tail_to_target_direction_endpoint_px": 1.2040785936576524,
+              "target_direction_endpoint_to_source_px": 36.19353810272874
+            }
+          ],
+          "clavicle": {
+            "world_direction_error_deg": 17.963766748619072,
+            "tail_to_shoulder_head_units": 0.012402231109323049
+          }
+        },
+        {
+          "source_frame": 23,
+          "side": "left",
+          "joint_residual_vectors_px": {
+            "shoulder": [
+              4.125762939453125,
+              -10.585235595703125
+            ],
+            "elbow": [
+              -5.072021484375,
+              -1.0357513427734375
+            ],
+            "wrist": [
+              -7.604461669921875,
+              17.675537109375
+            ]
+          },
+          "joint_errors_px": {
+            "shoulder": 11.360859560079406,
+            "elbow": 5.17669621279641,
+            "wrist": 19.241945340316718
+          },
+          "segments": [
+            {
+              "bone": "upper_arm_l",
+              "world_direction_error_deg": 0.0,
+              "world_bone_length": 0.24034212475646155,
+              "tail_to_next_head_units": 1.2013700229374393e-07,
+              "screen_direction_error_deg": 22.20561030014295,
+              "rig_projected_length_px": 34.897836297849246,
+              "source_projected_length_px": 33.66704395447887,
+              "segment_vector_residual_px": [
+                -9.197784423828125,
+                9.549484252929688
+              ],
+              "actual_tail_to_target_direction_endpoint_px": 1.52587890625e-05,
+              "target_direction_endpoint_to_source_px": 5.176690110355962
+            },
+            {
+              "bone": "lower_arm_l",
+              "world_direction_error_deg": 0.8809477712883185,
+              "world_bone_length": 0.24930409505842221,
+              "tail_to_next_head_units": 1.228781230931777e-07,
+              "screen_direction_error_deg": 12.415207118399108,
+              "rig_projected_length_px": 16.384629541282834,
+              "source_projected_length_px": 34.55186743099061,
+              "segment_vector_residual_px": [
+                -2.532440185546875,
+                18.711288452148438
+              ],
+              "actual_tail_to_target_direction_endpoint_px": 0.7434510542823353,
+              "target_direction_endpoint_to_source_px": 19.70051711125075
+            }
+          ],
+          "clavicle": {
+            "world_direction_error_deg": 64.23719156070926,
+            "tail_to_shoulder_head_units": 0.012402115425735898
+          }
+        },
+        {
+          "source_frame": 23,
+          "side": "right",
+          "joint_residual_vectors_px": {
+            "shoulder": [
+              -7.71844482421875,
+              -6.293922424316406
+            ],
+            "elbow": [
+              -7.78082275390625,
+              8.898574829101562
+            ],
+            "wrist": [
+              -2.86529541015625,
+              20.491485595703125
+            ]
+          },
+          "joint_errors_px": {
+            "shoulder": 9.959309762837405,
+            "elbow": 11.820568255918252,
+            "wrist": 20.690840690535996
+          },
+          "segments": [
+            {
+              "bone": "upper_arm_r",
+              "world_direction_error_deg": 0.004500550496352299,
+              "world_bone_length": 0.2403420514722751,
+              "tail_to_next_head_units": 1.192238405779396e-07,
+              "screen_direction_error_deg": 15.182277725514334,
+              "rig_projected_length_px": 42.02314810680705,
+              "source_projected_length_px": 30.08287401632416,
+              "segment_vector_residual_px": [
+                -0.0623779296875,
+                15.192497253417969
+              ],
+              "actual_tail_to_target_direction_endpoint_px": 0.0,
+              "target_direction_endpoint_to_source_px": 11.820556960820994
+            },
+            {
+              "bone": "lower_arm_r",
+              "world_direction_error_deg": 2.666011870480979,
+              "world_bone_length": 0.24930403225214237,
+              "tail_to_next_head_units": 1.1920928955078125e-07,
+              "screen_direction_error_deg": 4.690350334991628,
+              "rig_projected_length_px": 21.463734047748098,
+              "source_projected_length_px": 33.860917546052214,
+              "segment_vector_residual_px": [
+                4.91552734375,
+                11.592910766601562
+              ],
+              "actual_tail_to_target_direction_endpoint_px": 1.9681388875326573,
+              "target_direction_endpoint_to_source_px": 21.641419378911294
+            }
+          ],
+          "clavicle": {
+            "world_direction_error_deg": 12.820914940703348,
+            "tail_to_shoulder_head_units": 0.012402237672638436
+          }
+        },
+        {
+          "source_frame": 29,
+          "side": "left",
+          "joint_residual_vectors_px": {
+            "shoulder": [
+              4.12152099609375,
+              -11.127326965332031
+            ],
+            "elbow": [
+              -0.635986328125,
+              2.665771484375
+            ],
+            "wrist": [
+              -6.330352783203125,
+              16.366409301757812
+            ]
+          },
+          "joint_errors_px": {
+            "shoulder": 11.866100469933196,
+            "elbow": 2.7405868270981975,
+            "wrist": 17.5480116410644
+          },
+          "segments": [
+            {
+              "bone": "upper_arm_l",
+              "world_direction_error_deg": 0.0,
+              "world_bone_length": 0.24034212960019508,
+              "tail_to_next_head_units": 0.0,
+              "screen_direction_error_deg": 22.02531448185248,
+              "rig_projected_length_px": 37.03820972309795,
+              "source_projected_length_px": 29.86818575855943,
+              "segment_vector_residual_px": [
+                -4.75750732421875,
+                13.793098449707031
+              ],
+              "actual_tail_to_target_direction_endpoint_px": 0.0,
+              "target_direction_endpoint_to_source_px": 2.7405868270981975
+            },
+            {
+              "bone": "lower_arm_l",
+              "world_direction_error_deg": 0.4772951963278369,
+              "world_bone_length": 0.24930405700108724,
+              "tail_to_next_head_units": 1.4600096599955427e-07,
+              "screen_direction_error_deg": 39.81723482365489,
+              "rig_projected_length_px": 14.22152721404759,
+              "source_projected_length_px": 22.636784809006286,
+              "segment_vector_residual_px": [
+                -5.694366455078125,
+                13.700637817382812
+              ],
+              "actual_tail_to_target_direction_endpoint_px": 0.40677506874661923,
+              "target_direction_endpoint_to_source_px": 17.79589787480964
+            }
+          ],
+          "clavicle": {
+            "world_direction_error_deg": 69.9002613394196,
+            "tail_to_shoulder_head_units": 0.012402145840907187
+          }
+        },
+        {
+          "source_frame": 29,
+          "side": "right",
+          "joint_residual_vectors_px": {
+            "shoulder": [
+              -8.61236572265625,
+              -6.306327819824219
+            ],
+            "elbow": [
+              4.203582763671875,
+              -16.70203399658203
+            ],
+            "wrist": [
+              -7.725067138671875,
+              -37.51427459716797
+            ]
+          },
+          "joint_errors_px": {
+            "shoulder": 10.674390638768717,
+            "elbow": 17.222893356591097,
+            "wrist": 38.30140288848854
+          },
+          "segments": [
+            {
+              "bone": "upper_arm_r",
+              "world_direction_error_deg": 0.017132009856553852,
+              "world_bone_length": 0.24034204435047082,
+              "tail_to_next_head_units": 2.1073424255447017e-08,
+              "screen_direction_error_deg": 9.641889197481895,
+              "rig_projected_length_px": 13.60853961259522,
+              "source_projected_length_px": 29.760234963504704,
+              "segment_vector_residual_px": [
+                12.815948486328125,
+                -10.395706176757812
+              ],
+              "actual_tail_to_target_direction_endpoint_px": 2.288818359375e-05,
+              "target_direction_endpoint_to_source_px": 17.22287120758489
+            },
+            {
+              "bone": "lower_arm_r",
+              "world_direction_error_deg": 1.9266104677724174,
+              "world_bone_length": 0.24930404019048344,
+              "tail_to_next_head_units": 1.7120130796843852e-07,
+              "screen_direction_error_deg": 18.91987864263748,
+              "rig_projected_length_px": 42.92731524951508,
+              "source_projected_length_px": 21.070836440811497,
+              "segment_vector_residual_px": [
+                -11.92864990234375,
+                -20.812240600585938
+              ],
+              "actual_tail_to_target_direction_endpoint_px": 1.3575303727294634,
+              "target_direction_endpoint_to_source_px": 37.62610895797469
+            }
+          ],
+          "clavicle": {
+            "world_direction_error_deg": 16.98429834690594,
+            "tail_to_shoulder_head_units": 0.01240210867902113
+          }
+        },
+        {
+          "source_frame": 41,
+          "side": "left",
+          "joint_residual_vectors_px": {
+            "shoulder": [
+              -1.13232421875,
+              -9.925086975097656
+            ],
+            "elbow": [
+              13.380035400390625,
+              -8.279869079589844
+            ],
+            "wrist": [
+              12.027984619140625,
+              -3.9739608764648438
+            ]
+          },
+          "joint_errors_px": {
+            "shoulder": 9.989470099694774,
+            "elbow": 15.734725084548765,
+            "wrist": 12.667469128905541
+          },
+          "segments": [
+            {
+              "bone": "upper_arm_l",
+              "world_direction_error_deg": 0.009252342769159835,
+              "world_bone_length": 0.2403421079850335,
+              "tail_to_next_head_units": 3.332000937312528e-08,
+              "screen_direction_error_deg": 2.990707182987386,
+              "rig_projected_length_px": 42.70771652365532,
+              "source_projected_length_px": 28.215202683108323,
+              "segment_vector_residual_px": [
+                14.512359619140625,
+                1.6452178955078125
+              ],
+              "actual_tail_to_target_direction_endpoint_px": 0.0,
+              "target_direction_endpoint_to_source_px": 15.734725084548765
+            },
+            {
+              "bone": "lower_arm_l",
+              "world_direction_error_deg": 0.0,
+              "world_bone_length": 0.24930401170584665,
+              "tail_to_next_head_units": 5.960464477539063e-08,
+              "screen_direction_error_deg": 6.841389178450879,
+              "rig_projected_length_px": 32.887380321231284,
+              "source_projected_length_px": 34.89409554932356,
+              "segment_vector_residual_px": [
+                -1.35205078125,
+                4.305908203125
+              ],
+              "actual_tail_to_target_direction_endpoint_px": 0.004304121420292962,
+              "target_direction_endpoint_to_source_px": 12.66586145970413
+            }
+          ],
+          "clavicle": {
+            "world_direction_error_deg": 76.80614816139571,
+            "tail_to_shoulder_head_units": 0.012402152752602378
+          }
+        },
+        {
+          "source_frame": 41,
+          "side": "right",
+          "joint_residual_vectors_px": {
+            "shoulder": [
+              -8.091766357421875,
+              8.370681762695312
+            ],
+            "elbow": [
+              -5.8118896484375,
+              -3.2447662353515625
+            ],
+            "wrist": [
+              -8.726608276367188,
+              -9.517829895019531
+            ]
+          },
+          "joint_errors_px": {
+            "shoulder": 11.64237940323821,
+            "elbow": 6.656317983647286,
+            "wrist": 12.912892107997086
+          },
+          "segments": [
+            {
+              "bone": "upper_arm_r",
+              "world_direction_error_deg": 0.013988227454926254,
+              "world_bone_length": 0.240342053069194,
+              "tail_to_next_head_units": 1.1920928955078125e-07,
+              "screen_direction_error_deg": 18.642287287012593,
+              "rig_projected_length_px": 36.999347577915565,
+              "source_projected_length_px": 34.5734731076386,
+              "segment_vector_residual_px": [
+                2.279876708984375,
+                -11.615447998046875
+              ],
+              "actual_tail_to_target_direction_endpoint_px": 0.0,
+              "target_direction_endpoint_to_source_px": 6.6563068083009
+            },
+            {
+              "bone": "lower_arm_r",
+              "world_direction_error_deg": 1.5770014147533158,
+              "world_bone_length": 0.24930404672794063,
+              "tail_to_next_head_units": 1.3328003749250113e-07,
+              "screen_direction_error_deg": 6.9809939551565385,
+              "rig_projected_length_px": 39.515958242342386,
+              "source_projected_length_px": 34.245024827905546,
+              "segment_vector_residual_px": [
+                -2.9147186279296875,
+                -6.273063659667969
+              ],
+              "actual_tail_to_target_direction_endpoint_px": 1.2921631945684724,
+              "target_direction_endpoint_to_source_px": 12.501442482687716
+            }
+          ],
+          "clavicle": {
+            "world_direction_error_deg": 22.313133279239274,
+            "tail_to_shoulder_head_units": 0.012402190796648761
+          }
+        },
+        {
+          "source_frame": 55,
+          "side": "left",
+          "joint_residual_vectors_px": {
+            "shoulder": [
+              -24.43572998046875,
+              -18.010887145996094
+            ],
+            "elbow": [
+              -29.493499755859375,
+              -9.070327758789062
+            ],
+            "wrist": [
+              -37.41766357421875,
+              8.7982177734375
+            ]
+          },
+          "joint_errors_px": {
+            "shoulder": 30.35616871016113,
+            "elbow": 30.856723086211545,
+            "wrist": 38.4381344626562
+          },
+          "segments": [
+            {
+              "bone": "upper_arm_l",
+              "world_direction_error_deg": 0.0,
+              "world_bone_length": 0.24034216277976708,
+              "tail_to_next_head_units": 1.666000468656264e-08,
+              "screen_direction_error_deg": 14.237467568649093,
+              "rig_projected_length_px": 33.5859231321025,
+              "source_projected_length_px": 26.44823697709882,
+              "segment_vector_residual_px": [
+                -5.057769775390625,
+                8.940559387207031
+              ],
+              "actual_tail_to_target_direction_endpoint_px": 0.0,
+              "target_direction_endpoint_to_source_px": 30.856752756468527
+            },
+            {
+              "bone": "lower_arm_l",
+              "world_direction_error_deg": 0.026690128326676582,
+              "world_bone_length": 0.24930408058262676,
+              "tail_to_next_head_units": 1.431209796093296e-07,
+              "screen_direction_error_deg": 109.18495976452888,
+              "rig_projected_length_px": 5.154731249385117,
+              "source_projected_length_px": 17.236866249567196,
+              "segment_vector_residual_px": [
+                -7.924163818359375,
+                17.868545532226562
+              ],
+              "actual_tail_to_target_direction_endpoint_px": 0.02279667681953669,
+              "target_direction_endpoint_to_source_px": 38.46083722517017
+            }
+          ],
+          "clavicle": {
+            "world_direction_error_deg": 73.54056011488663,
+            "tail_to_shoulder_head_units": 0.01240218113267912
+          }
+        },
+        {
+          "source_frame": 55,
+          "side": "right",
+          "joint_residual_vectors_px": {
+            "shoulder": [
+              24.356719970703125,
+              1.9161376953125
+            ],
+            "elbow": [
+              34.055206298828125,
+              11.589157104492188
+            ],
+            "wrist": [
+              36.305572509765625,
+              32.701316833496094
+            ]
+          },
+          "joint_errors_px": {
+            "shoulder": 24.431974962066157,
+            "elbow": 35.97312390258242,
+            "wrist": 48.861750921605335
+          },
+          "segments": [
+            {
+              "bone": "upper_arm_r",
+              "world_direction_error_deg": 0.0,
+              "world_bone_length": 0.2403421044127797,
+              "tail_to_next_head_units": 2.9802322387695312e-08,
+              "screen_direction_error_deg": 24.943819798324032,
+              "rig_projected_length_px": 32.34274181324222,
+              "source_projected_length_px": 30.583482899590283,
+              "segment_vector_residual_px": [
+                9.698486328125,
+                9.673019409179688
+              ],
+              "actual_tail_to_target_direction_endpoint_px": 1.52587890625e-05,
+              "target_direction_endpoint_to_source_px": 35.973119024605005
+            },
+            {
+              "bone": "lower_arm_r",
+              "world_direction_error_deg": 1.051806578483132,
+              "world_bone_length": 0.24930402174551408,
+              "tail_to_next_head_units": 1.5269146510898468e-07,
+              "screen_direction_error_deg": 17.713793490529586,
+              "rig_projected_length_px": 10.597643651508362,
+              "source_projected_length_px": 31.08066768994409,
+              "segment_vector_residual_px": [
+                2.2503662109375,
+                21.112159729003906
+              ],
+              "actual_tail_to_target_direction_endpoint_px": 0.925261682670916,
+              "target_direction_endpoint_to_source_px": 49.65268778522342
+            }
+          ],
+          "clavicle": {
+            "world_direction_error_deg": 19.69304994660451,
+            "tail_to_shoulder_head_units": 0.012402177062672102
+          }
+        }
+      ],
+      "torso_rows": [
+        {
+          "source_frame": 1,
+          "body_hip_to_shoulder_target_angle_deg": 0.40744456450483807,
+          "hip_center_residual_px": [
+            -0.784515380859375,
+            4.94879150390625
+          ],
+          "shoulder_center_residual_px": [
+            0.17620849609375,
+            -7.460052490234375
+          ],
+          "spine_bones": [
+            {
+              "bone": "spine_lower",
+              "head_world": [
+                0.00875025987625122,
+                0.015048429369926453,
+                0.9957094788551331
+              ],
+              "tail_world": [
+                0.0072847469709813595,
+                0.0019247494637966156,
+                1.1052613258361816
+              ]
+            },
+            {
+              "bone": "spine_mid",
+              "head_world": [
+                0.0072847469709813595,
+                0.0019247392192482948,
+                1.1052613258361816
+              ],
+              "tail_world": [
+                0.003563239239156246,
+                -0.008646134287118912,
+                1.2311649322509766
+              ]
+            },
+            {
+              "bone": "spine_chest",
+              "head_world": [
+                0.003563239239156246,
+                -0.008646134287118912,
+                1.2311649322509766
+              ],
+              "tail_world": [
+                -0.0018890677019953728,
+                -0.02654758095741272,
+                1.3739709854125977
+              ]
+            }
+          ]
+        },
+        {
+          "source_frame": 17,
+          "body_hip_to_shoulder_target_angle_deg": 4.753144483057642,
+          "hip_center_residual_px": [
+            -3.69268798828125,
+            5.214996337890625
+          ],
+          "shoulder_center_residual_px": [
+            -2.761260986328125,
+            -2.7057113647460938
+          ],
+          "spine_bones": [
+            {
+              "bone": "spine_lower",
+              "head_world": [
+                0.05783962458372116,
+                0.014874767512083054,
+                1.0031849145889282
+              ],
+              "tail_world": [
+                0.054559748619794846,
+                -0.005243712570518255,
+                1.1116306781768799
+              ]
+            },
+            {
+              "bone": "spine_mid",
+              "head_world": [
+                0.05455974489450455,
+                -0.005243722349405289,
+                1.1116306781768799
+              ],
+              "tail_world": [
+                0.049450140446424484,
+                -0.033740922808647156,
+                1.2346718311309814
+              ]
+            },
+            {
+              "bone": "spine_chest",
+              "head_world": [
+                0.049450140446424484,
+                -0.033740922808647156,
+                1.2346718311309814
+              ],
+              "tail_world": [
+                0.04165572673082352,
+                -0.07771319150924683,
+                1.3716005086898804
+              ]
+            }
+          ]
+        },
+        {
+          "source_frame": 23,
+          "body_hip_to_shoulder_target_angle_deg": 0.7847935347108409,
+          "hip_center_residual_px": [
+            -5.375213623046875,
+            4.5658721923828125
+          ],
+          "shoulder_center_residual_px": [
+            -1.9857177734375,
+            -8.42156982421875
+          ],
+          "spine_bones": [
+            {
+              "bone": "spine_lower",
+              "head_world": [
+                0.08340141922235489,
+                0.014706572517752647,
+                0.981788158416748
+              ],
+              "tail_world": [
+                0.07953300327062607,
+                0.0023088224697858095,
+                1.0913660526275635
+              ]
+            },
+            {
+              "bone": "spine_mid",
+              "head_world": [
+                0.07953299582004547,
+                0.0023088124580681324,
+                1.0913660526275635
+              ],
+              "tail_world": [
+                0.07427459210157394,
+                -0.006882506888359785,
+                1.2173230648040771
+              ]
+            },
+            {
+              "bone": "spine_chest",
+              "head_world": [
+                0.07427459210157394,
+                -0.006882506888359785,
+                1.2173230648040771
+              ],
+              "tail_world": [
+                0.06608616560697556,
+                -0.022713039070367813,
+                1.3602429628372192
+              ]
+            }
+          ]
+        },
+        {
+          "source_frame": 29,
+          "body_hip_to_shoulder_target_angle_deg": 4.8978478166309785,
+          "hip_center_residual_px": [
+            -3.63726806640625,
+            5.1085968017578125
+          ],
+          "shoulder_center_residual_px": [
+            -2.564208984375,
+            -8.739364624023438
+          ],
+          "spine_bones": [
+            {
+              "bone": "spine_lower",
+              "head_world": [
+                0.0877264216542244,
+                0.01378364022821188,
+                0.9932140111923218
+              ],
+              "tail_world": [
+                0.08288008719682693,
+                -0.005478166975080967,
+                1.1017565727233887
+              ]
+            },
+            {
+              "bone": "spine_mid",
+              "head_world": [
+                0.08288007974624634,
+                -0.005478176288306713,
+                1.1017565727233887
+              ],
+              "tail_world": [
+                0.07973545044660568,
+                -0.0334792397916317,
+                1.2249773740768433
+              ]
+            },
+            {
+              "bone": "spine_chest",
+              "head_world": [
+                0.07973545044660568,
+                -0.0334792397916317,
+                1.2249773740768433
+              ],
+              "tail_world": [
+                0.0741826593875885,
+                -0.07655066251754761,
+                1.362300992012024
+              ]
+            }
+          ]
+        },
+        {
+          "source_frame": 41,
+          "body_hip_to_shoulder_target_angle_deg": 5.993562042996375,
+          "hip_center_residual_px": [
+            -0.876129150390625,
+            5.3492889404296875
+          ],
+          "shoulder_center_residual_px": [
+            -4.442108154296875,
+            -0.8135910034179688
+          ],
+          "spine_bones": [
+            {
+              "bone": "spine_lower",
+              "head_world": [
+                -0.030580036342144012,
+                0.014109816402196884,
+                1.0028821229934692
+              ],
+              "tail_world": [
+                -0.025217097252607346,
+                -0.007010981440544128,
+                1.1110539436340332
+              ]
+            },
+            {
+              "bone": "spine_mid",
+              "head_world": [
+                -0.025217093527317047,
+                -0.007010991219431162,
+                1.1110539436340332
+              ],
+              "tail_world": [
+                -0.019462797790765762,
+                -0.03917161375284195,
+                1.2331600189208984
+              ]
+            },
+            {
+              "bone": "spine_chest",
+              "head_world": [
+                -0.019462797790765762,
+                -0.03917161375284195,
+                1.2331600189208984
+              ],
+              "tail_world": [
+                -0.010254791006445885,
+                -0.08827198296785355,
+                1.3682456016540527
+              ]
+            }
+          ]
+        },
+        {
+          "source_frame": 55,
+          "body_hip_to_shoulder_target_angle_deg": 1.9375238148565292,
+          "hip_center_residual_px": [
+            -0.078399658203125,
+            6.5555877685546875
+          ],
+          "shoulder_center_residual_px": [
+            -0.18829345703125,
+            -8.320114135742188
+          ],
+          "spine_bones": [
+            {
+              "bone": "spine_lower",
+              "head_world": [
+                -0.11547140032052994,
+                -0.0036067520268261433,
+                0.9319090247154236
+              ],
+              "tail_world": [
+                -0.10526368767023087,
+                -0.0021470249630510807,
+                1.0417710542678833
+              ]
+            },
+            {
+              "bone": "spine_mid",
+              "head_world": [
+                -0.10526367276906967,
+                -0.002147022634744644,
+                1.0417710542678833
+              ],
+              "tail_world": [
+                -0.10144929587841034,
+                -0.003821031656116247,
+                1.168103814125061
+              ]
+            },
+            {
+              "bone": "spine_chest",
+              "head_world": [
+                -0.10144929587841034,
+                -0.003821031656116247,
+                1.168103814125061
+              ],
+              "tail_world": [
+                -0.0935545340180397,
+                -0.005713443737477064,
+                1.3119018077850342
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    "scaled_root_yaw": {
+      "bundle_sha256": "503bfecec06d74ed21623d518a2eec64533c84875de69435c963fbfce60f0b02",
+      "rows": [
+        {
+          "source_frame": 1,
+          "side": "left",
+          "joint_residual_vectors_px": {
+            "shoulder": [
+              5.881622314453125,
+              -9.467117309570312
+            ],
+            "elbow": [
+              3.233551025390625,
+              0.38890838623046875
+            ],
+            "wrist": [
+              5.32568359375,
+              21.677108764648438
+            ]
+          },
+          "joint_errors_px": {
+            "shoulder": 11.145393282085362,
+            "elbow": 3.256854655199153,
+            "wrist": 22.32173692152395
+          },
+          "segments": [
+            {
+              "bone": "upper_arm_l",
+              "world_direction_error_deg": 0.01850468559863808,
+              "world_bone_length": 0.24034213831891518,
+              "tail_to_next_head_units": 3.332000937312528e-08,
+              "screen_direction_error_deg": 18.030514291652164,
+              "rig_projected_length_px": 26.960380992822078,
+              "source_projected_length_px": 31.51150084761031,
+              "segment_vector_residual_px": [
+                -2.6480712890625,
+                9.856025695800781
+              ],
+              "actual_tail_to_target_direction_endpoint_px": 0.0,
+              "target_direction_endpoint_to_source_px": 3.256854655199153
+            },
+            {
+              "bone": "lower_arm_l",
+              "world_direction_error_deg": 0.2701910363060323,
+              "world_bone_length": 0.24930399377891038,
+              "tail_to_next_head_units": 1.7120130796843852e-07,
+              "screen_direction_error_deg": 12.989912936460557,
+              "rig_projected_length_px": 14.795037837313696,
+              "source_projected_length_px": 35.54708659685477,
+              "segment_vector_residual_px": [
+                2.092132568359375,
+                21.28820037841797
+              ],
+              "actual_tail_to_target_direction_endpoint_px": 0.22689150073731829,
+              "target_direction_endpoint_to_source_px": 22.490314094246468
+            }
+          ],
+          "clavicle": {
+            "world_direction_error_deg": 58.432677520709895,
+            "tail_to_shoulder_head_units": 0.012402076265405517
+          }
+        },
+        {
+          "source_frame": 1,
+          "side": "right",
+          "joint_residual_vectors_px": {
+            "shoulder": [
+              -6.956817626953125,
+              -2.9327545166015625
+            ],
+            "elbow": [
+              -20.598800659179688,
+              2.08880615234375
+            ],
+            "wrist": [
+              -16.1263427734375,
+              21.154891967773438
+            ]
+          },
+          "joint_errors_px": {
+            "shoulder": 7.549725927974102,
+            "elbow": 20.704436442746097,
+            "wrist": 26.60053343273871
+          },
+          "segments": [
+            {
+              "bone": "upper_arm_r",
+              "world_direction_error_deg": 0.0,
+              "world_bone_length": 0.24034217640276523,
+              "tail_to_next_head_units": 0.0,
+              "screen_direction_error_deg": 5.1376958826738095,
+              "rig_projected_length_px": 42.84781027042926,
+              "source_projected_length_px": 28.654355218409435,
+              "segment_vector_residual_px": [
+                -13.641983032226562,
+                5.0215606689453125
+              ],
+              "actual_tail_to_target_direction_endpoint_px": 1.52587890625e-05,
+              "target_direction_endpoint_to_source_px": 20.704434911206118
+            },
+            {
+              "bone": "lower_arm_r",
+              "world_direction_error_deg": 0.6756512276384221,
+              "world_bone_length": 0.24930406914207817,
+              "tail_to_next_head_units": 8.429369702178807e-08,
+              "screen_direction_error_deg": 33.184987144265804,
+              "rig_projected_length_px": 18.466601045035173,
+              "source_projected_length_px": 32.228489525718935,
+              "segment_vector_residual_px": [
+                4.4724578857421875,
+                19.066085815429688
+              ],
+              "actual_tail_to_target_direction_endpoint_px": 0.5674939793527839,
+              "target_direction_endpoint_to_source_px": 26.933697142205467
+            }
+          ],
+          "clavicle": {
+            "world_direction_error_deg": 10.001118486922689,
+            "tail_to_shoulder_head_units": 0.012402166044313071
+          }
+        },
+        {
+          "source_frame": 17,
+          "side": "left",
+          "joint_residual_vectors_px": {
+            "shoulder": [
+              0.899993896484375,
+              -1.8035659790039062
+            ],
+            "elbow": [
+              -6.062164306640625,
+              7.302207946777344
+            ],
+            "wrist": [
+              -2.827850341796875,
+              34.10633850097656
+            ]
+          },
+          "joint_errors_px": {
+            "shoulder": 2.0156486125420536,
+            "elbow": 9.490631101503945,
+            "wrist": 34.22336989617586
+          },
+          "segments": [
+            {
+              "bone": "upper_arm_l",
+              "world_direction_error_deg": 0.0,
+              "world_bone_length": 0.24034214872158904,
+              "tail_to_next_head_units": 2.9802322387695312e-08,
+              "screen_direction_error_deg": 19.530012093685016,
+              "rig_projected_length_px": 27.569919824438674,
+              "source_projected_length_px": 32.798437235346405,
+              "segment_vector_residual_px": [
+                -6.962158203125,
+                9.10577392578125
+              ],
+              "actual_tail_to_target_direction_endpoint_px": 0.0,
+              "target_direction_endpoint_to_source_px": 9.490631101503945
+            },
+            {
+              "bone": "lower_arm_l",
+              "world_direction_error_deg": 0.4581262426893387,
+              "world_bone_length": 0.24930404712421922,
+              "tail_to_next_head_units": 1.7881393432617188e-07,
+              "screen_direction_error_deg": 24.47854224378432,
+              "rig_projected_length_px": 7.910103563674848,
+              "source_projected_length_px": 33.99799235861078,
+              "segment_vector_residual_px": [
+                3.23431396484375,
+                26.80413055419922
+              ],
+              "actual_tail_to_target_direction_endpoint_px": 0.40616282114546826,
+              "target_direction_endpoint_to_source_px": 34.555491973461386
+            }
+          ],
+          "clavicle": {
+            "world_direction_error_deg": 62.711530863148155,
+            "tail_to_shoulder_head_units": 0.012402195249359772
+          }
+        },
+        {
+          "source_frame": 17,
+          "side": "right",
+          "joint_residual_vectors_px": {
+            "shoulder": [
+              -9.307373046875,
+              6.711112976074219
+            ],
+            "elbow": [
+              -15.595306396484375,
+              16.084884643554688
+            ],
+            "wrist": [
+              -10.41400146484375,
+              42.84211730957031
+            ]
+          },
+          "joint_errors_px": {
+            "shoulder": 11.474590425516269,
+            "elbow": 22.40395250871362,
+            "wrist": 44.08966369943634
+          },
+          "segments": [
+            {
+              "bone": "upper_arm_r",
+              "world_direction_error_deg": 0.0,
+              "world_bone_length": 0.24034211216275395,
+              "tail_to_next_head_units": 0.0,
+              "screen_direction_error_deg": 8.23291396501951,
+              "rig_projected_length_px": 39.911583265510345,
+              "source_projected_length_px": 29.766713552519928,
+              "segment_vector_residual_px": [
+                -6.287933349609375,
+                9.373771667480469
+              ],
+              "actual_tail_to_target_direction_endpoint_px": 0.0,
+              "target_direction_endpoint_to_source_px": 22.40395250871362
+            },
+            {
+              "bone": "lower_arm_r",
+              "world_direction_error_deg": 0.8580064800609588,
+              "world_bone_length": 0.24930403038429738,
+              "tail_to_next_head_units": 1.7881393432617188e-07,
+              "screen_direction_error_deg": 50.06933745249012,
+              "rig_projected_length_px": 12.20267018778422,
+              "source_projected_length_px": 33.43000061929778,
+              "segment_vector_residual_px": [
+                5.181304931640625,
+                26.757232666015625
+              ],
+              "actual_tail_to_target_direction_endpoint_px": 0.7330199787727056,
+              "target_direction_endpoint_to_source_px": 44.47252724234692
+            }
+          ],
+          "clavicle": {
+            "world_direction_error_deg": 16.47546559462466,
+            "tail_to_shoulder_head_units": 0.012402084992156516
+          }
+        },
+        {
+          "source_frame": 23,
+          "side": "left",
+          "joint_residual_vectors_px": {
+            "shoulder": [
+              1.822509765625,
+              -10.093620300292969
+            ],
+            "elbow": [
+              -5.5146484375,
+              -7.80615234375
+            ],
+            "wrist": [
+              -7.757965087890625,
+              20.984466552734375
+            ]
+          },
+          "joint_errors_px": {
+            "shoulder": 10.256837425170081,
+            "elbow": 9.55758141573016,
+            "wrist": 22.372614131290668
+          },
+          "segments": [
+            {
+              "bone": "upper_arm_l",
+              "world_direction_error_deg": 0.0,
+              "world_bone_length": 0.24034211603774097,
+              "tail_to_next_head_units": 4.2146848510894035e-08,
+              "screen_direction_error_deg": 12.179128710073016,
+              "rig_projected_length_px": 29.973603397569097,
+              "source_projected_length_px": 33.66704395447887,
+              "segment_vector_residual_px": [
+                -7.337158203125,
+                2.2874679565429688
+              ],
+              "actual_tail_to_target_direction_endpoint_px": 0.0,
+              "target_direction_endpoint_to_source_px": 9.55758141573016
+            },
+            {
+              "bone": "lower_arm_l",
+              "world_direction_error_deg": 0.4161433336135883,
+              "world_bone_length": 0.24930406680727227,
+              "tail_to_next_head_units": 1.4600096599955427e-07,
+              "screen_direction_error_deg": 46.93180908182057,
+              "rig_projected_length_px": 9.566003494226965,
+              "source_projected_length_px": 34.55186743099061,
+              "segment_vector_residual_px": [
+                -2.243316650390625,
+                28.790618896484375
+              ],
+              "actual_tail_to_target_direction_endpoint_px": 0.3602184525352316,
+              "target_direction_endpoint_to_source_px": 22.61248838003692
+            }
+          ],
+          "clavicle": {
+            "world_direction_error_deg": 65.09545132803125,
+            "tail_to_shoulder_head_units": 0.012402247132606457
+          }
+        },
+        {
+          "source_frame": 23,
+          "side": "right",
+          "joint_residual_vectors_px": {
+            "shoulder": [
+              -9.841400146484375,
+              -3.8722305297851562
+            ],
+            "elbow": [
+              -19.209686279296875,
+              4.1845855712890625
+            ],
+            "wrist": [
+              -15.796844482421875,
+              26.065597534179688
+            ]
+          },
+          "joint_errors_px": {
+            "shoulder": 10.575789629086167,
+            "elbow": 19.66018336593786,
+            "wrist": 30.478774642943762
+          },
+          "segments": [
+            {
+              "bone": "upper_arm_r",
+              "world_direction_error_deg": 0.0,
+              "world_bone_length": 0.2403421602670807,
+              "tail_to_next_head_units": 1.1926748300777466e-07,
+              "screen_direction_error_deg": 0.7715171251171619,
+              "rig_projected_length_px": 42.42976086349761,
+              "source_projected_length_px": 30.08287401632416,
+              "segment_vector_residual_px": [
+                -9.3682861328125,
+                8.056816101074219
+              ],
+              "actual_tail_to_target_direction_endpoint_px": 0.0,
+              "target_direction_endpoint_to_source_px": 19.66018661596726
+            },
+            {
+              "bone": "lower_arm_r",
+              "world_direction_error_deg": 2.1308035120958575,
+              "world_bone_length": 0.24930396407579097,
+              "tail_to_next_head_units": 1.519626234052415e-07,
+              "screen_direction_error_deg": 32.003064819965005,
+              "rig_projected_length_px": 15.73782762303096,
+              "source_projected_length_px": 33.860917546052214,
+              "segment_vector_residual_px": [
+                3.412841796875,
+                21.881011962890625
+              ],
+              "actual_tail_to_target_direction_endpoint_px": 1.6730334110150218,
+              "target_direction_endpoint_to_source_px": 31.00099278982978
+            }
+          ],
+          "clavicle": {
+            "world_direction_error_deg": 13.524806920496976,
+            "tail_to_shoulder_head_units": 0.012402073405376543
+          }
+        },
+        {
+          "source_frame": 29,
+          "side": "left",
+          "joint_residual_vectors_px": {
+            "shoulder": [
+              1.37890625,
+              -9.179267883300781
+            ],
+            "elbow": [
+              -1.085205078125,
+              -2.8766632080078125
+            ],
+            "wrist": [
+              -6.7144775390625,
+              15.180694580078125
+            ]
+          },
+          "joint_errors_px": {
+            "shoulder": 9.282259388503897,
+            "elbow": 3.0745505865169163,
+            "wrist": 16.599328319334976
+          },
+          "segments": [
+            {
+              "bone": "upper_arm_l",
+              "world_direction_error_deg": 0.0,
+              "world_bone_length": 0.24034206856914556,
+              "tail_to_next_head_units": 8.429369702178807e-08,
+              "screen_direction_error_deg": 11.632209254609014,
+              "rig_projected_length_px": 32.341302839940845,
+              "source_projected_length_px": 29.86818575855943,
+              "segment_vector_residual_px": [
+                -2.464111328125,
+                6.302604675292969
+              ],
+              "actual_tail_to_target_direction_endpoint_px": 1.52587890625e-05,
+              "target_direction_endpoint_to_source_px": 3.074561365368482
+            },
+            {
+              "bone": "lower_arm_l",
+              "world_direction_error_deg": 0.2661559042929956,
+              "world_bone_length": 0.24930400014855456,
+              "tail_to_next_head_units": 1.6858739404357614e-07,
+              "screen_direction_error_deg": 55.66591438834768,
+              "rig_projected_length_px": 15.655963095588833,
+              "source_projected_length_px": 22.636784809006286,
+              "segment_vector_residual_px": [
+                -5.6292724609375,
+                18.057357788085938
+              ],
+              "actual_tail_to_target_direction_endpoint_px": 0.23163201451179397,
+              "target_direction_endpoint_to_source_px": 16.76692870120491
+            }
+          ],
+          "clavicle": {
+            "world_direction_error_deg": 79.42296930685168,
+            "tail_to_shoulder_head_units": 0.012402195982693393
+          }
+        },
+        {
+          "source_frame": 29,
+          "side": "right",
+          "joint_residual_vectors_px": {
+            "shoulder": [
+              -12.31341552734375,
+              2.660125732421875
+            ],
+            "elbow": [
+              0.01055908203125,
+              -14.080589294433594
+            ],
+            "wrist": [
+              -17.287796020507812,
+              -26.522628784179688
+            ]
+          },
+          "joint_errors_px": {
+            "shoulder": 12.597479029155581,
+            "elbow": 14.080593452780837,
+            "wrist": 31.65940173954428
+          },
+          "segments": [
+            {
+              "bone": "upper_arm_r",
+              "world_direction_error_deg": 0.0,
+              "world_bone_length": 0.2403420661472782,
+              "tail_to_next_head_units": 4.2146848510894035e-08,
+              "screen_direction_error_deg": 37.03109207538589,
+              "rig_projected_length_px": 13.227134804869088,
+              "source_projected_length_px": 29.760234963504704,
+              "segment_vector_residual_px": [
+                12.323974609375,
+                -16.74071502685547
+              ],
+              "actual_tail_to_target_direction_endpoint_px": 0.0,
+              "target_direction_endpoint_to_source_px": 14.08061620994036
+            },
+            {
+              "bone": "lower_arm_r",
+              "world_direction_error_deg": 1.3159449786384807,
+              "world_bone_length": 0.24930400283358206,
+              "tail_to_next_head_units": 1.228781230931777e-07,
+              "screen_direction_error_deg": 5.5373672468204225,
+              "rig_projected_length_px": 42.18343947472715,
+              "source_projected_length_px": 21.070836440811497,
+              "segment_vector_residual_px": [
+                -17.298355102539062,
+                -12.442039489746094
+              ],
+              "actual_tail_to_target_direction_endpoint_px": 0.9760820809258064,
+              "target_direction_endpoint_to_source_px": 31.291088222502545
+            }
+          ],
+          "clavicle": {
+            "world_direction_error_deg": 24.778019413857937,
+            "tail_to_shoulder_head_units": 0.012402159865961045
+          }
+        },
+        {
+          "source_frame": 41,
+          "side": "left",
+          "joint_residual_vectors_px": {
+            "shoulder": [
+              -4.138427734375,
+              -7.68865966796875
+            ],
+            "elbow": [
+              10.702423095703125,
+              -4.714653015136719
+            ],
+            "wrist": [
+              10.044586181640625,
+              4.644447326660156
+            ]
+          },
+          "joint_errors_px": {
+            "shoulder": 8.731670581952425,
+            "elbow": 11.694862780081957,
+            "wrist": 11.066372726933649
+          },
+          "segments": [
+            {
+              "bone": "upper_arm_l",
+              "world_direction_error_deg": 0.0,
+              "world_bone_length": 0.2403421620380705,
+              "tail_to_next_head_units": 0.0,
+              "screen_direction_error_deg": 4.753172817457375,
+              "rig_projected_length_px": 43.07240432317692,
+              "source_projected_length_px": 28.215202683108323,
+              "segment_vector_residual_px": [
+                14.840850830078125,
+                2.9740066528320312
+              ],
+              "actual_tail_to_target_direction_endpoint_px": 0.0,
+              "target_direction_endpoint_to_source_px": 11.694862780081957
+            },
+            {
+              "bone": "lower_arm_l",
+              "world_direction_error_deg": 0.0770146941631026,
+              "world_bone_length": 0.24930404742838244,
+              "tail_to_next_head_units": 1.3657139822709083e-07,
+              "screen_direction_error_deg": 15.596013366666243,
+              "rig_projected_length_px": 33.484519523846295,
+              "source_projected_length_px": 34.89409554932356,
+              "segment_vector_residual_px": [
+                -0.6578369140625,
+                9.359100341796875
+              ],
+              "actual_tail_to_target_direction_endpoint_px": 0.07152011738628183,
+              "target_direction_endpoint_to_source_px": 11.090808231219206
+            }
+          ],
+          "clavicle": {
+            "world_direction_error_deg": 86.41330313281493,
+            "tail_to_shoulder_head_units": 0.012402208660191509
+          }
+        },
+        {
+          "source_frame": 41,
+          "side": "right",
+          "joint_residual_vectors_px": {
+            "shoulder": [
+              -6.639892578125,
+              20.9232177734375
+            ],
+            "elbow": [
+              -5.5789794921875,
+              14.163825988769531
+            ],
+            "wrist": [
+              -11.970306396484375,
+              17.082130432128906
+            ]
+          },
+          "joint_errors_px": {
+            "shoulder": 21.951519521198318,
+            "elbow": 15.222975377356413,
+            "wrist": 20.858749551718773
+          },
+          "segments": [
+            {
+              "bone": "upper_arm_r",
+              "world_direction_error_deg": 0.019154169333064127,
+              "world_bone_length": 0.2403421024752861,
+              "tail_to_next_head_units": 2.9802322387695312e-08,
+              "screen_direction_error_deg": 10.992597410478346,
+              "rig_projected_length_px": 35.77033514269475,
+              "source_projected_length_px": 34.5734731076386,
+              "segment_vector_residual_px": [
+                1.0609130859375,
+                -6.759391784667969
+              ],
+              "actual_tail_to_target_direction_endpoint_px": 0.0,
+              "target_direction_endpoint_to_source_px": 15.222975377356413
+            },
+            {
+              "bone": "lower_arm_r",
+              "world_direction_error_deg": 1.8366162301091646,
+              "world_bone_length": 0.24930403271910362,
+              "tail_to_next_head_units": 9.541398640621973e-08,
+              "screen_direction_error_deg": 7.311267864136964,
+              "rig_projected_length_px": 39.4778090324914,
+              "source_projected_length_px": 34.245024827905546,
+              "segment_vector_residual_px": [
+                -6.391326904296875,
+                2.918304443359375
+              ],
+              "actual_tail_to_target_direction_endpoint_px": 1.5097372834579215,
+              "target_direction_endpoint_to_source_px": 22.27890434598214
+            }
+          ],
+          "clavicle": {
+            "world_direction_error_deg": 28.258256712181257,
+            "tail_to_shoulder_head_units": 0.012402148932378756
+          }
+        },
+        {
+          "source_frame": 55,
+          "side": "left",
+          "joint_residual_vectors_px": {
+            "shoulder": [
+              -22.307464599609375,
+              -18.373092651367188
+            ],
+            "elbow": [
+              -26.54815673828125,
+              -16.907012939453125
+            ],
+            "wrist": [
+              -34.53118896484375,
+              4.3328399658203125
+            ]
+          },
+          "joint_errors_px": {
+            "shoulder": 28.89971473843454,
+            "elbow": 31.474619979927628,
+            "wrist": 34.80196052597348
+          },
+          "segments": [
+            {
+              "bone": "upper_arm_l",
+              "world_direction_error_deg": 0.022931735496013878,
+              "world_bone_length": 0.24034218263907076,
+              "tail_to_next_head_units": 2.2351741790771484e-08,
+              "screen_direction_error_deg": 9.733296140271092,
+              "rig_projected_length_px": 26.44097920784566,
+              "source_projected_length_px": 26.44823697709882,
+              "segment_vector_residual_px": [
+                -4.240692138671875,
+                1.4660797119140625
+              ],
+              "actual_tail_to_target_direction_endpoint_px": 3.0517578125e-05,
+              "target_direction_endpoint_to_source_px": 31.474646158933673
+            },
+            {
+              "bone": "lower_arm_l",
+              "world_direction_error_deg": 0.32614669436638166,
+              "world_bone_length": 0.24930411776440609,
+              "tail_to_next_head_units": 1.519626234052415e-07,
+              "screen_direction_error_deg": 122.32518136993619,
+              "rig_projected_length_px": 8.181399424028383,
+              "source_projected_length_px": 17.236866249567196,
+              "segment_vector_residual_px": [
+                -7.9830322265625,
+                21.239852905273438
+              ],
+              "actual_tail_to_target_direction_endpoint_px": 0.2755981535877132,
+              "target_direction_endpoint_to_source_px": 34.538129965207006
+            }
+          ],
+          "clavicle": {
+            "world_direction_error_deg": 73.6321508590699,
+            "tail_to_shoulder_head_units": 0.012402130532496966
+          }
+        },
+        {
+          "source_frame": 55,
+          "side": "right",
+          "joint_residual_vectors_px": {
+            "shoulder": [
+              26.37554931640625,
+              2.5853118896484375
+            ],
+            "elbow": [
+              35.115264892578125,
+              5.54931640625
+            ],
+            "wrist": [
+              37.645050048828125,
+              35.757301330566406
+            ]
+          },
+          "joint_errors_px": {
+            "shoulder": 26.50195189251174,
+            "elbow": 35.551043577476484,
+            "wrist": 51.920462006804215
+          },
+          "segments": [
+            {
+              "bone": "upper_arm_r",
+              "world_direction_error_deg": 0.0,
+              "world_bone_length": 0.24034212572520827,
+              "tail_to_next_head_units": 1.1920928955078125e-07,
+              "screen_direction_error_deg": 16.988548656307994,
+              "rig_projected_length_px": 26.942922944657617,
+              "source_projected_length_px": 30.583482899590283,
+              "segment_vector_residual_px": [
+                8.739715576171875,
+                2.9640045166015625
+              ],
+              "actual_tail_to_target_direction_endpoint_px": 0.0,
+              "target_direction_endpoint_to_source_px": 35.55104835241414
+            },
+            {
+              "bone": "lower_arm_r",
+              "world_direction_error_deg": 0.45927544600253833,
+              "world_bone_length": 0.2493040363964234,
+              "tail_to_next_head_units": 1.0745380149674383e-07,
+              "screen_direction_error_deg": 76.8838323893871,
+              "rig_projected_length_px": 5.422287496718191,
+              "source_projected_length_px": 31.08066768994409,
+              "segment_vector_residual_px": [
+                2.52978515625,
+                30.207984924316406
+              ],
+              "actual_tail_to_target_direction_endpoint_px": 0.40852668478040405,
+              "target_direction_endpoint_to_source_px": 52.28565572814283
+            }
+          ],
+          "clavicle": {
+            "world_direction_error_deg": 19.762658542292428,
+            "tail_to_shoulder_head_units": 0.01240224067929572
+          }
+        }
+      ],
+      "torso_rows": [
+        {
+          "source_frame": 1,
+          "body_hip_to_shoulder_target_angle_deg": 2.158121945913647,
+          "hip_center_residual_px": [
+            -0.784515380859375,
+            4.94879150390625
+          ],
+          "shoulder_center_residual_px": [
+            -0.538787841796875,
+            -6.199668884277344
+          ],
+          "spine_bones": [
+            {
+              "bone": "spine_lower",
+              "head_world": [
+                0.00875025987625122,
+                0.015048429369926453,
+                0.9957094788551331
+              ],
+              "tail_world": [
+                0.006217234302312136,
+                -0.0016056075692176819,
+                1.1047608852386475
+              ]
+            },
+            {
+              "bone": "spine_mid",
+              "head_world": [
+                0.006217234302312136,
+                -0.0016056178137660027,
+                1.1047608852386475
+              ],
+              "tail_world": [
+                -0.0002265237271785736,
+                -0.021115651354193687,
+                1.2294811010360718
+              ]
+            },
+            {
+              "bone": "spine_chest",
+              "head_world": [
+                -0.0002265237271785736,
+                -0.021115653216838837,
+                1.2294811010360718
+              ],
+              "tail_world": [
+                -0.00965084508061409,
+                -0.052081234753131866,
+                1.3698238134384155
+              ]
+            }
+          ]
+        },
+        {
+          "source_frame": 17,
+          "body_hip_to_shoulder_target_angle_deg": 9.762032827468337,
+          "hip_center_residual_px": [
+            -3.69268798828125,
+            5.214996337890625
+          ],
+          "shoulder_center_residual_px": [
+            -4.297607421875,
+            2.4798126220703125
+          ],
+          "spine_bones": [
+            {
+              "bone": "spine_lower",
+              "head_world": [
+                0.05783962458372116,
+                0.014874767512083054,
+                1.0031849145889282
+              ],
+              "tail_world": [
+                0.053226929157972336,
+                -0.012808703817427158,
+                1.1099010705947876
+              ]
+            },
+            {
+              "bone": "spine_mid",
+              "head_world": [
+                0.053226929157972336,
+                -0.012808714061975479,
+                1.1099010705947876
+              ],
+              "tail_world": [
+                0.0447813905775547,
+                -0.060156095772981644,
+                1.2267950773239136
+              ]
+            },
+            {
+              "bone": "spine_chest",
+              "head_world": [
+                0.0447813905775547,
+                -0.060156095772981644,
+                1.2267950773239136
+              ],
+              "tail_world": [
+                0.032271143049001694,
+                -0.13075906038284302,
+                1.3517049551010132
+              ]
+            }
+          ]
+        },
+        {
+          "source_frame": 23,
+          "body_hip_to_shoulder_target_angle_deg": 2.2757409421852017,
+          "hip_center_residual_px": [
+            -5.375213623046875,
+            4.5658721923828125
+          ],
+          "shoulder_center_residual_px": [
+            -4.204833984375,
+            -6.957557678222656
+          ],
+          "spine_bones": [
+            {
+              "bone": "spine_lower",
+              "head_world": [
+                0.08340141922235489,
+                0.014706572517752647,
+                0.981788158416748
+              ],
+              "tail_world": [
+                0.07792003452777863,
+                -0.0008222003234550357,
+                1.0908973217010498
+              ]
+            },
+            {
+              "bone": "spine_mid",
+              "head_world": [
+                0.07792003452777863,
+                -0.0008222103351727128,
+                1.0908973217010498
+              ],
+              "tail_world": [
+                0.06856000423431396,
+                -0.01794198527932167,
+                1.215783715248108
+              ]
+            },
+            {
+              "bone": "spine_chest",
+              "head_world": [
+                0.06856000423431396,
+                -0.01794198714196682,
+                1.215783715248108
+              ],
+              "tail_world": [
+                0.05437907949090004,
+                -0.04537004604935646,
+                1.356462001800537
+              ]
+            }
+          ]
+        },
+        {
+          "source_frame": 29,
+          "body_hip_to_shoulder_target_angle_deg": 11.114629202446634,
+          "hip_center_residual_px": [
+            -3.63726806640625,
+            5.1085968017578125
+          ],
+          "shoulder_center_residual_px": [
+            -5.72479248046875,
+            -3.2440567016601562
+          ],
+          "spine_bones": [
+            {
+              "bone": "spine_lower",
+              "head_world": [
+                0.0877264216542244,
+                0.01378364022821188,
+                0.9932140111923218
+              ],
+              "tail_world": [
+                0.08185935765504837,
+                -0.012948866933584213,
+                1.1001108884811401
+              ]
+            },
+            {
+              "bone": "spine_mid",
+              "head_world": [
+                0.08185935765504837,
+                -0.01294887624680996,
+                1.1001108884811401
+              ],
+              "tail_world": [
+                0.0762619823217392,
+                -0.059590887278318405,
+                1.217458724975586
+              ]
+            },
+            {
+              "bone": "spine_chest",
+              "head_world": [
+                0.0762619823217392,
+                -0.059590887278318405,
+                1.217458724975586
+              ],
+              "tail_world": [
+                0.0672716572880745,
+                -0.12905193865299225,
+                1.3433082103729248
+              ]
+            }
+          ]
+        },
+        {
+          "source_frame": 41,
+          "body_hip_to_shoulder_target_angle_deg": 12.167152373393012,
+          "hip_center_residual_px": [
+            -0.876129150390625,
+            5.3492889404296875
+          ],
+          "shoulder_center_residual_px": [
+            -5.230194091796875,
+            6.5480194091796875
+          ],
+          "spine_bones": [
+            {
+              "bone": "spine_lower",
+              "head_world": [
+                -0.030580036342144012,
+                0.014109816402196884,
+                1.0028821229934692
+              ],
+              "tail_world": [
+                -0.023650960996747017,
+                -0.015117899514734745,
+                1.1090599298477173
+              ]
+            },
+            {
+              "bone": "spine_mid",
+              "head_world": [
+                -0.023650959134101868,
+                -0.015117908827960491,
+                1.1090599298477173
+              ],
+              "tail_world": [
+                -0.014088218100368977,
+                -0.06738012284040451,
+                1.2237530946731567
+              ]
+            },
+            {
+              "bone": "spine_chest",
+              "head_world": [
+                -0.014088218100368977,
+                -0.06738012284040451,
+                1.2237530946731567
+              ],
+              "tail_world": [
+                0.00042013637721538544,
+                -0.14459525048732758,
+                1.3444639444351196
+              ]
+            }
+          ]
+        },
+        {
+          "source_frame": 55,
+          "body_hip_to_shoulder_target_angle_deg": 1.4572150183967785,
+          "hip_center_residual_px": [
+            -0.078399658203125,
+            6.5555877685546875
+          ],
+          "shoulder_center_residual_px": [
+            1.887847900390625,
+            -8.1776123046875
+          ],
+          "spine_bones": [
+            {
+              "bone": "spine_lower",
+              "head_world": [
+                -0.11547140032052994,
+                -0.0036067520268261433,
+                0.9319090247154236
+              ],
+              "tail_world": [
+                -0.10366760939359665,
+                -0.0025308248586952686,
+                1.0416154861450195
+              ]
+            },
+            {
+              "bone": "spine_mid",
+              "head_world": [
+                -0.10366760194301605,
+                -0.002530822530388832,
+                1.0416154861450195
+              ],
+              "tail_world": [
+                -0.09580408036708832,
+                -0.005181295797228813,
+                1.1677441596984863
+              ]
+            },
+            {
+              "bone": "spine_chest",
+              "head_world": [
+                -0.09580408036708832,
+                -0.005181295797228813,
+                1.1677441596984863
+              ],
+              "tail_world": [
+                -0.08195453882217407,
+                -0.00849924236536026,
+                1.3110653162002563
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    "raw_own_root_yaw": {
+      "bundle_sha256": "800e85a368bf194ace3b38055787f7708c09c7cf8a7d3757a3eadc7854e1d25e",
+      "rows": [
+        {
+          "source_frame": 1,
+          "side": "left",
+          "joint_residual_vectors_px": {
+            "shoulder": [
+              9.562347412109375,
+              -2.2463912963867188
+            ],
+            "elbow": [
+              6.44647216796875,
+              0.9812698364257812
+            ],
+            "wrist": [
+              8.1285400390625,
+              9.831016540527344
+            ]
+          },
+          "joint_errors_px": {
+            "shoulder": 9.822665907462829,
+            "elbow": 6.520727990572137,
+            "wrist": 12.756255466547854
+          },
+          "segments": [
+            {
+              "bone": "upper_arm_l",
+              "world_direction_error_deg": 0.0,
+              "world_bone_length": 0.24034215188136804,
+              "tail_to_next_head_units": 4.2146848510894035e-08,
+              "screen_direction_error_deg": 4.079773544332515,
+              "rig_projected_length_px": 27.545703086223888,
+              "source_projected_length_px": 31.51150084761031,
+              "segment_vector_residual_px": [
+                -3.115875244140625,
+                3.2276611328125
+              ],
+              "actual_tail_to_target_direction_endpoint_px": 0.0,
+              "target_direction_endpoint_to_source_px": 6.520727990572137
+            },
+            {
+              "bone": "lower_arm_l",
+              "world_direction_error_deg": 0.0,
+              "world_bone_length": 0.24930397407897897,
+              "tail_to_next_head_units": 1.4901161193847656e-07,
+              "screen_direction_error_deg": 4.677244175592511,
+              "rig_projected_length_px": 26.899615525401636,
+              "source_projected_length_px": 35.54708659685477,
+              "segment_vector_residual_px": [
+                1.68206787109375,
+                8.849746704101562
+              ],
+              "actual_tail_to_target_direction_endpoint_px": 0.0,
+              "target_direction_endpoint_to_source_px": 12.756255466547854
+            }
+          ],
+          "clavicle": {
+            "world_direction_error_deg": 0.0,
+            "tail_to_shoulder_head_units": 0.012402273899143551
+          }
+        },
+        {
+          "source_frame": 1,
+          "side": "right",
+          "joint_residual_vectors_px": {
+            "shoulder": [
+              -3.075592041015625,
+              -2.5624313354492188
+            ],
+            "elbow": [
+              -15.96630859375,
+              4.9755401611328125
+            ],
+            "wrist": [
+              -9.651290893554688,
+              15.120353698730469
+            ]
+          },
+          "joint_errors_px": {
+            "shoulder": 4.0031638745840645,
+            "elbow": 16.723606210060957,
+            "wrist": 17.93801847233599
+          },
+          "segments": [
+            {
+              "bone": "upper_arm_r",
+              "world_direction_error_deg": 0.0,
+              "world_bone_length": 0.24034216277976708,
+              "tail_to_next_head_units": 7.450580596923828e-09,
+              "screen_direction_error_deg": 8.646578641233134,
+              "rig_projected_length_px": 42.626726221833096,
+              "source_projected_length_px": 28.654355218409435,
+              "segment_vector_residual_px": [
+                -12.890716552734375,
+                7.537971496582031
+              ],
+              "actual_tail_to_target_direction_endpoint_px": 3.0517578125e-05,
+              "target_direction_endpoint_to_source_px": 16.723597085956364
+            },
+            {
+              "bone": "lower_arm_r",
+              "world_direction_error_deg": 0.0,
+              "world_bone_length": 0.24930403738871604,
+              "tail_to_next_head_units": 1.3328003749250113e-07,
+              "screen_direction_error_deg": 7.100021153503287,
+              "rig_projected_length_px": 20.71510598198152,
+              "source_projected_length_px": 32.228489525718935,
+              "segment_vector_residual_px": [
+                6.3150177001953125,
+                10.144813537597656
+              ],
+              "actual_tail_to_target_direction_endpoint_px": 0.0,
+              "target_direction_endpoint_to_source_px": 17.938026766070283
+            }
+          ],
+          "clavicle": {
+            "world_direction_error_deg": 0.014836755739843227,
+            "tail_to_shoulder_head_units": 0.012402126205805143
+          }
+        },
+        {
+          "source_frame": 17,
+          "side": "left",
+          "joint_residual_vectors_px": {
+            "shoulder": [
+              4.0936279296875,
+              5.1889801025390625
+            ],
+            "elbow": [
+              -2.381744384765625,
+              15.005653381347656
+            ],
+            "wrist": [
+              0.6729736328125,
+              30.797760009765625
+            ]
+          },
+          "joint_errors_px": {
+            "shoulder": 6.609334598354649,
+            "elbow": 15.193496572059196,
+            "wrist": 30.805111713086124
+          },
+          "segments": [
+            {
+              "bone": "upper_arm_l",
+              "world_direction_error_deg": 0.008979846894381922,
+              "world_bone_length": 0.24034214179088803,
+              "tail_to_next_head_units": 1.228781230931777e-07,
+              "screen_direction_error_deg": 20.53500620196396,
+              "rig_projected_length_px": 28.278776922688223,
+              "source_projected_length_px": 32.798437235346405,
+              "segment_vector_residual_px": [
+                -6.475372314453125,
+                9.816673278808594
+              ],
+              "actual_tail_to_target_direction_endpoint_px": 3.0517578125e-05,
+              "target_direction_endpoint_to_source_px": 15.193496572059196
+            },
+            {
+              "bone": "lower_arm_l",
+              "world_direction_error_deg": 0.0,
+              "world_bone_length": 0.24930398529888387,
+              "tail_to_next_head_units": 1.7881393432617188e-07,
+              "screen_direction_error_deg": 9.600218082788034,
+              "rig_projected_length_px": 18.469493173276245,
+              "source_projected_length_px": 33.99799235861078,
+              "segment_vector_residual_px": [
+                3.054718017578125,
+                15.792106628417969
+              ],
+              "actual_tail_to_target_direction_endpoint_px": 0.0,
+              "target_direction_endpoint_to_source_px": 30.805135165451105
+            }
+          ],
+          "clavicle": {
+            "world_direction_error_deg": 0.0,
+            "tail_to_shoulder_head_units": 0.01240217849267472
+          }
+        },
+        {
+          "source_frame": 17,
+          "side": "right",
+          "joint_residual_vectors_px": {
+            "shoulder": [
+              -3.150787353515625,
+              2.1145782470703125
+            ],
+            "elbow": [
+              -5.172607421875,
+              18.90087890625
+            ],
+            "wrist": [
+              1.993682861328125,
+              36.853302001953125
+            ]
+          },
+          "joint_errors_px": {
+            "shoulder": 3.7945885072550474,
+            "elbow": 19.595894776765128,
+            "wrist": 36.907189879695565
+          },
+          "segments": [
+            {
+              "bone": "upper_arm_r",
+              "world_direction_error_deg": 0.0,
+              "world_bone_length": 0.24034211991272794,
+              "tail_to_next_head_units": 0.0,
+              "screen_direction_error_deg": 20.124353549300128,
+              "rig_projected_length_px": 41.40226174778416,
+              "source_projected_length_px": 29.766713552519928,
+              "segment_vector_residual_px": [
+                -2.021820068359375,
+                16.786300659179688
+              ],
+              "actual_tail_to_target_direction_endpoint_px": 0.0,
+              "target_direction_endpoint_to_source_px": 19.595894776765128
+            },
+            {
+              "bone": "lower_arm_r",
+              "world_direction_error_deg": 0.0034970568555893434,
+              "world_bone_length": 0.24930403528739045,
+              "tail_to_next_head_units": 1.1920928955078125e-07,
+              "screen_direction_error_deg": 12.250713893788339,
+              "rig_projected_length_px": 14.687444418944036,
+              "source_projected_length_px": 33.43000061929778,
+              "segment_vector_residual_px": [
+                7.166290283203125,
+                17.952423095703125
+              ],
+              "actual_tail_to_target_direction_endpoint_px": 0.0,
+              "target_direction_endpoint_to_source_px": 36.90720476341598
+            }
+          ],
+          "clavicle": {
+            "world_direction_error_deg": 0.017132009856553852,
+            "tail_to_shoulder_head_units": 0.012402194332692684
+          }
+        },
+        {
+          "source_frame": 23,
+          "side": "left",
+          "joint_residual_vectors_px": {
+            "shoulder": [
+              -1.076934814453125,
+              2.0346298217773438
+            ],
+            "elbow": [
+              -10.033721923828125,
+              12.644973754882812
+            ],
+            "wrist": [
+              -13.353057861328125,
+              31.890106201171875
+            ]
+          },
+          "joint_errors_px": {
+            "shoulder": 2.3020658420456357,
+            "elbow": 16.142209591036693,
+            "wrist": 34.57286559251808
+          },
+          "segments": [
+            {
+              "bone": "upper_arm_l",
+              "world_direction_error_deg": 0.01850468559863808,
+              "world_bone_length": 0.24034213250643516,
+              "tail_to_next_head_units": 1.1920928955078125e-07,
+              "screen_direction_error_deg": 22.71112833585186,
+              "rig_projected_length_px": 35.93988443176675,
+              "source_projected_length_px": 33.66704395447887,
+              "segment_vector_residual_px": [
+                -8.956787109375,
+                10.610343933105469
+              ],
+              "actual_tail_to_target_direction_endpoint_px": 0.0,
+              "target_direction_endpoint_to_source_px": 16.142221879576326
+            },
+            {
+              "bone": "lower_arm_l",
+              "world_direction_error_deg": 0.0,
+              "world_bone_length": 0.2493040052851289,
+              "tail_to_next_head_units": 1.3657139822709083e-07,
+              "screen_direction_error_deg": 10.933800667684798,
+              "rig_projected_length_px": 15.527818388972046,
+              "source_projected_length_px": 34.55186743099061,
+              "segment_vector_residual_px": [
+                -3.3193359375,
+                19.245132446289062
+              ],
+              "actual_tail_to_target_direction_endpoint_px": 4.57763671875e-05,
+              "target_direction_endpoint_to_source_px": 34.57286559251808
+            }
+          ],
+          "clavicle": {
+            "world_direction_error_deg": 0.0,
+            "tail_to_shoulder_head_units": 0.012402119239094797
+          }
+        },
+        {
+          "source_frame": 23,
+          "side": "right",
+          "joint_residual_vectors_px": {
+            "shoulder": [
+              -3.98248291015625,
+              -6.611946105957031
+            ],
+            "elbow": [
+              -4.00140380859375,
+              8.437728881835938
+            ],
+            "wrist": [
+              2.749786376953125,
+              21.194290161132812
+            ]
+          },
+          "joint_errors_px": {
+            "shoulder": 7.718678709619858,
+            "elbow": 9.338442006016392,
+            "wrist": 21.371926962371944
+          },
+          "segments": [
+            {
+              "bone": "upper_arm_r",
+              "world_direction_error_deg": 0.0,
+              "world_bone_length": 0.24034205631601013,
+              "tail_to_next_head_units": 3.725290298461914e-09,
+              "screen_direction_error_deg": 15.130964801481248,
+              "rig_projected_length_px": 41.878664135399845,
+              "source_projected_length_px": 30.08287401632416,
+              "segment_vector_residual_px": [
+                -0.0189208984375,
+                15.049674987792969
+              ],
+              "actual_tail_to_target_direction_endpoint_px": 0.0,
+              "target_direction_endpoint_to_source_px": 9.338442006016392
+            },
+            {
+              "bone": "lower_arm_r",
+              "world_direction_error_deg": 0.0,
+              "world_bone_length": 0.24930403271910362,
+              "tail_to_next_head_units": 1.3738191809196602e-07,
+              "screen_direction_error_deg": 2.2983138513239516,
+              "rig_projected_length_px": 19.46480925769571,
+              "source_projected_length_px": 33.860917546052214,
+              "segment_vector_residual_px": [
+                6.751190185546875,
+                12.756561279296875
+              ],
+              "actual_tail_to_target_direction_endpoint_px": 3.0517578125e-05,
+              "target_direction_endpoint_to_source_px": 21.371926962371944
+            }
+          ],
+          "clavicle": {
+            "world_direction_error_deg": 0.0,
+            "tail_to_shoulder_head_units": 0.012402145455905485
+          }
+        },
+        {
+          "source_frame": 29,
+          "side": "left",
+          "joint_residual_vectors_px": {
+            "shoulder": [
+              -8.304779052734375,
+              5.766082763671875
+            ],
+            "elbow": [
+              -13.03839111328125,
+              20.639144897460938
+            ],
+            "wrist": [
+              -19.484527587890625,
+              35.42628479003906
+            ]
+          },
+          "joint_errors_px": {
+            "shoulder": 10.110245491767675,
+            "elbow": 24.412577767353252,
+            "wrist": 40.4310329637232
+          },
+          "segments": [
+            {
+              "bone": "upper_arm_l",
+              "world_direction_error_deg": 0.013988227454926254,
+              "world_bone_length": 0.24034213541267518,
+              "tail_to_next_head_units": 3.332000937312528e-08,
+              "screen_direction_error_deg": 22.836450478888313,
+              "rig_projected_length_px": 37.97893743538256,
+              "source_projected_length_px": 29.86818575855943,
+              "segment_vector_residual_px": [
+                -4.733612060546875,
+                14.873062133789062
+              ],
+              "actual_tail_to_target_direction_endpoint_px": 0.0,
+              "target_direction_endpoint_to_source_px": 24.412577767353252
+            },
+            {
+              "bone": "lower_arm_l",
+              "world_direction_error_deg": 0.0,
+              "world_bone_length": 0.24930410463112518,
+              "tail_to_next_head_units": 1.3328003749250113e-07,
+              "screen_direction_error_deg": 44.84432938148259,
+              "rig_projected_length_px": 13.727893953660704,
+              "source_projected_length_px": 22.636784809006286,
+              "segment_vector_residual_px": [
+                -6.446136474609375,
+                14.787139892578125
+              ],
+              "actual_tail_to_target_direction_endpoint_px": 3.0517578125e-05,
+              "target_direction_endpoint_to_source_px": 40.43106013672282
+            }
+          ],
+          "clavicle": {
+            "world_direction_error_deg": 0.0,
+            "tail_to_shoulder_head_units": 0.012402146959245398
+          }
+        },
+        {
+          "source_frame": 29,
+          "side": "right",
+          "joint_residual_vectors_px": {
+            "shoulder": [
+              -2.393096923828125,
+              -7.3225860595703125
+            ],
+            "elbow": [
+              10.213897705078125,
+              -17.694427490234375
+            ],
+            "wrist": [
+              -2.633758544921875,
+              -37.48661804199219
+            ]
+          },
+          "joint_errors_px": {
+            "shoulder": 7.7037120231745835,
+            "elbow": 20.430772893311364,
+            "wrist": 37.57902694539698
+          },
+          "segments": [
+            {
+              "bone": "upper_arm_r",
+              "world_direction_error_deg": 0.0,
+              "world_bone_length": 0.24034210635027328,
+              "tail_to_next_head_units": 1.2489448945403256e-07,
+              "screen_direction_error_deg": 9.866976185539537,
+              "rig_projected_length_px": 13.811838816011871,
+              "source_projected_length_px": 29.760234963504704,
+              "segment_vector_residual_px": [
+                12.60699462890625,
+                -10.371841430664062
+              ],
+              "actual_tail_to_target_direction_endpoint_px": 0.0,
+              "target_direction_endpoint_to_source_px": 20.43075272826376
+            },
+            {
+              "bone": "lower_arm_r",
+              "world_direction_error_deg": 0.0,
+              "world_bone_length": 0.2493040411244059,
+              "tail_to_next_head_units": 1.3328003749250113e-07,
+              "screen_direction_error_deg": 17.087037779066478,
+              "rig_projected_length_px": 42.91054722881733,
+              "source_projected_length_px": 21.070836440811497,
+              "segment_vector_residual_px": [
+                -12.84765625,
+                -19.792190551757812
+              ],
+              "actual_tail_to_target_direction_endpoint_px": 0.0,
+              "target_direction_endpoint_to_source_px": 37.579049683929576
+            }
+          ],
+          "clavicle": {
+            "world_direction_error_deg": 0.0,
+            "tail_to_shoulder_head_units": 0.012402198732694084
+          }
+        },
+        {
+          "source_frame": 41,
+          "side": "left",
+          "joint_residual_vectors_px": {
+            "shoulder": [
+              3.5123291015625,
+              12.217109680175781
+            ],
+            "elbow": [
+              18.98974609375,
+              14.2301025390625
+            ],
+            "wrist": [
+              18.570343017578125,
+              19.3687744140625
+            ]
+          },
+          "joint_errors_px": {
+            "shoulder": 12.711971604310113,
+            "elbow": 23.729860138800465,
+            "wrist": 26.83294709048089
+          },
+          "segments": [
+            {
+              "bone": "upper_arm_l",
+              "world_direction_error_deg": 0.0,
+              "world_bone_length": 0.2403421544848745,
+              "tail_to_next_head_units": 4.2146848510894035e-08,
+              "screen_direction_error_deg": 3.4579297539963987,
+              "rig_projected_length_px": 43.67854319727939,
+              "source_projected_length_px": 28.215202683108323,
+              "segment_vector_residual_px": [
+                15.4774169921875,
+                2.0129928588867188
+              ],
+              "actual_tail_to_target_direction_endpoint_px": 0.0,
+              "target_direction_endpoint_to_source_px": 23.729860138800465
+            },
+            {
+              "bone": "lower_arm_l",
+              "world_direction_error_deg": 0.006994113714435575,
+              "world_bone_length": 0.24930409202317486,
+              "tail_to_next_head_units": 1.228781230931777e-07,
+              "screen_direction_error_deg": 8.400559304899188,
+              "rig_projected_length_px": 33.74846998208125,
+              "source_projected_length_px": 34.89409554932356,
+              "segment_vector_residual_px": [
+                -0.419403076171875,
+                5.138671875
+              ],
+              "actual_tail_to_target_direction_endpoint_px": 0.0,
+              "target_direction_endpoint_to_source_px": 26.83296813084489
+            }
+          ],
+          "clavicle": {
+            "world_direction_error_deg": 0.020391170402929596,
+            "tail_to_shoulder_head_units": 0.01240220459936019
+          }
+        },
+        {
+          "source_frame": 41,
+          "side": "right",
+          "joint_residual_vectors_px": {
+            "shoulder": [
+              -4.772369384765625,
+              4.091888427734375
+            ],
+            "elbow": [
+              -2.329742431640625,
+              -7.281806945800781
+            ],
+            "wrist": [
+              -5.4377288818359375,
+              -12.379081726074219
+            ]
+          },
+          "joint_errors_px": {
+            "shoulder": 6.28641870502496,
+            "elbow": 7.645417658622331,
+            "wrist": 13.52074569101637
+          },
+          "segments": [
+            {
+              "bone": "upper_arm_r",
+              "world_direction_error_deg": 0.012114160322359619,
+              "world_bone_length": 0.24034211119400717,
+              "tail_to_next_head_units": 1.1920928955078125e-07,
+              "screen_direction_error_deg": 18.45768015061057,
+              "rig_projected_length_px": 36.733215235839346,
+              "source_projected_length_px": 34.5734731076386,
+              "segment_vector_residual_px": [
+                2.442626953125,
+                -11.373695373535156
+              ],
+              "actual_tail_to_target_direction_endpoint_px": 0.0,
+              "target_direction_endpoint_to_source_px": 7.645417658622331
+            },
+            {
+              "bone": "lower_arm_r",
+              "world_direction_error_deg": 0.0,
+              "world_bone_length": 0.2493041158381916,
+              "tail_to_next_head_units": 1.4975481660844222e-07,
+              "screen_direction_error_deg": 5.329443578040705,
+              "rig_projected_length_px": 39.149177661507345,
+              "source_projected_length_px": 34.245024827905546,
+              "segment_vector_residual_px": [
+                -3.1079864501953125,
+                -5.0972747802734375
+              ],
+              "actual_tail_to_target_direction_endpoint_px": 0.0,
+              "target_direction_endpoint_to_source_px": 13.520764100417212
+            }
+          ],
+          "clavicle": {
+            "world_direction_error_deg": 0.0,
+            "tail_to_shoulder_head_units": 0.012402211162689606
+          }
+        },
+        {
+          "source_frame": 55,
+          "side": "left",
+          "joint_residual_vectors_px": {
+            "shoulder": [
+              3.03857421875,
+              -12.573173522949219
+            ],
+            "elbow": [
+              -1.31463623046875,
+              -3.6529083251953125
+            ],
+            "wrist": [
+              -7.9169921875,
+              14.456954956054688
+            ]
+          },
+          "joint_errors_px": {
+            "shoulder": 12.935131206282001,
+            "elbow": 3.8822683954765402,
+            "wrist": 16.4827881252634
+          },
+          "segments": [
+            {
+              "bone": "upper_arm_l",
+              "world_direction_error_deg": 0.017831561215989052,
+              "world_bone_length": 0.2403421056237132,
+              "tail_to_next_head_units": 8.33000234328132e-09,
+              "screen_direction_error_deg": 13.050831202208386,
+              "rig_projected_length_px": 33.692982526532184,
+              "source_projected_length_px": 26.44823697709882,
+              "segment_vector_residual_px": [
+                -4.35321044921875,
+                8.920265197753906
+              ],
+              "actual_tail_to_target_direction_endpoint_px": 3.0517578125e-05,
+              "target_direction_endpoint_to_source_px": 3.882239654468275
+            },
+            {
+              "bone": "lower_arm_l",
+              "world_direction_error_deg": 0.012486990645142476,
+              "world_bone_length": 0.24930405402420958,
+              "tail_to_next_head_units": 1.4919776018337002e-07,
+              "screen_direction_error_deg": 99.96014385461498,
+              "rig_projected_length_px": 6.147573485491774,
+              "source_projected_length_px": 17.236866249567196,
+              "segment_vector_residual_px": [
+                -6.60235595703125,
+                18.10986328125
+              ],
+              "actual_tail_to_target_direction_endpoint_px": 3.411968959808029e-05,
+              "target_direction_endpoint_to_source_px": 16.4827881252634
+            }
+          ],
+          "clavicle": {
+            "world_direction_error_deg": 0.0,
+            "tail_to_shoulder_head_units": 0.012402193507692248
+          }
+        },
+        {
+          "source_frame": 55,
+          "side": "right",
+          "joint_residual_vectors_px": {
+            "shoulder": [
+              16.59808349609375,
+              1.4826202392578125
+            ],
+            "elbow": [
+              26.086273193359375,
+              11.04119873046875
+            ],
+            "wrist": [
+              28.85662841796875,
+              32.32508087158203
+            ]
+          },
+          "joint_errors_px": {
+            "shoulder": 16.664169082264987,
+            "elbow": 28.326696209400215,
+            "wrist": 43.33146553904817
+          },
+          "segments": [
+            {
+              "bone": "upper_arm_r",
+              "world_direction_error_deg": 0.0,
+              "world_bone_length": 0.24034212475646155,
+              "tail_to_next_head_units": 1.1920928955078125e-07,
+              "screen_direction_error_deg": 24.520216197722196,
+              "rig_projected_length_px": 32.329818954078846,
+              "source_projected_length_px": 30.583482899590283,
+              "segment_vector_residual_px": [
+                9.488189697265625,
+                9.558578491210938
+              ],
+              "actual_tail_to_target_direction_endpoint_px": 1.52587890625e-05,
+              "target_direction_endpoint_to_source_px": 28.326696209400215
+            },
+            {
+              "bone": "lower_arm_r",
+              "world_direction_error_deg": 0.0,
+              "world_bone_length": 0.24930408350113398,
+              "tail_to_next_head_units": 1.812804499357408e-07,
+              "screen_direction_error_deg": 15.765626595574009,
+              "rig_projected_length_px": 10.17910654865073,
+              "source_projected_length_px": 31.08066768994409,
+              "segment_vector_residual_px": [
+                2.770355224609375,
+                21.28388214111328
+              ],
+              "actual_tail_to_target_direction_endpoint_px": 0.0,
+              "target_direction_endpoint_to_source_px": 43.33146553904817
+            }
+          ],
+          "clavicle": {
+            "world_direction_error_deg": 0.0,
+            "tail_to_shoulder_head_units": 0.012402140469215693
+          }
+        }
+      ],
+      "torso_rows": [
+        {
+          "source_frame": 1,
+          "body_hip_to_shoulder_target_angle_deg": 7.218939541019451,
+          "hip_center_residual_px": [
+            -0.784515380859375,
+            4.94879150390625
+          ],
+          "shoulder_center_residual_px": [
+            2.8804931640625,
+            -2.3701400756835938
+          ],
+          "spine_bones": [
+            {
+              "bone": "spine_lower",
+              "head_world": [
+                0.00875025987625122,
+                0.015048429369926453,
+                0.9957094788551331
+              ],
+              "tail_world": [
+                0.007272355258464813,
+                0.0019261492416262627,
+                1.1052613258361816
+              ]
+            },
+            {
+              "bone": "spine_mid",
+              "head_world": [
+                0.007272355258464813,
+                0.001926138997077942,
+                1.1052613258361816
+              ],
+              "tail_world": [
+                0.0035338071174919605,
+                -0.008642521686851978,
+                1.231164574623108
+              ]
+            },
+            {
+              "bone": "spine_chest",
+              "head_world": [
+                0.0035338071174919605,
+                -0.008642521686851978,
+                1.231164574623108
+              ],
+              "tail_world": [
+                -0.0019767330959439278,
+                -0.026542918756604195,
+                1.373968482017517
+              ]
+            }
+          ]
+        },
+        {
+          "source_frame": 17,
+          "body_hip_to_shoulder_target_angle_deg": 2.3219794862766014,
+          "hip_center_residual_px": [
+            -3.69268798828125,
+            5.214996337890625
+          ],
+          "shoulder_center_residual_px": [
+            0.018951416015625,
+            3.68524169921875
+          ],
+          "spine_bones": [
+            {
+              "bone": "spine_lower",
+              "head_world": [
+                0.05783962458372116,
+                0.014874767512083054,
+                1.0031849145889282
+              ],
+              "tail_world": [
+                0.05455389991402626,
+                -0.005242751445621252,
+                1.1116306781768799
+              ]
+            },
+            {
+              "bone": "spine_mid",
+              "head_world": [
+                0.05455389618873596,
+                -0.005242761690169573,
+                1.1116306781768799
+              ],
+              "tail_world": [
+                0.04943766072392464,
+                -0.03373885899782181,
+                1.234671711921692
+              ]
+            },
+            {
+              "bone": "spine_chest",
+              "head_world": [
+                0.04943766072392464,
+                -0.03373885899782181,
+                1.234671711921692
+              ],
+              "tail_world": [
+                0.04162522405385971,
+                -0.07770848274230957,
+                1.3716001510620117
+              ]
+            }
+          ]
+        },
+        {
+          "source_frame": 23,
+          "body_hip_to_shoulder_target_angle_deg": 7.312979694697229,
+          "hip_center_residual_px": [
+            -5.375213623046875,
+            4.5658721923828125
+          ],
+          "shoulder_center_residual_px": [
+            -2.99652099609375,
+            -2.3635787963867188
+          ],
+          "spine_bones": [
+            {
+              "bone": "spine_lower",
+              "head_world": [
+                0.08340141922235489,
+                0.014706572517752647,
+                0.981788158416748
+              ],
+              "tail_world": [
+                0.07952260226011276,
+                0.0023120949044823647,
+                1.0913660526275635
+              ]
+            },
+            {
+              "bone": "spine_mid",
+              "head_world": [
+                0.07952259480953217,
+                0.0023120848927646875,
+                1.0913660526275635
+              ],
+              "tail_world": [
+                0.07425007224082947,
+                -0.006874569226056337,
+                1.217322826385498
+              ]
+            },
+            {
+              "bone": "spine_chest",
+              "head_world": [
+                0.07425007224082947,
+                -0.006874569226056337,
+                1.217322826385498
+              ],
+              "tail_world": [
+                0.06601128727197647,
+                -0.022693973034620285,
+                1.3602410554885864
+              ]
+            }
+          ]
+        },
+        {
+          "source_frame": 29,
+          "body_hip_to_shoulder_target_angle_deg": 3.272908529113131,
+          "hip_center_residual_px": [
+            -3.63726806640625,
+            5.1085968017578125
+          ],
+          "shoulder_center_residual_px": [
+            -5.747772216796875,
+            -1.0287857055664062
+          ],
+          "spine_bones": [
+            {
+              "bone": "spine_lower",
+              "head_world": [
+                0.0877264216542244,
+                0.01378364022821188,
+                0.9932140111923218
+              ],
+              "tail_world": [
+                0.08291880786418915,
+                -0.005488472990691662,
+                1.1017564535140991
+              ]
+            },
+            {
+              "bone": "spine_mid",
+              "head_world": [
+                0.08291880041360855,
+                -0.005488482303917408,
+                1.1017564535140991
+              ],
+              "tail_world": [
+                0.07984000444412231,
+                -0.033504653722047806,
+                1.2249754667282104
+              ]
+            },
+            {
+              "bone": "spine_chest",
+              "head_world": [
+                0.07984000444412231,
+                -0.033504653722047806,
+                1.2249754667282104
+              ],
+              "tail_world": [
+                0.07442369312047958,
+                -0.07662863284349442,
+                1.3622881174087524
+              ]
+            }
+          ]
+        },
+        {
+          "source_frame": 41,
+          "body_hip_to_shoulder_target_angle_deg": 2.300235122610844,
+          "hip_center_residual_px": [
+            -0.876129150390625,
+            5.3492889404296875
+          ],
+          "shoulder_center_residual_px": [
+            -0.8524169921875,
+            8.097152709960938
+          ],
+          "spine_bones": [
+            {
+              "bone": "spine_lower",
+              "head_world": [
+                -0.030580036342144012,
+                0.014109816402196884,
+                1.0028821229934692
+              ],
+              "tail_world": [
+                -0.02524716593325138,
+                -0.00701863644644618,
+                1.1110539436340332
+              ]
+            },
+            {
+              "bone": "spine_mid",
+              "head_world": [
+                -0.025247162207961082,
+                -0.007018646225333214,
+                1.1110539436340332
+              ],
+              "tail_world": [
+                -0.019539358094334602,
+                -0.03919050842523575,
+                1.2331591844558716
+              ]
+            },
+            {
+              "bone": "spine_chest",
+              "head_world": [
+                -0.019539358094334602,
+                -0.03919050842523575,
+                1.2331591844558716
+              ],
+              "tail_world": [
+                -0.010428515262901783,
+                -0.08832300454378128,
+                1.3682397603988647
+              ]
+            }
+          ]
+        },
+        {
+          "source_frame": 55,
+          "body_hip_to_shoulder_target_angle_deg": 9.104116164844585,
+          "hip_center_residual_px": [
+            -0.078399658203125,
+            6.5555877685546875
+          ],
+          "shoulder_center_residual_px": [
+            10.132904052734375,
+            -5.748260498046875
+          ],
+          "spine_bones": [
+            {
+              "bone": "spine_lower",
+              "head_world": [
+                -0.11547140032052994,
+                -0.0036067520268261433,
+                0.9319090247154236
+              ],
+              "tail_world": [
+                -0.10526281595230103,
+                -0.002153450855985284,
+                1.0417710542678833
+              ]
+            },
+            {
+              "bone": "spine_mid",
+              "head_world": [
+                -0.10526280105113983,
+                -0.0021534485276788473,
+                1.0417710542678833
+              ],
+              "tail_world": [
+                -0.10144738107919693,
+                -0.003835825715214014,
+                1.1681036949157715
+              ]
+            },
+            {
+              "bone": "spine_chest",
+              "head_world": [
+                -0.10144738107919693,
+                -0.003835825715214014,
+                1.1681036949157715
+              ],
+              "tail_world": [
+                -0.09354415535926819,
+                -0.005764927249401808,
+                1.3119007349014282
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    "scaled_own_root_yaw": {
+      "bundle_sha256": "5036c0e78ff1a2d69f6ca8d2768bf9b8fc8ca358a1ff990dd6f9a71d12ffe138",
+      "rows": [
+        {
+          "source_frame": 1,
+          "side": "left",
+          "joint_residual_vectors_px": {
+            "shoulder": [
+              8.485443115234375,
+              2.2810440063476562
+            ],
+            "elbow": [
+              6.5225830078125,
+              12.582893371582031
+            ],
+            "wrist": [
+              8.76739501953125,
+              34.37846374511719
+            ]
+          },
+          "joint_errors_px": {
+            "shoulder": 8.78668926834746,
+            "elbow": 14.172977762101356,
+            "wrist": 35.47881060854867
+          },
+          "segments": [
+            {
+              "bone": "upper_arm_l",
+              "world_direction_error_deg": 0.0,
+              "world_bone_length": 0.24034214606888832,
+              "tail_to_next_head_units": 0.0,
+              "screen_direction_error_deg": 19.005849321345313,
+              "rig_projected_length_px": 27.63298255279217,
+              "source_projected_length_px": 31.51150084761031,
+              "segment_vector_residual_px": [
+                -1.962860107421875,
+                10.301849365234375
+              ],
+              "actual_tail_to_target_direction_endpoint_px": 0.0,
+              "target_direction_endpoint_to_source_px": 14.172977762101356
+            },
+            {
+              "bone": "lower_arm_l",
+              "world_direction_error_deg": 0.0,
+              "world_bone_length": 0.24930404922326463,
+              "tail_to_next_head_units": 1.0745380149674383e-07,
+              "screen_direction_error_deg": 14.144008942304545,
+              "rig_projected_length_px": 14.353931677915211,
+              "source_projected_length_px": 35.54708659685477,
+              "segment_vector_residual_px": [
+                2.24481201171875,
+                21.795570373535156
+              ],
+              "actual_tail_to_target_direction_endpoint_px": 2.288818359375e-05,
+              "target_direction_endpoint_to_source_px": 35.47883297279278
+            }
+          ],
+          "clavicle": {
+            "world_direction_error_deg": 0.0024727926165902156,
+            "tail_to_shoulder_head_units": 0.012402157225952119
+          }
+        },
+        {
+          "source_frame": 1,
+          "side": "right",
+          "joint_residual_vectors_px": {
+            "shoulder": [
+              -4.92059326171875,
+              -2.2408065795898438
+            ],
+            "elbow": [
+              -18.350860595703125,
+              2.7590179443359375
+            ],
+            "wrist": [
+              -13.522964477539062,
+              22.4146728515625
+            ]
+          },
+          "joint_errors_px": {
+            "shoulder": 5.406796863217526,
+            "elbow": 18.557108330461144,
+            "wrist": 26.17800884277978
+          },
+          "segments": [
+            {
+              "bone": "upper_arm_r",
+              "world_direction_error_deg": 0.0,
+              "world_bone_length": 0.24034214933840817,
+              "tail_to_next_head_units": 7.450580596923828e-09,
+              "screen_direction_error_deg": 5.15856128552022,
+              "rig_projected_length_px": 42.63554972200612,
+              "source_projected_length_px": 28.654355218409435,
+              "segment_vector_residual_px": [
+                -13.430267333984375,
+                4.999824523925781
+              ],
+              "actual_tail_to_target_direction_endpoint_px": 0.0,
+              "target_direction_endpoint_to_source_px": 18.557108330461144
+            },
+            {
+              "bone": "lower_arm_r",
+              "world_direction_error_deg": 0.0,
+              "world_bone_length": 0.24930398789081995,
+              "tail_to_next_head_units": 1.4600096599955427e-07,
+              "screen_direction_error_deg": 34.77154325344394,
+              "rig_projected_length_px": 17.998526857281615,
+              "source_projected_length_px": 32.228489525718935,
+              "segment_vector_residual_px": [
+                4.8278961181640625,
+                19.655654907226562
+              ],
+              "actual_tail_to_target_direction_endpoint_px": 4.57763671875e-05,
+              "target_direction_endpoint_to_source_px": 26.178016711736603
+            }
+          ],
+          "clavicle": {
+            "world_direction_error_deg": 0.0,
+            "tail_to_shoulder_head_units": 0.012402168079318555
+          }
+        },
+        {
+          "source_frame": 17,
+          "side": "left",
+          "joint_residual_vectors_px": {
+            "shoulder": [
+              3.05218505859375,
+              14.511116027832031
+            ],
+            "elbow": [
+              -3.276031494140625,
+              24.467933654785156
+            ],
+            "wrist": [
+              -0.08721923828125,
+              52.3426513671875
+            ]
+          },
+          "joint_errors_px": {
+            "shoulder": 14.828632052628661,
+            "elbow": 24.686274147985745,
+            "wrist": 52.342724241518525
+          },
+          "segments": [
+            {
+              "bone": "upper_arm_l",
+              "world_direction_error_deg": 0.0,
+              "world_bone_length": 0.2403421109906082,
+              "tail_to_next_head_units": 1.1920928955078125e-07,
+              "screen_direction_error_deg": 20.689164704293812,
+              "rig_projected_length_px": 28.467101936079832,
+              "source_projected_length_px": 32.798437235346405,
+              "segment_vector_residual_px": [
+                -6.328216552734375,
+                9.956817626953125
+              ],
+              "actual_tail_to_target_direction_endpoint_px": 3.0517578125e-05,
+              "target_direction_endpoint_to_source_px": 24.686274147985745
+            },
+            {
+              "bone": "lower_arm_l",
+              "world_direction_error_deg": 0.0,
+              "world_bone_length": 0.24930404170491532,
+              "tail_to_next_head_units": 2.1490760299348766e-07,
+              "screen_direction_error_deg": 27.81920730368354,
+              "rig_projected_length_px": 6.929316324746154,
+              "source_projected_length_px": 33.99799235861078,
+              "segment_vector_residual_px": [
+                3.188812255859375,
+                27.874717712402344
+              ],
+              "actual_tail_to_target_direction_endpoint_px": 0.0,
+              "target_direction_endpoint_to_source_px": 52.342724241518525
+            }
+          ],
+          "clavicle": {
+            "world_direction_error_deg": 0.019470788626008685,
+            "tail_to_shoulder_head_units": 0.01240216382597338
+          }
+        },
+        {
+          "source_frame": 17,
+          "side": "right",
+          "joint_residual_vectors_px": {
+            "shoulder": [
+              -5.14141845703125,
+              6.511619567871094
+            ],
+            "elbow": [
+              -11.113525390625,
+              15.731201171875
+            ],
+            "wrist": [
+              -5.106719970703125,
+              42.996429443359375
+            ]
+          },
+          "joint_errors_px": {
+            "shoulder": 8.296708444766278,
+            "elbow": 19.260870502324764,
+            "wrist": 43.29863256096871
+          },
+          "segments": [
+            {
+              "bone": "upper_arm_r",
+              "world_direction_error_deg": 0.0098911704778757,
+              "world_bone_length": 0.24034208116285546,
+              "tail_to_next_head_units": 0.0,
+              "screen_direction_error_deg": 8.303173058441905,
+              "rig_projected_length_px": 39.56352437457386,
+              "source_projected_length_px": 29.766713552519928,
+              "segment_vector_residual_px": [
+                -5.97210693359375,
+                9.219581604003906
+              ],
+              "actual_tail_to_target_direction_endpoint_px": 3.0517578125e-05,
+              "target_direction_endpoint_to_source_px": 19.26084554747307
+            },
+            {
+              "bone": "lower_arm_r",
+              "world_direction_error_deg": 0.0,
+              "world_bone_length": 0.24930404952970792,
+              "tail_to_next_head_units": 1.7120130796843852e-07,
+              "screen_direction_error_deg": 51.96506242792696,
+              "rig_projected_length_px": 11.314765239712646,
+              "source_projected_length_px": 33.43000061929778,
+              "segment_vector_residual_px": [
+                6.006805419921875,
+                27.265228271484375
+              ],
+              "actual_tail_to_target_direction_endpoint_px": 5.501634636633284e-05,
+              "target_direction_endpoint_to_source_px": 43.298637957217494
+            }
+          ],
+          "clavicle": {
+            "world_direction_error_deg": 0.0,
+            "tail_to_shoulder_head_units": 0.012402135372523318
+          }
+        },
+        {
+          "source_frame": 23,
+          "side": "left",
+          "joint_residual_vectors_px": {
+            "shoulder": [
+              -2.934295654296875,
+              4.442878723144531
+            ],
+            "elbow": [
+              -10.0147705078125,
+              7.763214111328125
+            ],
+            "wrist": [
+              -12.63372802734375,
+              37.40766906738281
+            ]
+          },
+          "joint_errors_px": {
+            "shoulder": 5.324402613554232,
+            "elbow": 12.671350583515222,
+            "wrist": 39.483475331064135
+          },
+          "segments": [
+            {
+              "bone": "upper_arm_l",
+              "world_direction_error_deg": 0.015639313746682152,
+              "world_bone_length": 0.240342052100447,
+              "tail_to_next_head_units": 0.0,
+              "screen_direction_error_deg": 13.037559466657866,
+              "rig_projected_length_px": 30.935142350190706,
+              "source_projected_length_px": 33.66704395447887,
+              "segment_vector_residual_px": [
+                -7.080474853515625,
+                3.3203353881835938
+              ],
+              "actual_tail_to_target_direction_endpoint_px": 0.0,
+              "target_direction_endpoint_to_source_px": 12.671350583515222
+            },
+            {
+              "bone": "lower_arm_l",
+              "world_direction_error_deg": 0.0,
+              "world_bone_length": 0.24930394761540195,
+              "tail_to_next_head_units": 1.0745380149674383e-07,
+              "screen_direction_error_deg": 50.92980686945047,
+              "rig_projected_length_px": 8.89056653906938,
+              "source_projected_length_px": 34.55186743099061,
+              "segment_vector_residual_px": [
+                -2.61895751953125,
+                29.644454956054688
+              ],
+              "actual_tail_to_target_direction_endpoint_px": 3.0517578125e-05,
+              "target_direction_endpoint_to_source_px": 39.483483639956084
+            }
+          ],
+          "clavicle": {
+            "world_direction_error_deg": 0.005477249602201667,
+            "tail_to_shoulder_head_units": 0.012402168592653218
+          }
+        },
+        {
+          "source_frame": 23,
+          "side": "right",
+          "joint_residual_vectors_px": {
+            "shoulder": [
+              -5.914947509765625,
+              -4.677490234375
+            ],
+            "elbow": [
+              -15.191497802734375,
+              3.2647552490234375
+            ],
+            "wrist": [
+              -10.412200927734375,
+              26.37109375
+            ]
+          },
+          "joint_errors_px": {
+            "shoulder": 7.54092292560707,
+            "elbow": 15.538347000519229,
+            "wrist": 28.352222055482677
+          },
+          "segments": [
+            {
+              "bone": "upper_arm_r",
+              "world_direction_error_deg": 0.007520705141511917,
+              "world_bone_length": 0.24034213806159185,
+              "tail_to_next_head_units": 1.2293457984924316e-07,
+              "screen_direction_error_deg": 0.8017406698665581,
+              "rig_projected_length_px": 42.28469994701837,
+              "source_projected_length_px": 30.08287401632416,
+              "segment_vector_residual_px": [
+                -9.27655029296875,
+                7.9422454833984375
+              ],
+              "actual_tail_to_target_direction_endpoint_px": 0.0,
+              "target_direction_endpoint_to_source_px": 15.53835341426102
+            },
+            {
+              "bone": "lower_arm_r",
+              "world_direction_error_deg": 0.03008282088999204,
+              "world_bone_length": 0.2493039631418682,
+              "tail_to_next_head_units": 1.6858739404357614e-07,
+              "screen_direction_error_deg": 33.93569234125342,
+              "rig_projected_length_px": 13.971908860751087,
+              "source_projected_length_px": 33.860917546052214,
+              "segment_vector_residual_px": [
+                4.779296875,
+                23.106338500976562
+              ],
+              "actual_tail_to_target_direction_endpoint_px": 0.0,
+              "target_direction_endpoint_to_source_px": 28.352265110386657
+            }
+          ],
+          "clavicle": {
+            "world_direction_error_deg": 0.005494665384168207,
+            "tail_to_shoulder_head_units": 0.012402052981817131
+          }
+        },
+        {
+          "source_frame": 29,
+          "side": "left",
+          "joint_residual_vectors_px": {
+            "shoulder": [
+              -8.577728271484375,
+              10.950515747070312
+            ],
+            "elbow": [
+              -10.8756103515625,
+              18.530349731445312
+            ],
+            "wrist": [
+              -16.87493896484375,
+              37.95079040527344
+            ]
+          },
+          "joint_errors_px": {
+            "shoulder": 13.910112097567529,
+            "elbow": 21.486106464320002,
+            "wrist": 41.53343269577101
+          },
+          "segments": [
+            {
+              "bone": "upper_arm_l",
+              "world_direction_error_deg": 0.0,
+              "world_bone_length": 0.240342091819071,
+              "tail_to_next_head_units": 4.2146848510894035e-08,
+              "screen_direction_error_deg": 12.870276112329778,
+              "rig_projected_length_px": 33.415712363552444,
+              "source_projected_length_px": 29.86818575855943,
+              "segment_vector_residual_px": [
+                -2.297882080078125,
+                7.579833984375
+              ],
+              "actual_tail_to_target_direction_endpoint_px": 1.52587890625e-05,
+              "target_direction_endpoint_to_source_px": 21.486119247376898
+            },
+            {
+              "bone": "lower_arm_l",
+              "world_direction_error_deg": 0.0,
+              "world_bone_length": 0.2493039780846318,
+              "tail_to_next_head_units": 1.6858739404357614e-07,
+              "screen_direction_error_deg": 60.643734278771625,
+              "rig_projected_length_px": 15.983564995819485,
+              "source_projected_length_px": 22.636784809006286,
+              "segment_vector_residual_px": [
+                -5.99932861328125,
+                19.420440673828125
+              ],
+              "actual_tail_to_target_direction_endpoint_px": 1.52587890625e-05,
+              "target_direction_endpoint_to_source_px": 41.533420204655485
+            }
+          ],
+          "clavicle": {
+            "world_direction_error_deg": 0.014205112133177962,
+            "tail_to_shoulder_head_units": 0.012402223372673077
+          }
+        },
+        {
+          "source_frame": 29,
+          "side": "right",
+          "joint_residual_vectors_px": {
+            "shoulder": [
+              -3.34100341796875,
+              0.7610549926757812
+            ],
+            "elbow": [
+              8.691558837890625,
+              -15.894493103027344
+            ],
+            "wrist": [
+              -9.025299072265625,
+              -27.394729614257812
+            ]
+          },
+          "joint_errors_px": {
+            "shoulder": 3.426588478807458,
+            "elbow": 18.11568701001225,
+            "wrist": 28.843148503174405
+          },
+          "segments": [
+            {
+              "bone": "upper_arm_r",
+              "world_direction_error_deg": 0.0,
+              "world_bone_length": 0.24034206905351904,
+              "tail_to_next_head_units": 1.666000468656264e-08,
+              "screen_direction_error_deg": 36.544245329152965,
+              "rig_projected_length_px": 13.508690857887085,
+              "source_projected_length_px": 29.760234963504704,
+              "segment_vector_residual_px": [
+                12.032562255859375,
+                -16.655548095703125
+              ],
+              "actual_tail_to_target_direction_endpoint_px": 2.288818359375e-05,
+              "target_direction_endpoint_to_source_px": 18.115666794872652
+            },
+            {
+              "bone": "lower_arm_r",
+              "world_direction_error_deg": 0.0,
+              "world_bone_length": 0.2493040738116899,
+              "tail_to_next_head_units": 9.424321830774485e-08,
+              "screen_direction_error_deg": 4.142504299311259,
+              "rig_projected_length_px": 42.08296220571708,
+              "source_projected_length_px": 21.070836440811497,
+              "segment_vector_residual_px": [
+                -17.71685791015625,
+                -11.500236511230469
+              ],
+              "actual_tail_to_target_direction_endpoint_px": 0.0,
+              "target_direction_endpoint_to_source_px": 28.843148503174405
+            }
+          ],
+          "clavicle": {
+            "world_direction_error_deg": 0.0,
+            "tail_to_shoulder_head_units": 0.01240212077910479
+          }
+        },
+        {
+          "source_frame": 41,
+          "side": "left",
+          "joint_residual_vectors_px": {
+            "shoulder": [
+              6.344024658203125,
+              17.355674743652344
+            ],
+            "elbow": [
+              22.274261474609375,
+              20.766799926757812
+            ],
+            "wrist": [
+              22.810455322265625,
+              31.243850708007812
+            ]
+          },
+          "joint_errors_px": {
+            "shoulder": 18.47880143840768,
+            "elbow": 30.453287342435424,
+            "wrist": 38.68455915720767
+          },
+          "segments": [
+            {
+              "bone": "upper_arm_l",
+              "world_direction_error_deg": 0.0,
+              "world_bone_length": 0.24034212910068506,
+              "tail_to_next_head_units": 0.0,
+              "screen_direction_error_deg": 5.2592751605903185,
+              "rig_projected_length_px": 44.1811729768294,
+              "source_projected_length_px": 28.215202683108323,
+              "segment_vector_residual_px": [
+                15.93023681640625,
+                3.4111251831054688
+              ],
+              "actual_tail_to_target_direction_endpoint_px": 0.0,
+              "target_direction_endpoint_to_source_px": 30.453287342435424
+            },
+            {
+              "bone": "lower_arm_l",
+              "world_direction_error_deg": 0.0,
+              "world_bone_length": 0.2493039953622011,
+              "tail_to_next_head_units": 1.7120130796843852e-07,
+              "screen_direction_error_deg": 17.324361749853274,
+              "rig_projected_length_px": 34.75597374155811,
+              "source_projected_length_px": 34.89409554932356,
+              "segment_vector_residual_px": [
+                0.53619384765625,
+                10.47705078125
+              ],
+              "actual_tail_to_target_direction_endpoint_px": 0.0,
+              "target_direction_endpoint_to_source_px": 38.684600967966325
+            }
+          ],
+          "clavicle": {
+            "world_direction_error_deg": 0.008566004904343784,
+            "tail_to_shoulder_head_units": 0.012402118579090456
+          }
+        },
+        {
+          "source_frame": 41,
+          "side": "right",
+          "joint_residual_vectors_px": {
+            "shoulder": [
+              -3.203033447265625,
+              14.057327270507812
+            ],
+            "elbow": [
+              -1.927490234375,
+              7.602775573730469
+            ],
+            "wrist": [
+              -8.224594116210938,
+              11.867530822753906
+            ]
+          },
+          "joint_errors_px": {
+            "shoulder": 14.417623502844968,
+            "elbow": 7.843303834908596,
+            "wrist": 14.43891404398306
+          },
+          "segments": [
+            {
+              "bone": "upper_arm_r",
+              "world_direction_error_deg": 0.011058664786217634,
+              "world_bone_length": 0.24034205839730247,
+              "tail_to_next_head_units": 3.0719530773294423e-08,
+              "screen_direction_error_deg": 10.68759106966486,
+              "rig_projected_length_px": 35.449302685851045,
+              "source_projected_length_px": 34.5734731076386,
+              "segment_vector_residual_px": [
+                1.275543212890625,
+                -6.454551696777344
+              ],
+              "actual_tail_to_target_direction_endpoint_px": 2.288818359375e-05,
+              "target_direction_endpoint_to_source_px": 7.843325964419882
+            },
+            {
+              "bone": "lower_arm_r",
+              "world_direction_error_deg": 0.0,
+              "world_bone_length": 0.249304099961514,
+              "tail_to_next_head_units": 1.2128666487410446e-07,
+              "screen_direction_error_deg": 9.195453767671113,
+              "rig_projected_length_px": 39.08640938198935,
+              "source_projected_length_px": 34.245024827905546,
+              "segment_vector_residual_px": [
+                -6.2971038818359375,
+                4.2647552490234375
+              ],
+              "actual_tail_to_target_direction_endpoint_px": 0.0,
+              "target_direction_endpoint_to_source_px": 14.438939935126655
+            }
+          ],
+          "clavicle": {
+            "world_direction_error_deg": 0.0,
+            "tail_to_shoulder_head_units": 0.012402162102634834
+          }
+        },
+        {
+          "source_frame": 55,
+          "side": "left",
+          "joint_residual_vectors_px": {
+            "shoulder": [
+              4.932159423828125,
+              -11.860366821289062
+            ],
+            "elbow": [
+              1.592559814453125,
+              -10.310623168945312
+            ],
+            "wrist": [
+              -4.804901123046875,
+              11.090484619140625
+            ]
+          },
+          "joint_errors_px": {
+            "shoulder": 12.84501853303029,
+            "elbow": 10.43289025668936,
+            "wrist": 12.08660093827917
+          },
+          "segments": [
+            {
+              "bone": "upper_arm_l",
+              "world_direction_error_deg": 0.0,
+              "world_bone_length": 0.24034217416253892,
+              "tail_to_next_head_units": 1.201947465904182e-07,
+              "screen_direction_error_deg": 7.907514918892021,
+              "rig_projected_length_px": 26.758157502337898,
+              "source_projected_length_px": 26.44823697709882,
+              "segment_vector_residual_px": [
+                -3.339599609375,
+                1.54974365234375
+              ],
+              "actual_tail_to_target_direction_endpoint_px": 6.103515625e-05,
+              "target_direction_endpoint_to_source_px": 10.43285990840372
+            },
+            {
+              "bone": "lower_arm_l",
+              "world_direction_error_deg": 0.0,
+              "world_bone_length": 0.24930404497683603,
+              "tail_to_next_head_units": 1.4057727354849284e-07,
+              "screen_direction_error_deg": 113.07503554596691,
+              "rig_projected_length_px": 8.975285186061921,
+              "source_projected_length_px": 17.236866249567196,
+              "segment_vector_residual_px": [
+                -6.3974609375,
+                21.401107788085938
+              ],
+              "actual_tail_to_target_direction_endpoint_px": 1.52587890625e-05,
+              "target_direction_endpoint_to_source_px": 12.08660093827917
+            }
+          ],
+          "clavicle": {
+            "world_direction_error_deg": 0.0,
+            "tail_to_shoulder_head_units": 0.012402211822689019
+          }
+        },
+        {
+          "source_frame": 55,
+          "side": "right",
+          "joint_residual_vectors_px": {
+            "shoulder": [
+              18.5565185546875,
+              1.8048553466796875
+            ],
+            "elbow": [
+              27.045074462890625,
+              4.6647491455078125
+            ],
+            "wrist": [
+              29.563385009765625,
+              34.943809509277344
+            ]
+          },
+          "joint_errors_px": {
+            "shoulder": 18.64408468290697,
+            "elbow": 27.44441507915345,
+            "wrist": 45.77186403892304
+          },
+          "segments": [
+            {
+              "bone": "upper_arm_r",
+              "world_direction_error_deg": 0.0,
+              "world_bone_length": 0.2403421504282481,
+              "tail_to_next_head_units": 2.9802322387695312e-08,
+              "screen_direction_error_deg": 16.421489447318724,
+              "rig_projected_length_px": 26.994673026843127,
+              "source_projected_length_px": 30.583482899590283,
+              "segment_vector_residual_px": [
+                8.488555908203125,
+                2.859893798828125
+              ],
+              "actual_tail_to_target_direction_endpoint_px": 3.0517578125e-05,
+              "target_direction_endpoint_to_source_px": 27.44442029154852
+            },
+            {
+              "bone": "lower_arm_r",
+              "world_direction_error_deg": 0.01704254705194856,
+              "world_bone_length": 0.24930406207929026,
+              "tail_to_next_head_units": 1.4600096599955427e-07,
+              "screen_direction_error_deg": 77.62901926725546,
+              "rig_projected_length_px": 5.436329526545415,
+              "source_projected_length_px": 31.08066768994409,
+              "segment_vector_residual_px": [
+                2.518310546875,
+                30.27906036376953
+              ],
+              "actual_tail_to_target_direction_endpoint_px": 0.0,
+              "target_direction_endpoint_to_source_px": 45.7718867078141
+            }
+          ],
+          "clavicle": {
+            "world_direction_error_deg": 0.0,
+            "tail_to_shoulder_head_units": 0.012402177649339863
+          }
+        }
+      ],
+      "torso_rows": [
+        {
+          "source_frame": 1,
+          "body_hip_to_shoulder_target_angle_deg": 5.124167049406433,
+          "hip_center_residual_px": [
+            -0.784515380859375,
+            4.94879150390625
+          ],
+          "shoulder_center_residual_px": [
+            1.4248046875,
+            0.02728271484375
+          ],
+          "spine_bones": [
+            {
+              "bone": "spine_lower",
+              "head_world": [
+                0.00875025987625122,
+                0.015048429369926453,
+                0.9957094788551331
+              ],
+              "tail_world": [
+                0.006190161686390638,
+                -0.0016015730798244476,
+                1.1047608852386475
+              ]
+            },
+            {
+              "bone": "spine_mid",
+              "head_world": [
+                0.006190161686390638,
+                -0.0016015833243727684,
+                1.1047608852386475
+              ],
+              "tail_world": [
+                -0.0002936404198408127,
+                -0.021104710176587105,
+                1.2294801473617554
+              ]
+            },
+            {
+              "bone": "spine_chest",
+              "head_world": [
+                -0.0002936404198408127,
+                -0.021104712039232254,
+                1.2294801473617554
+              ],
+              "tail_world": [
+                -0.009825140237808228,
+                -0.052066728472709656,
+                1.3698164224624634
+              ]
+            }
+          ]
+        },
+        {
+          "source_frame": 17,
+          "body_hip_to_shoulder_target_angle_deg": 3.43030685676138,
+          "hip_center_residual_px": [
+            -3.69268798828125,
+            5.214996337890625
+          ],
+          "shoulder_center_residual_px": [
+            -1.4971923828125,
+            10.502983093261719
+          ],
+          "spine_bones": [
+            {
+              "bone": "spine_lower",
+              "head_world": [
+                0.05783962458372116,
+                0.014874767512083054,
+                1.0031849145889282
+              ],
+              "tail_world": [
+                0.053214117884635925,
+                -0.01280653290450573,
+                1.1099010705947876
+              ]
+            },
+            {
+              "bone": "spine_mid",
+              "head_world": [
+                0.053214117884635925,
+                -0.01280654314905405,
+                1.1099010705947876
+              ],
+              "tail_world": [
+                0.04475130885839462,
+                -0.06015098839998245,
+                1.226794958114624
+              ]
+            },
+            {
+              "bone": "spine_chest",
+              "head_world": [
+                0.04475130885839462,
+                -0.06015098839998245,
+                1.226794958114624
+              ],
+              "tail_world": [
+                0.03220761939883232,
+                -0.13074883818626404,
+                1.3517043590545654
+              ]
+            }
+          ]
+        },
+        {
+          "source_frame": 23,
+          "body_hip_to_shoulder_target_angle_deg": 5.279518458556331,
+          "hip_center_residual_px": [
+            -5.375213623046875,
+            4.5658721923828125
+          ],
+          "shoulder_center_residual_px": [
+            -4.893035888671875,
+            -0.19704437255859375
+          ],
+          "spine_bones": [
+            {
+              "bone": "spine_lower",
+              "head_world": [
+                0.08340141922235489,
+                0.014706572517752647,
+                0.981788158416748
+              ],
+              "tail_world": [
+                0.07789751887321472,
+                -0.0008142974111251533,
+                1.0908973217010498
+              ]
+            },
+            {
+              "bone": "spine_mid",
+              "head_world": [
+                0.07789751142263412,
+                -0.0008143074228428304,
+                1.0908973217010498
+              ],
+              "tail_world": [
+                0.06850463151931763,
+                -0.01792178861796856,
+                1.2157829999923706
+              ]
+            },
+            {
+              "bone": "spine_chest",
+              "head_world": [
+                0.06850463151931763,
+                -0.01792179048061371,
+                1.2157829999923706
+              ],
+              "tail_world": [
+                0.05423133447766304,
+                -0.04532809183001518,
+                1.3564561605453491
+              ]
+            }
+          ]
+        },
+        {
+          "source_frame": 29,
+          "body_hip_to_shoulder_target_angle_deg": 3.7778525731331793,
+          "hip_center_residual_px": [
+            -3.63726806640625,
+            5.1085968017578125
+          ],
+          "shoulder_center_residual_px": [
+            -6.37939453125,
+            5.631591796875
+          ],
+          "spine_bones": [
+            {
+              "bone": "spine_lower",
+              "head_world": [
+                0.0877264216542244,
+                0.01378364022821188,
+                0.9932140111923218
+              ],
+              "tail_world": [
+                0.08194644749164581,
+                -0.012968862429261208,
+                1.100110650062561
+              ]
+            },
+            {
+              "bone": "spine_mid",
+              "head_world": [
+                0.08194644749164581,
+                -0.012968871742486954,
+                1.100110650062561
+              ],
+              "tail_world": [
+                0.07650578022003174,
+                -0.05964164435863495,
+                1.2174535989761353
+              ]
+            },
+            {
+              "bone": "spine_chest",
+              "head_world": [
+                0.07650578022003174,
+                -0.05964164808392525,
+                1.2174535989761353
+              ],
+              "tail_world": [
+                0.06777051091194153,
+                -0.12919075787067413,
+                1.3432724475860596
+              ]
+            }
+          ]
+        },
+        {
+          "source_frame": 41,
+          "body_hip_to_shoulder_target_angle_deg": 5.403166295985807,
+          "hip_center_residual_px": [
+            -0.876129150390625,
+            5.3492889404296875
+          ],
+          "shoulder_center_residual_px": [
+            1.3125,
+            15.662979125976562
+          ],
+          "spine_bones": [
+            {
+              "bone": "spine_lower",
+              "head_world": [
+                -0.030580036342144012,
+                0.014109816402196884,
+                1.0028821229934692
+              ],
+              "tail_world": [
+                -0.023716755211353302,
+                -0.015133600682020187,
+                1.1090598106384277
+              ]
+            },
+            {
+              "bone": "spine_mid",
+              "head_world": [
+                -0.023716751486063004,
+                -0.015133609995245934,
+                1.1090598106384277
+              ],
+              "tail_world": [
+                -0.014265132136642933,
+                -0.06742065399885178,
+                1.2237508296966553
+              ]
+            },
+            {
+              "bone": "spine_chest",
+              "head_world": [
+                -0.014265132136642933,
+                -0.06742065399885178,
+                1.2237508296966553
+              ],
+              "tail_world": [
+                6.335601210594177e-05,
+                -0.1446906179189682,
+                1.3444479703903198
+              ]
+            }
+          ]
+        },
+        {
+          "source_frame": 55,
+          "body_hip_to_shoulder_target_angle_deg": 8.212076399997798,
+          "hip_center_residual_px": [
+            -0.078399658203125,
+            6.5555877685546875
+          ],
+          "shoulder_center_residual_px": [
+            12.058990478515625,
+            -5.226165771484375
+          ],
+          "spine_bones": [
+            {
+              "bone": "spine_lower",
+              "head_world": [
+                -0.11547140032052994,
+                -0.0036067520268261433,
+                0.9319090247154236
+              ],
+              "tail_world": [
+                -0.10366639494895935,
+                -0.002544115763157606,
+                1.0416154861450195
+              ]
+            },
+            {
+              "bone": "spine_mid",
+              "head_world": [
+                -0.10366638749837875,
+                -0.0025441134348511696,
+                1.0416154861450195
+              ],
+              "tail_world": [
+                -0.0958016887307167,
+                -0.005212694406509399,
+                1.1677438020706177
+              ]
+            },
+            {
+              "bone": "spine_chest",
+              "head_world": [
+                -0.0958016887307167,
+                -0.005212694406509399,
+                1.1677438020706177
+              ],
+              "tail_world": [
+                -0.0819375216960907,
+                -0.008596820756793022,
+                1.311061978340149
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  }
+}
