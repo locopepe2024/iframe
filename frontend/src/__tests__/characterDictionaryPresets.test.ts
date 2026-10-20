@@ -15,11 +15,11 @@ it("keeps optional face texture precise and reuses skin choices", () => {
   expect(options("肤质")).toContain("面颊和鼻翼保留细微毛孔纹理");
   expect(options("眼周纹理")).toContain("仅微笑时出现眼角纹");
   expect(options("眼周纹理")).not.toContain("眼周与嘴角有自然细纹，肤色分布不完全均匀");
-  expect(renderDictionaryPreset(face, { "肤色": "暖小麦肤色" })).toBe("面容：肤色为暖小麦肤色。");
+  expect(renderDictionaryPreset(face, { "肤色": "暖小麦肤色" })).toBe("肤色：暖小麦肤色");
   expect(renderDictionaryPreset(face, { "眼周纹理": "仅微笑时出现眼角纹", "肤质": "轻微干燥肤质" }))
-    .toBe("面容：眼周细节为眼角细纹仅在微笑时出现，表情放松时不明显。肤质为面颊皮肤略显干燥，保留细微干燥纹理。");
+    .toBe("眼周细节：眼角细纹仅在微笑时出现，表情放松时不明显\n肤质：面颊皮肤略显干燥，保留细微干燥纹理");
   expect(renderDictionaryPreset(face, { "眼周纹理": "静态鱼尾纹" })).toContain("表情放松时，外眼角仍可见放射状鱼尾纹");
-  expect(renderDictionaryPreset(face, { "眼周纹理": "[眼周纹理]" })).toBe("面容：眼周细节为[眼周纹理]。");
+  expect(renderDictionaryPreset(face, { "眼周纹理": "[眼周纹理]" })).toBe("眼周细节：[眼周纹理]");
   for (const label of ["眼周纹理", "眼角纹", "鱼尾纹", "下眼睑纹", "眼袋"]) expect(dictionarySlotCategory(label)).toBe("eye-detail");
   expect(localDictionaryCategories("character.facial_mark.classical-crows-feet")).toContain("eye-detail");
 });
@@ -143,7 +143,7 @@ it("keeps skin tone slots separate from garment colors and skin texture", () => 
   expect(fields.find((field) => field.key === "肤质")?.options).not.toContain("暖小麦肤色");
   expect(fields.find((field) => field.key === "肤质")?.options).not.toContain("暖调浅肤色，自然肤质");
   expect(renderDictionaryPreset(panel)).toBe("");
-  expect(renderDictionaryPreset(panel, { "肤色": "暖小麦肤色" })).toBe("皮肤：肤色为暖小麦肤色。");
+  expect(renderDictionaryPreset(panel, { "肤色": "暖小麦肤色" })).toBe("肤色：暖小麦肤色");
   expect(renderDictionaryPreset(panel, { "肤色": "[肤色]" })).toContain("[肤色]");
 });
 
@@ -186,4 +186,27 @@ it("keeps garment wear and folds out of material slots", () => {
   const text = renderDictionaryPreset(panel, { "面料": "棉布", "衣物状态": wear });
   expect(text).toContain("外穿靛蓝色棉布交领长袍一件");
   expect(text).toContain(`新旧：衣物状态为${wear}`);
+});
+
+it('keeps facial panel selections as independent fields rather than parsing prose', async () => {
+  const { dictionaryStructuredFields } = await import('@/lib/characterDictionaryPresets');
+  const face = CHARACTER_DICTIONARY_PRESETS.find(entry => entry.id === 'dictionary.panel.face')!;
+  const result = dictionaryStructuredFields(face, { '眼周纹理': '仅微笑时出现眼角纹', '肤色': '暖小麦肤色', '肤质': '轻微干燥肤质' });
+  expect(result.identity).toEqual({
+    eye_detail: '眼角细纹仅在微笑时出现，表情放松时不明显',
+    skin_tone: '暖小麦肤色',
+    skin_texture: '面颊皮肤略显干燥，保留细微干燥纹理',
+  });
+  expect(result.look).toEqual({});
+});
+
+
+it('captures complete clothing configuration independently of flattened prose', async () => {
+  const { dictionaryConfiguration } = await import('@/lib/characterDictionaryPresets');
+  const preset = CHARACTER_DICTIONARY_PRESETS.find(entry => entry.fields?.some(field => field.key === 'innerColor'))!;
+  const config = dictionaryConfiguration(preset, { innerColor: '米白色', outerColor: '靛蓝色' });
+  expect(config.selections.innerColor).toBe('米白色');
+  expect(config.resolved_fields.outerColor).toBe('靛蓝色');
+  expect(config.preset_text).toBe(preset.text);
+  expect(config.rendered_text).toBe(renderDictionaryPreset(preset, config.selections));
 });

@@ -92,6 +92,13 @@ export function renderDictionaryPreset(preset: CharacterDictionaryPreset, values
     const value = fieldValue(field);
     return field.output?.[value] ?? value;
   });
+  if (["dictionary.panel.face", "dictionary.panel.skin"].includes(preset.id)) {
+    const labels: Record<string, string> = { "眼周纹理": "眼周细节" };
+    return fields.flatMap(field => {
+      const value = fieldValue(field);
+      return value ? [`${labels[field.key] || field.label}：${field.output?.[value] ?? value}`] : [];
+    }).join("\n");
+  }
   if (!preset.sections) return substitute(preset.text);
   return preset.sections.flatMap((section) => {
     const sectionFields = fields.filter((field) => section.parts.some((part) => part.includes(`[${field.key}]`)));
@@ -209,3 +216,39 @@ export const CHARACTER_DICTIONARY_PRESETS: CharacterDictionaryPreset[] = [
   ...["棉布", "亚麻", "丝绸", "针织面料", "牛仔布", "雪纺"].map((name, index) => term(`material.${index}`, name, `服装采用${name}，纹理、光泽与垂坠符合材质特征。`, "material", "造型")).filter((item) => item.title !== "丝绸"),
   ...["平底鞋", "短靴", "简洁手提包", "细腰带", "不额外搭配单品"].map((name, index) => term(`accessory.${index}`, name, name === "不额外搭配单品" ? name : `搭配${name}，不遮挡服装主体。`, "accessory", "造型")),
 ];
+
+/** Preserve exact panel values alongside prose instead of parsing the rendered sentence. */
+export function dictionaryStructuredFields(preset: CharacterDictionaryPreset, values: Record<string, string>) {
+  const keys: Record<string, ["identity" | "look", string]> = {
+    '脸型': ['identity', 'face_shape'], '眉形': ['identity', 'eyebrows'], '眼型': ['identity', 'eyes'],
+    '眼周纹理': ['identity', 'eye_detail'], '肤色': ['identity', 'skin_tone'], '肤质': ['identity', 'skin_texture'],
+    '妆容': ['identity', 'makeup'], '发型': ['identity', 'hair'], '身高': ['identity', 'height'],
+    '体态': ['identity', 'build'], '衣物状态': ['look', 'condition'],
+  };
+  const result: { identity: Record<string, string>; look: Record<string, string> } = { identity: {}, look: {} };
+  if (!["face", "skin", "hair", "height", "posture"].some(id => preset.id === `dictionary.panel.${id}`)) return result;
+  for (const field of dictionaryPresetFields(preset, values)) {
+    const target = keys[field.key];
+    const selected = values[field.key] !== undefined && field.options.includes(values[field.key]) ? values[field.key] : field.value;
+    if (target && selected && !selected.includes('[')) result[target[0]][target[1]] = field.output?.[selected] ?? selected;
+  }
+  return result;
+}
+
+export type DictionaryConfiguration = {
+  preset_id: string; schema_version: 'iframe.dictionary-config.v1';
+  source: string; preset_text: string;
+  selections: Record<string, string>; resolved_fields: Record<string, string>; rendered_text: string;
+};
+
+export function dictionaryConfiguration(preset: CharacterDictionaryPreset, values: Record<string, string>): DictionaryConfiguration {
+  const selections: Record<string, string> = {};
+  const resolved_fields: Record<string, string> = {};
+  for (const field of dictionaryPresetFields(preset, values)) {
+    const selected = values[field.key] !== undefined && field.options.includes(values[field.key]) ? values[field.key] : field.value;
+    if (!selected) continue;
+    selections[field.key] = selected;
+    resolved_fields[field.key] = field.output?.[selected] ?? selected;
+  }
+  return { source: preset.source, preset_text: preset.text, preset_id: preset.id, schema_version: 'iframe.dictionary-config.v1', selections, resolved_fields, rendered_text: renderDictionaryPreset(preset, values) };
+}

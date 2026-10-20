@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { expect, it, vi } from "vitest";
 import CharacterWorkbench, { WorkbenchPanel } from "./CharacterWorkbench";
 import {
@@ -917,5 +917,43 @@ it("does not carry retired hidden style controls into a new completion or its sa
     fireEvent.click(screen.getByRole("button", { name: "保存草稿" }));
     await waitFor(() => expect(onUpdateAttributes).toHaveBeenCalledWith({ character_design: expect.objectContaining({
         route: "", age_stage: undefined, style_notes: undefined,
+    }) }));
+});
+
+it("edits, confirms and reloads independent facial fields without an AI call", async () => {
+    const { onUpdateAttributes } = mountSimpleDesign();
+    fireEvent.click(screen.getByRole("button", { name: "展开角色设计" }));
+    for (const [label, value] of [["眉形", "柳叶眉"], ["眼周细节", "表情放松时仍可见浅细纹"], ["肤色", "中等中性肤色"], ["肤质", "面颊略干，保留细微干燥纹理"]]) {
+        fireEvent.change(screen.getByRole("textbox", { name: `设计字段 · ${label}` }), { target: { value } });
+    }
+    expect((screen.getByRole("textbox", { name: "角色提示词 · 检查后保存或确认" }) as HTMLTextAreaElement).value).toContain("眉形：柳叶眉\n眼周细节：表情放松时仍可见浅细纹\n肤色：中等中性肤色\n肤质：面颊略干，保留细微干燥纹理");
+    fireEvent.click(screen.getByRole("button", { name: "确认设计" }));
+    await waitFor(() => expect(onUpdateAttributes).toHaveBeenCalled());
+    const design = onUpdateAttributes.mock.calls.at(-1)![0].character_design;
+    expect(design.identity.features).toMatchObject({ eyebrows: "柳叶眉", eye_detail: "表情放松时仍可见浅细纹", skin_tone: "中等中性肤色", skin_texture: "面颊略干，保留细微干燥纹理" });
+    fireEvent.click(screen.getByRole("button", { name: "返回图片 Prompt" }));
+    expect(screen.getByRole("textbox", { name: "输入 Prompt，/ 检索词典和 Skill，@ 检索资产" })).toHaveTextContent("眉形：柳叶眉");
+    cleanup();
+    mountSimpleDesign({ character_design: { design_draft: design } });
+    fireEvent.click(screen.getByRole("button", { name: "展开角色设计" }));
+    expect(screen.getByRole("textbox", { name: "设计字段 · 肤质" })).toHaveValue("面颊略干，保留细微干燥纹理");
+    expect(apiMocks.agentRequest.mock.calls.filter(([path]) => path.startsWith("/character-design/"))).toHaveLength(0);
+});
+
+it("saves dictionary face choices as fields and keeps the remaining clothing text", async () => {
+    const { onUpdateAttributes } = mountSimpleDesign();
+    fireEvent.click(screen.getByRole("button", { name: "展开角色设计" }));
+    act(() => designDetailsEditor().chain().selectAll().insertContent({ type: "text", text: "靛蓝外衣，素面布靴。 /面容" }).run());
+    fireEvent.click(await screen.findByRole("option", { name: /配置面板 · 面容选择面板/ }));
+    fireEvent.change(screen.getByRole("combobox", { name: "肤质" }), { target: { value: "轻微干燥肤质" } });
+    fireEvent.change(screen.getByRole("combobox", { name: "肤色" }), { target: { value: "暖小麦肤色" } });
+    fireEvent.click(screen.getByRole("button", { name: "应用配置" }));
+    expect(screen.getByRole("textbox", { name: "设计字段 · 肤质" })).toHaveValue("面颊皮肤略显干燥，保留细微干燥纹理");
+    expect(screen.getByRole("textbox", { name: "其他已输入细节" })).toHaveValue("靛蓝外衣，素面布靴。");
+    fireEvent.click(screen.getByRole("button", { name: "保存草稿" }));
+    await waitFor(() => expect(onUpdateAttributes).toHaveBeenCalledWith({ character_design: expect.objectContaining({
+        schema_version: "iframe.character-fields.v1", supplemental_prompt: "靛蓝外衣，素面布靴。",
+        dictionary_configurations: [expect.objectContaining({ preset_id: "dictionary.panel.face", selections: { "肤色": "暖小麦肤色", "肤质": "轻微干燥肤质" } })],
+        identity: expect.objectContaining({ editor_mode: "fields", features: { skin_tone: "暖小麦肤色", skin_texture: "面颊皮肤略显干燥，保留细微干燥纹理" } }),
     }) }));
 });

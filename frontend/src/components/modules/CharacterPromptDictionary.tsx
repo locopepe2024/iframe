@@ -3,7 +3,7 @@
 import { useEffect, useId, useState, type MutableRefObject } from "react";
 import { API_URL, api, authenticatedFetch, type PlatformReferenceResource } from "@/lib/api";
 import { searchCharacterQuickPresets } from "@/lib/characterQuickActions";
-import { CHARACTER_DICTIONARY_PRESETS, dictionaryPresetFields, configurationQueryCategory, isConfigurationQuery, renderDictionaryPreset, type CharacterDictionaryPreset } from "@/lib/characterDictionaryPresets";
+import { CHARACTER_DICTIONARY_PRESETS, dictionaryPresetFields, configurationQueryCategory, isConfigurationQuery, renderDictionaryPreset, dictionaryStructuredFields, dictionaryConfiguration, type DictionaryConfiguration, type CharacterDictionaryPreset } from "@/lib/characterDictionaryPresets";
 import { editablePlatformPrompt, isUsablePlatformPrompt } from "@/lib/platformPrompts";
 import { CHARACTER_DICTIONARY_GROUPS, dictionaryCategoryPath, dictionaryCategorySearch, dictionarySlotCategory, localDictionaryCategories, platformDictionaryCategories } from "@/lib/characterDictionaryCategories";
 import type { PromptSlashSuggestion } from "./playground/ReferencePromptEditor";
@@ -14,16 +14,20 @@ type Entry = {
   preset?: CharacterDictionaryPreset;
   slotValue?: string;
   motionText?: string;
+  remainingText?: string;
+  configuration?: DictionaryConfiguration;
+  structuredFields?: { identity: Record<string, string>; look: Record<string, string> };
 };
 const DOMAINS: Record<string, string> = {
   "character.identity": "身份", "character.look": "造型", "character.performance": "表演", "world.style": "风格",
 };
 const buttonStyle = "min-h-11 rounded px-2 text-xs focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary hover:bg-hover-bg";
 
-export default function CharacterPromptDictionary({ suggestion, onClose, onApply, onSkill, canRunSkill, keyHandler }: {
+export default function CharacterPromptDictionary({ suggestion, onClose, onApply, onSkill, canRunSkill, keyHandler, onConfiguration }: {
   suggestion: PromptSlashSuggestion;
   onClose: () => void;
   onApply: (text: string, source: Entry) => void;
+  onConfiguration?: (configuration: DictionaryConfiguration) => void;
   onSkill?: (currentPrompt: string) => void;
   canRunSkill: boolean;
   keyHandler: MutableRefObject<((event: KeyboardEvent) => boolean) | null>;
@@ -138,7 +142,14 @@ export default function CharacterPromptDictionary({ suggestion, onClose, onApply
     if (selected.type === "Skill") {
       if (!canRunSkill) return;
       const currentPrompt = suggestion.replaceWithText(""); onClose(); onSkill?.(currentPrompt);
-    } else { onApply(suggestion.replaceWithText(selectedText), { ...selected, text: selectedText }); onClose(); }
+    } else {
+      if (!suggestion.slot && selected.preset) onConfiguration?.(dictionaryConfiguration(selected.preset, fieldValues));
+      const fields = !suggestion.slot && selected.preset ? dictionaryStructuredFields(selected.preset, fieldValues) : undefined;
+      onApply(suggestion.replaceWithText(selectedText), { ...selected, text: selectedText,
+        remainingText: suggestion.remainingText,
+        structuredFields: fields && (Object.keys(fields.identity).length || Object.keys(fields.look).length) ? fields : undefined });
+      onClose();
+    }
   };
   useEffect(() => {
     keyHandler.current = (event) => {

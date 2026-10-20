@@ -317,9 +317,9 @@ it("opens skin configuration from slash and inserts the selected tone without as
   const { replaceWithText } = setup("肤色");
   fireEvent.click(screen.getByRole("option", { name: /配置面板 · 肤色与肤质选择面板/ }));
   fireEvent.change(screen.getByRole("combobox", { name: "肤色" }), { target: { value: "暖小麦肤色" } });
-  expect(screen.getByRole("textbox", { name: "将插入的完整文字" })).toHaveValue("皮肤：肤色为暖小麦肤色。");
+  expect(screen.getByRole("textbox", { name: "将插入的完整文字" })).toHaveValue("肤色：暖小麦肤色");
   fireEvent.click(screen.getByRole("button", { name: "应用配置" }));
-  expect(replaceWithText).toHaveBeenCalledWith("皮肤：肤色为暖小麦肤色。");
+  expect(replaceWithText).toHaveBeenCalledWith("肤色：暖小麦肤色");
 });
 
 it("previews and applies optional face eye texture and skin details", () => {
@@ -331,7 +331,7 @@ it("previews and applies optional face eye texture and skin details", () => {
   fireEvent.change(screen.getByRole("combobox", { name: "眼周纹理" }), { target: { value: "仅微笑时出现眼角纹" } });
   fireEvent.change(screen.getByRole("combobox", { name: "肤色" }), { target: { value: "暖小麦肤色" } });
   fireEvent.change(screen.getByRole("combobox", { name: "肤质" }), { target: { value: "细腻自然肤质" } });
-  const expected = "面容：眼周细节为眼角细纹仅在微笑时出现，表情放松时不明显。肤色为暖小麦肤色。肤质为皮肤纹理细腻自然，保留细微起伏，不过度磨皮。";
+  const expected = "眼周细节：眼角细纹仅在微笑时出现，表情放松时不明显\n肤色：暖小麦肤色\n肤质：皮肤纹理细腻自然，保留细微起伏，不过度磨皮";
   expect(screen.getByRole("textbox", { name: "将插入的完整文字" })).toHaveValue(expected);
   expect(replaceWithText).not.toHaveBeenCalled();
   fireEvent.click(screen.getByRole("button", { name: "应用配置" }));

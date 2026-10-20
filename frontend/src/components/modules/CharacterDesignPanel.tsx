@@ -3,13 +3,20 @@
 import { useRef, useState } from "react";
 import type { ChatModel } from "@/lib/api";
 import ReferencePromptEditor, { type PromptSlashSuggestion } from "./playground/ReferencePromptEditor";
+import { IDENTITY_FIELDS, LOOK_FIELDS, type IdentityFeatures, type LookFeatures } from "@/lib/characterStructuredDesign";
+import type { DictionaryConfiguration } from "@/lib/characterDictionaryPresets";
 import CharacterPromptDictionary from "./CharacterPromptDictionary";
 
 export default function CharacterDesignPanel({ description, details, onDetailsChange, result, onResultChange,
-    reviewItems, models, model, onModelChange, busy, saving, canSave, error, status, onSubmit, onSave, onConfirm, onBack,
+    identityFields, lookFields, onFieldsChange, onDictionaryFields, onDictionaryConfiguration, supplemental, onSupplementalChange, reviewItems, models, model, onModelChange, busy, saving, canSave, error, status, onSubmit, onSave, onConfirm, onBack,
 }: {
     description: string; details: string; onDetailsChange: (value: string) => void;
     result: string | null; onResultChange: (value: string) => void;
+    onDictionaryConfiguration: (configuration: DictionaryConfiguration) => void;
+    supplemental: string; onSupplementalChange: (value: string) => void;
+    identityFields: IdentityFeatures; lookFields: LookFeatures;
+    onFieldsChange: (section: "identity" | "look", key: string, value: string) => void;
+    onDictionaryFields: (text: string, fields: { identity: Record<string, string>; look: Record<string, string> }, remainingText: string) => void;
     reviewItems: string[];
     models: ChatModel[]; model: string; onModelChange: (value: string) => void;
     busy: boolean; saving: boolean; canSave: boolean; error: string; status: string;
@@ -40,8 +47,28 @@ export default function CharacterDesignPanel({ description, details, onDetailsCh
                     allowImplicitMentions={false} onSlashChange={setSlash}
                     onSlashKeyDown={event => keyHandler.current?.(event) || false} />
                 {slash && <CharacterPromptDictionary suggestion={slash} onClose={() => setSlash(null)}
-                    onApply={text => onDetailsChange(text)} keyHandler={keyHandler} canRunSkill={false} />}
+                    onConfiguration={onDictionaryConfiguration} onApply={(text, entry) => entry.structuredFields ? onDictionaryFields(text, entry.structuredFields, entry.remainingText || "") : onDetailsChange(text)} keyHandler={keyHandler} canRunSkill={false} />}
             </div>
+        </div>
+        {supplemental && <label className="block text-xs text-text-secondary">其他已输入细节
+            <textarea aria-label="其他已输入细节" value={supplemental} disabled={saving || busy} rows={3}
+                onChange={event => onSupplementalChange(event.target.value)}
+                className="mt-1 w-full rounded border border-glass-border bg-surface p-2 text-sm text-foreground" />
+        </label>}
+        <div aria-label="结构化角色设计" className="space-y-3">
+            {([['identity', '面容与体态', IDENTITY_FIELDS, identityFields], ['look', '服装与配饰', LOOK_FIELDS, lookFields]] as const).map(([section, title, fields, values]) =>
+                <fieldset key={section} disabled={saving || busy} className="min-w-0 rounded border border-glass-border p-3">
+                    <legend className="px-1 text-xs font-medium">{title}</legend>
+                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                        {fields.map(([key, label]) => <label key={key} className="min-w-0 text-xs text-text-secondary">
+                            {label}
+                            <textarea aria-label={`设计字段 · ${label}`} rows={2} maxLength={500}
+                                value={(values as Record<string, string>)[key] || ''}
+                                onChange={event => onFieldsChange(section, key, event.target.value)}
+                                className="mt-1 min-h-11 w-full resize-y rounded border border-glass-border bg-surface p-2 text-sm text-foreground focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary" />
+                        </label>)}
+                    </div>
+                </fieldset>)}
         </div>
         <label className="block text-xs text-text-secondary" htmlFor="character-design-model">设计模型</label>
         <select id="character-design-model" value={model} onChange={event => onModelChange(event.target.value)}

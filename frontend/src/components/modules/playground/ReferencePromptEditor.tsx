@@ -34,6 +34,8 @@ export type ReferenceSuggestion = {
 
 export type PromptSlashSuggestion = {
   query: string;
+  /** Read-only text outside the replacement range. */
+  remainingText?: string;
   /** A Skill's [label] placeholder. The replacement covers just this occurrence. */
   slot?: string;
   contextKey?: string;
@@ -66,7 +68,7 @@ function slashSuggestion(editor: Editor): PromptSlashSuggestion | null {
   if (!match) return null;
   const from = selection.from - match[1].length - 1;
   const to = selection.from;
-  return { query: match[1], replaceWithText: (text) => {
+  return { query: match[1], remainingText: editor.state.doc.textBetween(0, from, "\n") + editor.state.doc.textBetween(to, editor.state.doc.content.size, "\n"), replaceWithText: (text) => {
     editor.view.dispatch(closeHistory(editor.state.tr));
     if (text) {
       editor.chain().focus().insertContentAt({ from, to }, { type: 'text', text }).run();

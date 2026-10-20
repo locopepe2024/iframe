@@ -32,8 +32,9 @@ import ReferencePromptEditor, {
     type PromptSlashSuggestion,
 } from "./playground/ReferencePromptEditor";
 import { searchReferenceCandidates } from "@/lib/referenceCandidateSearch";
-import { IDENTITY_FIELDS, LOOK_FIELDS, characterSectionText, normalizeCharacterFeatures,
+import { IDENTITY_FIELDS, LOOK_FIELDS, characterSectionText, characterStructuredText, normalizeCharacterFeatures,
     type CharacterSectionEditorMode, type IdentityFeatures, type LookFeatures } from "@/lib/characterStructuredDesign";
+import type { DictionaryConfiguration } from "@/lib/characterDictionaryPresets";
 import { type CharacterPresetTarget } from "@/lib/characterQuickActions";
 import CharacterDesignPanel from "./CharacterDesignPanel";
 import CharacterPromptDictionary from "./CharacterPromptDictionary";
@@ -52,6 +53,9 @@ type AppliedPlatformPrompt = {
 };
 
 type DesignDraft = {
+    dictionary_configurations?: DictionaryConfiguration[];
+    schema_version?: string;
+    supplemental_prompt?: string;
     route?: string;
     style_notes?: string;
     age_stage?: string;
@@ -114,6 +118,15 @@ function confirmedDesignDescription(design: DesignDraft | undefined): string {
     // The question remains in the saved design draft for auditability; only
     // the user's confirmed value belongs in an image prompt.
     const answers = Object.values(design?.field_answers || {});
+    if (design?.identity?.editor_mode !== "notes" && design?.look?.editor_mode !== "notes") {
+        const identity = normalizeCharacterFeatures(design?.identity?.features, IDENTITY_FIELDS.map(([key]) => key));
+        const look = normalizeCharacterFeatures(design?.look?.features, LOOK_FIELDS.map(([key]) => key));
+        const structured = [
+            characterStructuredText(identity, {}) || String(design?.identity?.visual_notes || ""),
+            characterStructuredText({}, look) || String(design?.look?.visual_notes || ""),
+        ].filter(Boolean).join("\n");
+        if (structured) return [design?.supplemental_prompt || "", structured, ...answers, ...designScopeDescription(design?.route, design?.age_stage), design?.style_notes || ""].filter(Boolean).join("\n");
+    }
     return designPromptDescription(
         characterSectionText(normalizeCharacterFeatures(design?.identity?.features, IDENTITY_FIELDS.map(([key]) => key)),
             IDENTITY_FIELDS.map(([key]) => key), design?.identity?.visual_notes, design?.identity?.editor_mode),
@@ -341,6 +354,8 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
     const [designRoute, setDesignRoute] = useState(savedDesign.route || "");
     const [styleNotes, setStyleNotes] = useState(savedDesign.style_notes || "");
     const [designAgeStage, setDesignAgeStage] = useState(savedDesign.age_stage || "");
+    const [dictionaryConfigurations, setDictionaryConfigurations] = useState<DictionaryConfiguration[]>(savedDesign.dictionary_configurations || []);
+    const [supplementalPrompt, setSupplementalPrompt] = useState(savedDesign.supplemental_prompt || "");
     const [designNotes, setDesignNotes] = useState(String(savedDesign.identity?.visual_notes || ""));
     const [lookNotes, setLookNotes] = useState(String(savedDesign.look?.visual_notes || ""));
     const [identityFeatures, setIdentityFeatures] = useState<IdentityFeatures>(
@@ -666,10 +681,13 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
         character_name: asset.name,
         profile: asset.description,
         current_draft: designInput,
+        dictionary_configurations: dictionaryConfigurations,
+        structured_identity: identityEditorMode === "fields" ? identityFeatures : {},
+        structured_look: lookEditorMode === "fields" ? lookFeatures : {},
         route: "",
 
     };
-    const characterDesignSource = JSON.stringify({ ...characterDesignRequest, asset_id: asset.id, result: designResult });
+    const characterDesignSource = JSON.stringify({ ...characterDesignRequest, asset_id: asset.id, result: designResult, supplemental: supplementalPrompt });
     const characterDesignSourceRef = useRef(characterDesignSource);
     characterDesignSourceRef.current = characterDesignSource;
     const designPromptBaseline = useRef(fullBodyPrompt);
@@ -678,7 +696,11 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
             const currentPrompt = promptOverride ?? (activePanel === "three_view" ? threeViewPrompt : activePanel === "headshot" ? headshotPrompt : fullBodyPrompt);
             if (!designInput || currentPrompt !== designPromptBaseline.current) {
                 setDesignInput(currentPrompt);
-                if (currentPrompt !== designPromptBaseline.current) { setDesignResult(null); setDesignStatus("draft"); }
+                if (currentPrompt !== designPromptBaseline.current) {
+                    setDesignResult(null); setDesignStatus("draft");
+                    setIdentityFeatures({}); setLookFeatures({}); setDesignNotes(""); setLookNotes("");
+                    setIdentityEditorMode("notes"); setLookEditorMode("notes"); setSupplementalPrompt("");
+                }
             }
             designPromptBaseline.current = currentPrompt;
         }
@@ -712,7 +734,11 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
             const nextLookFeatures = normalizeCharacterFeatures(result.look.features, LOOK_FIELDS.map(([key]) => key));
             const identityText = characterSectionText(nextIdentityFeatures, IDENTITY_FIELDS.map(([key]) => key), nextIdentity);
             const lookText = characterSectionText(nextLookFeatures, LOOK_FIELDS.map(([key]) => key), nextLook);
-            setDesignResult([identityText && `身份：${identityText}`, lookText && `造型：${lookText}`].filter(Boolean).join("\n"));
+            setDesignResult([
+                characterStructuredText(nextIdentityFeatures, {}) || (identityText && `身份：${identityText}`),
+                characterStructuredText({}, nextLookFeatures) || (lookText && `造型：${lookText}`),
+            ].filter(Boolean).join("\n"));
+            setSupplementalPrompt("");
             setDesignNotes(nextIdentity);
             setLookNotes(nextLook);
             setIdentityFeatures(nextIdentityFeatures);
@@ -756,6 +782,9 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
         const unanswered = designUnresolved.filter((question) => !designFieldAnswers[question]?.trim());
         const manualInput = designResult === null ? designInput : null;
         const draft: DesignDraft = {
+            dictionary_configurations: dictionaryConfigurations,
+            schema_version: "iframe.character-fields.v1",
+            supplemental_prompt: manualInput !== null ? "" : supplementalPrompt,
             route: manualInput !== null ? "" : designRoute,
             style_notes: manualInput !== null ? undefined : styleNotes || undefined,
             age_stage: manualInput !== null ? undefined : designAgeStage || undefined,
@@ -1053,12 +1082,45 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
         updateProject(currentProject.id, updatedProject);
     };
 
+    const recordDictionaryConfiguration = (configuration: DictionaryConfiguration) => {
+        setDictionaryConfigurations(current => [...current.filter(item => item.preset_id !== configuration.preset_id), configuration]);
+    };
+
+    const updateStructuredDesign = (identityPatch: IdentityFeatures, lookPatch: LookFeatures, details?: string, remainingText?: string) => {
+        const nextIdentity = { ...(identityEditorMode === "fields" ? identityFeatures : {}), ...identityPatch };
+        const nextLook = { ...(lookEditorMode === "fields" ? lookFeatures : {}), ...lookPatch };
+        setIdentityFeatures(nextIdentity); setLookFeatures(nextLook);
+        setIdentityEditorMode("fields"); setLookEditorMode("fields");
+        const legacyNotes = [identityEditorMode === "notes" ? designNotes : "", lookEditorMode === "notes" ? lookNotes : ""].filter(Boolean).join("\n");
+        const supplemental = remainingText !== undefined ? remainingText.trim() : supplementalPrompt || legacyNotes ||
+            (!designResult && !Object.keys(identityFeatures).length && !Object.keys(lookFeatures).length ? designInput : "");
+        setSupplementalPrompt(supplemental);
+        setDesignResult([supplemental, characterStructuredText(nextIdentity, nextLook)].filter(Boolean).join("\n"));
+        if (details !== undefined) setDesignInput(details);
+        setDesignIdentityBasis(["user_specified"]); setDesignLookBasis(["user_specified"]);
+        setDesignStatus("draft"); setPromptsNeedDesignApply(true);
+    };
+
     const designEditor = showProfile ? <CharacterDesignPanel
         description={asset.description} details={designInput}
-        onDetailsChange={value => { setDesignInput(value); setDesignResult(null); setDesignStatus("draft"); }}
+        onDictionaryConfiguration={recordDictionaryConfiguration}
+        identityFields={identityFeatures} lookFields={lookFeatures}
+        onFieldsChange={(section, key, value) => updateStructuredDesign(section === "identity" ? { [key]: value } : {}, section === "look" ? { [key]: value } : {})}
+        onDictionaryFields={(text, fields, remaining) => updateStructuredDesign(fields.identity, fields.look, text, remaining)}
+        supplemental={supplementalPrompt} onSupplementalChange={value => {
+            setSupplementalPrompt(value);
+            setDesignResult([value, characterStructuredText(identityFeatures, lookFeatures)].filter(Boolean).join("\n"));
+            setDesignStatus("draft"); setPromptsNeedDesignApply(true);
+        }}
+        onDetailsChange={value => {
+            setDesignInput(value); setDesignResult(null); setDesignStatus("draft");
+            setIdentityFeatures({}); setLookFeatures({}); setDesignNotes(""); setLookNotes("");
+            setIdentityEditorMode("notes"); setLookEditorMode("notes"); setSupplementalPrompt("");
+        }}
         reviewItems={designUnresolved.map(question => [question, designFieldSuggestions[question]].filter(Boolean).join("："))}
         result={designResult} onResultChange={value => {
             setDesignResult(value);
+            setSupplementalPrompt("");
             const sections = value.match(/^身份：[\s\S]*?\n造型：/);
             if (sections) {
                 const boundary = value.indexOf("\n造型：");
@@ -1205,7 +1267,12 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
 
                         prompt={fullBodyPrompt}
                         setPrompt={setFullBodyPrompt}
+                        onDictionaryConfiguration={recordDictionaryConfiguration}
                         onDesignSkill={openDesignEditor}
+                        onStructuredSelection={(text: string, fields: { identity: IdentityFeatures; look: LookFeatures }, remaining: string) => {
+                            updateStructuredDesign(fields.identity, fields.look, text, remaining);
+                            designPromptBaseline.current = text;
+                        }}
                         canRunDesignSkill={!designing}
                         platformPromptSource={platformPromptSources.full_body}
                         onPlatformPromptSourceChange={(source: AppliedPlatformPrompt | null) => setPlatformPromptSources((current) => ({ ...current, full_body: source }))}
@@ -1264,7 +1331,12 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
 
                         prompt={threeViewPrompt}
                         setPrompt={setThreeViewPrompt}
+                        onDictionaryConfiguration={recordDictionaryConfiguration}
                         onDesignSkill={openDesignEditor}
+                        onStructuredSelection={(text: string, fields: { identity: IdentityFeatures; look: LookFeatures }, remaining: string) => {
+                            updateStructuredDesign(fields.identity, fields.look, text, remaining);
+                            designPromptBaseline.current = text;
+                        }}
                         canRunDesignSkill={!designing}
                         platformPromptSource={platformPromptSources.three_view}
                         onPlatformPromptSourceChange={(source: AppliedPlatformPrompt | null) => setPlatformPromptSources((current) => ({ ...current, three_view: source }))}
@@ -1304,7 +1376,12 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
 
                         prompt={headshotPrompt}
                         setPrompt={setHeadshotPrompt}
+                        onDictionaryConfiguration={recordDictionaryConfiguration}
                         onDesignSkill={openDesignEditor}
+                        onStructuredSelection={(text: string, fields: { identity: IdentityFeatures; look: LookFeatures }, remaining: string) => {
+                            updateStructuredDesign(fields.identity, fields.look, text, remaining);
+                            designPromptBaseline.current = text;
+                        }}
                         canRunDesignSkill={!designing}
                         platformPromptSource={platformPromptSources.headshot}
                         onPlatformPromptSourceChange={(source: AppliedPlatformPrompt | null) => setPlatformPromptSources((current) => ({ ...current, headshot: source }))}
@@ -1504,6 +1581,8 @@ export function WorkbenchPanel({
     platformPromptSource,
     onPlatformPromptSourceChange,
     onDesignSkill,
+    onStructuredSelection,
+    onDictionaryConfiguration,
     canRunDesignSkill = false,
     referenceCandidates = [],
     onRefreshReferences,
@@ -1855,9 +1934,10 @@ export function WorkbenchPanel({
                         placeholder={isVideo ? "输入视频 Prompt，@ 检索资产" : "输入 Prompt，/ 检索词典和 Skill，@ 检索资产"}
                     />
                     {!isVideo && !isLocked && promptSlash && <CharacterPromptDictionary suggestion={promptSlash} onClose={() => setPromptSlash(null)}
-                        keyHandler={slashKeyHandler} onSkill={onDesignSkill} canRunSkill={canRunDesignSkill && !isLocked}
+                        onConfiguration={onDictionaryConfiguration} keyHandler={slashKeyHandler} onSkill={onDesignSkill} canRunSkill={canRunDesignSkill && !isLocked}
                         onApply={(text, entry) => {
                             setPrompt(text);
+                            if (entry.structuredFields) onStructuredSelection?.(text, entry.structuredFields, entry.remainingText);
                             if (entry.resource) onPlatformPromptSourceChange?.({ resourceId: entry.resource.platform_resource_id,
                                 revision: entry.resource.revision, title: entry.title, appliedText: text, customized: false });
                         }} />}

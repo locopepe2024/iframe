@@ -1,10 +1,13 @@
 export const IDENTITY_FIELDS = [
-  ['face', '脸型与眉眼'], ['hair', '发型'], ['skin', '肤色与肤质'],
+  ['face', '面容补充'], ['face_shape', '脸型'], ['eyebrows', '眉形'], ['eyes', '眼型'],
+  ['eye_detail', '眼周细节'], ['nose', '鼻型'], ['lips', '唇形'], ['makeup', '妆容'],
+  ['hair', '发型'], ['skin', '肤色肤质补充'], ['skin_tone', '肤色'], ['skin_texture', '肤质'],
   ['height', '身高'], ['build', '体态与比例'], ['recognition_marks', '识别锚点'],
 ] as const;
 export const LOOK_FIELDS = [
   ['clothing', '服装结构与材质'], ['palette', '主色与配色'],
-  ['accessories', '配件'], ['weapon', '武器外观'],
+  ['footwear', '鞋履'], ['jewelry', '首饰'], ['decoration', '装饰'],
+  ['condition', '新旧状态'], ['accessories', '其他配件'], ['weapon', '武器外观'],
 ] as const;
 
 export type IdentityFeature = typeof IDENTITY_FIELDS[number][0];
@@ -33,4 +36,12 @@ export function requirementNeedsReview(requirement: string, projectedSection: st
   const normalize = (value: string) => value.replace(/[\s，。；;、,.!！?？]/g, '').toLocaleLowerCase();
   const expected = normalize(requirement.trim());
   return Boolean(expected && !normalize(projectedSection).includes(expected));
+}
+
+/** Render authored fields in a stable labelled order; never reverse-parse prose. */
+export function characterStructuredText(identity: IdentityFeatures, look: LookFeatures): string {
+  return [...IDENTITY_FIELDS, ...LOOK_FIELDS].flatMap(([key, label]) => {
+    const value = (identity as Record<string, string>)[key] ?? (look as Record<string, string>)[key];
+    return value?.trim() ? [`${label}：${value.trim()}`] : [];
+  }).join('\n');
 }
