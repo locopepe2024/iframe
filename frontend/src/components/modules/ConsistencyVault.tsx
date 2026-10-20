@@ -179,6 +179,23 @@ export default function ConsistencyVault() {
     const handleUpdateAttributes = async (assetId: string, type: string, attributes: Record<string, unknown>) => {
         if (!currentProject) return;
         try {
+            if (type === "character" && Object.keys(attributes).length === 1 && "character_design" in attributes) {
+                const saved = await api.saveCharacterDesign(currentProject.id, assetId, attributes.character_design);
+                if (saved.project_id !== currentProject.id || saved.asset_id !== assetId || !saved.character_design
+                    || !Number.isInteger(saved.asset_revision) || saved.asset_revision < 0) {
+                    throw new Error("Saved character design response is invalid");
+                }
+                // Merge into the latest state: generation may finish while saving.
+                const latest = useProjectStore.getState();
+                const project = latest.currentProject?.id === currentProject.id
+                    ? latest.currentProject : latest.projects.find(item => item.id === currentProject.id);
+                if (project) updateProject(currentProject.id, {
+                    characters: project.characters.map(character => character.id === assetId
+                        ? { ...character, character_design: saved.character_design,
+                            asset_revision: Math.max(character.asset_revision || 0, saved.asset_revision) } : character),
+                });
+                return;
+            }
             const updatedProject = await api.updateAssetAttributes(currentProject.id, assetId, type, attributes);
             await applyAssetMutationProject(assetId, type, updatedProject);
         } catch (error) {

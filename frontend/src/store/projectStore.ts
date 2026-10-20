@@ -78,6 +78,7 @@ export interface GenerationLineage {
 }
 
 export interface Character {
+    asset_revision?: number;
     id: string;
     name: string;
     description?: string;

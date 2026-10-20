@@ -7,6 +7,7 @@ PromptConfig three-level fallback, text splitting, and cross-series import.
 import json
 import time
 import uuid
+from pathlib import Path
 import pytest
 from unittest.mock import patch, MagicMock
 
@@ -80,6 +81,61 @@ def test_series_character_design_save_returns_merged_project(pipeline, monkeypat
     assert payload["characters"][0]["id"] == character.id
     assert payload["characters"][0]["source"] == "series"
     assert payload["characters"][0]["character_design"]["design_revisions"][0]["revision"] == 1
+
+
+def test_character_design_save_can_return_only_persisted_design(pipeline, monkeypatch):
+    from src.apps.comic_gen import api
+
+    series = pipeline.create_series("S")
+    character = _make_character("Hero")
+    series.characters.append(character)
+    episode = _make_script(series_id=series.id)
+    pipeline.scripts[episode.id] = episode
+    monkeypatch.setattr(api, "pipeline", pipeline)
+    monkeypatch.setattr(api, "get_project", MagicMock(side_effect=AssertionError("No project/cover rebuild")))
+    response = api.update_asset_attributes(episode.id, api.UpdateAssetAttributesRequest(
+        asset_id=character.id, asset_type="character", response_mode="design",
+        attributes={"character_design": {"identity": {"visual_notes": "Black hair"}, "confirmed": True}},
+    ))
+    payload = json.loads(response.body)
+    persisted = json.loads(Path(pipeline.series_data_file).read_text())
+    assert payload == {"project_id": episode.id, "asset_id": character.id,
+                       "asset_revision": persisted[series.id]["characters"][0]["asset_revision"],
+                       "character_design": persisted[series.id]["characters"][0]["character_design"]}
+    assert "persist;dur=" in response.headers["Server-Timing"]
+
+
+def test_design_response_rejects_other_mutations_before_saving(pipeline, monkeypatch):
+    from src.apps.comic_gen import api
+    from fastapi import HTTPException
+
+    mutation = MagicMock()
+    monkeypatch.setattr(api.pipeline, "update_asset_attributes", mutation)
+    with pytest.raises(HTTPException) as error:
+        api.update_asset_attributes("episode", api.UpdateAssetAttributesRequest(
+            asset_id="hero", asset_type="character", response_mode="design", attributes={"name": "Changed"},
+        ))
+    assert error.value.status_code == 422
+    mutation.assert_not_called()
+
+
+def test_design_save_does_not_report_success_when_persistence_fails(pipeline, monkeypatch):
+    from src.apps.comic_gen import api
+    from fastapi import HTTPException
+
+    series = pipeline.create_series("S")
+    character = _make_character("Hero")
+    series.characters.append(character)
+    episode = _make_script(series_id=series.id)
+    pipeline.scripts[episode.id] = episode
+    monkeypatch.setattr(api, "pipeline", pipeline)
+    monkeypatch.setattr(pipeline, "_save_after_asset_mutation", MagicMock(side_effect=OSError("Disk unavailable")))
+    with pytest.raises(HTTPException) as error:
+        api.update_asset_attributes(episode.id, api.UpdateAssetAttributesRequest(
+            asset_id=character.id, asset_type="character", response_mode="design",
+            attributes={"character_design": {"identity": {"visual_notes": "Black hair"}, "confirmed": True}},
+        ))
+    assert error.value.status_code == 500
 
 
 def test_series_character_description_save_returns_merged_project(pipeline, monkeypatch):

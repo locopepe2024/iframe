@@ -1870,6 +1870,16 @@ export const api = {
         return res.data;
     },
 
+    saveCharacterDesign: async (scriptId: string, assetId: string, design: unknown): Promise<{
+        project_id: string; asset_id: string; asset_revision: number; character_design: Record<string, unknown>;
+    }> => {
+        const res = await axios.post(`${API_URL}/projects/${scriptId}/assets/update_attributes`, {
+            asset_id: assetId, asset_type: "character",
+            attributes: { character_design: design }, response_mode: "design",
+        });
+        return res.data;
+    },
+
     updateSeriesAssetAttributes: async (seriesId: string, assetId: string, assetType: string, attributes: Record<string, unknown>) => {
         const res = await axios.post(`${API_URL}/series/${seriesId}/assets/update_attributes`, {
             asset_id: assetId,

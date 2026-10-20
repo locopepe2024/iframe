@@ -459,6 +459,7 @@ async def enforce_studio_owner_boundary(request: Request, call_next):
     if not protected or request.method == "OPTIONS":
         return await call_next(request)
 
+    identity_started = time.perf_counter()
     try:
         user, should_set_cookie = await asyncio.to_thread(
             _resolve_request_context,
@@ -482,7 +483,17 @@ async def enforce_studio_owner_boundary(request: Request, call_next):
 
     context_token = set_studio_user(user)
     try:
+        handler_started = time.perf_counter()
         response = await call_next(request)
+        if path.startswith("/projects/") and path.endswith("/assets/update_attributes"):
+            identity_ms = (handler_started - identity_started) * 1000
+            handler_ms = (time.perf_counter() - handler_started) * 1000
+            timing = response.headers.get("Server-Timing")
+            response.headers["Server-Timing"] = ", ".join(filter(None, [
+                timing, f"identity;dur={identity_ms:.1f}", f"handler;dur={handler_ms:.1f}",
+            ]))
+            logger.info("Asset save request status=%d identity_ms=%.1f handler_ms=%.1f",
+                        response.status_code, identity_ms, handler_ms)
         if should_set_cookie:
             _set_browser_profile_cookie(response, request, user)
         return response
@@ -855,6 +866,7 @@ class UpdateAssetAttributesRequest(BaseModel):
     asset_id: str
     asset_type: str
     attributes: Dict[str, Any]
+    response_mode: Literal["project", "design"] = "project"
 
 
 @app.get("/health")
@@ -4352,14 +4364,38 @@ def update_asset_image(script_id: str, request: UpdateAssetImageRequest):
 @app.post("/projects/{script_id}/assets/update_attributes")
 def update_asset_attributes(script_id: str, request: UpdateAssetAttributesRequest):
     """Updates arbitrary attributes of an asset."""
+    if request.response_mode == "design" and (
+        request.asset_type != "character" or set(request.attributes) != {"character_design"}
+    ):
+        raise HTTPException(status_code=422, detail="Design response requires only a character design update")
+    started = time.perf_counter()
     try:
-        pipeline.update_asset_attributes(
+        script = pipeline.update_asset_attributes(
             script_id,
             request.asset_id,
             request.asset_type,
             request.attributes
         )
-        return get_project(script_id)
+        persisted = time.perf_counter()
+        if request.response_mode == "design":
+            asset, _ = pipeline._find_asset_with_source(script, request.asset_id, "character")
+            response = signed_response({
+                "project_id": script_id,
+                "asset_id": request.asset_id,
+                "asset_revision": asset.asset_revision,
+                "character_design": asset.character_design,
+            })
+        else:
+            response = get_project(script_id)
+        finished = time.perf_counter()
+        response.headers["Server-Timing"] = (
+            f"persist;dur={(persisted - started) * 1000:.1f}, "
+            f"response;dur={(finished - persisted) * 1000:.1f}"
+        )
+        logger.info("Asset save mode=%s persist_ms=%.1f response_ms=%.1f bytes=%d",
+                    request.response_mode, (persisted - started) * 1000,
+                    (finished - persisted) * 1000, len(response.body))
+        return response
     except InvalidAssetName as e:
         raise HTTPException(status_code=422, detail=str(e))
     except ValueError as e:

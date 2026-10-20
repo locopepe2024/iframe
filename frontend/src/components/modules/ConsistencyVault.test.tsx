@@ -11,6 +11,7 @@ const mocks = vi.hoisted(() => ({
     authenticatedFetch: vi.fn(),
     deleteCharacter: vi.fn(), deleteScene: vi.fn(), deleteProp: vi.fn(),
     updateAssetAttributes: vi.fn(),
+    saveCharacterDesign: vi.fn(),
     updateAssetVariantMetadata: vi.fn(), agentRequest: vi.fn(),
     generateAsset: vi.fn(),
     previewAssetImageSubmission: vi.fn((_id: string, request: any) => Promise.resolve({
@@ -25,9 +26,10 @@ const mocks = vi.hoisted(() => ({
 vi.mock("next-intl", () => ({ useTranslations: () => (key: string) => key }));
 vi.mock("@/lib/api", () => ({ API_URL: "", authenticatedFetch: mocks.authenticatedFetch, agentRequest: mocks.agentRequest, api: mocks, crudApi: mocks }));
 vi.mock("@/store/toastStore", () => ({ toast: { error: mocks.error, warning: vi.fn() } }));
-vi.mock("./CharacterWorkbench", () => ({ default: ({ asset, onRename, onGenerate }: any) =>
+vi.mock("./CharacterWorkbench", () => ({ default: ({ asset, onRename, onGenerate, onUpdateAttributes }: any) =>
     <div role="dialog" aria-label="角色工作台">{asset.name}
         <button type="button" onClick={() => void onRename("新名字")}>保存资产名</button>
+        <button type="button" onClick={() => void onUpdateAttributes({ character_design: { test: "design" } })}>保存设计</button>
         <button type="button" onClick={() => onGenerate("three_view", "Reviewed three view", false, "blur", 1,
             [{ asset_type: "character", asset_id: asset.id, variant_id: "master-1" }], "reference")}>生成三视图</button>
     </div> }));
@@ -66,6 +68,30 @@ beforeEach(() => {
             : Promise.resolve({ prompt: "黄昏参考图，青石板与粮铺门头清晰可见" }));
     vi.spyOn(window, "confirm").mockReturnValue(true);
     vi.spyOn(window, "alert").mockImplementation(() => {});
+});
+
+it("saves only character design and retains current assets without refetching the project", async () => {
+    const character = { id: "hero", name: "Hero", cover_url: "/cover.webp", source: "series" };
+    const project = { id: "episode-1", characters: [character], scenes: [{ id: "scene-1" }], props: [] };
+    useProjectStore.setState({ currentProject: project as any });
+    mocks.getEpisodeVisualContext.mockResolvedValue({ context: null, bindings: [] });
+    let complete: (result: any) => void = () => {};
+    mocks.saveCharacterDesign.mockReturnValue(new Promise(resolve => { complete = resolve; }));
+    render(<ConsistencyVault />);
+    fireEvent.click(screen.getByText("Hero"));
+    fireEvent.click(screen.getByRole("button", { name: "保存设计" }));
+    await waitFor(() => expect(mocks.saveCharacterDesign).toHaveBeenCalledWith("episode-1", "hero", { test: "design" }));
+    // A generation can finish while the save request is in flight.
+    act(() => useProjectStore.setState({ currentProject: { ...project,
+        characters: [{ ...character, full_body_image_url: "/new.png", asset_revision: 4 }],
+    } as any }));
+    await act(async () => complete({ project_id: "episode-1", asset_id: "hero", asset_revision: 3, character_design: { saved: true } }));
+    expect(useProjectStore.getState().currentProject?.characters[0]).toMatchObject({
+        ...character, full_body_image_url: "/new.png", character_design: { saved: true }, asset_revision: 4,
+    });
+    expect(useProjectStore.getState().currentProject?.scenes).toEqual(project.scenes);
+    expect(mocks.getProject).not.toHaveBeenCalled();
+    expect(mocks.updateAssetAttributes).not.toHaveBeenCalled();
 });
 
 it("clears a stale generation overlay when a new character variant is already present", async () => {
