@@ -345,3 +345,28 @@ def test_scene_accepts_optional_focus_and_boundary_coordinates(tmp_path, focus):
         "visual_notes": "Stone street", "prompt_layers": {"camera": {"focus": focus}},
     }})
     assert scene.asset_design["design_draft"]["prompt_layers"]["camera"]["focus"] == focus
+
+
+def test_scene_atmosphere_roundtrip_without_implicit_light_changes(tmp_path):
+    pipeline, scene, _ = make_pipeline(tmp_path)
+    lighting = {"source": "传统油灯照明", "mood": "宁静平和", "air": "稀薄雾气", "color": "暖光", "shadow": "自然接触阴影", "rim": "微弱轮廓光"}
+    pipeline.update_asset_attributes("project", "street", "scene", {"asset_design": {
+        "visual_notes": "Stone street", "prompt_layers": {"lighting": lighting}, "confirmed": True,
+    }})
+    restored = ComicGenPipeline.__new__(ComicGenPipeline)
+    restored.data_file = pipeline.data_file
+    loaded = restored._load_data()["project"].scenes[0]
+    assert loaded.asset_design["design_draft"]["prompt_layers"] == {"lighting": lighting}
+    assert loaded.asset_design["design_revisions"][0]["design"]["prompt_layers"] == {"lighting": lighting}
+
+
+@pytest.mark.parametrize("field", ["mood", "air", "color", "shadow", "rim"])
+@pytest.mark.parametrize("bad_value", [["宁静"], "x" * 501, True])
+def test_scene_atmosphere_validation_before_mutation(tmp_path, field, bad_value):
+    pipeline, scene, _ = make_pipeline(tmp_path)
+    before = scene.model_dump()
+    with pytest.raises(ValueError):
+        pipeline.update_asset_attributes("project", "street", "scene", {"asset_design": {
+            "visual_notes": "Stone street", "prompt_layers": {"lighting": {field: bad_value}},
+        }})
+    assert scene.model_dump() == before

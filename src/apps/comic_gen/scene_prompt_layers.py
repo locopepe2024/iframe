@@ -16,6 +16,11 @@ class SceneLightingLayer(BaseModel):
     quality: str = Field(default="", max_length=500, strict=True)
     fill: str = Field(default="", max_length=500, strict=True)
     contrast: str = Field(default="", max_length=500, strict=True)
+    shadow: str = Field(default="", max_length=500, strict=True)
+    rim: str = Field(default="", max_length=500, strict=True)
+    mood: str = Field(default="", max_length=500, strict=True)
+    air: str = Field(default="", max_length=500, strict=True)
+    color: str = Field(default="", max_length=500, strict=True)
     angles: Optional[SceneLayerAngles] = None
 
     @model_validator(mode="after")

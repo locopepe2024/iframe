@@ -684,6 +684,9 @@ it("applies, saves and restores selected scene layers without rewriting the AI s
     fireEvent.click(screen.getByRole("button", { name: /基础面板 ·/ }));
     for (const title of ["光影", "镜头", "构图"]) fireEvent.click(screen.getByText(title, { selector: "summary" }));
     fireEvent.click(screen.getByRole("button", { name: "月光" }));
+    fireEvent.click(screen.getByRole("button", { name: "宁静" }));
+    fireEvent.click(screen.getByRole("button", { name: "薄雾" }));
+    fireEvent.click(screen.getByRole("button", { name: "冷光" }));
     fireEvent.click(screen.getByRole("button", { name: "长焦" }));
     fireEvent.click(screen.getByRole("button", { name: "深景深" }));
     fireEvent.click(screen.getByRole("button", { name: "前中后景" }));
@@ -704,6 +707,9 @@ it("applies, saves and restores selected scene layers without rewriting the AI s
     await waitFor(() => expect(mocks.success).toHaveBeenCalled());
     const saved = mocks.updateAssetAttributes.mock.calls[0][3].asset_design;
     expect(saved.prompt_layers.lighting.source).toBe("月光");
+    expect(saved.prompt_layers.lighting.mood).toContain("宁静平和");
+    expect(saved.prompt_layers.lighting.air).toContain("稀薄雾气");
+    expect(saved.prompt_layers.lighting.color).toContain("照明偏冷");
     expect(saved.prompt_layers.camera.focal_length).toContain("长焦");
     expect(saved.prompt_layers.camera.focus).toEqual({ target: "门口石狮", x: 30, y: 50, radius: 18 });
     expect(saved.prompt_workspace.design.prompt).toBe(prompt);
@@ -713,6 +719,8 @@ it("applies, saves and restores selected scene layers without rewriting the AI s
     await waitFor(() => expect(screen.queryByRole("tab", { name: "AI 优化" })).not.toBeInTheDocument());
     fireEvent.click(screen.getByText(asset.name));
     fireEvent.click(screen.getByRole("button", { name: /基础面板 ·/ }));
+    fireEvent.click(screen.getByText("光影", { selector: "summary" }));
+    expect(screen.getByRole("button", { name: "宁静" })).toHaveAttribute("aria-pressed", "true");
     fireEvent.click(screen.getByText("镜头", { selector: "summary" }));
     expect(screen.getByRole("textbox", { name: "对焦目标" })).toHaveValue("门口石狮");
     expect(screen.getByRole("slider", { name: "对焦水平位置" })).toHaveValue("30");

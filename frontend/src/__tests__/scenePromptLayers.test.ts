@@ -37,3 +37,21 @@ it("compiles explicit focus targets and image-relative coordinates without imply
     expect(compileScenePromptLayers({ camera: { focus: { target: "远处山门" } } })).toBe("镜头：对焦目标：远处山门");
     expect(compileScenePromptLayers({ camera: { focus: null } })).toBe("");
 });
+
+it("keeps atmosphere, air and light color independent from the source and optical settings", () => {
+    const fields = SCENE_LAYER_FIELDS.lighting;
+    const oilLamp = fields.find(f => f.key === "source")!.options.find(o => o[0] === "油灯")![1];
+    expect(compileScenePromptLayers({ lighting: { source: oilLamp } })).toBe("光影：光源：传统油灯照明");
+    expect(compileScenePromptLayers({ lighting: { mood: "宁静平和", air: "稀薄雾气", color: "暖光" } }))
+        .toBe("光影：氛围：宁静平和；空气介质：稀薄雾气；光色关系：暖光");
+    expect(compileScenePromptLayers({ lighting: { mood: "", air: "", color: "" } })).toBe("");
+    for (const field of fields.filter(f => ["mood", "air", "color"].includes(f.key))) {
+        for (const [, text] of field.options) expect(text).not.toMatch(/磨皮|柔肤|奶油|ARRI|Alexa|焦距|景深|运镜|剪辑/);
+    }
+});
+
+it("adds shadows and rim lighting only when explicitly chosen", () => {
+    expect(compileScenePromptLayers({ lighting: { source: "月光" } })).toBe("光影：光源：月光");
+    expect(compileScenePromptLayers({ lighting: { shadow: "自然接触阴影", rim: "微弱轮廓光" } }))
+        .toBe("光影：阴影：自然接触阴影；轮廓光：微弱轮廓光");
+});

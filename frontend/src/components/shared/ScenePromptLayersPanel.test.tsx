@@ -62,3 +62,21 @@ it("records opt-in image focus coordinates and clears them independently of the 
     fireEvent.change(screen.getByRole("textbox", { name: "对焦目标" }), { target: { value: "" } });
     expect(screen.getByTestId("prompt").textContent).toBe("");
 });
+
+it("selects atmosphere separately and cancels it without resetting the light source", () => {
+    render(<Harness />);
+    open("光影");
+    fireEvent.click(screen.getByRole("button", { name: "油灯" }));
+    expect(screen.getByTestId("prompt")).toHaveTextContent("光源：传统油灯照明");
+    expect(screen.getByTestId("prompt")).not.toHaveTextContent("氛围");
+    fireEvent.click(screen.getByRole("button", { name: "宁静" }));
+    fireEvent.click(screen.getByRole("button", { name: "薄雾" }));
+    fireEvent.click(screen.getByRole("button", { name: "暖光" }));
+    expect(screen.getByTestId("prompt")).toHaveTextContent("氛围：宁静平和");
+    expect(screen.getByTestId("prompt")).toHaveTextContent("空气介质：空气中有稀薄雾气");
+    expect(screen.getByTestId("prompt")).toHaveTextContent("光色关系：照明偏暖");
+    fireEvent.click(screen.getByRole("button", { name: "宁静" }));
+    expect(screen.getByTestId("prompt")).not.toHaveTextContent("氛围：");
+    expect(screen.getByRole("button", { name: "油灯" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("button", { name: "薄雾" })).toHaveAttribute("aria-pressed", "true");
+});
