@@ -234,6 +234,22 @@ def test_full_body_motion_reference_uses_selected_canonical_reference_sheet():
     assert pipeline.video_generator.generate_i2v.call_args.kwargs["image_url"] == "master.png"
 
 
+def test_motion_reference_uses_cover_ahead_of_category_selection():
+    from src.apps.comic_gen.models import ImageAsset, ImageVariant
+    character = Character(id="actor", name="Actor", description="Actor", cover_variant_id="cover",
+        reference_sheet=AssetUnit(selected_image_id="old", image_variants=[ImageVariant(id="old", url="old.png")]),
+        headshot_asset=ImageAsset(selected_id="cover", variants=[ImageVariant(id="cover", url="cover.png")]))
+    script = _script_with_tasks()
+    script.characters = [character]
+    pipeline = ComicGenPipeline.__new__(ComicGenPipeline)
+    pipeline.scripts = {script.id: script}
+    pipeline.video_generator = Mock()
+    pipeline.video_generator.generate_i2v.return_value = {"video_url": "video.mp4"}
+    pipeline._save_data = Mock()
+    pipeline.generate_motion_ref(script.id, character.id, "full_body", prompt="motion")
+    assert pipeline.video_generator.generate_i2v.call_args.kwargs["image_url"] == "cover.png"
+
+
 # ---------------------------------------------------------------------------
 # Orphan recovery
 # ---------------------------------------------------------------------------

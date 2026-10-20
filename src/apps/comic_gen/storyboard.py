@@ -141,6 +141,18 @@ class StoryboardGenerator:
                         if not target_url:
                             raise ValueError(f"Shot character variant {selected_id} is unavailable")
 
+                    # A chosen cover is the default character anchor; shot picks above stay explicit.
+                    if not target_url and char.cover_variant_id:
+                        for container in (char.reference_sheet, char.full_body_asset,
+                                          char.three_view_asset, char.headshot_asset):
+                            variants = (getattr(container, "image_variants", None)
+                                        or getattr(container, "variants", None) or [])
+                            selected_variant = next((item for item in variants if item.id == char.cover_variant_id), None)
+                            if selected_variant:
+                                target_url = image_variant_storage_key(selected_variant)
+                                source = "character_cover"
+                                break
+
                     # The canonical sheet is the current character master.
                     if not target_url and char.reference_sheet and char.reference_sheet.selected_image_id:
                         selected_variant = next((item for item in char.reference_sheet.image_variants

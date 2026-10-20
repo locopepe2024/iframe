@@ -2246,6 +2246,9 @@ class ComicGenPipeline(StudioOwnerMixin):
     @staticmethod
     def _selected_asset_variant_id(asset: Any, asset_type: str) -> Optional[str]:
         if asset_type == "character":
+            cover_id = ComicGenPipeline._explicit_asset_cover_variant_id(asset, asset_type)
+            if cover_id:
+                return cover_id
             selected = getattr(getattr(asset, "reference_sheet", None), "selected_image_id", None)
             if selected:
                 return selected
@@ -5131,7 +5134,8 @@ class ComicGenPipeline(StudioOwnerMixin):
                 result.append({"asset_type": asset_type, "asset_id": asset_id, "variant_id": binding.selected_variant_id, "source": source})
             elif asset is not None:
                 unit = getattr(asset, "reference_sheet", None) if asset_type == "character" else getattr(asset, "image_asset", None)
-                selected = getattr(unit, "selected_image_id", None) if unit else None
+                selected = (self._selected_asset_variant_id(asset, asset_type) if asset_type == "character"
+                            else getattr(unit, "selected_image_id", None) if unit else None)
                 selected = selected or getattr(asset, "cover_variant_id", None)
                 result.append({"asset_type": asset_type, "asset_id": asset_id, "variant_id": selected,
                                "source": "episode_look_baseline" if asset_type != "scene" else "episode_scene_baseline"})
@@ -6676,7 +6680,12 @@ class ComicGenPipeline(StudioOwnerMixin):
             reference_sheet = getattr(target_asset, "reference_sheet", None) if asset_type == "full_body" else None
             reference_variants = getattr(reference_sheet, "image_variants", None) or []
             reference_selected_id = getattr(reference_sheet, "selected_image_id", None)
-            if reference_selected_id and reference_variants:
+            cover_id = self._explicit_asset_cover_variant_id(target_asset, "character")
+            cover_variant = next((item for item in self._asset_image_variants(target_asset, "character")
+                                  if item.id == cover_id), None) if cover_id else None
+            if cover_variant is not None:
+                source_image_url = image_variant_storage_key(cover_variant)
+            elif reference_selected_id and reference_variants:
                 source_img = next((v for v in reference_variants if v.id == reference_selected_id), None)
                 if source_img is None or not image_variant_storage_key(source_img):
                     raise ValueError("Selected reference image is missing; select it again")
@@ -9431,10 +9440,12 @@ class ComicGenPipeline(StudioOwnerMixin):
                         target_asset.image_url = variant.url
                 else:
                     # Legacy fallback: search all assets (for backward compatibility)
-                    variant = self._select_variant_in_asset(target_asset.full_body_asset, variant_id)
-                    if variant:
-                        target_asset.full_body_image_url = variant.url
-                        target_asset.image_url = variant.url
+                    variant = self._select_variant_in_asset(target_asset.reference_sheet, variant_id)
+                    if not variant:
+                        variant = self._select_variant_in_asset(target_asset.full_body_asset, variant_id)
+                        if variant:
+                            target_asset.full_body_image_url = variant.url
+                            target_asset.image_url = variant.url
 
                     if not variant:
                         variant = self._select_variant_in_asset(target_asset.three_view_asset, variant_id)
@@ -9477,6 +9488,9 @@ class ComicGenPipeline(StudioOwnerMixin):
         if asset_type in ("character", "scene", "prop"):
             if variant is None:
                 raise ValueError(f"Variant {variant_id} does not belong to asset {asset_id}")
+            if asset_type == "character":
+                target_asset.cover_variant_id = variant.id
+                target_asset.image_url = variant.url
             commit_asset_revision(target_asset, "user_confirmed")
         self._save_after_asset_mutation(source)
         return script
