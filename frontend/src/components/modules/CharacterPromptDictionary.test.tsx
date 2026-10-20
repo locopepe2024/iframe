@@ -397,7 +397,7 @@ it("fills a male garment slot with a menswear combination", () => {
 it("opens height configuration and defers a height slot without body-build vocabulary", () => {
   getPlatformReferenceLibrary.mockResolvedValueOnce({ resources: [] });
   const { replaceWithText } = setup("身高");
-  fireEvent.click(screen.getByRole("option", { name: /^身高$/ }));
+  fireEvent.click(screen.getByRole("option", { name: /^基础特征$/ }));
   fireEvent.change(screen.getByRole("combobox", { name: "身高" }), { target: { value: "身高约180厘米" } });
   expect(screen.getByRole("textbox", { name: "将插入的完整文字" })).toHaveValue("身高：身高约180厘米。");
   fireEvent.click(screen.getByRole("button", { name: "应用配置" }));
@@ -460,7 +460,7 @@ it('opens footwear directly from quick panels and keeps details inside its form'
   expect(screen.getByRole('combobox', { name: '鞋履装饰' })).toBeInTheDocument();
   expect(screen.queryByRole('listbox')).not.toBeInTheDocument();
   fireEvent.click(screen.getByRole('button', { name: '返回结果' }));
-  expect(screen.getByRole('option', { name: /^身高$/ })).toBeInTheDocument();
+  expect(screen.getByRole('option', { name: /^基础特征$/ })).toBeInTheDocument();
 });
 
 it('keeps dictionary levels free of panels and templates with short summaries', () => {
@@ -482,7 +482,7 @@ it('shows compact module buttons and keeps close beside the tabs', () => {
   const { onClose } = setup('');
   const options = screen.getAllByRole('option');
   expect(options.slice(0, 6).map(option => option.textContent)).toEqual([
-    '古装鞋履', '古装外套', '古装衣裙', '首饰', '配饰', '现代男装',
+    '基础特征', '古装鞋履', '古装外套', '古装衣裙', '首饰', '配饰',
   ]);
   expect(options.every(option => option.children.length === 1)).toBe(true);
   expect(screen.queryByText('选择配置面板，调整后预览并应用。')).not.toBeInTheDocument();
@@ -546,4 +546,18 @@ it("keeps full role templates available independently", () => {
   fireEvent.change(screen.getByRole("combobox", { name: "角色模板类型" }), { target: { value: "design" } });
   expect(screen.getByRole("option", { name: /Prompt 模板 · 写实真人古装/ })).toBeInTheDocument();
   expect(screen.queryByRole("option", { name: /Prompt 模板 · 角色表情/ })).not.toBeInTheDocument();
+});
+
+
+it('configures gender, age and height together while omitting cleared fields', () => {
+  getPlatformReferenceLibrary.mockResolvedValueOnce({ resources: [] });
+  const { replaceWithText } = setup('性别');
+  fireEvent.click(screen.getByRole('option', { name: /^基础特征$/ }));
+  expect(screen.getByRole('textbox', { name: '将插入的完整文字' })).toHaveValue('');
+  fireEvent.change(screen.getByRole('combobox', { name: '性别' }), { target: { value: '女性' } });
+  fireEvent.change(screen.getByRole('combobox', { name: '年龄阶段' }), { target: { value: '婴儿' } });
+  expect(screen.getByRole('textbox', { name: '将插入的完整文字' })).toHaveValue('性别：人物性别为女性。\n年龄：人物年龄阶段为婴儿。');
+  fireEvent.change(screen.getByRole('combobox', { name: '性别' }), { target: { value: '' } });
+  fireEvent.click(screen.getByRole('button', { name: '应用配置' }));
+  expect(replaceWithText).toHaveBeenCalledWith('年龄：人物年龄阶段为婴儿。');
 });

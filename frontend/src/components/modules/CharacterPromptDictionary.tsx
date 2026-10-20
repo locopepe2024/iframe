@@ -27,6 +27,7 @@ const DOMAINS: Record<string, string> = {
 };
 const DISCOVERY_SECTIONS = ["基础面板", "词典", "Prompt 模板"] as const;
 const QUICK_PANEL_LABELS: Record<string, string> = {
+  "dictionary.panel.basic": "基础特征",
   "dictionary.panel.classical-footwear": "古装鞋履",
   "dictionary.panel.classical-robe": "古装外套",
   "dictionary.panel.classical-skirt": "古装衣裙",
@@ -36,7 +37,6 @@ const QUICK_PANEL_LABELS: Record<string, string> = {
   "dictionary.panel.modern-clothing": "现代女装",
   "dictionary.panel.face": "面容",
   "dictionary.panel.hair": "发型",
-  "dictionary.panel.height": "身高",
   "dictionary.panel.posture": "体态",
   "dictionary.panel.skin": "肤色与肤质",
   "dictionary.panel.condition": "新旧",

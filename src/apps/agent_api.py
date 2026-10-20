@@ -498,7 +498,7 @@ def _character_design_visual_notes(section: dict) -> str:
     return "；".join(details)
 
 
-_CHARACTER_IDENTITY_FEATURES = ("face", "face_shape", "eyebrows", "eyes", "eye_detail", "nose", "lips", "makeup", "hair", "skin", "skin_tone", "skin_texture", "height", "build", "recognition_marks")
+_CHARACTER_IDENTITY_FEATURES = ("gender", "age", "face", "face_shape", "eyebrows", "eyes", "eye_detail", "nose", "lips", "makeup", "hair", "skin", "skin_tone", "skin_texture", "height", "build", "recognition_marks")
 _CHARACTER_LOOK_FEATURES = ("clothing", "palette", "footwear", "jewelry", "decoration", "condition", "accessories", "weapon")
 
 
@@ -577,7 +577,7 @@ def _compile_character_design_draft_input(body: CharacterDesignRequest, ctx: Use
     system = (identity_skill["instructions"] + "\n\n" + route_skill["instructions"]
               + "\n\n用户主动点击了 AI 完善角色设计；你的任务是替用户完成可直接评审和用于出图的创意设计，不是列出待办清单。"
               + "只返回 JSON 对象：identity.visual_notes、identity.features、identity.basis、look.visual_notes、look.features、look.basis、review_items（对象数组，每项含 question 和 suggestion，可选 suggested_age_stage 或 suggested_route）。"
-              + "identity.features 仅含 face、face_shape、eyebrows、eyes、eye_detail、nose、lips、makeup、hair、skin、skin_tone、skin_texture、height、build、recognition_marks；look.features 仅含 clothing、palette、footwear、jewelry、decoration、condition、accessories、weapon。脸型、眉形、眼型、眼周、肤色、肤质必须分别放入对应字段，不合并到 face 或 skin；face/skin 仅用于无法分类的补充。每项是简短、可观察的视觉值，无依据可留空，不得把性格或场景光影填入。visual_notes 是兼容旧工作台的摘要，不应增加 features 中没有的新事实。"
+              + "identity.features 仅含 gender、age、face、face_shape、eyebrows、eyes、eye_detail、nose、lips、makeup、hair、skin、skin_tone、skin_texture、height、build、recognition_marks；look.features 仅含 clothing、palette、footwear、jewelry、decoration、condition、accessories、weapon。性别、年龄、脸型、眉形、眼型、眼周、肤色、肤质必须分别放入对应字段，不合并到 face 或 skin；face/skin 仅用于无法分类的补充。每项是简短、可观察的视觉值，无依据可留空，不得把性格或场景光影填入。visual_notes 是兼容旧工作台的摘要，不应增加 features 中没有的新事实。"
               + "一次完成当前草稿的表达整理与缺失细节提案，不要求用户再进行一次润色。保留用户已明确选择或填写的身高、肤色、服装件数、穿着关系、材质和配饰，不得为了丰富细节擅自改写。height 单独描述身高，不混入体型或姿态；未给出数值时可以提出身高感，不得由单张参考图推断精确厘米数。"
               + '严格格式示例（只说明形状，不是默认设计）：{"identity":{"visual_notes":"面容与体态摘要","features":{"face":"具体面容","height":"用户指定的身高描述"},"basis":["user_specified"]},"look":{"visual_notes":"穿搭摘要","features":{"clothing":"具体穿着关系"},"basis":["user_specified"]},"review_items": []}。'
               + "identity 和 look 必须为对象，features 必须为对象，其值必须为字符串；每个 features 值最多 500 个字符，不要使用对象或数组包装。未指定项可省略或用空字符串，不得将缺失字段写成 null。visual_notes 必须为字符串，review_items 必须为数组，无冲突时返回空数组 []。不要输出 Markdown 或 JSON 之外的解释。"

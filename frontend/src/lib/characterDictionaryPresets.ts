@@ -37,7 +37,7 @@ const colors = ["米白色", "月白色", "浅灰色", "深灰色", "靛蓝色",
 const materials = ["哑光棉麻", "低光泽丝织", "细密素布"];
 const shoes = ["黑色素面布靴", "深棕色素面皮靴", "黑色平底布鞋"];
 const panel = (id: string, title: string, text: string, categories: string[], search: string, defaults?: Record<string, string>): CharacterDictionaryPreset => {
-  const labels: Record<string, string> = { "modern-clothing": "服装", height: "身高", skin: "皮肤", face: "面容", hair: "发型", posture: "姿态与动作", condition: "新旧", expression: "表情" };
+  const labels: Record<string, string> = { "modern-clothing": "服装", gender: "性别", age: "年龄", height: "身高", skin: "皮肤", face: "面容", hair: "发型", posture: "姿态与动作", condition: "新旧", expression: "表情" };
   return sectionedDictionaryPreset({
     id: `dictionary.panel.${id}`, title, categories, defaults, type: "配置面板", domain: "局部配置", source,
     search: `${title} ${search}`,
@@ -51,7 +51,15 @@ const configurationPanels: CharacterDictionaryPreset[] = [
   MODERN_MALE_PANEL,
   panel("modern-clothing", "现代服装搭配 · 女装", "穿着[女装款式]，颜色为[颜色]，面料为[面料]，版型为[版型]，搭配要求为[搭配单品]，衣物状态为[衣物状态]。衣片连接清楚，保留自然褶皱。", ["clothing-panel"], "服装 现代 女装"),
   panel("face", "面容选择面板", "脸型为[脸型]，眼型为[眼型]，眉形为[眉形]，眼周细节为[眼周纹理]，肤色为[肤色]，肤质为[肤质]，妆容为[妆容]。", ["face-overview"], "面容 面部 五官 眼角纹 眼袋 肤色 肤质"),
-  panel("height", "身高选择面板", "[身高]。", ["height"], "身高 高矮 厘米 height stature"),
+  sectionedDictionaryPreset({
+    id: "dictionary.panel.basic", title: "基础特征", type: "配置面板", categories: ["basic-traits", "gender", "age-stage", "height"], domain: "身份", source,
+    search: "基础特征 性别 年龄 年纪 身高", optionalFields: ["性别", "年龄阶段", "身高"],
+    sections: [
+      { label: "性别", parts: ["[性别]。"] },
+      { label: "年龄", parts: ["[年龄阶段]。"] },
+      { label: "身高", parts: ["[身高]。"] },
+    ],
+  }),
   panel("skin", "肤色与肤质选择面板", "肤色为[肤色]，肤质为[肤质]。", ["skin-tone", "skin"], "肤色 肤质 皮肤 skin tone complexion"),
   panel("hair", "发型选择面板", "发型为[发型]，发束结构和固定关系自然。", ["hair"], "发型 头发"),
   panel("posture", "体态选择面板", "人物体态：[体态]。", ["posture"], "体态 姿态 站姿"),
@@ -60,7 +68,7 @@ const configurationPanels: CharacterDictionaryPreset[] = [
 ];
 
 export function configurationQueryCategory(query: string): string | null {
-  const categories: Record<string, string> = { "服装": "clothing", "鞋履": "footwear", "鞋靴": "footwear", "鞋子": "footwear", "靴子": "footwear", "面容": "face", "面部": "face", "发型": "look", "首饰": "jewelry", "饰品": "jewelry", "装饰": "decoration", "男装": "modern-male-garment", "现代男装": "modern-male-garment", "体态": "posture", "身高": "height", "肤色": "skin-tone", "肤质": "skin", "皮肤": "skin-tone", "新旧": "condition", "使用状态": "condition", "表情": "expression", "情绪": "expression" };
+  const categories: Record<string, string> = { "服装": "clothing", "鞋履": "footwear", "鞋靴": "footwear", "鞋子": "footwear", "靴子": "footwear", "面容": "face", "面部": "face", "发型": "look", "首饰": "jewelry", "饰品": "jewelry", "装饰": "decoration", "男装": "modern-male-garment", "现代男装": "modern-male-garment", "体态": "posture", "基础特征": "basic-traits", "性别": "gender", "年龄": "age-stage", "年纪": "age-stage", "年龄阶段": "age-stage", "身高": "height", "肤色": "skin-tone", "肤质": "skin", "皮肤": "skin-tone", "新旧": "condition", "使用状态": "condition", "表情": "expression", "情绪": "expression" };
   return categories[query.trim()] || null;
 }
 
@@ -184,6 +192,12 @@ export const CHARACTER_DICTIONARY_PRESETS: CharacterDictionaryPreset[] = [
   ...CLASSICAL_CHARACTER_TERMS,
   ...CLASSICAL_FOOTWEAR_TERMS,
   ...CLASSICAL_CHARACTER_TEMPLATES,
+  ...["男性", "女性"].map((title, index) => ({
+    ...term(`gender.${index}`, title, `人物性别为${title}。`, "gender", "身份"), slotValue: `人物性别为${title}`,
+  })),
+  ...["婴儿", "幼儿", "儿童", "少年", "青年", "成年", "中年", "老年"].map((title, index) => ({
+    ...term(`age-stage.${index}`, title, `人物年龄阶段为${title}。`, "age-stage", "身份"), slotValue: `人物年龄阶段为${title}`,
+  })),
   ...CHARACTER_EXPRESSION_TERMS,
   ...CHARACTER_EXPRESSION_DETAIL_TERMS,
   ...CHARACTER_EXPRESSION_PROMPTS,
@@ -225,14 +239,14 @@ export const CHARACTER_DICTIONARY_PRESETS: CharacterDictionaryPreset[] = [
 /** Preserve exact panel values alongside prose instead of parsing the rendered sentence. */
 export function dictionaryStructuredFields(preset: CharacterDictionaryPreset, values: Record<string, string>) {
   const keys: Record<string, ["identity" | "look", string]> = {
-    '脸型': ['identity', 'face_shape'], '眉形': ['identity', 'eyebrows'], '眼型': ['identity', 'eyes'],
+    '性别': ['identity', 'gender'], '年龄阶段': ['identity', 'age'], '脸型': ['identity', 'face_shape'], '眉形': ['identity', 'eyebrows'], '眼型': ['identity', 'eyes'],
     '眼周纹理': ['identity', 'eye_detail'], '肤色': ['identity', 'skin_tone'], '肤质': ['identity', 'skin_texture'],
     '妆容': ['identity', 'makeup'], '发型': ['identity', 'hair'], '身高': ['identity', 'height'],
     '体态': ['identity', 'build'], '衣物状态': ['look', 'condition'],
   };
   const result: { identity: Record<string, string>; look: Record<string, string>; constraints?: CharacterConstraints } = { identity: {}, look: {} };
   if (preset.type !== "配置面板") return result;
-  if (["face", "skin", "hair", "height", "posture"].some(id => preset.id === `dictionary.panel.${id}`)) {
+  if (["basic", "face", "skin", "hair", "height", "posture"].some(id => preset.id === `dictionary.panel.${id}`)) {
     for (const field of dictionaryPresetFields(preset, values)) {
       const target = keys[field.key];
       const selected = values[field.key] !== undefined && field.options.includes(values[field.key]) ? values[field.key] : field.value;

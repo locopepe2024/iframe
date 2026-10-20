@@ -4,7 +4,7 @@ export const CHARACTER_DICTIONARY_GROUPS = [
     ["lips", "唇形"], ["eye-detail", "眼周细节"], ["marks", "识别标记"], ["face-overview", "面部综合"],
     ["makeup", "妆容"],
   ] },
-  { id: "body", label: "身体", children: [["height", "身高"], ["build", "体型与比例"], ["posture", "体态"], ["skin-tone", "肤色"], ["skin", "肤质"]] },
+  { id: "body", label: "身体", children: [["gender", "性别"], ["age-stage", "年龄阶段"], ["height", "身高"], ["build", "体型与比例"], ["posture", "体态"], ["skin-tone", "肤色"], ["skin", "肤质"]] },
   { id: "templates", label: "Prompt 模板", children: [["classical-template", "古装模板"], ["modern-template", "现代模板"]] },
   { id: "style", label: "表现风格", children: [["render", "写实与绘画风格"], ["texture", "光影与质感"]] },
   { id: "setting", label: "时代与题材", children: [["era", "时代背景"], ["genre", "题材类型"]] },
@@ -77,6 +77,8 @@ export function dictionarySlotCategory(label: string | undefined): string | null
   if (footwearFields[label]) return footwearFields[label];
   if (/古装鞋履/.test(label)) return "classical-shoes";
   if (/角色定位|身份/.test(label)) return "role";
+  if (/性别/.test(label)) return "gender";
+  if (/年龄|年纪/.test(label)) return "age-stage";
   if (/身高/.test(label)) return "height";
   if (/肤色/.test(label)) return "skin-tone";
   if (/肤质|皮肤纹理/.test(label)) return "skin";

@@ -169,10 +169,10 @@ it("separates modern men's garment slots and renders optional outerwear without 
 
 it("routes height independently from build, posture and skin with no forced default", () => {
   expect(dictionarySlotCategory("身高")).toBe("height");
-  const panel = CHARACTER_DICTIONARY_PRESETS.find((entry) => entry.id === "dictionary.panel.height")!;
+  const panel = CHARACTER_DICTIONARY_PRESETS.find((entry) => entry.id === "dictionary.panel.basic")!;
   expect(renderDictionaryPreset(panel)).toBe("");
   expect(renderDictionaryPreset(panel, { "身高": "身高约180厘米" })).toBe("身高：身高约180厘米。");
-  expect(dictionaryPresetFields(panel)[0].options).not.toContain("自然站立");
+  expect(dictionaryPresetFields(panel).find(field => field.key === "身高")!.options).not.toContain("自然站立");
 });
 
 it("keeps garment wear and folds out of material slots", () => {
@@ -221,4 +221,28 @@ it('projects clothing panels into authored sections and explicit layer constrain
   expect(result.constraints?.negative_prompt).toContain('未指定的中衣、披风、护甲或装饰性叠领');
   const modern = CHARACTER_DICTIONARY_PRESETS.find(entry => entry.id === 'dictionary.panel.modern-male-clothing')!;
   expect(dictionaryStructuredFields(modern, {}).constraints).toBeUndefined();
+});
+
+it('offers human age stages without implicit age, skin or wardrobe defaults', async () => {
+  const { dictionaryStructuredFields, dictionaryConfiguration } = await import('@/lib/characterDictionaryPresets');
+  const preset = CHARACTER_DICTIONARY_PRESETS.find(p => p.id === 'dictionary.panel.basic')!;
+  expect(renderDictionaryPreset(preset)).toBe('');
+  expect(dictionaryPresetFields(preset).find(f => f.key === '年龄阶段')!.options).toEqual(['', '婴儿', '幼儿', '儿童', '少年', '青年', '成年', '中年', '老年', '[年龄阶段]']);
+  for (const stage of ['婴儿', '儿童', '中年', '老年']) {
+    const values = { 年龄阶段: stage };
+    expect(dictionaryStructuredFields(preset, values)).toEqual({ identity: { age: `人物年龄阶段为${stage}` }, look: {} });
+    expect(renderDictionaryPreset(preset, values)).toBe(`年龄：人物年龄阶段为${stage}。`);
+    expect(dictionaryConfiguration(preset, values).selections).toEqual(values);
+  }
+  for (const label of ['年龄', '年龄阶段', '年纪']) expect(dictionarySlotCategory(label)).toBe('age-stage');
+});
+
+it('keeps gender independent of age, appearance and wardrobe', async () => {
+  const { dictionaryStructuredFields } = await import('@/lib/characterDictionaryPresets');
+  const preset = CHARACTER_DICTIONARY_PRESETS.find(p => p.id === 'dictionary.panel.basic')!;
+  expect(renderDictionaryPreset(preset)).toBe('');
+  expect(dictionaryPresetFields(preset).find(f => f.key === '性别')!.options).toEqual(['', '男性', '女性', '[性别]']);
+  expect(dictionaryStructuredFields(preset, { 性别: '女性' })).toEqual({ identity: { gender: '人物性别为女性' }, look: {} });
+  expect(renderDictionaryPreset(preset, { 性别: '男性' })).toBe('性别：人物性别为男性。');
+  expect(dictionarySlotCategory('性别')).toBe('gender');
 });

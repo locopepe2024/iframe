@@ -128,14 +128,14 @@ function confirmedDesignContent(design: DesignDraft | undefined): string {
             characterStructuredText(identity, {}) || String(design?.identity?.visual_notes || ""),
             characterStructuredText({}, look) || String(design?.look?.visual_notes || ""),
         ].filter(Boolean).join("\n");
-        if (structured) return [design?.supplemental_prompt || "", structured, ...answers, ...designScopeDescription(design?.route, design?.age_stage), design?.style_notes || ""].filter(Boolean).join("\n");
+        if (structured) return [design?.supplemental_prompt || "", structured, ...answers, ...designScopeDescription(design?.route, design?.identity?.features?.age?.trim() ? undefined : design?.age_stage), design?.style_notes || ""].filter(Boolean).join("\n");
     }
     return designPromptDescription(
         characterSectionText(normalizeCharacterFeatures(design?.identity?.features, IDENTITY_FIELDS.map(([key]) => key)),
             IDENTITY_FIELDS.map(([key]) => key), design?.identity?.visual_notes, design?.identity?.editor_mode),
         characterSectionText(normalizeCharacterFeatures(design?.look?.features, LOOK_FIELDS.map(([key]) => key)),
             LOOK_FIELDS.map(([key]) => key), design?.look?.visual_notes, design?.look?.editor_mode),
-        [...answers, ...designScopeDescription(design?.route, design?.age_stage), design?.style_notes || ""],
+        [...answers, ...designScopeDescription(design?.route, design?.identity?.features?.age?.trim() ? undefined : design?.age_stage), design?.style_notes || ""],
     );
 }
 
@@ -674,7 +674,7 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
     const currentDesignDescription = [designResult ?? (designInput || designPromptDescription(
         projectedIdentity,
         projectedLook,
-        [...Object.values(designFieldAnswers), ...designScopeDescription(designRoute, designAgeStage), styleNotes],
+        [...Object.values(designFieldAnswers), ...designScopeDescription(designRoute, identityFeatures.age?.trim() ? undefined : designAgeStage), styleNotes],
     )), designConstraintText].filter(Boolean).join("\n");
 
     const [designTab, setDesignTab] = useState<"design" | "ai">("design");

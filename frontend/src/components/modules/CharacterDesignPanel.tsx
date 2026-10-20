@@ -49,10 +49,10 @@ export default function CharacterDesignPanel({ description, details, onDetailsCh
         </div>
         <div className="min-h-0 flex-1 space-y-3 overflow-y-auto">
         <div aria-label="结构化角色设计" className="space-y-3">
-            {([['identity', '面容与体态', IDENTITY_FIELDS, identityFields], ['look', '服装与配饰', LOOK_FIELDS, lookFields]] as const).map(([section, title, fields, values]) =>
-                <fieldset key={section} disabled={saving || busy} className="min-w-0 rounded border border-glass-border p-3">
+            {([['identity', '基础特征', IDENTITY_FIELDS.filter(([key]) => ['gender', 'age', 'height'].includes(key)), identityFields], ['identity', '面容与体态', IDENTITY_FIELDS.filter(([key]) => !['gender', 'age', 'height'].includes(key)), identityFields], ['look', '服装与配饰', LOOK_FIELDS, lookFields]] as const).map(([section, title, fields, values]) =>
+                <fieldset key={title} disabled={saving || busy} className="min-w-0 rounded border border-glass-border p-3">
                     <legend className="px-1 text-xs font-medium">{title}</legend>
-                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                    <div className={`grid grid-cols-1 gap-3 ${title === "基础特征" ? "sm:grid-cols-3" : "sm:grid-cols-2"}`}>
                         {fields.map(([key, label]) => <label key={key} className="min-w-0 text-xs text-text-secondary">
                             {label}
                             <textarea aria-label={`设计字段 · ${label}`} rows={2} maxLength={500}

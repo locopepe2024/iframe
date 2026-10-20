@@ -1168,3 +1168,28 @@ it('keeps invalid reference requests editable in review and prevents submitting 
     fireEvent.click(screen.getByRole('button', { name: 'Text to image' }));
     await waitFor(() => expect(screen.getByRole('button', { name: '确认并生成' })).toBeEnabled());
 });
+
+it('saves human gender and dictionary age and restores them in design and generation', async () => {
+    const { onUpdateAttributes } = mountSimpleDesign();
+    act(() => designDetailsEditor().chain().selectAll().insertContent({ type: 'text', text: '素色上衣。 /年龄' }).run());
+    fireEvent.click(await screen.findByRole('option', { name: /^基础特征$/ }));
+    fireEvent.change(screen.getByRole('combobox', { name: '年龄阶段' }), { target: { value: '老年' } });
+    fireEvent.click(screen.getByRole('button', { name: '应用配置' }));
+    fireEvent.click(screen.getByRole('button', { name: '设计面板' }));
+    expect(screen.getByRole('textbox', { name: '设计字段 · 年龄' })).toHaveValue('人物年龄阶段为老年');
+    fireEvent.change(screen.getByRole('textbox', { name: '设计字段 · 性别' }), { target: { value: '女性' } });
+    fireEvent.change(screen.getByRole('textbox', { name: '设计字段 · 年龄' }), { target: { value: '约72岁' } });
+    fireEvent.click(screen.getByRole('button', { name: '保存设计' }));
+    await waitFor(() => expect(onUpdateAttributes).toHaveBeenCalled());
+    const design = onUpdateAttributes.mock.calls.at(-1)![0].character_design;
+    expect(design.identity.features.age).toBe('约72岁');
+    expect(design.identity.features.gender).toBe('女性');
+    openImagePrompt();
+    expect(imagePromptInput()).toHaveTextContent('年龄：约72岁');
+    expect(imagePromptInput()).toHaveTextContent('性别：女性');
+    cleanup();
+    mountSimpleDesign({ character_design: { design_draft: design } });
+    fireEvent.click(screen.getByRole('button', { name: '设计面板' }));
+    expect(screen.getByRole('textbox', { name: '设计字段 · 年龄' })).toHaveValue('约72岁');
+    expect(screen.getByRole('textbox', { name: '设计字段 · 性别' })).toHaveValue('女性');
+});

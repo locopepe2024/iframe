@@ -741,13 +741,15 @@ def test_character_design_result_restores_realism_guard(ctx, monkeypatch):
 def test_structured_panel_choices_override_ai_proposals(ctx, monkeypatch):
     monkeypatch.setattr(agent, 'validate_model', lambda *_: None)
     monkeypatch.setattr(agent, 'complete', lambda *_: json.dumps({
-        'identity': {'visual_notes': '模型面容', 'features': {'eyebrows': '浓眉', 'skin_texture': '光滑皮肤', 'hair': '黑色长发'}},
+        'identity': {'visual_notes': '模型面容', 'features': {'gender': '男性', 'age': '青年', 'eyebrows': '浓眉', 'skin_texture': '光滑皮肤', 'hair': '黑色长发'}},
         'look': {'visual_notes': '服装', 'features': {'footwear': '皮靴'}}, 'review_items': [],
     }))
     body = agent.CharacterDesignRequest(model='qwen', character_name='苏砚', profile='少年',
-        structured_identity={'eyebrows': '柳叶眉', 'skin_texture': '面颊略干，保留干燥纹理'},
+        structured_identity={'gender': '女性', 'age': '约72岁', 'eyebrows': '柳叶眉', 'skin_texture': '面颊略干，保留干燥纹理'},
         structured_look={'footwear': '素面布靴'})
     result = run_reviewed_character_draft(body, ctx)
+    assert result['identity']['features']['gender'] == '女性'
+    assert result['identity']['features']['age'] == '约72岁'
     assert result['identity']['features']['eyebrows'] == '柳叶眉'
     assert result['identity']['features']['skin_texture'] == '面颊略干，保留干燥纹理'
     assert result['identity']['features']['hair'] == '黑色长发'
