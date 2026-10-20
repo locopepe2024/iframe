@@ -86,3 +86,21 @@ it("does not replace a stale placeholder after the template has been removed", (
   act(() => stale.replaceWithText("黑色"));
   expect(editor.getText()).toBe("");
 });
+
+it('opens the toolbar chooser without changing the draft and applies only on confirmation', () => {
+  const onChange = vi.fn();
+  const suggestion: { current: PromptSlashSuggestion | null } = { current: null };
+  const props = { value: '原有角色细节', placeholder: 'Prompt', candidates: [], onChange,
+    onSlashChange: (next: PromptSlashSuggestion | null) => { suggestion.current = next; } };
+  const view = render(<ReferencePromptEditor {...props} />);
+  const editor = (view.getByRole('textbox') as any).editor;
+  act(() => editor.commands.setTextSelection('原有'.length + 1));
+  onChange.mockClear();
+  view.rerender(<ReferencePromptEditor {...props} openSlashRequest={1} />);
+  expect(editor.getText()).toBe('原有角色细节');
+  expect(onChange).not.toHaveBeenCalled();
+  expect(suggestion.current?.query).toBe('');
+  act(() => { suggestion.current!.replaceWithText('新增细节'); });
+  expect(editor.getText()).toBe('原有新增细节角色细节');
+  expect(onChange).toHaveBeenCalledOnce();
+});

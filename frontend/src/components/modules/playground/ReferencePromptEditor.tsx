@@ -261,8 +261,21 @@ export default function ReferencePromptEditor({ value, labels = EMPTY_LABELS, ca
   useEffect(() => {
     if (!editor || !openSlashRequest || !editable || lastSlashRequest.current === openSlashRequest) return;
     lastSlashRequest.current = openSlashRequest;
-    if (!slashSuggestion(editor)) editor.chain().focus().insertContent({ type: 'text', text: ' /' }).run();
-    callbacks.current.onSlashChange?.(slashSuggestion(editor));
+    const existing = slashSuggestion(editor);
+    if (existing) { callbacks.current.onSlashChange?.(existing); return; }
+    // Opening a chooser must not edit the draft or clear its structured fields.
+    const { from, to } = editor.state.selection;
+    const sourceDocument = editor.state.doc;
+    callbacks.current.onSlashChange?.({
+      query: '', contextKey: `panel:${openSlashRequest}:${from}:${to}`,
+      remainingText: sourceDocument.textBetween(0, from, '\n') + sourceDocument.textBetween(to, sourceDocument.content.size, '\n'),
+      replaceWithText: (text) => {
+        if (!editor.state.doc.eq(sourceDocument)) return editor.getText({ blockSeparator: '\n' });
+        editor.view.dispatch(closeHistory(editor.state.tr));
+        editor.chain().focus().insertContentAt({ from, to }, text ? { type: 'text', text } : []).run();
+        return editor.getText({ blockSeparator: '\n' });
+      },
+    });
   }, [editor, openSlashRequest, editable]);
   useEffect(() => {
     if (!editor) return;
