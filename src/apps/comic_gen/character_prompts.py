@@ -37,10 +37,9 @@ def build_character_image_prompt(
         return _sentence(
             "严格保持参考图中的角色外观、脸型、发型、肤色和服装" if preserve_reference else "",
             f"全身角色设计：{character_name}",
-            "概念设计",
             character_description,
             "站立姿势，中性表情，正面看向镜头",
-            "纯白背景，主体独立，无其他物体和场景，背景简洁，高质量，杰作级细节",
+            "纯白背景，主体独立，无其他物体和场景，背景简洁",
         )
 
     if generation_type == "three_view":
@@ -50,7 +49,7 @@ def build_character_image_prompt(
             character_description,
             "三视图角色设计：正面、侧面和背面",
             "全身站立，中性表情，所有视图保持服装与细节一致",
-            "简洁白色背景，线条清晰，摄影棚光线，高质量",
+            "简洁白色背景，所有视图细节清晰",
         )
 
     if generation_type == "headshot":
@@ -59,7 +58,6 @@ def build_character_image_prompt(
             f"角色{character_name}的近景肖像",
             character_description,
             "聚焦面部和肩部，刻画清晰的面部细节，中性表情，正面看向镜头",
-            "高质量，杰作级细节",
         )
 
     raise ValueError(f"Unsupported character generation type: {generation_type}")
