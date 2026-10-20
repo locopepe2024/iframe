@@ -1285,3 +1285,24 @@ it('saves human gender and dictionary age and restores them in design and genera
     expect(screen.getByRole('textbox', { name: '设计字段 · 年龄' })).toHaveValue('约72岁');
     expect(screen.getByRole('textbox', { name: '设计字段 · 性别' })).toHaveValue('女性');
 });
+
+it('exposes full-body reference controls before generation and carries the selected reference into submission', async () => {
+    apiMocks.getAssetReferenceIndex.mockReset();
+    apiMocks.getAssetReferenceIndex.mockResolvedValue({ schema_version: 1, project_id: 'project-1', assets: [{
+        asset_type: 'prop', asset_id: 'watch-1', name: 'Pocket watch', source_scope: 'global',
+        variants: [{ id: 'watch-front', url: '/files/watch.png' }],
+    }] });
+    const { onGenerate } = mountSimpleDesign();
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Text to image' })).toBeVisible());
+    fireEvent.click(screen.getByRole('button', { name: 'Reference image' }));
+    expect(screen.getByRole('button', { name: 'Reference image' })).toHaveAttribute('aria-pressed', 'true');
+    fireEvent.click(screen.getByRole('button', { name: '选择参考素材' }));
+    fireEvent.click(await screen.findByRole('option', { name: /Pocket watch/ }));
+    fireEvent.click(screen.getByTestId('variant-generate'));
+    const confirm = await screen.findByRole('button', { name: '确认并生成' });
+    await waitFor(() => expect(confirm).toBeEnabled());
+    expect(screen.getAllByRole('button', { name: 'Reference image' })).toHaveLength(1);
+    fireEvent.click(confirm);
+    await waitFor(() => expect(onGenerate).toHaveBeenCalledWith('full_body', expect.any(String), false,
+        expect.any(String), 1, [{ asset_type: 'prop', asset_id: 'watch-1', variant_id: 'watch-front' }], 'reference', 'reviewed'));
+});

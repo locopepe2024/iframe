@@ -1671,9 +1671,9 @@ export function WorkbenchPanel({
             .some((value) => value!.toLocaleLowerCase().includes(mentionQuery)),
     );
 
-    const imageEditor = <div>
+    const imageReferenceControls = <>
                 <div className="p-2 border-b border-border-subtle flex justify-between items-center bg-surface">
-                    <span className="text-xs font-bold text-text-muted uppercase px-2">Prompt</span>
+                    <span className="text-xs font-bold text-text-muted uppercase px-2">{designEditor && !reviewEditorHost ? "生成方式" : "Prompt"}</span>
                     <div className="flex items-center gap-1 rounded-md border border-glass-border bg-black/20 p-1" role="group" aria-label={`Image generation mode: ${title}`}>
                         {(["text", "reference"] as const).map((generationMode) => (
                             <button
@@ -1681,7 +1681,7 @@ export function WorkbenchPanel({
                                 type="button"
                                 aria-pressed={imageGenerationMode === generationMode}
                                 onClick={(event) => { event.stopPropagation(); onImageGenerationModeChange?.(generationMode); }}
-                                className={`rounded px-2 py-1 text-[0.625rem] ${imageGenerationMode === generationMode ? "bg-primary/15 text-primary" : "text-text-muted hover:text-foreground"}`}
+                                className={`min-h-11 rounded px-2 py-1 text-xs ${imageGenerationMode === generationMode ? "bg-primary/15 text-primary" : "text-text-muted hover:text-foreground"}`}
                             >
                                 {generationMode === "text" ? "Text to image" : "Reference image"}
                             </button>
@@ -1701,6 +1701,10 @@ export function WorkbenchPanel({
                         onOpen={onRefreshReferences}
                     />
                 </div>}
+    </>;
+
+    const imageEditor = <div>
+                {imageReferenceControls}
                 {!isVideo && !designEditor && <div className="px-4 pt-2">
                     <div className="flex flex-wrap items-center gap-2">
                         <button type="button" disabled={isLocked} onMouseDown={event => event.preventDefault()} onClick={() => { setOpenSlashRequest((value) => value + 1); }}
@@ -2010,6 +2014,7 @@ export function WorkbenchPanel({
 
             {/* Task-specific generation inputs sit beside the image on wide screens. */}
             <div className="min-h-[180px] max-h-[42%] shrink-0 border-t border-glass-border flex flex-col overflow-y-auto bg-surface lg:max-h-none lg:min-h-0 lg:w-[min(34%,440px)] lg:border-r lg:border-t-0">
+                {designEditor && !reviewEditorHost && imageReferenceControls}
                 {designEditor}
                 {designEditor ? reviewEditorHost && createPortal(imageEditor, reviewEditorHost) : imageEditor}
 
