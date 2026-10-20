@@ -2687,6 +2687,8 @@ class ComicGenPipeline(StudioOwnerMixin):
             design = attributes["character_design"]
             if not isinstance(design, dict):
                 raise ValueError("Character design must be an object")
+            if "active_design_source" in design and design["active_design_source"] not in ("panel", "ai"):
+                raise ValueError("Character active design source is invalid")
             # Validate before mutating either draft or confirmed revisions.
             if "constraints" in design:
                 design = {**design, "constraints": CharacterConstraints.model_validate(design["constraints"]).model_dump()}

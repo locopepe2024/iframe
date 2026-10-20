@@ -24,7 +24,7 @@ export default function CharacterDesignPanel({ description, details, onDetailsCh
     models: ChatModel[]; model: string; onModelChange: (value: string) => void;
     busy: boolean; saving: boolean; canSave: boolean; canReedit: boolean; error: string; status: string;
     tab: "design" | "ai"; onTabChange: (tab: "design" | "ai") => void;
-    onSubmit: () => void; onSave: () => void; onReedit: () => void;
+    onSubmit: () => void; onSave: (source: "panel" | "ai") => void; onReedit: () => void;
 }) {
     const [showFields, setShowFields] = useState(false);
     const host = useContext(CharacterDictionaryHost);
@@ -105,7 +105,7 @@ export default function CharacterDesignPanel({ description, details, onDetailsCh
                 <button type="button" disabled={saving} onMouseDown={event => event.preventDefault()} onClick={() => setOpenSlashRequest(value => value + 1)} className="min-h-11 rounded border border-glass-border px-3 text-xs hover:bg-hover-bg focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary">面板与模板</button>
                 </div>
             </div>
-            <p className="mb-2 text-[11px] text-text-muted">选择词典或编辑设计后提交 AI 完善，也可直接保存。</p>
+            <p className="mb-2 text-[11px] text-text-muted">可直接使用角色设计，也可先提交 AI 完善。保存会保留两份内容，当前页签决定用于出图的版本。</p>
             <div className="relative min-h-36 rounded border border-glass-border p-2">
                 <ReferencePromptEditor value={details} onChange={onDetailsChange} candidates={[]} expanded editable={!saving}
                     placeholder="角色设计，/ 选择词典，[] 调整细节" openSlashRequest={openSlashRequest}
@@ -144,10 +144,11 @@ export default function CharacterDesignPanel({ description, details, onDetailsCh
         {result === null && <p className="py-4 text-sm text-text-muted">{busy ? '正在完善角色设计…' : '提交 AI 完善后，在此检查和编辑结果。'}</p>}
         </div>
         {error && tab === 'design' && <p role="alert" className="text-xs text-red-400">{error}</p>}
+        <p className="text-xs text-text-secondary">本次生成使用：{tab === 'ai' ? 'AI 优化' : '角色设计'}。点击生成后可核对和编辑实际提示词。</p>
         <p role="status" className="text-xs text-text-muted">{status}</p>
         <div className="sticky bottom-0 flex gap-2 bg-surface py-2">
-            <button type="button" disabled={!canSave || saving || busy} onClick={onSave}
-                className="min-h-11 flex-1 rounded bg-primary px-3 text-sm text-primary-foreground hover:opacity-90 disabled:opacity-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary">{saving ? "保存中…" : "保存设计"}</button>
+            <button type="button" disabled={!canSave || saving || busy} onClick={() => onSave(tab === "ai" ? "ai" : "panel")}
+                className="min-h-11 flex-1 rounded bg-primary px-3 text-sm text-primary-foreground hover:opacity-90 disabled:opacity-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary">{saving ? "保存中…" : tab === "ai" ? "保存并使用 AI 优化" : "保存并使用角色设计"}</button>
             <button type="button" disabled={saving || busy || !canReedit} onClick={onReedit}
                 className="min-h-11 flex-1 rounded border border-glass-border px-3 text-sm hover:bg-hover-bg disabled:opacity-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary">编辑已保存设计</button>
         </div>

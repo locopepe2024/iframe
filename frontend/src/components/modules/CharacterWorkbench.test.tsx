@@ -711,6 +711,49 @@ function mountSimpleDesign(extra: Record<string, unknown> = {}) {
         onGenerate={onGenerate} generatingTypes={[]} />);
     return { onUpdateAttributes, onUpdateDescription, onGenerate };
 }
+
+it.each(['panel', 'ai'] as const)('generates explicitly from %s while preserving both saved designs', async (source) => {
+    const { onGenerate, onUpdateAttributes } = mountSimpleDesign();
+    const result = await submitSimpleDesign();
+    fireEvent.change(result, { target: { value: 'AI方案：红色外衣，长靴。' } });
+    if (source === 'panel') fireEvent.click(screen.getByRole('tab', { name: '角色设计' }));
+    const label = source === 'panel' ? '角色设计' : 'AI 优化';
+    fireEvent.click(screen.getByRole('button', { name: `保存并使用${source === 'panel' ? '' : ' '}${label}` }));
+    await waitFor(() => expect(onUpdateAttributes).toHaveBeenCalledTimes(1));
+    const saved = onUpdateAttributes.mock.calls[0][0].character_design;
+    expect(saved.active_design_source).toBe(source);
+    expect(saved.design_input.prompt).toContain('素黑劲装');
+    expect(saved.design_result.prompt).toBe('AI方案：红色外衣，长靴。');
+    openImagePrompt();
+    expect(screen.getByText(new RegExp(`提示词来源：${label}`))).toBeInTheDocument();
+    const prompt = imagePromptInput().textContent || '';
+    expect(prompt).toContain(source === 'panel' ? '素黑劲装' : '红色外衣');
+    expect(prompt).not.toContain(source === 'panel' ? '红色外衣' : '素黑劲装');
+    const confirm = screen.getByRole('button', { name: '确认并生成' });
+    await waitFor(() => expect(confirm).toBeEnabled());
+    fireEvent.click(confirm);
+    expect(onGenerate.mock.calls[0][1]).toContain(source === 'panel' ? '素黑劲装' : '红色外衣');
+    cleanup();
+    mountSimpleDesign({ character_design: { design_draft: saved, design_revisions: [{ revision: 1, design: saved }] } });
+    expect(screen.getByRole('tab', { name: label })).toHaveAttribute('aria-selected', 'true');
+    openImagePrompt();
+    expect(imagePromptInput()).toHaveTextContent(source === 'panel' ? '素黑劲装' : '红色外衣');
+});
+
+it('uses the visible tab for an unsaved generation without implicitly saving either design', async () => {
+    const { onUpdateAttributes } = mountSimpleDesign();
+    await submitSimpleDesign();
+    fireEvent.click(screen.getByRole('tab', { name: '角色设计' }));
+    openImagePrompt();
+    expect(imagePromptInput()).toHaveTextContent('素黑劲装');
+    expect(imagePromptInput()).not.toHaveTextContent('深棕眼');
+    fireEvent.click(screen.getByRole('button', { name: '返回修改' }));
+    fireEvent.click(screen.getByRole('tab', { name: 'AI 优化' }));
+    openImagePrompt();
+    expect(imagePromptInput()).toHaveTextContent('深棕眼');
+    expect(imagePromptInput()).not.toHaveTextContent('素黑劲装');
+    expect(onUpdateAttributes).not.toHaveBeenCalled();
+});
 function aiResult() {
     fireEvent.click(screen.getByRole("tab", { name: "AI 优化" }));
     return screen.getByRole("textbox", { name: "AI 优化" });
@@ -780,7 +823,7 @@ it("keeps dictionary previews separate and inserts editable selected details in 
     fireEvent.click(screen.getByRole("button", { name: "插入到当前 Prompt" }));
     expect(editor.getText()).toBe("前文 长发高束，发际线和鬓角保留自然碎发");
     act(() => editor.commands.setContent("<p>长发高束，窄红发带。</p>"));
-    fireEvent.click(screen.getByRole("button", { name: "保存设计" }));
+    fireEvent.click(screen.getByRole("button", { name: /^保存并使用/ }));
     await waitFor(() => expect(onUpdateAttributes).toHaveBeenCalledWith({ character_design: expect.objectContaining({
         confirmed: true, user_visual_requirements: { identity: "长发高束，窄红发带。", look: "" },
         identity: expect.objectContaining({ visual_notes: "长发高束，窄红发带。" }),
@@ -792,7 +835,7 @@ it("saves and confirms the edited returned sections rather than stale generated 
     const { onUpdateAttributes } = mountSimpleDesign();
     const result = await submitSimpleDesign();
     fireEvent.change(result, { target: { value: "身份：身高约178厘米，浅麦肤色，清冽眉目。\n造型：里衣一件、黑色外衣一件，布靴，无披风。" } });
-    fireEvent.click(screen.getByRole("button", { name: "保存设计" }));
+    fireEvent.click(screen.getByRole("button", { name: /^保存并使用/ }));
     await waitFor(() => expect(onUpdateAttributes).toHaveBeenCalledWith({ character_design: expect.objectContaining({
         confirmed: true,
         identity: expect.objectContaining({ visual_notes: "身高约178厘米，浅麦肤色，清冽眉目。", features: {}, editor_mode: "notes" }),
@@ -802,7 +845,7 @@ it("saves and confirms the edited returned sections rather than stale generated 
     expect(within(screen.getByRole("region", { name: "角色设计" })).getByRole("status")).toHaveTextContent("已保存");
     openImagePrompt();
     expect(imagePromptInput()).toHaveTextContent("无披风");
-    expect(screen.queryByRole("button", { name: "应用到图片提示词" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /^应用.*到图片提示词/ })).not.toBeInTheDocument();
     expect(aiResult()).toHaveValue("身份：身高约178厘米，浅麦肤色，清冽眉目。\n造型：里衣一件、黑色外衣一件，布靴，无披风。");
     expect(within(screen.getByRole("region", { name: "角色设计" })).getByRole("status")).toHaveTextContent("已保存");
 });
@@ -815,7 +858,7 @@ it("preserves structured saved identity, height and look until the unified resul
     } } });
     expect(designDetailsEditor().getText()).toBe("保存的角色细节");
     expect((aiResult() as HTMLTextAreaElement).value).toContain("身高约182厘米");
-    fireEvent.click(screen.getByRole("button", { name: "保存设计" }));
+    fireEvent.click(screen.getByRole("button", { name: /^保存并使用/ }));
     await waitFor(() => expect(onUpdateAttributes).toHaveBeenCalledWith({ character_design: expect.objectContaining({
         identity: expect.objectContaining({ features: { face: "窄长脸", height: "身高约182厘米" } }),
         look: expect.objectContaining({ features: { clothing: "素黑劲装", accessories: "哑银发扣" } }),
@@ -825,13 +868,13 @@ it("preserves structured saved identity, height and look until the unified resul
 it("keeps manual confirmation available without AI and preserves empty output as empty", async () => {
     const { onUpdateAttributes } = mountSimpleDesign();
     act(() => designDetailsEditor().commands.setContent("<p>少年，黑发，素黑劲装。</p>"));
-    fireEvent.click(screen.getByRole("button", { name: "保存设计" }));
+    fireEvent.click(screen.getByRole("button", { name: /^保存并使用/ }));
     await waitFor(() => expect(onUpdateAttributes).toHaveBeenCalledWith({ character_design: expect.objectContaining({ confirmed: true,
         identity: expect.objectContaining({ visual_notes: "少年，黑发，素黑劲装。" }),
     }) }));
     const result = await submitSimpleDesign();
     fireEvent.change(result, { target: { value: "" } });
-    expect(screen.getByRole("button", { name: "保存设计" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: /^保存并使用/ })).toBeDisabled();
 });
 
 it("keeps design details and task Prompts independently editable in the same workspace", async () => {
@@ -884,8 +927,8 @@ it("applies the edited reviewed text to all image tasks only on explicit applica
     const { onUpdateAttributes } = mountSimpleDesign();
     const result = await submitSimpleDesign();
     fireEvent.change(result, { target: { value: "身份：清冽眉目，身高约178厘米。\n造型：黑色外衣一件，布靴。" } });
+    fireEvent.click(screen.getByRole("button", { name: /^应用.*到图片提示词/ }));
     openImagePrompt();
-    fireEvent.click(screen.getByRole("button", { name: "应用到图片提示词" }));
     for (const name of ["masterAsset", "threeViews", "avatar"]) {
         fireEvent.click(screen.getByRole("tab", { name }));
         const prompt = imagePromptInput();
@@ -899,7 +942,7 @@ it("keeps the editable result and draft status when saving fails", async () => {
     const { onUpdateAttributes } = mountSimpleDesign();
     onUpdateAttributes.mockRejectedValueOnce(new Error("保存失败，请重试"));
     const result = await submitSimpleDesign();
-    fireEvent.click(screen.getByRole("button", { name: "保存设计" }));
+    fireEvent.click(screen.getByRole("button", { name: /^保存并使用/ }));
     expect(await screen.findByRole("alert")).toHaveTextContent("保存失败，请重试");
     expect(result).toHaveValue("身份：深棕眼\n造型：黑色劲装");
     expect(within(screen.getByRole("region", { name: "角色设计" })).getByRole("status")).toHaveTextContent("尚未保存");
@@ -918,7 +961,7 @@ it("does not carry retired hidden style controls into a new completion or its sa
     expect(request).not.toHaveProperty("style");
     expect(request).not.toHaveProperty("age_stage");
     expect(request).not.toHaveProperty("confirmed_design");
-    fireEvent.click(screen.getByRole("button", { name: "保存设计" }));
+    fireEvent.click(screen.getByRole("button", { name: /^保存并使用/ }));
     await waitFor(() => expect(onUpdateAttributes).toHaveBeenCalledWith({ character_design: expect.objectContaining({
         route: "", age_stage: undefined, style_notes: undefined,
     }) }));
@@ -932,7 +975,7 @@ it("edits, confirms and reloads independent facial fields without an AI call", a
     }
     expect(screen.getByRole("textbox", { name: "设计字段 · 眉形" })).toHaveValue("柳叶眉");
     expect(screen.getByRole("textbox", { name: "设计字段 · 眼周细节" })).toHaveValue("表情放松时仍可见浅细纹");
-    fireEvent.click(screen.getByRole("button", { name: "保存设计" }));
+    fireEvent.click(screen.getByRole("button", { name: /^保存并使用/ }));
     await waitFor(() => expect(onUpdateAttributes).toHaveBeenCalled());
     const design = onUpdateAttributes.mock.calls.at(-1)![0].character_design;
     expect(design.identity.features).toMatchObject({ eyebrows: "柳叶眉", eye_detail: "表情放松时仍可见浅细纹", skin_tone: "中等中性肤色", skin_texture: "面颊略干，保留细微干燥纹理" });
@@ -955,7 +998,7 @@ it("saves dictionary face choices as fields and keeps the remaining clothing tex
     fireEvent.click(screen.getByRole("button", { name: "应用配置" }));
     expect(screen.getByRole("textbox", { name: "设计字段 · 肤质" })).toHaveValue("面颊皮肤略显干燥，保留细微干燥纹理");
     expect(screen.getByRole("textbox", { name: "其他已输入细节" })).toHaveValue("靛蓝外衣，素面布靴。");
-    fireEvent.click(screen.getByRole("button", { name: "保存设计" }));
+    fireEvent.click(screen.getByRole("button", { name: /^保存并使用/ }));
     await waitFor(() => expect(onUpdateAttributes).toHaveBeenCalledWith({ character_design: expect.objectContaining({
         schema_version: "iframe.character-fields.v1", supplemental_prompt: "靛蓝外衣，素面布靴。",
         dictionary_configurations: [expect.objectContaining({ preset_id: "dictionary.panel.face", selections: { "肤色": "暖小麦肤色", "肤质": "轻微干燥肤质" } })],
@@ -971,7 +1014,7 @@ it('preserves authored negative prompt arrays through AI, confirmation and reloa
     await submitSimpleDesign();
     const request = apiMocks.agentRequest.mock.calls.find(([path]) => path === '/character-design/draft')![2];
     expect(request.constraints).toEqual({ must_keep: ['自然皮肤纹理'], negative_prompt: ['额外披风', 'cartoon'] });
-    fireEvent.click(screen.getByRole('button', { name: '保存设计' }));
+    fireEvent.click(screen.getByRole('button', { name: /^保存并使用/ }));
     await waitFor(() => expect(onUpdateAttributes).toHaveBeenCalled());
     const design = onUpdateAttributes.mock.calls.at(-1)![0].character_design;
     expect(design.constraints).toEqual(request.constraints);
@@ -980,6 +1023,7 @@ it('preserves authored negative prompt arrays through AI, confirmation and reloa
     expect((screen.getByPlaceholderText('Enter your negative prompt (avoid unwanted elements)...') as HTMLTextAreaElement).value).toContain('cartoon');
     cleanup();
     mountSimpleDesign({ character_design: { design_draft: design } });
+    fireEvent.click(screen.getByRole('tab', { name: '角色设计' }));
     fireEvent.click(screen.getByRole('button', { name: '设计面板' }));
     expect(screen.getByRole('textbox', { name: '设计约束 · 负面提示词' })).toHaveValue('额外披风\ncartoon');
     const result = aiResult() as HTMLTextAreaElement;
@@ -997,7 +1041,7 @@ it('saves clothing panel sections and negative arrays without an AI call', async
     fireEvent.click(screen.getByRole('button', { name: '应用配置' }));
     expect((screen.getByRole('textbox', { name: '设计字段 · 服装结构与材质' }) as HTMLTextAreaElement).value).toContain('上身仅有里衣和外衣两件');
     expect(screen.getByRole('textbox', { name: '设计约束 · 负面提示词' })).toHaveValue('未指定的中衣、披风、护甲或装饰性叠领');
-    fireEvent.click(screen.getByRole('button', { name: '保存设计' }));
+    fireEvent.click(screen.getByRole('button', { name: /^保存并使用/ }));
     await waitFor(() => expect(onUpdateAttributes).toHaveBeenCalled());
     const design = onUpdateAttributes.mock.calls.at(-1)![0].character_design;
     expect(design.look.features.clothing).toContain('靛蓝色');
@@ -1065,7 +1109,7 @@ it('opens directly into design without mode buttons or an automatic AI request',
     expect(apiMocks.agentRequest.mock.calls.filter(([path]) => path.startsWith('/character-design/'))).toHaveLength(0);
     expect(onUpdateAttributes).not.toHaveBeenCalled();
     act(() => designDetailsEditor().commands.setContent('<p>窄袖黑衣，不叠加披风。</p>'));
-    expect(screen.getByRole('button', { name: '应用到图片提示词' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /^应用.*到图片提示词/ })).toBeInTheDocument();
     openImagePrompt();
     fireEvent.click(screen.getByRole('button', { name: '返回修改' }));
     expect(designDetailsEditor().getText()).toBe('窄袖黑衣，不叠加披风。');
@@ -1081,7 +1125,7 @@ it('saves input and AI result separately and restores both instead of unsaved AI
     expect(screen.getByRole('tab', { name: 'AI 优化' })).toHaveAttribute('aria-selected', 'true');
     expect(screen.queryByRole('combobox', { name: '设计模型' })).not.toBeInTheDocument();
     fireEvent.change(result, { target: { value: '圆脸，自然肤质，素黑外衣，布靴。' } });
-    fireEvent.click(screen.getByRole('button', { name: '保存设计' }));
+    fireEvent.click(screen.getByRole('button', { name: /^保存并使用/ }));
     await waitFor(() => expect(within(screen.getByRole("region", { name: "角色设计" })).getByRole("status")).toHaveTextContent('当前设计已生效'));
     expect(onUpdateAttributes).toHaveBeenCalledTimes(1);
     expect(onUpdateAttributes).toHaveBeenCalledWith({ character_design: expect.objectContaining({
@@ -1093,7 +1137,7 @@ it('saves input and AI result separately and restores both instead of unsaved AI
     fireEvent.change(aiResult(), { target: { value: '尚未保存的红衣方案' } });
     const callsBeforeReedit = apiMocks.agentRequest.mock.calls.length;
     fireEvent.click(screen.getByRole('button', { name: '编辑已保存设计' }));
-    expect(screen.getByRole('tab', { name: '角色设计' })).toHaveAttribute('aria-selected', 'true');
+    expect(screen.getByRole('tab', { name: 'AI 优化' })).toHaveAttribute('aria-selected', 'true');
     expect(designDetailsEditor().getText().replace(/\s+/g, ' ').trim()).toBe('脸部：眉目清冽。 服装：素黑劲装，布靴。');
     expect((aiResult() as HTMLTextAreaElement).value).toBe('圆脸，自然肤质，素黑外衣，布靴。');
     expect(apiMocks.agentRequest).toHaveBeenCalledTimes(callsBeforeReedit);
@@ -1127,7 +1171,7 @@ it('keeps authored panel fields intact when AI returns and saves them separately
     expect(screen.getByRole('textbox', { name: '设计字段 · 脸型' })).toHaveValue('圆脸');
     fireEvent.click(screen.getByRole('button', { name: '关闭设计面板' }));
     fireEvent.click(screen.getByRole('tab', { name: 'AI 优化' }));
-    fireEvent.click(screen.getByRole('button', { name: '保存设计' }));
+    fireEvent.click(screen.getByRole('button', { name: /^保存并使用/ }));
     await waitFor(() => expect(onUpdateAttributes).toHaveBeenCalled());
     const saved = onUpdateAttributes.mock.calls.at(-1)![0].character_design;
     expect(saved.design_input.identity.features).toEqual({ face_shape: '圆脸' });
@@ -1163,7 +1207,7 @@ it('restores saved structured fields and constraints when reopening a design', a
     fireEvent.click(screen.getByRole('button', { name: '设计面板' }));
     expect(screen.getByRole('textbox', { name: '设计字段 · 脸型' })).toHaveValue('圆脸');
     expect(screen.getByRole('textbox', { name: '设计约束 · 负面提示词' })).toHaveValue('额外披风');
-    fireEvent.click(screen.getByRole('button', { name: '保存设计' }));
+    fireEvent.click(screen.getByRole('button', { name: /^保存并使用/ }));
     await waitFor(() => expect(onUpdateAttributes).toHaveBeenCalledWith({ character_design: expect.objectContaining({
         identity: expect.objectContaining({ features: saved.identity.features }),
         look: expect.objectContaining({ features: saved.look.features }),
@@ -1185,7 +1229,7 @@ it('shows design fields only in the design panel and output editing only during 
     fireEvent.keyDown(panel, { key: 'Escape' });
     expect(screen.queryByRole('dialog', { name: '角色设计面板' })).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: '设计面板' })).toHaveFocus();
-    fireEvent.click(screen.getByRole('button', { name: '保存设计' }));
+    fireEvent.click(screen.getByRole('button', { name: /^保存并使用/ }));
     await waitFor(() => expect(onUpdateAttributes).toHaveBeenCalled());
     const saved = onUpdateAttributes.mock.calls.at(-1)![0].character_design;
     openImagePrompt();
@@ -1225,7 +1269,7 @@ it('saves human gender and dictionary age and restores them in design and genera
     expect(screen.getByRole('textbox', { name: '设计字段 · 年龄' })).toHaveValue('人物年龄阶段为老年');
     fireEvent.change(screen.getByRole('textbox', { name: '设计字段 · 性别' }), { target: { value: '女性' } });
     fireEvent.change(screen.getByRole('textbox', { name: '设计字段 · 年龄' }), { target: { value: '约72岁' } });
-    fireEvent.click(screen.getByRole('button', { name: '保存设计' }));
+    fireEvent.click(screen.getByRole('button', { name: /^保存并使用/ }));
     await waitFor(() => expect(onUpdateAttributes).toHaveBeenCalled());
     const design = onUpdateAttributes.mock.calls.at(-1)![0].character_design;
     expect(design.identity.features.age).toBe('约72岁');
@@ -1235,6 +1279,7 @@ it('saves human gender and dictionary age and restores them in design and genera
     expect(imagePromptInput()).toHaveTextContent('性别：女性');
     cleanup();
     mountSimpleDesign({ character_design: { design_draft: design } });
+    fireEvent.click(screen.getByRole('tab', { name: '角色设计' }));
     fireEvent.click(screen.getByRole('button', { name: '设计面板' }));
     expect(screen.getByRole('textbox', { name: '设计字段 · 年龄' })).toHaveValue('约72岁');
     expect(screen.getByRole('textbox', { name: '设计字段 · 性别' })).toHaveValue('女性');

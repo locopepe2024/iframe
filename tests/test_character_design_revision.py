@@ -148,16 +148,20 @@ def test_character_design_input_and_result_snapshots_round_trip_and_validate():
             'source': 'user-edited', 'skill_revision': 'sha256:test',
         },
         'confirmed': True,
+        'active_design_source': 'panel',
     }
     pipeline.update_asset_attributes('project', 'character', 'character', {'character_design': design})
     saved = character.character_design['design_draft']
     assert saved['design_input']['prompt'] == '原始面板 Prompt'
     assert saved['design_input']['identity']['features'] == {'face_shape': '圆脸'}
     assert saved['design_result']['prompt'] == 'AI 生成并手改的设计'
+    assert saved['active_design_source'] == 'panel'
+    assert character.character_design['design_revisions'][0]['design']['active_design_source'] == 'panel'
     assert character.character_design['design_revisions'][0]['design']['design_input'] == saved['design_input']
     assert character.character_design['design_revisions'][0]['design']['design_result'] == saved['design_result']
 
     invalid_snapshots = (
+        {'active_design_source': 'automatic'},
         {'design_input': {**design['design_input'], 'identity': {'features': {'camera_angle': '俯拍'}}}},
         {'design_input': {**design['design_input'], 'constraints': {'negative_prompt': ['x' * 501]}}},
         {'design_result': {**design['design_result'], 'source': 'unknown'}},

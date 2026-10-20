@@ -106,6 +106,7 @@ type DesignDraft = {
     preset_selections?: CharacterPresetSelection[];
     design_input?: DesignInputSnapshot;
     design_result?: DesignResultSnapshot;
+    active_design_source?: "panel" | "ai";
     confirmed?: boolean;
 };
 
@@ -676,7 +677,7 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
 
     // Local state for prompts
     const getInitialPrompt = (type: string, existingPrompt: string) => {
-        const confirmedDesign = asset.character_design?.design_revisions?.at(-1)?.design;
+        const confirmedDesign = asset.character_design?.design_revisions?.at(-1)?.design || (savedDesign.confirmed ? savedDesign : undefined);
         const confirmedNotes = confirmedDesignDescription(confirmedDesign);
         if (!confirmedNotes && existingPrompt) return existingPrompt;
         const promptDescription = confirmedNotes
@@ -724,22 +725,28 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
         projectedLook,
         [...Object.values(designFieldAnswers), ...designScopeDescription(designRoute, identityFeatures.age?.trim() ? undefined : designAgeStage), styleNotes],
     );
-    const currentDesignPrompt = designResult ?? panelDesignPrompt;
-    const currentDesignDescription = [currentDesignPrompt, designConstraintText].filter(Boolean).join("\n");
-
-    const [designTab, setDesignTab] = useState<"design" | "ai">("design");
+    const [designTab, setDesignTab] = useState<"design" | "ai">(savedDesign.active_design_source === "ai" ? "ai" : "design");
+    const [savedDesignSource, setSavedDesignSource] = useState<"panel" | "ai">(savedDesign.active_design_source === "ai" ? "ai" : "panel");
+    const [appliedPromptSource, setAppliedPromptSource] = useState<"panel" | "ai">(
+        savedDesign.active_design_source || (savedResult && savedResult.source !== "panel" ? "ai" : "panel"));
+    const selectedDesignPromptSource = designTab === "ai" ? "ai" : "panel";
     const savedDesignSnapshot = useRef<DesignDraft>(savedDesign);
     const [hasSavedDesign, setHasSavedDesign] = useState(!!asset.character_design);
 
-    const applyDesignToPrompts = () => {
+    const promptForSource = (source: "panel" | "ai") => source === "ai" ? designResult || "" : panelDesignPrompt;
+    const descriptionForSource = (source: "panel" | "ai") => [promptForSource(source), designConstraintText].filter(Boolean).join("\n");
+
+    const applyDesignToPrompts = (source: "panel" | "ai") => {
         const previousNegative = appliedDesignNegative.current;
         setNegativePrompt(current => Array.from(new Set([
             ...current.split('\n').filter(line => line && !previousNegative.includes(line)), ...normalizedConstraints.negative_prompt,
         ])).join('\n'));
         appliedDesignNegative.current = normalizedConstraints.negative_prompt;
-        setFullBodyPrompt(buildCharacterImagePrompt("full_body", asset.name, currentDesignDescription, hasNonFullBodyUpload));
-        setThreeViewPrompt(buildCharacterImagePrompt("three_view", asset.name, currentDesignDescription, hasFullBodyImage || hasAnyUpload));
-        setHeadshotPrompt(buildCharacterImagePrompt("headshot", asset.name, currentDesignDescription, hasFullBodyImage || hasAnyUpload));
+        const description = descriptionForSource(source);
+        setFullBodyPrompt(buildCharacterImagePrompt("full_body", asset.name, description, hasNonFullBodyUpload));
+        setThreeViewPrompt(buildCharacterImagePrompt("three_view", asset.name, description, hasFullBodyImage || hasAnyUpload));
+        setHeadshotPrompt(buildCharacterImagePrompt("headshot", asset.name, description, hasFullBodyImage || hasAnyUpload));
+        setAppliedPromptSource(source);
         setPromptsNeedDesignApply(false);
     };
     const characterDesignRequest = {
@@ -820,7 +827,7 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
         }
     };
 
-    const saveDesign = async () => {
+    const saveDesign = async (source: "panel" | "ai") => {
         if (!onUpdateAttributes || savingDesign) return;
         if ([normalizedConstraints.must_keep, normalizedConstraints.negative_prompt].some(items => items.length > 20 || items.some(item => item.length > 500))) {
             setDesignError("每类设计约束最多 20 项，每项最多 500 字。");
@@ -830,12 +837,18 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
             setDesignError("设计输入最多 8000 字，AI 优化结果最多 20000 字。");
             return;
         }
-        if (!currentDesignPrompt.trim()) {
-            setDesignError("请先填写具体的角色视觉值，再保存设计。 ");
+        if (source === "ai" && !designResult?.trim()) {
+            setDesignError("请先提交并检查 AI 优化结果，再使用该版本出图。");
+            return;
+        }
+        const selectedPrompt = promptForSource(source);
+        if (!selectedPrompt.trim()) {
+            setDesignError(source === "ai" ? "AI 优化结果为空，请检查后再保存。" : "请先填写具体的角色视觉值，再保存设计。 ");
             return;
         }
         const unanswered = designUnresolved.filter((question) => !designFieldAnswers[question]?.trim());
         const hasAIResult = designResult !== null;
+        const useAIResult = source === "ai";
         const inputIdentity: DesignSectionSnapshot = {
             visual_notes: designNotes || undefined,
             features: identityFeatures,
@@ -851,19 +864,20 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
         const panelIdentityForConfirmation: DesignSectionSnapshot = !Object.values(identityFeatures).some(value => (value || "").trim()) && !designNotes.trim()
             ? { ...inputIdentity, visual_notes: designInput || undefined, basis: ["user_specified"] }
             : inputIdentity;
-        const resultIdentity: DesignSectionSnapshot = hasAIResult ? {
+        const aiIdentity: DesignSectionSnapshot = hasAIResult ? {
             visual_notes: resultIdentityNotes || undefined,
             features: resultIdentityFeatures,
             editor_mode: resultIdentityEditorMode,
             basis: resultIdentityBasis,
         } : panelIdentityForConfirmation;
-        const resultLook: DesignSectionSnapshot = hasAIResult ? {
+        const aiLook: DesignSectionSnapshot = hasAIResult ? {
             visual_notes: resultLookNotes || undefined,
             features: resultLookFeatures,
             editor_mode: resultLookEditorMode,
             basis: resultLookBasis,
         } : inputLook;
-        const resultPrompt = designResult ?? panelDesignPrompt;
+        const storedResultIdentity = hasAIResult ? aiIdentity : panelIdentityForConfirmation;
+        const storedResultLook = hasAIResult ? aiLook : inputLook;
         const inputSnapshot: DesignInputSnapshot = {
             schema_version: "iframe.character-design-input.v1",
             prompt: designInput,
@@ -879,56 +893,58 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
         };
         const resultSnapshot: DesignResultSnapshot = {
             schema_version: "iframe.character-design-result.v1",
-            prompt: resultPrompt,
-            identity: resultIdentity,
-            look: resultLook,
+            prompt: designResult ?? panelDesignPrompt,
+            identity: storedResultIdentity,
+            look: storedResultLook,
             source: hasAIResult ? designResultSource : "panel",
             skill_revision: hasAIResult ? designSkillRevision || undefined : undefined,
         };
-        const activeIdentity = resultIdentity;
-        const activeLook = hasAIResult ? resultLook : inputLook;
-        const activeIdentityFeatures = hasAIResult ? resultIdentityFeatures : identityFeatures;
-        const activeLookFeatures = hasAIResult ? resultLookFeatures : lookFeatures;
-        const activeIdentityNotes = hasAIResult ? resultIdentityNotes : designNotes;
-        const activeIdentityBasis = hasAIResult ? resultIdentityBasis : designIdentityBasis;
-        const activeLookBasis = hasAIResult ? resultLookBasis : designLookBasis;
-        const activeIdentityMode = hasAIResult ? resultIdentityEditorMode : identityEditorMode;
-        const activeLookMode = hasAIResult ? resultLookEditorMode : lookEditorMode;
-        const unansweredOutput = hasAIResult ? unanswered : [];
+        const activeIdentity = useAIResult ? aiIdentity : panelIdentityForConfirmation;
+        const activeLook = useAIResult ? aiLook : inputLook;
+        const activeIdentityFeatures = useAIResult ? resultIdentityFeatures : identityFeatures;
+        const activeLookFeatures = useAIResult ? resultLookFeatures : lookFeatures;
+        const activeIdentityNotes = useAIResult ? resultIdentityNotes : designNotes;
+        const activeIdentityBasis = useAIResult ? resultIdentityBasis : designIdentityBasis;
+        const activeLookBasis = useAIResult ? resultLookBasis : designLookBasis;
+        const activeIdentityMode = useAIResult ? resultIdentityEditorMode : identityEditorMode;
+        const activeLookMode = useAIResult ? resultLookEditorMode : lookEditorMode;
+        const unansweredOutput = useAIResult ? unanswered : [];
         const draft: DesignDraft = {
             constraints: normalizedConstraints,
             dictionary_configurations: dictionaryConfigurations,
             schema_version: "iframe.character-fields.v1",
-            supplemental_prompt: hasAIResult ? "" : supplementalPrompt,
-            route: hasAIResult ? "" : designRoute,
-            style_notes: hasAIResult ? undefined : styleNotes || undefined,
-            age_stage: hasAIResult ? undefined : designAgeStage || undefined,
+            supplemental_prompt: useAIResult ? "" : supplementalPrompt,
+            route: useAIResult ? "" : designRoute,
+            style_notes: useAIResult ? undefined : styleNotes || undefined,
+            age_stage: useAIResult ? undefined : designAgeStage || undefined,
             identity: { ...activeIdentity, features: activeIdentityFeatures, editor_mode: activeIdentityMode, basis: activeIdentityBasis },
-            look: { ...activeLook, route: hasAIResult ? undefined : designRoute, features: activeLookFeatures, editor_mode: activeLookMode, basis: activeLookBasis },
-            unresolved: hasAIResult && activeIdentityNotes ? unansweredOutput : [],
-            field_answers: hasAIResult ? Object.fromEntries(Object.entries(designFieldAnswers).filter(([, answer]) => answer.trim())) : {},
+            look: { ...activeLook, route: useAIResult ? undefined : designRoute, features: activeLookFeatures, editor_mode: activeLookMode, basis: activeLookBasis },
+            unresolved: useAIResult && activeIdentityNotes ? unansweredOutput : [],
+            field_answers: useAIResult ? Object.fromEntries(Object.entries(designFieldAnswers).filter(([, answer]) => answer.trim())) : {},
             user_visual_requirements: { identity: designInput, look: "" },
-            field_suggestions: hasAIResult ? Object.fromEntries(Object.entries(designFieldSuggestions).filter(([question]) => !designFieldAnswers[question]?.trim())) : {},
-            field_suggestion_choices: hasAIResult ? Object.fromEntries(Object.entries(designFieldSuggestionChoices).filter(([question]) => !designFieldAnswers[question]?.trim())) : {},
+            field_suggestions: useAIResult ? Object.fromEntries(Object.entries(designFieldSuggestions).filter(([question]) => !designFieldAnswers[question]?.trim())) : {},
+            field_suggestion_choices: useAIResult ? Object.fromEntries(Object.entries(designFieldSuggestionChoices).filter(([question]) => !designFieldAnswers[question]?.trim())) : {},
             reference_assets: savedDesign.reference_assets || [],
-            field_status: { route: "stated", age_stage: designAgeStage ? "stated" : "default", visual_notes: activeIdentityNotes ? (hasAIResult ? (resultIdentityBasis.includes("creative_choice") ? "creative-choice" : "stated") : designSource) : "default" },
+            field_status: { route: "stated", age_stage: designAgeStage ? "stated" : "default", visual_notes: activeIdentityNotes ? (useAIResult ? (resultIdentityBasis.includes("creative_choice") ? "creative-choice" : "stated") : designSource) : "default" },
             skill_id: "character-style-routes",
-            skill_revision: hasAIResult ? designSkillRevision || undefined : undefined,
+            skill_revision: useAIResult ? designSkillRevision || undefined : undefined,
             preset_selections: presetSelections,
             design_input: inputSnapshot,
             design_result: resultSnapshot,
+            active_design_source: source,
             confirmed: true,
         };
         setSavingDesign(true);
         setDesignError("");
         try {
             await onUpdateAttributes({ character_design: draft });
-            setDesignUnresolved(draft.unresolved || []);
+            if (useAIResult) setDesignUnresolved(draft.unresolved || []);
             savedDesignSnapshot.current = draft;
             setHasSavedDesign(true);
             setDesignStatus("confirmed");
+            setSavedDesignSource(source);
             setDesignRevision((revision) => revision + 1);
-            applyDesignToPrompts();
+            applyDesignToPrompts(source);
         } catch (error) {
             setDesignError(error instanceof Error ? error.message : "保存视觉设计失败，请重试。");
         } finally {
@@ -1077,6 +1093,12 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
     }, [asset, hasAnyUpload, hasNonFullBodyUpload]);
 
     const handleGenerateClick = (type: "reference_sheet" | "full_body" | "three_view" | "headshot", batchSize: number) => {
+        // Choose the visible design explicitly; an AI response must never win merely by existing.
+        if (selectedDesignPromptSource === "ai" && !designResult?.trim()) {
+            setDesignError("请先填写 AI 优化结果，或切换到角色设计后生成。");
+            return;
+        }
+        if (promptForSource(selectedDesignPromptSource).trim() && (promptsNeedDesignApply || appliedPromptSource !== selectedDesignPromptSource)) applyDesignToPrompts(selectedDesignPromptSource);
         let prompt = "";
         if (type === "full_body" || type === "reference_sheet") prompt = fullBodyPrompt;
         else if (type === "three_view") prompt = threeViewPrompt;
@@ -1274,10 +1296,14 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
             setDesignStatus("draft"); setPromptsNeedDesignApply(true);
         }}
         models={designModels} model={designModel} onModelChange={setDesignModel}
-        busy={designing} saving={savingDesign} canSave={!!onUpdateAttributes && !!currentDesignPrompt.trim()} canReedit={hasSavedDesign} error={designError}
-        status={designStatus === "confirmed" ? "已保存 · 当前设计已生效" : hasSavedDesign ? "已保存的设计有修改 · 保存后生效" : "尚未保存"}
+        busy={designing} saving={savingDesign}
+        canSave={!!onUpdateAttributes && (designTab === "ai" ? !!designResult?.trim() : !!panelDesignPrompt.trim())}
+        canReedit={hasSavedDesign} error={designError}
+        status={designStatus === "confirmed"
+            ? `已保存 · 当前设计已生效 · 保存的来源：${savedDesignSource === "ai" ? "AI 优化" : "角色设计"}`
+            : hasSavedDesign ? `已保存的设计有修改 · 保存的来源：${savedDesignSource === "ai" ? "AI 优化" : "角色设计"}` : "尚未保存"}
         tab={designTab} onTabChange={setDesignTab}
-        onSubmit={() => void generateDesignDraft()} onSave={() => void saveDesign()}
+        onSubmit={() => void generateDesignDraft()} onSave={(source) => void saveDesign(source)}
         onReedit={() => {
             const snapshot = savedDesignSnapshot.current;
             const input = snapshot.design_input;
@@ -1314,8 +1340,10 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
             setDesignFieldSuggestionChoices(snapshot.field_suggestion_choices || {});
             setDesignSkillRevision(result?.skill_revision || snapshot.skill_revision || "");
             setDesignSource(snapshot.field_status?.visual_notes === "creative-choice" ? "creative-choice" : "stated");
-            setDesignUnresolved(snapshot.unresolved || []); setDesignFieldAnswers(snapshot.field_answers || {});
-            setDesignTab("design"); setDesignStatus("draft");
+            setDesignUnresolved(snapshot.unresolved || []);
+            setDesignFieldAnswers(snapshot.field_answers || {});
+            setSavedDesignSource(snapshot.active_design_source === "ai" ? "ai" : "panel");
+            setDesignTab(snapshot.active_design_source === "ai" ? "ai" : "design"); setDesignStatus("draft");
             setPromptsNeedDesignApply(false);
         }}
     />;
@@ -1371,19 +1399,19 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
                     <div className="min-h-0 min-w-0 flex-1 flex flex-col">
                         {promptsNeedDesignApply && <div className="mx-3 mt-3 flex flex-col gap-2 rounded-md border border-primary/30 bg-primary/5 p-3 sm:mx-5 sm:flex-row sm:items-center sm:justify-between">
                             <div className="min-w-0">
-                                <p className="text-xs font-medium text-foreground">角色设计草稿尚未应用到图片提示词</p>
-                                <p className="mt-0.5 text-[11px] leading-4 text-text-muted">应用会更新全身、三视图和肖像提示词，不保存角色设计或创建版本；之后仍可编辑提示词。</p>
+                                <p className="text-xs font-medium text-foreground">{designTab === "ai" ? "AI 优化结果" : "角色设计"}尚未应用到图片提示词</p>
+                                <p className="mt-0.5 text-[11px] leading-4 text-text-muted">将应用当前页签的版本，更新全身、三视图和肖像提示词；此操作不保存设计或创建版本，之后仍可编辑提示词。</p>
                                 <details className="mt-2 text-xs text-text-secondary">
                                     <summary className="cursor-pointer">查看将写入的三条图片提示词</summary>
                                     <div className="mt-2 space-y-2 whitespace-pre-wrap rounded border border-glass-border bg-surface-inset p-2 text-foreground">
-                                        <p>全身：{buildCharacterImagePrompt("full_body", asset.name, currentDesignDescription, hasNonFullBodyUpload)}</p>
-                                        <p>三视图：{buildCharacterImagePrompt("three_view", asset.name, currentDesignDescription, hasFullBodyImage || hasAnyUpload)}</p>
-                                        <p>肖像：{buildCharacterImagePrompt("headshot", asset.name, currentDesignDescription, hasFullBodyImage || hasAnyUpload)}</p>
+                                        <p>全身：{buildCharacterImagePrompt("full_body", asset.name, descriptionForSource(selectedDesignPromptSource), hasNonFullBodyUpload)}</p>
+                                        <p>三视图：{buildCharacterImagePrompt("three_view", asset.name, descriptionForSource(selectedDesignPromptSource), hasFullBodyImage || hasAnyUpload)}</p>
+                                        <p>肖像：{buildCharacterImagePrompt("headshot", asset.name, descriptionForSource(selectedDesignPromptSource), hasFullBodyImage || hasAnyUpload)}</p>
                                     </div>
                                 </details>
                             </div>
-                            <button type="button" onClick={() => applyDesignToPrompts()} className="inline-flex min-h-10 shrink-0 items-center justify-center gap-1.5 rounded-md bg-primary px-3 text-xs font-medium text-primary-foreground hover:opacity-90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary">
-                                <Sparkles size={14} aria-hidden="true" />应用到图片提示词
+                            <button type="button" disabled={!promptForSource(selectedDesignPromptSource).trim()} onClick={() => applyDesignToPrompts(selectedDesignPromptSource)} className="inline-flex min-h-10 shrink-0 items-center justify-center gap-1.5 rounded-md bg-primary px-3 text-xs font-medium text-primary-foreground hover:opacity-90 disabled:opacity-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary">
+                                <Sparkles size={14} aria-hidden="true" />应用{designTab === "ai" ? " AI 优化" : "角色设计"}到图片提示词
                             </button>
                         </div>}
                         <div className="flex shrink-0 flex-wrap items-center justify-between gap-x-3 border-b border-glass-border px-3 sm:px-5" data-testid="character-asset-toolbar">
@@ -1611,7 +1639,10 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
                 projectId={currentProject.id}
                 request={imageReviewRequest}
                 validationError={reviewValidationError}
-                editor={<div ref={setReviewEditorHost} className="relative mt-3" />}
+                editor={<>
+                    <p className="mt-3 text-xs text-text-secondary">提示词来源：{designTab === "ai" ? "AI 优化" : "角色设计"} · 下方内容为实际提交提示词，可继续修改。</p>
+                    <div ref={setReviewEditorHost} className="relative mt-3" />
+                </>}
                 onBack={() => setPendingImageReview(null)}
                 onConfirm={(review) => {
                     const request = imageReviewRequest;
