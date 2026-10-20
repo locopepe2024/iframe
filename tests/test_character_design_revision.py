@@ -120,3 +120,54 @@ def test_character_constraints_round_trip_and_reject_invalid_values():
         with pytest.raises(ValueError):
             pipeline.update_asset_attributes('project', 'character', 'character', {'character_design': {**design, 'constraints': bad}})
     assert len(character.character_design['design_revisions']) == 1
+
+
+def test_character_design_input_and_result_snapshots_round_trip_and_validate():
+    pipeline = ComicGenPipeline.__new__(ComicGenPipeline)
+    character = SimpleNamespace(character_design={})
+    script = SimpleNamespace(id='project')
+    pipeline.scripts = {script.id: script}
+    pipeline._find_asset_with_source = lambda *_: (character, script)
+    pipeline._save_after_asset_mutation = lambda *_: None
+    design = {
+        'identity': {'features': {'face_shape': '圆脸'}, 'editor_mode': 'fields'},
+        'look': {'features': {'clothing': '素黑劲装'}, 'editor_mode': 'fields'},
+        'design_input': {
+            'schema_version': 'iframe.character-design-input.v1',
+            'prompt': '原始面板 Prompt',
+            'identity': {'features': {'face_shape': '圆脸'}, 'editor_mode': 'fields', 'basis': ['user_specified']},
+            'look': {'features': {'clothing': '素黑劲装'}, 'editor_mode': 'fields', 'basis': ['user_specified']},
+            'supplemental_prompt': '用户补充', 'dictionary_configurations': [],
+            'constraints': {'must_keep': ['圆脸'], 'negative_prompt': []},
+        },
+        'design_result': {
+            'schema_version': 'iframe.character-design-result.v1',
+            'prompt': 'AI 生成并手改的设计',
+            'identity': {'visual_notes': '清晰面容', 'features': {}, 'editor_mode': 'notes', 'basis': ['user_specified']},
+            'look': {'visual_notes': '黑色外套', 'features': {}, 'editor_mode': 'notes', 'basis': ['creative_choice']},
+            'source': 'user-edited', 'skill_revision': 'sha256:test',
+        },
+        'confirmed': True,
+    }
+    pipeline.update_asset_attributes('project', 'character', 'character', {'character_design': design})
+    saved = character.character_design['design_draft']
+    assert saved['design_input']['prompt'] == '原始面板 Prompt'
+    assert saved['design_input']['identity']['features'] == {'face_shape': '圆脸'}
+    assert saved['design_result']['prompt'] == 'AI 生成并手改的设计'
+    assert character.character_design['design_revisions'][0]['design']['design_input'] == saved['design_input']
+    assert character.character_design['design_revisions'][0]['design']['design_result'] == saved['design_result']
+
+    invalid_snapshots = (
+        {'design_input': {**design['design_input'], 'identity': {'features': {'camera_angle': '俯拍'}}}},
+        {'design_input': {**design['design_input'], 'constraints': {'negative_prompt': ['x' * 501]}}},
+        {'design_result': {**design['design_result'], 'source': 'unknown'}},
+        {'design_result': {**design['design_result'], 'prompt': 'x' * 20001}},
+        {'design_result': None},
+        {'design_input': {key: value for key, value in design['design_input'].items() if key != 'schema_version'}},
+    )
+    for invalid in invalid_snapshots:
+        with pytest.raises(ValueError):
+            pipeline.update_asset_attributes('project', 'character', 'character', {
+                'character_design': {**design, **invalid},
+            })
+    assert len(character.character_design['design_revisions']) == 1

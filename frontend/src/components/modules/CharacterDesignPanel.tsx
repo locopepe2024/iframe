@@ -134,7 +134,7 @@ export default function CharacterDesignPanel({ description, details, onDetailsCh
         {error && <p role="alert" className="text-xs text-red-400">{error}</p>}
         {result !== null && <div>
             <label htmlFor="character-design-result" className="sr-only">AI 优化</label>
-            <textarea id="character-design-result" disabled={saving} value={result} onChange={event => onResultChange(event.target.value)} rows={10}
+            <textarea id="character-design-result" disabled={saving} value={result} maxLength={20000} onChange={event => onResultChange(event.target.value)} rows={10}
                 className="mt-2 w-full resize-y rounded border border-glass-border bg-surface p-3 text-sm leading-6 text-foreground focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary" />
         </div>}
         {result !== null && reviewItems.length > 0 && <div className="rounded border border-amber-400/30 p-2 text-xs text-text-secondary">
@@ -146,10 +146,10 @@ export default function CharacterDesignPanel({ description, details, onDetailsCh
         {error && tab === 'design' && <p role="alert" className="text-xs text-red-400">{error}</p>}
         <p role="status" className="text-xs text-text-muted">{status}</p>
         <div className="sticky bottom-0 flex gap-2 bg-surface py-2">
-            <button type="button" disabled={!canSave || saving || busy || !(result ?? details).trim()} onClick={onSave}
+            <button type="button" disabled={!canSave || saving || busy} onClick={onSave}
                 className="min-h-11 flex-1 rounded bg-primary px-3 text-sm text-primary-foreground hover:opacity-90 disabled:opacity-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary">{saving ? "保存中…" : "保存设计"}</button>
             <button type="button" disabled={saving || busy || !canReedit} onClick={onReedit}
-                className="min-h-11 flex-1 rounded border border-glass-border px-3 text-sm hover:bg-hover-bg disabled:opacity-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary">重新编辑</button>
+                className="min-h-11 flex-1 rounded border border-glass-border px-3 text-sm hover:bg-hover-bg disabled:opacity-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary">编辑已保存设计</button>
         </div>
         {showFields && (host ? createPortal(fieldsPanel, host) : fieldsPanel)}
     </section>;

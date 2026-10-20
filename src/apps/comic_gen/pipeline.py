@@ -2712,6 +2712,79 @@ class ComicGenPipeline(StudioOwnerMixin):
                     not isinstance(value, str) or len(value) > 500 for value in features.values()
                 ):
                     raise ValueError("Character design features are invalid")
+            section_fields = {
+                "identity": {"gender", "age", "face", "face_shape", "eyebrows", "eyes", "eye_detail", "nose", "lips", "makeup", "hair", "skin", "skin_tone", "skin_texture", "height", "build", "recognition_marks"},
+                "look": {"clothing", "palette", "footwear", "jewelry", "decoration", "condition", "accessories", "weapon"},
+            }
+            valid_basis = {"script_fact", "user_specified", "confirmed_design", "verified_reference", "creative_choice"}
+
+            def validate_design_snapshot(snapshot_key: str, *, is_result: bool) -> None:
+                if snapshot_key not in design:
+                    return
+                snapshot = design.get(snapshot_key)
+                allowed_snapshot_keys = {"schema_version", "prompt", "identity", "look"}
+                if is_result:
+                    allowed_snapshot_keys |= {"source", "skill_revision"}
+                else:
+                    allowed_snapshot_keys |= {
+                        "supplemental_prompt", "dictionary_configurations", "constraints", "route",
+                        "age_stage", "style_notes", "preset_selections",
+                    }
+                if not isinstance(snapshot, dict) or set(snapshot) - allowed_snapshot_keys:
+                    raise ValueError(f"Character {snapshot_key} is invalid")
+                expected_snapshot_version = "iframe.character-design-result.v1" if is_result else "iframe.character-design-input.v1"
+                if snapshot.get("schema_version") != expected_snapshot_version:
+                    raise ValueError(f"Character {snapshot_key} schema version is invalid")
+                prompt = snapshot.get("prompt")
+                max_prompt_length = 20000 if is_result else 8000
+                if not isinstance(prompt, str) or len(prompt) > max_prompt_length:
+                    raise ValueError(f"Character {snapshot_key} prompt is invalid")
+                if is_result:
+                    if snapshot.get("source") not in {"panel", "ai", "user-edited", "legacy"}:
+                        raise ValueError("Character design result source is invalid")
+                    skill_revision = snapshot.get("skill_revision")
+                    if skill_revision is not None and (not isinstance(skill_revision, str) or len(skill_revision) > 200):
+                        raise ValueError("Character design result skill revision is invalid")
+                else:
+                    supplemental = snapshot.get("supplemental_prompt", "")
+                    if not isinstance(supplemental, str) or len(supplemental) > 8000:
+                        raise ValueError("Character design input supplemental prompt is invalid")
+                    input_configs = snapshot.get("dictionary_configurations", [])
+                    if not isinstance(input_configs, list) or len(input_configs) > 50 or any(not isinstance(item, dict) for item in input_configs):
+                        raise ValueError("Character design input dictionary configuration is invalid")
+                    if len(json.dumps(input_configs, ensure_ascii=False)) > 60000:
+                        raise ValueError("Character design input dictionary configuration is too large")
+                    if "constraints" in snapshot:
+                        snapshot["constraints"] = CharacterConstraints.model_validate(snapshot["constraints"]).model_dump()
+                    for field in ("route", "age_stage", "style_notes"):
+                        value = snapshot.get(field)
+                        if value is not None and (not isinstance(value, str) or len(value) > 1000):
+                            raise ValueError(f"Character design input {field} is invalid")
+                    preset_selections = snapshot.get("preset_selections", [])
+                    if not isinstance(preset_selections, list) or len(preset_selections) > 100 or any(not isinstance(item, dict) for item in preset_selections):
+                        raise ValueError("Character design input preset selections are invalid")
+                for section_name in ("identity", "look"):
+                    section = snapshot.get(section_name)
+                    if not isinstance(section, dict) or set(section) - {"visual_notes", "features", "editor_mode", "basis"}:
+                        raise ValueError(f"Character {snapshot_key} {section_name} is invalid")
+                    notes = section.get("visual_notes")
+                    if notes is not None and (not isinstance(notes, str) or len(notes) > 8000):
+                        raise ValueError(f"Character {snapshot_key} {section_name} notes are invalid")
+                    if section.get("editor_mode") not in (None, "notes", "fields"):
+                        raise ValueError(f"Character {snapshot_key} {section_name} editor mode is invalid")
+                    features = section.get("features", {})
+                    if not isinstance(features, dict) or set(features) - section_fields[section_name] or any(
+                        not isinstance(value, str) or len(value) > 500 for value in features.values()
+                    ):
+                        raise ValueError(f"Character {snapshot_key} {section_name} features are invalid")
+                    basis = section.get("basis", [])
+                    if not isinstance(basis, list) or len(basis) > 10 or any(item not in valid_basis for item in basis):
+                        raise ValueError(f"Character {snapshot_key} {section_name} basis is invalid")
+
+            validate_design_snapshot("design_input", is_result=False)
+            validate_design_snapshot("design_result", is_result=True)
+            if len(json.dumps({key: design[key] for key in ("design_input", "design_result") if key in design}, ensure_ascii=False)) > 120000:
+                raise ValueError("Character design input and result snapshots are too large")
             notes = identity.get("visual_notes")
             visible_notes = isinstance(notes, str) and bool(notes.strip())
             visible_features = any(value.strip() for value in identity.get("features", {}).values())

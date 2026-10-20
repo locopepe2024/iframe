@@ -54,6 +54,36 @@ type AppliedPlatformPrompt = {
     customized: boolean;
 };
 
+type DesignSectionSnapshot = {
+    visual_notes?: string;
+    features?: Record<string, string>;
+    editor_mode?: CharacterSectionEditorMode;
+    basis?: DesignBasis[];
+};
+
+type DesignInputSnapshot = {
+    schema_version: "iframe.character-design-input.v1";
+    prompt: string;
+    identity: DesignSectionSnapshot;
+    look: DesignSectionSnapshot;
+    supplemental_prompt?: string;
+    dictionary_configurations: DictionaryConfiguration[];
+    constraints: CharacterConstraints;
+    route?: string;
+    age_stage?: string;
+    style_notes?: string;
+    preset_selections?: CharacterPresetSelection[];
+};
+
+type DesignResultSnapshot = {
+    schema_version: "iframe.character-design-result.v1";
+    prompt: string;
+    identity: DesignSectionSnapshot;
+    look: DesignSectionSnapshot;
+    source: "panel" | "ai" | "user-edited" | "legacy";
+    skill_revision?: string;
+};
+
 type DesignDraft = {
     constraints?: CharacterConstraints;
     dictionary_configurations?: DictionaryConfiguration[];
@@ -74,6 +104,8 @@ type DesignDraft = {
     skill_id?: string;
     skill_revision?: string;
     preset_selections?: CharacterPresetSelection[];
+    design_input?: DesignInputSnapshot;
+    design_result?: DesignResultSnapshot;
     confirmed?: boolean;
 };
 
@@ -357,25 +389,27 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
     const [activePanel, setActivePanel] = useState<"full_body" | "three_view" | "headshot" | "video">("full_body");
     const [isPlanOpen, setIsPlanOpen] = useState(false);
     const savedDesign = (asset.character_design?.design_draft || asset.character_design?.design_revisions?.at(-1)?.design || {}) as DesignDraft;
-    const [designRoute, setDesignRoute] = useState(savedDesign.route || "");
-    const [styleNotes, setStyleNotes] = useState(savedDesign.style_notes || "");
-    const [designAgeStage, setDesignAgeStage] = useState(savedDesign.age_stage || "");
-    const [dictionaryConfigurations, setDictionaryConfigurations] = useState<DictionaryConfiguration[]>(savedDesign.dictionary_configurations || []);
-    const [supplementalPrompt, setSupplementalPrompt] = useState(savedDesign.supplemental_prompt || "");
-    const [designConstraints, setDesignConstraints] = useState<CharacterConstraints>(() => normalizeCharacterConstraints(savedDesign.constraints));
-    const [designNotes, setDesignNotes] = useState(String(savedDesign.identity?.visual_notes || ""));
-    const [lookNotes, setLookNotes] = useState(String(savedDesign.look?.visual_notes || ""));
+    const savedInput = savedDesign.design_input;
+    const savedResult = savedDesign.design_result;
+    const [designRoute, setDesignRoute] = useState(savedInput?.route || savedDesign.route || "");
+    const [styleNotes, setStyleNotes] = useState(savedInput?.style_notes || savedDesign.style_notes || "");
+    const [designAgeStage, setDesignAgeStage] = useState(savedInput?.age_stage || savedDesign.age_stage || "");
+    const [dictionaryConfigurations, setDictionaryConfigurations] = useState<DictionaryConfiguration[]>(savedInput?.dictionary_configurations || savedDesign.dictionary_configurations || []);
+    const [supplementalPrompt, setSupplementalPrompt] = useState(savedInput?.supplemental_prompt || savedDesign.supplemental_prompt || "");
+    const [designConstraints, setDesignConstraints] = useState<CharacterConstraints>(() => normalizeCharacterConstraints(savedInput?.constraints || savedDesign.constraints));
+    const [designNotes, setDesignNotes] = useState(String(savedInput?.identity?.visual_notes ?? savedDesign.identity?.visual_notes ?? ""));
+    const [lookNotes, setLookNotes] = useState(String(savedInput?.look?.visual_notes ?? savedDesign.look?.visual_notes ?? ""));
     const [identityFeatures, setIdentityFeatures] = useState<IdentityFeatures>(
-        normalizeCharacterFeatures(savedDesign.identity?.features, IDENTITY_FIELDS.map(([key]) => key)));
+        normalizeCharacterFeatures(savedInput?.identity?.features || savedDesign.identity?.features, IDENTITY_FIELDS.map(([key]) => key)));
     const [lookFeatures, setLookFeatures] = useState<LookFeatures>(
-        normalizeCharacterFeatures(savedDesign.look?.features, LOOK_FIELDS.map(([key]) => key)));
+        normalizeCharacterFeatures(savedInput?.look?.features || savedDesign.look?.features, LOOK_FIELDS.map(([key]) => key)));
     const [identityEditorMode, setIdentityEditorMode] = useState<CharacterSectionEditorMode>(
-        savedDesign.identity?.editor_mode || (Object.values(savedDesign.identity?.features || {}).some((value) => typeof value === "string" && value.trim()) ? "fields" : "notes"));
+        savedInput?.identity?.editor_mode || savedDesign.identity?.editor_mode || (Object.values(savedInput?.identity?.features || savedDesign.identity?.features || {}).some((value) => typeof value === "string" && value.trim()) ? "fields" : "notes"));
     const [lookEditorMode, setLookEditorMode] = useState<CharacterSectionEditorMode>(
-        savedDesign.look?.editor_mode || (Object.values(savedDesign.look?.features || {}).some((value) => typeof value === "string" && value.trim()) ? "fields" : "notes"));
-    const [presetSelections, setPresetSelections] = useState<CharacterPresetSelection[]>(savedDesign.preset_selections || []);
-    const [designIdentityBasis, setDesignIdentityBasis] = useState<DesignBasis[]>(normalizeDesignBasis(savedDesign.identity?.basis));
-    const [designLookBasis, setDesignLookBasis] = useState<DesignBasis[]>(normalizeDesignBasis(savedDesign.look?.basis));
+        savedInput?.look?.editor_mode || savedDesign.look?.editor_mode || (Object.values(savedInput?.look?.features || savedDesign.look?.features || {}).some((value) => typeof value === "string" && value.trim()) ? "fields" : "notes"));
+    const [presetSelections, setPresetSelections] = useState<CharacterPresetSelection[]>(savedInput?.preset_selections || savedDesign.preset_selections || []);
+    const [designIdentityBasis, setDesignIdentityBasis] = useState<DesignBasis[]>(normalizeDesignBasis(savedInput?.identity?.basis || savedDesign.identity?.basis));
+    const [designLookBasis, setDesignLookBasis] = useState<DesignBasis[]>(normalizeDesignBasis(savedInput?.look?.basis || savedDesign.look?.basis));
     const [designSource, setDesignSource] = useState<"stated" | "creative-choice">(savedDesign.field_status?.visual_notes === "creative-choice" ? "creative-choice" : "stated");
     const [designUnresolved, setDesignUnresolved] = useState<string[]>(
         actionableDesignQuestions(savedDesign.unresolved, savedDesign.field_answers, savedDesign.field_suggestions),
@@ -391,9 +425,20 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
     const [designRevision, setDesignRevision] = useState<number>(asset.character_design?.design_revisions?.at(-1)?.revision || 0);
     const [savingDesign, setSavingDesign] = useState(false);
     const [designError, setDesignError] = useState("");
-    const [designInput, setDesignInput] = useState([savedDesign.user_visual_requirements?.identity, savedDesign.user_visual_requirements?.look].filter(Boolean).join("\n") || confirmedDesignContent(savedDesign) || asset.full_body_prompt || "");
-    const [designResult, setDesignResult] = useState<string | null>(
-        confirmedDesignContent(savedDesign) || null);
+    const [designInput, setDesignInput] = useState(savedInput?.prompt ?? ([savedDesign.user_visual_requirements?.identity, savedDesign.user_visual_requirements?.look].filter(Boolean).join("\n") || confirmedDesignContent(savedDesign) || asset.full_body_prompt || ""));
+    const [designResult, setDesignResult] = useState<string | null>(savedResult?.source === "panel" ? null
+        : savedResult?.prompt || confirmedDesignContent(savedDesign) || null);
+    const [designResultSource, setDesignResultSource] = useState<DesignResultSnapshot["source"]>(savedResult?.source || (savedResult ? "ai" : "legacy"));
+    const [resultIdentityFeatures, setResultIdentityFeatures] = useState<IdentityFeatures>(
+        normalizeCharacterFeatures(savedResult?.identity?.features || savedDesign.identity?.features, IDENTITY_FIELDS.map(([key]) => key)));
+    const [resultLookFeatures, setResultLookFeatures] = useState<LookFeatures>(
+        normalizeCharacterFeatures(savedResult?.look?.features || savedDesign.look?.features, LOOK_FIELDS.map(([key]) => key)));
+    const [resultIdentityNotes, setResultIdentityNotes] = useState(String(savedResult?.identity?.visual_notes || savedDesign.identity?.visual_notes || ""));
+    const [resultLookNotes, setResultLookNotes] = useState(String(savedResult?.look?.visual_notes || savedDesign.look?.visual_notes || ""));
+    const [resultIdentityEditorMode, setResultIdentityEditorMode] = useState<CharacterSectionEditorMode>(savedResult?.identity?.editor_mode || savedDesign.identity?.editor_mode || "notes");
+    const [resultLookEditorMode, setResultLookEditorMode] = useState<CharacterSectionEditorMode>(savedResult?.look?.editor_mode || savedDesign.look?.editor_mode || "notes");
+    const [resultIdentityBasis, setResultIdentityBasis] = useState<DesignBasis[]>(normalizeDesignBasis(savedResult?.identity?.basis || savedDesign.identity?.basis));
+    const [resultLookBasis, setResultLookBasis] = useState<DesignBasis[]>(normalizeDesignBasis(savedResult?.look?.basis || savedDesign.look?.basis));
     const updateProject = useProjectStore(state => state.updateProject);
     const currentProject = useProjectStore(state => state.currentProject);
     const [assetPackView, setAssetPackView] = useState<CharacterAssetPackView | null>(null);
@@ -671,14 +716,18 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
     const projectedLook = characterSectionText(lookFeatures, LOOK_FIELDS.map(([key]) => key), lookNotes, lookEditorMode);
     const normalizedConstraints = normalizeCharacterConstraints(designConstraints);
     const designConstraintText = characterConstraintsText(normalizedConstraints);
-    const currentDesignDescription = [designResult ?? (designInput || designPromptDescription(
+    const panelDesignPrompt = [
+        supplementalPrompt,
+        characterStructuredText(identityFeatures, lookFeatures),
+    ].filter(Boolean).join("\n") || designInput || designPromptDescription(
         projectedIdentity,
         projectedLook,
         [...Object.values(designFieldAnswers), ...designScopeDescription(designRoute, identityFeatures.age?.trim() ? undefined : designAgeStage), styleNotes],
-    )), designConstraintText].filter(Boolean).join("\n");
+    );
+    const currentDesignPrompt = designResult ?? panelDesignPrompt;
+    const currentDesignDescription = [currentDesignPrompt, designConstraintText].filter(Boolean).join("\n");
 
     const [designTab, setDesignTab] = useState<"design" | "ai">("design");
-    const savedDesignText = useRef(designResult ?? designInput);
     const savedDesignSnapshot = useRef<DesignDraft>(savedDesign);
     const [hasSavedDesign, setHasSavedDesign] = useState(!!asset.character_design);
 
@@ -742,17 +791,15 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
                 characterStructuredText(nextIdentityFeatures, {}) || (identityText && `身份：${identityText}`),
                 characterStructuredText({}, nextLookFeatures) || (lookText && `造型：${lookText}`),
             ].filter(Boolean).join("\n"));
-            setSupplementalPrompt("");
-            setDesignNotes(nextIdentity);
-            setLookNotes(nextLook);
-            setIdentityFeatures(nextIdentityFeatures);
-            setLookFeatures(nextLookFeatures);
-            setIdentityEditorMode(Object.values(nextIdentityFeatures).some((value) => value?.trim()) ? "fields" : "notes");
-            setLookEditorMode(Object.values(nextLookFeatures).some((value) => value?.trim()) ? "fields" : "notes");
-            setPresetSelections([]);
-            setDesignRoute(""); setDesignAgeStage(""); setStyleNotes("");
-            setDesignIdentityBasis(normalizeDesignBasis(result.identity.basis));
-            setDesignLookBasis(normalizeDesignBasis(result.look.basis));
+            setDesignResultSource("ai");
+            setResultIdentityNotes(nextIdentity);
+            setResultLookNotes(nextLook);
+            setResultIdentityFeatures(nextIdentityFeatures);
+            setResultLookFeatures(nextLookFeatures);
+            setResultIdentityEditorMode(Object.values(nextIdentityFeatures).some((value) => value?.trim()) ? "fields" : "notes");
+            setResultLookEditorMode(Object.values(nextLookFeatures).some((value) => value?.trim()) ? "fields" : "notes");
+            setResultIdentityBasis(normalizeDesignBasis(result.identity.basis));
+            setResultLookBasis(normalizeDesignBasis(result.look.basis));
             const questions = actionableDesignQuestions(result.unresolved, {}, result.field_suggestions);
             setDesignFieldSuggestions(Object.fromEntries(
                 Object.entries(result.field_suggestions || {}).filter(([question, suggestion]) => questions.includes(question) && !!suggestion.trim()),
@@ -762,11 +809,6 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
             ));
             setDesignUnresolved(questions);
             setDesignFieldAnswers({});
-            setDesignSource(
-                [...normalizeDesignBasis(result.identity.basis), ...normalizeDesignBasis(result.look.basis)].includes("creative_choice")
-                    ? "creative-choice"
-                    : "stated",
-            );
             setDesignSkillRevision(result.skill_revision);
             setDesignStatus("draft");
             setDesignTab("ai");
@@ -784,50 +826,104 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
             setDesignError("每类设计约束最多 20 项，每项最多 500 字。");
             return;
         }
-        if (!(designResult ?? designInput).trim()) {
+        if (designInput.length > 8000 || (designResult?.length || 0) > 20000) {
+            setDesignError("设计输入最多 8000 字，AI 优化结果最多 20000 字。");
+            return;
+        }
+        if (!currentDesignPrompt.trim()) {
             setDesignError("请先填写具体的角色视觉值，再保存设计。 ");
             return;
         }
         const unanswered = designUnresolved.filter((question) => !designFieldAnswers[question]?.trim());
-        const manualInput = designResult === null ? designInput : null;
+        const hasAIResult = designResult !== null;
+        const inputIdentity: DesignSectionSnapshot = {
+            visual_notes: designNotes || undefined,
+            features: identityFeatures,
+            editor_mode: identityEditorMode,
+            basis: designIdentityBasis,
+        };
+        const inputLook: DesignSectionSnapshot = {
+            visual_notes: lookNotes || undefined,
+            features: lookFeatures,
+            editor_mode: lookEditorMode,
+            basis: designLookBasis,
+        };
+        const panelIdentityForConfirmation: DesignSectionSnapshot = !Object.values(identityFeatures).some(value => (value || "").trim()) && !designNotes.trim()
+            ? { ...inputIdentity, visual_notes: designInput || undefined, basis: ["user_specified"] }
+            : inputIdentity;
+        const resultIdentity: DesignSectionSnapshot = hasAIResult ? {
+            visual_notes: resultIdentityNotes || undefined,
+            features: resultIdentityFeatures,
+            editor_mode: resultIdentityEditorMode,
+            basis: resultIdentityBasis,
+        } : panelIdentityForConfirmation;
+        const resultLook: DesignSectionSnapshot = hasAIResult ? {
+            visual_notes: resultLookNotes || undefined,
+            features: resultLookFeatures,
+            editor_mode: resultLookEditorMode,
+            basis: resultLookBasis,
+        } : inputLook;
+        const resultPrompt = designResult ?? panelDesignPrompt;
+        const inputSnapshot: DesignInputSnapshot = {
+            schema_version: "iframe.character-design-input.v1",
+            prompt: designInput,
+            identity: inputIdentity,
+            look: inputLook,
+            supplemental_prompt: supplementalPrompt || undefined,
+            dictionary_configurations: dictionaryConfigurations,
+            constraints: normalizedConstraints,
+            route: designRoute || undefined,
+            age_stage: designAgeStage || undefined,
+            style_notes: styleNotes || undefined,
+            preset_selections: presetSelections,
+        };
+        const resultSnapshot: DesignResultSnapshot = {
+            schema_version: "iframe.character-design-result.v1",
+            prompt: resultPrompt,
+            identity: resultIdentity,
+            look: resultLook,
+            source: hasAIResult ? designResultSource : "panel",
+            skill_revision: hasAIResult ? designSkillRevision || undefined : undefined,
+        };
+        const activeIdentity = resultIdentity;
+        const activeLook = hasAIResult ? resultLook : inputLook;
+        const activeIdentityFeatures = hasAIResult ? resultIdentityFeatures : identityFeatures;
+        const activeLookFeatures = hasAIResult ? resultLookFeatures : lookFeatures;
+        const activeIdentityNotes = hasAIResult ? resultIdentityNotes : designNotes;
+        const activeIdentityBasis = hasAIResult ? resultIdentityBasis : designIdentityBasis;
+        const activeLookBasis = hasAIResult ? resultLookBasis : designLookBasis;
+        const activeIdentityMode = hasAIResult ? resultIdentityEditorMode : identityEditorMode;
+        const activeLookMode = hasAIResult ? resultLookEditorMode : lookEditorMode;
+        const unansweredOutput = hasAIResult ? unanswered : [];
         const draft: DesignDraft = {
             constraints: normalizedConstraints,
             dictionary_configurations: dictionaryConfigurations,
             schema_version: "iframe.character-fields.v1",
-            supplemental_prompt: manualInput !== null ? "" : supplementalPrompt,
-            route: manualInput !== null ? "" : designRoute,
-            style_notes: manualInput !== null ? undefined : styleNotes || undefined,
-            age_stage: manualInput !== null ? undefined : designAgeStage || undefined,
-            identity: manualInput !== null
-                ? { visual_notes: manualInput, features: {}, editor_mode: "notes", basis: ["user_specified"] }
-                : { visual_notes: designNotes || undefined, features: identityFeatures, editor_mode: identityEditorMode, basis: designIdentityBasis },
-            look: manualInput !== null ? { features: {}, editor_mode: "notes" }
-                : { route: designRoute, visual_notes: lookNotes || undefined, features: lookFeatures, editor_mode: lookEditorMode, basis: designLookBasis },
-            unresolved: manualInput !== null ? [] : designNotes ? unanswered : [],
-            field_answers: manualInput !== null ? {} : Object.fromEntries(Object.entries(designFieldAnswers).filter(([, answer]) => answer.trim())),
+            supplemental_prompt: hasAIResult ? "" : supplementalPrompt,
+            route: hasAIResult ? "" : designRoute,
+            style_notes: hasAIResult ? undefined : styleNotes || undefined,
+            age_stage: hasAIResult ? undefined : designAgeStage || undefined,
+            identity: { ...activeIdentity, features: activeIdentityFeatures, editor_mode: activeIdentityMode, basis: activeIdentityBasis },
+            look: { ...activeLook, route: hasAIResult ? undefined : designRoute, features: activeLookFeatures, editor_mode: activeLookMode, basis: activeLookBasis },
+            unresolved: hasAIResult && activeIdentityNotes ? unansweredOutput : [],
+            field_answers: hasAIResult ? Object.fromEntries(Object.entries(designFieldAnswers).filter(([, answer]) => answer.trim())) : {},
             user_visual_requirements: { identity: designInput, look: "" },
-            field_suggestions: manualInput !== null ? {} : Object.fromEntries(Object.entries(designFieldSuggestions).filter(([question]) => !designFieldAnswers[question]?.trim())),
-            field_suggestion_choices: manualInput !== null ? {} : Object.fromEntries(Object.entries(designFieldSuggestionChoices).filter(([question]) => !designFieldAnswers[question]?.trim())),
+            field_suggestions: hasAIResult ? Object.fromEntries(Object.entries(designFieldSuggestions).filter(([question]) => !designFieldAnswers[question]?.trim())) : {},
+            field_suggestion_choices: hasAIResult ? Object.fromEntries(Object.entries(designFieldSuggestionChoices).filter(([question]) => !designFieldAnswers[question]?.trim())) : {},
             reference_assets: savedDesign.reference_assets || [],
-            field_status: { route: "stated", age_stage: designAgeStage ? "stated" : "default", visual_notes: designNotes ? designSource : "default" },
+            field_status: { route: "stated", age_stage: designAgeStage ? "stated" : "default", visual_notes: activeIdentityNotes ? (hasAIResult ? (resultIdentityBasis.includes("creative_choice") ? "creative-choice" : "stated") : designSource) : "default" },
             skill_id: "character-style-routes",
-            skill_revision: designSkillRevision || undefined,
+            skill_revision: hasAIResult ? designSkillRevision || undefined : undefined,
             preset_selections: presetSelections,
+            design_input: inputSnapshot,
+            design_result: resultSnapshot,
             confirmed: true,
         };
         setSavingDesign(true);
         setDesignError("");
         try {
             await onUpdateAttributes({ character_design: draft });
-            if (manualInput !== null) {
-                setDesignResult(manualInput);
-                setDesignNotes(manualInput); setLookNotes("");
-                setIdentityFeatures({}); setLookFeatures({});
-                setIdentityEditorMode("notes"); setLookEditorMode("notes");
-                setDesignRoute(""); setDesignAgeStage(""); setStyleNotes("");
-            }
             setDesignUnresolved(draft.unresolved || []);
-            savedDesignText.current = designResult ?? designInput;
             savedDesignSnapshot.current = draft;
             setHasSavedDesign(true);
             setDesignStatus("confirmed");
@@ -1099,8 +1195,24 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
         updateProject(currentProject.id, updatedProject);
     };
 
+    const clearAIResultForInput = () => {
+        setDesignResult(null);
+        setDesignResultSource("panel");
+        setResultIdentityFeatures({}); setResultLookFeatures({});
+        setResultIdentityNotes(""); setResultLookNotes("");
+        setResultIdentityEditorMode("notes"); setResultLookEditorMode("notes");
+        setResultIdentityBasis([]); setResultLookBasis([]);
+        setDesignSkillRevision("");
+        setDesignUnresolved([]); setDesignFieldAnswers({});
+        setDesignFieldSuggestions({}); setDesignFieldSuggestionChoices({});
+        setDesignSource("stated");
+        setDesignTab("design");
+        setDesignStatus("draft");
+    };
+
     const recordDictionaryConfiguration = (configuration: DictionaryConfiguration) => {
         setDictionaryConfigurations(current => [...current.filter(item => item.preset_id !== configuration.preset_id), configuration]);
+        clearAIResultForInput();
     };
 
     const updateStructuredDesign = (identityPatch: IdentityFeatures, lookPatch: LookFeatures, details?: string, remainingText?: string) => {
@@ -1110,9 +1222,9 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
         setIdentityEditorMode("fields"); setLookEditorMode("fields");
         const legacyNotes = [identityEditorMode === "notes" ? designNotes : "", lookEditorMode === "notes" ? lookNotes : ""].filter(Boolean).join("\n");
         const supplemental = remainingText !== undefined ? remainingText.trim() : supplementalPrompt || legacyNotes ||
-            (!designResult && !Object.keys(identityFeatures).length && !Object.keys(lookFeatures).length ? designInput : "");
+            (!Object.keys(identityFeatures).length && !Object.keys(lookFeatures).length ? designInput : "");
         setSupplementalPrompt(supplemental);
-        setDesignResult([supplemental, characterStructuredText(nextIdentity, nextLook)].filter(Boolean).join("\n"));
+        clearAIResultForInput();
         if (details !== undefined) setDesignInput(details);
         setDesignIdentityBasis(["user_specified"]); setDesignLookBasis(["user_specified"]);
         setDesignStatus("draft"); setPromptsNeedDesignApply(true);
@@ -1131,57 +1243,76 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
             }));
         }}
         constraints={designConstraints} onConstraintsChange={value => {
+            clearAIResultForInput();
             setDesignConstraints(value); setDesignStatus("draft"); setPromptsNeedDesignApply(true);
         }}
         supplemental={supplementalPrompt} onSupplementalChange={value => {
             setSupplementalPrompt(value);
-            setDesignResult([value, characterStructuredText(identityFeatures, lookFeatures)].filter(Boolean).join("\n"));
+            clearAIResultForInput();
             setDesignStatus("draft"); setPromptsNeedDesignApply(true);
         }}
         onDetailsChange={value => {
+            clearAIResultForInput();
             setDesignConstraints({ must_keep: [], negative_prompt: [] });
-            setDesignInput(value); setDesignResult(null); setDesignStatus("draft"); setPromptsNeedDesignApply(true);
+            setDesignInput(value); setDesignStatus("draft"); setPromptsNeedDesignApply(true);
             setIdentityFeatures({}); setLookFeatures({}); setDesignNotes(""); setLookNotes("");
             setIdentityEditorMode("notes"); setLookEditorMode("notes"); setSupplementalPrompt("");
         }}
         reviewItems={designUnresolved.map(question => [question, designFieldSuggestions[question]].filter(Boolean).join("："))}
-        result={designResult !== null || designConstraintText ? currentDesignDescription : null} onResultChange={value => {
-            setDesignConstraints({ must_keep: [], negative_prompt: [] });
+        result={designResult} onResultChange={value => {
             setDesignResult(value);
-            setSupplementalPrompt("");
+            setDesignResultSource("user-edited");
             const sections = value.match(/^身份：[\s\S]*?\n造型：/);
             if (sections) {
                 const boundary = value.indexOf("\n造型：");
-                setDesignNotes(value.slice(3, boundary));
-                setLookNotes(value.slice(boundary + 4));
-            } else { setDesignNotes(value); setLookNotes(""); }
-            setIdentityFeatures({}); setLookFeatures({});
-            setIdentityEditorMode("notes"); setLookEditorMode("notes");
-            setDesignRoute(""); setDesignAgeStage(""); setStyleNotes("");
-            setDesignIdentityBasis(["user_specified"]); setDesignLookBasis(["user_specified"]);
-            setDesignSource("stated"); setDesignStatus("draft"); setPromptsNeedDesignApply(true);
+                setResultIdentityNotes(value.slice(3, boundary));
+                setResultLookNotes(value.slice(boundary + 4));
+            } else { setResultIdentityNotes(value); setResultLookNotes(""); }
+            setResultIdentityFeatures({}); setResultLookFeatures({});
+            setResultIdentityEditorMode("notes"); setResultLookEditorMode("notes");
+            setResultIdentityBasis(["user_specified"]); setResultLookBasis(["user_specified"]);
+            setDesignStatus("draft"); setPromptsNeedDesignApply(true);
         }}
         models={designModels} model={designModel} onModelChange={setDesignModel}
-        busy={designing} saving={savingDesign} canSave={!!onUpdateAttributes} canReedit={hasSavedDesign} error={designError}
+        busy={designing} saving={savingDesign} canSave={!!onUpdateAttributes && !!currentDesignPrompt.trim()} canReedit={hasSavedDesign} error={designError}
         status={designStatus === "confirmed" ? "已保存 · 当前设计已生效" : hasSavedDesign ? "已保存的设计有修改 · 保存后生效" : "尚未保存"}
         tab={designTab} onTabChange={setDesignTab}
         onSubmit={() => void generateDesignDraft()} onSave={() => void saveDesign()}
         onReedit={() => {
             const snapshot = savedDesignSnapshot.current;
-            setDesignInput(savedDesignText.current); setDesignResult(savedDesignText.current);
-            setIdentityFeatures(normalizeCharacterFeatures(snapshot.identity?.features, IDENTITY_FIELDS.map(([key]) => key)));
-            setLookFeatures(normalizeCharacterFeatures(snapshot.look?.features, LOOK_FIELDS.map(([key]) => key)));
-            setDesignNotes(String(snapshot.identity?.visual_notes || "")); setLookNotes(String(snapshot.look?.visual_notes || ""));
-            setIdentityEditorMode(snapshot.identity?.editor_mode || "notes"); setLookEditorMode(snapshot.look?.editor_mode || "notes");
-            setSupplementalPrompt(snapshot.supplemental_prompt || "");
-            setDesignRoute(snapshot.route || ""); setDesignAgeStage(snapshot.age_stage || ""); setStyleNotes(snapshot.style_notes || "");
-            setDesignConstraints(normalizeCharacterConstraints(snapshot.constraints));
-            setDictionaryConfigurations(snapshot.dictionary_configurations || []);
-            setDesignIdentityBasis(normalizeDesignBasis(snapshot.identity?.basis));
-            setDesignLookBasis(normalizeDesignBasis(snapshot.look?.basis));
+            const input = snapshot.design_input;
+            const result = snapshot.design_result;
+            const legacyPrompt = [snapshot.user_visual_requirements?.identity, snapshot.user_visual_requirements?.look].filter(Boolean).join("\n");
+            const legacyResultPrompt = confirmedDesignContent(snapshot);
+            const inputIdentity = input?.identity || snapshot.identity || {};
+            const inputLook = input?.look || snapshot.look || {};
+            const resultIdentitySection = result?.identity || snapshot.identity || {};
+            const resultLookSection = result?.look || snapshot.look || {};
+            setDesignInput(input?.prompt ?? (legacyPrompt || legacyResultPrompt));
+            setDesignResult(result?.source === "panel" ? null : result?.prompt || legacyResultPrompt || null);
+            setDesignResultSource(result?.source || "legacy");
+            setIdentityFeatures(normalizeCharacterFeatures(inputIdentity.features, IDENTITY_FIELDS.map(([key]) => key)));
+            setLookFeatures(normalizeCharacterFeatures(inputLook.features, LOOK_FIELDS.map(([key]) => key)));
+            setDesignNotes(String(inputIdentity.visual_notes || "")); setLookNotes(String(inputLook.visual_notes || ""));
+            setIdentityEditorMode(inputIdentity.editor_mode || "notes"); setLookEditorMode(inputLook.editor_mode || "notes");
+            setDesignIdentityBasis(normalizeDesignBasis(inputIdentity.basis));
+            setDesignLookBasis(normalizeDesignBasis(inputLook.basis));
+            setResultIdentityFeatures(normalizeCharacterFeatures(resultIdentitySection.features, IDENTITY_FIELDS.map(([key]) => key)));
+            setResultLookFeatures(normalizeCharacterFeatures(resultLookSection.features, LOOK_FIELDS.map(([key]) => key)));
+            setResultIdentityNotes(String(resultIdentitySection.visual_notes || ""));
+            setResultLookNotes(String(resultLookSection.visual_notes || ""));
+            setResultIdentityEditorMode(resultIdentitySection.editor_mode || "notes");
+            setResultLookEditorMode(resultLookSection.editor_mode || "notes");
+            setResultIdentityBasis(normalizeDesignBasis(resultIdentitySection.basis));
+            setResultLookBasis(normalizeDesignBasis(resultLookSection.basis));
+            setSupplementalPrompt(input?.supplemental_prompt ?? snapshot.supplemental_prompt ?? "");
+            setDesignRoute(input?.route ?? snapshot.route ?? ""); setDesignAgeStage(input?.age_stage ?? snapshot.age_stage ?? ""); setStyleNotes(input?.style_notes ?? snapshot.style_notes ?? "");
+            setDesignConstraints(normalizeCharacterConstraints(input?.constraints || snapshot.constraints));
+            setDictionaryConfigurations(input?.dictionary_configurations || snapshot.dictionary_configurations || []);
+            setPresetSelections(input?.preset_selections || snapshot.preset_selections || []);
             setDesignFieldSuggestions(snapshot.field_suggestions || {});
             setDesignFieldSuggestionChoices(snapshot.field_suggestion_choices || {});
-            setDesignSkillRevision(snapshot.skill_revision || ""); setPresetSelections(snapshot.preset_selections || []);
+            setDesignSkillRevision(result?.skill_revision || snapshot.skill_revision || "");
             setDesignSource(snapshot.field_status?.visual_notes === "creative-choice" ? "creative-choice" : "stated");
             setDesignUnresolved(snapshot.unresolved || []); setDesignFieldAnswers(snapshot.field_answers || {});
             setDesignTab("design"); setDesignStatus("draft");
