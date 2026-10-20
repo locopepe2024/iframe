@@ -115,3 +115,13 @@ references 使用当前 owner 可访问的资产 ID + 固定 revision + role；�
 - OpenAI Structured Outputs：https://platform.openai.com/docs/guides/structured-outputs （格式保障、Schema 子集、拒绝与内容错误边界）
 - Google Gemini Image generation：https://ai.google.dev/gemini-api/docs/image-generation （Photorealistic scenes、机位、语义负面约束）
 - OpenAI Images and vision：https://platform.openai.com/docs/guides/images （所取页面主要为视觉输入说明，不作为 JSON 出图质量优势证据）
+
+## 角色第一阶段实现（2026-10-20）
+
+角色沿用 identity/look.features 兼容形状，schema_version 为 iframe.character-fields.v1；扩展独立 face_shape/eyebrows/eyes/eye_detail/nose/lips/makeup/skin_tone/skin_texture 与 footwear/jewelry/decoration/condition。旧 face/skin 是补充说明，旧 prose 不反向猜测字段。角色设计同一区域显示可编辑字段；词典面容/皮肤面板输出带标题的逐行文本并回传字段元数据，字段选择不调用模型。自由输入余文作为 supplemental_prompt 保存并展示，避免配置面容时丢失原来的服装或其他要求。
+
+AI 请求显式传递 structured_identity/structured_look，服务端校验并将明确选择覆盖同键模型提案；确认版本保存相同字段，提示词由字段顺序编译。直接编辑结果全文将切回显式 notes 模式；直接修改输入全文清除旧字段，避免陈旧字段反过来覆盖作者修改。角色字段到 UI/确认/重载/最终 Prompt 已纳入自动测试。
+
+此阶段没有实现四域统一封套、分镜继承运行时或全部服装细分属性；场景/道具/分镜沿此前实施顺序推进。图像一致性与肤质仍需真实出图验收。
+
+词典配置本身也保存结构：dictionary_configurations 记录 preset_id、schema_version、source、preset_text、selections、resolved_fields、rendered_text。全部本地配置面板/模板都输出配置快照，不依赖从 Prompt 反解析；角色常用面板另映射到独立身份字段。服装模板的全部颜色、材质和鞋履选择可在配置快照中保存并送给 AI，但尚未全部提升为角色独立编辑字段。当前目录尚无不可变版本 ID，因此使用当次 preset_text/source 快照，不虚称已建立词典版本系统。同 preset_id 的最新配置替换当前配置记录；它是配置来源快照，不替代用户后来手动编辑的字段。自由文本更改后旧配置只能作来源记录，当前显式字段/current_draft 优先。
