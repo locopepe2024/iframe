@@ -29,7 +29,7 @@ const PROPERTY_KEYS: Record<TimelineTrackKind, string> = {
   active_camera: "active_camera_id",
 };
 
-export function TimelinePanel({ recordingVideo = false, setRecordingVideo = () => {} }: { recordingVideo?: boolean; setRecordingVideo?: (value: boolean) => void }) {
+export function TimelinePanel({ suspended = false, recordingVideo = false, setRecordingVideo = () => {} }: { suspended?: boolean; recordingVideo?: boolean; setRecordingVideo?: (value: boolean) => void }) {
   const timeline = useWorkbenchStore((state) => state.dialogueTimeline);
   const minimumDuration = useWorkbenchStore(minimumTimelineDuration);
   const localAnimationImport = useWorkbenchStore((state) => state.localAnimationImport);
@@ -114,6 +114,7 @@ export function TimelinePanel({ recordingVideo = false, setRecordingVideo = () =
     }
   };
   useEffect(() => {
+    if (suspended) { setPlaying(false); lastTick.current = null; return; }
     if (!playing) { lastTick.current = null; return; }
     let handle = 0;
     const tick = (now: number) => {
@@ -130,7 +131,7 @@ export function TimelinePanel({ recordingVideo = false, setRecordingVideo = () =
     };
     handle = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(handle);
-  }, [loop, maximumFrame, playing, setPlayheadFrame, timeline.fps]);
+  }, [loop, maximumFrame, playing, setPlayheadFrame, timeline.fps, suspended]);
 
   const target = useMemo(() => {
     if (trackKind === "active_camera") return { targetType: "timeline" as const, targetId: timeline.timelineId };
