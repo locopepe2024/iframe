@@ -717,3 +717,22 @@ def test_character_design_contract_preserves_realistic_prompt_baseline(ctx, monk
     assert 'AI 完善是保守编辑，不是重写或概念设计改编' in system
     assert '禁止新增概念设计、插画、动漫' in system
     assert '不得用‘概念设计’作为开头' in system
+
+
+def test_character_design_result_restores_realism_guard(ctx, monkeypatch):
+    monkeypatch.setattr(agent, 'validate_model', lambda *_: None)
+    monkeypatch.setattr(agent, 'complete', lambda *_: (
+        '{"identity":{"visual_notes":"圆脸；概念设计；自然米色肤色；高质量；杰作级细节；自然皮肤纹理",'
+        '"features":{"skin":"自然米色肤色；磨皮"}},"look":{"visual_notes":"靛蓝长袍"},"review_items":[]}'
+    ))
+    body = agent.CharacterDesignRequest(
+        model='qwen', character_name='苏砚', profile='雪痕客',
+        current_draft='圆脸；自然米色肤色；保留可见的自然皮肤纹理；真人写实',
+    )
+    result = run_reviewed_character_draft(body, ctx)
+    combined = result['identity']['visual_notes'] + result['identity']['features']['skin']
+    assert '概念设计' not in combined
+    assert '杰作级细节' not in combined
+    assert '；磨皮' not in combined
+    assert '不磨皮' in combined
+    assert '可见毛孔' in combined

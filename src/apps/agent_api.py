@@ -506,6 +506,29 @@ def _character_design_features(section: dict, allowed: tuple[str, ...]) -> dict[
     return {key: raw[key].strip() for key in allowed if raw.get(key, "").strip()}
 
 
+_REALISM_REWRITE_TERMS = (
+    "概念设计", "插画", "动漫", "杰作级细节", "高质量", "电影感", "过度精修",
+    "磨皮", "塑料皮肤", "发光皮肤",
+)
+
+
+def _preserve_character_realism(text: str, current_draft: str) -> str:
+    """Keep explicit natural-skin/realism constraints effective after model completion."""
+    value = text.strip()
+    if not value:
+        return value
+    has_texture = "自然皮肤纹理" in current_draft or "肤质" in current_draft or "真人写实" in current_draft
+    if not has_texture:
+        return value
+    for term in _REALISM_REWRITE_TERMS:
+        value = value.replace(term, "")
+    value = re.sub(r"[；;。]+\s*(?=[；;。])", "；", value)
+    guard = "真人写实质感，保留可见毛孔与自然皮肤纹理，不磨皮、不塑料化、不做艺术化重绘"
+    if guard not in value:
+        value = f"{value.rstrip('；;。')}；{guard}"
+    return value
+
+
 def _character_design_review_needs_revision(result: dict) -> bool:
     legacy = result.get("unresolved") or []
     if legacy:
@@ -641,6 +664,9 @@ def character_design_draft(body: CharacterDesignRequest, ctx: UserContext = Depe
             raise ValueError("Invalid design sections")
         identity_features = _character_design_features(identity, _CHARACTER_IDENTITY_FEATURES)
         look_features = _character_design_features(look, _CHARACTER_LOOK_FEATURES)
+        if body.current_draft and any(term in body.current_draft for term in ("自然皮肤纹理", "肤质", "真人写实")):
+            if "skin" in identity_features:
+                identity_features["skin"] = _preserve_character_realism(identity_features["skin"], body.current_draft)
         identity_notes = _character_design_visual_notes(identity)
         look_notes = _character_design_visual_notes(look)
         if not identity_notes and identity_features:
@@ -649,6 +675,8 @@ def character_design_draft(body: CharacterDesignRequest, ctx: UserContext = Depe
             look_notes = "；".join(look_features.values())
         if not identity_notes:
             raise ValueError("Missing concrete identity design")
+        identity_notes = _preserve_character_realism(identity_notes, body.current_draft)
+        look_notes = _preserve_character_realism(look_notes, body.current_draft)
         review_items = result.get("review_items") or []
         if not isinstance(review_items, list):
             raise ValueError("Invalid review items")
