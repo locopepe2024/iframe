@@ -33,6 +33,7 @@ import ReferencePromptEditor, {
 } from "./playground/ReferencePromptEditor";
 import { searchReferenceCandidates } from "@/lib/referenceCandidateSearch";
 import { IDENTITY_FIELDS, LOOK_FIELDS, characterSectionText, characterStructuredText, normalizeCharacterFeatures,
+    characterConstraintsText, normalizeCharacterConstraints, type CharacterConstraints,
     type CharacterSectionEditorMode, type IdentityFeatures, type LookFeatures } from "@/lib/characterStructuredDesign";
 import type { DictionaryConfiguration } from "@/lib/characterDictionaryPresets";
 import { type CharacterPresetTarget } from "@/lib/characterQuickActions";
@@ -53,6 +54,7 @@ type AppliedPlatformPrompt = {
 };
 
 type DesignDraft = {
+    constraints?: CharacterConstraints;
     dictionary_configurations?: DictionaryConfiguration[];
     schema_version?: string;
     supplemental_prompt?: string;
@@ -114,7 +116,7 @@ function designScopeDescription(route?: string, ageStage?: string): string[] {
     return [route ? routeLabels[route] || route : "", ageStage ? ageLabels[ageStage] || ageStage : ""];
 }
 
-function confirmedDesignDescription(design: DesignDraft | undefined): string {
+function confirmedDesignContent(design: DesignDraft | undefined): string {
     // The question remains in the saved design draft for auditability; only
     // the user's confirmed value belongs in an image prompt.
     const answers = Object.values(design?.field_answers || {});
@@ -134,6 +136,10 @@ function confirmedDesignDescription(design: DesignDraft | undefined): string {
             LOOK_FIELDS.map(([key]) => key), design?.look?.visual_notes, design?.look?.editor_mode),
         [...answers, ...designScopeDescription(design?.route, design?.age_stage), design?.style_notes || ""],
     );
+}
+
+function confirmedDesignDescription(design: DesignDraft | undefined): string {
+    return [confirmedDesignContent(design), characterConstraintsText(normalizeCharacterConstraints(design?.constraints))].filter(Boolean).join("\n");
 }
 
 function normalizeDesignQuestions(values: unknown): string[] {
@@ -356,6 +362,7 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
     const [designAgeStage, setDesignAgeStage] = useState(savedDesign.age_stage || "");
     const [dictionaryConfigurations, setDictionaryConfigurations] = useState<DictionaryConfiguration[]>(savedDesign.dictionary_configurations || []);
     const [supplementalPrompt, setSupplementalPrompt] = useState(savedDesign.supplemental_prompt || "");
+    const [designConstraints, setDesignConstraints] = useState<CharacterConstraints>(() => normalizeCharacterConstraints(savedDesign.constraints));
     const [designNotes, setDesignNotes] = useState(String(savedDesign.identity?.visual_notes || ""));
     const [lookNotes, setLookNotes] = useState(String(savedDesign.look?.visual_notes || ""));
     const [identityFeatures, setIdentityFeatures] = useState<IdentityFeatures>(
@@ -386,7 +393,7 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
     const [designError, setDesignError] = useState("");
     const [designInput, setDesignInput] = useState([savedDesign.user_visual_requirements?.identity, savedDesign.user_visual_requirements?.look].filter(Boolean).join("\n"));
     const [designResult, setDesignResult] = useState<string | null>(
-        confirmedDesignDescription(savedDesign) || null);
+        confirmedDesignContent(savedDesign) || null);
     const updateProject = useProjectStore(state => state.updateProject);
     const currentProject = useProjectStore(state => state.currentProject);
     const [assetPackView, setAssetPackView] = useState<CharacterAssetPackView | null>(null);
@@ -654,17 +661,28 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
 
     // New State for Style Control
     // User's own negative prompt (initially empty or with sensible defaults)
-    const [negativePrompt, setNegativePrompt] = useState(DEFAULT_CHARACTER_NEGATIVE_PROMPT);
+    const [negativePrompt, setNegativePrompt] = useState(() => [DEFAULT_CHARACTER_NEGATIVE_PROMPT,
+        ...normalizeCharacterConstraints((asset.character_design?.design_revisions?.at(-1)?.design as DesignDraft | undefined)?.constraints).negative_prompt,
+    ].filter(Boolean).join("\n"));
+    const appliedDesignNegative = useRef(normalizeCharacterConstraints(
+        (asset.character_design?.design_revisions?.at(-1)?.design as DesignDraft | undefined)?.constraints).negative_prompt);
 
     const projectedIdentity = characterSectionText(identityFeatures, IDENTITY_FIELDS.map(([key]) => key), designNotes, identityEditorMode);
     const projectedLook = characterSectionText(lookFeatures, LOOK_FIELDS.map(([key]) => key), lookNotes, lookEditorMode);
-    const currentDesignDescription = designResult ?? (designInput || designPromptDescription(
+    const normalizedConstraints = normalizeCharacterConstraints(designConstraints);
+    const designConstraintText = characterConstraintsText(normalizedConstraints);
+    const currentDesignDescription = [designResult ?? (designInput || designPromptDescription(
         projectedIdentity,
         projectedLook,
         [...Object.values(designFieldAnswers), ...designScopeDescription(designRoute, designAgeStage), styleNotes],
-    ));
+    )), designConstraintText].filter(Boolean).join("\n");
 
     const applyDesignToPrompts = () => {
+        const previousNegative = appliedDesignNegative.current;
+        setNegativePrompt(current => Array.from(new Set([
+            ...current.split('\n').filter(line => line && !previousNegative.includes(line)), ...normalizedConstraints.negative_prompt,
+        ])).join('\n'));
+        appliedDesignNegative.current = normalizedConstraints.negative_prompt;
         setFullBodyPrompt(buildCharacterImagePrompt("full_body", asset.name, currentDesignDescription, hasNonFullBodyUpload));
         setThreeViewPrompt(buildCharacterImagePrompt("three_view", asset.name, currentDesignDescription, hasFullBodyImage || hasAnyUpload));
         setHeadshotPrompt(buildCharacterImagePrompt("headshot", asset.name, currentDesignDescription, hasFullBodyImage || hasAnyUpload));
@@ -684,6 +702,7 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
         dictionary_configurations: dictionaryConfigurations,
         structured_identity: identityEditorMode === "fields" ? identityFeatures : {},
         structured_look: lookEditorMode === "fields" ? lookFeatures : {},
+        constraints: normalizedConstraints,
         route: "",
 
     };
@@ -697,6 +716,7 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
             if (!designInput || currentPrompt !== designPromptBaseline.current) {
                 setDesignInput(currentPrompt);
                 if (currentPrompt !== designPromptBaseline.current) {
+                    setDesignConstraints({ must_keep: [], negative_prompt: [] });
                     setDesignResult(null); setDesignStatus("draft");
                     setIdentityFeatures({}); setLookFeatures({}); setDesignNotes(""); setLookNotes("");
                     setIdentityEditorMode("notes"); setLookEditorMode("notes"); setSupplementalPrompt("");
@@ -775,6 +795,10 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
 
     const saveDesignDraft = async (confirmed: boolean) => {
         if (!onUpdateAttributes || savingDesign) return;
+        if ([normalizedConstraints.must_keep, normalizedConstraints.negative_prompt].some(items => items.length > 20 || items.some(item => item.length > 500))) {
+            setDesignError("每类设计约束最多 20 项，每项最多 500 字。");
+            return;
+        }
         if (confirmed && !(designResult ?? designInput).trim()) {
             setDesignError("请先填写具体的角色视觉值，再确认设计。 ");
             return;
@@ -782,6 +806,7 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
         const unanswered = designUnresolved.filter((question) => !designFieldAnswers[question]?.trim());
         const manualInput = designResult === null ? designInput : null;
         const draft: DesignDraft = {
+            constraints: normalizedConstraints,
             dictionary_configurations: dictionaryConfigurations,
             schema_version: "iframe.character-fields.v1",
             supplemental_prompt: manualInput !== null ? "" : supplementalPrompt,
@@ -1106,19 +1131,30 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
         onDictionaryConfiguration={recordDictionaryConfiguration}
         identityFields={identityFeatures} lookFields={lookFeatures}
         onFieldsChange={(section, key, value) => updateStructuredDesign(section === "identity" ? { [key]: value } : {}, section === "look" ? { [key]: value } : {})}
-        onDictionaryFields={(text, fields, remaining) => updateStructuredDesign(fields.identity, fields.look, text, remaining)}
+        onDictionaryFields={(text, fields, remaining) => {
+            updateStructuredDesign(fields.identity, fields.look, text, remaining);
+            if (fields.constraints) setDesignConstraints(current => normalizeCharacterConstraints({
+                must_keep: [...current.must_keep, ...fields.constraints!.must_keep],
+                negative_prompt: [...current.negative_prompt, ...fields.constraints!.negative_prompt],
+            }));
+        }}
+        constraints={designConstraints} onConstraintsChange={value => {
+            setDesignConstraints(value); setDesignStatus("draft"); setPromptsNeedDesignApply(true);
+        }}
         supplemental={supplementalPrompt} onSupplementalChange={value => {
             setSupplementalPrompt(value);
             setDesignResult([value, characterStructuredText(identityFeatures, lookFeatures)].filter(Boolean).join("\n"));
             setDesignStatus("draft"); setPromptsNeedDesignApply(true);
         }}
         onDetailsChange={value => {
+            setDesignConstraints({ must_keep: [], negative_prompt: [] });
             setDesignInput(value); setDesignResult(null); setDesignStatus("draft");
             setIdentityFeatures({}); setLookFeatures({}); setDesignNotes(""); setLookNotes("");
             setIdentityEditorMode("notes"); setLookEditorMode("notes"); setSupplementalPrompt("");
         }}
         reviewItems={designUnresolved.map(question => [question, designFieldSuggestions[question]].filter(Boolean).join("："))}
-        result={designResult} onResultChange={value => {
+        result={designResult !== null || designConstraintText ? currentDesignDescription : null} onResultChange={value => {
+            setDesignConstraints({ must_keep: [], negative_prompt: [] });
             setDesignResult(value);
             setSupplementalPrompt("");
             const sections = value.match(/^身份：[\s\S]*?\n造型：/);

@@ -32,6 +32,7 @@ from ..utils.reference_files import AUDIO_EXTENSIONS, DOCUMENT_EXTENSIONS, TEXT_
 from .media_reference import normalize_managed_media_reference
 from .agent_tools import search_knowledge
 from . import agent_facts
+from .comic_gen.character_constraints import CharacterConstraints
 
 router = APIRouter(prefix="/agent", tags=["agent"])
 router.include_router(skills_router)
@@ -356,6 +357,7 @@ class CharacterDesignRequest(BaseModel):
     dictionary_configurations: list[dict] = Field(default_factory=list, max_length=50)
     structured_identity: dict[str, str] = Field(default_factory=dict)
     structured_look: dict[str, str] = Field(default_factory=dict)
+    constraints: CharacterConstraints = Field(default_factory=CharacterConstraints)
     user_visual_requirements: CharacterDesignVisualRequirements = Field(default_factory=CharacterDesignVisualRequirements)
     user_answers: dict[str, str] = Field(default_factory=dict, max_length=20)
     route: str = ""
@@ -581,6 +583,7 @@ def _compile_character_design_draft_input(body: CharacterDesignRequest, ctx: Use
               + "identity 和 look 必须为对象，features 必须为对象，其值必须为字符串；每个 features 值最多 500 个字符，不要使用对象或数组包装。未指定项可省略或用空字符串，不得将缺失字段写成 null。visual_notes 必须为字符串，review_items 必须为数组，无冲突时返回空数组 []。不要输出 Markdown 或 JSON 之外的解释。"
               + "current_draft 是当前由用户编辑的角色细节，其中明确的视觉选择视为 user_specified；与 profile 中外观描述不同时保留用户选择，并仅对确实需要确认的冲突给出具体建议，不得直接拒绝设计或只返回问题。"
               + "structured_identity 和 structured_look 是用户明确编辑的字段，必须逐项保留；仅补缺失项，不得用 current_draft 的旧摘要覆盖这些字段。dictionary_configurations 是之前应用词典的来源快照，可能已经被用户手动改过，不得覆盖当前显式字段和 current_draft。"
+              + "constraints.must_keep 是必须保留的用户要求；constraints.negative_prompt 是禁止出现的内容，不能作为正向描述。它们独立于身份和造型字段，不得改写或新增这些数组；遇到冲突在 review_items 提出具体核对建议。"
               + "basis 只能使用 script_fact、user_specified、confirmed_design、verified_reference、creative_choice；可用字符串数组表示混合来源。"
               + "每段视觉值必须具体、可观察、彼此协调。不得把角色性格、镜头动作或通用质量词写入视觉值。"
               + "群体角色须先给出统一主色、统一服装轮廓和一个视觉焦点，再用少量面孔或体型差异区分成员；杂色、拼凑和脏污应在受控色系内表现，不要扩展成多种抢眼颜色与层叠碎片。用户要求简化服装时，减少层数、配饰和兵器展示，不得一边保留满屏装饰一边只追加‘简化’字样。"
@@ -793,6 +796,7 @@ def character_design_draft(body: CharacterDesignRequest, ctx: UserContext = Depe
         "field_suggestion_choices": suggestion_choices,
         "skill_revision": prepared["route_skill_revision"],
         "identity_skill_revision": prepared["identity_skill_revision"],
+        "constraints": body.constraints.model_dump(),
     }
 
 

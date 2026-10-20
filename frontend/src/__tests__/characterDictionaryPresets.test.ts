@@ -210,3 +210,15 @@ it('captures complete clothing configuration independently of flattened prose', 
   expect(config.preset_text).toBe(preset.text);
   expect(config.rendered_text).toBe(renderDictionaryPreset(preset, config.selections));
 });
+
+it('projects clothing panels into authored sections and explicit layer constraints', async () => {
+  const { dictionaryStructuredFields } = await import('@/lib/characterDictionaryPresets');
+  const preset = CHARACTER_DICTIONARY_PRESETS.find(entry => entry.id === 'dictionary.panel.classical-robe')!;
+  const result = dictionaryStructuredFields(preset, {});
+  expect(result.look.clothing).toContain('上身仅有里衣和外衣两件');
+  expect(result.look.clothing).not.toContain('鞋履：');
+  expect(result.constraints?.must_keep).toContain('上身仅有里衣和外衣两件');
+  expect(result.constraints?.negative_prompt).toContain('未指定的中衣、披风、护甲或装饰性叠领');
+  const modern = CHARACTER_DICTIONARY_PRESETS.find(entry => entry.id === 'dictionary.panel.modern-male-clothing')!;
+  expect(dictionaryStructuredFields(modern, {}).constraints).toBeUndefined();
+});

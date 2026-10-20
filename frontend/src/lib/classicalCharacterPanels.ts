@@ -9,6 +9,10 @@ const fieldCategories = {
   "古装里衣款式": "classical-inner", "古装裤装款式": "classical-trousers", "古装裙装款式": "classical-skirt", "古装鞋履": "classical-shoes",
   "耳饰": "ear-jewelry", "颈饰": "neck-jewelry", "腕饰": "wrist-jewelry", "腰间佩饰": "waist-jewelry",
 };
+const twoLayerConstraints = {
+  must_keep: ['上身仅有里衣和外衣两件', '领口仅露出一道里衣领缘，袖口不叠加装饰袖'],
+  negative_prompt: ['未指定的中衣、披风、护甲或装饰性叠领'],
+};
 
 export function sectionedDictionaryPreset(preset: Omit<CharacterDictionaryPreset, "text"> & { sections: DictionarySection[] }): CharacterDictionaryPreset {
   return { ...preset, text: preset.sections.map((section) => `${section.label}：${section.parts.join("")}`).join("\n") };
@@ -26,6 +30,7 @@ export const CLASSICAL_CHARACTER_PANELS: CharacterDictionaryPreset[] = [
   }),
   sectionedDictionaryPreset({
     ...base, id: "dictionary.panel.classical-robe", title: "古装长袍搭配", search: "服装 古装 男装 男子 长袍 直裰 圆领袍",
+    constraints: twoLayerConstraints,
     fieldCategories: { ...fieldCategories, "男装外衣款式": "classical-male-outer" },
     defaults: { "古装里衣款式": "素面交领里衣", "男装外衣款式": "交领长袍", "古装裤装款式": "束脚长裤", "面料": "棉布" },
     sections: [
@@ -35,6 +40,7 @@ export const CLASSICAL_CHARACTER_PANELS: CharacterDictionaryPreset[] = [
   }),
   sectionedDictionaryPreset({
     ...base, id: "dictionary.panel.classical-skirt", title: "古装衣裙搭配", search: "服装 古装 女装 女子 衣裙 马面裙 褙子",
+    constraints: twoLayerConstraints,
     fieldCategories: { ...fieldCategories, "女装上衣款式": "classical-female-upper" },
     defaults: { "古装里衣款式": "素面交领里衣", "女装上衣款式": "立领长袄", "古装裙装款式": "马面裙", "面料": "丝绸" },
     sections: [

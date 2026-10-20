@@ -11,6 +11,7 @@ import threading
 import platform
 import tempfile
 import copy
+from .character_constraints import CharacterConstraints
 from urllib.parse import quote
 from .models import (
     Script,
@@ -2686,6 +2687,9 @@ class ComicGenPipeline(StudioOwnerMixin):
             design = attributes["character_design"]
             if not isinstance(design, dict):
                 raise ValueError("Character design must be an object")
+            # Validate before mutating either draft or confirmed revisions.
+            if "constraints" in design:
+                design = {**design, "constraints": CharacterConstraints.model_validate(design["constraints"]).model_dump()}
             configs = design.get("dictionary_configurations", [])
             if not isinstance(configs, list) or len(configs) > 50 or any(not isinstance(item, dict) for item in configs):
                 raise ValueError("Character dictionary configuration is invalid")

@@ -6,6 +6,7 @@ import { CLASSICAL_CHARACTER_TERMS, CLASSICAL_CHARACTER_TEMPLATES } from "./clas
 import { CLASSICAL_CHARACTER_PANELS, sectionedDictionaryPreset } from "./classicalCharacterPanels";
 import { MODERN_MALE_PANEL, MODERN_MALE_TEMPLATE, MODERN_MALE_TERMS } from "./modernMaleDictionary";
 import { CHARACTER_EXPRESSION_TERMS } from "./characterExpressionDictionary";
+import type { CharacterConstraints } from "./characterStructuredDesign";
 export type DictionarySection = { label: string; parts: string[] };
 export type OutfitField = { key: string; label: string; value: string; options: readonly string[]; output?: Record<string, string>; dependentKeys?: readonly string[] };
 export type CharacterDictionaryPreset = {
@@ -24,6 +25,7 @@ export type CharacterDictionaryPreset = {
   sections?: DictionarySection[];
   optionalFields?: string[];
   fieldCategories?: Record<string, string>;
+  constraints?: CharacterConstraints;
 };
 
 const source = "iFrame 创作词典 · v1 · 非历史考据方案";
@@ -225,13 +227,25 @@ export function dictionaryStructuredFields(preset: CharacterDictionaryPreset, va
     '妆容': ['identity', 'makeup'], '发型': ['identity', 'hair'], '身高': ['identity', 'height'],
     '体态': ['identity', 'build'], '衣物状态': ['look', 'condition'],
   };
-  const result: { identity: Record<string, string>; look: Record<string, string> } = { identity: {}, look: {} };
-  if (!["face", "skin", "hair", "height", "posture"].some(id => preset.id === `dictionary.panel.${id}`)) return result;
-  for (const field of dictionaryPresetFields(preset, values)) {
-    const target = keys[field.key];
-    const selected = values[field.key] !== undefined && field.options.includes(values[field.key]) ? values[field.key] : field.value;
-    if (target && selected && !selected.includes('[')) result[target[0]][target[1]] = field.output?.[selected] ?? selected;
+  const result: { identity: Record<string, string>; look: Record<string, string>; constraints?: CharacterConstraints } = { identity: {}, look: {} };
+  if (preset.type !== "配置面板") return result;
+  if (["face", "skin", "hair", "height", "posture"].some(id => preset.id === `dictionary.panel.${id}`)) {
+    for (const field of dictionaryPresetFields(preset, values)) {
+      const target = keys[field.key];
+      const selected = values[field.key] !== undefined && field.options.includes(values[field.key]) ? values[field.key] : field.value;
+      if (target && selected && !selected.includes('[')) result[target[0]][target[1]] = field.output?.[selected] ?? selected;
+    }
+  } else {
+    // These are authored section labels, not a reverse parse of user prose.
+    const sectionKeys: Record<string, string> = { '服装': 'clothing', '鞋履': 'footwear', '首饰': 'jewelry', '装饰': 'decoration', '新旧': 'condition' };
+    for (const section of preset.sections || []) {
+      const key = sectionKeys[section.label];
+      if (!key) continue;
+      const rendered = renderDictionaryPreset({ ...preset, sections: [section] }, values);
+      if (rendered) result.look[key] = rendered.slice(section.label.length + 1);
+    }
   }
+  if (preset.constraints) result.constraints = preset.constraints;
   return result;
 }
 

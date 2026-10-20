@@ -15,6 +15,20 @@ export type LookFeature = typeof LOOK_FIELDS[number][0];
 export type IdentityFeatures = Partial<Record<IdentityFeature, string>>;
 export type LookFeatures = Partial<Record<LookFeature, string>>;
 
+export type CharacterConstraints = { must_keep: string[]; negative_prompt: string[] };
+export function normalizeCharacterConstraints(value: unknown): CharacterConstraints {
+  const record = value && typeof value === 'object' ? value as Record<string, unknown> : {};
+  const lines = (items: unknown) => Array.isArray(items)
+    ? Array.from(new Set(items.filter((item): item is string => typeof item === 'string').map(item => item.trim()).filter(Boolean))) : [];
+  return { must_keep: lines(record.must_keep), negative_prompt: lines(record.negative_prompt) };
+}
+export function characterConstraintsText(constraints: CharacterConstraints): string {
+  return [
+    constraints.must_keep.length ? `必须保留：\n${constraints.must_keep.map(value => `- ${value}`).join('\n')}` : '',
+    constraints.negative_prompt.length ? `负面提示词：\n${constraints.negative_prompt.map(value => `- ${value}`).join('\n')}` : '',
+  ].filter(Boolean).join('\n');
+}
+
 export function normalizeCharacterFeatures<T extends string>(value: unknown, keys: readonly T[]): Partial<Record<T, string>> {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return {};
   const record = value as Record<string, unknown>;

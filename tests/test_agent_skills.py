@@ -752,3 +752,17 @@ def test_structured_panel_choices_override_ai_proposals(ctx, monkeypatch):
     assert result['identity']['features']['skin_texture'] == '面颊略干，保留干燥纹理'
     assert result['identity']['features']['hair'] == '黑色长发'
     assert result['look']['features']['footwear'] == '素面布靴'
+
+
+def test_character_constraints_are_authored_not_model_proposals(ctx, monkeypatch):
+    monkeypatch.setattr(agent, 'validate_model', lambda *_: None)
+    monkeypatch.setattr(agent, 'complete', lambda *_: json.dumps({
+        'identity': {'visual_notes': '圆脸', 'features': {'face_shape': '圆脸'}},
+        'look': {'visual_notes': '布衣', 'features': {'clothing': '布衣'}},
+        'constraints': {'must_keep': ['光滑肌肤'], 'negative_prompt': []}, 'review_items': [],
+    }))
+    constraints = {'must_keep': ['自然皮肤纹理'], 'negative_prompt': ['额外披风']}
+    body = agent.CharacterDesignRequest(model='qwen', character_name='苏砚', profile='少年', constraints=constraints)
+    preview = agent.preview_character_design_draft(body, ctx)
+    assert json.loads(preview['messages']['user'])['constraints'] == constraints
+    assert run_reviewed_character_draft(body, ctx)['constraints'] == constraints

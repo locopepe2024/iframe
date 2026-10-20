@@ -3,12 +3,12 @@
 import { useRef, useState } from "react";
 import type { ChatModel } from "@/lib/api";
 import ReferencePromptEditor, { type PromptSlashSuggestion } from "./playground/ReferencePromptEditor";
-import { IDENTITY_FIELDS, LOOK_FIELDS, type IdentityFeatures, type LookFeatures } from "@/lib/characterStructuredDesign";
+import { IDENTITY_FIELDS, LOOK_FIELDS, type IdentityFeatures, type LookFeatures, type CharacterConstraints } from "@/lib/characterStructuredDesign";
 import type { DictionaryConfiguration } from "@/lib/characterDictionaryPresets";
 import CharacterPromptDictionary from "./CharacterPromptDictionary";
 
 export default function CharacterDesignPanel({ description, details, onDetailsChange, result, onResultChange,
-    identityFields, lookFields, onFieldsChange, onDictionaryFields, onDictionaryConfiguration, supplemental, onSupplementalChange, reviewItems, models, model, onModelChange, busy, saving, canSave, error, status, onSubmit, onSave, onConfirm, onBack,
+    identityFields, lookFields, onFieldsChange, onDictionaryFields, onDictionaryConfiguration, constraints, onConstraintsChange, supplemental, onSupplementalChange, reviewItems, models, model, onModelChange, busy, saving, canSave, error, status, onSubmit, onSave, onConfirm, onBack,
 }: {
     description: string; details: string; onDetailsChange: (value: string) => void;
     result: string | null; onResultChange: (value: string) => void;
@@ -16,7 +16,8 @@ export default function CharacterDesignPanel({ description, details, onDetailsCh
     supplemental: string; onSupplementalChange: (value: string) => void;
     identityFields: IdentityFeatures; lookFields: LookFeatures;
     onFieldsChange: (section: "identity" | "look", key: string, value: string) => void;
-    onDictionaryFields: (text: string, fields: { identity: Record<string, string>; look: Record<string, string> }, remainingText: string) => void;
+    onDictionaryFields: (text: string, fields: { identity: Record<string, string>; look: Record<string, string>; constraints?: CharacterConstraints }, remainingText: string) => void;
+    constraints: CharacterConstraints; onConstraintsChange: (value: CharacterConstraints) => void;
     reviewItems: string[];
     models: ChatModel[]; model: string; onModelChange: (value: string) => void;
     busy: boolean; saving: boolean; canSave: boolean; error: string; status: string;
@@ -70,6 +71,18 @@ export default function CharacterDesignPanel({ description, details, onDetailsCh
                     </div>
                 </fieldset>)}
         </div>
+        <fieldset disabled={saving || busy} className="min-w-0 rounded border border-glass-border p-3">
+            <legend className="px-1 text-xs font-medium">设计约束</legend>
+            <p className="mb-2 text-[11px] text-text-muted">每行一项，最多 20 项，每项最多 500 字；未填写的项目不添加限制。</p>
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                {([['must_keep', '必须保留'], ['negative_prompt', '负面提示词']] as const).map(([key, label]) =>
+                    <label key={key} className="min-w-0 text-xs text-text-secondary">{label}
+                        <textarea aria-label={`设计约束 · ${label}`} value={constraints[key].join('\n')} rows={4}
+                            onChange={event => onConstraintsChange({ ...constraints, [key]: event.target.value.split('\n') })}
+                            className="mt-1 min-h-11 w-full rounded border border-glass-border bg-surface p-2 text-sm text-foreground" />
+                    </label>)}
+            </div>
+        </fieldset>
         <label className="block text-xs text-text-secondary" htmlFor="character-design-model">设计模型</label>
         <select id="character-design-model" value={model} onChange={event => onModelChange(event.target.value)}
             disabled={!models.length || busy || saving} className="min-h-11 w-full rounded border border-glass-border bg-surface px-2 text-sm text-foreground focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary">

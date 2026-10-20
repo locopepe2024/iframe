@@ -8,6 +8,7 @@ import { editablePlatformPrompt, isUsablePlatformPrompt } from "@/lib/platformPr
 import { CHARACTER_DICTIONARY_GROUPS, dictionaryCategoryPath, dictionaryCategorySearch, dictionarySlotCategory, localDictionaryCategories, platformDictionaryCategories } from "@/lib/characterDictionaryCategories";
 import { PROMPT_TASKS, PROMPT_TOPICS, PROMPT_STYLES, templateDimensions, type PromptTask } from "@/lib/promptTemplateCategories";
 import type { PromptSlashSuggestion } from "./playground/ReferencePromptEditor";
+import type { CharacterConstraints } from "@/lib/characterStructuredDesign";
 
 type Entry = {
   id: string; title: string; text: string; type: "词条" | "配置面板" | "Prompt 模板" | "Prompt 案例" | "Skill";
@@ -17,7 +18,7 @@ type Entry = {
   motionText?: string;
   remainingText?: string;
   configuration?: DictionaryConfiguration;
-  structuredFields?: { identity: Record<string, string>; look: Record<string, string> };
+  structuredFields?: { identity: Record<string, string>; look: Record<string, string>; constraints?: CharacterConstraints };
 };
 const DOMAINS: Record<string, string> = {
   "character.identity": "身份", "character.look": "造型", "character.performance": "表演", "world.style": "风格",

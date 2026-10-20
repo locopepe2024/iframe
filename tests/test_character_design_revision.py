@@ -103,3 +103,20 @@ def test_expanded_face_and_wardrobe_fields_survive_confirmation():
     saved = character.character_design['design_revisions'][0]['design']
     assert saved['identity']['features'] == fields
     assert saved['look']['features'] == look
+
+
+def test_character_constraints_round_trip_and_reject_invalid_values():
+    pipeline = ComicGenPipeline.__new__(ComicGenPipeline)
+    character = SimpleNamespace(character_design={})
+    script = SimpleNamespace(id='project')
+    pipeline.scripts = {script.id: script}
+    pipeline._find_asset_with_source = lambda *_: (character, script)
+    pipeline._save_after_asset_mutation = lambda *_: None
+    constraints = {'must_keep': ['可见自然皮肤纹理'], 'negative_prompt': ['额外披风']}
+    design = {'identity': {'features': {'face_shape': '圆脸'}}, 'constraints': constraints, 'confirmed': True}
+    pipeline.update_asset_attributes('project', 'character', 'character', {'character_design': design})
+    assert character.character_design['design_revisions'][0]['design']['constraints'] == constraints
+    for bad in ({'negative_prompt': '披风'}, {'negative_prompt': [42]}, {'negative_prompt': ['x' * 501]}, {'negative_prompt': ['x'] * 21}, {'unknown': []}, None):
+        with pytest.raises(ValueError):
+            pipeline.update_asset_attributes('project', 'character', 'character', {'character_design': {**design, 'constraints': bad}})
+    assert len(character.character_design['design_revisions']) == 1

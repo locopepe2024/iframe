@@ -959,3 +959,44 @@ it("saves dictionary face choices as fields and keeps the remaining clothing tex
         identity: expect.objectContaining({ editor_mode: "fields", features: { skin_tone: "暖小麦肤色", skin_texture: "面颊皮肤略显干燥，保留细微干燥纹理" } }),
     }) }));
 });
+
+it('preserves authored negative prompt arrays through AI, confirmation and reload', async () => {
+    const { onUpdateAttributes } = mountSimpleDesign();
+    fireEvent.click(screen.getByRole('button', { name: '展开角色设计' }));
+    fireEvent.change(screen.getByRole('textbox', { name: '设计约束 · 必须保留' }), { target: { value: '自然皮肤纹理' } });
+    fireEvent.change(screen.getByRole('textbox', { name: '设计约束 · 负面提示词' }), { target: { value: '额外披风\ncartoon' } });
+    await submitSimpleDesign();
+    const request = apiMocks.agentRequest.mock.calls.find(([path]) => path === '/character-design/draft')![2];
+    expect(request.constraints).toEqual({ must_keep: ['自然皮肤纹理'], negative_prompt: ['额外披风', 'cartoon'] });
+    fireEvent.click(screen.getByRole('button', { name: '确认设计' }));
+    await waitFor(() => expect(onUpdateAttributes).toHaveBeenCalled());
+    const design = onUpdateAttributes.mock.calls.at(-1)![0].character_design;
+    expect(design.constraints).toEqual(request.constraints);
+    fireEvent.click(screen.getByRole('button', { name: '返回图片 Prompt' }));
+    expect(screen.getByRole('textbox', { name: '输入 Prompt，/ 打开面板与模板，@ 检索资产' })).toHaveTextContent('负面提示词：');
+    expect((screen.getByPlaceholderText('Enter your negative prompt (avoid unwanted elements)...') as HTMLTextAreaElement).value).toContain('cartoon');
+    cleanup();
+    mountSimpleDesign({ character_design: { design_draft: design } });
+    fireEvent.click(screen.getByRole('button', { name: '展开角色设计' }));
+    expect(screen.getByRole('textbox', { name: '设计约束 · 负面提示词' })).toHaveValue('额外披风\ncartoon');
+    const result = screen.getByRole('textbox', { name: '角色提示词 · 检查后保存或确认' }) as HTMLTextAreaElement;
+    expect(result.value.split('负面提示词：')).toHaveLength(2);
+    fireEvent.change(result, { target: { value: '圆脸，素色布衣。' } });
+    expect(screen.getByRole('textbox', { name: '设计约束 · 负面提示词' })).toHaveValue('');
+});
+
+it('saves clothing panel sections and negative arrays without an AI call', async () => {
+    const { onUpdateAttributes } = mountSimpleDesign();
+    fireEvent.click(screen.getByRole('button', { name: '展开角色设计' }));
+    act(() => designDetailsEditor().chain().selectAll().insertContent({ type: 'text', text: '/服装' }).run());
+    fireEvent.click(await screen.findByRole('option', { name: /配置面板 · 古装长袍搭配/ }));
+    fireEvent.click(screen.getByRole('button', { name: '应用配置' }));
+    expect((screen.getByRole('textbox', { name: '设计字段 · 服装结构与材质' }) as HTMLTextAreaElement).value).toContain('上身仅有里衣和外衣两件');
+    expect(screen.getByRole('textbox', { name: '设计约束 · 负面提示词' })).toHaveValue('未指定的中衣、披风、护甲或装饰性叠领');
+    fireEvent.click(screen.getByRole('button', { name: '保存草稿' }));
+    await waitFor(() => expect(onUpdateAttributes).toHaveBeenCalled());
+    const design = onUpdateAttributes.mock.calls.at(-1)![0].character_design;
+    expect(design.look.features.clothing).toContain('靛蓝色');
+    expect(design.constraints.negative_prompt).toEqual(['未指定的中衣、披风、护甲或装饰性叠领']);
+    expect(apiMocks.agentRequest.mock.calls.filter(([path]) => path.startsWith('/character-design/'))).toHaveLength(0);
+});
