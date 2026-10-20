@@ -78,3 +78,12 @@ def test_character_scaffold_preserves_style_without_injecting_quality_words(kind
     assert prompt.count("概念设计") == style.count("概念设计")
     assert "高质量" not in prompt
     assert "杰作级细节" not in prompt
+
+
+@pytest.mark.parametrize("kind", ["full_body", "three_view", "headshot"])
+def test_character_expression_and_gaze_take_priority_over_defaults(kind):
+    description = "嘴部表现：嘴角上扬。视线表现：目光低垂。"
+    prompt = build_character_image_prompt(kind, "苏砚", description)
+    assert description in prompt
+    assert "未指定表情时采用中性表情" in prompt
+    assert "中性表情，正面看向镜头" not in prompt

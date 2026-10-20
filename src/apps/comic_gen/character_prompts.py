@@ -38,7 +38,7 @@ def build_character_image_prompt(
             "严格保持参考图中的角色外观、脸型、发型、肤色和服装" if preserve_reference else "",
             f"全身角色设计：{character_name}",
             character_description,
-            "站立姿势，中性表情，正面看向镜头",
+            "站立姿势，未指定表情时采用中性表情，未指定视线时正面看向镜头",
             "纯白背景，主体独立，无其他物体和场景，背景简洁",
         )
 
@@ -48,7 +48,7 @@ def build_character_image_prompt(
             f"角色设定参考图：{character_name}",
             character_description,
             "三视图角色设计：正面、侧面和背面",
-            "全身站立，中性表情，所有视图保持服装与细节一致",
+            "全身站立，未指定表情时采用中性表情，所有视图保持服装与细节一致",
             "简洁白色背景，所有视图细节清晰",
         )
 
@@ -57,7 +57,7 @@ def build_character_image_prompt(
             "严格保持参考图中的角色面孔、发型、肤色和五官" if preserve_reference else "",
             f"角色{character_name}的近景肖像",
             character_description,
-            "聚焦面部和肩部，刻画清晰的面部细节，中性表情，正面看向镜头",
+            "聚焦面部和肩部，刻画清晰的面部细节，未指定表情时采用中性表情，未指定视线时正面看向镜头",
         )
 
     raise ValueError(f"Unsupported character generation type: {generation_type}")

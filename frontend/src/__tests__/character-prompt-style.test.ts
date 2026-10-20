@@ -14,3 +14,13 @@ describe('character prompt style preservation', () => {
         }
     }
 });
+
+it('does not contradict selected expression or gaze with unconditional neutral defaults', () => {
+    for (const type of ['full_body', 'three_view', 'headshot'] as const) {
+        const prompt = buildCharacterImagePrompt(type, '苏砚', '嘴部表现：嘴角上扬。视线表现：目光低垂。');
+        expect(prompt).toContain('嘴部表现：嘴角上扬');
+        expect(prompt).toContain('视线表现：目光低垂');
+        expect(prompt).toContain('未指定表情时采用中性表情');
+        expect(prompt).not.toContain('中性表情，正面看向镜头');
+    }
+});

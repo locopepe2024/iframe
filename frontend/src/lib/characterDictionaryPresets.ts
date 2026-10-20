@@ -5,6 +5,7 @@ import { CHARACTER_QUICK_PRESETS } from "./characterQuickActions";
 import { CLASSICAL_CHARACTER_TERMS, CLASSICAL_CHARACTER_TEMPLATES } from "./classicalCharacterDictionary";
 import { CLASSICAL_CHARACTER_PANELS, sectionedDictionaryPreset } from "./classicalCharacterPanels";
 import { MODERN_MALE_PANEL, MODERN_MALE_TEMPLATE, MODERN_MALE_TERMS } from "./modernMaleDictionary";
+import { CHARACTER_EXPRESSION_DETAIL_TERMS, CHARACTER_EXPRESSION_PROMPTS } from "./characterExpressionPrompts";
 import { CHARACTER_EXPRESSION_TERMS } from "./characterExpressionDictionary";
 import type { CharacterConstraints } from "./characterStructuredDesign";
 export type DictionarySection = { label: string; parts: string[] };
@@ -184,6 +185,8 @@ export const CHARACTER_DICTIONARY_PRESETS: CharacterDictionaryPreset[] = [
   ...CLASSICAL_FOOTWEAR_TERMS,
   ...CLASSICAL_CHARACTER_TEMPLATES,
   ...CHARACTER_EXPRESSION_TERMS,
+  ...CHARACTER_EXPRESSION_DETAIL_TERMS,
+  ...CHARACTER_EXPRESSION_PROMPTS,
   classicalBaseTemplate("classical-live-action", "写实真人古装", "写实真人影像风格，人体比例自然，皮肤保留真实纹理，光影自然克制。"),
   classicalBaseTemplate("classical-donghua", "二次元国漫古装", "二次元国漫风格，二维手绘线条清晰，赛璐璐明暗分区明确，色块干净，人物比例与五官造型统一。"),
   {

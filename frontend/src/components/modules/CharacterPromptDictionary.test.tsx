@@ -20,7 +20,7 @@ it("starts with categories and lets creators compare face shapes without changin
   const { replaceWithText } = setup("");
   expect(screen.queryByRole("option", { name: /选项 · 圆脸/ })).not.toBeInTheDocument();
   fireEvent.click(screen.getByRole("tab", { name: "词典" }));
-  fireEvent.click(screen.getByRole("option", { name: /^面部/ }));
+  fireEvent.click(screen.getByRole("option", { name: /^面部\s/ }));
   fireEvent.click(screen.getByRole("option", { name: /^脸型/ }));
   expect(screen.getByRole("option", { name: /选项 · 圆脸/ })).toBeInTheDocument();
   expect(screen.getByRole("option", { name: /选项 · 方脸/ })).toBeInTheDocument();
@@ -114,7 +114,7 @@ it("keeps body build and posture separate and supports going back through catego
   expect(screen.getByRole("option", { name: /站姿略松弛/ })).toBeInTheDocument();
   act(() => { keyHandler.current!(new KeyboardEvent("keydown", { key: "Escape" })); });
   act(() => { keyHandler.current!(new KeyboardEvent("keydown", { key: "Escape" })); });
-  expect(screen.getByRole("option", { name: /^面部/ })).toBeInTheDocument();
+  expect(screen.getByRole("option", { name: /^面部\s/ })).toBeInTheDocument();
   expect(onClose).not.toHaveBeenCalled();
   expect(replaceWithText).not.toHaveBeenCalled();
 });
@@ -136,10 +136,10 @@ it("switches between dictionary and Skill using the keyboard without mixing thei
   const skill = screen.getByRole("tab", { name: "Prompt 模板" });
   expect(skill).toHaveAttribute("aria-selected", "true");
   expect(document.activeElement).toBe(skill);
-  expect(screen.queryByRole("option", { name: /^面部/ })).not.toBeInTheDocument();
+  expect(screen.queryByRole("option", { name: /^面部\s/ })).not.toBeInTheDocument();
   fireEvent.keyDown(skill, { key: "ArrowLeft" });
   expect(dictionary).toHaveAttribute("aria-selected", "true");
-  expect(screen.getByRole("option", { name: /^面部/ })).toBeInTheDocument();
+  expect(screen.getByRole("option", { name: /^面部\s/ })).toBeInTheDocument();
 });
 
 it("excludes combined patterns from discovery even when all members are available", async () => {
@@ -208,7 +208,7 @@ it("configures clothing direction, textile, pattern and scarf before applying", 
   expect(replaceWithText).toHaveBeenCalledWith(text);
 });
 
-it("groups 60 expressions and inserts static state while retaining original motion reference", () => {
+it("groups 60 expressions and keeps the role design interface static", () => {
   getPlatformReferenceLibrary.mockResolvedValueOnce({ resources: [] });
   const { replaceWithText } = setup("表情");
   fireEvent.click(screen.getByRole("option", { name: /^表情$/ }));
@@ -219,8 +219,7 @@ it("groups 60 expressions and inserts static state while retaining original moti
   const text = (screen.getByRole("textbox", { name: "将插入的完整文字" }) as HTMLTextAreaElement).value;
   expect(text).toContain("目光冰冷");
   expect(text).not.toMatch(/先震惊后|被背叛的怒/);
-  fireEvent.click(screen.getByText("动态表演参考（不随图片表情插入）"));
-  expect(screen.getByText(/眼神先震惊后变冷/)).toBeInTheDocument();
+  expect(screen.queryByText("动态表演参考（不随图片表情插入）")).not.toBeInTheDocument();
   fireEvent.click(screen.getByRole("button", { name: "应用配置" }));
   expect(replaceWithText).toHaveBeenCalledWith(text);
 });
@@ -230,7 +229,7 @@ it("browses expression groups independently of facial identity", () => {
   setup("");
   fireEvent.click(screen.getByRole("tab", { name: "词典" }));
   fireEvent.click(screen.getByRole("option", { name: /^表情 / }));
-  expect(screen.getByRole("option", { name: /^基础微表情/ })).toBeInTheDocument();
+  expect(screen.getByRole("option", { name: /^基础表情/ })).toBeInTheDocument();
   expect(screen.getByRole("option", { name: /^复杂情绪与转折/ })).toBeInTheDocument();
   fireEvent.click(screen.getByRole("option", { name: /^悲伤与崩溃/ }));
   expect(screen.getByRole("option", { name: /选项 · 无声落泪/ })).toBeInTheDocument();
@@ -242,7 +241,7 @@ it("fills an expression slot with static text and hides configuration panels", (
   getPlatformReferenceLibrary.mockResolvedValueOnce({ resources: [] });
   const { replaceWithText } = setup("", "表情");
   expect(screen.queryByRole("option", { name: /配置面板/ })).not.toBeInTheDocument();
-  fireEvent.click(screen.getByRole("option", { name: /^基础微表情/ }));
+  fireEvent.click(screen.getByRole("option", { name: /^基础表情/ }));
   fireEvent.click(screen.getByRole("option", { name: /选项 · 平静克制/ }));
   fireEvent.click(screen.getByRole("button", { name: "填写当前槽位" }));
   expect(replaceWithText).toHaveBeenCalledWith("眼神稳定，眉头放松，嘴唇自然闭合，脸上没有明显笑意。");
@@ -511,4 +510,40 @@ it('searches modules locally and only inserts the preview after confirmation', (
   fireEvent.click(screen.getByRole('button', { name: '应用配置' }));
   expect(replaceWithText).toHaveBeenCalledWith((preview as HTMLTextAreaElement).value);
   expect(onApply).toHaveBeenCalledWith(expect.stringContaining('前文 '), expect.objectContaining({ type: '配置面板' }));
+});
+
+
+it("filters expression templates and applies editable performance with a structured configuration", () => {
+  getPlatformReferenceLibrary.mockResolvedValueOnce({ resources: [] });
+  const onApply = vi.fn();
+  const onConfiguration = vi.fn();
+  render(<CharacterPromptDictionary suggestion={{ query: "", replaceWithText: text => text }} onApply={onApply}
+    onClose={vi.fn()} onConfiguration={onConfiguration} keyHandler={{ current: null }} />);
+  fireEvent.click(screen.getByRole("tab", { name: "Prompt 模板" }));
+  fireEvent.click(screen.getByRole("option", { name: /^角色设计/ }));
+  fireEvent.change(screen.getByRole("combobox", { name: "角色模板类型" }), { target: { value: "expression" } });
+  fireEvent.change(screen.getByRole("combobox", { name: "模板题材" }), { target: { value: "现代" } });
+  fireEvent.change(screen.getByRole("combobox", { name: "模板画风" }), { target: { value: "真人写实" } });
+  expect(screen.queryByRole("option", { name: /Prompt 模板 · 写实真人古装/ })).not.toBeInTheDocument();
+  fireEvent.click(screen.getByRole("option", { name: /Prompt 模板 · 角色表情 · 含泪强忍/ }));
+  fireEvent.change(screen.getByRole("combobox", { name: "嘴部表现" }), { target: { value: "嘴唇微张" } });
+  fireEvent.change(screen.getByRole("combobox", { name: "面部气色" }), { target: { value: "" } });
+  const text = (screen.getByRole("textbox", { name: "将插入的完整文字" }) as HTMLTextAreaElement).value;
+  expect(text).toContain("嘴部表现：嘴唇微微张开。");
+  expect(text).not.toMatch(/面部气色|秒|随后|背景|肤质/);
+  fireEvent.click(screen.getByRole("button", { name: "使用此模板" }));
+  expect(onApply).toHaveBeenCalledWith(text, expect.objectContaining({ structuredFields: undefined }));
+  expect(onConfiguration).toHaveBeenCalledWith(expect.objectContaining({
+    preset_id: "dictionary.template.expression.held-tears",
+    resolved_fields: expect.objectContaining({ 嘴部表现: "嘴唇微微张开" }), rendered_text: text,
+  }));
+});
+it("keeps full role templates available independently", () => {
+  getPlatformReferenceLibrary.mockResolvedValueOnce({ resources: [] });
+  setup("");
+  fireEvent.click(screen.getByRole("tab", { name: "Prompt 模板" }));
+  fireEvent.click(screen.getByRole("option", { name: /^角色设计/ }));
+  fireEvent.change(screen.getByRole("combobox", { name: "角色模板类型" }), { target: { value: "design" } });
+  expect(screen.getByRole("option", { name: /Prompt 模板 · 写实真人古装/ })).toBeInTheDocument();
+  expect(screen.queryByRole("option", { name: /Prompt 模板 · 角色表情/ })).not.toBeInTheDocument();
 });

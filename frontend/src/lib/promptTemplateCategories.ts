@@ -21,3 +21,8 @@ export function templateDimensions(title: string, metadata = '') {
     styles: PROMPT_STYLES.filter(style => style === '真人写实' ? /写实|真人|摄影|photoreal/.test(text) : style === '动漫' ? /动漫|二次元|国漫|anime/.test(text) : /插画|illustration/.test(text)),
   };
 }
+
+/** A discovery subtype, independent of topic and rendering style. */
+export function characterTemplateKind(title: string, categories: readonly string[] = []): 'design' | 'expression' {
+  return categories.includes('expression-template') || /^角色表情\s*[·：:]/.test(title) ? 'expression' : 'design';
+}
