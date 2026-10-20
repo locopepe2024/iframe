@@ -18,11 +18,11 @@ function setup(query: string, slot?: string) {
 it("starts with categories and lets creators compare face shapes without changing the Prompt", async () => {
   getPlatformReferenceLibrary.mockResolvedValueOnce({ resources: [] });
   const { replaceWithText } = setup("");
-  expect(screen.queryByRole("option", { name: /词条 · 圆脸/ })).not.toBeInTheDocument();
+  expect(screen.queryByRole("option", { name: /选项 · 圆脸/ })).not.toBeInTheDocument();
   fireEvent.click(screen.getByRole("option", { name: /^面部/ }));
   fireEvent.click(screen.getByRole("option", { name: /^脸型/ }));
-  expect(screen.getByRole("option", { name: /词条 · 圆脸/ })).toBeInTheDocument();
-  expect(screen.getByRole("option", { name: /词条 · 方脸/ })).toBeInTheDocument();
+  expect(screen.getByRole("option", { name: /选项 · 圆脸/ })).toBeInTheDocument();
+  expect(screen.getByRole("option", { name: /选项 · 方脸/ })).toBeInTheDocument();
   expect(screen.queryByRole("option", { name: /杏眼/ })).not.toBeInTheDocument();
   expect(replaceWithText).not.toHaveBeenCalled();
 });
@@ -33,7 +33,7 @@ it("separates rendering style from genre and inserts a complete style without as
   fireEvent.click(screen.getByRole("option", { name: /^表现风格/ }));
   fireEvent.click(screen.getByRole("option", { name: /^写实与绘画风格/ }));
   expect(screen.queryByRole("option", { name: /古装 \/ 武侠/ })).not.toBeInTheDocument();
-  fireEvent.click(screen.getByRole("option", { name: /词条 · 二次元国漫 / }));
+  fireEvent.click(screen.getByRole("option", { name: /选项 · 二次元国漫 / }));
   const text = (screen.getByRole("textbox", { name: "将插入的完整文字" }) as HTMLTextAreaElement).value;
   expect(text).toContain("二维手绘线条清晰");
   expect(text).not.toMatch(/侠客|里衣|少女|裙子/);
@@ -64,7 +64,7 @@ it("fills a Skill color slot with just the color rather than a full sentence", (
   const { replaceWithText } = setup("", "颜色");
   expect(screen.getByText("填写 [颜色]")).toBeInTheDocument();
   expect(screen.queryByRole("option", { name: /连衣裙/ })).not.toBeInTheDocument();
-  fireEvent.click(screen.getByRole("option", { name: /词条 · 靛蓝色 / }));
+  fireEvent.click(screen.getByRole("option", { name: /选项 · 靛蓝色 / }));
   expect(screen.getByRole("textbox", { name: "将插入的完整文字" })).toHaveValue("靛蓝色");
   fireEvent.click(screen.getByRole("button", { name: "填写当前槽位" }));
   expect(replaceWithText).toHaveBeenCalledWith("靛蓝色");
@@ -73,9 +73,9 @@ it("fills a Skill color slot with just the color rather than a full sentence", (
 it("configures a full classical template in the panel and optionally keeps slots for later", () => {
   getPlatformReferenceLibrary.mockResolvedValueOnce({ resources: [] });
   const { replaceWithText } = setup("古装 ");
-  expect(screen.getByRole("button", { name: "Prompt 模板" })).toHaveAttribute("aria-pressed", "true");
+  expect(screen.getByRole("tab", { name: "Prompt 模板" })).toHaveAttribute("aria-selected", "true");
   expect(screen.getByRole("option", { name: /Prompt 模板 · 明风长袄马面裙/ })).toBeInTheDocument();
-  expect(screen.queryByRole("option", { name: /词条 ·/ })).not.toBeInTheDocument();
+  expect(screen.queryByRole("option", { name: /选项 ·/ })).not.toBeInTheDocument();
   fireEvent.click(screen.getByRole("option", { name: /Prompt 模板 · 写实真人古装/ }));
   fireEvent.change(screen.getByRole("combobox", { name: "外衣颜色" }), { target: { value: "[外衣颜色]" } });
   const text = (screen.getByRole("textbox", { name: "将插入的完整文字" }) as HTMLTextAreaElement).value;
@@ -89,11 +89,11 @@ it("configures a full classical template in the panel and optionally keeps slots
 it("offers the containing category for an exact search so other options can be compared", async () => {
   getPlatformReferenceLibrary.mockResolvedValueOnce({ resources: [] });
   const { replaceWithText } = setup("圆脸");
-  expect(screen.getByRole("option", { name: /词条 · 圆脸/ })).toBeInTheDocument();
+  expect(screen.getByRole("option", { name: /选项 · 圆脸/ })).toBeInTheDocument();
   fireEvent.click(screen.getByRole("option", { name: /浏览 面部 › 脸型/ }));
-  expect(screen.getByRole("option", { name: /词条 · 方脸/ })).toBeInTheDocument();
+  expect(screen.getByRole("option", { name: /选项 · 方脸/ })).toBeInTheDocument();
   expect(replaceWithText).not.toHaveBeenCalled();
-  fireEvent.click(screen.getByRole("option", { name: /词条 · 方脸/ }));
+  fireEvent.click(screen.getByRole("option", { name: /选项 · 方脸/ }));
   fireEvent.click(screen.getByRole("button", { name: "插入到当前 Prompt" }));
   expect(replaceWithText).toHaveBeenCalledWith("方脸");
 });
@@ -119,7 +119,7 @@ it("keeps body build and posture separate and supports going back through catego
 it("finds dedicated eye-area detail through the eye-wrinkle category alias", () => {
   getPlatformReferenceLibrary.mockResolvedValueOnce({ resources: [] });
   setup("眼纹");
-  expect(screen.getByRole("option", { name: /词条 · 静态眼角细纹/ })).toBeInTheDocument();
+  expect(screen.getByRole("option", { name: /选项 · 静态眼角细纹/ })).toBeInTheDocument();
   expect(screen.queryByRole("option", { name: /眼周与嘴角有自然细纹/ })).not.toBeInTheDocument();
   expect(screen.getByRole("option", { name: /浏览 面部 › 眼周细节/ })).toBeInTheDocument();
 });
@@ -127,9 +127,9 @@ it("finds dedicated eye-area detail through the eye-wrinkle category alias", () 
 it("switches between dictionary and Skill using the keyboard without mixing their results", () => {
   getPlatformReferenceLibrary.mockResolvedValueOnce({ resources: [] });
   setup("");
-  const dictionary = screen.getByRole("tab", { name: "词典" });
+  const dictionary = screen.getByRole("tab", { name: "基础面板" });
   fireEvent.keyDown(dictionary, { key: "ArrowRight" });
-  const skill = screen.getByRole("tab", { name: "Skill" });
+  const skill = screen.getByRole("tab", { name: "Prompt 模板" });
   expect(skill).toHaveAttribute("aria-selected", "true");
   expect(document.activeElement).toBe(skill);
   expect(screen.queryByRole("option", { name: /^面部/ })).not.toBeInTheDocument();
@@ -138,7 +138,7 @@ it("switches between dictionary and Skill using the keyboard without mixing thei
   expect(screen.getByRole("option", { name: /^面部/ })).toBeInTheDocument();
 });
 
-it("previews fixed-version performance patterns and excludes unavailable members and unpublished terms", async () => {
+it("excludes combined patterns from discovery even when all members are available", async () => {
   const term = (id: string, content: string, status = "active") => ({
     platform_resource_id: id, revision: 1, kind: "prompt_preset", title: id, status,
     category_path: "character/performance", dictionary: { semantic_domain: "character.performance", entry_type: "term" },
@@ -152,14 +152,10 @@ it("previews fixed-version performance patterns and excludes unavailable members
   });
   getPlatformReferenceLibrary.mockResolvedValueOnce({ resources: [term("起势", "双拳抬起"), term("收势", "重心回收"),
     term("咏春待审核", "候选文字", "candidate"), pattern("组合", 1), pattern("失效组合", 2)] });
-  const { replaceWithText, onApply } = setup("咏春");
-  fireEvent.click(await screen.findByRole("option", { name: /咏春组合/ }));
-  expect(screen.queryByRole("option", { name: /失效组合|待审核/ })).not.toBeInTheDocument();
-  expect(screen.getByRole("textbox", { name: "将插入的完整文字" })).toHaveValue("双拳抬起；重心回收");
-  expect(replaceWithText).not.toHaveBeenCalled();
-  fireEvent.click(screen.getByRole("button", { name: "插入到当前 Prompt" }));
-  expect(replaceWithText).toHaveBeenCalledWith("双拳抬起；重心回收");
-  expect(onApply).toHaveBeenCalledWith("前文 双拳抬起；重心回收 后文", expect.objectContaining({ type: "组合方案" }));
+  setup("咏春");
+  await waitFor(() => expect(getPlatformReferenceLibrary).toHaveBeenCalled());
+  expect(screen.queryByRole("option", { name: /咏春组合|失效组合|待审核/ })).not.toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: "组合方案" })).not.toBeInTheDocument();
 });
 
 it("keeps local terms available on catalog failure and retries the platform catalog", async () => {
@@ -191,7 +187,7 @@ it("uses arrow keys, Enter and Escape without applying during preview or composi
 it("configures clothing direction, textile, pattern and scarf before applying", () => {
   getPlatformReferenceLibrary.mockResolvedValueOnce({ resources: [] });
   const { replaceWithText } = setup("服装");
-  expect(screen.getByRole("button", { name: "配置面板" })).toHaveAttribute("aria-pressed", "true");
+  expect(screen.getByRole("tab", { name: "基础面板" })).toHaveAttribute("aria-selected", "true");
   expect(screen.getByRole("option", { name: /配置面板 · 现代服装搭配/ })).toBeInTheDocument();
   fireEvent.click(screen.getByRole("option", { name: /配置面板 · 古装衣裙搭配/ }));
   fireEvent.change(screen.getByRole("combobox", { name: "面料" }), { target: { value: "丝绸" } });
@@ -232,8 +228,8 @@ it("browses expression groups independently of facial identity", () => {
   expect(screen.getByRole("option", { name: /^基础微表情/ })).toBeInTheDocument();
   expect(screen.getByRole("option", { name: /^复杂情绪与转折/ })).toBeInTheDocument();
   fireEvent.click(screen.getByRole("option", { name: /^悲伤与崩溃/ }));
-  expect(screen.getByRole("option", { name: /词条 · 无声落泪/ })).toBeInTheDocument();
-  expect(screen.queryByRole("option", { name: /词条 · 圆脸/ })).not.toBeInTheDocument();
+  expect(screen.getByRole("option", { name: /选项 · 无声落泪/ })).toBeInTheDocument();
+  expect(screen.queryByRole("option", { name: /选项 · 圆脸/ })).not.toBeInTheDocument();
 });
 
 
@@ -242,7 +238,7 @@ it("fills an expression slot with static text and hides configuration panels", (
   const { replaceWithText } = setup("", "表情");
   expect(screen.queryByRole("option", { name: /配置面板/ })).not.toBeInTheDocument();
   fireEvent.click(screen.getByRole("option", { name: /^基础微表情/ }));
-  fireEvent.click(screen.getByRole("option", { name: /词条 · 平静克制/ }));
+  fireEvent.click(screen.getByRole("option", { name: /选项 · 平静克制/ }));
   fireEvent.click(screen.getByRole("button", { name: "填写当前槽位" }));
   expect(replaceWithText).toHaveBeenCalledWith("眼神稳定，眉头放松，嘴唇自然闭合，脸上没有明显笑意。");
 });
@@ -307,8 +303,8 @@ it("keeps footwear material separate from garment material in outfit configurati
 it("searches the supplied English footwear terms without matching unrelated material options", () => {
   getPlatformReferenceLibrary.mockResolvedValueOnce({ resources: [] });
   setup("genuine leather");
-  expect(screen.getByRole("option", { name: /词条 · 真皮/ })).toBeInTheDocument();
-  expect(screen.queryByRole("option", { name: /词条 · 丝绸/ })).not.toBeInTheDocument();
+  expect(screen.getByRole("option", { name: /选项 · 真皮/ })).toBeInTheDocument();
+  expect(screen.queryByRole("option", { name: /选项 · 丝绸/ })).not.toBeInTheDocument();
 });
 
 
@@ -341,8 +337,8 @@ it("previews and applies optional face eye texture and skin details", () => {
 it("fills eye texture slots with descriptions preserving smile-only constraints", () => {
   getPlatformReferenceLibrary.mockResolvedValueOnce({ resources: [] });
   const { replaceWithText } = setup("", "眼周纹理");
-  expect(screen.queryByRole("option", { name: /词条 · 暖小麦肤色|配置面板/ })).not.toBeInTheDocument();
-  fireEvent.click(screen.getByRole("option", { name: /词条 · 仅微笑时出现眼角纹/ }));
+  expect(screen.queryByRole("option", { name: /选项 · 暖小麦肤色|配置面板/ })).not.toBeInTheDocument();
+  fireEvent.click(screen.getByRole("option", { name: /选项 · 仅微笑时出现眼角纹/ }));
   fireEvent.click(screen.getByRole("button", { name: "填写当前槽位" }));
   expect(replaceWithText).toHaveBeenCalledWith("眼角细纹仅在微笑时出现，表情放松时不明显");
 });
@@ -351,7 +347,7 @@ it("fills skin tone slots with tone vocabulary only", () => {
   getPlatformReferenceLibrary.mockResolvedValueOnce({ resources: [] });
   const { replaceWithText } = setup("", "肤色");
   expect(screen.queryByRole("option", { name: /靛蓝色|配置面板/ })).not.toBeInTheDocument();
-  fireEvent.click(screen.getByRole("option", { name: /词条 · 古铜肤色/ }));
+  fireEvent.click(screen.getByRole("option", { name: /选项 · 古铜肤色/ }));
   fireEvent.click(screen.getByRole("button", { name: "填写当前槽位" }));
   expect(replaceWithText).toHaveBeenCalledWith("古铜肤色");
 });
@@ -388,7 +384,7 @@ it("fills a male garment slot with a menswear combination", () => {
   getPlatformReferenceLibrary.mockResolvedValueOnce({ resources: [] });
   const { replaceWithText } = setup("", "男装款式");
   expect(screen.queryByRole("option", { name: /连衣裙/ })).not.toBeInTheDocument();
-  fireEvent.click(screen.getByRole("option", { name: /词条 · 商务西装套装/ }));
+  fireEvent.click(screen.getByRole("option", { name: /选项 · 商务西装套装/ }));
   fireEvent.click(screen.getByRole("button", { name: "填写当前槽位" }));
   expect(replaceWithText).toHaveBeenCalledWith("商务西装套装");
 });
@@ -408,7 +404,42 @@ it("fills a height slot with just the selected height", () => {
   getPlatformReferenceLibrary.mockResolvedValueOnce({ resources: [] });
   const { replaceWithText } = setup("", "身高");
   expect(screen.queryByRole("option", { name: /自然站立|圆脸|配置面板/ })).not.toBeInTheDocument();
-  fireEvent.click(screen.getByRole("option", { name: /词条 · 身高偏高/ }));
+  fireEvent.click(screen.getByRole("option", { name: /选项 · 身高偏高/ }));
   fireEvent.click(screen.getByRole("button", { name: "填写当前槽位" }));
   expect(replaceWithText).toHaveBeenCalledWith("身高偏高");
+});
+
+it('shows only panels and templates as top-level discovery modes', () => {
+  getPlatformReferenceLibrary.mockResolvedValueOnce({ resources: [] });
+  setup('');
+  expect(screen.getAllByRole('tab').map(tab => tab.textContent)).toEqual(['基础面板', 'Prompt 模板']);
+  for (const name of ['全部', '配置面板', '词条', '组合方案', 'Prompt 案例', 'Skill']) {
+    expect(screen.queryByRole('button', { name })).not.toBeInTheDocument();
+  }
+  fireEvent.click(screen.getByRole('tab', { name: 'Prompt 模板' }));
+  for (const name of ['角色设计', '风格写真', '换装写真', '电商主图', 'UGC']) {
+    expect(screen.getByRole('option', { name: new RegExp(`^${name}`) })).toBeInTheDocument();
+  }
+});
+
+it('combines task, topic and rendering filters without exposing term results', () => {
+  getPlatformReferenceLibrary.mockResolvedValueOnce({ resources: [] });
+  setup('');
+  fireEvent.click(screen.getByRole('tab', { name: 'Prompt 模板' }));
+  fireEvent.click(screen.getByRole('option', { name: /^角色设计/ }));
+  fireEvent.change(screen.getByRole('combobox', { name: '模板题材' }), { target: { value: '古装' } });
+  fireEvent.change(screen.getByRole('combobox', { name: '模板画风' }), { target: { value: '动漫' } });
+  expect(screen.getByRole('option', { name: /Prompt 模板 · 二次元国漫古装/ })).toBeInTheDocument();
+  expect(screen.queryByRole('option', { name: /Prompt 模板 · 写实真人古装/ })).not.toBeInTheDocument();
+  expect(screen.queryByRole('option', { name: /选项 ·/ })).not.toBeInTheDocument();
+});
+
+it('explains empty task categories and allows returning to task selection', async () => {
+  getPlatformReferenceLibrary.mockResolvedValueOnce({ resources: [] });
+  setup('');
+  fireEvent.click(screen.getByRole('tab', { name: 'Prompt 模板' }));
+  fireEvent.click(screen.getByRole('option', { name: /^UGC/ }));
+  expect(await screen.findByText(/当前分类暂无可用模板/)).toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button', { name: '返回任务分类' }));
+  expect(screen.getByRole('option', { name: /^电商主图/ })).toBeInTheDocument();
 });
