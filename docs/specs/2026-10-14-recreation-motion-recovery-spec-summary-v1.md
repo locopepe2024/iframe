@@ -52,6 +52,8 @@
 
 ## Not yet proven / Hypotheses
 
+- 2026-10-20 root/yaw八组对照固定最终root、镜头、尺度/基底声明及骨盆关闭。四对比较均显示求解纳入yaw改善所列源17/23/29/41/55与全段P95；首帧yaw为零不变。但原尺度自身基底的17/23仍17.26/13.31px，高于混合15.74/12.25，漏算yaw不能充分解释前段恶化。八组renderer重导入0px；yaw估计本身、端点/骨长与相机仍未验证。[root/yaw边界报告](../agents/deliverables/2026-10-20-recreation2-root-yaw-factorial-v1.md)
+
 - DPVO 能否在当前移动镜头素材上稳定恢复相机旋转和轨迹，以及它是否改善 GVHMR 源帧对齐，尚无实测。
 - 我们观察的白模误差有多少来自相机估计、GVHMR 本体、坐标变换或目标骨架重定向，尚未用同片分层实验归因。
 - 外部 Mixamo/GLB/Blender 插件方案是否包含自动骨架校准、接触约束或可用于 iFrame 的授权，尚未核实。HighTorque 的机器人 GMR 流程不等同于 Mixamo 角色流程。
