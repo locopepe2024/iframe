@@ -11,11 +11,12 @@ type Props = {
     referenceIndex?: AssetReferenceIndexEntry[];
     editor?: ReactNode;
     validationError?: string;
+    sourceLabel?: string;
     onBack: () => void;
     onConfirm: (review: AssetImageReviewProjection) => void;
 };
 
-export default function AssetImageSubmissionReview({ projectId, request, referenceIndex, editor, validationError = "", onBack, onConfirm }: Props) {
+export default function AssetImageSubmissionReview({ projectId, request, referenceIndex, editor, validationError = "", sourceLabel, onBack, onConfirm }: Props) {
     const [review, setReview] = useState<AssetImageReviewProjection | null>(null);
     const [reviewedProject, setReviewedProject] = useState("");
     const [reviewedRequest, setReviewedRequest] = useState<AssetImageReviewRequest | null>(null);
@@ -61,6 +62,7 @@ export default function AssetImageSubmissionReview({ projectId, request, referen
             <section role="dialog" aria-modal="true" aria-label="核对图片生成请求"
                 className="w-full max-w-2xl max-h-[90dvh] overflow-y-auto rounded-xl border border-glass-border bg-surface p-5 shadow-2xl">
                 <h2 className="text-base font-semibold text-foreground">生成前核对</h2>
+                {sourceLabel && <p className="mt-2 text-sm text-primary">提示词来源：{sourceLabel}</p>}
                 <p className="mt-1 text-xs text-text-secondary">请核对实际提交内容；修改后会重新获取预览。</p>
                 {editor}
                 {validationError || error ? <p role="alert" className="mt-4 text-sm text-red-400">{validationError || error}</p> : !currentReview ?
