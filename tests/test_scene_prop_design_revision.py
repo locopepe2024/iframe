@@ -49,10 +49,50 @@ def test_scene_prop_design_rejects_blank_confirmation_without_mutation(tmp_path)
             "asset_design": {"visual_notes": " ", "confirmed": True},
         })
     assert scene.asset_design == {"design_draft": {}, "design_revisions": []}
+
     with pytest.raises(ValueError, match="unknown fields"):
         pipeline.update_asset_attributes("project", "street", "scene", {
             "asset_design": {"visual_notes": "Stone", "hidden_prompt": "red sunset"},
         })
+    assert scene.asset_design == {"design_draft": {}, "design_revisions": []}
+
+
+def test_scene_prompt_sources_roundtrip_without_overwriting_description(tmp_path):
+    pipeline, scene, _ = make_pipeline(tmp_path)
+    workspace = {
+        "settings_pending": True,
+        "design": {"prompt": "Unpolished stone street", "mode": "text", "references": []},
+        "ai": {"prompt": "AI stone street @Gate", "mode": "reference", "references": [
+            {"asset_type": "scene", "asset_id": "gate", "variant_id": "v2"},
+        ]},
+    }
+    pipeline.update_asset_attributes("project", "street", "scene", {"asset_design": {
+        "visual_notes": "Stone street", "prompt_workspace": workspace, "confirmed": True,
+    }})
+    reloaded = ComicGenPipeline.__new__(ComicGenPipeline)
+    reloaded.data_file = pipeline.data_file
+    saved = reloaded._load_data()["project"].scenes[0]
+    assert saved.asset_design["design_draft"]["prompt_workspace"] == workspace
+    assert saved.description == "A market street"
+    assert saved.image_asset == scene.image_asset
+    assert "prompt_workspace" not in saved.asset_design["design_revisions"][0]["design"]
+
+
+@pytest.mark.parametrize("workspace", [
+    {"design": {"prompt": "original"}},
+    {"design": {"prompt": 4}, "ai": {"prompt": "AI"}},
+    {"design": {"prompt": "original"}, "ai": {"prompt": "x" * 30001}},
+    {"design": {"mode": "automatic"}, "ai": {}},
+    {"design": {"references": [{"asset_type": "scene", "asset_id": "gate"}]}, "ai": {}},
+    {"design": {}, "ai": {}, "hidden_prompt": "injected"},
+    {"design": {}, "ai": {}, "settings_pending": "false"},
+])
+def test_scene_rejects_invalid_prompt_workspace_before_mutation(tmp_path, workspace):
+    pipeline, scene, _ = make_pipeline(tmp_path)
+    with pytest.raises(ValueError):
+        pipeline.update_asset_attributes("project", "street", "scene", {"asset_design": {
+            "visual_notes": "Street", "prompt_workspace": workspace, "confirmed": True,
+        }})
     assert scene.asset_design == {"design_draft": {}, "design_revisions": []}
 
 

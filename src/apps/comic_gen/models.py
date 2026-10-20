@@ -355,6 +355,22 @@ class AssetLibraryReference(BaseModel):
     applied_fields: List[str] = Field(default_factory=list, max_length=16)
 
 
+class ScenePromptSource(BaseModel):
+    """Editable prompt and explicit references, independent of the other source."""
+
+    model_config = {"extra": "forbid"}
+    prompt: str = Field(default="", max_length=30000, strict=True)
+    mode: Literal["text", "reference"] = "text"
+    references: List[AssetLibraryReference] = Field(default_factory=list, max_length=32)
+
+
+class ScenePromptWorkspace(BaseModel):
+    model_config = {"extra": "forbid"}
+    settings_pending: bool = Field(default=False, strict=True)
+    design: ScenePromptSource
+    ai: ScenePromptSource
+
+
 class AssetReferenceIndexEntry(BaseModel):
     """Normalized reusable asset entry projected for reference pickers."""
 

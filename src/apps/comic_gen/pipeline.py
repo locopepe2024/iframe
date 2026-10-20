@@ -59,6 +59,7 @@ from .models import (
     build_episode_readable_summary,
     GlobalAssetLibrary,
     AssetLibraryReference,
+    ScenePromptWorkspace,
     AssetImageSubmissionSnapshot,
     AssetImageReferenceIdentity,
     AssetReferenceIndex,
@@ -2812,7 +2813,7 @@ class ComicGenPipeline(StudioOwnerMixin):
             design = attributes["asset_design"]
             if not isinstance(design, dict):
                 raise ValueError("Asset design must be an object")
-            scene_fields = {"style", "ambient_lighting", "local_lighting", "reference_viewpoint", "reference_framing", "visual_constraints"} if asset_type == "scene" else set()
+            scene_fields = {"style", "ambient_lighting", "local_lighting", "reference_viewpoint", "reference_framing", "visual_constraints", "prompt_workspace"} if asset_type == "scene" else set()
             if set(design) - {"visual_notes", "user_requirements", "unresolved", "confirmed"} - scene_fields:
                 raise ValueError("Asset design contains unknown fields")
             notes = design.get("visual_notes")
@@ -2825,7 +2826,12 @@ class ComicGenPipeline(StudioOwnerMixin):
                 raise ValueError("Asset design unresolved items must be text")
             if not isinstance(design.get("confirmed", False), bool):
                 raise ValueError("Asset design confirmation must be boolean")
-            for field in scene_fields - {"local_lighting", "visual_constraints"}:
+            if "prompt_workspace" in design:
+                # Validate before mutating the asset. This is editor state, never
+                # an implicit replacement for the reviewed generation prompt.
+                workspace = ScenePromptWorkspace.model_validate(design["prompt_workspace"])
+                design = {**design, "prompt_workspace": workspace.model_dump(exclude_unset=True)}
+            for field in scene_fields - {"local_lighting", "visual_constraints", "prompt_workspace"}:
                 value = design.get(field, "")
                 if not isinstance(value, str) or len(value) > 2000:
                     raise ValueError(f"Asset design {field} must be bounded text")
@@ -2862,7 +2868,7 @@ class ComicGenPipeline(StudioOwnerMixin):
             if design.get("confirmed"):
                 revisions.append({
                     "revision": len(revisions) + 1,
-                    "design": {key: value for key, value in design.items() if key != "confirmed"},
+                    "design": {key: value for key, value in design.items() if key not in {"confirmed", "prompt_workspace"}},
                 })
             record["design_revisions"] = revisions
             target_asset.asset_design = record
