@@ -11,7 +11,7 @@ function setup(query: string, slot?: string) {
   const onClose = vi.fn();
   const keyHandler = { current: null as ((event: KeyboardEvent) => boolean) | null };
   render(<CharacterPromptDictionary suggestion={{ query, slot, replaceWithText }} onApply={onApply}
-    onClose={onClose} canRunSkill={false} keyHandler={keyHandler} />);
+    onClose={onClose} keyHandler={keyHandler} />);
   return { replaceWithText, onApply, onClose, keyHandler };
 }
 
@@ -192,8 +192,8 @@ it("configures clothing direction, textile, pattern and scarf before applying", 
   getPlatformReferenceLibrary.mockResolvedValueOnce({ resources: [] });
   const { replaceWithText } = setup("服装");
   expect(screen.getByRole("tab", { name: "基础面板" })).toHaveAttribute("aria-selected", "true");
-  expect(screen.getByRole("option", { name: /配置面板 · 现代服装搭配/ })).toBeInTheDocument();
-  fireEvent.click(screen.getByRole("option", { name: /配置面板 · 古装衣裙搭配/ }));
+  expect(screen.getByRole("option", { name: /^现代女装$/ })).toBeInTheDocument();
+  fireEvent.click(screen.getByRole("option", { name: /^古装衣裙$/ }));
   fireEvent.change(screen.getByRole("combobox", { name: "面料" }), { target: { value: "丝绸" } });
   fireEvent.change(screen.getByRole("combobox", { name: "花纹" }), { target: { value: "祥云暗纹" } });
   fireEvent.change(screen.getByRole("combobox", { name: "纱巾披帛" }), { target: { value: "素色披帛" } });
@@ -211,7 +211,7 @@ it("configures clothing direction, textile, pattern and scarf before applying", 
 it("groups 60 expressions and inserts static state while retaining original motion reference", () => {
   getPlatformReferenceLibrary.mockResolvedValueOnce({ resources: [] });
   const { replaceWithText } = setup("表情");
-  fireEvent.click(screen.getByRole("option", { name: /配置面板 · 表情选择面板/ }));
+  fireEvent.click(screen.getByRole("option", { name: /^表情$/ }));
   const select = screen.getByRole("combobox", { name: "表情" });
   expect(select.querySelectorAll("optgroup")).toHaveLength(6);
   expect(select.querySelectorAll("optgroup option")).toHaveLength(60);
@@ -252,7 +252,7 @@ it("fills an expression slot with static text and hides configuration panels", (
 it("selects multiple ancient jewelry pieces independently and omits cleared sections", () => {
   getPlatformReferenceLibrary.mockResolvedValueOnce({ resources: [] });
   const { replaceWithText } = setup("首饰");
-  fireEvent.click(screen.getByRole("option", { name: /配置面板 · 首饰选择面板/ }));
+  fireEvent.click(screen.getByRole("option", { name: /^首饰$/ }));
   const apply = screen.getByRole("button", { name: "应用配置" });
   expect(apply).toBeDisabled();
   fireEvent.change(screen.getByRole("combobox", { name: "头饰" }), { target: { value: "束发玉冠" } });
@@ -271,7 +271,7 @@ it("selects multiple ancient jewelry pieces independently and omits cleared sect
 it("opens footwear schemes and clears the previous scheme's detail overrides when switching", () => {
   getPlatformReferenceLibrary.mockResolvedValueOnce({ resources: [] });
   const { replaceWithText } = setup("鞋履");
-  fireEvent.click(screen.getByRole("option", { name: /配置面板 · 古装鞋履选择面板/ }));
+  fireEvent.click(screen.getByRole("option", { name: /^古装鞋履$/ }));
   expect(screen.getByRole("combobox", { name: "鞋履材质" })).toHaveValue("缎面");
   fireEvent.change(screen.getByRole("combobox", { name: "古装鞋履" }), { target: { value: "锦缎翘头靴" } });
   expect(screen.getByRole("combobox", { name: "鞋履材质" })).toHaveValue("锦缎");
@@ -294,7 +294,7 @@ it("opens footwear schemes and clears the previous scheme's detail overrides whe
 it("keeps footwear material separate from garment material in outfit configuration", () => {
   getPlatformReferenceLibrary.mockResolvedValueOnce({ resources: [] });
   setup("服装");
-  fireEvent.click(screen.getByRole("option", { name: /配置面板 · 古装衣裙搭配/ }));
+  fireEvent.click(screen.getByRole("option", { name: /^古装衣裙$/ }));
   fireEvent.change(screen.getByRole("combobox", { name: "古装鞋履" }), { target: { value: "云纹皂靴" } });
   expect(screen.getByRole("combobox", { name: "面料" })).toHaveValue("丝绸");
   expect(screen.getByRole("combobox", { name: "鞋履材质" })).toHaveValue("缎面");
@@ -316,7 +316,7 @@ it("searches the supplied English footwear terms without matching unrelated mate
 it("opens skin configuration from slash and inserts the selected tone without assigning texture", () => {
   getPlatformReferenceLibrary.mockResolvedValueOnce({ resources: [] });
   const { replaceWithText } = setup("肤色");
-  fireEvent.click(screen.getByRole("option", { name: /配置面板 · 肤色与肤质选择面板/ }));
+  fireEvent.click(screen.getByRole("option", { name: /^肤色与肤质$/ }));
   fireEvent.change(screen.getByRole("combobox", { name: "肤色" }), { target: { value: "暖小麦肤色" } });
   expect(screen.getByRole("textbox", { name: "将插入的完整文字" })).toHaveValue("肤色：暖小麦肤色");
   fireEvent.click(screen.getByRole("button", { name: "应用配置" }));
@@ -326,7 +326,7 @@ it("opens skin configuration from slash and inserts the selected tone without as
 it("previews and applies optional face eye texture and skin details", () => {
   getPlatformReferenceLibrary.mockResolvedValueOnce({ resources: [] });
   const { replaceWithText } = setup("面容");
-  fireEvent.click(screen.getByRole("option", { name: /配置面板 · 面容选择面板/ }));
+  fireEvent.click(screen.getByRole("option", { name: /^面容$/ }));
   for (const label of ["眼周纹理", "肤色", "肤质"]) expect(screen.getByRole("combobox", { name: label })).toHaveValue("");
   expect(screen.getByRole("textbox", { name: "将插入的完整文字" })).toHaveValue("");
   fireEvent.change(screen.getByRole("combobox", { name: "眼周纹理" }), { target: { value: "仅微笑时出现眼角纹" } });
@@ -361,7 +361,7 @@ it("fills skin tone slots with tone vocabulary only", () => {
 it("configures modern menswear from slash with independent upper, trousers and footwear", () => {
   getPlatformReferenceLibrary.mockResolvedValueOnce({ resources: [] });
   const { replaceWithText } = setup("男装");
-  fireEvent.click(screen.getByRole("option", { name: /配置面板 · 现代男装搭配/ }));
+  fireEvent.click(screen.getByRole("option", { name: /^现代男装$/ }));
   fireEvent.change(screen.getByRole("combobox", { name: "男装上衣款式" }), { target: { value: "商务衬衫" } });
   fireEvent.change(screen.getByRole("combobox", { name: "男装裤装款式" }), { target: { value: "直筒西裤" } });
   fireEvent.change(screen.getByRole("combobox", { name: "男装鞋履" }), { target: { value: "德比皮鞋" } });
@@ -398,7 +398,7 @@ it("fills a male garment slot with a menswear combination", () => {
 it("opens height configuration and defers a height slot without body-build vocabulary", () => {
   getPlatformReferenceLibrary.mockResolvedValueOnce({ resources: [] });
   const { replaceWithText } = setup("身高");
-  fireEvent.click(screen.getByRole("option", { name: /配置面板 · 身高选择面板/ }));
+  fireEvent.click(screen.getByRole("option", { name: /^身高$/ }));
   fireEvent.change(screen.getByRole("combobox", { name: "身高" }), { target: { value: "身高约180厘米" } });
   expect(screen.getByRole("textbox", { name: "将插入的完整文字" })).toHaveValue("身高：身高约180厘米。");
   fireEvent.click(screen.getByRole("button", { name: "应用配置" }));
@@ -456,12 +456,12 @@ it('opens footwear directly from quick panels and keeps details inside its form'
   expect(screen.getByRole('tab', { name: '基础面板' })).toHaveAttribute('aria-selected', 'true');
   expect(screen.queryByRole('option', { name: /^Prompt 模板/ })).not.toBeInTheDocument();
   expect(screen.queryByRole('option', { name: /^身体 / })).not.toBeInTheDocument();
-  fireEvent.click(screen.getByRole('option', { name: /^古装鞋履选择面板/ }));
+  fireEvent.click(screen.getByRole('option', { name: /^古装鞋履$/ }));
   expect(screen.getByRole('combobox', { name: '鞋履图案' })).toBeInTheDocument();
   expect(screen.getByRole('combobox', { name: '鞋履装饰' })).toBeInTheDocument();
   expect(screen.queryByRole('listbox')).not.toBeInTheDocument();
   fireEvent.click(screen.getByRole('button', { name: '返回结果' }));
-  expect(screen.getByRole('option', { name: /^身高选择面板/ })).toBeInTheDocument();
+  expect(screen.getByRole('option', { name: /^身高$/ })).toBeInTheDocument();
 });
 
 it('keeps dictionary levels free of panels and templates with short summaries', () => {
@@ -476,4 +476,39 @@ it('keeps dictionary levels free of panels and templates with short summaries', 
   fireEvent.click(screen.getByRole('option', { name: /^身高 / }));
   expect(screen.getByRole('option', { name: /选项 · 身高偏高/ })).toBeInTheDocument();
   expect(screen.queryByRole('option', { name: /选择面板|配置面板|Prompt 模板/ })).not.toBeInTheDocument();
+});
+
+it('shows compact module buttons and keeps close beside the tabs', () => {
+  getPlatformReferenceLibrary.mockResolvedValueOnce({ resources: [] });
+  const { onClose } = setup('');
+  const options = screen.getAllByRole('option');
+  expect(options.slice(0, 6).map(option => option.textContent)).toEqual([
+    '古装鞋履', '古装外套', '古装衣裙', '首饰', '配饰', '现代男装',
+  ]);
+  expect(options.every(option => option.children.length === 1)).toBe(true);
+  expect(screen.queryByText('选择配置面板，调整后预览并应用。')).not.toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: 'AI 完善角色设计' })).not.toBeInTheDocument();
+  const close = screen.getByRole('button', { name: '关闭面板' });
+  expect(close.parentElement).toBe(screen.getByRole('tablist').parentElement);
+  fireEvent.click(close);
+  expect(onClose).toHaveBeenCalledOnce();
+});
+
+it('searches modules locally and only inserts the preview after confirmation', () => {
+  getPlatformReferenceLibrary.mockResolvedValueOnce({ resources: [] });
+  const { replaceWithText, onApply } = setup('');
+  const search = screen.getByRole('searchbox', { name: '搜索面板、词典或模板' });
+  fireEvent.change(search, { target: { value: '配饰' } });
+  expect(screen.getAllByRole('option').map(option => option.textContent)).toEqual(['配饰']);
+  expect(replaceWithText).not.toHaveBeenCalled();
+  expect(onApply).not.toHaveBeenCalled();
+  fireEvent.change(search, { target: { value: '' } });
+  expect(screen.getAllByRole('option').length).toBeGreaterThan(6);
+  fireEvent.change(search, { target: { value: '古装鞋履' } });
+  fireEvent.keyDown(search, { key: 'Enter' });
+  const preview = screen.getByRole('textbox', { name: '将插入的完整文字' });
+  expect(replaceWithText).not.toHaveBeenCalled();
+  fireEvent.click(screen.getByRole('button', { name: '应用配置' }));
+  expect(replaceWithText).toHaveBeenCalledWith((preview as HTMLTextAreaElement).value);
+  expect(onApply).toHaveBeenCalledWith(expect.stringContaining('前文 '), expect.objectContaining({ type: '配置面板' }));
 });

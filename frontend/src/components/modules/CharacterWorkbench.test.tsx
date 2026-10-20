@@ -91,7 +91,7 @@ it("explains an unpublished Prompt catalog within the slash dictionary", async (
     apiMocks.getPlatformReferenceLibrary.mockResolvedValueOnce({ resources: [] });
     render(<CharacterWorkbench asset={{ id: "character-1", name: "苏砚", description: "少年剑客" }}
         onClose={vi.fn()} onUpdateDescription={vi.fn()} onGenerate={vi.fn()} generatingTypes={[]} />);
-    fireEvent.click(screen.getByRole("button", { name: "/ 面板与模板" }));
+    fireEvent.click(screen.getByRole("button", { name: "面板与模板" }));
     fireEvent.click(screen.getByRole("tab", { name: "Prompt 模板" }));
     fireEvent.click(screen.getByRole("option", { name: /^UGC/ }));
     expect(await screen.findByText(/当前分类暂无可用模板/)).toBeInTheDocument();
@@ -118,7 +118,7 @@ it("previews an active platform Prompt before inserting editable text without se
     render(<CharacterWorkbench asset={{ id: "character-1", name: "苏砚", description: "少年剑客" }}
         onClose={vi.fn()} onUpdateDescription={vi.fn()} onGenerate={onGenerate} generatingTypes={[]} />);
 
-    fireEvent.click(screen.getByRole("button", { name: "/ 面板与模板" }));
+    fireEvent.click(screen.getByRole("button", { name: "面板与模板" }));
     fireEvent.click(screen.getByRole("tab", { name: "Prompt 模板" }));
     fireEvent.click(screen.getByRole("option", { name: /^角色设计/ }));
     expect(await screen.findByRole("option", { name: /古典行旅设定/ })).toBeInTheDocument();
@@ -722,15 +722,15 @@ it("opens design in the existing Prompt column with source and model, without a 
     expect(onUpdateDescription).not.toHaveBeenCalled();
 });
 
-it("opens the same design form from slash Skill without an input-inspection stage or a model call", async () => {
+it("keeps AI design out of discovery and available from the workbench", async () => {
     mountSimpleDesign();
-    fireEvent.click(screen.getByRole("button", { name: "/ 面板与模板" }));
+    fireEvent.click(screen.getByRole("button", { name: "面板与模板" }));
     const discovery = screen.getByRole("dialog", { name: "基础面板、词典和 Prompt 模板" });
-    fireEvent.click(within(discovery).getByRole("button", { name: "AI 完善角色设计" }));
-    fireEvent.click(screen.getByRole("button", { name: "打开角色设计" }));
+    expect(within(discovery).queryByRole("button", { name: "AI 完善角色设计" })).not.toBeInTheDocument();
+    fireEvent.click(within(discovery).getByRole("button", { name: "关闭面板" }));
+    fireEvent.click(screen.getByRole("button", { name: "AI 完善角色设计" }));
     expect(await screen.findByRole("region", { name: "角色设计" })).toBeInTheDocument();
-    expect(designDetailsEditor().getText().replace(/\s+/g, " ").trim()).toBe("脸部：眉目清冽。 服装：素黑劲装，布靴。");
-    expect(designDetailsEditor().getText()).not.toContain("/");
+    expect(designDetailsEditor().getText().replace(/\s+/g, " ").trim()).toBe("/脸部：眉目清冽。 服装：素黑劲装，布靴。");
     expect(screen.getByRole("button", { name: "提交 AI 完善" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "确认输入并完善角色设计" })).not.toBeInTheDocument();
     expect(apiMocks.agentRequest.mock.calls.filter(([path]) => path.startsWith("/character-design/"))).toHaveLength(0);
@@ -947,7 +947,7 @@ it("saves dictionary face choices as fields and keeps the remaining clothing tex
     const { onUpdateAttributes } = mountSimpleDesign();
     fireEvent.click(screen.getByRole("button", { name: "展开角色设计" }));
     act(() => designDetailsEditor().chain().selectAll().insertContent({ type: "text", text: "靛蓝外衣，素面布靴。 /面容" }).run());
-    fireEvent.click(await screen.findByRole("option", { name: /配置面板 · 面容选择面板/ }));
+    fireEvent.click(await screen.findByRole("option", { name: /^面容$/ }));
     fireEvent.change(screen.getByRole("combobox", { name: "肤质" }), { target: { value: "轻微干燥肤质" } });
     fireEvent.change(screen.getByRole("combobox", { name: "肤色" }), { target: { value: "暖小麦肤色" } });
     fireEvent.click(screen.getByRole("button", { name: "应用配置" }));
@@ -990,7 +990,7 @@ it('saves clothing panel sections and negative arrays without an AI call', async
     const { onUpdateAttributes } = mountSimpleDesign();
     fireEvent.click(screen.getByRole('button', { name: '展开角色设计' }));
     act(() => designDetailsEditor().chain().selectAll().insertContent({ type: 'text', text: '/服装' }).run());
-    fireEvent.click(await screen.findByRole('option', { name: /配置面板 · 古装长袍搭配/ }));
+    fireEvent.click(await screen.findByRole('option', { name: /^古装外套$/ }));
     fireEvent.click(screen.getByRole('button', { name: '应用配置' }));
     expect((screen.getByRole('textbox', { name: '设计字段 · 服装结构与材质' }) as HTMLTextAreaElement).value).toContain('上身仅有里衣和外衣两件');
     expect(screen.getByRole('textbox', { name: '设计约束 · 负面提示词' })).toHaveValue('未指定的中衣、披风、护甲或装饰性叠领');

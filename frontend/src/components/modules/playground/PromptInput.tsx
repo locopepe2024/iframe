@@ -101,7 +101,7 @@ export default function PromptInput({ onSubmit, onOpenReferences }: PromptInputP
       </div>
       <p className="mt-1 text-xs text-text-muted">/ 检索词典；点击模板中的 [变量] 选择词条填写；@ 选择参考素材。</p>
       {dictionary && <CharacterPromptDictionary suggestion={dictionary} onClose={() => setDictionary(null)}
-        onApply={(text) => setPrompt(text)} canRunSkill={false} keyHandler={dictionaryKeys} />}
+        onApply={(text) => setPrompt(text)} keyHandler={dictionaryKeys} />}
 
       {mention && (
         <div

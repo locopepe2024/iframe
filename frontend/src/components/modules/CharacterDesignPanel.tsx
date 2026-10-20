@@ -39,7 +39,7 @@ export default function CharacterDesignPanel({ description, details, onDetailsCh
         <div>
             <div className="flex flex-wrap items-center justify-between gap-2">
                 <span className="text-xs text-text-secondary">角色细节</span>
-                <button type="button" disabled={saving} onClick={() => setOpenSlashRequest(value => value + 1)} className="min-h-11 rounded border border-glass-border px-3 text-xs hover:bg-hover-bg focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary">/ 面板与模板</button>
+                <button type="button" disabled={saving} onClick={() => setOpenSlashRequest(value => value + 1)} className="min-h-11 rounded border border-glass-border px-3 text-xs hover:bg-hover-bg focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary">面板与模板</button>
             </div>
             <p className="mb-2 text-[11px] text-text-muted">已带入当前 Prompt，可继续调整词典细节和 [] 内容后提交。</p>
             <div className="relative min-h-36 rounded border border-glass-border p-2">
@@ -48,7 +48,7 @@ export default function CharacterDesignPanel({ description, details, onDetailsCh
                     allowImplicitMentions={false} onSlashChange={setSlash}
                     onSlashKeyDown={event => keyHandler.current?.(event) || false} />
                 {slash && <CharacterPromptDictionary suggestion={slash} onClose={() => setSlash(null)}
-                    onConfiguration={onDictionaryConfiguration} onApply={(text, entry) => entry.structuredFields ? onDictionaryFields(text, entry.structuredFields, entry.remainingText || "") : onDetailsChange(text)} keyHandler={keyHandler} canRunSkill={false} />}
+                    onConfiguration={onDictionaryConfiguration} onApply={(text, entry) => entry.structuredFields ? onDictionaryFields(text, entry.structuredFields, entry.remainingText || "") : onDetailsChange(text)} keyHandler={keyHandler} />}
             </div>
         </div>
         {supplemental && <label className="block text-xs text-text-secondary">其他已输入细节

@@ -38,7 +38,7 @@ describe('selected reference mentions', () => {
         render(<PromptInput />);
         const editor = (screen.getByRole('textbox') as HTMLElement & { editor: import('@tiptap/core').Editor }).editor;
         act(() => { editor.commands.setTextSelection(8); });
-        fireEvent.click(await screen.findByRole('option', { name: /词条 · 连衣裙 / }));
+        fireEvent.click(await screen.findByRole('option', { name: /选项 · 连衣裙 / }));
         expect(usePlaygroundStore.getState().prompt).toContain('[女装款式]');
         fireEvent.click(screen.getByRole('button', { name: '填写当前槽位' }));
         expect(usePlaygroundStore.getState().prompt).toBe('模特穿着连衣裙，颜色为[颜色]，面料为[面料]。');
@@ -64,7 +64,7 @@ describe('selected reference mentions', () => {
                 }
             });
         });
-        fireEvent.click(await screen.findByRole('option', { name: /词条 · 靛蓝色 / }));
+        fireEvent.click(await screen.findByRole('option', { name: /选项 · 靛蓝色 / }));
         fireEvent.click(screen.getByRole('button', { name: '填写当前槽位' }));
         expect(usePlaygroundStore.getState().prompt).toBe(template.replace('[外衣颜色]', '靛蓝色'));
         expect(usePlaygroundStore.getState().prompt).toContain('[里衣颜色]');
