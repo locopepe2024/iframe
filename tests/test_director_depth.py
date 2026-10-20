@@ -88,12 +88,16 @@ def test_real_media_blender_snapshot(client, monkeypatch):
     if not target: pytest.skip('explicit media integration target not configured')
     monkeypatch.setenv('DIRECTOR_DEPTH_MEDIA_SSH_TARGET', target)
     c, _ = client
-    response = c.post('/director3d/depth-tasks', json=snapshot())
+    checksum = 'fnv1a32:12345678'
+    response = c.post('/director3d/depth-tasks', json={**snapshot(), 'packageChecksum': checksum})
     assert response.status_code == 202, response.text
     task_id = response.json()['id']
     result = c.get(f'/director3d/depth-tasks/{task_id}').json()
     assert result['status'] == 'completed', result
+    assert result['executionHost'] == 'media'
+    assert result['packageChecksum'] == checksum
     manifest = c.get(f'/director3d/depth-tasks/{task_id}/outputs/manifest').json()
+    assert manifest['packageChecksum'] == checksum
     assert manifest['blenderVersion'].startswith('4.5.9')
     assert manifest['unit'] == 'meter'
     from PIL import Image
