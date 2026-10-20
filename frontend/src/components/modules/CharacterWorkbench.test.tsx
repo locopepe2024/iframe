@@ -83,7 +83,7 @@ it("opens dictionary content directly from slash in the Prompt and keeps preview
     expect(editor.getText()).toBe("前文 /长发高束");
     fireEvent.click(screen.getByRole("button", { name: "插入到当前 Prompt" }));
     expect(editor.getText()).toBe("前文 长发高束，发际线和鬓角保留自然碎发");
-    expect(screen.queryByRole("dialog", { name: "基础面板和 Prompt 模板" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("dialog", { name: "基础面板、词典和 Prompt 模板" })).not.toBeInTheDocument();
 });
 
 it("explains an unpublished Prompt catalog within the slash dictionary", async () => {
@@ -147,8 +147,9 @@ it("resolves slash platform Prompt as editable text without an image reference",
         onClose={vi.fn()} onUpdateDescription={vi.fn()} onGenerate={onGenerate} generatingTypes={[]} />);
     const editor = document.querySelector("[contenteditable]") as HTMLElement & { editor: import("@tiptap/core").Editor };
     act(() => editor.editor.commands.insertContent("/古典"));
+    fireEvent.click(screen.getByRole("tab", { name: "Prompt 模板" }));
     fireEvent.click(await screen.findByRole("option", { name: /古典行旅设定/ }));
-    expect(screen.getByRole("dialog", { name: "基础面板和 Prompt 模板" })).toHaveTextContent("正面全身，灰蓝行旅衣");
+    expect(screen.getByRole("dialog", { name: "基础面板、词典和 Prompt 模板" })).toHaveTextContent("正面全身，灰蓝行旅衣");
     expect(editor.editor.getText()).toContain("/古典");
     fireEvent.click(screen.getByRole("button", { name: "插入到当前 Prompt" }));
     expect(editor.editor.getText()).toContain("正面全身，灰蓝行旅衣");
@@ -724,7 +725,7 @@ it("opens design in the existing Prompt column with source and model, without a 
 it("opens the same design form from slash Skill without an input-inspection stage or a model call", async () => {
     mountSimpleDesign();
     fireEvent.click(screen.getByRole("button", { name: "/ 面板与模板" }));
-    const discovery = screen.getByRole("dialog", { name: "基础面板和 Prompt 模板" });
+    const discovery = screen.getByRole("dialog", { name: "基础面板、词典和 Prompt 模板" });
     fireEvent.click(within(discovery).getByRole("button", { name: "AI 完善角色设计" }));
     fireEvent.click(screen.getByRole("button", { name: "打开角色设计" }));
     expect(await screen.findByRole("region", { name: "角色设计" })).toBeInTheDocument();

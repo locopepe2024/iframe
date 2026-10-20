@@ -23,6 +23,7 @@ type Entry = {
 const DOMAINS: Record<string, string> = {
   "character.identity": "身份", "character.look": "造型", "character.performance": "表演", "world.style": "风格",
 };
+const DISCOVERY_SECTIONS = ["基础面板", "词典", "Prompt 模板"] as const;
 const buttonStyle = "min-h-11 rounded px-2 text-xs focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary hover:bg-hover-bg";
 
 export default function CharacterPromptDictionary({ suggestion, onClose, onApply, onSkill, canRunSkill, keyHandler, onConfiguration }: {
@@ -39,7 +40,7 @@ export default function CharacterPromptDictionary({ suggestion, onClose, onApply
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
   const [refresh, setRefresh] = useState(0);
-  const [section, setSection] = useState<"基础面板" | "Prompt 模板">("基础面板");
+  const [section, setSection] = useState<typeof DISCOVERY_SECTIONS[number]>("基础面板");
   const [task, setTask] = useState<PromptTask | null>(null);
   const [topic, setTopic] = useState("");
   const [style, setStyle] = useState("");
@@ -105,42 +106,44 @@ export default function CharacterPromptDictionary({ suggestion, onClose, onApply
   const group = CHARACTER_DICTIONARY_GROUPS.find((item) => item.id === category);
   const inCategory = (entry: Entry, key: string) => entry.categories.includes(key)
     || CHARACTER_DICTIONARY_GROUPS.find((item) => item.id === key)?.children.some(([child]) => entry.categories.includes(child));
-  const count = (key: string) => entries.filter(entry => (entry.type === "词条" || entry.type === "配置面板") && inCategory(entry, key)).length;
-  const showCategories = section === "基础面板" && browsing && (!category || !!group);
-  const panelEntries = showCategories && !suggestion.slot && category
-    ? entries.filter(entry => entry.type === "配置面板" && inCategory(entry, category)) : [];
-  const navigation = !showCategories ? [] : group ? group.children.map(([key, label]) => ({ id: key, label, detail: `${count(key)} 个选项` }))
-    : CHARACTER_DICTIONARY_GROUPS.filter(item => item.id !== "performance" || count(item.id) > 0)
-      .map(item => ({ id: item.id, label: item.label, detail: item.children.map(([, label]) => label).join("、") }));
+  const count = (key: string) => entries.filter(entry => entry.type === "词条" && inCategory(entry, key)).length;
+  const showCategories = section === "词典" && browsing && (!category || !!group);
+  const navigation = !showCategories ? [] : group
+    ? group.children.filter(([key]) => count(key) > 0).map(([key, label]) => ({ id: key, label, detail: `${count(key)} 个选项` }))
+    : CHARACTER_DICTIONARY_GROUPS.filter(item => item.id !== "templates" && count(item.id) > 0)
+      .map(item => ({ id: item.id, label: item.label,
+        detail: item.children.filter(([key]) => count(key) > 0).slice(0, 3).map(([, label]) => label).join("、") + (item.children.length > 3 ? "等" : "") }));
   const visible = showCategories ? [] : entries.filter(entry => {
-    if (entry.type === "Skill") return false;
     const template = entry.type === "Prompt 模板" || entry.type === "Prompt 案例";
-    if (suggestion.slot ? entry.type !== "词条" : section === "Prompt 模板" ? !template : template && (browsing || !needle || isConfigurationQuery(needle))) return false;
+    if (suggestion.slot || section === "词典") {
+      if (entry.type !== "词条") return false;
+    } else if (section === "基础面板") {
+      if (entry.type !== "配置面板") return false;
+      if (!browsing && isConfigurationQuery(needle)) return inCategory(entry, configurationQueryCategory(needle)!);
+    } else if (!template) return false;
     if (!browsing && needle && !`${entry.title} ${entry.search} ${entry.text} ${entry.categories.map(dictionaryCategorySearch).join(" ")}`.toLocaleLowerCase().includes(needle)) return false;
-    if (section === "基础面板" && !suggestion.slot && isConfigurationQuery(needle) && !browsing)
-      return entry.type === "配置面板" && inCategory(entry, configurationQueryCategory(needle)!);
     if (section === "Prompt 模板") {
       const dimensions = templateDimensions(entry.title, entry.search);
       return (!task || dimensions.tasks.includes(task)) && (!topic || dimensions.topics.includes(topic as typeof PROMPT_TOPICS[number]))
         && (!style || dimensions.styles.includes(style as typeof PROMPT_STYLES[number]));
     }
-    return !browsing || !category || inCategory(entry, category);
-  }).sort((a, b) => Number(b.type === "配置面板") - Number(a.type === "配置面板"));
-  const related = section === "基础面板" && !browsing ? Array.from(new Set(visible.flatMap(entry => entry.categories))) : [];
+    return section === "基础面板" || !browsing || !category || inCategory(entry, category);
+  });
+  const related = section === "词典" && !browsing ? Array.from(new Set(visible.flatMap(entry => entry.categories))) : [];
   const enterCategory = (key: string) => { setCategory(key); setBrowsing(true); setActive(0); };
   const showTasks = section === "Prompt 模板" && !task && browsing;
   const options = [
     ...(showTasks ? PROMPT_TASKS.map(([key, label]) => ({ id: `task-${key}`, label, detail: "选择任务，再按题材和画风筛选", choose: () => setTask(key) })) : []),
     ...navigation.map(item => ({ id: `category-${item.id}`, label: item.label, detail: item.detail, choose: () => enterCategory(item.id) })),
-    ...(showTasks ? [] : [...panelEntries, ...visible].map(entry => ({ id: entry.id,
-      label: `${entry.type === "词条" ? "选项" : entry.type === "Prompt 案例" ? "Prompt 模板" : entry.type} · ${entry.title}`,
-      detail: `${entry.domain} · ${entry.source}`, choose: () => { setSelected(entry); setFieldValues({}); } }))),
+    ...(showTasks ? [] : visible.map(entry => ({ id: entry.id,
+      label: browsing && entry.type === "配置面板" ? entry.title : `${entry.type === "词条" ? "选项" : entry.type === "Prompt 案例" ? "Prompt 模板" : entry.type} · ${entry.title}`,
+      detail: browsing && entry.type === "配置面板" ? "选择款式并调整细节" : `${entry.domain} · ${entry.source}`, choose: () => { setSelected(entry); setFieldValues({}); } }))),
     ...related.map(key => ({ id: `browse-${key}`, label: `浏览 ${dictionaryCategoryPath(key)}`, detail: `${count(key)} 个选项，可比较其他描述`, choose: () => enterCategory(key) })),
   ];
   useEffect(() => {
     setActive(0); setSelected(null); setFieldValues({}); setCategory(dictionarySlotCategory(suggestion.slot)); setBrowsing(!needle);
     setTask(null); setTopic(""); setStyle("");
-    setSection(!suggestion.slot && /^(古装|古风|现代|女装|动漫|国风|换装|写真|电商|ugc)$/i.test(needle) ? "Prompt 模板" : "基础面板");
+    setSection(suggestion.slot ? "词典" : /^(古装|古风|现代|女装|动漫|国风|换装|写真|电商|ugc)$/i.test(needle) ? "Prompt 模板" : !needle || isConfigurationQuery(needle) ? "基础面板" : "词典");
   }, [needle, suggestion.slot, suggestion.contextKey]);
   useEffect(() => { setActive(0); setSelected(null); }, [section, category, browsing, task, topic, style]);
   const back = () => {
@@ -178,11 +181,11 @@ export default function CharacterPromptDictionary({ suggestion, onClose, onApply
   useEffect(() => {
     document.getElementById(`${id}-${active}`)?.scrollIntoView?.({ block: "nearest" });
   }, [id, active]);
-  return <div data-prompt-discovery role="dialog" aria-label="基础面板和 Prompt 模板" onMouseDown={(event) => {
+  return <div data-prompt-discovery role="dialog" aria-label="基础面板、词典和 Prompt 模板" onMouseDown={(event) => {
     if (!(event.target as HTMLElement).closest("input, select, textarea")) event.preventDefault();
   }}
     className="absolute top-12 left-3 right-3 z-50 mb-2 max-h-[min(60vh,440px)] overflow-y-auto rounded-lg border border-glass-border bg-elevated p-3 shadow-xl">
-    <div className="flex items-center justify-between gap-2"><p className="text-xs font-medium text-foreground">{suggestion.slot ? `填写 [${suggestion.slot}]` : "/ 基础面板与 Prompt 模板"}</p><button type="button" onClick={onClose} className={buttonStyle}>关闭</button></div>
+    <div className="flex items-center justify-between gap-2"><p className="text-xs font-medium text-foreground">{suggestion.slot ? `填写 [${suggestion.slot}]` : "/ 基础面板、词典与 Prompt 模板"}</p><button type="button" onClick={onClose} className={buttonStyle}>关闭</button></div>
     {selected ? <>
       <h4 className="mt-2 text-sm text-foreground">{selected.type === "词条" ? "选项" : selected.type === "Prompt 案例" ? "Prompt 模板" : selected.type} · {selected.title}</h4>
       <p className="mt-1 break-all text-xs text-text-muted">{selected.source}</p>
@@ -223,14 +226,15 @@ export default function CharacterPromptDictionary({ suggestion, onClose, onApply
       {selected.type === "Skill" && !canRunSkill && <p className="text-xs text-text-muted">请等待当前设计完成；此入口需在角色工作台中使用。</p>}
       <button type="button" onClick={() => setSelected(null)} className={`${buttonStyle} ml-2`}>返回结果</button>
     </> : <>
-      {!suggestion.slot && <div role="tablist" aria-label="检索范围" className="mt-2 flex gap-2">{(["基础面板", "Prompt 模板"] as const).map(label => <button key={label} type="button" role="tab" aria-selected={section === label} tabIndex={section === label ? 0 : -1}
-        onClick={() => { setSection(label); setCategory(null); setTask(null); setBrowsing(true); }}
+      {!suggestion.slot && <div role="tablist" aria-label="检索范围" className="mt-2 flex gap-2">{DISCOVERY_SECTIONS.map(label => <button key={label} type="button" role="tab" aria-selected={section === label} tabIndex={section === label ? 0 : -1}
+        onClick={() => { setSection(label); setCategory(null); setTask(null); setBrowsing(!needle); }}
         onKeyDown={event => {
           if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
           event.preventDefault();
-          const next = event.key === "Home" ? "基础面板" : event.key === "End" ? "Prompt 模板" : section === "基础面板" ? "Prompt 模板" : "基础面板";
-          setSection(next); setCategory(null); setTask(null); setBrowsing(true);
-          event.currentTarget.parentElement?.querySelectorAll<HTMLButtonElement>('[role="tab"]')[next === "基础面板" ? 0 : 1]?.focus();
+          const index = event.key === "Home" ? 0 : event.key === "End" ? 2 : (DISCOVERY_SECTIONS.indexOf(section) + (event.key === "ArrowRight" ? 1 : 2)) % 3;
+          const next = DISCOVERY_SECTIONS[index];
+          setSection(next); setCategory(null); setTask(null); setBrowsing(!needle);
+          event.currentTarget.parentElement?.querySelectorAll<HTMLButtonElement>('[role="tab"]')[index]?.focus();
         }} className={`${buttonStyle} ${section === label ? "bg-primary/15 text-foreground" : "text-text-muted"}`}>{label}</button>)}</div>}
       {section === "Prompt 模板" && !suggestion.slot && <div className="mt-2 flex flex-wrap gap-2">
         {task && <button type="button" onClick={() => setTask(null)} className={buttonStyle}>返回任务分类</button>}
@@ -242,9 +246,10 @@ export default function CharacterPromptDictionary({ suggestion, onClose, onApply
           <option value="">不限画风</option>{PROMPT_STYLES.map(value => <option key={value}>{value}</option>)}
         </select></label>
       </div>}
-      {section === "基础面板" && <div className="flex flex-wrap items-center gap-1 text-xs text-text-muted">
+      {section === "基础面板" && <p className="py-2 text-xs text-text-muted">选择配置面板，调整后预览并应用。</p>}
+      {section === "词典" && <div className="flex flex-wrap items-center gap-1 text-xs text-text-muted">
         {category ? <><button type="button" onClick={back} className={buttonStyle}>返回上一级</button><span>{dictionaryCategoryPath(category)}</span></>
-          : <p className="py-2">{browsing ? "选择部位面板调整细节，也可输入 /关键词直接搜索。" : "搜索结果 · 进入所属分类可比较其他选项"}</p>}
+          : <p className="py-2">{browsing ? "选择分类查找单项描述，也可输入 /关键词直接搜索。" : "搜索结果 · 进入所属分类可比较其他选项"}</p>}
         {browsing && needle && <button type="button" onClick={() => { setCategory(null); setBrowsing(false); }} className={buttonStyle}>返回搜索结果</button>}
       </div>}
       {!suggestion.slot && onSkill && <button type="button" disabled={!canRunSkill} onClick={() => setSelected(entries.find(entry => entry.type === "Skill") || null)} className={`${buttonStyle} mt-1 border border-glass-border disabled:opacity-50`}>AI 完善角色设计</button>}

@@ -19,6 +19,7 @@ it("starts with categories and lets creators compare face shapes without changin
   getPlatformReferenceLibrary.mockResolvedValueOnce({ resources: [] });
   const { replaceWithText } = setup("");
   expect(screen.queryByRole("option", { name: /选项 · 圆脸/ })).not.toBeInTheDocument();
+  fireEvent.click(screen.getByRole("tab", { name: "词典" }));
   fireEvent.click(screen.getByRole("option", { name: /^面部/ }));
   fireEvent.click(screen.getByRole("option", { name: /^脸型/ }));
   expect(screen.getByRole("option", { name: /选项 · 圆脸/ })).toBeInTheDocument();
@@ -30,6 +31,7 @@ it("starts with categories and lets creators compare face shapes without changin
 it("separates rendering style from genre and inserts a complete style without assigning identity or clothing", () => {
   getPlatformReferenceLibrary.mockResolvedValueOnce({ resources: [] });
   const { replaceWithText } = setup("");
+  fireEvent.click(screen.getByRole("tab", { name: "词典" }));
   fireEvent.click(screen.getByRole("option", { name: /^表现风格/ }));
   fireEvent.click(screen.getByRole("option", { name: /^写实与绘画风格/ }));
   expect(screen.queryByRole("option", { name: /古装 \/ 武侠/ })).not.toBeInTheDocument();
@@ -101,6 +103,7 @@ it("offers the containing category for an exact search so other options can be c
 it("keeps body build and posture separate and supports going back through categories with Escape", () => {
   getPlatformReferenceLibrary.mockResolvedValueOnce({ resources: [] });
   const { keyHandler, replaceWithText, onClose } = setup("");
+  fireEvent.click(screen.getByRole("tab", { name: "词典" }));
   act(() => { keyHandler.current!(new KeyboardEvent("keydown", { key: "ArrowDown" })); });
   act(() => { keyHandler.current!(new KeyboardEvent("keydown", { key: "Enter" })); });
   fireEvent.click(screen.getByRole("option", { name: /^体型与比例/ }));
@@ -127,7 +130,8 @@ it("finds dedicated eye-area detail through the eye-wrinkle category alias", () 
 it("switches between dictionary and Skill using the keyboard without mixing their results", () => {
   getPlatformReferenceLibrary.mockResolvedValueOnce({ resources: [] });
   setup("");
-  const dictionary = screen.getByRole("tab", { name: "基础面板" });
+  const dictionary = screen.getByRole("tab", { name: "词典" });
+  fireEvent.click(dictionary);
   fireEvent.keyDown(dictionary, { key: "ArrowRight" });
   const skill = screen.getByRole("tab", { name: "Prompt 模板" });
   expect(skill).toHaveAttribute("aria-selected", "true");
@@ -224,6 +228,7 @@ it("groups 60 expressions and inserts static state while retaining original moti
 it("browses expression groups independently of facial identity", () => {
   getPlatformReferenceLibrary.mockResolvedValueOnce({ resources: [] });
   setup("");
+  fireEvent.click(screen.getByRole("tab", { name: "词典" }));
   fireEvent.click(screen.getByRole("option", { name: /^表情 / }));
   expect(screen.getByRole("option", { name: /^基础微表情/ })).toBeInTheDocument();
   expect(screen.getByRole("option", { name: /^复杂情绪与转折/ })).toBeInTheDocument();
@@ -409,10 +414,10 @@ it("fills a height slot with just the selected height", () => {
   expect(replaceWithText).toHaveBeenCalledWith("身高偏高");
 });
 
-it('shows only panels and templates as top-level discovery modes', () => {
+it('separates quick panels, vocabulary and complete templates', () => {
   getPlatformReferenceLibrary.mockResolvedValueOnce({ resources: [] });
   setup('');
-  expect(screen.getAllByRole('tab').map(tab => tab.textContent)).toEqual(['基础面板', 'Prompt 模板']);
+  expect(screen.getAllByRole('tab').map(tab => tab.textContent)).toEqual(['基础面板', '词典', 'Prompt 模板']);
   for (const name of ['全部', '配置面板', '词条', '组合方案', 'Prompt 案例', 'Skill']) {
     expect(screen.queryByRole('button', { name })).not.toBeInTheDocument();
   }
@@ -442,4 +447,33 @@ it('explains empty task categories and allows returning to task selection', asyn
   expect(await screen.findByText(/当前分类暂无可用模板/)).toBeInTheDocument();
   fireEvent.click(screen.getByRole('button', { name: '返回任务分类' }));
   expect(screen.getByRole('option', { name: /^电商主图/ })).toBeInTheDocument();
+});
+
+
+it('opens footwear directly from quick panels and keeps details inside its form', () => {
+  getPlatformReferenceLibrary.mockResolvedValueOnce({ resources: [] });
+  setup('');
+  expect(screen.getByRole('tab', { name: '基础面板' })).toHaveAttribute('aria-selected', 'true');
+  expect(screen.queryByRole('option', { name: /^Prompt 模板/ })).not.toBeInTheDocument();
+  expect(screen.queryByRole('option', { name: /^身体 / })).not.toBeInTheDocument();
+  fireEvent.click(screen.getByRole('option', { name: /^古装鞋履选择面板/ }));
+  expect(screen.getByRole('combobox', { name: '鞋履图案' })).toBeInTheDocument();
+  expect(screen.getByRole('combobox', { name: '鞋履装饰' })).toBeInTheDocument();
+  expect(screen.queryByRole('listbox')).not.toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button', { name: '返回结果' }));
+  expect(screen.getByRole('option', { name: /^身高选择面板/ })).toBeInTheDocument();
+});
+
+it('keeps dictionary levels free of panels and templates with short summaries', () => {
+  getPlatformReferenceLibrary.mockResolvedValueOnce({ resources: [] });
+  setup('');
+  fireEvent.click(screen.getByRole('tab', { name: '词典' }));
+  expect(screen.queryByRole('option', { name: /^Prompt 模板/ })).not.toBeInTheDocument();
+  for (const option of screen.getAllByRole('option')) expect(option.textContent!.length).toBeLessThan(55);
+  fireEvent.click(screen.getByRole('option', { name: /^身体 / }));
+  expect(screen.getByRole('option', { name: /^身高 / })).toBeInTheDocument();
+  expect(screen.queryByRole('option', { name: /选择面板|配置面板|Prompt 模板/ })).not.toBeInTheDocument();
+  fireEvent.click(screen.getByRole('option', { name: /^身高 / }));
+  expect(screen.getByRole('option', { name: /选项 · 身高偏高/ })).toBeInTheDocument();
+  expect(screen.queryByRole('option', { name: /选择面板|配置面板|Prompt 模板/ })).not.toBeInTheDocument();
 });
