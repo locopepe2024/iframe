@@ -286,7 +286,7 @@ it("saves both scene sources and restores independent edits when reopened", asyn
             design: { ...workspace.design, prompt: "手工修改原设计" },
             ai: { ...workspace.ai, prompt: "手工修改优化" },
         } }) }));
-    fireEvent.click(screen.getByRole("button", { name: "Done" }));
+    fireEvent.click(screen.getByRole("button", { name: "关闭工作台" }));
     await waitFor(() => expect(screen.queryByRole("tab", { name: "AI 优化" })).not.toBeInTheDocument());
     fireEvent.click(screen.getByText(asset.name));
     expect(screen.getByRole("tab", { name: "AI 优化" })).toHaveAttribute("aria-selected", "true");
