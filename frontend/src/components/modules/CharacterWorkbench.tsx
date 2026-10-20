@@ -3,7 +3,7 @@
 import { useState, useEffect, useMemo, useRef, useId, useCallback } from "react";
 import { useTranslations } from "next-intl";
 import { motion, AnimatePresence } from "framer-motion";
-import { X, RefreshCw, Check, Image as ImageIcon, Lock, ChevronRight, ChevronDown, Video, PanelLeft, Sparkles, Search } from "lucide-react";
+import { X, RefreshCw, Check, Image as ImageIcon, Lock, ChevronRight, ChevronDown, Video, Sparkles, Search } from "lucide-react";
 import { agentRequest, api, type AssetImageReviewRequest, type AssetLibraryReference, type AssetReferenceIndexEntry, type ChatModel, type CharacterAssetPackView } from "@/lib/api";
 
 import { VariantSelector } from "../common/VariantSelector";
@@ -355,8 +355,7 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
     const tc = useTranslations("character");
     const [activePanel, setActivePanel] = useState<"full_body" | "three_view" | "headshot" | "video">("full_body");
     const [isPlanOpen, setIsPlanOpen] = useState(false);
-    const [showProfile, setShowProfile] = useState(false);
-    const savedDesign = (asset.character_design?.design_draft || {}) as DesignDraft;
+    const savedDesign = (asset.character_design?.design_draft || asset.character_design?.design_revisions?.at(-1)?.design || {}) as DesignDraft;
     const [designRoute, setDesignRoute] = useState(savedDesign.route || "");
     const [styleNotes, setStyleNotes] = useState(savedDesign.style_notes || "");
     const [designAgeStage, setDesignAgeStage] = useState(savedDesign.age_stage || "");
@@ -391,7 +390,7 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
     const [designRevision, setDesignRevision] = useState<number>(asset.character_design?.design_revisions?.at(-1)?.revision || 0);
     const [savingDesign, setSavingDesign] = useState(false);
     const [designError, setDesignError] = useState("");
-    const [designInput, setDesignInput] = useState([savedDesign.user_visual_requirements?.identity, savedDesign.user_visual_requirements?.look].filter(Boolean).join("\n"));
+    const [designInput, setDesignInput] = useState([savedDesign.user_visual_requirements?.identity, savedDesign.user_visual_requirements?.look].filter(Boolean).join("\n") || confirmedDesignContent(savedDesign) || asset.full_body_prompt || "");
     const [designResult, setDesignResult] = useState<string | null>(
         confirmedDesignContent(savedDesign) || null);
     const updateProject = useProjectStore(state => state.updateProject);
@@ -686,10 +685,6 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
         setFullBodyPrompt(buildCharacterImagePrompt("full_body", asset.name, currentDesignDescription, hasNonFullBodyUpload));
         setThreeViewPrompt(buildCharacterImagePrompt("three_view", asset.name, currentDesignDescription, hasFullBodyImage || hasAnyUpload));
         setHeadshotPrompt(buildCharacterImagePrompt("headshot", asset.name, currentDesignDescription, hasFullBodyImage || hasAnyUpload));
-        designPromptBaseline.current = buildCharacterImagePrompt(
-            activePanel === "three_view" ? "three_view" : activePanel === "headshot" ? "headshot" : "full_body",
-            asset.name, currentDesignDescription,
-            activePanel === "full_body" ? hasNonFullBodyUpload : hasFullBodyImage || hasAnyUpload);
         setPromptsNeedDesignApply(false);
     };
     const characterDesignRequest = {
@@ -709,23 +704,6 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
     const characterDesignSource = JSON.stringify({ ...characterDesignRequest, asset_id: asset.id, result: designResult, supplemental: supplementalPrompt });
     const characterDesignSourceRef = useRef(characterDesignSource);
     characterDesignSourceRef.current = characterDesignSource;
-    const designPromptBaseline = useRef(fullBodyPrompt);
-    const openDesignEditor = (promptOverride?: string) => {
-        if (!showProfile) {
-            const currentPrompt = promptOverride ?? (activePanel === "three_view" ? threeViewPrompt : activePanel === "headshot" ? headshotPrompt : fullBodyPrompt);
-            if (!designInput || currentPrompt !== designPromptBaseline.current) {
-                setDesignInput(currentPrompt);
-                if (currentPrompt !== designPromptBaseline.current) {
-                    setDesignConstraints({ must_keep: [], negative_prompt: [] });
-                    setDesignResult(null); setDesignStatus("draft");
-                    setIdentityFeatures({}); setLookFeatures({}); setDesignNotes(""); setLookNotes("");
-                    setIdentityEditorMode("notes"); setLookEditorMode("notes"); setSupplementalPrompt("");
-                }
-            }
-            designPromptBaseline.current = currentPrompt;
-        }
-        setShowProfile(true);
-    };
 
     const generateDesignDraft = async () => {
         if (!designModel || designing || !asset.description.trim() || designInput.length > 8000) return;
@@ -1126,7 +1104,7 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
         setDesignStatus("draft"); setPromptsNeedDesignApply(true);
     };
 
-    const designEditor = showProfile ? <CharacterDesignPanel
+    const designEditor = <CharacterDesignPanel
         description={asset.description} details={designInput}
         onDictionaryConfiguration={recordDictionaryConfiguration}
         identityFields={identityFeatures} lookFields={lookFeatures}
@@ -1148,7 +1126,7 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
         }}
         onDetailsChange={value => {
             setDesignConstraints({ must_keep: [], negative_prompt: [] });
-            setDesignInput(value); setDesignResult(null); setDesignStatus("draft");
+            setDesignInput(value); setDesignResult(null); setDesignStatus("draft"); setPromptsNeedDesignApply(true);
             setIdentityFeatures({}); setLookFeatures({}); setDesignNotes(""); setLookNotes("");
             setIdentityEditorMode("notes"); setLookEditorMode("notes"); setSupplementalPrompt("");
         }}
@@ -1173,8 +1151,8 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
         busy={designing} saving={savingDesign} canSave={!!onUpdateAttributes} error={designError}
         status={designStatus === "confirmed" ? `已确认 r${designRevision}` : "草稿 · 确认前不会创建角色设计版本"}
         onSubmit={() => void generateDesignDraft()} onSave={() => void saveDesignDraft(false)}
-        onConfirm={() => void saveDesignDraft(true)} onBack={() => setShowProfile(false)}
-    /> : null;
+        onConfirm={() => void saveDesignDraft(true)}
+    />;
 
     return (
         <div className="absolute inset-0 z-50 flex items-center justify-center bg-overlay backdrop-blur-md">
@@ -1192,10 +1170,6 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
                         </div>
                     </div>
                     <div className="flex shrink-0 items-center gap-2">
-                        <button type="button" onClick={() => showProfile ? setShowProfile(false) : openDesignEditor()} aria-label={showProfile ? "收起角色设计" : "展开角色设计"} aria-expanded={showProfile} aria-controls="character-design-dossier" className="inline-flex min-h-11 items-center gap-2 rounded border border-glass-border px-3 text-xs text-text-secondary hover:text-foreground focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary">
-                            <PanelLeft size={16} aria-hidden="true" />{showProfile ? "收起设计" : "角色设计"}
-                            {designUnresolved.length > 0 && <span className="rounded border border-amber-400/40 px-1.5 py-0.5 text-[11px] text-amber-300">{tc("pendingDesignQuestions", { count: designUnresolved.length })}</span>}
-                        </button>
                         {planEntries.length > 0 && (
                             <button type="button" aria-expanded={isPlanOpen} aria-controls="character-plan-constraints" onClick={() => setIsPlanOpen(open => !open)} className="flex items-center gap-1 rounded border border-glass-border px-2 py-1.5 text-xs text-text-secondary hover:text-foreground" title="拍摄计划约束">
                                 拍摄计划 · {planEntries.length} 条
@@ -1216,7 +1190,7 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
                 <div className="min-h-0 flex-1 flex flex-col lg:flex-row overflow-hidden">
 
                     <div className="min-h-0 min-w-0 flex-1 flex flex-col">
-                        {promptsNeedDesignApply && !showProfile && <div className="mx-3 mt-3 flex flex-col gap-2 rounded-md border border-primary/30 bg-primary/5 p-3 sm:mx-5 sm:flex-row sm:items-center sm:justify-between">
+                        {promptsNeedDesignApply && <div className="mx-3 mt-3 flex flex-col gap-2 rounded-md border border-primary/30 bg-primary/5 p-3 sm:mx-5 sm:flex-row sm:items-center sm:justify-between">
                             <div className="min-w-0">
                                 <p className="text-xs font-medium text-foreground">角色设计草稿尚未应用到图片提示词</p>
                                 <p className="mt-0.5 text-[11px] leading-4 text-text-muted">应用会更新全身、三视图和肖像提示词，不保存角色设计或创建版本；之后仍可编辑提示词。</p>
@@ -1303,12 +1277,9 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
                         prompt={fullBodyPrompt}
                         setPrompt={setFullBodyPrompt}
                         onDictionaryConfiguration={recordDictionaryConfiguration}
-                        onDesignSkill={openDesignEditor}
                         onStructuredSelection={(text: string, fields: { identity: IdentityFeatures; look: LookFeatures }, remaining: string) => {
                             updateStructuredDesign(fields.identity, fields.look, text, remaining);
-                            designPromptBaseline.current = text;
                         }}
-                        canRunDesignSkill={!designing}
                         platformPromptSource={platformPromptSources.full_body}
                         onPlatformPromptSourceChange={(source: AppliedPlatformPrompt | null) => setPlatformPromptSources((current) => ({ ...current, full_body: source }))}
                         referenceCandidates={referenceCandidates}
@@ -1367,12 +1338,9 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
                         prompt={threeViewPrompt}
                         setPrompt={setThreeViewPrompt}
                         onDictionaryConfiguration={recordDictionaryConfiguration}
-                        onDesignSkill={openDesignEditor}
                         onStructuredSelection={(text: string, fields: { identity: IdentityFeatures; look: LookFeatures }, remaining: string) => {
                             updateStructuredDesign(fields.identity, fields.look, text, remaining);
-                            designPromptBaseline.current = text;
                         }}
-                        canRunDesignSkill={!designing}
                         platformPromptSource={platformPromptSources.three_view}
                         onPlatformPromptSourceChange={(source: AppliedPlatformPrompt | null) => setPlatformPromptSources((current) => ({ ...current, three_view: source }))}
                         referenceCandidates={referenceCandidates}
@@ -1412,12 +1380,9 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
                         prompt={headshotPrompt}
                         setPrompt={setHeadshotPrompt}
                         onDictionaryConfiguration={recordDictionaryConfiguration}
-                        onDesignSkill={openDesignEditor}
                         onStructuredSelection={(text: string, fields: { identity: IdentityFeatures; look: LookFeatures }, remaining: string) => {
                             updateStructuredDesign(fields.identity, fields.look, text, remaining);
-                            designPromptBaseline.current = text;
                         }}
-                        canRunDesignSkill={!designing}
                         platformPromptSource={platformPromptSources.headshot}
                         onPlatformPromptSourceChange={(source: AppliedPlatformPrompt | null) => setPlatformPromptSources((current) => ({ ...current, headshot: source }))}
                         referenceCandidates={referenceCandidates}
@@ -1455,7 +1420,7 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
                     </div>
                 </div>
 
-                {!showProfile && <details className="shrink-0 border-t border-glass-border bg-surface">
+                <details className="shrink-0 border-t border-glass-border bg-surface">
                     <summary className="flex min-h-11 cursor-pointer items-center px-4 text-sm font-medium text-text-secondary hover:text-foreground sm:px-6">出图设置</summary>
                     <div className="max-h-[30vh] overflow-y-auto">
                 {/* Footer: Negative Prompt & Art Direction Settings */}
@@ -1539,7 +1504,7 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
                     )}
                 </div>
                     </div>
-                </details>}
+                </details>
             </motion.div>
             {pendingImageReview && currentProject?.id && <AssetImageSubmissionReview
                 projectId={currentProject.id}
@@ -1616,10 +1581,8 @@ export function WorkbenchPanel({
     setPrompt,
     platformPromptSource,
     onPlatformPromptSourceChange,
-    onDesignSkill,
     onStructuredSelection,
     onDictionaryConfiguration,
-    canRunDesignSkill = false,
     referenceCandidates = [],
     onRefreshReferences,
     onReferencesChange,
@@ -1663,6 +1626,7 @@ export function WorkbenchPanel({
     reverseGenerationMode = false,
     reverseReferenceUrl = null
 }: any) {
+    const [showImagePrompt, setShowImagePrompt] = useState(false);
     const [dictionaryHost, setDictionaryHost] = useState<HTMLDivElement | null>(null);
     const tc = useTranslations("character");
     const ti = useTranslations("imageEditor");
@@ -1902,7 +1866,9 @@ export function WorkbenchPanel({
             {/* Task-specific generation inputs sit beside the image on wide screens. */}
             <div className="min-h-[180px] max-h-[42%] shrink-0 border-t border-glass-border flex flex-col overflow-y-auto bg-surface lg:max-h-none lg:min-h-0 lg:w-[min(34%,440px)] lg:border-r lg:border-t-0">
                 {designEditor}
-                <div className={designEditor ? "hidden" : "contents"}>
+                {designEditor && <button type="button" aria-expanded={showImagePrompt} onClick={() => setShowImagePrompt(value => !value)}
+                    className="m-4 min-h-11 shrink-0 rounded border border-glass-border px-3 text-left text-xs hover:bg-hover-bg focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary">{showImagePrompt ? "收起出图提示词" : "查看出图提示词"}</button>}
+                {(!designEditor || showImagePrompt) && <div>
                 <div className="p-2 border-b border-border-subtle flex justify-between items-center bg-surface">
                     <span className="text-xs font-bold text-text-muted uppercase px-2">Prompt</span>
                     <div className="flex items-center gap-1 rounded-md border border-glass-border bg-black/20 p-1" role="group" aria-label={`Image generation mode: ${title}`}>
@@ -1936,11 +1902,6 @@ export function WorkbenchPanel({
                     <div className="flex flex-wrap items-center gap-2">
                         <button type="button" disabled={isLocked} onClick={() => setOpenSlashRequest((value) => value + 1)}
                             className="min-h-11 rounded border border-glass-border px-3 text-xs text-foreground hover:bg-hover-bg disabled:opacity-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary">面板与模板</button>
-                        {onDesignSkill && <button type="button" disabled={isLocked || !canRunDesignSkill}
-                            onClick={() => onDesignSkill()}
-                            className="inline-flex min-h-11 items-center gap-1.5 rounded border border-glass-border px-3 text-xs text-foreground hover:bg-hover-bg disabled:opacity-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary">
-                            <Sparkles size={14} aria-hidden="true" />AI 完善角色设计
-                        </button>}
                     </div>
                     {platformPromptSource && <p className="mt-1 break-words text-[11px] text-text-muted" aria-label="平台 Prompt 来源">
                         来源：{platformPromptSource.title} · r{platformPromptSource.revision}
@@ -2017,7 +1978,7 @@ export function WorkbenchPanel({
                         </div>
                     )}
                 </div>
-                </div>
+                </div>}
             </div>
             </div>
         </div>

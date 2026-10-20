@@ -8,7 +8,7 @@ import type { DictionaryConfiguration } from "@/lib/characterDictionaryPresets";
 import CharacterPromptDictionary from "./CharacterPromptDictionary";
 
 export default function CharacterDesignPanel({ description, details, onDetailsChange, result, onResultChange,
-    identityFields, lookFields, onFieldsChange, onDictionaryFields, onDictionaryConfiguration, constraints, onConstraintsChange, supplemental, onSupplementalChange, reviewItems, models, model, onModelChange, busy, saving, canSave, error, status, onSubmit, onSave, onConfirm, onBack,
+    identityFields, lookFields, onFieldsChange, onDictionaryFields, onDictionaryConfiguration, constraints, onConstraintsChange, supplemental, onSupplementalChange, reviewItems, models, model, onModelChange, busy, saving, canSave, error, status, onSubmit, onSave, onConfirm,
 }: {
     description: string; details: string; onDetailsChange: (value: string) => void;
     result: string | null; onResultChange: (value: string) => void;
@@ -21,17 +21,13 @@ export default function CharacterDesignPanel({ description, details, onDetailsCh
     reviewItems: string[];
     models: ChatModel[]; model: string; onModelChange: (value: string) => void;
     busy: boolean; saving: boolean; canSave: boolean; error: string; status: string;
-    onSubmit: () => void; onSave: () => void; onConfirm: () => void; onBack: () => void;
+    onSubmit: () => void; onSave: () => void; onConfirm: () => void;
 }) {
     const [showFields, setShowFields] = useState(false);
     const [slash, setSlash] = useState<PromptSlashSuggestion | null>(null);
     const [openSlashRequest, setOpenSlashRequest] = useState(0);
     const keyHandler = useRef<((event: KeyboardEvent) => boolean) | null>(null);
     return <section id="character-design-dossier" aria-label="角色设计" className="space-y-3 p-4">
-        <div className="flex items-center justify-between gap-2">
-            <h3 className="text-sm font-semibold text-foreground">角色设计</h3>
-            <button type="button" onClick={onBack} className="min-h-11 rounded border border-glass-border px-3 text-xs hover:bg-hover-bg focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary">返回图片 Prompt</button>
-        </div>
         <div className="rounded border border-glass-border p-3">
             <h4 className="text-xs font-medium text-foreground">角色描述 · 设计依据</h4>
             <p className="mt-2 whitespace-pre-wrap break-words text-sm leading-6 text-text-secondary">{description || "暂无角色描述"}</p>
