@@ -89,6 +89,9 @@ const getApiUrl = (): string => {
 
 export const API_URL = getApiUrl();
 
+// Coalesce overlapping navigation reads; never retain completed responses.
+const pendingSeriesReads = new Map<string, Promise<any>>();
+
 const API_KEY_IDENTITY_KEY = "lumenx-api-key-identity";
 const API_KEY_IDENTITY_HEADER = "X-iFrame-API-Key-Identity";
 
@@ -2535,8 +2538,16 @@ export const api = {
         return res.data;
     },
     getSeries: async (seriesId: string) => {
-        const response = await axios.get(`${API_URL}/series/${seriesId}`);
-        return response.data;
+        const identity = getApiKeyIdentity() || (typeof window !== "undefined"
+            ? window.localStorage.getItem("lumenx-access-token") || "browser" : "server");
+        const key = JSON.stringify([identity, seriesId]);
+        let pending = pendingSeriesReads.get(key);
+        if (!pending) {
+            pending = axios.get(`${API_URL}/series/${seriesId}`).then(response => response.data)
+                .finally(() => { if (pendingSeriesReads.get(key) === pending) pendingSeriesReads.delete(key); });
+            pendingSeriesReads.set(key, pending);
+        }
+        return pending;
     },
     updateSeries: async (
         seriesId: string,

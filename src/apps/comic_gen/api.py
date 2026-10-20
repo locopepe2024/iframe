@@ -556,12 +556,15 @@ def signed_response(data):
     if isinstance(data, Script):
         pipeline.migrate_legacy_storyboard_media(data)
         processed_data = _script_response_dump(data)
+    elif isinstance(data, Series):
+        processed_data = _series_response_dump(data)
     elif hasattr(data, "model_dump"):
         processed_data = data.model_dump()
     elif isinstance(data, list):
         processed_data = [
             _script_response_dump(item)
             if isinstance(item, Script)
+            else _series_response_dump(item) if isinstance(item, Series)
             else item.model_dump() if hasattr(item, "model_dump") else item
             for item in data
         ]
@@ -584,6 +587,18 @@ def signed_response(data):
     
     # Return JSONResponse directly to avoid Pydantic re-validation stripping fields
     return JSONResponse(content=processed_data)
+
+
+_ASSET_HISTORY_EXCLUDE = {
+    collection: {"__all__": {"asset_revisions"}}
+    for collection in ("characters", "scenes", "props")
+}
+
+
+def _series_response_dump(series: Series) -> Dict[str, Any]:
+    # Immutable asset snapshots have dedicated revision endpoints. Do not
+    # serialize/sign/transfer them for navigation or the live asset view.
+    return series.model_dump(exclude=_ASSET_HISTORY_EXCLUDE)
 
 
 def _script_response_dump(script: Script) -> Dict[str, Any]:
@@ -1420,7 +1435,7 @@ def get_series(series_id: str, user: UserContext = Depends(require_studio_user))
         raise HTTPException(status_code=404, detail="Series not found")
     # Include episode summaries
     episodes = pipeline.get_series_episodes(series_id)
-    result = series.model_dump()
+    result = _series_response_dump(series)
     _add_asset_cover_urls(result, user.owner_profile_id)
     result["episodes"] = [
         {

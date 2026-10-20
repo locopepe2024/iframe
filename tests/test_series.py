@@ -83,6 +83,28 @@ def test_series_character_design_save_returns_merged_project(pipeline, monkeypat
     assert payload["characters"][0]["character_design"]["design_revisions"][0]["revision"] == 1
 
 
+def test_series_reads_exclude_asset_history_without_changing_persisted_revisions(pipeline, monkeypatch):
+    from src.apps.comic_gen import api
+    from src.apps.identity import UserContext
+
+    user = UserContext("user", "owner", "Test", "")
+    series = pipeline.create_series("S", owner_user_id=user.user_id, owner_profile_id=user.owner_profile_id)
+    character = _make_character("Hero")
+    series.characters.append(character)
+    pipeline._save_series_data()
+    monkeypatch.setattr(api, "pipeline", pipeline)
+    monkeypatch.setattr(api, "_add_asset_cover_urls", lambda *args: None)
+    assert character.asset_revisions
+    detail = json.loads(api.get_series(series.id, user).body)
+    listing = json.loads(api.list_series(user).body)
+    for payload in (detail, listing[0]):
+        assert "asset_revisions" not in payload["characters"][0]
+        assert payload["characters"][0]["asset_revision"] == character.asset_revision
+    assert character.asset_revisions
+    persisted = json.loads(Path(pipeline.series_data_file).read_text())
+    assert persisted[series.id]["characters"][0]["asset_revisions"]
+
+
 def test_character_design_save_can_return_only_persisted_design(pipeline, monkeypatch):
     from src.apps.comic_gen import api
 
