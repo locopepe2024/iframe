@@ -1,5 +1,6 @@
 "use client";
 
+import { createPortal } from "react-dom";
 import { useState, useEffect, useMemo, useRef, useId, useCallback } from "react";
 import { useTranslations } from "next-intl";
 import { motion } from "framer-motion";
@@ -989,23 +990,7 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
         const references = [...promptReferences[promptType], ...promptPickerReferences[promptType]]
             .filter((reference, index, all) => all.findIndex((candidate) => referenceKey(candidate) === referenceKey(reference)) === index);
         const imageGenerationMode = promptModes[promptType];
-        if (imageGenerationMode === "reference" && references.length === 0) {
-            toast.warning("Add at least one explicit @ reference before generating.");
-            return;
-        }
-        if (imageGenerationMode === "text" && references.length > 0) {
-            toast.warning("This prompt contains @ references. Select Reference image mode before generating.");
-            return;
-        }
-        if ((type === "three_view" || type === "headshot") &&
-            (imageGenerationMode !== "reference" || references.length !== 1)) {
-            toast.warning("Select exactly one master image in Reference image mode for this character view.");
-            return;
-        }
-        if (!currentProject?.id || !prompt.trim()) {
-            toast.warning("Review a non-empty image prompt before generating.");
-            return;
-        }
+        if (!currentProject?.id) return;
         const isDerived = type === "three_view" || type === "headshot";
         setPendingImageReview({
             asset_id: asset.id,
@@ -1034,6 +1019,32 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
     const setPanelMode = (type: "full_body" | "three_view" | "headshot", mode: "text" | "reference") => {
         setPromptModes((current) => ({ ...current, [type]: mode }));
     };
+
+    const [reviewEditorHost, setReviewEditorHost] = useState<HTMLDivElement | null>(null);
+    const imageReviewRequest = useMemo(() => {
+        if (!pendingImageReview) return null;
+        const type = pendingImageReview.generation_type === "reference_sheet" ? "full_body" : pendingImageReview.generation_type;
+        if (type !== "full_body" && type !== "three_view" && type !== "headshot") return pendingImageReview;
+        const prompt = type === "full_body" ? fullBodyPrompt : type === "three_view" ? threeViewPrompt : headshotPrompt;
+        const references = [...promptReferences[type], ...promptPickerReferences[type]]
+            .filter((reference, index, all) => all.findIndex(candidate => referenceKey(candidate) === referenceKey(reference)) === index);
+        const isDerived = type === "three_view" || type === "headshot";
+        return {
+            ...pendingImageReview, prompt, negative_prompt: negativePrompt, image_generation_mode: promptModes[type],
+            reference: isDerived ? references[0] : undefined,
+            references: isDerived ? [] : references,
+        };
+    }, [fullBodyPrompt, threeViewPrompt, headshotPrompt, negativePrompt, promptReferences, promptPickerReferences,
+        promptModes, pendingImageReview]);
+    const reviewReferences = imageReviewRequest?.reference ? [imageReviewRequest.reference] : imageReviewRequest?.references || [];
+    const reviewValidationError = !imageReviewRequest ? "" :
+        imageReviewRequest.image_generation_mode === "text" && reviewReferences.length > 0
+            ? "已选择参考素材，请切换到参考生图或移除素材。" :
+        imageReviewRequest.image_generation_mode === "reference" && reviewReferences.length === 0
+            ? "请选择至少一张参考素材。" :
+        (imageReviewRequest.generation_type === "three_view" || imageReviewRequest.generation_type === "headshot") &&
+            (imageReviewRequest.image_generation_mode !== "reference" || reviewReferences.length !== 1)
+            ? "三视图和头像需要选择一张角色主图作为参考。" : "";
 
     // Helper to check if a specific type is generating
     const getGeneratingInfo = (type: string) => {
@@ -1301,6 +1312,7 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
                         hideTitle
                         designEditor={designEditor}
                         imageSettings={imageSettings}
+                        reviewEditorHost={reviewEditorHost}
                         title={tc("masterAsset")}
                         isActive={activePanel === "full_body"}
                         onClick={() => setActivePanel("full_body")}
@@ -1363,6 +1375,7 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
                         hideTitle
                         designEditor={designEditor}
                         imageSettings={imageSettings}
+                        reviewEditorHost={reviewEditorHost}
                         title={tc("threeViews")}
                         isActive={activePanel === "three_view"}
                         onClick={() => setActivePanel("three_view")}
@@ -1406,6 +1419,7 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
                         hideTitle
                         designEditor={designEditor}
                         imageSettings={imageSettings}
+                        reviewEditorHost={reviewEditorHost}
                         title={tc("avatar")}
                         isActive={activePanel === "headshot"}
                         onClick={() => setActivePanel("headshot")}
@@ -1462,12 +1476,14 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
 
 
             </motion.div>
-            {pendingImageReview && currentProject?.id && <AssetImageSubmissionReview
+            {imageReviewRequest && currentProject?.id && <AssetImageSubmissionReview
                 projectId={currentProject.id}
-                request={pendingImageReview}
+                request={imageReviewRequest}
+                validationError={reviewValidationError}
+                editor={<div ref={setReviewEditorHost} className="relative mt-3" />}
                 onBack={() => setPendingImageReview(null)}
                 onConfirm={(review) => {
-                    const request = pendingImageReview;
+                    const request = imageReviewRequest;
                     setPendingImageReview(null);
                     onGenerate(request.generation_type, request.prompt, false, request.negative_prompt,
                         request.batch_size, request.reference ? [request.reference] : request.references || [],
@@ -1556,6 +1572,7 @@ export function WorkbenchPanel({
     hideTitle = false,
     designEditor,
     imageSettings,
+    reviewEditorHost,
     aspectRatio = "9:16",
     // Video specific
     isVideo = false,
@@ -1583,7 +1600,6 @@ export function WorkbenchPanel({
     reverseGenerationMode = false,
     reverseReferenceUrl = null
 }: any) {
-    const [showImagePrompt, setShowImagePrompt] = useState(false);
     const [dictionaryHost, setDictionaryHost] = useState<HTMLDivElement | null>(null);
     const tc = useTranslations("character");
     const ti = useTranslations("imageEditor");
@@ -1598,8 +1614,120 @@ export function WorkbenchPanel({
             .some((value) => value!.toLocaleLowerCase().includes(mentionQuery)),
     );
 
+    const imageEditor = <div>
+                <div className="p-2 border-b border-border-subtle flex justify-between items-center bg-surface">
+                    <span className="text-xs font-bold text-text-muted uppercase px-2">Prompt</span>
+                    <div className="flex items-center gap-1 rounded-md border border-glass-border bg-black/20 p-1" role="group" aria-label={`Image generation mode: ${title}`}>
+                        {(["text", "reference"] as const).map((generationMode) => (
+                            <button
+                                key={generationMode}
+                                type="button"
+                                aria-pressed={imageGenerationMode === generationMode}
+                                onClick={(event) => { event.stopPropagation(); onImageGenerationModeChange?.(generationMode); }}
+                                className={`rounded px-2 py-1 text-[0.625rem] ${imageGenerationMode === generationMode ? "bg-primary/15 text-primary" : "text-text-muted hover:text-foreground"}`}
+                            >
+                                {generationMode === "text" ? "Text to image" : "Reference image"}
+                            </button>
+                        ))}
+                    </div>
+                </div>
+                {showReferencePicker && <div className="px-4 pt-2">
+                    <AssetReferencePicker
+                        candidates={referenceCandidates}
+                        selected={pickerReferences}
+                        onChange={(references) => {
+                            onPickerReferencesChange?.(references);
+                            if (references.length > 0) onImageGenerationModeChange?.("reference");
+                        }}
+                        title="选择参考素材"
+                        description="不用记住 @：搜索并选择要传给图片模型的素材变体。"
+                        onOpen={onRefreshReferences}
+                    />
+                </div>}
+                {!isVideo && !designEditor && <div className="px-4 pt-2">
+                    <div className="flex flex-wrap items-center gap-2">
+                        <button type="button" disabled={isLocked} onMouseDown={event => event.preventDefault()} onClick={() => { setOpenSlashRequest((value) => value + 1); }}
+                            className="min-h-11 rounded border border-glass-border px-3 text-xs text-foreground hover:bg-hover-bg disabled:opacity-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary">面板与模板</button>
+                    </div>
+                    {platformPromptSource && <p className="mt-1 break-words text-[11px] text-text-muted" aria-label="平台 Prompt 来源">
+                        来源：{platformPromptSource.title} · r{platformPromptSource.revision}
+                        {platformPromptSource.customized ? " · 已由用户修改" : " · 当前草稿"}
+                    </p>}
+                </div>}
+                <div className="relative min-h-[150px] flex-1 p-4">
+                    <ReferencePromptEditor
+                        value={prompt}
+                        candidates={referenceCandidates}
+                        onChange={(text) => {
+                            setPrompt(text);
+                            if (platformPromptSource && onPlatformPromptSourceChange && text !== platformPromptSource.appliedText) {
+                                onPlatformPromptSourceChange({ ...platformPromptSource, customized: true });
+                            }
+                        }}
+                        onReferencesChange={onReferencesChange}
+                        onMentionChange={(next) => {
+                            if (next && !mention) onRefreshReferences?.();
+                            setMention(next);
+                        }}
+                        onSlashChange={!isVideo && !designEditor ? (next) => { setPromptSlash(next); if (next) setMention(null); } : undefined}
+                        onSlashKeyDown={(event) => slashKeyHandler.current?.(event) || false}
+                        openSlashRequest={openSlashRequest}
+                        allowImplicitMentions={false}
+                        pruneUnlistedReferences
+                        expanded
+                        editable={!isLocked}
+                        placeholder={isVideo ? "输入视频 Prompt，@ 检索资产" : designEditor ? "本次出图提示词，@ 检索资产" : "输入 Prompt，/ 打开面板与模板，@ 检索资产"}
+                    />
+                    {!isVideo && !designEditor && !isLocked && promptSlash && <CharacterPromptDictionary suggestion={promptSlash} onClose={() => setPromptSlash(null)}
+                        onConfiguration={designEditor ? undefined : onDictionaryConfiguration} keyHandler={slashKeyHandler}
+                        onApply={(text, entry) => {
+                            setPrompt(text);
+                            if (!designEditor && entry.structuredFields) onStructuredSelection?.(text, entry.structuredFields, entry.remainingText);
+                            if (entry.resource) onPlatformPromptSourceChange?.({ resourceId: entry.resource.platform_resource_id,
+                                revision: entry.resource.revision, title: entry.title, appliedText: text, customized: false });
+                        }} />}
+                    {mention && (
+                        <div
+                            role="listbox"
+                            aria-label="资产检索"
+                            className="absolute bottom-full left-3 z-50 mb-2 max-h-64 w-[min(100%-1.5rem,24rem)] overflow-y-auto rounded-xl border border-glass-border bg-elevated p-2 shadow-2xl"
+                        >
+                            <div className="px-2 pb-1.5 pt-1 font-mono text-[0.625rem] uppercase tracking-[0.12em] text-text-muted">项目参考图</div>
+                            {matchingReferenceCandidates.length === 0 ? (
+                                <div className="px-2 py-2 text-xs text-text-muted">
+                                    没有匹配的参考资产
+                                </div>
+                            ) : matchingReferenceCandidates.map((candidate: ReferenceCandidate) => (
+                                <button
+                                    key={`${candidate.reference?.asset_type}:${candidate.reference?.asset_id}:${candidate.reference?.variant_id}`}
+                                    type="button"
+                                    role="option"
+                                    onMouseDown={(event) => event.preventDefault()}
+                                    onClick={() => {
+                                        mention.choose(candidate);
+                                        setMention(null);
+                                    }}
+                                    className="flex min-h-11 w-full items-center gap-3 rounded-lg px-2 py-2 text-left transition-colors hover:bg-hover-bg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60"
+                                >
+                                    <span className="inline-flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-surface-inset">
+                                        {candidate.previewRef ? (
+                                            <AssetIndexPreview asset={candidate.previewRef} />
+                                        ) : <ImageIcon size={15} className="text-text-muted" />}
+                                    </span>
+                                    <span className="min-w-0 flex-1 text-xs">
+                                        <span className="block truncate text-foreground" title={candidate.label}>{candidate.label}</span>
+                                        <span className="block truncate text-text-muted">{candidate.sourceLabel || "Asset"}</span>
+                                    </span>
+                                </button>
+                            ))}
+
+                        </div>
+                    )}
+                </div>
+                {imageSettings}
+        </div>;
     return (
-        <CharacterDictionaryHost.Provider value={dictionaryHost}>
+        <CharacterDictionaryHost.Provider value={reviewEditorHost || dictionaryHost}>
         <div
             className={`min-w-0 min-h-0 flex-1 flex flex-col transition-colors ${isActive ? 'bg-glass' : 'bg-transparent hover:bg-hover-bg'}`}
             onClick={onClick}
@@ -1823,120 +1951,8 @@ export function WorkbenchPanel({
             {/* Task-specific generation inputs sit beside the image on wide screens. */}
             <div className="min-h-[180px] max-h-[42%] shrink-0 border-t border-glass-border flex flex-col overflow-y-auto bg-surface lg:max-h-none lg:min-h-0 lg:w-[min(34%,440px)] lg:border-r lg:border-t-0">
                 {designEditor}
-                {designEditor && <button type="button" aria-expanded={showImagePrompt} onClick={() => setShowImagePrompt(value => !value)}
-                    className="m-4 min-h-11 shrink-0 rounded border border-glass-border px-3 text-left text-xs hover:bg-hover-bg focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary">{showImagePrompt ? "收起出图提示词" : "查看出图提示词"}</button>}
-                {(!designEditor || showImagePrompt) && <div>
-                <div className="p-2 border-b border-border-subtle flex justify-between items-center bg-surface">
-                    <span className="text-xs font-bold text-text-muted uppercase px-2">Prompt</span>
-                    <div className="flex items-center gap-1 rounded-md border border-glass-border bg-black/20 p-1" role="group" aria-label={`Image generation mode: ${title}`}>
-                        {(["text", "reference"] as const).map((generationMode) => (
-                            <button
-                                key={generationMode}
-                                type="button"
-                                aria-pressed={imageGenerationMode === generationMode}
-                                onClick={(event) => { event.stopPropagation(); onImageGenerationModeChange?.(generationMode); }}
-                                className={`rounded px-2 py-1 text-[0.625rem] ${imageGenerationMode === generationMode ? "bg-primary/15 text-primary" : "text-text-muted hover:text-foreground"}`}
-                            >
-                                {generationMode === "text" ? "Text to image" : "Reference image"}
-                            </button>
-                        ))}
-                    </div>
-                </div>
-                {showReferencePicker && <div className="px-4 pt-2">
-                    <AssetReferencePicker
-                        candidates={referenceCandidates}
-                        selected={pickerReferences}
-                        onChange={(references) => {
-                            onPickerReferencesChange?.(references);
-                            if (references.length > 0) onImageGenerationModeChange?.("reference");
-                        }}
-                        title="选择参考素材"
-                        description="不用记住 @：搜索并选择要传给图片模型的素材变体。"
-                        onOpen={onRefreshReferences}
-                    />
-                </div>}
-                {!isVideo && <div className="px-4 pt-2">
-                    <div className="flex flex-wrap items-center gap-2">
-                        <button type="button" disabled={isLocked} onClick={() => setOpenSlashRequest((value) => value + 1)}
-                            className="min-h-11 rounded border border-glass-border px-3 text-xs text-foreground hover:bg-hover-bg disabled:opacity-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary">面板与模板</button>
-                    </div>
-                    {platformPromptSource && <p className="mt-1 break-words text-[11px] text-text-muted" aria-label="平台 Prompt 来源">
-                        来源：{platformPromptSource.title} · r{platformPromptSource.revision}
-                        {platformPromptSource.customized ? " · 已由用户修改" : " · 当前草稿"}
-                    </p>}
-                </div>}
-                <div className="relative min-h-[150px] flex-1 p-4">
-                    <ReferencePromptEditor
-                        value={prompt}
-                        candidates={referenceCandidates}
-                        onChange={(text) => {
-                            setPrompt(text);
-                            if (platformPromptSource && onPlatformPromptSourceChange && text !== platformPromptSource.appliedText) {
-                                onPlatformPromptSourceChange({ ...platformPromptSource, customized: true });
-                            }
-                        }}
-                        onReferencesChange={onReferencesChange}
-                        onMentionChange={(next) => {
-                            if (next && !mention) onRefreshReferences?.();
-                            setMention(next);
-                        }}
-                        onSlashChange={!isVideo ? (next) => { setPromptSlash(next); if (next) setMention(null); } : undefined}
-                        onSlashKeyDown={(event) => slashKeyHandler.current?.(event) || false}
-                        openSlashRequest={openSlashRequest}
-                        allowImplicitMentions={false}
-                        pruneUnlistedReferences
-                        expanded
-                        editable={!isLocked}
-                        placeholder={isVideo ? "输入视频 Prompt，@ 检索资产" : "输入 Prompt，/ 打开面板与模板，@ 检索资产"}
-                    />
-                    {!isVideo && !isLocked && promptSlash && <CharacterPromptDictionary suggestion={promptSlash} onClose={() => setPromptSlash(null)}
-                        onConfiguration={onDictionaryConfiguration} keyHandler={slashKeyHandler}
-                        onApply={(text, entry) => {
-                            setPrompt(text);
-                            if (entry.structuredFields) onStructuredSelection?.(text, entry.structuredFields, entry.remainingText);
-                            if (entry.resource) onPlatformPromptSourceChange?.({ resourceId: entry.resource.platform_resource_id,
-                                revision: entry.resource.revision, title: entry.title, appliedText: text, customized: false });
-                        }} />}
-                    {mention && (
-                        <div
-                            role="listbox"
-                            aria-label="资产检索"
-                            className="absolute bottom-full left-3 z-50 mb-2 max-h-64 w-[min(100%-1.5rem,24rem)] overflow-y-auto rounded-xl border border-glass-border bg-elevated p-2 shadow-2xl"
-                        >
-                            <div className="px-2 pb-1.5 pt-1 font-mono text-[0.625rem] uppercase tracking-[0.12em] text-text-muted">项目参考图</div>
-                            {matchingReferenceCandidates.length === 0 ? (
-                                <div className="px-2 py-2 text-xs text-text-muted">
-                                    没有匹配的参考资产
-                                </div>
-                            ) : matchingReferenceCandidates.map((candidate: ReferenceCandidate) => (
-                                <button
-                                    key={`${candidate.reference?.asset_type}:${candidate.reference?.asset_id}:${candidate.reference?.variant_id}`}
-                                    type="button"
-                                    role="option"
-                                    onMouseDown={(event) => event.preventDefault()}
-                                    onClick={() => {
-                                        mention.choose(candidate);
-                                        setMention(null);
-                                    }}
-                                    className="flex min-h-11 w-full items-center gap-3 rounded-lg px-2 py-2 text-left transition-colors hover:bg-hover-bg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60"
-                                >
-                                    <span className="inline-flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-surface-inset">
-                                        {candidate.previewRef ? (
-                                            <AssetIndexPreview asset={candidate.previewRef} />
-                                        ) : <ImageIcon size={15} className="text-text-muted" />}
-                                    </span>
-                                    <span className="min-w-0 flex-1 text-xs">
-                                        <span className="block truncate text-foreground" title={candidate.label}>{candidate.label}</span>
-                                        <span className="block truncate text-text-muted">{candidate.sourceLabel || "Asset"}</span>
-                                    </span>
-                                </button>
-                            ))}
+                {designEditor ? reviewEditorHost && createPortal(imageEditor, reviewEditorHost) : imageEditor}
 
-                        </div>
-                    )}
-                </div>
-                {imageSettings}
-                </div>}
             </div>
             </div>
         </div>

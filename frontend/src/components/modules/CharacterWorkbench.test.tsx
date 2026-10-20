@@ -77,7 +77,7 @@ it("opens dictionary content directly from slash in the Prompt and keeps preview
     apiMocks.getAssetReferenceIndex.mockResolvedValueOnce({ assets: [] } as any);
     render(<CharacterWorkbench asset={{ id: "character-1", name: "苏砚", description: "少年剑客" }}
         onClose={vi.fn()} onUpdateDescription={vi.fn()} onGenerate={vi.fn()} generatingTypes={[]} />);
-    const editor = (imagePromptInput() as any).editor;
+    const editor = designDetailsEditor();
     act(() => editor.chain().selectAll().insertContent({ type: "text", text: "前文 /长发高束" }).run());
     fireEvent.click(await screen.findByRole("option", { name: /长发高束/ }));
     expect(editor.getText()).toBe("前文 /长发高束");
@@ -118,8 +118,7 @@ it("previews an active platform Prompt before inserting editable text without se
     render(<CharacterWorkbench asset={{ id: "character-1", name: "苏砚", description: "少年剑客" }}
         onClose={vi.fn()} onUpdateDescription={vi.fn()} onGenerate={onGenerate} generatingTypes={[]} />);
 
-    openImagePrompt();
-    fireEvent.click(screen.getAllByRole("button", { name: "面板与模板" }).at(-1)!);
+    fireEvent.click(screen.getByRole("button", { name: "面板与模板" }));
     fireEvent.click(screen.getByRole("tab", { name: "Prompt 模板" }));
     fireEvent.click(screen.getByRole("option", { name: /^角色设计/ }));
     expect(await screen.findByRole("option", { name: /古典行旅设定/ })).toBeInTheDocument();
@@ -127,11 +126,11 @@ it("previews an active platform Prompt before inserting editable text without se
     expect(screen.queryByRole("option", { name: /窄长脸词条/ })).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("option", { name: /古典行旅设定/ }));
     expect(screen.getByRole("textbox", { name: "将插入的完整文字" })).toHaveValue("古典行旅人物，正面全身，灰蓝长袍");
-    const editor = imagePromptInput() as HTMLElement & { editor: import("@tiptap/core").Editor };
+    const editor = { editor: designDetailsEditor() };
     expect(editor.editor.getText()).not.toContain("古典行旅人物");
     fireEvent.click(screen.getByRole("button", { name: "插入到当前 Prompt" }));
     await waitFor(() => expect(editor.editor.getText()).toContain("古典行旅人物，正面全身，灰蓝长袍"));
-    expect(screen.getByLabelText("平台 Prompt 来源")).toHaveTextContent("古典行旅设定 · r2");
+    expect(designDetailsEditor().getText()).toContain("古典行旅人物");
     expect(onGenerate).not.toHaveBeenCalled();
     expect(apiMocks.previewAssetImageSubmission).not.toHaveBeenCalled();
 });
@@ -146,7 +145,7 @@ it("resolves slash platform Prompt as editable text without an image reference",
     const onGenerate = vi.fn();
     render(<CharacterWorkbench asset={{ id: "character-1", name: "苏砚", description: "少年剑客" }}
         onClose={vi.fn()} onUpdateDescription={vi.fn()} onGenerate={onGenerate} generatingTypes={[]} />);
-    const editor = imagePromptInput() as HTMLElement & { editor: import("@tiptap/core").Editor };
+    const editor = { editor: designDetailsEditor() };
     act(() => editor.editor.commands.insertContent("/古典"));
     fireEvent.click(screen.getByRole("tab", { name: "Prompt 模板" }));
     fireEvent.click(await screen.findByRole("option", { name: /古典行旅设定/ }));
@@ -155,7 +154,7 @@ it("resolves slash platform Prompt as editable text without an image reference",
     fireEvent.click(screen.getByRole("button", { name: "插入到当前 Prompt" }));
     expect(editor.editor.getText()).toContain("正面全身，灰蓝行旅衣");
     expect(editor.editor.getText()).not.toContain("/古典");
-    expect(screen.getByLabelText("平台 Prompt 来源")).toHaveTextContent("古典行旅设定 · r3");
+    expect(designDetailsEditor().getText()).toContain("正面全身，灰蓝行旅衣");
     expect(onGenerate).not.toHaveBeenCalled();
 });
 
@@ -689,12 +688,13 @@ it("preserves independent full-body and headshot presentation modes in the share
 });
 
 function openImagePrompt() {
-    const button = screen.queryByRole('button', { name: '查看出图提示词' });
-    if (button) fireEvent.click(button);
+    if (!screen.queryByRole('dialog', { name: '核对图片生成请求' })) {
+        fireEvent.click(screen.getByTestId('variant-generate'));
+    }
 }
 function imagePromptInput() {
     openImagePrompt();
-    return screen.getByRole('textbox', { name: '输入 Prompt，/ 打开面板与模板，@ 检索资产' });
+    return screen.getByRole('textbox', { name: '本次出图提示词，@ 检索资产' });
 }
 
 function designDetailsEditor() {
@@ -799,12 +799,12 @@ it("saves and confirms the edited returned sections rather than stale generated 
         look: expect.objectContaining({ visual_notes: "里衣一件、黑色外衣一件，布靴，无披风。", features: {}, editor_mode: "notes" }),
     }) }));
     await waitFor(() => expect(onUpdateAttributes).toHaveBeenLastCalledWith({ character_design: expect.objectContaining({ confirmed: true }) }));
-    expect(screen.getByRole("status")).toHaveTextContent("已保存");
+    expect(within(screen.getByRole("region", { name: "角色设计" })).getByRole("status")).toHaveTextContent("已保存");
     openImagePrompt();
     expect(imagePromptInput()).toHaveTextContent("无披风");
     expect(screen.queryByRole("button", { name: "应用到图片提示词" })).not.toBeInTheDocument();
     expect(aiResult()).toHaveValue("身份：身高约178厘米，浅麦肤色，清冽眉目。\n造型：里衣一件、黑色外衣一件，布靴，无披风。");
-    expect(screen.getByRole("status")).toHaveTextContent("已保存");
+    expect(within(screen.getByRole("region", { name: "角色设计" })).getByRole("status")).toHaveTextContent("已保存");
 });
 
 it("preserves structured saved identity, height and look until the unified result is explicitly edited", async () => {
@@ -902,7 +902,7 @@ it("keeps the editable result and draft status when saving fails", async () => {
     fireEvent.click(screen.getByRole("button", { name: "保存设计" }));
     expect(await screen.findByRole("alert")).toHaveTextContent("保存失败，请重试");
     expect(result).toHaveValue("身份：深棕眼\n造型：黑色劲装");
-    expect(screen.getByRole("status")).toHaveTextContent("尚未保存");
+    expect(within(screen.getByRole("region", { name: "角色设计" })).getByRole("status")).toHaveTextContent("尚未保存");
 });
 
 it("does not carry retired hidden style controls into a new completion or its saved projection", async () => {
@@ -926,7 +926,7 @@ it("does not carry retired hidden style controls into a new completion or its sa
 
 it("edits, confirms and reloads independent facial fields without an AI call", async () => {
     const { onUpdateAttributes } = mountSimpleDesign();
-    fireEvent.click(screen.getByRole("button", { name: "查看结构化字段与约束" }));
+    fireEvent.click(screen.getByRole("button", { name: "设计面板" }));
     for (const [label, value] of [["眉形", "柳叶眉"], ["眼周细节", "表情放松时仍可见浅细纹"], ["肤色", "中等中性肤色"], ["肤质", "面颊略干，保留细微干燥纹理"]]) {
         fireEvent.change(screen.getByRole("textbox", { name: `设计字段 · ${label}` }), { target: { value } });
     }
@@ -939,14 +939,14 @@ it("edits, confirms and reloads independent facial fields without an AI call", a
     expect(imagePromptInput()).toHaveTextContent("眉形：柳叶眉");
     cleanup();
     mountSimpleDesign({ character_design: { design_draft: design } });
-    fireEvent.click(screen.getByRole("button", { name: "查看结构化字段与约束" }));
+    fireEvent.click(screen.getByRole("button", { name: "设计面板" }));
     expect(screen.getByRole("textbox", { name: "设计字段 · 肤质" })).toHaveValue("面颊略干，保留细微干燥纹理");
     expect(apiMocks.agentRequest.mock.calls.filter(([path]) => path.startsWith("/character-design/"))).toHaveLength(0);
 });
 
 it("saves dictionary face choices as fields and keeps the remaining clothing text", async () => {
     const { onUpdateAttributes } = mountSimpleDesign();
-    fireEvent.click(screen.getByRole("button", { name: "查看结构化字段与约束" }));
+    fireEvent.click(screen.getByRole("button", { name: "设计面板" }));
     act(() => designDetailsEditor().chain().selectAll().insertContent({ type: "text", text: "靛蓝外衣，素面布靴。 /面容" }).run());
     fireEvent.click(await screen.findByRole("option", { name: /^面容$/ }));
     fireEvent.change(screen.getByRole("combobox", { name: "肤质" }), { target: { value: "轻微干燥肤质" } });
@@ -964,7 +964,7 @@ it("saves dictionary face choices as fields and keeps the remaining clothing tex
 
 it('preserves authored negative prompt arrays through AI, confirmation and reload', async () => {
     const { onUpdateAttributes } = mountSimpleDesign();
-    fireEvent.click(screen.getByRole('button', { name: '查看结构化字段与约束' }));
+    fireEvent.click(screen.getByRole('button', { name: '设计面板' }));
     fireEvent.change(screen.getByRole('textbox', { name: '设计约束 · 必须保留' }), { target: { value: '自然皮肤纹理' } });
     fireEvent.change(screen.getByRole('textbox', { name: '设计约束 · 负面提示词' }), { target: { value: '额外披风\ncartoon' } });
     await submitSimpleDesign();
@@ -979,7 +979,7 @@ it('preserves authored negative prompt arrays through AI, confirmation and reloa
     expect((screen.getByPlaceholderText('Enter your negative prompt (avoid unwanted elements)...') as HTMLTextAreaElement).value).toContain('cartoon');
     cleanup();
     mountSimpleDesign({ character_design: { design_draft: design } });
-    fireEvent.click(screen.getByRole('button', { name: '查看结构化字段与约束' }));
+    fireEvent.click(screen.getByRole('button', { name: '设计面板' }));
     expect(screen.getByRole('textbox', { name: '设计约束 · 负面提示词' })).toHaveValue('额外披风\ncartoon');
     const result = aiResult() as HTMLTextAreaElement;
     expect(result.value.split('负面提示词：')).toHaveLength(2);
@@ -990,7 +990,7 @@ it('preserves authored negative prompt arrays through AI, confirmation and reloa
 
 it('saves clothing panel sections and negative arrays without an AI call', async () => {
     const { onUpdateAttributes } = mountSimpleDesign();
-    fireEvent.click(screen.getByRole('button', { name: '查看结构化字段与约束' }));
+    fireEvent.click(screen.getByRole('button', { name: '设计面板' }));
     act(() => designDetailsEditor().chain().selectAll().insertContent({ type: 'text', text: '/服装' }).run());
     fireEvent.click(await screen.findByRole('option', { name: /^古装外套$/ }));
     fireEvent.click(screen.getByRole('button', { name: '应用配置' }));
@@ -1019,9 +1019,9 @@ it('keeps structured editors collapsed and opens discovery in the main workspace
     expect(within(workspace).getByRole('combobox', { name: '鞋履图案' })).toBeInTheDocument();
     fireEvent.click(within(dialog).getByRole('button', { name: '关闭面板' }));
     expect(screen.queryByRole('dialog', { name: '基础面板、词典和 Prompt 模板' })).not.toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: '查看结构化字段与约束' }));
+    fireEvent.click(screen.getByRole('button', { name: '设计面板' }));
     expect(screen.getByRole('textbox', { name: '设计字段 · 肤质' })).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: '收起结构化字段与约束' }));
+    fireEvent.click(screen.getByRole('button', { name: '关闭设计面板' }));
     expect(screen.queryByRole('textbox', { name: '设计字段 · 肤质' })).not.toBeInTheDocument();
 });
 
@@ -1040,7 +1040,7 @@ it('names design constraints and output settings clearly and hides unavailable s
     openImagePrompt();
     expect(screen.getByRole('textbox', { name: '出图负面提示词' })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'copyStyleToPrompt' })).not.toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: '查看结构化字段与约束' }));
+    fireEvent.click(screen.getByRole('button', { name: '设计面板' }));
     expect(screen.getByRole('textbox', { name: '设计约束 · 负面提示词' })).toBeInTheDocument();
     expect(screen.getByRole('textbox', { name: '出图负面提示词' })).toBeInTheDocument();
 });
@@ -1055,14 +1055,14 @@ it('opens directly into design without mode buttons or an automatic AI request',
     for (const name of ['AI 完善角色设计', '展开角色设计', '返回图片 Prompt']) {
         expect(screen.queryByRole('button', { name })).not.toBeInTheDocument();
     }
-    expect(screen.queryByRole('textbox', { name: '输入 Prompt，/ 打开面板与模板，@ 检索资产' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('textbox', { name: '本次出图提示词，@ 检索资产' })).not.toBeInTheDocument();
     await waitFor(() => expect(screen.getByLabelText('设计模型')).toHaveValue('qwen'));
     expect(apiMocks.agentRequest.mock.calls.filter(([path]) => path.startsWith('/character-design/'))).toHaveLength(0);
     expect(onUpdateAttributes).not.toHaveBeenCalled();
     act(() => designDetailsEditor().commands.setContent('<p>窄袖黑衣，不叠加披风。</p>'));
     expect(screen.getByRole('button', { name: '应用到图片提示词' })).toBeInTheDocument();
     openImagePrompt();
-    fireEvent.click(screen.getByRole('button', { name: '收起出图提示词' }));
+    fireEvent.click(screen.getByRole('button', { name: '返回修改' }));
     expect(designDetailsEditor().getText()).toBe('窄袖黑衣，不叠加披风。');
 });
 
@@ -1077,7 +1077,7 @@ it('saves once as the active design and reopens the last saved content instead o
     expect(screen.queryByRole('combobox', { name: '设计模型' })).not.toBeInTheDocument();
     fireEvent.change(result, { target: { value: '圆脸，自然肤质，素黑外衣，布靴。' } });
     fireEvent.click(screen.getByRole('button', { name: '保存设计' }));
-    await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('当前设计已生效'));
+    await waitFor(() => expect(within(screen.getByRole("region", { name: "角色设计" })).getByRole("status")).toHaveTextContent('当前设计已生效'));
     expect(onUpdateAttributes).toHaveBeenCalledTimes(1);
     expect(onUpdateAttributes).toHaveBeenCalledWith({ character_design: expect.objectContaining({ confirmed: true }) });
     expect(imagePromptInput()).toHaveTextContent('圆脸，自然肤质，素黑外衣，布靴。');
@@ -1114,7 +1114,7 @@ it('restores saved structured fields and constraints when reopening a design', a
     const { onUpdateAttributes } = mountSimpleDesign({ character_design: { design_draft: saved } });
     await submitSimpleDesign();
     fireEvent.click(screen.getByRole('button', { name: '重新编辑' }));
-    fireEvent.click(screen.getByRole('button', { name: '查看结构化字段与约束' }));
+    fireEvent.click(screen.getByRole('button', { name: '设计面板' }));
     expect(screen.getByRole('textbox', { name: '设计字段 · 脸型' })).toHaveValue('圆脸');
     expect(screen.getByRole('textbox', { name: '设计约束 · 负面提示词' })).toHaveValue('额外披风');
     fireEvent.click(screen.getByRole('button', { name: '保存设计' }));
@@ -1123,4 +1123,48 @@ it('restores saved structured fields and constraints when reopening a design', a
         look: expect.objectContaining({ features: saved.look.features }),
         constraints: saved.constraints, confirmed: true,
     }) }));
+});
+
+
+it('shows design fields only in the design panel and output editing only during generation review', async () => {
+    const { onGenerate, onUpdateAttributes } = mountSimpleDesign();
+    expect(screen.queryByRole('button', { name: '查看出图提示词' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '查看结构化字段与约束' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('textbox', { name: '出图负面提示词' })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: '设计面板' }));
+    const panel = screen.getByRole('dialog', { name: '角色设计面板' });
+    expect(screen.getByTestId('character-main-workspace')).toContainElement(panel);
+    fireEvent.change(within(panel).getByRole('textbox', { name: '设计字段 · 肤质' }), { target: { value: '保留自然皮肤纹理' } });
+    fireEvent.change(within(panel).getByRole('textbox', { name: '设计约束 · 负面提示词' }), { target: { value: '过度磨皮' } });
+    fireEvent.keyDown(panel, { key: 'Escape' });
+    expect(screen.queryByRole('dialog', { name: '角色设计面板' })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '设计面板' })).toHaveFocus();
+    fireEvent.click(screen.getByRole('button', { name: '保存设计' }));
+    await waitFor(() => expect(onUpdateAttributes).toHaveBeenCalled());
+    const saved = onUpdateAttributes.mock.calls.at(-1)![0].character_design;
+    openImagePrompt();
+    const dialog = screen.getByRole('dialog', { name: '核对图片生成请求' });
+    const editor = imagePromptInput() as any;
+    act(() => editor.editor.commands.setContent('<p>仅本次出图：全身，白背景。</p>'));
+    fireEvent.change(within(dialog).getByRole('textbox', { name: '出图负面提示词' }), { target: { value: '额外披风' } });
+    const confirm = within(dialog).getByRole('button', { name: '确认并生成' });
+    await waitFor(() => expect(confirm).toBeEnabled());
+    fireEvent.click(confirm);
+    await waitFor(() => expect(onGenerate).toHaveBeenCalledWith('full_body', '仅本次出图：全身，白背景。', false,
+        '额外披风', 1, [], 'text', 'reviewed'));
+    expect(onUpdateAttributes).toHaveBeenCalledTimes(1);
+    expect(saved.identity.features.skin_texture).toBe('保留自然皮肤纹理');
+    expect(saved.constraints.negative_prompt).toEqual(['过度磨皮']);
+});
+
+it('keeps invalid reference requests editable in review and prevents submitting them', async () => {
+    const { onGenerate } = mountSimpleDesign();
+    openImagePrompt();
+    fireEvent.click(screen.getByRole('button', { name: 'Reference image' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent('请选择至少一张参考素材');
+    expect(screen.getByRole('button', { name: '确认并生成' })).toBeDisabled();
+    expect(imagePromptInput()).toBeInTheDocument();
+    expect(onGenerate).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('button', { name: 'Text to image' }));
+    await waitFor(() => expect(screen.getByRole('button', { name: '确认并生成' })).toBeEnabled());
 });

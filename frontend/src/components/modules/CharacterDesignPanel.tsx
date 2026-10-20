@@ -1,11 +1,13 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useContext, useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
+import { X } from "lucide-react";
 import type { ChatModel } from "@/lib/api";
 import ReferencePromptEditor, { type PromptSlashSuggestion } from "./playground/ReferencePromptEditor";
 import { IDENTITY_FIELDS, LOOK_FIELDS, type IdentityFeatures, type LookFeatures, type CharacterConstraints } from "@/lib/characterStructuredDesign";
 import type { DictionaryConfiguration } from "@/lib/characterDictionaryPresets";
-import CharacterPromptDictionary from "./CharacterPromptDictionary";
+import CharacterPromptDictionary, { CharacterDictionaryHost } from "./CharacterPromptDictionary";
 
 export default function CharacterDesignPanel({ description, details, onDetailsChange, result, onResultChange,
     identityFields, lookFields, onFieldsChange, onDictionaryFields, onDictionaryConfiguration, constraints, onConstraintsChange, supplemental, onSupplementalChange, reviewItems, models, model, onModelChange, busy, saving, canSave, canReedit, error, status, tab, onTabChange, onSubmit, onSave, onReedit,
@@ -25,51 +27,27 @@ export default function CharacterDesignPanel({ description, details, onDetailsCh
     onSubmit: () => void; onSave: () => void; onReedit: () => void;
 }) {
     const [showFields, setShowFields] = useState(false);
+    const host = useContext(CharacterDictionaryHost);
+    const openFieldsRef = useRef<HTMLButtonElement>(null);
+    const closeFieldsRef = useRef<HTMLButtonElement>(null);
+    useEffect(() => {
+        if (!showFields) return;
+        closeFieldsRef.current?.focus();
+        return () => openFieldsRef.current?.focus();
+    }, [showFields]);
     const [slash, setSlash] = useState<PromptSlashSuggestion | null>(null);
     const [openSlashRequest, setOpenSlashRequest] = useState(0);
     const keyHandler = useRef<((event: KeyboardEvent) => boolean) | null>(null);
-    return <section id="character-design-dossier" aria-label="角色设计" className="space-y-3 p-4">
-        <div role="tablist" aria-label="角色设计编辑" className="sticky top-0 z-10 flex gap-2 border-b border-glass-border bg-surface pb-2">
-            {([['design', '角色设计'], ['ai', 'AI 优化']] as const).map(([id, label]) => <button
-                key={id} id={`character-design-tab-${id}`} type="button" role="tab" aria-selected={tab === id}
-                aria-controls={`character-design-panel-${id}`} tabIndex={tab === id ? 0 : -1}
-                onClick={() => onTabChange(id)} onKeyDown={event => {
-                    if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
-                    event.preventDefault();
-                    const next = event.key === 'Home' ? 'design' : event.key === 'End' ? 'ai' : tab === 'design' ? 'ai' : 'design';
-                    onTabChange(next);
-                    document.getElementById(`character-design-tab-${next}`)?.focus();
-                }} className={`min-h-11 flex-1 rounded px-3 text-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary ${tab === id ? 'bg-primary/15 text-primary' : 'text-text-secondary hover:bg-hover-bg'}`}>{label}</button>)}
+    const fieldsPanel = <div className={`${host ? 'absolute' : 'fixed'} inset-0 z-[70] flex flex-col rounded-xl border border-glass-border bg-surface p-4 shadow-2xl`}
+        role="dialog" aria-modal={!host} aria-label="角色设计面板" onKeyDown={event => {
+            if (event.key === 'Escape') { event.stopPropagation(); setShowFields(false); }
+        }}>
+        <div className="mb-3 flex shrink-0 items-center justify-between gap-3">
+            <h3 className="text-sm font-medium">角色设计面板</h3>
+            <button ref={closeFieldsRef} type="button" aria-label="关闭设计面板" onClick={() => setShowFields(false)}
+                className="flex min-h-11 min-w-11 items-center justify-center rounded hover:bg-hover-bg focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary"><X size={18} /></button>
         </div>
-        <div id="character-design-panel-design" role="tabpanel" aria-labelledby="character-design-tab-design" hidden={tab !== 'design'} className="space-y-3">
-        <div className="rounded border border-glass-border p-3">
-            <h4 className="text-xs font-medium text-foreground">角色描述 · 设计依据</h4>
-            <p className="mt-2 whitespace-pre-wrap break-words text-sm leading-6 text-text-secondary">{description || "暂无角色描述"}</p>
-            <p className="mt-2 text-[11px] text-text-muted">供设计核对，不随 AI 完善改写。</p>
-        </div>
-        <div>
-            <div className="flex flex-wrap items-center justify-between gap-2">
-                <span className="text-xs text-text-secondary">角色设计</span>
-                <button type="button" disabled={saving} onClick={() => setOpenSlashRequest(value => value + 1)} className="min-h-11 rounded border border-glass-border px-3 text-xs hover:bg-hover-bg focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary">面板与模板</button>
-            </div>
-            <p className="mb-2 text-[11px] text-text-muted">选择词典或编辑设计后提交 AI 完善，也可直接保存。</p>
-            <div className="relative min-h-36 rounded border border-glass-border p-2">
-                <ReferencePromptEditor value={details} onChange={onDetailsChange} candidates={[]} expanded editable={!saving}
-                    placeholder="角色设计，/ 选择词典，[] 调整细节" openSlashRequest={openSlashRequest}
-                    allowImplicitMentions={false} onSlashChange={setSlash}
-                    onSlashKeyDown={event => keyHandler.current?.(event) || false} />
-                {slash && <CharacterPromptDictionary suggestion={slash} onClose={() => setSlash(null)}
-                    onConfiguration={onDictionaryConfiguration} onApply={(text, entry) => entry.structuredFields ? onDictionaryFields(text, entry.structuredFields, entry.remainingText || "") : onDetailsChange(text)} keyHandler={keyHandler} />}
-            </div>
-        </div>
-        {supplemental && <label className="block text-xs text-text-secondary">其他已输入细节
-            <textarea aria-label="其他已输入细节" value={supplemental} disabled={saving || busy} rows={3}
-                onChange={event => onSupplementalChange(event.target.value)}
-                className="mt-1 w-full rounded border border-glass-border bg-surface p-2 text-sm text-foreground" />
-        </label>}
-        <button type="button" aria-expanded={showFields} aria-controls="character-structured-fields" onClick={() => setShowFields(value => !value)}
-            className="min-h-11 w-full rounded border border-glass-border px-3 text-left text-xs hover:bg-hover-bg focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary">{showFields ? "收起结构化字段与约束" : "查看结构化字段与约束"}</button>
-        {showFields && <div id="character-structured-fields" className="space-y-3">
+        <div className="min-h-0 flex-1 space-y-3 overflow-y-auto">
         <div aria-label="结构化角色设计" className="space-y-3">
             {([['identity', '面容与体态', IDENTITY_FIELDS, identityFields], ['look', '服装与配饰', LOOK_FIELDS, lookFields]] as const).map(([section, title, fields, values]) =>
                 <fieldset key={section} disabled={saving || busy} className="min-w-0 rounded border border-glass-border p-3">
@@ -97,7 +75,51 @@ export default function CharacterDesignPanel({ description, details, onDetailsCh
                     </label>)}
             </div>
         </fieldset>
-        </div>}
+        </div>
+    </div>;
+    return <section id="character-design-dossier" aria-label="角色设计" className="space-y-3 p-4">
+        <div role="tablist" aria-label="角色设计编辑" className="sticky top-0 z-10 flex gap-2 border-b border-glass-border bg-surface pb-2">
+            {([['design', '角色设计'], ['ai', 'AI 优化']] as const).map(([id, label]) => <button
+                key={id} id={`character-design-tab-${id}`} type="button" role="tab" aria-selected={tab === id}
+                aria-controls={`character-design-panel-${id}`} tabIndex={tab === id ? 0 : -1}
+                onClick={() => onTabChange(id)} onKeyDown={event => {
+                    if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
+                    event.preventDefault();
+                    const next = event.key === 'Home' ? 'design' : event.key === 'End' ? 'ai' : tab === 'design' ? 'ai' : 'design';
+                    onTabChange(next);
+                    document.getElementById(`character-design-tab-${next}`)?.focus();
+                }} className={`min-h-11 flex-1 rounded px-3 text-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary ${tab === id ? 'bg-primary/15 text-primary' : 'text-text-secondary hover:bg-hover-bg'}`}>{label}</button>)}
+        </div>
+        <div id="character-design-panel-design" role="tabpanel" aria-labelledby="character-design-tab-design" hidden={tab !== 'design'} className="space-y-3">
+        <div className="rounded border border-glass-border p-3">
+            <h4 className="text-xs font-medium text-foreground">角色描述 · 设计依据</h4>
+            <p className="mt-2 whitespace-pre-wrap break-words text-sm leading-6 text-text-secondary">{description || "暂无角色描述"}</p>
+            <p className="mt-2 text-[11px] text-text-muted">供设计核对，不随 AI 完善改写。</p>
+        </div>
+        <div>
+            <div className="flex flex-wrap items-center justify-between gap-2">
+                <span className="text-xs text-text-secondary">角色设计</span>
+                <div className="flex gap-2">
+                <button type="button" ref={openFieldsRef} disabled={saving || busy} onClick={() => setShowFields(true)} aria-haspopup="dialog"
+                    className="min-h-11 rounded border border-glass-border px-3 text-xs hover:bg-hover-bg focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary">设计面板</button>
+                <button type="button" disabled={saving} onMouseDown={event => event.preventDefault()} onClick={() => setOpenSlashRequest(value => value + 1)} className="min-h-11 rounded border border-glass-border px-3 text-xs hover:bg-hover-bg focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary">面板与模板</button>
+                </div>
+            </div>
+            <p className="mb-2 text-[11px] text-text-muted">选择词典或编辑设计后提交 AI 完善，也可直接保存。</p>
+            <div className="relative min-h-36 rounded border border-glass-border p-2">
+                <ReferencePromptEditor value={details} onChange={onDetailsChange} candidates={[]} expanded editable={!saving}
+                    placeholder="角色设计，/ 选择词典，[] 调整细节" openSlashRequest={openSlashRequest}
+                    allowImplicitMentions={false} onSlashChange={setSlash}
+                    onSlashKeyDown={event => keyHandler.current?.(event) || false} />
+                {slash && <CharacterPromptDictionary suggestion={slash} onClose={() => setSlash(null)}
+                    onConfiguration={onDictionaryConfiguration} onApply={(text, entry) => entry.structuredFields ? onDictionaryFields(text, entry.structuredFields, entry.remainingText || "") : onDetailsChange(text)} keyHandler={keyHandler} />}
+            </div>
+        </div>
+        {supplemental && <label className="block text-xs text-text-secondary">其他已输入细节
+            <textarea aria-label="其他已输入细节" value={supplemental} disabled={saving || busy} rows={3}
+                onChange={event => onSupplementalChange(event.target.value)}
+                className="mt-1 w-full rounded border border-glass-border bg-surface p-2 text-sm text-foreground" />
+        </label>}
         <label className="block text-xs text-text-secondary" htmlFor="character-design-model">设计模型</label>
         <select id="character-design-model" value={model} onChange={event => onModelChange(event.target.value)}
             disabled={!models.length || busy || saving} className="min-h-11 w-full rounded border border-glass-border bg-surface px-2 text-sm text-foreground focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary">
@@ -129,5 +151,6 @@ export default function CharacterDesignPanel({ description, details, onDetailsCh
             <button type="button" disabled={saving || busy || !canReedit} onClick={onReedit}
                 className="min-h-11 flex-1 rounded border border-glass-border px-3 text-sm hover:bg-hover-bg disabled:opacity-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary">重新编辑</button>
         </div>
+        {showFields && (host ? createPortal(fieldsPanel, host) : fieldsPanel)}
     </section>;
 }
