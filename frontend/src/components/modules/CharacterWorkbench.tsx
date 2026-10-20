@@ -38,7 +38,7 @@ import { IDENTITY_FIELDS, LOOK_FIELDS, characterSectionText, characterStructured
 import type { DictionaryConfiguration } from "@/lib/characterDictionaryPresets";
 import { type CharacterPresetTarget } from "@/lib/characterQuickActions";
 import CharacterDesignPanel from "./CharacterDesignPanel";
-import CharacterPromptDictionary from "./CharacterPromptDictionary";
+import CharacterPromptDictionary, { CharacterDictionaryHost } from "./CharacterPromptDictionary";
 
 import type { AssetPlanEntry } from "@/lib/episodeAssetPlan";
 import EpisodeAssetPlanPanel from "./EpisodeAssetPlanPanel";
@@ -1187,7 +1187,6 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
                 <div className="relative z-40 flex h-16 shrink-0 items-center justify-between gap-3 border-b border-glass-border bg-surface px-4 md:px-6">
                     <div className="flex min-w-0 items-center gap-3">
                         <div role="heading" aria-level={2} className="min-w-0 text-lg font-bold text-foreground md:text-xl"><AssetNameEditor key={asset.id} name={asset.name} onRename={onRename} className="font-bold" /></div>
-                        <span className="hidden shrink-0 text-sm text-text-muted sm:inline">{tc("workbench")}</span>
                         <div className="hidden shrink-0 items-center gap-2 px-3 py-1 bg-blue-500/10 border border-blue-500/20 rounded-full lg:flex">
                             <span className="text-xs text-blue-400 font-medium">{tc("tipConsistency")}</span>
                         </div>
@@ -1456,8 +1455,8 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
                     </div>
                 </div>
 
-                <details className="shrink-0 border-t border-glass-border bg-surface">
-                    <summary className="flex min-h-11 cursor-pointer items-center px-4 text-sm font-medium text-text-secondary hover:text-foreground sm:px-6">{tc("advancedSettings")}</summary>
+                {!showProfile && <details className="shrink-0 border-t border-glass-border bg-surface">
+                    <summary className="flex min-h-11 cursor-pointer items-center px-4 text-sm font-medium text-text-secondary hover:text-foreground sm:px-6">出图设置</summary>
                     <div className="max-h-[30vh] overflow-y-auto">
                 {/* Footer: Negative Prompt & Art Direction Settings */}
                 <div className="border-t border-glass-border bg-surface flex flex-col">
@@ -1465,9 +1464,10 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
                     <div className="px-6 py-3 flex items-start gap-4">
                         {/* User's Negative Prompt (Editable) */}
                         <div className="flex-1">
-                            <label className="text-xs font-bold text-text-muted uppercase mb-2 block">{tc("workbench")}</label>
+                            <label htmlFor="character-image-negative" className="text-xs font-medium text-text-secondary mb-2 block">出图负面提示词</label>
+                            <p className="mb-2 text-[11px] text-text-muted">应用角色设计时带入负面约束；此处调整用于出图，不改写角色设计。</p>
                             <textarea
-                                value={negativePrompt}
+                                id="character-image-negative" value={negativePrompt}
                                 onChange={(e) => setNegativePrompt(e.target.value)}
                                 className="w-full h-16 bg-input-bg border border-glass-border rounded-lg p-3 text-xs text-text-secondary resize-none focus:outline-none focus:border-primary/50 font-mono"
                                 placeholder="Enter your negative prompt (avoid unwanted elements)..."
@@ -1475,7 +1475,7 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
                         </div>
 
                         {/* Copy style into the editable prompts before submitting. */}
-                        <div className="pt-6">
+                        {(stylePrompt || styleNegativePrompt) && <div className="pt-6">
                             <div className="flex items-center gap-2 bg-surface px-4 py-2 rounded-lg border border-glass-border">
                                 <button type="button" disabled={activePanel === "video" || (!stylePrompt && !styleNegativePrompt)} onClick={() => {
                                     if (activePanel === "full_body") setFullBodyPrompt((current) => includeVisibleStyle(current, stylePrompt));
@@ -1486,7 +1486,7 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
                                     {tc("copyStyleToPrompt")}
                                 </button>
                             </div>
-                        </div>
+                        </div>}
                     </div>
 
                     {/* Optional style source; generation uses only the edited prompt fields. */}
@@ -1498,7 +1498,7 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
                             >
                                 <div className="flex items-center gap-2">
                                     <div className="w-2 h-2 rounded-full bg-gradient-to-r from-purple-500 to-blue-500" />
-                                    <span className="text-xs font-bold text-text-secondary uppercase">Art Direction Style (Copy to Prompt Above)</span>
+                                    <span className="text-xs font-bold text-text-secondary uppercase">项目风格参考</span>
                                 </div>
                                 <ChevronRight size={14} className={`text-text-muted transform transition-transform ${showStyleExpanded ? 'rotate-90' : ''}`} />
                             </button>
@@ -1515,7 +1515,7 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
                                             <div className="bg-gradient-to-r from-purple-500/10 to-blue-500/10 border border-glass-border rounded-lg p-4">
                                                 {stylePrompt && (
                                                     <div className="mb-3">
-                                                        <span className="text-xs font-bold text-green-400 block mb-1">+ Style Prompt:</span>
+                                                        <span className="text-xs font-bold text-green-400 block mb-1">风格提示词</span>
                                                         <p className="text-xs text-text-secondary font-mono bg-surface p-2 rounded border border-border-subtle leading-relaxed">
                                                             {stylePrompt}
                                                         </p>
@@ -1524,7 +1524,7 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
 
                                                 {styleNegativePrompt && (
                                                     <div>
-                                                        <span className="text-xs font-bold text-red-400 block mb-1">+ Negative Prompt:</span>
+                                                        <span className="text-xs font-bold text-red-400 block mb-1">风格负面提示词</span>
                                                         <p className="text-xs text-text-secondary font-mono bg-surface p-2 rounded border border-border-subtle leading-relaxed">
                                                             {styleNegativePrompt}
                                                         </p>
@@ -1539,7 +1539,7 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
                     )}
                 </div>
                     </div>
-                </details>
+                </details>}
             </motion.div>
             {pendingImageReview && currentProject?.id && <AssetImageSubmissionReview
                 projectId={currentProject.id}
@@ -1663,6 +1663,7 @@ export function WorkbenchPanel({
     reverseGenerationMode = false,
     reverseReferenceUrl = null
 }: any) {
+    const [dictionaryHost, setDictionaryHost] = useState<HTMLDivElement | null>(null);
     const tc = useTranslations("character");
     const ti = useTranslations("imageEditor");
     const [mention, setMention] = useState<ReferenceSuggestion | null>(null);
@@ -1677,6 +1678,7 @@ export function WorkbenchPanel({
     );
 
     return (
+        <CharacterDictionaryHost.Provider value={dictionaryHost}>
         <div
             className={`min-w-0 min-h-0 flex-1 flex flex-col transition-colors ${isActive ? 'bg-glass' : 'bg-transparent hover:bg-hover-bg'}`}
             onClick={onClick}
@@ -1698,7 +1700,7 @@ export function WorkbenchPanel({
 
             {/* Image Area with Variant Selector */}
             <div className="flex-1 min-h-0 flex flex-col lg:flex-row-reverse">
-            <div className="flex-1 min-h-0 min-w-0 relative bg-surface p-4 flex flex-col overflow-hidden group">
+            <div ref={setDictionaryHost} data-testid="character-main-workspace" className="flex-1 min-h-0 min-w-0 relative bg-surface p-4 flex flex-col overflow-hidden group">
 
                 {/* Locked Overlay */}
                 {isLocked && (
@@ -2019,5 +2021,6 @@ export function WorkbenchPanel({
             </div>
             </div>
         </div>
+        </CharacterDictionaryHost.Provider>
     );
 }

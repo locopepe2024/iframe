@@ -23,6 +23,7 @@ export default function CharacterDesignPanel({ description, details, onDetailsCh
     busy: boolean; saving: boolean; canSave: boolean; error: string; status: string;
     onSubmit: () => void; onSave: () => void; onConfirm: () => void; onBack: () => void;
 }) {
+    const [showFields, setShowFields] = useState(false);
     const [slash, setSlash] = useState<PromptSlashSuggestion | null>(null);
     const [openSlashRequest, setOpenSlashRequest] = useState(0);
     const keyHandler = useRef<((event: KeyboardEvent) => boolean) | null>(null);
@@ -56,6 +57,9 @@ export default function CharacterDesignPanel({ description, details, onDetailsCh
                 onChange={event => onSupplementalChange(event.target.value)}
                 className="mt-1 w-full rounded border border-glass-border bg-surface p-2 text-sm text-foreground" />
         </label>}
+        <button type="button" aria-expanded={showFields} aria-controls="character-structured-fields" onClick={() => setShowFields(value => !value)}
+            className="min-h-11 w-full rounded border border-glass-border px-3 text-left text-xs hover:bg-hover-bg focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary">{showFields ? "收起结构化字段与约束" : "查看结构化字段与约束"}</button>
+        {showFields && <div id="character-structured-fields" className="space-y-3">
         <div aria-label="结构化角色设计" className="space-y-3">
             {([['identity', '面容与体态', IDENTITY_FIELDS, identityFields], ['look', '服装与配饰', LOOK_FIELDS, lookFields]] as const).map(([section, title, fields, values]) =>
                 <fieldset key={section} disabled={saving || busy} className="min-w-0 rounded border border-glass-border p-3">
@@ -73,7 +77,7 @@ export default function CharacterDesignPanel({ description, details, onDetailsCh
         </div>
         <fieldset disabled={saving || busy} className="min-w-0 rounded border border-glass-border p-3">
             <legend className="px-1 text-xs font-medium">设计约束</legend>
-            <p className="mb-2 text-[11px] text-text-muted">每行一项，最多 20 项，每项最多 500 字；未填写的项目不添加限制。</p>
+            <p className="mb-2 text-[11px] text-text-muted">角色一致性约束：必须保留的特征与需要排除的内容。确认设计后随角色保存，应用设计时带入出图提示词。</p>
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 {([['must_keep', '必须保留'], ['negative_prompt', '负面提示词']] as const).map(([key, label]) =>
                     <label key={key} className="min-w-0 text-xs text-text-secondary">{label}
@@ -83,6 +87,7 @@ export default function CharacterDesignPanel({ description, details, onDetailsCh
                     </label>)}
             </div>
         </fieldset>
+        </div>}
         <label className="block text-xs text-text-secondary" htmlFor="character-design-model">设计模型</label>
         <select id="character-design-model" value={model} onChange={event => onModelChange(event.target.value)}
             disabled={!models.length || busy || saving} className="min-h-11 w-full rounded border border-glass-border bg-surface px-2 text-sm text-foreground focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary">

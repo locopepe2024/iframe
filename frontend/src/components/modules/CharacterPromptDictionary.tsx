@@ -1,7 +1,8 @@
 "use client";
 
 import { Search, X } from "lucide-react";
-import { useEffect, useId, useState, type MutableRefObject } from "react";
+import { createContext, useContext, useEffect, useId, useState, type MutableRefObject } from "react";
+import { createPortal } from "react-dom";
 import { API_URL, api, authenticatedFetch, type PlatformReferenceResource } from "@/lib/api";
 import { searchCharacterQuickPresets } from "@/lib/characterQuickActions";
 import { CHARACTER_DICTIONARY_PRESETS, dictionaryPresetFields, configurationQueryCategory, isConfigurationQuery, renderDictionaryPreset, dictionaryStructuredFields, dictionaryConfiguration, type DictionaryConfiguration, type CharacterDictionaryPreset } from "@/lib/characterDictionaryPresets";
@@ -42,6 +43,8 @@ const QUICK_PANEL_LABELS: Record<string, string> = {
   "dictionary.panel.expression": "表情",
 };
 const QUICK_PANEL_ORDER = Object.keys(QUICK_PANEL_LABELS);
+export const CharacterDictionaryHost = createContext<HTMLElement | null>(null);
+
 const buttonStyle = "min-h-11 rounded px-2 text-xs focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary hover:bg-hover-bg";
 
 export default function CharacterPromptDictionary({ suggestion, onClose, onApply, keyHandler, onConfiguration }: {
@@ -51,6 +54,7 @@ export default function CharacterPromptDictionary({ suggestion, onClose, onApply
   onConfiguration?: (configuration: DictionaryConfiguration) => void;
   keyHandler: MutableRefObject<((event: KeyboardEvent) => boolean) | null>;
 }) {
+  const host = useContext(CharacterDictionaryHost);
   const id = useId();
   const [resources, setResources] = useState<PlatformReferenceResource[]>([]);
   const [loading, setLoading] = useState(true);
@@ -194,10 +198,10 @@ export default function CharacterPromptDictionary({ suggestion, onClose, onApply
   useEffect(() => {
     document.getElementById(`${id}-${active}`)?.scrollIntoView?.({ block: "nearest" });
   }, [id, active]);
-  return <div data-prompt-discovery role="dialog" aria-label="基础面板、词典和 Prompt 模板" onMouseDown={(event) => {
+  const panel = <div data-prompt-discovery role="dialog" aria-label="基础面板、词典和 Prompt 模板" onMouseDown={(event) => {
     if (!(event.target as HTMLElement).closest("input, select, textarea")) event.preventDefault();
   }}
-    className="absolute top-12 left-3 right-3 z-50 mb-2 max-h-[min(60vh,440px)] overflow-y-auto rounded-lg border border-glass-border bg-elevated p-3 shadow-xl">
+    className={host ? "absolute inset-0 z-30 overflow-y-auto bg-surface p-3 sm:p-5" : "absolute top-12 left-3 right-3 z-50 mb-2 max-h-[min(60vh,440px)] overflow-y-auto rounded-lg border border-glass-border bg-elevated p-3 shadow-xl"}>
     <div className="flex items-center justify-between gap-1">
       {!suggestion.slot && <div role="tablist" aria-label="检索范围" className="flex min-w-0 gap-1">{DISCOVERY_SECTIONS.map(label => <button key={label} type="button" role="tab" aria-selected={section === label} tabIndex={section === label ? 0 : -1}
         onClick={() => { setSection(label); setSelected(null); setCategory(null); setTask(null); setBrowsing(!needle); }}
@@ -291,4 +295,5 @@ export default function CharacterPromptDictionary({ suggestion, onClose, onApply
       <button type="button" onClick={() => setRefresh((value) => value + 1)} className={buttonStyle}>刷新目录</button>
     </>}
   </div>;
+  return host ? createPortal(panel, host) : panel;
 }
