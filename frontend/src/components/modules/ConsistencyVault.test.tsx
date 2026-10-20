@@ -173,15 +173,14 @@ it("edits scene light and view before refinement and submits only the applied vi
     fireEvent.change(screen.getByRole("textbox", { name: "场景风格" }), { target: { value: "写实蓝调" } });
     fireEvent.change(screen.getByRole("textbox", { name: "场景环境光" }), { target: { value: "街道保持蓝色黄昏" } });
     fireEvent.change(screen.getByRole("textbox", { name: "场景参考图视角" }), { target: { value: "沿街向北" } });
-    fireEvent.click(screen.getByRole("button", { name: "保存设计" }));
+    fireEvent.click(screen.getByRole("button", { name: "保存并使用场景设计" }));
     await waitFor(() => expect(mocks.updateAssetAttributes).toHaveBeenCalledWith("episode-1", "street", "scene",
         expect.objectContaining({ asset_design: expect.objectContaining({
             style: "写实蓝调", ambient_lighting: "街道保持蓝色黄昏",
             reference_viewpoint: "沿街向北", confirmed: true,
         }) })));
     fireEvent.click(screen.getByRole("button", { name: "应用到图片提示词" }));
-    fireEvent.click(screen.getByRole("tab", { name: "AI 优化" }));
-    fireEvent.click(screen.getByRole("button", { name: "优化提示词" }));
+    fireEvent.click(screen.getByRole("button", { name: "提交 AI 完善" }));
     await waitFor(() => expect(mocks.agentRequest).toHaveBeenCalledWith("/asset-image-prompt/refine/preview", "POST",
         expect.objectContaining({ style: expect.stringContaining("环境光：街道保持蓝色黄昏") })));
     expect(mocks.agentRequest).not.toHaveBeenCalledWith("/asset-image-prompt/refine", "POST", expect.anything());
@@ -279,17 +278,23 @@ it("saves both scene sources and restores independent edits when reopened", asyn
     fireEvent.click(screen.getByRole("tab", { name: "AI 优化" }));
     expect(screen.getByRole("textbox", { name: "图像提示词" })).toHaveValue("已有优化");
     fireEvent.change(screen.getByRole("textbox", { name: "图像提示词" }), { target: { value: "手工修改优化" } });
-    fireEvent.click(screen.getByRole("button", { name: "保存设计" }));
-    await waitFor(() => expect(mocks.success).toHaveBeenCalledWith("场景设计与 AI 优化已保存"));
+    fireEvent.click(screen.getByRole("button", { name: "保存并使用 AI 优化" }));
+    await waitFor(() => expect(mocks.success).toHaveBeenCalledWith("已保存并使用 AI 优化"));
     expect(mocks.updateAssetAttributes).toHaveBeenCalledWith("episode-1", "street", "scene",
         expect.objectContaining({ asset_design: expect.objectContaining({ prompt_workspace: {
-            settings_pending: false,
+            active_source: "ai", settings_pending: false,
             design: { ...workspace.design, prompt: "手工修改原设计" },
             ai: { ...workspace.ai, prompt: "手工修改优化" },
         } }) }));
     fireEvent.click(screen.getByRole("button", { name: "Done" }));
     await waitFor(() => expect(screen.queryByRole("tab", { name: "AI 优化" })).not.toBeInTheDocument());
     fireEvent.click(screen.getByText(asset.name));
+    expect(screen.getByRole("tab", { name: "AI 优化" })).toHaveAttribute("aria-selected", "true");
+    fireEvent.change(screen.getByRole("textbox", { name: "图像提示词" }), { target: { value: "未保存优化" } });
+    fireEvent.click(screen.getByRole("tab", { name: "场景设计" }));
+    fireEvent.change(screen.getByRole("textbox", { name: "图像提示词" }), { target: { value: "未保存原设计" } });
+    expect(screen.getByText(/已保存的设计有修改/)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "编辑已保存设计" }));
     expect(screen.getByRole("textbox", { name: "图像提示词" })).toHaveValue("手工修改原设计");
     fireEvent.click(screen.getByRole("tab", { name: "AI 优化" }));
     expect(screen.getByRole("textbox", { name: "图像提示词" })).toHaveValue("手工修改优化");
@@ -307,6 +312,7 @@ it("does not submit an empty AI source or add unselected people-view constraints
     fireEvent.click(screen.getByRole("button", { name: /Scenes/ }));
     fireEvent.click(screen.getByText(asset.name));
     fireEvent.click(screen.getByRole("tab", { name: "AI 优化" }));
+    expect(screen.getByRole("button", { name: "保存并使用 AI 优化" })).toBeDisabled();
     fireEvent.click(screen.getByRole("button", { name: "测试生成图片" }));
     expect(mocks.previewAssetImageSubmission).not.toHaveBeenCalled();
     expect(mocks.generateAsset).not.toHaveBeenCalled();
@@ -317,6 +323,31 @@ it("does not submit an empty AI source or add unselected people-view constraints
     const text = (screen.getByRole("textbox", { name: "图像提示词" }) as HTMLTextAreaElement).value;
     expect(text).toContain("可见人脸上限：3 张");
     expect(text).not.toMatch(/侧身|远景/);
+});
+
+it("keeps the last successful scene save when a later save fails", async () => {
+    const asset = { id: "street", name: "保存失败场景", description: "场景原文", source: "episode",
+        asset_design: { design_draft: { visual_notes: "街道", prompt_workspace: {
+            active_source: "design", settings_pending: false,
+            design: { prompt: "成功保存的街道", mode: "text", references: [] },
+            ai: { prompt: "成功保存的优化", mode: "text", references: [] },
+        } } } };
+    useProjectStore.setState({ currentProject: { id: "episode-1", characters: [], scenes: [asset], props: [] } as any });
+    mocks.getEpisodeVisualContext.mockResolvedValue({ context: null, bindings: [] });
+    mocks.updateAssetAttributes.mockRejectedValue(new Error("保存连接失败"));
+    render(<ConsistencyVault />);
+    fireEvent.click(screen.getByRole("button", { name: /Scenes/ }));
+    fireEvent.click(screen.getByText(asset.name));
+    fireEvent.change(screen.getByRole("textbox", { name: "图像提示词" }), { target: { value: "未保存的街道" } });
+    fireEvent.click(screen.getByRole("button", { name: "保存并使用场景设计" }));
+    await waitFor(() => expect(mocks.error).toHaveBeenCalledWith("场景设计保存失败", expect.anything()));
+    expect(screen.getByRole("alert")).toHaveTextContent("保存连接失败");
+    expect(screen.getByRole("textbox", { name: "图像提示词" })).toHaveValue("未保存的街道");
+    fireEvent.click(screen.getByRole("button", { name: "编辑已保存设计" }));
+    expect(screen.getByRole("textbox", { name: "图像提示词" })).toHaveValue("成功保存的街道");
+    fireEvent.click(screen.getByRole("tab", { name: "AI 优化" }));
+    expect(screen.getByRole("textbox", { name: "图像提示词" })).toHaveValue("成功保存的优化");
+    expect(mocks.success).not.toHaveBeenCalled();
 });
 
 it.each([
@@ -335,9 +366,9 @@ it.each([
 
     fireEvent.click(screen.getByRole("button", { name: new RegExp(type === "scene" ? "Scenes" : "Props") }));
     fireEvent.click(screen.getByText(name));
-    if (type === "scene") fireEvent.click(screen.getByRole("tab", { name: "AI 优化" }));
-    await screen.findByRole("button", { name: "优化提示词" });
-    fireEvent.click(screen.getByRole("button", { name: "优化提示词" }));
+    const optimizeLabel = type === "scene" ? "提交 AI 完善" : "优化提示词";
+    await waitFor(() => expect(screen.getByRole("button", { name: optimizeLabel })).toBeEnabled());
+    fireEvent.click(screen.getByRole("button", { name: optimizeLabel }));
     await screen.findByRole("button", { name: "确认输入并优化" });
     expect(mocks.agentRequest).not.toHaveBeenCalledWith("/asset-image-prompt/refine", "POST", expect.anything());
     fireEvent.click(screen.getByRole("button", { name: "确认输入并优化" }));

@@ -1095,7 +1095,7 @@ function CharacterDetailModal({ asset, type, onClose, onUpdateDescription, onUpd
     const savedSceneDesign = asset.asset_design?.design_draft || {};
     const savedWorkspace = type === "scene" ? savedSceneDesign.prompt_workspace : undefined;
     const [imagePrompt, setImagePrompt] = useState(savedWorkspace?.design?.prompt ?? (asset.image_prompt || asset.description || ""));
-    const [scenePromptTab, setScenePromptTab] = useState<"design" | "ai">("design");
+    const [scenePromptTab, setScenePromptTab] = useState<"design" | "ai">(savedWorkspace?.active_source === "ai" ? "ai" : "design");
     const [showSceneSettings, setShowSceneSettings] = useState(false);
     const inheritedSceneLighting = [asset.time_of_day, asset.lighting_mood].filter(Boolean).join("；");
     const [sceneDesign, setSceneDesign] = useState(() => ({
@@ -1145,6 +1145,27 @@ function CharacterDetailModal({ asset, type, onClose, onUpdateDescription, onUpd
     const setVisibleReferences = usingSceneAi ? setAiReferences : setPromptReferences;
     const visibleGenerationMode = usingSceneAi ? aiGenerationMode : imageGenerationMode;
     const setVisibleGenerationMode = usingSceneAi ? setAiGenerationMode : setImageGenerationMode;
+    const currentSceneSnapshot = { sceneDesign, imagePrompt, optimizedPrompt, imageGenerationMode,
+        aiGenerationMode, promptReferences, aiReferences, sceneDesignNeedsApply };
+    const savedSceneSnapshot = useRef(currentSceneSnapshot);
+    const [hasSavedSceneDesign, setHasSavedSceneDesign] = useState(Boolean(savedWorkspace || savedSceneDesign.visual_notes));
+    const [savedSceneSource, setSavedSceneSource] = useState<"design" | "ai">(savedWorkspace?.active_source === "ai" ? "ai" : "design");
+    const sceneHasChanges = JSON.stringify(currentSceneSnapshot) !== JSON.stringify(savedSceneSnapshot.current);
+    const restoreSavedSceneDesign = () => {
+        const snapshot = savedSceneSnapshot.current;
+        setSceneDesign(snapshot.sceneDesign);
+        setImagePrompt(snapshot.imagePrompt);
+        setOptimizedPrompt(snapshot.optimizedPrompt);
+        setImageGenerationMode(snapshot.imageGenerationMode);
+        setAiGenerationMode(snapshot.aiGenerationMode);
+        setPromptReferences(snapshot.promptReferences);
+        setAiReferences(snapshot.aiReferences);
+        setSceneDesignNeedsApply(snapshot.sceneDesignNeedsApply);
+        setScenePromptTab("design");
+        setPendingPromptReview(null);
+        setMention(null);
+        setPromptError("");
+    };
     const [assetIndex, setAssetIndex] = useState<any[]>([]);
     const assetIndexRevision = JSON.stringify(
         [currentProject?.characters, currentProject?.scenes, currentProject?.props].map((items) =>
@@ -1460,8 +1481,15 @@ function CharacterDetailModal({ asset, type, onClose, onUpdateDescription, onUpd
     };
 
     const saveSceneDesign = async () => {
-        if (!sceneDesign.visual_notes.trim() || sceneDesignSaving) return;
+        if (sceneDesignSaving || optimizingPrompt) return;
+        if (!visibleImagePrompt.trim() || !sceneDesign.visual_notes.trim()) {
+            setPromptError(usingSceneAi ? "请先提交并检查 AI 优化结果，再保存使用。" : "请先填写具体的场景设计，再保存使用。");
+            return;
+        }
+        const snapshot = currentSceneSnapshot;
+        const source = scenePromptTab;
         setSceneDesignSaving(true);
+        setPromptError("");
         try {
             await onUpdateAttributes({ asset_design: {
                 visual_notes: sceneDesign.visual_notes.trim(),
@@ -1477,14 +1505,19 @@ function CharacterDetailModal({ asset, type, onClose, onUpdateDescription, onUpd
                     secondary_people_view: sceneDesign.visual_constraints.secondary_people_view.trim(),
                 },
                 prompt_workspace: {
+                    active_source: source,
                     settings_pending: sceneDesignNeedsApply,
                     design: { prompt: imagePrompt, mode: imageGenerationMode, references: promptReferences },
                     ai: { prompt: optimizedPrompt, mode: aiGenerationMode, references: aiReferences },
                 },
                 confirmed: true,
             } });
-            toast.success("场景设计与 AI 优化已保存");
+            savedSceneSnapshot.current = snapshot;
+            setHasSavedSceneDesign(true);
+            setSavedSceneSource(source);
+            toast.success(`已保存并使用${source === "ai" ? " AI 优化" : "场景设计"}`);
         } catch (error) {
+            setPromptError(extractErrorDetail(error));
             toast.error("场景设计保存失败", { body: extractErrorDetail(error) });
         } finally {
             setSceneDesignSaving(false);
@@ -1577,7 +1610,7 @@ function CharacterDetailModal({ asset, type, onClose, onUpdateDescription, onUpd
                             <div className="flex flex-1" role="tablist" aria-label="场景提示词来源">
                             {(["design", "ai"] as const).map(tab => <button key={tab} type="button" role="tab"
                                 id={`scene-tab-${tab}`} aria-controls={`scene-prompt-${tab}`} tabIndex={scenePromptTab === tab ? 0 : -1}
-                                aria-selected={scenePromptTab === tab} onClick={() => { setScenePromptTab(tab); setMention(null); }}
+                                disabled={sceneDesignSaving || optimizingPrompt} aria-selected={scenePromptTab === tab} onClick={() => { setScenePromptTab(tab); setMention(null); }}
                                 onKeyDown={event => {
                                     if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
                                     event.preventDefault();
@@ -1590,8 +1623,6 @@ function CharacterDetailModal({ asset, type, onClose, onUpdateDescription, onUpd
                                 {tab === "design" ? "场景设计" : "AI 优化"}
                             </button>)}
                             </div>
-                            <button type="button" onClick={() => void saveSceneDesign()} disabled={sceneDesignSaving || !sceneDesign.visual_notes.trim()}
-                                className="min-h-11 rounded px-3 text-sm text-primary disabled:opacity-40">{sceneDesignSaving ? "保存中…" : "保存设计"}</button>
                         </div>}
                         {type === "scene" && activeTab === "image" && scenePromptTab === "design" && <button type="button"
                             aria-expanded={showSceneSettings} onClick={() => setShowSceneSettings(value => !value)}
@@ -1661,7 +1692,7 @@ function CharacterDetailModal({ asset, type, onClose, onUpdateDescription, onUpd
                                             <button
                                                 key={mode}
                                                 type="button"
-                                                disabled={usingSceneAi && optimizingPrompt}
+                                                disabled={sceneDesignSaving || (usingSceneAi && optimizingPrompt)}
                                                 aria-pressed={visibleGenerationMode === mode}
                                                 onClick={() => setVisibleGenerationMode(mode)}
                                                 className={`rounded px-2 py-1 text-[0.6875rem] ${visibleGenerationMode === mode ? "bg-primary/15 text-primary" : "text-text-muted hover:text-foreground"}`}
@@ -1671,17 +1702,17 @@ function CharacterDetailModal({ asset, type, onClose, onUpdateDescription, onUpd
                                         ))}
                                     </div>
                                 </div>
-                                {(type !== "scene" || usingSceneAi) && <div className="flex flex-wrap items-center gap-2">
-                                    <select aria-label="提示词优化模型" value={promptModel}
+                                {(type !== "scene" || !usingSceneAi) && <div className="flex flex-wrap items-center gap-2">
+                                    <select aria-label={type === "scene" ? "设计模型" : "提示词优化模型"} value={promptModel}
                                         onChange={event => setPromptModel(event.target.value)}
                                         className="h-9 min-w-0 flex-1 rounded border border-glass-border bg-surface px-2 text-xs text-foreground">
                                         {promptModels.length === 0 && <option value="">暂无可用模型</option>}
                                         {promptModels.map(model => <option key={model.api_model_id} value={model.api_model_id}>{model.display_name}</option>)}
                                     </select>
                                     <button type="button" onClick={() => void handleOptimizePrompt()}
-                                        disabled={!promptModel || optimizingPrompt || !descriptionSaved || !description.trim() || (type === "scene" && sceneDesignNeedsApply)}
+                                        disabled={!promptModel || optimizingPrompt || sceneDesignSaving || !descriptionSaved || !description.trim() || (type === "scene" && sceneDesignNeedsApply)}
                                         className="inline-flex h-9 items-center gap-1.5 rounded border border-glass-border px-3 text-xs text-foreground hover:bg-hover-bg disabled:opacity-50">
-                                        <Sparkles size={14} />{optimizingPrompt ? "优化中…" : "优化提示词"}
+                                        <Sparkles size={14} />{optimizingPrompt ? "优化中…" : type === "scene" ? "提交 AI 完善" : "优化提示词"}
                                     </button>
                                 </div>}
                                 {type === "scene" && usingSceneAi && <p className="text-xs text-text-muted">根据场景设计生成独立提示词，保留原设计供对比。修改场景设计后，可重新优化。</p>}
@@ -1714,7 +1745,7 @@ function CharacterDetailModal({ asset, type, onClose, onUpdateDescription, onUpd
                                         onMentionKeyDown={handleMentionKeyDown}
                                         allowImplicitMentions={false}
                                         pruneUnlistedReferences
-                                        editable={!isGenerating && !(usingSceneAi && optimizingPrompt)}
+                                        editable={!isGenerating && !sceneDesignSaving && !(usingSceneAi && optimizingPrompt)}
                                         placeholder={tv("imagePromptPlaceholder")}
                                     />
                                     {mention && (
@@ -1742,6 +1773,19 @@ function CharacterDetailModal({ asset, type, onClose, onUpdateDescription, onUpd
                                 {visibleReferences.length > 0 && (
                                     <p className="text-[0.6875rem] text-primary">{tv("explicitReferenceCount", { count: visibleReferences.length, suffix: visibleReferences.length === 1 ? "" : "s" })}</p>
                                 )}
+                                {type === "scene" && <>
+                                    <p role="status" className="text-xs text-text-muted">{hasSavedSceneDesign
+                                        ? `${sceneHasChanges ? "已保存的设计有修改" : "已保存 · 当前设计已生效"} · 保存的来源：${savedSceneSource === "ai" ? "AI 优化" : "场景设计"}`
+                                        : "尚未保存"}</p>
+                                    <div className="sticky bottom-0 flex gap-2 bg-surface py-2">
+                                        <button type="button" disabled={sceneDesignSaving || optimizingPrompt || !visibleImagePrompt.trim() || !sceneDesign.visual_notes.trim()}
+                                            onClick={() => void saveSceneDesign()} className="min-h-11 flex-1 rounded bg-primary px-3 text-sm text-primary-foreground disabled:opacity-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary">
+                                            {sceneDesignSaving ? "保存中…" : usingSceneAi ? "保存并使用 AI 优化" : "保存并使用场景设计"}
+                                        </button>
+                                        <button type="button" disabled={sceneDesignSaving || optimizingPrompt || !hasSavedSceneDesign} onClick={restoreSavedSceneDesign}
+                                            className="min-h-11 flex-1 rounded border border-glass-border px-3 text-sm text-foreground disabled:opacity-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary">编辑已保存设计</button>
+                                    </div>
+                                </>}
                             </div>
                         )}
 
