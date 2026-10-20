@@ -1,3 +1,5 @@
+import { DesignAssistantPanel } from "./design/DesignAssistantPanel";
+import { designRevision, type DesignPreview } from "./design/design-proposal";
 import { useEffect, useState } from "react";
 
 import { resolveViewTabKey, resolveWorkbenchShortcut } from "./accessibility/workbench-accessibility";
@@ -52,6 +54,9 @@ export function App({ restoredSavedAt = null }: DirectorAppProps = {}) {
   const [leftPanelExpanded, setLeftPanelExpanded] = useState(true);
   const [inspectorExpanded, setInspectorExpanded] = useState(true);
   const [recordingVideo, setRecordingVideo] = useState(false);
+  const [designPreview, setDesignPreview] = useState<DesignPreview | null>(null);
+  const currentDesignRevision = useWorkbenchStore(designRevision);
+  const activeDesignPreview = !recordingVideo && designPreview?.baseRevision === currentDesignRevision ? designPreview : null;
   const [saveState, setSaveState] = useState<{ status: "idle" | "saving" | "saved" | "error"; message: string }>(() => restoredSavedAt
     ? { status: "saved", message: `本地草稿已恢复 ${formatSavedTime(restoredSavedAt)}` }
     : { status: "idle", message: "" });
@@ -158,7 +163,8 @@ export function App({ restoredSavedAt = null }: DirectorAppProps = {}) {
               <button className={`toggle-button ${showJointHandles ? "active" : ""}`} type="button" aria-pressed={showJointHandles} onClick={toggleJointHandles}>关节控制点</button>
               <button className={`toggle-button ${fullscreenActive ? "active" : ""}`} type="button" aria-pressed={fullscreenActive} onClick={toggleFullscreen}>{fullscreenActive ? "退出全屏" : "全屏"}</button>
             </div>
-            <HumanoidStage recordingVideo={recordingVideo} />
+            {activeDesignPreview && <p className="design-preview-banner" role="status">设计预览 · 尚未应用，退出预览可恢复原场景。</p>}
+            <div className={activeDesignPreview ? "design-preview-stage" : undefined}><HumanoidStage recordingVideo={recordingVideo} preview={activeDesignPreview} /></div>
             <p className="sr-only" role="status" aria-live="polite" aria-atomic="true">
               {selectedSceneObject ? `当前选择物体 ${selectedSceneObject.label}；${selectedSceneObject.visible ? "可见" : "已隐藏"}，${selectedSceneObject.locked ? "已锁定" : "可编辑"}。` : selectedCharacter ? `已选择 ${selectedCharacterIds.length} 个人物，当前为 ${selectedCharacter.label}；${selectedCharacter.visible ? "可见" : "已隐藏"}，${selectedCharacter.locked ? "已锁定，编辑不可用" : "未锁定，可编辑"}。` : "当前场景没有人物，可从添加对象开始。"}撤销 {undoDepth > 0 ? "可用" : "不可用"}，重做 {redoDepth > 0 ? "可用" : "不可用"}。
             </p>
@@ -169,10 +175,12 @@ export function App({ restoredSavedAt = null }: DirectorAppProps = {}) {
               <span><strong>单位：</strong>米 / 度</span>
             </div>
             </section>
-            <TemporalToolsInspector />
+            <DesignAssistantPanel onPreview={setDesignPreview} previewing={activeDesignPreview !== null} disabled={recordingVideo} />
+            {activeDesignPreview && <p role="status">设计预览期间暂不可导出参考图或提交深度；请先应用或退出预览。</p>}
+            <div hidden={activeDesignPreview !== null}><TemporalToolsInspector /></div>
           </div>
           <section className="timeline-dock" aria-label="底部时间轴">
-            <TimelinePanel recordingVideo={recordingVideo} setRecordingVideo={setRecordingVideo} />
+            <div hidden={activeDesignPreview !== null}><TimelinePanel suspended={activeDesignPreview !== null} recordingVideo={recordingVideo} setRecordingVideo={setRecordingVideo} /></div>
           </section>
         </div>
         <div className={`inspector-column ${viewMode === "camera" ? "camera-inspector-column" : ""} ${inspectorExpanded ? "" : "panel-collapsed"}`} aria-label="属性配置">
@@ -186,7 +194,8 @@ export function App({ restoredSavedAt = null }: DirectorAppProps = {}) {
               onToggle={() => setInspectorExpanded((value) => !value)}
             />
           </div>
-          <div id="inspector-column-content" hidden={!inspectorExpanded}>
+          {activeDesignPreview && <p role="status">正在查看候选设计。应用或退出预览后可编辑属性。</p>}
+          <div id="inspector-column-content" hidden={!inspectorExpanded || activeDesignPreview !== null}>
             {viewMode === "camera" ? <CameraToolsInspector /> : selectedSceneObjectId ? <SceneObjectInspector /> : selectedCharacter ? <JointInspector /> : <aside className="inspector-panel"><h2>空场景</h2><p>从左侧添加人物或道具后继续布置。</p></aside>}
           </div>
         </div>
@@ -194,8 +203,7 @@ export function App({ restoredSavedAt = null }: DirectorAppProps = {}) {
 
       <footer className="command-bar">
         <div><p className="kicker">Browser core</p><strong>场景保存在本机；深度任务由 iFrame 后端执行</strong></div>
-        <label><span className="sr-only">导演指令</span><input disabled placeholder="例如：角色 A 举起右手，镜头改为近景并前推" /></label>
-        <button type="button" disabled>预览计划</button>
+        <button type="button" onClick={() => { const input = document.getElementById("director-design-prompt"); input?.scrollIntoView?.({ block: "center", behavior: "smooth" }); input?.focus(); }}>输入设计要求</button>
       </footer>
     </div>
   );
