@@ -958,3 +958,14 @@
 .director3d-root .blocking-reference-actions a { display: inline-flex; align-items: center; min-height: 40px; padding: 6px 10px; border: 1px solid var(--border); border-radius: 7px; color: var(--text); text-decoration: none; }
 .director3d-root .blocking-reference-actions :is(button, a):focus-visible { outline: 2px solid var(--text); outline-offset: 3px; }
 .director3d-root .blocking-reference-actions button:disabled { opacity: .55; cursor: wait; }
+
+.director3d-root .design-assistant { display: grid; gap: 10px; padding: 16px; border: 1px solid var(--border); border-radius: 10px; background: var(--panel); }
+.director3d-root .design-assistant form { display: grid; gap: 8px; }
+.director3d-root .design-assistant textarea { width: 100%; min-height: 90px; padding: 10px; resize: vertical; color: var(--text); background: rgba(255,255,255,.04); border: 1px solid var(--border); border-radius: 7px; font: inherit; }
+.director3d-root .design-assistant :is(p, small, li) { overflow-wrap: anywhere; }
+.director3d-root .design-assistant small { color: var(--muted); }
+.director3d-root .design-proposal { padding: 12px; border: 1px solid var(--border); border-radius: 8px; display: grid; gap: 8px; }
+.director3d-root .design-preview-stage { pointer-events: none; }
+.director3d-root .design-preview-banner { padding: 10px; border: 1px solid var(--border); border-radius: 7px; color: var(--text); }
+
+.director3d-root .design-assistant :is(button, textarea):focus-visible { outline: 2px solid var(--primary); outline-offset: 3px; }

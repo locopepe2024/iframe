@@ -1,3 +1,4 @@
+import { compileDesignProposal, type DesignProposal } from "../design/design-proposal";
 import { create } from "zustand";
 import type { DirectorBlockingTemplateId } from "../types";
 
@@ -803,6 +804,7 @@ export interface WorkbenchState {
   undoStack: AuthoringSnapshot[];
   redoStack: AuthoringSnapshot[];
   unsavedChanges: boolean;
+  applyDesignProposal: (proposal: DesignProposal) => void;
   markExplicitlySaved: () => void;
   showJointHandles: boolean;
   showInternalBones: boolean;
@@ -1217,6 +1219,10 @@ export const useWorkbenchStore = create<WorkbenchState>((set, get) => ({
   fullscreenActive: false,
   playheadFrame: 1,
   commandHistory: [],
+  applyDesignProposal: (proposal) => set((state) => {
+    const preview = compileDesignProposal(state, proposal);
+    return mutateScene(state, "design.proposal.apply", { characters: preview.characters, sceneObjects: preview.sceneObjects, cameras: preview.cameras });
+  }),
   undoStack: [],
   redoStack: [],
   unsavedChanges: false,
