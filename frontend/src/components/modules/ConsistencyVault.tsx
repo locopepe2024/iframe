@@ -1856,16 +1856,6 @@ function CharacterDetailModal({ asset, type, onClose, onUpdateDescription, onUpd
                         )}
                     </div>
 
-                    {/* Footer Actions */}
-                    <div className="p-6 border-t border-glass-border bg-surface flex gap-4">
-                        <button
-                            onClick={onClose}
-                            className="flex-1 py-3 bg-green-600 hover:bg-green-500 text-foreground rounded-xl font-bold flex items-center justify-center gap-2 shadow-lg shadow-green-500/20"
-                        >
-                            <Check size={18} />
-                            Done
-                        </button>
-                    </div>
                 </div>} preview={<div className="flex min-h-[360px] flex-1 flex-col p-4 lg:min-h-0">
 
                         {activeTab === "image" ? (
