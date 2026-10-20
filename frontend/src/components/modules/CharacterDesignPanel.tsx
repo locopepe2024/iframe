@@ -8,7 +8,7 @@ import type { DictionaryConfiguration } from "@/lib/characterDictionaryPresets";
 import CharacterPromptDictionary from "./CharacterPromptDictionary";
 
 export default function CharacterDesignPanel({ description, details, onDetailsChange, result, onResultChange,
-    identityFields, lookFields, onFieldsChange, onDictionaryFields, onDictionaryConfiguration, constraints, onConstraintsChange, supplemental, onSupplementalChange, reviewItems, models, model, onModelChange, busy, saving, canSave, error, status, onSubmit, onSave, onConfirm,
+    identityFields, lookFields, onFieldsChange, onDictionaryFields, onDictionaryConfiguration, constraints, onConstraintsChange, supplemental, onSupplementalChange, reviewItems, models, model, onModelChange, busy, saving, canSave, canReedit, error, status, tab, onTabChange, onSubmit, onSave, onReedit,
 }: {
     description: string; details: string; onDetailsChange: (value: string) => void;
     result: string | null; onResultChange: (value: string) => void;
@@ -20,14 +20,28 @@ export default function CharacterDesignPanel({ description, details, onDetailsCh
     constraints: CharacterConstraints; onConstraintsChange: (value: CharacterConstraints) => void;
     reviewItems: string[];
     models: ChatModel[]; model: string; onModelChange: (value: string) => void;
-    busy: boolean; saving: boolean; canSave: boolean; error: string; status: string;
-    onSubmit: () => void; onSave: () => void; onConfirm: () => void;
+    busy: boolean; saving: boolean; canSave: boolean; canReedit: boolean; error: string; status: string;
+    tab: "design" | "ai"; onTabChange: (tab: "design" | "ai") => void;
+    onSubmit: () => void; onSave: () => void; onReedit: () => void;
 }) {
     const [showFields, setShowFields] = useState(false);
     const [slash, setSlash] = useState<PromptSlashSuggestion | null>(null);
     const [openSlashRequest, setOpenSlashRequest] = useState(0);
     const keyHandler = useRef<((event: KeyboardEvent) => boolean) | null>(null);
     return <section id="character-design-dossier" aria-label="角色设计" className="space-y-3 p-4">
+        <div role="tablist" aria-label="角色设计编辑" className="sticky top-0 z-10 flex gap-2 border-b border-glass-border bg-surface pb-2">
+            {([['design', '角色设计'], ['ai', 'AI 优化']] as const).map(([id, label]) => <button
+                key={id} id={`character-design-tab-${id}`} type="button" role="tab" aria-selected={tab === id}
+                aria-controls={`character-design-panel-${id}`} tabIndex={tab === id ? 0 : -1}
+                onClick={() => onTabChange(id)} onKeyDown={event => {
+                    if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
+                    event.preventDefault();
+                    const next = event.key === 'Home' ? 'design' : event.key === 'End' ? 'ai' : tab === 'design' ? 'ai' : 'design';
+                    onTabChange(next);
+                    document.getElementById(`character-design-tab-${next}`)?.focus();
+                }} className={`min-h-11 flex-1 rounded px-3 text-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary ${tab === id ? 'bg-primary/15 text-primary' : 'text-text-secondary hover:bg-hover-bg'}`}>{label}</button>)}
+        </div>
+        <div id="character-design-panel-design" role="tabpanel" aria-labelledby="character-design-tab-design" hidden={tab !== 'design'} className="space-y-3">
         <div className="rounded border border-glass-border p-3">
             <h4 className="text-xs font-medium text-foreground">角色描述 · 设计依据</h4>
             <p className="mt-2 whitespace-pre-wrap break-words text-sm leading-6 text-text-secondary">{description || "暂无角色描述"}</p>
@@ -35,13 +49,13 @@ export default function CharacterDesignPanel({ description, details, onDetailsCh
         </div>
         <div>
             <div className="flex flex-wrap items-center justify-between gap-2">
-                <span className="text-xs text-text-secondary">角色细节</span>
+                <span className="text-xs text-text-secondary">角色设计</span>
                 <button type="button" disabled={saving} onClick={() => setOpenSlashRequest(value => value + 1)} className="min-h-11 rounded border border-glass-border px-3 text-xs hover:bg-hover-bg focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary">面板与模板</button>
             </div>
-            <p className="mb-2 text-[11px] text-text-muted">已带入当前 Prompt，可继续调整词典细节和 [] 内容后提交。</p>
+            <p className="mb-2 text-[11px] text-text-muted">选择词典或编辑设计后提交 AI 完善，也可直接保存。</p>
             <div className="relative min-h-36 rounded border border-glass-border p-2">
                 <ReferencePromptEditor value={details} onChange={onDetailsChange} candidates={[]} expanded editable={!saving}
-                    placeholder="角色细节，/ 选择词典，[] 调整细节" openSlashRequest={openSlashRequest}
+                    placeholder="角色设计，/ 选择词典，[] 调整细节" openSlashRequest={openSlashRequest}
                     allowImplicitMentions={false} onSlashChange={setSlash}
                     onSlashKeyDown={event => keyHandler.current?.(event) || false} />
                 {slash && <CharacterPromptDictionary suggestion={slash} onClose={() => setSlash(null)}
@@ -73,7 +87,7 @@ export default function CharacterDesignPanel({ description, details, onDetailsCh
         </div>
         <fieldset disabled={saving || busy} className="min-w-0 rounded border border-glass-border p-3">
             <legend className="px-1 text-xs font-medium">设计约束</legend>
-            <p className="mb-2 text-[11px] text-text-muted">角色一致性约束：必须保留的特征与需要排除的内容。确认设计后随角色保存，应用设计时带入出图提示词。</p>
+            <p className="mb-2 text-[11px] text-text-muted">角色一致性约束：必须保留的特征与需要排除的内容。保存后随角色生效，并带入出图提示词。</p>
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 {([['must_keep', '必须保留'], ['negative_prompt', '负面提示词']] as const).map(([key, label]) =>
                     <label key={key} className="min-w-0 text-xs text-text-secondary">{label}
@@ -92,10 +106,12 @@ export default function CharacterDesignPanel({ description, details, onDetailsCh
         </select>
         <button type="button" onClick={onSubmit} disabled={!model || !description.trim() || busy || saving || details.length > 8000}
             className="min-h-11 w-full rounded bg-primary px-3 text-sm text-primary-foreground hover:opacity-90 disabled:opacity-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary">{busy ? "完善中…" : "提交 AI 完善"}</button>
-        {details.length > 8000 && <p role="alert" className="text-xs text-red-400">角色细节不能超过 8000 字，请精简后提交。</p>}
+        {details.length > 8000 && <p role="alert" className="text-xs text-red-400">角色设计不能超过 8000 字，请精简后提交。</p>}
+        </div>
+        <div id="character-design-panel-ai" role="tabpanel" aria-labelledby="character-design-tab-ai" hidden={tab !== 'ai'} className="space-y-3">
         {error && <p role="alert" className="text-xs text-red-400">{error}</p>}
         {result !== null && <div>
-            <label htmlFor="character-design-result" className="text-xs font-medium text-foreground">角色提示词 · 检查后保存或确认</label>
+            <label htmlFor="character-design-result" className="sr-only">AI 优化</label>
             <textarea id="character-design-result" disabled={saving} value={result} onChange={event => onResultChange(event.target.value)} rows={10}
                 className="mt-2 w-full resize-y rounded border border-glass-border bg-surface p-3 text-sm leading-6 text-foreground focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary" />
         </div>}
@@ -103,12 +119,15 @@ export default function CharacterDesignPanel({ description, details, onDetailsCh
             <p className="font-medium">提示词核对事项</p>
             {reviewItems.map(item => <p key={item} className="mt-1">{item}</p>)}
         </div>}
+        {result === null && <p className="py-4 text-sm text-text-muted">{busy ? '正在完善角色设计…' : '提交 AI 完善后，在此检查和编辑结果。'}</p>}
+        </div>
+        {error && tab === 'design' && <p role="alert" className="text-xs text-red-400">{error}</p>}
         <p role="status" className="text-xs text-text-muted">{status}</p>
-        <div className="flex gap-2">
-            <button type="button" disabled={!canSave || saving || busy} onClick={onSave}
-                className="min-h-11 flex-1 rounded border border-glass-border px-3 text-sm hover:bg-hover-bg disabled:opacity-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary">保存草稿</button>
-            <button type="button" disabled={!canSave || saving || busy || !(result ?? details).trim()} onClick={onConfirm}
-                className="min-h-11 flex-1 rounded bg-primary px-3 text-sm text-primary-foreground hover:opacity-90 disabled:opacity-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary">确认设计</button>
+        <div className="sticky bottom-0 flex gap-2 bg-surface py-2">
+            <button type="button" disabled={!canSave || saving || busy || !(result ?? details).trim()} onClick={onSave}
+                className="min-h-11 flex-1 rounded bg-primary px-3 text-sm text-primary-foreground hover:opacity-90 disabled:opacity-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary">{saving ? "保存中…" : "保存设计"}</button>
+            <button type="button" disabled={saving || busy || !canReedit} onClick={onReedit}
+                className="min-h-11 flex-1 rounded border border-glass-border px-3 text-sm hover:bg-hover-bg disabled:opacity-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary">重新编辑</button>
         </div>
     </section>;
 }

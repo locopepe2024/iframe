@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useMemo, useRef, useId, useCallback } from "react";
 import { useTranslations } from "next-intl";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion } from "framer-motion";
 import { X, RefreshCw, Check, Image as ImageIcon, Lock, ChevronRight, ChevronDown, Video, Sparkles, Search } from "lucide-react";
 import { agentRequest, api, type AssetImageReviewRequest, type AssetLibraryReference, type AssetReferenceIndexEntry, type ChatModel, type CharacterAssetPackView } from "@/lib/api";
 
@@ -676,6 +676,11 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
         [...Object.values(designFieldAnswers), ...designScopeDescription(designRoute, designAgeStage), styleNotes],
     )), designConstraintText].filter(Boolean).join("\n");
 
+    const [designTab, setDesignTab] = useState<"design" | "ai">("design");
+    const savedDesignText = useRef(designResult ?? designInput);
+    const savedDesignSnapshot = useRef<DesignDraft>(savedDesign);
+    const [hasSavedDesign, setHasSavedDesign] = useState(!!asset.character_design);
+
     const applyDesignToPrompts = () => {
         const previousNegative = appliedDesignNegative.current;
         setNegativePrompt(current => Array.from(new Set([
@@ -763,6 +768,7 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
             );
             setDesignSkillRevision(result.skill_revision);
             setDesignStatus("draft");
+            setDesignTab("ai");
             setPromptsNeedDesignApply(true);
         } catch (error) {
             if (source === characterDesignSourceRef.current) setDesignError(error instanceof Error ? error.message : "完善角色设计失败，请重试。");
@@ -771,14 +777,14 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
         }
     };
 
-    const saveDesignDraft = async (confirmed: boolean) => {
+    const saveDesign = async () => {
         if (!onUpdateAttributes || savingDesign) return;
         if ([normalizedConstraints.must_keep, normalizedConstraints.negative_prompt].some(items => items.length > 20 || items.some(item => item.length > 500))) {
             setDesignError("每类设计约束最多 20 项，每项最多 500 字。");
             return;
         }
-        if (confirmed && !(designResult ?? designInput).trim()) {
-            setDesignError("请先填写具体的角色视觉值，再确认设计。 ");
+        if (!(designResult ?? designInput).trim()) {
+            setDesignError("请先填写具体的角色视觉值，再保存设计。 ");
             return;
         }
         const unanswered = designUnresolved.filter((question) => !designFieldAnswers[question]?.trim());
@@ -806,7 +812,7 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
             skill_id: "character-style-routes",
             skill_revision: designSkillRevision || undefined,
             preset_selections: presetSelections,
-            confirmed,
+            confirmed: true,
         };
         setSavingDesign(true);
         setDesignError("");
@@ -820,21 +826,18 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
                 setDesignRoute(""); setDesignAgeStage(""); setStyleNotes("");
             }
             setDesignUnresolved(draft.unresolved || []);
-            setDesignStatus(confirmed ? "confirmed" : "draft");
-            if (confirmed) {
-                setDesignRevision((revision) => revision + 1);
-                applyDesignToPrompts();
-            } else {
-                setPromptsNeedDesignApply(true);
-            }
+            savedDesignText.current = designResult ?? designInput;
+            savedDesignSnapshot.current = draft;
+            setHasSavedDesign(true);
+            setDesignStatus("confirmed");
+            setDesignRevision((revision) => revision + 1);
+            applyDesignToPrompts();
         } catch (error) {
             setDesignError(error instanceof Error ? error.message : "保存视觉设计失败，请重试。");
         } finally {
             setSavingDesign(false);
         }
     };
-    // Art Direction Style expanded state (collapsed by default to save space)
-    const [showStyleExpanded, setShowStyleExpanded] = useState(false);
     // Get the uploaded image URL for reverse generation reference
     const getUploadedReferenceUrl = () => {
         if (hasUploadedThreeViews) {
@@ -1148,11 +1151,45 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
             setDesignSource("stated"); setDesignStatus("draft"); setPromptsNeedDesignApply(true);
         }}
         models={designModels} model={designModel} onModelChange={setDesignModel}
-        busy={designing} saving={savingDesign} canSave={!!onUpdateAttributes} error={designError}
-        status={designStatus === "confirmed" ? `已确认 r${designRevision}` : "草稿 · 确认前不会创建角色设计版本"}
-        onSubmit={() => void generateDesignDraft()} onSave={() => void saveDesignDraft(false)}
-        onConfirm={() => void saveDesignDraft(true)}
+        busy={designing} saving={savingDesign} canSave={!!onUpdateAttributes} canReedit={hasSavedDesign} error={designError}
+        status={designStatus === "confirmed" ? "已保存 · 当前设计已生效" : hasSavedDesign ? "已保存的设计有修改 · 保存后生效" : "尚未保存"}
+        tab={designTab} onTabChange={setDesignTab}
+        onSubmit={() => void generateDesignDraft()} onSave={() => void saveDesign()}
+        onReedit={() => {
+            const snapshot = savedDesignSnapshot.current;
+            setDesignInput(savedDesignText.current); setDesignResult(savedDesignText.current);
+            setIdentityFeatures(normalizeCharacterFeatures(snapshot.identity?.features, IDENTITY_FIELDS.map(([key]) => key)));
+            setLookFeatures(normalizeCharacterFeatures(snapshot.look?.features, LOOK_FIELDS.map(([key]) => key)));
+            setDesignNotes(String(snapshot.identity?.visual_notes || "")); setLookNotes(String(snapshot.look?.visual_notes || ""));
+            setIdentityEditorMode(snapshot.identity?.editor_mode || "notes"); setLookEditorMode(snapshot.look?.editor_mode || "notes");
+            setSupplementalPrompt(snapshot.supplemental_prompt || "");
+            setDesignRoute(snapshot.route || ""); setDesignAgeStage(snapshot.age_stage || ""); setStyleNotes(snapshot.style_notes || "");
+            setDesignConstraints(normalizeCharacterConstraints(snapshot.constraints));
+            setDictionaryConfigurations(snapshot.dictionary_configurations || []);
+            setDesignIdentityBasis(normalizeDesignBasis(snapshot.identity?.basis));
+            setDesignLookBasis(normalizeDesignBasis(snapshot.look?.basis));
+            setDesignFieldSuggestions(snapshot.field_suggestions || {});
+            setDesignFieldSuggestionChoices(snapshot.field_suggestion_choices || {});
+            setDesignSkillRevision(snapshot.skill_revision || ""); setPresetSelections(snapshot.preset_selections || []);
+            setDesignSource(snapshot.field_status?.visual_notes === "creative-choice" ? "creative-choice" : "stated");
+            setDesignUnresolved(snapshot.unresolved || []); setDesignFieldAnswers(snapshot.field_answers || {});
+            setDesignTab("design"); setDesignStatus("draft");
+            setPromptsNeedDesignApply(false);
+        }}
     />;
+
+    const imageSettings = <div className="space-y-3 px-4 pb-4">
+        <label className="block text-xs text-text-secondary" htmlFor="character-image-negative">出图负面提示词</label>
+        <textarea id="character-image-negative" value={negativePrompt} onChange={event => setNegativePrompt(event.target.value)} rows={3}
+            placeholder="Enter your negative prompt (avoid unwanted elements)..."
+            className="w-full rounded border border-glass-border bg-surface p-2 text-sm text-foreground" />
+        {(stylePrompt || styleNegativePrompt) && <button type="button" onClick={() => {
+            if (activePanel === "full_body") setFullBodyPrompt(current => includeVisibleStyle(current, stylePrompt));
+            if (activePanel === "three_view") setThreeViewPrompt(current => includeVisibleStyle(current, stylePrompt));
+            if (activePanel === "headshot") setHeadshotPrompt(current => includeVisibleStyle(current, stylePrompt));
+            setNegativePrompt(current => includeVisibleStyle(current, styleNegativePrompt));
+        }} className="min-h-11 rounded border border-glass-border px-3 text-xs text-text-secondary">{tc("copyStyleToPrompt")}</button>}
+    </div>;
 
     return (
         <div className="absolute inset-0 z-50 flex items-center justify-center bg-overlay backdrop-blur-md">
@@ -1263,6 +1300,7 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
                         previewLocator={characterPreviewLocator}
                         hideTitle
                         designEditor={designEditor}
+                        imageSettings={imageSettings}
                         title={tc("masterAsset")}
                         isActive={activePanel === "full_body"}
                         onClick={() => setActivePanel("full_body")}
@@ -1324,6 +1362,7 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
                         previewLocator={characterPreviewLocator}
                         hideTitle
                         designEditor={designEditor}
+                        imageSettings={imageSettings}
                         title={tc("threeViews")}
                         isActive={activePanel === "three_view"}
                         onClick={() => setActivePanel("three_view")}
@@ -1366,6 +1405,7 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
                         previewLocator={characterPreviewLocator}
                         hideTitle
                         designEditor={designEditor}
+                        imageSettings={imageSettings}
                         title={tc("avatar")}
                         isActive={activePanel === "headshot"}
                         onClick={() => setActivePanel("headshot")}
@@ -1420,91 +1460,7 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
                     </div>
                 </div>
 
-                <details className="shrink-0 border-t border-glass-border bg-surface">
-                    <summary className="flex min-h-11 cursor-pointer items-center px-4 text-sm font-medium text-text-secondary hover:text-foreground sm:px-6">出图设置</summary>
-                    <div className="max-h-[30vh] overflow-y-auto">
-                {/* Footer: Negative Prompt & Art Direction Settings */}
-                <div className="border-t border-glass-border bg-surface flex flex-col">
-                    {/* Top Row: User's Negative Prompt + Apply Style Toggle */}
-                    <div className="px-6 py-3 flex items-start gap-4">
-                        {/* User's Negative Prompt (Editable) */}
-                        <div className="flex-1">
-                            <label htmlFor="character-image-negative" className="text-xs font-medium text-text-secondary mb-2 block">出图负面提示词</label>
-                            <p className="mb-2 text-[11px] text-text-muted">应用角色设计时带入负面约束；此处调整用于出图，不改写角色设计。</p>
-                            <textarea
-                                id="character-image-negative" value={negativePrompt}
-                                onChange={(e) => setNegativePrompt(e.target.value)}
-                                className="w-full h-16 bg-input-bg border border-glass-border rounded-lg p-3 text-xs text-text-secondary resize-none focus:outline-none focus:border-primary/50 font-mono"
-                                placeholder="Enter your negative prompt (avoid unwanted elements)..."
-                            />
-                        </div>
 
-                        {/* Copy style into the editable prompts before submitting. */}
-                        {(stylePrompt || styleNegativePrompt) && <div className="pt-6">
-                            <div className="flex items-center gap-2 bg-surface px-4 py-2 rounded-lg border border-glass-border">
-                                <button type="button" disabled={activePanel === "video" || (!stylePrompt && !styleNegativePrompt)} onClick={() => {
-                                    if (activePanel === "full_body") setFullBodyPrompt((current) => includeVisibleStyle(current, stylePrompt));
-                                    if (activePanel === "three_view") setThreeViewPrompt((current) => includeVisibleStyle(current, stylePrompt));
-                                    if (activePanel === "headshot") setHeadshotPrompt((current) => includeVisibleStyle(current, stylePrompt));
-                                    setNegativePrompt((current) => includeVisibleStyle(current, styleNegativePrompt));
-                                }} className="text-xs font-bold text-text-secondary disabled:opacity-40">
-                                    {tc("copyStyleToPrompt")}
-                                </button>
-                            </div>
-                        </div>}
-                    </div>
-
-                    {/* Optional style source; generation uses only the edited prompt fields. */}
-                    {(stylePrompt || styleNegativePrompt) && (
-                        <div className="border-t border-border-subtle">
-                            <button
-                                onClick={() => setShowStyleExpanded(!showStyleExpanded)}
-                                className="w-full px-6 py-2 flex items-center justify-between hover:bg-glass transition-colors"
-                            >
-                                <div className="flex items-center gap-2">
-                                    <div className="w-2 h-2 rounded-full bg-gradient-to-r from-purple-500 to-blue-500" />
-                                    <span className="text-xs font-bold text-text-secondary uppercase">项目风格参考</span>
-                                </div>
-                                <ChevronRight size={14} className={`text-text-muted transform transition-transform ${showStyleExpanded ? 'rotate-90' : ''}`} />
-                            </button>
-
-                            <AnimatePresence>
-                                {showStyleExpanded && (
-                                    <motion.div
-                                        initial={{ height: 0, opacity: 0 }}
-                                        animate={{ height: "auto", opacity: 1 }}
-                                        exit={{ height: 0, opacity: 0 }}
-                                        className="overflow-hidden"
-                                    >
-                                        <div className="px-6 pb-4">
-                                            <div className="bg-gradient-to-r from-purple-500/10 to-blue-500/10 border border-glass-border rounded-lg p-4">
-                                                {stylePrompt && (
-                                                    <div className="mb-3">
-                                                        <span className="text-xs font-bold text-green-400 block mb-1">风格提示词</span>
-                                                        <p className="text-xs text-text-secondary font-mono bg-surface p-2 rounded border border-border-subtle leading-relaxed">
-                                                            {stylePrompt}
-                                                        </p>
-                                                    </div>
-                                                )}
-
-                                                {styleNegativePrompt && (
-                                                    <div>
-                                                        <span className="text-xs font-bold text-red-400 block mb-1">风格负面提示词</span>
-                                                        <p className="text-xs text-text-secondary font-mono bg-surface p-2 rounded border border-border-subtle leading-relaxed">
-                                                            {styleNegativePrompt}
-                                                        </p>
-                                                    </div>
-                                                )}
-                                            </div>
-                                        </div>
-                                    </motion.div>
-                                )}
-                            </AnimatePresence>
-                        </div>
-                    )}
-                </div>
-                    </div>
-                </details>
             </motion.div>
             {pendingImageReview && currentProject?.id && <AssetImageSubmissionReview
                 projectId={currentProject.id}
@@ -1599,6 +1555,7 @@ export function WorkbenchPanel({
     description,
     hideTitle = false,
     designEditor,
+    imageSettings,
     aspectRatio = "9:16",
     // Video specific
     isVideo = false,
@@ -1978,6 +1935,7 @@ export function WorkbenchPanel({
                         </div>
                     )}
                 </div>
+                {imageSettings}
                 </div>}
             </div>
             </div>
