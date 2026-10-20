@@ -366,6 +366,7 @@ class ScenePromptSource(BaseModel):
 
 class ScenePromptWorkspace(BaseModel):
     model_config = {"extra": "forbid"}
+    active_source: Optional[Literal["design", "ai"]] = None
     settings_pending: bool = Field(default=False, strict=True)
     design: ScenePromptSource
     ai: ScenePromptSource

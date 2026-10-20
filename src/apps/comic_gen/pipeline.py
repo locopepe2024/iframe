@@ -2830,6 +2830,9 @@ class ComicGenPipeline(StudioOwnerMixin):
                 # Validate before mutating the asset. This is editor state, never
                 # an implicit replacement for the reviewed generation prompt.
                 workspace = ScenePromptWorkspace.model_validate(design["prompt_workspace"])
+                if design.get("confirmed") and workspace.active_source is not None:
+                    if not getattr(workspace, workspace.active_source).prompt.strip():
+                        raise ValueError("Selected scene design source must contain a prompt")
                 design = {**design, "prompt_workspace": workspace.model_dump(exclude_unset=True)}
             for field in scene_fields - {"local_lighting", "visual_constraints", "prompt_workspace"}:
                 value = design.get(field, "")
@@ -2866,9 +2869,14 @@ class ComicGenPipeline(StudioOwnerMixin):
             record["design_draft"] = design
             revisions = list(record.get("design_revisions") or [])
             if design.get("confirmed"):
+                confirmed_design = {key: value for key, value in design.items() if key not in {"confirmed", "prompt_workspace"}}
+                prompt_workspace = design.get("prompt_workspace", {})
+                active_source = prompt_workspace.get("active_source")
+                if active_source:
+                    confirmed_design["visual_notes"] = prompt_workspace[active_source]["prompt"].strip()
                 revisions.append({
                     "revision": len(revisions) + 1,
-                    "design": {key: value for key, value in design.items() if key not in {"confirmed", "prompt_workspace"}},
+                    "design": confirmed_design,
                 })
             record["design_revisions"] = revisions
             target_asset.asset_design = record

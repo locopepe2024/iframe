@@ -78,6 +78,32 @@ def test_scene_prompt_sources_roundtrip_without_overwriting_description(tmp_path
     assert "prompt_workspace" not in saved.asset_design["design_revisions"][0]["design"]
 
 
+@pytest.mark.parametrize("source", ["design", "ai"])
+def test_scene_confirms_the_explicitly_selected_prompt_source(tmp_path, source):
+    pipeline, scene, _ = make_pipeline(tmp_path)
+    workspace = {"active_source": source,
+                 "design": {"prompt": "Original street"}, "ai": {"prompt": "AI street"}}
+    pipeline.update_asset_attributes("project", "street", "scene", {"asset_design": {
+        "visual_notes": "Editable panel notes", "prompt_workspace": workspace, "confirmed": True,
+    }})
+    assert scene.asset_design["design_draft"]["visual_notes"] == "Editable panel notes"
+    confirmed = scene.asset_design["design_revisions"][-1]["design"]
+    assert confirmed["visual_notes"] == workspace[source]["prompt"]
+    assert "prompt_workspace" not in confirmed
+    assert scene.description == "A market street"
+
+
+def test_scene_cannot_confirm_an_empty_selected_ai_source(tmp_path):
+    pipeline, scene, _ = make_pipeline(tmp_path)
+    with pytest.raises(ValueError, match="Selected scene design source"):
+        pipeline.update_asset_attributes("project", "street", "scene", {"asset_design": {
+            "visual_notes": "Panel notes", "confirmed": True, "prompt_workspace": {
+                "active_source": "ai", "design": {"prompt": "Original"}, "ai": {"prompt": " "},
+            },
+        }})
+    assert scene.asset_design == {"design_draft": {}, "design_revisions": []}
+
+
 @pytest.mark.parametrize("workspace", [
     {"design": {"prompt": "original"}},
     {"design": {"prompt": 4}, "ai": {"prompt": "AI"}},
