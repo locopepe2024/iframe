@@ -19,17 +19,18 @@ from ..studio_access import studio_media_dir, studio_uniart_config, studio_nsfw_
 
 logger = get_logger(__name__)
 
-def cleanup_old_variants(image_asset: ImageAsset) -> None:
+def cleanup_old_variants(image_asset: ImageAsset, protected_ids: set[str] | None = None) -> None:
     """
     Enforce variant limit: keep at most MAX_VARIANTS_PER_ASSET non-favorited variants.
-    Favorited variants are never removed.
+    Favorited and explicitly referenced variants are never removed.
     When over limit, remove oldest non-favorited variants first.
     """
     if not image_asset or not image_asset.variants:
         return
     
-    favorited = [v for v in image_asset.variants if v.is_favorited]
-    non_favorited = [v for v in image_asset.variants if not v.is_favorited]
+    protected_ids = protected_ids or set()
+    favorited = [v for v in image_asset.variants if v.is_favorited or v.id in protected_ids]
+    non_favorited = [v for v in image_asset.variants if not v.is_favorited and v.id not in protected_ids]
     
     # Sort non-favorited by created_at (oldest first)
     non_favorited.sort(key=lambda v: v.created_at)
@@ -422,7 +423,10 @@ class AssetGenerator:
                         character.full_body_asset.variants.insert(0, variant) # Prepend new variants
                         
                         # Cleanup old variants (keep max 10 non-favorited)
-                        cleanup_old_variants(character.full_body_asset)
+                        cleanup_old_variants(character.full_body_asset, {
+                            *(item.variant_id for item in (character.asset_pack.revisions if character.asset_pack else [])),
+                            character.cover_variant_id,
+                        })
                         
                         # Auto-select if it's the first one or we want to update the view
                         if not character.full_body_asset.selected_id or batch_size == 1:
@@ -605,7 +609,10 @@ class AssetGenerator:
                         character.three_view_asset.variants.insert(0, variant)
                         
                         # Cleanup old variants (keep max 10 non-favorited)
-                        cleanup_old_variants(character.three_view_asset)
+                        cleanup_old_variants(character.three_view_asset, {
+                            *(item.variant_id for item in (character.asset_pack.revisions if character.asset_pack else [])),
+                            character.cover_variant_id,
+                        })
                         
                         if not character.three_view_asset.selected_id or batch_size == 1:
                             character.three_view_asset.selected_id = variant_id
@@ -692,7 +699,10 @@ class AssetGenerator:
                         character.headshot_asset.variants.insert(0, variant)
                         
                         # Cleanup old variants (keep max 10 non-favorited)
-                        cleanup_old_variants(character.headshot_asset)
+                        cleanup_old_variants(character.headshot_asset, {
+                            *(item.variant_id for item in (character.asset_pack.revisions if character.asset_pack else [])),
+                            character.cover_variant_id,
+                        })
                         
                         if not character.headshot_asset.selected_id or batch_size == 1:
                             character.headshot_asset.selected_id = variant_id

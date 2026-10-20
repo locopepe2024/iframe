@@ -9095,9 +9095,6 @@ class ComicGenPipeline(StudioOwnerMixin):
                 current_revision=new_revision,
                 revisions=[*(pack.revisions if pack else []), anchor],
             )
-            # Generation eviction must retain every confirmed anchor revision.
-            for item in variants:
-                item.is_favorited = True
             commit_asset_revision(character, "user_confirmed")
             self._save_after_asset_mutation(source)
             return self.get_project_character_asset_pack(script_id, character_id)
@@ -9623,47 +9620,32 @@ class ComicGenPipeline(StudioOwnerMixin):
             raise ValueError("Script not found")
         
         found = False
+        source = "script"
+        target_asset = None
+        if asset_type in ("character", "scene", "prop"):
+            target_asset, source = self._find_asset_with_source(script, asset_id, asset_type)
+            if target_asset is None:
+                raise ValueError(f"Asset {asset_id} of type {asset_type} not found")
         if asset_type == "character":
-            target_asset = next((c for c in script.characters if c.id == asset_id), None)
-            if target_asset:
-                if not is_favorited and target_asset.asset_pack and any(
-                    item.variant_id == variant_id for item in target_asset.asset_pack.revisions
-                ):
-                    raise ValueError("Confirmed character anchor must remain favorited")
-                if generation_type == "full_body":
-                    found = self._set_variant_favorite(target_asset.full_body_asset, variant_id, is_favorited)
-                elif generation_type == "reference_sheet":
-                    found = self._set_variant_favorite(target_asset.reference_sheet, variant_id, is_favorited)
-                elif generation_type == "three_view":
-                    found = self._set_variant_favorite(target_asset.three_view_asset, variant_id, is_favorited)
-                elif generation_type == "headshot":
-                    found = self._set_variant_favorite(target_asset.headshot_asset, variant_id, is_favorited)
-                else:
-                    # Try all character assets
-                    found = self._set_variant_favorite(target_asset.full_body_asset, variant_id, is_favorited) or \
-                            self._set_variant_favorite(target_asset.three_view_asset, variant_id, is_favorited) or \
-                            self._set_variant_favorite(target_asset.headshot_asset, variant_id, is_favorited)
-        
-        elif asset_type == "scene":
-            target_asset = next((s for s in script.scenes if s.id == asset_id), None)
-            if target_asset:
-                found = self._set_variant_favorite(target_asset.image_asset, variant_id, is_favorited)
-        
-        elif asset_type == "prop":
-            target_asset = next((p for p in script.props if p.id == asset_id), None)
-            if target_asset:
-                found = self._set_variant_favorite(target_asset.image_asset, variant_id, is_favorited)
-        
+            fields = {
+                "reference_sheet": "reference_sheet", "full_body": "full_body_asset",
+                "three_view": "three_view_asset", "headshot": "headshot_asset",
+            }
+            containers = [fields[generation_type]] if generation_type in fields else list(fields.values())
+            found = any(self._set_variant_favorite(getattr(target_asset, field, None), variant_id, is_favorited)
+                        for field in containers)
+        elif asset_type in ("scene", "prop"):
+            found = self._set_variant_favorite(target_asset.image_asset, variant_id, is_favorited)
         elif asset_type == "storyboard_frame":
             target_asset = next((f for f in script.frames if f.id == asset_id), None)
             if target_asset:
                 found = self._set_variant_favorite(target_asset.rendered_image_asset, variant_id, is_favorited) or \
                         self._set_variant_favorite(target_asset.image_asset, variant_id, is_favorited)
-        
+
         if not found:
             raise ValueError(f"Variant {variant_id} not found")
 
-        self._save_data()
+        self._save_after_asset_mutation(source)
         return script
 
     # ============================================================

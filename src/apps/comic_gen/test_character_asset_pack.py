@@ -53,7 +53,7 @@ def test_anchor_requires_review_and_preserves_versions():
     assert confirmed["pack"]["current_revision"] == 1
     assert confirmed["pack"]["revisions"][0]["source_design_revision"] == 1
     assert confirmed["pack"]["revisions"][0]["media_id"] == "media-front"
-    assert character.reference_sheet.image_variants[0].is_favorited
+    assert not character.reference_sheet.image_variants[0].is_favorited
     with pytest.raises(ValueError, match="revision changed"):
         pipeline.confirm_project_character_anchor("episode", "hero", "front", first["asset_revision"], 0, True)
 
@@ -114,3 +114,43 @@ def test_anchor_rejects_unconfirmed_design_and_unowned_asset():
         )
     with pytest.raises(ValueError, match="Project character not found"):
         pipeline.get_project_character_asset_pack("episode", "other")
+
+
+def test_anchor_favorite_can_be_cancelled_without_changing_reference_or_cover():
+    character = _character()
+    pipeline = _pipeline(_script(characters=[character]))
+    current = pipeline.get_project_character_asset_pack("episode", "hero")
+    pipeline.confirm_project_character_anchor("episode", "hero", "front", current["asset_revision"], 0, True)
+    pipeline.set_asset_cover_variant("episode", "hero", "character", "front")
+    pipeline.toggle_variant_favorite("episode", "hero", "character", "front", True)
+    pipeline.toggle_variant_favorite("episode", "hero", "character", "front", False)
+    assert not character.reference_sheet.image_variants[0].is_favorited
+    assert character.cover_variant_id == "front"
+    assert character.asset_pack.revisions[0].variant_id == "front"
+    with pytest.raises(ValueError, match="cannot be deleted"):
+        pipeline.delete_asset_variant("episode", "hero", "character", "front")
+
+
+def test_series_character_favorite_persists_to_series_owner():
+    character = _character()
+    series = Series(id="series", title="Series", owner_profile_id="owner", characters=[character], created_at=0, updated_at=0)
+    pipeline = _pipeline(_script(series_id="series"), series)
+    saved = []
+    pipeline._save_after_asset_mutation = saved.append
+    pipeline.toggle_variant_favorite("episode", "hero", "character", "front", True, "reference_sheet")
+    assert character.reference_sheet.image_variants[0].is_favorited
+    assert saved == ["series"]
+
+
+def test_automatic_cleanup_retains_unfavorited_anchor_and_cover():
+    from src.apps.comic_gen.assets import cleanup_old_variants
+    from src.apps.comic_gen.models import ImageAsset, MAX_VARIANTS_PER_ASSET
+
+    images = ImageAsset(variants=[
+        ImageVariant(id=str(index), url=f"{index}.webp", created_at=index)
+        for index in range(MAX_VARIANTS_PER_ASSET + 4)
+    ])
+    cleanup_old_variants(images, {"0", "1"})
+    assert {"0", "1"}.issubset({item.id for item in images.variants})
+    assert len(images.variants) == MAX_VARIANTS_PER_ASSET + 2
+    assert all(not item.is_favorited for item in images.variants)
