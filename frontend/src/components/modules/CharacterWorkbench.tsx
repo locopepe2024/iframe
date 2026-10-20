@@ -40,6 +40,7 @@ import type { DictionaryConfiguration } from "@/lib/characterDictionaryPresets";
 import { type CharacterPresetTarget } from "@/lib/characterQuickActions";
 import CharacterDesignPanel from "./CharacterDesignPanel";
 import CharacterPromptDictionary, { CharacterDictionaryHost } from "./CharacterPromptDictionary";
+import AssetWorkbenchLayout from "@/components/shared/AssetWorkbenchLayout";
 
 import type { AssetPlanEntry } from "@/lib/episodeAssetPlan";
 import EpisodeAssetPlanPanel from "./EpisodeAssetPlanPanel";
@@ -1809,8 +1810,11 @@ export function WorkbenchPanel({
             </div>}
 
             {/* Image Area with Variant Selector */}
-            <div className="flex-1 min-h-0 flex flex-col lg:flex-row-reverse">
-            <div ref={setDictionaryHost} data-testid="character-main-workspace" className="flex-1 min-h-0 min-w-0 relative bg-surface p-4 flex flex-col overflow-hidden group">
+            <AssetWorkbenchLayout controls={<>
+                {designEditor && !reviewEditorHost && imageReferenceControls}
+                {designEditor}
+                {designEditor ? reviewEditorHost && createPortal(imageEditor, reviewEditorHost) : imageEditor}
+            </>} preview={<div ref={setDictionaryHost} data-testid="character-main-workspace" className="flex-1 min-h-0 min-w-0 relative bg-surface p-4 flex flex-col overflow-hidden group">
 
                 {/* Locked Overlay */}
                 {isLocked && (
@@ -2012,14 +2016,7 @@ export function WorkbenchPanel({
                 )}
             </div>
 
-            {/* Task-specific generation inputs sit beside the image on wide screens. */}
-            <div className="min-h-[180px] max-h-[42%] shrink-0 border-t border-glass-border flex flex-col overflow-y-auto bg-surface lg:max-h-none lg:min-h-0 lg:w-[min(34%,440px)] lg:border-r lg:border-t-0">
-                {designEditor && !reviewEditorHost && imageReferenceControls}
-                {designEditor}
-                {designEditor ? reviewEditorHost && createPortal(imageEditor, reviewEditorHost) : imageEditor}
-
-            </div>
-            </div>
+            } />
         </div>
         </CharacterDictionaryHost.Provider>
     );

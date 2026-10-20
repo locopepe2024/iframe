@@ -32,6 +32,7 @@ import { SceneImageTools, type LightingReference, type SceneImageSource, type Sc
 import AssetCoverBadges from "./AssetCoverBadges";
 import { characterImageUrl } from "@/lib/characterImage";
 import AssetNameEditor from "../common/AssetNameEditor";
+import AssetWorkbenchLayout from "@/components/shared/AssetWorkbenchLayout";
 import AssetImageSubmissionReview from "@/components/shared/AssetImageSubmissionReview";
 import VideoPolishReview, { type VideoPolishMessages } from "./storyboard-r2v/VideoPolishReview";
 
@@ -1491,15 +1492,21 @@ function CharacterDetailModal({ asset, type, onClose, onUpdateDescription, onUpd
     };
 
     return (
-        <div className="absolute inset-0 z-50 flex items-center justify-center bg-overlay backdrop-blur-sm p-2 md:p-8">
+        <div className="absolute inset-0 z-50 flex items-center justify-center bg-overlay backdrop-blur-sm">
             <motion.div
                 initial={{ opacity: 0, scale: 0.95 }}
                 animate={{ opacity: 1, scale: 1 }}
                 exit={{ opacity: 0, scale: 0.95 }}
-                className="bg-surface border border-glass-border rounded-lg w-[min(96vw,1600px)] max-w-none h-[min(96dvh,1000px)] flex flex-col overflow-hidden shadow-lg md:flex-row"
+                className="bg-surface border border-glass-border w-full h-full flex flex-col overflow-hidden shadow-lg"
             >
-                {/* Left: Variant Selector */}
-                <div className="h-[40%] min-h-0 w-full bg-surface relative border-b border-glass-border flex flex-col overflow-hidden md:h-auto md:w-1/2 md:border-b-0 md:border-r">
+                    {/* Header */}
+                    <div className="px-4 py-3 border-b border-glass-border flex justify-between items-center bg-surface">
+                        <AssetNameEditor name={asset.name} onRename={onRename} className="text-xl font-bold" />
+                        <button aria-label="关闭工作台" onClick={onClose} className="min-h-11 min-w-11 p-2 hover:bg-hover-bg rounded-full text-text-secondary hover:text-foreground">
+                            <X size={24} />
+                        </button>
+                    </div>
+
                     {/* Tab Switcher */}
                     <div className="flex border-b border-glass-border bg-surface">
                         <button
@@ -1520,36 +1527,7 @@ function CharacterDetailModal({ asset, type, onClose, onUpdateDescription, onUpd
                         </>}
                     </div>
 
-                    <div className="flex-1 p-4 overflow-hidden">
-                        {activeTab === "image" ? (
-                            <VariantSelector
-                                key={`${type}:${asset.id}`}
-                                asset={asset.image_asset}
-                                currentImageUrl={asset.image_url}
-                                onSelect={handleSelectVariant}
-                                onDelete={handleDeleteVariant}
-                                onRename={handleRenameVariant}
-                                onGenerate={handleGenerateClick}
-                                isGenerating={isGenerating}
-                                aspectRatio="16:9"
-                                className="h-full"
-                                previewLocator={currentProject ? {
-                                    scope: asset.source === "series" && currentProject.series_id ? "series" : "project",
-                                    containerId: asset.source === "series" && currentProject.series_id ? currentProject.series_id : currentProject.id,
-                                    assetType: type,
-                                    assetId: asset.id,
-                                } : undefined}
-                            />
-                        ) : activeTab === "video" ? (
-                            <VideoVariantSelector
-                                videos={asset.video_assets || []}
-                                onDelete={onDeleteVideo}
-                                onGenerate={(duration) => onGenerateVideo(videoPrompt, duration)}
-                                isGenerating={isGeneratingVideo}
-                                aspectRatio="16:9"
-                                className="h-full"
-                            />
-                        ) : <SceneImageTools kind={activeTab} sources={sceneImageSources} sceneAssetId={asset.id} lightingReferences={lightingReferences} busy={isGenerating} onGenerate={(source, params, compiledPrompt, lightReference) => {
+                {activeTab === "lighting" || activeTab === "camera" ? <SceneImageTools kind={activeTab} sources={sceneImageSources} sceneAssetId={asset.id} lightingReferences={lightingReferences} busy={isGenerating} onGenerate={(source, params, compiledPrompt, lightReference) => {
                             const sourceReference: AssetLibraryReference = { asset_type: "scene", asset_id: asset.id, variant_id: source.variantId };
                             const references = [sourceReference];
                             if (lightReference && !(lightReference.asset_type === sourceReference.asset_type && lightReference.asset_id === sourceReference.asset_id && lightReference.variant_id === sourceReference.variant_id)) references.push(lightReference);
@@ -1561,24 +1539,11 @@ function CharacterDetailModal({ asset, type, onClose, onUpdateDescription, onUpd
                                 references, image_generation_mode: "reference",
                                 apply_style: false, preserve_prompt: true, scene_tool: params,
                             });
-                        }} />}
-                    </div>
-                </div>
-
-                {/* Right: Details */}
-                <div className="min-h-0 w-full flex-1 flex flex-col md:w-1/2">
-                    {/* Header */}
-                    <div className="p-6 border-b border-glass-border flex justify-between items-center bg-surface">
-                        <AssetNameEditor name={asset.name} onRename={onRename} className="text-2xl font-bold" />
-                        <button onClick={onClose} className="p-2 hover:bg-hover-bg rounded-full text-text-secondary hover:text-foreground">
-                            <X size={24} />
-                        </button>
-                    </div>
-
+                        }} /> : <AssetWorkbenchLayout controls={<div className="flex min-w-0 flex-col">
                     <EpisodeAssetPlanPanel entries={planEntries} onUse={(text) => setImagePrompt((previous: string) => `${previous.trim()}\n${text}`.trim())} />
 
                     {/* Content */}
-                    <div className="flex-1 p-6 overflow-y-auto space-y-6">
+                    <div className="space-y-6 p-4 sm:p-5">
                         {/* Description */}
                         <div className="space-y-2">
                             <div className="flex justify-between items-center">
@@ -1857,7 +1822,38 @@ function CharacterDetailModal({ asset, type, onClose, onUpdateDescription, onUpd
                             Done
                         </button>
                     </div>
-                </div>
+                </div>} preview={<div className="flex min-h-[360px] flex-1 flex-col p-4 lg:min-h-0">
+
+                        {activeTab === "image" ? (
+                            <VariantSelector
+                                key={`${type}:${asset.id}`}
+                                asset={asset.image_asset}
+                                currentImageUrl={asset.image_url}
+                                onSelect={handleSelectVariant}
+                                onDelete={handleDeleteVariant}
+                                onRename={handleRenameVariant}
+                                onGenerate={handleGenerateClick}
+                                isGenerating={isGenerating}
+                                aspectRatio="16:9"
+                                className="h-full"
+                                previewLocator={currentProject ? {
+                                    scope: asset.source === "series" && currentProject.series_id ? "series" : "project",
+                                    containerId: asset.source === "series" && currentProject.series_id ? currentProject.series_id : currentProject.id,
+                                    assetType: type,
+                                    assetId: asset.id,
+                                } : undefined}
+                            />
+                        ) : activeTab === "video" ? (
+                            <VideoVariantSelector
+                                videos={asset.video_assets || []}
+                                onDelete={onDeleteVideo}
+                                onGenerate={(duration) => onGenerateVideo(videoPrompt, duration)}
+                                isGenerating={isGeneratingVideo}
+                                aspectRatio="16:9"
+                                className="h-full"
+                            />
+                        ) : null}
+                </div>} />}
             </motion.div>
             {pendingImageReview && currentProject?.id && <AssetImageSubmissionReview
                 projectId={currentProject.id}

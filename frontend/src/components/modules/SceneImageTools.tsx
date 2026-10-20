@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState, type ChangeEvent, type PointerEvent } from "react";
 import { api, type AssetLibraryReference } from "@/lib/api";
 import { getAssetUrl } from "@/lib/utils";
+import AssetWorkbenchLayout from "@/components/shared/AssetWorkbenchLayout";
 
 export type SceneImageSource = {
     key: string;
@@ -200,9 +201,8 @@ export function SceneImageTools({ kind, sources, sceneAssetId, lightingReference
         setExtra("");
     }
 
-    return <section className="min-h-0 flex-1 overflow-y-auto px-4 py-5 sm:px-6" aria-label={kind === "lighting" ? "光影工具" : "镜头工具"}>
-        <div className="mx-auto grid max-w-6xl gap-6 xl:grid-cols-[minmax(260px,1fr)_minmax(320px,1.1fr)]">
-            <div className="min-w-0 space-y-3">
+    return <section className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden" aria-label={kind === "lighting" ? "光影工具" : "镜头工具"}>
+        <AssetWorkbenchLayout controls={<div className="space-y-5 p-4 sm:p-5">
                 <h3 className="text-base font-semibold text-foreground">{kind === "lighting" ? "光影效果" : "镜头视角"}</h3>
                 <p className="text-sm text-text-secondary">选择已保存的场景图片作为本次生成来源。结果将成为该场景的新候选。</p>
                 <label className="block text-sm text-text-secondary" htmlFor={`${kind}-source`}>来源图片</label>
@@ -216,29 +216,7 @@ export function SceneImageTools({ kind, sources, sceneAssetId, lightingReference
                     {source.tool.kind === "lighting" ? <p className="mt-1">方向 {LIGHT_SIDE_LABELS[source.tool.light_side]} · 亮度 {source.tool.brightness}% · 颜色 {source.tool.color} · {source.tool.rim_light ? "有轮廓光" : "无轮廓光"}</p>
                         : <p className="mt-1">{cameraPresets.find((item) => item.key === source.tool?.preset)?.label} · 水平 {source.tool.yaw}° · 俯仰 {source.tool.pitch}° · {distances[source.tool.zoom]}</p>}
                 </details>}
-                <div ref={stageRef} className="relative flex min-h-52 items-center justify-center overflow-hidden rounded-lg border border-glass-border bg-surface-inset sm:min-h-72" onPointerDown={(event) => { if (kind === "camera" && updateFocus(event)) event.currentTarget.setPointerCapture?.(event.pointerId); }} onPointerMove={(event) => { if (kind === "camera" && event.buttons && event.currentTarget.hasPointerCapture?.(event.pointerId)) updateFocus(event, true); }} onPointerUp={(event) => { if (event.currentTarget.hasPointerCapture?.(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId); }}>
-                    {source ? <img ref={imageRef} onLoad={() => measureFocusImage()} src={source.url} alt={`来源图片：${source.label}`} className="max-h-[48vh] w-full object-contain" /> : <p className="px-4 text-center text-sm text-text-muted">先生成或上传场景图片</p>}
-                    {kind === "camera" && source && focus && focusImageBounds && <span aria-label="镜头对焦点" className="pointer-events-none absolute h-6 w-6 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-primary bg-primary/20 shadow-lg" style={{ left: focusImageBounds.left + focusImageBounds.width * focusX / 100, top: focusImageBounds.top + focusImageBounds.height * focusY / 100 }} />}
-                </div>
-                <div className="rounded-lg border border-glass-border bg-surface-inset p-4" aria-label={kind === "lighting" ? "光影参数示意" : "镜头参数示意"}>
-                    <div className="mb-3 flex items-center justify-between gap-2 text-xs text-text-secondary"><span>参数示意</span><span>{kind === "lighting" ? `${lightSide}主光 · ${brightness}%` : `${cameraPresets.find((item) => item.key === cameraPreset)?.label} · ${distances[distance]}`}</span></div>
-                    {kind === "lighting" ? <div className="relative mx-auto flex h-48 max-w-sm items-center justify-center overflow-hidden rounded-md border border-glass-border bg-background" data-testid="lighting-preview">
-                        <span className="absolute h-32 w-32 rounded-full opacity-20 blur-3xl" style={{ left: lightPosition[lightSide].left, top: lightPosition[lightSide].top, backgroundColor: color }} />
-                        <span className="absolute h-4 w-4 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-white shadow-lg" style={{ left: lightPosition[lightSide].left, top: lightPosition[lightSide].top, backgroundColor: color, boxShadow: `0 0 20px ${color}` }} aria-label={`${lightSide}主光位置`} />
-                        <span className="relative h-28 w-28 rounded-full border border-glass-border" style={{ background: `radial-gradient(circle at ${lightSide === "右侧" ? "78% 45%" : lightSide === "底部" ? "50% 80%" : lightSide === "左侧" ? "22% 45%" : "40% 25%"}, ${color} ${Math.max(5, Math.round(brightness / 4))}%, #344054 85%, #111827 100%)`, boxShadow: rimLight ? `0 0 22px ${color}` : "none" }} />
-                        <span className="absolute bottom-2 text-[11px] text-text-muted">{viewMode === "front" ? "正面观察" : "透视观察"}{rimLight ? " · 轮廓光" : ""}</span>
-                    </div> : <div className="relative mx-auto flex h-48 max-w-sm items-center justify-center rounded-md border border-glass-border bg-background" data-testid="camera-preview">
-                        <span className="absolute h-32 w-32 rounded-full border border-dashed border-glass-border" />
-                        <button type="button" aria-label="镜头向上" onClick={() => setPitch((value) => Math.max(-90, value - 15))} className="absolute left-1/2 top-1 -translate-x-1/2 rounded px-3 py-1 text-text-secondary hover:bg-hover-bg focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary">↑</button>
-                        <button type="button" aria-label="镜头向下" onClick={() => setPitch((value) => Math.min(90, value + 15))} className="absolute bottom-1 left-1/2 -translate-x-1/2 rounded px-3 py-1 text-text-secondary hover:bg-hover-bg focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary">↓</button>
-                        <button type="button" aria-label="镜头向左" onClick={() => setYaw((value) => Math.max(-180, value - 15))} className="absolute left-1 top-1/2 -translate-y-1/2 rounded px-3 py-1 text-text-secondary hover:bg-hover-bg focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary">←</button>
-                        <button type="button" aria-label="镜头向右" onClick={() => setYaw((value) => Math.min(180, value + 15))} className="absolute right-1 top-1/2 -translate-y-1/2 rounded px-3 py-1 text-text-secondary hover:bg-hover-bg focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary">→</button>
-                        <div className="flex h-24 w-24 items-center justify-center rounded-full border-2 border-primary/50 bg-primary/10 text-xs text-text-secondary" style={{ transform: `perspective(600px) rotateY(${yaw / 3}deg) rotateX(${-pitch / 3}deg) scale(${0.75 + distance * 0.12})` }}>场景</div>
-                        <span className="absolute bottom-2 text-[11px] text-text-muted">水平 {yaw}° · 俯仰 {pitch}°</span>
-                    </div>}
-                </div>
-            </div>
-            <div className="min-w-0 space-y-5">
+
                 <div className="sticky top-0 z-20 -mx-4 flex flex-wrap items-center gap-2 border-b border-glass-border bg-surface/95 px-4 py-3 backdrop-blur sm:-mx-6 sm:px-6">
                     <button type="button" onClick={() => { setReviewedPrompt(""); reset(); }} className={option}>重置参数</button>
                     <button type="button" aria-label={busy ? "生成中…" : reviewedPrompt ? "确认并生成" : "查看并确认提示词"} disabled={!source || busy} onClick={submit} className="min-h-11 rounded-md bg-primary px-5 text-sm font-medium text-primary-foreground hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary">
@@ -278,7 +256,30 @@ export function SceneImageTools({ kind, sources, sceneAssetId, lightingReference
                 <label className="block text-sm text-text-secondary" htmlFor={`${kind}-extra`}>补充提示词</label>
                 <textarea id={`${kind}-extra`} value={extra} onChange={(event) => setExtra(event.target.value)} onFocus={() => { if (kind === "camera") setCameraPromptEnabled(true); }} disabled={kind === "lighting" && !intelligent} rows={3} className={`${control} w-full py-2 disabled:opacity-50`} placeholder={kind === "lighting" ? "补充想要的光影氛围" : "补充镜头位置或构图要求"} />
                 {reviewedPrompt && <div className="space-y-2 rounded-lg border border-primary/40 bg-primary/5 p-3"><p className="text-xs font-medium text-foreground">提交前提示词核对</p><pre className="max-h-44 overflow-auto whitespace-pre-wrap text-xs leading-5 text-text-secondary">{reviewedPrompt}</pre><p className="text-xs text-text-muted">确认后将提交上面这份完整文本。</p></div>}
-            </div>
-        </div>
+
+        </div>} preview={<div className="min-h-0 flex-1 space-y-3 overflow-y-auto p-4 sm:p-5">
+                <div ref={stageRef} className="relative flex min-h-52 items-center justify-center overflow-hidden rounded-lg border border-glass-border bg-surface-inset sm:min-h-72" onPointerDown={(event) => { if (kind === "camera" && updateFocus(event)) event.currentTarget.setPointerCapture?.(event.pointerId); }} onPointerMove={(event) => { if (kind === "camera" && event.buttons && event.currentTarget.hasPointerCapture?.(event.pointerId)) updateFocus(event, true); }} onPointerUp={(event) => { if (event.currentTarget.hasPointerCapture?.(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId); }}>
+                    {source ? <img ref={imageRef} onLoad={() => measureFocusImage()} src={source.url} alt={`来源图片：${source.label}`} className="max-h-[48vh] w-full object-contain" /> : <p className="px-4 text-center text-sm text-text-muted">先生成或上传场景图片</p>}
+                    {kind === "camera" && source && focus && focusImageBounds && <span aria-label="镜头对焦点" className="pointer-events-none absolute h-6 w-6 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-primary bg-primary/20 shadow-lg" style={{ left: focusImageBounds.left + focusImageBounds.width * focusX / 100, top: focusImageBounds.top + focusImageBounds.height * focusY / 100 }} />}
+                </div>
+                <div className="rounded-lg border border-glass-border bg-surface-inset p-4" aria-label={kind === "lighting" ? "光影参数示意" : "镜头参数示意"}>
+                    <div className="mb-3 flex items-center justify-between gap-2 text-xs text-text-secondary"><span>参数示意</span><span>{kind === "lighting" ? `${lightSide}主光 · ${brightness}%` : `${cameraPresets.find((item) => item.key === cameraPreset)?.label} · ${distances[distance]}`}</span></div>
+                    {kind === "lighting" ? <div className="relative mx-auto flex h-48 max-w-sm items-center justify-center overflow-hidden rounded-md border border-glass-border bg-background" data-testid="lighting-preview">
+                        <span className="absolute h-32 w-32 rounded-full opacity-20 blur-3xl" style={{ left: lightPosition[lightSide].left, top: lightPosition[lightSide].top, backgroundColor: color }} />
+                        <span className="absolute h-4 w-4 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-white shadow-lg" style={{ left: lightPosition[lightSide].left, top: lightPosition[lightSide].top, backgroundColor: color, boxShadow: `0 0 20px ${color}` }} aria-label={`${lightSide}主光位置`} />
+                        <span className="relative h-28 w-28 rounded-full border border-glass-border" style={{ background: `radial-gradient(circle at ${lightSide === "右侧" ? "78% 45%" : lightSide === "底部" ? "50% 80%" : lightSide === "左侧" ? "22% 45%" : "40% 25%"}, ${color} ${Math.max(5, Math.round(brightness / 4))}%, #344054 85%, #111827 100%)`, boxShadow: rimLight ? `0 0 22px ${color}` : "none" }} />
+                        <span className="absolute bottom-2 text-[11px] text-text-muted">{viewMode === "front" ? "正面观察" : "透视观察"}{rimLight ? " · 轮廓光" : ""}</span>
+                    </div> : <div className="relative mx-auto flex h-48 max-w-sm items-center justify-center rounded-md border border-glass-border bg-background" data-testid="camera-preview">
+                        <span className="absolute h-32 w-32 rounded-full border border-dashed border-glass-border" />
+                        <button type="button" aria-label="镜头向上" onClick={() => setPitch((value) => Math.max(-90, value - 15))} className="absolute left-1/2 top-1 -translate-x-1/2 rounded px-3 py-1 text-text-secondary hover:bg-hover-bg focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary">↑</button>
+                        <button type="button" aria-label="镜头向下" onClick={() => setPitch((value) => Math.min(90, value + 15))} className="absolute bottom-1 left-1/2 -translate-x-1/2 rounded px-3 py-1 text-text-secondary hover:bg-hover-bg focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary">↓</button>
+                        <button type="button" aria-label="镜头向左" onClick={() => setYaw((value) => Math.max(-180, value - 15))} className="absolute left-1 top-1/2 -translate-y-1/2 rounded px-3 py-1 text-text-secondary hover:bg-hover-bg focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary">←</button>
+                        <button type="button" aria-label="镜头向右" onClick={() => setYaw((value) => Math.min(180, value + 15))} className="absolute right-1 top-1/2 -translate-y-1/2 rounded px-3 py-1 text-text-secondary hover:bg-hover-bg focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary">→</button>
+                        <div className="flex h-24 w-24 items-center justify-center rounded-full border-2 border-primary/50 bg-primary/10 text-xs text-text-secondary" style={{ transform: `perspective(600px) rotateY(${yaw / 3}deg) rotateX(${-pitch / 3}deg) scale(${0.75 + distance * 0.12})` }}>场景</div>
+                        <span className="absolute bottom-2 text-[11px] text-text-muted">水平 {yaw}° · 俯仰 {pitch}°</span>
+                    </div>}
+                </div>
+
+        </div>} />
     </section>;
 }
