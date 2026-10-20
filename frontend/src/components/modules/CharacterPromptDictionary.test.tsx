@@ -561,3 +561,35 @@ it('configures gender, age and height together while omitting cleared fields', (
   fireEvent.click(screen.getByRole('button', { name: '应用配置' }));
   expect(replaceWithText).toHaveBeenCalledWith('年龄：人物年龄阶段为婴儿。');
 });
+
+it('browses all 45 upstream styles and inserts edited text only after confirmation', () => {
+  getPlatformReferenceLibrary.mockResolvedValueOnce({ resources: [] });
+  const { replaceWithText, onApply } = setup('');
+  fireEvent.click(screen.getByRole('tab', { name: 'Prompt 模板' }));
+  fireEvent.click(screen.getByRole('option', { name: /^视觉风格/ }));
+  expect(screen.getAllByRole('option').filter(node => node.textContent?.startsWith('Prompt 模板 ·'))).toHaveLength(45);
+  fireEvent.change(screen.getByRole('combobox', { name: '来源模板分类' }), { target: { value: '古装' } });
+  expect(screen.getAllByRole('option').filter(node => node.textContent?.startsWith('Prompt 模板 ·'))).toHaveLength(3);
+  fireEvent.click(screen.getByRole('option', { name: /Prompt 模板 · 武侠江湖/ }));
+  const preview = screen.getByRole('textbox', { name: '将插入的完整文字' });
+  expect(preview).not.toHaveAttribute('readonly');
+  fireEvent.change(preview, { target: { value: '用户修改后的写实风格' } });
+  expect(replaceWithText).not.toHaveBeenCalled();
+  fireEvent.click(screen.getByRole('button', { name: '使用此模板' }));
+  expect(replaceWithText).toHaveBeenCalledWith('用户修改后的写实风格');
+  expect(onApply.mock.calls[0][1].structuredFields).toBeUndefined();
+});
+
+it('keeps motion and contact sheets in separate tasks and resets the upstream tag when returning', () => {
+  getPlatformReferenceLibrary.mockResolvedValueOnce({ resources: [] });
+  setup('');
+  fireEvent.click(screen.getByRole('tab', { name: 'Prompt 模板' }));
+  fireEvent.click(screen.getByRole('option', { name: /^运镜/ }));
+  expect(screen.getAllByRole('option').filter(node => node.textContent?.startsWith('Prompt 模板 ·'))).toHaveLength(33);
+  fireEvent.change(screen.getByRole('combobox', { name: '来源模板分类' }), { target: { value: '基础控制' } });
+  fireEvent.click(screen.getByRole('button', { name: '返回任务分类' }));
+  fireEvent.click(screen.getByRole('option', { name: /^多视图与推演/ }));
+  expect(screen.getAllByRole('option').filter(node => node.textContent?.startsWith('Prompt 模板 ·'))).toHaveLength(9);
+  fireEvent.click(screen.getByRole('option', { name: /Prompt 模板 · 角色脸部三视图/ }));
+  expect(screen.getByText(/原模板画幅：3:2/)).toHaveTextContent('另行选择来源参考图');
+});

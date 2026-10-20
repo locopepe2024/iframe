@@ -1,5 +1,6 @@
 "use client";
 
+import { OPEN_AI_CANVAS_PROMPTS } from "@/lib/openAiCanvasPrompts";
 import { Search, X } from "lucide-react";
 import { createContext, useContext, useEffect, useId, useState, type MutableRefObject } from "react";
 import { createPortal } from "react-dom";
@@ -16,6 +17,10 @@ type Entry = {
   id: string; title: string; text: string; type: "词条" | "配置面板" | "Prompt 模板" | "Prompt 案例";
   categories: string[]; domain: string; source: string; search: string; resource?: PlatformReferenceResource;
   preset?: CharacterDictionaryPreset;
+  promptTask?: PromptTask;
+  promptTag?: string;
+  usageHint?: string;
+  editableText?: boolean;
   slotValue?: string;
   motionText?: string;
   remainingText?: string;
@@ -62,6 +67,8 @@ export default function CharacterPromptDictionary({ suggestion, onClose, onApply
   const [refresh, setRefresh] = useState(0);
   const [section, setSection] = useState<typeof DISCOVERY_SECTIONS[number]>("基础面板");
   const [task, setTask] = useState<PromptTask | null>(null);
+  const [promptTag, setPromptTag] = useState("");
+  const [editedText, setEditedText] = useState<string | null>(null);
   const [characterKind, setCharacterKind] = useState("");
   const [topic, setTopic] = useState("");
   const [style, setStyle] = useState("");
@@ -79,8 +86,8 @@ export default function CharacterPromptDictionary({ suggestion, onClose, onApply
   const fieldGroups = selected?.preset?.sections
     ? selected.preset.sections.map((section) => ({ label: section.label, fields: selectedFields.filter((field) => section.parts.some((part) => part.includes(`[${field.key}]`))) })).filter((group) => group.fields.length > 0)
     : [{ label: "选择细节，预览同步更新", fields: selectedFields }];
-  const selectedText = selected ? suggestion.slot ? selected.slotValue || selected.text
-    : selected.preset ? renderDictionaryPreset(selected.preset, fieldValues) : selected.text : "";
+  const selectedText = editedText ?? (selected ? suggestion.slot ? selected.slotValue || selected.text
+    : selected.preset ? renderDictionaryPreset(selected.preset, fieldValues) : selected.text : "");
   useEffect(() => {
     setPreviewUrl("");
     const resource = selected?.resource;
@@ -115,6 +122,7 @@ export default function CharacterPromptDictionary({ suggestion, onClose, onApply
   // Search the template itself, not its configured defaults (e.g. a default
   // round face must not make every template a result for /圆脸).
   entries.push(...CHARACTER_DICTIONARY_PRESETS.map((preset) => ({ ...preset, preset })));
+  entries.push(...OPEN_AI_CANVAS_PROMPTS);
   for (const resource of resources) {
     if (resource.status !== "active" || resource.dictionary?.entry_type === "pattern") continue;
     const source = `平台 · ${resource.platform_resource_id} · r${resource.revision} · ${resource.provenance.license}`;
@@ -149,7 +157,7 @@ export default function CharacterPromptDictionary({ suggestion, onClose, onApply
       const kind = characterTemplateKind(entry.title, entry.categories);
       const neutralExpression = kind === "expression";
       return (task !== "character" || !characterKind || kind === characterKind)
-        && (!task || dimensions.tasks.includes(task)) && (!topic || neutralExpression || dimensions.topics.includes(topic as typeof PROMPT_TOPICS[number]))
+        && (!task || (entry.promptTask ? entry.promptTask === task : dimensions.tasks.includes(task))) && (!promptTag || entry.promptTag === promptTag) && (!topic || neutralExpression || dimensions.topics.includes(topic as typeof PROMPT_TOPICS[number]))
         && (!style || neutralExpression || dimensions.styles.includes(style as typeof PROMPT_STYLES[number]));
     }
     return section === "基础面板" || !browsing || !category || inCategory(entry, category);
@@ -158,7 +166,7 @@ export default function CharacterPromptDictionary({ suggestion, onClose, onApply
   const enterCategory = (key: string) => { setCategory(key); setBrowsing(true); setActive(0); };
   const showTasks = section === "Prompt 模板" && !task && browsing;
   const options = [
-    ...(showTasks ? PROMPT_TASKS.map(([key, label]) => ({ id: `task-${key}`, label, detail: "选择任务，再按题材和画风筛选", choose: () => setTask(key) })) : []),
+    ...(showTasks ? PROMPT_TASKS.map(([key, label]) => ({ id: `task-${key}`, label, detail: "选择任务，再按题材和画风筛选", choose: () => { setTask(key); setPromptTag(""); setTopic(""); setStyle(""); } })) : []),
     ...navigation.map(item => ({ id: `category-${item.id}`, label: item.label, detail: item.detail, choose: () => enterCategory(item.id) })),
     ...(showTasks ? [] : visible.map(entry => ({ id: entry.id,
       label: entry.type === "配置面板" ? QUICK_PANEL_LABELS[entry.id] || entry.title : `${entry.type === "词条" ? "选项" : entry.type === "Prompt 案例" ? "Prompt 模板" : entry.type} · ${entry.title}`,
@@ -168,13 +176,14 @@ export default function CharacterPromptDictionary({ suggestion, onClose, onApply
   useEffect(() => {
     setSearchQuery(suggestion.query);
     setActive(0); setSelected(null); setFieldValues({}); setCategory(dictionarySlotCategory(suggestion.slot)); setBrowsing(!externalNeedle);
-    setTask(null); setCharacterKind(""); setTopic(""); setStyle("");
-    setSection(suggestion.slot ? "词典" : /^(古装|古风|现代|女装|动漫|国风|换装|写真|电商|ugc)$/i.test(externalNeedle) ? "Prompt 模板" : !externalNeedle || isConfigurationQuery(externalNeedle) ? "基础面板" : "词典");
+    setTask(null); setPromptTag(""); setCharacterKind(""); setTopic(""); setStyle("");
+    setSection(suggestion.slot ? "词典" : /^(古装|古风|现代|女装|动漫|国风|换装|写真|电商|风格|运镜|九宫格|多视图|推演|ugc)$/i.test(externalNeedle) ? "Prompt 模板" : !externalNeedle || isConfigurationQuery(externalNeedle) ? "基础面板" : "词典");
   }, [externalNeedle, suggestion.slot, suggestion.contextKey]);
-  useEffect(() => { setActive(0); setSelected(null); }, [section, category, browsing, task, characterKind, topic, style, needle]);
+  useEffect(() => { setActive(0); setSelected(null); }, [section, category, browsing, task, characterKind, topic, style, needle, promptTag]);
+  useEffect(() => { setEditedText(null); }, [selected]);
   const back = () => {
     if (selected) setSelected(null);
-    else if (section === "Prompt 模板" && task) { setTask(null); }
+    else if (section === "Prompt 模板" && task) { setTask(null); setPromptTag(""); }
     else if (category) { setCategory(group ? null : CHARACTER_DICTIONARY_GROUPS.find((item) => item.children.some(([key]) => key === category))?.id || null); }
     else onClose();
   };
@@ -225,7 +234,7 @@ export default function CharacterPromptDictionary({ suggestion, onClose, onApply
       <input type="search" aria-label="搜索面板、词典或模板" placeholder="搜索" value={searchQuery}
         onChange={event => {
           setSearchQuery(event.target.value); setBrowsing(!event.target.value.trim());
-          setCategory(dictionarySlotCategory(suggestion.slot)); setTask(null); setActive(0);
+          setCategory(dictionarySlotCategory(suggestion.slot)); setTask(null); setPromptTag(""); setTopic(""); setStyle(""); setActive(0);
         }}
         onKeyDown={event => {
           if (["ArrowDown", "ArrowUp", "Enter", "Escape"].includes(event.key) && keyHandler.current?.(event.nativeEvent)) {
@@ -262,25 +271,31 @@ export default function CharacterPromptDictionary({ suggestion, onClose, onApply
         </label>)}
       </fieldset>)}
       </div>}
+      {selected.usageHint && <p className="mt-2 text-xs text-text-secondary">{selected.usageHint}</p>}
       {previewUrl && <img src={previewUrl} alt={`${selected.title} 案例预览`} className="mt-2 max-h-40 w-full rounded object-contain" />}
       <label className="mt-2 block text-xs text-text-secondary" htmlFor={`${id}-preview`}>将插入的完整文字</label>
-      <textarea id={`${id}-preview`} readOnly value={selectedText} placeholder="选择项目后在此预览；不指定的项目不会写入。" rows={5} className="mt-1 w-full rounded border border-glass-border bg-surface p-2 text-xs text-foreground" />
-      <p className="mt-1 text-xs text-text-muted">{suggestion.slot ? `仅替换当前 [${suggestion.slot}]，保留模板其他文字与参考图；也可关闭后手动填写。` : (selected.type === "Prompt 模板" || selected.type === "配置面板") ? "先在面板选择细节，确认后插入预览文字；也可保留 [变量] 稍后填写。" : "替换光标处的 /检索词，保留其他文字与参考图；插入后可编辑。"}</p>
+      <textarea id={`${id}-preview`} readOnly={!selected.editableText} value={selectedText} onChange={event => setEditedText(event.target.value)} placeholder="选择项目后在此预览；不指定的项目不会写入。" rows={5} className="mt-1 w-full rounded border border-glass-border bg-surface p-2 text-xs text-foreground" />
+      <p className="mt-1 text-xs text-text-muted">{suggestion.slot ? `仅替换当前 [${suggestion.slot}]，保留模板其他文字与参考图；也可关闭后手动填写。` : selected.editableText ? "可直接修改预览文字，确认后插入；参考图和出图参数由你另行选择。" : (selected.type === "Prompt 模板" || selected.type === "配置面板") ? "先在面板选择细节，确认后插入预览文字；也可保留 [变量] 稍后填写。" : "替换光标处的 /检索词，保留其他文字与参考图；插入后可编辑。"}</p>
       <button type="button" disabled={!selectedText.trim()} onClick={apply} className={`${buttonStyle} mt-2 bg-primary text-primary-foreground disabled:opacity-50`}>{suggestion.slot ? "填写当前槽位" : selected.type === "配置面板" ? "应用配置" : selected.type === "Prompt 模板" ? "使用此模板" : "插入到当前 Prompt"}</button>
       <button type="button" onClick={() => setSelected(null)} className={`${buttonStyle} ml-2`}>返回结果</button>
     </> : <>
       {section === "Prompt 模板" && !suggestion.slot && <div className="mt-2 flex flex-wrap gap-2">
-        {task && <button type="button" onClick={() => setTask(null)} className={buttonStyle}>返回任务分类</button>}
+        {task && <button type="button" onClick={() => { setTask(null); setPromptTag(""); }} className={buttonStyle}>返回任务分类</button>}
         {task && <span className="py-3 text-xs text-text-secondary">{PROMPT_TASKS.find(([key]) => key === task)?.[1]}</span>}
         {task === "character" && <label className="text-xs text-text-secondary">模板类型<select aria-label="角色模板类型" value={characterKind} onChange={event => setCharacterKind(event.target.value)} className="ml-1 min-h-11 rounded border border-glass-border bg-surface px-2">
           <option value="">全部</option><option value="design">完整设计</option><option value="expression">角色表情</option>
         </select></label>}
+        {task && ['visual-style', 'camera-motion'].includes(task) && <label className="text-xs text-text-secondary">分类<select aria-label="来源模板分类" value={promptTag} onChange={event => setPromptTag(event.target.value)} className="ml-1 min-h-11 rounded border border-glass-border bg-surface px-2">
+          <option value="">全部</option>{Array.from(new Set(OPEN_AI_CANVAS_PROMPTS.filter(entry => entry.promptTask === task).map(entry => entry.promptTag))).filter(Boolean).map(tag => <option key={tag}>{tag}</option>)}
+        </select></label>}
+        {!task?.match(/^(visual-style|camera-motion|multi-view)$/) && <>
         <label className="text-xs text-text-secondary">题材<select aria-label="模板题材" value={topic} onChange={event => setTopic(event.target.value)} className="ml-1 min-h-11 rounded border border-glass-border bg-surface px-2">
           <option value="">不限题材</option>{PROMPT_TOPICS.map(value => <option key={value}>{value}</option>)}
         </select></label>
         <label className="text-xs text-text-secondary">画风<select aria-label="模板画风" value={style} onChange={event => setStyle(event.target.value)} className="ml-1 min-h-11 rounded border border-glass-border bg-surface px-2">
           <option value="">不限画风</option>{PROMPT_STYLES.map(value => <option key={value}>{value}</option>)}
         </select></label>
+        </>}
       </div>}
       {section === "词典" && <div className="flex flex-wrap items-center gap-1 text-xs text-text-muted">
         {category ? <><button type="button" onClick={back} className={buttonStyle}>返回上一级</button><span>{dictionaryCategoryPath(category)}</span></>

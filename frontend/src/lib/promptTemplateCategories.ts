@@ -2,6 +2,7 @@
 export const PROMPT_TASKS = [
   ['character', '角色设计'], ['portrait', '风格写真'], ['outfit', '换装写真'],
   ['commerce', '电商主图'], ['ugc', 'UGC'],
+  ['visual-style', '视觉风格'], ['camera-motion', '运镜'], ['multi-view', '多视图与推演'],
 ] as const;
 export type PromptTask = typeof PROMPT_TASKS[number][0];
 export const PROMPT_TOPICS = ['古装', '现代', '仙侠', '国风'] as const;
