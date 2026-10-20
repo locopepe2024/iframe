@@ -30,3 +30,10 @@ describe("static scene prompt layers", () => {
         expect(sceneLightDirectionConflict({ lighting: { direction: "背面来光" } }, ["back"])).toBe(true);
     });
 });
+
+it("compiles explicit focus targets and image-relative coordinates without implying world distance", () => {
+    expect(compileScenePromptLayers({ camera: { focus: { target: "门口石狮", x: 30, y: 65, radius: 18 } } }))
+        .toBe("镜头：对焦目标：门口石狮；对焦点：画面坐标 x=30%、y=65%（左上角为原点，向右为 X，向下为 Y），清晰区域半径约 18%；保持该区域清晰");
+    expect(compileScenePromptLayers({ camera: { focus: { target: "远处山门" } } })).toBe("镜头：对焦目标：远处山门");
+    expect(compileScenePromptLayers({ camera: { focus: null } })).toBe("");
+});

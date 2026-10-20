@@ -37,6 +37,36 @@ export default function ScenePromptLayersPanel({ value, onChange }: {
                         {typeof selected?.[field.key] === "string" && selected[field.key] &&
                             <p className="mt-1 text-xs text-text-muted">{String(selected[field.key])}</p>}
                     </fieldset>)}
+                    {layer === "camera" && <fieldset className="space-y-2 rounded border border-glass-border p-3">
+                        <legend className="px-1 text-xs text-text-secondary">对焦</legend>
+                        <label className="block text-xs text-text-secondary">对焦目标
+                            <input aria-label="对焦目标" maxLength={500} value={value.camera?.focus?.target || ""}
+                                placeholder="例如：门口石狮、远处山门"
+                                onChange={event => {
+                                    const focus = { ...value.camera?.focus, target: event.target.value };
+                                    update("camera", { focus: focus.target.trim() || typeof focus.x === "number" ? focus : null });
+                                }} className="mt-1 min-h-11 w-full rounded border border-glass-border bg-input-bg px-2 text-sm text-foreground" />
+                        </label>
+                        <label className="flex min-h-11 items-center gap-2 text-xs text-text-secondary">
+                            <input type="checkbox" checked={typeof value.camera?.focus?.x === "number"}
+                                onChange={event => {
+                                    const target = value.camera?.focus?.target || "";
+                                    update("camera", { focus: event.target.checked ? { target, x: 50, y: 50, radius: 18 }
+                                        : target.trim() ? { target } : null });
+                                }} />指定画面对焦位置
+                        </label>
+                        {typeof value.camera?.focus?.x === "number" && <>
+                            <div className="grid grid-cols-3 gap-2">
+                                {([ ["x", "水平位置", 0, 100], ["y", "垂直位置", 0, 100], ["radius", "清晰范围", 6, 42] ] as const).map(([key, label, min, max]) =>
+                                    <label key={key} className="text-xs text-text-secondary">{label} · {value.camera?.focus?.[key]}%
+                                        <input aria-label={`对焦${label}`} type="range" min={min} max={max} step={1}
+                                            value={value.camera?.focus?.[key] ?? (key === "radius" ? 18 : 50)} className="mt-2 w-full"
+                                            onChange={event => update("camera", { focus: { ...value.camera?.focus, [key]: Number(event.target.value) } })} />
+                                    </label>)}
+                            </div>
+                            <p className="text-xs text-text-muted">画面左上角为原点，X 向右、Y 向下。位置与范围以画面百分比表示。</p>
+                        </>}
+                    </fieldset>}
                     {layer !== "composition" && <details className="rounded border border-glass-border p-2"
                         onToggle={event => { const open = event.currentTarget.open; setOpenSpheres(current => ({ ...current, [layer]: open })); }}>
                         <summary className="min-h-11 cursor-pointer text-xs text-text-secondary">三维{layer === "lighting" ? "光源" : "机位"}方向{angles ? " · 已设置" : ""}</summary>

@@ -11,7 +11,7 @@ from src.apps.comic_gen.pipeline import AssetReviewChanged, ComicGenPipeline
 
 def test_queued_scene_variant_keeps_reviewed_submission_when_design_changes():
     scene = Scene(id="street", name="Street", description="A street", asset_design={
-        "design_draft": {"prompt_layers": {"lighting": {"source": "月光"}, "camera": {"depth_of_field": "深景深"}}}, "design_revisions": [{"revision": 1, "design": {"visual_notes": "Blue dusk"}}],
+        "design_draft": {"prompt_layers": {"lighting": {"source": "月光"}, "camera": {"depth_of_field": "深景深", "focus": {"target": "gate", "x": 30, "y": 65, "radius": 18}}}}, "design_revisions": [{"revision": 1, "design": {"visual_notes": "Blue dusk"}}],
     })
     script = Script(id="project", title="Project", original_text="", scenes=[scene], created_at=1, updated_at=1)
     pipeline = ComicGenPipeline.__new__(ComicGenPipeline)
@@ -34,6 +34,7 @@ def test_queued_scene_variant_keeps_reviewed_submission_when_design_changes():
         apply_style=False, preserve_prompt=True,
     )
     scene.asset_design["design_draft"]["prompt_layers"]["lighting"]["source"] = "日光"
+    scene.asset_design["design_draft"]["prompt_layers"]["camera"]["focus"]["x"] = 90
     scene.asset_design["design_revisions"].append({"revision": 2, "design": {"visual_notes": "Red sunset"}})
     pipeline.generate_asset("project", "street", "scene", prompt="Blue dusk street with pedestrians",
                             negative_prompt="red sunset", model_name="model-a", aspect_ratio="16:9",
@@ -49,6 +50,7 @@ def test_queued_scene_variant_keeps_reviewed_submission_when_design_changes():
     assert snapshot.reference_inputs == []
     assert snapshot.visual_design["prompt_layers"]["lighting"]["source"] == "月光"
     assert snapshot.visual_design["prompt_layers"]["camera"]["depth_of_field"] == "深景深"
+    assert snapshot.visual_design["prompt_layers"]["camera"]["focus"] == {"target": "gate", "x": 30, "y": 65, "radius": 18}
 
 
 def test_series_prop_snapshot_survives_revision_change_and_keeps_existing_variant():

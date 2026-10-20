@@ -3,9 +3,10 @@ import { describeSceneDirection } from "./sceneDirection";
 export interface ScenePromptLayers {
     version?: 1;
     lighting?: Partial<Record<"source" | "direction" | "quality" | "fill" | "contrast", string>> & { angles?: SceneLayerAngles | null };
-    camera?: Partial<Record<"framing" | "viewpoint" | "focal_length" | "depth_of_field", string>> & { angles?: SceneLayerAngles | null };
+    camera?: Partial<Record<"framing" | "viewpoint" | "focal_length" | "depth_of_field", string>> & { angles?: SceneLayerAngles | null; focus?: SceneFocusPoint | null };
     composition?: Partial<Record<"subject_position" | "spatial_layers" | "leading_relation", string>>;
 }
+export interface SceneFocusPoint { target?: string; x?: number | null; y?: number | null; radius?: number | null }
 export interface SceneLayerAngles { azimuth: number; elevation: number }
 export type SceneLayer = "lighting" | "camera" | "composition";
 export interface SceneLayerField { key: string; label: string; options: readonly (readonly [string, string])[] }
@@ -61,7 +62,7 @@ export const SCENE_LAYER_FIELDS: Record<SceneLayer, readonly SceneLayerField[]> 
 const titles: Record<SceneLayer, string> = { lighting: "光影", camera: "镜头", composition: "构图" };
 export function compileScenePromptLayers(layers: ScenePromptLayers): string {
     return (Object.keys(SCENE_LAYER_FIELDS) as SceneLayer[]).flatMap(layer => {
-        const values = layers[layer] as Record<string, string | SceneLayerAngles | null> | undefined;
+        const values = layers[layer] as Record<string, unknown> | undefined;
         if (!values) return [];
         const angles = "angles" in values ? values.angles as SceneLayerAngles | null : null;
         const parts = SCENE_LAYER_FIELDS[layer].flatMap(field => {
@@ -71,6 +72,13 @@ export function compileScenePromptLayers(layers: ScenePromptLayers): string {
             const value = values[field.key];
             return typeof value === "string" && value.trim() ? [`${field.label}：${value.trim()}`] : [];
         });
+        if (layer === "camera" && layers.camera?.focus) {
+            const focus = layers.camera.focus;
+            if (focus.target?.trim()) parts.push(`对焦目标：${focus.target.trim()}`);
+            if (typeof focus.x === "number" && typeof focus.y === "number") {
+                parts.push(`对焦点：画面坐标 x=${focus.x}%、y=${focus.y}%（左上角为原点，向右为 X，向下为 Y）${typeof focus.radius === "number" ? `，清晰区域半径约 ${focus.radius}%` : ""}；保持该区域清晰`);
+            }
+        }
         return parts.length ? [`${titles[layer]}：${parts.join("；")}`] : [];
     }).join("\n");
 }

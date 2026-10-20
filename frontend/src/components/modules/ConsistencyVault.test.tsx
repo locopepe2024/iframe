@@ -687,12 +687,17 @@ it("applies, saves and restores selected scene layers without rewriting the AI s
     fireEvent.click(screen.getByRole("button", { name: "长焦" }));
     fireEvent.click(screen.getByRole("button", { name: "深景深" }));
     fireEvent.click(screen.getByRole("button", { name: "前中后景" }));
+    fireEvent.change(screen.getByRole("textbox", { name: "对焦目标" }), { target: { value: "门口石狮" } });
+    fireEvent.click(screen.getByRole("checkbox", { name: "指定画面对焦位置" }));
+    fireEvent.change(screen.getByRole("slider", { name: "对焦水平位置" }), { target: { value: "30" } });
     fireEvent.click(screen.getByRole("button", { name: "应用到图片提示词" }));
     const prompt = (screen.getByRole("textbox", { name: "图像提示词" }) as HTMLTextAreaElement).value;
     expect(prompt).toContain("手工场景正文");
     expect(prompt).toContain("光影：光源：月光");
     expect(prompt).toContain("焦距观感：长焦观感");
     expect(prompt).toContain("景深：深景深");
+    expect(prompt).toContain("对焦目标：门口石狮");
+    expect(prompt).toContain("画面坐标 x=30%、y=50%");
     expect(prompt).toContain("构图：空间层次：");
     expect(prompt).not.toMatch(/奶油|柔肤|ARRI|剪辑/);
     fireEvent.click(screen.getByRole("button", { name: "保存并使用场景设计" }));
@@ -700,6 +705,7 @@ it("applies, saves and restores selected scene layers without rewriting the AI s
     const saved = mocks.updateAssetAttributes.mock.calls[0][3].asset_design;
     expect(saved.prompt_layers.lighting.source).toBe("月光");
     expect(saved.prompt_layers.camera.focal_length).toContain("长焦");
+    expect(saved.prompt_layers.camera.focus).toEqual({ target: "门口石狮", x: 30, y: 50, radius: 18 });
     expect(saved.prompt_workspace.design.prompt).toBe(prompt);
     expect(saved.prompt_workspace.ai.prompt).toBe("已有 AI 正文");
     // Reopen from the returned record, then restore the saved panel after edits.
@@ -708,10 +714,14 @@ it("applies, saves and restores selected scene layers without rewriting the AI s
     fireEvent.click(screen.getByText(asset.name));
     fireEvent.click(screen.getByRole("button", { name: /基础面板 ·/ }));
     fireEvent.click(screen.getByText("镜头", { selector: "summary" }));
+    expect(screen.getByRole("textbox", { name: "对焦目标" })).toHaveValue("门口石狮");
+    expect(screen.getByRole("slider", { name: "对焦水平位置" })).toHaveValue("30");
+    fireEvent.change(screen.getByRole("textbox", { name: "对焦目标" }), { target: { value: "未保存目标" } });
     expect(screen.getByRole("button", { name: "长焦" })).toHaveAttribute("aria-pressed", "true");
     fireEvent.click(screen.getByRole("button", { name: "长焦" }));
     fireEvent.click(screen.getByRole("button", { name: "编辑已保存设计" }));
     expect(screen.getByRole("button", { name: "长焦" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("textbox", { name: "对焦目标" })).toHaveValue("门口石狮");
     expect(screen.getByRole("textbox", { name: "图像提示词" })).toHaveValue(prompt);
 });
 

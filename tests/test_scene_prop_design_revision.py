@@ -306,3 +306,42 @@ def test_scene_rejects_light_layer_contradicting_constraints(tmp_path, light):
             "visual_constraints": {"forbidden_light_directions": ["top"]},
         }})
     assert scene.model_dump() == before
+
+
+def test_scene_focus_roundtrip(tmp_path):
+    pipeline, scene, _ = make_pipeline(tmp_path)
+    focus = {"target": "门口石狮", "x": 30, "y": 65, "radius": 18}
+    pipeline.update_asset_attributes("project", "street", "scene", {"asset_design": {
+        "visual_notes": "Stone street", "prompt_layers": {"camera": {"focus": focus}}, "confirmed": True,
+    }})
+    restored = ComicGenPipeline.__new__(ComicGenPipeline)
+    restored.data_file = pipeline.data_file
+    loaded = restored._load_data()["project"].scenes[0]
+    assert loaded.asset_design["design_draft"]["prompt_layers"]["camera"]["focus"] == focus
+    assert loaded.asset_design["design_revisions"][0]["design"]["prompt_layers"]["camera"]["focus"] == focus
+
+
+@pytest.mark.parametrize("focus", [
+    {}, {"target": " "}, {"x": 30}, {"y": 30}, {"radius": 18},
+    {"x": 101, "y": 30}, {"x": 30, "y": -1}, {"x": True, "y": 30},
+    {"x": 30.5, "y": 30}, {"x": "30", "y": 30},
+    {"x": 30, "y": 30, "radius": 43}, {"target": "x" * 501},
+    {"target": "gate", "world_distance": 10},
+])
+def test_scene_rejects_invalid_focus_before_mutation(tmp_path, focus):
+    pipeline, scene, _ = make_pipeline(tmp_path)
+    before = scene.model_dump()
+    with pytest.raises(ValueError):
+        pipeline.update_asset_attributes("project", "street", "scene", {"asset_design": {
+            "visual_notes": "Stone street", "prompt_layers": {"camera": {"focus": focus}}, "confirmed": True,
+        }})
+    assert scene.model_dump() == before
+
+
+@pytest.mark.parametrize("focus", [None, {"target": "远处山门"}, {"x": 0, "y": 100}])
+def test_scene_accepts_optional_focus_and_boundary_coordinates(tmp_path, focus):
+    pipeline, scene, _ = make_pipeline(tmp_path)
+    pipeline.update_asset_attributes("project", "street", "scene", {"asset_design": {
+        "visual_notes": "Stone street", "prompt_layers": {"camera": {"focus": focus}},
+    }})
+    assert scene.asset_design["design_draft"]["prompt_layers"]["camera"]["focus"] == focus

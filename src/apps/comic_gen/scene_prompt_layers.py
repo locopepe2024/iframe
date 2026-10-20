@@ -25,12 +25,31 @@ class SceneLightingLayer(BaseModel):
         return self
 
 
+class SceneFocusPoint(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    target: str = Field(default="", max_length=500, strict=True)
+    x: Optional[int] = Field(default=None, ge=0, le=100, strict=True)
+    y: Optional[int] = Field(default=None, ge=0, le=100, strict=True)
+    radius: Optional[int] = Field(default=None, ge=6, le=42, strict=True)
+
+    @model_validator(mode="after")
+    def complete_focus(self):
+        if (self.x is None) != (self.y is None):
+            raise ValueError("Scene focus coordinates must include both x and y")
+        if self.radius is not None and self.x is None:
+            raise ValueError("Scene focus radius requires image coordinates")
+        if not self.target.strip() and self.x is None:
+            raise ValueError("Scene focus requires a target or image coordinates")
+        return self
+
+
 class SceneCameraLayer(BaseModel):
     model_config = ConfigDict(extra="forbid")
     framing: str = Field(default="", max_length=500, strict=True)
     viewpoint: str = Field(default="", max_length=500, strict=True)
     focal_length: str = Field(default="", max_length=500, strict=True)
     depth_of_field: str = Field(default="", max_length=500, strict=True)
+    focus: Optional[SceneFocusPoint] = None
     angles: Optional[SceneLayerAngles] = None
 
     @model_validator(mode="after")

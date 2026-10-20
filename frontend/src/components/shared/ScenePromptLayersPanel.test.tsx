@@ -43,3 +43,22 @@ it("replaces only the chosen layer direction and can clear sphere settings", asy
     expect(screen.getByTestId("prompt")).not.toHaveTextContent("光影");
     expect(screen.getByTestId("prompt")).toHaveTextContent("低机位仰视");
 });
+
+it("records opt-in image focus coordinates and clears them independently of the target", () => {
+    render(<Harness />);
+    open("镜头");
+    expect(screen.getByRole("checkbox", { name: "指定画面对焦位置" })).not.toBeChecked();
+    expect(screen.getByTestId("prompt").textContent).toBe("");
+    fireEvent.change(screen.getByRole("textbox", { name: "对焦目标" }), { target: { value: "门口石狮" } });
+    expect(screen.getByTestId("prompt")).toHaveTextContent("对焦目标：门口石狮");
+    expect(screen.getByTestId("prompt")).not.toHaveTextContent("画面坐标");
+    fireEvent.click(screen.getByRole("checkbox", { name: "指定画面对焦位置" }));
+    fireEvent.change(screen.getByRole("slider", { name: "对焦水平位置" }), { target: { value: "30" } });
+    fireEvent.change(screen.getByRole("slider", { name: "对焦垂直位置" }), { target: { value: "65" } });
+    expect(screen.getByTestId("prompt")).toHaveTextContent("x=30%、y=65%");
+    fireEvent.click(screen.getByRole("checkbox", { name: "指定画面对焦位置" }));
+    expect(screen.getByTestId("prompt")).not.toHaveTextContent("画面坐标");
+    expect(screen.getByTestId("prompt")).toHaveTextContent("对焦目标：门口石狮");
+    fireEvent.change(screen.getByRole("textbox", { name: "对焦目标" }), { target: { value: "" } });
+    expect(screen.getByTestId("prompt").textContent).toBe("");
+});
