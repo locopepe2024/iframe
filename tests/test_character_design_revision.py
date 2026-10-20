@@ -87,3 +87,19 @@ def test_character_design_editor_mode_preserves_both_drafts_but_confirms_active_
         pipeline.update_asset_attributes("project", "character", "character", {
             "character_design": {"identity": {**identity, "editor_mode": "hidden"}, "confirmed": False},
         })
+
+
+def test_expanded_face_and_wardrobe_fields_survive_confirmation():
+    pipeline = ComicGenPipeline.__new__(ComicGenPipeline)
+    character = SimpleNamespace(character_design={})
+    script = SimpleNamespace(id='project')
+    pipeline.scripts = {script.id: script}
+    pipeline._find_asset_with_source = lambda *_: (character, script)
+    pipeline._save_after_asset_mutation = lambda *_: None
+    fields = {'eyebrows': '柳叶眉', 'eye_detail': '浅细纹', 'skin_tone': '中性肤色', 'skin_texture': '干燥纹理'}
+    look = {'footwear': '布靴', 'jewelry': '无首饰'}
+    design = {'identity': {'features': fields, 'editor_mode': 'fields'}, 'look': {'features': look, 'editor_mode': 'fields'}, 'confirmed': True}
+    pipeline.update_asset_attributes('project', 'character', 'character', {'character_design': design})
+    saved = character.character_design['design_revisions'][0]['design']
+    assert saved['identity']['features'] == fields
+    assert saved['look']['features'] == look

@@ -353,6 +353,9 @@ class CharacterDesignRequest(BaseModel):
     character_name: str = Field(min_length=1, max_length=200)
     profile: str = Field(min_length=1, max_length=12000)
     current_draft: str = Field(default="", max_length=8000)
+    dictionary_configurations: list[dict] = Field(default_factory=list, max_length=50)
+    structured_identity: dict[str, str] = Field(default_factory=dict)
+    structured_look: dict[str, str] = Field(default_factory=dict)
     user_visual_requirements: CharacterDesignVisualRequirements = Field(default_factory=CharacterDesignVisualRequirements)
     user_answers: dict[str, str] = Field(default_factory=dict, max_length=20)
     route: str = ""
@@ -493,8 +496,8 @@ def _character_design_visual_notes(section: dict) -> str:
     return "；".join(details)
 
 
-_CHARACTER_IDENTITY_FEATURES = ("face", "hair", "skin", "height", "build", "recognition_marks")
-_CHARACTER_LOOK_FEATURES = ("clothing", "palette", "accessories", "weapon")
+_CHARACTER_IDENTITY_FEATURES = ("face", "face_shape", "eyebrows", "eyes", "eye_detail", "nose", "lips", "makeup", "hair", "skin", "skin_tone", "skin_texture", "height", "build", "recognition_marks")
+_CHARACTER_LOOK_FEATURES = ("clothing", "palette", "footwear", "jewelry", "decoration", "condition", "accessories", "weapon")
 
 
 def _character_design_features(section: dict, allowed: tuple[str, ...]) -> dict[str, str]:
@@ -550,6 +553,13 @@ def _character_design_review_needs_revision(result: dict) -> bool:
 
 def _compile_character_design_draft_input(body: CharacterDesignRequest, ctx: UserContext) -> dict:
     validate_model(ctx, body.model)
+    try:
+        _character_design_features({"features": body.structured_identity}, _CHARACTER_IDENTITY_FEATURES)
+        _character_design_features({"features": body.structured_look}, _CHARACTER_LOOK_FEATURES)
+    except ValueError:
+        raise HTTPException(422, "角色结构化字段名称、类型或长度无效") from None
+    if len(json.dumps(body.dictionary_configurations, ensure_ascii=False)) > 60000:
+        raise HTTPException(422, "词典配置快照过大，请减少配置数量")
     allowed_routes = {"realistic-modern", "historical-costume", "xianxia-fantasy", "anime-stylized"}
     if body.route and body.route not in allowed_routes:
         raise HTTPException(422, "不支持的角色设计路由")
@@ -565,11 +575,12 @@ def _compile_character_design_draft_input(body: CharacterDesignRequest, ctx: Use
     system = (identity_skill["instructions"] + "\n\n" + route_skill["instructions"]
               + "\n\n用户主动点击了 AI 完善角色设计；你的任务是替用户完成可直接评审和用于出图的创意设计，不是列出待办清单。"
               + "只返回 JSON 对象：identity.visual_notes、identity.features、identity.basis、look.visual_notes、look.features、look.basis、review_items（对象数组，每项含 question 和 suggestion，可选 suggested_age_stage 或 suggested_route）。"
-              + "identity.features 仅含 face、hair、skin、height、build、recognition_marks；look.features 仅含 clothing、palette、accessories、weapon。每项是简短、可观察的视觉值，无依据可留空，不得把性格或场景光影填入。visual_notes 是兼容旧工作台的摘要，不应增加 features 中没有的新事实。"
+              + "identity.features 仅含 face、face_shape、eyebrows、eyes、eye_detail、nose、lips、makeup、hair、skin、skin_tone、skin_texture、height、build、recognition_marks；look.features 仅含 clothing、palette、footwear、jewelry、decoration、condition、accessories、weapon。脸型、眉形、眼型、眼周、肤色、肤质必须分别放入对应字段，不合并到 face 或 skin；face/skin 仅用于无法分类的补充。每项是简短、可观察的视觉值，无依据可留空，不得把性格或场景光影填入。visual_notes 是兼容旧工作台的摘要，不应增加 features 中没有的新事实。"
               + "一次完成当前草稿的表达整理与缺失细节提案，不要求用户再进行一次润色。保留用户已明确选择或填写的身高、肤色、服装件数、穿着关系、材质和配饰，不得为了丰富细节擅自改写。height 单独描述身高，不混入体型或姿态；未给出数值时可以提出身高感，不得由单张参考图推断精确厘米数。"
               + '严格格式示例（只说明形状，不是默认设计）：{"identity":{"visual_notes":"面容与体态摘要","features":{"face":"具体面容","height":"用户指定的身高描述"},"basis":["user_specified"]},"look":{"visual_notes":"穿搭摘要","features":{"clothing":"具体穿着关系"},"basis":["user_specified"]},"review_items": []}。'
               + "identity 和 look 必须为对象，features 必须为对象，其值必须为字符串；每个 features 值最多 500 个字符，不要使用对象或数组包装。未指定项可省略或用空字符串，不得将缺失字段写成 null。visual_notes 必须为字符串，review_items 必须为数组，无冲突时返回空数组 []。不要输出 Markdown 或 JSON 之外的解释。"
               + "current_draft 是当前由用户编辑的角色细节，其中明确的视觉选择视为 user_specified；与 profile 中外观描述不同时保留用户选择，并仅对确实需要确认的冲突给出具体建议，不得直接拒绝设计或只返回问题。"
+              + "structured_identity 和 structured_look 是用户明确编辑的字段，必须逐项保留；仅补缺失项，不得用 current_draft 的旧摘要覆盖这些字段。dictionary_configurations 是之前应用词典的来源快照，可能已经被用户手动改过，不得覆盖当前显式字段和 current_draft。"
               + "basis 只能使用 script_fact、user_specified、confirmed_design、verified_reference、creative_choice；可用字符串数组表示混合来源。"
               + "每段视觉值必须具体、可观察、彼此协调。不得把角色性格、镜头动作或通用质量词写入视觉值。"
               + "群体角色须先给出统一主色、统一服装轮廓和一个视觉焦点，再用少量面孔或体型差异区分成员；杂色、拼凑和脏污应在受控色系内表现，不要扩展成多种抢眼颜色与层叠碎片。用户要求简化服装时，减少层数、配饰和兵器展示，不得一边保留满屏装饰一边只追加‘简化’字样。"
@@ -667,8 +678,15 @@ def character_design_draft(body: CharacterDesignRequest, ctx: UserContext = Depe
         if body.current_draft and any(term in body.current_draft for term in ("自然皮肤纹理", "肤质", "真人写实")):
             if "skin" in identity_features:
                 identity_features["skin"] = _preserve_character_realism(identity_features["skin"], body.current_draft)
+        # Explicit panel choices win over model proposals for the same field.
+        identity_features.update(_character_design_features({"features": body.structured_identity}, _CHARACTER_IDENTITY_FEATURES))
+        look_features.update(_character_design_features({"features": body.structured_look}, _CHARACTER_LOOK_FEATURES))
         identity_notes = _character_design_visual_notes(identity)
         look_notes = _character_design_visual_notes(look)
+        if body.structured_identity:
+            identity_notes = "；".join(identity_features.values())
+        if body.structured_look:
+            look_notes = "；".join(look_features.values())
         if not identity_notes and identity_features:
             identity_notes = "；".join(identity_features.values())
         if not look_notes and look_features:

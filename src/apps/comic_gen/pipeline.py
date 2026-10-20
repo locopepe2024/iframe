@@ -2686,12 +2686,21 @@ class ComicGenPipeline(StudioOwnerMixin):
             design = attributes["character_design"]
             if not isinstance(design, dict):
                 raise ValueError("Character design must be an object")
+            configs = design.get("dictionary_configurations", [])
+            if not isinstance(configs, list) or len(configs) > 50 or any(not isinstance(item, dict) for item in configs):
+                raise ValueError("Character dictionary configuration is invalid")
+            if len(json.dumps(configs, ensure_ascii=False)) > 60000:
+                raise ValueError("Character dictionary configuration is too large")
+            if not isinstance(design.get("supplemental_prompt", ""), str) or len(design.get("supplemental_prompt", "")) > 8000:
+                raise ValueError("Character design supplemental prompt is invalid")
+            if design.get("schema_version") not in (None, "iframe.character-fields.v1"):
+                raise ValueError("Character design schema version is invalid")
             identity = design.get("identity", {})
             look = design.get("look", {})
             if not isinstance(identity, dict) or not isinstance(look, dict):
                 raise ValueError("Character design identity and look must be objects")
-            for section, allowed in ((identity, {"face", "hair", "skin", "height", "build", "recognition_marks"}),
-                                     (look, {"clothing", "palette", "accessories", "weapon"})):
+            for section, allowed in ((identity, {"face", "face_shape", "eyebrows", "eyes", "eye_detail", "nose", "lips", "makeup", "hair", "skin", "skin_tone", "skin_texture", "height", "build", "recognition_marks"}),
+                                     (look, {"clothing", "palette", "footwear", "jewelry", "decoration", "condition", "accessories", "weapon"})):
                 if section.get("editor_mode") not in (None, "notes", "fields"):
                     raise ValueError("Character design editor mode is invalid")
                 features = section.get("features", {})
