@@ -48,6 +48,31 @@ API, verify PNG/EXR/manifest, media hostname, Blender version, metric value and
 package/snapshot checksums. Check capability and owner isolation. Do not invoke
 local Blender. Source revision changes or active jobs block the runtime switch.
 
+### Runtime observation
+
+Production configuration cutover completed on iframe using the unchanged image
+revision `5bd1f7222e69174ba8ff295551699d5985d7df66`. The isolated candidate,
+production loopback API and `https://garage.uniart.fun` API each rendered the
+synthetic 2m and 4m planes successfully on `VM-0-6-ubuntu`, Blender 4.5.9 LTS.
+Normalized PNG center values reconstructed 2.0m/4.0m within 0.02m tolerance;
+EXR magic, manifest unit/resolution and snapshot/package checksums passed.
+Invalid sessions returned 401; another anonymous browser owner received 404 for
+the authenticated owner's outputs through the public entry. Project/series IDs
+were preserved and backend/static revision matched after the switch.
+
+Public acceptance task IDs: `42fa6f8f678c4fa5ad0bc6e2c7b5ea5b` (2m),
+`fb5f8703eb0b47c381e3d2486417aff8` (4m). These are synthetic artifacts under
+the designated test owner, not user projects. This verifies API-to-media depth,
+not full WebGL/UI acceptance or arbitrary scene accuracy. No local Blender ran.
+
+Rollback container: `iframe-backend-before-media-20261021`. Environment and
+startup-state backups plus cutover metadata are retained in
+`/srv/lumenx/runtime/director-media-20261021`. The disposable candidate container
+was removed. The tested release helper is preserved in that same directory;
+the tracked release change must be merged before using the normal release entry
+again, so a later deployment retains the SSH mount. Tests: 25 passed, explicit
+remote integration test skipped, local Blender test excluded.
+
 ## Deployment configuration
 
 Set `DIRECTOR_DEPTH_MEDIA_SSH_TARGET` to an operator-managed SSH alias or
