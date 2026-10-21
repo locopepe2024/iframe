@@ -1,0 +1,41 @@
+{
+  "cases": 36,
+  "bones_per_case": 3,
+  "max_errors": {
+    "xyz_m": 3.552713678800501e-15,
+    "rotation_matrix": 3.3306690738754696e-16,
+    "endpoint_m": 2.737549743767154e-15,
+    "pixel": 3.595093471822542e-13,
+    "bone_length_m": 3.885780586188048e-16
+  },
+  "negative_controls": {
+    "omitted_rest_matrix_error": 0.3262451534939917,
+    "omitted_root_matrix_error": 4.173722057182078,
+    "same_direction_twist_direction_error": 0.0,
+    "same_direction_twist_endpoint_error_m": 0.14999999999999988
+  },
+  "contract_rejections": {
+    "relative_z_as_absolute": true,
+    "nonpositive_depth": true,
+    "reflection": true,
+    "scaled_rotation": true,
+    "missing_parent": true,
+    "invalid_intrinsics": true
+  },
+  "schema": "recreation2-contract-adapter-verification.v1",
+  "source_sha256": "0fed823bf39bd206ebeafec922a29394ee87a942b1bcc0395610a603d598550a",
+  "observation_frames": 31,
+  "selected_source_frames_present": [
+    1,
+    17,
+    23,
+    29,
+    55
+  ],
+  "normalized_xy_roundtrip_error": 0.0,
+  "limits": [
+    "Synthetic rigid unit-scale unconstrained rig only; not Blender rig certification",
+    "Source camera/metric pose/root/rig calibration remain unknown",
+    "No real-video retarget improvement or contact validation measured"
+  ]
+}

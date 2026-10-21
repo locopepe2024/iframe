@@ -52,6 +52,8 @@
 
 ## Not yet proven / Hypotheses
 
+- 2026-10-21隔离坐标adapter将图像观测、proxy相对Z、metric camera-Z和rig刚性变换分离；36组×3骨已知姿态闭环最大端点2.74e-15米、像素3.60e-13px，漏rest/root与六种非法输入对照通过。相同骨方向、60°twist差可产生合成侧点0.15米偏移，证明方向验收不足。真实31帧只保留像素观测/相对Z和PTS，XY回转误差0，未知camera/3D/root/rig保持null；尚未验证实际Blender rig或测得真实片段改善。主链路/接触/H3状态不变。[adapter与闭环报告](../agents/deliverables/2026-10-21-recreation2-contract-adapter-v1.md)
+
 - 2026-10-21公开来源与映射契约审计：MediaPipe的图像归一化XY/髋相对Z不同于公制相机XYZ；SMPLify-X显式做人体→相机投影拟合，GVHMR分别处理K/根位移/static关节/IK，Blender区分rest/parent/pose。现有builder同一XYZ直接兼作方向、yaw与root深度，存在已确认的语义边界缺口。36组无噪声针孔反例中，正确反投影XYZ误差<1e-12，补Y后的直接XYZ差仍不保持方向夹角，不能一般性用统一转轴修复；该合成Z不是MediaPipe内部公式，也不证明本片最大根因。下一步拆观测/3D/相机/root/rig标定通道并作闭环，再量真实源分层误差；主链路、接触/H3状态不变。[公开实现与合成报告](../agents/deliverables/2026-10-21-recreation2-mapping-contract-research-v1.md)
 
 - 2026-10-21躯干固定骨长端点四组隔离：同chest_source_full完整胸廓朝向/骨盆/root/镜头，仅解下/中脊柱链位置。绝对源肩射线25/28可达（37/39/41不交球壳），保留rig髋共同残差的相对目标28/28可达；全关节中位数9.37→6.11px（最近肩深度）或6.35px（近伸展）。最近深度最大链折角74.38°，近伸展最大1.08°但沿射线深度改变量中位0.08258units，说明像素低误差不能辨真实深度/体态。四组重导入0px、骨长/胸廓完整旋转/下身保持，接触/H3未通过；主链路未改。[躯干端点与深度选解](../agents/deliverables/2026-10-21-recreation2-torso-endpoint-v1.md)

@@ -1,0 +1,3200 @@
+{
+  "schema": "recreation2-observations-only.v1",
+  "source_sha256": "0fed823bf39bd206ebeafec922a29394ee87a942b1bcc0395610a603d598550a",
+  "dimension_provenance": "prior ffprobe source evidence: 1394x792",
+  "frames": [
+    {
+      "source_frame": 1,
+      "pts_seconds": 0.0,
+      "image_observations": {
+        "units": "pixel",
+        "origin": "top_left",
+        "width": 1394,
+        "height": 792,
+        "joints": {
+          "left_shoulder": [
+            740.0390400886536,
+            267.3411691188812
+          ],
+          "right_shoulder": [
+            643.9766683578491,
+            279.8170266151428
+          ],
+          "left_elbow": [
+            804.4913295507431,
+            243.50759625434875
+          ],
+          "right_elbow": [
+            581.7923312783241,
+            285.2058570384979
+          ],
+          "left_wrist": [
+            808.9904259443283,
+            165.43615221977234
+          ],
+          "right_wrist": [
+            532.7878838777542,
+            234.43901324272156
+          ],
+          "left_hip": [
+            730.6961946487427,
+            421.17802476882935
+          ],
+          "right_hip": [
+            673.4686905741692,
+            422.64554500579834
+          ],
+          "left_knee": [
+            749.6883172988892,
+            522.9083762168884
+          ],
+          "right_knee": [
+            624.9953472614288,
+            523.4857635498047
+          ],
+          "left_ankle": [
+            776.2291473150253,
+            653.0170955657959
+          ],
+          "right_ankle": [
+            644.5066922903061,
+            632.054361820221
+          ],
+          "left_heel": [
+            769.2852438688278,
+            669.9626655578613
+          ],
+          "right_heel": [
+            657.4262645244598,
+            645.022705078125
+          ],
+          "left_foot_index": [
+            780.4479849338531,
+            698.5731024742126
+          ],
+          "right_foot_index": [
+            618.3360232114792,
+            670.4793920516968
+          ]
+        }
+      },
+      "relative_depth_evidence": {
+        "origin": "hip_midpoint",
+        "units": "mediapipe_normalized_proxy_not_meters",
+        "joints": {
+          "left_shoulder": -0.040804918855428696,
+          "right_shoulder": -0.0060793738812208176,
+          "left_elbow": -0.10646601766347885,
+          "right_elbow": -0.0237281434237957,
+          "left_wrist": -0.20654410123825073,
+          "right_wrist": -0.13242647051811218,
+          "left_hip": -0.01938687078654766,
+          "right_hip": 0.01945558749139309,
+          "left_knee": -0.14985692501068115,
+          "right_knee": -0.14099659025669098,
+          "left_ankle": -0.059500522911548615,
+          "right_ankle": 0.0020450064912438393,
+          "left_heel": -0.054738543927669525,
+          "right_heel": 0.013239601626992226,
+          "left_foot_index": -0.16290223598480225,
+          "right_foot_index": -0.07087484747171402
+        }
+      },
+      "body_pose_3d": null,
+      "camera": null,
+      "root_trajectory": null,
+      "rig_calibration": null,
+      "status": "observations_only_metric_reconstruction_unavailable"
+    },
+    {
+      "source_frame": 3,
+      "pts_seconds": 0.06517413951079595,
+      "image_observations": {
+        "units": "pixel",
+        "origin": "top_left",
+        "width": 1394,
+        "height": 792,
+        "joints": {
+          "left_shoulder": [
+            739.9646755456924,
+            267.2651424407959
+          ],
+          "right_shoulder": [
+            643.9301385879517,
+            279.71472930908203
+          ],
+          "left_elbow": [
+            804.5023803710938,
+            243.48805260658264
+          ],
+          "right_elbow": [
+            581.5306428670883,
+            285.26621103286743
+          ],
+          "left_wrist": [
+            809.0756751298904,
+            165.3781349658966
+          ],
+          "right_wrist": [
+            532.7657822370529,
+            234.41545701026917
+          ],
+          "left_hip": [
+            730.3328469991684,
+            421.1518249511719
+          ],
+          "right_hip": [
+            673.3556066155434,
+            422.5992350578308
+          ],
+          "left_knee": [
+            749.3937672376633,
+            522.78129529953
+          ],
+          "right_knee": [
+            624.830083489418,
+            523.6216721534729
+          ],
+          "left_ankle": [
+            776.2381209135056,
+            652.3345785140991
+          ],
+          "right_ankle": [
+            644.5892410874367,
+            632.1969265937805
+          ],
+          "left_heel": [
+            769.5355906486511,
+            669.5427131652832
+          ],
+          "right_heel": [
+            657.6919827461243,
+            645.2151675224304
+          ],
+          "left_foot_index": [
+            779.84816634655,
+            697.5786895751953
+          ],
+          "right_foot_index": [
+            618.2432129383087,
+            670.9475898742676
+          ]
+        }
+      },
+      "relative_depth_evidence": {
+        "origin": "hip_midpoint",
+        "units": "mediapipe_normalized_proxy_not_meters",
+        "joints": {
+          "left_shoulder": -0.040513649582862854,
+          "right_shoulder": -0.005172342993319035,
+          "left_elbow": -0.10593155771493912,
+          "right_elbow": -0.02303682081401348,
+          "left_wrist": -0.2053792029619217,
+          "right_wrist": -0.1318262368440628,
+          "left_hip": -0.019786033779382706,
+          "right_hip": 0.019855212420225143,
+          "left_knee": -0.14669261872768402,
+          "right_knee": -0.13736887276172638,
+          "left_ankle": -0.0568087138235569,
+          "right_ankle": 0.0045543876476585865,
+          "left_heel": -0.05210093781352043,
+          "right_heel": 0.015617466531693935,
+          "left_foot_index": -0.16001731157302856,
+          "right_foot_index": -0.06836377084255219
+        }
+      },
+      "body_pose_3d": null,
+      "camera": null,
+      "root_trajectory": null,
+      "rig_calibration": null,
+      "status": "observations_only_metric_reconstruction_unavailable"
+    },
+    {
+      "source_frame": 5,
+      "pts_seconds": 0.1303482790215919,
+      "image_observations": {
+        "units": "pixel",
+        "origin": "top_left",
+        "width": 1394,
+        "height": 792,
+        "joints": {
+          "left_shoulder": [
+            740.0617233514786,
+            266.6573066711426
+          ],
+          "right_shoulder": [
+            644.4292950034142,
+            279.07993841171265
+          ],
+          "left_elbow": [
+            804.5544770956039,
+            243.38478755950928
+          ],
+          "right_elbow": [
+            581.8170086741447,
+            285.4342439174652
+          ],
+          "left_wrist": [
+            808.97148168087,
+            165.34981083869934
+          ],
+          "right_wrist": [
+            533.0546407103539,
+            234.45565366744995
+          ],
+          "left_hip": [
+            730.525862455368,
+            420.44084215164185
+          ],
+          "right_hip": [
+            673.8508578538895,
+            422.2018475532532
+          ],
+          "left_knee": [
+            749.0221107006073,
+            523.4980373382568
+          ],
+          "right_knee": [
+            625.299286365509,
+            523.2815465927124
+          ],
+          "left_ankle": [
+            775.0175453424454,
+            649.2363910675049
+          ],
+          "right_ankle": [
+            645.284071803093,
+            632.3067770004272
+          ],
+          "left_heel": [
+            768.5540617704391,
+            669.8224611282349
+          ],
+          "right_heel": [
+            658.3797924518585,
+            645.9522085189819
+          ],
+          "left_foot_index": [
+            775.0001797676086,
+            696.9069356918335
+          ],
+          "right_foot_index": [
+            618.4425846934319,
+            670.8379755020142
+          ]
+        }
+      },
+      "relative_depth_evidence": {
+        "origin": "hip_midpoint",
+        "units": "mediapipe_normalized_proxy_not_meters",
+        "joints": {
+          "left_shoulder": -0.04083876311779022,
+          "right_shoulder": -0.00216392008587718,
+          "left_elbow": -0.10523636639118195,
+          "right_elbow": -0.017609763890504837,
+          "left_wrist": -0.20522478222846985,
+          "right_wrist": -0.12651613354682922,
+          "left_hip": -0.02083050273358822,
+          "right_hip": 0.020896879956126213,
+          "left_knee": -0.13665731251239777,
+          "right_knee": -0.12454351782798767,
+          "left_ankle": -0.043503742665052414,
+          "right_ankle": 0.014870062470436096,
+          "left_heel": -0.0385638102889061,
+          "right_heel": 0.02551048994064331,
+          "left_foot_index": -0.14570499956607819,
+          "right_foot_index": -0.059211503714323044
+        }
+      },
+      "body_pose_3d": null,
+      "camera": null,
+      "root_trajectory": null,
+      "rig_calibration": null,
+      "status": "observations_only_metric_reconstruction_unavailable"
+    },
+    {
+      "source_frame": 7,
+      "pts_seconds": 0.19552241853238786,
+      "image_observations": {
+        "units": "pixel",
+        "origin": "top_left",
+        "width": 1394,
+        "height": 792,
+        "joints": {
+          "left_shoulder": [
+            739.771577000618,
+            267.14592146873474
+          ],
+          "right_shoulder": [
+            644.2430097460747,
+            279.4734077453613
+          ],
+          "left_elbow": [
+            804.4076590538025,
+            243.44237995147705
+          ],
+          "right_elbow": [
+            581.7156817913055,
+            285.5173044204712
+          ],
+          "left_wrist": [
+            808.8170194625854,
+            165.37405157089233
+          ],
+          "right_wrist": [
+            532.9438832402229,
+            234.6039068698883
+          ],
+          "left_hip": [
+            730.1681648492813,
+            420.70321798324585
+          ],
+          "right_hip": [
+            673.6966449022293,
+            422.34965229034424
+          ],
+          "left_knee": [
+            749.1752434968948,
+            523.5744652748108
+          ],
+          "right_knee": [
+            625.0600734949112,
+            523.5395793914795
+          ],
+          "left_ankle": [
+            775.08351790905,
+            649.4714813232422
+          ],
+          "right_ankle": [
+            645.0949615240097,
+            632.5023550987244
+          ],
+          "left_heel": [
+            768.6295064687729,
+            669.8473863601685
+          ],
+          "right_heel": [
+            658.1857799291611,
+            645.9540023803711
+          ],
+          "left_foot_index": [
+            776.3481305837631,
+            697.1631746292114
+          ],
+          "right_foot_index": [
+            618.4831320643425,
+            671.0391240119934
+          ]
+        }
+      },
+      "relative_depth_evidence": {
+        "origin": "hip_midpoint",
+        "units": "mediapipe_normalized_proxy_not_meters",
+        "joints": {
+          "left_shoulder": -0.03974603861570358,
+          "right_shoulder": -0.0052922866307199,
+          "left_elbow": -0.1062186062335968,
+          "right_elbow": -0.024974701926112175,
+          "left_wrist": -0.209378182888031,
+          "right_wrist": -0.13676181435585022,
+          "left_hip": -0.019448941573500633,
+          "right_hip": 0.019521458074450493,
+          "left_knee": -0.1377572864294052,
+          "right_knee": -0.1281881183385849,
+          "left_ankle": -0.04531354457139969,
+          "right_ankle": 0.010763177648186684,
+          "left_heel": -0.04047543555498123,
+          "right_heel": 0.02130899205803871,
+          "left_foot_index": -0.14813591539859772,
+          "right_foot_index": -0.06430482864379883
+        }
+      },
+      "body_pose_3d": null,
+      "camera": null,
+      "root_trajectory": null,
+      "rig_calibration": null,
+      "status": "observations_only_metric_reconstruction_unavailable"
+    },
+    {
+      "source_frame": 9,
+      "pts_seconds": 0.2606965580431838,
+      "image_observations": {
+        "units": "pixel",
+        "origin": "top_left",
+        "width": 1394,
+        "height": 792,
+        "joints": {
+          "left_shoulder": [
+            739.9533754587173,
+            267.19777822494507
+          ],
+          "right_shoulder": [
+            644.5365627408028,
+            279.5649890899658
+          ],
+          "left_elbow": [
+            804.4999707937241,
+            243.88480281829834
+          ],
+          "right_elbow": [
+            581.1860733032227,
+            285.30824875831604
+          ],
+          "left_wrist": [
+            808.6063060760498,
+            165.2174427509308
+          ],
+          "right_wrist": [
+            532.6574343442917,
+            234.39990234375
+          ],
+          "left_hip": [
+            730.8436774015427,
+            420.4888515472412
+          ],
+          "right_hip": [
+            674.3035260438919,
+            421.91431045532227
+          ],
+          "left_knee": [
+            750.1357508897781,
+            523.72798204422
+          ],
+          "right_knee": [
+            625.3277027606964,
+            523.3622703552246
+          ],
+          "left_ankle": [
+            776.1949146986008,
+            655.2568259239197
+          ],
+          "right_ankle": [
+            644.2907858490944,
+            632.5605611801147
+          ],
+          "left_heel": [
+            768.9729958772659,
+            671.7186670303345
+          ],
+          "right_heel": [
+            657.2715530395508,
+            646.0040416717529
+          ],
+          "left_foot_index": [
+            781.0475542545319,
+            701.004162311554
+          ],
+          "right_foot_index": [
+            618.6620639562607,
+            674.2831335067749
+          ]
+        }
+      },
+      "relative_depth_evidence": {
+        "origin": "hip_midpoint",
+        "units": "mediapipe_normalized_proxy_not_meters",
+        "joints": {
+          "left_shoulder": -0.03622481971979141,
+          "right_shoulder": -0.006586723029613495,
+          "left_elbow": -0.10173304378986359,
+          "right_elbow": -0.02331378497183323,
+          "left_wrist": -0.2068874090909958,
+          "right_wrist": -0.1315118670463562,
+          "left_hip": -0.017227137461304665,
+          "right_hip": 0.017301497980952263,
+          "left_knee": -0.1407438963651657,
+          "right_knee": -0.13561472296714783,
+          "left_ankle": -0.05113265663385391,
+          "right_ankle": 0.0027191799599677324,
+          "left_heel": -0.04662908613681793,
+          "right_heel": 0.013229208067059517,
+          "left_foot_index": -0.1550782024860382,
+          "right_foot_index": -0.0728418380022049
+        }
+      },
+      "body_pose_3d": null,
+      "camera": null,
+      "root_trajectory": null,
+      "rig_calibration": null,
+      "status": "observations_only_metric_reconstruction_unavailable"
+    },
+    {
+      "source_frame": 11,
+      "pts_seconds": 0.3258706975539798,
+      "image_observations": {
+        "units": "pixel",
+        "origin": "top_left",
+        "width": 1394,
+        "height": 792,
+        "joints": {
+          "left_shoulder": [
+            739.7920999526978,
+            267.4776678085327
+          ],
+          "right_shoulder": [
+            644.2227776050568,
+            279.57240056991577
+          ],
+          "left_elbow": [
+            804.6068230867386,
+            243.88095545768738
+          ],
+          "right_elbow": [
+            581.4551981687546,
+            285.51543974876404
+          ],
+          "left_wrist": [
+            808.5564527511597,
+            165.19218707084656
+          ],
+          "right_wrist": [
+            533.0154227614403,
+            234.1572825908661
+          ],
+          "left_hip": [
+            731.0710916519165,
+            420.63467359542847
+          ],
+          "right_hip": [
+            674.1218937635422,
+            422.1081418991089
+          ],
+          "left_knee": [
+            750.0554039478302,
+            524.1324033737183
+          ],
+          "right_knee": [
+            625.1906892061234,
+            523.4887375831604
+          ],
+          "left_ankle": [
+            776.2220847606659,
+            655.2235450744629
+          ],
+          "right_ankle": [
+            643.7116148471832,
+            632.2530555725098
+          ],
+          "left_heel": [
+            769.0361434221268,
+            671.789146900177
+          ],
+          "right_heel": [
+            657.1543561816216,
+            649.3868865966797
+          ],
+          "left_foot_index": [
+            782.3884425163269,
+            700.672061920166
+          ],
+          "right_foot_index": [
+            618.3611575961113,
+            674.0600810050964
+          ]
+        }
+      },
+      "relative_depth_evidence": {
+        "origin": "hip_midpoint",
+        "units": "mediapipe_normalized_proxy_not_meters",
+        "joints": {
+          "left_shoulder": -0.03314462676644325,
+          "right_shoulder": -0.006750809494405985,
+          "left_elbow": -0.09883091598749161,
+          "right_elbow": -0.026342419907450676,
+          "left_wrist": -0.20531579852104187,
+          "right_wrist": -0.13510216772556305,
+          "left_hip": -0.01625710539519787,
+          "right_hip": 0.016334572806954384,
+          "left_knee": -0.13572828471660614,
+          "right_knee": -0.1317988932132721,
+          "left_ankle": -0.046786095947027206,
+          "right_ankle": 0.0029953543562442064,
+          "left_heel": -0.04241575300693512,
+          "right_heel": 0.013020322658121586,
+          "left_foot_index": -0.15081185102462769,
+          "right_foot_index": -0.07436607033014297
+        }
+      },
+      "body_pose_3d": null,
+      "camera": null,
+      "root_trajectory": null,
+      "rig_calibration": null,
+      "status": "observations_only_metric_reconstruction_unavailable"
+    },
+    {
+      "source_frame": 13,
+      "pts_seconds": 0.3910448370647757,
+      "image_observations": {
+        "units": "pixel",
+        "origin": "top_left",
+        "width": 1394,
+        "height": 792,
+        "joints": {
+          "left_shoulder": [
+            739.8495143651962,
+            267.5634663105011
+          ],
+          "right_shoulder": [
+            644.2980976700783,
+            279.74248695373535
+          ],
+          "left_elbow": [
+            804.3190863132477,
+            243.55237197875977
+          ],
+          "right_elbow": [
+            581.4989860057831,
+            285.34603786468506
+          ],
+          "left_wrist": [
+            808.6631388664246,
+            164.84698677062988
+          ],
+          "right_wrist": [
+            533.210889339447,
+            233.87387609481812
+          ],
+          "left_hip": [
+            729.4067384004593,
+            420.1346583366394
+          ],
+          "right_hip": [
+            672.5975452661514,
+            421.4829339981079
+          ],
+          "left_knee": [
+            750.5791962146759,
+            523.037250995636
+          ],
+          "right_knee": [
+            625.1117547750473,
+            523.2453861236572
+          ],
+          "left_ankle": [
+            777.2213115692139,
+            652.8035316467285
+          ],
+          "right_ankle": [
+            643.415610730648,
+            631.4164552688599
+          ],
+          "left_heel": [
+            770.0597152709961,
+            669.8893532752991
+          ],
+          "right_heel": [
+            656.1641445159912,
+            644.5511083602905
+          ],
+          "left_foot_index": [
+            781.7075291872025,
+            698.0220565795898
+          ],
+          "right_foot_index": [
+            618.2355272173882,
+            673.3965411186218
+          ]
+        }
+      },
+      "relative_depth_evidence": {
+        "origin": "hip_midpoint",
+        "units": "mediapipe_normalized_proxy_not_meters",
+        "joints": {
+          "left_shoulder": -0.03910262882709503,
+          "right_shoulder": -0.0044902004301548,
+          "left_elbow": -0.10606099665164948,
+          "right_elbow": -0.021282820031046867,
+          "left_wrist": -0.20979847013950348,
+          "right_wrist": -0.12915420532226562,
+          "left_hip": -0.01879860833287239,
+          "right_hip": 0.018876826390624046,
+          "left_knee": -0.13565942645072937,
+          "right_knee": -0.12757588922977448,
+          "left_ankle": -0.052741728723049164,
+          "right_ankle": 0.0019215571228414774,
+          "left_heel": -0.048943161964416504,
+          "right_heel": 0.011504223570227623,
+          "left_foot_index": -0.15759633481502533,
+          "right_foot_index": -0.07513782382011414
+        }
+      },
+      "body_pose_3d": null,
+      "camera": null,
+      "root_trajectory": null,
+      "rig_calibration": null,
+      "status": "observations_only_metric_reconstruction_unavailable"
+    },
+    {
+      "source_frame": 15,
+      "pts_seconds": 0.4562189765755717,
+      "image_observations": {
+        "units": "pixel",
+        "origin": "top_left",
+        "width": 1394,
+        "height": 792,
+        "joints": {
+          "left_shoulder": [
+            739.9788837432861,
+            267.5278959274292
+          ],
+          "right_shoulder": [
+            644.2350332140923,
+            279.8128252029419
+          ],
+          "left_elbow": [
+            804.352986574173,
+            243.74009013175964
+          ],
+          "right_elbow": [
+            581.2558264136314,
+            285.32186794281006
+          ],
+          "left_wrist": [
+            808.6692043542862,
+            165.00104641914368
+          ],
+          "right_wrist": [
+            532.8774952292442,
+            234.06286883354187
+          ],
+          "left_hip": [
+            729.6499395370483,
+            420.1304569244385
+          ],
+          "right_hip": [
+            672.6714943647385,
+            421.4738230705261
+          ],
+          "left_knee": [
+            750.6678520441055,
+            523.6034030914307
+          ],
+          "right_knee": [
+            625.1617742776871,
+            523.4435133934021
+          ],
+          "left_ankle": [
+            777.1106371879578,
+            653.7677793502808
+          ],
+          "right_ankle": [
+            643.8100336194038,
+            631.8921589851379
+          ],
+          "left_heel": [
+            769.9487085342407,
+            670.5891952514648
+          ],
+          "right_heel": [
+            656.5703244805336,
+            644.9100694656372
+          ],
+          "left_foot_index": [
+            781.7337852716446,
+            699.695209980011
+          ],
+          "right_foot_index": [
+            618.3445813655853,
+            673.9491448402405
+          ]
+        }
+      },
+      "relative_depth_evidence": {
+        "origin": "hip_midpoint",
+        "units": "mediapipe_normalized_proxy_not_meters",
+        "joints": {
+          "left_shoulder": -0.04090052843093872,
+          "right_shoulder": -0.00549662671983242,
+          "left_elbow": -0.10826128721237183,
+          "right_elbow": -0.021293822675943375,
+          "left_wrist": -0.21243256330490112,
+          "right_wrist": -0.12907421588897705,
+          "left_hip": -0.018987370654940605,
+          "right_hip": 0.01906142756342888,
+          "left_knee": -0.13694125413894653,
+          "right_knee": -0.12853336334228516,
+          "left_ankle": -0.0516609363257885,
+          "right_ankle": 0.005194216966629028,
+          "left_heel": -0.04762359708547592,
+          "right_heel": 0.015255659818649292,
+          "left_foot_index": -0.15636923909187317,
+          "right_foot_index": -0.07055690884590149
+        }
+      },
+      "body_pose_3d": null,
+      "camera": null,
+      "root_trajectory": null,
+      "rig_calibration": null,
+      "status": "observations_only_metric_reconstruction_unavailable"
+    },
+    {
+      "source_frame": 17,
+      "pts_seconds": 0.5213931160863676,
+      "image_observations": {
+        "units": "pixel",
+        "origin": "top_left",
+        "width": 1394,
+        "height": 792,
+        "joints": {
+          "left_shoulder": [
+            764.1613191366196,
+            260.621057510376
+          ],
+          "right_shoulder": [
+            664.3623576164246,
+            276.0216643810272
+          ],
+          "left_elbow": [
+            835.5911630392075,
+            261.78232312202454
+          ],
+          "right_elbow": [
+            605.9533712863922,
+            304.4475932121277
+          ],
+          "left_wrist": [
+            835.710727930069,
+            186.98684763908386
+          ],
+          "right_wrist": [
+            568.4082922339439,
+            241.43231105804443
+          ],
+          "left_hip": [
+            758.7563047409058,
+            418.5209856033325
+          ],
+          "right_hip": [
+            699.9546403884888,
+            418.7242112159729
+          ],
+          "left_knee": [
+            767.5653041601181,
+            524.576856136322
+          ],
+          "right_knee": [
+            647.6417601704597,
+            510.75973320007324
+          ],
+          "left_ankle": [
+            778.0791211128235,
+            652.5696687698364
+          ],
+          "right_ankle": [
+            652.5209881663322,
+            628.4467177391052
+          ],
+          "left_heel": [
+            768.4002642631531,
+            671.1349067687988
+          ],
+          "right_heel": [
+            663.660173535347,
+            655.9682807922363
+          ],
+          "left_foot_index": [
+            774.0821307897568,
+            696.0131206512451
+          ],
+          "right_foot_index": [
+            620.1668034791946,
+            668.705735206604
+          ]
+        }
+      },
+      "relative_depth_evidence": {
+        "origin": "hip_midpoint",
+        "units": "mediapipe_normalized_proxy_not_meters",
+        "joints": {
+          "left_shoulder": -0.08665357530117035,
+          "right_shoulder": -0.03512652590870857,
+          "left_elbow": -0.16958287358283997,
+          "right_elbow": -0.07115523517131805,
+          "left_wrist": -0.30446839332580566,
+          "right_wrist": -0.21713769435882568,
+          "left_hip": -0.02650514990091324,
+          "right_hip": 0.026603274047374725,
+          "left_knee": -0.15118367969989777,
+          "right_knee": -0.12179836630821228,
+          "left_ankle": -0.05221955105662346,
+          "right_ankle": -0.005205586086958647,
+          "left_heel": -0.047547515481710434,
+          "right_heel": 0.0014745512744411826,
+          "left_foot_index": -0.16740983724594116,
+          "right_foot_index": -0.10411154478788376
+        }
+      },
+      "body_pose_3d": null,
+      "camera": null,
+      "root_trajectory": null,
+      "rig_calibration": null,
+      "status": "observations_only_metric_reconstruction_unavailable"
+    },
+    {
+      "source_frame": 19,
+      "pts_seconds": 0.5865672555971636,
+      "image_observations": {
+        "units": "pixel",
+        "origin": "top_left",
+        "width": 1394,
+        "height": 792,
+        "joints": {
+          "left_shoulder": [
+            767.2292927503586,
+            265.7663240432739
+          ],
+          "right_shoulder": [
+            663.9390197992325,
+            278.9928889274597
+          ],
+          "left_elbow": [
+            840.86971616745,
+            276.0560073852539
+          ],
+          "right_elbow": [
+            611.8167870044708,
+            312.6832344532013
+          ],
+          "left_wrist": [
+            843.5662825107574,
+            196.77734184265137
+          ],
+          "right_wrist": [
+            573.9465396404266,
+            244.83163118362427
+          ],
+          "left_hip": [
+            767.2936866283417,
+            416.1299571990967
+          ],
+          "right_hip": [
+            704.1540352106094,
+            420.39585399627686
+          ],
+          "left_knee": [
+            773.3508656024933,
+            526.8434000015259
+          ],
+          "right_knee": [
+            640.258732020855,
+            494.09853744506836
+          ],
+          "left_ankle": [
+            778.0302648544312,
+            656.1092405319214
+          ],
+          "right_ankle": [
+            660.8555085659027,
+            603.2257347106934
+          ],
+          "left_heel": [
+            770.9422852993011,
+            671.706298828125
+          ],
+          "right_heel": [
+            674.1179885864258,
+            624.5299158096313
+          ],
+          "left_foot_index": [
+            771.9003831148148,
+            692.9415578842163
+          ],
+          "right_foot_index": [
+            630.8159722089767,
+            662.5422163009644
+          ]
+        }
+      },
+      "relative_depth_evidence": {
+        "origin": "hip_midpoint",
+        "units": "mediapipe_normalized_proxy_not_meters",
+        "joints": {
+          "left_shoulder": -0.07161388546228409,
+          "right_shoulder": -0.02862473949790001,
+          "left_elbow": -0.15564003586769104,
+          "right_elbow": -0.07170481979846954,
+          "left_wrist": -0.30458250641822815,
+          "right_wrist": -0.22268645465373993,
+          "left_hip": -0.025527330115437508,
+          "right_hip": 0.025657713413238525,
+          "left_knee": -0.2175631821155548,
+          "right_knee": -0.2326451539993286,
+          "left_ankle": -0.09716995805501938,
+          "right_ankle": -0.10691550374031067,
+          "left_heel": -0.08932143449783325,
+          "right_heel": -0.09844771027565002,
+          "left_foot_index": -0.20882491767406464,
+          "right_foot_index": -0.2059655487537384
+        }
+      },
+      "body_pose_3d": null,
+      "camera": null,
+      "root_trajectory": null,
+      "rig_calibration": null,
+      "status": "observations_only_metric_reconstruction_unavailable"
+    },
+    {
+      "source_frame": 21,
+      "pts_seconds": 0.6517413951079596,
+      "image_observations": {
+        "units": "pixel",
+        "origin": "top_left",
+        "width": 1394,
+        "height": 792,
+        "joints": {
+          "left_shoulder": [
+            767.1029976606369,
+            265.2104630470276
+          ],
+          "right_shoulder": [
+            664.0951853394508,
+            278.58294439315796
+          ],
+          "left_elbow": [
+            839.9171853065491,
+            276.4160542488098
+          ],
+          "right_elbow": [
+            611.8475298881531,
+            312.70974111557007
+          ],
+          "left_wrist": [
+            843.5856422185898,
+            197.2800006866455
+          ],
+          "right_wrist": [
+            573.9477028846741,
+            244.87237071990967
+          ],
+          "left_hip": [
+            767.3246787786484,
+            416.5957474708557
+          ],
+          "right_hip": [
+            704.3371630907059,
+            420.3622899055481
+          ],
+          "left_knee": [
+            772.5102554559708,
+            524.4079971313477
+          ],
+          "right_knee": [
+            640.2157335281372,
+            494.01630306243896
+          ],
+          "left_ankle": [
+            779.2420330047607,
+            655.8500747680664
+          ],
+          "right_ankle": [
+            661.212042927742,
+            603.391478061676
+          ],
+          "left_heel": [
+            771.9887896776199,
+            671.8077936172485
+          ],
+          "right_heel": [
+            674.0815125703812,
+            625.2556743621826
+          ],
+          "left_foot_index": [
+            770.8063519001007,
+            688.8812942504883
+          ],
+          "right_foot_index": [
+            630.4870233535767,
+            662.9773693084717
+          ]
+        }
+      },
+      "relative_depth_evidence": {
+        "origin": "hip_midpoint",
+        "units": "mediapipe_normalized_proxy_not_meters",
+        "joints": {
+          "left_shoulder": -0.07089157402515411,
+          "right_shoulder": -0.024819673970341682,
+          "left_elbow": -0.15762126445770264,
+          "right_elbow": -0.06599176675081253,
+          "left_wrist": -0.30873867869377136,
+          "right_wrist": -0.21624772250652313,
+          "left_hip": -0.026581304147839546,
+          "right_hip": 0.026712454855442047,
+          "left_knee": -0.22866474092006683,
+          "right_knee": -0.23562714457511902,
+          "left_ankle": -0.1103106439113617,
+          "right_ankle": -0.10981405526399612,
+          "left_heel": -0.10260692238807678,
+          "right_heel": -0.10126002877950668,
+          "left_foot_index": -0.22291263937950134,
+          "right_foot_index": -0.2085777223110199
+        }
+      },
+      "body_pose_3d": null,
+      "camera": null,
+      "root_trajectory": null,
+      "rig_calibration": null,
+      "status": "observations_only_metric_reconstruction_unavailable"
+    },
+    {
+      "source_frame": 23,
+      "pts_seconds": 0.7169155346187556,
+      "image_observations": {
+        "units": "pixel",
+        "origin": "top_left",
+        "width": 1394,
+        "height": 792,
+        "joints": {
+          "left_shoulder": [
+            776.8759942054749,
+            277.57944416999817
+          ],
+          "right_shoulder": [
+            680.1936132907867,
+            279.9064836502075
+          ],
+          "left_elbow": [
+            834.6230945587158,
+            323.2297468185425
+          ],
+          "right_elbow": [
+            632.5430575609207,
+            325.33432388305664
+          ],
+          "left_wrist": [
+            858.4528176784515,
+            251.1268572807312
+          ],
+          "right_wrist": [
+            594.5686167478561,
+            261.4736137390137
+          ],
+          "left_hip": [
+            773.8400928974152,
+            426.95000982284546
+          ],
+          "right_hip": [
+            713.525629401207,
+            429.12431144714355
+          ],
+          "left_knee": [
+            779.9814409017563,
+            532.8374934196472
+          ],
+          "right_knee": [
+            649.2897864580154,
+            465.25074434280396
+          ],
+          "left_ankle": [
+            778.8197753429413,
+            649.804573059082
+          ],
+          "right_ankle": [
+            700.8329728841782,
+            575.2983341217041
+          ],
+          "left_heel": [
+            772.6500940322876,
+            659.9151062965393
+          ],
+          "right_heel": [
+            717.0163592100143,
+            586.0819902420044
+          ],
+          "left_foot_index": [
+            769.8383665084839,
+            682.873227596283
+          ],
+          "right_foot_index": [
+            675.2732563018799,
+            624.6200337409973
+          ]
+        }
+      },
+      "relative_depth_evidence": {
+        "origin": "hip_midpoint",
+        "units": "mediapipe_normalized_proxy_not_meters",
+        "joints": {
+          "left_shoulder": -0.05708841606974602,
+          "right_shoulder": 0.015473577193915844,
+          "left_elbow": -0.15035873651504517,
+          "right_elbow": 0.017517704516649246,
+          "left_wrist": -0.2995184361934662,
+          "right_wrist": -0.09125437587499619,
+          "left_hip": -0.030824551358819008,
+          "right_hip": 0.030939791351556778,
+          "left_knee": -0.1996430605649948,
+          "right_knee": -0.28474774956703186,
+          "left_ankle": -0.07466859370470047,
+          "right_ankle": -0.12871003150939941,
+          "left_heel": -0.06562867760658264,
+          "right_heel": -0.1153474822640419,
+          "left_foot_index": -0.17645643651485443,
+          "right_foot_index": -0.19961360096931458
+        }
+      },
+      "body_pose_3d": null,
+      "camera": null,
+      "root_trajectory": null,
+      "rig_calibration": null,
+      "status": "observations_only_metric_reconstruction_unavailable"
+    },
+    {
+      "source_frame": 25,
+      "pts_seconds": 0.7820896741295514,
+      "image_observations": {
+        "units": "pixel",
+        "origin": "top_left",
+        "width": 1394,
+        "height": 792,
+        "joints": {
+          "left_shoulder": [
+            776.7741272449493,
+            281.3538465499878
+          ],
+          "right_shoulder": [
+            681.4821555614471,
+            280.6978597640991
+          ],
+          "left_elbow": [
+            832.6105989217758,
+            329.7974274158478
+          ],
+          "right_elbow": [
+            633.3346868157387,
+            327.27728819847107
+          ],
+          "left_wrist": [
+            859.6552798748016,
+            257.16169023513794
+          ],
+          "right_wrist": [
+            596.7364885807037,
+            263.38256549835205
+          ],
+          "left_hip": [
+            775.9871094226837,
+            429.18884325027466
+          ],
+          "right_hip": [
+            716.4879139661789,
+            431.591956615448
+          ],
+          "left_knee": [
+            780.4428334236145,
+            528.7344131469727
+          ],
+          "right_knee": [
+            655.4381554722786,
+            464.4233021736145
+          ],
+          "left_ankle": [
+            779.4421110153198,
+            648.475793838501
+          ],
+          "right_ankle": [
+            705.8117413520813,
+            578.0056486129761
+          ],
+          "left_heel": [
+            773.4655282497406,
+            659.2394814491272
+          ],
+          "right_heel": [
+            720.4534966945648,
+            586.7799439430237
+          ],
+          "left_foot_index": [
+            768.8647310733795,
+            682.0962495803833
+          ],
+          "right_foot_index": [
+            680.9015305042267,
+            623.2228517532349
+          ]
+        }
+      },
+      "relative_depth_evidence": {
+        "origin": "hip_midpoint",
+        "units": "mediapipe_normalized_proxy_not_meters",
+        "joints": {
+          "left_shoulder": -0.07414554059505463,
+          "right_shoulder": -0.00732103968039155,
+          "left_elbow": -0.16999551653862,
+          "right_elbow": -0.028898952528834343,
+          "left_wrist": -0.3197188377380371,
+          "right_wrist": -0.1569776087999344,
+          "left_hip": -0.03101911023259163,
+          "right_hip": 0.031102880835533142,
+          "left_knee": -0.21375764906406403,
+          "right_knee": -0.26371920108795166,
+          "left_ankle": -0.09327077120542526,
+          "right_ankle": -0.09492222964763641,
+          "left_heel": -0.08441026508808136,
+          "right_heel": -0.08002546429634094,
+          "left_foot_index": -0.19276708364486694,
+          "right_foot_index": -0.15681849420070648
+        }
+      },
+      "body_pose_3d": null,
+      "camera": null,
+      "root_trajectory": null,
+      "rig_calibration": null,
+      "status": "observations_only_metric_reconstruction_unavailable"
+    },
+    {
+      "source_frame": 27,
+      "pts_seconds": 0.8472638136403474,
+      "image_observations": {
+        "units": "pixel",
+        "origin": "top_left",
+        "width": 1394,
+        "height": 792,
+        "joints": {
+          "left_shoulder": [
+            776.7851780653,
+            282.1997938156128
+          ],
+          "right_shoulder": [
+            682.472824215889,
+            280.51007080078125
+          ],
+          "left_elbow": [
+            830.6682302951813,
+            333.0748829841614
+          ],
+          "right_elbow": [
+            635.6418571472168,
+            328.0109066963196
+          ],
+          "left_wrist": [
+            858.5392301082611,
+            259.80397725105286
+          ],
+          "right_wrist": [
+            597.6319373846054,
+            266.2311701774597
+          ],
+          "left_hip": [
+            775.4945585727692,
+            429.79649019241333
+          ],
+          "right_hip": [
+            715.8704805374146,
+            432.75603103637695
+          ],
+          "left_knee": [
+            778.9141643047333,
+            529.7897229194641
+          ],
+          "right_knee": [
+            655.5221998691559,
+            465.0792417526245
+          ],
+          "left_ankle": [
+            779.4784208536148,
+            648.838059425354
+          ],
+          "right_ankle": [
+            706.6620728969574,
+            578.3369464874268
+          ],
+          "left_heel": [
+            773.8245552778244,
+            657.4094123840332
+          ],
+          "right_heel": [
+            722.3462612628937,
+            586.745388507843
+          ],
+          "left_foot_index": [
+            766.6984379291534,
+            682.3520164489746
+          ],
+          "right_foot_index": [
+            680.4737474322319,
+            623.846785068512
+          ]
+        }
+      },
+      "relative_depth_evidence": {
+        "origin": "hip_midpoint",
+        "units": "mediapipe_normalized_proxy_not_meters",
+        "joints": {
+          "left_shoulder": -0.0638483464717865,
+          "right_shoulder": 0.013318993151187897,
+          "left_elbow": -0.16693215072155,
+          "right_elbow": 0.0011183199239894748,
+          "left_wrist": -0.32217884063720703,
+          "right_wrist": -0.11775140464305878,
+          "left_hip": -0.03518169745802879,
+          "right_hip": 0.03525684401392937,
+          "left_knee": -0.22709593176841736,
+          "right_knee": -0.25447800755500793,
+          "left_ankle": -0.1170930564403534,
+          "right_ankle": -0.09182526916265488,
+          "left_heel": -0.10927066951990128,
+          "right_heel": -0.07759461551904678,
+          "left_foot_index": -0.21941648423671722,
+          "right_foot_index": -0.15346382558345795
+        }
+      },
+      "body_pose_3d": null,
+      "camera": null,
+      "root_trajectory": null,
+      "rig_calibration": null,
+      "status": "observations_only_metric_reconstruction_unavailable"
+    },
+    {
+      "source_frame": 29,
+      "pts_seconds": 0.9124379531511434,
+      "image_observations": {
+        "units": "pixel",
+        "origin": "top_left",
+        "width": 1394,
+        "height": 792,
+        "joints": {
+          "left_shoulder": [
+            778.6690521240234,
+            291.6821451187134
+          ],
+          "right_shoulder": [
+            690.6651380062103,
+            272.8082685470581
+          ],
+          "left_elbow": [
+            830.7226535081863,
+            331.0970091819763
+          ],
+          "right_elbow": [
+            635.1654670834541,
+            306.6350655555725
+          ],
+          "left_wrist": [
+            873.6075637340546,
+            306.52292561531067
+          ],
+          "right_wrist": [
+            593.4740039110184,
+            287.2547535896301
+          ],
+          "left_hip": [
+            770.8982481956482,
+            422.7602105140686
+          ],
+          "right_hip": [
+            717.9817688465118,
+            423.2593288421631
+          ],
+          "left_knee": [
+            775.7449884414673,
+            528.2653656005859
+          ],
+          "right_knee": [
+            663.9858819246292,
+            496.14490842819214
+          ],
+          "left_ankle": [
+            776.246097445488,
+            650.0323934555054
+          ],
+          "right_ankle": [
+            654.9696173071861,
+            621.8826484680176
+          ],
+          "left_heel": [
+            772.5923472642899,
+            661.779447555542
+          ],
+          "right_heel": [
+            665.2751304507256,
+            645.4113121032715
+          ],
+          "left_foot_index": [
+            769.7817829847336,
+            681.7048573493958
+          ],
+          "right_foot_index": [
+            608.5425868034363,
+            644.5796685218811
+          ]
+        }
+      },
+      "relative_depth_evidence": {
+        "origin": "hip_midpoint",
+        "units": "mediapipe_normalized_proxy_not_meters",
+        "joints": {
+          "left_shoulder": -0.11732220649719238,
+          "right_shoulder": 0.005753659643232822,
+          "left_elbow": -0.19040995836257935,
+          "right_elbow": 0.1195187047123909,
+          "left_wrist": -0.3308241367340088,
+          "right_wrist": 0.13154923915863037,
+          "left_hip": -0.044762130826711655,
+          "right_hip": 0.04483019560575485,
+          "left_knee": -0.14851735532283783,
+          "right_knee": -0.1187000423669815,
+          "left_ankle": -0.05639420077204704,
+          "right_ankle": -0.05599411949515343,
+          "left_heel": -0.05178765207529068,
+          "right_heel": -0.05556221306324005,
+          "left_foot_index": -0.16195882856845856,
+          "right_foot_index": -0.16505831480026245
+        }
+      },
+      "body_pose_3d": null,
+      "camera": null,
+      "root_trajectory": null,
+      "rig_calibration": null,
+      "status": "observations_only_metric_reconstruction_unavailable"
+    },
+    {
+      "source_frame": 31,
+      "pts_seconds": 0.9776120926619394,
+      "image_observations": {
+        "units": "pixel",
+        "origin": "top_left",
+        "width": 1394,
+        "height": 792,
+        "joints": {
+          "left_shoulder": [
+            784.5602195262909,
+            287.05381751060486
+          ],
+          "right_shoulder": [
+            688.5176644921303,
+            267.3720660209656
+          ],
+          "left_elbow": [
+            832.9187755584717,
+            309.0035762786865
+          ],
+          "right_elbow": [
+            629.4583830833435,
+            289.52294969558716
+          ],
+          "left_wrist": [
+            892.6993930339813,
+            309.00891065597534
+          ],
+          "right_wrist": [
+            576.369078874588,
+            283.46238899230957
+          ],
+          "left_hip": [
+            771.9494886398315,
+            419.7952880859375
+          ],
+          "right_hip": [
+            715.8259449005127,
+            422.2084093093872
+          ],
+          "left_knee": [
+            777.4184814691544,
+            534.4746751785278
+          ],
+          "right_knee": [
+            665.5237739086151,
+            514.3355598449707
+          ],
+          "left_ankle": [
+            774.5737676620483,
+            656.6288466453552
+          ],
+          "right_ankle": [
+            640.6514931321144,
+            644.467080116272
+          ],
+          "left_heel": [
+            771.3156867027283,
+            670.4130191802979
+          ],
+          "right_heel": [
+            649.6585348844528,
+            670.463436126709
+          ],
+          "left_foot_index": [
+            765.6963030099869,
+            689.9004435539246
+          ],
+          "right_foot_index": [
+            597.1545502543449,
+            671.4822549819946
+          ]
+        }
+      },
+      "relative_depth_evidence": {
+        "origin": "hip_midpoint",
+        "units": "mediapipe_normalized_proxy_not_meters",
+        "joints": {
+          "left_shoulder": -0.1269311159849167,
+          "right_shoulder": -0.023623989894986153,
+          "left_elbow": -0.16583363711833954,
+          "right_elbow": 0.08777718245983124,
+          "left_wrist": -0.273027241230011,
+          "right_wrist": 0.10642629116773605,
+          "left_hip": -0.036753084510564804,
+          "right_hip": 0.036745503544807434,
+          "left_knee": -0.10358808934688568,
+          "right_knee": -0.09014134109020233,
+          "left_ankle": -0.019286876544356346,
+          "right_ankle": -0.03605112060904503,
+          "left_heel": -0.01574123091995716,
+          "right_heel": -0.036737795919179916,
+          "left_foot_index": -0.1258714348077774,
+          "right_foot_index": -0.14987677335739136
+        }
+      },
+      "body_pose_3d": null,
+      "camera": null,
+      "root_trajectory": null,
+      "rig_calibration": null,
+      "status": "observations_only_metric_reconstruction_unavailable"
+    },
+    {
+      "source_frame": 33,
+      "pts_seconds": 1.0427862321727353,
+      "image_observations": {
+        "units": "pixel",
+        "origin": "top_left",
+        "width": 1394,
+        "height": 792,
+        "joints": {
+          "left_shoulder": [
+            783.050910115242,
+            286.4106001853943
+          ],
+          "right_shoulder": [
+            687.2211456894875,
+            267.5779824256897
+          ],
+          "left_elbow": [
+            831.0249308347702,
+            309.87803649902344
+          ],
+          "right_elbow": [
+            628.8990287780762,
+            288.59330463409424
+          ],
+          "left_wrist": [
+            891.6439150571823,
+            309.66789507865906
+          ],
+          "right_wrist": [
+            571.878956079483,
+            285.5433626174927
+          ],
+          "left_hip": [
+            772.5218048095703,
+            418.8182473182678
+          ],
+          "right_hip": [
+            715.3998651504517,
+            422.11814975738525
+          ],
+          "left_knee": [
+            778.9454057216644,
+            534.1017408370972
+          ],
+          "right_knee": [
+            669.365055680275,
+            514.6276288032532
+          ],
+          "left_ankle": [
+            773.9439539909363,
+            656.6079339981079
+          ],
+          "right_ankle": [
+            638.5439853668213,
+            643.9477100372314
+          ],
+          "left_heel": [
+            769.7436451911926,
+            670.4390773773193
+          ],
+          "right_heel": [
+            646.5499723553658,
+            662.1851906776428
+          ],
+          "left_foot_index": [
+            773.9128787517548,
+            689.6245193481445
+          ],
+          "right_foot_index": [
+            597.4520084261894,
+            668.9386067390442
+          ]
+        }
+      },
+      "relative_depth_evidence": {
+        "origin": "hip_midpoint",
+        "units": "mediapipe_normalized_proxy_not_meters",
+        "joints": {
+          "left_shoulder": -0.1062287837266922,
+          "right_shoulder": -0.019557125866413116,
+          "left_elbow": -0.14770197868347168,
+          "right_elbow": 0.06460767984390259,
+          "left_wrist": -0.2660014033317566,
+          "right_wrist": 0.054432064294815063,
+          "left_hip": -0.031131833791732788,
+          "right_hip": 0.03116113692522049,
+          "left_knee": -0.09971518069505692,
+          "right_knee": -0.07979017496109009,
+          "left_ankle": -0.022075148299336433,
+          "right_ankle": -0.02196917124092579,
+          "left_heel": -0.01982717402279377,
+          "right_heel": -0.022320855408906937,
+          "left_foot_index": -0.1319102942943573,
+          "right_foot_index": -0.1328444927930832
+        }
+      },
+      "body_pose_3d": null,
+      "camera": null,
+      "root_trajectory": null,
+      "rig_calibration": null,
+      "status": "observations_only_metric_reconstruction_unavailable"
+    },
+    {
+      "source_frame": 35,
+      "pts_seconds": 1.1079603716835313,
+      "image_observations": {
+        "units": "pixel",
+        "origin": "top_left",
+        "width": 1394,
+        "height": 792,
+        "joints": {
+          "left_shoulder": [
+            780.6334393024445,
+            280.50832414627075
+          ],
+          "right_shoulder": [
+            679.174071252346,
+            266.1001946926117
+          ],
+          "left_elbow": [
+            838.50550532341,
+            300.1779670715332
+          ],
+          "right_elbow": [
+            602.4335603713989,
+            265.7160487174988
+          ],
+          "left_wrist": [
+            914.0708487033844,
+            291.8589584827423
+          ],
+          "right_wrist": [
+            513.75500613451,
+            259.14423751831055
+          ],
+          "left_hip": [
+            753.2581477165222,
+            428.87949657440186
+          ],
+          "right_hip": [
+            696.3777474164963,
+            427.57309341430664
+          ],
+          "left_knee": [
+            757.8565353155136,
+            531.4055671691895
+          ],
+          "right_knee": [
+            665.6481164097786,
+            527.4586944580078
+          ],
+          "left_ankle": [
+            773.2211638689041,
+            654.1781015396118
+          ],
+          "right_ankle": [
+            610.5742344260216,
+            646.3543639183044
+          ],
+          "left_heel": [
+            769.3914314508438,
+            670.2647895812988
+          ],
+          "right_heel": [
+            618.3354831337929,
+            678.3066701889038
+          ],
+          "left_foot_index": [
+            784.3560701608658,
+            688.2602405548096
+          ],
+          "right_foot_index": [
+            582.3244739770889,
+            691.3445963859558
+          ]
+        }
+      },
+      "relative_depth_evidence": {
+        "origin": "hip_midpoint",
+        "units": "mediapipe_normalized_proxy_not_meters",
+        "joints": {
+          "left_shoulder": -0.10759559273719788,
+          "right_shoulder": -0.021916769444942474,
+          "left_elbow": -0.18948866426944733,
+          "right_elbow": 0.017268307507038116,
+          "left_wrist": -0.33506906032562256,
+          "right_wrist": -0.0456053651869297,
+          "left_hip": -0.025980914011597633,
+          "right_hip": 0.026004444807767868,
+          "left_knee": -0.051341462880373,
+          "right_knee": -0.02567436546087265,
+          "left_ankle": 0.05635671317577362,
+          "right_ankle": 0.05765634402632713,
+          "left_heel": 0.0606209971010685,
+          "right_heel": 0.059277888387441635,
+          "left_foot_index": -0.05027371644973755,
+          "right_foot_index": -0.05349799618124962
+        }
+      },
+      "body_pose_3d": null,
+      "camera": null,
+      "root_trajectory": null,
+      "rig_calibration": null,
+      "status": "observations_only_metric_reconstruction_unavailable"
+    },
+    {
+      "source_frame": 37,
+      "pts_seconds": 1.1731345111943272,
+      "image_observations": {
+        "units": "pixel",
+        "origin": "top_left",
+        "width": 1394,
+        "height": 792,
+        "joints": {
+          "left_shoulder": [
+            776.2576467990875,
+            280.3273801803589
+          ],
+          "right_shoulder": [
+            677.9060934782028,
+            260.4809002876282
+          ],
+          "left_elbow": [
+            834.8144482374191,
+            297.54934644699097
+          ],
+          "right_elbow": [
+            596.5002669095993,
+            261.00083684921265
+          ],
+          "left_wrist": [
+            911.3585785627365,
+            293.81516432762146
+          ],
+          "right_wrist": [
+            513.9515528678894,
+            252.09462189674377
+          ],
+          "left_hip": [
+            746.3791366815567,
+            421.80181646347046
+          ],
+          "right_hip": [
+            691.7143427729607,
+            418.38540744781494
+          ],
+          "left_knee": [
+            754.9129457473755,
+            530.8270468711853
+          ],
+          "right_knee": [
+            661.1803860664368,
+            525.8671145439148
+          ],
+          "left_ankle": [
+            769.5847792625427,
+            651.6094808578491
+          ],
+          "right_ankle": [
+            612.2245872020721,
+            645.1437907218933
+          ],
+          "left_heel": [
+            764.4649258852005,
+            667.8592686653137
+          ],
+          "right_heel": [
+            618.1774896383286,
+            674.783007144928
+          ],
+          "left_foot_index": [
+            789.9349895715714,
+            681.0987682342529
+          ],
+          "right_foot_index": [
+            580.010199546814,
+            674.4563827514648
+          ]
+        }
+      },
+      "relative_depth_evidence": {
+        "origin": "hip_midpoint",
+        "units": "mediapipe_normalized_proxy_not_meters",
+        "joints": {
+          "left_shoulder": -0.09967417269945145,
+          "right_shoulder": -0.05153645575046539,
+          "left_elbow": -0.14737865328788757,
+          "right_elbow": -0.014056742191314697,
+          "left_wrist": -0.2745683491230011,
+          "right_wrist": -0.08048011362552643,
+          "left_hip": -0.011924409307539463,
+          "right_hip": 0.012010958045721054,
+          "left_knee": -0.007070422172546387,
+          "right_knee": -0.027704497799277306,
+          "left_ankle": 0.10420866310596466,
+          "right_ankle": 0.055658817291259766,
+          "left_heel": 0.10823557525873184,
+          "right_heel": 0.05719410628080368,
+          "left_foot_index": -0.0014641683083027601,
+          "right_foot_index": -0.05910491943359375
+        }
+      },
+      "body_pose_3d": null,
+      "camera": null,
+      "root_trajectory": null,
+      "rig_calibration": null,
+      "status": "observations_only_metric_reconstruction_unavailable"
+    },
+    {
+      "source_frame": 39,
+      "pts_seconds": 1.238308650705123,
+      "image_observations": {
+        "units": "pixel",
+        "origin": "top_left",
+        "width": 1394,
+        "height": 792,
+        "joints": {
+          "left_shoulder": [
+            755.5944406986237,
+            269.8162021636963
+          ],
+          "right_shoulder": [
+            649.3894515633583,
+            253.43942785263062
+          ],
+          "left_elbow": [
+            818.3358471393585,
+            265.4521622657776
+          ],
+          "right_elbow": [
+            575.7168312072754,
+            235.5678949356079
+          ],
+          "left_wrist": [
+            892.8122277259827,
+            250.01832175254822
+          ],
+          "right_wrist": [
+            503.67885982990265,
+            212.8693642616272
+          ],
+          "left_hip": [
+            714.5194554328918,
+            422.59069061279297
+          ],
+          "right_hip": [
+            655.849528491497,
+            419.6351623535156
+          ],
+          "left_knee": [
+            736.4838333129883,
+            530.8779830932617
+          ],
+          "right_knee": [
+            635.6348776817322,
+            529.9737825393677
+          ],
+          "left_ankle": [
+            770.3268460035324,
+            653.5933971405029
+          ],
+          "right_ankle": [
+            606.274052798748,
+            665.4348649978638
+          ],
+          "left_heel": [
+            769.792916893959,
+            670.711555480957
+          ],
+          "right_heel": [
+            609.6437221169472,
+            684.2999610900879
+          ],
+          "left_foot_index": [
+            784.044237613678,
+            683.7843675613403
+          ],
+          "right_foot_index": [
+            586.6344600915909,
+            698.8300967216492
+          ]
+        }
+      },
+      "relative_depth_evidence": {
+        "origin": "hip_midpoint",
+        "units": "mediapipe_normalized_proxy_not_meters",
+        "joints": {
+          "left_shoulder": -0.10481478273868561,
+          "right_shoulder": -0.05254829302430153,
+          "left_elbow": -0.13365714251995087,
+          "right_elbow": -0.006234299391508102,
+          "left_wrist": -0.20123298466205597,
+          "right_wrist": -0.037552982568740845,
+          "left_hip": -0.014568530954420567,
+          "right_hip": 0.014619847759604454,
+          "left_knee": -0.02285153605043888,
+          "right_knee": -0.028530685231089592,
+          "left_ankle": 0.0722852423787117,
+          "right_ankle": 0.04788806661963463,
+          "left_heel": 0.07537788897752762,
+          "right_heel": 0.04920915141701698,
+          "left_foot_index": -0.032586317509412766,
+          "right_foot_index": -0.06395109742879868
+        }
+      },
+      "body_pose_3d": null,
+      "camera": null,
+      "root_trajectory": null,
+      "rig_calibration": null,
+      "status": "observations_only_metric_reconstruction_unavailable"
+    },
+    {
+      "source_frame": 41,
+      "pts_seconds": 1.3034827902159192,
+      "image_observations": {
+        "units": "pixel",
+        "origin": "top_left",
+        "width": 1394,
+        "height": 792,
+        "joints": {
+          "left_shoulder": [
+            753.548210978508,
+            268.4046456813812
+          ],
+          "right_shoulder": [
+            648.3328518867493,
+            254.18156719207764
+          ],
+          "left_elbow": [
+            814.9546284675598,
+            265.9053010940552
+          ],
+          "right_elbow": [
+            575.0932492017746,
+            236.48828744888306
+          ],
+          "left_wrist": [
+            889.2030131816864,
+            249.50227975845337
+          ],
+          "right_wrist": [
+            505.5065658092499,
+            209.36057138442993
+          ],
+          "left_hip": [
+            713.1033717393875,
+            419.9010314941406
+          ],
+          "right_hip": [
+            651.3916026353836,
+            417.61060094833374
+          ],
+          "left_knee": [
+            735.7626218795776,
+            528.3973088264465
+          ],
+          "right_knee": [
+            631.4544271230698,
+            531.1201543807983
+          ],
+          "left_ankle": [
+            768.7187439203262,
+            655.3206968307495
+          ],
+          "right_ankle": [
+            606.727593421936,
+            663.4584546089172
+          ],
+          "left_heel": [
+            765.4806042909622,
+            675.5511574745178
+          ],
+          "right_heel": [
+            612.671605348587,
+            681.9315447807312
+          ],
+          "left_foot_index": [
+            789.4087046384811,
+            688.1679983139038
+          ],
+          "right_foot_index": [
+            589.8046745657921,
+            697.1319236755371
+          ]
+        }
+      },
+      "relative_depth_evidence": {
+        "origin": "hip_midpoint",
+        "units": "mediapipe_normalized_proxy_not_meters",
+        "joints": {
+          "left_shoulder": -0.09109428524971008,
+          "right_shoulder": -0.05343782529234886,
+          "left_elbow": -0.10695231705904007,
+          "right_elbow": -0.009435980580747128,
+          "left_wrist": -0.17114952206611633,
+          "right_wrist": -0.04398202523589134,
+          "left_hip": -0.009505785070359707,
+          "right_hip": 0.009603695012629032,
+          "left_knee": -0.04678228124976158,
+          "right_knee": -0.04346228763461113,
+          "left_ankle": 0.03431720286607742,
+          "right_ankle": 0.026944391429424286,
+          "left_heel": 0.035750266164541245,
+          "right_heel": 0.02738405205309391,
+          "left_foot_index": -0.0772831067442894,
+          "right_foot_index": -0.08996951580047607
+        }
+      },
+      "body_pose_3d": null,
+      "camera": null,
+      "root_trajectory": null,
+      "rig_calibration": null,
+      "status": "observations_only_metric_reconstruction_unavailable"
+    },
+    {
+      "source_frame": 43,
+      "pts_seconds": 1.368656929726715,
+      "image_observations": {
+        "units": "pixel",
+        "origin": "top_left",
+        "width": 1394,
+        "height": 792,
+        "joints": {
+          "left_shoulder": [
+            731.129420042038,
+            270.55777502059937
+          ],
+          "right_shoulder": [
+            628.2819277048111,
+            259.6390128135681
+          ],
+          "left_elbow": [
+            796.068859577179,
+            270.6758394241333
+          ],
+          "right_elbow": [
+            555.5524491667747,
+            248.60690689086914
+          ],
+          "left_wrist": [
+            848.3033454418182,
+            227.28044414520264
+          ],
+          "right_wrist": [
+            508.44890904426575,
+            194.05600690841675
+          ],
+          "left_hip": [
+            686.1038495898247,
+            422.4447269439697
+          ],
+          "right_hip": [
+            623.5410011410713,
+            420.33731746673584
+          ],
+          "left_knee": [
+            720.4280714988708,
+            523.7092881202698
+          ],
+          "right_knee": [
+            610.5762701034546,
+            530.7492027282715
+          ],
+          "left_ankle": [
+            755.7217328548431,
+            643.3428010940552
+          ],
+          "right_ankle": [
+            605.8423230051994,
+            671.1036558151245
+          ],
+          "left_heel": [
+            751.9764187335968,
+            660.5170412063599
+          ],
+          "right_heel": [
+            610.1374777555466,
+            686.5481414794922
+          ],
+          "left_foot_index": [
+            782.238633275032,
+            683.6266965866089
+          ],
+          "right_foot_index": [
+            592.4028636813164,
+            712.5730576515198
+          ]
+        }
+      },
+      "relative_depth_evidence": {
+        "origin": "hip_midpoint",
+        "units": "mediapipe_normalized_proxy_not_meters",
+        "joints": {
+          "left_shoulder": -0.04471544548869133,
+          "right_shoulder": -0.018123270943760872,
+          "left_elbow": -0.1166190579533577,
+          "right_elbow": 0.008056573569774628,
+          "left_wrist": -0.2644988000392914,
+          "right_wrist": -0.05939219519495964,
+          "left_hip": 0.00038827970274724066,
+          "right_hip": -0.0002373809984419495,
+          "left_knee": -0.04499407857656479,
+          "right_knee": -0.14414921402931213,
+          "left_ankle": 0.06588821113109589,
+          "right_ankle": -0.08011836558580399,
+          "left_heel": 0.069849394261837,
+          "right_heel": -0.0809025913476944,
+          "left_foot_index": -0.050533417612314224,
+          "right_foot_index": -0.22015635669231415
+        }
+      },
+      "body_pose_3d": null,
+      "camera": null,
+      "root_trajectory": null,
+      "rig_calibration": null,
+      "status": "observations_only_metric_reconstruction_unavailable"
+    },
+    {
+      "source_frame": 45,
+      "pts_seconds": 1.4338310692375111,
+      "image_observations": {
+        "units": "pixel",
+        "origin": "top_left",
+        "width": 1394,
+        "height": 792,
+        "joints": {
+          "left_shoulder": [
+            722.4438906908035,
+            272.88719844818115
+          ],
+          "right_shoulder": [
+            620.393054485321,
+            264.00930762290955
+          ],
+          "left_elbow": [
+            784.5868079662323,
+            278.1419849395752
+          ],
+          "right_elbow": [
+            550.114074587822,
+            255.54575157165527
+          ],
+          "left_wrist": [
+            824.9265397787094,
+            219.11457467079163
+          ],
+          "right_wrist": [
+            515.8836184740067,
+            189.2083797454834
+          ],
+          "left_hip": [
+            680.2262256741524,
+            427.0021262168884
+          ],
+          "right_hip": [
+            618.0541442036629,
+            424.1554570198059
+          ],
+          "left_knee": [
+            714.4538983106613,
+            528.7268600463867
+          ],
+          "right_knee": [
+            605.8882296085358,
+            534.0989084243774
+          ],
+          "left_ankle": [
+            749.3484007120132,
+            641.7102928161621
+          ],
+          "right_ankle": [
+            606.6535612344742,
+            671.7802248001099
+          ],
+          "left_heel": [
+            743.8981028795242,
+            659.5422191619873
+          ],
+          "right_heel": [
+            610.3293715119362,
+            686.9665360450745
+          ],
+          "left_foot_index": [
+            775.1255608797073,
+            678.7312488555908
+          ],
+          "right_foot_index": [
+            594.955312371254,
+            711.1851282119751
+          ]
+        }
+      },
+      "relative_depth_evidence": {
+        "origin": "hip_midpoint",
+        "units": "mediapipe_normalized_proxy_not_meters",
+        "joints": {
+          "left_shoulder": -0.02633369341492653,
+          "right_shoulder": -0.06479750573635101,
+          "left_elbow": -0.06545928865671158,
+          "right_elbow": -0.07440841197967529,
+          "left_wrist": -0.19283346831798553,
+          "right_wrist": -0.164797842502594,
+          "left_hip": 0.01885385997593403,
+          "right_hip": -0.01867685094475746,
+          "left_knee": -0.0017184939933940768,
+          "right_knee": -0.10630824416875839,
+          "left_ankle": 0.10691194236278534,
+          "right_ankle": -0.021754324436187744,
+          "left_heel": 0.11091126501560211,
+          "right_heel": -0.01966492086648941,
+          "left_foot_index": -0.00039523880695924163,
+          "right_foot_index": -0.14386336505413055
+        }
+      },
+      "body_pose_3d": null,
+      "camera": null,
+      "root_trajectory": null,
+      "rig_calibration": null,
+      "status": "observations_only_metric_reconstruction_unavailable"
+    },
+    {
+      "source_frame": 47,
+      "pts_seconds": 1.499005208748307,
+      "image_observations": {
+        "units": "pixel",
+        "origin": "top_left",
+        "width": 1394,
+        "height": 792,
+        "joints": {
+          "left_shoulder": [
+            720.8373672962189,
+            276.0006809234619
+          ],
+          "right_shoulder": [
+            615.2166591286659,
+            266.0471577644348
+          ],
+          "left_elbow": [
+            780.4791432619095,
+            283.54780983924866
+          ],
+          "right_elbow": [
+            547.0290677547455,
+            260.25544023513794
+          ],
+          "left_wrist": [
+            816.593141078949,
+            222.52595615386963
+          ],
+          "right_wrist": [
+            517.354623913765,
+            191.5070242881775
+          ],
+          "left_hip": [
+            678.1770462989807,
+            431.84295558929443
+          ],
+          "right_hip": [
+            614.6735486984253,
+            428.16039419174194
+          ],
+          "left_knee": [
+            713.1429220438004,
+            527.1445798873901
+          ],
+          "right_knee": [
+            604.4112833142281,
+            534.7333688735962
+          ],
+          "left_ankle": [
+            739.2450428009033,
+            636.8034210205078
+          ],
+          "right_ankle": [
+            606.3190869688988,
+            668.3989849090576
+          ],
+          "left_heel": [
+            735.7040442228317,
+            659.8280096054077
+          ],
+          "right_heel": [
+            608.5227701067924,
+            686.8048524856567
+          ],
+          "left_foot_index": [
+            767.4908565282822,
+            683.5289783477783
+          ],
+          "right_foot_index": [
+            594.6426904797554,
+            721.2155041694641
+          ]
+        }
+      },
+      "relative_depth_evidence": {
+        "origin": "hip_midpoint",
+        "units": "mediapipe_normalized_proxy_not_meters",
+        "joints": {
+          "left_shoulder": -0.009554487653076649,
+          "right_shoulder": -0.04316234216094017,
+          "left_elbow": -0.07477515935897827,
+          "right_elbow": -0.06936416774988174,
+          "left_wrist": -0.23252950608730316,
+          "right_wrist": -0.18657071888446808,
+          "left_hip": 0.01744570955634117,
+          "right_hip": -0.017269697040319443,
+          "left_knee": -0.041239120066165924,
+          "right_knee": -0.15530741214752197,
+          "left_ankle": 0.06464734673500061,
+          "right_ankle": -0.08332177251577377,
+          "left_heel": 0.06840682774782181,
+          "right_heel": -0.08279404044151306,
+          "left_foot_index": -0.04770926758646965,
+          "right_foot_index": -0.21646007895469666
+        }
+      },
+      "body_pose_3d": null,
+      "camera": null,
+      "root_trajectory": null,
+      "rig_calibration": null,
+      "status": "observations_only_metric_reconstruction_unavailable"
+    },
+    {
+      "source_frame": 49,
+      "pts_seconds": 1.5641793482591029,
+      "image_observations": {
+        "units": "pixel",
+        "origin": "top_left",
+        "width": 1394,
+        "height": 792,
+        "joints": {
+          "left_shoulder": [
+            709.5181698799133,
+            282.8355760574341
+          ],
+          "right_shoulder": [
+            605.1974287033081,
+            282.46242928504944
+          ],
+          "left_elbow": [
+            766.9438824653625,
+            305.24647521972656
+          ],
+          "right_elbow": [
+            537.7527765035629,
+            285.89493584632874
+          ],
+          "left_wrist": [
+            785.9488838911057,
+            243.26356029510498
+          ],
+          "right_wrist": [
+            533.7542490363121,
+            213.8358542919159
+          ],
+          "left_hip": [
+            670.1984370946884,
+            442.02108907699585
+          ],
+          "right_hip": [
+            606.460795044899,
+            432.89581060409546
+          ],
+          "left_knee": [
+            717.0297365188599,
+            498.2241826057434
+          ],
+          "right_knee": [
+            593.6803551316261,
+            526.9473495483398
+          ],
+          "left_ankle": [
+            711.1571810245514,
+            613.3732309341431
+          ],
+          "right_ankle": [
+            606.5994703769684,
+            666.1993803977966
+          ],
+          "left_heel": [
+            695.3904023170471,
+            628.7267017364502
+          ],
+          "right_heel": [
+            607.4395404458046,
+            677.510006904602
+          ],
+          "left_foot_index": [
+            740.2185951471329,
+            665.3982796669006
+          ],
+          "right_foot_index": [
+            611.0664529204369,
+            708.2137384414673
+          ]
+        }
+      },
+      "relative_depth_evidence": {
+        "origin": "hip_midpoint",
+        "units": "mediapipe_normalized_proxy_not_meters",
+        "joints": {
+          "left_shoulder": -0.005744836758822203,
+          "right_shoulder": -0.08587130904197693,
+          "left_elbow": -0.11717981100082397,
+          "right_elbow": -0.20111721754074097,
+          "left_wrist": -0.3150281310081482,
+          "right_wrist": -0.35260480642318726,
+          "left_hip": 0.03481171652674675,
+          "right_hip": -0.0347173772752285,
+          "left_knee": -0.21320092678070068,
+          "right_knee": -0.2646186053752899,
+          "left_ankle": -0.08107377588748932,
+          "right_ankle": -0.16946536302566528,
+          "left_heel": -0.07192273437976837,
+          "right_heel": -0.1653502732515335,
+          "left_foot_index": -0.17431016266345978,
+          "right_foot_index": -0.29432111978530884
+        }
+      },
+      "body_pose_3d": null,
+      "camera": null,
+      "root_trajectory": null,
+      "rig_calibration": null,
+      "status": "observations_only_metric_reconstruction_unavailable"
+    },
+    {
+      "source_frame": 51,
+      "pts_seconds": 1.629353487769899,
+      "image_observations": {
+        "units": "pixel",
+        "origin": "top_left",
+        "width": 1394,
+        "height": 792,
+        "joints": {
+          "left_shoulder": [
+            708.8306094408035,
+            283.947958946228
+          ],
+          "right_shoulder": [
+            606.8113885521889,
+            287.53646063804626
+          ],
+          "left_elbow": [
+            754.0366073846817,
+            332.05478954315186
+          ],
+          "right_elbow": [
+            544.3154681921005,
+            302.6432046890259
+          ],
+          "left_wrist": [
+            776.11814057827,
+            264.0832099914551
+          ],
+          "right_wrist": [
+            540.4223805069923,
+            229.89773511886597
+          ],
+          "left_hip": [
+            667.6295783519745,
+            444.5959882736206
+          ],
+          "right_hip": [
+            603.3146763443947,
+            439.03124141693115
+          ],
+          "left_knee": [
+            725.8443028926849,
+            496.3288264274597
+          ],
+          "right_knee": [
+            588.0527040958405,
+            531.5208463668823
+          ],
+          "left_ankle": [
+            704.4452617168427,
+            619.2471828460693
+          ],
+          "right_ankle": [
+            610.0963487625122,
+            668.9612188339233
+          ],
+          "left_heel": [
+            687.4191049337387,
+            636.3910217285156
+          ],
+          "right_heel": [
+            612.0287467241287,
+            682.779616355896
+          ],
+          "left_foot_index": [
+            729.7985855340958,
+            673.0056209564209
+          ],
+          "right_foot_index": [
+            606.1804531812668,
+            715.5622444152832
+          ]
+        }
+      },
+      "relative_depth_evidence": {
+        "origin": "hip_midpoint",
+        "units": "mediapipe_normalized_proxy_not_meters",
+        "joints": {
+          "left_shoulder": -0.01727479323744774,
+          "right_shoulder": -0.07108230888843536,
+          "left_elbow": -0.13834790885448456,
+          "right_elbow": -0.1823791116476059,
+          "left_wrist": -0.3553939759731293,
+          "right_wrist": -0.3557090163230896,
+          "left_hip": 0.026227764785289764,
+          "right_hip": -0.02610698528587818,
+          "left_knee": -0.25665831565856934,
+          "right_knee": -0.2883266508579254,
+          "left_ankle": -0.13974754512310028,
+          "right_ankle": -0.19270755350589752,
+          "left_heel": -0.13200466334819794,
+          "right_heel": -0.1881721019744873,
+          "left_foot_index": -0.24269244074821472,
+          "right_foot_index": -0.3191056251525879
+        }
+      },
+      "body_pose_3d": null,
+      "camera": null,
+      "root_trajectory": null,
+      "rig_calibration": null,
+      "status": "observations_only_metric_reconstruction_unavailable"
+    },
+    {
+      "source_frame": 53,
+      "pts_seconds": 1.6945276272806948,
+      "image_observations": {
+        "units": "pixel",
+        "origin": "top_left",
+        "width": 1394,
+        "height": 792,
+        "joints": {
+          "left_shoulder": [
+            701.0652893781662,
+            287.35372281074524
+          ],
+          "right_shoulder": [
+            611.9835048317909,
+            290.4346561431885
+          ],
+          "left_elbow": [
+            730.1865274906158,
+            347.4515962600708
+          ],
+          "right_elbow": [
+            556.05829423666,
+            329.71677446365356
+          ],
+          "left_wrist": [
+            758.7165051698685,
+            295.6267046928406
+          ],
+          "right_wrist": [
+            542.2993166446686,
+            256.89865350723267
+          ],
+          "left_hip": [
+            668.2309756278992,
+            448.0936875343323
+          ],
+          "right_hip": [
+            607.0969234704971,
+            443.47676038742065
+          ],
+          "left_knee": [
+            727.7041642665863,
+            500.4892158508301
+          ],
+          "right_knee": [
+            603.6025377511978,
+            552.3096227645874
+          ],
+          "left_ankle": [
+            702.9566414356232,
+            623.7407112121582
+          ],
+          "right_ankle": [
+            613.5424598455429,
+            671.1330184936523
+          ],
+          "left_heel": [
+            684.4135726094246,
+            634.3224635124207
+          ],
+          "right_heel": [
+            617.4502958059311,
+            683.7697806358337
+          ],
+          "left_foot_index": [
+            731.236937046051,
+            679.1039943695068
+          ],
+          "right_foot_index": [
+            618.2359011173248,
+            722.3863291740417
+          ]
+        }
+      },
+      "relative_depth_evidence": {
+        "origin": "hip_midpoint",
+        "units": "mediapipe_normalized_proxy_not_meters",
+        "joints": {
+          "left_shoulder": 0.04576648399233818,
+          "right_shoulder": -0.045598771423101425,
+          "left_elbow": -0.0445416197180748,
+          "right_elbow": -0.1494022011756897,
+          "left_wrist": -0.24794967472553253,
+          "right_wrist": -0.31511756777763367,
+          "left_hip": 0.03802937641739845,
+          "right_hip": -0.037930235266685486,
+          "left_knee": -0.15817581117153168,
+          "right_knee": -0.1930980682373047,
+          "left_ankle": -0.04465091601014137,
+          "right_ankle": -0.08839856833219528,
+          "left_heel": -0.03795832768082619,
+          "right_heel": -0.08372022211551666,
+          "left_foot_index": -0.1355179101228714,
+          "right_foot_index": -0.201157808303833
+        }
+      },
+      "body_pose_3d": null,
+      "camera": null,
+      "root_trajectory": null,
+      "rig_calibration": null,
+      "status": "observations_only_metric_reconstruction_unavailable"
+    },
+    {
+      "source_frame": 55,
+      "pts_seconds": 1.7597017667914907,
+      "image_observations": {
+        "units": "pixel",
+        "origin": "top_left",
+        "width": 1394,
+        "height": 792,
+        "joints": {
+          "left_shoulder": [
+            693.783629655838,
+            295.9825265407562
+          ],
+          "right_shoulder": [
+            612.6528272628784,
+            298.69064354896545
+          ],
+          "left_elbow": [
+            717.2423609495163,
+            349.12574100494385
+          ],
+          "right_elbow": [
+            561.4794278740883,
+            341.766330242157
+          ],
+          "left_wrist": [
+            740.5310093164444,
+            319.38177251815796
+          ],
+          "right_wrist": [
+            544.1640802621841,
+            275.6633405685425
+          ],
+          "left_hip": [
+            667.6140822768211,
+            451.5513081550598
+          ],
+          "right_hip": [
+            609.2890987992287,
+            448.41662979125977
+          ],
+          "left_knee": [
+            727.9501073360443,
+            506.37124013900757
+          ],
+          "right_knee": [
+            610.8515850901604,
+            549.9713716506958
+          ],
+          "left_ankle": [
+            710.0285017490387,
+            626.0195760726929
+          ],
+          "right_ankle": [
+            615.8021864295006,
+            667.0857839584351
+          ],
+          "left_heel": [
+            687.1496477127075,
+            646.8862910270691
+          ],
+          "right_heel": [
+            617.7229934930801,
+            676.7525253295898
+          ],
+          "left_foot_index": [
+            735.0280331373215,
+            681.2097516059875
+          ],
+          "right_foot_index": [
+            624.9869137406349,
+            710.6068911552429
+          ]
+        }
+      },
+      "relative_depth_evidence": {
+        "origin": "hip_midpoint",
+        "units": "mediapipe_normalized_proxy_not_meters",
+        "joints": {
+          "left_shoulder": 0.04743228107690811,
+          "right_shoulder": -0.05256107449531555,
+          "left_elbow": -0.045275092124938965,
+          "right_elbow": -0.16320177912712097,
+          "left_wrist": -0.2561616599559784,
+          "right_wrist": -0.33223918080329895,
+          "left_hip": 0.0366671159863472,
+          "right_hip": -0.03662460297346115,
+          "left_knee": -0.11854429543018341,
+          "right_knee": -0.19125300645828247,
+          "left_ankle": -0.010372240096330643,
+          "right_ankle": -0.07156101614236832,
+          "left_heel": -0.004327504895627499,
+          "right_heel": -0.06459716707468033,
+          "left_foot_index": -0.09255994856357574,
+          "right_foot_index": -0.16280247271060944
+        }
+      },
+      "body_pose_3d": null,
+      "camera": null,
+      "root_trajectory": null,
+      "rig_calibration": null,
+      "status": "observations_only_metric_reconstruction_unavailable"
+    },
+    {
+      "source_frame": 57,
+      "pts_seconds": 1.8248759063022868,
+      "image_observations": {
+        "units": "pixel",
+        "origin": "top_left",
+        "width": 1394,
+        "height": 792,
+        "joints": {
+          "left_shoulder": [
+            694.331351518631,
+            297.404043674469
+          ],
+          "right_shoulder": [
+            607.9100311994553,
+            302.02191495895386
+          ],
+          "left_elbow": [
+            716.5828014612198,
+            345.2909138202667
+          ],
+          "right_elbow": [
+            563.7075806856155,
+            346.0808973312378
+          ],
+          "left_wrist": [
+            735.2232089042664,
+            328.254919052124
+          ],
+          "right_wrist": [
+            546.0945671796799,
+            282.9763469696045
+          ],
+          "left_hip": [
+            670.7513935565948,
+            449.8255662918091
+          ],
+          "right_hip": [
+            609.0900593996048,
+            450.55845308303833
+          ],
+          "left_knee": [
+            731.7330607175827,
+            498.9838356971741
+          ],
+          "right_knee": [
+            603.9424127936363,
+            552.9586701393127
+          ],
+          "left_ankle": [
+            713.2705465555191,
+            622.4620656967163
+          ],
+          "right_ankle": [
+            614.5880087018013,
+            667.0866808891296
+          ],
+          "left_heel": [
+            694.3960362076759,
+            634.1509137153625
+          ],
+          "right_heel": [
+            620.9479635357857,
+            680.8371477127075
+          ],
+          "left_foot_index": [
+            738.5955370664597,
+            670.6554737091064
+          ],
+          "right_foot_index": [
+            611.7957655191422,
+            714.5158095359802
+          ]
+        }
+      },
+      "relative_depth_evidence": {
+        "origin": "hip_midpoint",
+        "units": "mediapipe_normalized_proxy_not_meters",
+        "joints": {
+          "left_shoulder": -0.005185597576200962,
+          "right_shoulder": -0.03937732055783272,
+          "left_elbow": -0.12403389066457748,
+          "right_elbow": -0.15795619785785675,
+          "left_wrist": -0.3459586501121521,
+          "right_wrist": -0.3591592013835907,
+          "left_hip": 0.014976254664361477,
+          "right_hip": -0.014910218305885792,
+          "left_knee": -0.2074609249830246,
+          "right_knee": -0.13754642009735107,
+          "left_ankle": -0.07100876420736313,
+          "right_ankle": 0.0035680546425282955,
+          "left_heel": -0.06222975254058838,
+          "right_heel": 0.011531544849276543,
+          "left_foot_index": -0.16531066596508026,
+          "right_foot_index": -0.1026458740234375
+        }
+      },
+      "body_pose_3d": null,
+      "camera": null,
+      "root_trajectory": null,
+      "rig_calibration": null,
+      "status": "observations_only_metric_reconstruction_unavailable"
+    },
+    {
+      "source_frame": 59,
+      "pts_seconds": 1.8900500458130827,
+      "image_observations": {
+        "units": "pixel",
+        "origin": "top_left",
+        "width": 1394,
+        "height": 792,
+        "joints": {
+          "left_shoulder": [
+            691.0691161155701,
+            293.64656496047974
+          ],
+          "right_shoulder": [
+            608.5209421515465,
+            299.4428143501282
+          ],
+          "left_elbow": [
+            708.2198231220245,
+            359.4231662750244
+          ],
+          "right_elbow": [
+            585.8664280772209,
+            361.67016649246216
+          ],
+          "left_wrist": [
+            725.616473197937,
+            337.02048110961914
+          ],
+          "right_wrist": [
+            557.2237403392792,
+            297.1910934448242
+          ],
+          "left_hip": [
+            670.3850962519646,
+            445.1841859817505
+          ],
+          "right_hip": [
+            616.2566410303116,
+            443.1100101470947
+          ],
+          "left_knee": [
+            719.9204815626144,
+            515.18523645401
+          ],
+          "right_knee": [
+            609.3907164931297,
+            550.6105527877808
+          ],
+          "left_ankle": [
+            731.9727721214294,
+            645.1577167510986
+          ],
+          "right_ankle": [
+            618.3371449112892,
+            666.4959812164307
+          ],
+          "left_heel": [
+            716.4189502000809,
+            662.3354501724243
+          ],
+          "right_heel": [
+            620.8753854036331,
+            676.8456172943115
+          ],
+          "left_foot_index": [
+            766.3237071037292,
+            677.5807228088379
+          ],
+          "right_foot_index": [
+            620.510625243187,
+            700.3164525032043
+          ]
+        }
+      },
+      "relative_depth_evidence": {
+        "origin": "hip_midpoint",
+        "units": "mediapipe_normalized_proxy_not_meters",
+        "joints": {
+          "left_shoulder": 0.0584668293595314,
+          "right_shoulder": -0.07877378910779953,
+          "left_elbow": 0.022146932780742645,
+          "right_elbow": -0.21171456575393677,
+          "left_wrist": -0.13103966414928436,
+          "right_wrist": -0.37982961535453796,
+          "left_hip": 0.03931007534265518,
+          "right_hip": -0.03918914124369621,
+          "left_knee": -0.139846071600914,
+          "right_knee": -0.128816157579422,
+          "left_ankle": -0.04167685657739639,
+          "right_ankle": -0.009187787771224976,
+          "left_heel": -0.037616923451423645,
+          "right_heel": -0.0035486975684762,
+          "left_foot_index": -0.14156195521354675,
+          "right_foot_index": -0.11322969198226929
+        }
+      },
+      "body_pose_3d": null,
+      "camera": null,
+      "root_trajectory": null,
+      "rig_calibration": null,
+      "status": "observations_only_metric_reconstruction_unavailable"
+    },
+    {
+      "source_frame": 61,
+      "pts_seconds": 1.9552241853238788,
+      "image_observations": {
+        "units": "pixel",
+        "origin": "top_left",
+        "width": 1394,
+        "height": 792,
+        "joints": {
+          "left_shoulder": [
+            688.2515723705292,
+            295.67174005508423
+          ],
+          "right_shoulder": [
+            610.1224386692047,
+            298.53278374671936
+          ],
+          "left_elbow": [
+            711.0428507328033,
+            352.07782316207886
+          ],
+          "right_elbow": [
+            583.553275346756,
+            356.42430210113525
+          ],
+          "left_wrist": [
+            728.0338609218597,
+            332.24534010887146
+          ],
+          "right_wrist": [
+            551.432071864605,
+            300.6350004673004
+          ],
+          "left_hip": [
+            670.4438816308975,
+            443.94297552108765
+          ],
+          "right_hip": [
+            618.185466170311,
+            442.54796504974365
+          ],
+          "left_knee": [
+            720.3871917724609,
+            523.1082029342651
+          ],
+          "right_knee": [
+            610.0941053628922,
+            549.9349279403687
+          ],
+          "left_ankle": [
+            734.3028334379196,
+            650.2094192504883
+          ],
+          "right_ankle": [
+            617.7309284806252,
+            663.2836475372314
+          ],
+          "left_heel": [
+            721.1177922487259,
+            665.9394121170044
+          ],
+          "right_heel": [
+            619.9154596328735,
+            674.5190734863281
+          ],
+          "left_foot_index": [
+            773.8430840969086,
+            679.4416179656982
+          ],
+          "right_foot_index": [
+            619.0931705832481,
+            695.9772434234619
+          ]
+        }
+      },
+      "relative_depth_evidence": {
+        "origin": "hip_midpoint",
+        "units": "mediapipe_normalized_proxy_not_meters",
+        "joints": {
+          "left_shoulder": 0.04990672320127487,
+          "right_shoulder": -0.10005347430706024,
+          "left_elbow": 0.06607101112604141,
+          "right_elbow": -0.238145112991333,
+          "left_wrist": -0.022048451006412506,
+          "right_wrist": -0.40767577290534973,
+          "left_hip": 0.03712067753076553,
+          "right_hip": -0.03699924424290657,
+          "left_knee": -0.13012954592704773,
+          "right_knee": -0.09613792598247528,
+          "left_ankle": -0.05074002966284752,
+          "right_ankle": 0.01620313711464405,
+          "left_heel": -0.048431482166051865,
+          "right_heel": 0.021554237231612206,
+          "left_foot_index": -0.15355700254440308,
+          "right_foot_index": -0.08290143311023712
+        }
+      },
+      "body_pose_3d": null,
+      "camera": null,
+      "root_trajectory": null,
+      "rig_calibration": null,
+      "status": "observations_only_metric_reconstruction_unavailable"
+    }
+  ]
+}
