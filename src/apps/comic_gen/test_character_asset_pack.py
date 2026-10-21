@@ -67,17 +67,18 @@ def test_anchor_requires_review_and_preserves_versions():
     assert [item["variant_id"] for item in replaced["pack"]["revisions"]] == ["front", "front-v2"]
     reloaded = Character.model_validate(character.model_dump())
     assert reloaded.asset_pack and reloaded.asset_pack.current_revision == 2
-    with pytest.raises(ValueError, match="cannot be deleted"):
-        pipeline.delete_asset_variant("episode", "hero", "character", "front")
+    pipeline.delete_asset_variant("episode", "hero", "character", "front")
+    assert [item.id for item in character.reference_sheet.image_variants] == ["front-v2"]
+    assert character.asset_pack.revisions[0].variant_id == "front"
     with pytest.raises(ValueError, match="cannot be removed"):
         pipeline.confirm_asset_revision(
-            "episode", "hero", "character", replaced["asset_revision"], ["front-v2"], "front-v2",
+            "episode", "hero", "character", character.asset_revision, [], None,
         )
     with pytest.raises(ValueError, match="reviewed anchor operations"):
         pipeline.update_asset_attributes("episode", "hero", "character", {"asset_pack": None})
     with pytest.raises(ValueError, match="changes confirmed character anchors"):
         pipeline.restore_asset_revision(
-            "episode", "hero", "character", first["asset_revision"], replaced["asset_revision"],
+            "episode", "hero", "character", first["asset_revision"], character.asset_revision,
         )
 
 
@@ -127,7 +128,7 @@ def test_anchor_favorite_can_be_cancelled_without_changing_reference_or_cover():
     assert not character.reference_sheet.image_variants[0].is_favorited
     assert character.cover_variant_id == "front"
     assert character.asset_pack.revisions[0].variant_id == "front"
-    with pytest.raises(ValueError, match="cannot be deleted"):
+    with pytest.raises(ValueError, match="不能删除"):
         pipeline.delete_asset_variant("episode", "hero", "character", "front")
 
 
@@ -154,3 +155,28 @@ def test_automatic_cleanup_retains_unfavorited_anchor_and_cover():
     assert {"0", "1"}.issubset({item.id for item in images.variants})
     assert len(images.variants) == MAX_VARIANTS_PER_ASSET + 2
     assert all(not item.is_favorited for item in images.variants)
+
+
+def test_old_anchor_used_in_another_episode_remains_protected():
+    from src.apps.comic_gen.models import EpisodeCharacterUse
+    character = _character()
+    series = Series(id='series', title='Series', owner_profile_id='owner', characters=[character], created_at=0, updated_at=0)
+    script = _script(series_id='series')
+    pipeline = _pipeline(script, series)
+    current = pipeline.get_project_character_asset_pack('episode', 'hero')
+    pipeline.confirm_project_character_anchor('episode', 'hero', 'front', current['asset_revision'], 0, True)
+    character.reference_sheet.image_variants.append(ImageVariant(id='new', url='new.webp'))
+    current = pipeline.get_project_character_asset_pack('episode', 'hero')
+    pipeline.confirm_project_character_anchor('episode', 'hero', 'new', current['asset_revision'], 1, True)
+    other = _script(series_id='series')
+    other.id = 'other'
+    other.episode_character_uses = [EpisodeCharacterUse(
+        use_id='look', project_character_id='hero', label='Look',
+        source_pack_id='character-pack-hero', source_pack_revision=1, source_design_revision=1,
+        source_anchor_variant_id='front', selected_asset_id='hero', selected_variant_id='front',
+        selected_asset_revision=1, selected_source_scope='series', selected_source_container_id='series',
+    )]
+    pipeline.scripts[other.id] = other
+    with pytest.raises(ValueError, match='剧集造型'):
+        pipeline.delete_asset_variant('episode', 'hero', 'character', 'front')
+    assert len(character.reference_sheet.image_variants) == 2

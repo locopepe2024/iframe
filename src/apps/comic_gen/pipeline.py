@@ -9403,7 +9403,8 @@ class ComicGenPipeline(StudioOwnerMixin):
             if selected_variant_id and selected_variant_id not in active:
                 raise ValueError("Selected variant must remain active on this asset")
             if asset_type == "character" and asset.asset_pack:
-                anchors = {item.variant_id for item in asset.asset_pack.revisions}
+                anchors = {item.variant_id for item in asset.asset_pack.revisions
+                           if item.revision == asset.asset_pack.current_revision}
                 if not anchors.issubset(active):
                     raise ValueError("Confirmed character anchors cannot be removed")
             if asset_type == "character" and any(
@@ -9661,12 +9662,17 @@ class ComicGenPipeline(StudioOwnerMixin):
 
         if asset_type == "character":
             if target_asset.asset_pack and any(
-                item.variant_id == variant_id for item in target_asset.asset_pack.revisions
+                item.variant_id == variant_id and item.revision == target_asset.asset_pack.current_revision
+                for item in target_asset.asset_pack.revisions
             ):
-                raise ValueError("Confirmed character anchor cannot be deleted")
+                raise ValueError("当前角色锚点不能删除，请先选择其他图片作为锚点")
+            related_scripts = [script] if source == "script" else [
+                item for item in self.scripts.values()
+                if source != "series" or item.series_id == script.series_id
+            ]
             if any(item.selected_asset_id == asset_id and item.selected_variant_id == variant_id
-                   for item in script.episode_character_uses):
-                raise ValueError("Variant belongs to a confirmed episode look and cannot be deleted")
+                   for project in related_scripts for item in project.episode_character_uses):
+                raise ValueError("此变体仍用于已确认的剧集造型，请先更换该造型")
             for field, legacy_url_field in (
                 ("reference_sheet", "image_url"),
                 ("full_body_asset", "image_url"),
