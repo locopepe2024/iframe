@@ -1,3 +1,4 @@
+from src.apps import director_skills
 # ─────────────────────────────────────────────────────────────────────────────
 # IMPORTANT — handler async/sync convention (audited 2026-05-21):
 #
@@ -5920,6 +5921,53 @@ class SaveArtDirectionRequest(BaseModel):
     ai_recommendations: List[Dict[str, Any]] = []
 
 
+def _freeze_director_skills(stage, request):
+    try:
+        return director_skills.freeze(stage, request.skills)
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from exc
+
+
+@app.get("/projects/{script_id}/director-skills/{stage}")
+def get_project_director_skills(script_id: str, stage: director_skills.Stage,
+                                user: UserContext = Depends(require_studio_user)):
+    if stage == "series":
+        raise HTTPException(422, "Use the series scope for series Skills")
+    if not pipeline.get_script(script_id):
+        raise HTTPException(404, "Project not found")
+    return {"catalog": [{k: v for k, v in task.items() if k != "instructions"} for task in director_skills.catalog(stage)],
+            "skills": director_skills.preferences(user.owner_profile_id, "project:" + script_id, stage)}
+
+
+@app.put("/projects/{script_id}/director-skills/{stage}")
+def save_project_director_skills(script_id: str, stage: director_skills.Stage,
+                                 request: director_skills.DirectorSkillsRequest,
+                                 user: UserContext = Depends(require_studio_user)):
+    if stage == "series":
+        raise HTTPException(422, "Use the series scope for series Skills")
+    if not pipeline.get_script(script_id):
+        raise HTTPException(404, "Project not found")
+    _freeze_director_skills(stage, request)
+    return {"skills": director_skills.preferences(user.owner_profile_id, "project:" + script_id, stage, request.skills)}
+
+
+@app.get("/series/{series_id}/director-skills")
+def get_series_director_skills(series_id: str, user: UserContext = Depends(require_studio_user)):
+    if not pipeline.get_series(series_id):
+        raise HTTPException(404, "Series not found")
+    return {"catalog": [{k: v for k, v in task.items() if k != "instructions"} for task in director_skills.catalog("series")],
+            "skills": director_skills.preferences(user.owner_profile_id, "series:" + series_id, "series")}
+
+
+@app.put("/series/{series_id}/director-skills")
+def save_series_director_skills(series_id: str, request: director_skills.DirectorSkillsRequest,
+                                user: UserContext = Depends(require_studio_user)):
+    if not pipeline.get_series(series_id):
+        raise HTTPException(404, "Series not found")
+    _freeze_director_skills("series", request)
+    return {"skills": director_skills.preferences(user.owner_profile_id, "series:" + series_id, "series", request.skills)}
+
+
 class DirectorProfileRefineRequest(BaseModel):
     draft: Dict[str, Any]
     instructions: List[str] = Field(min_length=1, max_length=12)
@@ -6139,13 +6187,15 @@ def _director_profile_fingerprint(script_id: str, draft=None, instructions=None)
 @app.post("/projects/{script_id}/director-profile-jobs", status_code=202)
 def start_director_profile_analysis(
     script_id: str,
+    request: director_skills.DirectorSkillsRequest = director_skills.DirectorSkillsRequest(),
     user: UserContext = Depends(require_studio_user),
 ):
-    fingerprint = _director_profile_fingerprint(script_id)
+    skill_snapshot = _freeze_director_skills("episode", request)
+    fingerprint = _director_profile_fingerprint(script_id) + hashlib.sha256(json.dumps(skill_snapshot, sort_keys=True).encode()).hexdigest()
     return extraction_jobs.start(
         user.owner_profile_id, script_id, "director:" + fingerprint,
         lambda: {
-            "profile": pipeline.preview_director_profile(script_id),
+            "profile": pipeline.preview_director_profile(script_id, skill_snapshot=skill_snapshot),
             "source_audit": getattr(pipeline, "_last_director_analysis_audit", {}),
         },
         queue_group="director",
@@ -6291,19 +6341,21 @@ def get_series_director_profile(
 @app.post("/series/{series_id}/director-profile-jobs", status_code=202)
 def start_series_director_profile_analysis(
     series_id: str,
+    request: director_skills.DirectorSkillsRequest = director_skills.DirectorSkillsRequest(),
     user: UserContext = Depends(require_studio_user),
 ):
+    skill_snapshot = _freeze_director_skills("series", request)
     series = pipeline.get_series(series_id)
     if not series:
         raise HTTPException(404, "Series not found")
     fingerprint = hashlib.sha256(json.dumps([
-        series.source_context,
+        series.source_context, skill_snapshot,
         [pipeline.get_script(item).original_text for item in series.episode_ids if pipeline.get_script(item)],
         series.characters, series.scenes, series.props,
     ], ensure_ascii=False, default=str, sort_keys=True).encode()).hexdigest()
     return extraction_jobs.start(
         user.owner_profile_id, "series:" + series_id, "series-director:" + fingerprint,
-        lambda: pipeline.preview_series_director_profile(series_id),
+        lambda: pipeline.preview_series_director_profile(series_id, skill_snapshot=skill_snapshot),
         queue_group="series-director",
     )
 
@@ -6722,8 +6774,10 @@ def _director_shooting_plan_fingerprint(script_id: str, lineage: Dict[str, Any],
 @app.post("/projects/{script_id}/director-shooting-plan-jobs", status_code=202)
 def start_director_shooting_plan(
     script_id: str,
+    request: director_skills.DirectorSkillsRequest = director_skills.DirectorSkillsRequest(),
     user: UserContext = Depends(require_studio_user),
 ):
+    skill_snapshot = _freeze_director_skills("shooting_plan", request)
     script = pipeline.get_script(script_id)
     if not script:
         raise HTTPException(404, "Project not found")
@@ -6745,7 +6799,7 @@ def start_director_shooting_plan(
             raise HTTPException(502, f"uniart_models_unavailable: {exc}") from exc
         if not any(item["api_model_id"] == model and "chat" in item["capabilities"] for item in published):
             raise HTTPException(422, "Selected LLM model is not published for this user")
-    fingerprint = "director_shooting_plan:" + _director_shooting_plan_fingerprint(script_id, lineage, model)
+    fingerprint = "director_shooting_plan:" + _director_shooting_plan_fingerprint(script_id, lineage, model) + hashlib.sha256(json.dumps(skill_snapshot, sort_keys=True).encode()).hexdigest()
     return extraction_jobs.start(
         user.owner_profile_id,
         script_id,
@@ -6762,6 +6816,7 @@ def start_director_shooting_plan(
                 ),
                 expected_lineage=lineage,
                 model=model,
+                skill_snapshot=skill_snapshot,
             ).model_dump(),
         },
         pass_job_id=True,

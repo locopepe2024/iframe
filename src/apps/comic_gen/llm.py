@@ -1,4 +1,6 @@
 import json
+from src.apps.director_skills import guidance as director_skill_guidance
+
 import hashlib
 import os
 import time
@@ -1646,6 +1648,7 @@ class ScriptProcessor:
 
 <stage_preset name="director-interpretation">{preset}</stage_preset>
 <stage_preset name="director-intent">{intent_preset}</stage_preset>
+{director_skill_guidance(entities_json.get("selected_creative_methods", []))}
 
 {source_label}：
 <script>{source_context}</script>
@@ -1655,7 +1658,7 @@ tail_anchor 是原文锚点；source_ref/char_start/char_end 仅用于回指来�
 不得把摘要中没有证据的内容补成事实，也不要把分块边界当作叙事边界。
 
 已确认实体（名称和关系不得擅自替换）：
-<entities>{_prompt_json(entities_json)}</entities>
+<entities>{_prompt_json({k: v for k, v in entities_json.items() if k != "selected_creative_methods"})}</entities>
 
 如果 entities 中包含 series_context 或 series_director_understanding，它们是系列级只读 handoff：
 用于约束全剧背景、人物关系和跨集连续性，不等于本集已经发生的事件。Episode 输出只能把本集原文
@@ -1975,6 +1978,7 @@ fact_id，事实变化时保留 source_refs，并用 status/supersedes_fact_id �
             prompt = f"""你是电影导演和场记统筹。请根据提供的剧本片段、已确认故事理解、人物/场景/道具实体和视觉风格，提出可供用户审阅的拍摄计划。
 
 <stage_preset name="shooting-plan-handoff">{handoff_preset}</stage_preset>
+{director_skill_guidance(entities_json.get("selected_creative_methods", []))}
 
 事实边界：剧本片段是剧情事实来源；Director story_map 只提供已确认的事件 ID 和叙事组织；实体只提供可引用 ID；视觉风格只决定拍摄表达。不得添加剧本没有的对白、动作或剧情事实。来源片段边界由系统切分，不能把片段边界直接当作场景边界。
 
@@ -1994,7 +1998,7 @@ fact_id，事实变化时保留 source_refs，并用 status/supersedes_fact_id �
 <source_chunk ref="{source_ref}">
 {script_chunk}
 </source_chunk>
-<entities>{_prompt_json(entities_json)}</entities>
+<entities>{_prompt_json({k: v for k, v in entities_json.items() if k != "selected_creative_methods"})}</entities>
 <confirmed_director_profile>{_prompt_json(director_profile)}</confirmed_director_profile>
 <visual_style>{_prompt_json(style_config)}</visual_style>
 <visual_style_summary>{style_summary}</visual_style_summary>

@@ -1232,6 +1232,7 @@ class DirectorStoryMap(_DirectorStoryMapModel):
 
 class DirectorProfile(BaseModel):
     """Confirmed narrative direction carried into downstream generation."""
+    creative_skill_run: List[Dict[str, str]] = Field(default_factory=list, max_length=12)
     setting: Dict[str, Any] = Field(default_factory=dict)
     timeline: List[Dict[str, Any]] = Field(default_factory=list)
     relationships: List[Dict[str, Any]] = Field(default_factory=list)
@@ -1447,6 +1448,7 @@ class DirectorPlanScene(_DirectorShootingPlanModel):
 
 
 class DirectorShootingPlan(_DirectorShootingPlanModel):
+    creative_skill_run: List[Dict[str, str]] = Field(default_factory=list, max_length=12)
     schema_version: Literal[1] = 1
     source_revision: int = Field(..., ge=1)
     source_revision_id: str = Field("", max_length=240)

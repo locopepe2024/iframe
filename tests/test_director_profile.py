@@ -1868,7 +1868,7 @@ def test_director_jobs_are_durable_owner_scoped_and_non_mutating(tmp_path, monke
             provider="openai", _get_default_model=lambda: "test",
         )),
         director_analysis_context=lambda project: (source, {"characters": []}, {"name": "style"}),
-        preview_director_profile=lambda project: profile_payload(),
+        preview_director_profile=lambda project, **kwargs: profile_payload(),
         refine_director_profile=lambda project, draft, instructions: (
             captured.update(draft=draft, instructions=instructions) or profile_payload()
         ),
@@ -1880,7 +1880,7 @@ def test_director_jobs_are_durable_owner_scoped_and_non_mutating(tmp_path, monke
         jobs = ExtractionJobs(tmp_path / "director-jobs.db", executor=executor)
         monkeypatch.setattr(api, "pipeline", pipeline)
         monkeypatch.setattr(api, "extraction_jobs", jobs)
-        job = api.start_director_profile_analysis("film", owner)
+        job = api.start_director_profile_analysis("film", api.director_skills.DirectorSkillsRequest(), owner)
         deadline = time.monotonic() + 3
         while time.monotonic() < deadline:
             done = jobs.get("owner", "film", job["id"])

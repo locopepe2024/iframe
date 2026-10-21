@@ -1,0 +1,166 @@
+{
+  "schema_version": 1,
+  "tasks": [
+    {
+      "id": "people-relations",
+      "label": "人物与关系",
+      "category": "故事与人物分析",
+      "stages": [
+        "series",
+        "episode"
+      ],
+      "version": "1.0.0",
+      "description": "梳理人物目标、关系变化及其触发事件；区分原文事实、解释和未知。",
+      "instructions": "在 relationships 与 key_events 中记录人物目标、关系变化及来源事件；不凭性格标签补写动机。",
+      "source": "LumenX 独立适配；方法分类参考 open-ai-canvas",
+      "source_revision": "86ebb6c5345287c645e857a8f550901bb6fd4bd8",
+      "license": "MIT (LumenX original adaptation)"
+    },
+    {
+      "id": "story-causality",
+      "label": "主支线与因果",
+      "category": "故事与人物分析",
+      "stages": [
+        "series",
+        "episode"
+      ],
+      "version": "1.0.0",
+      "description": "核对事件之间的因果、主支线与悬而未决之处。",
+      "instructions": "在 timeline、key_events、story_map 中区分时间先后与真实因果，列出来源支持的因果连接；缺失环节放 unresolved_questions，不补写剧情。",
+      "source": "LumenX 独立适配；方法分类参考 open-ai-canvas",
+      "source_revision": "86ebb6c5345287c645e857a8f550901bb6fd4bd8",
+      "license": "MIT (LumenX original adaptation)"
+    },
+    {
+      "id": "episode-beats",
+      "label": "目标冲突与节拍",
+      "category": "故事与人物分析",
+      "stages": [
+        "episode"
+      ],
+      "version": "1.0.0",
+      "description": "按目标、阻碍、转折和情绪变化分析当前集。",
+      "instructions": "在 key_events、emotional_arc、pacing 中分析本集目标、阻碍、转折和情绪变化，保留事件顺序与来源；不强制三幕结构或固定时长。",
+      "source": "LumenX 独立适配；方法分类参考 open-ai-canvas",
+      "source_revision": "86ebb6c5345287c645e857a8f550901bb6fd4bd8",
+      "license": "MIT (LumenX original adaptation)"
+    },
+    {
+      "id": "opening-hook",
+      "label": "开场吸引力",
+      "category": "钩子与节奏设计",
+      "stages": [
+        "shooting_plan"
+      ],
+      "version": "1.0.0",
+      "description": "用已有事件建立观众想继续看的问题。",
+      "instructions": "在开场 beat 的 dramatic_purpose 与 shot.director_effect 写明观众问题、吸引注意的可见或可闻信息、原文来源与后续兑现依据；没有兑现依据明确待核验。不得虚构冲突、强制前三秒高潮或把素材分块开头都当全片开场。",
+      "source": "LumenX 独立适配；方法分类参考 open-ai-canvas",
+      "source_revision": "86ebb6c5345287c645e857a8f550901bb6fd4bd8",
+      "license": "MIT (LumenX original adaptation)"
+    },
+    {
+      "id": "information-suspense",
+      "label": "信息差与悬念",
+      "category": "钩子与节奏设计",
+      "stages": [
+        "shooting_plan"
+      ],
+      "version": "1.0.0",
+      "description": "安排观众知道什么、何时揭示与兑现。",
+      "instructions": "在相关 beat.dramatic_purpose 与 shot.director_effect 标明观众和人物各自已知信息、暂缓展示的内容、揭示/兑现所依赖的已有事件及来源。只编排已有信息，不改变因果，不提前暴露后续事件；来源不覆盖时标待核验。",
+      "source": "LumenX 独立适配；方法分类参考 open-ai-canvas",
+      "source_revision": "86ebb6c5345287c645e857a8f550901bb6fd4bd8",
+      "license": "MIT (LumenX original adaptation)"
+    },
+    {
+      "id": "rhythm-emotion",
+      "label": "节奏与情绪",
+      "category": "钩子与节奏设计",
+      "stages": [
+        "shooting_plan"
+      ],
+      "version": "1.0.0",
+      "description": "以情绪和信息变化组织节奏与段尾余韵。",
+      "instructions": "在 beat.emotional_change、dramatic_purpose 与镜头 duration_seconds 建议节奏；解释加速、停顿与段尾余韵服务的观众体验。不硬编码固定秒数、付费墙或每段反转。",
+      "source": "LumenX 独立适配；方法分类参考 open-ai-canvas",
+      "source_revision": "86ebb6c5345287c645e857a8f550901bb6fd4bd8",
+      "license": "MIT (LumenX original adaptation)"
+    },
+    {
+      "id": "viewpoint-staging",
+      "label": "视点与调度",
+      "category": "镜头与视听设计",
+      "stages": [
+        "shooting_plan"
+      ],
+      "version": "1.0.0",
+      "description": "让景别、机位、空间与人物行动服务叙事。",
+      "instructions": "在 shots 的 visual_intent、composition、camera_angle、camera_movement、performance_action 中写清谁观察谁、主体前后左右、行动与注意力转移；景别/运镜有明确目的，不为丰富而增加镜头，不凭摄影品牌附带美学效果。",
+      "source": "LumenX 独立适配；方法分类参考 open-ai-canvas",
+      "source_revision": "86ebb6c5345287c645e857a8f550901bb6fd4bd8",
+      "license": "MIT (LumenX original adaptation)"
+    },
+    {
+      "id": "audiovisual-strategy",
+      "label": "声画与注意力",
+      "category": "镜头与视听设计",
+      "stages": [
+        "shooting_plan"
+      ],
+      "version": "1.0.0",
+      "description": "选择画外声、声音先行、声源揭示和声画关系。",
+      "instructions": "在 shot.ambient_sound、visual_intent、director_effect 中说明声源是否画内、观众先听后看或先看后听、声画互补与注意力流向。只使用来源支持的声音/对白或标明可选制作建议；不编造对白和剧情声源，不提前揭示悬念。",
+      "source": "LumenX 独立适配；方法分类参考 open-ai-canvas",
+      "source_revision": "86ebb6c5345287c645e857a8f550901bb6fd4bd8",
+      "license": "MIT (LumenX original adaptation)"
+    },
+    {
+      "id": "continuity-review",
+      "label": "状态与连续性审阅",
+      "category": "剧本与连续性审阅",
+      "stages": [
+        "series",
+        "episode",
+        "shooting_plan"
+      ],
+      "version": "1.0.0",
+      "description": "检查人物、道具、时空与已确认约束的承接。",
+      "instructions": "只提出审阅发现与建议：逐项对照人物/道具/规则、时间地点和已确认意图的前后状态。将有证据的冲突与来源不足区分；profile 写入 unresolved_questions，plan 写入 unresolved_questions 或相关场景 unresolved_questions。引用事件或场景，不自动重写事实。",
+      "source": "LumenX 独立适配；方法分类参考 open-ai-canvas",
+      "source_revision": "86ebb6c5345287c645e857a8f550901bb6fd4bd8",
+      "license": "MIT (LumenX original adaptation)"
+    },
+    {
+      "id": "setup-payoff-review",
+      "label": "伏笔与兑现审阅",
+      "category": "剧本与连续性审阅",
+      "stages": [
+        "series",
+        "episode",
+        "shooting_plan"
+      ],
+      "version": "1.0.0",
+      "description": "核对已有线索、揭示和兑现，不新增伏笔。",
+      "instructions": "只审阅来源中已存在的铺垫、揭示与兑现，区分已兑现、尚未兑现、当前来源覆盖不足；写入 unresolved_questions 并引用来源事件。不得将未覆盖误判为缺失，不为闭环擅自补写结局。",
+      "source": "LumenX 独立适配；方法分类参考 open-ai-canvas",
+      "source_revision": "86ebb6c5345287c645e857a8f550901bb6fd4bd8",
+      "license": "MIT (LumenX original adaptation)"
+    },
+    {
+      "id": "dialogue-review",
+      "label": "对白与因果审阅",
+      "category": "剧本与连续性审阅",
+      "stages": [
+        "series",
+        "episode"
+      ],
+      "version": "1.0.0",
+      "description": "核对对白信息、人物目标与事件因果是否相容。",
+      "instructions": "对照已有对白、人物目标与事件结果，在 unresolved_questions 输出有来源的疑点与修改建议，不改写原文对白，不强制短句或商业短剧规格。",
+      "source": "LumenX 独立适配；方法分类参考 open-ai-canvas",
+      "source_revision": "86ebb6c5345287c645e857a8f550901bb6fd4bd8",
+      "license": "MIT (LumenX original adaptation)"
+    }
+  ]
+}

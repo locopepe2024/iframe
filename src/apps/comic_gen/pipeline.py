@@ -1,4 +1,6 @@
 from typing import Dict, Any, List, Optional, Tuple
+from src.apps.director_skills import provenance as director_skill_provenance
+
 import hashlib
 import json
 import os
@@ -3125,7 +3127,7 @@ class ComicGenPipeline(StudioOwnerMixin):
             return series.director_profile_revisions[-1].profile
         return series.art_direction.director_profile if series.art_direction else None
 
-    def preview_series_director_profile(self, series_id: str) -> Dict[str, Any]:
+    def preview_series_director_profile(self, series_id: str, *, skill_snapshot=None) -> Dict[str, Any]:
         series = self.series_store.get(series_id)
         if not series:
             raise ValueError("Series not found")
@@ -3148,6 +3150,8 @@ class ComicGenPipeline(StudioOwnerMixin):
                     entities[kind].append({field: getattr(item, field, None) for field in fields})
                     known.add(item.id)
         entities["scope"] = "series"
+        if skill_snapshot:
+            entities["selected_creative_methods"] = skill_snapshot
         style = series.art_direction.style_config if series.art_direction else {}
         try:
             analyzed = self.script_processor.analyze_director_profile_with_audit(
@@ -3169,6 +3173,7 @@ class ComicGenPipeline(StudioOwnerMixin):
             raise
         normalized = normalize_director_profile_draft(analyzed["profile"])
         # A Series profile is global context, not an Episode source ledger.
+        normalized["creative_skill_run"] = director_skill_provenance(skill_snapshot or [])
         normalized["story_map"] = None
         normalized["source_revision"] = None
         normalized["source_revision_id"] = ""
@@ -3612,13 +3617,15 @@ class ComicGenPipeline(StudioOwnerMixin):
         """Only entities extracted into this script can bind Director facts."""
         return {"characters": script.characters, "scenes": script.scenes, "props": script.props}
 
-    def preview_director_profile(self, script_id: str) -> Dict[str, Any]:
-        analyzed = self.preview_director_profile_with_audit(script_id)
+    def preview_director_profile(self, script_id: str, *, skill_snapshot=None) -> Dict[str, Any]:
+        analyzed = self.preview_director_profile_with_audit(script_id, skill_snapshot=skill_snapshot)
         self._last_director_analysis_audit = analyzed.get("source_audit", {})
         return analyzed["profile"]
 
-    def preview_director_profile_with_audit(self, script_id: str, source_mode: str = "auto") -> Dict[str, Any]:
+    def preview_director_profile_with_audit(self, script_id: str, source_mode: str = "auto", *, skill_snapshot=None) -> Dict[str, Any]:
         script, entities, style = self.director_analysis_context(script_id)
+        if skill_snapshot:
+            entities["selected_creative_methods"] = skill_snapshot
         source_audit = {}
         analyzer = getattr(self.script_processor, "analyze_director_profile_with_audit", None)
         try:
@@ -3639,6 +3646,7 @@ class ComicGenPipeline(StudioOwnerMixin):
                 draft = self.script_processor.analyze_director_profile(script.original_text, entities, style)
                 source_audit = getattr(self.script_processor, "_last_director_source_audit", {})
             normalized = normalize_director_profile_draft(draft)
+            normalized["creative_skill_run"] = director_skill_provenance(skill_snapshot or [])
             self._bind_director_story_map(script, entities, normalized)
             DirectorProfile(**normalized)
             self._validate_director_story_map(script, normalized.get("story_map"))
@@ -4140,6 +4148,7 @@ class ComicGenPipeline(StudioOwnerMixin):
         save_batch=None,
         expected_lineage: Optional[Dict[str, Any]] = None,
         model: Optional[str] = None,
+        skill_snapshot=None,
     ) -> DirectorShootingPlan:
         script = self.scripts.get(script_id)
         if not script:
@@ -4220,6 +4229,8 @@ class ComicGenPipeline(StudioOwnerMixin):
                         "recent_prop_ids": recent_prop_ids[:40],
                         "unresolved_questions": last.get("unresolved_questions", [])[:20],
                     }
+                if skill_snapshot:
+                    entities["selected_creative_methods"] = skill_snapshot
                 chunk_result = self.script_processor.plan_director_shooting_chunk(
                     chunk["text"],
                     entities,
@@ -4441,6 +4452,7 @@ class ComicGenPipeline(StudioOwnerMixin):
                         shot["lighting"] = {}
         plan = DirectorShootingPlan(
             **lineage,
+            creative_skill_run=director_skill_provenance(skill_snapshot or []),
             scenes=scenes,
             lighting_baselines=lighting_baselines,
             unresolved_questions=list(dict.fromkeys(unresolved_questions))[:80],
