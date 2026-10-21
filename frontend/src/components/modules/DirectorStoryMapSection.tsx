@@ -16,7 +16,7 @@ import type {
     ScriptFactLedgerQueryEntry,
 } from "@/store/projectStore";
 
-import { restoreStoryMapMilestoneDefaults } from "@/lib/directorStoryMap";
+import { restoreStoryMapDefaults } from "@/lib/directorStoryMap";
 
 type Draft = Record<string, unknown>;
 
@@ -467,7 +467,7 @@ function StoryMapSection({
 }) {
     const t = useTranslations("artDirection.directorEditor.storyMap");
     const tLegacy = useTranslations("artDirection.directorEditor");
-    const rawStoryMap = restoreStoryMapMilestoneDefaults(profile.story_map);
+    const rawStoryMap = useMemo(() => restoreStoryMapDefaults(profile.story_map), [profile.story_map]);
     const map = isDirectorStoryMap(rawStoryMap) ? rawStoryMap : null;
     const invalidMap = rawStoryMap !== undefined && rawStoryMap !== null && !map;
     const [expandedEventId, setExpandedEventId] = useState<string | null>(null);

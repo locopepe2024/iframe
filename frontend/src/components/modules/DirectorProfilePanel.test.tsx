@@ -380,11 +380,11 @@ it("sends only the current revision instruction after prior changes are merged",
 
 vi.mock("@/lib/directorSkills", () => ({ useDirectorSkills: () => ({ catalog: [], selected: [], loading: false, saving: false, error: "", canRun: true, update: vi.fn(), retry: vi.fn() }) }));
 
-it("opens a previously returned story map whose optional milestone notes were omitted", async () => {
+it("opens a returned story map with missing relation evidence fields and milestone notes", async () => {
     window.localStorage.clear();
     const analyzed = { ...profile, story_map: {
         schema_version: 1, source_revision: 1, source_revision_id: "source-r1:test", fact_ledger_revision: null,
-        people: [], relationship_arcs: [],
+        people: [], relationship_arcs: [{ relationship_id: "relation-1", person_ids: [], states: [{ phase_id: "p1", state: "关系变化", trigger_event_ids: ["e1"] }] }],
         phases: [{ phase_id: "p1", order: 0, label: "本集", time_anchor: "", events: [{
             event_id: "e1", order: 0, title: "事件一", description: "原文事件", character_ids: [],
             dramatic_function: "", source_fact_ids: [], evidence_status: "interpretation",
