@@ -16,6 +16,7 @@ import type {
     ScriptFactLedgerQueryEntry,
 } from "@/store/projectStore";
 
+import HoverHint from "@/components/shared/HoverHint";
 import { restoreStoryMapDefaults } from "@/lib/directorStoryMap";
 
 type Draft = Record<string, unknown>;
@@ -478,7 +479,7 @@ function StoryMapSection({
     const [viewMode, setViewMode] = useState<"graph" | "editor">("graph");
     const [selectedGraphNode, setSelectedGraphNode] = useState<{ kind: string; title: string; body: string; meta: string } | null>(null);
     const [mindMapFilter, setMindMapFilter] = useState<"all" | "review">("all");
-    const [expandedMindMapNodes, setExpandedMindMapNodes] = useState<Set<string>>(() => new Set(["timeline", "people", "threads", "scenes"]));
+    const [expandedMindMapNodes, setExpandedMindMapNodes] = useState<Set<string>>(() => new Set());
     const openMindMapWindow = () => {
         if (typeof window === "undefined") return;
         const url = new URL(window.location.href);
@@ -525,7 +526,7 @@ function StoryMapSection({
             observer?.disconnect();
             window.removeEventListener("resize", measure);
         };
-    }, [viewMode, map?.source_revision, expandedMindMapNodes, mindMapFilter]);
+    }, [viewMode, map, expandedMindMapNodes, mindMapFilter]);
     const people = useMemo(() => {
         const generated = makePeople(characters);
         const existing = map?.people ?? [];
@@ -878,11 +879,10 @@ function StoryMapSection({
         const className = node.issue ? "border-amber-400/45 bg-amber-400/10" : node.tone === "branch" ? "border-primary/35 bg-primary/10" : "border-border bg-background/85";
         const hasChildren = Boolean(node.children?.length);
         const expanded = expandedMindMapNodes.has(node.id);
-        return <button key={node.id} type="button" onClick={() => { node.onClick?.(); if (hasChildren) setExpandedMindMapNodes(current => { const next = new Set(current); expanded ? next.delete(node.id) : next.add(node.id); return next; }); }} data-graph-node={node.id} data-graph-parent={mindMapParentFor(node.id)} aria-expanded={hasChildren ? expanded : undefined} className={`w-full rounded-lg border px-3 py-2.5 text-left shadow-sm transition-colors ${className} hover:border-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary`}>
+        return <HoverHint key={node.id} text={node.meta || node.label} className="block w-full"><button type="button" onClick={() => { node.onClick?.(); if (hasChildren) setExpandedMindMapNodes(current => { const next = new Set(current); expanded ? next.delete(node.id) : next.add(node.id); return next; }); }} aria-description={node.meta} data-graph-node={node.id} data-graph-parent={mindMapParentFor(node.id)} aria-expanded={hasChildren ? expanded : undefined} className={`w-full rounded-lg border px-3 py-2.5 text-left shadow-sm transition-colors ${className} hover:border-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary`}>
             <span className="flex items-center justify-between gap-2"><span className="block text-xs font-semibold text-foreground">{node.label}</span>{hasChildren && <span className="text-sm text-primary" aria-hidden="true">{expanded ? "−" : "+"}</span>}</span>
-            {node.meta && <span className="mt-1 block text-[10px] leading-4 text-text-muted">{node.meta}</span>}
             {node.issue && <span className="mt-1 block text-[10px] font-medium text-amber-200">{node.issue}</span>}
-        </button>;
+        </button></HoverHint>;
     };
 
     if (invalidMap) {
@@ -898,8 +898,7 @@ function StoryMapSection({
             <section className="rounded-lg border border-border bg-background/40 p-4" aria-labelledby="director-story-map-title">
                 <div className="flex flex-wrap items-start justify-between gap-3">
                     <div>
-                        <h3 id="director-story-map-title" className="text-sm font-semibold text-foreground">{t("title")}</h3>
-                        <p className="mt-1 max-w-3xl text-xs leading-5 text-text-secondary">{t("mindMapEntryHint")}</p>
+                        <HoverHint text={t("mindMapEntryHint")} focusable className="inline-block rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"><h3 id="director-story-map-title" className="text-sm font-semibold text-foreground">{t("title")}</h3></HoverHint>
                     </div>
                     <button type="button" onClick={newMap} className="inline-flex min-h-11 items-center gap-2 rounded-md bg-primary px-4 text-xs font-semibold text-white shadow-sm hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/70">
                         <Plus size={15} aria-hidden="true" />{t("enterMindMap")}
@@ -989,9 +988,7 @@ function StoryMapSection({
             <section className="rounded-lg border border-border bg-background/40 p-4" aria-labelledby="director-story-map-title">
                 <div className="flex flex-wrap items-start justify-between gap-3">
                     <div>
-                        <h3 id="director-story-map-title" className="text-sm font-semibold text-foreground">{t("title")}</h3>
-                        <p className="mt-1 max-w-3xl text-xs leading-5 text-text-secondary">{t("mapHint")}</p>
-                        <p className="mt-2 rounded-md border border-primary/20 bg-primary/5 px-3 py-2 text-[11px] leading-5 text-text-secondary">{t("draftSaveHint")}</p>
+                        <HoverHint text={`${t("mapHint")}\n${t("draftSaveHint")}`} focusable className="inline-block rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"><h3 id="director-story-map-title" className="text-sm font-semibold text-foreground">{t("title")}</h3></HoverHint>
                         <div className="mt-2 flex flex-wrap items-center gap-2 text-[10px]">
                             <span className="rounded bg-primary/10 px-2 py-1 text-primary">{t("sourceRevision", { revision: map.source_revision })}</span>
                             {map.fact_ledger_revision !== null && <span className="rounded bg-background px-2 py-1 text-text-secondary">{t("pinnedLedger", { revision: map.fact_ledger_revision })}</span>}
@@ -1012,26 +1009,23 @@ function StoryMapSection({
 
                 {viewMode === "editor" && <div className="mt-5 flex flex-wrap items-end justify-between gap-3">
                     <div>
-                        <h4 className="text-sm font-semibold text-foreground">{t("timelineTitle")}</h4>
-                        <p className="mt-1 text-xs text-text-secondary">{t("timelineHint")}</p>
+                        <HoverHint text={t("timelineHint")} focusable className="inline-block rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"><h4 className="text-sm font-semibold text-foreground">{t("timelineTitle")}</h4></HoverHint>
                     </div>
                     <button type="button" onClick={addPhase} className="inline-flex min-h-9 items-center gap-2 rounded-md border border-border px-3 text-xs text-foreground hover:border-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/70"><Plus size={14} aria-hidden="true" />{t("addPhase")}</button>
                 </div>}
 
                 {viewMode === "graph" && <div className="mt-5 overflow-x-auto rounded-lg border-2 border-primary/30 bg-surface p-5" role="group" aria-label={t("graphDescription")}>
-                    <div className="mb-4 flex flex-wrap items-center justify-between gap-3"><div><p className="text-sm font-semibold text-foreground">{t("mindMapView")}</p><p className="mt-1 text-xs text-text-secondary">{t("mindMapCoreHint")}</p></div><div className="flex flex-wrap items-center gap-2"><button type="button" onClick={openMindMapWindow} className="rounded-md border border-primary/40 bg-primary/10 px-3 py-2 text-xs font-medium text-primary hover:bg-primary/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/70">{t("openMindMapWindow")}</button><div className="inline-flex rounded-md border border-border bg-background/50 p-1" role="group" aria-label={t("mindMapFilterLabel")}><button type="button" onClick={() => setMindMapFilter("all")} aria-pressed={mindMapFilter === "all"} className={`rounded px-2.5 py-1.5 text-[10px] ${mindMapFilter === "all" ? "bg-primary text-white" : "text-text-secondary"}`}>{t("mindMapFilterAll")}</button><button type="button" onClick={() => setMindMapFilter("review")} aria-pressed={mindMapFilter === "review"} className={`rounded px-2.5 py-1.5 text-[10px] ${mindMapFilter === "review" ? "bg-amber-500/80 text-white" : "text-text-secondary"}`}>{t("mindMapFilterReview")}</button></div><span className="rounded-full bg-primary/10 px-2.5 py-1 text-[10px] font-medium text-primary">{t("graphDescription")}</span></div></div>
-                    <div ref={graphCanvasRef} className="relative min-h-[680px] min-w-[1240px] px-4 pb-2 pt-2">
+                    <div className="mb-4 flex flex-wrap items-center justify-between gap-3"><HoverHint text={`${t("mindMapCoreHint")}\n${t("graphDescription")}`} focusable className="rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"><span className="text-sm font-semibold text-foreground">{t("mindMapView")}</span></HoverHint><div className="flex flex-wrap items-center gap-2"><button type="button" onClick={openMindMapWindow} className="rounded-md border border-primary/40 bg-primary/10 px-3 py-2 text-xs font-medium text-primary hover:bg-primary/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/70">{t("openMindMapWindow")}</button><div className="inline-flex rounded-md border border-border bg-background/50 p-1" role="group" aria-label={t("mindMapFilterLabel")}><button type="button" onClick={() => setMindMapFilter("all")} aria-pressed={mindMapFilter === "all"} className={`rounded px-2.5 py-1.5 text-[10px] ${mindMapFilter === "all" ? "bg-primary text-white" : "text-text-secondary"}`}>{t("mindMapFilterAll")}</button><button type="button" onClick={() => setMindMapFilter("review")} aria-pressed={mindMapFilter === "review"} className={`rounded px-2.5 py-1.5 text-[10px] ${mindMapFilter === "review" ? "bg-amber-500/80 text-white" : "text-text-secondary"}`}>{t("mindMapFilterReview")}</button></div></div></div>
+                    <div ref={graphCanvasRef} className="relative flex w-max min-w-full items-center gap-10 px-4 py-2">
                         <svg className="pointer-events-none absolute inset-0 h-full w-full" aria-hidden="true">
-                            {graphEdges.map((edge, index) => <path key={index} d={`M ${edge.x1} ${edge.y1} C ${edge.x1} ${edge.y1 + 28}, ${edge.x2} ${edge.y2 - 28}, ${edge.x2} ${edge.y2}`} fill="none" stroke="currentColor" strokeOpacity="0.42" strokeWidth="2" />)}
+                            {graphEdges.map((edge, index) => <path key={index} d={`M ${edge.x1} ${edge.y1} C ${(edge.x1 + edge.x2) / 2} ${edge.y1}, ${(edge.x1 + edge.x2) / 2} ${edge.y2}, ${edge.x2} ${edge.y2}`} fill="none" stroke="currentColor" strokeOpacity="0.42" strokeWidth="2" />)}
                         </svg>
-                        <div data-graph-node="core" className="relative z-10 mx-auto flex w-72 items-center justify-center rounded-xl border-2 border-primary/70 bg-primary/15 p-5 text-center shadow-lg shadow-primary/10">
-                            <div><p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-primary">Director</p><p className="mt-2 text-lg font-semibold text-foreground">{t("mindMapCore")}</p><p className="mt-2 text-xs leading-5 text-text-secondary">{t("mindMapCoreHint")}</p></div>
+                        <div data-graph-node="core" className="relative z-10 flex w-64 shrink-0 items-center justify-center rounded-xl border-2 border-primary/70 bg-primary/15 p-5 text-center shadow-lg shadow-primary/10">
+                            <HoverHint text={t("mindMapCoreHint")} focusable className="rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"><span className="text-lg font-semibold text-foreground">{t("mindMapCore")}</span></HoverHint>
                         </div>
-                        <div className="relative z-10 mt-14 grid grid-cols-[260px_320px_360px] items-start gap-10">
-                            {mindMapColumns.map((column, columnIndex) => <div key={columnIndex} className="space-y-3">
-                                {column.length > 0 ? column.map(renderMindMapNode) : <p className="rounded-lg border border-dashed border-border p-4 text-xs text-text-muted">{t("mindMapEmptyBranch")}</p>}
-                            </div>)}
-                        </div>
+                        {mindMapColumns.map((column, columnIndex) => column.length > 0 && <div key={columnIndex} data-graph-depth={columnIndex + 2} className={`relative z-10 shrink-0 space-y-3 ${columnIndex === 0 ? "w-64" : columnIndex === 1 ? "w-80" : "w-96"}`}>
+                            {column.map(renderMindMapNode)}
+                        </div>)}
                     </div>
                     {selectedGraphNode && <aside className="mt-4 rounded-lg border border-primary/30 bg-background/80 p-4" aria-label="脑图节点详情">
                         <div className="flex items-start justify-between gap-3"><div><p className="text-[10px] font-semibold uppercase tracking-wide text-primary">{selectedGraphNode.kind}</p><h4 className="mt-1 text-sm font-semibold text-foreground">{selectedGraphNode.title}</h4></div><button type="button" onClick={() => setSelectedGraphNode(null)} className="rounded-md border border-border px-2 py-1 text-xs text-text-secondary hover:border-primary">关闭</button></div>
@@ -1075,8 +1069,7 @@ function StoryMapSection({
             <section className="rounded-lg border border-border bg-background/40 p-4" aria-labelledby="director-relationship-graph-title">
                 <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
                     <div>
-                        <h3 id="director-relationship-graph-title" className="text-sm font-semibold text-foreground">{t("relationshipsTitle")}</h3>
-                        <p className="mt-1 text-xs leading-5 text-text-secondary">{t("relationshipsHint")}</p>
+                        <HoverHint text={t("relationshipsHint")} focusable className="inline-block rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"><h3 id="director-relationship-graph-title" className="text-sm font-semibold text-foreground">{t("relationshipsTitle")}</h3></HoverHint>
                     </div>
                     <div className="flex flex-wrap items-end gap-2">
                         <label className="space-y-1.5">
@@ -1209,8 +1202,7 @@ function StoryMapSection({
             <section className="rounded-lg border border-border bg-background/40 p-4" aria-labelledby="director-storyline-title">
                 <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
                     <div>
-                        <h3 id="director-storyline-title" className="text-sm font-semibold text-foreground">{t("storylinesTitle")}</h3>
-                        <p className="mt-1 text-xs leading-5 text-text-secondary">{t("storylinesHint")}</p>
+                        <HoverHint text={t("storylinesHint")} focusable className="inline-block rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"><h3 id="director-storyline-title" className="text-sm font-semibold text-foreground">{t("storylinesTitle")}</h3></HoverHint>
                     </div>
                     <button type="button" onClick={addThread} className="inline-flex min-h-9 items-center gap-2 rounded-md border border-border px-3 text-xs text-foreground hover:border-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/70"><Plus size={14} aria-hidden="true" />{t("addStoryline")}</button>
                 </div>
@@ -1284,8 +1276,7 @@ function StoryMapSection({
             <section className="rounded-lg border border-border bg-background/40 p-4" aria-labelledby="director-scene-summaries-title">
                 <div className="flex flex-wrap items-start justify-between gap-3">
                     <div>
-                        <h3 id="director-scene-summaries-title" className="text-sm font-semibold text-foreground">{t("sceneSummariesTitle")}</h3>
-                        <p className="mt-1 max-w-3xl text-xs leading-5 text-text-secondary">{t("sceneSummariesHint")}</p>
+                        <HoverHint text={t("sceneSummariesHint")} focusable className="inline-block rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"><h3 id="director-scene-summaries-title" className="text-sm font-semibold text-foreground">{t("sceneSummariesTitle")}</h3></HoverHint>
                     </div>
                     <button type="button" onClick={addSceneSummary} className="inline-flex min-h-9 items-center gap-2 rounded-md border border-border px-3 text-xs text-foreground hover:border-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/70"><Plus size={14} aria-hidden="true" />{t("addSceneSummary")}</button>
                 </div>
