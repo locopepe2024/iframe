@@ -90,3 +90,29 @@ These are architectural references; their runtimes and scene owners are not used
   length survive a dolly; a camera with no target must be framed first.
 - UI/API tests use deterministic model stubs. Real provider understanding,
   latency and full WebGL visual acceptance have not been measured in this slice.
+
+## Live provider acceptance (2026-10-21)
+
+Add an opt-in check against an explicitly selected API origin and test-owner
+session token. Use only a synthetic two-actor scene, not a saved user project.
+The check must call the real proposal endpoint and pass its response through the
+actual browser parser/compiler/store. Verify pair facing across a box table,
+35mm two-subject framing, preview purity, atomic apply/undo/redo, stale rejection,
+a follow-up camera-only half-meter dolly, and clarification for timed motion.
+Record per-request duration and individual assertions; one passing run is a
+runtime observation, not statistical evidence of general model quality. This
+does not verify WebGL pixels, browser interactions, or production media depth.
+
+The test is skipped unless explicitly enabled with an API origin. Missing owner
+credentials fail before any request. Require HTTPS except for loopback HTTP,
+disable redirects, and never log tokens or provider error bodies. Run with:
+
+```bash
+IFRAME_DIRECTOR_LIVE_URL=https://garage.uniart.fun \
+npm run test:ui --prefix frontend -- --run src/components/director3d/design/design-provider.live.test.tsx
+```
+
+Supply `IFRAME_DIRECTOR_LIVE_TOKEN` through the operator's environment (never
+commit it). This check consumes three model calls and modifies only an in-memory
+frontend store; the API produces read-only proposals. No production config,
+saved scene, merge or deployment is changed.
