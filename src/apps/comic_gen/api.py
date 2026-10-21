@@ -447,6 +447,11 @@ async def enforce_studio_owner_boundary(request: Request, call_next):
         or path == "/upload"
         or path == "/config/models"
         or path == "/config/uniart/models"
+        # Voice catalog and preview need the same owner-scoped UniArt
+        # credentials as project audio generation.  Without this context,
+        # /voices fails even for an authenticated browser session.
+        or path == "/voices"
+        or path.startswith("/voice/")
         or path == "/studio/media-delivery"
         or path.startswith("/studio/media-records/")
         or path.startswith("/studio/owned-media/")

@@ -197,3 +197,34 @@ def test_request_context_resolves_correct_owner_without_global_sdk_state(gateway
         finally:
             access.reset_studio_user(token)
         assert post.call_args.kwargs['headers']['Authorization'] == f'Bearer {owner}-profile-{owner}'
+
+
+def test_voice_http_routes_require_and_propagate_owner_context(monkeypatch):
+    from fastapi import HTTPException
+    from fastapi.testclient import TestClient
+    from src.apps.comic_gen import api
+    from src.apps.identity import UserContext
+    from src.apps.studio_access import require_studio_user
+
+    def resolve(authorization, _cookie, _key_header):
+        if authorization != "Bearer owner-test":
+            raise HTTPException(status_code=401, detail="Authentication required")
+        return UserContext("owner-test", "profile-test", "Test", ""), False
+
+    monkeypatch.setattr(api, "_resolve_request_context", resolve)
+    monkeypatch.setattr(api.pipeline.audio_generator, "get_available_voices",
+                        lambda: [{"id": require_studio_user().owner_profile_id}])
+    monkeypatch.setattr(api.pipeline.audio_generator.tts, "preview",
+                        lambda **_kwargs: {"url": require_studio_user().owner_profile_id, "cached": False})
+    monkeypatch.setattr(api, "signed_response", lambda value: value)
+    client = TestClient(api.app, raise_server_exceptions=False)
+
+    assert client.get("/voices").status_code == 401
+    assert client.post("/voice/preview", json={"voice_id": VOICE, "text": "你好"}).status_code == 401
+    headers = {"Authorization": "Bearer owner-test"}
+    voices = client.get("/voices", headers=headers)
+    assert voices.status_code == 200
+    assert voices.json() == [{"id": "profile-test"}]
+    preview = client.post("/voice/preview", headers=headers, json={"voice_id": VOICE, "text": "你好"})
+    assert preview.status_code == 200
+    assert preview.json() == {"url": "profile-test", "cached": False}
