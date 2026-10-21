@@ -1,8 +1,6 @@
 import "./globals.css";
 import "@/components/director3d/styles.css";
-import EnvConfigChecker from "@/components/EnvConfigChecker";
-import { Providers } from "@/components/Providers";
-import TauriDragBar from "@/components/layout/TauriDragBar";
+import { ApplicationBoundary } from "@/components/companion/ApplicationBoundary";
 
 export default function RootLayout({
   children,
@@ -29,11 +27,9 @@ export default function RootLayout({
         />
       </head>
       <body className="font-sans bg-background text-foreground antialiased">
-        <Providers>
-          <TauriDragBar />
-          <EnvConfigChecker />
+        <ApplicationBoundary>
           {children}
-        </Providers>
+        </ApplicationBoundary>
       </body>
     </html>
   );

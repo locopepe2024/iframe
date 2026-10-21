@@ -1,0 +1,45 @@
+.shell {
+  --ink: #182f40; --muted: #455f70; --accent: #185a85; --surface: #fff; --border: #bdcdd8;
+  position: fixed; inset: 0; height: 100dvh; display: flex; flex-direction: column;
+  background: #f4f7f8; color: var(--ink); color-scheme: light;
+  font-family: system-ui, "PingFang SC", "Microsoft YaHei", sans-serif;
+  font-size: max(18px, 1.125rem); line-height: 1.65; overflow-wrap: anywhere;
+}
+.large { font-size: max(22px, 1.375rem); }
+.header, .main, .nav { width: 100%; max-width: 640px; margin-inline: auto; }
+.header { padding: max(16px, env(safe-area-inset-top)) 24px 12px; display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-shrink: 0; }
+.shell h1 { font-size: 1.65em; font-weight: 700; margin: 0; }
+.shell h2 { font-size: 1.25em; font-weight: 650; margin: 0 0 12px; }
+.shell h3 { font-size: 1em; font-weight: 650; }
+.shell p { margin: 0 0 16px; }
+.eyebrow, .badge, .disclosure { color: var(--muted); font-size: .9em; }
+.badge { border: 1px solid var(--border); border-radius: 24px; padding: 4px 12px; white-space: nowrap; }
+.main { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: 12px 20px 32px; scrollbar-gutter: stable; }
+.status { border-left: 4px solid var(--accent); padding: 8px 12px; background: #e7f0f6; }
+.hero { padding: 24px; margin-bottom: 24px; border-radius: 24px; background: #e1edf3; }
+.hero h2 { font-size: 1.65em; }
+.card { background: var(--surface); border: 1px solid var(--border); border-radius: 20px; padding: 20px; margin: 20px 0; }
+.shell button { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 52px; padding: 10px 16px; border: 1px solid var(--accent); border-radius: 14px; background: var(--surface); color: var(--accent); font: inherit; font-weight: 600; cursor: pointer; touch-action: manipulation; white-space: normal; }
+.shell button svg { width: 24px; height: 24px; flex-shrink: 0; }
+.shell button.primary { color: white; background: var(--accent); }
+.shell button:disabled { cursor: default; color: #53636e; background: #e6ebee; border-color: #889da9; }
+.shell button:active:not(:disabled) { background: #d6e7f2; color: var(--ink); }
+.shell :is(button, input, textarea, summary):focus-visible { outline: 3px solid #945000; outline-offset: 3px; }
+.shell label { display: block; margin: 12px 0; }
+.shell textarea { display: block; width: 100%; font: inherit; color: var(--ink); background: white; border: 2px solid #718b9b; border-radius: 12px; padding: 12px; resize: vertical; }
+.shell .check { display: flex; align-items: center; gap: 12px; min-height: 52px; cursor: pointer; }
+.check input { width: 26px; height: 26px; flex-shrink: 0; accent-color: var(--accent); }
+.actions { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 16px; }
+.actions button { flex: 1; }
+.messages { display: flex; flex-direction: column; gap: 16px; margin-bottom: 20px; }
+.message { padding: 16px; background: white; border: 1px solid var(--border); border-radius: 16px 16px 16px 4px; margin-right: 20px; white-space: pre-wrap; }
+.message p { margin: 8px 0 0; }
+.mine { background: #e0edf5; margin-right: 0; margin-left: 20px; border-radius: 16px 16px 4px 16px; }
+.preserve { white-space: pre-wrap; }
+.feedback { border-top: 1px solid var(--border); padding: 16px 0; }
+.nav { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; padding: 12px 12px max(12px, env(safe-area-inset-bottom)); background: white; border-top: 1px solid var(--border); flex-shrink: 0; }
+.nav button { flex-direction: column; gap: 2px; padding: 8px 2px; border: 0; font-size: .9em; font-weight: 400; }
+.nav button[aria-current] { background: #dfedf5; font-weight: 700; }
+.shell summary { min-height: 52px; cursor: pointer; padding: 12px 0; }
+@media (max-width: 360px) { .header { padding-inline: 16px; } .main { padding-inline: 12px; } .card, .hero { padding: 16px; } }
+@media (prefers-reduced-motion: reduce) { .shell *, .shell *::before, .shell *::after { scroll-behavior: auto !important; animation: none !important; transition: none !important; } }
