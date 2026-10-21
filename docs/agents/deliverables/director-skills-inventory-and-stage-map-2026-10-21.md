@@ -83,3 +83,47 @@
 5. 验证未选不注入、选项按阶段过滤、空选择、取消、保存重载、已提交快照稳定及跨层引用。另以同剧本方案人工对照评价质量，不能以测试通过代替效果。
 
 本次仅形成盘点与阶段设计，不改运行时、不部署。证据文件：config/agent_skills/catalog.json、src/apps/agent_skills.py、src/apps/agent_api.py、src/apps/comic_gen/models.py、llm.py、api.py、presets三份文件、frontend/src/components/modules/storyboard-r2v/OptimizerSelector.tsx、tests/test_storyboard_skill_contract.py；外部调研详见docs/specs/2026-10-01-external-film-skills-review-v1.md与2026-10-18-open-ai-canvas-skill-and-visual-reference-routing-v1.md。
+
+## 9. GitHub已采集但尚未作为对应Skill接入的材料
+
+补查发现上一轮只列运行目录不够完整。本地实际存在 `open-ai-canvas` checkout（commit `86ebb6c5345287c645e857a8f550901bb6fd4bd8`），位置 `/Users/owen/Developer/codex/git project/open-ai-canvas/backend/builtin`。以下核对了文件存在、SKILL头部与概述，以及cards文件数量；没有声称逐卡全文已读或全部方法已验证。它们不在iframe的12项目录中作为同名独立包登记；视觉基调部分素材已有借鉴，不能笼统说整个仓库从未使用。
+
+| 本地已采集包 | 实存方法卡数量 | 适配阶段建议 | 接入状态/需处理边界 |
+| --- | --- | --- | --- |
+| 故事结构引擎 | 36 | 全剧理解：主线/人物目标/因果/揭示序列分析；拍摄计划：经用户选择的结构诊断 | 未登记独立包；创作/改写方法须与原作事实分析分开，不能默认强制救猫咪/三幕/22步 |
+| 短剧实战手册 | 28 | 剧集理解：识别既有冲突/情绪/钩子；拍摄计划：开场、信息差、段尾策略 | 未登记独立包；包含dxj-audience-hook、czks-hook-paywall、czks-emotion、czks-structure-rhythm、sushi-reveal-punch等候选。付费墙和固定30秒开场不是默认规则 |
+| 分镜语法 | 28 | 拍摄计划：视点、悬念与镜头动机；分镜：调度/景别/运动/轴线/视线 | 未登记独立包；dm-suspense-necessity、dm-audience-meaning、shot-viewpoint、shot-dialog-blocking等适合按任务切片，不能整包混入全剧理解 |
+| 视听理论基础 | 12 | 拍摄计划：声画信息策略；分镜：声音先行、声画关系与衔接 | 未登记独立包；avs-acousmetre、ibe-misdirection、ibe-sound-first等为候选；不能据此自动新增故事中的声音事件 |
+| 视觉基调设计 | 27 | 全剧理解之后的风格策略、场景基线、分镜局部表达 | 部分光影/构图材料已被研究吸收，整包未登记；ctp-lighting/composition、vis-story-visual-map/visual-progression等需区分全局基线与局部变化 |
+| 剧本工业化机器 | 5 | 剧集理解/审阅：情绪目标、台账、对白与规格诊断 | 未登记独立包；factory-emotion-contract/dialogue-doctor/ledger等须变成可选审阅，不启动量产写作或新增审批 |
+| AI演员微表情导演 | 无cards目录卡片（正文包） | 分镜表演/视频：表情起点、发展、收束 | 未登记独立包；清除上游平台表单工具与模型效果断言；时序只进分镜，不回填角色固定身份 |
+| 叙事短片导演分镜 | 无cards目录卡片（正文包） | 导演意图/拍摄计划→分镜 | 未登记独立包；概述明确导演是信息编排者。需去除默认哥特暗黑风格、固定Clip时长与上游工具依赖 |
+| 影策短剧制作工作流 | 无cards目录卡片（正文及references） | 全剧/剧集来源理解、资产与拍摄计划交接参考 | 未整包接入；是上游完整工作流，不直接覆盖iframe已有owner/版本/API流程 |
+| 喜剧-mechanics | 67 | 喜剧题材时可选：预期落差、张力释放、包袱时机 | 本次只核对目录与卡名，未全文复核；不默认用于武侠、悬疑或一般剧集 |
+
+卡片数是本地文件计数，不是独立可运行Skill数。源包存在社区作者、书籍方法卡、媒体与原始来源元数据，适配前须逐卡核对来源与许可范围，不能把仓库MIT推导为所有第三方内容都可原样再发布。此次只记录目录、方法与映射，不复制原文到生产提示词。
+
+### 其他已调研的GitHub来源
+
+| 来源 | 已保存证据 | 候选能力/阶段 | 当前结论 |
+| --- | --- | --- | --- |
+| zenstory-ai/drama-skills | 09-30与10-01调研；记录short-drama-novel-analyze、short-drama-develop、short-drama-storyboard、short-drama-assets等入口 | 全剧原著分析、剧集开发、分镜、资产交接 | 已调研，不在当前目录逐项登记；不能将11项全部算已接入 |
+| kangarooking/director-skills | 10-01调研及10-06的action-fight-prompt具体文件记录 | 拍摄计划动作编排、分镜动作执行 | 未见同名独立包；固定时长配额不能照搬 |
+| 62656456/ai-film-skills | README/catalog调研，wuxia-design具体文件记录 | 导演/分镜/类型视觉与预演 | 调研记录含21模块，但未重核最新数量，不计作iframe可用Skill |
+| Coconah/AI-Short-Drama-Agent-Skill | README/SKILL调研 | 全剧/分集/剧本审阅的阶段组织 | 原调研记载无声明许可证，不复制文本；需再次核对后才决定复用 |
+| locopepe2024/martial-arts-director-cy | 10-19逐文件调研，固定commit65c7c1dd | 武术指导、动作骨架、镜头调性 | 词典与任务Skill候选，尚未作为可执行武指包登记；样例媒体单独验证 |
+| chaoszero6/production-pack | 10-17固定版本源文件比较 | story-schema、shot-list-schema、continuity-check | 已研究结构和部分lint，不等于已有自动视觉连续性检查Skill |
+| smixs/visual-skills | 10-21固定版本摄影词汇/图片框架调研 | 分镜/静态场景的词汇与Prompt检查 | 属词汇/方法参考，未整包安装 |
+| OSideMedia/higgsfield-ai-prompt-skill | 10-21 image-shots具体文件调研 | 静态分镜取景 | 已调研未整包接入，移除模型专用假设后再适配 |
+
+OpenMovie、AutoMovie、PromptKit、AI Movie Studio、StoryAI 3D导演台等另列为工程/结构/预演参考，不把整个项目当Skill。现有调研可证明研究发生，不证明源码均已完整保存或候选功能可直接运行。
+
+## 10. 将已采集材料映射到本次优先级
+
+- P0 全剧理解：先适配故事结构引擎中的因果/人物目标/主线与揭示序列分析，参考drama-skills原著分析；严格只分析已有故事。
+- P0 剧集理解：先适配短剧实战手册的观众关注、情绪与节拍分析，以及剧本工业化机器的情绪/台账审阅。
+- P0 拍摄计划：从短剧实战手册、分镜语法、叙事短片导演分镜中适配钩子、视点、信息保留与兑现策略；这是先前钩子缺口最直接的存量来源。
+- P1 分镜：分镜语法的调度/视线/屏幕方向；微表情导演的时序表演；视听理论的声画执行。延续用户此前“角色表情时序放到分镜”的决定。
+- P1 类型专项：武术、追逐、喜剧按用户选用再适配；不一次启用全部方法包。
+
+下一步应做逐条candidate清单（来源文件/版本、目标阶段、输入输出、依赖、可用状态），再导入目录；不能把上述几十张方法卡无差别显示成几十个Skill，也不能仅换名称就宣称已完成集成。
