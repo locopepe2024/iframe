@@ -2,6 +2,8 @@
 
 from typing import Literal, Optional
 
+from .scene_prompt_layers import ScenePromptLayers, validate_tool_panel, compile_tool_panel
+
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
 
 
@@ -17,12 +19,17 @@ class SceneLightingParams(BaseModel):
     elevation: Optional[int] = Field(None, ge=-90, le=90, strict=True)
     rim_light: bool = False
     preset: Optional[Literal["nolan_cool_gray", "golden_hour", "mystic_shadow", "cyberpunk", "blue_rim", "expired_film", "cinematic_portrait", "studio_softbox"]] = None
+    panel_settings: Optional[ScenePromptLayers] = None
     extra: str = Field("", max_length=2000)
 
     @model_validator(mode="after")
     def complete_direction(self):
         if (self.azimuth is None) != (self.elevation is None):
             raise ValueError("light direction requires both azimuth and elevation")
+        if self.panel_settings is not None:
+            validate_tool_panel(self.panel_settings, "lighting")
+            if self.preset is not None or self.rim_light:
+                raise ValueError("Panel settings replace legacy lighting presets")
         return self
 
 
@@ -38,7 +45,17 @@ class SceneCameraParams(BaseModel):
     focus_y: int = Field(50, ge=0, le=100)
     focus_radius: int = Field(18, ge=6, le=42)
     prompt_enabled: bool = False
+    panel_settings: Optional[ScenePromptLayers] = None
     extra: str = Field("", max_length=2000)
+
+
+    @model_validator(mode="after")
+    def validate_panel(self):
+        if self.panel_settings is not None:
+            validate_tool_panel(self.panel_settings, "camera")
+            if self.preset != "custom":
+                raise ValueError("Panel settings replace legacy camera presets")
+        return self
 
 
 SceneToolParams = SceneLightingParams | SceneCameraParams
@@ -92,15 +109,17 @@ def scene_tool_prompt(tool: SceneToolParams, has_lighting_reference: bool = Fals
             f"观察模式：{'正面' if tool.view_mode == 'front' else '透视'}。主光从{side}进入，受光方向必须与阴影方向一致。",
             f"主光方位角 {tool.azimuth}°，仰角 {tool.elevation}°；坐标系 Z 向上，方位 0° 为前方、90° 为右侧。" if tool.azimuth is not None else "",
             f"主光颜色 {tool.color}，亮度 {tool.brightness}%。{brightness_guide}",
-            "增加克制的轮廓光。" if tool.rim_light else "不额外增加明显轮廓光。",
+            "" if tool.panel_settings is not None else "增加克制的轮廓光。" if tool.rim_light else "不额外增加明显轮廓光。",
             (LIGHT_PRESETS[tool.preset] if tool.preset else "") if tool.intelligent else "仅根据结构化灯位、光色和亮度重塑光照。",
             tool.extra.strip() if tool.intelligent else "",
+            compile_tool_panel(tool.panel_settings) if tool.panel_settings is not None else "",
             "第二张图片仅供参考灯位、明暗分布、色温及氛围；场景内容必须来自第一张图片。" if has_lighting_reference else "",
             "结果应呈现真实受光面、阴影面与空间层次，不要只做整体滤镜变色。",
         ]))
     return "\n".join(filter(None, [
         "基于来源场景图片重定位相机视角。保持同一场景的主体、材质、结构、物体位置关系和核心风格；不要生成新场景。",
-        f"预设视角：{CAMERA_PRESETS[tool.preset]}；水平环绕 {tool.yaw}°；垂直俯仰 {tool.pitch}°；景别 {DISTANCES[tool.zoom]}。",
+        f"{'镜头设置' if tool.panel_settings is not None else '预设视角：' + CAMERA_PRESETS[tool.preset]}；水平环绕 {tool.yaw}°；垂直俯仰 {tool.pitch}°；景别 {DISTANCES[tool.zoom]}。",
         f"对焦点：图片坐标 x={tool.focus_x}%、y={tool.focus_y}%，影响半径约 {tool.focus_radius}%；保持该区域清晰稳定。" if tool.focus else "",
         tool.extra.strip() if tool.prompt_enabled else "",
+        compile_tool_panel(tool.panel_settings) if tool.panel_settings is not None else "",
     ]))

@@ -180,3 +180,41 @@ def test_scene_tool_infers_and_validates_shared_edit_mode(tmp_path, monkeypatch)
             references=[{"asset_type": "scene", "asset_id": "scene", "variant_id": "source"}],
             scene_tool=tool, edit_mode="scene_lighting",
         )
+
+
+def test_panel_settings_compile_without_legacy_preset_or_default_rim():
+    tool = parse_scene_tool({"kind": "lighting", "panel_settings": {"lighting": {
+        "source": "月光", "quality": "硬光", "mood": "清冷", "rim": "蓝色轮廓光",
+    }}})
+    prompt = scene_tool_prompt(tool)
+    assert "光影：光源：月光；软硬：硬光；轮廓光：蓝色轮廓光；氛围：清冷" in prompt
+    assert "不额外增加明显轮廓光" not in prompt
+    camera = scene_tool_prompt(parse_scene_tool({"kind": "camera", "panel_settings": {
+        "camera": {"focal_length": "鱼眼"}, "composition": {"frame_orientation": "倾斜画面"},
+    }}))
+    assert "镜头设置；水平环绕" in camera
+    assert "镜头：焦距观感：鱼眼\n构图：画面倾斜：倾斜画面" in camera
+    assert "预设视角" not in camera
+
+
+@pytest.mark.parametrize("tool", [
+    {"kind": "lighting", "panel_settings": {"lighting": {"direction": "left"}}},
+    {"kind": "lighting", "panel_settings": {"lighting": {"color": "blue"}}},
+    {"kind": "lighting", "panel_settings": {"camera": {"focal_length": "wide"}}},
+    {"kind": "camera", "panel_settings": {"camera": {"focus": {"target": "gate"}}}},
+    {"kind": "camera", "panel_settings": {"camera": {"angles": {"azimuth": 0, "elevation": 0}}}},
+    {"kind": "camera", "preset": "fisheye", "panel_settings": {}},
+    {"kind": "lighting", "preset": "golden_hour", "panel_settings": {}},
+    {"kind": "lighting", "rim_light": True, "panel_settings": {}},
+])
+def test_tool_panel_rejects_conflicting_control_sources(tool):
+    with pytest.raises(ValueError):
+        parse_scene_tool(tool)
+
+
+def test_tool_panel_survives_normalization_and_queue_reparse():
+    for kind, settings in (("lighting", {"lighting": {"mood": "quiet"}}),
+                           ("camera", {"camera": {"focal_length": "wide"}})):
+        parsed = parse_scene_tool({"kind": kind, "panel_settings": settings})
+        for normalized in (parsed.model_dump(), parsed.model_dump(exclude_none=True)):
+            assert scene_tool_prompt(parse_scene_tool(normalized)) == scene_tool_prompt(parsed)

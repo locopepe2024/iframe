@@ -66,6 +66,7 @@ class SceneCameraLayer(BaseModel):
 
 class SceneCompositionLayer(BaseModel):
     model_config = ConfigDict(extra="forbid")
+    frame_orientation: str = Field(default="", max_length=500, strict=True)
     subject_position: str = Field(default="", max_length=500, strict=True)
     spatial_layers: str = Field(default="", max_length=500, strict=True)
     leading_relation: str = Field(default="", max_length=500, strict=True)
@@ -77,3 +78,41 @@ class ScenePromptLayers(BaseModel):
     lighting: SceneLightingLayer = Field(default_factory=SceneLightingLayer)
     camera: SceneCameraLayer = Field(default_factory=SceneCameraLayer)
     composition: SceneCompositionLayer = Field(default_factory=SceneCompositionLayer)
+
+
+# Shared label/order contract with SCENE_LAYER_FIELDS; tool panels expose only
+# non-overlapping fields so numeric direction/color/focus controls stay owners.
+TOOL_LAYER_FIELDS = {
+    "lighting": {
+        "source": "光源", "quality": "软硬", "fill": "补光", "contrast": "反差",
+        "shadow": "阴影", "rim": "轮廓光", "mood": "氛围", "air": "空气介质",
+    },
+    "camera": {"focal_length": "焦距观感", "depth_of_field": "景深"},
+    "composition": {
+        "frame_orientation": "画面倾斜", "subject_position": "主体位置",
+        "spatial_layers": "空间层次", "leading_relation": "引导关系",
+    },
+}
+
+
+def validate_tool_panel(layers: ScenePromptLayers, kind: str) -> None:
+    data = layers.model_dump(exclude_unset=True)
+    allowed_layers = ("lighting",) if kind == "lighting" else ("camera", "composition")
+    for layer, fields in data.items():
+        if layer == "version":
+            continue
+        # Revalidated queued records may contain model_dump defaults. Empty
+        # defaults add no instruction; reject only effective duplicate fields.
+        meaningful = {key for key, value in fields.items() if value is not None and value != "" and value != {}}
+        if meaningful and (layer not in allowed_layers or meaningful - set(TOOL_LAYER_FIELDS[layer])):
+            raise ValueError("Tool panel settings duplicate or conflict with dedicated controls")
+
+
+def compile_tool_panel(layers: ScenePromptLayers) -> str:
+    lines = []
+    for layer, title in (("lighting", "光影"), ("camera", "镜头"), ("composition", "构图")):
+        values = getattr(layers, layer)
+        parts = [f"{label}：{getattr(values, key).strip()}" for key, label in TOOL_LAYER_FIELDS[layer].items() if getattr(values, key).strip()]
+        if parts:
+            lines.append(f"{title}：" + "；".join(parts))
+    return "\n".join(lines)
