@@ -129,3 +129,9 @@ def test_information_boundary_survives_context_budget_reduction():
             'scene': {'location': '场景' * 4000}}
     result = json.loads(project_shot_context(data, 's', 'saved'))
     assert result['shot']['information_design']['withhold'] == data['shot']['information_design']['withhold']
+
+
+def test_withholding_clause_is_not_deduplicated_against_positive_prompt():
+    from src.apps.comic_gen.prompt_assembly import append_projected_shot_context
+    result = append_projected_shot_context('信物姓名', {'shot': {'information_design': {'withhold': '信物姓名'}}})
+    assert '当前镜头不得提前展示：信物姓名' in result

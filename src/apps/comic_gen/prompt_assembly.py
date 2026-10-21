@@ -155,7 +155,7 @@ def append_projected_shot_context(prompt: str, context: Optional[Dict[str, Any]]
     for clause in _director_shot_context_parts(context):
         value = clause.split("：", 1)[-1]
         compact = re.sub(r"[\s，。；：、,.!?！？:;]+", "", value).casefold()
-        if not compact or compact in normalized:
+        if not compact or (compact in normalized and not clause.startswith("当前镜头不得提前展示：")):
             continue
         parts.append(clause)
         normalized += compact
