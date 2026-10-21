@@ -3,6 +3,7 @@ import { NextIntlClientProvider } from 'next-intl';
 import { expect, it, vi } from 'vitest';
 import zh from '../../../../messages/zh.json';
 import CharacterVoiceBinding from './CharacterVoiceBinding';
+import { isUniArtVoiceBinding } from '@/lib/voiceBinding';
 
 const mocks = vi.hoisted(() => ({
   getVoices: vi.fn().mockResolvedValue([
@@ -127,4 +128,46 @@ it('retires the visible old binding and replaces it only after explicit apply', 
     voice_id: 'uniart:speech-2.8-hd:male-qn-jingying', voice_name: '沉稳男声',
   }));
   await waitFor(() => expect(screen.getByRole('button', { name: /音色库/ })).toHaveTextContent('沉稳男声'));
+});
+
+it('searches and filters the expanded catalog without losing the selected binding', async () => {
+  const voice = (id: string, name: string, language: string) => ({
+    id: `uniart:speech-2.8-hd:${id}`, name, gender: 'Unknown', family: 'minimax',
+    model: 'speech-2.8-hd', origin: 'system', lang_primary: language,
+  });
+  mocks.getVoices.mockResolvedValueOnce([
+    ...Array.from({ length: 50 }, (_, i) => voice(`voice_${i}`, `普通话${i}`, 'zh')),
+    voice('Chinese (Mandarin)_Gentleman', '温润男声', 'zh'),
+    voice('Cantonese_ProfessionalHost（F)', '专业女主持', 'yue'),
+  ]);
+  const save = vi.fn().mockResolvedValue(undefined);
+  setup(save);
+  fireEvent.click(screen.getByRole('button', { name: /音色库/ }));
+  await screen.findByText('普通话0');
+  expect(screen.queryByText('温润男声')).not.toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button', { name: '显示更多' }));
+  fireEvent.click(screen.getByText('温润男声'));
+  fireEvent.change(screen.getByRole('combobox', { name: '语言' }), { target: { value: 'yue' } });
+  expect(screen.getByText('专业女主持')).toBeInTheDocument();
+  expect(screen.queryByRole('radio', { name: /温润男声/ })).not.toBeInTheDocument();
+  expect(screen.getByRole('button', { name: '应用' })).toBeEnabled();
+  fireEvent.change(screen.getByRole('combobox', { name: '语言' }), { target: { value: '' } });
+  fireEvent.change(screen.getByRole('searchbox'), { target: { value: 'Chinese (Mandarin)_Gentleman' } });
+  expect(screen.getByRole('radio', { name: /温润男声/ })).toHaveAttribute('aria-checked', 'true');
+  expect(screen.queryByText('专业女主持')).not.toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button', { name: '应用' }));
+  await waitFor(() => expect(save).toHaveBeenCalledWith({
+    voice_id: 'uniart:speech-2.8-hd:Chinese (Mandarin)_Gentleman', voice_name: '温润男声',
+  }));
+});
+
+
+it('recognizes every published system binding while rejecting legacy or malformed bindings', async () => {
+  for (const id of ['clever_boy', 'Chinese (Mandarin)_Gentleman', 'Cantonese_ProfessionalHost（F)']) {
+    expect(isUniArtVoiceBinding(`uniart:speech-2.8-hd:${id}`)).toBe(true);
+    expect(isUniArtVoiceBinding(`uniart:speech-2.8-turbo:${id}`)).toBe(true);
+  }
+  for (const id of ['longcheng_v2', 'uniart:other:male-qn-qingse', 'uniart:speech-2.8-hd:a:b']) {
+    expect(isUniArtVoiceBinding(id)).toBe(false);
+  }
 });

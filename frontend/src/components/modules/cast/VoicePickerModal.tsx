@@ -33,6 +33,10 @@ export default function VoicePickerModal({
     seriesId,
 }: VoicePickerModalProps) {
     const t = useTranslations("voicePicker");
+    const [query, setQuery] = useState("");
+    const [language, setLanguage] = useState("");
+    const [visibleLimit, setVisibleLimit] = useState(48);
+    useEffect(() => { setVisibleLimit(48); }, [query, language, isOpen]);
     const [voices, setVoices] = useState<VoiceMeta[]>([]);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
@@ -130,8 +134,17 @@ export default function VoicePickerModal({
     };
 
     const handlePreview = (voice: VoiceMeta) => handlePreviewById(voice.id);
-    const groups = useMemo(() => Array.from(new Set(voices.map(v => v.model)))
-        .map(model => ({ model, voices: voices.filter(v => v.model === model) })), [voices]);
+    const languages = useMemo(() => Array.from(new Set(voices.map(v => v.lang_primary).filter(Boolean))) as string[], [voices]);
+    const languageLabel = (code: string) => t.has(`languages.${code}`) ? t(`languages.${code}`) : code;
+    const uniqueCount = new Set(voices.map(v => v.id.split(":").slice(2).join(":"))).size;
+    const filtered = useMemo(() => {
+        const search = query.trim().toLocaleLowerCase();
+        return voices.filter(v => (!language || v.lang_primary === language) &&
+            (!search || [v.name, v.id, v.lang_primary || "", v.lang_primary ? languageLabel(v.lang_primary) : ""]
+                .some(value => value.toLocaleLowerCase().includes(search))));
+    }, [voices, query, language, t]);
+    const groups = useMemo(() => Array.from(new Set(filtered.map(v => v.model)))
+        .map(model => ({ model, voices: filtered.filter(v => v.model === model) })), [filtered]);
 
     if (!isOpen) return null;
 
@@ -176,12 +189,28 @@ export default function VoicePickerModal({
                     {!loading && !error && currentVoiceId && !voices.some(v => v.id === currentVoiceId) &&
                         <p className="mb-3 text-sm text-text-secondary">{t("legacyReselect")}</p>}
                     {!loading && !error && !voices.length && <p className="text-sm text-text-secondary">{t("gatewayEmpty")}</p>}
-                    {!loading && !error && <div className="space-y-5">
-                        {groups.map(group => <VoiceGroup key={group.model}
-                            label={`UniArt · MiniMax ${group.model.endsWith('-hd') ? 'HD' : 'Turbo'}`}
-                            voices={group.voices} selectedId={selectedId} playingId={playingId} previewingId={previewingId}
-                            onSelect={setSelectedId} onPreview={handlePreview} />)}
-                    </div>}
+                    {!loading && !error && voices.length > 0 && <>
+                        <div className="mb-4 flex flex-wrap items-center gap-2">
+                            <input type="search" aria-label={t("searchVoices")} placeholder={t("searchVoices")}
+                                value={query} onChange={e => setQuery(e.target.value)}
+                                className="glass-input min-w-0 flex-1 px-3 py-2 text-sm" />
+                            <select aria-label={t("language")} value={language} onChange={e => setLanguage(e.target.value)}
+                                className="glass-input px-3 py-2 text-sm">
+                                <option value="">{t("allLanguages")}</option>
+                                {languages.map(code => <option key={code} value={code}>{languageLabel(code)}</option>)}
+                            </select>
+                            <span className="text-xs text-text-muted">{t("catalogCount", { count: uniqueCount })}</span>
+                        </div>
+                        {!filtered.length && <p className="text-sm text-text-secondary">{t("noMatches")}</p>}
+                        <div className="space-y-5">
+                            {groups.map(group => <VoiceGroup key={group.model}
+                                label={`UniArt · MiniMax ${group.model.endsWith('-hd') ? 'HD' : 'Turbo'} · ${group.voices.length}`}
+                                voices={group.voices.slice(0, visibleLimit)} selectedId={selectedId} playingId={playingId} previewingId={previewingId}
+                                onSelect={setSelectedId} onPreview={handlePreview} />)}
+                        </div>
+                        {groups.some(group => group.voices.length > visibleLimit) &&
+                            <button className="glass-button mt-4 px-3 py-2 text-sm" onClick={() => setVisibleLimit(limit => limit + 48)}>{t("showMore")}</button>}
+                    </>}
                     {previewError && <p role="alert" className="mt-3 text-sm text-status-failed-fg">{previewError}</p>}
 
                 </div>
@@ -321,7 +350,7 @@ function VoiceCard({
                         {voice.name}
                     </p>
                     <p className="mt-0.5 font-mono text-[0.59375rem] uppercase tracking-[0.14em] text-text-muted">
-                        {localizedGender(voice.gender, t)}
+                        {voice.gender !== "Unknown" ? localizedGender(voice.gender, t) : ""}
                         {voice.dialect ? ` · ${voice.dialect}` : ""}
                         {voice.lang_primary ? ` · ${voice.lang_primary}` : ""}
                         {voice.supports_instruction ? ` · ${t("supportsInstruction")}` : ""}
