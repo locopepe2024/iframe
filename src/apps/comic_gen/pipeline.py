@@ -3648,8 +3648,10 @@ class ComicGenPipeline(StudioOwnerMixin):
             normalized = normalize_director_profile_draft(draft)
             normalized["creative_skill_run"] = director_skill_provenance(skill_snapshot or [])
             self._bind_director_story_map(script, entities, normalized)
-            DirectorProfile(**normalized)
+            validated = DirectorProfile(**normalized)
             self._validate_director_story_map(script, normalized.get("story_map"))
+            if validated.story_map is not None:
+                normalized["story_map"] = validated.story_map.model_dump()
             if isinstance(source_audit, dict):
                 source_audit["normalization_status"] = "normalized"
                 source_audit["admission_status"] = "confirmable"
@@ -3683,8 +3685,10 @@ class ComicGenPipeline(StudioOwnerMixin):
         )
         normalized_result = merge_director_profile_patch(normalized_draft, revised_patch)
         self._bind_director_story_map(script, entities, normalized_result)
-        DirectorProfile(**normalized_result)
+        validated = DirectorProfile(**normalized_result)
         self._validate_director_story_map(script, normalized_result.get("story_map"))
+        if validated.story_map is not None:
+            normalized_result["story_map"] = validated.story_map.model_dump()
         return normalized_result
 
     @staticmethod

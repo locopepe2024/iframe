@@ -16,6 +16,8 @@ import type {
     ScriptFactLedgerQueryEntry,
 } from "@/store/projectStore";
 
+import { restoreStoryMapMilestoneDefaults } from "@/lib/directorStoryMap";
+
 type Draft = Record<string, unknown>;
 
 const evidenceStatuses: DirectorEvidenceStatus[] = ["explicit", "interpretation", "uncertain", "conflicted"];
@@ -465,7 +467,7 @@ function StoryMapSection({
 }) {
     const t = useTranslations("artDirection.directorEditor.storyMap");
     const tLegacy = useTranslations("artDirection.directorEditor");
-    const rawStoryMap = profile.story_map;
+    const rawStoryMap = restoreStoryMapMilestoneDefaults(profile.story_map);
     const map = isDirectorStoryMap(rawStoryMap) ? rawStoryMap : null;
     const invalidMap = rawStoryMap !== undefined && rawStoryMap !== null && !map;
     const [expandedEventId, setExpandedEventId] = useState<string | null>(null);

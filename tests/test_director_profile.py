@@ -1984,3 +1984,20 @@ def test_director_refinement_rejects_invalid_draft_with_422(tmp_path, monkeypatc
             )
 
     assert raised.value.status_code == 422
+
+
+def test_analysis_serializes_optional_story_defaults_before_returning_to_visual_editor():
+    pipeline, script = make_pipeline()
+    draft = profile_payload()
+    draft['story_map'] = {
+        'schema_version': 1,
+        'phases': [{'phase_id': 'phase-1', 'order': 0, 'events': [{'event_id': 'event-1'}]}],
+        'story_threads': [{'thread_id': 'thread-1', 'milestones': [{'event_id': 'event-1', 'role': 'setup'}]}],
+    }
+    pipeline.script_processor.analyze_director_profile_with_audit.return_value = {'profile': draft, 'source_audit': {}}
+    result = pipeline.preview_director_profile_with_audit(script.id)['profile']['story_map']
+    assert result['story_threads'][0]['milestones'][0]['note'] == ''
+    assert result['phases'][0]['time_anchor'] == ''
+    assert result['phases'][0]['events'][0]['dramatic_function'] == ''
+    assert result['phases'][0]['events'][0]['source_fact_ids'] == []
+    assert 'note' not in draft['story_map']['story_threads'][0]['milestones'][0]

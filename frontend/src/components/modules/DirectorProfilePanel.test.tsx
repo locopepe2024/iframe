@@ -379,3 +379,22 @@ it("sends only the current revision instruction after prior changes are merged",
 });
 
 vi.mock("@/lib/directorSkills", () => ({ useDirectorSkills: () => ({ catalog: [], selected: [], loading: false, saving: false, error: "", canRun: true, update: vi.fn(), retry: vi.fn() }) }));
+
+it("opens a previously returned story map whose optional milestone notes were omitted", async () => {
+    window.localStorage.clear();
+    const analyzed = { ...profile, story_map: {
+        schema_version: 1, source_revision: 1, source_revision_id: "source-r1:test", fact_ledger_revision: null,
+        people: [], relationship_arcs: [],
+        phases: [{ phase_id: "p1", order: 0, label: "本集", time_anchor: "", events: [{
+            event_id: "e1", order: 0, title: "事件一", description: "原文事件", character_ids: [],
+            dramatic_function: "", source_fact_ids: [], evidence_status: "interpretation",
+        }] }],
+        story_threads: [{ thread_id: "t1", label: "主线", person_ids: [], milestones: [{ event_id: "e1", role: "setup" }] }],
+    } };
+    vi.spyOn(api, "getDirectorProfileDraft").mockResolvedValue({ project_id: "film", draft_revision: 1, source_revision: 1, draft: analyzed, updated_at: 1 });
+    render(<NextIntlClientProvider locale="en" messages={messages}><DirectorProfilePanel /></NextIntlClientProvider>);
+    expect(await screen.findByRole("button", { name: "Editor view" })).toBeInTheDocument();
+    expect(screen.queryByText(/story map.*invalid|story map.*incomplete/i)).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Editor view" }));
+    expect(await screen.findByDisplayValue("主线")).toBeInTheDocument();
+});
