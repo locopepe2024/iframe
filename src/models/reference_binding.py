@@ -72,18 +72,16 @@ def bind_h3_canonical_prompt(
     ordered_media: list[str],
     names: dict[str, str],
 ) -> str:
-    """Compile one user-facing reference syntax into H3 canonical syntax.
+    """Compile editor references into H3 canonical syntax.
 
     The editor may keep ``@原始文件名`` (or legacy ``@1``) so users can read
     and edit a prompt. H3 receives only modality-specific canonical labels:
-    ``<Picture N>``, ``<Video N>`` and ``<Audio N>``. Canonical labels and
-    legacy @ labels must not be mixed in one request.
+    ``<Picture N>``, ``<Video N>`` and ``<Audio N>``. Agent output can already
+    contain canonical labels; preserve those while resolving editor mentions
+    against the submitted attachments, then validate all resulting slots.
     """
     canonical_pattern = re.compile(r"<(Picture|Video|Audio)\s+(\d+)>")
-    has_canonical = bool(canonical_pattern.search(prompt))
     has_legacy = bool(re.search(r"@[^\s@]+", prompt))
-    if has_canonical and has_legacy:
-        raise ValueError("H3 prompt cannot mix canonical media references with @ references")
 
     kind_for_ref = {ref: media_kind(ref) for ref in ordered_media}
     counts = {"image": 0, "video": 0, "audio": 0}
