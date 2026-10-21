@@ -360,7 +360,7 @@ def test_scene_atmosphere_roundtrip_without_implicit_light_changes(tmp_path):
     assert loaded.asset_design["design_revisions"][0]["design"]["prompt_layers"] == {"lighting": lighting}
 
 
-@pytest.mark.parametrize("field", ["mood", "air", "color", "shadow", "rim"])
+@pytest.mark.parametrize("field", ["season", "time_of_day", "mood", "air", "color", "shadow", "rim"])
 @pytest.mark.parametrize("bad_value", [["宁静"], "x" * 501, True])
 def test_scene_atmosphere_validation_before_mutation(tmp_path, field, bad_value):
     pipeline, scene, _ = make_pipeline(tmp_path)
@@ -370,3 +370,19 @@ def test_scene_atmosphere_validation_before_mutation(tmp_path, field, bad_value)
             "visual_notes": "Stone street", "prompt_layers": {"lighting": {field: bad_value}},
         }})
     assert scene.model_dump() == before
+
+
+def test_autumn_evening_skylight_roundtrip_and_tool_normalization(tmp_path):
+    from src.apps.comic_gen.scene_prompt_layers import ScenePromptLayers, validate_tool_panel, compile_tool_panel
+    pipeline, _, _ = make_pipeline(tmp_path)
+    lighting = {"season": "秋天", "time_of_day": "傍晚", "source": "来自天空的环境光照明", "color": "冷蓝色"}
+    pipeline.update_asset_attributes("project", "street", "scene", {"asset_design": {
+        "visual_notes": "Stone street", "prompt_layers": {"lighting": lighting}, "confirmed": True,
+    }})
+    loaded = pipeline._load_data()["project"].scenes[0]
+    assert loaded.asset_design["design_draft"]["prompt_layers"] == {"lighting": lighting}
+    assert loaded.asset_design["design_revisions"][0]["design"]["prompt_layers"] == {"lighting": lighting}
+    tool = ScenePromptLayers.model_validate({"lighting": {k: v for k, v in lighting.items() if k != "color"}})
+    reparsed = ScenePromptLayers.model_validate(tool.model_dump())
+    validate_tool_panel(reparsed, "lighting")
+    assert compile_tool_panel(reparsed) == "光影：季节：秋天；时段：傍晚；光源：来自天空的环境光照明"

@@ -11,6 +11,8 @@ class SceneLayerAngles(BaseModel):
 
 class SceneLightingLayer(BaseModel):
     model_config = ConfigDict(extra="forbid")
+    season: str = Field(default="", max_length=500, strict=True)
+    time_of_day: str = Field(default="", max_length=500, strict=True)
     source: str = Field(default="", max_length=500, strict=True)
     direction: str = Field(default="", max_length=500, strict=True)
     quality: str = Field(default="", max_length=500, strict=True)
@@ -84,7 +86,7 @@ class ScenePromptLayers(BaseModel):
 # non-overlapping fields so numeric direction/color/focus controls stay owners.
 TOOL_LAYER_FIELDS = {
     "lighting": {
-        "source": "光源", "quality": "软硬", "fill": "补光", "contrast": "反差",
+        "season": "季节", "time_of_day": "时段", "source": "光源", "quality": "软硬", "fill": "补光", "contrast": "反差",
         "shadow": "阴影", "rim": "轮廓光", "mood": "氛围", "air": "空气介质",
     },
     "camera": {"focal_length": "焦距观感", "depth_of_field": "景深"},
