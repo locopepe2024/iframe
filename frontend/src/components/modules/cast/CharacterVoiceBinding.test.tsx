@@ -6,8 +6,8 @@ import CharacterVoiceBinding from './CharacterVoiceBinding';
 
 const mocks = vi.hoisted(() => ({
   getVoices: vi.fn().mockResolvedValue([
-    { id: 'voice-a', name: '清朗男声', gender: 'Male', family: 'cosyvoice', origin: 'system', model: 'cosyvoice-v3-flash' },
-    { id: 'voice-b', name: '沉稳男声', gender: 'Male', family: 'cosyvoice', origin: 'system', model: 'cosyvoice-v3-flash' },
+    { id: 'voice-a', name: '清朗男声', gender: 'Male', family: 'minimax', origin: 'system', model: 'speech-2.8-hd' },
+    { id: 'voice-b', name: '沉稳男声', gender: 'Male', family: 'minimax', origin: 'system', model: 'speech-2.8-hd' },
   ]),
   listCustomVoices: vi.fn().mockResolvedValue([]),
   previewVoice: vi.fn(),
@@ -81,4 +81,31 @@ it('discards a pending audition after closing the library', async () => {
   await act(async () => finish({ url: '/output/voice.wav' }));
   expect(audio).not.toHaveBeenCalled();
   vi.unstubAllGlobals();
+});
+
+it('shows gateway model groups and does not call legacy custom voice management', async () => {
+  mocks.getVoices.mockResolvedValueOnce([
+    { id: 'uniart:speech-2.8-hd:male-qn-qingse', name: 'HD青年', gender: 'Male', family: 'minimax', model: 'speech-2.8-hd', origin: 'system' },
+    { id: 'uniart:speech-2.8-turbo:male-qn-qingse', name: 'Turbo青年', gender: 'Male', family: 'minimax', model: 'speech-2.8-turbo', origin: 'system' },
+  ]);
+  setup(vi.fn());
+  fireEvent.click(screen.getByRole('button', { name: /音色库/ }));
+  expect(await screen.findByText(/UniArt · MiniMax HD/)).toBeInTheDocument();
+  expect(screen.getByText(/UniArt · MiniMax Turbo/)).toBeInTheDocument();
+  expect(screen.getByText(/原音色不兼容/)).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: '应用' })).toBeDisabled();
+  expect(screen.queryByText('我的复刻')).not.toBeInTheDocument();
+  expect(mocks.listCustomVoices).not.toHaveBeenCalled();
+});
+
+it('keeps available voices visible after an audition fails', async () => {
+  mocks.previewVoice.mockRejectedValueOnce(new Error('网关请求失败'));
+  setup(vi.fn());
+  fireEvent.click(screen.getByRole('button', { name: /音色库/ }));
+  await screen.findByText('沉稳男声');
+  fireEvent.click(screen.getAllByRole('button', { name: '播放试听' })[0]);
+  expect(await screen.findByRole('alert')).toHaveTextContent('网关请求失败');
+  expect(screen.getByText('沉稳男声')).toBeInTheDocument();
+  fireEvent.click(screen.getByText('沉稳男声'));
+  expect(screen.getByRole('button', { name: '应用' })).toBeEnabled();
 });

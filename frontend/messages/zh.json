@@ -178,6 +178,8 @@
     "confirmCloseLeave": "离开"
   },
   "voicePicker": {
+        "legacyReselect": "原音色不兼容当前网关，请重新选择并保存。",
+        "gatewayEmpty": "当前 UniArt 配置暂无可用语音模型，请检查设置或网关权限。",
     "library": "音色库",
     "saving": "保存中…",
     "saveFailed": "音色保存失败，请重试",

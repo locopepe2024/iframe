@@ -9,7 +9,7 @@ import {
 } from "@/lib/characterPrompts";
 
 const apiMocks = vi.hoisted(() => ({
-    getVoices: vi.fn().mockResolvedValue([{ id: 'voice-test', name: '清朗男声', gender: 'Male', family: 'cosyvoice', origin: 'system' }]),
+    getVoices: vi.fn().mockResolvedValue([{ id: 'voice-test', name: '清朗男声', gender: 'Male', family: 'minimax', model: 'speech-2.8-hd', origin: 'system' }]),
     listCustomVoices: vi.fn().mockResolvedValue([]),
     getAssetReferenceIndex: vi.fn(),
     getPlatformReferenceLibrary: vi.fn().mockResolvedValue({ scope: "platform_shared", schema_version: 1, catalog_revision: "test", resources: [] }),

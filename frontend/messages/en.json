@@ -178,6 +178,8 @@
     "confirmCloseLeave": "Leave"
   },
   "voicePicker": {
+        "legacyReselect": "The previous voice is incompatible with this gateway. Select and save a new voice.",
+        "gatewayEmpty": "No supported speech models are available. Check your UniArt settings and permissions.",
     "library": "Voice library",
     "saving": "Saving…",
     "saveFailed": "Could not save the voice. Please retry.",
