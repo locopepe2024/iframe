@@ -178,6 +178,9 @@
     "confirmCloseLeave": "Leave"
   },
   "voicePicker": {
+    "library": "Voice library",
+    "saving": "Saving…",
+    "saveFailed": "Could not save the voice. Please retry.",
     "title": "Pick voice",
     "close": "Close",
     "tabSystem": "System",

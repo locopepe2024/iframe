@@ -178,6 +178,9 @@
     "confirmCloseLeave": "离开"
   },
   "voicePicker": {
+    "library": "音色库",
+    "saving": "保存中…",
+    "saveFailed": "音色保存失败，请重试",
     "title": "选择音色",
     "close": "关闭",
     "tabSystem": "系统音色",

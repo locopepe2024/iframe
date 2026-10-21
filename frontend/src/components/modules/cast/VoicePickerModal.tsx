@@ -44,7 +44,7 @@ interface VoicePickerModalProps {
      *  (Q5 A3 preferred). When null/undefined, uses character-name template. */
     previewText?: string;
     currentVoiceId?: string;
-    onApply: (voiceId: string, voiceName: string) => void;
+    onApply: (voiceId: string, voiceName: string) => void | Promise<void>;
     /** PR-3h · Series id enables the 我的复刻 / 我的设计 tabs. When null,
      *  those tabs show "请先关联到系列" message (orphan projects). */
     seriesId?: string | null;
@@ -71,16 +71,26 @@ export default function VoicePickerModal({
     const [customVoices, setCustomVoices] = useState<CustomVoice[]>([]);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
+    const [saving, setSaving] = useState(false);
+    const [saveError, setSaveError] = useState<string | null>(null);
+    const savingRef = useRef(false);
     const [selectedId, setSelectedId] = useState<string | undefined>(currentVoiceId);
     const [playingId, setPlayingId] = useState<string | null>(null);
     const [previewingId, setPreviewingId] = useState<string | null>(null);
     const [cloneModalOpen, setCloneModalOpen] = useState(false);
     const [designModalOpen, setDesignModalOpen] = useState(false);
     const audioRef = useRef<HTMLAudioElement | null>(null);
+    const previewRequest = useRef(0);
+
+    useEffect(() => () => {
+        previewRequest.current++;
+        audioRef.current?.pause();
+        audioRef.current = null;
+    }, []);
 
     // Sync selected when current changes / modal opens
     useEffect(() => {
-        if (isOpen) setSelectedId(currentVoiceId);
+        if (isOpen) { setSelectedId(currentVoiceId); setSaveError(null); }
     }, [isOpen, currentVoiceId]);
 
     // PR-3h · refresh custom voices list (called on open + after clone)
@@ -144,10 +154,12 @@ export default function VoicePickerModal({
 
     // Stop any in-flight audio when closing
     useEffect(() => {
-        if (!isOpen && audioRef.current) {
-            audioRef.current.pause();
+        if (!isOpen) {
+            previewRequest.current++;
+            audioRef.current?.pause();
             audioRef.current = null;
             setPlayingId(null);
+            setPreviewingId(null);
         }
     }, [isOpen]);
 
@@ -161,6 +173,7 @@ export default function VoicePickerModal({
 
     // PR-3h · unified preview-by-id (works for both system VoiceMeta and CustomVoice)
     const handlePreviewById = async (voiceId: string) => {
+        const request = ++previewRequest.current;
         if (audioRef.current) {
             audioRef.current.pause();
             audioRef.current = null;
@@ -176,6 +189,7 @@ export default function VoicePickerModal({
                 voice_id: voiceId,
                 text: sampleText,
             });
+            if (request !== previewRequest.current) return;
             const audio = new Audio(getAssetUrl(url));
             audio.onended = () => {
                 setPlayingId(null);
@@ -189,9 +203,9 @@ export default function VoicePickerModal({
             setPlayingId(voiceId);
             await audio.play();
         } catch (e: any) {
-            setError(e?.message || t("previewFailed"));
+            if (request === previewRequest.current) setError(e?.message || t("previewFailed"));
         } finally {
-            setPreviewingId(null);
+            if (request === previewRequest.current) setPreviewingId(null);
         }
     };
 
@@ -201,9 +215,9 @@ export default function VoicePickerModal({
     // L1.5 recommended subset based on character gender
     const recommended = useMemo<VoiceMeta[]>(() => {
         if (!voices.length) return [];
-        const genderKey = characterGender === "Female" || characterGender === "女" || characterGender === "female"
+        const genderKey = characterGender === "Female" || characterGender === "女" || characterGender === "女性" || characterGender === "female"
             ? "Female"
-            : characterGender === "Male" || characterGender === "男" || characterGender === "male"
+            : characterGender === "Male" || characterGender === "男" || characterGender === "男性" || characterGender === "male"
                 ? "Male"
                 : null;
         if (!genderKey) {
@@ -231,7 +245,7 @@ export default function VoicePickerModal({
     if (!isOpen) return null;
 
     return (
-        <div className="fixed inset-0 z-[100] grid place-items-center bg-overlay backdrop-blur-sm" onClick={onClose}>
+        <div className="fixed inset-0 z-[100] grid place-items-center bg-overlay backdrop-blur-sm" onClick={() => { if (!savingRef.current) onClose(); }}>
             <div
                 className="w-full max-w-4xl max-h-[85vh] flex flex-col rounded-2xl border border-glass-border bg-elevated shadow-[0_24px_64px_-12px_rgba(0,0,0,0.7)]"
                 onClick={(e) => e.stopPropagation()}
@@ -246,6 +260,7 @@ export default function VoicePickerModal({
                     </div>
                     <button
                         onClick={onClose}
+                        disabled={saving}
                         aria-label={t("close")}
                         className="p-2 rounded-lg hover:bg-hover-bg text-text-muted hover:text-foreground transition-colors"
                     >
@@ -373,6 +388,7 @@ export default function VoicePickerModal({
                     )}
                 </div>
 
+                {saveError && <p role="alert" className="px-6 py-2 text-sm text-status-failed-fg">{saveError}</p>}
                 {/* Footer */}
                 <div className="flex items-center justify-between gap-3 px-6 py-3 border-t border-glass-border">
                     <span className="font-mono text-[0.625rem] uppercase tracking-[0.14em] text-text-muted">
@@ -383,24 +399,35 @@ export default function VoicePickerModal({
                     <div className="flex items-center gap-2">
                         <button
                             onClick={onClose}
+                            disabled={saving}
                             className="inline-flex items-center px-4 py-2 rounded-md bg-glass border border-glass-border text-text-secondary hover:text-foreground hover:bg-hover-bg transition-colors text-[0.75rem]"
                         >
                             {t("cancel")}
                         </button>
                         <button
-                            onClick={() => {
-                                if (!selectedId) return;
+                            onClick={async () => {
+                                if (!selectedId || savingRef.current) return;
                                 // PR-3h · lookup in both system + custom pools
                                 const systemMeta = voices.find(v => v.id === selectedId);
                                 const customMeta = customVoices.find(cv => cv.id === selectedId);
                                 const name = systemMeta?.name || customMeta?.label || selectedId;
-                                onApply(selectedId, name);
-                                onClose();
+                                savingRef.current = true;
+                                setSaving(true);
+                                setSaveError(null);
+                                try {
+                                    await onApply(selectedId, name);
+                                    onClose();
+                                } catch (e) {
+                                    setSaveError(e instanceof Error ? e.message : t('saveFailed'));
+                                } finally {
+                                    savingRef.current = false;
+                                    setSaving(false);
+                                }
                             }}
-                            disabled={!selectedId || selectedId === currentVoiceId}
+                            disabled={saving || !selectedId || selectedId === currentVoiceId}
                             className="inline-flex items-center px-4 py-2 rounded-md bg-primary text-white border border-[rgba(100,108,255,0.65)] shadow-[inset_0_1.5px_0_rgba(255,255,255,0.14)] hover:bg-primary-hover disabled:opacity-40 disabled:cursor-not-allowed transition-colors text-[0.75rem] font-semibold"
                         >
-                            {t("apply")}
+                            {saving ? t("saving") : t("apply")}
                         </button>
                     </div>
                 </div>

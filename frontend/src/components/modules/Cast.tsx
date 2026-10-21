@@ -697,6 +697,7 @@ function CastCard({ item, onOpenWorkbench }: { item: CastItem; onOpenWorkbench?:
             updateProject(currentProject.id, updated);
         } catch (e) {
             console.error("Failed to bind voice:", e);
+            throw e;
         }
     };
 

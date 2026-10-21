@@ -45,6 +45,7 @@ import AssetWorkbenchLayout from "@/components/shared/AssetWorkbenchLayout";
 import type { AssetPlanEntry } from "@/lib/episodeAssetPlan";
 import EpisodeAssetPlanPanel from "./EpisodeAssetPlanPanel";
 import AssetNameEditor from "@/components/common/AssetNameEditor";
+import CharacterVoiceBinding from "./cast/CharacterVoiceBinding";
 
 type CharacterImagePanel = "full_body" | "three_view" | "headshot";
 type AppliedPlatformPrompt = {
@@ -1295,6 +1296,7 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
                         </div>
                     </div>
                     <div className="flex shrink-0 items-center gap-2">
+                        <CharacterVoiceBinding key={asset.id} character={asset} seriesId={currentProject?.series_id} onSave={onUpdateAttributes} />
                         {planEntries.length > 0 && (
                             <button type="button" aria-expanded={isPlanOpen} aria-controls="character-plan-constraints" onClick={() => setIsPlanOpen(open => !open)} className="flex items-center gap-1 rounded border border-glass-border px-2 py-1.5 text-xs text-text-secondary hover:text-foreground" title="拍摄计划约束">
                                 拍摄计划 · {planEntries.length} 条

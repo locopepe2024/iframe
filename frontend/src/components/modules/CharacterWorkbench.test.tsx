@@ -9,6 +9,8 @@ import {
 } from "@/lib/characterPrompts";
 
 const apiMocks = vi.hoisted(() => ({
+    getVoices: vi.fn().mockResolvedValue([{ id: 'voice-test', name: '清朗男声', gender: 'Male', family: 'cosyvoice', origin: 'system' }]),
+    listCustomVoices: vi.fn().mockResolvedValue([]),
     getAssetReferenceIndex: vi.fn(),
     getPlatformReferenceLibrary: vi.fn().mockResolvedValue({ scope: "platform_shared", schema_version: 1, catalog_revision: "test", resources: [] }),
     getCharacterAssetPack: vi.fn().mockResolvedValue({
@@ -77,6 +79,19 @@ const baseProps = {
     isGenerating: false,
     description: "Character reference",
 };
+
+it('binds a voice from the character workbench without saving visual design or generating images', async () => {
+    apiMocks.getAssetReferenceIndex.mockResolvedValueOnce({ assets: [] });
+    const save = vi.fn().mockResolvedValue(undefined);
+    const generate = vi.fn();
+    render(<CharacterWorkbench asset={{ id: 'character-1', name: '苏砚', description: '少年剑客' }} onClose={vi.fn()}
+        onUpdateDescription={vi.fn()} onUpdateAttributes={save} onGenerate={generate} generatingTypes={[]} />);
+    fireEvent.click(screen.getByRole('button', { name: 'library' }));
+    fireEvent.click(await screen.findByText('清朗男声'));
+    fireEvent.click(screen.getByRole('button', { name: 'apply' }));
+    await waitFor(() => expect(save).toHaveBeenCalledWith({ voice_id: 'voice-test', voice_name: '清朗男声' }));
+    expect(generate).not.toHaveBeenCalled();
+});
 
 it("opens dictionary content directly from slash in the Prompt and keeps preview separate from insertion", async () => {
     apiMocks.getAssetReferenceIndex.mockResolvedValueOnce({ assets: [] } as any);
