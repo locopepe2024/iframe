@@ -73,6 +73,15 @@ the tracked release change must be merged before using the normal release entry
 again, so a later deployment retains the SSH mount. Tests: 25 passed, explicit
 remote integration test skipped, local Blender test excluded.
 
+During final observation another deployment advanced backend and static to
+`5851355029ae26e9337bd655f25fb81d2db893d2`. This session did not initiate that
+application release. The new container retained `director-media` and the fixed
+read-only SSH mount. Repeated public acceptance passed at this revision:
+`7e3052023370461b8c36f8fe9500dfd7` (2m) and
+`51532f7fb26c416998975d0c5f1f0ff7` (4m), including cross-owner rejection.
+The earlier rollback container belongs to the earlier runtime cutover; consult
+the latest release metadata before rolling back a subsequent application release.
+
 ## Deployment configuration
 
 Set `DIRECTOR_DEPTH_MEDIA_SSH_TARGET` to an operator-managed SSH alias or
