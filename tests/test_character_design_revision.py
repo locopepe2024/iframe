@@ -96,7 +96,7 @@ def test_expanded_face_and_wardrobe_fields_survive_confirmation():
     pipeline.scripts = {script.id: script}
     pipeline._find_asset_with_source = lambda *_: (character, script)
     pipeline._save_after_asset_mutation = lambda *_: None
-    fields = {'gender': '女性', 'age': '约72岁', 'eyebrows': '柳叶眉', 'eye_detail': '浅细纹', 'skin_tone': '中性肤色', 'skin_texture': '干燥纹理'}
+    fields = {'face_shape': '圆脸', 'forehead': '额头饱满', 'cheekbones': '颧骨平缓', 'jaw': '下颌轮廓分明', 'chin': '下巴圆润', 'gender': '女性', 'age': '约72岁', 'eyebrows': '柳叶眉', 'eye_detail': '浅细纹', 'skin_tone': '中性肤色', 'skin_texture': '干燥纹理'}
     look = {'footwear': '布靴', 'jewelry': '无首饰'}
     design = {'identity': {'features': fields, 'editor_mode': 'fields'}, 'look': {'features': look, 'editor_mode': 'fields'}, 'confirmed': True}
     pipeline.update_asset_attributes('project', 'character', 'character', {'character_design': design})

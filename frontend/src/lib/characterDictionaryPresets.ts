@@ -36,6 +36,12 @@ const term = (id: string, title: string, text: string, category: string, domain:
 const colors = ["米白色", "月白色", "浅灰色", "深灰色", "靛蓝色", "深青色", "墨黑色", "朱红色"];
 const materials = ["哑光棉麻", "低光泽丝织", "细密素布"];
 const shoes = ["黑色素面布靴", "深棕色素面皮靴", "黑色平底布鞋"];
+const faceDetailTerms = [
+  ['forehead', '额头', ['额头饱满', '额头平缓', '额头偏宽', '额头偏窄']],
+  ['cheekbones', '颧骨', ['颧骨平缓', '颧骨清晰', '颧骨略宽', '颧骨略高']],
+  ['jaw', '下颌', ['下颌轮廓柔和', '下颌轮廓分明', '下颌偏宽', '下颌偏窄']],
+  ['chin', '下巴', ['下巴圆润', '下巴偏尖', '下巴方正', '下巴较短']],
+] as const;
 const panel = (id: string, title: string, text: string, categories: string[], search: string, defaults?: Record<string, string>): CharacterDictionaryPreset => {
   const labels: Record<string, string> = { "modern-clothing": "服装", gender: "性别", age: "年龄", height: "身高", skin: "皮肤", face: "面容", hair: "发型", posture: "姿态与动作", condition: "新旧", expression: "表情" };
   return sectionedDictionaryPreset({
@@ -50,7 +56,7 @@ const configurationPanels: CharacterDictionaryPreset[] = [
   ...CLASSICAL_CHARACTER_PANELS,
   MODERN_MALE_PANEL,
   panel("modern-clothing", "现代服装搭配 · 女装", "穿着[女装款式]，颜色为[颜色]，面料为[面料]，版型为[版型]，搭配要求为[搭配单品]，衣物状态为[衣物状态]。衣片连接清楚，保留自然褶皱。", ["clothing-panel"], "服装 现代 女装"),
-  panel("face", "面容选择面板", "脸型为[脸型]，眼型为[眼型]，眉形为[眉形]，眼周细节为[眼周纹理]，肤色为[肤色]，肤质为[肤质]，妆容为[妆容]。", ["face-overview"], "面容 面部 五官 眼角纹 眼袋 肤色 肤质"),
+  panel("face", "面容选择面板", "脸型为[脸型]，额头为[额头]，颧骨为[颧骨]，下颌为[下颌]，下巴为[下巴]，眼型为[眼型]，眉形为[眉形]，眼周细节为[眼周纹理]，肤色为[肤色]，肤质为[肤质]，妆容为[妆容]。", ["face-overview"], "面容 面部 五官 额头 颧骨 下颌 下巴 眼角纹 眼袋 肤色 肤质"),
   sectionedDictionaryPreset({
     id: "dictionary.panel.basic", title: "基础特征", type: "配置面板", categories: ["basic-traits", "gender", "age-stage", "height"], domain: "身份", source,
     search: "基础特征 性别 年龄 年纪 身高", optionalFields: ["性别", "年龄阶段", "身高"],
@@ -170,6 +176,8 @@ function classicalBaseTemplate(id: string, title: string, style: string): Charac
 
 export const CHARACTER_DICTIONARY_PRESETS: CharacterDictionaryPreset[] = [
   ...configurationPanels,
+  ...faceDetailTerms.flatMap(([category, label, choices]) => choices.map((name, index) =>
+    term(`face-detail.${category}.${index}`, name, name, category, label))),
   ...["身高偏矮", "中等身高", "身高偏高", "身形高挑", "身高约150厘米", "身高约160厘米", "身高约170厘米", "身高约180厘米", "身高约190厘米"].map((name, index) =>
     term(`height.${index}`, name, `人物${name}，人体比例自然。`, "height", "身体")),
   ...["瓷白肤色", "浅白肤色", "浅米色肤色", "自然米色肤色", "暖小麦肤色", "古铜肤色", "深棕肤色", "深褐肤色"].map((name, index) =>
@@ -239,6 +247,7 @@ export const CHARACTER_DICTIONARY_PRESETS: CharacterDictionaryPreset[] = [
 /** Preserve exact panel values alongside prose instead of parsing the rendered sentence. */
 export function dictionaryStructuredFields(preset: CharacterDictionaryPreset, values: Record<string, string>) {
   const keys: Record<string, ["identity" | "look", string]> = {
+    '额头': ['identity', 'forehead'], '颧骨': ['identity', 'cheekbones'], '下颌': ['identity', 'jaw'], '下巴': ['identity', 'chin'],
     '性别': ['identity', 'gender'], '年龄阶段': ['identity', 'age'], '脸型': ['identity', 'face_shape'], '眉形': ['identity', 'eyebrows'], '眼型': ['identity', 'eyes'],
     '眼周纹理': ['identity', 'eye_detail'], '肤色': ['identity', 'skin_tone'], '肤质': ['identity', 'skin_texture'],
     '妆容': ['identity', 'makeup'], '发型': ['identity', 'hair'], '身高': ['identity', 'height'],

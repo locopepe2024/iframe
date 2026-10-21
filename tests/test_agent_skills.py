@@ -745,9 +745,11 @@ def test_structured_panel_choices_override_ai_proposals(ctx, monkeypatch):
         'look': {'visual_notes': '服装', 'features': {'footwear': '皮靴'}}, 'review_items': [],
     }))
     body = agent.CharacterDesignRequest(model='qwen', character_name='苏砚', profile='少年',
-        structured_identity={'gender': '女性', 'age': '约72岁', 'eyebrows': '柳叶眉', 'skin_texture': '面颊略干，保留干燥纹理'},
+        structured_identity={'face_shape': '圆脸', 'forehead': '额头饱满', 'cheekbones': '颧骨平缓', 'jaw': '下颌轮廓分明', 'chin': '下巴圆润', 'gender': '女性', 'age': '约72岁', 'eyebrows': '柳叶眉', 'skin_texture': '面颊略干，保留干燥纹理'},
         structured_look={'footwear': '素面布靴'})
     result = run_reviewed_character_draft(body, ctx)
+    for key, value in body.structured_identity.items():
+        assert result['identity']['features'][key] == value
     assert result['identity']['features']['gender'] == '女性'
     assert result['identity']['features']['age'] == '约72岁'
     assert result['identity']['features']['eyebrows'] == '柳叶眉'

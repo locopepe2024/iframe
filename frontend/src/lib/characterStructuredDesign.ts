@@ -1,6 +1,6 @@
 export const IDENTITY_FIELDS = [
   ['gender', '性别'], ['age', '年龄'],
-  ['face', '面容补充'], ['face_shape', '脸型'], ['eyebrows', '眉形'], ['eyes', '眼型'],
+  ['face', '面容补充'], ['face_shape', '脸型'], ['forehead', '额头'], ['cheekbones', '颧骨'], ['jaw', '下颌'], ['chin', '下巴'], ['eyebrows', '眉形'], ['eyes', '眼型'],
   ['eye_detail', '眼周细节'], ['nose', '鼻型'], ['lips', '唇形'], ['makeup', '妆容'],
   ['hair', '发型'], ['skin', '肤色肤质补充'], ['skin_tone', '肤色'], ['skin_texture', '肤质'],
   ['height', '身高'], ['build', '体态与比例'], ['recognition_marks', '识别锚点'],

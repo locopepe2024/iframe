@@ -1,6 +1,6 @@
 export const CHARACTER_DICTIONARY_GROUPS = [
   { id: "face", label: "面部", children: [
-    ["face-shape", "脸型"], ["eyes", "眼型"], ["brows", "眉形"], ["nose", "鼻形"],
+    ["face-shape", "脸型"], ["forehead", "额头"], ["cheekbones", "颧骨"], ["jaw", "下颌"], ["chin", "下巴"], ["eyes", "眼型"], ["brows", "眉形"], ["nose", "鼻形"],
     ["lips", "唇形"], ["eye-detail", "眼周细节"], ["marks", "识别标记"], ["face-overview", "面部综合"],
     ["makeup", "妆容"],
   ] },
@@ -83,6 +83,8 @@ export function dictionarySlotCategory(label: string | undefined): string | null
   if (/肤色/.test(label)) return "skin-tone";
   if (/肤质|皮肤纹理/.test(label)) return "skin";
   if (/眼周|眼角纹|鱼尾纹|下眼睑纹|眼袋/.test(label)) return "eye-detail";
+  const faceParts: Record<string, string> = { "额头": "forehead", "颧骨": "cheekbones", "下颌": "jaw", "下巴": "chin" };
+  if (faceParts[label]) return faceParts[label];
   if (/脸型/.test(label)) return "face-shape";
   if (/眉形/.test(label)) return "brows";
   if (/眼型/.test(label)) return "eyes";

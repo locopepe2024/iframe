@@ -9,11 +9,33 @@ function setup(query: string, slot?: string) {
   const replaceWithText = vi.fn((text: string) => `前文 ${text} 后文`);
   const onApply = vi.fn();
   const onClose = vi.fn();
+  const onConfiguration = vi.fn();
   const keyHandler = { current: null as ((event: KeyboardEvent) => boolean) | null };
   render(<CharacterPromptDictionary suggestion={{ query, slot, replaceWithText }} onApply={onApply}
-    onClose={onClose} keyHandler={keyHandler} />);
-  return { replaceWithText, onApply, onClose, keyHandler };
+    onClose={onClose} onConfiguration={onConfiguration} keyHandler={keyHandler} />);
+  return { replaceWithText, onApply, onClose, onConfiguration, keyHandler };
 }
+
+it('keeps face shape, forehead, cheekbones and jaw independent through apply', () => {
+  getPlatformReferenceLibrary.mockResolvedValueOnce({ resources: [] });
+  const { onApply, onConfiguration } = setup('面容');
+  fireEvent.click(screen.getByRole('option', { name: /^面容$/ }));
+  const choose = (name: string, value: string) => fireEvent.change(screen.getByRole('combobox', { name }), { target: { value } });
+  choose('脸型', '圆脸');
+  choose('额头', '额头饱满');
+  choose('颧骨', '颧骨略宽');
+  choose('下颌', '下颌轮廓分明');
+  choose('下巴', '下巴圆润');
+  choose('颧骨', '颧骨平缓');
+  expect(screen.getByRole('combobox', { name: '脸型' })).toHaveValue('圆脸');
+  expect(screen.getByRole('combobox', { name: '额头' })).toHaveValue('额头饱满');
+  expect(screen.getByRole('textbox', { name: '将插入的完整文字' })).toHaveValue('脸型：圆脸\n额头：额头饱满\n颧骨：颧骨平缓\n下颌：下颌轮廓分明\n下巴：下巴圆润');
+  fireEvent.click(screen.getByRole('button', { name: '应用配置' }));
+  expect(onApply.mock.calls[0][1].structuredFields.identity).toEqual({
+    face_shape: '圆脸', forehead: '额头饱满', cheekbones: '颧骨平缓', jaw: '下颌轮廓分明', chin: '下巴圆润',
+  });
+  expect(onConfiguration.mock.calls[0][0].selections).toMatchObject({ '脸型': '圆脸', '额头': '额头饱满', '颧骨': '颧骨平缓' });
+});
 
 it("starts with categories and lets creators compare face shapes without changing the Prompt", async () => {
   getPlatformReferenceLibrary.mockResolvedValueOnce({ resources: [] });
