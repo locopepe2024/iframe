@@ -1,0 +1,266 @@
+{
+  "left_shoulder": {
+    "source_range_xy_px": [
+      41.676483154296875,
+      16.073395013809204
+    ],
+    "baseline_range_xy_px": [
+      20.62530517578125,
+      20.06230115890503
+    ],
+    "absolute_shoulder_range_xy_px": [
+      43.949222564697266,
+      17.64932155609131
+    ],
+    "hip_relative_shoulder_range_xy_px": [
+      40.05928039550781,
+      18.452653884887695
+    ],
+    "absolute_shoulder_extended_range_xy_px": [
+      43.624229431152344,
+      17.668333053588867
+    ]
+  },
+  "left_elbow": {
+    "source_range_xy_px": [
+      56.75861358642578,
+      48.064069747924805
+    ],
+    "baseline_range_xy_px": [
+      40.268096923828125,
+      50.00967979431152
+    ],
+    "absolute_shoulder_range_xy_px": [
+      64.04533386230469,
+      46.78658723831177
+    ],
+    "hip_relative_shoulder_range_xy_px": [
+      58.621864318847656,
+      47.77627944946289
+    ],
+    "absolute_shoulder_extended_range_xy_px": [
+      63.811302185058594,
+      47.52764940261841
+    ]
+  },
+  "left_wrist": {
+    "source_range_xy_px": [
+      79.67395782470703,
+      70.24308443069458
+    ],
+    "baseline_range_xy_px": [
+      55.73089599609375,
+      65.50218343734741
+    ],
+    "absolute_shoulder_range_xy_px": [
+      80.01846313476562,
+      63.43932867050171
+    ],
+    "hip_relative_shoulder_range_xy_px": [
+      76.89090728759766,
+      64.45429801940918
+    ],
+    "absolute_shoulder_extended_range_xy_px": [
+      79.3038558959961,
+      64.56383943557739
+    ]
+  },
+  "left_hip": {
+    "source_range_xy_px": [
+      49.755191802978516,
+      16.100614070892334
+    ],
+    "baseline_range_xy_px": [
+      45.19620895385742,
+      16.10769510269165
+    ],
+    "absolute_shoulder_range_xy_px": [
+      45.19620895385742,
+      16.10769510269165
+    ],
+    "hip_relative_shoulder_range_xy_px": [
+      45.19620895385742,
+      16.10769510269165
+    ],
+    "absolute_shoulder_extended_range_xy_px": [
+      45.19620895385742,
+      16.10769510269165
+    ]
+  },
+  "left_knee": {
+    "source_range_xy_px": [
+      30.898094177246094,
+      17.339022159576416
+    ],
+    "baseline_range_xy_px": [
+      32.69493103027344,
+      9.78531002998352
+    ],
+    "absolute_shoulder_range_xy_px": [
+      32.69493103027344,
+      9.78531002998352
+    ],
+    "hip_relative_shoulder_range_xy_px": [
+      32.69493103027344,
+      9.78531002998352
+    ],
+    "absolute_shoulder_extended_range_xy_px": [
+      32.69493103027344,
+      9.78531002998352
+    ]
+  },
+  "left_ankle": {
+    "source_range_xy_px": [
+      35.13195037841797,
+      19.661643505096436
+    ],
+    "baseline_range_xy_px": [
+      43.31514358520508,
+      13.578559756278992
+    ],
+    "absolute_shoulder_range_xy_px": [
+      43.31514358520508,
+      13.578559756278992
+    ],
+    "hip_relative_shoulder_range_xy_px": [
+      43.31514358520508,
+      13.578559756278992
+    ],
+    "absolute_shoulder_extended_range_xy_px": [
+      43.31514358520508,
+      13.578559756278992
+    ]
+  },
+  "right_shoulder": {
+    "source_range_xy_px": [
+      39.23912048339844,
+      20.568734407424927
+    ],
+    "baseline_range_xy_px": [
+      27.377548217773438,
+      16.01433277130127
+    ],
+    "absolute_shoulder_range_xy_px": [
+      46.78169250488281,
+      16.832621097564697
+    ],
+    "hip_relative_shoulder_range_xy_px": [
+      42.39898681640625,
+      20.82361936569214
+    ],
+    "absolute_shoulder_extended_range_xy_px": [
+      46.67198181152344,
+      16.835474967956543
+    ]
+  },
+  "right_elbow": {
+    "source_range_xy_px": [
+      44.94190216064453,
+      48.2720160484314
+    ],
+    "baseline_range_xy_px": [
+      34.028987884521484,
+      29.969394207000732
+    ],
+    "absolute_shoulder_range_xy_px": [
+      54.065093994140625,
+      36.9609260559082
+    ],
+    "hip_relative_shoulder_range_xy_px": [
+      51.49127960205078,
+      42.12589502334595
+    ],
+    "absolute_shoulder_extended_range_xy_px": [
+      54.23225402832031,
+      37.31132984161377
+    ]
+  },
+  "right_wrist": {
+    "source_range_xy_px": [
+      43.13484191894531,
+      44.56653356552124
+    ],
+    "baseline_range_xy_px": [
+      40.306739807128906,
+      37.86356449127197
+    ],
+    "absolute_shoulder_range_xy_px": [
+      54.32413101196289,
+      40.782387256622314
+    ],
+    "hip_relative_shoulder_range_xy_px": [
+      51.63728713989258,
+      38.61269474029541
+    ],
+    "absolute_shoulder_extended_range_xy_px": [
+      54.5012092590332,
+      41.04957818984985
+    ]
+  },
+  "right_hip": {
+    "source_range_xy_px": [
+      52.64486312866211,
+      14.002740383148193
+    ],
+    "baseline_range_xy_px": [
+      51.0235595703125,
+      15.93394160270691
+    ],
+    "absolute_shoulder_range_xy_px": [
+      51.0235595703125,
+      15.93394160270691
+    ],
+    "hip_relative_shoulder_range_xy_px": [
+      51.0235595703125,
+      15.93394160270691
+    ],
+    "absolute_shoulder_extended_range_xy_px": [
+      51.0235595703125,
+      15.93394160270691
+    ]
+  },
+  "right_knee": {
+    "source_range_xy_px": [
+      37.33135223388672,
+      39.94832754135132
+    ],
+    "baseline_range_xy_px": [
+      42.155303955078125,
+      36.07855439186096
+    ],
+    "absolute_shoulder_range_xy_px": [
+      42.155303955078125,
+      36.07855439186096
+    ],
+    "hip_relative_shoulder_range_xy_px": [
+      42.155303955078125,
+      36.07855439186096
+    ],
+    "absolute_shoulder_extended_range_xy_px": [
+      42.155303955078125,
+      36.07855439186096
+    ]
+  },
+  "right_ankle": {
+    "source_range_xy_px": [
+      46.28740310668945,
+      43.8554048538208
+    ],
+    "baseline_range_xy_px": [
+      54.64649200439453,
+      40.10913670063019
+    ],
+    "absolute_shoulder_range_xy_px": [
+      54.64649200439453,
+      40.10913670063019
+    ],
+    "hip_relative_shoulder_range_xy_px": [
+      54.64649200439453,
+      40.10913670063019
+    ],
+    "absolute_shoulder_extended_range_xy_px": [
+      54.64649200439453,
+      40.10913670063019
+    ]
+  }
+}

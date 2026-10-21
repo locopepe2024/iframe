@@ -1,0 +1,821 @@
+{
+  "baseline": {
+    "nonintersecting_source_frames": [
+      37,
+      39,
+      41
+    ],
+    "baseline_bend_deg": {
+      "min": 0.6540104512648592,
+      "max": 8.037928099359327
+    },
+    "selected": [
+      {
+        "source_target_px": [
+          317.70806884765625,
+          124.35413360595703
+        ],
+        "ray_shell_intersects": true,
+        "closest_ray_distance_to_chain_origin_units": 0.18577251557754995,
+        "chain_inner_radius_units": 0.016056633908170134,
+        "chain_outer_radius_units": 0.23674611625852593,
+        "chosen_ray_depth_units": 5.385898577646003,
+        "baseline_shoulder_ray_depth_units": 5.385898577646003,
+        "target_chest_displacement_units": 0.06261807132894848,
+        "baseline_shoulder_center_px": [
+          310.2283935546875,
+          115.74637603759766
+        ],
+        "source_frame": 1,
+        "output_frame": 1,
+        "kind": "source",
+        "baseline_chain_bend_deg": 7.200881627937181
+      },
+      {
+        "source_target_px": [
+          327.9250793457031,
+          121.9642562866211
+        ],
+        "ray_shell_intersects": true,
+        "closest_ray_distance_to_chain_origin_units": 0.22533160124859003,
+        "chain_inner_radius_units": 0.016056675362335234,
+        "chain_outer_radius_units": 0.23674620644937433,
+        "chosen_ray_depth_units": 5.317567869568105,
+        "baseline_shoulder_ray_depth_units": 5.299872630406753,
+        "target_chest_displacement_units": 0.07190567922183409,
+        "baseline_shoulder_center_px": [
+          315.0455017089844,
+          121.84831237792969
+        ],
+        "source_frame": 17,
+        "output_frame": 20,
+        "kind": "source",
+        "baseline_chain_bend_deg": 1.4273529639846343
+      },
+      {
+        "source_target_px": [
+          334.47796630859375,
+          126.70134735107422
+        ],
+        "ray_shell_intersects": true,
+        "closest_ray_distance_to_chain_origin_units": 0.19322307640308867,
+        "chain_inner_radius_units": 0.01605669070950971,
+        "chain_outer_radius_units": 0.23674611304770948,
+        "chosen_ray_depth_units": 5.407378844283812,
+        "baseline_shoulder_ray_depth_units": 5.407378844283812,
+        "target_chest_displacement_units": 0.08832901740636613,
+        "baseline_shoulder_center_px": [
+          320.9388427734375,
+          118.1682357788086
+        ],
+        "source_frame": 23,
+        "output_frame": 24,
+        "kind": "source",
+        "baseline_chain_bend_deg": 7.637536796855211
+      },
+      {
+        "source_target_px": [
+          337.2933654785156,
+          128.29327392578125
+        ],
+        "ray_shell_intersects": true,
+        "closest_ray_distance_to_chain_origin_units": 0.1973183286307972,
+        "chain_inner_radius_units": 0.016056675260406116,
+        "chain_outer_radius_units": 0.23674611426452974,
+        "chosen_ray_depth_units": 5.3298293644038495,
+        "baseline_shoulder_ray_depth_units": 5.3298293644038495,
+        "target_chest_displacement_units": 0.09119307576330699,
+        "baseline_shoulder_center_px": [
+          321.8954162597656,
+          121.6822280883789
+        ],
+        "source_frame": 29,
+        "output_frame": 28,
+        "kind": "source",
+        "baseline_chain_bend_deg": 0.6540104512648592
+      },
+      {
+        "source_target_px": [
+          321.80914306640625,
+          118.76959228515625
+        ],
+        "ray_shell_intersects": false,
+        "closest_ray_distance_to_chain_origin_units": 0.25565661748516255,
+        "chain_inner_radius_units": 0.016056685580628737,
+        "chain_outer_radius_units": 0.23674610585825429,
+        "chosen_ray_depth_units": 5.349681878717092,
+        "baseline_shoulder_ray_depth_units": 5.253738038358279,
+        "target_chest_displacement_units": 0.1157929663909747,
+        "baseline_shoulder_center_px": [
+          310.9861755371094,
+          124.15818786621094
+        ],
+        "source_frame": 41,
+        "output_frame": 37,
+        "kind": "source",
+        "baseline_chain_bend_deg": 1.9377498271115157
+      },
+      {
+        "source_target_px": [
+          299.8993225097656,
+          135.1529998779297
+        ],
+        "ray_shell_intersects": true,
+        "closest_ray_distance_to_chain_origin_units": 0.19411214388936865,
+        "chain_inner_radius_units": 0.016056452270032117,
+        "chain_outer_radius_units": 0.23674623998895372,
+        "chosen_ray_depth_units": 5.433364337775856,
+        "baseline_shoulder_ray_depth_units": 5.433364337775856,
+        "target_chest_displacement_units": 0.06761084902352672,
+        "baseline_shoulder_center_px": [
+          309.2496643066406,
+          127.33894348144531
+        ],
+        "source_frame": 55,
+        "output_frame": 48,
+        "kind": "source",
+        "baseline_chain_bend_deg": 5.992178249904128
+      }
+    ]
+  },
+  "absolute_shoulder": {
+    "nonintersecting_source_frames": [
+      37,
+      39,
+      41
+    ],
+    "baseline_bend_deg": {
+      "min": 0.6540104512648592,
+      "max": 8.037928099359327
+    },
+    "selected": [
+      {
+        "source_target_px": [
+          317.70806884765625,
+          124.35413360595703
+        ],
+        "ray_shell_intersects": true,
+        "closest_ray_distance_to_chain_origin_units": 0.18577251557754995,
+        "chain_inner_radius_units": 0.016056633908170134,
+        "chain_outer_radius_units": 0.23674611625852593,
+        "chosen_ray_depth_units": 5.385898577646003,
+        "baseline_shoulder_ray_depth_units": 5.385898577646003,
+        "target_chest_displacement_units": 0.06261807132894848,
+        "baseline_shoulder_center_px": [
+          310.2283935546875,
+          115.74637603759766
+        ],
+        "source_frame": 1,
+        "output_frame": 1,
+        "kind": "source",
+        "baseline_chain_bend_deg": 7.200881627937181,
+        "endpoint_error_units": 1.5366822481155396e-08,
+        "bone_length_error_units": 6.248468031877508e-08,
+        "unreachable_units": 0.0,
+        "chain_bend_deg": 70.97581585582847,
+        "chest_full_rotation_error_deg": 0.0,
+        "after_shoulder_center_px": [
+          318.0926513671875,
+          124.30404663085938
+        ],
+        "after_shoulder_world_midpoint_projection_px": [
+          317.70806884765625,
+          124.35420227050781
+        ],
+        "actual_chest_displacement_units": 0.06261806110371623
+      },
+      {
+        "source_target_px": [
+          327.9250793457031,
+          121.9642562866211
+        ],
+        "ray_shell_intersects": true,
+        "closest_ray_distance_to_chain_origin_units": 0.22533160124859003,
+        "chain_inner_radius_units": 0.016056675362335234,
+        "chain_outer_radius_units": 0.23674620644937433,
+        "chosen_ray_depth_units": 5.317567869568105,
+        "baseline_shoulder_ray_depth_units": 5.299872630406753,
+        "target_chest_displacement_units": 0.07190567922183409,
+        "baseline_shoulder_center_px": [
+          315.0455017089844,
+          121.84831237792969
+        ],
+        "source_frame": 17,
+        "output_frame": 20,
+        "kind": "source",
+        "baseline_chain_bend_deg": 1.4273529639846343,
+        "endpoint_error_units": 1.2065930039634471e-07,
+        "bone_length_error_units": 1.0384243118166658e-07,
+        "unreachable_units": 7.950762070663142e-07,
+        "chain_bend_deg": 0.10518820643008736,
+        "chest_full_rotation_error_deg": 0.0,
+        "after_shoulder_center_px": [
+          328.38421630859375,
+          121.90261840820312
+        ],
+        "after_shoulder_world_midpoint_projection_px": [
+          327.925048828125,
+          121.96450805664062
+        ],
+        "actual_chest_displacement_units": 0.07190554478143485
+      },
+      {
+        "source_target_px": [
+          334.47796630859375,
+          126.70134735107422
+        ],
+        "ray_shell_intersects": true,
+        "closest_ray_distance_to_chain_origin_units": 0.19322307640308867,
+        "chain_inner_radius_units": 0.01605669070950971,
+        "chain_outer_radius_units": 0.23674611304770948,
+        "chosen_ray_depth_units": 5.407378844283812,
+        "baseline_shoulder_ray_depth_units": 5.407378844283812,
+        "target_chest_displacement_units": 0.08832901740636613,
+        "baseline_shoulder_center_px": [
+          320.9388427734375,
+          118.1682357788086
+        ],
+        "source_frame": 23,
+        "output_frame": 24,
+        "kind": "source",
+        "baseline_chain_bend_deg": 7.637536796855211,
+        "endpoint_error_units": 1.0536712127723509e-08,
+        "bone_length_error_units": 6.003687473554731e-08,
+        "unreachable_units": 0.0,
+        "chain_bend_deg": 65.31644710551576,
+        "chest_full_rotation_error_deg": 0.0,
+        "after_shoulder_center_px": [
+          334.9716796875,
+          126.6720199584961
+        ],
+        "after_shoulder_world_midpoint_projection_px": [
+          334.47796630859375,
+          126.70146179199219
+        ],
+        "actual_chest_displacement_units": 0.08832902168978055
+      },
+      {
+        "source_target_px": [
+          337.2933654785156,
+          128.29327392578125
+        ],
+        "ray_shell_intersects": true,
+        "closest_ray_distance_to_chain_origin_units": 0.1973183286307972,
+        "chain_inner_radius_units": 0.016056675260406116,
+        "chain_outer_radius_units": 0.23674611426452974,
+        "chosen_ray_depth_units": 5.3298293644038495,
+        "baseline_shoulder_ray_depth_units": 5.3298293644038495,
+        "target_chest_displacement_units": 0.09119307576330699,
+        "baseline_shoulder_center_px": [
+          321.8954162597656,
+          121.6822280883789
+        ],
+        "source_frame": 29,
+        "output_frame": 28,
+        "kind": "source",
+        "baseline_chain_bend_deg": 0.6540104512648592,
+        "endpoint_error_units": 1.9800189533707965e-08,
+        "bone_length_error_units": 1.0170993214320134e-08,
+        "unreachable_units": 0.0,
+        "chain_bend_deg": 47.29290176788917,
+        "chest_full_rotation_error_deg": 0.0,
+        "after_shoulder_center_px": [
+          337.71112060546875,
+          128.3799591064453
+        ],
+        "after_shoulder_world_midpoint_projection_px": [
+          337.2933654785156,
+          128.29331970214844
+        ],
+        "actual_chest_displacement_units": 0.09119310572305571
+      },
+      {
+        "source_target_px": [
+          321.80914306640625,
+          118.76959228515625
+        ],
+        "ray_shell_intersects": false,
+        "closest_ray_distance_to_chain_origin_units": 0.25565661748516255,
+        "chain_inner_radius_units": 0.016056685580628737,
+        "chain_outer_radius_units": 0.23674610585825429,
+        "chosen_ray_depth_units": 5.349681878717092,
+        "baseline_shoulder_ray_depth_units": 5.253738038358279,
+        "target_chest_displacement_units": 0.1157929663909747,
+        "baseline_shoulder_center_px": [
+          310.9861755371094,
+          124.15818786621094
+        ],
+        "source_frame": 41,
+        "output_frame": 37,
+        "kind": "source",
+        "baseline_chain_bend_deg": 1.9377498271115157,
+        "endpoint_error_units": 1.2206011868512503e-07,
+        "bone_length_error_units": 1.0413313164536753e-07,
+        "unreachable_units": 0.018901711678837807,
+        "chain_bend_deg": 0.10721774854555485,
+        "chest_full_rotation_error_deg": 0.0,
+        "after_shoulder_center_px": [
+          321.1773681640625,
+          122.14103698730469
+        ],
+        "after_shoulder_world_midpoint_projection_px": [
+          320.80438232421875,
+          122.08799743652344
+        ],
+        "actual_chest_displacement_units": 0.10993014506307307
+      },
+      {
+        "source_target_px": [
+          299.8993225097656,
+          135.1529998779297
+        ],
+        "ray_shell_intersects": true,
+        "closest_ray_distance_to_chain_origin_units": 0.19411214388936865,
+        "chain_inner_radius_units": 0.016056452270032117,
+        "chain_outer_radius_units": 0.23674623998895372,
+        "chosen_ray_depth_units": 5.433364337775856,
+        "baseline_shoulder_ray_depth_units": 5.433364337775856,
+        "target_chest_displacement_units": 0.06761084902352672,
+        "baseline_shoulder_center_px": [
+          309.2496643066406,
+          127.33894348144531
+        ],
+        "source_frame": 55,
+        "output_frame": 48,
+        "kind": "source",
+        "baseline_chain_bend_deg": 5.992178249904128,
+        "endpoint_error_units": 4.470348358154297e-08,
+        "bone_length_error_units": 1.0583096851646268e-07,
+        "unreachable_units": 0.0,
+        "chain_bend_deg": 69.0588439799247,
+        "chest_full_rotation_error_deg": 0.0,
+        "after_shoulder_center_px": [
+          299.466064453125,
+          135.1278076171875
+        ],
+        "after_shoulder_world_midpoint_projection_px": [
+          299.8993225097656,
+          135.15313720703125
+        ],
+        "actual_chest_displacement_units": 0.06761088346039414
+      }
+    ],
+    "bend_min_deg": 0.10314837205133222,
+    "bend_max_deg": 74.38423113646562,
+    "max_chest_displacement_units": 0.12885600715245824,
+    "max_requested_ray_projection_residual_px": 4.435438283955187,
+    "max_chest_full_rotation_error_deg": 0.0
+  },
+  "hip_relative_shoulder": {
+    "nonintersecting_source_frames": [],
+    "baseline_bend_deg": {
+      "min": 0.6540104512648592,
+      "max": 8.037928099359327
+    },
+    "selected": [
+      {
+        "source_target_px": [
+          317.5046691894531,
+          129.34432983398438
+        ],
+        "ray_shell_intersects": true,
+        "closest_ray_distance_to_chain_origin_units": 0.15836339474035374,
+        "chain_inner_radius_units": 0.016056633908170134,
+        "chain_outer_radius_units": 0.23674611625852593,
+        "chosen_ray_depth_units": 5.38559681607876,
+        "baseline_shoulder_ray_depth_units": 5.38559681607876,
+        "target_chest_displacement_units": 0.08467716116403794,
+        "baseline_shoulder_center_px": [
+          310.2283935546875,
+          115.74637603759766
+        ],
+        "source_frame": 1,
+        "output_frame": 1,
+        "kind": "source",
+        "baseline_chain_bend_deg": 7.200881627937181,
+        "endpoint_error_units": 2.3039648079970816e-08,
+        "bone_length_error_units": 4.055265467872715e-08,
+        "unreachable_units": 0.0,
+        "chain_bend_deg": 90.44710679978049,
+        "chest_full_rotation_error_deg": 0.0,
+        "after_shoulder_center_px": [
+          317.8890075683594,
+          129.29527282714844
+        ],
+        "after_shoulder_world_midpoint_projection_px": [
+          317.504638671875,
+          129.34442138671875
+        ],
+        "actual_chest_displacement_units": 0.08467714964997236
+      },
+      {
+        "source_target_px": [
+          324.3691711425781,
+          127.15515899658203
+        ],
+        "ray_shell_intersects": true,
+        "closest_ray_distance_to_chain_origin_units": 0.19310737952937898,
+        "chain_inner_radius_units": 0.016056675362335234,
+        "chain_outer_radius_units": 0.23674620644937433,
+        "chosen_ray_depth_units": 5.300013129599392,
+        "baseline_shoulder_ray_depth_units": 5.300013129599392,
+        "target_chest_displacement_units": 0.05803677464370707,
+        "baseline_shoulder_center_px": [
+          315.0455017089844,
+          121.84831237792969
+        ],
+        "source_frame": 17,
+        "output_frame": 20,
+        "kind": "source",
+        "baseline_chain_bend_deg": 1.4273529639846343,
+        "endpoint_error_units": 1.501712528671799e-08,
+        "bone_length_error_units": 1.25282844931629e-08,
+        "unreachable_units": 0.0,
+        "chain_bend_deg": 51.15629755418779,
+        "chest_full_rotation_error_deg": 0.0,
+        "after_shoulder_center_px": [
+          324.8299560546875,
+          127.09458923339844
+        ],
+        "after_shoulder_world_midpoint_projection_px": [
+          324.3691711425781,
+          127.15520477294922
+        ],
+        "actual_chest_displacement_units": 0.05803676702759717
+      },
+      {
+        "source_target_px": [
+          329.5646667480469,
+          131.3104248046875
+        ],
+        "ray_shell_intersects": true,
+        "closest_ray_distance_to_chain_origin_units": 0.1612791573964209,
+        "chain_inner_radius_units": 0.01605669070950971,
+        "chain_outer_radius_units": 0.23674611304770948,
+        "chosen_ray_depth_units": 5.407404715926532,
+        "baseline_shoulder_ray_depth_units": 5.407404715926532,
+        "target_chest_displacement_units": 0.08671835097014922,
+        "baseline_shoulder_center_px": [
+          320.9388427734375,
+          118.1682357788086
+        ],
+        "source_frame": 23,
+        "output_frame": 24,
+        "kind": "source",
+        "baseline_chain_bend_deg": 7.637536796855211,
+        "endpoint_error_units": 2.2351741790771484e-08,
+        "bone_length_error_units": 4.2159340907232945e-08,
+        "unreachable_units": 0.0,
+        "chain_bend_deg": 89.12446291344156,
+        "chest_full_rotation_error_deg": 0.0,
+        "after_shoulder_center_px": [
+          330.0555419921875,
+          131.2834930419922
+        ],
+        "after_shoulder_world_midpoint_projection_px": [
+          329.5646667480469,
+          131.310546875
+        ],
+        "actual_chest_displacement_units": 0.08671836305222656
+      },
+      {
+        "source_target_px": [
+          333.7767639160156,
+          133.39053344726562
+        ],
+        "ray_shell_intersects": true,
+        "closest_ray_distance_to_chain_origin_units": 0.16403347419013478,
+        "chain_inner_radius_units": 0.016056675260406116,
+        "chain_outer_radius_units": 0.23674611426452974,
+        "chosen_ray_depth_units": 5.329837520737783,
+        "baseline_shoulder_ray_depth_units": 5.329837520737783,
+        "target_chest_displacement_units": 0.09075397233523853,
+        "baseline_shoulder_center_px": [
+          321.8954162597656,
+          121.6822280883789
+        ],
+        "source_frame": 29,
+        "output_frame": 28,
+        "kind": "source",
+        "baseline_chain_bend_deg": 0.6540104512648592,
+        "endpoint_error_units": 2.2239897281414927e-08,
+        "bone_length_error_units": 2.8584279998522533e-08,
+        "unreachable_units": 0.0,
+        "chain_bend_deg": 75.25981566123352,
+        "chest_full_rotation_error_deg": 0.0,
+        "after_shoulder_center_px": [
+          334.19158935546875,
+          133.48101806640625
+        ],
+        "after_shoulder_world_midpoint_projection_px": [
+          333.77679443359375,
+          133.39056396484375
+        ],
+        "actual_chest_displacement_units": 0.09075398628522326
+      },
+      {
+        "source_target_px": [
+          321.4866638183594,
+          124.08418273925781
+        ],
+        "ray_shell_intersects": true,
+        "closest_ray_distance_to_chain_origin_units": 0.22751438236331373,
+        "chain_inner_radius_units": 0.016056685580628737,
+        "chain_outer_radius_units": 0.23674610585825429,
+        "chosen_ray_depth_units": 5.285485626610239,
+        "baseline_shoulder_ray_depth_units": 5.253836602983938,
+        "target_chest_displacement_units": 0.06461385918042381,
+        "baseline_shoulder_center_px": [
+          310.9861755371094,
+          124.15818786621094
+        ],
+        "source_frame": 41,
+        "output_frame": 37,
+        "kind": "source",
+        "baseline_chain_bend_deg": 1.9377498271115157,
+        "endpoint_error_units": 1.2588022716578702e-07,
+        "bone_length_error_units": 1.1806259961333332e-07,
+        "unreachable_units": 0.0,
+        "chain_bend_deg": 0.8476662878050436,
+        "chest_full_rotation_error_deg": 0.0,
+        "after_shoulder_center_px": [
+          321.86883544921875,
+          124.138916015625
+        ],
+        "after_shoulder_world_midpoint_projection_px": [
+          321.4866638183594,
+          124.08424377441406
+        ],
+        "actual_chest_displacement_units": 0.06461387030034083
+      },
+      {
+        "source_target_px": [
+          300.0154113769531,
+          141.3954315185547
+        ],
+        "ray_shell_intersects": true,
+        "closest_ray_distance_to_chain_origin_units": 0.15982887403110055,
+        "chain_inner_radius_units": 0.016056452270032117,
+        "chain_outer_radius_units": 0.23674623998895372,
+        "chosen_ray_depth_units": 5.432984175160527,
+        "baseline_shoulder_ray_depth_units": 5.432984175160527,
+        "target_chest_displacement_units": 0.0933015364508942,
+        "baseline_shoulder_center_px": [
+          309.2496643066406,
+          127.33894348144531
+        ],
+        "source_frame": 55,
+        "output_frame": 48,
+        "kind": "source",
+        "baseline_chain_bend_deg": 5.992178249904128,
+        "endpoint_error_units": 1.501712528671799e-07,
+        "bone_length_error_units": 9.784155427516872e-08,
+        "unreachable_units": 0.0,
+        "chain_bend_deg": 94.31427590505623,
+        "chest_full_rotation_error_deg": 0.0,
+        "after_shoulder_center_px": [
+          299.5824279785156,
+          141.374755859375
+        ],
+        "after_shoulder_world_midpoint_projection_px": [
+          300.015380859375,
+          141.39547729492188
+        ],
+        "actual_chest_displacement_units": 0.09330148482596436
+      }
+    ],
+    "bend_min_deg": 0.1916694337359741,
+    "bend_max_deg": 94.31427590505623,
+    "max_chest_displacement_units": 0.1182338318604224,
+    "max_requested_ray_projection_residual_px": 0.0001678466796875,
+    "max_chest_full_rotation_error_deg": 0.0
+  },
+  "absolute_shoulder_extended": {
+    "nonintersecting_source_frames": [
+      37,
+      39,
+      41
+    ],
+    "baseline_bend_deg": {
+      "min": 0.6540104512648592,
+      "max": 8.037928099359327
+    },
+    "selected": [
+      {
+        "source_target_px": [
+          317.70806884765625,
+          124.35413360595703
+        ],
+        "ray_shell_intersects": true,
+        "closest_ray_distance_to_chain_origin_units": 0.18577251557754995,
+        "chain_inner_radius_units": 0.016056633908170134,
+        "chain_outer_radius_units": 0.23674611625852593,
+        "chosen_ray_depth_units": 5.291448821779773,
+        "baseline_shoulder_ray_depth_units": 5.385898577646003,
+        "target_chest_displacement_units": 0.11332232222957778,
+        "baseline_shoulder_center_px": [
+          310.2283935546875,
+          115.74637603759766
+        ],
+        "source_frame": 1,
+        "output_frame": 1,
+        "kind": "source",
+        "baseline_chain_bend_deg": 7.200881627937181,
+        "endpoint_error_units": 1.6873395938420144e-08,
+        "bone_length_error_units": 5.666991190200754e-08,
+        "unreachable_units": 0.0,
+        "chain_bend_deg": 0.48197401288739805,
+        "chest_full_rotation_error_deg": 0.0,
+        "after_shoulder_center_px": [
+          318.10650634765625,
+          124.30223083496094
+        ],
+        "after_shoulder_world_midpoint_projection_px": [
+          317.70806884765625,
+          124.35416412353516
+        ],
+        "actual_chest_displacement_units": 0.11332230733381635
+      },
+      {
+        "source_target_px": [
+          327.9250793457031,
+          121.9642562866211
+        ],
+        "ray_shell_intersects": true,
+        "closest_ray_distance_to_chain_origin_units": 0.22533160124859003,
+        "chain_inner_radius_units": 0.016056675362335234,
+        "chain_outer_radius_units": 0.23674620644937433,
+        "chosen_ray_depth_units": 5.317567869568105,
+        "baseline_shoulder_ray_depth_units": 5.299872630406753,
+        "target_chest_displacement_units": 0.07190567922183409,
+        "baseline_shoulder_center_px": [
+          315.0455017089844,
+          121.84831237792969
+        ],
+        "source_frame": 17,
+        "output_frame": 20,
+        "kind": "source",
+        "baseline_chain_bend_deg": 1.4273529639846343,
+        "endpoint_error_units": 1.2065930039634471e-07,
+        "bone_length_error_units": 1.0384243118166658e-07,
+        "unreachable_units": 7.950762070663142e-07,
+        "chain_bend_deg": 0.10518820643008736,
+        "chest_full_rotation_error_deg": 0.0,
+        "after_shoulder_center_px": [
+          328.38421630859375,
+          121.90261840820312
+        ],
+        "after_shoulder_world_midpoint_projection_px": [
+          327.925048828125,
+          121.96450805664062
+        ],
+        "actual_chest_displacement_units": 0.07190554478143485
+      },
+      {
+        "source_target_px": [
+          334.47796630859375,
+          126.70134735107422
+        ],
+        "ray_shell_intersects": true,
+        "closest_ray_distance_to_chain_origin_units": 0.19322307640308867,
+        "chain_inner_radius_units": 0.01605669070950971,
+        "chain_outer_radius_units": 0.23674611304770948,
+        "chosen_ray_depth_units": 5.320220234532366,
+        "baseline_shoulder_ray_depth_units": 5.407378844283812,
+        "target_chest_displacement_units": 0.12409101075877849,
+        "baseline_shoulder_center_px": [
+          320.9388427734375,
+          118.1682357788086
+        ],
+        "source_frame": 23,
+        "output_frame": 24,
+        "kind": "source",
+        "baseline_chain_bend_deg": 7.637536796855211,
+        "endpoint_error_units": 2.3853496601554932e-08,
+        "bone_length_error_units": 2.319761180369362e-08,
+        "unreachable_units": 6.996654378921274e-06,
+        "chain_bend_deg": 0.10572455177175134,
+        "chest_full_rotation_error_deg": 0.0,
+        "after_shoulder_center_px": [
+          334.9876708984375,
+          126.67205047607422
+        ],
+        "after_shoulder_world_midpoint_projection_px": [
+          334.47760009765625,
+          126.70246887207031
+        ],
+        "actual_chest_displacement_units": 0.12408911827198776
+      },
+      {
+        "source_target_px": [
+          337.2933654785156,
+          128.29327392578125
+        ],
+        "ray_shell_intersects": true,
+        "closest_ray_distance_to_chain_origin_units": 0.1973183286307972,
+        "chain_inner_radius_units": 0.016056675260406116,
+        "chain_outer_radius_units": 0.23674611426452974,
+        "chosen_ray_depth_units": 5.2892291128378845,
+        "baseline_shoulder_ray_depth_units": 5.3298293644038495,
+        "target_chest_displacement_units": 0.09982300533573377,
+        "baseline_shoulder_center_px": [
+          321.8954162597656,
+          121.6822280883789
+        ],
+        "source_frame": 29,
+        "output_frame": 28,
+        "kind": "source",
+        "baseline_chain_bend_deg": 0.6540104512648592,
+        "endpoint_error_units": 2.006130221163669e-08,
+        "bone_length_error_units": 6.496576061831849e-08,
+        "unreachable_units": 0.0,
+        "chain_bend_deg": 0.4579955236952981,
+        "chest_full_rotation_error_deg": 0.0,
+        "after_shoulder_center_px": [
+          337.71759033203125,
+          128.38128662109375
+        ],
+        "after_shoulder_world_midpoint_projection_px": [
+          337.2933654785156,
+          128.29336547851562
+        ],
+        "actual_chest_displacement_units": 0.0998230204965583
+      },
+      {
+        "source_target_px": [
+          321.80914306640625,
+          118.76959228515625
+        ],
+        "ray_shell_intersects": false,
+        "closest_ray_distance_to_chain_origin_units": 0.25565661748516255,
+        "chain_inner_radius_units": 0.016056685580628737,
+        "chain_outer_radius_units": 0.23674610585825429,
+        "chosen_ray_depth_units": 5.349681878717092,
+        "baseline_shoulder_ray_depth_units": 5.253738038358279,
+        "target_chest_displacement_units": 0.1157929663909747,
+        "baseline_shoulder_center_px": [
+          310.9861755371094,
+          124.15818786621094
+        ],
+        "source_frame": 41,
+        "output_frame": 37,
+        "kind": "source",
+        "baseline_chain_bend_deg": 1.9377498271115157,
+        "endpoint_error_units": 1.2206011868512503e-07,
+        "bone_length_error_units": 1.0413313164536753e-07,
+        "unreachable_units": 0.018901711678837807,
+        "chain_bend_deg": 0.10721774854555485,
+        "chest_full_rotation_error_deg": 0.0,
+        "after_shoulder_center_px": [
+          321.1773681640625,
+          122.14103698730469
+        ],
+        "after_shoulder_world_midpoint_projection_px": [
+          320.80438232421875,
+          122.08799743652344
+        ],
+        "actual_chest_displacement_units": 0.10993014506307307
+      },
+      {
+        "source_target_px": [
+          299.8993225097656,
+          135.1529998779297
+        ],
+        "ray_shell_intersects": true,
+        "closest_ray_distance_to_chain_origin_units": 0.19411214388936865,
+        "chain_inner_radius_units": 0.016056452270032117,
+        "chain_outer_radius_units": 0.23674623998895372,
+        "chosen_ray_depth_units": 5.31891126147996,
+        "baseline_shoulder_ray_depth_units": 5.433364337775856,
+        "target_chest_displacement_units": 0.13293161248803861,
+        "baseline_shoulder_center_px": [
+          309.2496643066406,
+          127.33894348144531
+        ],
+        "source_frame": 55,
+        "output_frame": 48,
+        "kind": "source",
+        "baseline_chain_bend_deg": 5.992178249904128,
+        "endpoint_error_units": 2.1073424255447017e-08,
+        "bone_length_error_units": 1.5397925767768328e-08,
+        "unreachable_units": 0.0,
+        "chain_bend_deg": 0.3261841890581408,
+        "chest_full_rotation_error_deg": 0.0,
+        "after_shoulder_center_px": [
+          299.44720458984375,
+          135.126708984375
+        ],
+        "after_shoulder_world_midpoint_projection_px": [
+          299.8993225097656,
+          135.15313720703125
+        ],
+        "actual_chest_displacement_units": 0.13293161774255938
+      }
+    ],
+    "bend_min_deg": 0.10314837205133222,
+    "bend_max_deg": 1.080895150230542,
+    "max_chest_displacement_units": 0.13293161774255938,
+    "max_requested_ray_projection_residual_px": 4.435438283955187,
+    "max_chest_full_rotation_error_deg": 0.0
+  }
+}
