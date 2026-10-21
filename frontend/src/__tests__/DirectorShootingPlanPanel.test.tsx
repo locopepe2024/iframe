@@ -499,6 +499,7 @@ it("keeps an editable disclosure boundary in the saved plan", async () => {
     const save = vi.spyOn(api, "saveDirectorShootingPlanDraft").mockImplementation(async (_id, _source, revision, draft) => ({ project_id: "film", draft_revision: revision + 1, draft_updated_at: 20, draft }));
     render(<NextIntlClientProvider locale="en" messages={messages}><DirectorShootingPlanPanel /></NextIntlClientProvider>);
     await screen.findByText("Cinema entrance");
+    fireEvent.click(screen.getByText("Shot 1 · Follow the couple · Medium shot"));
     const details = await screen.findByText("观众信息与揭示安排");
     fireEvent.click(details);
     fireEvent.change(screen.getByLabelText("当前镜头暂缓展示"), { target: { value: "不得展示信物姓名和刻字" } });
