@@ -103,6 +103,9 @@ Z-up; actor forward is +Y; actor yaw 0 faces +Y and yaw 90 faces -X.
 place_entity changes only position and yaw. arrange_pair places two actors at
 center +/- separation/2 along (cos(axis),sin(axis),0), facing one another.
 add_box is a simple labeled geometric prop proxy, never an asset or seated pose.
+add_box positionM is the BOTTOM center, not the geometric center. A box resting
+on the ground must use positionM.z = context.groundHeightM (normally 0), never
+half its height. dimensionsM is [world X width, world Y depth, vertical height].
 frame_camera targets mean subject centers, sets focal length and position at
 that center + distance*(cos(elevation)*sin(azimuth),-cos(elevation)*cos(azimuth),sin(elevation)).
 Azimuth 0 views from -Y, with world +X to screen right. Do not confuse world left

@@ -28,6 +28,7 @@ def client(monkeypatch):
         is_configured = True
         def chat(self, messages, **kwargs):
             assert current_studio_user() == owner
+            assert "positionM is the BOTTOM center" in messages[0]["content"]
             assert json.loads(messages[-1]["content"])["request"] == request()["prompt"]
             assert kwargs["response_format"] == {"type": "json_object"}
             return json.dumps(response())

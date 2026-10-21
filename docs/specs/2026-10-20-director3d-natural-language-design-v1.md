@@ -116,3 +116,26 @@ Supply `IFRAME_DIRECTOR_LIVE_TOKEN` through the operator's environment (never
 commit it). This check consumes three model calls and modifies only an in-memory
 frontend store; the API produces read-only proposals. No production config,
 saved scene, merge or deployment is changed.
+
+Live observation on iframe backend `0e41955474b0` using `gpt-5.6-sol`:
+the first pair/table proposal returned HTTP 200 in 7946 ms, but assigned the
+0.75m-high table a bottom Z of 0.375m. The compiler interprets box position as
+bottom center, so this would float above ground. Explicitly document bottom
+center and ground height in the model instruction. This is a prompt correction;
+its effect on real-model output requires a new invocation with the corrected
+instruction. The deployed endpoint still uses its deployed instruction.
+
+Corrected candidate runtime observation: three real calls using iframe's
+configured `gpt-5.6-sol` and `/opt/.iframe` credential passed the acceptance
+check (10527 / 7099 / 6189 ms including SSH overhead). A temporary local API
+loaded the corrected module; an ephemeral process in iframe's existing backend
+container called its LLMAdapter with the candidate messages. No deployed source
+or configuration changed. Synthetic identity was used on this candidate, so
+this is not a production authentication/owner-configuration acceptance claim.
+The earlier deployed-endpoint call did use a short-lived API-key session.
+No keys or sessions were logged or committed. The test verified real response
+compilation, grounded table, pair placement/facing, 35mm two-subject bindings,
+preview purity, atomic apply/undo/redo, camera-only dolly, stale rejection and
+timed-motion clarification. This single run is not a model reliability estimate.
+Frontend focused checks: 10 passed; backend proposal checks: 15 passed;
+typecheck passed. WebGL visuals and production media integration remain open.
