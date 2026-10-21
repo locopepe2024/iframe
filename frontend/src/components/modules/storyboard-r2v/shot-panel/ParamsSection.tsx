@@ -24,6 +24,7 @@ import { useTranslations } from "next-intl";
 import type { I2VModelConfig, DurationConfig, ModelParamSupport } from "@/lib/modelCatalog";
 import { usePanelSectionState } from "./usePanelSectionState";
 import SectionShell from "./SectionShell";
+import H3FrameInput from "./H3FrameInput";
 // PR-3c · Loader2/Sparkles/WorkflowActionButton removed with the Generate
 // CTA — generation lives in ShotCard's inline row now.
 
@@ -32,6 +33,8 @@ import SectionShell from "./SectionShell";
  *  given param simply leaves the field as undefined / default. */
 export interface ParamsState {
     model: string;
+    frameMode?: "i2v" | "f2v";
+    lastFrameUrl?: string;
     duration: number;
     count: number;
     resolution?: string;
@@ -54,6 +57,8 @@ export interface ParamsState {
 
 interface ParamsSectionProps {
     shotId: string;
+    frameWorkflow?: boolean;
+    frameCandidates?: string[];
     /** Pickable models for this section (already filtered for the
      *  active tab — I2V models for t2i_i2v, R2V models for direct_r2v). */
     modelList: I2VModelConfig[];
@@ -79,6 +84,8 @@ interface ParamsSectionProps {
 
 export default function ParamsSection({
     shotId,
+    frameWorkflow = false,
+    frameCandidates = [],
     modelList,
     title,
     params,
@@ -116,6 +123,7 @@ export default function ParamsSection({
         [modelList, params.model],
     );
     const modelParams: ModelParamSupport = activeModel?.params ?? {};
+    const h3FrameWorkflow = frameWorkflow && params.model.startsWith("uniart/minimax-h3") && params.model !== "uniart/minimax-h3-ir";
     const durationCfg: DurationConfig = activeModel?.duration ?? { type: "fixed", value: 5 };
 
     const set = useCallback(<K extends keyof ParamsState>(key: K, value: ParamsState[K]) => {
@@ -263,8 +271,13 @@ export default function ParamsSection({
                     </ParamRow>
                 ) : null}
 
+                {h3FrameWorkflow ? (
+                    <H3FrameInput mode={params.frameMode ?? "i2v"} lastFrameUrl={params.lastFrameUrl}
+                        candidates={frameCandidates} onChange={(frameMode, lastFrameUrl) =>
+                            onChange({ ...params, frameMode, lastFrameUrl })} />
+                ) : null}
                 {/* Ratio */}
-                {modelParams.ratio ? (
+                {modelParams.ratio && !h3FrameWorkflow ? (
                     <ParamRow label="Ratio">
                         <PillCluster
                             options={modelParams.ratio.options}

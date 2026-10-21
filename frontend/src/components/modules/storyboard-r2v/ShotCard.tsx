@@ -45,6 +45,8 @@ export interface ShotNode {
     videoModel?: string;
     /** Explicit per-shot generated-audio choice. Undefined inherits the UI default. */
     generateAudio?: boolean;
+    frameMode?: "i2v" | "f2v";
+    lastFrameUrl?: string;
     /** Explicit image variants selected from each semantic asset for this shot. */
     referenceVariantIds?: Record<string, string[]>;
     poseReferenceVariantIds?: Record<string, string[]>;

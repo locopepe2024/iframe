@@ -312,7 +312,8 @@ class VideoTask(BaseModel):
     negative_prompt: Optional[str] = Field(None, description="Negative prompt")
     model: str = Field("wan2.7-i2v", description="Model used for generation")
     shot_type: str = Field("single", description="Shot type: 'single' or 'multi' (only for wan I2V models)")
-    generation_mode: str = Field("i2v", description="Generation mode: 'i2v' (image-to-video) or 'r2v' (reference-to-video)")
+    generation_mode: str = Field("i2v", description="Generation mode: i2v (first frame), f2v (first/last frames), r2v (references), t2v")
+    last_frame_url: Optional[str] = Field(None, description="Last image for first/last-frame video generation")
     reference_video_urls: List[str] = Field(default_factory=list, description="Reference video URLs for R2V generation (max 3)")
     # Kling params
     mode: Optional[str] = Field(None, description="Kling mode: std/pro")
@@ -691,6 +692,8 @@ class StoryboardFrame(BaseModel):
         description="Last-chosen Generate ×N batch size for this shot (1-6).",
     )
     video_model: Optional[str] = Field(None, description="Per-shot video model override")
+    workbench_frame_mode: str = "i2v"
+    workbench_last_frame_url: Optional[str] = None
     workbench_generate_audio: Optional[bool] = Field(
         None,
         description="Per-shot generated-audio choice; None inherits the current project/UI default",

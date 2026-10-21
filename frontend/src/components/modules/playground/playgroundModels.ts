@@ -87,6 +87,11 @@ export function installUniArtCatalog(models: UniArtCatalogModelResponse[]): numb
   runtimeModels = Object.fromEntries(models.map((model, index) => [model.id, {
     ...model,
     status: 'active',
+    // H3 creates now use V2. Older runtime snapshots omit this newly wired
+    // mode; keep SKU availability intact while exposing its V2 frame workflow.
+    capabilities: model.id.startsWith('uniart/minimax-h3') && model.id !== 'uniart/minimax-h3-ir'
+      && model.capabilities.includes('i2v')
+      ? Array.from(new Set([...model.capabilities, 'f2v'])) : model.capabilities,
     duration: model.duration as CatalogDuration | null | undefined,
     params: model.params,
     inputs: model.inputs,
@@ -94,7 +99,7 @@ export function installUniArtCatalog(models: UniArtCatalogModelResponse[]): numb
       selection_group: model.capabilities.some((capability) => capability === 't2i' || capability === 'i2i') ? 'image' : 'i2v',
       visible_in: ['playground'],
       // Runtime UniArt catalog is the sole owner of model availability and
-      // capabilities. Do not locally mark a SKU as recommended/default.
+      // routing. Do not locally mark a SKU as recommended/default.
       recommended: false,
       order: models.length - index,
       badges: ['UniArt'],

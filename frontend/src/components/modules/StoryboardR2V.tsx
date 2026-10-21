@@ -957,200 +957,6 @@ export default function StoryboardR2V() {
     }, [shots, currentProject, persistWorkbench, loadGenerationStyle]);
 
     // Generate video for a shot
-    const generateVideo = useCallback(async (index: number) => {
-        const shot = shots[index];
-        if (!currentProject || !shot.prompt.trim()) return;
-
-        setShots(prev => prev.map((s, i) =>
-            i === index ? { ...s, videoStatus: "pending" } : s
-        ));
-
-        try {
-            const style = await loadGenerationStyle();
-            if (shot.tabMode === "direct_r2v") {
-                // R2V mode: use reference assets. We prefer the user's
-                // explicit R2V model choice (videoConfig.r2vModel) over
-                // the derived route from the I2V model. The derivation
-                // is kept as a fallback when the explicit r2vModel is
-                // missing or invalid (which can only happen if the
-                // catalog flipped under our feet).
-                const referenceSubmission = resolveShotReferences(shot);
-                const referenceUrls = referenceSubmission.urls;
-                const explicitR2v = videoConfig.r2vModel;
-                const explicitOk = VIDEO_R2V_MODELS.some(m => m.id === explicitR2v);
-                const routeModelId = explicitOk
-                    ? explicitR2v
-                    : getR2vRouteModelId(videoConfig.model);
-                const imageBased = isR2vImageBased(routeModelId);
-                const generateAudio = storyboardGeneratedAudio(
-                    routeModelId,
-                    storyboardAudioChoice(shot.generateAudio, videoConfig.audio),
-                );
-                const basePromptText = buildGenerationPrompt(
-                    shot,
-                    generateAudio,
-                    routeModelId,
-                    style.positivePrompt,
-                );
-                const promptText = routeModelId.toLowerCase().includes("minimax-h3")
-                    ? bindH3MultiReferencePrompt(basePromptText, referenceSubmission.groups)
-                    : basePromptText;
-                const negativePrompt = resolveNegativePrompt(
-                    style.negativePrompt,
-                    videoConfig.negativePrompt,
-                    shot.negativePromptOverride,
-                );
-
-                const tasks = await api.createVideoTask(
-                    currentProject.id,
-                    "",  // no image_url for R2V
-                    promptText,
-                    videoConfig.duration,
-                    undefined, // seed
-                    videoConfig.resolution,
-                    generateAudio,
-                    "", // audioUrl
-                    videoConfig.promptExtend,
-                    negativePrompt,
-                    1, // batchSize
-                    routeModelId,  // use routed R2V model
-                    shot.id, // frameId
-                    "multi", // shotType
-                    "r2v", // generationMode
-                    !imageBased ? referenceUrls : undefined, // referenceVideoUrls (Wan 2.6 legacy)
-                    undefined, undefined, undefined, // kling params
-                    undefined, undefined, // vidu params
-                    imageBased ? referenceUrls : undefined, // referenceImageUrls
-                    undefined, // ratio
-                    shot.tabMode,
-                    undefined, // watermark
-                    shot.poseReferenceVariantIds,
-                    shot.directorSnapshotMediaId ?? undefined,
-                );
-                const task = Array.isArray(tasks) ? tasks[0] : tasks;
-
-                if (task && task.id) {
-                    setShots(prev => prev.map((s, i) =>
-                        i === index ? { ...s, videoTaskId: task.id, videoStatus: "processing" } : s
-                    ));
-                }
-            } else {
-                // I2V mode: use T2I image as first frame.
-                // Bug A guard: even if videoConfig.model passed the
-                // mount-time check, the catalog can change at runtime
-                // (catalog reload, project setting flip). Last sanity
-                // check right before submit so we never ship an r2v-
-                // only model into the I2V flow.
-                const i2vModelOk = VIDEO_I2V_MODELS.some(m => m.id === videoConfig.model);
-                if (!i2vModelOk) {
-                    debugLog.warn(
-                        "Studio",
-                        `Refusing to submit I2V task with model "${videoConfig.model}" ` +
-                        `which is not in the visible I2V list. Falling back to "${DEFAULT_I2V_MODEL_ID}".`,
-                    );
-                    setVideoConfig(c => ({ ...c, model: DEFAULT_I2V_MODEL_ID }));
-                    if (typeof window !== 'undefined') {
-                        localStorage.removeItem('storyboard-r2v-model');
-                    }
-                    setShots(prev => prev.map((s, i) =>
-                        i === index ? { ...s, videoStatus: "failed" as const } : s,
-                    ));
-                    return;
-                }
-                // Use the multi-frame-aware accessor so this legacy path
-                // stays in sync with the new ParamsSection batch path
-                // (Issue 15). `shot.t2iImageUrl` (legacy singular) and
-                // `shot.t2iImageUrls[selectedIndex]` should normally agree,
-                // but the singular field has occasionally lagged behind the
-                // plural one (e.g. async upload state mid-flight), causing
-                // HappyHorse to silently submit with no media.
-                const imageUrl = getActiveT2IImageUrl(shot) || shot.imageUrl || "";
-                if (!imageUrl) {
-                    // I2V without a first frame is guaranteed to fail with
-                    // "input.media required" on HappyHorse — surface inline
-                    // instead of letting it 502 mid-generation.
-                    setShotErrors(prev => ({
-                        ...prev,
-                        [shot.id]: t("i2vNeedsFirstFrame") || "请先上传或生成首帧再生成视频。",
-                    }));
-                    setShots(prev => prev.map((s, i) =>
-                        i === index ? { ...s, videoStatus: undefined } : s,
-                    ));
-                    return;
-                }
-
-                const generateAudio = storyboardGeneratedAudio(
-                    videoConfig.model,
-                    storyboardAudioChoice(shot.generateAudio, videoConfig.audio),
-                );
-                const promptText = buildGenerationPrompt(
-                    shot,
-                    generateAudio,
-                    videoConfig.model,
-                    style.positivePrompt,
-                );
-                const negativePrompt = resolveNegativePrompt(
-                    style.negativePrompt,
-                    videoConfig.negativePrompt,
-                    shot.negativePromptOverride,
-                );
-                const tasks = await api.createVideoTask(
-                    currentProject.id,
-                    imageUrl,
-                    promptText,
-                    videoConfig.duration,
-                    undefined, // seed
-                    videoConfig.resolution,
-                    generateAudio,
-                    "", // audioUrl
-                    videoConfig.promptExtend,
-                    negativePrompt,
-                    1, // batchSize
-                    videoConfig.model, // direct I2V model
-                    shot.id, // frameId
-                    "multi", // shotType
-                    "i2v", // generationMode
-                    undefined, // referenceVideoUrls
-                    // Kling params
-                    videoConfig.mode,
-                    videoConfig.sound,
-                    videoConfig.cfgScale,
-                    // Vidu params
-                    videoConfig.viduAudio,
-                    videoConfig.movementAmplitude,
-                    // HappyHorse
-                    undefined,
-                    undefined, // ratio
-                    shot.tabMode,
-                    undefined, // watermark
-                    shot.poseReferenceVariantIds,
-                    shot.directorSnapshotMediaId ?? undefined,
-                );
-                const task = Array.isArray(tasks) ? tasks[0] : tasks;
-
-                if (task && task.id) {
-                    setShots(prev => prev.map((s, i) =>
-                        i === index ? { ...s, videoTaskId: task.id, videoStatus: "processing" } : s
-                    ));
-                }
-            }
-        } catch (error: any) {
-            debugLog.error("Studio", "Failed to generate video for shot:", error);
-            const detail = error?.response?.data?.detail || error?.message || t("unknownErrorFallback");
-            toast.error(t("videoGenFailedToast", { detail: String(detail).slice(0, 150) }));
-            setShots(prev => prev.map((s, i) =>
-                i === index ? { ...s, videoStatus: "failed" } : s
-            ));
-        }
-    }, [shots, currentProject, videoConfig, resolveShotReferences, loadGenerationStyle]);
-
-    // Batch-aware generation. The user's "抽卡" mental model: one
-    // click of Generate ×N fires N independent createVideoTask calls
-    // in parallel (each becomes its own VideoTask record on the
-    // backend). All N task ids get appended to the shot's per-tab
-    // bucket so the CandidatesSection can render them as one batch.
-    // Refactored from the single-task generateVideo to support both
-    // R2V and I2V paths; falls back to N=1 if count is undefined.
     const generateVideoBatch = useCallback(async (
         index: number,
         count: number,
@@ -1163,6 +969,17 @@ export default function StoryboardR2V() {
         const requestedModelId = params?.model ?? (tabMode === "direct_r2v"
             ? videoConfig.r2vModel
             : videoConfig.model);
+        const isFirstLastFrame = tabMode === "t2i_i2v"
+            && requestedModelId.startsWith("uniart/minimax-h3")
+            && requestedModelId !== "uniart/minimax-h3-ir"
+            && (params?.frameMode ?? shot.frameMode) === "f2v";
+        const lastFrameUrl = params?.lastFrameUrl ?? shot.lastFrameUrl;
+        if (isFirstLastFrame && !lastFrameUrl) {
+            const message = t("lastFrameRequired");
+            setShotErrors(prev => ({ ...prev, [shot.id]: message }));
+            toast.warning(message);
+            return;
+        }
         const generateAudio = storyboardGeneratedAudio(
             requestedModelId,
             params?.audio ?? storyboardAudioChoice(shot.generateAudio, videoConfig.audio),
@@ -1334,7 +1151,7 @@ export default function StoryboardR2V() {
                     i2vModelId,
                     shot.id,
                     params?.shotType ?? "multi",
-                    "i2v",
+                    isFirstLastFrame ? "f2v" : "i2v",
                     undefined,
                     params?.mode ?? videoConfig.mode,
                     params?.sound ?? videoConfig.sound,
@@ -1347,6 +1164,7 @@ export default function StoryboardR2V() {
                     params?.watermark,
                     shot.poseReferenceVariantIds,
                     shot.directorSnapshotMediaId ?? undefined,
+                    isFirstLastFrame ? lastFrameUrl : undefined,
                 );
                 const task = Array.isArray(tasks) ? tasks[0] : tasks;
                 return task?.id ?? null;
@@ -1708,6 +1526,8 @@ export default function StoryboardR2V() {
         const modelId = shot.videoModel ?? (isR2v ? videoConfig.r2vModel : videoConfig.model);
         return {
             model: modelId,
+            frameMode: shot.frameMode ?? "i2v",
+            lastFrameUrl: shot.lastFrameUrl,
             duration: shot.duration ?? videoConfig.duration,
             count: shotCounts[shot.id] ?? 1,
             // Per-shot seed override (Sweep G fix); undefined means
@@ -1743,10 +1563,14 @@ export default function StoryboardR2V() {
             ...item,
             videoModel: next.model,
             generateAudio: next.audio === true,
+            frameMode: next.frameMode,
+            lastFrameUrl: next.lastFrameUrl,
         } : item));
         persistWorkbench(shot.id, {
             video_model: next.model,
             workbench_generate_audio: next.audio === true,
+            workbench_frame_mode: next.frameMode ?? "i2v",
+            workbench_last_frame_url: next.lastFrameUrl ?? "",
         });
         // Sync duration back to structured field (single source of truth)
         if (next.duration !== (shot.duration ?? videoConfig.duration)) {
@@ -1889,8 +1713,8 @@ export default function StoryboardR2V() {
             ? shots.findIndex((s) => s.id === task.frame_id)
             : -1;
         if (ownerIdx < 0) return;
-        await generateVideoBatch(ownerIdx, 1);
-    }, [shots, generateVideoBatch]);
+        await generateVideoBatch(ownerIdx, 1, paramsStateForShot(shots[ownerIdx]));
+    }, [shots, generateVideoBatch, paramsStateForShot]);
 
     // Click on a candidate thumb: plain click = preview (open new
     // window for v1), shift-click = toggle compare-selection.
@@ -2146,7 +1970,7 @@ export default function StoryboardR2V() {
                             onUpdateField={(field, value) => handleUpdateField(index, field, value)}
                             durationEditorConfig={durationEditorCfg}
                             onGenerateT2I={() => generateT2I(index)}
-                            onGenerateVideo={() => generateVideo(index)}
+                            onGenerateVideo={() => generateVideoBatch(index, 1, paramsStateForShot(shot))}
                             onDelete={() => deleteShot(index)}
                             onMoveUp={() => moveShot(index, "up")}
                             onMoveDown={() => moveShot(index, "down")}
@@ -2433,6 +2257,8 @@ export default function StoryboardR2V() {
                             <div className={isI2vTab ? "border-t border-glass-border" : ""}>
                                 <ParamsSection
                                     shotId={shot.id}
+                                    frameWorkflow={isI2vTab}
+                                    frameCandidates={shot.t2iImageUrls ?? []}
                                     modelList={modelList}
                                     title={isI2vTab ? "I2V Params" : "R2V Params"}
                                     params={paramsState}

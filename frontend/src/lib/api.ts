@@ -436,6 +436,7 @@ export interface VideoTask {
     model?: string;
     frame_id?: string;
     generation_mode?: string;
+    last_frame_url?: string;
     reference_video_urls?: string[];
     reference_image_urls?: string[];
     ratio?: string;
@@ -660,6 +661,7 @@ export const api = {
         watermark?: boolean,
         poseReferenceVariantIds?: Record<string, string[]>,
         directorSnapshotMediaId?: string,
+        lastFrameUrl?: string,
     ) => {
         const res = await axios.post(`${API_URL}/projects/${id}/video_tasks`, {
             image_url,
@@ -676,6 +678,7 @@ export const api = {
             frame_id: frameId,
             shot_type: shotType,
             generation_mode: generationMode,
+            last_frame_url: lastFrameUrl,
             reference_video_urls: referenceVideoUrls,
             // Kling
             mode,
@@ -733,6 +736,8 @@ export const api = {
             t2i_selected_index?: number;
             workbench_generate_count?: number;
             video_model?: string;
+            workbench_frame_mode?: "i2v" | "f2v";
+            workbench_last_frame_url?: string;
             workbench_generate_audio?: boolean;
             workbench_reference_variant_ids?: Record<string, string[]>;
             workbench_pose_reference_variant_ids?: Record<string, string[]>;

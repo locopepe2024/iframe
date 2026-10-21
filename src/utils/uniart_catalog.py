@@ -9,10 +9,13 @@ from urllib.request import Request, urlopen
 
 MODE_MAP = {
     "text_to_video": "t2v",
+    "text2video": "t2v",
     "image_to_video": "i2v",
+    "image2video": "i2v",
     "image_reference": "i2v",
     "omni_reference": "r2v",
     "first_last_frame": "f2v",
+    "frames2video": "f2v",
 }
 
 

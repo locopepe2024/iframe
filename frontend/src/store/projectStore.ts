@@ -58,7 +58,8 @@ export interface VideoTask {
     duration?: number;
     created_at: number;
     model?: string;
-    generation_mode?: string;  // 'i2v' or 'r2v'
+    generation_mode?: string;  // i2v / f2v / r2v / t2v
+    last_frame_url?: string;
     reference_video_urls?: string[];  // Reference videos for R2V
 }
 

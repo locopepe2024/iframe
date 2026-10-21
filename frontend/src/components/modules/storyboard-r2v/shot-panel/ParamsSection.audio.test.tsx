@@ -26,3 +26,17 @@ describe('storyboard generated audio', () => {
     expect(onChange).toHaveBeenCalledWith(expect.objectContaining({ model: 'h3', audio: true }));
   });
 });
+
+
+it('exposes H3 frame modes in the frame workflow and keeps the audio choice', () => {
+    const onChange = vi.fn();
+    const model = { id: 'uniart/minimax-h3-vip', name: 'H3', description: '', duration: { type: 'fixed' as const, value: 5 }, params: { ratio: { options: ['16:9'], default: '16:9' } } };
+    const view = render(<ParamsSection shotId="shot" title="Parameters" frameWorkflow frameCandidates={['tail.webp']}
+        modelList={[model]} params={{ model: model.id, duration: 5, count: 1, audio: false }} onChange={onChange} />);
+    fireEvent.click(screen.getByRole('button', { name: 'firstLastFrameMode' }));
+    expect(onChange).toHaveBeenCalledWith(expect.objectContaining({ frameMode: 'f2v', audio: false }));
+    expect(screen.queryByText('Ratio')).not.toBeInTheDocument();
+    view.rerender(<ParamsSection shotId="shot" title="Parameters" modelList={[model]}
+        params={{ model: model.id, duration: 5, count: 1 }} onChange={onChange} />);
+    expect(screen.queryByRole('button', { name: 'firstLastFrameMode' })).not.toBeInTheDocument();
+});

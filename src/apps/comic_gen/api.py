@@ -3090,7 +3090,8 @@ class CreateVideoTaskRequest(BaseModel):
     batch_size: int = 1
     model: str = "wan2.6-i2v"
     shot_type: str = "single"  # 'single' or 'multi' (only for wan2.6-i2v)
-    generation_mode: str = "i2v"  # 'i2v' (image-to-video) or 'r2v' (reference-to-video)
+    generation_mode: str = "i2v"  # i2v / f2v / r2v / t2v
+    last_frame_url: Optional[str] = None
     reference_video_urls: List[str] = []  # Reference video URLs for R2V (max 3)
     # Kling params
     mode: Optional[str] = None
@@ -3173,6 +3174,8 @@ class UpdateFrameWorkbenchRequest(BaseModel):
     t2i_selected_index: Optional[int] = None  # active首帧 index, clamped to range
     workbench_generate_count: Optional[int] = None  # batch size, clamped to [1, 6]
     video_model: Optional[str] = None
+    workbench_frame_mode: Optional[Literal["i2v", "f2v"]] = None
+    workbench_last_frame_url: Optional[str] = None
     workbench_generate_audio: Optional[bool] = None
     workbench_reference_variant_ids: Optional[Dict[str, List[str]]] = None
     workbench_pose_reference_variant_ids: Optional[Dict[str, List[str]]] = None
@@ -3195,6 +3198,8 @@ def update_frame_workbench(
             t2i_selected_index=request.t2i_selected_index,
             workbench_generate_count=request.workbench_generate_count,
             video_model=request.video_model,
+            workbench_frame_mode=request.workbench_frame_mode,
+            workbench_last_frame_url=request.workbench_last_frame_url,
             workbench_generate_audio=request.workbench_generate_audio,
             workbench_reference_variant_ids=request.workbench_reference_variant_ids,
             workbench_pose_reference_variant_ids=request.workbench_pose_reference_variant_ids,
@@ -3251,6 +3256,7 @@ def create_video_task(script_id: str, request: CreateVideoTaskRequest, backgroun
                 model=request.model,
                 shot_type=request.shot_type,
                 generation_mode=request.generation_mode,
+                last_frame_url=request.last_frame_url,
                 reference_video_urls=request.reference_video_urls,
                 reference_image_urls=request.reference_image_urls,
                 pose_reference_variant_ids=request.pose_reference_variant_ids,
