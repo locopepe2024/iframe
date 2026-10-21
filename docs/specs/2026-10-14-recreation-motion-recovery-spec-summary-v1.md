@@ -52,6 +52,8 @@
 
 ## Not yet proven / Hypotheses
 
+- 2026-10-21 pinned Blender rig 已知姿态闭环：源1/17/23/29/55只作采样锚点，额外root yaw/骨盆/胸廓旋转为合成测试扰动。73骨中无pose-bone constraints；Blender rest/parent逆解与renderer重导入的最大世界矩阵误差分别3.58e−7/4.77e−7、投影误差1.11e−4/9.16e−5 px。漏rest/root和只看骨方向的负对照显著失败（60°twist使侧向点偏0.08062 Blender units）。证明此rig上已知世界姿态可往返，不证明源3D、源相机、鞋底接触/H3正确；主链路未改。[rig闭环报告](../agents/deliverables/2026-10-21-recreation2-pinned-rig-roundtrip-v1.md)
+
 - 2026-10-21隔离坐标adapter将图像观测、proxy相对Z、metric camera-Z和rig刚性变换分离；36组×3骨已知姿态闭环最大端点2.74e-15米、像素3.60e-13px，漏rest/root与六种非法输入对照通过。相同骨方向、60°twist差可产生合成侧点0.15米偏移，证明方向验收不足。真实31帧只保留像素观测/相对Z和PTS，XY回转误差0，未知camera/3D/root/rig保持null；尚未验证实际Blender rig或测得真实片段改善。主链路/接触/H3状态不变。[adapter与闭环报告](../agents/deliverables/2026-10-21-recreation2-contract-adapter-v1.md)
 
 - 2026-10-21公开来源与映射契约审计：MediaPipe的图像归一化XY/髋相对Z不同于公制相机XYZ；SMPLify-X显式做人体→相机投影拟合，GVHMR分别处理K/根位移/static关节/IK，Blender区分rest/parent/pose。现有builder同一XYZ直接兼作方向、yaw与root深度，存在已确认的语义边界缺口。36组无噪声针孔反例中，正确反投影XYZ误差<1e-12，补Y后的直接XYZ差仍不保持方向夹角，不能一般性用统一转轴修复；该合成Z不是MediaPipe内部公式，也不证明本片最大根因。下一步拆观测/3D/相机/root/rig标定通道并作闭环，再量真实源分层误差；主链路、接触/H3状态不变。[公开实现与合成报告](../agents/deliverables/2026-10-21-recreation2-mapping-contract-research-v1.md)

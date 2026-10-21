@@ -1,0 +1,266 @@
+{
+  "schema": "recreation2-pinned-rig-roundtrip.v1",
+  "rig_sha256": "95eeb19c8abce2325479804b3dda429ebddfa6e8d07a2688541cc990fb676855",
+  "bundle_sha256": "0e040952e656576fd405412bf21d574ccdf29fa8bcc6c7bb2561509e41f04a9b",
+  "blender": "4.5.9 LTS",
+  "inventory": {
+    "bone_count": 73,
+    "constraint_count": 0,
+    "rig_object_data_driver_count": 0,
+    "inherit_scale": {
+      "root": "FULL",
+      "pelvis": "FULL",
+      "spine_lower": "FULL",
+      "upper_leg_l": "FULL",
+      "upper_leg_r": "FULL",
+      "spine_mid": "FULL",
+      "lower_leg_l": "FULL",
+      "lower_leg_r": "FULL",
+      "spine_chest": "FULL",
+      "ankle_l": "FULL",
+      "ankle_r": "FULL",
+      "neck": "FULL",
+      "clavicle_l": "FULL",
+      "clavicle_r": "FULL",
+      "foot_l": "FULL",
+      "foot_r": "FULL",
+      "head": "FULL",
+      "upper_arm_l": "FULL",
+      "upper_arm_r": "FULL",
+      "DEF_foot_l": "FULL",
+      "DEF_foot_r": "FULL",
+      "lower_arm_l": "FULL",
+      "lower_arm_r": "FULL",
+      "toe_l": "FULL",
+      "toe_r": "FULL",
+      "wrist_l": "FULL",
+      "wrist_r": "FULL",
+      "toe_attachment_l": "FULL",
+      "toe_attachment_r": "FULL",
+      "hand_l": "FULL",
+      "hand_r": "FULL",
+      "DEF_hand_l": "FULL",
+      "DEF_hand_r": "FULL",
+      "index_01_l": "FULL",
+      "middle_01_l": "FULL",
+      "little_01_l": "FULL",
+      "ring_01_l": "FULL",
+      "thumb_01_l": "FULL",
+      "index_01_r": "FULL",
+      "middle_01_r": "FULL",
+      "little_01_r": "FULL",
+      "ring_01_r": "FULL",
+      "thumb_01_r": "FULL",
+      "index_02_l": "FULL",
+      "middle_02_l": "FULL",
+      "little_02_l": "FULL",
+      "ring_02_l": "FULL",
+      "thumb_02_l": "FULL",
+      "index_02_r": "FULL",
+      "middle_02_r": "FULL",
+      "little_02_r": "FULL",
+      "ring_02_r": "FULL",
+      "thumb_02_r": "FULL",
+      "index_03_l": "FULL",
+      "middle_03_l": "FULL",
+      "little_03_l": "FULL",
+      "ring_03_l": "FULL",
+      "thumb_03_l": "FULL",
+      "index_03_r": "FULL",
+      "middle_03_r": "FULL",
+      "little_03_r": "FULL",
+      "ring_03_r": "FULL",
+      "thumb_03_r": "FULL",
+      "index_04_leaf_l": "FULL",
+      "middle_04_leaf_l": "FULL",
+      "little_04_leaf_l": "FULL",
+      "ring_04_leaf_l": "FULL",
+      "thumb_04_leaf_l": "FULL",
+      "index_04_leaf_r": "FULL",
+      "middle_04_leaf_r": "FULL",
+      "little_04_leaf_r": "FULL",
+      "ring_04_leaf_r": "FULL",
+      "thumb_04_leaf_r": "FULL"
+    },
+    "use_inherit_rotation_false": [],
+    "use_local_location_false": [],
+    "armature_object_matrix": [
+      [
+        1.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      [
+        0.0,
+        1.0,
+        0.0,
+        0.0
+      ],
+      [
+        0.0,
+        0.0,
+        1.0,
+        0.0
+      ],
+      [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ]
+    ]
+  },
+  "rows": [
+    {
+      "source_frame": 1,
+      "source_pts_s": 0.0,
+      "new_bundle_frame": 1,
+      "inverse_fk_error": {
+        "world_matrix": 2.384185791015625e-07,
+        "head_m": 2.780773879069317e-07,
+        "tail_m": 2.780773879069317e-07,
+        "side_m": 2.8115454709698567e-07,
+        "side_px": 6.454057432437375e-05,
+        "worst_bone": "spine_mid"
+      },
+      "max_basis_translation_m": 3.95372484964776e-07,
+      "max_basis_scale_deviation": 3.5762786865234375e-07,
+      "twist_control": {
+        "bone_direction_deg": 0.0,
+        "side_offset_m": 0.08062256690689906
+      },
+      "omit_rest_world_matrix_error": 0.19839655980467796,
+      "omit_root_world_matrix_error": 0.1743491291999817,
+      "renderer_roundtrip_error": {
+        "world_matrix": 2.384185791015625e-07,
+        "head_m": 2.4620758953479386e-07,
+        "tail_m": 2.457562461863554e-07,
+        "side_m": 3.769728732309794e-07,
+        "side_px": 9.1552734375e-05,
+        "worst_bone": "lower_leg_l"
+      }
+    },
+    {
+      "source_frame": 17,
+      "source_pts_s": 0.783655,
+      "new_bundle_frame": 20,
+      "inverse_fk_error": {
+        "world_matrix": 3.5762786865234375e-07,
+        "head_m": 3.993539000528275e-07,
+        "tail_m": 3.589448174967141e-07,
+        "side_m": 3.7342202920143806e-07,
+        "side_px": 9.289394883640992e-05,
+        "worst_bone": "upper_arm_r"
+      },
+      "max_basis_translation_m": 6.828569911354541e-07,
+      "max_basis_scale_deviation": 4.76837158203125e-07,
+      "twist_control": {
+        "bone_direction_deg": 0.0,
+        "side_offset_m": 0.08062258761015872
+      },
+      "omit_rest_world_matrix_error": 0.19673798978328705,
+      "omit_root_world_matrix_error": 0.06638103723526001,
+      "renderer_roundtrip_error": {
+        "world_matrix": 2.5331974029541016e-07,
+        "head_m": 1.431209796093296e-07,
+        "tail_m": 2.5122933536898145e-07,
+        "side_m": 2.4755668231600746e-07,
+        "side_px": 7.62939453125e-05,
+        "worst_bone": "thumb_01_l"
+      }
+    },
+    {
+      "source_frame": 23,
+      "source_pts_s": 0.964499,
+      "new_bundle_frame": 24,
+      "inverse_fk_error": {
+        "world_matrix": 3.5762786865234375e-07,
+        "head_m": 3.6010283153040923e-07,
+        "tail_m": 3.5886748369909214e-07,
+        "side_m": 3.705119120823251e-07,
+        "side_px": 8.217109385886389e-05,
+        "worst_bone": "thumb_02_l"
+      },
+      "max_basis_translation_m": 6.227616940083379e-07,
+      "max_basis_scale_deviation": 3.5762786865234375e-07,
+      "twist_control": {
+        "bone_direction_deg": 0.0,
+        "side_offset_m": 0.08062258410462146
+      },
+      "omit_rest_world_matrix_error": 0.20191427320241928,
+      "omit_root_world_matrix_error": 0.020703017711639404,
+      "renderer_roundtrip_error": {
+        "world_matrix": 3.5762786865234375e-07,
+        "head_m": 2.4755668231600746e-07,
+        "tail_m": 2.619385098106704e-07,
+        "side_m": 2.5288109106536417e-07,
+        "side_px": 6.103515625e-05,
+        "worst_bone": "foot_l"
+      }
+    },
+    {
+      "source_frame": 29,
+      "source_pts_s": 1.145343,
+      "new_bundle_frame": 28,
+      "inverse_fk_error": {
+        "world_matrix": 3.5762786865234375e-07,
+        "head_m": 3.674277068954096e-07,
+        "tail_m": 3.674277068954096e-07,
+        "side_m": 3.674277068954096e-07,
+        "side_px": 8.631674575031098e-05,
+        "worst_bone": "middle_02_l"
+      },
+      "max_basis_translation_m": 5.331201499700045e-07,
+      "max_basis_scale_deviation": 4.76837158203125e-07,
+      "twist_control": {
+        "bone_direction_deg": 0.0,
+        "side_offset_m": 0.08062257786346747
+      },
+      "omit_rest_world_matrix_error": 0.1938982680439949,
+      "omit_root_world_matrix_error": 0.1604805588722229,
+      "renderer_roundtrip_error": {
+        "world_matrix": 3.5762786865234375e-07,
+        "head_m": 2.6656007498500226e-07,
+        "tail_m": 2.682209014892578e-07,
+        "side_m": 2.682209014892578e-07,
+        "side_px": 6.518557544950508e-05,
+        "worst_bone": "middle_01_l"
+      }
+    },
+    {
+      "source_frame": 55,
+      "source_pts_s": 1.959139,
+      "new_bundle_frame": 48,
+      "inverse_fk_error": {
+        "world_matrix": 3.5762786865234375e-07,
+        "head_m": 3.1680303253932744e-07,
+        "tail_m": 2.874031889734553e-07,
+        "side_m": 2.980232238769531e-07,
+        "side_px": 8.631674575031098e-05,
+        "worst_bone": "thumb_02_r"
+      },
+      "max_basis_translation_m": 3.919883500923486e-07,
+      "max_basis_scale_deviation": 4.76837158203125e-07,
+      "twist_control": {
+        "bone_direction_deg": 0.0,
+        "side_offset_m": 0.08062258314292538
+      },
+      "omit_rest_world_matrix_error": 0.18500231206417084,
+      "omit_root_world_matrix_error": 1.6972285509109497,
+      "renderer_roundtrip_error": {
+        "world_matrix": 4.76837158203125e-07,
+        "head_m": 2.4755668231600746e-07,
+        "tail_m": 3.0683368864616754e-07,
+        "side_m": 3.371747880871523e-07,
+        "side_px": 6.823937919616058e-05,
+        "worst_bone": "index_03_l"
+      }
+    }
+  ],
+  "limits": [
+    "Known rig forward poses are synthetic truth, not source video truth",
+    "Twist/pelvis/root perturbations are test stimuli, not source estimates",
+    "Sole mesh and real ground contact not assessed"
+  ]
+}
