@@ -31,6 +31,8 @@ KNOWLEDGE_SECRETS = Path("/srv/lumenx/runtime/knowledge-pg-provision")
 KNOWLEDGE_MOUNT = "/run/iframe-knowledge"
 REVIEW_CONFIG = Path("/opt/.iframe")
 REVIEW_CONFIG_MOUNT = "/run/iframe-review-key"
+DIRECTOR_MEDIA_SSH = Path("/srv/lumenx/runtime/director-depth-ssh")
+DIRECTOR_MEDIA_SSH_MOUNT = "/root/.ssh"
 KNOWLEDGE_PATHS = {"/knowledge/collections", "/knowledge/search", "/knowledge/collections/{collection_id}/sources"}
 
 
@@ -90,6 +92,7 @@ def verify_topology(backend, frontend):
     allowed_extra = {
         (str(KNOWLEDGE_SECRETS), KNOWLEDGE_MOUNT),
         (str(REVIEW_CONFIG), REVIEW_CONFIG_MOUNT),
+        (str(DIRECTOR_MEDIA_SSH), DIRECTOR_MEDIA_SSH_MOUNT),
     }
     if any(
         mount["Type"] != "bind"
@@ -246,11 +249,29 @@ def knowledge_runtime(env_path):
     return True
 
 
+def director_media_runtime(env_path):
+    values = dict(line.split("=", 1) for line in env_path.read_text().splitlines()
+                  if line.startswith("DIRECTOR_DEPTH_") and "=" in line)
+    if not values.get("DIRECTOR_DEPTH_MEDIA_SSH_TARGET", "").strip():
+        return False
+    if (DIRECTOR_MEDIA_SSH.is_symlink() or not DIRECTOR_MEDIA_SSH.is_dir()
+            or DIRECTOR_MEDIA_SSH.stat().st_mode & (stat.S_IRWXG | stat.S_IRWXO)):
+        raise RuntimeError("Missing or unsafe media SSH directory")
+    for name in ("config", "known_hosts", "id_ed25519"):
+        path = DIRECTOR_MEDIA_SSH / name
+        if (path.is_symlink() or not path.is_file() or path.stat().st_size == 0
+                or path.stat().st_mode & (stat.S_IRWXG | stat.S_IRWXO)):
+            raise RuntimeError(f"Missing or unsafe media SSH file: {name}")
+    return True
+
+
 def create_backend(name, image, env_path, output, host_port, *, restart=False):
     args = ["docker", "create", "--name", name, "--network", NETWORK, "--network-alias", "backend" if restart else name,
             "--env-file", str(env_path), "-v", f"{output}:/app/output", "-p", f"127.0.0.1:{host_port}:17177"]
     if knowledge_runtime(env_path):
         args += ["-v", f"{KNOWLEDGE_SECRETS}:{KNOWLEDGE_MOUNT}:ro"]
+    if director_media_runtime(env_path):
+        args += ["-v", f"{DIRECTOR_MEDIA_SSH}:{DIRECTOR_MEDIA_SSH_MOUNT}:ro"]
     if REVIEW_CONFIG.is_file():
         args += ["-v", f"{REVIEW_CONFIG}:{REVIEW_CONFIG_MOUNT}:ro", "-e", f"IFRAME_PLATFORM_REVIEW_CONFIG={REVIEW_CONFIG_MOUNT}"]
     if restart:

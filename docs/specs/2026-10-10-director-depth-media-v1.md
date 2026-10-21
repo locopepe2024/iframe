@@ -19,6 +19,35 @@ Acceptance: Blender 4.5.9 known-distance check, real remote API task output,
 transport failure/invalid artifact tests, existing depth owner tests. Production
 Core requires SSH connectivity and credentials; merging does not configure them.
 
+## Production connection closure (2026-10-21)
+
+Observed on iframe: the running backend has no DIRECTOR_DEPTH settings or SSH
+mount; the host has no media alias/key. Media still has Blender 4.5.9 and the
+previous CI account. This proves the current production connection is absent;
+it does not establish that a historical production connection never existed.
+
+Provision a separate `director-depth` media account without sudo, with an SSH
+key restricted from PTY and forwarding. Keep the private key only on iframe in
+`/srv/lumenx/runtime/director-depth-ssh` (0700), with config, pinned known_hosts
+and id_ed25519 (0600). Pin media's public host key obtained over the existing
+authenticated management connection, rather than accepting an unverified scan.
+
+The release owner validates this fixed directory and mounts it read-only at
+`/root/.ssh` only when DIRECTOR_DEPTH_MEDIA_SSH_TARGET is configured. Missing or
+unsafe credentials must stop container creation before changing production.
+Both candidate and production creation must retain the mount. Update both the
+managed release env and the active container configuration. No SSH credentials
+go into Git, output/media paths, image layers or browser responses.
+
+Acceptance: reproduce release creation dropping the mount with a failing test;
+verify read-only mounts, missing/private/symlink checks, and existing release
+tests. Validate a disposable candidate with the same running image against media
+before switching. Preserve the previous container and environment for rollback.
+Submit a synthetic known-distance plane through the authenticated production
+API, verify PNG/EXR/manifest, media hostname, Blender version, metric value and
+package/snapshot checksums. Check capability and owner isolation. Do not invoke
+local Blender. Source revision changes or active jobs block the runtime switch.
+
 ## Deployment configuration
 
 Set `DIRECTOR_DEPTH_MEDIA_SSH_TARGET` to an operator-managed SSH alias or
