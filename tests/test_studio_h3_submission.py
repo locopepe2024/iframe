@@ -113,22 +113,26 @@ def test_studio_sends_image_and_source_video_with_explicit_mode(studio):
     pipeline.process_video_task(script.id, current.id)
     body = uniart._post.call_args.args[2]
     assert body["model"] == "minimax-h3-vip"
-    assert body["mode"] == "reference2video"
+    assert body["mode"] == "omni_reference"
     assert body["duration"] == 6 and body["generate_audio"] is False
     assert body["content"][1:] == [
         {"type": "image_url", "role": "reference_image", "image_url": {"url": "https://cdn.example/product.jpg"}},
         {"type": "video_url", "role": "reference_video", "video_url": {"url": "https://cdn.example/source.mp4"}},
     ]
     assert current.provider_task_id == "provider-task"
+    assert current.provider_api_version == "v2"
+    assert uniart._post.call_args.args[0]["base_url"].endswith("/oran/h3/v2")
     assert current.provider_name == "uniart"
     assert current.status == "completed"
 
 
-def test_h3_seed_reaches_gateway_request(studio):
+def test_pending_h3_seed_rejected_without_gateway_request(studio):
     pipeline, script = studio
     current = task(script, seed=24680)
     pipeline.process_video_task(script.id, current.id)
-    assert uniart._post.call_args.args[2]["seed"] == 24680
+    uniart._post.assert_not_called()
+    assert current.status == "failed"
+    assert "seed" in current.error
 
 
 @pytest.mark.parametrize("model,duration,expected", [
@@ -225,12 +229,14 @@ def test_audio_reference_reaches_gateway(studio):
         "type": "audio_url", "role": "reference_audio", "audio_url": {"url": "https://cdn.example/sound.wav"}}
 
 
-def test_saved_provider_task_resumes_without_another_post(studio):
+@pytest.mark.parametrize("version,path", [(None, "/v1"), ("v2", "/oran/h3/v2")])
+def test_saved_provider_task_resumes_without_another_post(studio, version, path):
     pipeline, script = studio
-    current = task(script, provider_task_id="existing", provider_name="uniart")
+    current = task(script, provider_task_id="existing", provider_name="uniart", provider_api_version=version)
     pipeline.process_video_task(script.id, current.id)
     uniart._post.assert_not_called()
     assert uniart._poll.call_args.args[1] == "existing"
+    assert uniart._base_url(uniart._poll.call_args.args[0]).endswith(path)
     assert current.status == "completed"
 
 
@@ -239,6 +245,7 @@ def test_acceptance_saved_before_poll_failure(studio):
     current = task(script)
     def fail_poll(*args):
         assert current.provider_task_id == "provider-task"
+        assert current.provider_api_version == "v2"
         assert pipeline._save_data.call_count >= 2
         raise RuntimeError("poll unavailable")
     uniart._poll.side_effect = fail_poll
@@ -246,3 +253,11 @@ def test_acceptance_saved_before_poll_failure(studio):
     assert current.status == "failed"
     assert "poll unavailable" in current.error
     assert current.provider_task_id == "provider-task"
+
+
+def test_h3_seed_rejected_before_task_creation(studio):
+    pipeline, script = studio
+    with pytest.raises(ValueError, match="seed"):
+        pipeline.create_video_task(script.id, "", "move", model="uniart/minimax-h3-vip",
+                                   generation_mode="t2v", seed=123)
+    assert not script.video_tasks

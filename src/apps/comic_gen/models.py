@@ -461,6 +461,7 @@ class VideoTask(BaseModel):
     # provider_name labels the platform so the UI can render "dashscope: 1ce3..."
     # rather than guessing from model_name.
     provider_name: Optional[str] = Field(None, description="Which provider handled this task (dashscope / kling / vidu / pixverse / etc.)")
+    provider_api_version: Optional[str] = Field(None, description="Accepted H3 API version; absent on legacy V1 tasks")
     provider_task_id: Optional[str] = Field(None, description="Provider-side task ID; pasteable into the provider's console for diagnosis")
     provider_request_id: Optional[str] = Field(None, description="Provider-side request ID for support tickets (optional — not all providers return one)")
     # User annotations on this take (抽卡 review). Storyboard's candidates

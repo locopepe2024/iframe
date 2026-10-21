@@ -7291,6 +7291,10 @@ class ComicGenPipeline(StudioOwnerMixin):
         
         task_id = str(uuid.uuid4())
         
+        if model and model.startswith("uniart/minimax-h3"):
+            if seed is not None:
+                raise ValueError("H3 V2 does not support seed")
+
         # If R2V mode is selected, use the appropriate R2V model
         from ...models.nsfw_new_one import WAN_IDS
         is_nsfw_wan = model in WAN_IDS
@@ -8684,6 +8688,8 @@ class ComicGenPipeline(StudioOwnerMixin):
                 def save_provider_task(provider_task_id):
                     task.provider_name = "uniart"
                     task.provider_task_id = provider_task_id
+                    if "minimax-h3" in model_name_lower:
+                        task.provider_api_version = "v2"
                     self._save_data()
 
                 reference_images = list(task.reference_image_urls)
@@ -8712,6 +8718,7 @@ class ComicGenPipeline(StudioOwnerMixin):
                     seed=task.seed,
                     on_task_submitted=save_provider_task,
                     resume_task_id=task.provider_task_id if task.provider_name == "uniart" else None,
+                    h3_api_version=(task.provider_api_version or "v1") if task.provider_task_id else "v2",
                 )
             elif use_mulerouter:
                 if self._mulerouter_video_model is None:

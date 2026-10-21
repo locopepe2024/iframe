@@ -69,6 +69,7 @@ models:
       reference_videos: {max: 3}
       reference_audios: {max: 3}
     params:
+      audio: true
       resolution: {options: [720p, 2k], default: 2k}
       ratio: {options: ["16:9", "9:16", "1:1", "4:3", "3:4"], default: "16:9"}
 

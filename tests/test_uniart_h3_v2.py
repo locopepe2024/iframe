@@ -17,7 +17,7 @@ def test_h3_v2_modes_use_dedicated_create_and_query(monkeypatch, tmp_path, mode,
     monkeypatch.setattr(uniart, '_download_result', Mock())
     uniart.UniArtVideoModel({'base_url': 'https://gateway.test/v1', 'api_key': 'test'}).generate(
         '<Picture 1> animate' if roles else 'animate', str(tmp_path / 'v.mp4'),
-        model='minimax-h3-discount', h3_api_version='v2', mode=mode, duration=4, resolution='720p', aspect_ratio='16:9', **media)
+        model='minimax-h3-discount', mode=mode, duration=4, resolution='720p', aspect_ratio='16:9', **media)
     config, path, body = post.call_args.args
     assert config['base_url'] + path == 'https://gateway.test/oran/h3/v2/videos'
     assert body['model'] == 'minimax-h3-discount'
@@ -28,7 +28,7 @@ def test_h3_v2_modes_use_dedicated_create_and_query(monkeypatch, tmp_path, mode,
     assert poll.call_args.args[0]['base_url'] == 'https://gateway.test/oran/h3/v2'
 
 
-@pytest.mark.parametrize('params', [{'seed': 0}, {'generate_audio': False}, {'watermark': True}, {'duration': 3}, {'duration': 4.5}, {'resolution': '1080p'}])
+@pytest.mark.parametrize('params', [{'seed': 0}, {'watermark': True}, {'duration': 3}, {'duration': 4.5}, {'resolution': '1080p'}])
 def test_h3_v2_rejects_unsupported_parameters_before_submission(monkeypatch, tmp_path, params):
     post = Mock()
     monkeypatch.setattr(uniart, '_post', post)
@@ -141,4 +141,30 @@ def test_v2_rejects_excessive_or_mixed_frame_references(monkeypatch, tmp_path, m
     with pytest.raises(ValueError):
         uniart.UniArtVideoModel({}).generate('move', str(tmp_path / 'v.mp4'),
             model='minimax-h3-discount', h3_api_version='v2', duration=4, resolution='720p', **media)
+    post.assert_not_called()
+
+
+@pytest.mark.parametrize('enabled', [False, True])
+@pytest.mark.parametrize('mode,media', [
+    ('text2video', {}),
+    ('image2video', {'img_url': 'https://cdn.test/a.png'}),
+    ('reference2video', {'ref_image_urls': ['https://cdn.test/a.png']}),
+    ('frames2video', {'first_frame': 'https://cdn.test/a.png', 'last_frame': 'https://cdn.test/b.png'}),
+])
+def test_v2_preserves_explicit_audio_switch(monkeypatch, tmp_path, enabled, mode, media):
+    post = Mock(return_value={'id': 'accepted'})
+    monkeypatch.setattr(uniart, '_post', post)
+    monkeypatch.setattr(uniart, '_poll', Mock(return_value={}))
+    monkeypatch.setattr(uniart, '_download_result', Mock())
+    uniart.UniArtVideoModel({}).generate('move', str(tmp_path / 'v.mp4'), model='minimax-h3-vip',
+        mode=mode, duration=4, resolution='720p', generate_audio=enabled, **media)
+    assert post.call_args.args[2]['generate_audio'] is enabled
+
+
+def test_new_h3_tasks_cannot_opt_into_v1(monkeypatch, tmp_path):
+    post = Mock()
+    monkeypatch.setattr(uniart, '_post', post)
+    with pytest.raises(ValueError, match='recovery-only'):
+        uniart.UniArtVideoModel({}).generate('move', str(tmp_path / 'v.mp4'),
+            model='minimax-h3-vip', h3_api_version='v1')
     post.assert_not_called()
