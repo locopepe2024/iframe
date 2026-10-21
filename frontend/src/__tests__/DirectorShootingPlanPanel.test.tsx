@@ -344,7 +344,7 @@ it("regenerates a new unsaved plan from the current confirmed Director and can r
 
     expect(await screen.findByText("No confirmed shooting plan matches Director v6.")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Generate plan draft" }));
-    await waitFor(() => expect(generate).toHaveBeenCalledWith("film", expect.any(Function)));
+    await waitFor(() => expect(generate).toHaveBeenCalledWith("film", expect.any(Function), []));
     expect(await screen.findByText(/Unsaved plan draft generated from confirmed Director v6.*replace server draft r5/i)).toBeInTheDocument();
     expect(screen.queryByText(/Saved shooting-plan draft r5 is based on confirmed Director v4/i)).not.toBeInTheDocument();
     expect(save).not.toHaveBeenCalled();
@@ -485,3 +485,5 @@ it("treats generated lighting wording as inherited and asks once when an overrid
     await waitFor(() => expect(confirm).toHaveBeenCalled());
     expect(confirmPrompt).toHaveBeenCalledTimes(1);
 });
+
+vi.mock("@/lib/directorSkills", () => ({ useDirectorSkills: () => ({ catalog: [], selected: [], loading: false, saving: false, error: "", canRun: true, update: vi.fn(), retry: vi.fn() }) }));

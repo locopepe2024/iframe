@@ -18,6 +18,8 @@ import {
 import { useTranslations } from "next-intl";
 import axios from "axios";
 import { api } from "@/lib/api";
+import { useDirectorSkills } from "@/lib/directorSkills";
+import DirectorSkillsSelector from "@/components/modules/DirectorSkillsSelector";
 import type {
     DirectorPlanBeat,
     DirectorPlanCastBinding,
@@ -188,6 +190,7 @@ export default function DirectorShootingPlanPanel({ selectedDirector = null, his
     const t = useTranslations("artDirection.directorPlan");
     const { currentProject } = useProjectStore();
     const projectId = currentProject?.id;
+    const creativeSkills = useDirectorSkills(projectId, "shooting_plan");
     const confirmedProfile = currentProject?.art_direction?.director_profile;
     const viewedDirector = selectedDirector ?? confirmedProfile;
     const examples = Array.isArray(confirmedProfile?.sample_plan)
@@ -354,6 +357,7 @@ export default function DirectorShootingPlanPanel({ selectedDirector = null, his
     }));
 
     const generate = async () => {
+        if (!creativeSkills.canRun) return;
         if (!projectId) return;
         setAction("generate");
         setError("");
@@ -363,7 +367,7 @@ export default function DirectorShootingPlanPanel({ selectedDirector = null, his
             const generated = await api.generateDirectorShootingPlan(projectId, job => {
                 setJobStatus(job.status);
                 setJobProgress(job.progress ?? null);
-            });
+            }, creativeSkills.selected);
             setPlan(generated);
             setSavedPlan(null);
             setExpandedShots(new Set());
@@ -487,7 +491,8 @@ export default function DirectorShootingPlanPanel({ selectedDirector = null, his
                         <p className="mt-1 text-sm text-text-secondary">{t("selectedSource", { revision: viewedDirectorRevision })}</p>
                     </div>
                     {!historical && <div className="flex flex-wrap gap-2">
-                        <button type="button" onClick={generate} disabled={action !== null || dirty || Boolean(serverState?.readiness_error)} className="inline-flex min-h-10 items-center gap-2 rounded-md bg-primary px-3 py-2 text-sm text-white disabled:opacity-50"><Sparkles size={16} />{t("generate")}</button>
+                        <DirectorSkillsSelector state={creativeSkills} disabled={action !== null} />
+                        <button type="button" onClick={generate} disabled={action !== null || dirty || !creativeSkills.canRun || Boolean(serverState?.readiness_error)} className="inline-flex min-h-10 items-center gap-2 rounded-md bg-primary px-3 py-2 text-sm text-white disabled:opacity-50"><Sparkles size={16} />{t("generate")}</button>
                     </div>}
                 </div>
                 {error && <p role="alert" className="text-sm text-red-300">{error}</p>}
@@ -554,7 +559,7 @@ export default function DirectorShootingPlanPanel({ selectedDirector = null, his
                     <button
                         type="button"
                         onClick={generate}
-                        disabled={locked || dirty || Boolean(serverState?.readiness_error)}
+                        disabled={locked || dirty || !creativeSkills.canRun || Boolean(serverState?.readiness_error)}
                         className="inline-flex min-h-10 items-center gap-2 rounded-md bg-primary px-3 py-2 text-sm font-medium text-white transition hover:brightness-110 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-background disabled:cursor-not-allowed disabled:opacity-50"
                     >
                         {action === "generate" ? <Loader2 size={16} className="animate-spin" aria-hidden="true" /> : <Sparkles size={16} aria-hidden="true" />}
@@ -563,6 +568,7 @@ export default function DirectorShootingPlanPanel({ selectedDirector = null, his
                 </div>
             </header>
 
+            <DirectorSkillsSelector state={creativeSkills} disabled={action !== null} />
             {action === "load" && <p className="flex items-center gap-2 text-sm text-text-secondary" role="status"><Loader2 size={15} className="animate-spin" aria-hidden="true" />{t("loading")}</p>}
             {error && <div className="flex items-start gap-2 rounded-md border border-red-400/30 bg-red-400/10 p-3 text-sm text-red-200" role="alert"><AlertCircle size={16} className="mt-0.5 shrink-0" aria-hidden="true" />{error}</div>}
             {notice && <div className="flex items-start gap-2 rounded-md border border-emerald-400/30 bg-emerald-400/10 p-3 text-sm text-emerald-100" role="status"><CheckCircle2 size={16} className="mt-0.5 shrink-0" aria-hidden="true" />{notice}</div>}

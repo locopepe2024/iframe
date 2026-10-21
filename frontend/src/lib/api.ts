@@ -1568,8 +1568,8 @@ export const api = {
         return res.data;
     },
 
-    analyzeDirectorProfile: (scriptId: string, onStatus?: DirectorProfileJobStatusListener) =>
-        analyzeDirectorProfile(API_URL, scriptId, onStatus),
+    analyzeDirectorProfile: (scriptId: string, onStatus?: DirectorProfileJobStatusListener, skills: import("./directorSkills").CreativeSkillSelection[] = []) =>
+        analyzeDirectorProfile(API_URL, scriptId, onStatus, skills),
 
     refineDirectorProfile: (
         scriptId: string,
@@ -1579,7 +1579,7 @@ export const api = {
     ) => refineDirectorProfile(API_URL, scriptId, draft, instructions, onStatus),
 
     getSeriesDirectorProfile: async (seriesId: string) => getSeriesDirectorProfile(API_URL, seriesId),
-    analyzeSeriesDirectorProfile: (seriesId: string, onStatus?: (status: string) => void) => analyzeSeriesDirectorProfile(API_URL, seriesId, onStatus),
+    analyzeSeriesDirectorProfile: (seriesId: string, onStatus?: (status: string) => void, skills: import("./directorSkills").CreativeSkillSelection[] = []) => analyzeSeriesDirectorProfile(API_URL, seriesId, onStatus, skills),
     saveSeriesDirectorDraft: (seriesId: string, draft: Record<string, unknown>, draftName?: string) => saveSeriesDirectorDraft(API_URL, seriesId, draft, draftName),
     saveSeriesSourceContext: (seriesId: string, text: string) => saveSeriesSourceContext(API_URL, seriesId, text),
     confirmSeriesDirectorProfile: (seriesId: string) => confirmSeriesDirectorProfile(API_URL, seriesId),
@@ -1624,8 +1624,8 @@ export const api = {
         return res.data;
     },
 
-    generateDirectorShootingPlan: (scriptId: string, onStatus?: DirectorShootingPlanJobListener) =>
-        generateDirectorShootingPlan(API_URL, scriptId, onStatus),
+    generateDirectorShootingPlan: (scriptId: string, onStatus?: DirectorShootingPlanJobListener, skills: import("./directorSkills").CreativeSkillSelection[] = []) =>
+        generateDirectorShootingPlan(API_URL, scriptId, onStatus, skills),
 
     getDirectorShootingPlan: (scriptId: string) =>
         getDirectorShootingPlan(API_URL, scriptId),

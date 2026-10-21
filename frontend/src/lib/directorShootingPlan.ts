@@ -233,9 +233,10 @@ async function runJob(
     baseUrl: string,
     projectId: string,
     onStatus?: DirectorShootingPlanJobListener,
+    skills: import("./directorSkills").CreativeSkillSelection[] = [],
 ): Promise<DirectorShootingPlan> {
     const base = `${baseUrl}/projects/${projectId}/director-shooting-plan-jobs`;
-    let job = (await axios.post<DirectorShootingPlanJob>(base, {}, { timeout: 15000 })).data;
+    let job = (await axios.post<DirectorShootingPlanJob>(base, { skills }, { timeout: 15000 })).data;
     if (!job?.id) throw new Error("Invalid Director shooting-plan task response");
     onStatus?.(job);
     let failures = 0;
@@ -265,8 +266,9 @@ export function generateDirectorShootingPlan(
     baseUrl: string,
     projectId: string,
     onStatus?: DirectorShootingPlanJobListener,
+    skills: import("./directorSkills").CreativeSkillSelection[] = [],
 ) {
-    return runJob(baseUrl, projectId, onStatus);
+    return runJob(baseUrl, projectId, onStatus, skills);
 }
 
 export async function getDirectorShootingPlan(baseUrl: string, projectId: string) {

@@ -87,7 +87,7 @@ it("does not report a submit timeout as a model analysis failure", async () => {
         .rejects.toThrow("任务提交连接超时");
     expect(axios.post).toHaveBeenCalledWith(
         "/api/projects/film/director-profile-jobs",
-        {},
+        { skills: [] },
         { timeout: 60000 },
     );
 });

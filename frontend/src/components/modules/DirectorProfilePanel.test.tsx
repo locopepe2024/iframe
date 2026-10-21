@@ -27,6 +27,7 @@ beforeEach(() => {
         project_id: "film", draft_revision: 0, source_revision: null, draft: null, updated_at: null,
     });
     vi.spyOn(api, "listDirectorProfileRevisions").mockResolvedValue([]);
+    vi.spyOn(api, "getScriptFactLedgerDraft").mockResolvedValue({ project_id: "film", source_revision: 1, draft_revision: 0, facts: [] } as never);
     vi.spyOn(api, "listScriptFactLedgerRevisions").mockResolvedValue([]);
     vi.spyOn(api, "saveDirectorProfileDraft").mockImplementation(async (_projectId, sourceRevision, expectedDraftRevision, draft) => ({
         project_id: "film",
@@ -128,7 +129,7 @@ it("loads the story map's pinned fact revision and displays exact source evidenc
     await waitFor(() => expect(screen.getByLabelText("Locations")).toBeInTheDocument());
     fireEvent.click(screen.getByRole("button", { name: "Editor view" }));
     fireEvent.click(await screen.findByRole("button", { name: /First/ }));
-    fireEvent.click(await screen.findByText(/Script evidence/));
+    await screen.findByRole("heading", { name: "Script fact sources" });
 
     await waitFor(() => expect(getLedger).toHaveBeenCalledWith("film", 1, 2, 0, 100));
     expect(await screen.findByText(/They meet in the university library/)).toBeInTheDocument();
@@ -227,7 +228,10 @@ it("restores a browser draft when the previous server save failed", async () => 
         </NextIntlClientProvider>,
     );
 
+    await screen.findByLabelText("geography");
+    fireEvent.click(screen.getByRole("button", { name: /Director questions \/ open decisions/ }));
     expect(await screen.findByDisplayValue("2014 or 2020?")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /Director intent/ }));
     expect(screen.getByDisplayValue("Keep the haircut by era")).toBeInTheDocument();
     expect(screen.getAllByRole("button", { name: "Save draft" })[0]).toBeEnabled();
 });
@@ -245,6 +249,7 @@ it("retries a draft save against the latest server revision without losing edits
         }));
     render(<NextIntlClientProvider locale="en" messages={messages}><DirectorProfilePanel /></NextIntlClientProvider>);
     await screen.findByText("Director draft save r4 (not confirmed)");
+    fireEvent.click(screen.getByRole("button", { name: /Director questions \/ open decisions/ }));
     fireEvent.click(screen.getAllByRole("button", { name: "Add item" })[0]);
     fireEvent.click(screen.getAllByRole("button", { name: "Save draft" })[0]);
     await waitFor(() => expect(save).toHaveBeenCalledTimes(2));
@@ -372,3 +377,5 @@ it("sends only the current revision instruction after prior changes are merged",
         expect.any(Function),
     ));
 });
+
+vi.mock("@/lib/directorSkills", () => ({ useDirectorSkills: () => ({ catalog: [], selected: [], loading: false, saving: false, error: "", canRun: true, update: vi.fn(), retry: vi.fn() }) }));
