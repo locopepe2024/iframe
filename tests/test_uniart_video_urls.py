@@ -34,7 +34,7 @@ def test_large_video_image_references_are_urls_not_inline_bytes(tmp_path, monkey
         'r2v': {'ref_image_urls': [str(image), str(image)]},
         'v2v': {'ref_video_urls': [str(image), str(image)]},
     }[mode]
-    uniart.UniArtVideoModel({}).generate('walk', str(tmp_path / 'result.mp4'), model='minimax-h3', **kwargs)
+    uniart.UniArtVideoModel({}).generate('walk', str(tmp_path / 'result.mp4'), model='minimax-h3', duration=4, resolution='720p', **kwargs)
 
 
 def test_video_material_storage_failure_prevents_submission(monkeypatch, tmp_path):
@@ -78,12 +78,13 @@ def test_h3_ref2v_emits_video_reference_content_after_ordered_images(monkeypatch
         str(tmp_path / 'result.mp4'),
         model='minimax-h3-vip',
         mode='reference2video',
+        duration=4, resolution='720p',
         ref_image_urls=[str(image)],
         ref_video_urls=[str(video)],
     )
 
     assert captured['endpoint'] == '/videos'
-    assert captured['body']['mode'] == 'reference2video'
+    assert captured['body']['mode'] == 'omni_reference'
     assert captured['body']['content'][1]['type'] == 'image_url'
     assert captured['body']['content'][1]['role'] == 'reference_image'
     assert captured['body']['content'][2]['type'] == 'video_url'

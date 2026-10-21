@@ -823,6 +823,8 @@ class RecreationService:
                           soundscape="", generation_durations=None, accept_cost=False, seed=None):
         if not accept_cost:
             raise HTTPException(422, "Paid video generation requires explicit cost acceptance")
+        if seed is not None:
+            raise HTTPException(422, "H3 V2 does not support seed")
         plan = self.generation_plan(project_id, revision, model, audio_policy, soundscape, generation_durations)
         if not plan["ready"]:
             reasons = "; ".join(
@@ -987,7 +989,7 @@ class RecreationService:
                 with self.db() as db:
                     current = self._generation_task(db, task_id)
                     if current["status"] == "processing":
-                        current.update(provider_task_id=provider_task_id, updated_at=time.time())
+                        current.update(provider_task_id=provider_task_id, provider_api_version="v2", updated_at=time.time())
                         db.execute("UPDATE recreation_generation_tasks SET data=? WHERE task_id=? AND owner=?",
                                    (json.dumps(current), task_id, self.user.owner_profile_id))
 
@@ -995,6 +997,7 @@ class RecreationService:
                 "model": task["model"], "mode": "reference2video", "duration": task["duration"],
                 "resolution": task["resolution"], "ratio": task.get("ratio"),
                 "generate_audio": task["generate_audio"],
+                "h3_api_version": (task.get("provider_api_version") or "v1") if task.get("provider_task_id") else "v2",
                 "on_task_submitted": save_provider_task,
             }
             if task.get("seed") is not None:

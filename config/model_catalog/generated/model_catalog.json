@@ -4036,6 +4036,7 @@
         }
       },
       "params": {
+        "audio": true,
         "ratio": {
           "default": "16:9",
           "options": [
@@ -7675,6 +7676,7 @@
       "mode": "i2v",
       "model_line_id": "uniart/uniart/minimax-h3-vip",
       "params": {
+        "audio": true,
         "ratio": {
           "default": "16:9",
           "options": [

@@ -525,7 +525,7 @@ class UniArtVideoModel(VideoGenModel):
         model = (kwargs.get("model") or kwargs.get("model_name") or "seedance-2.5-vip").removeprefix("uniart/")
         is_h3 = model.startswith("minimax-h3") and model != "minimax-h3-ir"
         # Missing version on a saved task denotes the pre-migration V1 API.
-        version = kwargs.get("h3_api_version", "v1")
+        version = kwargs.get("h3_api_version", "v1" if kwargs.get("resume_task_id") else "v2")
         if is_h3 and version not in {"v1", "v2"}:
             raise ValueError("Unknown persisted H3 API version")
         config = self.config
@@ -536,7 +536,9 @@ class UniArtVideoModel(VideoGenModel):
             result = _poll(config, kwargs["resume_task_id"])
             _download_result(config, result, "video", output_path)
             return output_path, time.time() - started
-        if is_h3 and version == "v2":
+        if is_h3:
+            if version != "v2":
+                raise ValueError("New H3 tasks require V2; V1 is recovery-only")
             return self._generate_h3_v2(config, model, prompt, output_path, started, **kwargs)
         body: Dict[str, Any] = {"model": model}
         for key in ("mode", "duration", "resolution", "size", "ratio", "watermark", "generate_audio", "seed"):
@@ -600,8 +602,6 @@ class UniArtVideoModel(VideoGenModel):
             raise ValueError("H3 V2 supports 720p or 2k resolution")
         if kwargs.get("seed") is not None or kwargs.get("watermark"):
             raise ValueError("H3 V2 does not support seed or watermark")
-        if kwargs.get("generate_audio") is False:
-            raise ValueError("H3 V2 audio cannot be disabled")
         mode = kwargs.get("mode")
         mode = {"text2video": "text_to_video", "reference2video": "omni_reference", "frames2video": "first_last_frame"}.get(mode, mode)
         first, last = kwargs.get("first_frame"), kwargs.get("last_frame")
@@ -642,6 +642,8 @@ class UniArtVideoModel(VideoGenModel):
             if ref:
                 content.append({"type": "image_url", "role": role, "image_url": {"url": _media(ref)}})
         body = {"model": api_model, "mode": mode, "content": content, "duration": duration, "resolution": resolution, "ratio": ratio}
+        if kwargs.get("generate_audio") is not None:
+            body["generate_audio"] = kwargs["generate_audio"]
         task = _post(config, "/videos", body)
         task_id = task.get("task_id") or task.get("id")
         if not task_id:

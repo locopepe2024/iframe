@@ -743,6 +743,7 @@ def test_generation_submission_persists_provider_task_and_indexes_video(service,
         assert kwargs['duration'] == 5
         assert kwargs['resolution'] == submitted['tasks'][0]['resolution']
         assert kwargs['generate_audio'] is False
+        assert kwargs['h3_api_version'] == 'v2'
         assert len(kwargs['ref_image_urls']) == 2
         assert kwargs['ref_video_urls'] == [str((Path('output') / p['source_url']).resolve())]
         kwargs['on_task_submitted']('provider-task-1')
@@ -754,6 +755,7 @@ def test_generation_submission_persists_provider_task_and_indexes_video(service,
     done = service.generation_task(task_id)
     assert done['status'] == 'completed', done
     assert done['provider_task_id'] == 'provider-task-1'
+    assert done['provider_api_version'] == 'v2'
     assert done['output_media']['kind'] == 'generated_video'
     assert service.search_media(project_id=p['id'], kind='generated_video')['items']
 
@@ -803,7 +805,8 @@ def test_generation_worker_can_use_signed_disk_media_url(service, video, monkeyp
     assert service.generation_task(submitted['tasks'][0]['task_id'])['status'] == 'completed'
 
 
-def test_generation_worker_recovery_resumes_only_with_saved_provider_id(service, video, monkeypatch):
+@pytest.mark.parametrize("version", [None, "v2"])
+def test_generation_worker_recovery_resumes_only_with_saved_provider_id(service, video, monkeypatch, version):
     project = completed(service, video)
     project = service.confirm(project['id'], project['revision'], project['analysis_id'], [])
     reference = service.upload_image(project['id'], image_stream(), 'frame.png', 'reference_image')
@@ -815,12 +818,13 @@ def test_generation_worker_recovery_resumes_only_with_saved_provider_id(service,
     task_id = submitted['tasks'][0]['task_id']
     with service.db() as db:
         task = service._generation_task(db, task_id)
-        task.update(status='processing', provider_task_id='provider-recovered', updated_at=time.time())
+        task.update(status='processing', provider_task_id='provider-recovered', provider_api_version=version, updated_at=time.time())
         db.execute('UPDATE recreation_generation_tasks SET data=? WHERE task_id=? AND owner=?',
                    (json.dumps(task), task_id, service.user.owner_profile_id))
 
     def generate(_self, _prompt, output_path, **kwargs):
         assert kwargs['resume_task_id'] == 'provider-recovered'
+        assert kwargs['h3_api_version'] == (version or 'v1')
         assert kwargs['model'] == 'uniart/minimax-h3-vip'
         Path(output_path).write_bytes(b'recovered-mp4')
         return output_path, 0.1
@@ -1095,3 +1099,13 @@ def test_keyframe_failure_creates_no_media(service, video, monkeypatch):
     assert failed['status'] == 'failed' and failed['error'] == 'provider failed'
     assert failed['output_media'] is None
     assert service.search_media(project_id=p['id'], kind='reference_image')['items'] == []
+
+
+def test_h3_seed_rejected_before_recreation_plan(service, monkeypatch):
+    plan = Mock()
+    monkeypatch.setattr(service, "generation_plan", plan)
+    with pytest.raises(HTTPException) as exc:
+        service.submit_generation("unused", 0, accept_cost=True, seed=0)
+    assert exc.value.status_code == 422
+    assert "seed" in exc.value.detail
+    plan.assert_not_called()
