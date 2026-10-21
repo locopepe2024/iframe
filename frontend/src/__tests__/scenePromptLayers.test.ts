@@ -65,3 +65,9 @@ it("composes autumn evening skylight without injecting a golden hour recipe", ()
     } })).toBe("光影：季节：秋天；时段：傍晚；光源：来自天空的环境光照明；光色关系：冷蓝色照明，保留物体固有色的辨识度");
     expect(compileScenePromptLayers({ lighting: { time_of_day: pick("time_of_day", "傍晚") } })).toBe("光影：时段：傍晚");
 });
+
+
+it("classifies oblique light directions in the same scene coordinate frame", () => {
+    expect(sceneLightDirectionConflict({ lighting: { direction: "左后侧来光" } }, ["side"])).toBe(true);
+    expect(sceneLightDirectionConflict({ lighting: { direction: "左后侧来光" } }, ["front"])).toBe(false);
+});

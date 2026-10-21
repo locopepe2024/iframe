@@ -4,6 +4,15 @@ import type { ScenePromptLayers } from "./scenePromptLayers";
 export const SCENE_ATMOSPHERE_TEMPLATES: {
     id: string; title: string; keywords?: string; color: string; brightness: number; settings: ScenePromptLayers;
 }[] = [
+    { id: "high-key", title: "高调光", keywords: "High key lighting 明亮 亮调", color: "#f1f2ee", brightness: 70, settings: { lighting: {
+        mood: "整体明亮，亮调区域占主导，保留材质与空间层次", shadow: "暗部适度提亮，保留接触阴影与立体感，高光不过曝",
+    } } },
+    { id: "low-key", title: "低调光", keywords: "Low key lighting 暗调 深沉", color: "#deded8", brightness: 30, settings: { lighting: {
+        mood: "暗调区域占主导，亮部有限而集中", shadow: "保留深沉阴影及必要的暗部细节",
+    } } },
+    { id: "chiaroscuro", title: "明暗对照", keywords: "Chiaroscuro 戏剧性 集中光 深邃阴影", color: "#e2d5bd", brightness: 45, settings: { lighting: {
+        contrast: "集中亮部与深沉暗部形成强烈明暗对照", shadow: "以清楚的明暗交界塑造主体体积，保留受光面的材质细节",
+    } } },
     { id: "blue-orange-mist", title: "蓝橙暮光·薄雾", keywords: "黄昏 蓝调时刻 冰冷 蓝色 大气光 地平线 橙色余晖 薄雾 低饱和 写实", color: "#8faed1", brightness: 35, settings: { lighting: {
         time_of_day: "太阳落至地平线以下后的暮光时段", source: "来自天空的环境光照明",
         color: "冰冷的蓝色天空环境光与地平线上微弱的橙色余晖交融，整体低饱和",

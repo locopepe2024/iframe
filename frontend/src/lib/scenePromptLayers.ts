@@ -34,6 +34,7 @@ export const SCENE_LAYER_FIELDS: Record<SceneLayer, readonly SceneLayerField[]> 
         ] },
         { key: "direction", label: "方向", options: [
             ["正面", "正面来光"], ["左侧", "左侧来光"], ["右侧", "右侧来光"],
+            ["左前侧", "左前侧来光"], ["右前侧", "右前侧来光"], ["左后侧", "左后侧来光"], ["右后侧", "右后侧来光"],
             ["背面", "背面来光"], ["顶部", "顶部来光"], ["底部", "底部来光"],
         ] },
         { key: "quality", label: "软硬", options: [
@@ -41,7 +42,7 @@ export const SCENE_LAYER_FIELDS: Record<SceneLayer, readonly SceneLayerField[]> 
         ] },
         { key: "fill", label: "补光", options: [
             ["无补光", "不额外补光，保留暗部"], ["弱反射补光", "以弱反射光轻微提亮暗部"], ["均匀补光", "补光使暗部细节清楚可辨"], ["负补光", "遮挡环境反射光，加深暗部"],
-            ["地面反射", "以地面反射光轻微提亮暗部，亮度弱于主光"], ["墙面反射", "以墙面反射光轻微提亮暗部，亮度弱于主光"],
+            ["下方反射补光", "以下方反射光轻微提亮主体底部暗面，亮度弱于主光"], ["地面反射", "以地面反射光轻微提亮暗部，亮度弱于主光"], ["墙面反射", "以墙面反射光轻微提亮暗部，亮度弱于主光"],
         ] },
         { key: "contrast", label: "反差", options: [
             ["低反差", "低反差，明暗差异较小"], ["中等反差", "中等反差，亮部暗部均保留细节"], ["高反差", "高反差，亮暗区域分明"],
@@ -134,7 +135,7 @@ export function sceneLightDirectionConflict(layers: ScenePromptLayers, forbidden
         const { azimuth: a, elevation: e } = light.angles;
         direction = e >= 60 ? "top" : e <= -60 ? "bottom" : Math.abs(a) <= 22.5 ? "front" : Math.abs(a) >= 157.5 ? "back" : "side";
     } else {
-        direction = ({ "正面来光": "front", "背面来光": "back", "左侧来光": "side", "右侧来光": "side", "顶部来光": "top", "底部来光": "bottom" } as Record<string, string>)[light.direction || ""] || "";
+        direction = ({ "正面来光": "front", "背面来光": "back", "左侧来光": "side", "右侧来光": "side", "左前侧来光": "side", "右前侧来光": "side", "左后侧来光": "side", "右后侧来光": "side", "顶部来光": "top", "底部来光": "bottom" } as Record<string, string>)[light.direction || ""] || "";
     }
     return Boolean(direction && forbidden.includes(direction));
 }

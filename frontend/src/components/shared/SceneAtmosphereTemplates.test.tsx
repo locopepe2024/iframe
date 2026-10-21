@@ -33,3 +33,18 @@ it("keeps mist, warm highlights and clear air in explicitly selected recipes", (
     fireEvent.click(screen.getByRole("button", { name: "丁达尔冷光束" }));
     expect(apply.mock.calls[3][0].settings.lighting.air).toContain("光束路径可见");
 });
+
+it("offers tonal recipes without changing skin, camera or scene contents", () => {
+    const apply = vi.fn();
+    render(<SceneAtmosphereTemplates onApply={apply} />);
+    fireEvent.click(screen.getByText("Prompt 模板 · 氛围"));
+    for (const name of ["高调光", "低调光", "明暗对照"]) {
+        fireEvent.click(screen.getByRole("button", { name }));
+        const settings = apply.mock.lastCall![0].settings;
+        expect(settings.camera).toBeUndefined();
+        expect(settings.composition).toBeUndefined();
+        expect(compileScenePromptLayers(settings)).not.toMatch(/磨皮|瓷肌|脸型|虚化|背景|8K|--ar/);
+    }
+    expect(apply.mock.calls[0][0].settings.lighting.contrast).toBeUndefined();
+    expect(apply.mock.calls[1][0].settings.lighting.contrast).toBeUndefined();
+});
