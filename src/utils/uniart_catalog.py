@@ -68,7 +68,8 @@ def normalize_uniart_model(item: Dict[str, Any]) -> Dict[str, Any] | None:
     # the image API family.
     if model_id.lower().startswith("gpt-image-"):
         capabilities.extend(("t2i", "i2i"))
-    if audio.get("supports_generation") or audio.get("supports_tts") or audio.get("supports_speech"):
+    if (audio.get("supports_generation") or audio.get("supports_tts") or audio.get("supports_speech")
+            or "audio-speech" in (item.get("supported_endpoint_types") or [])):
         capabilities.append("audio")
     # Older UniArt payloads identify these MiniMax audio SKUs only by ID.
     if model_id.lower().startswith("minimax") and any(token in model_id.lower() for token in ("speed-hd", "speed_hd", "-turbo", "_turbo")):

@@ -4876,7 +4876,11 @@ def update_voice_params(script_id: str, char_id: str, request: UpdateVoiceParams
 @app.get("/voices")
 def get_voices():
     """Returns list of available voices."""
-    return pipeline.audio_generator.get_available_voices()
+    from ...audio.uniart_tts import UniArtTTSError
+    try:
+        return pipeline.audio_generator.get_available_voices()
+    except UniArtTTSError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=str(exc)) from None
 
 
 class VoicePreviewRequest(BaseModel):
@@ -4896,61 +4900,18 @@ class VoicePreviewRequest(BaseModel):
 
 @app.post("/voice/preview")
 def voice_preview(request: VoicePreviewRequest):
-    """Generate or fetch cached preview audio for a voice.
-
-    Cache key = md5(voice_id|text|speed|pitch|volume|instructions). First
-    call triggers TTSProcessor.synthesize() and writes to
-    output/cache/voice_preview/{key}.mp3. Subsequent identical calls
-    return the cached URL instantly.
-
-    PR-3h #2: handles CUSTOM voices (clones/designs) by looking up
-    series.custom_voices[] for target_model + family overrides — required
-    because cloned voice_ids aren't in static TTS_VOICE_REGISTRY.
-
-    Spec: r2v-workflow-v3-unified.md §4.2.3 (cache strategy) + Q5 b/c.
-    """
-    import hashlib
+    """Owner-scoped UniArt preview; no global SDK credentials or shared cache."""
+    from ...audio.uniart_tts import UniArtTTSError
     if not pipeline.audio_generator.tts:
-        raise HTTPException(
-            status_code=503,
-            detail="TTS service unavailable. Check DASHSCOPE_API_KEY configuration.",
-        )
-
-    # PR-3h #2: resolve custom voice → target_model/family override
-    custom = pipeline.find_custom_voice(request.voice_id)
-    model_override = custom.target_model if custom else None
-    family_override = custom.family if custom else None
-
-    cache_dir = os.path.join(pipeline.output_root, "cache", "voice_preview")
-    os.makedirs(cache_dir, exist_ok=True)
-    cache_key = hashlib.md5(
-        f"{request.voice_id}|{request.text}|{request.speed}|{request.pitch}|{request.volume}|{request.instructions or ''}".encode("utf-8")
-    ).hexdigest()
-    cache_path = os.path.join(cache_dir, f"{cache_key}.mp3")
-    cached = os.path.exists(cache_path)
-
-    if not cached:
-        try:
-            pipeline.audio_generator.tts.synthesize(
-                text=request.text,
-                output_path=cache_path,
-                voice=request.voice_id,
-                speech_rate=request.speed,
-                pitch_rate=request.pitch,
-                volume=request.volume,
-                instructions=request.instructions,
-                model_override=model_override,
-                family_override=family_override,
-            )
-        except Exception as e:
-            logger.error(f"[/voice/preview] TTS error voice={request.voice_id}: {e}")
-            raise HTTPException(status_code=500, detail=f"TTS generation failed: {e}")
-
-    # Static mount /files maps to output/, so the relative path under output/
-    # becomes the URL path frontend can hit. signed_response wraps for OSS
-    # signing when configured, no-op otherwise.
-    url = f"cache/voice_preview/{cache_key}.mp3"
-    return signed_response({"url": url, "cached": cached})
+        raise HTTPException(status_code=503, detail="UniArt 语音服务不可用。")
+    try:
+        return signed_response(pipeline.audio_generator.tts.preview(
+            output_root=pipeline.output_root, text=request.text, voice=request.voice_id,
+            speech_rate=request.speed, pitch_rate=request.pitch, volume=request.volume,
+            instructions=request.instructions,
+        ))
+    except UniArtTTSError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=str(exc)) from None
 
 
 # ─────────────────────────────────────────────────────────────
@@ -4972,23 +4933,7 @@ class VoiceCloneRequest(BaseModel):
 
 @app.post("/voice/clone")
 def voice_clone(request: VoiceCloneRequest):
-    """Create a custom voice by cloning a reference audio sample.
-
-    Per Q15.2: stored at series level so any character in the series can
-    pick from the clone via the VoicePickerModal '我的复刻' tab.
-    """
-    try:
-        custom = pipeline.create_voice_clone(
-            series_id=request.series_id,
-            audio_url=request.audio_url,
-            label=request.label,
-            target_model=request.target_model,
-        )
-        return signed_response(custom)
-    except ValueError as e:
-        raise HTTPException(status_code=404, detail=str(e))
-    except RuntimeError as e:
-        raise HTTPException(status_code=500, detail=str(e))
+    raise HTTPException(status_code=409, detail="UniArt 网关暂未接入音色复刻与音色设计，请选择系统音色。")
 
 
 @app.get("/series/{series_id}/custom_voices")
@@ -5026,20 +4971,7 @@ class VoiceDesignPreviewRequest(BaseModel):
 
 @app.post("/voice/design/preview")
 def voice_design_preview(request: VoiceDesignPreviewRequest):
-    """Mint a fresh design voice and return a preview audio URL.
-
-    The user re-calls this with a tweaked voice_prompt to iterate.
-    Returns: {voice_id, preview_url, target_model}.
-    """
-    try:
-        result = pipeline.voice_design_preview(
-            voice_prompt=request.voice_prompt,
-            preview_text=request.preview_text,
-            target_model=request.target_model,
-        )
-        return signed_response(result)
-    except RuntimeError as e:
-        raise HTTPException(status_code=500, detail=str(e))
+    raise HTTPException(status_code=409, detail="UniArt 网关暂未接入音色复刻与音色设计，请选择系统音色。")
 
 
 class VoiceDesignSaveRequest(BaseModel):
@@ -5052,20 +4984,7 @@ class VoiceDesignSaveRequest(BaseModel):
 
 @app.post("/voice/design/accept")
 def voice_design_accept(request: VoiceDesignSaveRequest):
-    """Persist a previewed design voice into series.custom_voices[]."""
-    try:
-        custom = pipeline.voice_design_save(
-            series_id=request.series_id,
-            voice_id=request.voice_id,
-            voice_prompt=request.voice_prompt,
-            label=request.label,
-            target_model=request.target_model,
-        )
-        return signed_response(custom)
-    except ValueError as e:
-        raise HTTPException(status_code=404, detail=str(e))
-    except RuntimeError as e:
-        raise HTTPException(status_code=500, detail=str(e))
+    raise HTTPException(status_code=409, detail="UniArt 网关暂未接入音色复刻与音色设计，请选择系统音色。")
 
 
 class VoiceDesignTranslateRequest(BaseModel):
@@ -5074,14 +4993,7 @@ class VoiceDesignTranslateRequest(BaseModel):
 
 @app.post("/voice/design/translate")
 def voice_design_translate(request: VoiceDesignTranslateRequest):
-    """LLM helper: character.description → CosyVoice voice_prompt."""
-    if not request.description.strip():
-        raise HTTPException(status_code=400, detail="description is empty")
-    try:
-        voice_prompt = pipeline.translate_character_to_voice_prompt(request.description)
-        return {"voice_prompt": voice_prompt}
-    except RuntimeError as e:
-        raise HTTPException(status_code=500, detail=str(e))
+    raise HTTPException(status_code=409, detail="UniArt 网关暂未接入音色复刻与音色设计，请选择系统音色。")
 
 
 class GenerateLineAudioRequest(BaseModel):
@@ -5241,8 +5153,12 @@ def generate_dialogue_audio_batch(script_id: str):
                 skipped += 1
                 continue
             try:
-                pipeline.generate_dialogue_line(script_id, frame.id)
-                generated += 1
+                updated = pipeline.generate_dialogue_line(script_id, frame.id)
+                result = next((item for item in updated.frames if item.id == frame.id), None)
+                if result and result.status == GenerationStatus.COMPLETED and result.audio_url and not result.audio_error:
+                    generated += 1
+                else:
+                    failed += 1
             except Exception as exc:
                 logger.error(f"[batch_dialogue_audio] frame={frame.id} error={exc}")
                 failed += 1
