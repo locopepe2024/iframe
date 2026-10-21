@@ -99,3 +99,33 @@ def test_actual_plan_prompt_includes_only_requested_hook():
     assert prompt.count(snapshot[0]['instructions']) == 1
     assert '[opening-hook ' in prompt
     assert '[information-suspense ' not in prompt
+
+
+def test_information_design_projects_and_compiles_without_methods():
+    from src.apps.comic_gen.models import DirectorInformationDesign
+    from src.apps.comic_gen.shot_context_projection import project_shot_context
+    from src.apps.comic_gen.prompt_assembly import append_projected_shot_context
+    information = DirectorInformationDesign(
+        audience_question='信物属于谁？', audience_knows='角色发现信物',
+        character_knows='角色知道归属', withhold='信物上的姓名',
+        presentation='先表现角色反应', source_event_ids=['event-1'], reveal_event_ids=['event-2'],
+    ).model_dump()
+    context = {'shot': {'shot_id': 'shot-1', 'information_design': information}, 'scene': {}}
+    projected = json.loads(project_shot_context(context, 'shot-1', 'saved'))
+    assert projected['shot']['information_design']['withhold'] == '信物上的姓名'
+    compiled = append_projected_shot_context('', context)
+    assert '当前镜头不得提前展示：信物上的姓名' in compiled
+    assert 'selected_creative_methods' not in compiled
+
+
+def test_information_boundary_survives_context_budget_reduction():
+    from src.apps.comic_gen.shot_context_projection import project_shot_context
+    from src.apps.comic_gen.models import DirectorInformationDesign
+    from pydantic import ValidationError
+    with pytest.raises(ValidationError, match='requires source_event_ids'):
+        DirectorInformationDesign(evidence_status='source_linked')
+    data = {'shot': {'shot_id': 's', 'visual_intent': '内容' * 4000,
+                     'information_design': {'withhold': '不得展示信物姓名' * 30}},
+            'scene': {'location': '场景' * 4000}}
+    result = json.loads(project_shot_context(data, 's', 'saved'))
+    assert result['shot']['information_design']['withhold'] == data['shot']['information_design']['withhold']

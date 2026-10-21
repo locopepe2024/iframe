@@ -47,7 +47,15 @@ export interface DirectorPlanPropBinding {
     binding_status: DirectorPlanBindingStatus;
 }
 
+export interface DirectorInformationDesign {
+    audience_question: string; audience_knows: string; character_knows: string;
+    withhold: string; presentation: string;
+    source_event_ids: string[]; reveal_event_ids: string[]; payoff_event_ids: string[];
+    evidence_status: "source_linked" | "needs_review";
+}
+
 export interface DirectorPlanShot {
+    information_design?: DirectorInformationDesign | null;
     shot_id: string;
     order: number;
     title: string;

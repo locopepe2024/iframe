@@ -1862,7 +1862,7 @@ fact_id，事实变化时保留 source_refs，并用 status/supersedes_fact_id �
         }
         beat_keys = {"title", "dramatic_purpose", "emotional_change", "duration_seconds", "keep_with_next", "source_chunk_refs", "story_event_ids", "shots"}
         shot_keys = {
-            "title", "visual_intent", "director_effect", "performance_action", "action_physics",
+            "title", "visual_intent", "director_effect", "performance_action", "action_physics", "information_design",
             "shot_size", "camera_angle", "composition", "camera_movement",
             "lighting", "lighting_override_reason", "duration_seconds", "dialogue", "ambient_sound",
             "character_ids", "prop_ids", "unresolved_entity_refs",
@@ -1919,6 +1919,12 @@ fact_id，事实变化时保留 source_refs，并用 status/supersedes_fact_id �
                         return f"scene {scene_index + 1} beat {beat_index + 1} shot {shot_index + 1} 字段不符合结构"
                     if "title" in shot and not isinstance(shot["title"], str):
                         return f"scene {scene_index + 1} beat {beat_index + 1} shot {shot_index + 1} 标题必须是字符串"
+                    if shot.get("information_design") is not None:
+                        from .models import DirectorInformationDesign
+                        try:
+                            DirectorInformationDesign.model_validate(shot["information_design"])
+                        except ValueError:
+                            return "information_design 不符合信息披露合同"
                     if "director_effect" in shot and not isinstance(shot["director_effect"], str):
                         return f"scene {scene_index + 1} beat {beat_index + 1} shot {shot_index + 1} director_effect 必须是字符串"
                     if "lighting_override_reason" in shot and not isinstance(shot["lighting_override_reason"], str):
@@ -1991,6 +1997,7 @@ fact_id，事实变化时保留 source_refs，并用 status/supersedes_fact_id �
 4. 每个 shot 必须填 title、visual_intent、performance_action、action_physics、shot_size、camera_angle、composition、camera_movement、lighting、duration_seconds、dialogue、ambient_sound、character_ids、prop_ids，并返回 director_effect 字段。director_effect 写该镜头希望观众感受到或注意到的导演效果；没有明确效果时返回空字符串。表演写视线/表情/姿态/节奏；动作物理写身体或物体的可观察位移、接触、支撑、速度和结果，两者不要混为动作摘要。构图写人物在画面中的位置、关系和空间留白。
 5. lighting 包含 key_source（主光来源与方向）、color_tone（冷暖倾向）、contrast（明暗关系）、practical_sources（画内实际光源数组）。同一 place_continuity_id 与 time_continuity_id 的镜头默认继承同一光影基线；不要为每个镜头改写同一光影。lighting_override_reason 是用户决定字段，模型必须始终返回空字符串，不得替用户选择独立光影；用户在计划编辑器填写原因后，运行时才保留本镜头独立光影。
 6. camera_movement 必须说明固定/推拉摇移/跟拍方向与速度；ambient_sound 可选；有明确环境声时填写此镜头能听见的环境底噪/具体声响，没有明确内容时返回空字符串。没有明确对白就 dialogue=[]；不要发明台词。shot 时长为 1–30 整数秒，依据动作和情绪节奏估计。
+如果本次选择开场吸引力、信息差与悬念或节奏与情绪方法，可在相关 shot 返回 information_design 对象：audience_question、audience_knows、character_knows、withhold、presentation（字符串）；source_event_ids、reveal_event_ids、payoff_event_ids（仅用已确认 story_map 的 event_id 数组）；evidence_status（source_linked 或 needs_review）。无依据时数组留空并标 needs_review，不猜测后续事件；无信息编排时省略或 null。source_linked 仅表示有来源引用，不代表建议已核验或采用。暂缓展示的内容不要写入当前镜头可见描述。
 7. character_ids 和 prop_ids 必须使用下方实体 ID，不能用名字代替；如无实体则用空数组。只返回合法 JSON，不要 Markdown、解释或额外键。
 
 必须返回如下根结构：{{"scenes":[...],"unresolved_questions":[]}}。不要输出 IDs、order 或 source_chunk_refs，这些由系统生成；source_chunk_refs 由系统根据输入片段回填。只有片段开头有明确连续动作/连续场次证据时才设 continues_previous_scene=true，不要仅因地点相同而续接。

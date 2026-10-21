@@ -1316,3 +1316,43 @@ def test_plan_api_keeps_large_resource_separate_and_confirms_without_touching_fr
     finally:
         api.app.dependency_overrides.pop(require_studio_user, None)
         executor.shutdown(wait=True)
+
+
+def test_information_design_rejects_unknown_events_and_hands_off_only_confirmed_plan():
+    from src.apps.comic_gen.models import DirectorInformationDesign
+    pipeline, script = make_pipeline()
+    plan = make_plan(pipeline)
+    information = DirectorInformationDesign(
+        audience_question='为什么在入口停步？', audience_knows='两人走向入口',
+        character_knows='角色看见前方', withhold='未到揭示事件前不展示额外信息',
+        presentation='先拍人物反应', source_event_ids=['event-cinema'],
+        reveal_event_ids=['invented-event'],
+    )
+    plan.scenes[0].beats[0].shots[0].information_design = information
+    with pytest.raises(ValueError, match='unknown Director story events'):
+        pipeline.save_director_shooting_plan_draft('film', 1, 0, plan)
+    information.reveal_event_ids = []
+    pipeline.save_director_shooting_plan_draft('film', 1, 0, plan)
+    assert script.episode_visual_context is None
+    pipeline.apply_director_shooting_plan('film', plan, 0, 1)
+    context = pipeline.project_episode_visual_context('film')
+    assert context.shots[0].information_design == information
+    assert context.shooting_plan_revision == 1
+
+
+def test_generated_information_design_survives_normalization_and_remains_draft():
+    from src.apps import director_skills
+    pipeline, script = make_pipeline()
+    scene = raw_scene()
+    scene['beats'][0]['shots'][0]['information_design'] = {
+        'audience_question': '入口有什么？', 'withhold': '暂不展示入口内细节',
+        'source_event_ids': ['event-cinema'], 'evidence_status': 'needs_review',
+    }
+    pipeline.script_processor.plan_director_shooting_chunk.return_value = valid_chunk(scene)
+    task = next(t for t in director_skills.catalog('shooting_plan') if t['id'] == 'opening-hook')
+    snapshot = director_skills.freeze('shooting_plan', [director_skills.SkillSelection(id=task['id'], revision=task['revision'])])
+    result = pipeline.preview_director_shooting_plan('film', skill_snapshot=snapshot)
+    assert result.scenes[0].beats[0].shots[0].information_design.withhold == '暂不展示入口内细节'
+    assert result.creative_skill_run[0]['id'] == 'opening-hook'
+    assert script.episode_visual_context is None
+    assert pipeline.script_processor.plan_director_shooting_chunk.call_args.args[1]['selected_creative_methods'] == snapshot

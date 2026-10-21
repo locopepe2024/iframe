@@ -1345,7 +1345,28 @@ class DirectorPlanPropBinding(_DirectorShootingPlanModel):
     binding_status: Literal["unresolved", "suggested", "selected", "confirmed"] = "unresolved"
 
 
+class DirectorInformationDesign(BaseModel):
+    """Proposed disclosure arrangement; adopted only with its enclosing plan."""
+    model_config = ConfigDict(extra="forbid")
+    audience_question: str = Field("", max_length=600)
+    audience_knows: str = Field("", max_length=600)
+    character_knows: str = Field("", max_length=600)
+    withhold: str = Field("", max_length=600)
+    presentation: str = Field("", max_length=1000)
+    source_event_ids: List[str] = Field(default_factory=list, max_length=20)
+    reveal_event_ids: List[str] = Field(default_factory=list, max_length=20)
+    payoff_event_ids: List[str] = Field(default_factory=list, max_length=20)
+    evidence_status: Literal["source_linked", "needs_review"] = "needs_review"
+
+    @model_validator(mode="after")
+    def validate_source_link(self):
+        if self.evidence_status == "source_linked" and not self.source_event_ids:
+            raise ValueError("source_linked information design requires source_event_ids")
+        return self
+
+
 class DirectorPlanShot(_DirectorShootingPlanModel):
+    information_design: Optional[DirectorInformationDesign] = None
     shot_id: str = Field(..., min_length=1, max_length=120)
     order: int = Field(..., ge=0)
     title: str = Field("", max_length=180)
@@ -1538,6 +1559,7 @@ class EpisodeVisualPropContext(BaseModel):
 
 
 class EpisodeVisualShotContext(BaseModel):
+    information_design: Optional[DirectorInformationDesign] = None
     scene_id: str
     beat_id: str
     shot_id: str

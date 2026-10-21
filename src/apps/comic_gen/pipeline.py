@@ -4081,6 +4081,12 @@ class ComicGenPipeline(StudioOwnerMixin):
         requested_event_ids = {
             event_id for scene in plan.scenes for beat in scene.beats for event_id in beat.story_event_ids
         }
+        for scene in plan.scenes:
+            for beat in scene.beats:
+                for shot in beat.shots:
+                    if shot.information_design:
+                        design = shot.information_design
+                        requested_event_ids.update(design.source_event_ids + design.reveal_event_ids + design.payoff_event_ids)
         missing_events = requested_event_ids - valid_event_ids
         if missing_events:
             raise ValueError("Shooting plan references unknown Director story events: " + ", ".join(sorted(missing_events)))
@@ -4394,6 +4400,7 @@ class ComicGenPipeline(StudioOwnerMixin):
                             "title": str(raw_shot.get("title", ""))[:180],
                             "visual_intent": str(raw_shot.get("visual_intent", ""))[:2400],
                             "director_effect": str(raw_shot.get("director_effect", ""))[:2400],
+                            "information_design": raw_shot.get("information_design"),
                             "performance_action": str(raw_shot.get("performance_action", ""))[:2400],
                             "action_physics": str(raw_shot.get("action_physics", ""))[:1800],
                             "shot_size": str(raw_shot.get("shot_size", ""))[:64],
@@ -4769,6 +4776,7 @@ class ComicGenPipeline(StudioOwnerMixin):
                         person_ids=list(dict.fromkeys(cast.person_id for cast in cast_items)),
                         prop_ids=shot_prop_ids,
                         visual_intent=shot.visual_intent, director_effect=shot.director_effect,
+                        information_design=shot.information_design,
                         performance_action=shot.performance_action, action_physics=shot.action_physics,
                         shot_size=shot.shot_size, camera_angle=shot.camera_angle,
                         composition=shot.composition, camera_movement=shot.camera_movement,
@@ -6002,7 +6010,7 @@ class ComicGenPipeline(StudioOwnerMixin):
                     "time_continuity_id", "interior_exterior",
                 )
                 shot_context_keys = (
-                    "shot_id", "visual_intent", "director_effect", "performance_action",
+                    "shot_id", "visual_intent", "director_effect", "performance_action", "information_design",
                     "action_physics", "shot_size", "camera_angle", "composition",
                     "camera_movement", "duration_seconds", "dialogue", "ambient_sound", "lighting",
                 )

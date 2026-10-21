@@ -114,6 +114,12 @@ def _director_shot_context_parts(context: Optional[Dict[str, Any]]) -> List[str]
         value = shot.get(key)
         if isinstance(value, str) and value.strip():
             parts.append(f"{label}：{value.strip()}")
+    information = shot.get("information_design")
+    if isinstance(information, dict):
+        for key, label in (("audience_question", "观众问题"), ("audience_knows", "观众已知"), ("character_knows", "人物已知"), ("withhold", "当前镜头不得提前展示"), ("presentation", "信息呈现")):
+            value = information.get(key)
+            if isinstance(value, str) and value.strip():
+                parts.append(f"{label}：{value.strip()}")
     lighting = shot.get("lighting")
     if isinstance(lighting, dict):
         lighting_parts: List[str] = []

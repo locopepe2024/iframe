@@ -13,3 +13,11 @@
 本切片不创建第二套确认操作；不自动采用新建议；不修改模型/供应商权限；不宣称 hook 结构化 schema、自动跨镜头披露校验、组合预设或分镜专项已完成。既有采用计划的镜头字段承接本次规划；显式结构化 hook 数据下一切片实现。
 
 验证：pytest tests/test_director_skills.py tests/test_director_profile.py tests/test_director_shooting_plan.py；前端选择器行为/请求测试、typecheck、build；上线前版本核对。
+
+## 切片 B：镜头信息披露合同
+
+在计划镜头增加可选 information_design 对象：观众问题、观众/人物已知信息、暂缓展示、呈现方式、依据 event IDs、揭示/兑现 event IDs、依据状态。采用状态沿用整份计划确认，不另设局部自动采用。事件 ID 必须属于本计划的已确认 story_map；ID 有效不证明语义依据成立。缺少依据允许标未核验，不伪造后续事件。
+
+对象经计划保存/确认、EpisodeVisualShotContext、分镜上下文快照、模型边界有界投影和最终可读 Prompt 传递。只传所确认镜头的合同，不传上游方法全文；旧计划无该字段时不增加限制。用户可直接编辑合同，旧的 director_effect 保留。
+
+验证范围增加：无效引用拒绝、未确认计划不进入上下文、确认后字段完整传递、投影与编译保留披露边界；不声称模型一定遵守或悬念效果提升。
