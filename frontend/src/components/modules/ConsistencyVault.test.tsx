@@ -759,7 +759,7 @@ it("fills an atmosphere Prompt template into editable scene settings without cha
     fireEvent.click(screen.getByRole("button", { name: /Scenes/ }));
     fireEvent.click(screen.getByText(asset.name));
     fireEvent.click(screen.getByRole("button", { name: /基础面板 ·/ }));
-    fireEvent.click(screen.getByText("Prompt 模板 · 氛围", { selector: "summary" }));
+    fireEvent.click(screen.getByText("Prompt 模板 · 光影", { selector: "summary" }));
     fireEvent.click(screen.getByRole("button", { name: "黄金时刻" }));
     fireEvent.click(screen.getByRole("button", { name: "应用到图片提示词" }));
     const prompt = (screen.getByRole("textbox", { name: "图像提示词" }) as HTMLTextAreaElement).value;

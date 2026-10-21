@@ -126,7 +126,7 @@ it("uses atmosphere templates to fill the shared panel without legacy preset inj
     const onGenerate = vi.fn();
     render(<SceneImageTools kind="lighting" sources={sources} busy={false} onGenerate={onGenerate} />);
     expect(screen.queryByText("光影预设")).not.toBeInTheDocument();
-    fireEvent.click(screen.getByText("Prompt 模板 · 氛围", { selector: "summary" }));
+    fireEvent.click(screen.getByText("Prompt 模板 · 光影", { selector: "summary" }));
     fireEvent.click(screen.getByRole("button", { name: "黄金时刻" }));
     fireEvent.click(screen.getByRole("button", { name: "查看并确认提示词" }));
     fireEvent.click(screen.getByRole("button", { name: "确认并生成" }));
@@ -161,7 +161,7 @@ it("removes camera preset buttons and compiles independent lens and composition 
 it("preserves warm horizon highlights when mapping a blue-hour recipe to tool controls", () => {
     const onGenerate = vi.fn();
     render(<SceneImageTools kind="lighting" sources={sources} busy={false} onGenerate={onGenerate} />);
-    fireEvent.click(screen.getByText("Prompt 模板 · 氛围", { selector: "summary" }));
+    fireEvent.click(screen.getByText("Prompt 模板 · 光影", { selector: "summary" }));
     fireEvent.click(screen.getByRole("button", { name: "蓝橙暮光·薄雾" }));
     fireEvent.click(screen.getByRole("button", { name: "查看并确认提示词" }));
     fireEvent.click(screen.getByRole("button", { name: "确认并生成" }));
