@@ -2,7 +2,7 @@ import { describeSceneDirection } from "./sceneDirection";
 
 export interface ScenePromptLayers {
     version?: 1;
-    lighting?: Partial<Record<"source" | "direction" | "quality" | "fill" | "contrast" | "mood" | "air" | "color" | "shadow" | "rim", string>> & { angles?: SceneLayerAngles | null };
+    lighting?: Partial<Record<"season" | "time_of_day" | "source" | "direction" | "quality" | "fill" | "contrast" | "mood" | "air" | "color" | "shadow" | "rim", string>> & { angles?: SceneLayerAngles | null };
     camera?: Partial<Record<"framing" | "viewpoint" | "focal_length" | "depth_of_field", string>> & { angles?: SceneLayerAngles | null; focus?: SceneFocusPoint | null };
     composition?: Partial<Record<"subject_position" | "spatial_layers" | "leading_relation" | "frame_orientation", string>>;
 }
@@ -14,8 +14,15 @@ export interface SceneLayerField { key: string; label: string; options: readonly
 // Original static-scene vocabulary. Each option describes only its own field.
 export const SCENE_LAYER_FIELDS: Record<SceneLayer, readonly SceneLayerField[]> = {
     lighting: [
+        { key: "season", label: "季节", options: [
+            ["春天", "春天"], ["夏天", "夏天"], ["秋天", "秋天"], ["冬天", "冬天"],
+        ] },
+        { key: "time_of_day", label: "时段", options: [
+            ["黎明前", "日出前的黎明时段"], ["清晨", "清晨"], ["上午", "上午"], ["正午", "正午"],
+            ["下午", "下午"], ["傍晚", "傍晚"], ["日落后暮光", "太阳落至地平线以下后的暮光时段"], ["夜间", "夜间"],
+        ] },
         { key: "source", label: "光源", options: [
-            ["窗光", "窗户进入的自然光"], ["阴天天光", "阴天漫射天光"], ["直射日光", "太阳直射光"],
+            ["天空环境光", "来自天空的环境光照明"], ["窗光", "窗户进入的自然光"], ["阴天天光", "阴天漫射天光"], ["直射日光", "太阳直射光"],
             ["月光", "月光"], ["烛火灯笼", "烛火或灯笼光"], ["室内灯具", "场景内实际灯具照明"], ["霓虹", "霓虹灯照明"],
             ["晨间日光", "清晨太阳光"], ["夕阳", "临近日落的太阳光"], ["曙暮天光", "日出前或日落后的天空环境光"],
             ["天井采光", "由天井或屋顶开口进入的自然光"], ["林间透光", "穿过树冠间隙的自然光"], ["雪地反射", "雪地反射的环境光"],
@@ -49,7 +56,7 @@ export const SCENE_LAYER_FIELDS: Record<SceneLayer, readonly SceneLayerField[]> 
         ] },
         { key: "mood", label: "氛围", options: [
             ["宁静", "宁静平和的空间氛围，视觉节奏舒缓"], ["温馨", "温馨亲切的空间氛围"], ["清冷", "清冷疏离的空间氛围"],
-            ["庄严", "庄严肃穆的空间氛围"], ["神秘", "含蓄神秘的空间氛围，保留未完全揭示的细节"], ["紧张", "紧张压迫的空间氛围"],
+            ["冰冷", "冰冷疏离的空间氛围"], ["庄严", "庄严肃穆的空间氛围"], ["神秘", "含蓄神秘的空间氛围，保留未完全揭示的细节"], ["紧张", "紧张压迫的空间氛围"],
             ["荒凉", "荒凉萧瑟的空间氛围"], ["怀旧", "朴素怀旧的空间氛围"], ["浪漫", "含蓄浪漫的空间氛围"],
             ["梦幻", "梦幻空灵的空间氛围"], ["诡异", "不安诡异的空间氛围"], ["明快", "轻盈明快的空间氛围"],
         ] },
@@ -59,6 +66,8 @@ export const SCENE_LAYER_FIELDS: Record<SceneLayer, readonly SceneLayerField[]> 
         ] },
         { key: "color", label: "光色关系", options: [
             ["中性光色", "中性光色，保留物体固有色的辨识度"], ["暖光", "照明偏暖，保留物体固有色的辨识度"], ["冷光", "照明偏冷，保留物体固有色的辨识度"],
+            ["冷蓝色", "冷蓝色照明，保留物体固有色的辨识度"], ["蓝灰色", "蓝灰色照明，保留物体固有色的辨识度"],
+            ["冷蓝微暖高光", "冷蓝色环境光与微弱暖色高光形成对照，保留物体固有色的辨识度"],
             ["冷暖对照", "不同光照区域形成冷暖对照，保留物体固有色的辨识度"], ["局部彩光", "局部区域受有色光照明，其余区域保留物体固有色"],
         ] },
     ],

@@ -247,10 +247,10 @@ export function SceneImageTools({ kind, sources, sceneAssetId, lightingReference
                     setPanelSettings({ lighting });
                     setLightAngles(angles || null); setLightSide("前方");
                     setColor(template.color); setBrightness(template.brightness); setIntelligent(true);
-                    setExtra(""); setReviewedPrompt("");
+                    setExtra(_color ? `光色关系：${_color}` : ""); setReviewedPrompt("");
                 }} />}
                 <ScenePromptLayersPanel value={panelSettings} onChange={value => { setPanelSettings(value); setReviewedPrompt(""); }}
-                    fields={kind === "lighting" ? { lighting: ["source", "quality", "fill", "contrast", "shadow", "rim", "mood", "air"] }
+                    fields={kind === "lighting" ? { lighting: ["season", "time_of_day", "source", "quality", "fill", "contrast", "shadow", "rim", "mood", "air"] }
                         : { camera: ["focal_length", "depth_of_field"], composition: ["frame_orientation", "subject_position", "spatial_layers", "leading_relation"] }} />
                 <label className="block text-sm text-text-secondary" htmlFor={`${kind}-extra`}>补充提示词</label>
                 <textarea id={`${kind}-extra`} value={extra} onChange={(event) => setExtra(event.target.value)} onFocus={() => { if (kind === "camera") setCameraPromptEnabled(true); }} disabled={kind === "lighting" && !intelligent} rows={3} className={`${control} w-full py-2 disabled:opacity-50`} placeholder={kind === "lighting" ? "补充想要的光影氛围" : "补充镜头位置或构图要求"} />

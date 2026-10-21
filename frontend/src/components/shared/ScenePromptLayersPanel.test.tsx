@@ -80,3 +80,16 @@ it("selects atmosphere separately and cancels it without resetting the light sou
     expect(screen.getByRole("button", { name: "油灯" })).toHaveAttribute("aria-pressed", "true");
     expect(screen.getByRole("button", { name: "薄雾" })).toHaveAttribute("aria-pressed", "true");
 });
+
+
+it("lets users compose autumn evening blue skylight and clear season independently", () => {
+    render(<Harness />);
+    open("光影");
+    for (const name of ["秋天", "傍晚", "天空环境光", "冷蓝色"]) fireEvent.click(screen.getByRole("button", { name }));
+    expect(screen.getByTestId("prompt")).toHaveTextContent("季节：秋天；时段：傍晚；光源：来自天空的环境光照明");
+    expect(screen.getByTestId("prompt")).toHaveTextContent("冷蓝色照明");
+    expect(screen.getByTestId("prompt").textContent).not.toMatch(/暖|雾|落叶|柔焦/);
+    fireEvent.click(screen.getByRole("button", { name: "秋天" }));
+    expect(screen.getByTestId("prompt")).not.toHaveTextContent("季节：");
+    expect(screen.getByRole("button", { name: "冷蓝色" })).toHaveAttribute("aria-pressed", "true");
+});

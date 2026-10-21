@@ -2,8 +2,31 @@ import type { ScenePromptLayers } from "./scenePromptLayers";
 
 /** Complete opt-in lighting recipes, kept separate from atomic dictionary fields. */
 export const SCENE_ATMOSPHERE_TEMPLATES: {
-    id: string; title: string; color: string; brightness: number; settings: ScenePromptLayers;
+    id: string; title: string; keywords?: string; color: string; brightness: number; settings: ScenePromptLayers;
 }[] = [
+    { id: "blue-orange-mist", title: "蓝橙暮光·薄雾", keywords: "黄昏 蓝调时刻 冰冷 蓝色 大气光 地平线 橙色余晖 薄雾 低饱和 写实", color: "#8faed1", brightness: 35, settings: { lighting: {
+        time_of_day: "太阳落至地平线以下后的暮光时段", source: "来自天空的环境光照明",
+        color: "冰冷的蓝色天空环境光与地平线上微弱的橙色余晖交融，整体低饱和",
+        air: "空气中有柔和薄雾，远处轮廓仍可辨", shadow: "保留丰富的暗部阴影层次",
+        mood: "逼真写实的黄昏氛围",
+    } } },
+    { id: "clear-cold", title: "通透冷光", keywords: "Transparent lighting Crystal clear air 通透 冷蓝 清澈", color: "#a8c7df", brightness: 45, settings: { lighting: {
+        color: "冷蓝色照明，保留物体固有色的辨识度", air: "空气通透，无额外雾气、烟尘",
+    } } },
+    { id: "misty-cold-beams", title: "丁达尔冷光束", keywords: "Tyndall effect misty cold light beams 丁达尔 迷雾 冷光束 烟雾", color: "#a8c7df", brightness: 45, settings: { lighting: {
+        quality: "定向光穿过已有开口或遮挡间隙，形成可辨识的光束；不新增门窗",
+        color: "冷蓝色照明，保留物体固有色的辨识度", air: "薄雾中的散射使冷光束路径可见",
+    } } },
+    { id: "blue-hour", title: "蓝调时刻", keywords: "Blue hour lighting Twilight lighting 秋天 傍晚 天空 冷蓝色 暮光 蓝色时刻", color: "#8faed1", brightness: 35, settings: { lighting: {
+        time_of_day: "太阳落至地平线以下后的暮光时段", source: "来自天空的环境光照明",
+        color: "冷蓝色照明，保留物体固有色的辨识度",
+    } } },
+    { id: "cool-dawn", title: "清晨冷光", keywords: "Crisp dawn light Early morning cool light 黎明 天空", color: "#b2c8db", brightness: 40, settings: { lighting: {
+        time_of_day: "清晨", source: "来自天空的环境光照明", color: "偏冷的清晨光色，保留物体固有色的辨识度",
+    } } },
+    { id: "chilly", title: "冰冷低饱和", keywords: "Chilly atmosphere Frosty tone Cold low-saturation color palette 冷色调", color: "#b5c4d1", brightness: 40, settings: { lighting: {
+        mood: "冰冷疏离的空间氛围", color: "低饱和冷色调，保留材质和物体固有色的辨识度",
+    } } },
     { id: "golden-hour", title: "黄金时刻", color: "#f5c57a", brightness: 65, settings: { lighting: {
         source: "临近日落的太阳光", angles: { azimuth: 90, elevation: 12 }, quality: "柔和漫射光，阴影边缘柔和",
         fill: "以弱反射光轻微提亮暗部", contrast: "中等反差，亮部暗部均保留细节",

@@ -55,3 +55,13 @@ it("adds shadows and rim lighting only when explicitly chosen", () => {
     expect(compileScenePromptLayers({ lighting: { shadow: "自然接触阴影", rim: "微弱轮廓光" } }))
         .toBe("光影：阴影：自然接触阴影；轮廓光：微弱轮廓光");
 });
+
+
+it("composes autumn evening skylight without injecting a golden hour recipe", () => {
+    const pick = (key: string, label: string) => SCENE_LAYER_FIELDS.lighting.find(f => f.key === key)!.options.find(o => o[0] === label)![1];
+    expect(compileScenePromptLayers({ lighting: {
+        season: pick("season", "秋天"), time_of_day: pick("time_of_day", "傍晚"),
+        source: pick("source", "天空环境光"), color: pick("color", "冷蓝色"),
+    } })).toBe("光影：季节：秋天；时段：傍晚；光源：来自天空的环境光照明；光色关系：冷蓝色照明，保留物体固有色的辨识度");
+    expect(compileScenePromptLayers({ lighting: { time_of_day: pick("time_of_day", "傍晚") } })).toBe("光影：时段：傍晚");
+});

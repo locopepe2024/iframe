@@ -156,3 +156,18 @@ it("removes camera preset buttons and compiles independent lens and composition 
     expect(onGenerate.mock.lastCall?.[2]).toContain("倾斜构图");
     expect(onGenerate.mock.lastCall?.[2]).not.toContain("预设视角");
 });
+
+
+it("preserves warm horizon highlights when mapping a blue-hour recipe to tool controls", () => {
+    const onGenerate = vi.fn();
+    render(<SceneImageTools kind="lighting" sources={sources} busy={false} onGenerate={onGenerate} />);
+    fireEvent.click(screen.getByText("Prompt 模板 · 氛围", { selector: "summary" }));
+    fireEvent.click(screen.getByRole("button", { name: "蓝橙暮光·薄雾" }));
+    fireEvent.click(screen.getByRole("button", { name: "查看并确认提示词" }));
+    fireEvent.click(screen.getByRole("button", { name: "确认并生成" }));
+    const [, tool, prompt] = onGenerate.mock.lastCall!;
+    expect(tool.color).toBe("#8faed1");
+    expect(prompt).toContain("地平线上微弱的橙色余晖");
+    expect(prompt).toContain("薄雾");
+    expect(tool.panel_settings.lighting).not.toHaveProperty("color");
+});
