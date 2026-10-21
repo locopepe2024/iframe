@@ -43,7 +43,11 @@ def test_gateway_endpoint_metadata_and_per_call_credentials(gateway, tmp_path):
 def test_catalog_uses_endpoint_metadata_and_only_authorized_models(gateway):
     assert normalize_uniart_model({'id': 'speech-2.8-hd', 'supported_endpoint_types': ['audio-speech']})['capabilities'] == ['audio']
     voices = UniArtTTSProcessor().list_voices()
-    assert len(voices) == 8
+    assert len(voices) == 327
+    assert len({v['id'] for v in voices}) == 327
+    assert len({v['lang_primary'] for v in voices}) == 24
+    assert sum(v['lang_primary'] == 'zh' for v in voices) == 58
+    assert sum(v['lang_primary'] == 'yue' for v in voices) == 6
     assert {v['model'] for v in voices} == {'speech-2.8-hd'}
     assert all(v['id'].startswith('uniart:speech-2.8-hd:') for v in voices)
 
@@ -233,3 +237,11 @@ def test_voice_http_routes_require_and_propagate_owner_context(monkeypatch):
     other = client.get("/voices", headers={"Authorization": "Bearer other-test"})
     assert other.status_code == 200
     assert other.json() == [{"id": "other-profile"}]
+
+
+@pytest.mark.parametrize('voice_id', ['clever_boy', 'Chinese (Mandarin)_Gentleman', 'Cantonese_ProfessionalHost（F)'])
+def test_official_extended_ids_are_forwarded_unchanged(gateway, tmp_path, voice_id):
+    _, post = gateway
+    UniArtTTSProcessor().synthesize('你好', str(tmp_path / 'new.mp3'),
+                                  voice='uniart:speech-2.8-hd:' + voice_id)
+    assert post.call_args.kwargs['json']['voice'] == voice_id

@@ -19,17 +19,9 @@ from ..apps.studio_access import require_studio_user, studio_media_dir, studio_u
 from ..utils.provider_catalog import catalog_name, fetch_selected_catalog
 
 MODELS = ('speech-2.8-hd', 'speech-2.8-turbo')
-# A verified subset of MiniMax's system voice catalog, not arbitrary provider IDs.
-VOICES = (
-    ('male-qn-qingse', '青涩青年', 'Male'),
-    ('male-qn-jingying', '精英青年', 'Male'),
-    ('male-qn-badao', '霸道青年', 'Male'),
-    ('male-qn-daxuesheng', '青年大学生', 'Male'),
-    ('female-shaonv', '少女', 'Female'),
-    ('female-yujie', '御姐', 'Female'),
-    ('female-chengshu', '成熟女性', 'Female'),
-    ('female-tianmei', '甜美女性', 'Female'),
-)
+# Versioned official metadata; listing and synthesis share the same allowlist.
+VOICES = json.loads(Path(__file__).with_name('minimax_system_voices.json').read_text(encoding='utf-8'))['voices']
+VOICE_IDS = frozenset(voice['id'] for voice in VOICES)
 EMOTIONS = {
     'happy': 'happy', '高兴': 'happy', '开心': 'happy',
     'sad': 'sad', '悲伤': 'sad', 'angry': 'angry', '愤怒': 'angry',
@@ -58,16 +50,15 @@ class UniArtTTSProcessor:
 
     def list_voices(self):
         _, models = self._config_and_models()
-        return [dict(id=f'uniart:{model}:{voice}', name=name, gender=gender,
-                     model=model, family='minimax', supports_instruction=False,
-                     origin='system', dialect=None, lang_primary=None)
-                for model in models for voice, name, gender in VOICES]
+        return [dict(voice, id=f"uniart:{model}:{voice['id']}",
+                     model=model, family='minimax', supports_instruction=False, origin='system')
+                for model in models for voice in VOICES]
 
     def _prepare(self, text, voice, speech_rate, pitch_rate, volume, instructions,
                  model_override=None, family_override=None):
         parts = (voice or '').split(':')
         if (len(parts) != 3 or parts[0] != 'uniart' or parts[1] not in MODELS
-                or parts[2] not in {v[0] for v in VOICES}):
+                or parts[2] not in VOICE_IDS):
             raise UniArtTTSError('此音色不兼容 UniArt，请打开音色库重新选择并保存。')
         model, voice_id = parts[1:]
         if model_override not in (None, model) or family_override not in (None, 'minimax'):
