@@ -17,6 +17,9 @@ import { createRenderRequestId } from "@/lib/renderRequestId";
 import StepHeader from "@/components/shared/StepHeader";
 import WorkflowActionButton from "@/components/shared/WorkflowActionButton";
 
+import StoryboardGenerateDialog from "./storyboard-r2v/StoryboardGenerateDialog";
+import StoryboardAnalysisModal from "./storyboard-r2v/StoryboardAnalysisModal";
+import type { StoryboardAnalysisDraft, StoryboardGenerationOptions } from "@/lib/storyboardAnalysis";
 import StoryboardFrameEditor from "./StoryboardFrameEditor";
 import RenderPromptPreviewDialog, { type FrameRenderPreview } from "./RenderPromptPreviewDialog";
 import { resolveNegativePrompt, resolveStylePrompt } from "./storyboard-r2v/buildAssembledPrompt";
@@ -40,6 +43,18 @@ export default function StoryboardComposer() {
     const isAnalyzing = useProjectStore((state) => state.isAnalyzingStoryboard);
     const setIsAnalyzing = useProjectStore((state) => state.setIsAnalyzingStoryboard);
 
+    const [generateDialogOpen, setGenerateDialogOpen] = useState(false);
+    const [analysisDraft, setAnalysisDraft] = useState<StoryboardAnalysisDraft | null>(null);
+    const [analysisSource, setAnalysisSource] = useState("");
+    const [analysisProjectId, setAnalysisProjectId] = useState("");
+    const [analysisFeedback, setAnalysisFeedback] = useState<string[]>([]);
+    const [draftBusy, setDraftBusy] = useState(false);
+    useEffect(() => {
+        setGenerateDialogOpen(false);
+        setAnalysisDraft(null);
+        setAnalysisFeedback([]);
+    }, [currentProject?.id]);
+
     const [editingFrameId, setEditingFrameId] = useState<string | null>(null);
     const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
     const [insertIndex, setInsertIndex] = useState<number | null>(null);
@@ -60,41 +75,47 @@ export default function StoryboardComposer() {
     }, [currentProject?.id]);
 
 
-    // NEW: Analyze script text to generate storyboard frames
-    const handleAnalyzeToStoryboard = async () => {
+    const handleAnalyzeToStoryboard = async (options?: StoryboardGenerationOptions) => {
         if (!currentProject) return;
-
-        const text = currentProject.originalText;
-        if (!text || !text.trim()) {
-            alert(t("enterScriptFirst"));
-            return;
-        }
-
-        if (currentProject.frames?.length > 0) {
-            if (!confirm(t("overwriteConfirm"))) return;
-        }
-
+        const projectId = currentProject.id;
+        const text = currentProject.originalText || (currentProject as any).original_text || "";
         setIsAnalyzing(true);
         try {
-            const updatedProject = await api.analyzeToStoryboard(currentProject.id, text);
-            const frameCount = updatedProject.frames?.length || 0;
-            if (frameCount > 0) {
-                updateProject(currentProject.id, updatedProject);
-                alert(t("framesGenerated", { count: frameCount }));
-            } else {
-                alert(t("aiInvalidOutput"));
-            }
-        } catch (error: any) {
-            console.error("Analyze to storyboard failed:", error);
-            const detail = extractErrorDetail(error, "");
-            if (detail.includes("JSON") || detail.includes("格式")) {
-                alert(t("aiFormatRetry"));
-            } else {
-                alert(t("genFailedDetail", { detail }));
-            }
+            const result = await api.analyzeStoryboardPreview(projectId, text, undefined, options);
+            if (useProjectStore.getState().currentProject?.id !== projectId) return;
+            setAnalysisDraft(result);
+            setAnalysisSource(text);
+            setAnalysisProjectId(projectId);
+            setAnalysisFeedback([]);
+        } catch (error) {
+            alert(t("genFailedDetail", { detail: extractErrorDetail(error, "") }));
         } finally {
             setIsAnalyzing(false);
         }
+    };
+
+    const handleRefineAnalysis = async (instruction: string) => {
+        if (!analysisDraft || currentProject?.id !== analysisProjectId) return;
+        setDraftBusy(true);
+        const instructions = [...analysisFeedback, instruction];
+        try {
+            const result = await api.refineStoryboardPreview(analysisProjectId, analysisSource,
+                analysisDraft.frames, instructions, analysisDraft.lineage);
+            if (useProjectStore.getState().currentProject?.id !== analysisProjectId) return;
+            setAnalysisDraft(result);
+            setAnalysisFeedback(instructions);
+        } finally { setDraftBusy(false); }
+    };
+
+    const handleApplyAnalysis = async () => {
+        if (!analysisDraft || currentProject?.id !== analysisProjectId) return;
+        setDraftBusy(true);
+        try {
+            const updated = await api.applyStoryboardDraft(analysisProjectId, analysisSource,
+                analysisDraft.frames, analysisDraft.lineage);
+            updateProject(analysisProjectId, updated);
+            if (useProjectStore.getState().currentProject?.id === analysisProjectId) setAnalysisDraft(null);
+        } finally { setDraftBusy(false); }
     };
 
     const handleImageClick = (frameId: string, e: React.MouseEvent) => {
@@ -467,7 +488,7 @@ export default function StoryboardComposer() {
                             size="sm"
                             leftIcon={isAnalyzing ? undefined : <Zap />}
                             loading={isAnalyzing}
-                            onClick={handleAnalyzeToStoryboard}
+                            onClick={() => setGenerateDialogOpen(true)}
                             disabled={isAnalyzing}
                             title={t("generateFromScript")}
                         >
@@ -741,6 +762,28 @@ export default function StoryboardComposer() {
                 )}
             </AnimatePresence>
 
+            <StoryboardGenerateDialog
+                isOpen={generateDialogOpen}
+                onClose={() => setGenerateDialogOpen(false)}
+                project={currentProject as any}
+                existingShotCount={currentProject?.frames?.length ?? 0}
+                onConfirm={handleAnalyzeToStoryboard}
+                onJumpToScript={() => {
+                    setGenerateDialogOpen(false);
+                    window.dispatchEvent(new CustomEvent("navigateStep", { detail: "script" }));
+                }}
+            />
+            <StoryboardAnalysisModal
+                isOpen={!!analysisDraft}
+                draft={analysisDraft?.frames ?? null}
+                lineage={analysisDraft?.lineage}
+                feedback={analysisFeedback}
+                existingShotCount={currentProject?.frames?.length ?? 0}
+                isBusy={draftBusy}
+                onRefine={handleRefineAnalysis}
+                onApply={handleApplyAnalysis}
+                onDiscard={() => setAnalysisDraft(null)}
+            />
             {/* Hidden file input for frame image upload */}
             <input
                 ref={fileInputRef}
