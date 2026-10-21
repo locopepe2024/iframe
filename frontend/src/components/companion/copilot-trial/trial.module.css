@@ -1,3 +1,4 @@
+.shell, .shell * { box-sizing: border-box; }
 .shell {
   --ink: #182f40; --muted: #455f70; --primary: #185a85; --border: #bdcdd8;
   position: fixed; inset: 0; height: 100dvh; display: flex; flex-direction: column;
@@ -5,10 +6,10 @@
   font-family: system-ui, "PingFang SC", sans-serif; font-size: max(18px, 1.125rem); line-height: 1.65;
 }
 .large { font-size: max(22px, 1.375rem); }
-.header, .content { width: 100%; max-width: 660px; margin-inline: auto; }
+.header, .content { width: 100%; max-width: 660px; min-width: 0; margin-inline: auto; }
 .header { padding: max(16px, env(safe-area-inset-top)) 20px 12px; flex-shrink: 0; border-bottom: 1px solid var(--border); }
 .header h1 { font-size: 1.5em; font-weight: 700; }
-.content { overflow-y: auto; min-height: 0; padding: 16px 20px max(28px, env(safe-area-inset-bottom)); overflow-wrap: anywhere; }
+.content { overflow-x: hidden; overflow-y: auto; min-height: 0; padding: 16px 20px max(28px, env(safe-area-inset-bottom)); overflow-wrap: anywhere; }
 .shell p { margin: 0 0 14px; }
 .shell h2 { font-size: 1.2em; font-weight: 650; margin: 0 0 12px; }
 .shell h3 { font-size: 1em; font-weight: 650; }
@@ -34,4 +35,5 @@
 .photo svg { width: 72px; height: 72px; border-radius: 12px; background: #dfeef5; color: var(--primary); padding: 16px; }
 .photo p { margin: 0; }
 @media (max-width: 360px) { .header, .content { padding-inline: 12px; } .card { padding: 16px; } }
+@media (max-width: 600px) { .actions { display: grid; grid-template-columns: minmax(0, 1fr); } }
 @media (prefers-reduced-motion: reduce) { .shell * { animation: none !important; transition: none !important; scroll-behavior: auto !important; } }
