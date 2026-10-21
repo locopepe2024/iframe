@@ -1,12 +1,13 @@
 """UniArt OpenAI-compatible image/video adapter.
 
 Image generation/edit may return final data or an accepted image task.
-Image tasks use /v1/images/{task_id}; video tasks use /v1/videos/{task_id}.
+Image tasks use /v1/images/{task_id}; H3 V2 uses /oran/h3/v2/videos/{task_id}.
+Other video models and persisted legacy H3 tasks keep /v1/videos/{task_id}.
 """
 from __future__ import annotations
 import base64, os, time
 from typing import Any, Dict, Optional, Tuple
-from urllib.parse import parse_qs, urlsplit
+from urllib.parse import parse_qs, urlsplit, urlunsplit
 import requests
 from .base import VideoGenModel
 from .image import ImageGenModel
@@ -521,11 +522,22 @@ class UniArtVideoModel(VideoGenModel):
 
     def generate(self, prompt: str, output_path: str, **kwargs) -> Tuple[str, float]:
         started = time.time()
-        if kwargs.get("resume_task_id"):
-            result = _poll(self.config, kwargs["resume_task_id"])
-            _download_result(self.config, result, "video", output_path)
-            return output_path, time.time() - started
         model = (kwargs.get("model") or kwargs.get("model_name") or "seedance-2.5-vip").removeprefix("uniart/")
+        is_h3 = model.startswith("minimax-h3") and model != "minimax-h3-ir"
+        # Missing version on a saved task denotes the pre-migration V1 API.
+        version = kwargs.get("h3_api_version", "v1")
+        if is_h3 and version not in {"v1", "v2"}:
+            raise ValueError("Unknown persisted H3 API version")
+        config = self.config
+        if is_h3 and version == "v2":
+            parsed = urlsplit(_base_url(self.config))
+            config = {**self.config, "base_url": urlunsplit((parsed.scheme, parsed.netloc, "/oran/h3/v2", "", ""))}
+        if kwargs.get("resume_task_id"):
+            result = _poll(config, kwargs["resume_task_id"])
+            _download_result(config, result, "video", output_path)
+            return output_path, time.time() - started
+        if is_h3 and version == "v2":
+            return self._generate_h3_v2(config, model, prompt, output_path, started, **kwargs)
         body: Dict[str, Any] = {"model": model}
         for key in ("mode", "duration", "resolution", "size", "ratio", "watermark", "generate_audio", "seed"):
             if kwargs.get(key) is not None:
@@ -574,4 +586,68 @@ class UniArtVideoModel(VideoGenModel):
             kwargs["on_task_submitted"](task_id)
         result = _poll(self.config, task_id)
         _download_result(self.config, result, "video", output_path)
+        return output_path, time.time() - started
+
+    def _generate_h3_v2(self, config, api_model, prompt, output_path, started, **kwargs):
+        """Dedicated public H3 V2 transport; never downgrade a failed create."""
+        if not prompt.strip() or len(prompt) > 7000:
+            raise ValueError("H3 V2 prompt must contain 1 through 7000 characters")
+        duration = kwargs.get("duration")
+        if type(duration) is not int or not 4 <= duration <= 15:
+            raise ValueError("H3 V2 duration must be 4 through 15 integer seconds")
+        resolution = str(kwargs.get("resolution") or "").lower()
+        if resolution not in {"720p", "768p", "2k", "1440p"}:
+            raise ValueError("H3 V2 supports 720p or 2k resolution")
+        if kwargs.get("seed") is not None or kwargs.get("watermark"):
+            raise ValueError("H3 V2 does not support seed or watermark")
+        if kwargs.get("generate_audio") is False:
+            raise ValueError("H3 V2 audio cannot be disabled")
+        mode = kwargs.get("mode")
+        mode = {"text2video": "text_to_video", "reference2video": "omni_reference", "frames2video": "first_last_frame"}.get(mode, mode)
+        first, last = kwargs.get("first_frame"), kwargs.get("last_frame")
+        image = kwargs.get("img_url") or kwargs.get("img_path")
+        groups = [(kwargs.get("ref_image_urls") or [], "image_url", "reference_image", 9),
+                  (kwargs.get("ref_video_urls") or [], "video_url", "reference_video", 3),
+                  (kwargs.get("ref_audio_urls") or [], "audio_url", "reference_audio", 3)]
+        has_refs = any(refs for refs, *_ in groups)
+        if mode is None:
+            mode = "first_last_frame" if last else "image2video" if first or image else "omni_reference" if has_refs else "text_to_video"
+        if mode == "image2video":
+            first = first or image
+            if not first or last or has_refs:
+                raise ValueError("H3 V2 image-to-video requires exactly one first frame")
+        elif mode == "first_last_frame":
+            if not first or not last or has_refs or image:
+                raise ValueError("H3 V2 first/last-frame mode requires both frames and no references")
+        elif mode == "omni_reference":
+            if not has_refs or first or last or image:
+                raise ValueError("H3 V2 omni reference requires reference media only")
+        elif mode == "text_to_video":
+            if first or last or image or has_refs:
+                raise ValueError("H3 V2 text-to-video does not accept attachments")
+        else:
+            raise ValueError("Unsupported H3 V2 mode")
+        ratio = kwargs.get("ratio") or kwargs.get("aspect_ratio") or "16:9"
+        if first:
+            # Frame geometry owns output ratio in the V2 contract.
+            ratio = "adaptive"
+        if ratio not in {"21:9", "16:9", "4:3", "1:1", "3:4", "9:16", "auto", "adaptive"} or (mode == "text_to_video" and ratio in {"auto", "adaptive"}):
+            raise ValueError("Unsupported H3 V2 aspect ratio for this mode")
+        content = [{"type": "text", "text": prompt}]
+        for refs, kind, role, limit in groups:
+            if len(refs) > limit:
+                raise ValueError("H3 V2 reference media count exceeds limits")
+            content.extend({"type": kind, "role": role, kind: {"url": _media(ref)}} for ref in refs)
+        for ref, role in ((first, "first_frame"), (last, "last_frame")):
+            if ref:
+                content.append({"type": "image_url", "role": role, "image_url": {"url": _media(ref)}})
+        body = {"model": api_model, "mode": mode, "content": content, "duration": duration, "resolution": resolution, "ratio": ratio}
+        task = _post(config, "/videos", body)
+        task_id = task.get("task_id") or task.get("id")
+        if not task_id:
+            raise RuntimeError("UniArt H3 V2 response has no task id")
+        if kwargs.get("on_task_submitted"):
+            kwargs["on_task_submitted"](task_id)
+        result = _poll(config, task_id)
+        _download_result(config, result, "video", output_path)
         return output_path, time.time() - started

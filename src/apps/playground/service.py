@@ -398,7 +398,8 @@ class PlaygroundService:
         model = UniArtVideoModel(runtime_config) if use_uniart else MuleRouterVideoModel({})
         saved_task = gen.provider_tasks.get(str(batch_index))
         if use_uniart and saved_task:
-            model.generate(prompt=gen.prompt, output_path=out_path, resume_task_id=saved_task)
+            model.generate(prompt=gen.prompt, output_path=out_path, model=gen.model_id, resume_task_id=saved_task,
+                           h3_api_version=gen.provider_task_api_versions.get(str(batch_index), "v1"))
             return
 
         params = gen.parameters
@@ -415,10 +416,8 @@ class PlaygroundService:
         if gen.mode == PlaygroundMode.T2V and gen.input_media:
             raise ValueError("当前是文生视频模式，附件不会自动改变模式；请切换到图生视频或全能视频后再提交")
 
-        # H3 IR returns canonical <Picture N>/<Video N> labels. Product mode
-        # remains I2V; only H3's provider transport needs reference slots.
-        h3_i2v_reference_transport = "h3" in model_lower and gen.mode == PlaygroundMode.I2V and bool(gen.input_media)
-        reference_mode = gen.mode == PlaygroundMode.R2V or h3_i2v_reference_transport
+        # V2 preserves I2V as one first-frame input, independent of prompt syntax.
+        reference_mode = gen.mode == PlaygroundMode.R2V
 
         # r2v: reference images (including H3 prompts restored from Agent)
         if reference_mode and gen.input_media:
@@ -430,13 +429,17 @@ class PlaygroundService:
                 raise ValueError("Video resolution is required; refresh the page and select a resolution before retrying")
             def save_task(task_id: str) -> None:
                 gen.provider_tasks[str(batch_index)] = task_id
+                if "h3" in model_lower:
+                    gen.provider_task_api_versions[str(batch_index)] = "v2"
                 self.storage.update_generation(gen)
 
             kwargs["on_task_submitted"] = save_task
             kwargs["resume_task_id"] = gen.provider_tasks.get(str(batch_index))
             kwargs["model"] = gen.model_id
+            if "h3" in model_lower:
+                kwargs["h3_api_version"] = "v2"
             references = list(gen.input_media)
-            if gen.mode in (PlaygroundMode.R2V, PlaygroundMode.V2V) or h3_i2v_reference_transport:
+            if gen.mode in (PlaygroundMode.R2V, PlaygroundMode.V2V):
                 grouped = {kind: [ref for ref in references if media_kind(ref) == kind] for kind in ("image", "video", "audio")}
                 references = grouped["image"] + grouped["video"] + grouped["audio"]
                 kwargs["ref_image_urls"] = grouped["image"]
@@ -459,7 +462,7 @@ class PlaygroundService:
                     gen.prompt, gen.input_media, references, gen.media_names,
                 )
             kwargs["generate_audio"] = params.get("audio")
-            effective_mode = PlaygroundMode.R2V if h3_i2v_reference_transport else gen.mode
+            effective_mode = gen.mode
             kwargs["mode"] = {
                 PlaygroundMode.T2V: "text2video",
                 PlaygroundMode.I2V: "image2video",
@@ -476,6 +479,7 @@ class PlaygroundService:
             kwargs["generation_mode"] = "first_last_frame"
             kwargs["first_frame"] = gen.input_media[0]
             kwargs["last_frame"] = gen.input_media[1]
+            img_path, img_url = None, None
 
         if use_uniart and params.get("duration") is None:
             raise ValueError("Video duration is required; refresh the model controls and select a duration before submitting")

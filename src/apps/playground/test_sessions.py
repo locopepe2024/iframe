@@ -159,7 +159,7 @@ def test_t2v_with_attachments_requires_explicit_reference_mode(tmp_path):
         service._generate_video_mulerouter(generation, str(tmp_path / "result.mp4"))
 
 
-def test_h3_i2v_keeps_product_mode_but_uses_reference_material_transport(tmp_path, monkeypatch):
+def test_h3_v2_i2v_keeps_single_frame_transport(tmp_path, monkeypatch):
     storage = make_storage(tmp_path)
     service = PlaygroundService(storage)
     service._load_provider_config = lambda: {"base_url": "https://uniart.test", "api_key": "test"}
@@ -191,5 +191,6 @@ def test_h3_i2v_keeps_product_mode_but_uses_reference_material_transport(tmp_pat
     service._generate_video_mulerouter(generation, str(tmp_path / "result.mp4"))
 
     assert generation.mode is PlaygroundMode.I2V
-    assert captured["kwargs"]["mode"] == "reference2video"
-    assert captured["kwargs"]["ref_image_urls"] == ["/tmp/identity.jpg"]
+    assert captured["kwargs"]["mode"] == "image2video"
+    assert "ref_image_urls" not in captured["kwargs"]
+    assert captured["kwargs"]["img_url"] == "/tmp/identity.jpg"

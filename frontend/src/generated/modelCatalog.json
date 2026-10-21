@@ -1287,8 +1287,8 @@
         ]
       },
       "default_backend": "uniart",
-      "description": "Minimax H3 video generation through the UniArt gateway",
-      "display_name": "UniArt Minimax H3 VIP",
+      "description": "MiniMax H3 V2 via the dedicated UniArt endpoint; SKU requires an active V2 route",
+      "display_name": "UniArt MiniMax H3 VIP V2",
       "docs": {
         "context_hub_doc_ids": [
           "uniart/minimax-h3"
@@ -4005,8 +4005,8 @@
         ]
       },
       "default_backend": "uniart",
-      "description": "Minimax H3 video generation through the UniArt gateway",
-      "display_name": "UniArt Minimax H3 VIP",
+      "description": "MiniMax H3 V2 via the dedicated UniArt endpoint; SKU requires an active V2 route",
+      "display_name": "UniArt MiniMax H3 VIP V2",
       "docs": {
         "context_hub_doc_ids": [
           "uniart/minimax-h3"
@@ -4024,9 +4024,18 @@
       },
       "family": "uniart",
       "id": "uniart/minimax-h3-vip",
-      "inputs": {},
+      "inputs": {
+        "reference_audios": {
+          "max": 3
+        },
+        "reference_images": {
+          "max": 9
+        },
+        "reference_videos": {
+          "max": 3
+        }
+      },
       "params": {
-        "audio": true,
         "ratio": {
           "default": "16:9",
           "options": [
@@ -4043,8 +4052,7 @@
             "720p",
             "2k"
           ]
-        },
-        "seed": true
+        }
       },
       "provider": "uniart",
       "release_stage": "stable",
@@ -7633,8 +7641,8 @@
         ]
       },
       "default_backend": "uniart",
-      "description": "Minimax H3 video generation through the UniArt gateway",
-      "display_name": "UniArt Minimax H3 VIP",
+      "description": "MiniMax H3 V2 via the dedicated UniArt endpoint; SKU requires an active V2 route",
+      "display_name": "UniArt MiniMax H3 VIP V2",
       "docs": {
         "context_hub_doc_ids": [
           "uniart/minimax-h3"
@@ -7652,12 +7660,21 @@
       },
       "family": "uniart",
       "id": "uniart/uniart/minimax-h3-vip#i2v",
-      "inputs": {},
+      "inputs": {
+        "reference_audios": {
+          "max": 3
+        },
+        "reference_images": {
+          "max": 9
+        },
+        "reference_videos": {
+          "max": 3
+        }
+      },
       "legacy_model_id": "uniart/minimax-h3-vip",
       "mode": "i2v",
       "model_line_id": "uniart/uniart/minimax-h3-vip",
       "params": {
-        "audio": true,
         "ratio": {
           "default": "16:9",
           "options": [
@@ -7674,8 +7691,7 @@
             "720p",
             "2k"
           ]
-        },
-        "seed": true
+        }
       },
       "provider": "uniart",
       "release_stage": "stable",
