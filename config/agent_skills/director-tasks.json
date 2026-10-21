@@ -161,6 +161,62 @@
       "source": "LumenX 独立适配；方法分类参考 open-ai-canvas",
       "source_revision": "86ebb6c5345287c645e857a8f550901bb6fd4bd8",
       "license": "MIT (LumenX original adaptation)"
+    },
+    {
+      "id": "storyboard-suspense",
+      "label": "悬念呈现",
+      "category": "分镜设计",
+      "stages": [
+        "storyboard"
+      ],
+      "version": "1.0.0",
+      "description": "用景别、遮挡和视线呈现已确认的信息差；不新增悬念事实，不提前揭示后续事件。",
+      "instructions": "用景别、遮挡和视线呈现已确认的信息差；不新增悬念事实，不提前揭示后续事件。",
+      "source": "iFrame 原创分镜阶段方法",
+      "source_revision": "1.0.0",
+      "license": "MIT"
+    },
+    {
+      "id": "storyboard-action",
+      "label": "动作拆解",
+      "category": "分镜设计",
+      "stages": [
+        "storyboard"
+      ],
+      "version": "1.0.0",
+      "description": "将复杂动作拆为准备、接触、结果的可见画面，明确肢体归属、受力和空间衔接，不增加剧情动作。",
+      "instructions": "将复杂动作拆为准备、接触、结果的可见画面，明确肢体归属、受力和空间衔接，不增加剧情动作。",
+      "source": "iFrame 原创分镜阶段方法",
+      "source_revision": "1.0.0",
+      "license": "MIT"
+    },
+    {
+      "id": "storyboard-emotion",
+      "label": "情绪特写",
+      "category": "分镜设计",
+      "stages": [
+        "storyboard"
+      ],
+      "version": "1.0.0",
+      "description": "用来源支持的眼神、面部和手部细节表现情绪变化，避免每帧重复特写，不把内心解释写成事实。",
+      "instructions": "用来源支持的眼神、面部和手部细节表现情绪变化，避免每帧重复特写，不把内心解释写成事实。",
+      "source": "iFrame 原创分镜阶段方法",
+      "source_revision": "1.0.0",
+      "license": "MIT"
+    },
+    {
+      "id": "storyboard-dialogue",
+      "label": "对白调度",
+      "category": "分镜设计",
+      "stages": [
+        "storyboard"
+      ],
+      "version": "1.0.0",
+      "description": "明确说话者、回应者、视线方向和轴线，用反应镜头服务对白，不改写台词或人物关系。",
+      "instructions": "明确说话者、回应者、视线方向和轴线，用反应镜头服务对白，不改写台词或人物关系。",
+      "source": "iFrame 原创分镜阶段方法",
+      "source_revision": "1.0.0",
+      "license": "MIT"
     }
   ]
 }

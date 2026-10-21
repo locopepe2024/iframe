@@ -3601,6 +3601,8 @@ def generate_motion_ref(script_id: str, request: GenerateMotionRefRequest, backg
 class AnalyzeToStoryboardRequest(BaseModel):
     """Request to analyze script text into storyboard frames."""
     text: str
+    mode: Literal["auto", "plan", "script"] = "auto"
+    skills: List[director_skills.SkillSelection] = Field(default_factory=list, max_length=12)
 
 
 class StoryboardAnalysisRefineRequest(BaseModel):
@@ -3649,7 +3651,11 @@ def start_storyboard_analysis(
     """Create or resume a durable storyboard draft without replacing frames."""
     if not request.text.strip():
         raise HTTPException(422, "Script text is required")
-    lineage = pipeline.storyboard_analysis_lineage(script_id, request.text)
+    try:
+        skill_snapshot = director_skills.freeze("storyboard", request.skills)
+        lineage = pipeline.storyboard_workflow_lineage(script_id, request.text, request.mode, skill_snapshot)
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from exc
     fingerprint = _storyboard_analysis_fingerprint(
         script_id, request.text, lineage=lineage,
     )
@@ -3658,7 +3664,7 @@ def start_storyboard_analysis(
     from .llm import split_director_source
     total_batches = len(split_director_source(
         request.text, direct_max_chars=1800, target_chars=1600, max_chars=1800
-    )) if len(request.text) > 1800 else 0
+    )) if lineage.storyboard_mode != "plan" and len(request.text) > 1800 else 0
     return extraction_jobs.start(
         user.owner_profile_id,
         script_id,
@@ -3675,6 +3681,7 @@ def start_storyboard_analysis(
                 ),
                 expected_lineage=lineage,
                 model=selected_model,
+                skill_snapshot=skill_snapshot,
             ),
             "lineage": lineage.model_dump(),
         },
@@ -3698,9 +3705,16 @@ def start_storyboard_analysis_refinement(
             pipeline.validate_storyboard_lineage(script_id, request.text, request.lineage)
         except StaleStoryboardDraftError as exc:
             raise HTTPException(status_code=409, detail=str(exc)) from exc
-        lineage = pipeline.storyboard_analysis_lineage(script_id, request.text)
+        lineage = request.lineage.model_copy(deep=True)
     else:
         lineage = ArtifactLineage(status="legacy_unpinned")
+    try:
+        snapshot = director_skills.freeze("storyboard", [
+            {"id": item["id"], "revision": item["revision"]} for item in lineage.creative_skill_run
+        ])
+        pipeline.validate_storyboard_coverage(script_id, request.draft, lineage)
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from exc
     fingerprint = _storyboard_analysis_fingerprint(
         script_id, request.text, request.draft, instructions, lineage,
     )
@@ -3714,6 +3728,7 @@ def start_storyboard_analysis_refinement(
                 script_id, request.text, request.draft, instructions,
                 lineage=lineage,
                 model=selected_model,
+                skill_snapshot=snapshot,
             ),
             "lineage": lineage.model_dump(),
         },
@@ -3759,7 +3774,10 @@ def analyze_to_storyboard(script_id: str, request: AnalyzeToStoryboardRequest):
     Replaces existing frames with newly generated ones.
     """
     try:
-        updated_script = pipeline.analyze_text_to_frames(script_id, request.text)
+        snapshot = director_skills.freeze("storyboard", request.skills)
+        lineage = pipeline.storyboard_workflow_lineage(script_id, request.text, request.mode, snapshot)
+        draft = pipeline.preview_storyboard_analysis(script_id, request.text, expected_lineage=lineage, skill_snapshot=snapshot)
+        updated_script = pipeline.analyze_text_to_frames(script_id, request.text, draft, lineage)
         return signed_response(updated_script)
     except StaleStoryboardDraftError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc

@@ -3468,6 +3468,35 @@ class ComicGenPipeline(StudioOwnerMixin):
             script, profile, execution_context, source_range,
         )
 
+    def storyboard_workflow_lineage(self, script_id, text, mode="auto", skill_snapshot=None):
+        lineage = self.storyboard_analysis_lineage(script_id, text)
+        script = self.scripts[script_id]
+        resolved = ("plan" if script.director_shooting_plan_revisions else "script") if mode == "auto" else mode
+        if resolved not in ("plan", "script"):
+            raise ValueError("Unknown storyboard mode")
+        if resolved == "plan" and skill_snapshot:
+            raise ValueError("按导演计划生成不重新执行创作 Skills")
+        lineage.storyboard_mode = resolved
+        if script.director_shooting_plan_revisions:
+            revision = script.director_shooting_plan_revisions[-1]
+            self._validate_director_shooting_plan(script, revision.plan)
+            context = self.project_episode_visual_context(script_id)
+            lineage.shooting_plan_revision = context.shooting_plan_revision
+            lineage.shooting_plan_hash = context.shooting_plan_hash
+        if resolved == "plan":
+            if not lineage.shooting_plan_revision:
+                raise ValueError("请先确认导演拍摄计划")
+            if text.strip() != script.original_text.strip():
+                raise ValueError("按导演计划生成目前需使用完整本集剧本")
+        lineage.creative_skill_run = director_skill_provenance(skill_snapshot or [])
+        return lineage
+
+    def validate_storyboard_coverage(self, script_id, frames, lineage):
+        if lineage and lineage.storyboard_mode == "plan":
+            from .storyboard_workflow import validate_plan_coverage
+            context = self.project_episode_visual_context(script_id).model_dump()
+            validate_plan_coverage(context["shots"], frames)
+
     def validate_storyboard_lineage(
         self,
         script_id: str,
@@ -3487,6 +3516,13 @@ class ComicGenPipeline(StudioOwnerMixin):
             field for field in pinned_fields
             if getattr(lineage, field) != getattr(current, field)
         ]
+        if lineage.storyboard_mode:
+            try:
+                workflow = self.storyboard_workflow_lineage(script_id, text, lineage.storyboard_mode)
+            except ValueError as exc:
+                raise StaleStoryboardDraftError(str(exc)) from exc
+            changed.extend(field for field in ("shooting_plan_revision", "shooting_plan_hash")
+                           if getattr(lineage, field) != getattr(workflow, field))
         if changed:
             raise StaleStoryboardDraftError(
                 "Storyboard draft lineage is stale; upstream revisions changed: "
@@ -5687,7 +5723,8 @@ class ComicGenPipeline(StudioOwnerMixin):
     def preview_storyboard_analysis(self, script_id: str, text: str,
                                     load_batches=None, save_batch=None,
                                     expected_lineage: Optional[ArtifactLineage] = None,
-                                    model: Optional[str] = None) -> List[Dict[str, Any]]:
+                                    model: Optional[str] = None,
+                                    skill_snapshot=None) -> List[Dict[str, Any]]:
         """Generate a storyboard draft without mutating persisted frames."""
         script, entities_json, prompt = self.storyboard_analysis_context(script_id)
         selected_model = model if model is not None else self.get_effective_polish_model(script)
@@ -5704,6 +5741,13 @@ class ComicGenPipeline(StudioOwnerMixin):
         if expected_lineage:
             self.validate_storyboard_lineage(script_id, text, expected_lineage)
             lineage = expected_lineage
+        if skill_snapshot:
+            entities_json["selected_creative_methods"] = skill_snapshot
+        if lineage.storyboard_mode == "plan":
+            from .storyboard_workflow import materialize_plan
+            frames = materialize_plan(entities_json["episode_visual_context"], entities_json)
+            self.validate_storyboard_lineage(script_id, text, lineage)
+            return frames
         visual_style = self.storyboard_visual_style(script)
         if len(text) <= 1800 or load_batches is None or save_batch is None:
             if lineage.status == "pinned":
@@ -5765,12 +5809,25 @@ class ComicGenPipeline(StudioOwnerMixin):
                                     draft: List[Dict[str, Any]],
                                     instructions: List[str],
                                     lineage: Optional[ArtifactLineage] = None,
-                                    model: Optional[str] = None) -> List[Dict[str, Any]]:
+                                    model: Optional[str] = None,
+                                    skill_snapshot=None) -> List[Dict[str, Any]]:
         """Revise a storyboard draft without changing the project's frames."""
         script, entities_json, prompt = self.storyboard_analysis_context(script_id)
         selected_model = model if model is not None else self.get_effective_polish_model(script)
         if lineage and lineage.status == "pinned":
             self.validate_storyboard_lineage(script_id, text, lineage)
+        if skill_snapshot is not None:
+            entities_json["selected_creative_methods"] = skill_snapshot
+        elif lineage and lineage.creative_skill_run:
+            from src.apps.director_skills import freeze
+            entities_json["selected_creative_methods"] = freeze("storyboard", [
+                {"id": item["id"], "revision": item["revision"]} for item in lineage.creative_skill_run
+            ])
+        self.validate_storyboard_coverage(script_id, draft, lineage)
+        if lineage and lineage.storyboard_mode == "plan":
+            entities_json["storyboard_workflow_rules"] = ("\n当前为按导演计划修订：每个计划 shot_id 必须保留且顺序不变，禁止合并不同 shot_id。"
+                       "可将一个镜头连续拆帧，每帧保留原 shot_id；同镜头拆帧时长之和必须等于计划时长。"
+                       "对白仅分配到对应帧，不重复台词；保留计划人物、道具、光影与信息意图。")
         director_profile = self.director_execution_context(
             script,
             source_range=self._source_range_for_text(script, text),
@@ -5783,6 +5840,7 @@ class ComicGenPipeline(StudioOwnerMixin):
             source_range=self._source_range_for_text(script, text),
             model=selected_model or None,
         )
+        self.validate_storyboard_coverage(script_id, frames, lineage)
         if not frames:
             raise RuntimeError("AI 分镜修订未返回任何帧数据，请重试。")
         if lineage and lineage.status == "pinned":
@@ -5875,6 +5933,13 @@ class ComicGenPipeline(StudioOwnerMixin):
             # Rebuild trusted provenance server-side; the browser only submits
             # revision preconditions and cannot invent fact IDs or source ranges.
             generated_lineage = self.storyboard_analysis_lineage(script_id, text)
+            if lineage.storyboard_mode:
+                generated_lineage = self.storyboard_workflow_lineage(script_id, text, lineage.storyboard_mode)
+                from src.apps.director_skills import freeze
+                snapshot = freeze("storyboard", [{"id": item["id"], "revision": item["revision"]}
+                                                for item in lineage.creative_skill_run])
+                generated_lineage.creative_skill_run = director_skill_provenance(snapshot)
+        self.validate_storyboard_coverage(script_id, draft or [], lineage)
         raw_frames = draft if draft is not None else self.script_processor.analyze_to_storyboard(
             text, entities_json, custom_extraction_prompt=storyboard_extraction_prompt,
             director_profile=director_profile,
@@ -5972,6 +6037,8 @@ class ComicGenPipeline(StudioOwnerMixin):
                         break
 
             shot_id = frame_data.get("shot_id")
+            if lineage and lineage.storyboard_mode == "plan":
+                frame_context_shots = episode_context_shots
             director_shot_context = None
             context_shot_ids = {
                 context_shot_value(item, "shot_id") for item in frame_context_shots
@@ -5993,9 +6060,9 @@ class ComicGenPipeline(StudioOwnerMixin):
             if plan_shot:
                 planned_character_ids = context_shot_value(plan_shot, "character_ids", [])
                 planned_prop_ids = context_shot_value(plan_shot, "prop_ids", [])
-                if planned_character_ids:
+                if planned_character_ids or (lineage and lineage.storyboard_mode == "plan"):
                     character_ids = planned_character_ids
-                if planned_prop_ids:
+                if planned_prop_ids or (lineage and lineage.storyboard_mode == "plan"):
                     prop_ids = planned_prop_ids
                 plan_scene = next(
                     (item for item in episode_context_scenes
@@ -6044,6 +6111,8 @@ class ComicGenPipeline(StudioOwnerMixin):
                     director_shot_context["shooting_plan_revision"] = episode_context_payload.get("shooting_plan_revision")
                     director_shot_context["shooting_plan_hash"] = episode_context_payload.get("shooting_plan_hash")
 
+            split_plan_shot = bool(plan_shot and lineage and lineage.storyboard_mode == "plan"
+                                   and sum(item.get("shot_id") == shot_id for item in raw_frames) > 1)
             planned_dialogue = context_shot_value(plan_shot, "dialogue", []) if plan_shot else []
             planned_dialogue_lines = [
                 item for item in planned_dialogue
@@ -6090,13 +6159,13 @@ class ComicGenPipeline(StudioOwnerMixin):
                 shot_size=(context_shot_value(plan_shot, "shot_size") or frame_data.get("shot_size")) if plan_shot else frame_data.get("shot_size"),
                 camera_angle=(context_shot_value(plan_shot, "camera_angle") or frame_data.get("camera_angle", "平视")) if plan_shot else frame_data.get("camera_angle", "平视"),
                 camera_movement=(context_shot_value(plan_shot, "camera_movement") or frame_data.get("camera_movement")) if plan_shot else frame_data.get("camera_movement"),
-                dialogue=(planned_dialogue_lines[0]["line"] if len(planned_dialogue_lines) == 1 else frame_data.get("dialogue")),
-                speaker=(planned_dialogue_lines[0]["speaker"] if len(planned_dialogue_lines) == 1 else frame_data.get("speaker")),
+                dialogue=(planned_dialogue_lines[0]["line"] if len(planned_dialogue_lines) == 1 and not split_plan_shot else frame_data.get("dialogue")),
+                speaker=(planned_dialogue_lines[0]["speaker"] if len(planned_dialogue_lines) == 1 and not split_plan_shot else frame_data.get("speaker")),
                 dialogue_structured=(DialogueStructured(
                     speaker=str(planned_dialogue_lines[0]["speaker"]),
                     line=str(planned_dialogue_lines[0]["line"]),
-                ) if len(planned_dialogue_lines) == 1 else None),
-                duration=(context_shot_value(plan_shot, "duration_seconds") or frame_data.get("duration")) if plan_shot else frame_data.get("duration"),
+                ) if len(planned_dialogue_lines) == 1 and not split_plan_shot else None),
+                duration=(context_shot_value(plan_shot, "duration_seconds") or frame_data.get("duration")) if plan_shot and not split_plan_shot else frame_data.get("duration"),
                 director_profile_revision=(
                     generated_lineage.director_profile_revision
                 ),

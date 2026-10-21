@@ -2205,6 +2205,7 @@ fact_id，事实变化时保留 source_refs，并用 status/supersedes_fact_id �
             else DEFAULT_STORYBOARD_EXTRACTION_PROMPT
         )
         system_prompt = template.replace("{entities_str}", entities_str).replace("{text}", text)
+        system_prompt += director_skill_guidance(entities_json.get("selected_creative_methods", []))
         system_prompt += system_visual_context
         system_prompt += self._storyboard_visual_style_context(visual_style)
         system_prompt += STORYBOARD_CONTINUITY_CONTEXT
@@ -2335,6 +2336,8 @@ scene_summaries 是场景级连续性记忆。为每个镜头优先匹配原文�
         baseline += self._storyboard_episode_visual_context(entities_json, text, source_range)
         baseline += self._storyboard_visual_style_context(visual_style)
         baseline += STORYBOARD_CONTINUITY_CONTEXT
+        baseline += entities_json.get("storyboard_workflow_rules", "")
+        baseline += director_skill_guidance(entities_json.get("selected_creative_methods", []))
         if director_profile:
             execution_context = director_execution_payload(director_profile)
             baseline += "\n\n<confirmed_director_execution_summary>\n" + json.dumps(

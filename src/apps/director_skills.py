@@ -7,7 +7,7 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field
 from .agent_skills import database
 
-Stage = Literal['series', 'episode', 'shooting_plan']
+Stage = Literal['series', 'episode', 'shooting_plan', 'storyboard']
 CATALOG_PATH = Path(__file__).resolve().parents[2] / 'config/agent_skills/director-tasks.json'
 MAX_METHOD_CHARS = 14000
 

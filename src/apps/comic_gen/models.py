@@ -507,6 +507,10 @@ class ArtifactLineage(BaseModel):
     fact_ledger_revision: Optional[int] = Field(None, ge=1)
     fact_ledger_source_revision_id: Optional[str] = None
     fact_ledger_status: Literal["none", "current", "stale", "unavailable"] = "none"
+    storyboard_mode: Optional[Literal["plan", "script"]] = None
+    shooting_plan_revision: Optional[int] = None
+    shooting_plan_hash: Optional[str] = None
+    creative_skill_run: List[Dict[str, str]] = Field(default_factory=list, max_length=12)
     fact_ids: List[str] = Field(default_factory=list, max_length=40)
     source_ranges: List[SourceRange] = Field(default_factory=list, max_length=40)
 

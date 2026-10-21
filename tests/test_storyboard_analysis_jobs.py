@@ -64,9 +64,11 @@ def test_storyboard_jobs_are_drafts_owner_scoped_and_refinable(tmp_path, monkeyp
             "style_config": {"positive_prompt": "黑白电影质感"},
         },
         storyboard_analysis_lineage=lambda project, text: lineage,
+        storyboard_workflow_lineage=lambda project, text, mode, snapshot: lineage,
         validate_storyboard_lineage=lambda project, text, pinned: None,
+        validate_storyboard_coverage=lambda project, draft, lineage: None,
         preview_storyboard_analysis=lambda project, text, **kwargs: first,
-        refine_storyboard_analysis=lambda project, text, draft, instructions, lineage=None, model=None: (
+        refine_storyboard_analysis=lambda project, text, draft, instructions, lineage=None, model=None, skill_snapshot=None: (
             captured.update(text=text, draft=draft, instructions=instructions, lineage=lineage, model=model) or refined
         ),
     )
