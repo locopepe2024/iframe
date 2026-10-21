@@ -19,6 +19,69 @@ Acceptance: Blender 4.5.9 known-distance check, real remote API task output,
 transport failure/invalid artifact tests, existing depth owner tests. Production
 Core requires SSH connectivity and credentials; merging does not configure them.
 
+## Production connection closure (2026-10-21)
+
+Observed on iframe: the running backend has no DIRECTOR_DEPTH settings or SSH
+mount; the host has no media alias/key. Media still has Blender 4.5.9 and the
+previous CI account. This proves the current production connection is absent;
+it does not establish that a historical production connection never existed.
+
+Provision a separate `director-depth` media account without sudo, with an SSH
+key restricted from PTY and forwarding. Keep the private key only on iframe in
+`/srv/lumenx/runtime/director-depth-ssh` (0700), with config, pinned known_hosts
+and id_ed25519 (0600). Pin media's public host key obtained over the existing
+authenticated management connection, rather than accepting an unverified scan.
+
+The release owner validates this fixed directory and mounts it read-only at
+`/root/.ssh` only when DIRECTOR_DEPTH_MEDIA_SSH_TARGET is configured. Missing or
+unsafe credentials must stop container creation before changing production.
+Both candidate and production creation must retain the mount. Update both the
+managed release env and the active container configuration. No SSH credentials
+go into Git, output/media paths, image layers or browser responses.
+
+Acceptance: reproduce release creation dropping the mount with a failing test;
+verify read-only mounts, missing/private/symlink checks, and existing release
+tests. Validate a disposable candidate with the same running image against media
+before switching. Preserve the previous container and environment for rollback.
+Submit a synthetic known-distance plane through the authenticated production
+API, verify PNG/EXR/manifest, media hostname, Blender version, metric value and
+package/snapshot checksums. Check capability and owner isolation. Do not invoke
+local Blender. Source revision changes or active jobs block the runtime switch.
+
+### Runtime observation
+
+Production configuration cutover completed on iframe using the unchanged image
+revision `5bd1f7222e69174ba8ff295551699d5985d7df66`. The isolated candidate,
+production loopback API and `https://garage.uniart.fun` API each rendered the
+synthetic 2m and 4m planes successfully on `VM-0-6-ubuntu`, Blender 4.5.9 LTS.
+Normalized PNG center values reconstructed 2.0m/4.0m within 0.02m tolerance;
+EXR magic, manifest unit/resolution and snapshot/package checksums passed.
+Invalid sessions returned 401; another anonymous browser owner received 404 for
+the authenticated owner's outputs through the public entry. Project/series IDs
+were preserved and backend/static revision matched after the switch.
+
+Public acceptance task IDs: `42fa6f8f678c4fa5ad0bc6e2c7b5ea5b` (2m),
+`fb5f8703eb0b47c381e3d2486417aff8` (4m). These are synthetic artifacts under
+the designated test owner, not user projects. This verifies API-to-media depth,
+not full WebGL/UI acceptance or arbitrary scene accuracy. No local Blender ran.
+
+Rollback container: `iframe-backend-before-media-20261021`. Environment and
+startup-state backups plus cutover metadata are retained in
+`/srv/lumenx/runtime/director-media-20261021`. The disposable candidate container
+was removed. The tested release helper is preserved in that same directory;
+the tracked release change must be merged before using the normal release entry
+again, so a later deployment retains the SSH mount. Tests: 25 passed, explicit
+remote integration test skipped, local Blender test excluded.
+
+During final observation another deployment advanced backend and static to
+`5851355029ae26e9337bd655f25fb81d2db893d2`. This session did not initiate that
+application release. The new container retained `director-media` and the fixed
+read-only SSH mount. Repeated public acceptance passed at this revision:
+`7e3052023370461b8c36f8fe9500dfd7` (2m) and
+`51532f7fb26c416998975d0c5f1f0ff7` (4m), including cross-owner rejection.
+The earlier rollback container belongs to the earlier runtime cutover; consult
+the latest release metadata before rolling back a subsequent application release.
+
 ## Deployment configuration
 
 Set `DIRECTOR_DEPTH_MEDIA_SSH_TARGET` to an operator-managed SSH alias or

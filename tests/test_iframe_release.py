@@ -64,6 +64,7 @@ def test_release_requires_complete_private_knowledge_runtime(monkeypatch, tmp_pa
     env_file.write_text("IFRAME_KNOWLEDGE_PG_HOST=10.0.0.1\n")
     with pytest.raises(RuntimeError, match="Incomplete knowledge"):
         release.knowledge_runtime(env_file)
+
     names = (
         "IFRAME_KNOWLEDGE_PG_HOST", "IFRAME_KNOWLEDGE_PG_USER",
         "IFRAME_KNOWLEDGE_PG_PASSWORD_FILE", "IFRAME_KNOWLEDGE_PG_CA_FILE",
@@ -88,6 +89,57 @@ def test_release_requires_complete_private_knowledge_runtime(monkeypatch, tmp_pa
     (secrets / "knowledge-cos-secret-key").chmod(0o644)
     with pytest.raises(RuntimeError, match="unsafe knowledge secret"):
         release.knowledge_runtime(env_file)
+
+
+def test_media_credentials_survive_backend_creation(monkeypatch, tmp_path):
+    env = tmp_path / "backend.env"
+    env.write_text("DIRECTOR_DEPTH_MEDIA_SSH_TARGET=director-media\n")
+    ssh_dir = tmp_path / "ssh"
+    ssh_dir.mkdir(mode=0o700)
+    for name in ("config", "known_hosts", "id_ed25519"):
+        path = ssh_dir / name
+        path.write_text("provisioned")
+        path.chmod(0o600)
+    monkeypatch.setattr(release, "DIRECTOR_MEDIA_SSH", ssh_dir, raising=False)
+    monkeypatch.setattr(release, "knowledge_runtime", lambda _: False)
+    calls = []
+    monkeypatch.setattr(release, "run", lambda *args: calls.append(args))
+    release.create_backend("candidate", "pinned-image", env, tmp_path / "output", 17178)
+    assert f"{ssh_dir}:/root/.ssh:ro" in calls[0]
+
+
+@pytest.mark.parametrize("unsafe", ["missing", "public-key", "public-dir", "symlink-key"])
+def test_media_credentials_fail_closed(monkeypatch, tmp_path, unsafe):
+    env = tmp_path / "backend.env"
+    env.write_text("DIRECTOR_DEPTH_MEDIA_SSH_TARGET=director-media\n")
+    ssh_dir = tmp_path / "ssh"
+    ssh_dir.mkdir(mode=0o700)
+    for name in ("config", "known_hosts", "id_ed25519"):
+        path = ssh_dir / name
+        path.write_text("provisioned")
+        path.chmod(0o600)
+    if unsafe == "missing": (ssh_dir / "config").unlink()
+    elif unsafe == "public-key": (ssh_dir / "id_ed25519").chmod(0o644)
+    elif unsafe == "public-dir": ssh_dir.chmod(0o755)
+    else:
+        (ssh_dir / "id_ed25519").rename(ssh_dir / "real-key")
+        (ssh_dir / "id_ed25519").symlink_to(ssh_dir / "real-key")
+    monkeypatch.setattr(release, "DIRECTOR_MEDIA_SSH", ssh_dir, raising=False)
+    with pytest.raises(RuntimeError, match="media SSH"):
+        release.director_media_runtime(env)
+
+
+def test_media_mount_is_opt_in_and_read_only(monkeypatch, tmp_path):
+    env = tmp_path / "backend.env"
+    env.write_text("APP_ENV=production\n")
+    assert not release.director_media_runtime(env)
+    backend, frontend = topology()
+    mount = {"Source": str(release.DIRECTOR_MEDIA_SSH), "Destination": "/root/.ssh", "RW": False, "Type": "bind"}
+    backend["Mounts"].append(mount)
+    release.verify_topology(backend, frontend)
+    mount["RW"] = True
+    with pytest.raises(RuntimeError, match="Unexpected backend mounts"):
+        release.verify_topology(backend, frontend)
 
 
 def test_release_requires_explicit_matching_remote_revision(monkeypatch, tmp_path):
