@@ -86,3 +86,16 @@ def test_api_rejects_invalid_stage_before_queue():
     with pytest.raises(HTTPException) as err:
         api._freeze_director_skills('episode', skills.DirectorSkillsRequest(skills=[selection('shooting_plan', 'opening-hook')]))
     assert err.value.status_code == 422
+
+
+def test_actual_plan_prompt_includes_only_requested_hook():
+    processor = ScriptProcessor.__new__(ScriptProcessor)
+    processor.llm = Mock(is_configured=True)
+    processor.llm.chat.return_value = json.dumps({'scenes': [], 'unresolved_questions': []})
+    snapshot = skills.freeze('shooting_plan', [selection('shooting_plan', 'opening-hook')])
+    with pytest.raises(RuntimeError, match='至少一个 scene'):
+        processor.plan_director_shooting_chunk('原文', {'selected_creative_methods': snapshot}, {}, {})
+    prompt = processor.llm.chat.call_args.kwargs['messages'][0]['content']
+    assert prompt.count(snapshot[0]['instructions']) == 1
+    assert '[opening-hook ' in prompt
+    assert '[information-suspense ' not in prompt
