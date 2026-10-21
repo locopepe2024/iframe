@@ -54,6 +54,7 @@ it('uses the existing type popup and composer for Agent while keeping shared act
     expect(screen.queryByRole('button', { name: 'mode.i2i' })).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'sessions.templates' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'sessions.allHistory' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '对话历史' })).toHaveAttribute('aria-haspopup', 'dialog');
     fireEvent.click(screen.getByRole('button', { name: '发送' }));
     expect(send).toHaveBeenCalledOnce();
 });

@@ -33,6 +33,7 @@ import { usePlaygroundStore } from './usePlaygroundStore';
 import { COMPANION_SKILLS, type CompanionSkillId } from './companionSkills';
 import type { AgentMemory, MemoryCandidate } from './useAgentConversation';
 import VoiceTranscriptionButton from './VoiceTranscriptionButton';
+import AgentHistory from './AgentHistory';
 
 type ComposerPanel = 'output' | 'model' | 'method' | 'reference' | 'companion' | ComposerControl | null;
 
@@ -275,6 +276,7 @@ export default function AgentComposer({ canGenerate, batchSize, onGenerate, agen
             }}
           />
 
+          <AgentHistory />
           <span aria-label="字数统计" className="ml-auto whitespace-nowrap font-mono text-[0.625rem] text-text-muted">{prompt.length} 字</span>
           <button
             type="button"
