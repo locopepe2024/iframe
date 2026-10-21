@@ -723,3 +723,21 @@ def test_create_video_task_workbench_tab_defaults_to_none(pipeline):
         )
     task = next(t for t in script.video_tasks if t.id == task_id)
     assert task.workbench_tab is None
+
+
+def test_workbench_preserves_frame_mode_and_tail_across_reload(pipeline):
+    frame = StoryboardFrame(id="f1", scene_id="s1")
+    pipeline.scripts = {"p1": _script_with_frame(frame)}
+    pipeline.scripts["p1"].owner_profile_id = "profile"
+    with patch.object(pipeline, "_save_data"):
+        updated = pipeline.update_frame_workbench("p1", "f1", video_generation_mode="first_last_frame",
+            last_frame_image_urls=["https://cdn.example/tail.webp"], last_frame_selected_index=0)
+        restored = StoryboardFrame.model_validate(updated.model_dump())
+        assert restored.video_generation_mode == "first_last_frame"
+        assert restored.last_frame_image_urls == ["https://cdn.example/tail.webp"]
+        pipeline.update_frame_workbench("p1", "f1", video_generation_mode="i2v")
+        assert frame.last_frame_image_urls == ["https://cdn.example/tail.webp"]
+        pipeline.update_frame_workbench("p1", "f1", last_frame_image_urls=[])
+        assert frame.last_frame_image_urls == []
+        with pytest.raises(ValueError, match="video_generation_mode"):
+            pipeline.update_frame_workbench("p1", "f1", video_generation_mode="bad")

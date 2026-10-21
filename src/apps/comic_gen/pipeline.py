@@ -7295,6 +7295,15 @@ class ComicGenPipeline(StudioOwnerMixin):
             if seed is not None:
                 raise ValueError("H3 V2 does not support seed")
 
+        # Accept the H3 client alias at the boundary; persist the existing
+        # storyboard mode so frame history and reference identity keep one owner.
+        if generation_mode == "f2v":
+            if not (model and model.startswith("uniart/minimax-h3") and model != "uniart/minimax-h3-ir"):
+                raise ValueError("Studio f2v alias requires an H3 V2 model")
+            generation_mode = "first_last_frame"
+        if last_frame_url and generation_mode != "first_last_frame":
+            raise ValueError("Last frame requires first/last-frame mode")
+
         # If R2V mode is selected, use the appropriate R2V model
         from ...models.nsfw_new_one import WAN_IDS
         is_nsfw_wan = model in WAN_IDS
@@ -7372,7 +7381,7 @@ class ComicGenPipeline(StudioOwnerMixin):
                 raise ValueError("Image-to-video requires an input image")
             if generation_mode == "first_last_frame" and (not image_url or not last_frame_url):
                 raise ValueError("First/last-frame video requires both frame images")
-            if generation_mode == "i2v" and audio_url:
+            if generation_mode in ("i2v", "first_last_frame") and audio_url:
                 raise ValueError("Audio references require reference-to-video mode")
             if generation_mode == "t2v" and (image_url or audio_url):
                 raise ValueError("Text-to-video cannot accept media references")
@@ -8599,6 +8608,8 @@ class ComicGenPipeline(StudioOwnerMixin):
                 task.reference_video_urls = [resolve_studio_reference(ref, script.owner_profile_id, output_root=self.output_root) for ref in task.reference_video_urls]
                 if task.image_url:
                     task.image_url = resolve_studio_reference(task.image_url, script.owner_profile_id, output_root=self.output_root)
+                if task.last_frame_url:
+                    task.last_frame_url = resolve_studio_reference(task.last_frame_url, script.owner_profile_id, output_root=self.output_root)
                 if task.audio_url:
                     task.audio_url = resolve_studio_reference(task.audio_url, script.owner_profile_id, output_root=self.output_root)
             
@@ -8697,7 +8708,8 @@ class ComicGenPipeline(StudioOwnerMixin):
                 if task.generation_mode == "r2v" and task.image_url and task.image_url not in reference_images:
                     reference_images.insert(0, task.image_url)
                 from .reference_prompt import bind_storyboard_prompt
-                submitted_prompt = bind_storyboard_prompt(task.prompt, task.model, len(reference_images))
+                image_count = 2 if task.generation_mode == "first_last_frame" else 1 if task.generation_mode == "i2v" else len(reference_images)
+                submitted_prompt = bind_storyboard_prompt(task.prompt, task.model, image_count)
                 # Storyboard cuts can be shorter than the provider's output
                 # window. Normalize at the submission boundary as protection
                 # for mobile clients or cached frontends that predate the UI
@@ -8705,7 +8717,9 @@ class ComicGenPipeline(StudioOwnerMixin):
                 max_duration = 15 if "minimax-h3" in model_name_lower else 30
                 provider_duration = max(4, min(max_duration, task.duration))
                 video_path, _ = uniart_model.generate(
-                    prompt=submitted_prompt, output_path=output_path, img_url=img_url, img_path=img_path,
+                    prompt=submitted_prompt, output_path=output_path,
+                    img_url=img_url if task.generation_mode != "first_last_frame" else None,
+                    img_path=img_path if task.generation_mode != "first_last_frame" else None,
                     first_frame=task.image_url if task.generation_mode == "first_last_frame" else None,
                     last_frame=task.last_frame_url if task.generation_mode == "first_last_frame" else None,
                     duration=provider_duration, resolution=task.resolution, aspect_ratio=task.ratio or "16:9",

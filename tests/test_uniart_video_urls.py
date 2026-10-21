@@ -114,24 +114,30 @@ def test_playground_preserves_video_model_and_all_url_references(monkeypatch, tm
     def post(config, endpoint, body):
         assert body['model'] == model
         assert body['resolution'] == resolution
-        assert body['mode'] == {
+        expected_modes = {
             't2v': 'text2video', 'i2v': 'image2video', 'r2v': 'reference2video',
             'f2v': 'frames2video', 'v2v': 'reference2video',
-        }[mode]
+        }
+        if model.startswith('minimax-h3'):
+            expected_modes.update(t2v='text_to_video', r2v='omni_reference',
+                                  f2v='first_last_frame', v2v='omni_reference')
+        assert body['mode'] == expected_modes[mode]
         assert endpoint == '/videos'
         assert 'data:' not in json.dumps(body)
         if mode in {'r2v', 'f2v', 'v2v'}:
             urls = [c[c['type']]['url'] for c in body['content'] if c['type'] != 'text']
             assert urls == refs
         elif mode == 'i2v':
-            assert body['content'][1] == {'type': 'image_url', 'role': 'image', 'image_url': {'url': refs[0]}}
+            assert body['content'][1] == {'type': 'image_url', 'role': 'first_frame' if model.startswith('minimax-h3') else 'image', 'image_url': {'url': refs[0]}}
+        elif model.startswith('minimax-h3'):
+            assert body['content'] == [{'type': 'text', 'text': 'walk'}]
         else:
             assert body['prompt'] == 'walk'
             assert 'content' not in body
         if mode != 't2v':
             assert 'prompt' not in body
         assert 'input_reference' not in body and 'aspect_ratio' not in body
-        assert body['ratio'] == '16:9'
+        assert body['ratio'] == ('adaptive' if model.startswith('minimax-h3') and mode in {'i2v', 'f2v'} else '16:9')
         captured.append(body)
         return {'task_id': 'accepted'}
     def poll(config, task_id, **kwargs):
@@ -140,6 +146,12 @@ def test_playground_preserves_video_model_and_all_url_references(monkeypatch, tm
     monkeypatch.setattr(uniart, '_post', post)
     monkeypatch.setattr(uniart, '_poll', poll)
     monkeypatch.setattr(uniart, '_download_result', lambda *a: None)
+    if model.startswith('minimax-h3') and resolution == '480p':
+        with pytest.raises(RuntimeError, match='supports 720p or 2k'):
+            service._process_video_generation(gen)
+        assert captured == []
+        assert gen.provider_tasks == {}
+        return
     service._process_video_generation(gen)
     assert len(captured) == 1
     assert gen.provider_tasks == {'0': 'accepted'}

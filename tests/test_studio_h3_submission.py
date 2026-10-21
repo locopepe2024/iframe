@@ -261,3 +261,84 @@ def test_h3_seed_rejected_before_task_creation(studio):
         pipeline.create_video_task(script.id, "", "move", model="uniart/minimax-h3-vip",
                                    generation_mode="t2v", seed=123)
     assert not script.video_tasks
+
+
+def test_studio_creates_first_last_frame_task(studio):
+    pipeline, script = studio
+    pipeline.create_video_task(script.id, "https://cdn.example/first.jpg", "Transition from <Picture 1> to <Picture 2>",
+        model="uniart/minimax-h3-vip", generation_mode="f2v", last_frame_url="https://cdn.example/last.jpg")
+    current = script.video_tasks[0]
+    pipeline._download_temp_image = Mock(return_value=None)
+    assert current.last_frame_url == "https://cdn.example/last.jpg"
+    pipeline.process_video_task(script.id, current.id)
+    assert current.status == "completed", current.error
+    body = uniart._post.call_args.args[2]
+    assert body["content"][0]["text"] == "Transition from <Picture 1> to <Picture 2>"
+    assert body["mode"] == "first_last_frame"
+    assert body["ratio"] == "adaptive"
+    assert [item["role"] for item in body["content"][1:]] == ["first_frame", "last_frame"]
+    assert body["content"][2]["image_url"]["url"] == current.last_frame_url
+    assert body["generate_audio"] is False
+
+
+@pytest.mark.parametrize("image,tail,extra", [
+    ("", "https://cdn.example/last.jpg", {}),
+    ("https://cdn.example/first.jpg", None, {}),
+    ("https://cdn.example/first.jpg", "https://cdn.example/last.jpg", {"audio_url": "https://cdn.example/a.wav"}),
+    ("https://cdn.example/first.jpg", "https://cdn.example/last.jpg", {"reference_image_urls": ["https://cdn.example/ref.jpg"]}),
+    ("https://cdn.example/first.jpg", "https://cdn.example/last.jpg", {"reference_video_urls": ["https://cdn.example/ref.mp4"]}),
+])
+def test_first_last_rejects_missing_or_mixed_inputs(studio, image, tail, extra):
+    pipeline, script = studio
+    with pytest.raises(ValueError):
+        pipeline.create_video_task(script.id, image, "move", model="uniart/minimax-h3-vip",
+            generation_mode="f2v", last_frame_url=tail, **extra)
+    assert not script.video_tasks
+
+
+def test_first_last_rejects_foreign_tail(studio):
+    pipeline, script = studio
+    foreign = owned_file("foreign", "last.jpg")
+    with pytest.raises(ValueError, match="another owner"):
+        pipeline.create_video_task(script.id, "https://cdn.example/first.jpg", "move",
+            model="uniart/minimax-h3-vip", generation_mode="f2v", last_frame_url=str(foreign))
+    assert not script.video_tasks
+
+
+@pytest.mark.parametrize("mode,model", [("i2v", "uniart/minimax-h3-vip"), ("r2v", "uniart/minimax-h3-vip"), ("f2v", "uniart/seedance-2.5-vip")])
+def test_tail_cannot_be_silently_ignored(studio, mode, model):
+    pipeline, script = studio
+    with pytest.raises(ValueError):
+        pipeline.create_video_task(script.id, "https://cdn.example/first.jpg", "move",
+            model=model, generation_mode=mode, last_frame_url="https://cdn.example/last.jpg")
+    assert not script.video_tasks
+
+
+@pytest.mark.parametrize("mode,expected", [("i2v", "image2video"), ("r2v", "omni_reference")])
+def test_storyboard_h3_first_frame_and_reference_modes(studio, mode, expected):
+    pipeline, script = studio
+    pipeline._download_temp_image = Mock(return_value=None)
+    current = task(script, generation_mode=mode, image_url="https://cdn.example/first.jpg" if mode == "i2v" else "",
+                   reference_image_urls=[] if mode == "i2v" else ["https://cdn.example/ref.jpg"],
+                   reference_video_urls=[], generate_audio=True)
+    pipeline.process_video_task(script.id, current.id)
+    assert current.status == "completed", current.error
+    body = uniart._post.call_args.args[2]
+    assert body["mode"] == expected
+    assert body["generate_audio"] is True
+    assert body["content"][1]["role"] == ("first_frame" if mode == "i2v" else "reference_image")
+
+
+def test_storyboard_api_passes_tail_into_created_task(studio, monkeypatch):
+    from fastapi import BackgroundTasks
+    from src.apps.comic_gen import api as studio_api
+    pipeline, script = studio
+    monkeypatch.setattr(studio_api, "pipeline", pipeline)
+    request = studio_api.CreateVideoTaskRequest(image_url="https://cdn.example/first.jpg", prompt="move",
+        model="uniart/minimax-h3-vip", generation_mode="f2v", last_frame_url="https://cdn.example/tail.webp")
+    jobs = BackgroundTasks()
+    studio_api.create_video_task(script.id, request, jobs)
+    assert script.video_tasks[0].generation_mode == "first_last_frame"
+    assert script.video_tasks[0].last_frame_url == "https://cdn.example/tail.webp"
+    assert len(jobs.tasks) == 1
+    uniart._post.assert_not_called()

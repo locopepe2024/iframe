@@ -190,8 +190,8 @@ def test_t2v_with_attachments_requires_explicit_reference_mode(tmp_path):
         mode=PlaygroundMode.T2V,
         model_id="uniart/minimax-h3-vip",
         prompt="<Picture 1> is the first frame; make her dance.",
-        input_media=["/tmp/identity.jpg"],
-        media_names={"/tmp/identity.jpg": "Screenshot.png"},
+        input_media=["https://cdn.example/identity.jpg"],
+        media_names={"https://cdn.example/identity.jpg": "Screenshot.png"},
         parameters={"resolution": "720p", "duration": 15},
         created_at="2026-10-04T00:00:00+00:00",
     )
@@ -223,8 +223,8 @@ def test_h3_v2_i2v_keeps_single_frame_transport(tmp_path, monkeypatch):
         mode=PlaygroundMode.I2V,
         model_id="uniart/minimax-h3-vip",
         prompt="<Picture 1> is the subject; make her dance.",
-        input_media=["/tmp/identity.jpg"],
-        media_names={"/tmp/identity.jpg": "Screenshot.png"},
+        input_media=["https://cdn.example/identity.jpg"],
+        media_names={"https://cdn.example/identity.jpg": "Screenshot.png"},
         parameters={"resolution": "720p", "duration": 15},
         created_at="2026-10-04T00:00:00+00:00",
     )
@@ -234,4 +234,4 @@ def test_h3_v2_i2v_keeps_single_frame_transport(tmp_path, monkeypatch):
     assert generation.mode is PlaygroundMode.I2V
     assert captured["kwargs"]["mode"] == "image2video"
     assert "ref_image_urls" not in captured["kwargs"]
-    assert captured["kwargs"]["img_url"] == "/tmp/identity.jpg"
+    assert captured["kwargs"]["img_url"] == "https://cdn.example/identity.jpg"

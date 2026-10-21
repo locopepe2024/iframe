@@ -174,3 +174,14 @@ it('shows automatic frame ratio for H3 V2 image and first-last-frame modes', () 
     expect(screen.queryByText('比例跟随首帧')).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: '16:9' })).toBeInTheDocument();
 });
+
+
+it('exposes and selects first-last-frame mode for an older three-mode H3 catalog', () => {
+    installUniArtCatalog([{ id: 'uniart/minimax-h3-discount', api_model_id: 'minimax-h3-discount', display_name: 'H3', description: '', family: 'minimax', provider: 'uniart', capabilities: ['t2v', 'i2v', 'r2v'], duration: null, params: {}, inputs: {} }]);
+    usePlaygroundStore.setState({ mode: 'i2v', modelId: 'uniart/minimax-h3-discount', inputMedia: ['first.webp'], parameters: {} });
+    render(<AgentComposer canGenerate batchSize={1} onGenerate={vi.fn()} />);
+    fireEvent.click(screen.getByRole('button', { name: 'mode.i2v' }));
+    fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'mode.f2v' }));
+    expect(usePlaygroundStore.getState().mode).toBe('f2v');
+    expect(usePlaygroundStore.getState().inputMedia).toEqual(['first.webp']);
+});
