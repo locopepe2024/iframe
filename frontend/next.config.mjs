@@ -1,3 +1,5 @@
+import path from 'node:path';
+
 /** @type {import('next').NextConfig} */
 const isProd = process.env.NODE_ENV === 'production';
 const isDocker = process.env.DOCKER_BUILD === 'true';
@@ -13,6 +15,8 @@ const nextConfig = {
     webpack(config) {
         // Filerobot is client-only; Konva's server entry must not require native canvas.
         config.resolve.alias = { ...config.resolve.alias, canvas: false };
+        // The headless trial supplies its own UI; CopilotKit's Tailwind v4 CSS cannot pass this app's Tailwind v3 PostCSS pipeline.
+        config.resolve.alias[path.resolve(process.cwd(), 'node_modules/@copilotkit/react-core/dist/v2/index.css')] = path.resolve(process.cwd(), 'src/styles/copilotkit-empty.css');
         return config;
     },
     output: isProd ? 'export' : undefined,

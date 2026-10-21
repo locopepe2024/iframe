@@ -1,0 +1,37 @@
+.shell {
+  --ink: #182f40; --muted: #455f70; --primary: #185a85; --border: #bdcdd8;
+  position: fixed; inset: 0; height: 100dvh; display: flex; flex-direction: column;
+  color: var(--ink); background: #f4f7f8; color-scheme: light;
+  font-family: system-ui, "PingFang SC", sans-serif; font-size: max(18px, 1.125rem); line-height: 1.65;
+}
+.large { font-size: max(22px, 1.375rem); }
+.header, .content { width: 100%; max-width: 660px; margin-inline: auto; }
+.header { padding: max(16px, env(safe-area-inset-top)) 20px 12px; flex-shrink: 0; border-bottom: 1px solid var(--border); }
+.header h1 { font-size: 1.5em; font-weight: 700; }
+.content { overflow-y: auto; min-height: 0; padding: 16px 20px max(28px, env(safe-area-inset-bottom)); overflow-wrap: anywhere; }
+.shell p { margin: 0 0 14px; }
+.shell h2 { font-size: 1.2em; font-weight: 650; margin: 0 0 12px; }
+.shell h3 { font-size: 1em; font-weight: 650; }
+.muted { color: var(--muted); }
+.card { padding: 20px; margin: 20px 0; border: 1px solid var(--border); border-radius: 18px; background: white; }
+.prompt { border: 2px solid var(--primary); }
+.actions { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 16px; }
+.actions > * { flex: 1 1 130px; }
+.shell button, .shell a { min-height: 52px; padding: 10px 14px; display: inline-flex; align-items: center; justify-content: center; gap: 8px; border: 1px solid var(--primary); border-radius: 12px; color: var(--primary); background: white; font: inherit; font-weight: 600; cursor: pointer; touch-action: manipulation; }
+.shell .primary { background: var(--primary); color: white; }
+.shell button:disabled { color: #53636e; background: #e6ebee; border-color: #889da9; cursor: default; }
+.shell button:active:not(:disabled) { background: #d6e7f2; color: var(--ink); }
+.shell :is(button, a, input, textarea):focus-visible { outline: 3px solid #945000; outline-offset: 3px; }
+.shell textarea { width: 100%; display: block; color: var(--ink); background: white; border: 2px solid #718b9b; border-radius: 12px; padding: 12px; font: inherit; margin-top: 10px; }
+.shell label { display: block; }
+.shell .check { display: flex; align-items: center; gap: 12px; min-height: 52px; margin: 12px 0; }
+.check input { width: 26px; height: 26px; accent-color: var(--primary); flex-shrink: 0; }
+.shell svg { flex-shrink: 0; }
+.status { border-left: 4px solid var(--primary); background: #e7f0f6; padding: 10px 14px; }
+.messages { list-style: none; padding: 0; }
+.message { margin: 16px 0; border-bottom: 1px solid var(--border); padding-bottom: 16px; white-space: pre-wrap; }
+.photo { display: grid; grid-template-columns: 72px minmax(0, 1fr); align-items: center; gap: 16px; margin: 16px 0; }
+.photo svg { width: 72px; height: 72px; border-radius: 12px; background: #dfeef5; color: var(--primary); padding: 16px; }
+.photo p { margin: 0; }
+@media (max-width: 360px) { .header, .content { padding-inline: 12px; } .card { padding: 16px; } }
+@media (prefers-reduced-motion: reduce) { .shell * { animation: none !important; transition: none !important; scroll-behavior: auto !important; } }

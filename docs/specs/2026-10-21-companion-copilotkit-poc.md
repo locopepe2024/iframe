@@ -32,3 +32,11 @@
 - 记录 SDK/AG-UI 版本、试验初始包大小与 `/companion` 对照、已验证与未验证；不推送或部署。
 
 后续才验证真实模型 tools 协议、认证/owner-thread 隔离、后端授权与任务恢复、真实设备和老人任务。该 PoC 的用户本机授权/任务结果不能用于正式照片处理。
+
+## 实施与验证（2026-10-21）
+
+- 独立静态路由：`/companion/copilot-trial`；原 `/companion` 保留。浏览器内确定性 AG-UI Agent 通过 CopilotKit V2 Provider、`useAgent`、`useHumanInTheLoop` 和工具结果完成往返。固定句式仅供协议试验，不代表已接入聊天模型。
+- 锁定 `@copilotkit/react-core@1.79.1`、`@ag-ui/client@1.0.2`、`@ag-ui/core@1.0.2`、`rxjs@7.8.1`、`zod@3.25.76`。保留 React 18 与 Next 14。未配置 Runtime、Intelligence 或 Inspector；交互采集关闭。
+- 确认卡按工具调用 ID、样例批次 ID 与授权版本核验；拒绝不执行，重复确认幂等，撤回清除模拟结果并阻止旧计时器继续提交。听写须显式勾选，转写先放入输入框供核对。
+- CopilotKit 发布包自带 Tailwind v4 样式与现有 Tailwind v3 构建冲突。仅把该包的默认 UI CSS 解析到本地空样式，试验页使用独立样式。静态导出通过；这不验证未来使用 CopilotKit 默认 UI 的兼容性。
+- 本次验证：`npm run typecheck`、43 项定向 UI/协议/状态测试、`npm run build`。测试验证浏览器内工具往返及无 fetch/本地持久化；未做真实手机、浏览器语音服务或老人可用性实测。Next 构建显示试验页首载 95.6 kB，但动态 SDK 代码不计入此数字，需在真实设备测量完整下载和交互性能。

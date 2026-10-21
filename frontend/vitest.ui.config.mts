@@ -12,6 +12,11 @@ export default defineConfig({
             'src/components/**/*.spec.tsx',
         ],
         setupFiles: ['./vitest.setup.ts'],
+        server: {
+            deps: {
+                inline: ['@copilotkit/react-core'],
+            },
+        },
     },
     resolve: {
         alias: {

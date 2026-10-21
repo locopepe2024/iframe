@@ -69,7 +69,7 @@ export class TrialScenario {
       if (this.disposed || revision !== this.state.revision || this.state.consent !== "granted" || this.state.task !== "running") return;
       const ids = [...this.state.processedIds, SAMPLE_PHOTOS[this.state.processedIds.length].id];
       const finished = ids.length === SAMPLE_PHOTOS.length;
-      this.update({ processedIds: ids, task: finished ? "completed" : "running", notice: finished ? "样例整理完成：2 条有拍摄年月，1 条时间待确认。" : `正在整理合成记录：${ids.length} / ${SAMPLE_PHOTOS.length}` });
+      this.update({ processedIds: ids, task: finished ? "completed" : "running", notice: finished ? "样例整理完成：2 条有已知时间，1 条时间待确认。" : `正在整理合成记录：${ids.length} / ${SAMPLE_PHOTOS.length}` });
       if (!finished) this.scheduleNext(revision);
     }, 500);
   }
