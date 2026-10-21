@@ -4,7 +4,7 @@ export interface ScenePromptLayers {
     version?: 1;
     lighting?: Partial<Record<"source" | "direction" | "quality" | "fill" | "contrast" | "mood" | "air" | "color" | "shadow" | "rim", string>> & { angles?: SceneLayerAngles | null };
     camera?: Partial<Record<"framing" | "viewpoint" | "focal_length" | "depth_of_field", string>> & { angles?: SceneLayerAngles | null; focus?: SceneFocusPoint | null };
-    composition?: Partial<Record<"subject_position" | "spatial_layers" | "leading_relation", string>>;
+    composition?: Partial<Record<"subject_position" | "spatial_layers" | "leading_relation" | "frame_orientation", string>>;
 }
 export interface SceneFocusPoint { target?: string; x?: number | null; y?: number | null; radius?: number | null }
 export interface SceneLayerAngles { azimuth: number; elevation: number }
@@ -41,11 +41,11 @@ export const SCENE_LAYER_FIELDS: Record<SceneLayer, readonly SceneLayerField[]> 
         ] },
         { key: "shadow", label: "阴影", options: [
             ["清晰投影", "投射阴影边缘清晰，方向与实际光源和遮挡关系一致"], ["柔和投影", "投射阴影边缘柔和，方向与实际光源和遮挡关系一致"],
-            ["接触阴影", "保留物体与地面、相邻表面接触处的自然阴影"], ["暗部层次", "保留暗部明暗层次，避免统一提亮成灰色"],
+            ["窗格投影", "光穿过已有窗格，在受光表面形成分割投影；不新增窗户"], ["接触阴影", "保留物体与地面、相邻表面接触处的自然阴影"], ["暗部层次", "保留暗部明暗层次，避免统一提亮成灰色"],
         ] },
         { key: "rim", label: "轮廓光", options: [
             ["无额外轮廓光", "不额外添加轮廓光"], ["微弱轮廓光", "以弱于主光的辅助光勾勒主体边缘"],
-            ["左缘轮廓光", "以弱于主光的辅助光勾勒主体左侧边缘"], ["右缘轮廓光", "以弱于主光的辅助光勾勒主体右侧边缘"],
+            ["蓝色轮廓光", "以弱于主光的蓝色辅助光勾勒主体边缘"], ["左缘轮廓光", "以弱于主光的辅助光勾勒主体左侧边缘"], ["右缘轮廓光", "以弱于主光的辅助光勾勒主体右侧边缘"],
         ] },
         { key: "mood", label: "氛围", options: [
             ["宁静", "宁静平和的空间氛围，视觉节奏舒缓"], ["温馨", "温馨亲切的空间氛围"], ["清冷", "清冷疏离的空间氛围"],
@@ -70,13 +70,16 @@ export const SCENE_LAYER_FIELDS: Record<SceneLayer, readonly SceneLayerField[]> 
             ["平视", "平视机位"], ["高机位", "高机位俯视"], ["低机位", "低机位仰视"], ["正俯视", "正上方垂直俯视"], ["侧视", "侧面机位"], ["背视", "背面机位"],
         ] },
         { key: "focal_length", label: "焦距观感", options: [
-            ["广角", "广角观感，近大远小的透视关系明显，空间纵深展开"], ["标准", "标准焦距观感，空间比例自然"], ["长焦", "长焦观感，远近空间呈压缩感"],
+            ["广角", "广角观感，近大远小的透视关系明显，空间纵深展开"], ["标准", "标准焦距观感，空间比例自然"], ["长焦", "长焦观感，远近空间呈压缩感"], ["鱼眼", "鱼眼镜头观感，边缘呈明显桶形弯曲"],
         ] },
         { key: "depth_of_field", label: "景深", options: [
             ["深景深", "深景深，前中后景均清晰可辨"], ["中等景深", "中等景深，主体清楚，远处逐渐失焦"], ["浅景深", "浅景深，主体清楚，焦外区域失焦"],
         ] },
     ],
     composition: [
+        { key: "frame_orientation", label: "画面倾斜", options: [
+            ["水平画面", "画面水平线保持水平"], ["倾斜画面", "画面水平线倾斜，形成倾斜构图"],
+        ] },
         { key: "subject_position", label: "主体位置", options: [
             ["居中", "场景主体位于画面中央"], ["左三分", "场景主体位于画面左侧三分线附近"], ["右三分", "场景主体位于画面右侧三分线附近"], ["对称", "主体居中，画面两侧形成对称关系"], ["留白", "主体偏置，另一侧保留清晰留白"],
         ] },

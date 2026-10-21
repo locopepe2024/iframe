@@ -79,19 +79,20 @@ it("maps a pointer to the displayed image rather than the letterboxed container"
     }), expect.any(String), undefined);
 });
 
-it("submits lighting direction, preset, and stable reference identity", () => {
+it("submits shared lighting panel settings and stable reference identity", () => {
     const onGenerate = vi.fn();
     const reference = { asset_type: "prop" as const, asset_id: "light-ref", variant_id: "variant" };
     render(<SceneImageTools kind="lighting" sources={sources} sceneAssetId="scene" lightingReferences={[
         { key: "light-ref", label: "蓝色参考", url: "/light.png", reference },
     ]} busy={false} onGenerate={onGenerate} />);
     fireEvent.click(screen.getByRole("button", { name: "后方" }));
-    fireEvent.click(screen.getByRole("button", { name: "诺兰冷灰" }));
+    fireEvent.click(screen.getByText("光影", { selector: "summary" }));
+    fireEvent.click(screen.getByRole("button", { name: "清冷" }));
     fireEvent.change(screen.getByLabelText("光影参考图（可选）"), { target: { value: "light-ref" } });
     fireEvent.click(screen.getByRole("button", { name: "查看并确认提示词" }));
     fireEvent.click(screen.getByRole("button", { name: "确认并生成" }));
     expect(onGenerate).toHaveBeenCalledWith(sources[0], expect.objectContaining({
-        kind: "lighting", light_side: "back", preset: "nolan_cool_gray", brightness: 50,
+        kind: "lighting", light_side: "back", preset: null, panel_settings: { version: 1, lighting: { mood: "清冷疏离的空间氛围" } }, brightness: 50,
     }), expect.any(String), reference);
     expect(screen.getByTestId("lighting-preview")).toHaveTextContent("透视观察");
 });
@@ -119,4 +120,39 @@ it("uploads a separate lighting reference into the asset library before submissi
     expect(onGenerate).toHaveBeenCalledWith(sources[0], expect.objectContaining({ kind: "lighting" }), expect.any(String), {
         asset_type: "prop", asset_id: "uploaded-prop", variant_id: "uploaded-v1",
     });
+});
+
+it("uses atmosphere templates to fill the shared panel without legacy preset injection", () => {
+    const onGenerate = vi.fn();
+    render(<SceneImageTools kind="lighting" sources={sources} busy={false} onGenerate={onGenerate} />);
+    expect(screen.queryByText("光影预设")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByText("Prompt 模板 · 氛围", { selector: "summary" }));
+    fireEvent.click(screen.getByRole("button", { name: "黄金时刻" }));
+    fireEvent.click(screen.getByRole("button", { name: "查看并确认提示词" }));
+    fireEvent.click(screen.getByRole("button", { name: "确认并生成" }));
+    const [, tool, prompt] = onGenerate.mock.lastCall!;
+    expect(tool.preset).toBeNull();
+    expect(tool.azimuth).toBe(90);
+    expect(tool.elevation).toBe(12);
+    expect(tool.panel_settings.lighting.source).toBe("临近日落的太阳光");
+    expect(tool.panel_settings.lighting.quality).toContain("柔和");
+    expect(tool.panel_settings.lighting).not.toHaveProperty("angles");
+    expect(prompt).toContain("温暖舒缓的傍晚氛围");
+    expect(prompt).not.toContain("不额外增加明显轮廓光");
+});
+
+it("removes camera preset buttons and compiles independent lens and composition choices", () => {
+    const onGenerate = vi.fn();
+    render(<SceneImageTools kind="camera" sources={sources} busy={false} onGenerate={onGenerate} />);
+    expect(screen.queryByText("镜头预设")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByText("镜头", { selector: "summary" }));
+    fireEvent.click(screen.getByRole("button", { name: "鱼眼" }));
+    fireEvent.click(screen.getByText("构图", { selector: "summary" }));
+    fireEvent.click(screen.getByRole("button", { name: "倾斜画面" }));
+    fireEvent.click(screen.getByRole("button", { name: "查看并确认提示词" }));
+    fireEvent.click(screen.getByRole("button", { name: "确认并生成" }));
+    expect(onGenerate.mock.lastCall?.[1].preset).toBe("custom");
+    expect(onGenerate.mock.lastCall?.[2]).toContain("鱼眼镜头观感");
+    expect(onGenerate.mock.lastCall?.[2]).toContain("倾斜构图");
+    expect(onGenerate.mock.lastCall?.[2]).not.toContain("预设视角");
 });

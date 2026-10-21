@@ -7,8 +7,9 @@ import { SCENE_LAYER_FIELDS, type SceneLayer, type SceneLayerAngles, type SceneP
 const SceneDirectionSphere = dynamic(() => import("./SceneDirectionSphere"), { ssr: false });
 const layerNames: Record<SceneLayer, string> = { lighting: "光影", camera: "镜头", composition: "构图" };
 
-export default function ScenePromptLayersPanel({ value, onChange }: {
+export default function ScenePromptLayersPanel({ value, onChange, fields }: {
     value: ScenePromptLayers; onChange: (value: ScenePromptLayers) => void;
+    fields?: Partial<Record<SceneLayer, readonly string[]>>;
 }) {
     const [openSpheres, setOpenSpheres] = useState<Partial<Record<SceneLayer, boolean>>>({});
     const update = (layer: SceneLayer, patch: Record<string, unknown>) => onChange({
@@ -16,6 +17,8 @@ export default function ScenePromptLayersPanel({ value, onChange }: {
     });
     return <div className="space-y-3" aria-label="光影镜头构图">
         {(Object.keys(SCENE_LAYER_FIELDS) as SceneLayer[]).map(layer => {
+            const layerFields = fields ? SCENE_LAYER_FIELDS[layer].filter(field => fields[layer]?.includes(field.key)) : SCENE_LAYER_FIELDS[layer];
+            if (fields && !layerFields.length) return null;
             const selected = value[layer] as Record<string, string | SceneLayerAngles | null> | undefined;
             const angles = selected?.angles as SceneLayerAngles | null | undefined;
             const directionKey = layer === "lighting" ? "direction" : "viewpoint";
@@ -23,7 +26,7 @@ export default function ScenePromptLayersPanel({ value, onChange }: {
             return <details key={layer} className="rounded-lg border border-glass-border p-3">
                 <summary className="min-h-11 cursor-pointer text-sm font-medium text-foreground">{layerNames[layer]}</summary>
                 <div className="space-y-4 pt-2">
-                    {SCENE_LAYER_FIELDS[layer].map(field => <fieldset key={field.key}>
+                    {layerFields.map(field => <fieldset key={field.key}>
                         <legend className="mb-2 text-xs text-text-secondary">{field.label}</legend>
                         <div className="grid grid-cols-3 gap-2">
                             {field.options.map(([label, text]) => <button key={text} type="button" title={text}
@@ -37,7 +40,7 @@ export default function ScenePromptLayersPanel({ value, onChange }: {
                         {typeof selected?.[field.key] === "string" && selected[field.key] &&
                             <p className="mt-1 text-xs text-text-muted">{String(selected[field.key])}</p>}
                     </fieldset>)}
-                    {layer === "camera" && <fieldset className="space-y-2 rounded border border-glass-border p-3">
+                    {!fields && layer === "camera" && <fieldset className="space-y-2 rounded border border-glass-border p-3">
                         <legend className="px-1 text-xs text-text-secondary">对焦</legend>
                         <label className="block text-xs text-text-secondary">对焦目标
                             <input aria-label="对焦目标" maxLength={500} value={value.camera?.focus?.target || ""}
@@ -67,7 +70,7 @@ export default function ScenePromptLayersPanel({ value, onChange }: {
                             <p className="text-xs text-text-muted">画面左上角为原点，X 向右、Y 向下。位置与范围以画面百分比表示。</p>
                         </>}
                     </fieldset>}
-                    {layer !== "composition" && <details className="rounded border border-glass-border p-2"
+                    {!fields && layer !== "composition" && <details className="rounded border border-glass-border p-2"
                         onToggle={event => { const open = event.currentTarget.open; setOpenSpheres(current => ({ ...current, [layer]: open })); }}>
                         <summary className="min-h-11 cursor-pointer text-xs text-text-secondary">三维{layer === "lighting" ? "光源" : "机位"}方向{angles ? " · 已设置" : ""}</summary>
                         {openSpheres[layer] && <SceneDirectionSphere mode={layer === "lighting" ? "light" : "camera"}

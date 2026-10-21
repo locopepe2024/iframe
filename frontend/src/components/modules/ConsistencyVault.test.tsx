@@ -749,3 +749,27 @@ it("blocks applying a scene light direction forbidden by the same design", async
     expect(screen.getByRole("alert")).toHaveTextContent("所选光源方向与禁止方向冲突");
     expect(screen.getByRole("textbox", { name: "图像提示词" })).toHaveValue(previous);
 });
+
+it("fills an atmosphere Prompt template into editable scene settings without changing camera settings", async () => {
+    const asset = { id: "street", name: "氛围模板场景", description: "庭院", source: "episode",
+        asset_design: { design_draft: { visual_notes: "庭院", prompt_layers: { camera: { depth_of_field: "深景深" } } } } };
+    useProjectStore.setState({ currentProject: { id: "episode-1", characters: [], scenes: [asset], props: [] } as any });
+    mocks.getEpisodeVisualContext.mockResolvedValue({ context: null, bindings: [] });
+    render(<ConsistencyVault />);
+    fireEvent.click(screen.getByRole("button", { name: /Scenes/ }));
+    fireEvent.click(screen.getByText(asset.name));
+    fireEvent.click(screen.getByRole("button", { name: /基础面板 ·/ }));
+    fireEvent.click(screen.getByText("Prompt 模板 · 氛围", { selector: "summary" }));
+    fireEvent.click(screen.getByRole("button", { name: "黄金时刻" }));
+    fireEvent.click(screen.getByRole("button", { name: "应用到图片提示词" }));
+    const prompt = (screen.getByRole("textbox", { name: "图像提示词" }) as HTMLTextAreaElement).value;
+    expect(prompt).toContain("临近日落的太阳光");
+    expect(prompt).toContain("仰角 12°");
+    expect(prompt).toContain("温暖舒缓的傍晚氛围");
+    expect(prompt).toContain("景深：深景深");
+    fireEvent.click(screen.getByText("光影", { selector: "summary" }));
+    fireEvent.click(screen.getByRole("button", { name: "硬光" }));
+    fireEvent.click(screen.getByRole("button", { name: "应用到图片提示词" }));
+    expect((screen.getByRole("textbox", { name: "图像提示词" }) as HTMLTextAreaElement).value).toContain("硬质定向光");
+    expect((screen.getByRole("textbox", { name: "图像提示词" }) as HTMLTextAreaElement).value).not.toContain("软硬：柔和漫射光");
+});
