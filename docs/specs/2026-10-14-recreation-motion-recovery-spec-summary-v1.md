@@ -52,6 +52,12 @@
 
 ## Not yet proven / Hypotheses
 
+- 2026-10-22 world landmarks方向候选隔离：将同源world姿态经首段弱透视basis映射到目标镜头，冻结旧root/yaw、骨盆关闭、own-basis后重算子骨。代数映射误差3.33e-16，pinned rig方向残差0°、renderer回导0px，但源1/17/23/29/41/55平均误差25.11/24.86/23.26/27.81/22.55/25.71px，对照12.53/17.26/13.31/21.98/16.90/24.27px；双踝候选44.46–56.54px，对照3.72–27.23px。证明简单替换world字段并不能修复；未证明world输出无效，仍缺透视相机/尺度/完整姿态/接触验证。主链路/H3不变。[world候选报告](../agents/deliverables/2026-10-22-recreation2-world-landmark-retarget-ablation-v1.md)
+
+- 2026-10-22源人体层world→image透视拟合：同源sidecar的79个可检测配对帧中，训练窗帧1–53的固定针孔相机加逐帧root平移RMSE为10.23px，逐帧弱透视对照10.87px；帧63以后相同全局焦距/方向的逐帧平移拟合为10.63/11.29px。全局焦距候选1449px未触搜索边界，但距最优RMSE≤1%的区间仍宽达1058–2205px，对应中值髋深3.36–6.90模型单位；深度随焦距缩放，绝对相机深度未辨识。事件帧29/41针孔略差、全段最大单点49.35px反高于弱透视47.39px；源55附近背景也有移动证据。该同模型重投影仅支持相机项有小幅拟合收益，不构成独立真值、相机标定、root轨迹或rig/脚接触通过；主链路/H3不变。[透视拟合诊断](../agents/deliverables/2026-10-22-recreation2-world-perspective-camera-fit-v1.md)
+
+- 2026-10-21/22同源MediaPipe world伴随与PTS时序对照：120个采样帧pose选择/状态一致；79个可检测帧image/world逐值相同，41帧均无检测。平均FPS推算时间与源PTS绝对差中位/P90/最大为0.054/0.223/0.267秒；改用真实PTS的VIDEO重提取未改变image或world输出。16关节弱透视比较中，track帧1–53拟合并固定朝向后，全79帧RMSE中位/P90/最大10.56/14.58/21.58px；逐帧局部搜索9.80/13.18/16.25px，逐帧解不高于共享解。帧1–53中位/P90 10.79/12.84，帧63以后9.91/15.60，后段中位未变差。朝向搜索不是全局最优；world仍为髋相对模型估计，几何残差不是相机真值/retarget改善，主链路/接触/H3不变。[world伴随报告](../agents/deliverables/2026-10-21-recreation2-world-companion-v1.md)
+
 - 2026-10-21 pinned Blender rig 已知姿态闭环：源1/17/23/29/55只作采样锚点，额外root yaw/骨盆/胸廓旋转为合成测试扰动。73骨中无pose-bone constraints；Blender rest/parent逆解与renderer重导入的最大世界矩阵误差分别3.58e−7/4.77e−7、投影误差1.11e−4/9.16e−5 px。漏rest/root和只看骨方向的负对照显著失败（60°twist使侧向点偏0.08062 Blender units）。证明此rig上已知世界姿态可往返，不证明源3D、源相机、鞋底接触/H3正确；主链路未改。[rig闭环报告](../agents/deliverables/2026-10-21-recreation2-pinned-rig-roundtrip-v1.md)
 
 - 2026-10-21隔离坐标adapter将图像观测、proxy相对Z、metric camera-Z和rig刚性变换分离；36组×3骨已知姿态闭环最大端点2.74e-15米、像素3.60e-13px，漏rest/root与六种非法输入对照通过。相同骨方向、60°twist差可产生合成侧点0.15米偏移，证明方向验收不足。真实31帧只保留像素观测/相对Z和PTS，XY回转误差0，未知camera/3D/root/rig保持null；尚未验证实际Blender rig或测得真实片段改善。主链路/接触/H3状态不变。[adapter与闭环报告](../agents/deliverables/2026-10-21-recreation2-contract-adapter-v1.md)

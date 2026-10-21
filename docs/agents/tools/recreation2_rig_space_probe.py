@@ -73,6 +73,9 @@ parser = argparse.ArgumentParser()
 parser.add_argument('--track', required=True)
 parser.add_argument('--rig', required=True)
 parser.add_argument('--anchors', required=True)
+parser.add_argument('--observations')
+parser.add_argument('--root-bundle')
+parser.add_argument('--case-label', default='world_candidate_root_frozen')
 parser.add_argument('--out', required=True)
 parser.add_argument('--render-selected', action='store_true')
 args = parser.parse_args(sys.argv[sys.argv.index('--') + 1:])
@@ -80,8 +83,18 @@ out = Path(args.out)
 out.mkdir(parents=True, exist_ok=True)
 track = json.loads(Path(args.track).read_text())
 anchors = json.loads(Path(args.anchors).read_text())
+observations = json.loads(Path(args.observations).read_text()) if args.observations else track
+observation_by_frame = {row['source_frame']: row for row in observations['frames']}
+frozen_root_by_source = {}
+root_bundle = json.loads(Path(args.root_bundle).read_text()) if args.root_bundle else None
+if root_bundle:
+    if len(root_bundle['frames']) != len(anchors):
+        raise ValueError('root bundle and PTS anchors must have corresponding rows')
+    for anchor, root_row in zip(anchors, root_bundle['frames'], strict=True):
+        frozen_root_by_source.setdefault(anchor['source_frame'], root_row)
 pts_by_source = {row['source_frame']: row['source_pts_s'] for row in anchors}
 source_by_frame = {row['source_frame']: row for row in track['frames']}
+observation_by_frame = {row['source_frame']: row for row in observations['frames']}
 bpy.ops.wm.open_mainfile(filepath=args.rig)
 arm = next(obj for obj in bpy.data.objects if obj.type == 'ARMATURE')
 if arm.animation_data:
@@ -121,9 +134,28 @@ cases = [('no_pelvis', False, False, False, 'torso', False),
          ('pelvis_horizontal_root_pixel_contact', True, True, True, 'horizontal', 'pixel'),
          ('body_own_basis_root', True, True, True, 'torso', False),
          ('no_pelvis_own_basis_root', False, True, True, 'torso', False)]
+if root_bundle:
+    cases = [(args.case_label, False, True, True, 'torso', False)]
 report = {'rig_sha256': hashlib.sha256(Path(args.rig).read_bytes()).hexdigest(),
           'track_sha256': hashlib.sha256(Path(args.track).read_bytes()).hexdigest(),
+          'observations_sha256': hashlib.sha256(Path(args.observations).read_bytes()).hexdigest() if args.observations else None,
+          'root_bundle_sha256': hashlib.sha256(Path(args.root_bundle).read_bytes()).hexdigest() if args.root_bundle else None,
           'blender': bpy.app.version_string, 'rest': rest_axes, 'cases': {}}
+if bpy.context.scene.camera:
+    bpy.context.view_layer.update()
+    camera = bpy.context.scene.camera
+    camera_eval = camera.evaluated_get(bpy.context.evaluated_depsgraph_get())
+    camera_matrix = camera_eval.matrix_world.copy()
+    rotation = camera_matrix.to_3x3()
+    axes = [rotation @ Vector(axis) for axis in ((1, 0, 0), (0, -1, 0), (0, 0, -1))]
+    report['renderer_camera'] = {
+        'name': camera.name,
+        'type': camera.data.type,
+        'lens_mm': camera.data.lens,
+        'location': list(camera_matrix.translation),
+        'right_down_forward_world_axes': [list(axis) for axis in axes],
+        'matrix_world': [list(row) for row in camera_matrix],
+    }
 for label, orient, own_basis, include_root, pelvis_mode, contact in cases:
     frames = []
     rows = []
@@ -131,11 +163,17 @@ for label, orient, own_basis, include_root, pelvis_mode, contact in cases:
     solved = {}
     for src in track['frames']:
         joints = src['semantic_joints']
+        obs = observation_by_frame[src['source_frame']]
+        obs_joints = obs['semantic_joints']
+        obs_confidence = obs.get('joint_confidence', {})
+        frozen_root = frozen_root_by_source.get(src['source_frame'])
         yaw, previous_axis = solver['root_yaw'](joints, previous_yaw, previous_axis)
         previous_yaw = yaw
         if first_yaw is None:
             first_yaw = yaw
         root_yaw = yaw - first_yaw
+        if frozen_root is not None:
+            root_yaw = frozen_root['rootYaw']
         root.rotation_euler[2] = root_yaw if include_root else 0
         root.location = (0, 0, 0)
         for bone in arm.pose.bones:
@@ -170,6 +208,8 @@ for label, orient, own_basis, include_root, pelvis_mode, contact in cases:
         pelvis_q = solver['qxyzw'](arm.pose.bones['pelvis'].rotation_quaternion) if orient else None
         h = [(joints['left_hip'][i] + joints['right_hip'][i]) / 2 for i in range(3)]
         position = [(h[0] - .5) * 2.4, max(-.35, min(.35, -h[2] * 1.5)), (1 - h[1]) * 1.8 - .9]
+        if frozen_root is not None:
+            position = frozen_root['rootPosition']
         item = {'rootPosition': position, 'rootYaw': root_yaw, 'pelvisQuaternion': pelvis_q,
                 'localQuaternions': {name: solver['qxyzw'](arm.pose.bones[name].rotation_quaternion)
                                      for name in solver['ORDER']}, 'footContacts': []}
@@ -208,7 +248,9 @@ for label, orient, own_basis, include_root, pelvis_mode, contact in cases:
             for part, prefix in parts.items():
                 name = f'{side}_{part}'
                 pixel = project(head(f'{prefix}_{suffix}'))
-                source = [joints[name][0] * 640, joints[name][1] * 360]
+                if name not in obs_joints or float(obs_confidence.get(name, 0)) < .2:
+                    continue
+                source = [obs_joints[name][0] * 640, obs_joints[name][1] * 360]
                 errors[name] = math.dist(pixel, source)
                 projections[name] = pixel
         feet = {}
@@ -227,7 +269,12 @@ for label, orient, own_basis, include_root, pelvis_mode, contact in cases:
                          'direction_residual_deg_before_render_root': residuals,
                          'root_yaw_deg': math.degrees(root_yaw), 'feet': feet})
     for anchor in anchors:
-        frames.append(dict(solved[anchor['source_frame']], frame=anchor['new_bundle_frame']))
+        row = dict(solved[anchor['source_frame']], frame=anchor['new_bundle_frame'])
+        if root_bundle:
+            expected_root = root_bundle['frames'][len(frames)]
+            if row['rootPosition'] != expected_root['rootPosition'] or row['rootYaw'] != expected_root['rootYaw']:
+                raise AssertionError('candidate root/yaw drifted from frozen baseline')
+        frames.append(row)
     bundle = dict(bundle_base, frames=frames, request_id='recreation2-' + label)
     (out / (label + '.bundle.json')).write_text(json.dumps(bundle, indent=2) + '\n')
     report['cases'][label] = rows

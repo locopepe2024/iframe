@@ -1,0 +1,64 @@
+{
+  "schema": "recreation2-world-companion-run.v1",
+  "source_video_sha256": "6614a5f7afdc5dd7342058e99027f2f42eee19594dcfd90c46017ddcfce114c0",
+  "old_track_sha256": "e556a4991e1e879445cc1ca3f3ce050af1e628d149a6119c28281c36acfaf153",
+  "world_track_sha256": "a2d71042981ce4bbb799823b8a03ef616a2d14926e5b4480a17401aa769062ae",
+  "extractor_source_sha256": "aba3f34ae3824533a8036cf73c3c5fc773dcca5c12d2b73f7c06a922df6e5546",
+  "world_companion_extractor_sha256": "aead79a0e1726428264221306893e6de4d0ced7f9697a8f20aed7e99fa6e2765",
+  "pose_model_sha256": "59929e1d1ee95287735ddd833b19cf4ac46d29bc7afddbbf6753c459690d574a",
+  "mediapipe": "1.0.1",
+  "frames": 120,
+  "pose_index_status_exact": 120,
+  "image_landmarks_exact": 120,
+  "world_available_frames": 79,
+  "world_missing_frames": 41,
+  "event_frames": {
+    "1": {
+      "track_frame": 1,
+      "timestamp_s": 0.0,
+      "target_pose_index_equal": true,
+      "selection_status_equal": true,
+      "image_landmarks_equal": true,
+      "world_landmarks_count": 33
+    },
+    "17": {
+      "track_frame": 17,
+      "timestamp_s": 0.5213931160863676,
+      "target_pose_index_equal": true,
+      "selection_status_equal": true,
+      "image_landmarks_equal": true,
+      "world_landmarks_count": 33
+    },
+    "23": {
+      "track_frame": 23,
+      "timestamp_s": 0.7169155346187556,
+      "target_pose_index_equal": true,
+      "selection_status_equal": true,
+      "image_landmarks_equal": true,
+      "world_landmarks_count": 33
+    },
+    "29": {
+      "track_frame": 29,
+      "timestamp_s": 0.9124379531511434,
+      "target_pose_index_equal": true,
+      "selection_status_equal": true,
+      "image_landmarks_equal": true,
+      "world_landmarks_count": 33
+    },
+    "55": {
+      "track_frame": 55,
+      "timestamp_s": 1.7597017667914907,
+      "target_pose_index_equal": true,
+      "selection_status_equal": true,
+      "image_landmarks_equal": true,
+      "world_landmarks_count": 33
+    }
+  },
+  "pts_note": "Extraction uses legacy track timestamp; source PTS is joined separately through pts-retime-anchors and is not replaced by this companion run.",
+  "projection_report": "../2026-10-21-world-companion-projection/consistency.json",
+  "limits": [
+    "world landmarks are model estimates relative to hip midpoint",
+    "no calibrated perspective camera or absolute root",
+    "projection fit is diagnostic, not retargeting truth"
+  ]
+}

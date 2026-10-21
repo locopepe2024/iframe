@@ -1,0 +1,18 @@
+{
+  "schema": "recreation2-world-perspective-camera-fit-verification.v1",
+  "report_sha256": "9d90697ce2f77ed84518c24c08168c0edb8a5a73fb37e820d1237447ad19cc56",
+  "assertions": {
+    "paired_frames_79": true,
+    "missing_frames_41": true,
+    "pts_exact": true,
+    "events_present": true,
+    "perspective_improves_train_and_later": true,
+    "synthetic_pinhole_translation_roundtrip_px": 9.41569668013781e-13,
+    "synthetic_translation_max_abs_error": 4.884981308350689e-14
+  },
+  "commands": [
+    "python3 -m py_compile docs/agents/tools/recreation2_world_perspective_fit.py",
+    "python3 -m json.tool docs/agents/raw/2026-10-22-world-camera-fit/report.json"
+  ],
+  "tool_sha256": "ac623d8ac61e7342bda6f43245fa40cc7922d46c61b8c561ceb105cf6e45f903"
+}
