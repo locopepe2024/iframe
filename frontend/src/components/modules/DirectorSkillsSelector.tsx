@@ -23,7 +23,7 @@ export default function DirectorSkillsSelector({ state, disabled = false }: { st
         <button ref={trigger} type="button" onClick={() => setOpen(true)} className="min-h-11 rounded-md border border-border px-3 text-sm text-text-secondary focus-visible:ring-2 focus-visible:ring-primary" aria-expanded={open}>
             创作 Skills · {state.loading ? "加载中" : state.error ? "加载或保存失败" : `已选 ${state.selected.length}`}
         </button>
-        {open && createPortal(<div ref={panel} role="dialog" aria-modal="true" aria-label="创作 Skills" className="fixed inset-y-0 right-0 z-[100] flex w-full max-w-2xl flex-col border-l border-border bg-background p-5 shadow-2xl" onKeyDown={event => {
+        {open && createPortal(<div ref={panel} role="dialog" aria-modal="true" aria-label="创作 Skills" className="fixed inset-y-0 right-0 z-[140] flex w-full max-w-2xl flex-col border-l border-border bg-background p-5 shadow-2xl" onKeyDown={event => {
             if (event.key === "Escape") setOpen(false);
             if (event.key === "Tab") {
                 const items = Array.from(panel.current?.querySelectorAll<HTMLElement>('button:not(:disabled),input,summary,[tabindex="0"]') ?? []);

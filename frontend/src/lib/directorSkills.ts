@@ -2,7 +2,7 @@ import axios from "axios";
 import { useEffect, useRef, useState } from "react";
 import { API_URL } from "./api";
 
-export type CreativeStage = "series" | "episode" | "shooting_plan";
+export type CreativeStage = "series" | "episode" | "shooting_plan" | "storyboard";
 export interface CreativeSkillSelection { id: string; revision: string }
 export interface CreativeSkillTask extends CreativeSkillSelection {
     label: string; category: string; description: string; version: string;

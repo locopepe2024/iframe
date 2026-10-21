@@ -12,11 +12,16 @@
  *     overlay) so users can switch projects and learn when the other one
  *     finishes via the global ToastContainer.
  */
-import { useMemo } from "react";
+import { useMemo, useEffect, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Wand2, X, AlertTriangle, ArrowRight, Film, Sparkles } from "lucide-react";
 import { useTranslations } from "next-intl";
 import WorkflowActionButton from "@/components/shared/WorkflowActionButton";
+
+import { api } from "@/lib/api";
+import { useDirectorSkills } from "@/lib/directorSkills";
+import DirectorSkillsSelector from "@/components/modules/DirectorSkillsSelector";
+import type { StoryboardGenerationOptions } from "@/lib/storyboardAnalysis";
 
 interface StoryboardGenerateDialogProps {
     isOpen: boolean;
@@ -33,7 +38,7 @@ interface StoryboardGenerateDialogProps {
     existingShotCount: number;
     /** Called when the user confirms. Dialog closes immediately; parent
      *  runs the API call in the background with toast feedback. */
-    onConfirm: () => void;
+    onConfirm: (options?: StoryboardGenerationOptions) => void;
     /** Jump to the Script step (used by the empty-text quick fix link). */
     onJumpToScript?: () => void;
 }
@@ -47,6 +52,21 @@ export default function StoryboardGenerateDialog({
     onJumpToScript,
 }: StoryboardGenerateDialogProps) {
     const t = useTranslations("storyboardGen");
+    const skills = useDirectorSkills(isOpen ? project?.id : undefined, "storyboard");
+    const [mode, setMode] = useState<"plan" | "script">("script");
+    const [planState, setPlanState] = useState<"loading" | "ready" | "none" | "stale" | "error">("loading");
+    const [retry, setRetry] = useState(0);
+    useEffect(() => {
+        if (!isOpen || !project?.id) return;
+        let active = true;
+        setPlanState("loading");
+        void api.getDirectorShootingPlan(project.id).then(state => {
+            if (!active) return;
+            setPlanState(state.current_revision ? state.current_stale ? "stale" : "ready" : "none");
+            setMode(state.current_revision ? "plan" : "script");
+        }).catch(() => { if (active) setPlanState("error"); });
+        return () => { active = false; };
+    }, [isOpen, project?.id, retry]);
 
     const text = (project as any)?.original_text ?? project?.originalText ?? "";
     const charsCount = project?.characters?.length ?? 0;
@@ -69,10 +89,11 @@ export default function StoryboardGenerateDialog({
 
     const allPass = checks.every((c) => c.pass);
 
+    const workflowReady = planState !== "loading" && planState !== "error" && (mode === "plan" ? planState === "ready" : skills.canRun);
     const handleConfirm = () => {
-        if (!allPass) return;
+        if (!allPass || !workflowReady) return;
         onClose();
-        onConfirm();
+        onConfirm({ mode, skills: mode === "script" ? skills.selected : [] });
     };
 
     return (
@@ -97,7 +118,7 @@ export default function StoryboardGenerateDialog({
                         <header className="flex items-center justify-between gap-3 px-5 py-3 border-b border-glass-border">
                             <div className="flex items-center gap-2">
                                 <Sparkles size={15} className="text-primary" />
-                                <h2 className="text-display font-medium text-foreground">{t("title")}</h2>
+                                <h2 className="text-display font-medium text-foreground">分镜设计</h2>
                             </div>
                             <button
                                 onClick={onClose}
@@ -116,6 +137,16 @@ export default function StoryboardGenerateDialog({
                                 <span className="text-foreground font-medium">{project?.title || "—"}</span>
                             </p>
 
+                            <section className="space-y-3" aria-label="分镜生成来源">
+                                <div className="grid grid-cols-2 gap-2">
+                                    <button type="button" aria-pressed={mode === "plan"} disabled={planState !== "ready" && planState !== "stale"} title="逐镜转换已确认计划，保留镜头关联；不另行调用设计模型" onClick={() => setMode("plan")} className={`min-h-11 rounded-md border p-2 text-sm disabled:opacity-40 ${mode === "plan" ? "border-primary text-primary" : "border-border"}`}>按导演计划生成</button>
+                                    <button type="button" aria-pressed={mode === "script"} title="从剧本重新规划分镜，可选择本阶段 Skills" onClick={() => setMode("script")} className={`min-h-11 rounded-md border p-2 text-sm ${mode === "script" ? "border-primary text-primary" : "border-border"}`}>从剧本设计分镜</button>
+                                </div>
+                                {planState === "loading" && <p role="status" className="text-xs text-text-muted">正在检查导演计划…</p>}
+                                {planState === "error" && <p role="alert" className="text-xs text-accent">导演计划加载失败 <button onClick={() => setRetry(n => n + 1)} className="underline">重试</button></p>}
+                                {mode === "plan" && planState === "stale" && <p role="alert" className="text-xs text-accent">导演计划已过期，请先重新确认。</p>}
+                                {mode === "script" && <DirectorSkillsSelector state={skills} />}
+                            </section>
                             {/* Pre-flight checks */}
                             <section>
                                 <h3 className="mb-2 font-mono text-[0.625rem] uppercase tracking-[0.18em] text-text-muted">
@@ -189,7 +220,7 @@ export default function StoryboardGenerateDialog({
                             <WorkflowActionButton
                                 variant="primary"
                                 size="sm"
-                                disabled={!allPass}
+                                disabled={!allPass || !workflowReady}
                                 leftIcon={<Wand2 />}
                                 onClick={handleConfirm}
                             >

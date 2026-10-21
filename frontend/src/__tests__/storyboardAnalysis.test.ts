@@ -9,6 +9,7 @@ import { api } from "../lib/api";
 
 vi.mock("axios", () => ({
     default: {
+        interceptors: { request: { use: vi.fn() }, response: { use: vi.fn() } },
         post: vi.fn(),
         get: vi.fn(),
         isAxiosError: (error: any) => error?.isAxiosError === true,
@@ -135,4 +136,13 @@ it("retries a transient connection loss while starting storyboard analysis", asy
     expect(calls).toHaveLength(3);
     expect(calls[0][0]).toEqual(calls[1][0]);
     expect(calls[0][1]).toEqual(calls[1][1]);
+});
+
+
+it("submits explicit storyboard mode and stage selections", async () => {
+    vi.mocked(axios.post).mockResolvedValue({ data: { id: "job", status: "completed", result: analysisDraft } });
+    const options = { mode: "script" as const, skills: [{ id: "storyboard-action", revision: "a".repeat(64) }] };
+    await analyzeStoryboardPreview("/api", "project", "script", undefined, options);
+    expect(axios.post).toHaveBeenCalledWith("/api/projects/project/storyboard-analysis-jobs",
+        { text: "script", ...options }, { timeout: 15000 });
 });

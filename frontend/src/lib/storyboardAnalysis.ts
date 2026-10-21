@@ -1,9 +1,17 @@
 import axios from "axios";
 
+export interface StoryboardGenerationOptions {
+    mode: "auto" | "plan" | "script";
+    skills: { id: string; revision: string }[];
+}
 export type StoryboardDraftFrame = Record<string, any>;
 
 export interface StoryboardAnalysisLineage {
     status: "pinned" | "legacy_unpinned";
+    storyboard_mode?: "plan" | "script";
+    shooting_plan_revision?: number | null;
+    shooting_plan_hash?: string | null;
+    creative_skill_run?: {id: string; revision: string; label: string; version: string}[];
     source_revision?: number | null;
     source_revision_id?: string | null;
     director_profile_revision?: number | null;
@@ -78,9 +86,10 @@ async function runStoryboardJob(endpoint: string, pollBase: string, payload: unk
 }
 
 export function analyzeStoryboardPreview(baseUrl: string, projectId: string, text: string,
-                                         onProgress?: (completed: number, total: number) => void) {
+                                         onProgress?: (completed: number, total: number) => void,
+                                         options?: StoryboardGenerationOptions) {
     const base = `${baseUrl}/projects/${projectId}/storyboard-analysis-jobs`;
-    return runStoryboardJob(base, base, { text }, onProgress);
+    return runStoryboardJob(base, base, { text, ...options }, onProgress);
 }
 
 export async function applyStoryboardDraft(

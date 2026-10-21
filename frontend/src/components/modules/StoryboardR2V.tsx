@@ -659,7 +659,7 @@ export default function StoryboardR2V() {
         }
     }, [currentProject, updateProject]);
 
-    const handleSmartGenerate = useCallback(async () => {
+    const handleSmartGenerate = useCallback(async (options?: import("@/lib/storyboardAnalysis").StoryboardGenerationOptions) => {
         if (!currentProject?.id) return;
         const projectId = currentProject.id;
         const scriptText = (currentProject as any).originalText || (currentProject as any).original_text || "";
@@ -673,7 +673,7 @@ export default function StoryboardR2V() {
         try {
             const result = await api.analyzeStoryboardPreview(projectId, scriptText, (completed, total) => {
                 setAnalysisProgress({ completed, total });
-            });
+            }, options);
             if (useProjectStore.getState().currentProject?.id !== projectId) return;
             setStoryboardDraft(result.frames);
             setStoryboardDraftLineage(result.lineage);
@@ -2651,6 +2651,7 @@ export default function StoryboardR2V() {
             }}
         />
         <StoryboardAnalysisModal
+                lineage={storyboardDraftLineage}
             isOpen={!!storyboardDraft}
             draft={storyboardDraft}
             feedback={storyboardFeedback}

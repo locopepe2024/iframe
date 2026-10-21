@@ -6,6 +6,7 @@ import {
     analyzeStoryboardPreview,
     applyStoryboardDraft as applyStoryboardDraftRequest,
     refineStoryboardPreview,
+    type StoryboardGenerationOptions,
     type StoryboardDraftFrame,
     type StoryboardAnalysisLineage,
 } from "./storyboardAnalysis";
@@ -2035,8 +2036,9 @@ export const api = {
     },
 
     analyzeStoryboardPreview: async (scriptId: string, text: string,
-                                     onProgress?: (completed: number, total: number) => void) =>
-        analyzeStoryboardPreview(API_URL, scriptId, text, onProgress),
+                                     onProgress?: (completed: number, total: number) => void,
+                                     options?: StoryboardGenerationOptions) =>
+        analyzeStoryboardPreview(API_URL, scriptId, text, onProgress, options),
 
     refineStoryboardPreview: async (
         scriptId: string,
