@@ -182,8 +182,15 @@ try {
     throw new Error(`Timed out: ${label}`);
   }
   async function clickText(label) {
-    const clicked = await evaluate(`(() => { const button = [...document.querySelectorAll('button')].find(node => node.textContent.trim() === ${JSON.stringify(label)} && !node.disabled); if (!button) return false; button.click(); return true; })()`);
-    if (!clicked) throw new Error(`Button unavailable: ${label}`);
+    const selector = `[...document.querySelectorAll('button')].find(node => node.textContent.trim() === ${JSON.stringify(label)} && !node.disabled)`;
+    await waitFor(`enabled button: ${label}`, `!!(${selector})`);
+    const exists = await evaluate(`(() => { const button = ${selector}; if (!button) return false; button.scrollIntoView({block: 'center'}); return true; })()`);
+    if (!exists) throw new Error(`Button unavailable: ${label}`);
+    await evaluate(`new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve(true))))`);
+    const point = await evaluate(`(() => { const button = ${selector}; if (!button) return null; const r = button.getBoundingClientRect(); const x = r.x + r.width / 2; const y = r.y + r.height / 2; const hit = document.elementFromPoint(x, y); return {x, y, width: r.width, height: r.height, reachable: hit === button || button.contains(hit)}; })()`);
+    if (!point?.reachable || point.width < 44 || point.height < 44) throw new Error(`Button is not reachable or is too small: ${label}: ${JSON.stringify(point)}`);
+    await send("Input.dispatchTouchEvent", { type: "touchStart", touchPoints: [{ x: point.x, y: point.y }] });
+    await send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
   }
   const buttonExists = label => `!![...document.querySelectorAll('button')].find(node => node.textContent.trim() === ${JSON.stringify(label)})`;
 
@@ -192,6 +199,8 @@ try {
   await send("Network.enable");
   await send("Fetch.enable", { patterns: [{ urlPattern: "*", requestStage: "Request" }] });
   await send("Emulation.setDeviceMetricsOverride", { width: 390, height: 844, deviceScaleFactor: 1, mobile: true });
+  await send("Emulation.setTouchEmulationEnabled", { enabled: true });
+  await send("Emulation.setEmulatedMedia", { features: [{ name: "prefers-reduced-motion", value: "reduce" }] });
   await send("Page.navigate", { url: `${localOrigin}${pagePath}` });
   await waitFor("trial page", `!!document.querySelector('main[data-font-size]') && !!document.querySelector('button')`);
   await waitFor("ready shortcuts", `!![...document.querySelectorAll('button')].find(node => node.textContent.trim() === '字调大一点' && !node.disabled)`);
@@ -208,6 +217,21 @@ try {
   await waitFor("second font confirmation", buttonExists("确认调整"));
   await clickText("确认调整");
   await waitFor("large font applied", `document.querySelector('main').dataset.fontSize === 'large'`);
+  const layouts = [];
+  for (const { width, height, textScale } of [
+    { width: 320, height: 568, textScale: "100%" },
+    { width: 375, height: 812, textScale: "200%" },
+    { width: 844, height: 390, textScale: "100%" },
+  ]) {
+    await send("Emulation.setDeviceMetricsOverride", { width, height, deviceScaleFactor: 1, mobile: true });
+    await evaluate(`document.documentElement.style.fontSize = ${JSON.stringify(textScale)}`);
+    await evaluate(`new Promise(resolve => requestAnimationFrame(() => resolve(true)))`);
+    const layout = await evaluate(`({ width: innerWidth, scrollWidth: document.documentElement.scrollWidth, clipped: [...document.querySelectorAll('main, main div, main button, main textarea')].filter(node => node.scrollWidth > node.clientWidth + 1).map(node => node.tagName), font: document.querySelector('main').dataset.fontSize })`);
+    if (layout.width !== width || layout.scrollWidth > width || layout.clipped.length) throw new Error(`Large-text layout is clipped: ${JSON.stringify({width, height, textScale, ...layout})}`);
+    layouts.push({ width, height, textScale, font: layout.font });
+  }
+  await send("Emulation.setDeviceMetricsOverride", { width: 390, height: 844, deviceScaleFactor: 1, mobile: true });
+  await evaluate(`document.documentElement.style.fontSize = '81.25%'`);
   await clickText("恢复普通字号");
   await waitFor("restore confirmation", buttonExists("确认调整"));
   await clickText("确认调整");
@@ -239,6 +263,8 @@ try {
   console.log(JSON.stringify({
     result: "passed",
     viewport: { initial, final },
+    largeTextLayouts: layouts,
+    input: "CDP touch events with target size and hit testing",
     checks: ["font change waits for confirmation", "cancel keeps current font", "font can be restored", "declining photo consent starts no work", "authorized photo sample completes", "withdrawal clears simulated results"],
     requestCount: requests.size,
     allowedFontRequests: [...requests].filter(url => { try { return fontHosts.has(new URL(url).hostname); } catch { return false; } }),

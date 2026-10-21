@@ -3,7 +3,7 @@
 import { createContext, useContext, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { useAgent, useHumanInTheLoop, useRenderToolCall } from "@copilotkit/react-core/v2/headless";
 import { useCopilotKit } from "@copilotkit/react-core/v2/context";
-import { Image as ImageIcon, Mic } from "lucide-react";
+import { Image as ImageIcon, Mic, Volume2 } from "lucide-react";
 import Link from "next/link";
 import { z } from "zod";
 import type { ToolMessage } from "@ag-ui/core";
@@ -15,15 +15,18 @@ const fontParameters = z.object({ size: z.enum(["normal", "large"]) }).strict();
 const timeParameters = z.object({ batchId: z.literal(SAMPLE_BATCH_ID), revision: z.number().int().positive(), scope: z.literal("time") }).strict();
 type Answer = (approved: boolean) => void;
 const TrialContext = createContext<{ scenario: TrialScenario; answer: React.MutableRefObject<Answer | null> } | null>(null);
+const VoiceContext = createContext<ReturnType<typeof useCompanionVoice> | null>(null);
 
 type CardProps = { name: string; toolCallId: string; status: string; args: Record<string, unknown>; result?: string; respond?: (result: unknown) => void };
 function ConfirmationCard({ name, toolCallId, status, args, result, respond }: CardProps) {
   const context = useContext(TrialContext)!;
   const { scenario, answer } = context;
+  const voice = useContext(VoiceContext)!;
   const snapshot = useSyncExternalStore(scenario.subscribe, scenario.getSnapshot, scenario.getSnapshot);
   const [error, setError] = useState("");
   const sent = useRef(false);
   const heading = useRef<HTMLHeadingElement>(null);
+  const description = useRef<HTMLDivElement>(null);
   const font = name === "confirm_font_size";
   const parsed = (font ? fontParameters : timeParameters).safeParse(args);
   const validArgs = parsed.success ? JSON.stringify(parsed.data) : "";
@@ -43,6 +46,7 @@ function ConfirmationCard({ name, toolCallId, status, args, result, respond }: C
   const choose = (approved: boolean) => {
     if (!active || sent.current) return;
     try {
+      voice.stopAll();
       const decision = scenario.decide(toolCallId, approved);
       sent.current = true;
       answer.current = null;
@@ -58,12 +62,16 @@ function ConfirmationCard({ name, toolCallId, status, args, result, respond }: C
     return <p className={styles.muted}>{result ? "这次选择已记录，请查看当前状态。" : "正在准备确认卡…"}</p>;
   }
   return <section className={`${styles.card} ${styles.prompt}`} aria-label={font ? "字号确认" : "样例整理授权"}>
+    <div ref={description}>
     <h2 ref={heading} tabIndex={-1}>{font ? (args.size === "large" ? "要把字调大一点吗？" : "要恢复普通字号吗？") : "只按时间整理这批样例吗？"}</h2>
     {font ? <p>只调整此页文字，刷新后恢复。取消会保留现在的字号。</p> : <>
       <p>本次仅处理 3 条合成记录的时间，不识别人脸、地点，也不处理真实照片。</p>
       <p>处理位置：{SAMPLE_LOCATION}。刷新后重置，您可以随时撤回并清除模拟结果。</p>
       <p className={styles.muted}>样例批次：{SAMPLE_BATCH_ID}；授权版本：{String(args.revision)}</p>
     </>}
+    <p>请核对后点按钮，或听写“确认 / 取消”，检查文字后发送。</p>
+    </div>
+    <button disabled={!active} onClick={() => voice.speak(description.current?.textContent ?? "", true)}><Volume2 size={24} aria-hidden="true" />{voice.speaking ? "停止朗读" : "读给我听"}</button>
     <div className={styles.actions}>
       <button className={styles.primary} disabled={!active} onClick={() => choose(true)}>{font ? "确认调整" : "同意本次整理"}</button>
       <button disabled={!active} onClick={() => choose(false)}>取消</button>
@@ -92,6 +100,7 @@ function Conversation() {
   }, [agent, scenario]);
   async function send(text: string) {
     if (!text.trim()) return;
+    voice.stopAll();
     if (state.question) {
       const decision = parseDecision(text);
       if (decision === null || !answer.current) { setNotice("请核对当前确认卡，再说“确认”或“取消”，也可以直接点按钮。"); return; }
@@ -104,7 +113,7 @@ function Conversation() {
     catch { setNotice("这次试验未完成，请刷新重试。"); }
     finally { setBusy(false); }
   }
-  return <main className={`${styles.shell} ${state.fontSize === "large" ? styles.large : ""}`} data-font-size={state.fontSize}>
+  return <VoiceContext.Provider value={voice}><main className={`${styles.shell} ${state.fontSize === "large" ? styles.large : ""}`} data-font-size={state.fontSize}>
     <header className={styles.header}><h1>陪伴交互试验</h1><p className={styles.muted}>CopilotKit 工具确认 · 合成样例</p></header>
     <div className={styles.content}>
       <p>这里使用固定句式，不连接聊天模型。所有状态只在本页内存中，刷新后重置。</p>
@@ -127,11 +136,11 @@ function Conversation() {
         <p role="status" className={styles.status}>{state.notice}</p>
         {state.task === "running" && <progress aria-label="样例整理进度" value={state.processedIds.length} max={3} />}
         {SAMPLE_PHOTOS.map(photo => <div className={styles.photo} key={photo.id}><ImageIcon aria-hidden="true" /><div><h3>{photo.title}</h3><p>{state.processedIds.includes(photo.id) ? `模拟结果：${photo.date ?? "时间待确认"}` : "合成示意 · 尚无整理结果"}</p></div></div>)}
-        <button disabled={state.consent !== "granted"} onClick={() => { answer.current?.(false); scenario.revoke(); }}>撤回授权并清除模拟结果</button>
+        <button disabled={state.consent !== "granted"} onClick={() => { voice.stopAll(); answer.current?.(false); scenario.revoke(); }}>撤回授权并清除模拟结果</button>
       </section>
       <Link href="/companion">返回陪伴原型</Link>
     </div>
-  </main>;
+  </main></VoiceContext.Provider>;
 }
 
 export function TrialContent({ scenario }: { scenario: TrialScenario }) {
