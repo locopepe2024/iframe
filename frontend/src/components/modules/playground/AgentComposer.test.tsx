@@ -161,3 +161,16 @@ it('preserves long drafts across modes and submits Chat beyond sixteen thousand 
     expect(send).toHaveBeenCalledTimes(3);
     expect(usePlaygroundStore.getState().prompt).toBe('字'.repeat(16001));
 });
+
+it('shows automatic frame ratio for H3 V2 image and first-last-frame modes', () => {
+    installUniArtCatalog([{ id: 'uniart/minimax-h3-discount', api_model_id: 'minimax-h3-discount', display_name: 'H3', description: '', family: 'minimax', provider: 'uniart', capabilities: ['t2v', 'i2v', 'r2v', 'f2v'], duration: null, params: { ratio: { options: ['16:9', '9:16'], default: '16:9' } }, inputs: {} }]);
+    usePlaygroundStore.setState({ mode: 'i2v', modelId: 'uniart/minimax-h3-discount', parameters: { aspect_ratio: '16:9' } });
+    render(<AgentComposer canGenerate batchSize={1} onGenerate={vi.fn()} />);
+    expect(screen.getByText('比例跟随首帧')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '16:9' })).not.toBeInTheDocument();
+    act(() => usePlaygroundStore.setState({ mode: 'f2v' }));
+    expect(screen.getByText('比例跟随首帧')).toBeInTheDocument();
+    act(() => usePlaygroundStore.setState({ mode: 't2v' }));
+    expect(screen.queryByText('比例跟随首帧')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '16:9' })).toBeInTheDocument();
+});

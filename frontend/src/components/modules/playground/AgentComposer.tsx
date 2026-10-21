@@ -94,6 +94,7 @@ export default function AgentComposer({ canGenerate, batchSize, onGenerate, agen
   const OutputIcon = agent?.active ? MessageSquare : outputType === 'image' ? ImageIcon : Video;
   const outputLabel = agent?.active ? 'Agent' : t(outputType === 'image' ? 'mode.outputImage' : 'mode.outputVideo');
   const controls = getComposerControlState(modelId, parameters, batchSize);
+  const h3FrameMode = modelId.startsWith('uniart/minimax-h3') && (mode === 'i2v' || mode === 'f2v');
   const referenceLabel = t(`mode.${mode}`);
   const resolutionLabel = [controls.resolution, controls.duration != null ? `${controls.duration}s` : null]
     .filter(Boolean)
@@ -239,7 +240,8 @@ export default function AgentComposer({ canGenerate, batchSize, onGenerate, agen
               onClick={() => togglePanel('resolution')}
             />
           )}
-          {controls.ratio && (
+          {h3FrameMode && <span className="px-3 text-xs text-text-secondary">比例跟随首帧</span>}
+          {controls.ratio && !h3FrameMode && (
             <ToolButton
               active={activePanel === 'ratio'}
               icon={Maximize2}
