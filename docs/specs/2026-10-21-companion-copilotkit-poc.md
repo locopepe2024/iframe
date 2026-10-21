@@ -28,7 +28,9 @@
 - `frontend/src/app/companion/copilot-trial/` 与 `frontend/src/components/companion/copilot-trial/`：独立入口、确定性 Agent、样例状态机、适老卡片和样式。
 - `ApplicationBoundary`：只增加明确的试验路径隔离，常规业务路径仍保留原 Providers。
 - 定向测试使用真实 SDK，不 mock 成普通 React 状态；验证工具调用 → 卡片 → 返回结果往返、拒绝、恢复、重复回传、错误/撤回、退出清理及无业务/模型网络请求。
+- `frontend/scripts/companion-browser-smoke.mjs`：启动临时静态服务器和隔离的无头 Chrome profile，模拟 390px 视口并验证确认/取消/字号恢复/样例授权/撤回；清理服务、浏览器和 profile。只允许本地静态请求和 `fonts.googleapis.com` / `fonts.gstatic.com`，其他网络请求在浏览器侧拦截并使测试失败。
 - `npm run typecheck`、定向 `npm run test:ui -- ...` / `npm run test -- --run ...`、`npm run build`。以构建记录 React 18 / 静态导出兼容证据，不将组件测试当手机实测。
+- 浏览器验收命令：先 `npm run build`，再 `npm run test:companion:browser`；后者要求可用的 Chrome/Chromium，可通过 `CHROME_BIN` 指定。
 - 记录 SDK/AG-UI 版本、试验初始包大小与 `/companion` 对照、已验证与未验证；不推送或部署。
 
 后续才验证真实模型 tools 协议、认证/owner-thread 隔离、后端授权与任务恢复、真实设备和老人任务。该 PoC 的用户本机授权/任务结果不能用于正式照片处理。
@@ -40,3 +42,9 @@
 - 确认卡按工具调用 ID、样例批次 ID 与授权版本核验；拒绝不执行，重复确认幂等，撤回清除模拟结果并阻止旧计时器继续提交。听写须显式勾选，转写先放入输入框供核对。
 - CopilotKit 发布包自带 Tailwind v4 样式与现有 Tailwind v3 构建冲突。仅把该包的默认 UI CSS 解析到本地空样式，试验页使用独立样式。静态导出通过；这不验证未来使用 CopilotKit 默认 UI 的兼容性。
 - 本次验证：`npm run typecheck`、43 项定向 UI/协议/状态测试、`npm run build`。测试验证浏览器内工具往返及无 fetch/本地持久化；未做真实手机、浏览器语音服务或老人可用性实测。Next 构建显示试验页首载 95.6 kB，但动态 SDK 代码不计入此数字，需在真实设备测量完整下载和交互性能。
+
+## 浏览器烟测（2026-10-22）
+
+- `npm run test:companion:browser` 直接加载静态导出页面，不依赖运行中的后端或长驻开发服务。脚本用临时端口、临时 Chrome profile 和 CDP 请求拦截，并在退出时清理资源。
+- 页面全局样式会请求 Google Fonts；浏览器检查明确允许 `fonts.googleapis.com` 和 `fonts.gstatic.com`，所有其他非本地网络请求均被拦截并判失败。字体服务不可用时页面仍可使用系统字体，此烟测只保证请求范围，不把字体下载成功当作交互前置条件。
+- 覆盖 390px 横向溢出、字号确认前不生效、取消、调整后恢复、拒绝照片授权不启动处理、同意后模拟处理、撤回并清除结果。此浏览器烟测不替代真实设备、语音服务或老人可用性测试。
