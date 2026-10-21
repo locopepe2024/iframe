@@ -3477,7 +3477,7 @@ class ComicGenPipeline(StudioOwnerMixin):
         if resolved == "plan" and skill_snapshot:
             raise ValueError("按导演计划生成不重新执行创作 Skills")
         lineage.storyboard_mode = resolved
-        if script.director_shooting_plan_revisions:
+        if resolved == "plan" and script.director_shooting_plan_revisions:
             revision = script.director_shooting_plan_revisions[-1]
             self._validate_director_shooting_plan(script, revision.plan)
             context = self.project_episode_visual_context(script_id)
@@ -5693,7 +5693,7 @@ class ComicGenPipeline(StudioOwnerMixin):
 
     # === STORYBOARD DRAMATIZATION v2 ===
 
-    def storyboard_analysis_context(self, script_id: str) -> Tuple[Script, Dict[str, Any], str]:
+    def storyboard_analysis_context(self, script_id: str, *, include_plan: bool = True) -> Tuple[Script, Dict[str, Any], str]:
         """Return the stable project context used by storyboard analysis jobs."""
         script = self.scripts.get(script_id)
         if not script:
@@ -5711,10 +5711,10 @@ class ComicGenPipeline(StudioOwnerMixin):
             "scenes": [{"id": s.id, "name": s.name, "description": s.description} for s in resolved["scenes"]],
             "props": [{"id": p.id, "name": p.name, "description": p.description} for p in resolved["props"]],
         }
-        if script.director_shooting_plan_revisions:
+        if include_plan and script.director_shooting_plan_revisions:
             episode_context = self.project_episode_visual_context(script_id)
             entities_json["episode_visual_context"] = episode_context.model_dump()
-        elif script.episode_visual_context:
+        elif include_plan and script.episode_visual_context:
             entities_json["episode_visual_context"] = script.episode_visual_context.model_dump()
         series = self.get_series(script.series_id) if getattr(script, "series_id", None) else None
         prompt = self.get_effective_prompt("storyboard_extraction", script, series)
@@ -5726,7 +5726,9 @@ class ComicGenPipeline(StudioOwnerMixin):
                                     model: Optional[str] = None,
                                     skill_snapshot=None) -> List[Dict[str, Any]]:
         """Generate a storyboard draft without mutating persisted frames."""
-        script, entities_json, prompt = self.storyboard_analysis_context(script_id)
+        script, entities_json, prompt = self.storyboard_analysis_context(
+            script_id, include_plan=not (expected_lineage and expected_lineage.storyboard_mode == "script"),
+        )
         selected_model = model if model is not None else self.get_effective_polish_model(script)
         source_range = self._source_range_for_text(script, text)
         confirmed_director_profile = self.effective_director_profile(script)
@@ -5812,7 +5814,9 @@ class ComicGenPipeline(StudioOwnerMixin):
                                     model: Optional[str] = None,
                                     skill_snapshot=None) -> List[Dict[str, Any]]:
         """Revise a storyboard draft without changing the project's frames."""
-        script, entities_json, prompt = self.storyboard_analysis_context(script_id)
+        script, entities_json, prompt = self.storyboard_analysis_context(
+            script_id, include_plan=not (lineage and lineage.storyboard_mode == "script"),
+        )
         selected_model = model if model is not None else self.get_effective_polish_model(script)
         if lineage and lineage.status == "pinned":
             self.validate_storyboard_lineage(script_id, text, lineage)
@@ -5854,7 +5858,9 @@ class ComicGenPipeline(StudioOwnerMixin):
         Analyzes script text and generates storyboard frames using LLM.
         Replaces existing frames with newly generated ones.
         """
-        script, entities_json, storyboard_extraction_prompt = self.storyboard_analysis_context(script_id)
+        script, entities_json, storyboard_extraction_prompt = self.storyboard_analysis_context(
+            script_id, include_plan=not (lineage and lineage.storyboard_mode == "script"),
+        )
         logger.info(f"Analyzing text to frames for project {script_id}")
 
         # Resolve assets (merge Series + Episode if applicable)

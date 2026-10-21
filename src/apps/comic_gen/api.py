@@ -3621,7 +3621,9 @@ class StoryboardAnalysisApplyRequest(BaseModel):
 def _storyboard_analysis_fingerprint(script_id: str, text: str,
                                      draft=None, instructions=None,
                                      lineage: Optional[ArtifactLineage] = None) -> str:
-    script, entities, prompt = pipeline.storyboard_analysis_context(script_id)
+    script, entities, prompt = pipeline.storyboard_analysis_context(
+        script_id, include_plan=not (lineage and lineage.storyboard_mode == "script"),
+    )
     resolve_director = getattr(pipeline, "effective_director_profile", None)
     director_profile = resolve_director(script) if resolve_director else None
     visual_style = pipeline.storyboard_visual_style(script)

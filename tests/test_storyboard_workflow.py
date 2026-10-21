@@ -113,3 +113,20 @@ def test_selected_method_is_in_actual_model_prompt():
     assert selected[0]['instructions'] in prompt
     assert '[storyboard-suspense ' in prompt
     assert '[storyboard-action ' not in prompt
+
+
+def test_script_workflow_does_not_depend_on_stale_plan_or_story_map():
+    pipeline, script = confirmed()
+    script.art_direction.director_profile.story_map.source_revision = 99
+    lineage = pipeline.storyboard_workflow_lineage('film', SOURCE_TEXT, 'script')
+    assert lineage.shooting_plan_revision is None
+    pipeline.script_processor.analyze_to_storyboard.return_value = [{'action_summary': 'walk'}]
+    draft = pipeline.preview_storyboard_analysis('film', SOURCE_TEXT, expected_lineage=lineage)
+    assert 'episode_visual_context' not in pipeline.script_processor.analyze_to_storyboard.call_args.args[1]
+    pipeline.script_processor.refine_storyboard_analysis.return_value = draft
+    pipeline.refine_storyboard_analysis('film', SOURCE_TEXT, draft, ['refine'], lineage)
+    assert 'episode_visual_context' not in pipeline.script_processor.refine_storyboard_analysis.call_args.args[1]
+    result = pipeline.analyze_text_to_frames('film', SOURCE_TEXT, draft, lineage)
+    assert result.frames[0].shot_id is None
+    with pytest.raises(ValueError, match='story map is stale'):
+        pipeline.storyboard_workflow_lineage('film', SOURCE_TEXT, 'plan')

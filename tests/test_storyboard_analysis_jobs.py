@@ -56,7 +56,7 @@ def test_storyboard_jobs_are_drafts_owner_scoped_and_refinable(tmp_path, monkeyp
         script_processor=SimpleNamespace(
             llm=SimpleNamespace(provider="openai", _get_default_model=lambda: "test")
         ),
-        storyboard_analysis_context=lambda project: (
+        storyboard_analysis_context=lambda project, **kwargs: (
             source, {"characters": [{"name": "主播"}]}, "prompt"
         ),
         storyboard_visual_style=lambda script: {
@@ -131,7 +131,7 @@ def test_pinned_storyboard_apply_records_lineage_and_rejects_changed_source():
     pipeline.stamp_owned_children = Mock()
     pipeline._save_data = Mock()
     pipeline.script_processor = Mock()
-    pipeline.storyboard_analysis_context = lambda project: (
+    pipeline.storyboard_analysis_context = lambda project, **kwargs: (
         script, {"characters": [], "scenes": [], "props": []}, "prompt"
     )
 
@@ -250,7 +250,7 @@ def test_applying_120_reviewed_shots_preserves_order_without_model_call():
     pipeline = ComicGenPipeline.__new__(ComicGenPipeline)
     pipeline.scripts = {script.id: script}
     pipeline.series_store = {}
-    pipeline.storyboard_analysis_context = lambda project: (
+    pipeline.storyboard_analysis_context = lambda project, **kwargs: (
         script, {"characters": [], "scenes": [{"id": "room", "name": "房间"}], "props": []}, "prompt"
     )
     pipeline.resolve_project_assets = lambda current: {
@@ -286,7 +286,7 @@ def test_storyboard_prefers_exact_temporal_character_variant():
         characters=[base, college], scenes=[scene], frames=[],
     )
     pipeline.scripts = {script.id: script}
-    pipeline.storyboard_analysis_context = lambda project: (
+    pipeline.storyboard_analysis_context = lambda project, **kwargs: (
         script,
         {"characters": [{"id": base.id, "name": base.name}, {"id": college.id, "name": college.name}]},
         "prompt",
@@ -360,7 +360,7 @@ def test_storyboard_apply_keeps_confirmed_shot_id_and_asset_context():
     pipeline = ComicGenPipeline.__new__(ComicGenPipeline)
     pipeline.scripts = {script.id: script}
     pipeline.series_store = {}
-    pipeline.storyboard_analysis_context = lambda project: (
+    pipeline.storyboard_analysis_context = lambda project, **kwargs: (
         script,
         {"characters": [], "scenes": [], "props": [], "episode_visual_context": context.model_dump()},
         "prompt",
@@ -546,7 +546,7 @@ def test_long_storyboard_preview_resumes_ordered_source_batches():
     pipeline = ComicGenPipeline.__new__(ComicGenPipeline)
     script = Script(id="project", title="Story", original_text="", created_at=1, updated_at=1)
     pipeline.scripts = {script.id: script}
-    pipeline.storyboard_analysis_context = lambda project: (script, {"characters": [], "scenes": [], "props": []}, "prompt")
+    pipeline.storyboard_analysis_context = lambda project, **kwargs: (script, {"characters": [], "scenes": [], "props": []}, "prompt")
     pipeline.script_processor = Mock()
     pipeline.script_processor.analyze_to_storyboard.side_effect = lambda text, *_args, **_kwargs: [{"action_summary": text[:8]}]
     source = "第一场。" * 1000
@@ -582,7 +582,7 @@ def test_storyboard_preview_uses_episode_model_before_series_model():
         id="series", title="Story", created_at=1, updated_at=1,
         prompt_config=PromptConfig(polish_model="kimi-k3"),
     )}
-    pipeline.storyboard_analysis_context = lambda project: (
+    pipeline.storyboard_analysis_context = lambda project, **kwargs: (
         script, {"characters": [], "scenes": [], "props": []}, "prompt"
     )
     pipeline.script_processor = Mock()
@@ -609,7 +609,7 @@ def test_long_storyboard_without_unique_source_match_uses_global_ledger_context(
     pipeline.scripts = {script.id: script}
     pipeline.series_store = {}
     pipeline._save_data = Mock()
-    pipeline.storyboard_analysis_context = lambda project: (
+    pipeline.storyboard_analysis_context = lambda project, **kwargs: (
         script, {"characters": [], "scenes": [], "props": []}, "prompt"
     )
     pipeline.script_processor = Mock()
@@ -647,7 +647,7 @@ def test_episode_length_storyboard_job_retries_only_missing_batches_after_store_
                     created_at=1, updated_at=1, owner_profile_id="owner", frames=[])
     pipeline = ComicGenPipeline.__new__(ComicGenPipeline)
     pipeline.scripts = {script.id: script}
-    pipeline.storyboard_analysis_context = lambda project: (
+    pipeline.storyboard_analysis_context = lambda project, **kwargs: (
         script, {"characters": [], "scenes": [], "props": []}, "prompt"
     )
     pipeline.director_execution_context = lambda current, **_kwargs: None
@@ -805,7 +805,7 @@ def test_storyboard_analysis_context_passes_project_style_to_all_frames():
     pipeline = ComicGenPipeline.__new__(ComicGenPipeline)
     pipeline.scripts = {script.id: script}
     pipeline.series_store = {}
-    pipeline.storyboard_analysis_context = lambda project: (
+    pipeline.storyboard_analysis_context = lambda project, **kwargs: (
         script, {"characters": [], "scenes": [], "props": []}, "prompt"
     )
     pipeline.script_processor = Mock()
@@ -846,7 +846,7 @@ def test_storyboard_analysis_consumes_confirmed_director_revision_and_hash():
     pipeline = ComicGenPipeline.__new__(ComicGenPipeline)
     pipeline.scripts = {script.id: script}
     pipeline.series_store = {}
-    pipeline.storyboard_analysis_context = lambda project: (
+    pipeline.storyboard_analysis_context = lambda project, **kwargs: (
         script, {"characters": [], "scenes": [], "props": []}, "prompt"
     )
     pipeline.script_processor = Mock()
@@ -892,7 +892,7 @@ def test_storyboard_job_fingerprint_changes_when_project_style_changes(monkeypat
     )
     visual_style = {"selected_style_id": "film-noir", "style_config": {"positive_prompt": "黑白"}}
     pipeline = SimpleNamespace(
-        storyboard_analysis_context=lambda project: (source, {"characters": []}, "prompt"),
+        storyboard_analysis_context=lambda project, **kwargs: (source, {"characters": []}, "prompt"),
         storyboard_visual_style=lambda script: visual_style,
         script_processor=SimpleNamespace(
             llm=SimpleNamespace(provider="openai", _get_default_model=lambda: "test")
@@ -915,7 +915,7 @@ def test_storyboard_job_fingerprint_changes_when_selected_model_changes(monkeypa
                     prompt_config=PromptConfig(polish_model="deepseek-v4.1-flash-peak"),
                     created_at=1, updated_at=1)
     pipeline = SimpleNamespace(
-        storyboard_analysis_context=lambda project: (source, {"characters": []}, "prompt"),
+        storyboard_analysis_context=lambda project, **kwargs: (source, {"characters": []}, "prompt"),
         storyboard_visual_style=lambda script: {},
         get_effective_polish_model=lambda script: script.prompt_config.polish_model,
         script_processor=SimpleNamespace(llm=SimpleNamespace(
