@@ -9,7 +9,7 @@ import {
 } from "@/lib/characterPrompts";
 
 const apiMocks = vi.hoisted(() => ({
-    getVoices: vi.fn().mockResolvedValue([{ id: 'voice-test', name: '清朗男声', gender: 'Male', family: 'minimax', model: 'speech-2.8-hd', origin: 'system' }]),
+    getVoices: vi.fn().mockResolvedValue([{ id: 'uniart:speech-2.8-hd:male-qn-qingse', name: '清朗男声', gender: 'Male', family: 'minimax', model: 'speech-2.8-hd', origin: 'system' }]),
     listCustomVoices: vi.fn().mockResolvedValue([]),
     getAssetReferenceIndex: vi.fn(),
     getPlatformReferenceLibrary: vi.fn().mockResolvedValue({ scope: "platform_shared", schema_version: 1, catalog_revision: "test", resources: [] }),
@@ -89,7 +89,7 @@ it('binds a voice from the character workbench without saving visual design or g
     fireEvent.click(screen.getByRole('button', { name: 'library' }));
     fireEvent.click(await screen.findByText('清朗男声'));
     fireEvent.click(screen.getByRole('button', { name: 'apply' }));
-    await waitFor(() => expect(save).toHaveBeenCalledWith({ voice_id: 'voice-test', voice_name: '清朗男声' }));
+    await waitFor(() => expect(save).toHaveBeenCalledWith({ voice_id: 'uniart:speech-2.8-hd:male-qn-qingse', voice_name: '清朗男声' }));
     expect(generate).not.toHaveBeenCalled();
 });
 

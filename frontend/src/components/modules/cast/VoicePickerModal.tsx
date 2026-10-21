@@ -190,9 +190,7 @@ export default function VoicePickerModal({
                 {/* Footer */}
                 <div className="flex items-center justify-between gap-3 px-6 py-3 border-t border-glass-border">
                     <span className="font-mono text-[0.625rem] uppercase tracking-[0.14em] text-text-muted">
-                        {selectedId
-                            ? voices.find(v => v.id === selectedId)?.name || selectedId
-                            : t("noSelection")}
+                        {voices.find(v => v.id === selectedId)?.name || t("noSelection")}
                     </span>
                     <div className="flex items-center gap-2">
                         <button

@@ -178,6 +178,7 @@
     "confirmCloseLeave": "离开"
   },
   "voicePicker": {
+    "legacyStopped": "旧音色已停用 · 需重选",
         "legacyReselect": "原音色不兼容当前网关，请重新选择并保存。",
         "gatewayEmpty": "当前 UniArt 配置暂无可用语音模型，请检查设置或网关权限。",
     "library": "音色库",
@@ -583,6 +584,7 @@
     "useThisStyle": "使用此风格"
   },
   "cast": {
+    "voiceLegacyStopped": "旧音色已停用 · 需重选",
     "totalCast": "项素材",
     "tabAll": "全部",
     "tabCharacters": "角色",

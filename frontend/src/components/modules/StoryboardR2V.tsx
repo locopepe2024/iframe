@@ -16,6 +16,7 @@ import { api, crudApi, type VideoTask, type RefineSSEEvent, type AssetReferenceI
 import { resolveMediaDelivery, resolveVideoTaskDelivery } from "@/lib/mediaDelivery";
 import { resolveStoryboardStyle, resolveStoryboardStyleForRender } from "@/lib/storyboardStyle";
 import { getAssetUrl } from "@/lib/utils";
+import { isUniArtVoiceBinding } from "@/lib/voiceBinding";
 import { debugLog } from "@/lib/debugLog";
 import type { BatchSummary } from "./storyboard-r2v/shot-panel/CandidatesSection";
 import { getR2vRouteModelId, isR2vImageBased, videoModelSupportsMode, VIDEO_I2V_MODELS, VIDEO_R2V_MODELS, DEFAULT_I2V_MODEL_ID, DEFAULT_R2V_MODEL_ID } from "@/lib/modelCatalog";
@@ -610,10 +611,10 @@ export default function StoryboardR2V() {
             f.dialogue_structured?.line || f.dialogue
         );
         const charsWithVoice = new Set(
-            (currentProject as any).characters?.filter((c: any) => c.voice_id).map((c: any) => c.id) ?? []
+            (currentProject as any).characters?.filter((c: any) => isUniArtVoiceBinding(c.voice_id)).map((c: any) => c.id) ?? []
         );
         const charNameToVoice = new Map<string, boolean>(
-            (currentProject as any).characters?.filter((c: any) => c.voice_id).map((c: any) => [c.name?.toLowerCase(), true]) ?? []
+            (currentProject as any).characters?.filter((c: any) => isUniArtVoiceBinding(c.voice_id)).map((c: any) => [c.name?.toLowerCase(), true]) ?? []
         );
         const hasVoiceBinding = (f: any): boolean => {
             if (f.character_ids?.[0] && charsWithVoice.has(f.character_ids[0])) return true;

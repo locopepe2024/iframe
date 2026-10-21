@@ -207,9 +207,11 @@ def test_voice_http_routes_require_and_propagate_owner_context(monkeypatch):
     from src.apps.studio_access import require_studio_user
 
     def resolve(authorization, _cookie, _key_header):
-        if authorization != "Bearer owner-test":
+        if authorization not in {"Bearer owner-test", "Bearer other-test"}:
             raise HTTPException(status_code=401, detail="Authentication required")
-        return UserContext("owner-test", "profile-test", "Test", ""), False
+        other = authorization == "Bearer other-test"
+        return UserContext("other-test" if other else "owner-test",
+                           "other-profile" if other else "profile-test", "Test", ""), False
 
     monkeypatch.setattr(api, "_resolve_request_context", resolve)
     monkeypatch.setattr(api.pipeline.audio_generator, "get_available_voices",
@@ -228,3 +230,6 @@ def test_voice_http_routes_require_and_propagate_owner_context(monkeypatch):
     preview = client.post("/voice/preview", headers=headers, json={"voice_id": VOICE, "text": "你好"})
     assert preview.status_code == 200
     assert preview.json() == {"url": "profile-test", "cached": False}
+    other = client.get("/voices", headers={"Authorization": "Bearer other-test"})
+    assert other.status_code == 200
+    assert other.json() == [{"id": "other-profile"}]

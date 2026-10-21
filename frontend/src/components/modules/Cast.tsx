@@ -24,6 +24,7 @@ import { useTranslations } from "next-intl";
 import { useProjectStore } from "@/store/projectStore";
 import { api } from "@/lib/api";
 import { getAssetUrl } from "@/lib/utils";
+import { isUniArtVoiceBinding } from "@/lib/voiceBinding";
 import { characterImageUrl } from "@/lib/characterImage";
 import { useLightbox } from "@/components/shared/preview/LightboxProvider";
 import StepPageHeader, { StepPill } from "@/components/shared/StepPageHeader";
@@ -160,7 +161,7 @@ export default function Cast() {
                         <StepPill label={t("charactersLabel")} value={characters.length} />
                         <StepPill
                             label={t("voiceBoundLabel")}
-                            value={(currentProject?.characters ?? []).filter((c: any) => c.voice_id).length}
+                            value={(currentProject?.characters ?? []).filter((c: any) => isUniArtVoiceBinding(c.voice_id)).length}
                         />
                     </>
                 ) : null}
@@ -311,7 +312,6 @@ function AddCastPlaceholderModal({
     const [name, setName] = useState("");
     const [persona, setPersona] = useState("");
     const [description, setDescription] = useState("");
-    const [voiceId, setVoiceId] = useState("");  // P2-c — character voice binding
     const [uploading, setUploading] = useState(false);
     const [imageUrl, setImageUrl] = useState<string>("");
     const [submitting, setSubmitting] = useState(false);
@@ -319,7 +319,7 @@ function AddCastPlaceholderModal({
 
     // Reset state when modal closes / kind changes
     const reset = () => {
-        setName(""); setPersona(""); setDescription(""); setVoiceId("");
+        setName(""); setPersona(""); setDescription("");
         setImageUrl(""); setError(null); setTab("ai");
     };
 
@@ -359,7 +359,6 @@ function AddCastPlaceholderModal({
                 name: name.trim(),
                 description: description.trim() || undefined,
                 persona: kind === "character" ? (persona.trim() || undefined) : undefined,
-                voice_id: kind === "character" ? (voiceId.trim() || undefined) : undefined,
                 image_url: imageUrl || undefined,
             });
             onCreated();
@@ -442,23 +441,7 @@ function AddCastPlaceholderModal({
                                     className="w-full bg-input-bg border border-glass-border rounded-lg px-3 py-2 text-sm text-foreground placeholder-text-muted focus:outline-none focus:border-primary"
                                 />
                             </div>
-                            <div>
-                                <label className="block text-xs font-medium text-text-secondary mb-1.5">
-                                    {t("fieldVoice")} <span className="text-text-muted">({t("fieldVoiceHint")})</span>
-                                </label>
-                                <select
-                                    value={voiceId}
-                                    onChange={(e) => setVoiceId(e.target.value)}
-                                    className="w-full bg-input-bg border border-glass-border rounded-lg px-3 py-2 text-sm text-foreground focus:outline-none focus:border-primary"
-                                >
-                                    <option value="">{t("fieldVoiceNone")}</option>
-                                    <option value="longanyang">{t("voiceLonganyang")}</option>
-                                    <option value="longshu">{t("voiceLongshu")}</option>
-                                    <option value="longtong">{t("voiceLongtong")}</option>
-                                    <option value="longfei_v2">{t("voiceLongfei")}</option>
-                                    <option value="longxiaobai_v2">{t("voiceLongxiaobai")}</option>
-                                </select>
-                            </div>
+
                         </>
                     )}
                     <div>
@@ -687,6 +670,7 @@ function CastCard({ item, onOpenWorkbench }: { item: CastItem; onOpenWorkbench?:
         : null;
     const voiceId: string | undefined = character?.voice_id;
     const voiceName: string | undefined = character?.voice_name;
+    const usableVoice = isUniArtVoiceBinding(voiceId);
 
     // PR-3g · Voice bind handler: persist via existing bindVoice API
     const handleApplyVoice = async (newVoiceId: string, newVoiceName: string) => {
@@ -703,7 +687,7 @@ function CastCard({ item, onOpenWorkbench }: { item: CastItem; onOpenWorkbench?:
 
     // PR-3g · inline preview from CastCard (uses currently-bound voice)
     const handleInlinePreview = async () => {
-        if (!voiceId) return;
+        if (!usableVoice) return;
         if (audioRef.current) {
             audioRef.current.pause();
             audioRef.current = null;
@@ -888,13 +872,13 @@ function CastCard({ item, onOpenWorkbench }: { item: CastItem; onOpenWorkbench?:
                             className="flex-1 inline-flex items-center gap-1.5 rounded-md border border-glass-border bg-black/30 px-2 py-1 text-[0.625rem] text-text-secondary hover:border-foreground/30 hover:text-foreground transition-colors min-w-0"
                             title={voiceId ? t("voiceBindChange") : t("voiceBindAdd")}
                         >
-                            <Volume2 size={10} className={voiceId ? "text-primary" : "text-text-muted"} />
+                            <Volume2 size={10} className={usableVoice ? "text-primary" : "text-text-muted"} />
                             <span className="truncate flex-1 text-left">
-                                {voiceName || (voiceId ? voiceId : t("voiceBindNone"))}
+                                {usableVoice ? (voiceName || voiceId) : voiceId ? t("voiceLegacyStopped") : t("voiceBindNone")}
                             </span>
                             <span className="font-mono text-[0.5rem] text-text-muted shrink-0">▼</span>
                         </button>
-                        {voiceId && (
+                        {usableVoice && (
                             <button
                                 onClick={(e) => { e.stopPropagation(); handleInlinePreview(); }}
                                 aria-label={playing ? t("previewStop") : t("previewPlay")}

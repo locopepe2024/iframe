@@ -2100,7 +2100,10 @@ export const api = {
 
     getVoices: async (): Promise<VoiceMeta[]> => {
         const response = await authenticatedFetch(`${API_URL}/voices`);
-        if (!response.ok) throw new Error("Failed to fetch voices");
+        if (!response.ok) {
+            const error = await response.json().catch(() => null);
+            throw new Error(typeof error?.detail === "string" ? error.detail : `音色加载失败（HTTP ${response.status}）`);
+        }
         return response.json();
     },
 

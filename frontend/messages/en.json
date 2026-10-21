@@ -178,6 +178,7 @@
     "confirmCloseLeave": "Leave"
   },
   "voicePicker": {
+    "legacyStopped": "Previous voice retired · select again",
         "legacyReselect": "The previous voice is incompatible with this gateway. Select and save a new voice.",
         "gatewayEmpty": "No supported speech models are available. Check your UniArt settings and permissions.",
     "library": "Voice library",
@@ -583,6 +584,7 @@
     "useThisStyle": "Use this style"
   },
   "cast": {
+    "voiceLegacyStopped": "Previous voice retired · select again",
     "tabAll": "All",
     "tabCharacters": "Characters",
     "tabScenes": "Scenes",

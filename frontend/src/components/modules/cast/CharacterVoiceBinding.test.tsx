@@ -6,17 +6,17 @@ import CharacterVoiceBinding from './CharacterVoiceBinding';
 
 const mocks = vi.hoisted(() => ({
   getVoices: vi.fn().mockResolvedValue([
-    { id: 'voice-a', name: '清朗男声', gender: 'Male', family: 'minimax', origin: 'system', model: 'speech-2.8-hd' },
-    { id: 'voice-b', name: '沉稳男声', gender: 'Male', family: 'minimax', origin: 'system', model: 'speech-2.8-hd' },
+    { id: 'uniart:speech-2.8-hd:male-qn-qingse', name: '清朗男声', gender: 'Male', family: 'minimax', origin: 'system', model: 'speech-2.8-hd' },
+    { id: 'uniart:speech-2.8-hd:male-qn-jingying', name: '沉稳男声', gender: 'Male', family: 'minimax', origin: 'system', model: 'speech-2.8-hd' },
   ]),
   listCustomVoices: vi.fn().mockResolvedValue([]),
   previewVoice: vi.fn(),
 }));
 vi.mock('@/lib/api', () => ({ api: mocks }));
 
-function setup(save: (attributes: Record<string, unknown>) => Promise<void>) {
+function setup(save: (attributes: Record<string, unknown>) => Promise<void>, voiceId = 'uniart:speech-2.8-hd:male-qn-qingse') {
   return render(<NextIntlClientProvider locale="zh" messages={zh} timeZone="Asia/Hong_Kong">
-    <CharacterVoiceBinding character={{ id: 'hero', name: '苏砚', gender: '男', voice_id: 'voice-a', voice_name: '清朗男声' }}
+    <CharacterVoiceBinding character={{ id: 'hero', name: '苏砚', gender: '男', voice_id: voiceId, voice_name: '清朗男声' }}
       seriesId="series" onSave={save} />
   </NextIntlClientProvider>);
 }
@@ -28,7 +28,7 @@ it('opens the existing library and saves only the voice binding after explicit a
   fireEvent.click(await screen.findByText('沉稳男声'));
   expect(save).not.toHaveBeenCalled();
   fireEvent.click(screen.getByRole('button', { name: '应用' }));
-  await waitFor(() => expect(save).toHaveBeenCalledWith({ voice_id: 'voice-b', voice_name: '沉稳男声' }));
+  await waitFor(() => expect(save).toHaveBeenCalledWith({ voice_id: 'uniart:speech-2.8-hd:male-qn-jingying', voice_name: '沉稳男声' }));
   await waitFor(() => expect(screen.queryByRole('button', { name: '应用' })).not.toBeInTheDocument());
   expect(screen.getByRole('button', { name: /音色库/ })).toHaveTextContent('沉稳男声');
 });
@@ -88,7 +88,7 @@ it('shows gateway model groups and does not call legacy custom voice management'
     { id: 'uniart:speech-2.8-hd:male-qn-qingse', name: 'HD青年', gender: 'Male', family: 'minimax', model: 'speech-2.8-hd', origin: 'system' },
     { id: 'uniart:speech-2.8-turbo:male-qn-qingse', name: 'Turbo青年', gender: 'Male', family: 'minimax', model: 'speech-2.8-turbo', origin: 'system' },
   ]);
-  setup(vi.fn());
+  setup(vi.fn(), 'longcheng_v2');
   fireEvent.click(screen.getByRole('button', { name: /音色库/ }));
   expect(await screen.findByText(/UniArt · MiniMax HD/)).toBeInTheDocument();
   expect(screen.getByText(/UniArt · MiniMax Turbo/)).toBeInTheDocument();
@@ -108,4 +108,23 @@ it('keeps available voices visible after an audition fails', async () => {
   expect(screen.getByText('沉稳男声')).toBeInTheDocument();
   fireEvent.click(screen.getByText('沉稳男声'));
   expect(screen.getByRole('button', { name: '应用' })).toBeEnabled();
+});
+
+
+it('retires the visible old binding and replaces it only after explicit apply', async () => {
+  const save = vi.fn().mockResolvedValue(undefined);
+  setup(save, 'longcheng_v2');
+  expect(screen.getByRole('button', { name: /音色库/ })).toHaveTextContent('旧音色已停用');
+  expect(screen.queryByText('longcheng_v2')).not.toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button', { name: /音色库/ }));
+  await screen.findByText('沉稳男声');
+  expect(screen.getByRole('button', { name: '应用' })).toBeDisabled();
+  expect(screen.queryByText('longcheng_v2')).not.toBeInTheDocument();
+  expect(save).not.toHaveBeenCalled();
+  fireEvent.click(screen.getByText('沉稳男声'));
+  fireEvent.click(screen.getByRole('button', { name: '应用' }));
+  await waitFor(() => expect(save).toHaveBeenCalledWith({
+    voice_id: 'uniart:speech-2.8-hd:male-qn-jingying', voice_name: '沉稳男声',
+  }));
+  await waitFor(() => expect(screen.getByRole('button', { name: /音色库/ })).toHaveTextContent('沉稳男声'));
 });
