@@ -108,3 +108,5 @@
 4. 在目标角色及 Blender 重导入的 GLB 中，按相同帧/事件复核骨骼方向、脚地面关系、手与道具的可见接触、动作连续性；记录每层首次失配的位置。
 
 和 [枪法_2 复刻验证计划](../agents/deliverables/2026-10-13-recreation-failure-dimensions-validation-plan-v1.md)的关系：本摘要是可选的 3D 动作恢复分支，不替代该计划中的源帧证据表、镜头切点与 H3 输出验收。
+
+- 2026-10-22 PersPose官方源码核对（43eb2c2）：PE输入K逆射线，PR使用KRK逆，裁剪同步更新K；demo要求EXIF/文件名焦距，缺失默认50mm，并非估计未知焦距。可作给定GeoCalib有效K的源姿态对照候选；仍需SMPL和独立权重，公开Drive可下载性/运行效果未验证、demo硬编码CUDA。主链路未改。[PersPose适用性](../agents/deliverables/2026-10-22-recreation2-perspose-review-v1.md)

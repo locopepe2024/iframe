@@ -1,0 +1,28 @@
+{
+  "repository": "https://github.com/KenAdamsJoseph/PersPose",
+  "commit": "43eb2c2f38046764eb65441fd03bee161fd624b5",
+  "sha256": {
+    "README.md": "94768ad8029ea9183e103be968898c8633fb3d38b627bba2a2d334d6b839ef84",
+    "src_PersPose/inference.py": "942ee5262e573f55ce020d4f226c5eef15968705c04a7da47d03ea5813de7d19",
+    "src_PersPose/PersPose.py": "022905155bbc2fe2f3dcdafff37b0eee20f7c04d391fd58831e280825eaf2544",
+    "datasets/transform.py": "d5151506f315a25bb601a7fe17784c37592d038870ee61fa9cefaa6ae3263420",
+    "common/geometry.py": "0ff854752c6d2a75e393711df174159f4ccb95c47829b04fe0d357af84f7bce4",
+    "LICENSE": "e3f1e752c1007d551d5798dab68a051a3594c6f0cf3c964107906a79055326db",
+    "requirements.txt": "b44ff9f6b6900879a335c330da9f6fafdb5e40d425e2290767897f8e2e85740d"
+  },
+  "runtime_performed": false,
+  "weight_download_verified": false,
+  "facts": {
+    "focal_input": "EXIF or filename 35mm-equivalent focal length",
+    "missing_focal_fallback_35mm": 50,
+    "focal_px_formula": "f35/36*full_image_width",
+    "principal_point": "full image center",
+    "PE": "K inverse times homogeneous pixel coordinates",
+    "PR": "K R K inverse",
+    "crop_K": "crop_affine @ K",
+    "SMPL_required_in_model_constructor": true,
+    "demo_hardcoded_cuda": true,
+    "weights_link": "https://drive.google.com/drive/folders/1ok_2IFvJ3PJr97IEfESav6Qmi50KTjtQ",
+    "official_weight_in_checkout": false
+  }
+}
