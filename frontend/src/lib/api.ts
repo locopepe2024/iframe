@@ -1097,6 +1097,7 @@ export const api = {
             projection: {
                 scope: "same_place_time" | "same_time_world_light" | "different_time" | "unresolved";
                 selected_fields: string[];
+                source_visual_version_known: boolean;
                 available_fields: string[];
                 eligible_fields: string[];
                 suggested_fields: string[];

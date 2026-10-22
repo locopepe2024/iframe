@@ -7336,8 +7336,11 @@ class ComicGenPipeline(StudioOwnerMixin):
                 raise ValueError("Selected visual reference media changed; review it again")
         if source_asset is not None:
             variant_has_design_snapshot = bool(
-                source_variant and source_variant.submission_snapshot
-                and source_variant.submission_snapshot.visual_design
+                source_variant and (
+                    source_variant.storyboard_visual_snapshot is not None
+                    or (source_variant.submission_snapshot is not None
+                        and source_variant.submission_snapshot.visual_design is not None)
+                )
             )
             if not variant_has_design_snapshot:
                 if snapshot.source_asset_revision and source_asset.asset_revision != snapshot.source_asset_revision:

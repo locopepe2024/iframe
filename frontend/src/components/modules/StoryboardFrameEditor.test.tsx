@@ -39,3 +39,18 @@ it("selects a source thumbnail and applies only confirmed fields", async () => {
     fireEvent.click(screen.getByRole("button", { name: "确认应用" }));
     await waitFor(() => expect(api.applyShotVisualPreset).toHaveBeenCalledWith("project", "frame", "second", "image_and_context", ["lighting"]));
 });
+
+it("identifies a legacy image with no structured version and keeps image-only submission", async () => {
+    api.listShotVisualPresets.mockResolvedValue([{ id: "legacy", name: "旧长街", preview_url: "/preview/old.webp" }]);
+    api.previewShotVisualPreset.mockResolvedValue({
+        reference_image_available: true,
+        projection: { scope: "unresolved", source_visual_version_known: false,
+            eligible_fields: [], available_fields: [], visual_design: {} },
+    });
+    api.applyShotVisualPreset.mockResolvedValue({ id: "frame" });
+    render(<StoryboardFrameEditor frame={state.currentProject.frames[0]} onClose={() => {}} />);
+    fireEvent.click(await screen.findByRole("button", { name: "选择参考图 旧长街" }));
+    expect(await screen.findByText(/此图的结构化版本未知/)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "确认应用" }));
+    await waitFor(() => expect(api.applyShotVisualPreset).toHaveBeenCalledWith("project", "frame", "legacy", "image_only", []));
+});

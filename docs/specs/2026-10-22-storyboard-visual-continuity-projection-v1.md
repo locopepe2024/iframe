@@ -74,3 +74,23 @@ projection are separate inputs.
   after the scene's current design revision changes.
 - Preview text equals the text submitted to the provider; stale snapshots are
   rejected.
+
+## Variant snapshot cutover
+
+Code audit on 2026-10-22 found that a selected variant without
+`submission_snapshot.visual_design` can currently borrow the scene's latest
+design or a frame's current shooting state. That state is not evidence of what
+was used to create the selected image.
+
+For scene and frame variants, an absent visual snapshot means the structured
+version is unknown: offer the image, leave structured categories unavailable,
+and do not report the current scene design revision as the image's revision.
+New storyboard frame renders must freeze their allowlisted lighting, space,
+camera and continuity state on every new image variant. Legacy variants remain
+unchanged. The render and batch paths must preserve existing variants and
+record a snapshot only for newly generated ones. A confirmed variant snapshot
+is read without merging later scene or frame edits; continuity stage entries
+remain limited to exact target entity references.
+Frame variant snapshots also freeze the source scene ID and the explicit place,
+time and shooting-plan identity used for eligibility. Later plan edits do not
+retroactively change the source image's scope. Missing IDs stay unresolved.

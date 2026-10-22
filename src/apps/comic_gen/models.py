@@ -147,6 +147,7 @@ class StoryboardReferenceProjectionSnapshot(BaseModel):
     source_media_id: Optional[str] = Field(None, max_length=200)
     source_asset_revision: Optional[int] = Field(None, ge=1)
     source_scene_design_revision: Optional[int] = Field(None, ge=1)
+    source_visual_version_known: bool = False
     source_projection_hash: Optional[str] = Field(None, max_length=128)
     source_plan_revision: Optional[int] = Field(None, ge=1)
     source_plan_hash: Optional[str] = Field(None, max_length=128)
@@ -231,6 +232,22 @@ class AssetImageSubmissionSnapshot(BaseModel):
     submitted_at: float = Field(default_factory=time.time)
 
 
+class StoryboardVariantVisualSnapshot(BaseModel):
+    """Structured visual state frozen with a generated storyboard image."""
+
+    schema_version: Literal[1] = 1
+    visual_design: Dict[str, Any] = Field(default_factory=dict)
+    source_scene_id: Optional[str] = None
+    scene_asset_revision: Optional[int] = Field(None, ge=1)
+    scene_design_revision: Optional[int] = Field(None, ge=1)
+    shot_visual_design_revision: Optional[int] = Field(None, ge=1)
+    place_continuity_id: Optional[str] = None
+    time_continuity_id: Optional[str] = None
+    shooting_plan_revision: Optional[int] = Field(None, ge=1)
+    shooting_plan_hash: Optional[str] = None
+    captured_at: float = Field(default_factory=time.time)
+
+
 class ImageVariant(BaseModel):
     model_config = ConfigDict(validate_assignment=True)
     id: str = Field(..., description="Unique identifier for the variant")
@@ -250,6 +267,9 @@ class ImageVariant(BaseModel):
     prompt_used: Optional[str] = Field(None, description="Prompt used for this specific variant")
     submission_snapshot: Optional[AssetImageSubmissionSnapshot] = Field(
         None, description="Reviewed image request frozen at enqueue; absent for legacy or uploaded media"
+    )
+    storyboard_visual_snapshot: Optional[StoryboardVariantVisualSnapshot] = Field(
+        None, description="Structured visual state frozen for a generated storyboard variant"
     )
     is_favorited: bool = Field(False, description="Whether this variant is favorited/pinned (won't be auto-deleted)")
     # NEW: 上传来源标记

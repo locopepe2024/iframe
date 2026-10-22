@@ -156,8 +156,7 @@ def _entity_refs(frame: Optional[StoryboardFrame], names: Iterable[str] = ()) ->
     return refs
 
 
-def _merge_continuity(result: Dict[str, Any], frame: Optional[StoryboardFrame], target_refs: Set[str]) -> None:
-    blocking = _as_dict(getattr(frame, "blocking", None)) if frame else {}
+def _merge_continuity_state(result: Dict[str, Any], blocking: Dict[str, Any], target_refs: Set[str]) -> None:
     _put(result, "camera_relation", blocking.get("camera_relation"))
     stage = blocking.get("stage")
     if not isinstance(stage, list):
@@ -179,6 +178,10 @@ def _merge_continuity(result: Dict[str, Any], frame: Optional[StoryboardFrame], 
         result["stage"] = filtered
 
 
+def _merge_continuity(result: Dict[str, Any], frame: Optional[StoryboardFrame], target_refs: Set[str]) -> None:
+    _merge_continuity_state(result, _as_dict(getattr(frame, "blocking", None)) if frame else {}, target_refs)
+
+
 def _source_visual_design(
     source_frame: Optional[StoryboardFrame],
     source_asset: Any,
@@ -191,18 +194,24 @@ def _source_visual_design(
     space: Dict[str, Any] = {}
     camera: Dict[str, Any] = {}
     continuity: Dict[str, Any] = {}
-    design_revision, design = _confirmed_design(source_asset)
-    variant_has_design = False
     if source_variant is not None:
-        variant_design = _asset_variant_design(source_variant)
+        frame_snapshot = _as_dict(getattr(source_variant, "storyboard_visual_snapshot", None))
         submission = _as_dict(getattr(source_variant, "submission_snapshot", None))
-        variant_has_design = bool(submission and variant_design)
-        if variant_has_design:
-            design = variant_design
-            design_revision = submission.get("design_revision_at_submission") or None
+        if isinstance(frame_snapshot.get("visual_design"), dict):
+            variant_design = frame_snapshot["visual_design"]
+            design_revision = frame_snapshot.get("scene_design_revision")
+        elif isinstance(submission.get("visual_design"), dict):
+            variant_design = submission["visual_design"]
+            design_revision = submission.get("design_revision_at_submission")
+        else:
+            return lighting, space, camera, continuity, None
         _merge_lighting(lighting, variant_design)
         _merge_space(space, variant_design)
         _merge_camera(camera, variant_design)
+        continuity = _as_dict(variant_design.get("continuity_state"))
+        return lighting, space, camera, continuity, design_revision
+
+    design_revision, design = _confirmed_design(source_asset)
     if design:
         _merge_lighting(lighting, design)
         _merge_space(space, design)
@@ -212,40 +221,38 @@ def _source_visual_design(
         (_as_dict(source_context.get("scene")), _as_dict(source_context.get("shot")))
         if source_context is not None else _context_parts(source_frame)
     )
-    if source_scene_context and not variant_has_design:
+    if source_scene_context:
         _merge_space(space, source_scene_context)
         _put(lighting, "story_time", source_scene_context.get("time_anchor"))
-    if source_shot_context and not variant_has_design:
+    if source_shot_context:
         _merge_lighting(lighting, source_shot_context)
         _merge_camera(camera, source_shot_context)
-    if source_context is not None and not variant_has_design:
+    if source_context is not None:
         baseline = _as_dict(source_context.get("lighting_baseline"))
         _merge_lighting(lighting, baseline)
         _merge_lighting(lighting, {"lighting": _as_dict(baseline.get("lighting"))})
     if source_frame is not None:
         frame_design = _as_dict(getattr(source_frame, "shot_visual_design", None))
-        if frame_design and not variant_has_design:
+        if frame_design:
             frame_visual_design = _as_dict(frame_design.get("visual_design"))
             _merge_lighting(lighting, frame_visual_design)
             _merge_space(space, frame_visual_design)
             _merge_camera(camera, frame_visual_design)
-        if not variant_has_design:
-            frame_lighting = _as_dict(getattr(source_frame, "lighting", None))
-            _merge_lighting(lighting, {"lighting": frame_lighting})
-            _merge_camera(camera, {
-                "shot_size": source_frame.shot_size,
-                "camera_angle": source_frame.camera_angle if source_frame.camera_angle != "Medium Shot" else None,
-                "camera_movement": source_frame.camera_movement,
-                "composition": source_frame.composition,
-                "camera_movement_structured": _as_dict(source_frame.camera_movement_structured),
-            })
+        frame_lighting = _as_dict(getattr(source_frame, "lighting", None))
+        _merge_lighting(lighting, {"lighting": frame_lighting})
+        _merge_camera(camera, {
+            "shot_size": source_frame.shot_size,
+            "camera_angle": source_frame.camera_angle if source_frame.camera_angle != "Medium Shot" else None,
+            "camera_movement": source_frame.camera_movement,
+            "composition": source_frame.composition,
+            "camera_movement_structured": _as_dict(source_frame.camera_movement_structured),
+        })
         _merge_continuity(continuity, source_frame, _entity_refs(source_frame))
 
     if source_scene is not None:
         _put(space, "location", getattr(source_scene, "name", None))
         source_design_revision, _ = _confirmed_design(source_scene)
-        if not variant_has_design:
-            design_revision = source_design_revision or design_revision
+        design_revision = source_design_revision or design_revision
 
     return lighting, space, camera, continuity, design_revision
 
@@ -301,16 +308,35 @@ def build_reference_projection(
     lighting, space, camera, continuity, design_revision = _source_visual_design(
         source_frame, source_asset, source_variant, source_scene, source_context,
     )
-    if target_entity_refs is not None and source_frame is not None:
+    frame_variant_snapshot = _as_dict(getattr(source_variant, "storyboard_visual_snapshot", None))
+    asset_variant_snapshot = _as_dict(getattr(source_variant, "submission_snapshot", None))
+    source_visual_version_known = isinstance(frame_variant_snapshot.get("visual_design"), dict) or isinstance(
+        asset_variant_snapshot.get("visual_design"), dict)
+    frozen_source_context = {
+        "scene": {
+            "scene_id": frame_variant_snapshot.get("source_scene_id"),
+            "place_continuity_id": frame_variant_snapshot.get("place_continuity_id"),
+            "time_continuity_id": frame_variant_snapshot.get("time_continuity_id"),
+        },
+    } if frame_variant_snapshot else None
+    if source_variant is not None:
+        frozen_continuity = continuity
+        continuity = {}
+        _merge_continuity_state(continuity, frozen_continuity,
+                                target_entity_refs if target_entity_refs is not None else _entity_refs(target_frame))
+    elif target_entity_refs is not None and source_frame is not None:
         continuity = {}
         _merge_continuity(continuity, source_frame, target_entity_refs)
     target_context_scene, _ = _context_parts(target_frame)
     target_scene_id = target_frame.scene_id
-    source_scene_id = getattr(source_scene, "id", None) or (
+    source_scene_id = frame_variant_snapshot.get("source_scene_id") or getattr(source_scene, "id", None) or (
         _first(_as_dict(source_context.get("scene")), "scene_id") if source_context is not None
         else _context_value(source_frame, "scene_id")
     )
-    if source_context is not None:
+    if frame_variant_snapshot:
+        source_revision = frame_variant_snapshot.get("shooting_plan_revision")
+        source_hash = frame_variant_snapshot.get("shooting_plan_hash")
+    elif source_context is not None:
         source_revision = source_context.get("shooting_plan_revision")
         source_hash = source_context.get("shooting_plan_hash")
         source_revision = source_revision if type(source_revision) is int and source_revision >= 1 else None
@@ -318,7 +344,7 @@ def build_reference_projection(
     else:
         source_revision, source_hash = _plan_provenance(source_frame)
     target_revision, target_hash = _plan_provenance(target_frame)
-    scope = _scope(source_frame, target_frame, source_context)
+    scope = _scope(source_frame, target_frame, frozen_source_context or source_context)
     design = {"lighting": lighting, "space": space, "camera": camera, "continuity_state": continuity}
     available = [key for key in REFERENCE_FIELDS if _nonempty(design.get(key))]
     eligible = _eligible_fields(scope, design)
@@ -335,9 +361,9 @@ def build_reference_projection(
     resolved_source_asset_id = source_asset_id or (
         getattr(source_asset, "id", None) if source_frame is None else None
     )
-    resolved_source_asset_revision = source_asset_revision or (
-        getattr(source_asset, "asset_revision", None) if source_frame is None else None
-    )
+    resolved_source_asset_revision = (frame_variant_snapshot.get("scene_asset_revision") if frame_variant_snapshot
+                                      else source_asset_revision or (getattr(source_asset, "asset_revision", None)
+                                                                     if source_frame is None else None))
     return StoryboardReferenceProjectionSnapshot(
         source_frame_id=getattr(source_frame, "id", None),
         source_shot_id=getattr(source_frame, "shot_id", None),
@@ -347,6 +373,7 @@ def build_reference_projection(
         source_media_id=source_media_id or getattr(source_variant, "media_id", None),
         source_asset_revision=resolved_source_asset_revision or None,
         source_scene_design_revision=design_revision,
+        source_visual_version_known=source_visual_version_known,
         source_plan_revision=source_revision,
         source_plan_hash=source_hash,
         target_frame_id=target_frame.id,

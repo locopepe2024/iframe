@@ -1,7 +1,8 @@
 import os
 import time
 from typing import Dict, Any, List
-from .models import StoryboardFrame, Character, Scene, Prop, GenerationStatus, ImageAsset, ImageVariant, image_variant_storage_key
+from .models import StoryboardFrame, Character, Scene, Prop, GenerationStatus, ImageAsset, ImageVariant, StoryboardVariantVisualSnapshot, image_variant_storage_key
+from .visual_continuity import _as_dict, _context_value, _plan_provenance, _source_visual_design
 from .prompt_assembly import append_storyboard_character_descriptions
 from ...models.image import WanxImageModel
 from ..studio_access import studio_uniart_config, studio_nsfw_new_one_config, studio_media_dir
@@ -253,6 +254,22 @@ class StoryboardGenerator:
         if not frame.rendered_image_asset:
             frame.rendered_image_asset = ImageAsset(asset_id=frame.id, asset_type="storyboard_frame")
 
+        lighting, space, camera, continuity, scene_revision = _source_visual_design(frame, scene, None, scene)
+        shot_revision = _as_dict(frame.shot_visual_design).get("revision")
+        plan_revision, plan_hash = _plan_provenance(frame)
+        visual_snapshot = StoryboardVariantVisualSnapshot(
+            visual_design={"lighting": lighting, "space": space, "camera": camera,
+                           "continuity_state": continuity},
+            source_scene_id=frame.scene_id,
+            scene_asset_revision=getattr(scene, "asset_revision", None) or None,
+            scene_design_revision=scene_revision,
+            shot_visual_design_revision=shot_revision if type(shot_revision) is int and shot_revision >= 1 else None,
+            place_continuity_id=_context_value(frame, "place_continuity_id"),
+            time_continuity_id=_context_value(frame, "time_continuity_id"),
+            shooting_plan_revision=plan_revision,
+            shooting_plan_hash=plan_hash,
+        )
+
         try:
             import uuid
             
@@ -284,7 +301,8 @@ class StoryboardGenerator:
                 variant = ImageVariant(
                     id=variant_id,
                     url=rel_path,
-                    prompt=prompt,
+                    prompt_used=prompt,
+                    storyboard_visual_snapshot=visual_snapshot.model_copy(deep=True),
                     created_at=time.time()
                 )
                 frame.rendered_image_asset.variants.append(variant)

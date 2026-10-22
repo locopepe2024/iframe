@@ -13,6 +13,7 @@ from src.apps.comic_gen.models import (
     LightingData,
 )
 from src.apps.comic_gen.pipeline import ComicGenPipeline
+from src.apps.comic_gen.storyboard import StoryboardGenerator
 
 
 def make_pipeline(tmp_path):
@@ -43,6 +44,19 @@ def context(scene_id, place, time_id, *, lighting=None):
         "shooting_plan_revision": 2,
         "shooting_plan_hash": "plan-hash",
     }
+
+
+def frozen_frame_variant(variant_id, visual_design, *, media_id=None, url="output/source.webp",
+                         place=None, time_id=None):
+    return ImageVariant(
+        id=variant_id, url=url, media_id=media_id,
+        storyboard_visual_snapshot={"visual_design": visual_design,
+                                    "source_scene_id": "source-street",
+                                    "place_continuity_id": place,
+                                    "time_continuity_id": time_id,
+                                    "shooting_plan_revision": 2,
+                                    "shooting_plan_hash": "plan-hash"},
+    )
 
 
 def test_reference_picker_previews_bind_to_exact_source_variants(tmp_path, monkeypatch):
@@ -112,7 +126,7 @@ def test_explicit_reference_defaults_to_image_only_and_never_copies_source_promp
     projection = preview["projection"]
     assert projection["scope"] == "same_time_world_light"
     assert projection["suggested_fields"] == []
-    assert projection["eligible_fields"] == ["lighting"]
+    assert projection["eligible_fields"] == []
 
     applied = pipeline.apply_shot_visual_preset(
         script.id, target.id, preset.id, "image_only", selected_fields=[],
@@ -132,9 +146,12 @@ def test_confirmed_subset_projects_only_world_light_and_keeps_provenance(tmp_pat
             lighting={"story_time": "dusk", "daylight_phase": "blue hour", "weather": "clear",
                       "shadow_direction": "west", "key_source": "lantern"},
         ),
-        rendered_image_asset=ImageAsset(variants=[ImageVariant(
-            id="source-variant", url="output/source.webp", media_id="media-source",
-        )], selected_id="source-variant"),
+        rendered_image_asset=ImageAsset(variants=[frozen_frame_variant("source-variant", {
+            "lighting": {"story_time": "dusk", "daylight_phase": "blue hour", "weather": "clear",
+                         "shadow_direction": "west", "key_source": "lantern"},
+            "space": {"reference_viewpoint": "northbound"},
+            "camera": {"shot_size": "wide"},
+        }, media_id="media-source", place="place-a", time_id="time-a")], selected_id="source-variant"),
         shot_visual_design=ShotVisualDesignSnapshot(
             visual_design={
                 "lighting": {"story_time": "dusk", "daylight_phase": "blue hour", "weather": "clear",
@@ -179,9 +196,9 @@ def test_missing_continuity_ids_do_not_suggest_fields(tmp_path):
     pipeline, script, source_scene, target_scene = make_pipeline(tmp_path)
     source = StoryboardFrame(
         id="source-frame", scene_id=source_scene.id,
-        rendered_image_asset=ImageAsset(variants=[ImageVariant(
-            id="source-variant", url="output/source.webp",
-        )], selected_id="source-variant"),
+        rendered_image_asset=ImageAsset(variants=[frozen_frame_variant("source-variant", {
+            "lighting": {"key_source": "soft"}, "space": {"location": "street"},
+        })], selected_id="source-variant"),
         shot_visual_design=ShotVisualDesignSnapshot(
             visual_design={"lighting": {"key_source": "soft"}, "space": {"location": "street"}},
         ),
@@ -227,9 +244,11 @@ def test_same_place_subset_and_target_fields_win(tmp_path):
         id="source-frame", scene_id=source_scene.id, shot_id="source-shot",
         director_shot_context=context(source_scene.id, "same-place", "same-time",
                                       lighting={"key_source": "source lamp", "color_tone": "amber"}),
-        rendered_image_asset=ImageAsset(variants=[ImageVariant(
-            id="source-variant", url="output/source.webp",
-        )], selected_id="source-variant"),
+        rendered_image_asset=ImageAsset(variants=[frozen_frame_variant("source-variant", {
+            "lighting": {"key_source": "source lamp", "color_tone": "amber"},
+            "space": {"reference_viewpoint": "northbound"},
+            "camera": {"shot_size": "wide", "camera_angle": "wide"},
+        }, place="same-place", time_id="same-time")], selected_id="source-variant"),
         shot_visual_design=ShotVisualDesignSnapshot(visual_design={
             "lighting": {"key_source": "source lamp", "color_tone": "amber"},
             "space": {"reference_viewpoint": "northbound"},
@@ -290,6 +309,107 @@ def test_scene_variant_uses_its_submission_design_after_scene_design_changes(tmp
     assert "old lamp" in pipeline.preview_storyboard_render_prompt(script.id, target.id, "target")
 
 
+def test_legacy_scene_variant_does_not_borrow_current_scene_design(tmp_path):
+    pipeline, script, source_scene, target_scene = make_pipeline(tmp_path)
+    source_scene.asset_design = {"design_revisions": [{"revision": 4, "design": {
+        "lighting": {"key_source": "new lamp"}, "space": {"reference_viewpoint": "new angle"},
+    }}]}
+    source_scene.image_asset.variants = [ImageVariant(id="legacy", url="output/old.webp")]
+    source = StoryboardFrame(id="source-frame", scene_id=source_scene.id,
+                             director_shot_context=context(source_scene.id, "same", "same"))
+    target = StoryboardFrame(id="target-frame", scene_id=target_scene.id,
+                             director_shot_context=context(target_scene.id, "same", "same"))
+    script.frames = [source, target]
+    preset = pipeline.list_shot_visual_presets(script.id)[0]
+    projection = pipeline.preview_shot_visual_preset(script.id, target.id, preset.id)["projection"]
+    assert projection["source_scene_design_revision"] is None
+    assert projection["source_visual_version_known"] is False
+    assert projection["available_fields"] == []
+    assert projection["eligible_fields"] == []
+    assert all(not values for values in projection["visual_design"].values())
+
+
+def test_legacy_frame_variant_does_not_borrow_current_frame_state(tmp_path):
+    pipeline, script, source_scene, target_scene = make_pipeline(tmp_path)
+    source = StoryboardFrame(
+        id="source-frame", scene_id=source_scene.id,
+        director_shot_context=context(source_scene.id, "same", "same", lighting={"key_source": "current lamp"}),
+        rendered_image_asset=ImageAsset(variants=[ImageVariant(id="legacy", url="output/old.webp")]),
+        shot_visual_design=ShotVisualDesignSnapshot(visual_design={"camera": {"camera_angle": "current angle"}}),
+    )
+    target = StoryboardFrame(id="target-frame", scene_id=target_scene.id,
+                             director_shot_context=context(target_scene.id, "same", "same"))
+    script.frames = [source, target]
+    preset = pipeline.save_shot_visual_preset(script.id, source.id, "legacy frame", source_variant_id="legacy")
+    projection = pipeline.preview_shot_visual_preset(script.id, target.id, preset.id)["projection"]
+    assert projection["available_fields"] == []
+    assert projection["eligible_fields"] == []
+    assert all(not values for values in projection["visual_design"].values())
+
+
+def test_generated_frame_variant_freezes_visual_design_for_later_reference(tmp_path):
+    scene = Scene(id="street", name="清溪镇长街", description="source")
+    scene.asset_design = {"design_revisions": [{"revision": 2, "design": {
+        "lighting": {"key_source": "old lamp"},
+    }}]}
+    frame = StoryboardFrame(id="frame", scene_id=scene.id,
+                            director_shot_context=context(scene.id, "place", "time"))
+    generator = StoryboardGenerator.__new__(StoryboardGenerator)
+    generator.output_root = str(tmp_path)
+    generator.model = Mock()
+    generator._get_model_for = Mock(return_value=generator.model)
+    generator.generate_frame(frame, [], scene, prompt="old frame prompt", output_dir=str(tmp_path))
+    variant = frame.rendered_image_asset.variants[-1]
+    assert variant.storyboard_visual_snapshot.visual_design["lighting"]["key_source"] == "old lamp"
+    assert variant.storyboard_visual_snapshot.scene_design_revision == 2
+    assert ImageVariant.model_validate(variant.model_dump()).storyboard_visual_snapshot == variant.storyboard_visual_snapshot
+
+    scene.asset_design = {"design_revisions": [{"revision": 3, "design": {
+        "lighting": {"key_source": "new lamp"},
+    }}]}
+    frame.lighting = LightingData(description="new frame light")
+    from src.apps.comic_gen.visual_continuity import build_reference_projection
+    target = StoryboardFrame(id="target", scene_id=scene.id,
+                             director_shot_context=context(scene.id, "place", "time"))
+    projection = build_reference_projection(target, source_frame=frame, source_asset=scene,
+                                            source_scene=scene, source_variant=variant)
+    assert projection.visual_design["lighting"]["key_source"] == "old lamp"
+    assert "new frame light" not in str(projection.visual_design)
+    assert projection.source_scene_design_revision == 2
+    assert projection.source_visual_version_known is True
+
+
+def test_generated_frame_reference_keeps_its_plan_scope_after_source_edits(tmp_path):
+    pipeline, script, source_scene, target_scene = make_pipeline(tmp_path)
+    source_scene.asset_design = {"design_revisions": [{"revision": 2, "design": {
+        "lighting": {"key_source": "old lamp"},
+    }}]}
+    source = StoryboardFrame(id="source-frame", scene_id=source_scene.id,
+                             director_shot_context=context(source_scene.id, "same-place", "same-time"))
+    target = StoryboardFrame(id="target-frame", scene_id=target_scene.id,
+                             director_shot_context=context(target_scene.id, "same-place", "same-time"))
+    script.frames = [source, target]
+    generator = StoryboardGenerator.__new__(StoryboardGenerator)
+    generator.output_root = str(tmp_path)
+    generator.model = Mock()
+    generator._get_model_for = Mock(return_value=generator.model)
+    generator.generate_frame(source, [], source_scene, prompt="old frame prompt", output_dir=str(tmp_path))
+    variant_id = source.rendered_image_asset.selected_id
+    preset = pipeline.save_shot_visual_preset(script.id, source.id, "source image", source_variant_id=variant_id)
+    pipeline.apply_shot_visual_preset(script.id, target.id, preset.id, "image_and_context", ["lighting"])
+
+    source.director_shot_context = context(source_scene.id, "different-place", "different-time")
+    source.director_shot_context["shooting_plan_revision"] = 3
+    source.director_shot_context["shooting_plan_hash"] = "new-plan"
+    source_scene.asset_design = {"design_revisions": [{"revision": 3, "design": {
+        "lighting": {"key_source": "new lamp"},
+    }}]}
+    assert "old lamp" in pipeline.preview_storyboard_render_prompt(script.id, target.id, "target")
+    projection = pipeline.preview_shot_visual_preset(script.id, target.id, preset.id)["projection"]
+    assert projection["scope"] == "same_place_time"
+    assert projection["source_plan_revision"] == 2
+
+
 def test_candidate_and_render_submit_reviewed_prompt_and_selected_image(tmp_path):
     pipeline, script, source_scene, target_scene = make_pipeline(tmp_path)
     source = StoryboardFrame(
@@ -297,9 +417,10 @@ def test_candidate_and_render_submit_reviewed_prompt_and_selected_image(tmp_path
         action_description="SOURCE ACTION MUST NOT LEAK",
         dialogue="SOURCE DIALOGUE MUST NOT LEAK",
         director_shot_context=context(source_scene.id, "same-place", "same-time"),
-        rendered_image_asset=ImageAsset(variants=[ImageVariant(
-            id="source-variant", url="output/source.webp", media_id="media-source",
-        )], selected_id="source-variant"),
+        rendered_image_asset=ImageAsset(variants=[frozen_frame_variant("source-variant", {
+            "lighting": {"key_source": "source lamp"},
+            "camera": {"camera_angle": "high"},
+        }, media_id="media-source", place="same-place", time_id="same-time")], selected_id="source-variant"),
         shot_visual_design=ShotVisualDesignSnapshot(visual_design={
             "lighting": {"key_source": "source lamp"},
             "camera": {"camera_angle": "high"},
