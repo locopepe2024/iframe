@@ -83,3 +83,19 @@ def test_sheet_reports_explicit_style_override_without_calling_it_a_failure(tmp_
     issues = pipeline.storyboard_continuity_sheet(script.id)["issues"]
     assert any(issue["field"] == "style" and issue["status"] == "explicit_override"
                and issue["scope"] == "project_style" for issue in issues)
+
+
+def test_confirmed_scene_light_takes_priority_over_plan_baseline(tmp_path):
+    scene = Scene(id="street", name="街", description="")
+    scene.asset_design = {"design_revisions": [{"revision": 3, "design": {
+        "lighting": {"key_source": "confirmed lantern", "weather": "clear"},
+    }}]}
+    shot = frame("a", "street", "street", "dusk", baseline={
+        "weather": "rain", "lighting": {"key_source": "planned sun"},
+    })
+    pipeline, script = make_pipeline(tmp_path, [shot], [scene])
+    fields = pipeline.storyboard_continuity_sheet(script.id)["rows"][0]["fields"]
+    assert fields["weather"]["value"] == "clear"
+    assert fields["weather"]["source_kind"] == "scene_design"
+    assert fields["key_source"]["value"] == "confirmed lantern"
+    assert fields["key_source"]["source_revision"] == 3

@@ -58,17 +58,17 @@ def build_continuity_sheet(script: Script, scenes: Iterable[Any], *, model_name:
         _set_fields(fields, _as_dict(design.get("lighting")), WORLD_FIELDS + LOCAL_FIELDS,
                     "scene_design", scene_id, design_revision)
         _set_fields(fields, scene_context, WORLD_FIELDS + SPACE_FIELDS, "plan_scene", frame.scene_id,
-                    raw.get("shooting_plan_revision"))
+                    raw.get("shooting_plan_revision"), replace=False)
         if _nonempty(scene_context.get("time_anchor")):
             fields["story_time"] = _record(scene_context["time_anchor"], "plan_scene", frame.scene_id,
                                            raw.get("shooting_plan_revision"))
         baseline = _as_dict(raw.get("lighting_baseline"))
         _set_fields(fields, baseline, WORLD_FIELDS + LOCAL_FIELDS, "plan_baseline",
                     f"{place_id}:{time_id}" if place_id and time_id else None,
-                    raw.get("shooting_plan_revision"))
+                    raw.get("shooting_plan_revision"), replace=False)
         _set_fields(fields, _as_dict(baseline.get("lighting")), LOCAL_FIELDS, "plan_baseline",
                     f"{place_id}:{time_id}" if place_id and time_id else None,
-                    raw.get("shooting_plan_revision"))
+                    raw.get("shooting_plan_revision"), replace=False)
         _set_fields(fields, shot_context, CAMERA_FIELDS, "plan_shot", frame.shot_id,
                     raw.get("shooting_plan_revision"))
         _set_fields(fields, _as_dict(shot_context.get("lighting")), WORLD_FIELDS + LOCAL_FIELDS,

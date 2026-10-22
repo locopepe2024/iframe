@@ -411,6 +411,8 @@ def select_projection_fields(
 
 def _current_values(frame: StoryboardFrame, target_scene: Any = None) -> Dict[str, Dict[str, Any]]:
     lighting: Dict[str, Any] = {}
+    _, scene_design = _confirmed_design(target_scene)
+    _merge_lighting(lighting, scene_design)
     _merge_lighting(lighting, {"lighting": _as_dict(frame.lighting)})
     if frame.lighting_override and frame.lighting_override.strip():
         lighting["__all__"] = frame.lighting_override.strip()
@@ -429,7 +431,6 @@ def _current_values(frame: StoryboardFrame, target_scene: Any = None) -> Dict[st
     target_scene_context, _ = _context_parts(frame)
     for key in SPACE_KEYS:
         _put(space, key, target_scene_context.get(key))
-    _, scene_design = _confirmed_design(target_scene)
     _merge_space(space, scene_design)
     return {"lighting": lighting, "space": space, "camera": camera, "continuity_state": continuity}
 

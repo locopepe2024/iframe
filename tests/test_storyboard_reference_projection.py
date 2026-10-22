@@ -11,10 +11,12 @@ from src.apps.comic_gen.models import (
     ShotVisualPreset,
     StoryboardFrame,
     StoryboardReference,
+    StoryboardReferenceProjectionSnapshot,
     LightingData,
 )
 from src.apps.comic_gen.pipeline import ComicGenPipeline
 from src.apps.comic_gen.storyboard import StoryboardGenerator
+from src.apps.comic_gen.visual_continuity import projected_design_for_target, reference_projection_prompt_clauses
 
 
 def make_pipeline(tmp_path):
@@ -192,6 +194,29 @@ def test_confirmed_subset_projects_only_world_light_and_keeps_provenance(tmp_pat
     assert "lantern" not in prompt
     assert "SOURCE ACTION" not in prompt
     assert "SOURCE DIALOGUE" not in prompt
+
+
+def test_target_scene_light_blocks_conflicting_reference_light():
+    target_scene = Scene(id="shop", name="粮店", description="")
+    target_scene.asset_design = {"design_revisions": [{"revision": 2, "design": {
+        "lighting": {"key_source": "shop lamp", "weather": "clear"},
+    }}]}
+    target = StoryboardFrame(id="target", scene_id="shop")
+    snapshot = StoryboardReferenceProjectionSnapshot.model_validate({
+        "target_frame_id": "target", "target_scene_id": "shop",
+        "selected_fields": ["lighting"],
+        "visual_design": {"lighting": {
+            "key_source": "street sun", "weather": "rain", "shadow_direction": "east",
+        }},
+    })
+    assert projected_design_for_target(snapshot, target, target_scene) == {
+        "lighting": {"shadow_direction": "east"},
+    }
+    clauses = reference_projection_prompt_clauses(snapshot, target, target_scene)
+    assert len(clauses) == 1
+    assert "east" in clauses[0]
+    assert "street sun" not in clauses[0]
+    assert "rain" not in clauses[0]
 
 
 def test_missing_continuity_ids_do_not_suggest_fields(tmp_path):
