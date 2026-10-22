@@ -1036,7 +1036,7 @@ export default function StoryboardR2V() {
                 "",
                 shot.negativePromptOverride,
             );
-            const projected = await api.previewFrameCandidate(currentProject.id, shot.id, cleanedPrompt, negativePrompt);
+            const projected = await api.previewFrameCandidate(currentProject.id, shot.id, cleanedPrompt, negativePrompt, slot);
             setPendingCandidate({
                 projectId: currentProject.id, frameId: shot.id, slot,
                 preview: {

@@ -9,23 +9,35 @@ type Candidate = {
     items: Array<{
         character_id: string;
         emotion_intent: string;
-        timing: Array<{ phase: string; visible_change: string }>;
+        timing: Array<{ phase: string; visible_change: string; relative_start: number; relative_end: number }>;
         uncertainties?: string[];
         facial_channels?: Record<string, string>;
     }>;
 };
 
+type Accepted = Pick<Candidate["items"][number], "character_id" | "timing"> & { character_name?: string };
+const phaseLabels: Record<string, string> = {
+    trigger: "起始", change: "变化", hold: "保持", release: "落点",
+};
+
+function timingLabel(item: Accepted): string {
+    return item.timing.map(phase =>
+        `${phaseLabels[phase.phase] ?? phase.phase} ${Math.round(phase.relative_start * 100)}-${Math.round(phase.relative_end * 100)}%：${phase.visible_change}`,
+    ).join("；");
+}
+
 interface Props {
     projectId: string;
     frameId: string;
     initialCandidate: Candidate | null;
+    accepted: Accepted[];
     characterNames: Record<string, string>;
     optimized: boolean;
     onBeforePreview?: () => Promise<void> | void;
     onApplied?: () => Promise<void> | void;
 }
 
-export default function MicroExpressionPanel({ projectId, frameId, initialCandidate, characterNames, optimized, onBeforePreview, onApplied }: Props) {
+export default function MicroExpressionPanel({ projectId, frameId, initialCandidate, accepted, characterNames, optimized, onBeforePreview, onApplied }: Props) {
     const [intent, setIntent] = useState("");
     const [visibility, setVisibility] = useState("unknown");
     const [review, setReview] = useState<{
@@ -124,7 +136,7 @@ export default function MicroExpressionPanel({ projectId, frameId, initialCandid
                         onChange={() => setSelected(current => current.includes(item.character_id)
                             ? current.filter(id => id !== item.character_id) : [...current, item.character_id])} />
                     <span className="min-w-0 break-words"><strong>{characterNames[item.character_id] || "当前角色"}</strong> · {item.emotion_intent}<br />
-                        {item.timing.map(phase => `${phase.phase}：${phase.visible_change}`).join("；")}</span>
+                        {timingLabel(item)}</span>
                 </label>)}
                 {candidate.items.flatMap(item => (item.uncertainties ?? []).map((uncertainty, index) =>
                     <p key={`${item.character_id}-${index}`} className="text-amber-600">{characterNames[item.character_id] || "当前角色"}：{uncertainty}</p>
@@ -132,6 +144,12 @@ export default function MicroExpressionPanel({ projectId, frameId, initialCandid
                 <button type="button" onClick={apply} disabled={busy || optimized || !selected.length}
                     className="rounded border border-primary px-2 py-1 text-primary disabled:opacity-50">应用所选角色</button>
                 {optimized && <span className="ml-2 text-text-muted">当前完整优化稿需重新审阅</span>}
+            </div>}
+            {accepted.length > 0 && <div className="space-y-1 border-t border-glass-border pt-2">
+                <p className="text-foreground">已采纳的表演时序</p>
+                {accepted.map(item => <p key={item.character_id} className="break-words">
+                    <strong>{item.character_name || characterNames[item.character_id] || "当前角色"}</strong> · {timingLabel(item)}
+                </p>)}
             </div>}
             {error && <p role="alert" className="text-red-500">{error}</p>}
         </div>

@@ -2021,10 +2021,10 @@ export const api = {
     },
 
     previewFrameCandidate: async (
-        scriptId: string, frameId: string, prompt: string, negativePrompt?: string,
+        scriptId: string, frameId: string, prompt: string, negativePrompt?: string, slot: "first" | "last" = "first",
     ): Promise<{ prompt: string; negative_prompt: string; model: string; aspect_ratio: string; size: string; reference_asset_labels: string[]; source_label?: string | null; polish_review?: string | null; context_token: string }> => {
         const res = await axios.post(`${API_URL}/projects/${scriptId}/storyboard/render-candidate-preview`, {
-            frame_id: frameId, prompt, negative_prompt: negativePrompt,
+            frame_id: frameId, prompt, negative_prompt: negativePrompt, slot,
         });
         return res.data;
     },
@@ -2393,7 +2393,7 @@ export const api = {
             frame_id: frameId, emotion_intent: emotionIntent, visibility,
             reviewed_messages: review.messages, review_token: review.review_token,
         });
-        return response.data as { id: string; items: Array<{ character_id: string; emotion_intent: string; timing: Array<{ phase: string; visible_change: string }>; uncertainties?: string[]; facial_channels?: Record<string, string> }> };
+        return response.data as { id: string; items: Array<{ character_id: string; emotion_intent: string; timing: Array<{ phase: string; visible_change: string; relative_start: number; relative_end: number }>; uncertainties?: string[]; facial_channels?: Record<string, string> }> };
     },
 
     applyMicroExpression: async (scriptId: string, frameId: string, candidateId: string, characterIds: string[]) => {

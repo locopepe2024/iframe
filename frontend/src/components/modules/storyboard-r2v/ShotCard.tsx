@@ -159,7 +159,7 @@ export interface ShotNode {
     } | null;
     microExpressionCandidate?: {
         id: string;
-        items: Array<{ character_id: string; emotion_intent: string; timing: Array<{ phase: string; visible_change: string }>; uncertainties?: string[]; facial_channels?: Record<string, string> }>;
+        items: Array<{ character_id: string; emotion_intent: string; timing: Array<{ phase: string; visible_change: string; relative_start: number; relative_end: number }>; uncertainties?: string[]; facial_channels?: Record<string, string> }>;
     } | null;
     microExpressionTiming?: Array<{
         character_id: string;
@@ -921,6 +921,7 @@ export default function ShotCard({
                             projectId={currentProjectId}
                             frameId={shot.id}
                             initialCandidate={shot.microExpressionCandidate ?? null}
+                            accepted={shot.microExpressionTiming ?? []}
                             characterNames={Object.fromEntries(characters.map((character: any) => [character.id, character.name]))}
                             optimized={!!shot.promptIsOptimized}
                             onBeforePreview={onMicroExpressionBeforePreview}
