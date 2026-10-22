@@ -15,16 +15,16 @@ from ..identity import UserContext, require_user_context
 from .date_store import OperationConflict, PhotoNotAvailable, TimeConsentRequired
 from .dates import DateRevisionConflict, ManualPrecision
 from . import media
-from .time_tasks import PhotoTaskStore
+from .undo import PhotoUndoStore
 from .analysis import analyze_photo, AnalysisUnavailable, AnalysisCredentialRejected
 
 
-def get_store() -> PhotoTaskStore:
+def get_store() -> PhotoUndoStore:
     configured = os.getenv("IFRAME_PHOTOS_LOCAL_DB_PATH", "")
     path = Path(configured)
     if not configured or not path.is_absolute() or not path.is_file():
         raise HTTPException(503, "Photo storage is not configured")
-    return PhotoTaskStore(path, initialize=False)
+    return PhotoUndoStore(path, initialize=False)
 
 
 class DateMutation(BaseModel):
@@ -75,6 +75,12 @@ class TimeRevocation(BaseModel):
     expected_consent_version: int = Field(ge=0)
 
 
+class BatchUndoRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+    operation_id: str = Field(min_length=1, max_length=120, pattern=r"^[a-zA-Z0-9_-]+$")
+    preview_token: str = Field(pattern=r"^[a-f0-9]{64}$")
+
+
 class TimeTaskRequest(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True)
     operation_id: str = Field(min_length=1, max_length=120, pattern=r"^[a-zA-Z0-9_-]+$")
@@ -120,8 +126,27 @@ def api_errors():
 # Demo uses the existing workspace identity, including browser/key-fingerprint
 # scopes. Replace this dependency with registered-account auth before production.
 Owner = Annotated[UserContext, Depends(require_user_context)]
-Store = Annotated[PhotoTaskStore, Depends(get_store)]
+Store = Annotated[PhotoUndoStore, Depends(get_store)]
 router = APIRouter(prefix="/photos", tags=["photo-date-trial"])
+
+
+@router.get("/batches/{batch_id}/undo-time-preview")
+def undo_time_preview(batch_id: str, identity: Owner, store: Store):
+    with api_errors():
+        return store.undo_preview(identity.owner_profile_id, batch_id)
+
+
+@router.post("/batches/{batch_id}/undo-time")
+def undo_time(batch_id: str, body: BatchUndoRequest, identity: Owner, store: Store):
+    with api_errors():
+        return store.undo_batch(identity.owner_profile_id, batch_id, identity.user_id, **body.model_dump())
+
+
+@router.get("/batches/{batch_id}/undo-time/history")
+def undo_time_history(batch_id: str, identity: Owner, store: Store,
+                      after: int = Query(default=0, ge=0), limit: int = Query(default=20, ge=1, le=100)):
+    with api_errors():
+        return store.undo_history(identity.owner_profile_id, batch_id, after, limit)
 
 
 @router.get("/tasks/{task_id}")

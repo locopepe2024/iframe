@@ -42,11 +42,17 @@ class DateChange(Snapshot):
     actor: str
     created_at: datetime
     operation_id: str
-    kind: Literal["register", "correct", "restore", "organize"]
+    kind: Literal["register", "correct", "restore", "organize", "undo"]
     restored_from_revision: int | None = None
 
 
 _SCHEMA = """
+CREATE TABLE IF NOT EXISTS photo_batch_undos (
+ owner TEXT NOT NULL, batch_id TEXT NOT NULL, operation_id TEXT NOT NULL,
+ preview_token TEXT NOT NULL, actor TEXT NOT NULL, created_at TEXT NOT NULL,
+ result TEXT NOT NULL,
+ PRIMARY KEY(owner,batch_id,operation_id)
+);
 CREATE TABLE IF NOT EXISTS photo_time_tasks (
  owner TEXT NOT NULL, task_id TEXT NOT NULL, batch_id TEXT NOT NULL,
  operation_id TEXT NOT NULL, actor TEXT NOT NULL, consent_version INTEGER NOT NULL,
@@ -121,7 +127,7 @@ CREATE TABLE IF NOT EXISTS photo_media (
 CREATE TABLE IF NOT EXISTS photo_date_history (
     owner TEXT NOT NULL, photo_id TEXT NOT NULL, revision INTEGER NOT NULL,
     operation_id TEXT NOT NULL, request TEXT NOT NULL,
-    kind TEXT NOT NULL CHECK(kind IN ('register', 'correct', 'restore', 'organize')),
+    kind TEXT NOT NULL CHECK(kind IN ('register', 'correct', 'restore', 'organize', 'undo')),
     change_json TEXT NOT NULL,
     PRIMARY KEY(owner, photo_id, revision),
     UNIQUE(owner, photo_id, operation_id),
@@ -174,7 +180,7 @@ class DateStore:
                 definition = connection.execute(
                     "SELECT sql FROM sqlite_master WHERE name = 'photo_date_history'"
                 ).fetchone()[0]
-                if "'organize'" not in definition:
+                if "'undo'" not in definition:
                     connection.execute("ALTER TABLE photo_date_history RENAME TO old_date_history")
                     start = _SCHEMA.index("CREATE TABLE IF NOT EXISTS photo_date_history")
                     end = _SCHEMA.index(";", start) + 1
