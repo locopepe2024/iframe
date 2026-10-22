@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { photoApi, type PhotoAnalysis } from "@/lib/photoApi";
+import DescriptionReview from "./DescriptionReview";
 
 export default function PhotoContent({ photoId }: { photoId: string }) {
   const [analysis, setAnalysis] = useState<PhotoAnalysis | null>(null);
@@ -40,6 +41,7 @@ export default function PhotoContent({ photoId }: { photoId: string }) {
       {!!analysis.observation.visible_text.length && <><h3>看见的文字（可能有误）</h3><ul>{analysis.observation.visible_text.map((text, i) => <li key={i}>{text}</li>)}</ul></>}
       {!!analysis.observation.uncertainties.length && <><h3>还不确定的地方</h3><ul>{analysis.observation.uncertainties.map((text, i) => <li key={i}>{text}</li>)}</ul></>}
       <p>{analysis.observation.story_question}</p><p>不想说也可以，下次再聊。</p>
+      <DescriptionReview key={photoId} photoId={photoId} original={analysis.observation.visible_summary} />
     </>}
   </section>;
 }

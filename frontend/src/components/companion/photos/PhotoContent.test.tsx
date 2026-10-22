@@ -4,6 +4,7 @@ import PhotoContent from "./PhotoContent";
 
 const api = vi.hoisted(() => ({ analysis: vi.fn(), analyze: vi.fn() }));
 vi.mock("@/lib/photoApi", () => ({ photoApi: api }));
+vi.mock("./DescriptionReview", () => ({ default: () => null }));
 const result = { observation: { visible_summary: "画面中有一张桌子。", visible_text: [], uncertainties: ["看不清桌上的字。"], story_question: "您想说说这张照片吗？" } };
 beforeEach(() => { vi.resetAllMocks(); api.analysis.mockResolvedValue(null); api.analyze.mockResolvedValue(result); });
 describe("Qwen photo observations", () => {

@@ -13,6 +13,7 @@ export interface PhotoAnalysis {
   observation: { visible_summary: string; visible_text: string[]; uncertainties: string[]; story_question: string };
 }
 export interface TimeConsent { granted: boolean; consent_version: number }
+export interface DescriptionReview { revision: number; description: string; actor: string; created_at: string }
 export interface TimeQuestion { question_id: string; text: string }
 export interface DateChange {
   revision: number; after: PhotoDateAnnotation; kind: string; created_at: string;
@@ -41,6 +42,9 @@ function serviceError(status: number) {
     : "服务暂不可用，请稍后重试。");
 }
 export const photoApi = {
+  description: (id: string) => request<DescriptionReview | null>(`/${encodeURIComponent(id)}/description`),
+  confirmDescription: (id: string, body: { description: string; expected_revision: number; operation_id: string }) => request<DescriptionReview>(`/${encodeURIComponent(id)}/description`, "POST", body),
+  descriptionHistory: (id: string, after = 0) => request<{ changes: DescriptionReview[]; next_after_revision: number | null }>(`/${encodeURIComponent(id)}/description/history?after_revision=${after}`),
   analysis: (id: string) => request<PhotoAnalysis | null>(`/${encodeURIComponent(id)}/analysis`),
   analyze: (id: string) => request<PhotoAnalysis>(`/${encodeURIComponent(id)}/analysis`, "POST", { allow_external_analysis: true }),
   list: (view: string, year: string, after = "") => request<{ photos: AlbumPhoto[]; next_after_id: string | null }>(
