@@ -57,7 +57,7 @@ const configurationPanels: CharacterDictionaryPreset[] = [
   ...CLASSICAL_CHARACTER_PANELS,
   MODERN_MALE_PANEL,
   panel("modern-clothing", "现代服装搭配 · 女装", "穿着[女装款式]，颜色为[颜色]，面料为[面料]，版型为[版型]，搭配要求为[搭配单品]，衣物状态为[衣物状态]。衣片连接清楚，保留自然褶皱。", ["clothing-panel"], "服装 现代 女装"),
-  panel("face", "面容选择面板", "脸型为[脸型]，额头为[额头]，颧骨为[颧骨]，下颌为[下颌]，下巴为[下巴]，眼型为[眼型]，眉形为[眉形]，眼周细节为[眼周纹理]，肤色为[肤色]，肤质为[肤质]，妆容为[妆容]。", ["face-overview"], "面容 面部 五官 额头 颧骨 下颌 下巴 眼角纹 眼袋 肤色 肤质"),
+  panel("face", "面容选择面板", "脸型为[脸型]，额头为[额头]，颧骨为[颧骨]，下颌为[下颌]，下巴为[下巴]，眼型为[眼型]，眉形为[眉形]，唇形为[唇形]，眼周细节为[眼周纹理]，肤色为[肤色]，肤质为[肤质]，妆容为[妆容]。", ["face-overview"], "面容 面部 五官 额头 颧骨 下颌 下巴 唇形 眼角纹 眼袋 肤色 肤质"),
   sectionedDictionaryPreset({
     id: "dictionary.panel.basic", title: "基础特征", type: "配置面板", categories: ["basic-traits", "gender", "age-stage", "height"], domain: "身份", source,
     search: "基础特征 性别 年龄 年纪 身高", optionalFields: ["性别", "年龄阶段", "身高"],
@@ -177,6 +177,8 @@ function classicalBaseTemplate(id: string, title: string, style: string): Charac
 
 export const CHARACTER_DICTIONARY_PRESETS: CharacterDictionaryPreset[] = [
   ...configurationPanels,
+  ...["唇线自然平直", "上唇略薄、下唇自然饱满", "上下唇厚度接近", "唇峰清晰、嘴角自然"].map((name, index) =>
+    term(`face-detail.lips.${index}`, name, name, "lips", "嘴唇")),
   ...faceDetailTerms.flatMap(([category, label, choices]) => choices.map((name, index) =>
     term(`face-detail.${category}.${index}`, name, name, category, label))),
   ...["身高偏矮", "中等身高", "身高偏高", "身形高挑", "身高约150厘米", "身高约160厘米", "身高约170厘米", "身高约180厘米", "身高约190厘米"].map((name, index) =>
