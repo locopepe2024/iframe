@@ -47,6 +47,12 @@ class DateChange(Snapshot):
 
 
 _SCHEMA = """
+CREATE TABLE IF NOT EXISTS photo_stories (
+    owner TEXT NOT NULL, photo_id TEXT NOT NULL, revision INTEGER NOT NULL,
+    operation_id TEXT NOT NULL, actor TEXT NOT NULL, text TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    PRIMARY KEY(owner, photo_id, revision), UNIQUE(owner, photo_id, operation_id)
+);
 CREATE TABLE IF NOT EXISTS photo_description_reviews (
     owner TEXT NOT NULL, photo_id TEXT NOT NULL, revision INTEGER NOT NULL,
     operation_id TEXT NOT NULL, actor TEXT NOT NULL, description TEXT NOT NULL,
@@ -242,6 +248,43 @@ class DateStore:
             row = connection.execute("SELECT result FROM photo_content_analyses WHERE owner=? AND photo_id=?",
                                      (owner, photo_id)).fetchone()
             return PhotoAnalysis.model_validate_json(row["result"]) if row else None
+
+    def story(self, owner, photo_id):
+        with self._connection() as connection:
+            self._photo(connection, owner, photo_id)
+            row = connection.execute(
+                "SELECT revision,text,actor,created_at FROM photo_stories WHERE owner=? AND photo_id=? ORDER BY revision DESC LIMIT 1",
+                (owner, photo_id)).fetchone()
+            return dict(row) if row else None
+
+    def story_history(self, owner, photo_id, after=0, limit=20):
+        with self._connection() as connection:
+            self._photo(connection, owner, photo_id)
+            rows = connection.execute(
+                "SELECT revision,text,actor,created_at FROM photo_stories WHERE owner=? AND photo_id=? AND revision>? ORDER BY revision LIMIT ?",
+                (owner, photo_id, after, limit)).fetchall()
+            return [dict(row) for row in rows]
+
+    def save_story(self, owner, photo_id, actor, *, text, expected_revision, operation_id):
+        # Stories are user narratives, never evidence for date/person annotations.
+        with self._connection(write=True) as connection:
+            self._photo(connection, owner, photo_id)
+            existing = connection.execute(
+                "SELECT * FROM photo_stories WHERE owner=? AND photo_id=? AND operation_id=?",
+                (owner, photo_id, operation_id)).fetchone()
+            if existing:
+                if existing["text"] != text or existing["revision"] != expected_revision + 1:
+                    raise OperationConflict("Story operation conflicts")
+                return {key: existing[key] for key in ("revision", "text", "actor", "created_at")}
+            current = connection.execute(
+                "SELECT COALESCE(MAX(revision),0) FROM photo_stories WHERE owner=? AND photo_id=?",
+                (owner, photo_id)).fetchone()[0]
+            if current != expected_revision:
+                raise OperationConflict("Story changed")
+            created_at = datetime.now(timezone.utc).isoformat()
+            connection.execute("INSERT INTO photo_stories VALUES (?,?,?,?,?,?,?)",
+                               (owner, photo_id, current + 1, operation_id, actor, text, created_at))
+            return dict(revision=current + 1, text=text, actor=actor, created_at=created_at)
 
     def description_history(self, owner, photo_id, after=0, limit=20):
         with self._connection() as connection:

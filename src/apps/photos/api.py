@@ -46,6 +46,13 @@ class DescriptionConfirmation(BaseModel):
     operation_id: str = Field(min_length=1, max_length=120, pattern=r"^[a-zA-Z0-9_-]+$")
 
 
+class StoryConfirmation(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+    text: str = Field(min_length=1, max_length=4000, pattern=r"\S")
+    expected_revision: int = Field(ge=0)
+    operation_id: str = Field(min_length=1, max_length=120, pattern=r"^[a-zA-Z0-9_-]+$")
+
+
 class DateCorrection(DateMutation):
     value: str = Field(min_length=4, max_length=10)
     precision: ManualPrecision
@@ -178,6 +185,26 @@ def read_date(photo_id: str, identity: Owner, store: Store):
 def read_analysis(photo_id: str, identity: Owner, store: Store):
     with api_errors():
         return store.analysis(identity.owner_profile_id, photo_id)
+
+
+@router.get("/{photo_id}/story")
+def read_story(photo_id: str, identity: Owner, store: Store):
+    with api_errors():
+        return store.story(identity.owner_profile_id, photo_id)
+
+
+@router.get("/{photo_id}/story/history")
+def story_history(photo_id: str, identity: Owner, store: Store,
+                  after_revision: int = Query(default=0, ge=0), limit: int = Query(default=20, ge=1, le=100)):
+    with api_errors():
+        rows = store.story_history(identity.owner_profile_id, photo_id, after_revision, limit + 1)
+        return {"changes": rows[:limit], "next_after_revision": rows[limit - 1]["revision"] if len(rows) > limit else None}
+
+
+@router.post("/{photo_id}/story")
+def save_story(photo_id: str, body: StoryConfirmation, identity: Owner, store: Store):
+    with api_errors():
+        return store.save_story(identity.owner_profile_id, photo_id, identity.user_id, **body.model_dump())
 
 
 @router.get("/{photo_id}/description")
