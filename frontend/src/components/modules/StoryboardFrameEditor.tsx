@@ -10,6 +10,7 @@ import { VariantSelector } from "../common/VariantSelector";
 import { useProjectStore } from "@/store/projectStore";
 import { resolveNegativePrompt, resolveStylePrompt } from "./storyboard-r2v/buildAssembledPrompt";
 import RenderPromptPreviewDialog, { type FrameRenderPreview } from "./RenderPromptPreviewDialog";
+import { getAssetUrl } from "@/lib/utils";
 
 interface StoryboardFrameEditorProps {
     frame: any;
@@ -46,7 +47,10 @@ export default function StoryboardFrameEditor({ frame: initialFrame, onClose }: 
     const [lightingOverride, setLightingOverride] = useState(frame.lighting_override || "");
     const [negativePromptOverride, setNegativePromptOverride] = useState(frame.negative_prompt_override || "");
     const [visualPresets, setVisualPresets] = useState<any[]>([]);
-    const [selectedVisualPresetId, setSelectedVisualPresetId] = useState("");
+    const [visualPresetsLoading, setVisualPresetsLoading] = useState(false);
+    const [visualPresetsError, setVisualPresetsError] = useState(false);
+    const [failedPreviewIds, setFailedPreviewIds] = useState<string[]>([]);
+    const [selectedVisualPresetId, setSelectedVisualPresetId] = useState(frame.reference_visual_projection?.source_preset_id || "");
     const [visualPresetApplyMode, setVisualPresetApplyMode] = useState<"image_only" | "image_and_context">("image_only");
     const [visualPresetProjection, setVisualPresetProjection] = useState<any | null>(null);
     const [selectedReferenceFields, setSelectedReferenceFields] = useState<string[]>([]);
@@ -73,10 +77,20 @@ export default function StoryboardFrameEditor({ frame: initialFrame, onClose }: 
     ]);
 
     useEffect(() => {
+        setSelectedVisualPresetId(frame.reference_visual_projection?.source_preset_id || "");
+        setFailedPreviewIds([]);
+    }, [frame.id]);
+
+    useEffect(() => {
         if (!currentProject?.id) return;
+        let cancelled = false;
+        setVisualPresetsLoading(true);
+        setVisualPresetsError(false);
         api.listShotVisualPresets(currentProject.id)
-            .then((presets: any[]) => setVisualPresets(Array.isArray(presets) ? presets : []))
-            .catch(() => setVisualPresets([]));
+            .then((presets: any[]) => { if (!cancelled) setVisualPresets(Array.isArray(presets) ? presets : []); })
+            .catch(() => { if (!cancelled) { setVisualPresets([]); setVisualPresetsError(true); } })
+            .finally(() => { if (!cancelled) setVisualPresetsLoading(false); });
+        return () => { cancelled = true; };
     }, [currentProject?.id, frame.id]);
 
     useEffect(() => {
@@ -105,7 +119,8 @@ export default function StoryboardFrameEditor({ frame: initialFrame, onClose }: 
                 compiled_prompt: "",
                 source_variant_id: frame.rendered_image_asset?.selected_id || null,
             });
-            setVisualPresets(current => [...current, preset]);
+            const refreshed = await api.listShotVisualPresets(currentProject.id);
+            setVisualPresets(Array.isArray(refreshed) ? refreshed : [...visualPresets, preset]);
             setVisualPresetName("");
         } finally {
             setVisualPresetBusy(false);
@@ -248,12 +263,12 @@ export default function StoryboardFrameEditor({ frame: initialFrame, onClose }: 
                 initial={{ opacity: 0, scale: 0.95 }}
                 animate={{ opacity: 1, scale: 1 }}
                 exit={{ opacity: 0, scale: 0.95 }}
-                className="bg-elevated border border-glass-border rounded-2xl w-full max-w-6xl h-[85vh] flex flex-col overflow-hidden shadow-lg"
+                className="bg-elevated border border-glass-border rounded-lg w-full max-w-6xl h-[90vh] md:h-[85vh] flex flex-col overflow-hidden shadow-lg"
             >
                 {/* Header */}
                 <div className="h-16 border-b border-glass-border flex justify-between items-center px-6 bg-surface">
                     <div className="flex items-center gap-4">
-                        <h2 className="text-xl font-bold text-foreground">{ts("frameEditor")} <span className="text-text-muted font-normal text-sm ml-2">#{frame.id.substring(0, 8)}</span></h2>
+                        <h2 className="text-lg font-bold text-foreground">分镜首帧编辑 <span className="text-text-muted font-normal text-sm ml-2">#{frame.id.substring(0, 8)}</span></h2>
                     </div>
                     <button onClick={onClose} className="p-2 hover:bg-hover-bg rounded-full text-text-secondary hover:text-foreground transition-colors">
                         <X size={24} />
@@ -261,9 +276,10 @@ export default function StoryboardFrameEditor({ frame: initialFrame, onClose }: 
                 </div>
 
                 {/* Content */}
-                <div className="flex-1 flex overflow-hidden">
+                <div className="flex-1 flex flex-col md:flex-row overflow-y-auto md:overflow-hidden">
                     {/* Left: Variant Selector */}
-                    <div className="flex-1 bg-surface p-4 flex flex-col overflow-hidden relative">
+                    <div className="min-w-0 md:flex-1 bg-surface p-4 flex flex-col gap-4 md:overflow-y-auto">
+                        <h3 className="text-xs font-semibold text-text-secondary">当前分镜首帧</h3>
                         <VariantSelector
                             key={frame.id}
                             asset={frame.rendered_image_asset}
@@ -273,12 +289,34 @@ export default function StoryboardFrameEditor({ frame: initialFrame, onClose }: 
                             onGenerate={handleGenerate}
                             isGenerating={isGenerating}
                             aspectRatio="16:9"
-                            className="h-full"
                         />
+                        <section aria-label="参考图列表" className="border-t border-border-subtle pt-3">
+                            <div className="flex items-center justify-between gap-2 mb-2">
+                                <h3 className="text-xs font-semibold text-text-secondary">参考图</h3>
+                                <span className="text-[0.6875rem] text-text-muted">选择后在右侧确认应用</span>
+                            </div>
+                            {visualPresetsLoading && <p role="status" className="text-xs text-text-muted">正在加载参考图…</p>}
+                            {visualPresetsError && <p role="alert" className="text-xs text-text-muted">参考图加载失败，请重新打开编辑器。</p>}
+                            {!visualPresetsLoading && !visualPresetsError && !visualPresets.length && <p className="text-xs text-text-muted">暂无可用的参考素材或分镜。</p>}
+                            <div className="flex gap-2 overflow-x-auto pb-2">
+                                {visualPresets.map((preset: any) => {
+                                    const selected = preset.id === selectedVisualPresetId;
+                                    const previewUrl = preset.preview_url && !failedPreviewIds.includes(preset.id) ? getAssetUrl(preset.preview_url) : "";
+                                    return <button key={preset.id} type="button" aria-label={`选择参考图 ${preset.name}`} aria-pressed={selected}
+                                        onClick={() => setSelectedVisualPresetId(preset.id)}
+                                        className={`w-28 shrink-0 overflow-hidden rounded border text-left transition-colors ${selected ? "border-primary bg-primary/10" : "border-glass-border hover:border-primary/50"}`}>
+                                        <div className="aspect-video w-full bg-elevated flex items-center justify-center overflow-hidden">
+                                            {previewUrl ? <img src={previewUrl} alt="" loading="lazy" className="h-full w-full object-cover" onError={() => setFailedPreviewIds(current => [...current, preset.id])} /> : <ImageIcon size={20} className="text-text-muted" aria-hidden="true" />}
+                                        </div>
+                                        <span className="block truncate px-1.5 py-1 text-[0.6875rem] text-foreground" title={preset.name}>{preset.name}</span>
+                                    </button>;
+                                })}
+                            </div>
+                        </section>
                     </div>
 
                     {/* Right: Controls & Prompt */}
-                    <div className="w-1/3 min-w-[350px] border-l border-glass-border bg-elevated flex flex-col">
+                    <div className="w-full md:w-1/3 md:min-w-[350px] border-t md:border-t-0 md:border-l border-glass-border bg-elevated flex flex-col md:overflow-y-auto">
                         <div className="p-4 border-b border-border-subtle">
                             <h3 className="font-bold text-sm uppercase tracking-wider text-text-secondary mb-2">
                                 {ts("sceneContext")}
@@ -309,13 +347,10 @@ export default function StoryboardFrameEditor({ frame: initialFrame, onClose }: 
                             <div className="mt-4 space-y-3 border-t border-border-subtle pt-4">
                                 <div className="rounded-lg border border-primary/20 bg-primary/5 p-3 space-y-2">
                                     <div>
-                                        <label className="mb-1 block text-xs font-medium text-text-secondary">选择参考图</label>
+                                        <h4 className="mb-1 text-xs font-medium text-text-secondary">参考图提交</h4>
                                         <p className="text-[0.6875rem] text-text-muted">默认只提交参考图。确认后可按类别带入来源素材的结构化视觉字段。</p>
                                     </div>
-                                    <select aria-label="选择结构化视觉预设" value={selectedVisualPresetId} onChange={event => setSelectedVisualPresetId(event.target.value)} className="w-full rounded border border-glass-border bg-surface p-2 text-xs text-foreground">
-                                        <option value="">选择参考素材或分镜</option>
-                                        {visualPresets.map((preset: any) => <option key={preset.id} value={preset.id}>{preset.name} · 来源 {preset.source_asset_id ? `场景资产变体 ${preset.source_variant_id}` : `分镜 ${preset.source_frame_id}`}</option>)}
-                                    </select>
+                                    <p className="text-xs text-foreground">{visualPresets.find((preset: any) => preset.id === selectedVisualPresetId)?.name || "尚未选择参考图"}</p>
                                     {visualPresetProjectionLoading && <p role="status" className="text-[0.6875rem] text-text-muted">正在读取来源字段…</p>}
                                     {visualPresetFeedback && <p role={visualPresetFeedback.includes("失败") || visualPresetFeedback.includes("无法") ? "alert" : "status"} className="text-[0.6875rem] text-text-secondary">{visualPresetFeedback}</p>}
                                     {visualPresetProjection && <div className="rounded border border-glass-border bg-surface/70 p-2 text-[0.6875rem] text-text-secondary">
