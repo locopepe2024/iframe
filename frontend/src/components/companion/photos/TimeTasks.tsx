@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { photoApi, type PhotoTimeTask, type TimeConsent, type TimeQuestion } from "@/lib/photoApi";
 import styles from "./photos.module.css";
+import BatchUndo from "./BatchUndo";
 
 const labels: Record<PhotoTimeTask["status"], string> = {
   queued: "等待后台整理", running: "正在后台整理", completed: "本任务已完成",
@@ -98,5 +99,9 @@ export default function TimeTasks({ batchId }: { batchId: string }) {
       </p>)}
       {task.counts.failed > 0 && !["queued", "running"].includes(task.status) && <button disabled={busy || active || !consent?.granted || stop} onClick={() => void run(() => create(task.task_id))}>重试此任务的失败项</button>}
     </div>)}
+    <BatchUndo batchId={batchId} disabled={busy} onUndone={async () => {
+      setQuestion(null); setStop(false); operation.current = null;
+      await refresh();
+    }} />
   </section>;
 }

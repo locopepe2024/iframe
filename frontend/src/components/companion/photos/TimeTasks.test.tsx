@@ -4,6 +4,7 @@ import TimeTasks from "./TimeTasks";
 
 const api = vi.hoisted(() => ({ batch:vi.fn(), timeTasks:vi.fn(), question:vi.fn(), answer:vi.fn(), createTimeTask:vi.fn(), revoke:vi.fn() }));
 vi.mock("@/lib/photoApi", () => ({ photoApi:api }));
+vi.mock("./BatchUndo", () => ({ default: () => null }));
 const task = (status="queued", failed=0) => ({ task_id:"task",status,counts:{pending:status==="queued"?2:0,completed:1,needs_confirmation:0,failed,cancelled:0},items:[] });
 beforeEach(() => {
   vi.resetAllMocks(); api.batch.mockResolvedValue({granted:false,consent_version:0}); api.timeTasks.mockResolvedValue([]);

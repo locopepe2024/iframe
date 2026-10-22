@@ -29,6 +29,13 @@ export interface PhotoTimeTask {
   items: { photo_id: string; expected_revision: number; status: string; error_code: string | null; result: PhotoDateAnnotation | null }[];
 }
 export interface DescriptionReview { revision: number; description: string; actor: string; created_at: string }
+export interface BatchUndoPreview {
+  batch_id: string; preview_token: string; counts: { undo: number; preserve: number };
+  items: { photo_id: string; action: "undo" | "preserve"; current: PhotoDateAnnotation; target: PhotoDateAnnotation }[];
+}
+export interface BatchUndoReceipt {
+  operation_id: string; created_at: string; counts: { undo: number; preserve: number };
+}
 export interface PhotoStory { revision: number; text: string; actor: string; created_at: string }
 export interface TimeQuestion { question_id: string; text: string }
 export interface DateChange {
@@ -43,6 +50,7 @@ async function request<T>(path: string, method = "GET", body?: unknown): Promise
     ...(body === undefined ? {} : { headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }),
   });
   if (!response.ok) {
+    if (path.endsWith("/undo-time") && response.status === 409) throw new Error("照片或授权已变化，请重新预览后再确认撤销。");
     if (path.endsWith("/analysis") && response.status === 409) throw new Error("请先在 iFrame 创作台为当前用户配置 UniArt 渠道，再回来重试。");
     if (path.endsWith("/analysis") && response.status === 502) throw new Error("当前用户的 UniArt 渠道拒绝访问，请在创作台检查配置后重试。");
     throw serviceError(response.status);
@@ -58,6 +66,9 @@ function serviceError(status: number) {
     : "服务暂不可用，请稍后重试。");
 }
 export const photoApi = {
+  undoPreview: (id: string) => request<BatchUndoPreview>(`/batches/${encodeURIComponent(id)}/undo-time-preview`),
+  undoBatch: (id: string, body: { operation_id: string; preview_token: string }) => request<BatchUndoReceipt>(`/batches/${encodeURIComponent(id)}/undo-time`, "POST", body),
+  undoHistory: (id: string, after = 0) => request<{ changes: BatchUndoReceipt[]; next_after: number | null }>(`/batches/${encodeURIComponent(id)}/undo-time/history?after=${after}`),
   timeTasks: (id: string) => request<PhotoTimeTask[]>(`/batches/${encodeURIComponent(id)}/time-tasks`),
   createTimeTask: (id: string, body: { operation_id: string; consent_version: number; retry_task_id?: string }) => request<PhotoTimeTask>(`/batches/${encodeURIComponent(id)}/time-tasks`, "POST", body),
   fingerprint: async (file: File) => {

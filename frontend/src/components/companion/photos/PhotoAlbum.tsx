@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import PhotoImage from "./PhotoImage";
 import PhotoContent from "./PhotoContent";
 import PhotoStory from "./PhotoStory";
 import BatchUpload from "./BatchUpload";
@@ -12,20 +13,6 @@ import styles from "./photos.module.css";
 function dateLabel(annotation: PhotoDateAnnotation) {
   if (annotation.date) return `${annotation.date.value.replace("T", " ")}${annotation.source === "user" ? "（您确认的）" : "（来自照片信息）"}`;
   return annotation.reason === "not_processed" ? "尚未整理" : "时间待确认";
-}
-function PhotoImage({ id, large = false }: { id: string; large?: boolean }) {
-  const [url, setUrl] = useState("");
-  const [failed, setFailed] = useState(false);
-  useEffect(() => {
-    let active = true; let objectUrl = "";
-    setUrl(""); setFailed(false);
-    photoApi.image(id).then(blob => {
-      if (active) { objectUrl = URL.createObjectURL(blob); setUrl(objectUrl); }
-    }).catch(() => { if (active) setFailed(true); });
-    return () => { active = false; if (objectUrl) URL.revokeObjectURL(objectUrl); };
-  }, [id]);
-  return url ? <img className={large ? styles.largeImage : styles.image} src={url} alt={large ? "当前选择的照片" : "照片缩略图"} />
-    : <span>{failed ? "图片暂不可用，请刷新相册" : "正在读取照片…"}</span>;
 }
 
 type Confirmation = { kind: "date"; photoId: string; expectedRevision: number; consentVersion: number; value: string; precision: "year" | "month" | "day" }
