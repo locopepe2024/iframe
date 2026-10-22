@@ -2,7 +2,7 @@
 
 import { OPEN_AI_CANVAS_PROMPTS } from "@/lib/openAiCanvasPrompts";
 import { Search, X } from "lucide-react";
-import { createContext, useContext, useEffect, useId, useState, type MutableRefObject } from "react";
+import { createContext, Fragment, useContext, useEffect, useId, useState, type MutableRefObject } from "react";
 import { createPortal } from "react-dom";
 import { API_URL, api, authenticatedFetch, type PlatformReferenceResource } from "@/lib/api";
 import { searchCharacterQuickPresets } from "@/lib/characterQuickActions";
@@ -10,6 +10,7 @@ import { CHARACTER_DICTIONARY_PRESETS, dictionaryPresetFields, configurationQuer
 import { editablePlatformPrompt, isUsablePlatformPrompt } from "@/lib/platformPrompts";
 import { CHARACTER_DICTIONARY_GROUPS, dictionaryCategoryPath, dictionaryCategorySearch, dictionarySlotCategory, localDictionaryCategories, platformDictionaryCategories } from "@/lib/characterDictionaryCategories";
 import { PROMPT_TASKS, PROMPT_TOPICS, PROMPT_STYLES, templateDimensions, characterTemplateKind, type PromptTask } from "@/lib/promptTemplateCategories";
+import { CHARACTER_PANEL_GROUPS, CHARACTER_PANEL_LABELS, CHARACTER_PANEL_ORDER, characterPanelGroup } from "@/lib/characterPanelCatalog";
 import type { PromptSlashSuggestion } from "./playground/ReferencePromptEditor";
 import type { CharacterConstraints } from "@/lib/characterStructuredDesign";
 
@@ -31,23 +32,6 @@ const DOMAINS: Record<string, string> = {
   "character.identity": "身份", "character.look": "造型", "character.performance": "表演", "world.style": "风格",
 };
 const DISCOVERY_SECTIONS = ["基础面板", "词典", "Prompt 模板"] as const;
-const QUICK_PANEL_LABELS: Record<string, string> = {
-  "dictionary.panel.basic": "基础特征",
-  "dictionary.panel.classical-footwear": "古装鞋履",
-  "dictionary.panel.classical-robe": "古装外套",
-  "dictionary.panel.classical-skirt": "古装衣裙",
-  "dictionary.panel.jewelry": "首饰",
-  "dictionary.panel.decoration": "配饰",
-  "dictionary.panel.modern-male-clothing": "现代男装",
-  "dictionary.panel.modern-clothing": "现代女装",
-  "dictionary.panel.face": "面容",
-  "dictionary.panel.hair": "发型",
-  "dictionary.panel.posture": "体态",
-  "dictionary.panel.skin": "肤色与肤质",
-  "dictionary.panel.condition": "新旧",
-  "dictionary.panel.expression": "表情",
-};
-const QUICK_PANEL_ORDER = Object.keys(QUICK_PANEL_LABELS);
 export const CharacterDictionaryHost = createContext<HTMLElement | null>(null);
 
 const buttonStyle = "min-h-11 rounded px-2 text-xs focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary hover:bg-hover-bg";
@@ -151,7 +135,7 @@ export default function CharacterPromptDictionary({ suggestion, onClose, onApply
       if (entry.type !== "配置面板") return false;
       if (!browsing && isConfigurationQuery(needle)) return inCategory(entry, configurationQueryCategory(needle)!);
     } else if (!template) return false;
-    if (!browsing && needle && !`${QUICK_PANEL_LABELS[entry.id] || ""} ${entry.title} ${entry.search} ${entry.text} ${entry.categories.map(dictionaryCategorySearch).join(" ")}`.toLocaleLowerCase().includes(needle)) return false;
+    if (!browsing && needle && !`${CHARACTER_PANEL_LABELS[entry.id] || ""} ${entry.title} ${entry.search} ${entry.text} ${entry.categories.map(dictionaryCategorySearch).join(" ")}`.toLocaleLowerCase().includes(needle)) return false;
     if (section === "Prompt 模板") {
       const dimensions = templateDimensions(entry.title, entry.search);
       const kind = characterTemplateKind(entry.title, entry.categories);
@@ -161,7 +145,7 @@ export default function CharacterPromptDictionary({ suggestion, onClose, onApply
         && (!style || neutralExpression || dimensions.styles.includes(style as typeof PROMPT_STYLES[number]));
     }
     return section === "基础面板" || !browsing || !category || inCategory(entry, category);
-  }).sort((a, b) => quickPanels ? QUICK_PANEL_ORDER.indexOf(a.id) - QUICK_PANEL_ORDER.indexOf(b.id) : 0);
+  }).sort((a, b) => quickPanels ? CHARACTER_PANEL_ORDER.indexOf(a.id) - CHARACTER_PANEL_ORDER.indexOf(b.id) : 0);
   const related = section === "词典" && !browsing ? Array.from(new Set(visible.flatMap(entry => entry.categories))) : [];
   const enterCategory = (key: string) => { setCategory(key); setBrowsing(true); setActive(0); };
   const showTasks = section === "Prompt 模板" && !task && browsing;
@@ -171,7 +155,7 @@ export default function CharacterPromptDictionary({ suggestion, onClose, onApply
     ...(showTasks ? PROMPT_TASKS.map(([key, label]) => ({ id: `task-${key}`, label, detail: "选择任务，再按题材和画风筛选", choose: () => { setTask(key); setPromptTag(""); setTopic(""); setStyle(""); } })) : []),
     ...navigation.map(item => ({ id: `category-${item.id}`, label: item.label, detail: item.detail, choose: () => enterCategory(item.id) })),
     ...(showTasks ? [] : visible.map(entry => ({ id: entry.id,
-      label: entry.type === "配置面板" ? QUICK_PANEL_LABELS[entry.id] || entry.title : `${entry.type === "词条" ? "选项" : entry.type === "Prompt 案例" ? "Prompt 模板" : entry.type} · ${entry.title}`,
+      label: entry.type === "配置面板" ? CHARACTER_PANEL_LABELS[entry.id] || entry.title : `${entry.type === "词条" ? "选项" : entry.type === "Prompt 案例" ? "Prompt 模板" : entry.type} · ${entry.title}`,
       detail: browsing && entry.type === "配置面板" ? "选择款式并调整细节" : `${entry.domain} · ${entry.source}`, choose: () => { setSelected(entry); setFieldValues({}); } }))),
     ...related.map(key => ({ id: `browse-${key}`, label: `浏览 ${dictionaryCategoryPath(key)}`, detail: `${count(key)} 个选项，可比较其他描述`, choose: () => enterCategory(key) })),
   ];
@@ -248,7 +232,7 @@ export default function CharacterPromptDictionary({ suggestion, onClose, onApply
         className="min-h-11 w-full rounded border border-glass-border bg-surface pl-9 pr-3 text-sm text-foreground focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary" />
     </div>}
     {selected ? <>
-      <h4 className="mt-2 text-sm text-foreground">{selected.type === "配置面板" ? QUICK_PANEL_LABELS[selected.id] || selected.title : <>{selected.type === "词条" ? "选项" : selected.type === "Prompt 案例" ? "Prompt 模板" : selected.type} · {selected.title}</>}</h4>
+      <h4 className="mt-2 text-sm text-foreground">{selected.type === "配置面板" ? CHARACTER_PANEL_LABELS[selected.id] || selected.title : <>{selected.type === "词条" ? "选项" : selected.type === "Prompt 案例" ? "Prompt 模板" : selected.type} · {selected.title}</>}</h4>
       {selected.type !== "配置面板" && <p className="mt-1 break-all text-xs text-text-muted">{selected.source}</p>}
       {!suggestion.slot && selectedFields.length > 0 && <div className="mt-2 space-y-3">
         {fieldGroups.map((group) => <fieldset key={group.label} className="grid grid-cols-1 gap-2 sm:grid-cols-2">
@@ -310,9 +294,12 @@ export default function CharacterPromptDictionary({ suggestion, onClose, onApply
       {error && <p role="status" className="text-xs text-text-muted">平台词典读取失败，本地词条仍可使用。<button type="button" onClick={() => setRefresh((value) => value + 1)} className={buttonStyle}>重试</button></p>}
       {!loading && options.length === 0 && <p role="status" className="py-2 text-xs text-text-muted">{section === "Prompt 模板" ? "当前分类暂无可用模板，请调整题材、画风或选择其他任务。" : "没有匹配项，请更换关键词或分类。"}</p>}
       <div role="listbox" aria-label="面板和模板结果" className={tileLayout ? "grid grid-cols-3 gap-2" : ""} aria-activedescendant={options.length ? `${id}-${Math.min(active, options.length - 1)}` : undefined}>
-        {options.map((option, index) => <button key={option.id} id={`${id}-${index}`} type="button" role="option" aria-label={templateTiles ? option.label : undefined} aria-selected={active === index} onClick={option.choose} className={`${templateTiles ? buttonStyle.replace("text-xs", "text-sm leading-relaxed") : buttonStyle} min-w-0 w-full py-2 ${tileLayout ? "border border-glass-border text-center" : "block text-left"} ${active === index ? "bg-primary/10" : ""}`}>
+        {options.map((option, index) => <Fragment key={option.id}>
+          {quickPanels && index === options.findIndex((item) => characterPanelGroup(item.id) === characterPanelGroup(option.id)) && <h5 className="col-span-full pt-2 text-xs font-medium text-text-secondary">{CHARACTER_PANEL_GROUPS.find((group) => group.id === characterPanelGroup(option.id))?.label}</h5>}
+          <button id={`${id}-${index}`} type="button" role="option" aria-label={templateTiles ? option.label : undefined} aria-selected={active === index} onClick={option.choose} className={`${templateTiles ? buttonStyle.replace("text-xs", "text-sm leading-relaxed") : buttonStyle} min-w-0 w-full py-2 ${tileLayout ? "border border-glass-border text-center" : "block text-left"} ${active === index ? "bg-primary/10" : ""}`}>
           <span className="block break-words text-foreground">{templateTiles ? option.label.replace(/^Prompt 模板 · /, "") : option.label}</span>{!tileLayout && <span className="block text-text-muted">{option.detail}</span>}
-        </button>)}
+          </button>
+        </Fragment>)}
       </div>
       <button type="button" onClick={() => setRefresh((value) => value + 1)} className={buttonStyle}>刷新目录</button>
     </>}

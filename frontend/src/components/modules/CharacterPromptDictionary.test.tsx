@@ -504,8 +504,11 @@ it('shows compact module buttons and keeps close beside the tabs', () => {
   const { onClose } = setup('');
   const options = screen.getAllByRole('option');
   expect(options.slice(0, 6).map(option => option.textContent)).toEqual([
-    '基础特征', '古装鞋履', '古装外套', '古装衣裙', '首饰', '配饰',
+    '基础特征', '面容', '肤色与肤质', '发型', '体态', '古装外套',
   ]);
+  for (const group of ['基础身份', '面容与身体', '服装搭配', '服饰细节', '表演']) {
+    expect(screen.getByRole('heading', { name: group })).toBeInTheDocument();
+  }
   expect(options.every(option => option.children.length === 1)).toBe(true);
   expect(screen.queryByText('选择配置面板，调整后预览并应用。')).not.toBeInTheDocument();
   expect(screen.queryByRole('button', { name: 'AI 完善角色设计' })).not.toBeInTheDocument();
