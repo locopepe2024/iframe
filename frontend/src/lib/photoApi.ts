@@ -16,6 +16,12 @@ export interface PhotoAnalysis {
   observation: { visible_summary: string; visible_text: string[]; uncertainties: string[]; story_question: string };
 }
 export interface TimeConsent { granted: boolean; consent_version: number }
+export interface UploadManifestItem { item_id: string; filename: string; size: number; sha256: string }
+export interface UploadBatch {
+  batch_id: string;
+  items: (UploadManifestItem & { status: "pending" | "uploaded" | "failed"; photo_id: string | null; error_code: string | null })[];
+  counts: { pending: number; uploaded: number; failed: number };
+}
 export interface DescriptionReview { revision: number; description: string; actor: string; created_at: string }
 export interface PhotoStory { revision: number; text: string; actor: string; created_at: string }
 export interface TimeQuestion { question_id: string; text: string }
@@ -46,6 +52,20 @@ function serviceError(status: number) {
     : "服务暂不可用，请稍后重试。");
 }
 export const photoApi = {
+  fingerprint: async (file: File) => {
+    const digest = await crypto.subtle.digest("SHA-256", await file.arrayBuffer());
+    return Array.from(new Uint8Array(digest), byte => byte.toString(16).padStart(2, "0")).join("");
+  },
+  uploadBatches: (after = "") => request<{ batches: UploadBatch[]; next_after_id: string | null }>(`/upload-batches?${new URLSearchParams({ after_id: after, limit: "10" })}`),
+  uploadBatch: (id: string) => request<UploadBatch>(`/upload-batches/${encodeURIComponent(id)}`),
+  createUploadBatch: (id: string, items: UploadManifestItem[]) => request<UploadBatch>(`/upload-batches/${encodeURIComponent(id)}`, "PUT", { items }),
+  uploadBatchItem: async (batch: string, item: string, file: File) => {
+    const response = await authenticatedFetch(`${base}/upload-batches/${encodeURIComponent(batch)}/items/${encodeURIComponent(item)}`, {
+      method: "PUT", body: file, credentials: "include", cache: "no-store",
+    });
+    if (!response.ok) throw serviceError(response.status);
+    return response.json() as Promise<{ photo_id: string; batch_id: string; created: boolean }>;
+  },
   story: (id: string) => request<PhotoStory | null>(`/${encodeURIComponent(id)}/story`),
   saveStory: (id: string, body: { text: string; expected_revision: number; operation_id: string }) => request<PhotoStory>(`/${encodeURIComponent(id)}/story`, "POST", body),
   storyHistory: (id: string, after = 0) => request<{ changes: PhotoStory[]; next_after_revision: number | null }>(`/${encodeURIComponent(id)}/story/history?after_revision=${after}`),

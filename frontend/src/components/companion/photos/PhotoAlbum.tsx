@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import PhotoContent from "./PhotoContent";
 import PhotoStory from "./PhotoStory";
+import BatchUpload from "./BatchUpload";
 import { photoApi, type AlbumPhoto, type DateChange, type PhotoDateAnnotation, type TimeConsent, type TimeQuestion } from "@/lib/photoApi";
 import { useCompanionVoice } from "../useCompanionVoice";
 import { parseSpokenPhotoDate, type DateSuggestion } from "./spokenDate";
@@ -188,7 +189,7 @@ export default function PhotoAlbum() {
     <a href={`${process.env.NEXT_PUBLIC_COMPANION_BASE_PATH || ""}/companion`}>返回陪伴首页</a>
     <h1>我的生活相册</h1>
     <p>留住照片，慢慢说说照片里的故事。</p>
-    <p className={styles.note}>照片 Demo · 当前支持单张上传和按时间整理。照片保存在当前服务端；人物识别与自动语音整理尚未加入。</p>
+    <p className={styles.note}>照片 Demo · 支持单张、批量上传与逐张按时间整理。照片保存在当前服务端；后台整理任务和人物识别尚未加入。</p>
     <section className={styles.panel} aria-label="上传照片">
       <h2>添一张照片</h2>
       <label htmlFor="photo-file">选择一张照片</label>
@@ -206,6 +207,7 @@ export default function PhotoAlbum() {
       })}>上传照片</button>
     </section>
 
+    <BatchUpload onUploaded={() => { void run(() => load()); }} />
     <section className={styles.panel} aria-label="相册浏览">
       <h2>看看照片</h2>
       <div className={styles.filters}>
@@ -251,6 +253,7 @@ export default function PhotoAlbum() {
       <PhotoStory key={`story-${selected.photo_id}`} photoId={selected.photo_id} />
       <p>{dateLabel(selected.date)}</p>
       <p>{consent?.granted ? "您已允许按时间整理。" : "当前未授权整理。"}</p>
+      <p className={styles.note}>授权针对这张照片所属批次；下方整理按钮只处理当前照片，尚不自动整理整批。</p>
       <button disabled={busy || voice.listening || voice.finishing} onClick={speakCurrentPrompt}>{voice.speaking ? "停止朗读" : "读出当前提示"}</button>
       {!question && !confirmation && <>
         <button disabled={busy || !consent} onClick={() => void requestOrganization()}>按时间整理</button>
