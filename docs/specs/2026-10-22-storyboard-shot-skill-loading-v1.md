@@ -1,6 +1,6 @@
 # Storyboard 首帧与分镜设计 Skill 盘点及加载 V1
 
-状态：设计规格；不声称新增 Skill 或加载器已经实现。承接 `2026-10-22-storyboard-shot-design-inheritance-and-performance-v1.md`。
+状态：设计规格；现有润色入口的模型兼容过滤、默认选项与预览指令回显已实现，结构化分镜设计器及完整 Skill 加载合同仍待实现。承接 `2026-10-22-storyboard-shot-design-inheritance-and-performance-v1.md`。
 
 ## Observed
 
@@ -91,3 +91,13 @@ MiniMax 官方 Context-IR 是独立优化器，不等于本地 `minimax-h3-direc
 - 标为“节奏、机位、微表情、特效或转场设计”的能力必须返回相应字段的具体候选及依据；仅返回扩写后的完整提示词，不算通过设计能力验收。
 - 同一份已确认分镜设计分别编译为 H3 和 Seedance 提示词时，动作、景别、机位、光线、表情、转场及参考用途的语义保持一致；H3 使用其当前适用模式的结构，Seedance 不继承 H3 专用标题或媒体标签。
 - 预览与提交的 Skill ID、revision、冻结文本、镜头/参考版本一致；任一变化使旧预览失效。行为测试只证明加载和数据边界，视觉效果仍需实际多镜验证。
+
+## Pavo AI Agent 源码对照（2026-10-22）
+
+**Observed（代码事实）：**公开仓库 `locopepe2024/pavo-ai-agent` 的 `backend/app/models/schema.py` 将 storyboard 建模为 scenes 下的 shots。shot 有 `shotType`、`cameraMove`、`cameraAngle`、description、dialogue、duration、characters；scene 有 duration、mood、music、keyframe。`storyboard_agent.py` 的提示词负责从故事生成这组文本字段；`reviewer.py` 审查角色、场景、道具一致性以及动作承接和镜头标签，`fixer.py` 按审查意见重写 storyboard。`project_service.py` 使用镜头字段拼接 T2V 请求。README 所述七 Agent 流程是项目说明，不能据此认定每个字段有独立可审核的设计决策。
+
+**Direct implication：**Pavo 可供参考的是上游文本拆镜的字段划分和审查步骤。它的 `keyframe` 是文本字段；已读源码未显示单镜 0.00 秒首帧图及对应结构化版本快照，也未显示微表情触发/变化/保持/落点或逐字段采纳合同，因此不能直接替代本产品 Storyboard 首帧与分镜表演设计。
+
+**Not yet proven：**这些 Agent 在真实项目中能否稳定保持跨镜视觉一致性，或镜头标签能否改善 H3/Seedance 成片效果，均需固定素材、模型与参数的生成对照。Pavo 的 schema 校验失败会回退原始 dict；字段存在不等于输出始终符合 schema。
+
+源码范围：[`schema.py`](https://github.com/locopepe2024/pavo-ai-agent/blob/master/backend/app/models/schema.py)、[`storyboard_agent.py`](https://github.com/locopepe2024/pavo-ai-agent/blob/master/backend/app/agents/storyboard_agent.py)、[`reviewer.py`](https://github.com/locopepe2024/pavo-ai-agent/blob/master/backend/app/agents/reviewer.py)、[`fixer.py`](https://github.com/locopepe2024/pavo-ai-agent/blob/master/backend/app/agents/fixer.py)、[`project_service.py`](https://github.com/locopepe2024/pavo-ai-agent/blob/master/backend/app/services/project_service.py)。
