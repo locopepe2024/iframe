@@ -106,3 +106,33 @@ def test_migrate_pre_undo_schema_preserves_history(tmp_path):
         assert "'undo'" in connection.execute("SELECT sql FROM sqlite_master WHERE name='photo_date_history'").fetchone()[0]
     PhotoUndoStore(path)
     assert len(store.history('owner','photo'))==1
+
+
+def test_restore_preserved_then_regrant_organize_and_undo_again(setup):
+    client, worker, _, path, batch, version = prepare(setup)
+    endpoint = f'/photos/batches/{batch}'
+    client.post(endpoint+'/time-tasks', json=dict(operation_id='first', consent_version=version))
+    while worker.process_time_item():
+        pass
+    assert client.post('/photos/second/date/restore', json=dict(operation_id='restore',
+        expected_revision=2, consent_version=version, target_revision=1)).status_code == 200
+    preserved = client.get('/photos/second/date').json()
+    preview = client.get(endpoint+'/undo-time-preview').json()
+    assert preview['counts'] == dict(undo=1, preserve=1)
+    assert client.post(endpoint+'/undo-time', json=dict(operation_id='undo-one', preview_token=preview['preview_token'])).status_code == 200
+    assert client.get('/photos/second/date').json() == preserved
+    question = client.post(endpoint+'/time-question').json()
+    version = client.post(endpoint+'/time-consent', json=dict(question_id=question['question_id'], granted=True, method='button')).json()['consent_version']
+    client.post(endpoint+'/time-tasks', json=dict(operation_id='second', consent_version=version))
+    while worker.process_time_item():
+        pass
+    preview = client.get(endpoint+'/undo-time-preview').json()
+    # Re-running an unchanged EXIF result is a no-op, retaining the explicit restore.
+    assert preview['counts'] == dict(undo=1, preserve=1)
+    assert client.post(endpoint+'/undo-time', json=dict(operation_id='undo-two', preview_token=preview['preview_token'])).status_code == 200
+    restored = client.get('/photos/second/date').json()
+    assert {k:v for k,v in restored.items() if k!='revision'} == {k:v for k,v in preserved.items() if k!='revision'}
+    first_page = client.get(endpoint+'/undo-time/history?limit=1').json()
+    assert first_page['next_after'] == 1
+    assert first_page['changes'][0]['operation_id'] == 'undo-one'
+    assert client.get(endpoint+'/undo-time/history?after=1&limit=1').json()['changes'][0]['operation_id'] == 'undo-two'
