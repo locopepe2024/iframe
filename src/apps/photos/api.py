@@ -1,6 +1,7 @@
 """Isolated local photo Demo API with explicit consent and synchronous date rules."""
 
 import os
+import hashlib
 import sqlite3
 from contextlib import contextmanager
 from pathlib import Path
@@ -8,22 +9,22 @@ from typing import Annotated, Literal
 
 from fastapi import APIRouter, Depends, FastAPI, HTTPException, Query, Request, Response, Path as APIPath
 from starlette.concurrency import run_in_threadpool
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from ..identity import UserContext, require_user_context
 from .date_store import OperationConflict, PhotoNotAvailable, TimeConsentRequired
 from .dates import DateRevisionConflict, ManualPrecision
 from . import media
-from .workflow import PhotoWorkflowStore
+from .intake import PhotoIntakeStore
 from .analysis import analyze_photo, AnalysisUnavailable, AnalysisCredentialRejected
 
 
-def get_store() -> PhotoWorkflowStore:
+def get_store() -> PhotoIntakeStore:
     configured = os.getenv("IFRAME_PHOTOS_LOCAL_DB_PATH", "")
     path = Path(configured)
     if not configured or not path.is_absolute() or not path.is_file():
         raise HTTPException(503, "Photo storage is not configured")
-    return PhotoWorkflowStore(path, initialize=False)
+    return PhotoIntakeStore(path, initialize=False)
 
 
 class DateMutation(BaseModel):
@@ -74,6 +75,25 @@ class TimeRevocation(BaseModel):
     expected_consent_version: int = Field(ge=0)
 
 
+class IntakeItem(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+    item_id: str = Field(min_length=1, max_length=80, pattern=r"^[a-zA-Z0-9_-]+$")
+    filename: str = Field(min_length=1, max_length=255, pattern=r"\S")
+    size: int = Field(ge=1, le=media.MAX_UPLOAD_BYTES)
+    sha256: str = Field(pattern=r"^[a-f0-9]{64}$")
+
+
+class IntakeManifest(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+    items: list[IntakeItem] = Field(min_length=1, max_length=20)
+
+    @model_validator(mode="after")
+    def unique_items(self):
+        if len({item.item_id for item in self.items}) != len(self.items):
+            raise ValueError("Duplicate upload item")
+        return self
+
+
 @contextmanager
 def api_errors():
     try:
@@ -93,8 +113,53 @@ def api_errors():
 # Demo uses the existing workspace identity, including browser/key-fingerprint
 # scopes. Replace this dependency with registered-account auth before production.
 Owner = Annotated[UserContext, Depends(require_user_context)]
-Store = Annotated[PhotoWorkflowStore, Depends(get_store)]
+Store = Annotated[PhotoIntakeStore, Depends(get_store)]
 router = APIRouter(prefix="/photos", tags=["photo-date-trial"])
+
+
+@router.get("/upload-batches")
+def upload_batches(identity: Owner, store: Store,
+                   after_id: str = Query(default="", max_length=80),
+                   limit: int = Query(default=10, ge=1, le=20)):
+    with api_errors():
+        return store.intake_page(identity.owner_profile_id, after_id, limit)
+
+
+@router.put("/upload-batches/{batch_id}")
+def create_upload_batch(body: IntakeManifest, identity: Owner, store: Store,
+                        batch_id: str = APIPath(min_length=1, max_length=80, pattern=r"^[a-zA-Z0-9_-]+$")):
+    with api_errors():
+        return store.create_intake(identity.owner_profile_id, batch_id, [item.model_dump() for item in body.items])
+
+
+@router.get("/upload-batches/{batch_id}")
+def read_upload_batch(batch_id: str, identity: Owner, store: Store):
+    with api_errors():
+        return store.intake(identity.owner_profile_id, batch_id)
+
+
+@router.put("/upload-batches/{batch_id}/items/{item_id}")
+async def upload_batch_item(batch_id: str, item_id: str, request: Request, identity: Owner, store: Store):
+    with api_errors():
+        item = await run_in_threadpool(store.intake_item, identity.owner_profile_id, batch_id, item_id)
+        raw = bytearray()
+        async for chunk in request.stream():
+            if len(raw) + len(chunk) > media.MAX_UPLOAD_BYTES:
+                await run_in_threadpool(store.fail_intake_item, identity.owner_profile_id, batch_id, item_id, "image_limit")
+                raise HTTPException(413, "Image exceeds upload limit")
+            raw.extend(chunk)
+        if len(raw) != item["size"] or hashlib.sha256(raw).hexdigest() != item["sha256"]:
+            await run_in_threadpool(store.fail_intake_item, identity.owner_profile_id, batch_id, item_id, "file_mismatch")
+            raise HTTPException(409, "File does not match upload manifest")
+        try:
+            prepared = await run_in_threadpool(media.prepare_photo, bytes(raw))
+        except media.ImageLimitExceeded as exc:
+            await run_in_threadpool(store.fail_intake_item, identity.owner_profile_id, batch_id, item_id, "image_limit")
+            raise HTTPException(413, "Image exceeds processing limits") from exc
+        except ValueError as exc:
+            await run_in_threadpool(store.fail_intake_item, identity.owner_profile_id, batch_id, item_id, "invalid_image")
+            raise HTTPException(422, "Invalid image") from exc
+        return await run_in_threadpool(store.upload_intake_item, identity.owner_profile_id, batch_id, item_id, prepared)
 
 
 @router.get("/batches/{batch_id}")
@@ -247,8 +312,7 @@ def create_analysis(photo_id: str, body: AnalysisPermission, identity: Owner, st
 @router.get("/{photo_id}/date/history")
 def read_history(photo_id: str, identity: Owner, store: Store,
                  after_revision: int = Query(default=0, ge=0),
-                 limit: int = Query(default=50, ge=1, le=100),
-            query: str = Query(default="", max_length=100)):
+                 limit: int = Query(default=50, ge=1, le=100)):
     with api_errors():
         changes = store.history(
             identity.owner_profile_id, photo_id, after_revision=after_revision, limit=limit + 1,

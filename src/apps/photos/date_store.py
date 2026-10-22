@@ -1,8 +1,8 @@
 """Explicit local SQLite prototype for photo date edits; no default or fallback DB.
 
 Callers must supply authenticated owner/actor identities. No public API or
-background jobs are registered here. Each photo belongs to one batch in this
-slice; batch undo and shared ownership are deliberately not implemented.
+background jobs are registered here. Each photo belongs to one batch; batch undo and shared ownership are
+not implemented. Explicit intake batches support immutable multi-file manifests.
 """
 
 import json
@@ -47,6 +47,19 @@ class DateChange(Snapshot):
 
 
 _SCHEMA = """
+CREATE TABLE IF NOT EXISTS photo_upload_batches (
+    owner TEXT NOT NULL, batch_id TEXT NOT NULL, manifest TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    PRIMARY KEY(owner, batch_id)
+);
+CREATE TABLE IF NOT EXISTS photo_upload_items (
+    owner TEXT NOT NULL, batch_id TEXT NOT NULL, item_id TEXT NOT NULL,
+    filename TEXT NOT NULL, size INTEGER NOT NULL, sha256 TEXT NOT NULL,
+    status TEXT NOT NULL CHECK(status IN ('pending','uploaded','failed')),
+    photo_id TEXT, error_code TEXT,
+    PRIMARY KEY(owner, batch_id, item_id),
+    FOREIGN KEY(owner, batch_id) REFERENCES photo_upload_batches(owner, batch_id)
+);
 CREATE TABLE IF NOT EXISTS photo_stories (
     owner TEXT NOT NULL, photo_id TEXT NOT NULL, revision INTEGER NOT NULL,
     operation_id TEXT NOT NULL, actor TEXT NOT NULL, text TEXT NOT NULL,
