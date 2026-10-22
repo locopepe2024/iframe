@@ -28,6 +28,10 @@ export interface PhotoTimeTask {
   counts: { pending: number; completed: number; needs_confirmation: number; failed: number; cancelled: number };
   items: { photo_id: string; expected_revision: number; status: string; error_code: string | null; result: PhotoDateAnnotation | null }[];
 }
+export interface PendingPeopleReview {
+  task_id: string; batch_id: string; consent_version: number;
+  pending_groups: number; deferred_groups: number; photo_count: number;
+}
 export interface PeopleTask {
   task_id: string; consent_version: number; status: string;
   counts: { pending: number; running: number; detected: number; no_faces: number; failed: number; cancelled: number; cleared: number };
@@ -110,6 +114,7 @@ export const photoApi = {
   peopleCorrectionPreview: (body: PeopleCorrectionSelection) => request<PeopleCorrectionPreview>("/people-corrections/preview", "POST", body),
   correctPeople: (body: PeopleCorrectionRequest) => request<PeopleCorrectionReceipt>("/people-corrections", "POST", body),
   peopleCorrectionHistory: (after = 0) => request<{ changes: PeopleCorrectionReceipt[]; next_after: number | null }>(`/people-corrections/history?after=${after}`),
+  pendingPeopleReviews: (after = "") => request<{ reviews: PendingPeopleReview[]; next_after_id: string | null }>(`/people-reviews?${new URLSearchParams({ after_id: after })}`),
   peopleStatus: (id: string) => request<TimeConsent & { enabled: boolean }>(`/batches/${encodeURIComponent(id)}/people`),
   peopleQuestion: (id: string) => request<TimeQuestion & { consent_version: number }>(`/batches/${encodeURIComponent(id)}/people-question`, "POST"),
   peopleConsent: (id: string, body: PeopleConsentRequest) => request<TimeConsent>(`/batches/${encodeURIComponent(id)}/people-consent`, "POST", body),

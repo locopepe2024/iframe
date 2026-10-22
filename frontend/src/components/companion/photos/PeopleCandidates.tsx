@@ -47,7 +47,7 @@ function CandidateCard({ group, version, onSaved }: { group: PeopleGroup; versio
   </div>;
 }
 
-export default function PeopleCandidates({ taskId, version }: { taskId: string; version: number }) {
+export default function PeopleCandidates({ taskId, version, onReviewed }: { taskId: string; version: number; onReviewed?: () => Promise<void> }) {
   const [groups, setGroups] = useState<PeopleGroup[]>([]), [ready, setReady] = useState(false);
   const [selected, setSelected] = useState<string | null>(null), [busy, setBusy] = useState(false), [error, setError] = useState("");
   const [notice, setNotice] = useState("");
@@ -73,7 +73,7 @@ export default function PeopleCandidates({ taskId, version }: { taskId: string; 
       {group.status === "corrected" ? "确认后已调整" : group.status === "confirmed" ? "已确认" : group.status === "deferred" ? "以后再说" : "待核对"}人物组 {index + 1}：{group.members.length} 张人脸
     </button>)}
     {current && ["pending", "deferred"].includes(current.status) && <CandidateCard key={`${current.group_id}/${current.revision}`} group={current} version={version} onSaved={async () => {
-      setNotice("核对已保存。只有确认的人物会进入人物相册。"); await refresh();
+      setNotice("核对已保存。只有确认的人物会进入人物相册。"); await refresh(); await onReviewed?.();
     }} />}
   </section>;
 }
