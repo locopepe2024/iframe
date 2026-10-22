@@ -19,6 +19,12 @@ def test_read_only_deferred_confirmed_and_revoked_filter(setup,monkeypatch):
     with store._connection() as connection:
         assert connection.execute('SELECT COUNT(*) FROM photo_people_review_events').fetchone()[0]==before
         assert connection.execute('SELECT COUNT(*) FROM photo_people_persons').fetchone()[0]==persons
+    from src.apps.photos.people_tasks import FINGERPRINT
+    with store._connection(write=True) as connection:
+        connection.execute('UPDATE photo_people_tasks SET fingerprint=? WHERE owner=? AND task_id=?',('old-model','owner',task))
+    assert client.get(url).json()['reviews']==[]
+    with store._connection(write=True) as connection:
+        connection.execute('UPDATE photo_people_tasks SET fingerprint=? WHERE owner=? AND task_id=?',(FINGERPRINT,'owner',task))
     groups=store.people_groups('owner',task)['groups']
     for group,action in zip(groups,['confirm','defer']):
         assert client.post(f"/photos/people-groups/{group['group_id']}/review",json=review_body(group,action)).status_code==200
