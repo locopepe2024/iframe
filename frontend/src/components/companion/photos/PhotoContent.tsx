@@ -21,7 +21,7 @@ export default function PhotoContent({ photoId }: { photoId: string }) {
     if (!allowed || busy) return;
     setBusy(true); setError("");
     try { setAnalysis(await photoApi.analyze(photoId)); }
-    catch { setError("这次没能看清照片，请稍后再试。照片和日期仍保留。"); }
+    catch (failure) { setError(failure instanceof Error ? failure.message : "照片分析暂不可用，请稍后重试。照片和日期仍保留。"); }
     finally { setBusy(false); }
   }
   return <section aria-label="照片内容描述" aria-busy={busy}>

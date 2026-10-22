@@ -8,6 +8,7 @@ import os
 import sqlite3
 import threading
 import base64
+from pathlib import Path
 from datetime import datetime, timezone
 from typing import Any, Dict
 
@@ -29,13 +30,19 @@ class UserConfigUpdate(BaseModel):
 
 
 class UserConfigStore:
-    def __init__(self, db_path: str | None = None, master_key: str | None = None):
+    def __init__(self, db_path: str | None = None, master_key: str | None = None, *, read_only: bool = False):
         self.db_path = db_path or os.getenv("LUMENX_USER_DB_PATH") or "output/lumenx_users.db"
         self.master_key = master_key if master_key is not None else os.getenv("LUMENX_CONFIG_MASTER_KEY")
         self._lock = threading.RLock()
-        self._ensure_schema()
+        self.read_only = read_only
+        if not read_only:
+            self._ensure_schema()
 
     def _connect(self) -> sqlite3.Connection:
+        if self.read_only:
+            connection = sqlite3.connect(Path(self.db_path).resolve().as_uri() + "?mode=ro", uri=True)
+            connection.row_factory = sqlite3.Row
+            return connection
         os.makedirs(os.path.dirname(self.db_path) or ".", exist_ok=True)
         connection = sqlite3.connect(self.db_path)
         connection.row_factory = sqlite3.Row
@@ -140,6 +147,8 @@ class UserConfigStore:
         }
 
     def update(self, identity: UserContext, update: UserConfigUpdate) -> Dict[str, Any]:
+        if self.read_only:
+            raise HTTPException(status_code=503, detail="User configuration is read-only")
         row = self._row(identity.owner_profile_id)
         config = json.loads(row["config_json"]) if row else {}
         secret_payload = json.loads(row["secrets_json"]) if row else {}

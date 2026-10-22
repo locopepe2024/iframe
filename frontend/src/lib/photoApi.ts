@@ -25,7 +25,11 @@ async function request<T>(path: string, method = "GET", body?: unknown): Promise
     method, credentials: "include", cache: "no-store",
     ...(body === undefined ? {} : { headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }),
   });
-  if (!response.ok) throw serviceError(response.status);
+  if (!response.ok) {
+    if (path.endsWith("/analysis") && response.status === 409) throw new Error("请先在 iFrame 创作台为当前用户配置 UniArt 渠道，再回来重试。");
+    if (path.endsWith("/analysis") && response.status === 502) throw new Error("当前用户的 UniArt 渠道拒绝访问，请在创作台检查配置后重试。");
+    throw serviceError(response.status);
+  }
   return response.json();
 }
 function serviceError(status: number) {

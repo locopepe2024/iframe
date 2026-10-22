@@ -15,7 +15,7 @@ from .date_store import OperationConflict, PhotoNotAvailable, TimeConsentRequire
 from .dates import DateRevisionConflict, ManualPrecision
 from . import media
 from .workflow import PhotoWorkflowStore
-from .analysis import analyze_photo, AnalysisUnavailable
+from .analysis import analyze_photo, AnalysisUnavailable, AnalysisCredentialRejected
 
 
 def get_store() -> PhotoWorkflowStore:
@@ -181,7 +181,9 @@ def create_analysis(photo_id: str, body: AnalysisPermission, identity: Owner, st
             return existing
         raw, _ = store.media(identity.owner_profile_id, photo_id, thumbnail=True)
         try:
-            result = analyze_photo(raw)
+            result = analyze_photo(raw, identity)
+        except AnalysisCredentialRejected as exc:
+            raise HTTPException(502, "当前用户的 UniArt 渠道拒绝访问，请在创作台检查渠道配置。") from exc
         except AnalysisUnavailable as exc:
             raise HTTPException(503, "照片分析暂不可用，请稍后重试。") from exc
         return store.save_analysis(identity.owner_profile_id, photo_id, identity.user_id, result)

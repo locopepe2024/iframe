@@ -10,6 +10,8 @@ from src.apps.identity import UserContext, require_user_context
 from src.apps.photos import analysis
 from src.apps.photos.api import create_app
 from src.apps.photos.date_store import DateStore
+from src.apps.user_config import UserConfigStore, UserConfigUpdate
+from fastapi import HTTPException
 
 
 OBSERVATION = dict(visible_summary="画面中有一张桌子。", visible_text=[], uncertainties=[], story_question="您想聊聊这张照片吗？")
@@ -59,18 +61,56 @@ def test_provider_failure_never_saves_result(setup, monkeypatch):
 
 
 def test_qwen_wire_and_strict_observation_validation(monkeypatch):
-    for key, value in {"BASE_URL": "https://example.test/v1", "API_KEY": "test-key", "MODEL": "qwen-test"}.items():
-        monkeypatch.setenv("IFRAME_PHOTOS_QWEN_" + key, value)
+    identity = UserContext("actor", "owner", "", "")
+    configured = Mock()
+    configured.get_public.return_value = {"secrets_configured": {"UNIART_API_KEY": True}}
+    configured.get_runtime_uniart.return_value = {"base_url": "https://example.test/v1", "api_key": "test-key"}
+    monkeypatch.setattr(analysis, "UserConfigStore", Mock(return_value=configured))
+    monkeypatch.setenv("IFRAME_PHOTOS_QWEN_MODEL", "qwen-test")
     response = Mock(); response.json.return_value = {"choices": [{"message": {"content": analysis.Observation(**OBSERVATION).model_dump_json()}}]}
     post = Mock(return_value=response); monkeypatch.setattr(analysis.requests, "post", post)
-    result = analysis.analyze_photo(b"webp")
+    result = analysis.analyze_photo(b"webp", identity)
+    configured.get_runtime_uniart.assert_called_once_with(identity)
     assert result.observation.visible_summary == OBSERVATION["visible_summary"]
     body = post.call_args.kwargs["json"]
     assert body["model"] == "qwen-test"
     assert body["messages"][1]["content"][0]["image_url"]["url"].startswith("data:image/webp;base64,")
     response.json.return_value = {"choices": [{"message": {"content": '{"date":"1985"}'}}]}
     with pytest.raises(analysis.AnalysisUnavailable):
-        analysis.analyze_photo(b"webp")
-    monkeypatch.delenv("IFRAME_PHOTOS_QWEN_API_KEY")
+        analysis.analyze_photo(b"webp", identity)
+    response.status_code = 401
+    with pytest.raises(analysis.AnalysisCredentialRejected):
+        analysis.analyze_photo(b"webp", identity)
+    configured.get_public.return_value = {"secrets_configured": {"UNIART_API_KEY": False}}
+    with pytest.raises(HTTPException) as missing:
+        analysis.analyze_photo(b"webp", identity)
+    assert missing.value.status_code == 409
+
+
+def test_read_only_current_user_channel_does_not_fall_back_to_shared(tmp_path, monkeypatch):
+    path = tmp_path / "users.db"
+    identity = UserContext("actor", "owner", "", "")
+    store = UserConfigStore(str(path))
+    store.update(identity, UserConfigUpdate(UNIART_API_KEY="personal", UNIART_BASE_URL="https://example.test/v1"))
+    monkeypatch.setenv("IFRAME_PHOTOS_USER_CONFIG_DB", str(path))
+    monkeypatch.setenv("LUMENX_ALLOW_SHARED_PROVIDER_CREDENTIALS", "true")
+    monkeypatch.setenv("OPENAI_API_KEY", "shared-must-not-be-used")
+    before = path.read_bytes()
+    response = Mock(status_code=200)
+    response.json.return_value = {"choices": [{"message": {"content": analysis.Observation(**OBSERVATION).model_dump_json()}}]}
+    post = Mock(return_value=response); monkeypatch.setattr(analysis.requests, "post", post)
+    analysis.analyze_photo(b"webp", identity)
+    assert post.call_args.kwargs["headers"]["Authorization"] == "Bearer personal"
+    assert path.read_bytes() == before
+    with pytest.raises(HTTPException) as missing:
+        analysis.analyze_photo(b"webp", UserContext("other", "other", "", ""))
+    assert missing.value.status_code == 409
+    assert post.call_count == 1
+    readonly = UserConfigStore(str(path), read_only=True)
+    with pytest.raises(HTTPException):
+        readonly.update(identity, UserConfigUpdate(UNIART_API_KEY="replacement"))
+    absent = tmp_path / "absent.db"
+    monkeypatch.setenv("IFRAME_PHOTOS_USER_CONFIG_DB", str(absent))
     with pytest.raises(analysis.AnalysisUnavailable):
-        analysis.analyze_photo(b"webp")
+        analysis.analyze_photo(b"webp", identity)
+    assert not absent.exists()

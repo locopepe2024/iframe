@@ -8,8 +8,12 @@
 
 渠道由部署配置 `IFRAME_PHOTOS_QWEN_BASE_URL`、`IFRAME_PHOTOS_QWEN_API_KEY`、`IFRAME_PHOTOS_QWEN_MODEL` 显式提供，缺失返回 503。使用现有 OpenAI-compatible chat/completions 的 image_url data URI；模型仅允许 qwen 前缀。不用未经验证的严格 JSON Schema 选项，提示 JSON 后 Pydantic 校验。当前真实渠道 image/JSON 能力仍待运行验证。
 
+2026-10-22 渠道修正（用户同意）：以上独立 Key 配置被当前用户 UniArt 配置替代。分析入口在读取照片归属后，把 require_user_context 的同一个 UserContext 传给既有 UserConfigStore.get_runtime_uniart；不枚举其他用户、不使用共享环境 Key、不接受客户端指定 owner/渠道。配置库以只读方式打开，测试容器只挂载现有用户配置库文件，不复制 Key 或生产照片库。模型由 IFRAME_PHOTOS_QWEN_MODEL 配置，默认沿用现有候选 qwen3.8-flash；候选名不等于真实图片能力证明。缺少个人配置返回 409 并提示先在创作台配置，远端 401/403 单独提示渠道拒绝，不伪装成看不清照片。Demo 与正式站同源，复用现有 API-key 指纹 localStorage；无指纹时仍保留独立 Demo 浏览器身份，不自动迁移照片 owner。需要验证已上传照片所属身份和配置是否一致。
+
 影响：`src/apps/photos/analysis.py`、日期仓储新增独立分析表、照片 API、photoApi 与 PhotoAlbum UI；原日期表及规则不变。测试包括 owner/披露门禁、无配置失败、严格输出校验、服务失败零写入、保存重读/重复请求、日期不变与 UI 明确授权。命令：照片 pytest 定向集、照片 UI 测试、typecheck、build、独立 demo 浏览器与真实模型样本验证（依赖有效渠道凭据）。用户已上传照片的单次试验另行使用可信运维入口，不能据此开放跨 owner HTTP 查询。
 
 验证结果：99 项照片后端测试、16 项照片界面测试、前端类型检查与独立目录静态构建通过。共享 UniArt 渠道的 models 查询和 qwen3.8-flash 文本探针均返回 401；未把用户照片发送至该无效渠道，未取得真实图片分析结果。DashScope Key 在主机现有运行环境中为空。已向用户询问使用当前用户 UniArt 配置或单独 DashScope 渠道；不读取其他用户加密配置来替代凭据。视频能力仍未接入或验证。
 
 限制：已保存结果的顺序重复请求复用结果；当前同步实现没有跨进程调用租约，两个并发首请求仍可能重复调用外部模型（最终只保留首个结果）。不得宣称全局至多一次计费。模型指令和 JSON 字段校验不能证明生成描述无幻觉，UI 始终显示待核对。本轮尚无照片删除/分析撤回或编辑确认接口。
+
+渠道修正验证：103 项后端测试（含只读配置、个人渠道选择、禁止共享 Key 回退、跨 owner 无调用、缺失库不创建、远端鉴权错误分类）、16 项界面测试、类型检查与独立目录静态构建通过。运行观察：已上传照片所属 API-key 工作区与个人配置一致；独立容器以只读单文件挂载创作台配置库，通过真实 HTTP POST 使用该照片 owner 的配置调用 qwen3.8-flash 成功，返回通过字段校验的观察并持久化；GET 重读一致，日期快照保持不变。该验证只覆盖一张授权照片，不证明总体描述正确率或视频能力。未输出/复制个人密钥，不修改创作台配置；运维验证仅定位这张照片后使用其 owner，普通 HTTP 仍受 require_user_context 与照片归属检查约束。
