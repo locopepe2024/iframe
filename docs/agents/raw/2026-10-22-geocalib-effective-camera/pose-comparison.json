@@ -1,0 +1,866 @@
+{
+  "schema": "recreation2-external-effective-camera-compare.v1",
+  "input_sha256": {
+    "docs/agents/raw/2026-10-22-geocalib-effective-camera/report.json": "e65514c2cb9a1e1f20feee1ca79e953146937622a917dfacd410fecd6dba2e7f",
+    "/Users/owen/Developer/codex/iframe/docs/agents/raw/2026-10-22-world-camera-fit/report.json": "9d90697ce2f77ed84518c24c08168c0edb8a5a73fb37e820d1237447ad19cc56",
+    "/Users/owen/Developer/codex/iframe/docs/agents/raw/2026-10-21-world-companion-projection/world-pts-timestamps.json": "2639560dddac15f6490caa6752fee5bf79894a40928f9818558d4aa774956a2c",
+    "/Users/owen/Developer/codex/iframe/docs/agents/raw/2026-10-21-world-companion-projection/pts-map.json": "9ded184845cc142f9edac24e0e98c344c63cacd6916945e75f80ab431fe0df6d",
+    "/Users/owen/Developer/codex/iframe/docs/agents/raw/2026-10-22-effective-intrinsics-scale/report.json": "94b1f6d5139b65668aa22194d17e3993075f016d16eb5b144a8298eb092dc5fb"
+  },
+  "tool_sha256": "adcdbda5164e1ba607a76dfbf2dbfaf5dc242abf42d692a1f184ae7a7d6f790f",
+  "reference_length_model_units": 0.7553238974383398,
+  "dependency_tool_sha256": {
+    "recreation2_world_perspective_fit.py": "ac623d8ac61e7342bda6f43245fa40cc7922d46c61b8c561ceb105cf6e45f903",
+    "recreation2_effective_intrinsics_scale.py": "c3d37fc16a74572f3148072a92198a9e772ff284e705a16ac2612509b0e362a4"
+  },
+  "external_K_source": "GeoCalib first five full frames shared intrinsics, no pose-residual selection",
+  "rotation_source": "prior same-model training rotation, frozen; GeoCalib gravity not applied",
+  "external_fixed_K": {
+    "K": [
+      [
+        1601.14208984375,
+        0.0,
+        697.0
+      ],
+      [
+        0.0,
+        1601.141845703125,
+        396.0000305175781
+      ],
+      [
+        0.0,
+        0.0,
+        1.0
+      ]
+    ],
+    "train_fit": {
+      "frame_count": 27,
+      "weighted_rmse_px": 8.255565312099938,
+      "median_joint_error_px": 5.664043190371993,
+      "p90_joint_error_px": 14.162320476664323,
+      "max_joint_error_px": 21.5379943169095
+    },
+    "train_heldout": {
+      "frame_count": 27,
+      "weighted_rmse_px": 15.170079959472645,
+      "median_joint_error_px": 14.404809167181416,
+      "p90_joint_error_px": 21.10673374949063,
+      "max_joint_error_px": 29.760545703633685
+    },
+    "later_fit": {
+      "frame_count": 48,
+      "weighted_rmse_px": 7.841957106518702,
+      "median_joint_error_px": 5.999361081007885,
+      "p90_joint_error_px": 12.45075697666658,
+      "max_joint_error_px": 30.142772530739855
+    },
+    "later_heldout": {
+      "frame_count": 48,
+      "weighted_rmse_px": 19.46478237746686,
+      "median_joint_error_px": 17.101227927728978,
+      "p90_joint_error_px": 26.825098775094688,
+      "max_joint_error_px": 59.645377708875266
+    },
+    "all_fit": {
+      "frame_count": 79,
+      "weighted_rmse_px": 7.978459185712043,
+      "median_joint_error_px": 5.923020583213456,
+      "p90_joint_error_px": 13.05244154519685,
+      "max_joint_error_px": 30.142772530739855
+    },
+    "all_heldout": {
+      "frame_count": 79,
+      "weighted_rmse_px": 17.9088403461499,
+      "median_joint_error_px": 15.99911609876755,
+      "p90_joint_error_px": 24.730458701152084,
+      "max_joint_error_px": 59.645377708875266
+    },
+    "events": {
+      "1": {
+        "source_pts_s": 0.0,
+        "fit_rmse_px": 8.676661462481109,
+        "heldout": {
+          "weighted_rmse_px": 15.74249026903652,
+          "median_joint_error_px": 15.289679904108088,
+          "p90_joint_error_px": 20.15928276791516,
+          "max_joint_error_px": 21.844059257375022,
+          "per_joint_px": {
+            "left_wrist": 16.265485398045207,
+            "right_wrist": 19.43723570100379,
+            "left_ankle": 16.356813532370072,
+            "right_ankle": 12.40621005141049,
+            "left_heel": 14.31387441017097,
+            "right_heel": 21.844059257375022,
+            "left_foot_index": 13.70564583224707,
+            "right_foot_index": 6.961186459035019
+          }
+        },
+        "root_xyz_reference_units": [
+          0.015087384165056589,
+          0.1165054688148321,
+          6.895245082628613
+        ]
+      },
+      "17": {
+        "source_pts_s": 0.783655,
+        "fit_rmse_px": 7.240406744167166,
+        "heldout": {
+          "weighted_rmse_px": 12.677485696475662,
+          "median_joint_error_px": 12.62100631925858,
+          "p90_joint_error_px": 16.201998030999004,
+          "max_joint_error_px": 17.169568091766212,
+          "per_joint_px": {
+            "left_wrist": 13.184829985350078,
+            "right_wrist": 11.225630937102158,
+            "left_ankle": 12.05718265316708,
+            "right_ankle": 7.527300245944425,
+            "left_heel": 15.787325147813057,
+            "right_heel": 17.169568091766212,
+            "left_foot_index": 14.632971574563083,
+            "right_foot_index": 6.4300804934535725
+          }
+        },
+        "root_xyz_reference_units": [
+          0.13143451481520427,
+          0.09180202665047286,
+          6.7831198915847
+        ]
+      },
+      "23": {
+        "source_pts_s": 0.964499,
+        "fit_rmse_px": 9.94118946541894,
+        "heldout": {
+          "weighted_rmse_px": 14.752035358628644,
+          "median_joint_error_px": 11.741030191370974,
+          "p90_joint_error_px": 21.694082929824297,
+          "max_joint_error_px": 25.245544995856584,
+          "per_joint_px": {
+            "left_wrist": 16.33149636480374,
+            "right_wrist": 0.6774977088298424,
+            "left_ankle": 11.088954488022035,
+            "right_ankle": 11.456065945254718,
+            "left_heel": 12.025994437487233,
+            "right_heel": 25.245544995856584,
+            "left_foot_index": 20.172027758667603,
+            "right_foot_index": 6.245881738970811
+          }
+        },
+        "root_xyz_reference_units": [
+          0.18790198116735157,
+          0.1304592806009051,
+          6.954646807530245
+        ]
+      },
+      "29": {
+        "source_pts_s": 1.145343,
+        "fit_rmse_px": 5.24600094464716,
+        "heldout": {
+          "weighted_rmse_px": 13.844344533219244,
+          "median_joint_error_px": 12.532995607795836,
+          "p90_joint_error_px": 17.325758140640016,
+          "max_joint_error_px": 23.868201239716623,
+          "per_joint_px": {
+            "left_wrist": 11.610670907044508,
+            "right_wrist": 6.449032075435837,
+            "left_ankle": 14.52185395532147,
+            "right_ankle": 8.608744153194484,
+            "left_heel": 13.455320308547165,
+            "right_heel": 23.868201239716623,
+            "left_foot_index": 14.19454441290119,
+            "right_foot_index": 10.843564553623203
+          }
+        },
+        "root_xyz_reference_units": [
+          0.20302925916703074,
+          0.11902277141784572,
+          7.094580990195784
+        ]
+      },
+      "41": {
+        "source_pts_s": 1.50703,
+        "fit_rmse_px": 6.7328544013674305,
+        "heldout": {
+          "weighted_rmse_px": 14.293542333130077,
+          "median_joint_error_px": 13.518291633996599,
+          "p90_joint_error_px": 17.877337778009032,
+          "max_joint_error_px": 20.80686113583476,
+          "per_joint_px": {
+            "left_wrist": 9.161432582389796,
+            "right_wrist": 20.80686113583476,
+            "left_ankle": 14.785683368867709,
+            "right_ankle": 12.25089989912549,
+            "left_heel": 16.62182776751229,
+            "right_heel": 15.277282933631321,
+            "left_foot_index": 11.182476611225148,
+            "right_foot_index": 11.051193035476695
+          }
+        },
+        "root_xyz_reference_units": [
+          -0.07808433454296392,
+          0.09266162607608824,
+          6.67016906991613
+        ]
+      },
+      "55": {
+        "source_pts_s": 1.959139,
+        "fit_rmse_px": 9.236053871704124,
+        "heldout": {
+          "weighted_rmse_px": 15.26282908819483,
+          "median_joint_error_px": 14.559989993229962,
+          "p90_joint_error_px": 19.827820399188376,
+          "max_joint_error_px": 20.570702121049113,
+          "per_joint_px": {
+            "left_wrist": 14.185136951793444,
+            "right_wrist": 12.336906332562608,
+            "left_ankle": 16.54715489879738,
+            "right_ankle": 14.934843034666478,
+            "left_heel": 6.768641497397441,
+            "right_heel": 12.137637137165814,
+            "left_foot_index": 20.570702121049113,
+            "right_foot_index": 19.509442518390916
+          }
+        },
+        "root_xyz_reference_units": [
+          -0.2578888447909071,
+          0.21826545986248722,
+          6.873664594378725
+        ]
+      }
+    }
+  },
+  "external_focal_sensitivity": [
+    {
+      "focal_factor": 0.9,
+      "K": [
+        [
+          1441.027880859375,
+          0.0,
+          697.0
+        ],
+        [
+          0.0,
+          1441.0276611328125,
+          396.0000305175781
+        ],
+        [
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "train_fit": {
+        "frame_count": 27,
+        "weighted_rmse_px": 8.303596881838443,
+        "median_joint_error_px": 5.638674782775,
+        "p90_joint_error_px": 14.27114508976321,
+        "max_joint_error_px": 21.61427234193775
+      },
+      "train_heldout": {
+        "frame_count": 27,
+        "weighted_rmse_px": 15.196125054436951,
+        "median_joint_error_px": 14.444056677227648,
+        "p90_joint_error_px": 21.031138740186186,
+        "max_joint_error_px": 29.611084416630263
+      },
+      "later_fit": {
+        "frame_count": 48,
+        "weighted_rmse_px": 7.874296844047457,
+        "median_joint_error_px": 6.0366292724489075,
+        "p90_joint_error_px": 12.66987425962091,
+        "max_joint_error_px": 30.09266975392318
+      },
+      "later_heldout": {
+        "frame_count": 48,
+        "weighted_rmse_px": 19.539783079036894,
+        "median_joint_error_px": 17.12105917524846,
+        "p90_joint_error_px": 27.02404859574821,
+        "max_joint_error_px": 60.46864981205801
+      },
+      "all_fit": {
+        "frame_count": 79,
+        "weighted_rmse_px": 8.015772257204329,
+        "median_joint_error_px": 5.984370330720136,
+        "p90_joint_error_px": 13.167422249549755,
+        "max_joint_error_px": 30.09266975392318
+      },
+      "all_heldout": {
+        "frame_count": 79,
+        "weighted_rmse_px": 17.9670337388434,
+        "median_joint_error_px": 15.97903504767569,
+        "p90_joint_error_px": 24.754674067161897,
+        "max_joint_error_px": 60.46864981205801
+      },
+      "events": {
+        "1": {
+          "source_pts_s": 0.0,
+          "fit_rmse_px": 8.733228570288611,
+          "heldout": {
+            "weighted_rmse_px": 15.815580629029785,
+            "median_joint_error_px": 15.368074643165514,
+            "p90_joint_error_px": 20.029227508731882,
+            "max_joint_error_px": 22.05795017741888,
+            "per_joint_px": {
+              "left_wrist": 16.038036580964416,
+              "right_wrist": 19.159774936437454,
+              "left_ankle": 16.681531831985122,
+              "right_ankle": 12.810327276032572,
+              "left_heel": 14.69811270536661,
+              "right_heel": 22.05795017741888,
+              "left_foot_index": 13.407378380306701,
+              "right_foot_index": 7.318306572166829
+            }
+          },
+          "root_xyz_reference_units": [
+            0.014980241207381798,
+            0.11619046422393428,
+            6.217751289208797
+          ]
+        },
+        "17": {
+          "source_pts_s": 0.783655,
+          "fit_rmse_px": 7.261665632469623,
+          "heldout": {
+            "weighted_rmse_px": 12.606382241660189,
+            "median_joint_error_px": 12.532736294680674,
+            "p90_joint_error_px": 16.518694342763506,
+            "max_joint_error_px": 17.365085092551148,
+            "per_joint_px": {
+              "left_wrist": 12.554143195741526,
+              "right_wrist": 10.786979614834896,
+              "left_ankle": 12.511329393619823,
+              "right_ankle": 6.914030188090851,
+              "left_heel": 16.155955449997375,
+              "right_heel": 17.365085092551148,
+              "left_foot_index": 14.464940409733588,
+              "right_foot_index": 6.276357744395337
+            }
+          },
+          "root_xyz_reference_units": [
+            0.13135904834845197,
+            0.09172207203183073,
+            6.119798369135688
+          ]
+        },
+        "23": {
+          "source_pts_s": 0.964499,
+          "fit_rmse_px": 9.959169736298847,
+          "heldout": {
+            "weighted_rmse_px": 14.715009268334601,
+            "median_joint_error_px": 11.814172945930155,
+            "p90_joint_error_px": 21.78434161958102,
+            "max_joint_error_px": 25.246670866531446,
+            "per_joint_px": {
+              "left_wrist": 15.59772087531779,
+              "right_wrist": 0.6573125824953477,
+              "left_ankle": 11.442757201184792,
+              "right_ankle": 11.476679068225652,
+              "left_heel": 12.151666823634658,
+              "right_heel": 25.246670866531446,
+              "left_foot_index": 20.30048622803084,
+              "right_foot_index": 6.126388659921675
+            }
+          },
+          "root_xyz_reference_units": [
+            0.18786948292008174,
+            0.12988983794424794,
+            6.275111019530852
+          ]
+        },
+        "29": {
+          "source_pts_s": 1.145343,
+          "fit_rmse_px": 5.320057842598134,
+          "heldout": {
+            "weighted_rmse_px": 13.982891199323335,
+            "median_joint_error_px": 12.738000768072986,
+            "p90_joint_error_px": 17.57904439905089,
+            "max_joint_error_px": 23.99704582391647,
+            "per_joint_px": {
+              "left_wrist": 11.79136868216889,
+              "right_wrist": 6.69610983003104,
+              "left_ankle": 14.828472359822788,
+              "right_ankle": 8.646476489420941,
+              "left_heel": 13.684632853977083,
+              "right_heel": 23.99704582391647,
+              "left_foot_index": 14.10009433660916,
+              "right_foot_index": 11.030421176465738
+            }
+          },
+          "root_xyz_reference_units": [
+            0.20276123478994035,
+            0.1187901272706706,
+            6.398191077898837
+          ]
+        },
+        "41": {
+          "source_pts_s": 1.50703,
+          "fit_rmse_px": 6.783436258935811,
+          "heldout": {
+            "weighted_rmse_px": 14.532817222511017,
+            "median_joint_error_px": 14.092484662636089,
+            "p90_joint_error_px": 18.330095061313695,
+            "max_joint_error_px": 20.832776717507947,
+            "per_joint_px": {
+              "left_wrist": 8.70034016489669,
+              "right_wrist": 20.832776717507947,
+              "left_ankle": 15.387637434861121,
+              "right_ankle": 12.797331890411055,
+              "left_heel": 17.257517208659017,
+              "right_heel": 15.817568749241174,
+              "left_foot_index": 11.138432732940624,
+              "right_foot_index": 10.842463342380988
+            }
+          },
+          "root_xyz_reference_units": [
+            -0.07826636314056142,
+            0.09280870375555561,
+            6.011365831157627
+          ]
+        },
+        "55": {
+          "source_pts_s": 1.959139,
+          "fit_rmse_px": 9.267910763796674,
+          "heldout": {
+            "weighted_rmse_px": 15.27539764380481,
+            "median_joint_error_px": 14.597340170175654,
+            "p90_joint_error_px": 19.82245465753626,
+            "max_joint_error_px": 20.77310067042266,
+            "per_joint_px": {
+              "left_wrist": 13.869588850532125,
+              "right_wrist": 11.72019877922565,
+              "left_ankle": 16.445234265802494,
+              "right_ankle": 15.325091489819183,
+              "left_heel": 7.128518524484925,
+              "right_heel": 12.571829618531714,
+              "left_foot_index": 20.77310067042266,
+              "right_foot_index": 19.4150349377278
+            }
+          },
+          "root_xyz_reference_units": [
+            -0.25790726821588605,
+            0.21805446065006817,
+            6.201914791039599
+          ]
+        }
+      }
+    },
+    {
+      "focal_factor": 1.1,
+      "K": [
+        [
+          1761.2562988281252,
+          0.0,
+          697.0
+        ],
+        [
+          0.0,
+          1761.2560302734375,
+          396.0000305175781
+        ],
+        [
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "train_fit": {
+        "frame_count": 27,
+        "weighted_rmse_px": 8.218224951253976,
+        "median_joint_error_px": 5.574953247051623,
+        "p90_joint_error_px": 14.092276927395154,
+        "max_joint_error_px": 21.475855080249268
+      },
+      "train_heldout": {
+        "frame_count": 27,
+        "weighted_rmse_px": 15.162806070156991,
+        "median_joint_error_px": 14.276314500784922,
+        "p90_joint_error_px": 21.117793120670505,
+        "max_joint_error_px": 29.883248271693514
+      },
+      "later_fit": {
+        "frame_count": 48,
+        "weighted_rmse_px": 7.819911199105818,
+        "median_joint_error_px": 6.001151851542713,
+        "p90_joint_error_px": 12.394598274938097,
+        "max_joint_error_px": 30.1902975319038
+      },
+      "later_heldout": {
+        "frame_count": 48,
+        "weighted_rmse_px": 19.422094650266498,
+        "median_joint_error_px": 17.13877626458276,
+        "p90_joint_error_px": 26.662747622145716,
+        "max_joint_error_px": 58.980143280904784
+      },
+      "all_fit": {
+        "frame_count": 79,
+        "weighted_rmse_px": 7.951390009635657,
+        "median_joint_error_px": 5.897746291177164,
+        "p90_joint_error_px": 13.005935202784684,
+        "max_joint_error_px": 30.1902975319038
+      },
+      "all_heldout": {
+        "frame_count": 79,
+        "weighted_rmse_px": 17.878325598579384,
+        "median_joint_error_px": 16.074416304870265,
+        "p90_joint_error_px": 24.65358566267886,
+        "max_joint_error_px": 58.980143280904784
+      },
+      "events": {
+        "1": {
+          "source_pts_s": 0.0,
+          "fit_rmse_px": 8.631426436493081,
+          "heldout": {
+            "weighted_rmse_px": 15.694752468406424,
+            "median_joint_error_px": 15.04649400782745,
+            "p90_joint_error_px": 20.271060074353027,
+            "max_joint_error_px": 21.686019234212903,
+            "per_joint_px": {
+              "left_wrist": 16.471796856431475,
+              "right_wrist": 19.664649005841653,
+              "left_ankle": 16.092696349248456,
+              "right_ankle": 12.090886946872125,
+              "left_heel": 14.000291666406444,
+              "right_heel": 21.686019234212903,
+              "left_foot_index": 13.950688276756186,
+              "right_foot_index": 6.669862459183939
+            }
+          },
+          "root_xyz_reference_units": [
+            0.015175496705681996,
+            0.11676231916154217,
+            7.572770918358163
+          ]
+        },
+        "17": {
+          "source_pts_s": 0.783655,
+          "fit_rmse_px": 7.224415792543641,
+          "heldout": {
+            "weighted_rmse_px": 12.75526954157233,
+            "median_joint_error_px": 12.708801696304679,
+            "p90_joint_error_px": 15.952728612661891,
+            "max_joint_error_px": 17.03149589671278,
+            "per_joint_px": {
+              "left_wrist": 13.732102656570559,
+              "right_wrist": 11.583795833216888,
+              "left_ankle": 11.6855007360388,
+              "right_ankle": 8.036864814367574,
+              "left_heel": 15.490399776640082,
+              "right_heel": 17.03149589671278,
+              "left_foot_index": 14.772495905174068,
+              "right_foot_index": 6.557802483636699
+            }
+          },
+          "root_xyz_reference_units": [
+            0.13149609069119864,
+            0.09186729447880201,
+            7.44646912253209
+          ]
+        },
+        "23": {
+          "source_pts_s": 0.964499,
+          "fit_rmse_px": 9.929247257441338,
+          "heldout": {
+            "weighted_rmse_px": 14.790654526152768,
+            "median_joint_error_px": 11.688236974817277,
+            "p90_joint_error_px": 21.620647220577645,
+            "max_joint_error_px": 25.244906107396762,
+            "per_joint_px": {
+              "left_wrist": 16.94220514236481,
+              "right_wrist": 0.7025952063792914,
+              "left_ankle": 10.805621758533185,
+              "right_ankle": 11.439841021130068,
+              "left_heel": 11.936632928504487,
+              "right_heel": 25.244906107396762,
+              "left_foot_index": 20.06739341194088,
+              "right_foot_index": 6.347612319739685
+            }
+          },
+          "root_xyz_reference_units": [
+            0.18793138841084245,
+            0.1309224565616216,
+            7.634290447924528
+          ]
+        },
+        "29": {
+          "source_pts_s": 1.145343,
+          "fit_rmse_px": 5.190589301281432,
+          "heldout": {
+            "weighted_rmse_px": 13.745090122653837,
+            "median_joint_error_px": 12.403981711816101,
+            "p90_joint_error_px": 17.1233522266227,
+            "max_joint_error_px": 23.764969306737083,
+            "per_joint_px": {
+              "left_wrist": 11.53260705369921,
+              "right_wrist": 6.2889897145037414,
+              "left_ankle": 14.275684094996164,
+              "right_ankle": 8.583845402052965,
+              "left_heel": 13.275356369932995,
+              "right_heel": 23.764969306737083,
+              "left_foot_index": 14.27694490657368,
+              "right_foot_index": 10.693456607921853
+            }
+          },
+          "root_xyz_reference_units": [
+            0.20325064252155317,
+            0.1192152426967654,
+            7.791081542357362
+          ]
+        },
+        "41": {
+          "source_pts_s": 1.50703,
+          "fit_rmse_px": 6.692041144752998,
+          "heldout": {
+            "weighted_rmse_px": 14.105685843967192,
+            "median_joint_error_px": 13.047567785904633,
+            "p90_joint_error_px": 17.506343673285325,
+            "max_joint_error_px": 20.786180625940965,
+            "per_joint_px": {
+              "left_wrist": 9.543447631366696,
+              "right_wrist": 20.786180625940965,
+              "left_ankle": 14.292393029985197,
+              "right_ankle": 11.80274254182407,
+              "left_heel": 16.10069926500434,
+              "right_heel": 14.836629664142121,
+              "left_foot_index": 11.21941447754665,
+              "right_foot_index": 11.222281664903711
+            }
+          },
+          "root_xyz_reference_units": [
+            -0.07793552344380515,
+            0.09254151221976835,
+            7.328984391531228
+          ]
+        },
+        "55": {
+          "source_pts_s": 1.959139,
+          "fit_rmse_px": 9.212562357060705,
+          "heldout": {
+            "weighted_rmse_px": 15.26880250693655,
+            "median_joint_error_px": 14.53047071058088,
+            "p90_joint_error_px": 19.83540036515277,
+            "max_joint_error_px": 20.408469837079124,
+            "per_joint_px": {
+              "left_wrist": 14.44258626635583,
+              "right_wrist": 12.877122885242493,
+              "left_ankle": 16.648010838212446,
+              "right_ankle": 14.618355154805931,
+              "left_heel": 6.514689560493874,
+              "right_heel": 11.786108684367608,
+              "left_foot_index": 20.408469837079124,
+              "right_foot_index": 19.58979916289862
+            }
+          },
+          "root_xyz_reference_units": [
+            -0.25787450415064767,
+            0.21843807603573193,
+            7.545500517788366
+          ]
+        }
+      }
+    }
+  ],
+  "baseline_1449_center": {
+    "focal_px": 1449.062216382841,
+    "principal_point_px": [
+      697.0,
+      396.0
+    ],
+    "horizontal_fov_deg_if_centered": 51.375177859768286,
+    "train_fit": {
+      "frame_count": 27,
+      "weighted_rmse_px": 8.300866673849622,
+      "median_joint_error_px": 5.644364697584585,
+      "p90_joint_error_px": 14.262463192135723,
+      "max_joint_error_px": 21.6100427485981
+    },
+    "train_heldout": {
+      "frame_count": 27,
+      "weighted_rmse_px": 15.194184181411966,
+      "median_joint_error_px": 14.450777432407667,
+      "p90_joint_error_px": 21.02528536276308,
+      "max_joint_error_px": 29.619371710590922
+    },
+    "later_fit": {
+      "frame_count": 48,
+      "weighted_rmse_px": 7.872348428565064,
+      "median_joint_error_px": 6.018081019489577,
+      "p90_joint_error_px": 12.674446299571198,
+      "max_joint_error_px": 30.095222698952494
+    },
+    "later_heldout": {
+      "frame_count": 48,
+      "weighted_rmse_px": 19.53496822461705,
+      "median_joint_error_px": 17.094457892891732,
+      "p90_joint_error_px": 27.031350949077503,
+      "max_joint_error_px": 60.42272505563725
+    },
+    "all_fit": {
+      "frame_count": 79,
+      "weighted_rmse_px": 8.013582399988309,
+      "median_joint_error_px": 5.984100983631096,
+      "p90_joint_error_px": 13.155824978645482,
+      "max_joint_error_px": 30.095222698952494
+    },
+    "all_heldout": {
+      "frame_count": 79,
+      "weighted_rmse_px": 17.9632048498933,
+      "median_joint_error_px": 15.961082030549122,
+      "p90_joint_error_px": 24.768491377171728,
+      "max_joint_error_px": 60.42272505563725
+    },
+    "train_median_depth_reference_units": 6.23360391856088,
+    "events": {
+      "1": {
+        "fit_rmse_px": 8.730059298322978,
+        "heldout": {
+          "weighted_rmse_px": 15.811103701637311,
+          "median_joint_error_px": 15.363347760100346,
+          "p90_joint_error_px": 20.036255475855672,
+          "max_joint_error_px": 22.04549733289504,
+          "per_joint_px": {
+            "left_wrist": 16.04992395236623,
+            "right_wrist": 19.175151822838803,
+            "left_ankle": 16.663471498729923,
+            "right_ankle": 12.78740381221319,
+            "left_heel": 14.676771567834466,
+            "right_heel": 22.04549733289504,
+            "left_foot_index": 13.423869616669256,
+            "right_foot_index": 7.298466428393247
+          }
+        },
+        "root_xyz_reference_units": [
+          0.01498616458655535,
+          0.11620809487355344,
+          6.251746879486452
+        ]
+      },
+      "17": {
+        "fit_rmse_px": 7.260442773472245,
+        "heldout": {
+          "weighted_rmse_px": 12.60962145091743,
+          "median_joint_error_px": 12.537021101743916,
+          "p90_joint_error_px": 16.50078640402436,
+          "max_joint_error_px": 17.353482227331227,
+          "per_joint_px": {
+            "left_wrist": 12.587897732805645,
+            "right_wrist": 10.811333796618136,
+            "left_ankle": 12.486144470682186,
+            "right_ankle": 6.9477311131452115,
+            "left_heel": 16.135345336892847,
+            "right_heel": 17.353482227331227,
+            "left_foot_index": 14.474169212042138,
+            "right_foot_index": 6.284824013579668
+          }
+        },
+        "root_xyz_reference_units": [
+          0.1313632485216091,
+          0.09172664211502293,
+          6.153082892978376
+        ]
+      },
+      "23": {
+        "fit_rmse_px": 9.958077089523409,
+        "heldout": {
+          "weighted_rmse_px": 14.716761126977172,
+          "median_joint_error_px": 11.809860042586532,
+          "p90_joint_error_px": 21.779320514192015,
+          "max_joint_error_px": 25.24659324035878,
+          "per_joint_px": {
+            "left_wrist": 15.63800906991042,
+            "right_wrist": 0.658116875741039,
+            "left_ankle": 11.422915157035826,
+            "right_ankle": 11.475506315558214,
+            "left_heel": 12.144213769614849,
+            "right_heel": 25.24659324035878,
+            "left_foot_index": 20.293346488691974,
+            "right_foot_index": 6.132861560333261
+          }
+        },
+        "root_xyz_reference_units": [
+          0.18787119989782702,
+          0.12992164003903497,
+          6.309206804979003
+        ]
+      },
+      "29": {
+        "fit_rmse_px": 5.315774904611019,
+        "heldout": {
+          "weighted_rmse_px": 13.97471329454978,
+          "median_joint_error_px": 12.72528413697877,
+          "p90_joint_error_px": 17.56485126134489,
+          "max_joint_error_px": 23.98981034262512,
+          "per_joint_px": {
+            "left_wrist": 11.778928019167505,
+            "right_wrist": 6.681047350643973,
+            "left_ankle": 14.811297369367653,
+            "right_ankle": 8.644160293143278,
+            "left_heel": 13.671640254790034,
+            "right_heel": 23.98981034262512,
+            "left_foot_index": 14.105142095807116,
+            "right_foot_index": 11.019988386548818
+          }
+        },
+        "root_xyz_reference_units": [
+          0.20277603979417377,
+          0.11880308759521732,
+          6.43313255308363
+        ]
+      },
+      "41": {
+        "fit_rmse_px": 6.780605587076858,
+        "heldout": {
+          "weighted_rmse_px": 14.519276319351698,
+          "median_joint_error_px": 14.060673898560564,
+          "p90_joint_error_px": 18.305004537649204,
+          "max_joint_error_px": 20.83132563209186,
+          "per_joint_px": {
+            "left_wrist": 8.725735593465787,
+            "right_wrist": 20.83132563209186,
+            "left_ankle": 15.35428430394172,
+            "right_ankle": 12.767063493179409,
+            "left_heel": 17.222295497173782,
+            "right_heel": 15.787553553386395,
+            "left_foot_index": 11.140838793036533,
+            "right_foot_index": 10.854014368853244
+          }
+        },
+        "root_xyz_reference_units": [
+          -0.07825626870091373,
+          0.09280067359118985,
+          6.044424031767411
+        ]
+      },
+      "55": {
+        "fit_rmse_px": 9.266055678203355,
+        "heldout": {
+          "weighted_rmse_px": 15.27412108518738,
+          "median_joint_error_px": 14.595230611119357,
+          "p90_joint_error_px": 19.822632159021772,
+          "max_joint_error_px": 20.761759256757916,
+          "per_joint_px": {
+            "left_wrist": 13.88711386808316,
+            "right_wrist": 11.752985334542558,
+            "left_ankle": 16.450268685590636,
+            "right_ankle": 15.303347354155553,
+            "left_heel": 7.107253186646676,
+            "right_heel": 12.547618414097736,
+            "left_foot_index": 20.761759256757916,
+            "right_foot_index": 19.42014911713485
+          }
+        },
+        "root_xyz_reference_units": [
+          -0.2579062443094321,
+          0.21806628793943666,
+          6.235620590034808
+        ]
+      }
+    }
+  },
+  "verification": {
+    "non_square_known_camera_heldout_max_error_px": 6.30961949354969e-12
+  },
+  "limits": [
+    "same-model image/world points; inherited rotation was fitted using all 16 joints, so held-out points are current-step diagnostics, not strict holdout or independent ground truth",
+    "external focal and principal frozen, but per-frame root refitted from eight joints",
+    "reference units only; no metric distance, ground contact, target rig or H3 validation"
+  ]
+}

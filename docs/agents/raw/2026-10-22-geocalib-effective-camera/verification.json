@@ -1,0 +1,41 @@
+{
+  "schema": "recreation2-effective-camera-verification.v1",
+  "checks": {
+    "geocalib_tool_and_input_hashes_match": true,
+    "comparison_tool_and_input_hashes_match": true,
+    "grid_tool_and_input_hashes_match": true,
+    "source_hash_matches": true,
+    "weights_hash_matches": true,
+    "frame_hashes_and_sizes_match": true,
+    "source_events_and_shared_window_match": true,
+    "grid_189_and_boundary_flag_match": true,
+    "current_step_fit_and_scoring_joints_disjoint": true,
+    "strict_holdout": false,
+    "old_all_joint_regression_rmse_delta_px": 0.0,
+    "scale_gauge_max_pixel_delta": 2.2737367544323206e-13,
+    "known_camera_non_square_pixel_heldout_max_error_px": 6.30961949354969e-12
+  },
+  "reports_sha256": {
+    "docs/agents/raw/2026-10-22-geocalib-effective-camera/report.json": "e65514c2cb9a1e1f20feee1ca79e953146937622a917dfacd410fecd6dba2e7f",
+    "docs/agents/raw/2026-10-22-geocalib-effective-camera/pose-comparison.json": "9dcf5117c6a1cc72535931b6a89ace1b83ee692da85bf398b553cb19a8aa2167",
+    "docs/agents/raw/2026-10-22-effective-intrinsics-scale/report.json": "94b1f6d5139b65668aa22194d17e3993075f016d16eb5b144a8298eb092dc5fb"
+  },
+  "environment_freeze_sha256": "8680e2eb0a52dfffb2023958f14ad5ff1122789606642401ea9b2ac7ce0877a4",
+  "installed_geocalib_matches_pinned_repo_python_sources": {
+    "perspective_fields.py": "50a601c50b5420c46aa4d597f50d7388e4f700e5a0c12bd89681d4ce929ff293",
+    "misc.py": "1aedafacca78d0c2c0c36db2bf6eae643cca43f9faf133b3be8a54c456919b88",
+    "lm_optimizer.py": "dbda352e10192fc4304cdffcf5ea5dcc143a9bcebbb176306cde26bcf615eb5f",
+    "__init__.py": "d9445e6e8b4e23793bba11a867a7e3dc3e2464c59c8ebdc69fb01503757b73ca",
+    "extractor.py": "d37a74020e939b29f2fccdc5f46b5f4bafa6f4064541274b2b9810ce5231be0d",
+    "gravity.py": "2c518251171682c402d62e69bd63ae911c9ee89c29c34c3c6b3d9ef56b50f4a4",
+    "camera.py": "c82081ccd68c440cee8ff374638a86b2d1d94ec1d05c3e103fa8000770baa549",
+    "utils.py": "2292fea1ad5f7a7011dacd4210dbd99f6eba003b677efd0cf389e157bcd4f5fd",
+    "geocalib.py": "4c221b3922911e0372f5837bc3a4e87ac44afe2721049b20a65cdcf6b8a2eab9",
+    "modules.py": "222f28ef570fbda9bd46bbd7c6089ccff8b9d96072177dd54179b6444fd48de6",
+    "viz2d.py": "2c2b63cc464d6d906270893098bf7be1930c0488c34560ab1b06fa245178213c",
+    "interactive_demo.py": "43ac5a6df03e9357c25b58ddd0a186b1f2770545930d09d92accceb77d051908"
+  },
+  "limits": [
+    "checks establish numerical/provenance consistency only; no source camera truth or contact validation"
+  ]
+}
