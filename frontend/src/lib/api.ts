@@ -2362,6 +2362,24 @@ export const api = {
         return response.json();
     },
 
+    applyRichRefinement: async (scriptId: string, frameId: string, candidateId: string, selectedFields: string[]) => {
+        const response = await authenticatedFetch(`${API_URL}/projects/${scriptId}/frames/${frameId}/rich-refinement/apply`, {
+            method: "POST", headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ candidate_id: candidateId, selected_fields: selectedFields }),
+        });
+        if (!response.ok) throw new Error(`Rich refinement apply failed (${response.status})`);
+        return response.json();
+    },
+
+    discardRichRefinement: async (scriptId: string, frameId: string, candidateId: string) => {
+        const response = await authenticatedFetch(`${API_URL}/projects/${scriptId}/frames/${frameId}/rich-refinement/discard`, {
+            method: "POST", headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ candidate_id: candidateId }),
+        });
+        if (!response.ok) throw new Error(`Rich refinement discard failed (${response.status})`);
+        return response.json();
+    },
+
     /** Schema v2 · Batch refine all frames via SSE stream. */
     refineBatchFrames: async (
         scriptId: string,

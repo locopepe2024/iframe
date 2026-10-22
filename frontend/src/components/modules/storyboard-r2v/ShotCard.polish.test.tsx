@@ -156,3 +156,27 @@ it("applies only the selected director field to the shot", () => {
     expect(onUpdateField).toHaveBeenCalledExactlyOnceWith("cameraAngle", "低角度");
     expect(onUpdatePrompt).not.toHaveBeenCalled();
 });
+
+it("reviews rich-frame fields without applying any by default", () => {
+    const onApplyRichRefinement = vi.fn();
+    render(<ShotCard
+        shot={{ ...shot, cameraAngle: "平视", richRefinementCandidate: {
+            id: "candidate-1", source: "AI 分镜细化",
+            fields: { camera_angle: "低角度", shot_size: "近景" },
+            current_fields: { camera_angle: "平视", shot_size: "中景" },
+            rationale: { camera_angle: "突出人物视线", shot_size: "看清表情" },
+        } }}
+        index={0} totalShots={1} characters={[]} scenes={[]} props={[]}
+        onUpdatePrompt={vi.fn()} onUpdateField={vi.fn()}
+        onGenerateT2I={vi.fn()} onGenerateVideo={vi.fn()} onDelete={vi.fn()}
+        onMoveUp={vi.fn()} onMoveDown={vi.fn()} onDuplicate={vi.fn()}
+        onSetVideoMode={vi.fn()} onOpenDrawer={vi.fn()} onInsertAsset={vi.fn()}
+        onApplyRichRefinement={onApplyRichRefinement}
+        expanded={false} onToggleExpanded={vi.fn()}
+    />);
+    expect(screen.getByRole("button", { name: "应用所选" })).toBeDisabled();
+    expect(screen.getByText("理由：突出人物视线")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("checkbox", { name: /机位/ }));
+    fireEvent.click(screen.getByRole("button", { name: "应用所选" }));
+    expect(onApplyRichRefinement).toHaveBeenCalledExactlyOnceWith("candidate-1", ["camera_angle"]);
+});

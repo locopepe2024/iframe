@@ -588,6 +588,7 @@ export default function StoryboardR2V() {
     const [storyboardDraftText, setStoryboardDraftText] = useState("");
     const [storyboardFeedback, setStoryboardFeedback] = useState<string[]>([]);
     const [storyboardDraftBusy, setStoryboardDraftBusy] = useState(false);
+    const [richRefinementBusyFrameId, setRichRefinementBusyFrameId] = useState<string | null>(null);
     const [bannerState, setBannerState] = useState<BannerState>(
         () => (currentProject?.frames?.length ?? 0) > 0 ? "summary" : "idle"
     );
@@ -783,6 +784,28 @@ export default function StoryboardR2V() {
             debugLog.warn("Studio", "single frame refine failed", err);
         }
     }, [currentProject, updateProject]);
+
+    const handleRichRefinement = useCallback(async (frameId: string, candidateId: string, selectedFields?: string[]) => {
+        if (!currentProject?.id || richRefinementBusyFrameId) return;
+        const projectId = currentProject.id;
+        setRichRefinementBusyFrameId(frameId);
+        try {
+            await frameEdits.flush();
+            const updated = selectedFields
+                ? await api.applyRichRefinement(projectId, frameId, candidateId, selectedFields)
+                : await api.discardRichRefinement(projectId, frameId, candidateId);
+            if (useProjectStore.getState().currentProject?.id !== projectId) return;
+            updateProject(projectId, updated);
+            const defaultMode = updated.default_generation_mode === "i2v" ? "t2i_i2v" : "direct_r2v";
+            setShots(updated.frames.map((frame: any) => frameToShotNode(frame, updated.video_tasks ?? [], defaultMode)));
+            toast.success(selectedFields ? "已应用所选分镜字段" : "已丢弃分镜细化建议");
+        } catch (error) {
+            debugLog.warn("Studio", "Rich refinement review failed", error);
+            toast.error("操作失败，请重试；若镜头或素材已变化，请重新细化");
+        } finally {
+            setRichRefinementBusyFrameId(null);
+        }
+    }, [currentProject?.id, frameEdits, richRefinementBusyFrameId, updateProject]);
 
     // Delete a shot
     const deleteShot = useCallback(async (index: number) => {
@@ -2221,6 +2244,9 @@ export default function StoryboardR2V() {
                             onGenerateBatch={(n) => generateVideoBatch(index, n, paramsState)}
                             inFlightCount={shotInFlight}
                             onRefineFrame={() => handleRefineFrame(shot.id)}
+                            onApplyRichRefinement={(candidateId, fields) => { void handleRichRefinement(shot.id, candidateId, fields); }}
+                            onDiscardRichRefinement={(candidateId) => { void handleRichRefinement(shot.id, candidateId); }}
+                            richRefinementBusy={richRefinementBusyFrameId === shot.id}
                             onUnpinVideo={() => handleUnpinVideo(shot.id)}
                             onUpdateDialogue={async (text: string) => {
                                 if (!currentProject) return;

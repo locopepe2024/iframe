@@ -245,6 +245,7 @@ export function frameToShotNode(
         stylePromptOverride: frame.style_prompt_override ?? null,
         lightingOverride: frame.lighting_override ?? null,
         negativePromptOverride: frame.negative_prompt_override ?? null,
+        richRefinementCandidate: frame.rich_refinement_candidate ?? null,
         isVideoPinned: Boolean(frame.is_video_pinned),
     });
 }

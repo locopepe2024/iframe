@@ -149,6 +149,13 @@ export interface ShotNode {
     stylePromptOverride?: string | null;
     lightingOverride?: string | null;
     negativePromptOverride?: string | null;
+    richRefinementCandidate?: {
+        id: string;
+        source: string;
+        fields: Record<string, unknown>;
+        current_fields: Record<string, unknown>;
+        rationale: Record<string, string>;
+    } | null;
 
     /** When true, the user has manually pinned an active take. Hero
      *  shows a "Pinned" chip; autoSelectLatestVideo skips this frame on
@@ -214,6 +221,9 @@ interface ShotCardProps {
     /** Active in-flight count for label flip (生成 ×N → 生成中 · N). */
     inFlightCount?: number;
     onRefineFrame?: () => void;
+    onApplyRichRefinement?: (candidateId: string, fields: string[]) => void;
+    onDiscardRichRefinement?: (candidateId: string) => void;
+    richRefinementBusy?: boolean;
     onUpdateDialogue?: (text: string) => void;
     /** Active-take pin controls. When the user has manually pinned an
      *  active take (shot.isVideoPinned=true), the hero shows a "📌 Pinned"
@@ -260,6 +270,9 @@ export default function ShotCard({
     onGenerateBatch,
     inFlightCount = 0,
     onRefineFrame,
+    onApplyRichRefinement,
+    onDiscardRichRefinement,
+    richRefinementBusy = false,
     onUnpinVideo,
 }: ShotCardProps) {
     const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -273,6 +286,8 @@ export default function ShotCard({
     const [styleOpen, setStyleOpen] = useState(
         Boolean(shot.stylePromptOverride || shot.lightingOverride || shot.negativePromptOverride),
     );
+    const [selectedRichFields, setSelectedRichFields] = useState<string[]>([]);
+    useEffect(() => setSelectedRichFields([]), [shot.richRefinementCandidate?.id]);
     // currentProjectId — needed by PolishPanel to look up the
     // project's PromptConfig override server-side.
     const currentProjectId = useProjectStore((state) => state.currentProject?.id);
@@ -822,6 +837,40 @@ export default function ShotCard({
                                         aria-label={`采用${label}`} disabled={!!unavailableReason} onClick={() => onUpdateField(field, proposed)}>采用</button>
                                 </li>)}
                             </ul>
+                        </details>}
+                        {shot.richRefinementCandidate && <details className="border-t border-border-subtle py-2 text-xs text-text-secondary" open>
+                            <summary className="cursor-pointer font-medium text-foreground">{shot.richRefinementCandidate.source} · {Object.keys(shot.richRefinementCandidate.fields).length} 项待审</summary>
+                            <div className="mt-2 divide-y divide-border-subtle">
+                                {Object.entries(shot.richRefinementCandidate.fields).map(([field, proposed]) => {
+                                    const labels: Record<string, string> = {
+                                        visual_description: "画面描述", shot_size: "景别", camera_angle: "机位", duration: "时长",
+                                        transition_hint: "转场", camera_movement_structured: "运镜", blocking: "站位",
+                                        dialogue_structured: "对白", audio_note: "声音", lighting: "光线",
+                                    };
+                                    const unavailable = shot.promptIsOptimized && field !== "duration";
+                                    const display = (value: unknown) => value == null || value === "" ? "未设置"
+                                        : typeof value === "object" ? JSON.stringify(value, null, 2) : String(value);
+                                    return <label key={field} className="flex items-start gap-2 py-2">
+                                        <input type="checkbox" className="mt-0.5" checked={selectedRichFields.includes(field)} disabled={richRefinementBusy || unavailable}
+                                            onChange={() => setSelectedRichFields((items) => items.includes(field)
+                                                ? items.filter((item) => item !== field) : [...items, field])} />
+                                        <span className="min-w-0 flex-1">
+                                            <span className="block font-medium text-foreground">{labels[field] || field}</span>
+                                            <span className="block whitespace-pre-wrap break-words">当前：{display(shot.richRefinementCandidate?.current_fields?.[field])}</span>
+                                            <span className="block whitespace-pre-wrap break-words">建议：{display(proposed)}</span>
+                                            <span className="block text-text-muted">理由：{shot.richRefinementCandidate?.rationale?.[field] || "模型未提供理由"}</span>
+                                            {unavailable && <span className="block text-accent">已采用完整优化稿，需重新审阅生成提示词后才能应用此项</span>}
+                                        </span>
+                                    </label>;
+                                })}
+                            </div>
+                            <div className="mt-2 flex justify-end gap-3">
+                                <button type="button" className="text-text-secondary hover:text-foreground"
+                                    disabled={richRefinementBusy} onClick={() => onDiscardRichRefinement?.(shot.richRefinementCandidate!.id)}>丢弃</button>
+                                <button type="button" className="text-primary hover:underline disabled:cursor-not-allowed disabled:text-text-muted"
+                                    disabled={richRefinementBusy || !selectedRichFields.length}
+                                    onClick={() => onApplyRichRefinement?.(shot.richRefinementCandidate!.id, selectedRichFields)}>应用所选</button>
+                            </div>
                         </details>}
                         {planSuggestions.length > 0 && <details className="rounded-md border border-glass-border px-3 py-2 text-xs text-text-secondary">
                             <summary className="cursor-pointer text-foreground">拍摄计划参考 · {planSuggestions.length} 条（不会自动加入生成提示词）</summary>
