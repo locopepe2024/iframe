@@ -134,10 +134,11 @@ def organize_time(photo_id: str, body: DateMutation, identity: Owner, store: Sto
 def albums(identity: Owner, store: Store, view: Literal["all", "pending"] = "all",
             year: int | None = Query(default=None, ge=1, le=9999),
             after_id: str = Query(default="", max_length=80),
-            limit: int = Query(default=50, ge=1, le=100)):
+            limit: int = Query(default=50, ge=1, le=100),
+            query: str = Query(default="", max_length=100)):
     with api_errors():
         return store.album_page(identity.owner_profile_id, view=view, year=year,
-                                after_id=after_id, limit=limit)
+                                after_id=after_id, limit=limit, query=query)
 
 
 @router.post("/uploads/{upload_id}", status_code=201)
@@ -246,7 +247,8 @@ def create_analysis(photo_id: str, body: AnalysisPermission, identity: Owner, st
 @router.get("/{photo_id}/date/history")
 def read_history(photo_id: str, identity: Owner, store: Store,
                  after_revision: int = Query(default=0, ge=0),
-                 limit: int = Query(default=50, ge=1, le=100)):
+                 limit: int = Query(default=50, ge=1, le=100),
+            query: str = Query(default="", max_length=100)):
     with api_errors():
         changes = store.history(
             identity.owner_profile_id, photo_id, after_revision=after_revision, limit=limit + 1,

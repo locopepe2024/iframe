@@ -129,24 +129,52 @@ class PhotoWorkflowStore(DateStore):
                             consent_version, "organize", {})
 
     def album_page(self, owner: str, *, view: str, year: int | None,
-                   after_id: str, limit: int) -> dict:
-        if view not in ("all", "pending") or not 1 <= limit <= 100:
+                   after_id: str, limit: int, query: str = "") -> dict:
+        if view not in ("all", "pending") or not 1 <= limit <= 100 or len(query) > 100:
             raise ValueError("Invalid album query")
-        conditions = ["owner = ?", "photo_id > ?"]
+        query = query.strip()
+        conditions = ["p.owner = ?", "p.photo_id > ?"]
         params = [owner, after_id]
         if view == "pending":
-            conditions.append("album_year IS NULL")
+            conditions.append("p.album_year IS NULL")
         if year is not None:
-            conditions.append("album_year = ?")
+            conditions.append("p.album_year = ?")
             params.append(year)
+        joins, fields = "", ""
+        if query:
+            # Join only the latest owner-scoped source versions, never historical
+            # text or unreviewed model observations. instr treats SQL wildcards literally.
+            joins = """
+                LEFT JOIN photo_stories s ON s.owner=p.owner AND s.photo_id=p.photo_id
+                    AND s.revision=(SELECT MAX(revision) FROM photo_stories WHERE owner=p.owner AND photo_id=p.photo_id)
+                LEFT JOIN photo_description_reviews d ON d.owner=p.owner AND d.photo_id=p.photo_id
+                    AND d.revision=(SELECT MAX(revision) FROM photo_description_reviews WHERE owner=p.owner AND photo_id=p.photo_id)
+            """
+            fields = ", s.text AS story_text, s.revision AS story_revision, d.description AS description_text, d.revision AS description_revision"
+            conditions.append("(instr(s.text, ?) > 0 OR instr(d.description, ?) > 0)")
+            params.extend([query, query])
         with self._connection() as connection:
             rows = connection.execute(
-                "SELECT photo_id, batch_id, annotation FROM photo_date_states WHERE "
-                + " AND ".join(conditions) + " ORDER BY photo_id LIMIT ?",
+                "SELECT p.photo_id, p.batch_id, p.annotation" + fields
+                + " FROM photo_date_states p " + joins + " WHERE "
+                + " AND ".join(conditions) + " ORDER BY p.photo_id LIMIT ?",
                 (*params, limit + 1),
             ).fetchall()
             page = rows[:limit]
-            return {"photos": [
-                {"photo_id": row["photo_id"], "batch_id": row["batch_id"],
-                 "date": DateAnnotation.model_validate_json(row["annotation"])} for row in page
-            ], "next_after_id": page[-1]["photo_id"] if len(rows) > limit else None}
+            photos = []
+            for row in page:
+                photo = {"photo_id": row["photo_id"], "batch_id": row["batch_id"],
+                         "date": DateAnnotation.model_validate_json(row["annotation"])}
+                if query:
+                    matches = []
+                    for source in ("story", "description"):
+                        text = row[source + "_text"] or ""
+                        index = text.find(query)
+                        if index >= 0:
+                            start = max(0, index - 30)
+                            matches.append({"source": source, "revision": row[source + "_revision"],
+                                            "excerpt": text[start:start + 160]})
+                    photo["search_matches"] = matches
+                photos.append(photo)
+            return {"photos": photos,
+                    "next_after_id": page[-1]["photo_id"] if len(rows) > limit else None}
