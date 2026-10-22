@@ -15,16 +15,16 @@ from ..identity import UserContext, require_user_context
 from .date_store import OperationConflict, PhotoNotAvailable, TimeConsentRequired
 from .dates import DateRevisionConflict, ManualPrecision
 from . import media
-from .intake import PhotoIntakeStore
+from .time_tasks import PhotoTaskStore
 from .analysis import analyze_photo, AnalysisUnavailable, AnalysisCredentialRejected
 
 
-def get_store() -> PhotoIntakeStore:
+def get_store() -> PhotoTaskStore:
     configured = os.getenv("IFRAME_PHOTOS_LOCAL_DB_PATH", "")
     path = Path(configured)
     if not configured or not path.is_absolute() or not path.is_file():
         raise HTTPException(503, "Photo storage is not configured")
-    return PhotoIntakeStore(path, initialize=False)
+    return PhotoTaskStore(path, initialize=False)
 
 
 class DateMutation(BaseModel):
@@ -75,6 +75,13 @@ class TimeRevocation(BaseModel):
     expected_consent_version: int = Field(ge=0)
 
 
+class TimeTaskRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+    operation_id: str = Field(min_length=1, max_length=120, pattern=r"^[a-zA-Z0-9_-]+$")
+    consent_version: int = Field(ge=1)
+    retry_task_id: str | None = Field(default=None, max_length=80)
+
+
 class IntakeItem(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True)
     item_id: str = Field(min_length=1, max_length=80, pattern=r"^[a-zA-Z0-9_-]+$")
@@ -113,8 +120,26 @@ def api_errors():
 # Demo uses the existing workspace identity, including browser/key-fingerprint
 # scopes. Replace this dependency with registered-account auth before production.
 Owner = Annotated[UserContext, Depends(require_user_context)]
-Store = Annotated[PhotoIntakeStore, Depends(get_store)]
+Store = Annotated[PhotoTaskStore, Depends(get_store)]
 router = APIRouter(prefix="/photos", tags=["photo-date-trial"])
+
+
+@router.get("/tasks/{task_id}")
+def read_time_task(task_id: str, identity: Owner, store: Store):
+    with api_errors():
+        return store.time_task(identity.owner_profile_id, task_id)
+
+
+@router.get("/batches/{batch_id}/time-tasks")
+def read_time_tasks(batch_id: str, identity: Owner, store: Store):
+    with api_errors():
+        return store.time_tasks(identity.owner_profile_id, batch_id)
+
+
+@router.post("/batches/{batch_id}/time-tasks", status_code=202)
+def create_time_task(batch_id: str, body: TimeTaskRequest, identity: Owner, store: Store):
+    with api_errors():
+        return store.create_time_task(identity.owner_profile_id, batch_id, identity.user_id, **body.model_dump())
 
 
 @router.get("/upload-batches")

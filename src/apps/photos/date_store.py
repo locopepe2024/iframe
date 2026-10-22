@@ -47,6 +47,19 @@ class DateChange(Snapshot):
 
 
 _SCHEMA = """
+CREATE TABLE IF NOT EXISTS photo_time_tasks (
+ owner TEXT NOT NULL, task_id TEXT NOT NULL, batch_id TEXT NOT NULL,
+ operation_id TEXT NOT NULL, actor TEXT NOT NULL, consent_version INTEGER NOT NULL,
+ request TEXT NOT NULL, status TEXT NOT NULL, created_at TEXT NOT NULL,
+ PRIMARY KEY(owner,task_id), UNIQUE(owner,batch_id,operation_id)
+);
+CREATE TABLE IF NOT EXISTS photo_time_task_items (
+ owner TEXT NOT NULL, task_id TEXT NOT NULL, photo_id TEXT NOT NULL,
+ expected_revision INTEGER NOT NULL, status TEXT NOT NULL, error_code TEXT,
+ result TEXT,
+ PRIMARY KEY(owner,task_id,photo_id),
+ FOREIGN KEY(owner,task_id) REFERENCES photo_time_tasks(owner,task_id)
+);
 CREATE TABLE IF NOT EXISTS photo_upload_batches (
     owner TEXT NOT NULL, batch_id TEXT NOT NULL, manifest TEXT NOT NULL,
     created_at TEXT NOT NULL,
@@ -414,78 +427,83 @@ class DateStore:
             "consent_version": consent_version, **payload,
         }, sort_keys=True)
         with self._connection(write=True) as connection:
-            row = self._photo(connection, owner, photo_id)
-            consent = connection.execute(
-                "SELECT granted, version FROM photo_time_consents "
-                "WHERE owner = ? AND batch_id = ?", (owner, row["batch_id"]),
-            ).fetchone()
-            if not consent["granted"] or consent["version"] != consent_version:
-                raise TimeConsentRequired("Current batch time consent is required")
-            previous = connection.execute(
-                "SELECT request, change_json FROM photo_date_history "
-                "WHERE owner = ? AND photo_id = ? AND operation_id = ?",
-                (owner, photo_id, operation_id),
-            ).fetchone()
-            if previous:
-                if previous["request"] != request:
-                    raise OperationConflict("Operation ID was used for another request")
-                return DateChange.model_validate_json(previous["change_json"]).after
-            noop = connection.execute(
-                "SELECT request, result FROM photo_date_noop_receipts "
-                "WHERE owner = ? AND photo_id = ? AND operation_id = ?",
-                (owner, photo_id, operation_id),
-            ).fetchone()
-            if noop:
-                if noop["request"] != request:
-                    raise OperationConflict("Operation ID was used for another request")
-                return DateAnnotation.model_validate_json(noop["result"])
-            current = DateAnnotation.model_validate_json(row["annotation"])
-            if expected_revision != current.revision:
-                raise DateRevisionConflict("Date changed; reload before confirming")
-            target_revision = payload.get("target_revision")
-            if kind == "correct":
-                after = correct_date(current, expected_revision=expected_revision, **payload)
-            elif kind == "organize":
-                after = resolve_photo_date(
-                    PhotoTimeEvidence.model_validate_json(row["evidence"]), current=current,
+            return self._change_in_connection(connection, owner, photo_id, actor, operation_id,
+                                              expected_revision, consent_version, kind, payload, request)
+
+    def _change_in_connection(self, connection, owner, photo_id, actor, operation_id,
+                              expected_revision, consent_version, kind, payload, request):
+        row = self._photo(connection, owner, photo_id)
+        consent = connection.execute(
+            "SELECT granted, version FROM photo_time_consents "
+            "WHERE owner = ? AND batch_id = ?", (owner, row["batch_id"]),
+        ).fetchone()
+        if not consent["granted"] or consent["version"] != consent_version:
+            raise TimeConsentRequired("Current batch time consent is required")
+        previous = connection.execute(
+            "SELECT request, change_json FROM photo_date_history "
+            "WHERE owner = ? AND photo_id = ? AND operation_id = ?",
+            (owner, photo_id, operation_id),
+        ).fetchone()
+        if previous:
+            if previous["request"] != request:
+                raise OperationConflict("Operation ID was used for another request")
+            return DateChange.model_validate_json(previous["change_json"]).after
+        noop = connection.execute(
+            "SELECT request, result FROM photo_date_noop_receipts "
+            "WHERE owner = ? AND photo_id = ? AND operation_id = ?",
+            (owner, photo_id, operation_id),
+        ).fetchone()
+        if noop:
+            if noop["request"] != request:
+                raise OperationConflict("Operation ID was used for another request")
+            return DateAnnotation.model_validate_json(noop["result"])
+        current = DateAnnotation.model_validate_json(row["annotation"])
+        if expected_revision != current.revision:
+            raise DateRevisionConflict("Date changed; reload before confirming")
+        target_revision = payload.get("target_revision")
+        if kind == "correct":
+            after = correct_date(current, expected_revision=expected_revision, **payload)
+        elif kind == "organize":
+            after = resolve_photo_date(
+                PhotoTimeEvidence.model_validate_json(row["evidence"]), current=current,
+            )
+            if after == current:
+                connection.execute(
+                    "INSERT INTO photo_date_noop_receipts VALUES (?, ?, ?, ?, ?)",
+                    (owner, photo_id, operation_id, request, current.model_dump_json()),
                 )
-                if after == current:
-                    connection.execute(
-                        "INSERT INTO photo_date_noop_receipts VALUES (?, ?, ?, ?, ?)",
-                        (owner, photo_id, operation_id, request, current.model_dump_json()),
-                    )
-                    return current
-            else:
-                target = connection.execute(
-                    "SELECT change_json FROM photo_date_history "
-                    "WHERE owner = ? AND photo_id = ? AND revision = ?",
-                    (owner, photo_id, target_revision),
-                ).fetchone()
-                if target is None:
-                    raise PhotoNotAvailable("History version is not available")
-                saved = DateChange.model_validate_json(target[0]).after
-                if saved.status == "confirmed":
-                    restored = saved
-                else:
-                    inputs = PhotoTimeEvidence.model_validate_json(row["evidence"])
-                    restored = resolve_photo_date(inputs)
-                after = DateAnnotation(**{
-                    **restored.model_dump(), "revision": current.revision + 1,
-                })
-            written = connection.execute(
-                "UPDATE photo_date_states SET annotation = ?, revision = ?, album_year = ? "
+                return current
+        else:
+            target = connection.execute(
+                "SELECT change_json FROM photo_date_history "
                 "WHERE owner = ? AND photo_id = ? AND revision = ?",
-                (after.model_dump_json(), after.revision, after.album_year,
-                 owner, photo_id, expected_revision),
-            )
-            if written.rowcount != 1:
-                raise DateRevisionConflict("Date changed; reload before confirming")
-            self._record(
-                connection, owner, photo_id, current, after, actor=actor,
-                operation_id=operation_id, request=request, kind=kind,
-                restored_from_revision=target_revision,
-            )
-            return after
+                (owner, photo_id, target_revision),
+            ).fetchone()
+            if target is None:
+                raise PhotoNotAvailable("History version is not available")
+            saved = DateChange.model_validate_json(target[0]).after
+            if saved.status == "confirmed":
+                restored = saved
+            else:
+                inputs = PhotoTimeEvidence.model_validate_json(row["evidence"])
+                restored = resolve_photo_date(inputs)
+            after = DateAnnotation(**{
+                **restored.model_dump(), "revision": current.revision + 1,
+            })
+        written = connection.execute(
+            "UPDATE photo_date_states SET annotation = ?, revision = ?, album_year = ? "
+            "WHERE owner = ? AND photo_id = ? AND revision = ?",
+            (after.model_dump_json(), after.revision, after.album_year,
+             owner, photo_id, expected_revision),
+        )
+        if written.rowcount != 1:
+            raise DateRevisionConflict("Date changed; reload before confirming")
+        self._record(
+            connection, owner, photo_id, current, after, actor=actor,
+            operation_id=operation_id, request=request, kind=kind,
+            restored_from_revision=target_revision,
+        )
+        return after
 
     @staticmethod
     def _record(connection, owner, photo_id, before, after, *, actor, operation_id,

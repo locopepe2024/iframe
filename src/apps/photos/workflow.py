@@ -94,6 +94,14 @@ class PhotoWorkflowStore(DateStore):
             "UPDATE photo_time_consents SET granted = ?, version = ? "
             "WHERE owner = ? AND batch_id = ?", (int(granted), version, owner, batch_id),
         )
+        # Authorization changes fence pending work in the same write transaction.
+        connection.execute(
+            "UPDATE photo_time_task_items SET status='cancelled' WHERE owner=? AND status='pending' "
+            "AND task_id IN (SELECT task_id FROM photo_time_tasks WHERE owner=? AND batch_id=? "
+            "AND status IN ('queued','running') AND consent_version!=?)", (owner, owner, batch_id, version))
+        connection.execute(
+            "UPDATE photo_time_tasks SET status='cancelled' WHERE owner=? AND batch_id=? "
+            "AND status IN ('queued','running') AND consent_version!=?", (owner, batch_id, version))
         connection.execute(
             "INSERT INTO photo_time_consent_history VALUES (?, ?, ?, ?, ?, ?)",
             (owner, batch_id, version, int(granted), actor, now),
