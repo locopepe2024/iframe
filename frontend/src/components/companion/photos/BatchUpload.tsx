@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { photoApi, type UploadBatch, type UploadManifestItem } from "@/lib/photoApi";
 import styles from "./photos.module.css";
+import PeopleTasks from "./PeopleTasks";
 import TimeTasks from "./TimeTasks";
 
 const errorText: Record<string, string> = {
@@ -115,7 +116,7 @@ export default function BatchUpload({ onUploaded }: { onUploaded: () => void }) 
           </>}
         </li>;
       })}</ul>
-      {batch.counts.uploaded > 0 && <TimeTasks key={batch.batch_id} batchId={batch.batch_id} />}
+      {batch.counts.uploaded > 0 && <><TimeTasks key={batch.batch_id} batchId={batch.batch_id} /><details><summary>人物整理（需单独允许）</summary><PeopleTasks key={batch.batch_id} batchId={batch.batch_id} /></details></>}
     </details>)}
     {cursor && <button disabled={busy} onClick={() => void run(async () => {
       const page = await photoApi.uploadBatches(cursor);

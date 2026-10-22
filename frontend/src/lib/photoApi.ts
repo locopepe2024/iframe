@@ -28,6 +28,24 @@ export interface PhotoTimeTask {
   counts: { pending: number; completed: number; needs_confirmation: number; failed: number; cancelled: number };
   items: { photo_id: string; expected_revision: number; status: string; error_code: string | null; result: PhotoDateAnnotation | null }[];
 }
+export interface PeopleTask {
+  task_id: string; consent_version: number; status: string;
+  counts: { pending: number; running: number; detected: number; no_faces: number; failed: number; cancelled: number; cleared: number };
+}
+export type FaceBox = [number, number, number, number];
+export interface PeopleGroup {
+  group_id: string; revision: number; status: "pending" | "deferred" | "confirmed" | "split";
+  person_id: string | null; members: { face_id: string; photo_id: string; box: FaceBox }[];
+}
+export interface PersonAlbum { person_id: string; label: string; photo_count: number }
+export interface PeopleReviewRequest {
+  operation_id: string; expected_revision: number; consent_version: number;
+  action: "confirm" | "split" | "defer"; label: string;
+}
+export interface PeopleConsentRequest {
+  operation_id: string; expected_version: number; granted: boolean;
+  question_id?: string; clear?: boolean; method: "button";
+}
 export interface DescriptionReview { revision: number; description: string; actor: string; created_at: string }
 export interface BatchUndoPreview {
   batch_id: string; preview_token: string; counts: { undo: number; preserve: number };
@@ -50,6 +68,7 @@ async function request<T>(path: string, method = "GET", body?: unknown): Promise
     ...(body === undefined ? {} : { headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }),
   });
   if (!response.ok) {
+    if (path.includes("people") && response.status === 503) throw new Error("人物整理暂不可用，请稍后刷新；不会自动提交确认。");
     if (path.endsWith("/undo-time") && response.status === 409) throw new Error("照片或授权已变化，请重新预览后再确认撤销。");
     if (path.endsWith("/analysis") && response.status === 409) throw new Error("请先在 iFrame 创作台为当前用户配置 UniArt 渠道，再回来重试。");
     if (path.endsWith("/analysis") && response.status === 502) throw new Error("当前用户的 UniArt 渠道拒绝访问，请在创作台检查配置后重试。");
@@ -66,6 +85,15 @@ function serviceError(status: number) {
     : "服务暂不可用，请稍后重试。");
 }
 export const photoApi = {
+  peopleStatus: (id: string) => request<TimeConsent & { enabled: boolean }>(`/batches/${encodeURIComponent(id)}/people`),
+  peopleQuestion: (id: string) => request<TimeQuestion & { consent_version: number }>(`/batches/${encodeURIComponent(id)}/people-question`, "POST"),
+  peopleConsent: (id: string, body: PeopleConsentRequest) => request<TimeConsent>(`/batches/${encodeURIComponent(id)}/people-consent`, "POST", body),
+  peopleTasks: (id: string) => request<PeopleTask[]>(`/batches/${encodeURIComponent(id)}/people-tasks`),
+  createPeopleTask: (id: string, body: { operation_id: string; consent_version: number; retry_task_id?: string }) => request<PeopleTask>(`/batches/${encodeURIComponent(id)}/people-tasks`, "POST", body),
+  peopleGroups: (id: string) => request<{ ready: boolean; groups: PeopleGroup[] }>(`/people-tasks/${encodeURIComponent(id)}/groups`),
+  reviewPeopleGroup: (id: string, body: PeopleReviewRequest) => request<{ status: string; revision: number; person_id: string | null }>(`/people-groups/${encodeURIComponent(id)}/review`, "POST", body),
+  peopleAlbums: (after = "") => request<{ people: PersonAlbum[]; next_after_id: string | null }>(`/people-albums?${new URLSearchParams({ after_id: after })}`),
+  personPhotos: (id: string, after = "") => request<{ photos: { photo_id: string; boxes: FaceBox[] }[]; next_after_id: string | null }>(`/people-albums/${encodeURIComponent(id)}?${new URLSearchParams({ after_id: after })}`),
   undoPreview: (id: string) => request<BatchUndoPreview>(`/batches/${encodeURIComponent(id)}/undo-time-preview`),
   undoBatch: (id: string, body: { operation_id: string; preview_token: string }) => request<BatchUndoReceipt>(`/batches/${encodeURIComponent(id)}/undo-time`, "POST", body),
   undoHistory: (id: string, after = 0) => request<{ changes: BatchUndoReceipt[]; next_after: number | null }>(`/batches/${encodeURIComponent(id)}/undo-time/history?after=${after}`),

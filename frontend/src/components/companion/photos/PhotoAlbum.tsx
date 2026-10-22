@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import PeopleAlbums from "./PeopleAlbums";
 import PhotoImage from "./PhotoImage";
 import PhotoContent from "./PhotoContent";
 import PhotoStory from "./PhotoStory";
@@ -177,6 +178,7 @@ export default function PhotoAlbum() {
     <h1>我的生活相册</h1>
     <p>留住照片，慢慢说说照片里的故事。</p>
     <p className={styles.note}>照片 Demo · 支持单张、批量上传与后台时间整理。照片保存在当前服务端；人物识别尚未加入。</p>
+    <PeopleAlbums />
     <section className={styles.panel} aria-label="上传照片">
       <h2>添一张照片</h2>
       <label htmlFor="photo-file">选择一张照片</label>

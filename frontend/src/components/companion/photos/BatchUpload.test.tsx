@@ -4,6 +4,7 @@ import BatchUpload from "./BatchUpload";
 
 const api = vi.hoisted(() => ({ fingerprint: vi.fn(), uploadBatches: vi.fn(), uploadBatch: vi.fn(), createUploadBatch: vi.fn(), uploadBatchItem: vi.fn() }));
 vi.mock("@/lib/photoApi", () => ({ photoApi: api }));
+vi.mock("./PeopleTasks", () => ({ default: () => null }));
 vi.mock("./TimeTasks", () => ({ default: () => null }));
 const entry = (id: string, status = "pending") => ({ item_id: id, filename: id + ".png", size: 3, sha256: id, status, photo_id: null, error_code: null });
 function batch(items = [entry("item-001"), entry("item-002")]) {
