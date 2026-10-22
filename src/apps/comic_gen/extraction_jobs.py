@@ -11,6 +11,7 @@ import time
 from uuid import uuid4
 
 from fastapi import HTTPException
+from .llm import DirectorShootingChunkError
 
 logger = logging.getLogger(__name__)
 _POOL = ThreadPoolExecutor(max_workers=4, thread_name_prefix='script-extraction')
@@ -278,6 +279,8 @@ class ExtractionJobs:
                 if row and row['fingerprint'].startswith('director_shooting_plan:')
                 else '剧本分析失败，请检查模型配置后重试。'
             )
+            if row and row['fingerprint'].startswith('director_shooting_plan:') and isinstance(exc, DirectorShootingChunkError):
+                message = f'导演拍摄计划生成失败（{exc.category}）：{exc.public_reason}；请重试或调整本段内容。'
             if row and not row['fingerprint'].startswith(('storyboard:', 'director_shooting_plan:')):
                 detail = str(exc).strip()
                 if 'timed out' in detail.lower() or 'timeout' in detail.lower():

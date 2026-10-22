@@ -29,6 +29,15 @@ from .models import (
 )
 
 
+class DirectorShootingChunkError(RuntimeError):
+    """A bounded, model-output-only failure safe for an owner-scoped job status."""
+
+    def __init__(self, category: str, reason: str):
+        self.category = category
+        self.public_reason = reason[:180]
+        super().__init__(f"拍摄计划模型结果连续两次未通过校验：{self.public_reason}")
+
+
 def _strip_markdown_json(content: str) -> str:
     """Strip markdown code fences from LLM JSON output."""
     if "```json" in content:
@@ -2037,6 +2046,7 @@ fact_id，事实变化时保留 source_refs，并用 status/supersedes_fact_id �
 
         retry_note = ""
         last_error = ""
+        last_category = "contract_violation"
         style_summary = build_visual_style_summary(style_config)
         for attempt in range(2):
             handoff_preset = _load_director_preset("shooting-plan-handoff")
@@ -2083,7 +2093,8 @@ fact_id，事实变化时保留 source_refs，并用 status/supersedes_fact_id �
             try:
                 result = json.loads(_strip_markdown_json(content))
             except json.JSONDecodeError as exc:
-                last_error = f"JSON 格式错误：{exc}"
+                last_category = "invalid_json"
+                last_error = f"JSON 格式错误（第 {exc.lineno} 行，第 {exc.colno} 列）"
             else:
                 # Keep the plan usable when creative details are omitted. The
                 # storyboard editor exposes these empty fields for later completion.
@@ -2107,6 +2118,7 @@ fact_id，事实变化时保留 source_refs，并用 status/supersedes_fact_id �
                                 shot.setdefault("character_ids", [])
                                 shot.setdefault("prop_ids", [])
                 last_error = self._validate_director_shooting_chunk(result) or ""
+                last_category = "contract_violation"
                 if not last_error:
                     return result
             if attempt == 0:
@@ -2114,7 +2126,7 @@ fact_id，事实变化时保留 source_refs，并用 status/supersedes_fact_id �
                     "上次结果未通过契约校验，请完整重做本段并修正以下问题：" + last_error
                 )
 
-        raise RuntimeError(f"拍摄计划模型结果连续两次不符合完整镜头契约：{last_error}")
+        raise DirectorShootingChunkError(last_category, last_error)
 
     @staticmethod
     def _storyboard_visual_style_context(visual_style: Optional[Dict[str, Any]]) -> str:
