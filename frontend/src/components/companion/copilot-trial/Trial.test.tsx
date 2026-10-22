@@ -20,6 +20,31 @@ async function confirm(name = "确认调整") {
 }
 
 describe("real CopilotKit local trial", () => {
+  it("changes playback speed only after confirmation and supports cancelling and restoring", async () => {
+    const speak = vi.fn(); const cancel = vi.fn();
+    vi.stubGlobal("speechSynthesis", { speak, cancel });
+    vi.stubGlobal("SpeechSynthesisUtterance", class { lang = ""; rate = 1; constructor(public text: string) {} });
+    const trial = createTrial(); render(<CopilotTrial trial={trial} />); await ready();
+    send("恢复普通语速");
+    fireEvent.click(await screen.findByRole("button", { name: "读给我听" }));
+    expect(speak).toHaveBeenLastCalledWith(expect.objectContaining({ rate: 0.7 }));
+    fireEvent.click(screen.getByRole("button", { name: "取消" })); await settled();
+    expect(screen.getByRole("main")).toHaveAttribute("data-speech-speed", "slow");
+    send("恢复普通语速"); await confirm();
+    expect(screen.getByRole("main")).toHaveAttribute("data-speech-speed", "normal");
+    send("说慢一点");
+    fireEvent.click(await screen.findByRole("button", { name: "读给我听" }));
+    expect(speak).toHaveBeenLastCalledWith(expect.objectContaining({ rate: 0.9 }));
+    expect(trial.scenario.getSnapshot().speechSpeed).toBe("normal");
+    send("确认"); await settled();
+    expect(screen.getByRole("main")).toHaveAttribute("data-speech-speed", "slow");
+    send("按时间整理");
+    fireEvent.click(await screen.findByRole("button", { name: "读给我听" }));
+    expect(speak).toHaveBeenLastCalledWith(expect.objectContaining({ rate: 0.7 }));
+    expect(trial.scenario.getSnapshot().consent).toBe("none");
+    expect(trial.agent.messages.some(message => message.role === "assistant" && message.toolCalls?.some(call => call.function.name === "confirm_speech_speed"))).toBe(true);
+  });
+
   it("reads only the current question, permits stopping and never approves through playback", async () => {
     const speak = vi.fn(); const cancel = vi.fn();
     vi.stubGlobal("speechSynthesis", { speak, cancel });

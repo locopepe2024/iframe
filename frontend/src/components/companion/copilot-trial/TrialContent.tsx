@@ -12,6 +12,7 @@ import { parseDecision, SAMPLE_BATCH_ID, SAMPLE_LOCATION, SAMPLE_PHOTOS, TrialSc
 import styles from "./trial.module.css";
 
 const fontParameters = z.object({ size: z.enum(["normal", "large"]) }).strict();
+const speechParameters = z.object({ speed: z.enum(["slow", "normal"]) }).strict();
 const timeParameters = z.object({ batchId: z.literal(SAMPLE_BATCH_ID), revision: z.number().int().positive(), scope: z.literal("time") }).strict();
 type Answer = (approved: boolean) => void;
 const TrialContext = createContext<{ scenario: TrialScenario; answer: React.MutableRefObject<Answer | null> } | null>(null);
@@ -28,17 +29,20 @@ function ConfirmationCard({ name, toolCallId, status, args, result, respond }: C
   const heading = useRef<HTMLHeadingElement>(null);
   const description = useRef<HTMLDivElement>(null);
   const font = name === "confirm_font_size";
-  const parsed = (font ? fontParameters : timeParameters).safeParse(args);
+  const speech = name === "confirm_speech_speed";
+  const parsed = (font ? fontParameters : speech ? speechParameters : timeParameters).safeParse(args);
   const validArgs = parsed.success ? JSON.stringify(parsed.data) : "";
   useEffect(() => {
     if (!respond || !validArgs) return;
     const data = JSON.parse(validArgs);
-    const question: Question = font ? { id: toolCallId, kind: "font", size: data.size } : { id: toolCallId, kind: "time", batchId: data.batchId, revision: data.revision };
+    const question: Question = font ? { id: toolCallId, kind: "font", size: data.size }
+      : speech ? { id: toolCallId, kind: "speech", speed: data.speed }
+        : { id: toolCallId, kind: "time", batchId: data.batchId, revision: data.revision };
     if (!scenario.open(question)) {
       sent.current = true;
       respond({ questionId: toolCallId, status: "cancelled", message: "问题或批次已失效，请重新发起。" });
     }
-  }, [scenario, respond, validArgs, font, toolCallId]);
+  }, [scenario, respond, validArgs, font, speech, toolCallId]);
   const active = Boolean(respond && parsed.success && snapshot.question?.id === toolCallId && !sent.current);
   useEffect(() => {
     if (active) heading.current?.focus();
@@ -61,19 +65,19 @@ function ConfirmationCard({ name, toolCallId, status, args, result, respond }: C
   if (!respond) {
     return <p className={styles.muted}>{result ? "这次选择已记录，请查看当前状态。" : "正在准备确认卡…"}</p>;
   }
-  return <section className={`${styles.card} ${styles.prompt}`} aria-label={font ? "字号确认" : "样例整理授权"}>
+  return <section className={`${styles.card} ${styles.prompt}`} aria-label={font ? "字号确认" : speech ? "语速确认" : "样例整理授权"}>
     <div ref={description}>
-    <h2 ref={heading} tabIndex={-1}>{font ? (args.size === "large" ? "要把字调大一点吗？" : "要恢复普通字号吗？") : "只按时间整理这批样例吗？"}</h2>
-    {font ? <p>只调整此页文字，刷新后恢复。取消会保留现在的字号。</p> : <>
-      <p>本次仅处理 3 条合成记录的时间，不识别人脸、地点，也不处理真实照片。</p>
-      <p>处理位置：{SAMPLE_LOCATION}。刷新后重置，您可以随时撤回并清除模拟结果。</p>
-      <p className={styles.muted}>样例批次：{SAMPLE_BATCH_ID}；授权版本：{String(args.revision)}</p>
-    </>}
-    <p>请核对后点按钮，或听写“确认 / 取消”，检查文字后发送。</p>
+      <h2 ref={heading} tabIndex={-1}>{font ? (args.size === "large" ? "要把字调大一点吗？" : "要恢复普通字号吗？") : speech ? (args.speed === "slow" ? "要把朗读调慢一点吗？" : "要恢复普通语速吗？") : "只按时间整理这批样例吗？"}</h2>
+      {font ? <p>只调整此页文字，刷新后恢复。取消会保留现在的字号。</p> : speech ? <p>只调整此页下一次朗读的速度，刷新后恢复慢速。取消会保留现在的语速。</p> : <>
+        <p>本次仅处理 3 条合成记录的时间，不识别人脸、地点，也不处理真实照片。</p>
+        <p>处理位置：{SAMPLE_LOCATION}。刷新后重置，您可以随时撤回并清除模拟结果。</p>
+        <p className={styles.muted}>样例批次：{SAMPLE_BATCH_ID}；授权版本：{String(args.revision)}</p>
+      </>}
+      <p>请核对后点按钮，或听写“确认 / 取消”，检查文字后发送。</p>
     </div>
-    <button disabled={!active} onClick={() => voice.speak(description.current?.textContent ?? "", true)}><Volume2 size={24} aria-hidden="true" />{voice.speaking ? "停止朗读" : "读给我听"}</button>
+    <button disabled={!active} onClick={() => voice.speak(description.current?.textContent ?? "", snapshot.speechSpeed === "slow")}><Volume2 size={24} aria-hidden="true" />{voice.speaking ? "停止朗读" : "读给我听"}</button>
     <div className={styles.actions}>
-      <button className={styles.primary} disabled={!active} onClick={() => choose(true)}>{font ? "确认调整" : "同意本次整理"}</button>
+      <button className={styles.primary} disabled={!active} onClick={() => choose(true)}>{font || speech ? "确认调整" : "同意本次整理"}</button>
       <button disabled={!active} onClick={() => choose(false)}>取消</button>
     </div>
     {error && <p role="alert">{error}</p>}
@@ -93,6 +97,7 @@ function Conversation() {
   const [voiceConsent, setVoiceConsent] = useState(false);
   const voice = useCompanionVoice(setDraft);
   useHumanInTheLoop({ name: "confirm_font_size", description: "请求用户确认当前页面字号调整", parameters: fontParameters, render: ConfirmationCard }, []);
+  useHumanInTheLoop({ name: "confirm_speech_speed", description: "请求用户确认当前页面朗读速度调整", parameters: speechParameters, render: ConfirmationCard }, []);
   useHumanInTheLoop({ name: "confirm_time_batch", description: "请求合成批次的本地时间整理授权", parameters: timeParameters, render: ConfirmationCard }, []);
   useEffect(() => {
     scenario.activate();
@@ -113,12 +118,13 @@ function Conversation() {
     catch { setNotice("这次试验未完成，请刷新重试。"); }
     finally { setBusy(false); }
   }
-  return <VoiceContext.Provider value={voice}><main className={`${styles.shell} ${state.fontSize === "large" ? styles.large : ""}`} data-font-size={state.fontSize}>
+  return <VoiceContext.Provider value={voice}><main className={`${styles.shell} ${state.fontSize === "large" ? styles.large : ""}`} data-font-size={state.fontSize} data-speech-speed={state.speechSpeed}>
     <header className={styles.header}><h1>陪伴交互试验</h1><p className={styles.muted}>CopilotKit 工具确认 · 合成样例</p></header>
     <div className={styles.content}>
       <p>这里使用固定句式，不连接聊天模型。所有状态只在本页内存中，刷新后重置。</p>
+      <p>当前朗读：{state.speechSpeed === "slow" ? "慢速" : "普通语速"}。可以说“说慢一点”或“恢复普通语速”，确认后调整。</p>
       <section className={styles.card} aria-label="尝试交互"><h2>您想试试什么？</h2><div className={styles.actions}>
-        {["字调大一点", "恢复普通字号", "按时间整理"].map(text => <button key={text} disabled={busy || !isReady} onClick={() => void send(text)}>{text}</button>)}
+        {["字调大一点", "恢复普通字号", "说慢一点", "恢复普通语速", "按时间整理"].map(text => <button key={text} disabled={busy || !isReady} onClick={() => void send(text)}>{text}</button>)}
       </div></section>
       <ol className={styles.messages} aria-label="对话记录">{agent.messages.map(message => <li key={message.id} className={styles.message}>
         {message.role === "user" && <strong>您： </strong>}

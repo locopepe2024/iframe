@@ -7,12 +7,15 @@ export const SAMPLE_PHOTOS = [
   { id: "sample-unknown", title: "旧照示意", date: null, precision: "unknown" },
 ] as const;
 export type FontSize = "normal" | "large";
+export type SpeechSpeed = "slow" | "normal";
 export type Question =
   | { id: string; kind: "font"; size: FontSize }
+  | { id: string; kind: "speech"; speed: SpeechSpeed }
   | { id: string; kind: "time"; batchId: string; revision: number };
 export type Decision = { questionId: string; status: "confirmed" | "declined" | "cancelled"; message: string };
 export type ScenarioState = {
   fontSize: FontSize;
+  speechSpeed: SpeechSpeed;
   question: Question | null;
   revision: number;
   consent: "none" | "granted" | "declined" | "revoked";
@@ -21,7 +24,7 @@ export type ScenarioState = {
   notice: string;
 };
 const initial = (): ScenarioState => ({
-  fontSize: "normal", question: null, revision: 1, consent: "none", task: "idle", processedIds: [],
+  fontSize: "normal", speechSpeed: "slow", question: null, revision: 1, consent: "none", task: "idle", processedIds: [],
   notice: "仅使用 3 条合成照片记录，刷新后重置。",
 });
 
@@ -54,6 +57,9 @@ export class TrialScenario {
     if (question.kind === "font") {
       decision.message = approved ? `字号已${question.size === "large" ? "调大" : "恢复普通"}，仅此页有效。` : "保持原来的字号。";
       this.update({ question: null, fontSize: approved ? question.size : this.state.fontSize, notice: decision.message });
+    } else if (question.kind === "speech") {
+      decision.message = approved ? `朗读已${question.speed === "slow" ? "调慢" : "恢复普通语速"}，下次朗读生效，仅此页有效。` : "保持原来的朗读速度。";
+      this.update({ question: null, speechSpeed: approved ? question.speed : this.state.speechSpeed, notice: decision.message });
     } else {
       if (question.batchId !== SAMPLE_BATCH_ID || question.revision !== this.state.revision) throw new Error("批次确认已失效。");
       decision.message = approved ? "已同意本批合成记录的时间整理，正在本页模拟处理。" : "未授权，本批不整理。";
@@ -86,12 +92,14 @@ export function parseDecision(text: string): boolean | null {
   if (/^(取消|拒绝|不同意|不可以|不要|不要调整|不整理|暂时不用|不用了?)$/.test(normalized)) return false;
   return null;
 }
-export type TrialIntent = { tool: "confirm_font_size"; size: FontSize } | { tool: "confirm_time_batch" } | { tool: "help" };
+export type TrialIntent = { tool: "confirm_font_size"; size: FontSize } | { tool: "confirm_speech_speed"; speed: SpeechSpeed } | { tool: "confirm_time_batch" } | { tool: "help" };
 export function parseIntent(text: string): TrialIntent {
   // Exact small grammar for the protocol fixture, never a claim of general NLU.
   const normalized = text.trim().replace(/[。！!，,？?\s]/g, "");
   if (/^(恢复普通字号|字调小一点|恢复字号)$/.test(normalized)) return { tool: "confirm_font_size", size: "normal" };
   if (/^(字调大一点|字太小了|帮我把字调大一点|帮我调大字号)$/.test(normalized)) return { tool: "confirm_font_size", size: "large" };
+  if (/^(说慢一点|读慢一点|朗读慢一点)$/.test(normalized)) return { tool: "confirm_speech_speed", speed: "slow" };
+  if (/^(恢复普通语速|恢复朗读速度)$/.test(normalized)) return { tool: "confirm_speech_speed", speed: "normal" };
   if (/^(按时间整理|按时间整理这些照片|整理样例照片)$/.test(normalized)) return { tool: "confirm_time_batch" };
   return { tool: "help" };
 }

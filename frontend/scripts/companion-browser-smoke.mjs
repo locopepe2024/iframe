@@ -237,6 +237,20 @@ try {
   await clickText("确认调整");
   await waitFor("normal font restored", `document.querySelector('main').dataset.fontSize === 'normal'`);
 
+  await clickText("恢复普通语速");
+  await waitFor("speech-speed confirmation", buttonExists("确认调整"));
+  if (await evaluate(`document.querySelector('main').dataset.speechSpeed`) !== "slow") throw new Error("Speech speed changed before confirmation.");
+  await clickText("取消");
+  await waitFor("speech-speed cancelled", `!${buttonExists("确认调整")} && document.querySelector('main').dataset.speechSpeed === 'slow'`);
+  await clickText("恢复普通语速");
+  await waitFor("second speech-speed confirmation", buttonExists("确认调整"));
+  await clickText("确认调整");
+  await waitFor("normal speech speed applied", `document.querySelector('main').dataset.speechSpeed === 'normal'`);
+  await clickText("说慢一点");
+  await waitFor("slow speech-speed confirmation", buttonExists("确认调整"));
+  await clickText("确认调整");
+  await waitFor("slow speech speed restored", `document.querySelector('main').dataset.speechSpeed === 'slow'`);
+
   await clickText("按时间整理");
   await waitFor("time confirmation", buttonExists("同意本次整理"));
   await clickText("取消");
@@ -265,7 +279,7 @@ try {
     viewport: { initial, final },
     largeTextLayouts: layouts,
     input: "CDP touch events with target size and hit testing",
-    checks: ["font change waits for confirmation", "cancel keeps current font", "font can be restored", "declining photo consent starts no work", "authorized photo sample completes", "withdrawal clears simulated results"],
+    checks: ["font change waits for confirmation", "cancel keeps current font", "font can be restored", "speech speed waits for confirmation and supports cancelling and restoring", "declining photo consent starts no work", "authorized photo sample completes", "withdrawal clears simulated results"],
     requestCount: requests.size,
     allowedFontRequests: [...requests].filter(url => { try { return fontHosts.has(new URL(url).hostname); } catch { return false; } }),
     blockedUnexpectedRequests: [...unexpectedRequests],

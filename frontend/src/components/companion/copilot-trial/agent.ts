@@ -24,10 +24,12 @@ export class TrialAgent extends AbstractAgent {
       } else {
         const intent = parseIntent(typeof last?.content === "string" ? last.content : "");
         if (intent.tool === "help") {
-          text("这是固定句式试验。可以说“字调大一点”“恢复普通字号”或“按时间整理”。我会先请您确认。");
+          text("这是固定句式试验。可以说“字调大一点”“恢复普通字号”“说慢一点”“恢复普通语速”或“按时间整理”。我会先请您确认。");
         } else {
           const toolCallId = crypto.randomUUID();
-          const args = intent.tool === "confirm_font_size" ? { size: intent.size } : { batchId: SAMPLE_BATCH_ID, revision: this.scenario.getSnapshot().revision, scope: "time" };
+          const args = intent.tool === "confirm_font_size" ? { size: intent.size }
+            : intent.tool === "confirm_speech_speed" ? { speed: intent.speed }
+              : { batchId: SAMPLE_BATCH_ID, revision: this.scenario.getSnapshot().revision, scope: "time" };
           text("请核对下面的确认卡，确认前不会调整或整理。");
           emit({ type: EventType.TOOL_CALL_START, toolCallId, toolCallName: intent.tool });
           emit({ type: EventType.TOOL_CALL_ARGS, toolCallId, delta: JSON.stringify(args) });

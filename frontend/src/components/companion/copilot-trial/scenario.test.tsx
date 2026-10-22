@@ -6,6 +6,28 @@ afterEach(() => { vi.useRealTimers(); });
 const timeQuestion = (id = "q-time", revision = 1) => ({ id, kind: "time" as const, batchId: SAMPLE_BATCH_ID, revision });
 
 describe("in-memory trial contract (not production authorization)", () => {
+  it("confirms speech speed independently, rejects stale decisions and supports restoring", () => {
+    const scenario = new TrialScenario();
+    expect(scenario.getSnapshot().speechSpeed).toBe("slow");
+    scenario.open({ id: "normal", kind: "speech", speed: "normal" });
+    expect(scenario.getSnapshot().speechSpeed).toBe("slow");
+    scenario.decide("normal", false);
+    expect(scenario.getSnapshot().speechSpeed).toBe("slow");
+    scenario.open({ id: "normal-2", kind: "speech", speed: "normal" });
+    expect(() => scenario.decide("missing", true)).toThrow();
+    scenario.decide("normal-2", true);
+    scenario.open({ id: "slow", kind: "speech", speed: "slow" });
+    scenario.decide("normal-2", true);
+    expect(scenario.getSnapshot().question?.id).toBe("slow");
+    scenario.decide("slow", true);
+    expect(scenario.getSnapshot()).toMatchObject({ speechSpeed: "slow", fontSize: "normal", consent: "none", task: "idle" });
+  });
+  it("recognizes only explicit speech-speed requests", () => {
+    expect(parseIntent("说慢一点")).toEqual({ tool: "confirm_speech_speed", speed: "slow" });
+    expect(parseIntent("恢复普通语速")).toEqual({ tool: "confirm_speech_speed", speed: "normal" });
+    expect(parseIntent("不要说慢一点")).toEqual({ tool: "help" });
+    expect(parseIntent("不要恢复普通语速")).toEqual({ tool: "help" });
+  });
   it("cannot mutate before the exact current question is confirmed", () => {
     const scenario = new TrialScenario();
     scenario.open({ id: "font-1", kind: "font", size: "large" });
