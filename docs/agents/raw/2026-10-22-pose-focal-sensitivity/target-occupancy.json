@@ -1,0 +1,2791 @@
+{
+  "schema": "recreation2-target-occupancy.v1",
+  "image_size_px": [
+    640,
+    360
+  ],
+  "track_sha256": "0fed823bf39bd206ebeafec922a29394ee87a942b1bcc0395610a603d598550a",
+  "tool_sha256": "a03382a860f63d1b32ac642d120f0a9e20ddfffb64ee8482cf8a43fad3f029cd",
+  "dependencies_sha256": {
+    "recreation2_frame_occupancy.py": "945fccf25836cda3837ab1fd92418f4676fdb15a0ba4b9d71e1a1695488acbdf"
+  },
+  "cases": {
+    "fixed_temporal": {
+      "input_report_sha256": "3d11717f76f37c9c51fc58b8b87440a85fe7a833370f6c4e0faf10f2ec28b66d",
+      "input_report": "docs/agents/raw/2026-10-20-fixed-length-temporal/report.json",
+      "summary": {
+        "baseline": {
+          "distal_rmse_px": 12.83403710184992,
+          "median_frame_all_mean_px": 8.882352475189517
+        },
+        "frozen_first_frame": {
+          "distal_rmse_px": 17.459782777805916,
+          "median_frame_all_mean_px": 10.717971564435302
+        },
+        "per_frame_oracle": {
+          "distal_rmse_px": 14.542332433824553,
+          "median_frame_all_mean_px": 8.09849806318454
+        },
+        "median_height_ratio": 0.948510623571303,
+        "median_width_ratio": 0.9236295592048205,
+        "first_frame_scale": 0.9245360056098288
+      },
+      "frames": [
+        {
+          "source_frame": 1,
+          "source_pts_s": 0.0,
+          "source_joint_height_fraction": 0.6156325042247772,
+          "target_joint_height_fraction": 0.5841406732797623,
+          "height_ratio": 0.9488463803829358,
+          "width_ratio": 1.0392627419316993,
+          "corrections": {
+            "baseline": {
+              "scale": 1.0,
+              "translation_px": [
+                0.0,
+                0.0
+              ],
+              "all_mean_px": 8.718073826726586,
+              "distal_rmse_px": 9.866600526559514,
+              "fit_rmse_px": 8.651230283925269
+            },
+            "frozen_first_frame": {
+              "scale": 0.9245360056098288,
+              "translation_px": [
+                23.118744254786293,
+                16.336984417298396
+              ],
+              "all_mean_px": 8.062770724179122,
+              "distal_rmse_px": 14.118480547369218,
+              "fit_rmse_px": 5.976618190633757
+            },
+            "per_frame_oracle": {
+              "scale": 0.9245360056098288,
+              "translation_px": [
+                23.118744254786293,
+                16.336984417298396
+              ],
+              "all_mean_px": 8.062770724179122,
+              "distal_rmse_px": 14.118480547369218,
+              "fit_rmse_px": 5.976618190633757
+            }
+          }
+        },
+        {
+          "source_frame": 3,
+          "source_pts_s": 0.060281,
+          "source_joint_height_fraction": 0.6148439943790436,
+          "target_joint_height_fraction": 0.5837418884038925,
+          "height_ratio": 0.9494146380878903,
+          "width_ratio": 1.0377486036577042,
+          "corrections": {
+            "baseline": {
+              "scale": 1.0,
+              "translation_px": [
+                0.0,
+                0.0
+              ],
+              "all_mean_px": 8.724234164507415,
+              "distal_rmse_px": 9.84855499163705,
+              "fit_rmse_px": 8.661634164721919
+            },
+            "frozen_first_frame": {
+              "scale": 0.9245360056098288,
+              "translation_px": [
+                23.118744254786293,
+                16.336984417298396
+              ],
+              "all_mean_px": 8.042217530427207,
+              "distal_rmse_px": 14.092671976451815,
+              "fit_rmse_px": 5.967829960960445
+            },
+            "per_frame_oracle": {
+              "scale": 0.92460110958094,
+              "translation_px": [
+                23.04928652862594,
+                16.352133430608575
+              ],
+              "all_mean_px": 8.027117381354135,
+              "distal_rmse_px": 14.070614634008288,
+              "fit_rmse_px": 5.967574089764243
+            }
+          }
+        },
+        {
+          "source_frame": 5,
+          "source_pts_s": 0.150703,
+          "source_joint_height_fraction": 0.6109679043292999,
+          "target_joint_height_fraction": 0.5805602520704269,
+          "height_ratio": 0.9502303606402148,
+          "width_ratio": 1.030652322288668,
+          "corrections": {
+            "baseline": {
+              "scale": 1.0,
+              "translation_px": [
+                0.0,
+                0.0
+              ],
+              "all_mean_px": 8.730115047199359,
+              "distal_rmse_px": 9.857994560120293,
+              "fit_rmse_px": 8.639468632130828
+            },
+            "frozen_first_frame": {
+              "scale": 0.9245360056098288,
+              "translation_px": [
+                23.118744254786293,
+                16.336984417298396
+              ],
+              "all_mean_px": 8.00631061038518,
+              "distal_rmse_px": 14.083881731257597,
+              "fit_rmse_px": 5.955389813876481
+            },
+            "per_frame_oracle": {
+              "scale": 0.9260085599360152,
+              "translation_px": [
+                22.57103759467043,
+                16.182855446210823
+              ],
+              "all_mean_px": 7.936463046718167,
+              "distal_rmse_px": 13.895489432391077,
+              "fit_rmse_px": 5.953512739271119
+            }
+          }
+        },
+        {
+          "source_frame": 7,
+          "source_pts_s": 0.210984,
+          "source_joint_height_fraction": 0.6112341284751892,
+          "target_joint_height_fraction": 0.5798799246549606,
+          "height_ratio": 0.9487034470760883,
+          "width_ratio": 1.04129051786517,
+          "corrections": {
+            "baseline": {
+              "scale": 1.0,
+              "translation_px": [
+                0.0,
+                0.0
+              ],
+              "all_mean_px": 8.857678550742097,
+              "distal_rmse_px": 9.959761120216323,
+              "fit_rmse_px": 8.822032996727351
+            },
+            "frozen_first_frame": {
+              "scale": 0.9245360056098288,
+              "translation_px": [
+                23.118744254786293,
+                16.336984417298396
+              ],
+              "all_mean_px": 8.10549240356326,
+              "distal_rmse_px": 14.079101160293455,
+              "fit_rmse_px": 6.072181787854037
+            },
+            "per_frame_oracle": {
+              "scale": 0.9229280056597585,
+              "translation_px": [
+                23.610712338655787,
+                16.68732179487793
+              ],
+              "all_mean_px": 8.134225402189955,
+              "distal_rmse_px": 14.210015427547521,
+              "fit_rmse_px": 6.070680280996784
+            }
+          }
+        },
+        {
+          "source_frame": 9,
+          "source_pts_s": 0.271265,
+          "source_joint_height_fraction": 0.61873659491539,
+          "target_joint_height_fraction": 0.5867589265108109,
+          "height_ratio": 0.9483178000665178,
+          "width_ratio": 1.0520578995877607,
+          "corrections": {
+            "baseline": {
+              "scale": 1.0,
+              "translation_px": [
+                0.0,
+                0.0
+              ],
+              "all_mean_px": 9.096703986838387,
+              "distal_rmse_px": 10.10693212047206,
+              "fit_rmse_px": 9.175007466437092
+            },
+            "frozen_first_frame": {
+              "scale": 0.9245360056098288,
+              "translation_px": [
+                23.118744254786293,
+                16.336984417298396
+              ],
+              "all_mean_px": 8.264012518163385,
+              "distal_rmse_px": 14.084073938897513,
+              "fit_rmse_px": 6.260409078320553
+            },
+            "per_frame_oracle": {
+              "scale": 0.9180925768601007,
+              "translation_px": [
+                25.37511719588298,
+                17.628402303378664
+              ],
+              "all_mean_px": 8.4418930611209,
+              "distal_rmse_px": 14.684417600521071,
+              "fit_rmse_px": 6.239423817371748
+            }
+          }
+        },
+        {
+          "source_frame": 11,
+          "source_pts_s": 0.331547,
+          "source_joint_height_fraction": 0.6187264621257782,
+          "target_joint_height_fraction": 0.5862088203430176,
+          "height_ratio": 0.9474442362283347,
+          "width_ratio": 1.0579754874562775,
+          "corrections": {
+            "baseline": {
+              "scale": 1.0,
+              "translation_px": [
+                0.0,
+                0.0
+              ],
+              "all_mean_px": 9.22068954715819,
+              "distal_rmse_px": 10.21584315741058,
+              "fit_rmse_px": 9.357757149027492
+            },
+            "frozen_first_frame": {
+              "scale": 0.9245360056098288,
+              "translation_px": [
+                23.118744254786293,
+                16.336984417298396
+              ],
+              "all_mean_px": 8.344159157124098,
+              "distal_rmse_px": 14.082379321504527,
+              "fit_rmse_px": 6.352359860893507
+            },
+            "per_frame_oracle": {
+              "scale": 0.915710531281971,
+              "translation_px": [
+                26.225092303120164,
+                18.117955418620426
+              ],
+              "all_mean_px": 8.571296324626521,
+              "distal_rmse_px": 14.896683010989507,
+              "fit_rmse_px": 6.311977604684241
+            }
+          }
+        },
+        {
+          "source_frame": 13,
+          "source_pts_s": 0.632952,
+          "source_joint_height_fraction": 0.6161067485809326,
+          "target_joint_height_fraction": 0.5856831073760986,
+          "height_ratio": 0.9506195293674218,
+          "width_ratio": 1.04155450489148,
+          "corrections": {
+            "baseline": {
+              "scale": 1.0,
+              "translation_px": [
+                0.0,
+                0.0
+              ],
+              "all_mean_px": 9.00410176846839,
+              "distal_rmse_px": 9.970329083082207,
+              "fit_rmse_px": 9.03303193123235
+            },
+            "frozen_first_frame": {
+              "scale": 0.9245360056098288,
+              "translation_px": [
+                23.118744254786293,
+                16.336984417298396
+              ],
+              "all_mean_px": 8.105905137193579,
+              "distal_rmse_px": 13.986917874267652,
+              "fit_rmse_px": 6.063436637832934
+            },
+            "per_frame_oracle": {
+              "scale": 0.9200205709272173,
+              "translation_px": [
+                24.562700755065237,
+                17.398728536379934
+              ],
+              "all_mean_px": 8.17933405630435,
+              "distal_rmse_px": 14.340784601422538,
+              "fit_rmse_px": 6.048156963734058
+            }
+          }
+        },
+        {
+          "source_frame": 15,
+          "source_pts_s": 0.723374,
+          "source_joint_height_fraction": 0.6171297132968903,
+          "target_joint_height_fraction": 0.5861067622900009,
+          "height_ratio": 0.9497302587471351,
+          "width_ratio": 1.0396809508207834,
+          "corrections": {
+            "baseline": {
+              "scale": 1.0,
+              "translation_px": [
+                0.0,
+                0.0
+              ],
+              "all_mean_px": 8.933402356646921,
+              "distal_rmse_px": 9.983775128664632,
+              "fit_rmse_px": 8.9144144441928
+            },
+            "frozen_first_frame": {
+              "scale": 0.9245360056098288,
+              "translation_px": [
+                23.118744254786293,
+                16.336984417298396
+              ],
+              "all_mean_px": 8.114322645158458,
+              "distal_rmse_px": 14.089759314352232,
+              "fit_rmse_px": 6.045321299774897
+            },
+            "per_frame_oracle": {
+              "scale": 0.922069319200085,
+              "translation_px": [
+                23.895845228882706,
+                16.993036723860115
+              ],
+              "all_mean_px": 8.14530626036796,
+              "distal_rmse_px": 14.257879086186165,
+              "fit_rmse_px": 6.038077136251689
+            }
+          }
+        },
+        {
+          "source_frame": 17,
+          "source_pts_s": 0.783655,
+          "source_joint_height_fraction": 0.5878570973873138,
+          "target_joint_height_fraction": 0.5386188626289368,
+          "height_ratio": 0.9162411494609614,
+          "width_ratio": 1.0257049395777178,
+          "corrections": {
+            "baseline": {
+              "scale": 1.0,
+              "translation_px": [
+                0.0,
+                0.0
+              ],
+              "all_mean_px": 6.864091162725938,
+              "distal_rmse_px": 9.86323953921958,
+              "fit_rmse_px": 6.045645382416739
+            },
+            "frozen_first_frame": {
+              "scale": 0.9245360056098288,
+              "translation_px": [
+                23.118744254786293,
+                16.336984417298396
+              ],
+              "all_mean_px": 10.49952359448551,
+              "distal_rmse_px": 16.08330134687007,
+              "fit_rmse_px": 7.97018903611902
+            },
+            "per_frame_oracle": {
+              "scale": 0.9779357943878966,
+              "translation_px": [
+                8.69295352466412,
+                3.9290414433161516
+              ],
+              "all_mean_px": 7.241079894653761,
+              "distal_rmse_px": 11.896868703649117,
+              "fit_rmse_px": 5.722796139387695
+            }
+          }
+        },
+        {
+          "source_frame": 19,
+          "source_pts_s": 0.843937,
+          "source_joint_height_fraction": 0.5799645185470581,
+          "target_joint_height_fraction": 0.5386380106210709,
+          "height_ratio": 0.9287430409889221,
+          "width_ratio": 1.0303729850266075,
+          "corrections": {
+            "baseline": {
+              "scale": 1.0,
+              "translation_px": [
+                0.0,
+                0.0
+              ],
+              "all_mean_px": 6.8653179127792745,
+              "distal_rmse_px": 8.346020587235143,
+              "fit_rmse_px": 6.6854309371275615
+            },
+            "frozen_first_frame": {
+              "scale": 0.9245360056098288,
+              "translation_px": [
+                23.118744254786293,
+                16.336984417298396
+              ],
+              "all_mean_px": 8.931248768674301,
+              "distal_rmse_px": 14.190439148637672,
+              "fit_rmse_px": 7.029840144587662
+            },
+            "per_frame_oracle": {
+              "scale": 0.9514885712576067,
+              "translation_px": [
+                18.139916968286286,
+                9.991237187444256
+              ],
+              "all_mean_px": 7.186774468332654,
+              "distal_rmse_px": 12.202528478319806,
+              "fit_rmse_px": 5.344427076890171
+            }
+          }
+        },
+        {
+          "source_frame": 21,
+          "source_pts_s": 0.904218,
+          "source_joint_height_fraction": 0.5790026187896729,
+          "target_joint_height_fraction": 0.5397370904684067,
+          "height_ratio": 0.9321841956374127,
+          "width_ratio": 1.0219515126302896,
+          "corrections": {
+            "baseline": {
+              "scale": 1.0,
+              "translation_px": [
+                0.0,
+                0.0
+              ],
+              "all_mean_px": 6.676492456918965,
+              "distal_rmse_px": 8.038438422850316,
+              "fit_rmse_px": 6.5790200536167145
+            },
+            "frozen_first_frame": {
+              "scale": 0.9245360056098288,
+              "translation_px": [
+                23.118744254786293,
+                16.336984417298396
+              ],
+              "all_mean_px": 8.793632061085853,
+              "distal_rmse_px": 13.997845206083005,
+              "fit_rmse_px": 6.907492939800985
+            },
+            "per_frame_oracle": {
+              "scale": 0.9517116914685738,
+              "translation_px": [
+                18.004951520275085,
+                9.983080371381476
+              ],
+              "all_mean_px": 7.039900946925709,
+              "distal_rmse_px": 11.951060597200778,
+              "fit_rmse_px": 5.234991320891669
+            }
+          }
+        },
+        {
+          "source_frame": 23,
+          "source_pts_s": 0.964499,
+          "source_joint_height_fraction": 0.5033809542655945,
+          "target_joint_height_fraction": 0.4782349467277527,
+          "height_ratio": 0.9500457708525575,
+          "width_ratio": 0.940933308605645,
+          "corrections": {
+            "baseline": {
+              "scale": 1.0,
+              "translation_px": [
+                0.0,
+                0.0
+              ],
+              "all_mean_px": 7.454897037696519,
+              "distal_rmse_px": 7.1849197205661675,
+              "fit_rmse_px": 8.576271364419433
+            },
+            "frozen_first_frame": {
+              "scale": 0.9245360056098288,
+              "translation_px": [
+                23.118744254786293,
+                16.336984417298396
+              ],
+              "all_mean_px": 8.79993595026446,
+              "distal_rmse_px": 12.35331372047585,
+              "fit_rmse_px": 7.948601633049339
+            },
+            "per_frame_oracle": {
+              "scale": 0.9289388722279781,
+              "translation_px": [
+                27.2374265891267,
+                15.738800300079134
+              ],
+              "all_mean_px": 7.001611972300541,
+              "distal_rmse_px": 11.288085401877124,
+              "fit_rmse_px": 5.655344537444665
+            }
+          }
+        },
+        {
+          "source_frame": 25,
+          "source_pts_s": 1.02478,
+          "source_joint_height_fraction": 0.4940834641456604,
+          "target_joint_height_fraction": 0.46158798038959503,
+          "height_ratio": 0.9342307805984671,
+          "width_ratio": 0.9355012217521177,
+          "corrections": {
+            "baseline": {
+              "scale": 1.0,
+              "translation_px": [
+                0.0,
+                0.0
+              ],
+              "all_mean_px": 6.668208774097972,
+              "distal_rmse_px": 7.570065243375135,
+              "fit_rmse_px": 6.839507461894223
+            },
+            "frozen_first_frame": {
+              "scale": 0.9245360056098288,
+              "translation_px": [
+                23.118744254786293,
+                16.336984417298396
+              ],
+              "all_mean_px": 9.087426101001254,
+              "distal_rmse_px": 13.768304919686587,
+              "fit_rmse_px": 7.557717577812284
+            },
+            "per_frame_oracle": {
+              "scale": 0.9460938809957022,
+              "translation_px": [
+                21.253723677130665,
+                10.984711141991824
+              ],
+              "all_mean_px": 6.586132319107871,
+              "distal_rmse_px": 11.724998244010685,
+              "fit_rmse_px": 5.009491857382199
+            }
+          }
+        },
+        {
+          "source_frame": 27,
+          "source_pts_s": 1.085061,
+          "source_joint_height_fraction": 0.4912046492099762,
+          "target_joint_height_fraction": 0.4669801741838455,
+          "height_ratio": 0.95068353879571,
+          "width_ratio": 0.9034320255507867,
+          "corrections": {
+            "baseline": {
+              "scale": 1.0,
+              "translation_px": [
+                0.0,
+                0.0
+              ],
+              "all_mean_px": 7.3312766594480925,
+              "distal_rmse_px": 7.587195549936996,
+              "fit_rmse_px": 7.810073272192494
+            },
+            "frozen_first_frame": {
+              "scale": 0.9245360056098288,
+              "translation_px": [
+                23.118744254786293,
+                16.336984417298396
+              ],
+              "all_mean_px": 8.942403988855999,
+              "distal_rmse_px": 13.398930654098768,
+              "fit_rmse_px": 7.788344793432096
+            },
+            "per_frame_oracle": {
+              "scale": 0.9378455584624672,
+              "translation_px": [
+                24.107873963642703,
+                13.534268956704807
+              ],
+              "all_mean_px": 7.170809905308457,
+              "distal_rmse_px": 11.926114514999158,
+              "fit_rmse_px": 5.533702345021597
+            }
+          }
+        },
+        {
+          "source_frame": 29,
+          "source_pts_s": 1.145343,
+          "source_joint_height_fraction": 0.47629308700561523,
+          "target_joint_height_fraction": 0.4530317634344101,
+          "height_ratio": 0.9511617443002466,
+          "width_ratio": 0.8338983649083656,
+          "corrections": {
+            "baseline": {
+              "scale": 1.0,
+              "translation_px": [
+                0.0,
+                0.0
+              ],
+              "all_mean_px": 8.60039285894885,
+              "distal_rmse_px": 11.379995401707033,
+              "fit_rmse_px": 8.183566955189127
+            },
+            "frozen_first_frame": {
+              "scale": 0.9245360056098288,
+              "translation_px": [
+                23.118744254786293,
+                16.336984417298396
+              ],
+              "all_mean_px": 10.936419534385095,
+              "distal_rmse_px": 15.612129245549376,
+              "fit_rmse_px": 9.382358496619739
+            },
+            "per_frame_oracle": {
+              "scale": 0.9784377617998592,
+              "translation_px": [
+                10.356101565690608,
+                5.72810828399696
+              ],
+              "all_mean_px": 8.416267361779099,
+              "distal_rmse_px": 11.863382349553978,
+              "fit_rmse_px": 7.190310972714272
+            }
+          }
+        },
+        {
+          "source_frame": 31,
+          "source_pts_s": 1.205624,
+          "source_joint_height_fraction": 0.4914858341217041,
+          "target_joint_height_fraction": 0.45067940652370453,
+          "height_ratio": 0.9169733392806294,
+          "width_ratio": 0.8393645137599642,
+          "corrections": {
+            "baseline": {
+              "scale": 1.0,
+              "translation_px": [
+                0.0,
+                0.0
+              ],
+              "all_mean_px": 8.86840083854085,
+              "distal_rmse_px": 12.580092808982588,
+              "fit_rmse_px": 7.337158440359662
+            },
+            "frozen_first_frame": {
+              "scale": 0.9245360056098288,
+              "translation_px": [
+                23.118744254786293,
+                16.336984417298396
+              ],
+              "all_mean_px": 12.74540654983363,
+              "distal_rmse_px": 17.77457481345027,
+              "fit_rmse_px": 10.471189646410632
+            },
+            "per_frame_oracle": {
+              "scale": 1.0255236089414392,
+              "translation_px": [
+                -5.2948840514114295,
+                -4.634805861367795
+              ],
+              "all_mean_px": 7.643646787184334,
+              "distal_rmse_px": 10.913204850474049,
+              "fit_rmse_px": 6.453404747237155
+            }
+          }
+        },
+        {
+          "source_frame": 33,
+          "source_pts_s": 1.265905,
+          "source_joint_height_fraction": 0.49119943380355835,
+          "target_joint_height_fraction": 0.4559495747089386,
+          "height_ratio": 0.9282371748239495,
+          "width_ratio": 0.8582216720467282,
+          "corrections": {
+            "baseline": {
+              "scale": 1.0,
+              "translation_px": [
+                0.0,
+                0.0
+              ],
+              "all_mean_px": 8.552878521940793,
+              "distal_rmse_px": 12.356001270671818,
+              "fit_rmse_px": 7.279656863857125
+            },
+            "frozen_first_frame": {
+              "scale": 0.9245360056098288,
+              "translation_px": [
+                23.118744254786293,
+                16.336984417298396
+              ],
+              "all_mean_px": 11.877011298106547,
+              "distal_rmse_px": 16.977705943167955,
+              "fit_rmse_px": 9.528375828003858
+            },
+            "per_frame_oracle": {
+              "scale": 0.9971553721190807,
+              "translation_px": [
+                4.412695559470876,
+                1.5325235856017514
+              ],
+              "all_mean_px": 7.880002177710364,
+              "distal_rmse_px": 12.019230473414606,
+              "fit_rmse_px": 6.314672325804929
+            }
+          }
+        },
+        {
+          "source_frame": 35,
+          "source_pts_s": 1.326186,
+          "source_joint_height_fraction": 0.49878013134002686,
+          "target_joint_height_fraction": 0.4498692452907562,
+          "height_ratio": 0.901938984783002,
+          "width_ratio": 0.8259392246472987,
+          "corrections": {
+            "baseline": {
+              "scale": 1.0,
+              "translation_px": [
+                0.0,
+                0.0
+              ],
+              "all_mean_px": 9.571282708467093,
+              "distal_rmse_px": 14.88086464403518,
+              "fit_rmse_px": 7.218959462696318
+            },
+            "frozen_first_frame": {
+              "scale": 0.9245360056098288,
+              "translation_px": [
+                23.118744254786293,
+                16.336984417298396
+              ],
+              "all_mean_px": 13.851542451730559,
+              "distal_rmse_px": 20.86980153655717,
+              "fit_rmse_px": 10.748880798329267
+            },
+            "per_frame_oracle": {
+              "scale": 1.0367602761694028,
+              "translation_px": [
+                -9.86476155972241,
+                -7.424704894510057
+              ],
+              "all_mean_px": 8.009974337743138,
+              "distal_rmse_px": 12.620995922689593,
+              "fit_rmse_px": 6.463333184017989
+            }
+          }
+        },
+        {
+          "source_frame": 37,
+          "source_pts_s": 1.386467,
+          "source_joint_height_fraction": 0.5044379532337189,
+          "target_joint_height_fraction": 0.4505964666604996,
+          "height_ratio": 0.8932644020378198,
+          "width_ratio": 0.8906446173515523,
+          "corrections": {
+            "baseline": {
+              "scale": 1.0,
+              "translation_px": [
+                0.0,
+                0.0
+              ],
+              "all_mean_px": 8.896304111838186,
+              "distal_rmse_px": 12.805577843957765,
+              "fit_rmse_px": 8.110389353963706
+            },
+            "frozen_first_frame": {
+              "scale": 0.9245360056098288,
+              "translation_px": [
+                23.118744254786293,
+                16.336984417298396
+              ],
+              "all_mean_px": 13.072626881468418,
+              "distal_rmse_px": 18.746686053040186,
+              "fit_rmse_px": 10.87503879314067
+            },
+            "per_frame_oracle": {
+              "scale": 1.0057884576496392,
+              "translation_px": [
+                0.6073166934796177,
+                -2.321683719856594
+              ],
+              "all_mean_px": 8.88082712151085,
+              "distal_rmse_px": 13.17572904474356,
+              "fit_rmse_px": 7.593043599416251
+            }
+          }
+        },
+        {
+          "source_frame": 39,
+          "source_pts_s": 1.446748,
+          "source_joint_height_fraction": 0.5714210867881775,
+          "target_joint_height_fraction": 0.5016637891530991,
+          "height_ratio": 0.8779231301610382,
+          "width_ratio": 0.8779953789379756,
+          "corrections": {
+            "baseline": {
+              "scale": 1.0,
+              "translation_px": [
+                0.0,
+                0.0
+              ],
+              "all_mean_px": 10.164117439624443,
+              "distal_rmse_px": 14.504849530974264,
+              "fit_rmse_px": 8.645287517084189
+            },
+            "frozen_first_frame": {
+              "scale": 0.9245360056098288,
+              "translation_px": [
+                23.118744254786293,
+                16.336984417298396
+              ],
+              "all_mean_px": 14.94071112270121,
+              "distal_rmse_px": 21.668461000686612,
+              "fit_rmse_px": 12.640891654143898
+            },
+            "per_frame_oracle": {
+              "scale": 1.0532791124238694,
+              "translation_px": [
+                -17.898218336693503,
+                -12.677712180322885
+              ],
+              "all_mean_px": 7.816556587619907,
+              "distal_rmse_px": 10.48458295180844,
+              "fit_rmse_px": 7.131357618982067
+            }
+          }
+        },
+        {
+          "source_frame": 41,
+          "source_pts_s": 1.50703,
+          "source_joint_height_fraction": 0.5733559131622314,
+          "target_joint_height_fraction": 0.5098541676998138,
+          "height_ratio": 0.8892455035264462,
+          "width_ratio": 0.899239676701811,
+          "corrections": {
+            "baseline": {
+              "scale": 1.0,
+              "translation_px": [
+                0.0,
+                0.0
+              ],
+              "all_mean_px": 9.289501163763415,
+              "distal_rmse_px": 13.583992900459036,
+              "fit_rmse_px": 7.988629262427805
+            },
+            "frozen_first_frame": {
+              "scale": 0.9245360056098288,
+              "translation_px": [
+                23.118744254786293,
+                16.336984417298396
+              ],
+              "all_mean_px": 13.884496296260282,
+              "distal_rmse_px": 20.66659531220572,
+              "fit_rmse_px": 11.588388394570302
+            },
+            "per_frame_oracle": {
+              "scale": 1.0319344229281686,
+              "translation_px": [
+                -10.92692689876128,
+                -8.190260412715503
+              ],
+              "all_mean_px": 8.029076130853502,
+              "distal_rmse_px": 11.376159324668304,
+              "fit_rmse_px": 7.189675468795693
+            }
+          }
+        },
+        {
+          "source_frame": 43,
+          "source_pts_s": 1.567311,
+          "source_joint_height_fraction": 0.6023328900337219,
+          "target_joint_height_fraction": 0.5575124621391296,
+          "height_ratio": 0.9255886094945223,
+          "width_ratio": 0.9247596480608041,
+          "corrections": {
+            "baseline": {
+              "scale": 1.0,
+              "translation_px": [
+                0.0,
+                0.0
+              ],
+              "all_mean_px": 8.791729633130867,
+              "distal_rmse_px": 13.479455810027188,
+              "fit_rmse_px": 8.61058615843705
+            },
+            "frozen_first_frame": {
+              "scale": 0.9245360056098288,
+              "translation_px": [
+                23.118744254786293,
+                16.336984417298396
+              ],
+              "all_mean_px": 11.891599361644738,
+              "distal_rmse_px": 19.634144306174946,
+              "fit_rmse_px": 9.875298440976998
+            },
+            "per_frame_oracle": {
+              "scale": 0.9851822999042071,
+              "translation_px": [
+                1.198442429399222,
+                2.685260689693507
+              ],
+              "all_mean_px": 8.556953733382139,
+              "distal_rmse_px": 14.198120217775218,
+              "fit_rmse_px": 7.853981136147061
+            }
+          }
+        },
+        {
+          "source_frame": 45,
+          "source_pts_s": 1.657733,
+          "source_joint_height_fraction": 0.6093078851699829,
+          "target_joint_height_fraction": 0.5699301660060883,
+          "height_ratio": 0.9353730353367917,
+          "width_ratio": 0.8825657507368072,
+          "corrections": {
+            "baseline": {
+              "scale": 1.0,
+              "translation_px": [
+                0.0,
+                0.0
+              ],
+              "all_mean_px": 13.762937027265842,
+              "distal_rmse_px": 18.24560912188239,
+              "fit_rmse_px": 13.559121638775267
+            },
+            "frozen_first_frame": {
+              "scale": 0.9245360056098288,
+              "translation_px": [
+                23.118744254786293,
+                16.336984417298396
+              ],
+              "all_mean_px": 16.600761696027863,
+              "distal_rmse_px": 23.807336306311985,
+              "fit_rmse_px": 14.9641742883699
+            },
+            "per_frame_oracle": {
+              "scale": 1.0022302632733164,
+              "translation_px": [
+                -3.547218193609808,
+                -1.430074609205377
+              ],
+              "all_mean_px": 12.63357594754092,
+              "distal_rmse_px": 17.98080403409072,
+              "fit_rmse_px": 13.211144839221031
+            }
+          }
+        },
+        {
+          "source_frame": 47,
+          "source_pts_s": 1.718014,
+          "source_joint_height_fraction": 0.6021363139152527,
+          "target_joint_height_fraction": 0.5841218829154968,
+          "height_ratio": 0.9700824703917603,
+          "width_ratio": 0.9224994703488367,
+          "corrections": {
+            "baseline": {
+              "scale": 1.0,
+              "translation_px": [
+                0.0,
+                0.0
+              ],
+              "all_mean_px": 12.785527872967114,
+              "distal_rmse_px": 15.703077395948883,
+              "fit_rmse_px": 12.988958908912688
+            },
+            "frozen_first_frame": {
+              "scale": 0.9245360056098288,
+              "translation_px": [
+                23.118744254786293,
+                16.336984417298396
+              ],
+              "all_mean_px": 15.052827065081525,
+              "distal_rmse_px": 20.78799046960992,
+              "fit_rmse_px": 13.762690243338325
+            },
+            "per_frame_oracle": {
+              "scale": 0.9803706319537757,
+              "translation_px": [
+                2.988771173641396,
+                3.5508934038094537
+              ],
+              "all_mean_px": 11.946512115276304,
+              "distal_rmse_px": 16.807013321608377,
+              "fit_rmse_px": 12.578451928593564
+            }
+          }
+        },
+        {
+          "source_frame": 49,
+          "source_pts_s": 1.778295,
+          "source_joint_height_fraction": 0.571166068315506,
+          "target_joint_height_fraction": 0.5646215528249741,
+          "height_ratio": 0.9885418342342479,
+          "width_ratio": 0.8417930446674801,
+          "corrections": {
+            "baseline": {
+              "scale": 1.0,
+              "translation_px": [
+                0.0,
+                0.0
+              ],
+              "all_mean_px": 16.75732732250376,
+              "distal_rmse_px": 18.915061627297174,
+              "fit_rmse_px": 18.280351467505163
+            },
+            "frozen_first_frame": {
+              "scale": 0.9245360056098288,
+              "translation_px": [
+                23.118744254786293,
+                16.336984417298396
+              ],
+              "all_mean_px": 18.279451168552434,
+              "distal_rmse_px": 22.150810656007284,
+              "fit_rmse_px": 18.753420059999428
+            },
+            "per_frame_oracle": {
+              "scale": 0.9696252539376371,
+              "translation_px": [
+                5.249314616946663,
+                5.009047185781526
+              ],
+              "all_mean_px": 16.442984031090617,
+              "distal_rmse_px": 19.90297107580032,
+              "fit_rmse_px": 17.771665196030586
+            }
+          }
+        },
+        {
+          "source_frame": 51,
+          "source_pts_s": 1.838576,
+          "source_joint_height_fraction": 0.5543730854988098,
+          "target_joint_height_fraction": 0.5414787977933884,
+          "height_ratio": 0.9767407761258476,
+          "width_ratio": 0.9166323688281738,
+          "corrections": {
+            "baseline": {
+              "scale": 1.0,
+              "translation_px": [
+                0.0,
+                0.0
+              ],
+              "all_mean_px": 15.187060471564289,
+              "distal_rmse_px": 16.871015773043684,
+              "fit_rmse_px": 16.085802247746486
+            },
+            "frozen_first_frame": {
+              "scale": 0.9245360056098288,
+              "translation_px": [
+                23.118744254786293,
+                16.336984417298396
+              ],
+              "all_mean_px": 16.421191198118798,
+              "distal_rmse_px": 20.12075416282848,
+              "fit_rmse_px": 16.527176993108736
+            },
+            "per_frame_oracle": {
+              "scale": 0.9678017286486021,
+              "translation_px": [
+                5.730569282657996,
+                5.568962234631016
+              ],
+              "all_mean_px": 14.069014103719814,
+              "distal_rmse_px": 17.943223529205657,
+              "fit_rmse_px": 15.486301860091983
+            }
+          }
+        },
+        {
+          "source_frame": 53,
+          "source_pts_s": 1.898857,
+          "source_joint_height_fraction": 0.5230231881141663,
+          "target_joint_height_fraction": 0.5151773989200592,
+          "height_ratio": 0.9849991561131426,
+          "width_ratio": 0.7751476495663328,
+          "corrections": {
+            "baseline": {
+              "scale": 1.0,
+              "translation_px": [
+                0.0,
+                0.0
+              ],
+              "all_mean_px": 17.56824899842427,
+              "distal_rmse_px": 19.78191829009852,
+              "fit_rmse_px": 19.074440982719977
+            },
+            "frozen_first_frame": {
+              "scale": 0.9245360056098288,
+              "translation_px": [
+                23.118744254786293,
+                16.336984417298396
+              ],
+              "all_mean_px": 18.236235340369074,
+              "distal_rmse_px": 22.19311823872131,
+              "fit_rmse_px": 18.93281591706253
+            },
+            "per_frame_oracle": {
+              "scale": 0.9425992868556959,
+              "translation_px": [
+                13.131013657322853,
+                11.729007395105953
+              ],
+              "all_mean_px": 17.231835305751307,
+              "distal_rmse_px": 21.422007768622084,
+              "fit_rmse_px": 18.314669454509684
+            }
+          }
+        },
+        {
+          "source_frame": 55,
+          "source_pts_s": 1.959139,
+          "source_joint_height_fraction": 0.4942202568054199,
+          "target_joint_height_fraction": 0.497350737452507,
+          "height_ratio": 1.006334181175256,
+          "width_ratio": 0.7621125392242153,
+          "corrections": {
+            "baseline": {
+              "scale": 1.0,
+              "translation_px": [
+                0.0,
+                0.0
+              ],
+              "all_mean_px": 18.32365810528381,
+              "distal_rmse_px": 20.04720122130551,
+              "fit_rmse_px": 19.33494389534467
+            },
+            "frozen_first_frame": {
+              "scale": 0.9245360056098288,
+              "translation_px": [
+                23.118744254786293,
+                16.336984417298396
+              ],
+              "all_mean_px": 17.67882245830717,
+              "distal_rmse_px": 21.647339992052142,
+              "fit_rmse_px": 18.734737341074304
+            },
+            "per_frame_oracle": {
+              "scale": 0.9124117596252809,
+              "translation_px": [
+                22.057679278107003,
+                18.520948797228186
+              ],
+              "all_mean_px": 17.117302502973057,
+              "distal_rmse_px": 21.939116805164794,
+              "fit_rmse_px": 18.11683258103405
+            }
+          }
+        }
+      ],
+      "events": [
+        {
+          "source_frame": 1,
+          "source_pts_s": 0.0,
+          "source_joint_height_fraction": 0.6156325042247772,
+          "target_joint_height_fraction": 0.5841406732797623,
+          "height_ratio": 0.9488463803829358,
+          "width_ratio": 1.0392627419316993,
+          "corrections": {
+            "baseline": {
+              "scale": 1.0,
+              "translation_px": [
+                0.0,
+                0.0
+              ],
+              "all_mean_px": 8.718073826726586,
+              "distal_rmse_px": 9.866600526559514,
+              "fit_rmse_px": 8.651230283925269
+            },
+            "frozen_first_frame": {
+              "scale": 0.9245360056098288,
+              "translation_px": [
+                23.118744254786293,
+                16.336984417298396
+              ],
+              "all_mean_px": 8.062770724179122,
+              "distal_rmse_px": 14.118480547369218,
+              "fit_rmse_px": 5.976618190633757
+            },
+            "per_frame_oracle": {
+              "scale": 0.9245360056098288,
+              "translation_px": [
+                23.118744254786293,
+                16.336984417298396
+              ],
+              "all_mean_px": 8.062770724179122,
+              "distal_rmse_px": 14.118480547369218,
+              "fit_rmse_px": 5.976618190633757
+            }
+          }
+        },
+        {
+          "source_frame": 17,
+          "source_pts_s": 0.783655,
+          "source_joint_height_fraction": 0.5878570973873138,
+          "target_joint_height_fraction": 0.5386188626289368,
+          "height_ratio": 0.9162411494609614,
+          "width_ratio": 1.0257049395777178,
+          "corrections": {
+            "baseline": {
+              "scale": 1.0,
+              "translation_px": [
+                0.0,
+                0.0
+              ],
+              "all_mean_px": 6.864091162725938,
+              "distal_rmse_px": 9.86323953921958,
+              "fit_rmse_px": 6.045645382416739
+            },
+            "frozen_first_frame": {
+              "scale": 0.9245360056098288,
+              "translation_px": [
+                23.118744254786293,
+                16.336984417298396
+              ],
+              "all_mean_px": 10.49952359448551,
+              "distal_rmse_px": 16.08330134687007,
+              "fit_rmse_px": 7.97018903611902
+            },
+            "per_frame_oracle": {
+              "scale": 0.9779357943878966,
+              "translation_px": [
+                8.69295352466412,
+                3.9290414433161516
+              ],
+              "all_mean_px": 7.241079894653761,
+              "distal_rmse_px": 11.896868703649117,
+              "fit_rmse_px": 5.722796139387695
+            }
+          }
+        },
+        {
+          "source_frame": 23,
+          "source_pts_s": 0.964499,
+          "source_joint_height_fraction": 0.5033809542655945,
+          "target_joint_height_fraction": 0.4782349467277527,
+          "height_ratio": 0.9500457708525575,
+          "width_ratio": 0.940933308605645,
+          "corrections": {
+            "baseline": {
+              "scale": 1.0,
+              "translation_px": [
+                0.0,
+                0.0
+              ],
+              "all_mean_px": 7.454897037696519,
+              "distal_rmse_px": 7.1849197205661675,
+              "fit_rmse_px": 8.576271364419433
+            },
+            "frozen_first_frame": {
+              "scale": 0.9245360056098288,
+              "translation_px": [
+                23.118744254786293,
+                16.336984417298396
+              ],
+              "all_mean_px": 8.79993595026446,
+              "distal_rmse_px": 12.35331372047585,
+              "fit_rmse_px": 7.948601633049339
+            },
+            "per_frame_oracle": {
+              "scale": 0.9289388722279781,
+              "translation_px": [
+                27.2374265891267,
+                15.738800300079134
+              ],
+              "all_mean_px": 7.001611972300541,
+              "distal_rmse_px": 11.288085401877124,
+              "fit_rmse_px": 5.655344537444665
+            }
+          }
+        },
+        {
+          "source_frame": 29,
+          "source_pts_s": 1.145343,
+          "source_joint_height_fraction": 0.47629308700561523,
+          "target_joint_height_fraction": 0.4530317634344101,
+          "height_ratio": 0.9511617443002466,
+          "width_ratio": 0.8338983649083656,
+          "corrections": {
+            "baseline": {
+              "scale": 1.0,
+              "translation_px": [
+                0.0,
+                0.0
+              ],
+              "all_mean_px": 8.60039285894885,
+              "distal_rmse_px": 11.379995401707033,
+              "fit_rmse_px": 8.183566955189127
+            },
+            "frozen_first_frame": {
+              "scale": 0.9245360056098288,
+              "translation_px": [
+                23.118744254786293,
+                16.336984417298396
+              ],
+              "all_mean_px": 10.936419534385095,
+              "distal_rmse_px": 15.612129245549376,
+              "fit_rmse_px": 9.382358496619739
+            },
+            "per_frame_oracle": {
+              "scale": 0.9784377617998592,
+              "translation_px": [
+                10.356101565690608,
+                5.72810828399696
+              ],
+              "all_mean_px": 8.416267361779099,
+              "distal_rmse_px": 11.863382349553978,
+              "fit_rmse_px": 7.190310972714272
+            }
+          }
+        },
+        {
+          "source_frame": 41,
+          "source_pts_s": 1.50703,
+          "source_joint_height_fraction": 0.5733559131622314,
+          "target_joint_height_fraction": 0.5098541676998138,
+          "height_ratio": 0.8892455035264462,
+          "width_ratio": 0.899239676701811,
+          "corrections": {
+            "baseline": {
+              "scale": 1.0,
+              "translation_px": [
+                0.0,
+                0.0
+              ],
+              "all_mean_px": 9.289501163763415,
+              "distal_rmse_px": 13.583992900459036,
+              "fit_rmse_px": 7.988629262427805
+            },
+            "frozen_first_frame": {
+              "scale": 0.9245360056098288,
+              "translation_px": [
+                23.118744254786293,
+                16.336984417298396
+              ],
+              "all_mean_px": 13.884496296260282,
+              "distal_rmse_px": 20.66659531220572,
+              "fit_rmse_px": 11.588388394570302
+            },
+            "per_frame_oracle": {
+              "scale": 1.0319344229281686,
+              "translation_px": [
+                -10.92692689876128,
+                -8.190260412715503
+              ],
+              "all_mean_px": 8.029076130853502,
+              "distal_rmse_px": 11.376159324668304,
+              "fit_rmse_px": 7.189675468795693
+            }
+          }
+        },
+        {
+          "source_frame": 55,
+          "source_pts_s": 1.959139,
+          "source_joint_height_fraction": 0.4942202568054199,
+          "target_joint_height_fraction": 0.497350737452507,
+          "height_ratio": 1.006334181175256,
+          "width_ratio": 0.7621125392242153,
+          "corrections": {
+            "baseline": {
+              "scale": 1.0,
+              "translation_px": [
+                0.0,
+                0.0
+              ],
+              "all_mean_px": 18.32365810528381,
+              "distal_rmse_px": 20.04720122130551,
+              "fit_rmse_px": 19.33494389534467
+            },
+            "frozen_first_frame": {
+              "scale": 0.9245360056098288,
+              "translation_px": [
+                23.118744254786293,
+                16.336984417298396
+              ],
+              "all_mean_px": 17.67882245830717,
+              "distal_rmse_px": 21.647339992052142,
+              "fit_rmse_px": 18.734737341074304
+            },
+            "per_frame_oracle": {
+              "scale": 0.9124117596252809,
+              "translation_px": [
+                22.057679278107003,
+                18.520948797228186
+              ],
+              "all_mean_px": 17.117302502973057,
+              "distal_rmse_px": 21.939116805164794,
+              "fit_rmse_px": 18.11683258103405
+            }
+          }
+        }
+      ]
+    },
+    "torso_extended": {
+      "input_report_sha256": "fd1cde960d217c26c32d6ee108bb7d727f39847d03444027ae6bbff8ae5cffb9",
+      "input_report": "docs/agents/raw/2026-10-21-torso-endpoint/report.json",
+      "summary": {
+        "baseline": {
+          "distal_rmse_px": 11.33940450017655,
+          "median_frame_all_mean_px": 7.012633367546504
+        },
+        "frozen_first_frame": {
+          "distal_rmse_px": 12.603780520977296,
+          "median_frame_all_mean_px": 7.350308746643093
+        },
+        "per_frame_oracle": {
+          "distal_rmse_px": 10.786838730290919,
+          "median_frame_all_mean_px": 6.898622144470016
+        },
+        "median_height_ratio": 0.9214796763580624,
+        "median_width_ratio": 0.9429976329995945,
+        "first_frame_scale": 0.9820563289767982
+      },
+      "frames": [
+        {
+          "source_frame": 1,
+          "source_pts_s": 0.0,
+          "source_joint_height_fraction": 0.6156325042247772,
+          "target_joint_height_fraction": 0.5679136961698532,
+          "height_ratio": 0.9224881601808648,
+          "width_ratio": 1.0389091211010708,
+          "corrections": {
+            "baseline": {
+              "scale": 1.0,
+              "translation_px": [
+                0.0,
+                0.0
+              ],
+              "all_mean_px": 7.023167585622205,
+              "distal_rmse_px": 10.518880921159267,
+              "fit_rmse_px": 5.657808737906101
+            },
+            "frozen_first_frame": {
+              "scale": 0.9820563289767982,
+              "translation_px": [
+                5.034503526146409,
+                3.681124918464434
+              ],
+              "all_mean_px": 7.280429364172421,
+              "distal_rmse_px": 11.704923737922723,
+              "fit_rmse_px": 5.4715882965737705
+            },
+            "per_frame_oracle": {
+              "scale": 0.9820563289767982,
+              "translation_px": [
+                5.034503526146409,
+                3.681124918464434
+              ],
+              "all_mean_px": 7.280429364172421,
+              "distal_rmse_px": 11.704923737922723,
+              "fit_rmse_px": 5.4715882965737705
+            }
+          }
+        },
+        {
+          "source_frame": 3,
+          "source_pts_s": 0.060281,
+          "source_joint_height_fraction": 0.6148439943790436,
+          "target_joint_height_fraction": 0.5671961605548859,
+          "height_ratio": 0.922504189258156,
+          "width_ratio": 1.0371019289280266,
+          "corrections": {
+            "baseline": {
+              "scale": 1.0,
+              "translation_px": [
+                0.0,
+                0.0
+              ],
+              "all_mean_px": 7.002099149470802,
+              "distal_rmse_px": 10.543172092663697,
+              "fit_rmse_px": 5.630208280034486
+            },
+            "frozen_first_frame": {
+              "scale": 0.9820563289767982,
+              "translation_px": [
+                5.034503526146409,
+                3.681124918464434
+              ],
+              "all_mean_px": 7.255445000216686,
+              "distal_rmse_px": 11.729382577370702,
+              "fit_rmse_px": 5.444658062112825
+            },
+            "per_frame_oracle": {
+              "scale": 0.9830722346573042,
+              "translation_px": [
+                4.6278552002281685,
+                3.510000707625153
+              ],
+              "all_mean_px": 7.225740118392056,
+              "distal_rmse_px": 11.622602736996944,
+              "fit_rmse_px": 5.443697535292857
+            }
+          }
+        },
+        {
+          "source_frame": 5,
+          "source_pts_s": 0.150703,
+          "source_joint_height_fraction": 0.6109679043292999,
+          "target_joint_height_fraction": 0.56293585896492,
+          "height_ratio": 0.9213836847663743,
+          "width_ratio": 1.0281893196508554,
+          "corrections": {
+            "baseline": {
+              "scale": 1.0,
+              "translation_px": [
+                0.0,
+                0.0
+              ],
+              "all_mean_px": 6.906651453327162,
+              "distal_rmse_px": 10.624278909327423,
+              "fit_rmse_px": 5.480854227655067
+            },
+            "frozen_first_frame": {
+              "scale": 0.9820563289767982,
+              "translation_px": [
+                5.034503526146409,
+                3.681124918464434
+              ],
+              "all_mean_px": 7.153655403768133,
+              "distal_rmse_px": 11.819450401512459,
+              "fit_rmse_px": 5.321571734069008
+            },
+            "per_frame_oracle": {
+              "scale": 0.9873427826639808,
+              "translation_px": [
+                3.1282291389424017,
+                2.8054949018702757
+              ],
+              "all_mean_px": 7.012844456475172,
+              "distal_rmse_px": 11.295523619396555,
+              "fit_rmse_px": 5.307832198970769
+            }
+          }
+        },
+        {
+          "source_frame": 7,
+          "source_pts_s": 0.210984,
+          "source_joint_height_fraction": 0.6112341284751892,
+          "target_joint_height_fraction": 0.5629303306341171,
+          "height_ratio": 0.9209733298734925,
+          "width_ratio": 1.041110107997443,
+          "corrections": {
+            "baseline": {
+              "scale": 1.0,
+              "translation_px": [
+                0.0,
+                0.0
+              ],
+              "all_mean_px": 7.109853542405393,
+              "distal_rmse_px": 10.602384058490928,
+              "fit_rmse_px": 5.748050008866633
+            },
+            "frozen_first_frame": {
+              "scale": 0.9820563289767982,
+              "translation_px": [
+                5.034503526146409,
+                3.681124918464434
+              ],
+              "all_mean_px": 7.354964988033745,
+              "distal_rmse_px": 11.76889116409755,
+              "fit_rmse_px": 5.549826436809265
+            },
+            "per_frame_oracle": {
+              "scale": 0.9814998322057318,
+              "translation_px": [
+                5.156737338202504,
+                3.7871869854745626
+              ],
+              "all_mean_px": 7.363621698773426,
+              "distal_rmse_px": 11.804605728809186,
+              "fit_rmse_px": 5.549436322697716
+            }
+          }
+        },
+        {
+          "source_frame": 9,
+          "source_pts_s": 0.271265,
+          "source_joint_height_fraction": 0.61873659491539,
+          "target_joint_height_fraction": 0.5703054368495941,
+          "height_ratio": 0.9217257255126171,
+          "width_ratio": 1.0553224520938511,
+          "corrections": {
+            "baseline": {
+              "scale": 1.0,
+              "translation_px": [
+                0.0,
+                0.0
+              ],
+              "all_mean_px": 7.362965253176249,
+              "distal_rmse_px": 10.559333940013456,
+              "fit_rmse_px": 6.105454233282641
+            },
+            "frozen_first_frame": {
+              "scale": 0.9820563289767982,
+              "translation_px": [
+                5.034503526146409,
+                3.681124918464434
+              ],
+              "all_mean_px": 7.609515053587408,
+              "distal_rmse_px": 11.710104063508952,
+              "fit_rmse_px": 5.878983393411773
+            },
+            "per_frame_oracle": {
+              "scale": 0.9743024726379081,
+              "translation_px": [
+                7.787366133570913,
+                4.988059985092605
+              ],
+              "all_mean_px": 7.797968593328437,
+              "distal_rmse_px": 12.440263791241684,
+              "fit_rmse_px": 5.853801257465181
+            }
+          }
+        },
+        {
+          "source_frame": 11,
+          "source_pts_s": 0.331547,
+          "source_joint_height_fraction": 0.6187264621257782,
+          "target_joint_height_fraction": 0.5698694437742233,
+          "height_ratio": 0.9210361583959166,
+          "width_ratio": 1.0634981901836744,
+          "corrections": {
+            "baseline": {
+              "scale": 1.0,
+              "translation_px": [
+                0.0,
+                0.0
+              ],
+              "all_mean_px": 7.5423670200192205,
+              "distal_rmse_px": 10.606545895949534,
+              "fit_rmse_px": 6.3415656755464935
+            },
+            "frozen_first_frame": {
+              "scale": 0.9820563289767982,
+              "translation_px": [
+                5.034503526146409,
+                3.681124918464434
+              ],
+              "all_mean_px": 7.782345020505102,
+              "distal_rmse_px": 11.737857832584845,
+              "fit_rmse_px": 6.101159794723468
+            },
+            "per_frame_oracle": {
+              "scale": 0.9705358575306515,
+              "translation_px": [
+                9.15234908061592,
+                5.62062325510999
+              ],
+              "all_mean_px": 8.053453362101543,
+              "distal_rmse_px": 12.81176653229521,
+              "fit_rmse_px": 6.045034681534717
+            }
+          }
+        },
+        {
+          "source_frame": 13,
+          "source_pts_s": 0.632952,
+          "source_joint_height_fraction": 0.6161067485809326,
+          "target_joint_height_fraction": 0.5677889883518219,
+          "height_ratio": 0.9215756679497504,
+          "width_ratio": 1.0421488969434887,
+          "corrections": {
+            "baseline": {
+              "scale": 1.0,
+              "translation_px": [
+                0.0,
+                0.0
+              ],
+              "all_mean_px": 7.104571642615858,
+              "distal_rmse_px": 10.570417730931181,
+              "fit_rmse_px": 5.737130517809553
+            },
+            "frozen_first_frame": {
+              "scale": 0.9820563289767982,
+              "translation_px": [
+                5.034503526146409,
+                3.681124918464434
+              ],
+              "all_mean_px": 7.358519544296885,
+              "distal_rmse_px": 11.75652615831051,
+              "fit_rmse_px": 5.54200162926889
+            },
+            "per_frame_oracle": {
+              "scale": 0.9809405189036493,
+              "translation_px": [
+                5.392932327051881,
+                3.860371127353062
+              ],
+              "all_mean_px": 7.384102310052056,
+              "distal_rmse_px": 11.858763916878846,
+              "fit_rmse_px": 5.541595895875766
+            }
+          }
+        },
+        {
+          "source_frame": 15,
+          "source_pts_s": 0.723374,
+          "source_joint_height_fraction": 0.6171297132968903,
+          "target_joint_height_fraction": 0.5685727000236511,
+          "height_ratio": 0.9213179786566537,
+          "width_ratio": 1.0396164781821127,
+          "corrections": {
+            "baseline": {
+              "scale": 1.0,
+              "translation_px": [
+                0.0,
+                0.0
+              ],
+              "all_mean_px": 7.070039545901307,
+              "distal_rmse_px": 10.5960129869314,
+              "fit_rmse_px": 5.681905958799131
+            },
+            "frozen_first_frame": {
+              "scale": 0.9820563289767982,
+              "translation_px": [
+                5.034503526146409,
+                3.681124918464434
+              ],
+              "all_mean_px": 7.328378364500483,
+              "distal_rmse_px": 11.791666278322197,
+              "fit_rmse_px": 5.499281818502836
+            },
+            "per_frame_oracle": {
+              "scale": 0.9824104647383237,
+              "translation_px": [
+                4.91915242834591,
+                3.631087914325036
+              ],
+              "all_mean_px": 7.320199451882023,
+              "distal_rmse_px": 11.757009557820354,
+              "fit_rmse_px": 5.499232784120572
+            }
+          }
+        },
+        {
+          "source_frame": 17,
+          "source_pts_s": 0.783655,
+          "source_joint_height_fraction": 0.5878570973873138,
+          "target_joint_height_fraction": 0.5397265404462814,
+          "height_ratio": 0.9181254132085076,
+          "width_ratio": 1.0050466783947425,
+          "corrections": {
+            "baseline": {
+              "scale": 1.0,
+              "translation_px": [
+                0.0,
+                0.0
+              ],
+              "all_mean_px": 6.579288700038674,
+              "distal_rmse_px": 10.516218733887952,
+              "fit_rmse_px": 5.105481283900524
+            },
+            "frozen_first_frame": {
+              "scale": 0.9820563289767982,
+              "translation_px": [
+                5.034503526146409,
+                3.681124918464434
+              ],
+              "all_mean_px": 6.920497991585411,
+              "distal_rmse_px": 11.789556747753151,
+              "fit_rmse_px": 5.34522564877544
+            },
+            "per_frame_oracle": {
+              "scale": 1.0031068927577418,
+              "translation_px": [
+                -0.4983636159507796,
+                0.2360796500414608
+              ],
+              "all_mean_px": 6.461586343937744,
+              "distal_rmse_px": 10.190576663686741,
+              "fit_rmse_px": 5.018363499221344
+            }
+          }
+        },
+        {
+          "source_frame": 19,
+          "source_pts_s": 0.843937,
+          "source_joint_height_fraction": 0.5799645185470581,
+          "target_joint_height_fraction": 0.5287224054336548,
+          "height_ratio": 0.9116461240736307,
+          "width_ratio": 1.0201822459225949,
+          "corrections": {
+            "baseline": {
+              "scale": 1.0,
+              "translation_px": [
+                0.0,
+                0.0
+              ],
+              "all_mean_px": 6.88886855967661,
+              "distal_rmse_px": 10.290006727718323,
+              "fit_rmse_px": 5.633925823100627
+            },
+            "frozen_first_frame": {
+              "scale": 0.9820563289767982,
+              "translation_px": [
+                5.034503526146409,
+                3.681124918464434
+              ],
+              "all_mean_px": 7.202568429190784,
+              "distal_rmse_px": 11.52469336278072,
+              "fit_rmse_px": 5.878057440058254
+            },
+            "per_frame_oracle": {
+              "scale": 0.9946031554739057,
+              "translation_px": [
+                2.885908949911311,
+                1.493786511074262
+              ],
+              "all_mean_px": 6.996006286650352,
+              "distal_rmse_px": 10.831314637857728,
+              "fit_rmse_px": 5.485732854262655
+            }
+          }
+        },
+        {
+          "source_frame": 21,
+          "source_pts_s": 0.904218,
+          "source_joint_height_fraction": 0.5790026187896729,
+          "target_joint_height_fraction": 0.5294188857078552,
+          "height_ratio": 0.9143635426287609,
+          "width_ratio": 1.011061653069557,
+          "corrections": {
+            "baseline": {
+              "scale": 1.0,
+              "translation_px": [
+                0.0,
+                0.0
+              ],
+              "all_mean_px": 6.747358784986399,
+              "distal_rmse_px": 10.159498251050895,
+              "fit_rmse_px": 5.506490242299755
+            },
+            "frozen_first_frame": {
+              "scale": 0.9820563289767982,
+              "translation_px": [
+                5.034503526146409,
+                3.681124918464434
+              ],
+              "all_mean_px": 7.073417980993489,
+              "distal_rmse_px": 11.411342267658423,
+              "fit_rmse_px": 5.762161656053367
+            },
+            "per_frame_oracle": {
+              "scale": 0.9972508254295843,
+              "translation_px": [
+                1.8665703099006237,
+                1.0146029172579745
+              ],
+              "all_mean_px": 6.812164281691897,
+              "distal_rmse_px": 10.488871921670555,
+              "fit_rmse_px": 5.392243829483506
+            }
+          }
+        },
+        {
+          "source_frame": 23,
+          "source_pts_s": 0.964499,
+          "source_joint_height_fraction": 0.5033809542655945,
+          "target_joint_height_fraction": 0.4566420465707779,
+          "height_ratio": 0.9071500276306518,
+          "width_ratio": 0.9210523415683043,
+          "corrections": {
+            "baseline": {
+              "scale": 1.0,
+              "translation_px": [
+                0.0,
+                0.0
+              ],
+              "all_mean_px": 6.217940707738549,
+              "distal_rmse_px": 9.682822529851983,
+              "fit_rmse_px": 5.493504673957845
+            },
+            "frozen_first_frame": {
+              "scale": 0.9820563289767982,
+              "translation_px": [
+                5.034503526146409,
+                3.681124918464434
+              ],
+              "all_mean_px": 6.843643609113635,
+              "distal_rmse_px": 10.93631011439379,
+              "fit_rmse_px": 5.8972143833264825
+            },
+            "per_frame_oracle": {
+              "scale": 1.01632196550925,
+              "translation_px": [
+                -4.678858455377508,
+                -2.4936752251557834
+              ],
+              "all_mean_px": 5.961092839033203,
+              "distal_rmse_px": 8.607247446574455,
+              "fit_rmse_px": 5.366960536744444
+            }
+          }
+        },
+        {
+          "source_frame": 25,
+          "source_pts_s": 1.02478,
+          "source_joint_height_fraction": 0.4940834641456604,
+          "target_joint_height_fraction": 0.4475916028022766,
+          "height_ratio": 0.9059028186183589,
+          "width_ratio": 0.9168960480458919,
+          "corrections": {
+            "baseline": {
+              "scale": 1.0,
+              "translation_px": [
+                0.0,
+                0.0
+              ],
+              "all_mean_px": 6.31646635217124,
+              "distal_rmse_px": 10.369742585462337,
+              "fit_rmse_px": 5.340523412100218
+            },
+            "frozen_first_frame": {
+              "scale": 0.9820563289767982,
+              "translation_px": [
+                5.034503526146409,
+                3.681124918464434
+              ],
+              "all_mean_px": 6.87929387282371,
+              "distal_rmse_px": 11.608362877417076,
+              "fit_rmse_px": 5.762696039065093
+            },
+            "per_frame_oracle": {
+              "scale": 1.0124302544493327,
+              "translation_px": [
+                -3.3485215312940113,
+                -2.1944060716022307
+              ],
+              "all_mean_px": 6.152331434029765,
+              "distal_rmse_px": 9.656994394425595,
+              "fit_rmse_px": 5.243110060300654
+            }
+          }
+        },
+        {
+          "source_frame": 27,
+          "source_pts_s": 1.085061,
+          "source_joint_height_fraction": 0.4912046492099762,
+          "target_joint_height_fraction": 0.44596703350543976,
+          "height_ratio": 0.9079047485049381,
+          "width_ratio": 0.8843561938652252,
+          "corrections": {
+            "baseline": {
+              "scale": 1.0,
+              "translation_px": [
+                0.0,
+                0.0
+              ],
+              "all_mean_px": 6.7578609127578515,
+              "distal_rmse_px": 11.036443002927463,
+              "fit_rmse_px": 5.6985368742724845
+            },
+            "frozen_first_frame": {
+              "scale": 0.9820563289767982,
+              "translation_px": [
+                5.034503526146409,
+                3.681124918464434
+              ],
+              "all_mean_px": 7.440520117619591,
+              "distal_rmse_px": 12.224216063195012,
+              "fit_rmse_px": 6.123148121947784
+            },
+            "per_frame_oracle": {
+              "scale": 1.0261275566803822,
+              "translation_px": [
+                -8.30217358982594,
+                -4.582476979629035
+              ],
+              "all_mean_px": 6.237989957345963,
+              "distal_rmse_px": 9.407663470192384,
+              "fit_rmse_px": 5.5423136408455145
+            }
+          }
+        },
+        {
+          "source_frame": 29,
+          "source_pts_s": 1.145343,
+          "source_joint_height_fraction": 0.47629308700561523,
+          "target_joint_height_fraction": 0.4430583119392395,
+          "height_ratio": 0.9302220083114834,
+          "width_ratio": 0.8003274810299176,
+          "corrections": {
+            "baseline": {
+              "scale": 1.0,
+              "translation_px": [
+                0.0,
+                0.0
+              ],
+              "all_mean_px": 9.173686114737272,
+              "distal_rmse_px": 13.550229896012919,
+              "fit_rmse_px": 7.418506719139967
+            },
+            "frozen_first_frame": {
+              "scale": 0.9820563289767982,
+              "translation_px": [
+                5.034503526146409,
+                3.681124918464434
+              ],
+              "all_mean_px": 9.846834982801527,
+              "distal_rmse_px": 14.509170976930015,
+              "fit_rmse_px": 7.8728444608370385
+            },
+            "per_frame_oracle": {
+              "scale": 1.0672284689336118,
+              "translation_px": [
+                -22.728650317830215,
+                -11.604509013534084
+              ],
+              "all_mean_px": 7.385213605363368,
+              "distal_rmse_px": 9.512620904009275,
+              "fit_rmse_px": 6.7191095729009875
+            }
+          }
+        },
+        {
+          "source_frame": 31,
+          "source_pts_s": 1.205624,
+          "source_joint_height_fraction": 0.4914858341217041,
+          "target_joint_height_fraction": 0.455791637301445,
+          "height_ratio": 0.9273749224450275,
+          "width_ratio": 0.8052556360010633,
+          "corrections": {
+            "baseline": {
+              "scale": 1.0,
+              "translation_px": [
+                0.0,
+                0.0
+              ],
+              "all_mean_px": 9.262433340806327,
+              "distal_rmse_px": 14.917112763947374,
+              "fit_rmse_px": 6.9509072941361785
+            },
+            "frozen_first_frame": {
+              "scale": 0.9820563289767982,
+              "translation_px": [
+                5.034503526146409,
+                3.681124918464434
+              ],
+              "all_mean_px": 10.022512406482987,
+              "distal_rmse_px": 15.923328411806951,
+              "fit_rmse_px": 7.522566998876767
+            },
+            "per_frame_oracle": {
+              "scale": 1.0641057357254555,
+              "translation_px": [
+                -21.214198417164596,
+                -10.629899778402631
+              ],
+              "all_mean_px": 7.231479345744944,
+              "distal_rmse_px": 10.627424527412103,
+              "fit_rmse_px": 6.1192575517764
+            }
+          }
+        },
+        {
+          "source_frame": 33,
+          "source_pts_s": 1.265905,
+          "source_joint_height_fraction": 0.49119943380355835,
+          "target_joint_height_fraction": 0.4551027715206146,
+          "height_ratio": 0.9265132249778212,
+          "width_ratio": 0.8302832892768527,
+          "corrections": {
+            "baseline": {
+              "scale": 1.0,
+              "translation_px": [
+                0.0,
+                0.0
+              ],
+              "all_mean_px": 8.22723508950247,
+              "distal_rmse_px": 13.936661618890712,
+              "fit_rmse_px": 6.116043572604193
+            },
+            "frozen_first_frame": {
+              "scale": 0.9820563289767982,
+              "translation_px": [
+                5.034503526146409,
+                3.681124918464434
+              ],
+              "all_mean_px": 9.015580252763124,
+              "distal_rmse_px": 14.962112173172914,
+              "fit_rmse_px": 6.726388775109547
+            },
+            "per_frame_oracle": {
+              "scale": 1.0498481118606917,
+              "translation_px": [
+                -16.002563270316955,
+                -8.144116212695167
+              ],
+              "all_mean_px": 6.654696182532071,
+              "distal_rmse_px": 10.388848344311727,
+              "fit_rmse_px": 5.487047750370485
+            }
+          }
+        },
+        {
+          "source_frame": 35,
+          "source_pts_s": 1.326186,
+          "source_joint_height_fraction": 0.49878013134002686,
+          "target_joint_height_fraction": 0.4643298238515854,
+          "height_ratio": 0.9309308744999786,
+          "width_ratio": 0.7905766872388074,
+          "corrections": {
+            "baseline": {
+              "scale": 1.0,
+              "translation_px": [
+                0.0,
+                0.0
+              ],
+              "all_mean_px": 9.046947146230151,
+              "distal_rmse_px": 17.34861083780973,
+              "fit_rmse_px": 5.8404782645763165
+            },
+            "frozen_first_frame": {
+              "scale": 0.9820563289767982,
+              "translation_px": [
+                5.034503526146409,
+                3.681124918464434
+              ],
+              "all_mean_px": 9.943244322603723,
+              "distal_rmse_px": 18.4797414735696,
+              "fit_rmse_px": 6.409524204736915
+            },
+            "per_frame_oracle": {
+              "scale": 1.0532411275190143,
+              "translation_px": [
+                -17.920222252674478,
+                -8.688819126552971
+              ],
+              "all_mean_px": 6.875565382752441,
+              "distal_rmse_px": 13.134081786753157,
+              "fit_rmse_px": 5.021867807333625
+            }
+          }
+        },
+        {
+          "source_frame": 37,
+          "source_pts_s": 1.386467,
+          "source_joint_height_fraction": 0.5044379532337189,
+          "target_joint_height_fraction": 0.46555058658123016,
+          "height_ratio": 0.9229095146326723,
+          "width_ratio": 0.8637812923708659,
+          "corrections": {
+            "baseline": {
+              "scale": 1.0,
+              "translation_px": [
+                0.0,
+                0.0
+              ],
+              "all_mean_px": 8.064820227233445,
+              "distal_rmse_px": 13.448994408041047,
+              "fit_rmse_px": 6.252691309637458
+            },
+            "frozen_first_frame": {
+              "scale": 0.9820563289767982,
+              "translation_px": [
+                5.034503526146409,
+                3.681124918464434
+              ],
+              "all_mean_px": 8.832747549711678,
+              "distal_rmse_px": 14.730359493258767,
+              "fit_rmse_px": 6.756527358860023
+            },
+            "per_frame_oracle": {
+              "scale": 1.013501622276384,
+              "translation_px": [
+                -3.111063336412883,
+                -2.7410509310388704
+              ],
+              "all_mean_px": 7.723685167450377,
+              "distal_rmse_px": 12.706313039325746,
+              "fit_rmse_px": 6.047018872243433
+            }
+          }
+        },
+        {
+          "source_frame": 39,
+          "source_pts_s": 1.446748,
+          "source_joint_height_fraction": 0.5714210867881775,
+          "target_joint_height_fraction": 0.5067624002695084,
+          "height_ratio": 0.8868458164851768,
+          "width_ratio": 0.8478039919809349,
+          "corrections": {
+            "baseline": {
+              "scale": 1.0,
+              "translation_px": [
+                0.0,
+                0.0
+              ],
+              "all_mean_px": 8.501588821547605,
+              "distal_rmse_px": 14.351758898554673,
+              "fit_rmse_px": 5.9647907821005335
+            },
+            "frozen_first_frame": {
+              "scale": 0.9820563289767982,
+              "translation_px": [
+                5.034503526146409,
+                3.681124918464434
+              ],
+              "all_mean_px": 9.68783224353992,
+              "distal_rmse_px": 15.99577338559882,
+              "fit_rmse_px": 6.820035607962069
+            },
+            "per_frame_oracle": {
+              "scale": 1.0566500048055105,
+              "translation_px": [
+                -18.604301710770585,
+                -11.443295886299438
+              ],
+              "all_mean_px": 5.776556641170128,
+              "distal_rmse_px": 9.316097770861816,
+              "fit_rmse_px": 4.512129719026676
+            }
+          }
+        },
+        {
+          "source_frame": 41,
+          "source_pts_s": 1.50703,
+          "source_joint_height_fraction": 0.5733559131622314,
+          "target_joint_height_fraction": 0.5101950466632843,
+          "height_ratio": 0.8898400364433396,
+          "width_ratio": 0.877990642507943,
+          "corrections": {
+            "baseline": {
+              "scale": 1.0,
+              "translation_px": [
+                0.0,
+                0.0
+              ],
+              "all_mean_px": 8.0710404458934,
+              "distal_rmse_px": 12.912649150233984,
+              "fit_rmse_px": 6.024910781531974
+            },
+            "frozen_first_frame": {
+              "scale": 0.9820563289767982,
+              "translation_px": [
+                5.034503526146409,
+                3.681124918464434
+              ],
+              "all_mean_px": 9.097824249019984,
+              "distal_rmse_px": 14.57079000702225,
+              "fit_rmse_px": 6.642912441446576
+            },
+            "per_frame_oracle": {
+              "scale": 1.0288105656654951,
+              "translation_px": [
+                -9.178554046155227,
+                -6.343506421310707
+              ],
+              "all_mean_px": 6.921678906187592,
+              "distal_rmse_px": 10.549628176243464,
+              "fit_rmse_px": 5.5644732413075495
+            }
+          }
+        },
+        {
+          "source_frame": 43,
+          "source_pts_s": 1.567311,
+          "source_joint_height_fraction": 0.6023328900337219,
+          "target_joint_height_fraction": 0.541396751999855,
+          "height_ratio": 0.8988331219461462,
+          "width_ratio": 0.9425139331268587,
+          "corrections": {
+            "baseline": {
+              "scale": 1.0,
+              "translation_px": [
+                0.0,
+                0.0
+              ],
+              "all_mean_px": 7.245709360635913,
+              "distal_rmse_px": 10.492072309463326,
+              "fit_rmse_px": 6.296858861099557
+            },
+            "frozen_first_frame": {
+              "scale": 0.9820563289767982,
+              "translation_px": [
+                5.034503526146409,
+                3.681124918464434
+              ],
+              "all_mean_px": 7.818023009738902,
+              "distal_rmse_px": 12.119645915145691,
+              "fit_rmse_px": 6.220327520216064
+            },
+            "per_frame_oracle": {
+              "scale": 0.9816151398664558,
+              "translation_px": [
+                5.067378880056594,
+                2.912815361621284
+              ],
+              "all_mean_px": 7.7948913941252576,
+              "distal_rmse_px": 12.380187707817917,
+              "fit_rmse_px": 6.162122389936633
+            }
+          }
+        },
+        {
+          "source_frame": 45,
+          "source_pts_s": 1.657733,
+          "source_joint_height_fraction": 0.6093078851699829,
+          "target_joint_height_fraction": 0.5527260601520538,
+          "height_ratio": 0.9071375467229609,
+          "width_ratio": 0.9434813328723303,
+          "corrections": {
+            "baseline": {
+              "scale": 1.0,
+              "translation_px": [
+                0.0,
+                0.0
+              ],
+              "all_mean_px": 6.639933182807231,
+              "distal_rmse_px": 10.395132989835366,
+              "fit_rmse_px": 5.219322365465928
+            },
+            "frozen_first_frame": {
+              "scale": 0.9820563289767982,
+              "translation_px": [
+                5.034503526146409,
+                3.681124918464434
+              ],
+              "all_mean_px": 7.345652505252441,
+              "distal_rmse_px": 12.263486095276471,
+              "fit_rmse_px": 5.455682808111356
+            },
+            "per_frame_oracle": {
+              "scale": 0.9921451441633975,
+              "translation_px": [
+                3.423941898489261,
+                0.5469905560642871
+              ],
+              "all_mean_px": 6.85331460794706,
+              "distal_rmse_px": 11.227158932223785,
+              "fit_rmse_px": 5.029407052950143
+            }
+          }
+        },
+        {
+          "source_frame": 47,
+          "source_pts_s": 1.718014,
+          "source_joint_height_fraction": 0.6021363139152527,
+          "target_joint_height_fraction": 0.5624444037675858,
+          "height_ratio": 0.934081520694908,
+          "width_ratio": 1.0004020628489763,
+          "corrections": {
+            "baseline": {
+              "scale": 1.0,
+              "translation_px": [
+                0.0,
+                0.0
+              ],
+              "all_mean_px": 6.163946930625474,
+              "distal_rmse_px": 8.678917895303075,
+              "fit_rmse_px": 5.253587094559246
+            },
+            "frozen_first_frame": {
+              "scale": 0.9820563289767982,
+              "translation_px": [
+                5.034503526146409,
+                3.681124918464434
+              ],
+              "all_mean_px": 6.557596047315042,
+              "distal_rmse_px": 10.36930720162428,
+              "fit_rmse_px": 5.191408666883441
+            },
+            "per_frame_oracle": {
+              "scale": 0.9727748753971562,
+              "translation_px": [
+                9.716202098266706,
+                4.487578954240121
+              ],
+              "all_mean_px": 6.469767579407358,
+              "distal_rmse_px": 11.084025375773802,
+              "fit_rmse_px": 4.738558516557768
+            }
+          }
+        },
+        {
+          "source_frame": 49,
+          "source_pts_s": 1.778295,
+          "source_joint_height_fraction": 0.571166068315506,
+          "target_joint_height_fraction": 0.5378588438034058,
+          "height_ratio": 0.9416855685942085,
+          "width_ratio": 0.9409511176959842,
+          "corrections": {
+            "baseline": {
+              "scale": 1.0,
+              "translation_px": [
+                0.0,
+                0.0
+              ],
+              "all_mean_px": 6.193972344195167,
+              "distal_rmse_px": 8.662029052091452,
+              "fit_rmse_px": 5.84047126688271
+            },
+            "frozen_first_frame": {
+              "scale": 0.9820563289767982,
+              "translation_px": [
+                5.034503526146409,
+                3.681124918464434
+              ],
+              "all_mean_px": 6.973537681548301,
+              "distal_rmse_px": 10.195583412081794,
+              "fit_rmse_px": 6.1705384564405685
+            },
+            "per_frame_oracle": {
+              "scale": 1.0054592811115808,
+              "translation_px": [
+                -0.33610669819120176,
+                -2.0967420269997206
+              ],
+              "all_mean_px": 5.94885252032437,
+              "distal_rmse_px": 7.898859856677516,
+              "fit_rmse_px": 5.572931915354447
+            }
+          }
+        },
+        {
+          "source_frame": 51,
+          "source_pts_s": 1.838576,
+          "source_joint_height_fraction": 0.5543730854988098,
+          "target_joint_height_fraction": 0.5180416256189346,
+          "height_ratio": 0.9344638821215768,
+          "width_ratio": 1.0185506212300652,
+          "corrections": {
+            "baseline": {
+              "scale": 1.0,
+              "translation_px": [
+                0.0,
+                0.0
+              ],
+              "all_mean_px": 5.587560143338911,
+              "distal_rmse_px": 8.05682570986989,
+              "fit_rmse_px": 4.969339728159466
+            },
+            "frozen_first_frame": {
+              "scale": 0.9820563289767982,
+              "translation_px": [
+                5.034503526146409,
+                3.681124918464434
+              ],
+              "all_mean_px": 6.019188453903181,
+              "distal_rmse_px": 9.43571443458995,
+              "fit_rmse_px": 5.0175342222099655
+            },
+            "per_frame_oracle": {
+              "scale": 0.9792430408127065,
+              "translation_px": [
+                7.316573379535612,
+                2.9699727882928926
+              ],
+              "all_mean_px": 5.811109270886554,
+              "distal_rmse_px": 9.28425054414499,
+              "fit_rmse_px": 4.646925199871169
+            }
+          }
+        },
+        {
+          "source_frame": 53,
+          "source_pts_s": 1.898857,
+          "source_joint_height_fraction": 0.5230231881141663,
+          "target_joint_height_fraction": 0.48519228398799896,
+          "height_ratio": 0.9276687822148537,
+          "width_ratio": 0.8965898257998108,
+          "corrections": {
+            "baseline": {
+              "scale": 1.0,
+              "translation_px": [
+                0.0,
+                0.0
+              ],
+              "all_mean_px": 6.951860569403071,
+              "distal_rmse_px": 9.663270464257867,
+              "fit_rmse_px": 6.542871974583005
+            },
+            "frozen_first_frame": {
+              "scale": 0.9820563289767982,
+              "translation_px": [
+                5.034503526146409,
+                3.681124918464434
+              ],
+              "all_mean_px": 7.557531455034148,
+              "distal_rmse_px": 10.982859365621456,
+              "fit_rmse_px": 6.786318777603066
+            },
+            "per_frame_oracle": {
+              "scale": 1.008880613022194,
+              "translation_px": [
+                -1.0148711365630447,
+                -2.1305526997264224
+              ],
+              "all_mean_px": 6.540898712670626,
+              "distal_rmse_px": 8.629249835083126,
+              "fit_rmse_px": 6.301820944542029
+            }
+          }
+        },
+        {
+          "source_frame": 55,
+          "source_pts_s": 1.959139,
+          "source_joint_height_fraction": 0.4942202568054199,
+          "target_joint_height_fraction": 0.45977938175201416,
+          "height_ratio": 0.9303127005031574,
+          "width_ratio": 0.8888109858268143,
+          "corrections": {
+            "baseline": {
+              "scale": 1.0,
+              "translation_px": [
+                0.0,
+                0.0
+              ],
+              "all_mean_px": 6.450317298738285,
+              "distal_rmse_px": 8.983928421668729,
+              "fit_rmse_px": 6.205415530448999
+            },
+            "frozen_first_frame": {
+              "scale": 0.9820563289767982,
+              "translation_px": [
+                5.034503526146409,
+                3.681124918464434
+              ],
+              "all_mean_px": 7.0294358270008175,
+              "distal_rmse_px": 10.206764563758602,
+              "fit_rmse_px": 6.441119802699912
+            },
+            "per_frame_oracle": {
+              "scale": 1.0073061973398776,
+              "translation_px": [
+                -0.3972561527460243,
+                -1.8949387281930967
+              ],
+              "all_mean_px": 6.086863929815934,
+              "distal_rmse_px": 8.094687550493903,
+              "fit_rmse_px": 5.91210179404972
+            }
+          }
+        }
+      ],
+      "events": [
+        {
+          "source_frame": 1,
+          "source_pts_s": 0.0,
+          "source_joint_height_fraction": 0.6156325042247772,
+          "target_joint_height_fraction": 0.5679136961698532,
+          "height_ratio": 0.9224881601808648,
+          "width_ratio": 1.0389091211010708,
+          "corrections": {
+            "baseline": {
+              "scale": 1.0,
+              "translation_px": [
+                0.0,
+                0.0
+              ],
+              "all_mean_px": 7.023167585622205,
+              "distal_rmse_px": 10.518880921159267,
+              "fit_rmse_px": 5.657808737906101
+            },
+            "frozen_first_frame": {
+              "scale": 0.9820563289767982,
+              "translation_px": [
+                5.034503526146409,
+                3.681124918464434
+              ],
+              "all_mean_px": 7.280429364172421,
+              "distal_rmse_px": 11.704923737922723,
+              "fit_rmse_px": 5.4715882965737705
+            },
+            "per_frame_oracle": {
+              "scale": 0.9820563289767982,
+              "translation_px": [
+                5.034503526146409,
+                3.681124918464434
+              ],
+              "all_mean_px": 7.280429364172421,
+              "distal_rmse_px": 11.704923737922723,
+              "fit_rmse_px": 5.4715882965737705
+            }
+          }
+        },
+        {
+          "source_frame": 17,
+          "source_pts_s": 0.783655,
+          "source_joint_height_fraction": 0.5878570973873138,
+          "target_joint_height_fraction": 0.5397265404462814,
+          "height_ratio": 0.9181254132085076,
+          "width_ratio": 1.0050466783947425,
+          "corrections": {
+            "baseline": {
+              "scale": 1.0,
+              "translation_px": [
+                0.0,
+                0.0
+              ],
+              "all_mean_px": 6.579288700038674,
+              "distal_rmse_px": 10.516218733887952,
+              "fit_rmse_px": 5.105481283900524
+            },
+            "frozen_first_frame": {
+              "scale": 0.9820563289767982,
+              "translation_px": [
+                5.034503526146409,
+                3.681124918464434
+              ],
+              "all_mean_px": 6.920497991585411,
+              "distal_rmse_px": 11.789556747753151,
+              "fit_rmse_px": 5.34522564877544
+            },
+            "per_frame_oracle": {
+              "scale": 1.0031068927577418,
+              "translation_px": [
+                -0.4983636159507796,
+                0.2360796500414608
+              ],
+              "all_mean_px": 6.461586343937744,
+              "distal_rmse_px": 10.190576663686741,
+              "fit_rmse_px": 5.018363499221344
+            }
+          }
+        },
+        {
+          "source_frame": 23,
+          "source_pts_s": 0.964499,
+          "source_joint_height_fraction": 0.5033809542655945,
+          "target_joint_height_fraction": 0.4566420465707779,
+          "height_ratio": 0.9071500276306518,
+          "width_ratio": 0.9210523415683043,
+          "corrections": {
+            "baseline": {
+              "scale": 1.0,
+              "translation_px": [
+                0.0,
+                0.0
+              ],
+              "all_mean_px": 6.217940707738549,
+              "distal_rmse_px": 9.682822529851983,
+              "fit_rmse_px": 5.493504673957845
+            },
+            "frozen_first_frame": {
+              "scale": 0.9820563289767982,
+              "translation_px": [
+                5.034503526146409,
+                3.681124918464434
+              ],
+              "all_mean_px": 6.843643609113635,
+              "distal_rmse_px": 10.93631011439379,
+              "fit_rmse_px": 5.8972143833264825
+            },
+            "per_frame_oracle": {
+              "scale": 1.01632196550925,
+              "translation_px": [
+                -4.678858455377508,
+                -2.4936752251557834
+              ],
+              "all_mean_px": 5.961092839033203,
+              "distal_rmse_px": 8.607247446574455,
+              "fit_rmse_px": 5.366960536744444
+            }
+          }
+        },
+        {
+          "source_frame": 29,
+          "source_pts_s": 1.145343,
+          "source_joint_height_fraction": 0.47629308700561523,
+          "target_joint_height_fraction": 0.4430583119392395,
+          "height_ratio": 0.9302220083114834,
+          "width_ratio": 0.8003274810299176,
+          "corrections": {
+            "baseline": {
+              "scale": 1.0,
+              "translation_px": [
+                0.0,
+                0.0
+              ],
+              "all_mean_px": 9.173686114737272,
+              "distal_rmse_px": 13.550229896012919,
+              "fit_rmse_px": 7.418506719139967
+            },
+            "frozen_first_frame": {
+              "scale": 0.9820563289767982,
+              "translation_px": [
+                5.034503526146409,
+                3.681124918464434
+              ],
+              "all_mean_px": 9.846834982801527,
+              "distal_rmse_px": 14.509170976930015,
+              "fit_rmse_px": 7.8728444608370385
+            },
+            "per_frame_oracle": {
+              "scale": 1.0672284689336118,
+              "translation_px": [
+                -22.728650317830215,
+                -11.604509013534084
+              ],
+              "all_mean_px": 7.385213605363368,
+              "distal_rmse_px": 9.512620904009275,
+              "fit_rmse_px": 6.7191095729009875
+            }
+          }
+        },
+        {
+          "source_frame": 41,
+          "source_pts_s": 1.50703,
+          "source_joint_height_fraction": 0.5733559131622314,
+          "target_joint_height_fraction": 0.5101950466632843,
+          "height_ratio": 0.8898400364433396,
+          "width_ratio": 0.877990642507943,
+          "corrections": {
+            "baseline": {
+              "scale": 1.0,
+              "translation_px": [
+                0.0,
+                0.0
+              ],
+              "all_mean_px": 8.0710404458934,
+              "distal_rmse_px": 12.912649150233984,
+              "fit_rmse_px": 6.024910781531974
+            },
+            "frozen_first_frame": {
+              "scale": 0.9820563289767982,
+              "translation_px": [
+                5.034503526146409,
+                3.681124918464434
+              ],
+              "all_mean_px": 9.097824249019984,
+              "distal_rmse_px": 14.57079000702225,
+              "fit_rmse_px": 6.642912441446576
+            },
+            "per_frame_oracle": {
+              "scale": 1.0288105656654951,
+              "translation_px": [
+                -9.178554046155227,
+                -6.343506421310707
+              ],
+              "all_mean_px": 6.921678906187592,
+              "distal_rmse_px": 10.549628176243464,
+              "fit_rmse_px": 5.5644732413075495
+            }
+          }
+        },
+        {
+          "source_frame": 55,
+          "source_pts_s": 1.959139,
+          "source_joint_height_fraction": 0.4942202568054199,
+          "target_joint_height_fraction": 0.45977938175201416,
+          "height_ratio": 0.9303127005031574,
+          "width_ratio": 0.8888109858268143,
+          "corrections": {
+            "baseline": {
+              "scale": 1.0,
+              "translation_px": [
+                0.0,
+                0.0
+              ],
+              "all_mean_px": 6.450317298738285,
+              "distal_rmse_px": 8.983928421668729,
+              "fit_rmse_px": 6.205415530448999
+            },
+            "frozen_first_frame": {
+              "scale": 0.9820563289767982,
+              "translation_px": [
+                5.034503526146409,
+                3.681124918464434
+              ],
+              "all_mean_px": 7.0294358270008175,
+              "distal_rmse_px": 10.206764563758602,
+              "fit_rmse_px": 6.441119802699912
+            },
+            "per_frame_oracle": {
+              "scale": 1.0073061973398776,
+              "translation_px": [
+                -0.3972561527460243,
+                -1.8949387281930967
+              ],
+              "all_mean_px": 6.086863929815934,
+              "distal_rmse_px": 8.094687550493903,
+              "fit_rmse_px": 5.91210179404972
+            }
+          }
+        }
+      ]
+    }
+  },
+  "limits": [
+    "existing 12 body joint projections only; no mesh top/sole occupancy",
+    "two candidates have different pose settings; not a paired causal treatment",
+    "first-frame/global 2D transform is a diagnostic, not a physical camera/rig calibration",
+    "per-frame oracle fit uses current source observations; not a temporal prediction or independent truth",
+    "no new bundle/render, no contact or H3 validation"
+  ]
+}
