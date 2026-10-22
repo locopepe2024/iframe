@@ -2022,7 +2022,7 @@ export const api = {
 
     previewFrameCandidate: async (
         scriptId: string, frameId: string, prompt: string, negativePrompt?: string,
-    ): Promise<{ prompt: string; negative_prompt: string; model: string; aspect_ratio: string; size: string; reference_asset_labels: string[]; context_token: string }> => {
+    ): Promise<{ prompt: string; negative_prompt: string; model: string; aspect_ratio: string; size: string; reference_asset_labels: string[]; source_label?: string | null; polish_review?: string | null; context_token: string }> => {
         const res = await axios.post(`${API_URL}/projects/${scriptId}/storyboard/render-candidate-preview`, {
             frame_id: frameId, prompt, negative_prompt: negativePrompt,
         });

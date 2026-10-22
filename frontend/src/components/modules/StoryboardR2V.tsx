@@ -27,6 +27,7 @@ import ShotCard, { type ShotNode } from "./storyboard-r2v/ShotCard";
 import {
     buildGenerationPrompt,
     resolveNegativePrompt,
+    resolveStylePrompt,
 } from "./storyboard-r2v/buildAssembledPrompt";
 import DialogueAudioRow from "./storyboard-r2v/DialogueAudioRow";
 import StoryboardGenerateDialog from "./storyboard-r2v/StoryboardGenerateDialog";
@@ -1018,12 +1019,15 @@ export default function StoryboardR2V() {
         if (!currentProject || !shot.prompt.trim()) return;
         try {
             const style = await loadGenerationStyle();
-            const t2iPrompt = buildGenerationPrompt(
-                shot,
-                false,
-                videoConfig.model,
+            const frame = currentProject.frames?.find((item: any) => item.id === shot.id);
+            const reviewedImagePrompt = frame?.image_prompt_en?.trim();
+            const imageDraft = reviewedImagePrompt || frame?.image_prompt || frame?.visual_description || frame?.action_description || shot.prompt;
+            const draftStyle = reviewedImagePrompt ? "" : resolveStylePrompt(
                 style.positivePrompt,
-            )
+                shot.stylePromptOverride,
+                shot.lightingOverride,
+            );
+            const cleanedPrompt = [draftStyle, imageDraft].filter(Boolean).join("\n")
                 .replace(/\[(?:character\d+|character|scene|prop):[^\]]+\]/g, "")
                 .replace(/\s+/g, " ")
                 .trim();
@@ -1032,15 +1036,16 @@ export default function StoryboardR2V() {
                 "",
                 shot.negativePromptOverride,
             );
-            const projected = await api.previewFrameCandidate(currentProject.id, shot.id, t2iPrompt, negativePrompt);
+            const projected = await api.previewFrameCandidate(currentProject.id, shot.id, cleanedPrompt, negativePrompt);
             setPendingCandidate({
                 projectId: currentProject.id, frameId: shot.id, slot,
                 preview: {
                     prompt: projected.prompt, negativePrompt: projected.negative_prompt,
                     contextToken: projected.context_token, batchSize: 1, referenceCount: null,
                     model: projected.model, aspectRatio: projected.aspect_ratio,
-                    sourceLabel: slot === "first" ? "STEP 1 首帧" : "STEP 2 尾帧",
+                    sourceLabel: [slot === "first" ? "首帧" : "尾帧", projected.source_label].filter(Boolean).join(" · "),
                     referenceLabels: projected.reference_asset_labels,
+                    polishReview: projected.polish_review ?? undefined,
                 },
             });
         } catch (error) {
