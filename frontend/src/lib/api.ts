@@ -1098,6 +1098,7 @@ export const api = {
                 scope: "same_place_time" | "same_time_world_light" | "different_time" | "unresolved";
                 selected_fields: string[];
                 source_visual_version_known: boolean;
+                source_scene_design_revision?: number | null;
                 available_fields: string[];
                 eligible_fields: string[];
                 suggested_fields: string[];

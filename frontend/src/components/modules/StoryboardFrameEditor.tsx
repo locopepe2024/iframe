@@ -359,6 +359,11 @@ export default function StoryboardFrameEditor({ frame: initialFrame, onClose }: 
                                             <span>来源字段（需逐项确认）</span>
                                             <span className="text-text-muted">{visualPresetProjection.projection.scope === "same_time_world_light" ? "同时间·不同地点：仅世界光" : visualPresetProjection.projection.scope === "same_place_time" ? "同地点·同时间" : visualPresetProjection.projection.scope === "different_time" ? "不同时间：仅参考图" : "连续性 ID 未完整确认"}</span>
                                         </div>
+                                        <p className="mt-1 text-text-muted">{visualPresetProjection.projection.source_visual_version_known === false
+                                            ? "来源图片：结构化版本未知"
+                                            : visualPresetProjection.projection.source_scene_design_revision
+                                                ? `来源图片：场景设计版本 ${visualPresetProjection.projection.source_scene_design_revision}`
+                                                : "来源图片：结构化版本已保存"}</p>
                                         {!visualPresetProjection.projection.available_fields?.length && <p className="mt-2 text-text-muted">{visualPresetProjection.projection.source_visual_version_known === false
                                             ? "此图的结构化版本未知，可仅使用参考图。"
                                             : "此来源没有可带入的结构化视觉字段，可仅使用参考图。"}</p>}

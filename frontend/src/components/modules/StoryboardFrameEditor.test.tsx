@@ -26,7 +26,8 @@ it("selects a source thumbnail and applies only confirmed fields", async () => {
     ]);
     api.previewShotVisualPreset.mockResolvedValue({
         reference_image_available: true,
-        projection: { scope: "same_time_world_light", eligible_fields: ["lighting"], available_fields: ["lighting"], visual_design: { lighting: { story_time: "dusk" } } },
+        projection: { scope: "same_time_world_light", source_visual_version_known: true, source_scene_design_revision: 2,
+            eligible_fields: ["lighting"], available_fields: ["lighting"], visual_design: { lighting: { story_time: "dusk" } } },
     });
     api.applyShotVisualPreset.mockResolvedValue({ id: "frame" });
     render(<StoryboardFrameEditor frame={state.currentProject.frames[0]} onClose={() => {}} />);
@@ -34,6 +35,7 @@ it("selects a source thumbnail and applies only confirmed fields", async () => {
     expect(screen.getByText("分镜首帧编辑")).toBeTruthy();
     fireEvent.click(await screen.findByRole("button", { name: "选择参考图 长街变体 B" }));
     await waitFor(() => expect(api.previewShotVisualPreset).toHaveBeenCalledWith("project", "frame", "second"));
+    expect(await screen.findByText("来源图片：场景设计版本 2")).toBeInTheDocument();
     fireEvent.change(screen.getByLabelText("参考提交模式"), { target: { value: "image_and_context" } });
     fireEvent.click(await screen.findByLabelText("带入光影"));
     fireEvent.click(screen.getByRole("button", { name: "确认应用" }));
@@ -50,6 +52,7 @@ it("identifies a legacy image with no structured version and keeps image-only su
     api.applyShotVisualPreset.mockResolvedValue({ id: "frame" });
     render(<StoryboardFrameEditor frame={state.currentProject.frames[0]} onClose={() => {}} />);
     fireEvent.click(await screen.findByRole("button", { name: "选择参考图 旧长街" }));
+    expect(await screen.findByText("来源图片：结构化版本未知")).toBeInTheDocument();
     expect(await screen.findByText(/此图的结构化版本未知/)).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "确认应用" }));
     await waitFor(() => expect(api.applyShotVisualPreset).toHaveBeenCalledWith("project", "frame", "legacy", "image_only", []));
