@@ -3595,8 +3595,6 @@ class ComicGenPipeline(StudioOwnerMixin):
             f"Lighting: {'; '.join(lighting_parts)}" if lighting_parts else "",
             f"Shot size: {frame.shot_size}" if frame.shot_size else "",
             f"Camera angle: {frame.camera_angle}" if frame.camera_angle else "",
-            f"Camera movement: {frame.camera_movement}" if frame.camera_movement else "",
-            f"Transition: {frame.transition_hint}" if frame.transition_hint else "",
         ]
         return "\n".join(item for item in parts if item)
 

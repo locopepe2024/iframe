@@ -229,3 +229,41 @@ def test_storyboard_prompt_projection_is_per_frame_and_includes_visual_baseline(
     assert "Alex enters from the left" in first_prompt
     assert "檐下冷阴影" in second_prompt
     assert "Alex enters from the left" not in second_prompt
+
+
+def test_storyboard_image_projection_excludes_video_movement_and_transition(pipeline, project):
+    frame = project.frames[0]
+    frame.visual_description = "Alex stands in the ruins"
+    frame.shot_size = "中景"
+    frame.camera_angle = "平视"
+    frame.camera_movement = "缓慢推近"
+    frame.transition_hint = "淡出到下一镜"
+    frame.director_shot_context = {"shot": {
+        "composition": "人物位于画面右侧",
+        "camera_movement": "环绕人物半周",
+    }}
+
+    projected = pipeline.storyboard_frame_prompt_projection(project, frame)
+    preview = pipeline.preview_storyboard_render_prompt(project.id, frame.id, "Alex stands in the ruins")
+
+    for prompt in (projected, preview):
+        assert "中景" in prompt
+        assert "平视" in prompt
+        assert "缓慢推近" not in prompt
+        assert "环绕人物半周" not in prompt
+        assert "淡出到下一镜" not in prompt
+    assert "人物位于画面右侧" in preview
+
+    pipeline.generate_storyboard_render(project.id, frame.id, None, preview, prompt_is_complete=True)
+    submitted = pipeline.storyboard_generator.generate_frame.call_args.kwargs["prompt"]
+    assert submitted == preview
+
+
+def test_storyboard_video_prompt_keeps_structured_movement(project):
+    from src.apps.comic_gen.prompt_assembly import assemble_prompt
+
+    frame = project.frames[0]
+    frame.visual_description = "Alex stands in the ruins"
+    frame.director_shot_context = {"shot": {"camera_movement": "环绕人物半周"}}
+
+    assert "环绕人物半周" in assemble_prompt(frame, [])

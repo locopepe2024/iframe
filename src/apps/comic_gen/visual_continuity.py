@@ -500,7 +500,10 @@ def reference_projection_prompt_clauses(
         value = projected.get(field)
         if not isinstance(value, dict) or not value:
             continue
-        text = "；".join(f"{key}：{_format_value(item)}" for key, item in value.items() if _nonempty(item))
+        text = "；".join(
+            f"{key}：{_format_value(item)}" for key, item in value.items()
+            if _nonempty(item) and not (field == "camera" and key == "camera_movement")
+        )
         if text:
             clauses.append(f"{labels[field]}：{text}")
     return clauses

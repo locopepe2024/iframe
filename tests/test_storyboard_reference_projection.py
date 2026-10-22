@@ -247,7 +247,7 @@ def test_same_place_subset_and_target_fields_win(tmp_path):
         rendered_image_asset=ImageAsset(variants=[frozen_frame_variant("source-variant", {
             "lighting": {"key_source": "source lamp", "color_tone": "amber"},
             "space": {"reference_viewpoint": "northbound"},
-            "camera": {"shot_size": "wide", "camera_angle": "wide"},
+            "camera": {"shot_size": "wide", "camera_angle": "wide", "camera_movement": "orbit half circle"},
         }, place="same-place", time_id="same-time")], selected_id="source-variant"),
         shot_visual_design=ShotVisualDesignSnapshot(visual_design={
             "lighting": {"key_source": "source lamp", "color_tone": "amber"},
@@ -275,6 +275,8 @@ def test_same_place_subset_and_target_fields_win(tmp_path):
     assert "参考结构化空间" not in prompt
     assert "参考结构化镜头" in prompt
     assert "shot_size：wide" not in prompt
+    assert "orbit half circle" not in prompt
+    assert applied.reference_visual_projection.visual_design["camera"]["camera_movement"] == "orbit half circle"
     assert applied.reference_visual_projection.selected_fields == ["lighting", "camera"]
 
 

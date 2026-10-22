@@ -70,7 +70,9 @@ def _get_character_appearance_keywords(
     return "；".join(parts)
 
 
-def _director_shot_context_parts(context: Optional[Dict[str, Any]]) -> List[str]:
+def _director_shot_context_parts(
+    context: Optional[Dict[str, Any]], *, include_camera_movement: bool = True,
+) -> List[str]:
     """Convert the server-projected plan context into concise prompt clauses.
 
     The plan context is read-only runtime data. Keep IDs out of the natural
@@ -111,6 +113,8 @@ def _director_shot_context_parts(context: Optional[Dict[str, Any]]) -> List[str]
         ("ambient_sound", "环境音"),
     )
     for key, label in labels:
+        if key == "camera_movement" and not include_camera_movement:
+            continue
         value = shot.get(key)
         if isinstance(value, str) and value.strip():
             parts.append(f"{label}：{value.strip()}")
@@ -152,7 +156,7 @@ def append_projected_shot_context(prompt: str, context: Optional[Dict[str, Any]]
     base = (prompt or "").strip()
     parts = [base] if base else []
     normalized = re.sub(r"[\s，。；：、,.!?！？:;]+", "", base).casefold()
-    for clause in _director_shot_context_parts(context):
+    for clause in _director_shot_context_parts(context, include_camera_movement=False):
         value = clause.split("：", 1)[-1]
         compact = re.sub(r"[\s，。；：、,.!?！？:;]+", "", value).casefold()
         if not compact or (compact in normalized and not clause.startswith("当前镜头不得提前展示：")):

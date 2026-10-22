@@ -239,8 +239,6 @@ class StoryboardGenerator:
                 prompt += f"Location: {scene.name}, {scene.description}. "
                 
             prompt += f"Camera: {frame.camera_angle}"
-            if frame.camera_movement:
-                prompt += f", {frame.camera_movement}"
             prompt += "."
         else:
             # If prompt is provided by user/LLM, ensure character descriptions are still present for I2I consistency
