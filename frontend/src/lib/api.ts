@@ -1070,6 +1070,25 @@ export const api = {
         return res.data;
     },
 
+    previewShotVisualPreset: async (scriptId: string, frameId: string, presetId: string) => {
+        const res = await axios.get(
+            `${API_URL}/projects/${scriptId}/frames/${frameId}/shot-visual-presets/${presetId}/projection`,
+        );
+        return res.data as {
+            preset: { id: string; name: string; source_frame_id?: string | null; source_asset_id?: string | null; source_variant_id?: string | null };
+            reference_image_available: boolean;
+            source_label: string;
+            projection: {
+                scope: "same_place_time" | "same_time_world_light" | "different_time" | "unresolved";
+                selected_fields: string[];
+                available_fields: string[];
+                eligible_fields: string[];
+                suggested_fields: string[];
+                visual_design: Record<string, Record<string, unknown>>;
+            };
+        };
+    },
+
     saveShotVisualPreset: async (
         scriptId: string,
         frameId: string,
@@ -1092,11 +1111,12 @@ export const api = {
         scriptId: string,
         frameId: string,
         presetId: string,
-        applyMode: "parameters_only" | "parameters_with_reference" = "parameters_only",
+        applyMode: "parameters_only" | "parameters_with_reference" | "image_only" | "image_and_context" = "parameters_only",
+        selectedFields: string[] = [],
     ) => {
         const res = await axios.post(
             `${API_URL}/projects/${scriptId}/frames/${frameId}/shot-visual-presets/${presetId}/apply`,
-            { apply_mode: applyMode },
+            { apply_mode: applyMode, selected_fields: selectedFields },
         );
         return res.data;
     },
