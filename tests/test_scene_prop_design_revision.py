@@ -255,6 +255,7 @@ def test_scene_variant_visual_snapshot_is_projected_as_reusable_preset(tmp_path)
     assert len(presets) == 1
     assert presets[0].source_asset_id == "street"
     assert presets[0].source_variant_id == "scene-variant-1"
+    assert presets[0].name.endswith("变体 1")
 
 
 def test_scene_prompt_layers_survive_reload_and_confirmed_snapshot(tmp_path):

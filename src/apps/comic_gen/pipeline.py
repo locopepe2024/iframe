@@ -599,7 +599,7 @@ class ComicGenPipeline(StudioOwnerMixin):
         scenes = [scene for scene in resolved["scenes"] if not scene_id or scene.id == scene_id]
         for scene in scenes:
             image_asset = getattr(scene, "image_asset", None)
-            for variant in (getattr(image_asset, "variants", None) or []):
+            for variant_index, variant in enumerate((getattr(image_asset, "variants", None) or []), start=1):
                 snapshot = variant.submission_snapshot
                 derived_id = f"asset_variant_visual_{scene.id}_{variant.id}"
                 if any(item.id == derived_id for item in presets):
@@ -607,7 +607,7 @@ class ComicGenPipeline(StudioOwnerMixin):
                 _, source = self._find_asset_with_source(script, scene.id, "scene")
                 presets.append(ShotVisualPreset(
                     id=derived_id,
-                    name=f"{scene.name} · {variant.display_name or variant.id[:8]}",
+                    name=f"{scene.name} · {variant.display_name or f'变体 {variant_index}'}",
                     scene_id=scene.id,
                     source_asset_id=scene.id,
                     source_variant_id=variant.id,
