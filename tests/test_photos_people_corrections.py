@@ -7,6 +7,7 @@ import pytest
 from tests.test_photos_analysis import setup
 from tests.test_photos_people_review import prepared, review_body
 from src.apps.photos.people_corrections import PhotoPeopleCorrectionStore
+from src.apps.photos.media import prepare_photo
 from src.apps.identity import UserContext, require_user_context
 
 
@@ -60,6 +61,7 @@ def test_preview_cancel_revoke_split_merge_remove_idempotency_and_history(setup,
     assert merged.status_code == 200
     assert source not in [p['person_id'] for p in client.get('/photos/people-albums').json()['people']]
     assert next(p for p in client.get('/photos/people-albums').json()['people'] if p['person_id']==new)['label'] == '家人'
+    assert preview(client, select('undo_batch', batch_id=batch))['counts'] == dict(members=1, photos=1, preserve=2)
     remove = select('remove', new, faces[:1])
     assert client.post('/photos/people-corrections', json=body(remove,preview(client,remove),'remove')).status_code == 200
     history = client.get('/photos/people-corrections/history?limit=1').json()
@@ -76,7 +78,7 @@ def test_batch_undo_preserves_manual_and_other_batch_relationships(setup, monkey
     client, store, _, batch, people, _ = confirmed(setup, monkeypatch)
     (single,one),(source,faces) = people
     # Move the singleton's task provenance to a distinct real batch scope.
-    other = store.upload('owner','other-upload',__import__('src.apps.photos.media',fromlist=['prepare_photo']).prepare_photo(client.get('/photos/second/original').content))['batch_id']
+    other = store.upload('owner','other-upload',prepare_photo(client.get('/photos/second/original').content))['batch_id']
     with store._connection(write=True) as connection:
         # New task copies only the singleton membership's source, not the two-face source.
         taskrow = dict(connection.execute('SELECT * FROM photo_people_tasks WHERE owner=? AND task_id=?',('owner',one[0]['task_id'])).fetchone())
