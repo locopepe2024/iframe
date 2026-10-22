@@ -15,7 +15,7 @@
  * 视觉寄存于 Studio 现有 chrome-sm / display-sm / status colors token 体系。
  */
 import { syncPromptSettings } from "./shotPromptSettings";
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Loader2, Sparkles, Check, X, RefreshCw, Copy, CornerDownLeft, AlertCircle, AlertTriangle } from "lucide-react";
 import clsx from "clsx";
 import { useTranslations } from "next-intl";
@@ -23,7 +23,7 @@ import { api } from "@/lib/api";
 import { debugLog } from "@/lib/debugLog";
 import BorderGlow from "@/components/shared/BorderGlow/BorderGlow";
 import WorkflowActionButton from "@/components/shared/WorkflowActionButton";
-import OptimizerSelector, { type OptimizerProvider } from "./OptimizerSelector";
+import OptimizerSelector, { compatibleOptimizationSkills, defaultOptimizationSkills, type OptimizerProvider } from "./OptimizerSelector";
 import VideoPolishReview from "./VideoPolishReview";
 
 interface PolishedPrompt {
@@ -150,17 +150,24 @@ export default function PolishPanel({
     /** 跟踪两栏的 "已复制" 闪烁状态。 */
     const [copiedCol, setCopiedCol] = useState<"cn" | "en" | "original" | null>(null);
     const [optimizerProvider, setOptimizerProvider] = useState<OptimizerProvider>("qwen");
-    const [optimizationSkills, setOptimizationSkills] = useState<string[]>(["minimax-h3-director"]);
+    const [optimizationSkills, setOptimizationSkills] = useState<string[]>(() => defaultOptimizationSkills(videoModel, "qwen"));
+    const selectedSkills = compatibleOptimizationSkills(videoModel, optimizerProvider, optimizationSkills);
+    useEffect(() => {
+        const provider = optimizerProvider === "minimax_context_ir" && videoModel.toLowerCase().includes("seedance")
+            ? "qwen" : optimizerProvider;
+        if (provider !== optimizerProvider) setOptimizerProvider(provider);
+        setOptimizationSkills(defaultOptimizationSkills(videoModel, provider));
+    }, [videoModel]);
     const [review, setReview] = useState<PolishReview | null>(null);
     const sourceSignature = JSON.stringify([prompt, optimizationDraft, polished?.cn, polished?.en,
         shotOverrides, slots, imageUrls, videoModel, generateAudio, targetDuration, dialogue,
-        optimizerProvider, optimizationSkills, targetRatio, videoMode, tabMode, scriptId, frameId]);
+        optimizerProvider, selectedSkills, targetRatio, videoMode, tabMode, scriptId, frameId]);
 
     const requestPolish = (draft: string, prevCn: string, feedbackText: string,
         confirmed?: { messages: { system: string; user: string }; token: string }) =>
         tabMode === "direct_r2v"
-            ? api.polishR2VPrompt(draft, slots, feedbackText, scriptId, prevCn, imageUrls, "", videoModel, generateAudio, targetDuration, dialogue ?? undefined, optimizerProvider, optimizationSkills, targetRatio, frameId, shotOverrides, confirmed)
-            : api.polishVideoPrompt(draft, feedbackText, scriptId, prevCn, imageUrls, "", videoModel, generateAudio, targetDuration, dialogue ?? undefined, optimizerProvider, optimizationSkills, targetRatio, frameId, shotOverrides, videoMode ?? "i2v", confirmed);
+            ? api.polishR2VPrompt(draft, slots, feedbackText, scriptId, prevCn, imageUrls, "", videoModel, generateAudio, targetDuration, dialogue ?? undefined, optimizerProvider, selectedSkills, targetRatio, frameId, shotOverrides, confirmed)
+            : api.polishVideoPrompt(draft, feedbackText, scriptId, prevCn, imageUrls, "", videoModel, generateAudio, targetDuration, dialogue ?? undefined, optimizerProvider, selectedSkills, targetRatio, frameId, shotOverrides, videoMode ?? "i2v", confirmed);
 
     const toggleSkill = (skillId: string) => {
         setOptimizationSkills((current) => current.includes(skillId)
@@ -270,10 +277,11 @@ export default function PolishPanel({
         <div className="mb-2">
             <OptimizerSelector
                 provider={optimizerProvider}
-                skills={optimizationSkills}
+                modelId={videoModel}
+                skills={selectedSkills}
                 onProviderChange={(provider) => {
                     setOptimizerProvider(provider);
-                    setOptimizationSkills(provider === "minimax_context_ir" ? [] : ["minimax-h3-director"]);
+                    setOptimizationSkills(defaultOptimizationSkills(videoModel, provider));
                 }}
                 onToggleSkill={toggleSkill}
             />
