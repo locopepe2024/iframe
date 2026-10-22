@@ -77,6 +77,12 @@ Store = Annotated[PhotoWorkflowStore, Depends(get_store)]
 router = APIRouter(prefix="/photos", tags=["photo-date-trial"])
 
 
+@router.get("/batches/{batch_id}")
+def batch_status(batch_id: str, identity: Owner, store: Store):
+    with api_errors():
+        return store.batch_status(identity.owner_profile_id, batch_id)
+
+
 @router.post("/batches/{batch_id}/time-question", status_code=201)
 def time_question(batch_id: str, identity: Owner, store: Store):
     with api_errors():

@@ -54,6 +54,9 @@ def test_uploaded_photo_authorization_organization_list_and_revoke(setup):
     consent = answer(client, photo, q)
     assert consent.status_code == 200
     assert consent.json()["consent_version"] == 1
+    assert client.get(f"/photos/batches/{photo['batch_id']}").json() == {
+        "batch_id": photo["batch_id"], "granted": True, "consent_version": 1,
+    }
     assert answer(client, photo, q).json() == consent.json()
     response = organize(client, photo)
     assert response.status_code == 200
@@ -85,6 +88,7 @@ def test_replaced_expired_and_foreign_questions_cannot_authorize(setup):
     assert answer(client, photo, second).status_code == 409
     third = question(client, photo)
     app.dependency_overrides[require_user_context] = lambda: UserContext("other", "other", "", "")
+    assert client.get(f"/photos/batches/{photo['batch_id']}").status_code == 404
     assert answer(client, photo, third).status_code == 404
     assert client.get("/photos/albums").json()["photos"] == []
 

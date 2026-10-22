@@ -139,6 +139,7 @@ from ..agent_api import router as agent_router
 from ..knowledge.api import router as knowledge_router
 from ..recreation.api import router as recreation_router
 from ..avatar.service import router as avatar_router
+from ..photos.api import create_app as create_photo_demo_app
 app.include_router(identity_router)
 app.include_router(user_config_router)
 app.include_router(playground_router, prefix="/playground")
@@ -146,6 +147,7 @@ app.include_router(agent_router)
 app.include_router(knowledge_router)
 app.include_router(recreation_router)
 app.include_router(avatar_router)
+app.mount("/photo-demo-api", create_photo_demo_app())
 
 # Debug: Print OSS configuration at startup
 logger.info(f"STARTUP: OSS_ENDPOINT={os.getenv('OSS_ENDPOINT')}, OSS_BUCKET_NAME={os.getenv('OSS_BUCKET_NAME')}, OSS_BASE_PATH={os.getenv('OSS_BASE_PATH')}")

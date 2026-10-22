@@ -15,6 +15,12 @@ QUESTION_TEXT = (
 
 
 class PhotoWorkflowStore(DateStore):
+    def batch_status(self, owner: str, batch_id: str) -> dict:
+        with self._connection() as connection:
+            batch = self._batch(connection, owner, batch_id)
+            return {"batch_id": batch_id, "granted": bool(batch["granted"]),
+                    "consent_version": batch["version"]}
+
     @staticmethod
     def _batch(connection, owner, batch_id):
         row = connection.execute(

@@ -1,0 +1,44 @@
+.shell {
+  --surface: #172331;
+  --text: #f4f7fa;
+  --muted: #bdcbd9;
+  --accent: #9bd4fa;
+  max-width: 48rem;
+  min-height: 100dvh;
+  margin: 0 auto;
+  padding: max(1rem, env(safe-area-inset-top)) 1rem max(2rem, env(safe-area-inset-bottom));
+  background: #0c1520;
+  color: var(--text);
+  font: max(20px, 1.25rem)/1.7 system-ui, sans-serif;
+  overflow-wrap: anywhere;
+}
+.shell h1 { font-size: 1.8em; }
+.shell h2 { font-size: 1.3em; margin: 0 0 1rem; }
+.shell h3 { font-size: 1.1em; }
+.shell a { color: var(--accent); display: inline-flex; min-height: 48px; align-items: center; }
+.panel { background: var(--surface); border: 1px solid #52687d; border-radius: 1rem; padding: 1rem; margin: 1rem 0; min-width: 0; }
+.shell button, .shell input, .shell select {
+  font: inherit;
+  min-height: 48px;
+  max-width: 100%;
+  border-radius: .65rem;
+  padding: .5rem .75rem;
+  border: 1px solid #7891a6;
+}
+.shell button { background: #244d6b; color: var(--text); cursor: pointer; margin: .5rem .5rem .5rem 0; touch-action: manipulation; }
+.shell button:active { background: #356588; }
+.shell button:disabled { opacity: .55; cursor: default; }
+.shell :focus-visible { outline: 3px solid var(--accent); outline-offset: 3px; }
+.shell input, .shell select { background: #0c1520; color: var(--text); width: 100%; }
+.shell label { display: block; margin-top: .75rem; }
+.shell input[type=file] { white-space: normal; font-size: .9em; }
+.note { color: var(--muted); font-size: .9em; }
+.filters { display: grid; gap: 1rem; grid-template-columns: repeat(auto-fit, minmax(min(100%, 14rem), 1fr)); }
+.grid { display: grid; gap: 1rem; grid-template-columns: repeat(auto-fit, minmax(min(100%, 15rem), 1fr)); margin-top: 1rem; }
+.shell .photo { display: flex; flex-direction: column; gap: .5rem; text-align: left; margin: 0; padding: .75rem; min-width: 0; }
+.photo[aria-pressed=true] { outline: 3px solid var(--accent); }
+.image { width: 100%; aspect-ratio: 4/3; object-fit: contain; background: #080e16; border-radius: .5rem; }
+.largeImage { display: block; width: 100%; max-height: 70dvh; object-fit: contain; background: #080e16; border-radius: .5rem; }
+.confirm { border: 2px solid var(--accent); border-radius: .75rem; padding: .75rem; margin-top: 1rem; }
+.history { border-top: 1px solid #52687d; margin-top: 1rem; }
+.error { color: #ffd2d2; border: 2px solid #e09d9d; padding: 1rem; border-radius: .75rem; }

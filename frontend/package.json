@@ -12,6 +12,7 @@
     "test:ui": "node ./scripts/run-vitest.mjs --config vitest.ui.config.mts",
     "test:all": "npm run test && npm run test:ui",
     "test:companion:browser": "node ./scripts/companion-browser-smoke.mjs",
+    "test:photos:browser": "node ./scripts/photos-browser-smoke.mjs",
     "check:colors": "node ./scripts/check-playground-colors.mjs",
     "check:playground-ratio": "node ./scripts/check-playground-ratio.mjs",
     "verify:playground": "npm run typecheck && npm run check:playground-ratio && npm run test -- --run src/__tests__/playground-mediaDisplay.test.ts && npm run test:ui -- src/components/modules/playground/ResultCard.test.tsx"
