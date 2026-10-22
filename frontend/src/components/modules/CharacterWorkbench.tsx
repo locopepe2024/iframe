@@ -1162,7 +1162,13 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
         setIdentityFeatures(nextIdentity); setLookFeatures(nextLook);
         setIdentityEditorMode("fields"); setLookEditorMode("fields");
         const legacyNotes = [identityEditorMode === "notes" ? designNotes : "", lookEditorMode === "notes" ? lookNotes : ""].filter(Boolean).join("\n");
-        const supplemental = remainingText !== undefined ? remainingText.trim() : supplementalPrompt || legacyNotes ||
+        // Only remove exact text recorded by an applied panel; edited prose remains authored input.
+        const previousPanelText = [...dictionaryConfigurations].reverse()
+            .map(configuration => configuration.rendered_text.trim())
+            .find(rendered => rendered && remainingText?.includes(rendered));
+        const authoredRemaining = previousPanelText
+            ? remainingText!.replace(previousPanelText, "").trim() : remainingText?.trim();
+        const supplemental = remainingText !== undefined ? authoredRemaining || "" : supplementalPrompt || legacyNotes ||
             (!Object.keys(identityFeatures).length && !Object.keys(lookFeatures).length ? designInput : "");
         setSupplementalPrompt(supplemental);
         clearAIResultForInput();
@@ -1194,8 +1200,10 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
         }}
         onDetailsChange={value => {
             clearAIResultForInput();
-            setDesignConstraints({ must_keep: [], negative_prompt: [] });
             setDesignInput(value); setDesignStatus("draft"); setPromptsNeedDesignApply(true);
+            const withoutSlashQuery = (text: string) => text.replace(/(^|\s)\/[^\s/]*(?=\s|$)/g, "$1").trim();
+            if (value.includes("/") && withoutSlashQuery(value) === withoutSlashQuery(designInput)) return;
+            setDesignConstraints({ must_keep: [], negative_prompt: [] });
             setIdentityFeatures({}); setLookFeatures({}); setDesignNotes(""); setLookNotes("");
             setIdentityEditorMode("notes"); setLookEditorMode("notes"); setSupplementalPrompt("");
         }}

@@ -1038,6 +1038,39 @@ it("saves dictionary face choices as fields and keeps the remaining clothing tex
     }) }));
 });
 
+it("does not turn the previous panel preview into supplemental prose when applying a second panel", async () => {
+    const { onUpdateAttributes } = mountSimpleDesign();
+    act(() => designDetailsEditor().chain().selectAll().insertContent({ type: "text", text: "靛蓝外衣。 /面容" }).run());
+    fireEvent.click(await screen.findByRole("option", { name: /^面容$/ }));
+    fireEvent.change(screen.getByRole("combobox", { name: "肤色" }), { target: { value: "暖小麦肤色" } });
+    fireEvent.click(screen.getByRole("button", { name: "应用配置" }));
+    fireEvent.click(screen.getByRole("button", { name: "设计面板" }));
+    expect(screen.getByRole("textbox", { name: "设计字段 · 肤色" })).toHaveValue("暖小麦肤色");
+    fireEvent.click(screen.getByRole("button", { name: "关闭设计面板" }));
+    act(() => designDetailsEditor().chain().insertContentAt(designDetailsEditor().state.doc.content.size, " /肤色").run());
+    fireEvent.click(await screen.findByRole("option", { name: /^肤色与肤质$/ }));
+    fireEvent.change(screen.getByRole("combobox", { name: "肤质" }), { target: { value: "轻微干燥肤质" } });
+    fireEvent.click(screen.getByRole("button", { name: "应用配置" }));
+    fireEvent.click(screen.getByRole("button", { name: /^保存并使用/ }));
+    await waitFor(() => expect(onUpdateAttributes).toHaveBeenCalled());
+    const design = onUpdateAttributes.mock.calls.at(-1)![0].character_design;
+    expect(design.identity.features).toMatchObject({ skin_tone: "暖小麦肤色", skin_texture: "面颊皮肤略显干燥，保留细微干燥纹理" });
+    expect(design.design_input.prompt.match(/肤色：暖小麦肤色/g)).toHaveLength(1);
+    expect(design.design_result.prompt).toContain("肤色：暖小麦肤色");
+    expect(design.design_input.prompt.match(/肤质：面颊皮肤略显干燥/g)).toHaveLength(1);
+    expect(design.supplemental_prompt).toBe("靛蓝外衣。");
+    expect(design.design_result.prompt.match(/靛蓝外衣。/g)).toHaveLength(1);
+    openImagePrompt();
+    expect(imagePromptInput().textContent?.match(/肤色：暖小麦肤色/g)).toHaveLength(1);
+    expect(imagePromptInput().textContent?.match(/靛蓝外衣。/g)).toHaveLength(1);
+    cleanup();
+    mountSimpleDesign({ character_design: { design_draft: design } });
+    fireEvent.click(screen.getByRole("button", { name: "设计面板" }));
+    expect(screen.getByRole("textbox", { name: "设计字段 · 肤色" })).toHaveValue("暖小麦肤色");
+    expect(screen.getByRole("textbox", { name: "设计字段 · 肤质" })).toHaveValue("面颊皮肤略显干燥，保留细微干燥纹理");
+    expect(screen.getByRole("textbox", { name: "其他已输入细节" })).toHaveValue("靛蓝外衣。");
+});
+
 it('preserves authored negative prompt arrays through AI, confirmation and reload', async () => {
     const { onUpdateAttributes } = mountSimpleDesign();
     fireEvent.click(screen.getByRole('button', { name: '设计面板' }));
