@@ -1,0 +1,875 @@
+{
+  "schema": "recreation2-visible-wrist-audit.v1",
+  "frames": [
+    {
+      "source_frame": 195,
+      "source_pts_s": 6.329525,
+      "source_image_sha256": "b0b7252ea5eee021999b85702ea2da22f7c91f84a343ab79a71cb37526ae8b8a",
+      "visual_regions_xyxy_px": {
+        "image_lower_left_wrist": [
+          550,
+          407,
+          580,
+          437
+        ],
+        "image_upper_right_wrist": [
+          783,
+          294,
+          811,
+          317
+        ]
+      },
+      "models": {
+        "mediapipe": {
+          "wrist_pixels": {
+            "left_wrist": [
+              792.2860723733902,
+              308.8609642982483
+            ],
+            "right_wrist": [
+              586.4775467514992,
+              403.8116054534912
+            ]
+          },
+          "inter_wrist_distance_px": 226.65562749344718,
+          "region_padding": {
+            "0": {
+              "all_bijections": [
+                {
+                  "assignment": {
+                    "left_wrist": "image_lower_left_wrist",
+                    "right_wrist": "image_upper_right_wrist"
+                  },
+                  "per_wrist_region_distance_px": {
+                    "left_wrist": 233.87314264829547,
+                    "right_wrist": 214.84256904119772
+                  },
+                  "mean_region_distance_px": 224.3578558447466
+                },
+                {
+                  "assignment": {
+                    "left_wrist": "image_upper_right_wrist",
+                    "right_wrist": "image_lower_left_wrist"
+                  },
+                  "per_wrist_region_distance_px": {
+                    "left_wrist": 0.0,
+                    "right_wrist": 7.219727952081333
+                  },
+                  "mean_region_distance_px": 3.6098639760406663
+                }
+              ],
+              "best_mean_region_distance_px": 3.6098639760406663
+            },
+            "5": {
+              "all_bijections": [
+                {
+                  "assignment": {
+                    "left_wrist": "image_lower_left_wrist",
+                    "right_wrist": "image_upper_right_wrist"
+                  },
+                  "per_wrist_region_distance_px": {
+                    "left_wrist": 227.24963316018474,
+                    "right_wrist": 208.26422853001398
+                  },
+                  "mean_region_distance_px": 217.75693084509936
+                },
+                {
+                  "assignment": {
+                    "left_wrist": "image_upper_right_wrist",
+                    "right_wrist": "image_lower_left_wrist"
+                  },
+                  "per_wrist_region_distance_px": {
+                    "left_wrist": 0.0,
+                    "right_wrist": 1.477546751499176
+                  },
+                  "mean_region_distance_px": 0.738773375749588
+                }
+              ],
+              "best_mean_region_distance_px": 0.738773375749588
+            },
+            "10": {
+              "all_bijections": [
+                {
+                  "assignment": {
+                    "left_wrist": "image_lower_left_wrist",
+                    "right_wrist": "image_upper_right_wrist"
+                  },
+                  "per_wrist_region_distance_px": {
+                    "left_wrist": 220.65390250500243,
+                    "right_wrist": 201.71923135433065
+                  },
+                  "mean_region_distance_px": 211.18656692966653
+                },
+                {
+                  "assignment": {
+                    "left_wrist": "image_upper_right_wrist",
+                    "right_wrist": "image_lower_left_wrist"
+                  },
+                  "per_wrist_region_distance_px": {
+                    "left_wrist": 0.0,
+                    "right_wrist": 0.0
+                  },
+                  "mean_region_distance_px": 0.0
+                }
+              ],
+              "best_mean_region_distance_px": 0.0
+            }
+          }
+        },
+        "rtmpose": {
+          "wrist_pixels": {
+            "left_wrist": [
+              797.3419124293141,
+              306.0857584322803
+            ],
+            "right_wrist": [
+              564.9000753005967,
+              415.1177541988436
+            ]
+          },
+          "inter_wrist_distance_px": 256.7434200687782,
+          "region_padding": {
+            "0": {
+              "all_bijections": [
+                {
+                  "assignment": {
+                    "left_wrist": "image_lower_left_wrist",
+                    "right_wrist": "image_upper_right_wrist"
+                  },
+                  "per_wrist_region_distance_px": {
+                    "left_wrist": 239.62719179930255,
+                    "right_wrist": 239.15407343992723
+                  },
+                  "mean_region_distance_px": 239.3906326196149
+                },
+                {
+                  "assignment": {
+                    "left_wrist": "image_upper_right_wrist",
+                    "right_wrist": "image_lower_left_wrist"
+                  },
+                  "per_wrist_region_distance_px": {
+                    "left_wrist": 0.0,
+                    "right_wrist": 0.0
+                  },
+                  "mean_region_distance_px": 0.0
+                }
+              ],
+              "best_mean_region_distance_px": 0.0
+            },
+            "5": {
+              "all_bijections": [
+                {
+                  "assignment": {
+                    "left_wrist": "image_lower_left_wrist",
+                    "right_wrist": "image_upper_right_wrist"
+                  },
+                  "per_wrist_region_distance_px": {
+                    "left_wrist": 232.99920495497273,
+                    "right_wrist": 232.5564319771174
+                  },
+                  "mean_region_distance_px": 232.77781846604506
+                },
+                {
+                  "assignment": {
+                    "left_wrist": "image_upper_right_wrist",
+                    "right_wrist": "image_lower_left_wrist"
+                  },
+                  "per_wrist_region_distance_px": {
+                    "left_wrist": 0.0,
+                    "right_wrist": 0.0
+                  },
+                  "mean_region_distance_px": 0.0
+                }
+              ],
+              "best_mean_region_distance_px": 0.0
+            },
+            "10": {
+              "all_bijections": [
+                {
+                  "assignment": {
+                    "left_wrist": "image_lower_left_wrist",
+                    "right_wrist": "image_upper_right_wrist"
+                  },
+                  "per_wrist_region_distance_px": {
+                    "left_wrist": 226.39802995980122,
+                    "right_wrist": 225.98742722758973
+                  },
+                  "mean_region_distance_px": 226.19272859369548
+                },
+                {
+                  "assignment": {
+                    "left_wrist": "image_upper_right_wrist",
+                    "right_wrist": "image_lower_left_wrist"
+                  },
+                  "per_wrist_region_distance_px": {
+                    "left_wrist": 0.0,
+                    "right_wrist": 0.0
+                  },
+                  "mean_region_distance_px": 0.0
+                }
+              ],
+              "best_mean_region_distance_px": 0.0
+            }
+          }
+        }
+      },
+      "visual_regions_min_separation_px": 222.05629916757596
+    },
+    {
+      "source_frame": 197,
+      "source_pts_s": 6.419946,
+      "source_image_sha256": "186bab9fa698bd17bf74e0a6520e1d53845099f2b2b6a703bf9be427ed33037d",
+      "visual_regions_xyxy_px": {
+        "image_lower_left_wrist": [
+          555,
+          397,
+          585,
+          425
+        ],
+        "image_upper_right_wrist": [
+          758,
+          248,
+          789,
+          279
+        ]
+      },
+      "models": {
+        "mediapipe": {
+          "wrist_pixels": {
+            "left_wrist": [
+              687.0718765258789,
+              333.589910030365
+            ],
+            "right_wrist": [
+              675.4100205898285,
+              327.48681592941284
+            ]
+          },
+          "inter_wrist_distance_px": 13.162319000779126,
+          "region_padding": {
+            "0": {
+              "all_bijections": [
+                {
+                  "assignment": {
+                    "left_wrist": "image_lower_left_wrist",
+                    "right_wrist": "image_upper_right_wrist"
+                  },
+                  "per_wrist_region_distance_px": {
+                    "left_wrist": 120.1645017776526,
+                    "right_wrist": 95.7709560250148
+                  },
+                  "mean_region_distance_px": 107.9677289013337
+                },
+                {
+                  "assignment": {
+                    "left_wrist": "image_upper_right_wrist",
+                    "right_wrist": "image_lower_left_wrist"
+                  },
+                  "per_wrist_region_distance_px": {
+                    "left_wrist": 89.50339086695828,
+                    "right_wrist": 114.04409052066023
+                  },
+                  "mean_region_distance_px": 101.77374069380926
+                }
+              ],
+              "best_mean_region_distance_px": 101.77374069380926
+            },
+            "5": {
+              "all_bijections": [
+                {
+                  "assignment": {
+                    "left_wrist": "image_lower_left_wrist",
+                    "right_wrist": "image_upper_right_wrist"
+                  },
+                  "per_wrist_region_distance_px": {
+                    "left_wrist": 113.29028123593099,
+                    "right_wrist": 88.94553425860948
+                  },
+                  "mean_region_distance_px": 101.11790774727024
+                },
+                {
+                  "assignment": {
+                    "left_wrist": "image_upper_right_wrist",
+                    "right_wrist": "image_lower_left_wrist"
+                  },
+                  "per_wrist_region_distance_px": {
+                    "left_wrist": 82.49652502765586,
+                    "right_wrist": 107.03654766518018
+                  },
+                  "mean_region_distance_px": 94.76653634641802
+                }
+              ],
+              "best_mean_region_distance_px": 94.76653634641802
+            },
+            "10": {
+              "all_bijections": [
+                {
+                  "assignment": {
+                    "left_wrist": "image_lower_left_wrist",
+                    "right_wrist": "image_upper_right_wrist"
+                  },
+                  "per_wrist_region_distance_px": {
+                    "left_wrist": 106.44185341096423,
+                    "right_wrist": 82.16167057182825
+                  },
+                  "mean_region_distance_px": 94.30176199139623
+                },
+                {
+                  "assignment": {
+                    "left_wrist": "image_upper_right_wrist",
+                    "right_wrist": "image_lower_left_wrist"
+                  },
+                  "per_wrist_region_distance_px": {
+                    "left_wrist": 75.50163115187506,
+                    "right_wrist": 100.03794524817187
+                  },
+                  "mean_region_distance_px": 87.76978820002347
+                }
+              ],
+              "best_mean_region_distance_px": 87.76978820002347
+            }
+          }
+        },
+        "rtmpose": {
+          "wrist_pixels": {
+            "left_wrist": [
+              764.4079733879771,
+              265.7940494521754
+            ],
+            "right_wrist": [
+              568.3841034515062,
+              404.59355984197464
+            ]
+          },
+          "inter_wrist_distance_px": 240.18880421309908,
+          "region_padding": {
+            "0": {
+              "all_bijections": [
+                {
+                  "assignment": {
+                    "left_wrist": "image_lower_left_wrist",
+                    "right_wrist": "image_upper_right_wrist"
+                  },
+                  "per_wrist_region_distance_px": {
+                    "left_wrist": 222.26610712013493,
+                    "right_wrist": 227.43775081913898
+                  },
+                  "mean_region_distance_px": 224.85192896963696
+                },
+                {
+                  "assignment": {
+                    "left_wrist": "image_upper_right_wrist",
+                    "right_wrist": "image_lower_left_wrist"
+                  },
+                  "per_wrist_region_distance_px": {
+                    "left_wrist": 0.0,
+                    "right_wrist": 0.0
+                  },
+                  "mean_region_distance_px": 0.0
+                }
+              ],
+              "best_mean_region_distance_px": 0.0
+            },
+            "5": {
+              "all_bijections": [
+                {
+                  "assignment": {
+                    "left_wrist": "image_lower_left_wrist",
+                    "right_wrist": "image_upper_right_wrist"
+                  },
+                  "per_wrist_region_distance_px": {
+                    "left_wrist": 215.2814045266829,
+                    "right_wrist": 220.51266615268173
+                  },
+                  "mean_region_distance_px": 217.8970353396823
+                },
+                {
+                  "assignment": {
+                    "left_wrist": "image_upper_right_wrist",
+                    "right_wrist": "image_lower_left_wrist"
+                  },
+                  "per_wrist_region_distance_px": {
+                    "left_wrist": 0.0,
+                    "right_wrist": 0.0
+                  },
+                  "mean_region_distance_px": 0.0
+                }
+              ],
+              "best_mean_region_distance_px": 0.0
+            },
+            "10": {
+              "all_bijections": [
+                {
+                  "assignment": {
+                    "left_wrist": "image_lower_left_wrist",
+                    "right_wrist": "image_upper_right_wrist"
+                  },
+                  "per_wrist_region_distance_px": {
+                    "left_wrist": 208.3025297388951,
+                    "right_wrist": 213.59714738230795
+                  },
+                  "mean_region_distance_px": 210.9498385606015
+                },
+                {
+                  "assignment": {
+                    "left_wrist": "image_upper_right_wrist",
+                    "right_wrist": "image_lower_left_wrist"
+                  },
+                  "per_wrist_region_distance_px": {
+                    "left_wrist": 0.0,
+                    "right_wrist": 0.0
+                  },
+                  "mean_region_distance_px": 0.0
+                }
+              ],
+              "best_mean_region_distance_px": 0.0
+            }
+          }
+        }
+      },
+      "visual_regions_min_separation_px": 209.41107898103195
+    },
+    {
+      "source_frame": 203,
+      "source_pts_s": 6.60079,
+      "source_image_sha256": "f91cf8badbe84706c461dbbc979e9ce6dbb834d8a56c5b16ea1b7c4d01fa152b",
+      "visual_regions_xyxy_px": {
+        "image_lower_left_wrist": [
+          551,
+          389,
+          579,
+          419
+        ],
+        "image_upper_right_wrist": [
+          700,
+          225,
+          735,
+          263
+        ]
+      },
+      "models": {
+        "mediapipe": {
+          "wrist_pixels": {
+            "left_wrist": [
+              706.9448243379593,
+              223.3847200870514
+            ],
+            "right_wrist": [
+              584.6552830934525,
+              392.7160062789917
+            ]
+          },
+          "inter_wrist_distance_px": 208.87272771046182,
+          "region_padding": {
+            "0": {
+              "all_bijections": [
+                {
+                  "assignment": {
+                    "left_wrist": "image_lower_left_wrist",
+                    "right_wrist": "image_upper_right_wrist"
+                  },
+                  "per_wrist_region_distance_px": {
+                    "left_wrist": 209.28043151598186,
+                    "right_wrist": 173.58181357280205
+                  },
+                  "mean_region_distance_px": 191.43112254439194
+                },
+                {
+                  "assignment": {
+                    "left_wrist": "image_upper_right_wrist",
+                    "right_wrist": "image_lower_left_wrist"
+                  },
+                  "per_wrist_region_distance_px": {
+                    "left_wrist": 1.6152799129486084,
+                    "right_wrist": 5.655283093452454
+                  },
+                  "mean_region_distance_px": 3.635281503200531
+                }
+              ],
+              "best_mean_region_distance_px": 3.635281503200531
+            },
+            "5": {
+              "all_bijections": [
+                {
+                  "assignment": {
+                    "left_wrist": "image_lower_left_wrist",
+                    "right_wrist": "image_upper_right_wrist"
+                  },
+                  "per_wrist_region_distance_px": {
+                    "left_wrist": 202.26887544307576,
+                    "right_wrist": 166.5233880611598
+                  },
+                  "mean_region_distance_px": 184.39613175211778
+                },
+                {
+                  "assignment": {
+                    "left_wrist": "image_upper_right_wrist",
+                    "right_wrist": "image_lower_left_wrist"
+                  },
+                  "per_wrist_region_distance_px": {
+                    "left_wrist": 0.0,
+                    "right_wrist": 0.6552830934524536
+                  },
+                  "mean_region_distance_px": 0.3276415467262268
+                }
+              ],
+              "best_mean_region_distance_px": 0.3276415467262268
+            },
+            "10": {
+              "all_bijections": [
+                {
+                  "assignment": {
+                    "left_wrist": "image_lower_left_wrist",
+                    "right_wrist": "image_upper_right_wrist"
+                  },
+                  "per_wrist_region_distance_px": {
+                    "left_wrist": 195.26161151259973,
+                    "right_wrist": 159.4660827245475
+                  },
+                  "mean_region_distance_px": 177.36384711857363
+                },
+                {
+                  "assignment": {
+                    "left_wrist": "image_upper_right_wrist",
+                    "right_wrist": "image_lower_left_wrist"
+                  },
+                  "per_wrist_region_distance_px": {
+                    "left_wrist": 0.0,
+                    "right_wrist": 0.0
+                  },
+                  "mean_region_distance_px": 0.0
+                }
+              ],
+              "best_mean_region_distance_px": 0.0
+            }
+          }
+        },
+        "rtmpose": {
+          "wrist_pixels": {
+            "left_wrist": [
+              718.4045644947328,
+              222.65030598733574
+            ],
+            "right_wrist": [
+              571.9797118967399,
+              389.64724531397223
+            ]
+          },
+          "inter_wrist_distance_px": 222.09956146469145,
+          "region_padding": {
+            "0": {
+              "all_bijections": [
+                {
+                  "assignment": {
+                    "left_wrist": "image_lower_left_wrist",
+                    "right_wrist": "image_upper_right_wrist"
+                  },
+                  "per_wrist_region_distance_px": {
+                    "left_wrist": 217.0388290147022,
+                    "right_wrist": 180.07975708462953
+                  },
+                  "mean_region_distance_px": 198.55929304966588
+                },
+                {
+                  "assignment": {
+                    "left_wrist": "image_upper_right_wrist",
+                    "right_wrist": "image_lower_left_wrist"
+                  },
+                  "per_wrist_region_distance_px": {
+                    "left_wrist": 2.3496940126642585,
+                    "right_wrist": 0.0
+                  },
+                  "mean_region_distance_px": 1.1748470063321292
+                }
+              ],
+              "best_mean_region_distance_px": 1.1748470063321292
+            },
+            "5": {
+              "all_bijections": [
+                {
+                  "assignment": {
+                    "left_wrist": "image_lower_left_wrist",
+                    "right_wrist": "image_upper_right_wrist"
+                  },
+                  "per_wrist_region_distance_px": {
+                    "left_wrist": 209.99597785433693,
+                    "right_wrist": 173.00879624310107
+                  },
+                  "mean_region_distance_px": 191.50238704871902
+                },
+                {
+                  "assignment": {
+                    "left_wrist": "image_upper_right_wrist",
+                    "right_wrist": "image_lower_left_wrist"
+                  },
+                  "per_wrist_region_distance_px": {
+                    "left_wrist": 0.0,
+                    "right_wrist": 0.0
+                  },
+                  "mean_region_distance_px": 0.0
+                }
+              ],
+              "best_mean_region_distance_px": 0.0
+            },
+            "10": {
+              "all_bijections": [
+                {
+                  "assignment": {
+                    "left_wrist": "image_lower_left_wrist",
+                    "right_wrist": "image_upper_right_wrist"
+                  },
+                  "per_wrist_region_distance_px": {
+                    "left_wrist": 202.95508894808523,
+                    "right_wrist": 165.93784451810424
+                  },
+                  "mean_region_distance_px": 184.44646673309472
+                },
+                {
+                  "assignment": {
+                    "left_wrist": "image_upper_right_wrist",
+                    "right_wrist": "image_lower_left_wrist"
+                  },
+                  "per_wrist_region_distance_px": {
+                    "left_wrist": 0.0,
+                    "right_wrist": 0.0
+                  },
+                  "mean_region_distance_px": 0.0
+                }
+              ],
+              "best_mean_region_distance_px": 0.0
+            }
+          }
+        }
+      },
+      "visual_regions_min_separation_px": 174.69115604403103
+    },
+    {
+      "source_frame": 205,
+      "source_pts_s": 6.661071,
+      "source_image_sha256": "6ae23c9e7f13cf8202cb08acdb9ef47d44d817c90f6a91f40f4dce6afbd4b146",
+      "visual_regions_xyxy_px": {
+        "image_lower_left_wrist": [
+          553,
+          392,
+          580,
+          420
+        ],
+        "image_upper_right_wrist": [
+          695,
+          220,
+          730,
+          253
+        ]
+      },
+      "models": {
+        "mediapipe": {
+          "wrist_pixels": {
+            "left_wrist": [
+              707.4922969341278,
+              224.09334254264832
+            ],
+            "right_wrist": [
+              584.0318257212639,
+              384.55754828453064
+            ]
+          },
+          "inter_wrist_distance_px": 202.4629577885188,
+          "region_padding": {
+            "0": {
+              "all_bijections": [
+                {
+                  "assignment": {
+                    "left_wrist": "image_lower_left_wrist",
+                    "right_wrist": "image_upper_right_wrist"
+                  },
+                  "per_wrist_region_distance_px": {
+                    "left_wrist": 210.82440891898702,
+                    "right_wrist": 172.10846641984978
+                  },
+                  "mean_region_distance_px": 191.46643766941838
+                },
+                {
+                  "assignment": {
+                    "left_wrist": "image_upper_right_wrist",
+                    "right_wrist": "image_lower_left_wrist"
+                  },
+                  "per_wrist_region_distance_px": {
+                    "left_wrist": 0.0,
+                    "right_wrist": 8.464378664954555
+                  },
+                  "mean_region_distance_px": 4.232189332477278
+                }
+              ],
+              "best_mean_region_distance_px": 4.232189332477278
+            },
+            "5": {
+              "all_bijections": [
+                {
+                  "assignment": {
+                    "left_wrist": "image_lower_left_wrist",
+                    "right_wrist": "image_upper_right_wrist"
+                  },
+                  "per_wrist_region_distance_px": {
+                    "left_wrist": 203.82085725490768,
+                    "right_wrist": 165.06382701173473
+                  },
+                  "mean_region_distance_px": 184.4423421333212
+                },
+                {
+                  "assignment": {
+                    "left_wrist": "image_upper_right_wrist",
+                    "right_wrist": "image_lower_left_wrist"
+                  },
+                  "per_wrist_region_distance_px": {
+                    "left_wrist": 0.0,
+                    "right_wrist": 2.4424517154693604
+                  },
+                  "mean_region_distance_px": 1.2212258577346802
+                }
+              ],
+              "best_mean_region_distance_px": 1.2212258577346802
+            },
+            "10": {
+              "all_bijections": [
+                {
+                  "assignment": {
+                    "left_wrist": "image_lower_left_wrist",
+                    "right_wrist": "image_upper_right_wrist"
+                  },
+                  "per_wrist_region_distance_px": {
+                    "left_wrist": 196.82213368473236,
+                    "right_wrist": 158.02154841073803
+                  },
+                  "mean_region_distance_px": 177.4218410477352
+                },
+                {
+                  "assignment": {
+                    "left_wrist": "image_upper_right_wrist",
+                    "right_wrist": "image_lower_left_wrist"
+                  },
+                  "per_wrist_region_distance_px": {
+                    "left_wrist": 0.0,
+                    "right_wrist": 0.0
+                  },
+                  "mean_region_distance_px": 0.0
+                }
+              ],
+              "best_mean_region_distance_px": 0.0
+            }
+          }
+        },
+        "rtmpose": {
+          "wrist_pixels": {
+            "left_wrist": [
+              714.2224566055229,
+              223.65921283874195
+            ],
+            "right_wrist": [
+              574.0568831037963,
+              392.1038055557292
+            ]
+          },
+          "inter_wrist_distance_px": 219.134590630187,
+          "region_padding": {
+            "0": {
+              "all_bijections": [
+                {
+                  "assignment": {
+                    "left_wrist": "image_lower_left_wrist",
+                    "right_wrist": "image_upper_right_wrist"
+                  },
+                  "per_wrist_region_distance_px": {
+                    "left_wrist": 215.3004609360915,
+                    "right_wrist": 184.3287992817588
+                  },
+                  "mean_region_distance_px": 199.81463010892514
+                },
+                {
+                  "assignment": {
+                    "left_wrist": "image_upper_right_wrist",
+                    "right_wrist": "image_lower_left_wrist"
+                  },
+                  "per_wrist_region_distance_px": {
+                    "left_wrist": 0.0,
+                    "right_wrist": 0.0
+                  },
+                  "mean_region_distance_px": 0.0
+                }
+              ],
+              "best_mean_region_distance_px": 0.0
+            },
+            "5": {
+              "all_bijections": [
+                {
+                  "assignment": {
+                    "left_wrist": "image_lower_left_wrist",
+                    "right_wrist": "image_upper_right_wrist"
+                  },
+                  "per_wrist_region_distance_px": {
+                    "left_wrist": 208.27543312072515,
+                    "right_wrist": 177.2755962340434
+                  },
+                  "mean_region_distance_px": 192.77551467738428
+                },
+                {
+                  "assignment": {
+                    "left_wrist": "image_upper_right_wrist",
+                    "right_wrist": "image_lower_left_wrist"
+                  },
+                  "per_wrist_region_distance_px": {
+                    "left_wrist": 0.0,
+                    "right_wrist": 0.0
+                  },
+                  "mean_region_distance_px": 0.0
+                }
+              ],
+              "best_mean_region_distance_px": 0.0
+            },
+            "10": {
+              "all_bijections": [
+                {
+                  "assignment": {
+                    "left_wrist": "image_lower_left_wrist",
+                    "right_wrist": "image_upper_right_wrist"
+                  },
+                  "per_wrist_region_distance_px": {
+                    "left_wrist": 201.2536300392066,
+                    "right_wrist": 170.2238755157932
+                  },
+                  "mean_region_distance_px": 185.73875277749988
+                },
+                {
+                  "assignment": {
+                    "left_wrist": "image_upper_right_wrist",
+                    "right_wrist": "image_lower_left_wrist"
+                  },
+                  "per_wrist_region_distance_px": {
+                    "left_wrist": 0.0,
+                    "right_wrist": 0.0
+                  },
+                  "mean_region_distance_px": 0.0
+                }
+              ],
+              "best_mean_region_distance_px": 0.0
+            }
+          }
+        }
+      },
+      "visual_regions_min_separation_px": 180.40509970618902
+    }
+  ],
+  "reviewer": "Codex agent visual estimates, saw model overlays earlier; NOT blind or human-labelled truth",
+  "definition": "Distance to permissive rectangle, best of both bijections; not true joint error",
+  "input_sha256": {
+    "/Users/owen/Developer/codex/iframe/docs/agents/raw/2026-10-22-turn-continuity/report.json": "658494289a38866523a8dfc98fc43869a238178b88d3c856c1fd26f8bc9816af",
+    "/Users/owen/Developer/codex/iframe/docs/agents/raw/2026-10-21-world-companion-projection/world-pts-timestamps.json": "2639560dddac15f6490caa6752fee5bf79894a40928f9818558d4aa774956a2c"
+  },
+  "tool_sha256": "66954b0249fbfaf9addb2c6714419e8a3223017f287d52a6af30ebf06ad4b036",
+  "verification": "distance and bijection checks passed; four image hashes matched",
+  "limits": [
+    "Four selected frames, eight wrists; no statistical confidence",
+    "No anatomical left/right truth assigned; no 3D/K/contact validation",
+    "Raw RGB viewing estimates and 5/10px padding are sensitivity probes only",
+    "No model preference or trajectory changes applied"
+  ]
+}
