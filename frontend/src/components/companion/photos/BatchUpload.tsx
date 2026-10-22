@@ -3,8 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { photoApi, type UploadBatch, type UploadManifestItem } from "@/lib/photoApi";
 import styles from "./photos.module.css";
-import PeopleTasks from "./PeopleTasks";
-import TimeTasks from "./TimeTasks";
+import BatchOrganization from "./BatchOrganization";
 
 const errorText: Record<string, string> = {
   invalid_image: "不是有效的静态 JPEG、PNG 或 WebP 照片，可跳过此项，其他照片仍保留。",
@@ -116,7 +115,7 @@ export default function BatchUpload({ onUploaded }: { onUploaded: () => void }) 
           </>}
         </li>;
       })}</ul>
-      {batch.counts.uploaded > 0 && <><TimeTasks key={batch.batch_id} batchId={batch.batch_id} /><details><summary>人物整理（需单独允许）</summary><PeopleTasks key={batch.batch_id} batchId={batch.batch_id} /></details></>}
+      {batch.counts.uploaded > 0 && <BatchOrganization key={batch.batch_id} batchId={batch.batch_id} disabled={busy} />}
     </details>)}
     {cursor && <button disabled={busy} onClick={() => void run(async () => {
       const page = await photoApi.uploadBatches(cursor);
