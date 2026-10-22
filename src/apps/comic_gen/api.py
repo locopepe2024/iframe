@@ -3906,6 +3906,167 @@ class RichFrameCandidateDiscardRequest(BaseModel):
     candidate_id: str
 
 
+class MicroExpressionTimingRequest(BaseModel):
+    frame_id: str
+    emotion_intent: str = Field("", max_length=500)
+    visibility: Literal["unknown", "close", "medium", "wide", "occluded"] = "unknown"
+    reviewed_messages: Optional[Dict[str, str]] = None
+    review_token: Optional[str] = None
+
+
+def _micro_expression_review(script_id: str, request: MicroExpressionTimingRequest, user: UserContext) -> Dict[str, Any]:
+    from .micro_expression import CHANNELS, PHASES
+    from ..agent_skills import catalog as skill_catalog
+
+    script = pipeline.get_script(script_id, user.owner_profile_id)
+    if not script:
+        raise HTTPException(status_code=404, detail="Script not found")
+    frame = next((item for item in script.frames if item.id == request.frame_id), None)
+    if frame is None:
+        raise HTTPException(status_code=404, detail="Frame not found")
+    duration = frame.duration or 0
+    if duration <= 0 or not frame.character_ids:
+        raise HTTPException(status_code=422, detail="请先确定镜头时长和角色")
+    character_by_id = {character.id: character for character in script.characters}
+    aliases = {f"character{index + 1}": character_id for index, character_id in enumerate(frame.character_ids)}
+    characters = []
+    anchors = {}
+    for alias, character_id in aliases.items():
+        character = character_by_id.get(character_id)
+        characters.append({"ref": alias, "name": character.name if character else f"角色 {len(characters) + 1}"})
+        if character and character.asset_pack:
+            anchors[alias] = {"revision": character.asset_pack.current_revision}
+    payload = {
+        "characters": characters,
+        "duration_seconds": duration,
+        "shot_size": frame.shot_size or "",
+        "composition": frame.composition or "",
+        "visibility": request.visibility,
+        "character_anchors": anchors,
+        "current_dialogue": frame.dialogue or "",
+        "current_action": frame.action_description or "",
+        "emotion_intent": request.emotion_intent.strip(),
+        "allowed_phases": PHASES,
+        "allowed_facial_channels": CHANNELS,
+        "invariants": ["character_identity", "clothing", "scene", "lighting", "camera", "dialogue", "reference_media"],
+    }
+    skill = next(item for item in skill_catalog() if item["id"] == "micro-expression-timing")
+    messages = {
+        "system": skill["instructions"],
+        "user": json.dumps(payload, ensure_ascii=False),
+    }
+    source = {"frame": frame.model_dump(exclude={"micro_expression_candidate", "updated_at"}, mode="json"),
+              "payload": payload, "skill_revision": skill["revision"]}
+    token = hashlib.sha256(json.dumps(source, sort_keys=True, ensure_ascii=False, default=str).encode()).hexdigest()
+    return {"messages": messages, "review_token": token, "input": payload}
+
+
+@app.post("/projects/{script_id}/frames/{frame_id}/micro-expression/preview")
+def preview_micro_expression(script_id: str, frame_id: str, request: MicroExpressionTimingRequest,
+                             user: UserContext = Depends(require_studio_user)):
+    if request.frame_id != frame_id:
+        raise HTTPException(status_code=422, detail="Frame ID mismatch")
+    try:
+        return _micro_expression_review(script_id, request, user)
+    except HTTPException:
+        raise
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+@app.post("/projects/{script_id}/frames/{frame_id}/micro-expression/generate")
+def generate_micro_expression(script_id: str, frame_id: str, request: MicroExpressionTimingRequest,
+                              user: UserContext = Depends(require_studio_user)):
+    if request.frame_id != frame_id:
+        raise HTTPException(status_code=422, detail="Frame ID mismatch")
+    review = _micro_expression_review(script_id, request, user)
+    if request.review_token != review["review_token"] or request.reviewed_messages != review["messages"]:
+        raise HTTPException(status_code=409, detail="请先审核并确认完整的微表情模型输入")
+    try:
+        content = pipeline.script_processor.llm.chat(
+            messages=[{"role": "system", "content": review["messages"]["system"]},
+                      {"role": "user", "content": review["messages"]["user"]}],
+            response_format={"type": "json_object"},
+            timeout_seconds=300, max_retries=1,
+        )
+        payload = json.loads(content or "")
+        from .micro_expression import validate_micro_expression_payload
+        candidates = validate_micro_expression_payload(payload, duration_seconds=review["input"]["duration_seconds"])
+        aliases = {f"character{index + 1}": character_id for index, character_id in enumerate(
+            next(item for item in pipeline.get_script(script_id, user.owner_profile_id).frames if item.id == frame_id).character_ids
+        )}
+        allowed = set(aliases)
+        if len({item.character_id for item in candidates}) != len(candidates) or any(item.character_id not in allowed for item in candidates):
+            raise ValueError("微表情结果包含未选角色或重复角色")
+        if any(
+            (request.visibility == "unknown" or item.character_id not in review["input"]["character_anchors"])
+            and not item.uncertainties for item in candidates
+        ):
+            raise ValueError("缺少可见性或角色锚点时必须标记待确认项")
+        if _micro_expression_review(script_id, request, user)["review_token"] != review["review_token"]:
+            raise HTTPException(status_code=409, detail="镜头或锚点已变化，请重新预览")
+        script = pipeline.get_script(script_id, user.owner_profile_id)
+        frame = next(item for item in script.frames if item.id == frame_id)
+        normalized = []
+        for item in candidates:
+            value = item.model_dump(mode="json")
+            value["character_id"] = aliases[item.character_id]
+            normalized.append(value)
+        frame.micro_expression_candidate = {
+            "id": str(uuid.uuid4()), "source_hash": review["review_token"],
+            "items": normalized,
+            "emotion_intent": request.emotion_intent.strip(),
+            "visibility": request.visibility,
+        }
+        frame.updated_at = time.time()
+        pipeline._save_data()
+        return frame.micro_expression_candidate
+    except HTTPException:
+        raise
+    except (json.JSONDecodeError, ValueError) as exc:
+        logger.warning("Micro-expression result failed validation: %s", type(exc).__name__)
+        raise HTTPException(status_code=502, detail="微表情结果未通过结构校验，请重试") from exc
+
+
+class MicroExpressionApplyRequest(BaseModel):
+    candidate_id: str
+    character_ids: List[str] = Field(min_length=1)
+
+
+@app.post("/projects/{script_id}/frames/{frame_id}/micro-expression/apply", response_model=Script)
+def apply_micro_expression(script_id: str, frame_id: str, request: MicroExpressionApplyRequest,
+                           user: UserContext = Depends(require_studio_user)):
+    script = pipeline.get_script(script_id, user.owner_profile_id)
+    if not script:
+        raise HTTPException(status_code=404, detail="Script not found")
+    frame = next((item for item in script.frames if item.id == frame_id), None)
+    if not frame:
+        raise HTTPException(status_code=404, detail="Frame not found")
+    candidate = frame.micro_expression_candidate or {}
+    if candidate.get("id") != request.candidate_id:
+        raise HTTPException(status_code=409, detail="微表情候选已过期")
+    if frame.workbench_prompt_is_optimized:
+        raise HTTPException(status_code=409, detail="完整优化稿需重新审核后才能应用微表情时序")
+    refresh = MicroExpressionTimingRequest(frame_id=frame_id, emotion_intent=candidate.get("emotion_intent", ""),
+                                           visibility=candidate.get("visibility", "unknown"))
+    if candidate.get("source_hash") != _micro_expression_review(script_id, refresh, user)["review_token"]:
+        raise HTTPException(status_code=409, detail="镜头或锚点已变化，请重新生成")
+    selected = set(request.character_ids)
+    items = candidate.get("items") or []
+    if len(selected) != len(request.character_ids) or not selected.issubset({item["character_id"] for item in items}):
+        raise HTTPException(status_code=422, detail="请选择有效角色")
+    frame.micro_expression_timing = [item for item in frame.micro_expression_timing if item.get("character_id") not in selected]
+    names = {character.id: character.name for character in script.characters}
+    frame.micro_expression_timing.extend(
+        {**item, "character_name": names.get(item["character_id"], "当前角色")}
+        for item in items if item["character_id"] in selected
+    )
+    frame.micro_expression_candidate = None
+    frame.updated_at = time.time()
+    pipeline._save_data()
+    return signed_response(script)
+
+
 @app.post("/projects/{script_id}/frames/{frame_id}/rich-refinement/apply", response_model=Script)
 def apply_rich_refinement(script_id: str, frame_id: str, request: RichFrameCandidateApplyRequest,
                           user: UserContext = Depends(require_studio_user)):

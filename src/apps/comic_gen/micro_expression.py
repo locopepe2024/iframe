@@ -45,8 +45,12 @@ class MicroExpressionCandidate(BaseModel):
         if set(self.facial_channels) - set(CHANNELS):
             raise ValueError("facial_channels 含有未允许的通道")
         phases = [item.phase for item in self.timing]
-        if phases != [phase for phase in PHASES if phase in phases]:
-            raise ValueError("timing 阶段必须按 trigger、change、hold、release 顺序")
+        if phases != list(PHASES):
+            raise ValueError("timing 阶段必须完整且按 trigger、change、hold、release 顺序")
+        if self.timing[0].relative_start != 0:
+            raise ValueError("trigger 必须从镜头起点开始")
+        if any(next_item.relative_start < item.relative_end for item, next_item in zip(self.timing, self.timing[1:])):
+            raise ValueError("timing 阶段不得重叠")
         return self
 
 

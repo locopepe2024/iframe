@@ -941,6 +941,12 @@ class StoryboardFrame(BaseModel):
     rich_refinement_candidate: Optional[Dict[str, Any]] = Field(
         None, description="Unapplied rich-frame field proposals with source snapshot"
     )
+    micro_expression_candidate: Optional[Dict[str, Any]] = Field(
+        None, description="Unapplied shot-scoped micro-expression proposal"
+    )
+    micro_expression_timing: List[Dict[str, Any]] = Field(
+        default_factory=list, description="Creator-accepted performance timing by character"
+    )
 
     # === Prompts ===
     # Per-shot art-direction overrides.  Empty values inherit the project's

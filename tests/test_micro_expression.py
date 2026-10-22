@@ -1,4 +1,5 @@
 import pytest
+from types import SimpleNamespace
 
 from src.apps.comic_gen.micro_expression import (
     opening_static_state,
@@ -44,6 +45,18 @@ def test_micro_expression_rejects_invalid_phase_order_or_range(bad):
         validate_micro_expression_payload(value)
 
 
+@pytest.mark.parametrize("change", [
+    lambda timing: timing[0].update(relative_start=0.1),
+    lambda timing: timing[1].update(relative_start=0.1),
+    lambda timing: timing.pop(0),
+])
+def test_micro_expression_requires_opening_state_and_nonoverlapping_phases(change):
+    value = payload()
+    change(value["candidates"][0]["timing"])
+    with pytest.raises(ValueError):
+        validate_micro_expression_payload(value)
+
+
 def test_micro_expression_rejects_unrelated_prompt_fields():
     value = payload()
     value["candidates"][0]["prompt"] = "重做整个场景"
@@ -56,3 +69,132 @@ def test_micro_expression_rejects_unknown_facial_channel():
     value["candidates"][0]["facial_channels"]["lighting"] = "red"
     with pytest.raises(ValueError):
         validate_micro_expression_payload(value)
+
+
+def test_micro_expression_api_review_input_excludes_neighbor_content(monkeypatch):
+    from src.apps.comic_gen import api
+    from src.apps.identity import UserContext
+    from src.apps.comic_gen.models import Script, StoryboardFrame
+
+    frame_id = "e5a19270-1311-44c1-b162-a761002139aa"
+    character_id = "f05e2031-73c7-463c-ae58-03e096ed41e0"
+    frame = StoryboardFrame(id=frame_id, scene_id="scene", duration=6, shot_size="特写", character_ids=[character_id], dialogue="当前对白")
+    other = StoryboardFrame(id="other", scene_id="scene", duration=6, character_ids=["villain"], dialogue="前镜对白")
+    script = Script(id="film", title="T", original_text="text", created_at=1, updated_at=1, frames=[other, frame])
+    monkeypatch.setattr(api, "pipeline", SimpleNamespace(get_script=lambda *_: script))
+    result = api._micro_expression_review("film", api.MicroExpressionTimingRequest(frame_id=frame_id), UserContext("o", "o", "", ""))
+    encoded = str(result["input"])
+    assert "前镜对白" not in encoded
+    assert "当前对白" in encoded
+    assert list(result["input"]["allowed_phases"]) == ["trigger", "change", "hold", "release"]
+    assert result["input"]["characters"] == [{"ref": "character1", "name": "角色 1"}]
+    assert frame_id not in str(result["messages"])
+    assert character_id not in str(result["messages"])
+
+
+def test_micro_expression_generate_requires_review_and_keeps_frame_fields(monkeypatch):
+    import json
+    from unittest.mock import Mock
+    from src.apps.comic_gen import api
+    from src.apps.identity import UserContext
+    from src.apps.comic_gen.models import Script, StoryboardFrame
+
+    frame = StoryboardFrame(id="frame", scene_id="scene", duration=6, character_ids=["hero"],
+                            action_description="抬眼", dialogue="别动", shot_size="特写")
+    script = Script(id="film", title="T", original_text="text", created_at=1, updated_at=1, frames=[frame])
+    response = payload(character_id="character1")
+    response["candidates"][0]["uncertainties"] = ["角色锚点与面部可见性待确认"]
+    llm = Mock(chat=Mock(return_value=json.dumps(response, ensure_ascii=False)))
+    save = Mock()
+    monkeypatch.setattr(api, "pipeline", SimpleNamespace(get_script=lambda *_: script,
+                        script_processor=SimpleNamespace(llm=llm), _save_data=save))
+    user = UserContext("o", "o", "", "")
+    request = api.MicroExpressionTimingRequest(frame_id="frame")
+    with pytest.raises(api.HTTPException) as unreviewed:
+        api.generate_micro_expression("film", "frame", request, user)
+    assert unreviewed.value.status_code == 409
+    llm.chat.assert_not_called()
+
+    review = api.preview_micro_expression("film", "frame", request, user)
+    reviewed = request.model_copy(update={"review_token": review["review_token"], "reviewed_messages": review["messages"]})
+    candidate = api.generate_micro_expression("film", "frame", reviewed, user)
+    assert candidate["items"][0]["character_id"] == "hero"
+    assert frame.action_description == "抬眼" and frame.dialogue == "别动"
+    assert frame.micro_expression_timing == []
+    assert llm.chat.call_args.kwargs["messages"][0]["role"] == "system"
+    save.assert_called_once()
+
+
+def test_micro_expression_generate_rejects_unknown_character_alias(monkeypatch):
+    import json
+    from unittest.mock import Mock
+    from src.apps.comic_gen import api
+    from src.apps.identity import UserContext
+    from src.apps.comic_gen.models import Script, StoryboardFrame
+
+    frame = StoryboardFrame(id="frame", scene_id="scene", duration=6, character_ids=["hero"])
+    script = Script(id="film", title="T", original_text="text", created_at=1, updated_at=1, frames=[frame])
+    llm = Mock(chat=Mock(return_value=json.dumps(payload(character_id="hero"))))
+    save = Mock()
+    monkeypatch.setattr(api, "pipeline", SimpleNamespace(get_script=lambda *_: script,
+                        script_processor=SimpleNamespace(llm=llm), _save_data=save))
+    user = UserContext("o", "o", "", "")
+    request = api.MicroExpressionTimingRequest(frame_id="frame")
+    review = api.preview_micro_expression("film", "frame", request, user)
+    reviewed = request.model_copy(update={"review_token": review["review_token"], "reviewed_messages": review["messages"]})
+
+    with pytest.raises(api.HTTPException) as rejected:
+        api.generate_micro_expression("film", "frame", reviewed, user)
+    assert rejected.value.status_code == 502
+    assert frame.micro_expression_candidate is None
+    save.assert_not_called()
+
+
+def test_micro_expression_apply_rejects_changed_frame(monkeypatch):
+    from unittest.mock import Mock
+    from src.apps.comic_gen import api
+    from src.apps.identity import UserContext
+    from src.apps.comic_gen.models import Script, StoryboardFrame
+
+    frame = StoryboardFrame(id="frame", scene_id="scene", duration=6, character_ids=["hero"], shot_size="特写")
+    script = Script(id="film", title="T", original_text="text", created_at=1, updated_at=1, frames=[frame])
+    save = Mock()
+    monkeypatch.setattr(api, "pipeline", SimpleNamespace(get_script=lambda *_: script, _save_data=save))
+    user = UserContext("o", "o", "", "")
+    review = api._micro_expression_review("film", api.MicroExpressionTimingRequest(frame_id="frame"), user)
+    frame.micro_expression_candidate = {"id": "candidate", "source_hash": review["review_token"],
+                                        "emotion_intent": "", "items": payload()["candidates"]}
+    frame.shot_size = "远景"
+    with pytest.raises(api.HTTPException) as stale:
+        api.apply_micro_expression("film", "frame", api.MicroExpressionApplyRequest(
+            candidate_id="candidate", character_ids=["hero"]), user)
+    assert stale.value.status_code == 409
+    assert frame.micro_expression_timing == []
+    save.assert_not_called()
+
+
+def test_micro_expression_apply_changes_only_selected_performance(monkeypatch):
+    from unittest.mock import Mock
+    from src.apps.comic_gen import api
+    from src.apps.identity import UserContext
+    from src.apps.comic_gen.models import Script, StoryboardFrame
+
+    frame = StoryboardFrame(id="frame", scene_id="scene", duration=6, character_ids=["hero"],
+                            shot_size="特写", action_description="抬眼", dialogue="别动")
+    script = Script(id="film", title="T", original_text="text", created_at=1, updated_at=1, frames=[frame])
+    save = Mock()
+    monkeypatch.setattr(api, "pipeline", SimpleNamespace(get_script=lambda *_: script, _save_data=save))
+    monkeypatch.setattr(api, "signed_response", lambda value: value)
+    user = UserContext("o", "o", "", "")
+    review = api._micro_expression_review("film", api.MicroExpressionTimingRequest(frame_id="frame"), user)
+    frame.micro_expression_candidate = {"id": "candidate", "source_hash": review["review_token"],
+                                        "emotion_intent": "", "visibility": "unknown", "items": payload()["candidates"]}
+    original = frame.model_dump(exclude={"micro_expression_candidate", "micro_expression_timing", "updated_at"})
+
+    api.apply_micro_expression("film", "frame", api.MicroExpressionApplyRequest(
+        candidate_id="candidate", character_ids=["hero"]), user)
+
+    assert frame.micro_expression_timing[0]["character_id"] == "hero"
+    assert frame.micro_expression_candidate is None
+    assert frame.model_dump(exclude={"micro_expression_candidate", "micro_expression_timing", "updated_at"}) == original
+    save.assert_called_once()
