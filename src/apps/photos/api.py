@@ -15,6 +15,7 @@ from .date_store import OperationConflict, PhotoNotAvailable, TimeConsentRequire
 from .dates import DateRevisionConflict, ManualPrecision
 from . import media
 from .workflow import PhotoWorkflowStore
+from .analysis import analyze_photo, AnalysisUnavailable
 
 
 def get_store() -> PhotoWorkflowStore:
@@ -31,6 +32,11 @@ class DateMutation(BaseModel):
     expected_revision: int = Field(ge=1)
     consent_version: int = Field(ge=1)
     operation_id: str = Field(min_length=1, max_length=120, pattern=r"^[a-zA-Z0-9_-]+$")
+
+
+class AnalysisPermission(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+    allow_external_analysis: Literal[True]
 
 
 class DateCorrection(DateMutation):
@@ -159,6 +165,26 @@ def thumbnail(photo_id: str, identity: Owner, store: Store):
 def read_date(photo_id: str, identity: Owner, store: Store):
     with api_errors():
         return store.read(identity.owner_profile_id, photo_id)
+
+
+@router.get("/{photo_id}/analysis")
+def read_analysis(photo_id: str, identity: Owner, store: Store):
+    with api_errors():
+        return store.analysis(identity.owner_profile_id, photo_id)
+
+
+@router.post("/{photo_id}/analysis")
+def create_analysis(photo_id: str, body: AnalysisPermission, identity: Owner, store: Store):
+    with api_errors():
+        existing = store.analysis(identity.owner_profile_id, photo_id)
+        if existing:
+            return existing
+        raw, _ = store.media(identity.owner_profile_id, photo_id, thumbnail=True)
+        try:
+            result = analyze_photo(raw)
+        except AnalysisUnavailable as exc:
+            raise HTTPException(503, "照片分析暂不可用，请稍后重试。") from exc
+        return store.save_analysis(identity.owner_profile_id, photo_id, identity.user_id, result)
 
 
 @router.get("/{photo_id}/date/history")

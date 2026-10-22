@@ -47,6 +47,11 @@ class DateChange(Snapshot):
 
 
 _SCHEMA = """
+CREATE TABLE IF NOT EXISTS photo_content_analyses (
+    owner TEXT NOT NULL, photo_id TEXT NOT NULL, actor TEXT NOT NULL,
+    disclosure_version TEXT NOT NULL, result TEXT NOT NULL,
+    PRIMARY KEY(owner, photo_id)
+);
 CREATE TABLE IF NOT EXISTS photo_time_consents (
     owner TEXT NOT NULL, batch_id TEXT NOT NULL,
     granted INTEGER NOT NULL CHECK(granted IN (0, 1)),
@@ -223,6 +228,24 @@ class DateStore:
             if row is None:
                 raise PhotoNotAvailable("Photo is not available")
             return row["content"], "image/webp" if thumbnail else row["media_type"]
+
+    def analysis(self, owner: str, photo_id: str):
+        from .analysis import PhotoAnalysis
+        with self._connection() as connection:
+            self._photo(connection, owner, photo_id)
+            row = connection.execute("SELECT result FROM photo_content_analyses WHERE owner=? AND photo_id=?",
+                                     (owner, photo_id)).fetchone()
+            return PhotoAnalysis.model_validate_json(row["result"]) if row else None
+
+    def save_analysis(self, owner: str, photo_id: str, actor: str, result):
+        from .analysis import PhotoAnalysis
+        with self._connection(write=True) as connection:
+            self._photo(connection, owner, photo_id)
+            connection.execute("INSERT OR IGNORE INTO photo_content_analyses VALUES (?, ?, ?, ?, ?)",
+                               (owner, photo_id, actor, "qwen-external-photo-v1", result.model_dump_json()))
+            row = connection.execute("SELECT result FROM photo_content_analyses WHERE owner=? AND photo_id=?",
+                                     (owner, photo_id)).fetchone()
+            return PhotoAnalysis.model_validate_json(row["result"])
 
     def set_time_consent(self, owner: str, batch_id: str, *, granted: bool) -> int:
         """Trusted service boundary only; a UI checkbox alone is not authorization."""

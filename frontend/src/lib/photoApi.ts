@@ -8,6 +8,10 @@ export interface PhotoDateAnnotation {
   revision: number;
 }
 export interface AlbumPhoto { photo_id: string; batch_id: string; date: PhotoDateAnnotation }
+export interface PhotoAnalysis {
+  model: string; provider: "qwen"; status: "needs_review"; created_at: string;
+  observation: { visible_summary: string; visible_text: string[]; uncertainties: string[]; story_question: string };
+}
 export interface TimeConsent { granted: boolean; consent_version: number }
 export interface TimeQuestion { question_id: string; text: string }
 export interface DateChange {
@@ -33,6 +37,8 @@ function serviceError(status: number) {
     : "服务暂不可用，请稍后重试。");
 }
 export const photoApi = {
+  analysis: (id: string) => request<PhotoAnalysis | null>(`/${encodeURIComponent(id)}/analysis`),
+  analyze: (id: string) => request<PhotoAnalysis>(`/${encodeURIComponent(id)}/analysis`, "POST", { allow_external_analysis: true }),
   list: (view: string, year: string, after = "") => request<{ photos: AlbumPhoto[]; next_after_id: string | null }>(
     `/albums?${new URLSearchParams({ view, ...(year ? { year } : {}), after_id: after, limit: "20" })}`),
   batch: (id: string) => request<TimeConsent>(`/batches/${encodeURIComponent(id)}`),
