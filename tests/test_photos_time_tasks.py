@@ -1,4 +1,5 @@
 from concurrent.futures import ThreadPoolExecutor
+from threading import Event
 from io import BytesIO
 
 from PIL import Image
@@ -114,3 +115,27 @@ def test_item_transaction_rolls_back_date_and_progress_on_process_failure(setup,
     while recovered.process_time_item():
         pass
     assert recovered.time_task('owner',task['task_id'])['counts']['pending'] == 0
+
+
+def test_revoke_racing_worker_fences_every_later_write(setup, monkeypatch):
+    client, store, _, _, batch, version = prepare(setup)
+    task = client.post(f'/photos/batches/{batch}/time-tasks', json=dict(operation_id='first',consent_version=version)).json()
+    entered, release = Event(), Event()
+    original = store._change_in_connection
+    def held(*args, **kwargs):
+        entered.set()
+        assert release.wait(3)
+        return original(*args, **kwargs)
+    monkeypatch.setattr(store, '_change_in_connection', held)
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        worker = pool.submit(store.process_time_item)
+        assert entered.wait(3)
+        revocation = pool.submit(store.revoke_time, 'owner', batch, actor='actor', expected_consent_version=version)
+        release.set()
+        assert worker.result()
+        assert revocation.result()['granted'] is False
+    cancelled = store.time_task('owner',task['task_id'])
+    assert cancelled['status'] == 'cancelled' and cancelled['counts']['cancelled'] == 1
+    before = [store.read('owner', item['photo_id']) for item in task['items']]
+    assert not store.process_time_item()
+    assert before == [store.read('owner', item['photo_id']) for item in task['items']]
