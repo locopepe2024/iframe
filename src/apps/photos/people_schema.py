@@ -40,3 +40,34 @@ CREATE TABLE IF NOT EXISTS photo_people_faces (
 );
 CREATE INDEX IF NOT EXISTS photo_people_pending ON photo_people_items(status,lease_until);
 """
+
+PEOPLE_SCHEMA += """
+CREATE TABLE IF NOT EXISTS photo_people_group_runs (
+ owner TEXT NOT NULL, task_id TEXT NOT NULL, digest TEXT NOT NULL,
+ PRIMARY KEY(owner,task_id)
+);
+CREATE TABLE IF NOT EXISTS photo_people_groups (
+ owner TEXT NOT NULL, task_id TEXT NOT NULL, group_id TEXT NOT NULL,
+ members TEXT NOT NULL, revision INTEGER NOT NULL, status TEXT NOT NULL,
+ person_id TEXT,
+ PRIMARY KEY(owner,group_id),
+ FOREIGN KEY(owner,task_id) REFERENCES photo_people_tasks(owner,task_id)
+);
+CREATE TABLE IF NOT EXISTS photo_people_persons (
+ owner TEXT NOT NULL, person_id TEXT NOT NULL, label TEXT NOT NULL,
+ actor TEXT NOT NULL, created_at REAL NOT NULL,
+ PRIMARY KEY(owner,person_id)
+);
+CREATE TABLE IF NOT EXISTS photo_people_members (
+ owner TEXT NOT NULL, person_id TEXT NOT NULL, task_id TEXT NOT NULL,
+ face_id TEXT NOT NULL, photo_id TEXT NOT NULL, box TEXT NOT NULL,
+ PRIMARY KEY(owner,task_id,face_id),
+ FOREIGN KEY(owner,person_id) REFERENCES photo_people_persons(owner,person_id)
+);
+CREATE TABLE IF NOT EXISTS photo_people_review_events (
+ owner TEXT NOT NULL, group_id TEXT NOT NULL, operation_id TEXT NOT NULL,
+ request TEXT NOT NULL, actor TEXT NOT NULL, result TEXT NOT NULL,
+ created_at REAL NOT NULL,
+ PRIMARY KEY(owner,group_id,operation_id)
+);
+"""

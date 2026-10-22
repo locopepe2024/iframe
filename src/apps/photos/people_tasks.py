@@ -57,7 +57,7 @@ class PhotoPeopleStore(PhotoUndoStore):
             disclosure = DISCLOSURE + ' 模型：' + MODEL_VERSION + '，指纹：' + FINGERPRINT
             connection.execute('INSERT INTO photo_people_questions VALUES (?,?,?,?,?,?) ON CONFLICT(owner,batch_id) DO UPDATE SET question_id=excluded.question_id,version=excluded.version,expires=excluded.expires,disclosure=excluded.disclosure',
                 (owner,batch,question,consent['version'],expires,disclosure))
-            return dict(question_id=question,consent_version=consent['version'],expires_at=expires,text=disclosure,scope='people',processing_location='demo_server_local',fingerprint=FINGERPRINT)
+            return dict(question_id=question,consent_version=consent['version'],expires_at=expires,text=DISCLOSURE,scope='people',processing_location='demo_server_local',fingerprint=FINGERPRINT)
 
     def change_people_consent(self, owner, batch, actor, *, operation_id, expected_version,
                               granted, question_id=None, clear=False):
@@ -85,11 +85,16 @@ class PhotoPeopleStore(PhotoUndoStore):
             connection.execute("UPDATE photo_people_items SET status='cancelled',token=NULL,lease_until=NULL WHERE owner=? AND status IN ('pending','running') AND task_id IN (SELECT task_id FROM photo_people_tasks WHERE owner=? AND batch_id=?)",(owner,owner,batch))
             connection.execute("UPDATE photo_people_tasks SET status='cancelled' WHERE owner=? AND batch_id=? AND status IN ('queued','running')",(owner,batch))
             if clear:
+                self._clear_people_candidates(connection, owner, batch)
                 connection.execute("UPDATE photo_people_tasks SET status='cleared' WHERE owner=? AND batch_id=? AND status NOT IN ('cancelled','failed')",(owner,batch))
                 connection.execute('DELETE FROM photo_people_faces WHERE owner=? AND task_id IN (SELECT task_id FROM photo_people_tasks WHERE owner=? AND batch_id=?)',(owner,owner,batch))
                 connection.execute("UPDATE photo_people_items SET status='cleared',face_count=0 WHERE owner=? AND status='detected' AND task_id IN (SELECT task_id FROM photo_people_tasks WHERE owner=? AND batch_id=?)",(owner,owner,batch))
             connection.execute('INSERT INTO photo_people_consent_events VALUES (?,?,?,?,?,?,?,?,?)',(owner,batch,operation_id,request,version,int(granted),actor,self.clock(),int(clear)))
             return dict(granted=granted,consent_version=version,cleared=clear)
+
+    def _clear_people_candidates(self, connection, owner, batch):
+        # Only automatic, unconfirmed suggestions are removed with features.
+        connection.execute("DELETE FROM photo_people_groups WHERE owner=? AND status!='confirmed' AND task_id IN (SELECT task_id FROM photo_people_tasks WHERE owner=? AND batch_id=?)", (owner,owner,batch))
 
     def _people_task(self, connection, owner, task):
         row = connection.execute('SELECT * FROM photo_people_tasks WHERE owner=? AND task_id=?',(owner,task)).fetchone()

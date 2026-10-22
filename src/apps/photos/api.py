@@ -15,16 +15,36 @@ from ..identity import UserContext, require_user_context
 from .date_store import OperationConflict, PhotoNotAvailable, TimeConsentRequired
 from .dates import DateRevisionConflict, ManualPrecision
 from . import media
-from .undo import PhotoUndoStore
+from .people_review import PhotoPeopleReviewStore
+from .people_tasks import PeopleConsentRequired
 from .analysis import analyze_photo, AnalysisUnavailable, AnalysisCredentialRejected
 
 
-def get_store() -> PhotoUndoStore:
+def get_store() -> PhotoPeopleReviewStore:
     configured = os.getenv("IFRAME_PHOTOS_LOCAL_DB_PATH", "")
     path = Path(configured)
     if not configured or not path.is_absolute() or not path.is_file():
         raise HTTPException(503, "Photo storage is not configured")
-    return PhotoUndoStore(path, initialize=False)
+    return PhotoPeopleReviewStore(path, initialize=False)
+
+
+class PeopleConsentRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+    operation_id: str = Field(min_length=1,max_length=120,pattern=r"^[a-zA-Z0-9_-]+$")
+    expected_version: int = Field(ge=0)
+    granted: bool
+    question_id: str | None = Field(default=None,max_length=80)
+    clear: bool = False
+    method: Literal["button"]
+
+
+class PeopleReviewRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+    operation_id: str = Field(min_length=1,max_length=120,pattern=r"^[a-zA-Z0-9_-]+$")
+    expected_revision: int = Field(ge=1)
+    consent_version: int = Field(ge=1)
+    action: Literal["confirm","split","defer"]
+    label: str = Field(default="",max_length=80)
 
 
 class DateMutation(BaseModel):
@@ -113,6 +133,8 @@ def api_errors():
         yield
     except PhotoNotAvailable as exc:
         raise HTTPException(404, "Photo or history is not available") from exc
+    except PeopleConsentRequired as exc:
+        raise HTTPException(403, "Current people consent is required") from exc
     except TimeConsentRequired as exc:
         raise HTTPException(403, "Current time consent is required") from exc
     except (DateRevisionConflict, OperationConflict) as exc:
@@ -126,8 +148,79 @@ def api_errors():
 # Demo uses the existing workspace identity, including browser/key-fingerprint
 # scopes. Replace this dependency with registered-account auth before production.
 Owner = Annotated[UserContext, Depends(require_user_context)]
-Store = Annotated[PhotoUndoStore, Depends(get_store)]
+Store = Annotated[PhotoPeopleReviewStore, Depends(get_store)]
 router = APIRouter(prefix="/photos", tags=["photo-date-trial"])
+
+
+def people_enabled():
+    return os.getenv("IFRAME_PHOTOS_PEOPLE_ENABLED") == "1"
+
+
+def require_people_enabled():
+    if not people_enabled():
+        raise HTTPException(503,"当前测试站尚未启用人物整理。")
+
+
+@router.get("/batches/{batch_id}/people")
+def people_status(batch_id: str, identity: Owner, store: Store):
+    with api_errors():
+        return dict(**store.people_consent(identity.owner_profile_id,batch_id), enabled=people_enabled())
+
+
+@router.post("/batches/{batch_id}/people-question")
+def people_question(batch_id: str, identity: Owner, store: Store):
+    with api_errors():
+        store.batch_status(identity.owner_profile_id,batch_id)
+        require_people_enabled()
+        return store.people_question(identity.owner_profile_id,batch_id)
+
+
+@router.post("/batches/{batch_id}/people-consent")
+def people_consent(batch_id: str, body: PeopleConsentRequest, identity: Owner, store: Store):
+    with api_errors():
+        store.batch_status(identity.owner_profile_id,batch_id)
+        if body.granted:
+            require_people_enabled()
+        values=body.model_dump(exclude={"method"})
+        return store.change_people_consent(identity.owner_profile_id,batch_id,identity.user_id,**values)
+
+
+@router.get("/batches/{batch_id}/people-tasks")
+def people_tasks(batch_id: str, identity: Owner, store: Store):
+    with api_errors():
+        return store.people_tasks(identity.owner_profile_id,batch_id)
+
+
+@router.post("/batches/{batch_id}/people-tasks", status_code=202)
+def create_people_task(batch_id: str, body: TimeTaskRequest, identity: Owner, store: Store):
+    with api_errors():
+        store.batch_status(identity.owner_profile_id,batch_id)
+        require_people_enabled()
+        return store.create_people_task(identity.owner_profile_id,batch_id,identity.user_id,**body.model_dump())
+
+
+@router.get("/people-tasks/{task_id}/groups")
+def people_groups(task_id: str, identity: Owner, store: Store):
+    with api_errors():
+        return store.people_groups(identity.owner_profile_id,task_id)
+
+
+@router.post("/people-groups/{group_id}/review")
+def review_people_group(group_id: str, body: PeopleReviewRequest, identity: Owner, store: Store):
+    with api_errors():
+        return store.review_people_group(identity.owner_profile_id,group_id,identity.user_id,**body.model_dump())
+
+
+@router.get("/people-albums")
+def people_albums(identity: Owner, store: Store, after_id: str = Query(default="",max_length=80), limit: int = Query(default=20,ge=1,le=100)):
+    with api_errors():
+        return store.people_albums(identity.owner_profile_id,after_id=after_id,limit=limit)
+
+
+@router.get("/people-albums/{person_id}")
+def person_photos(person_id: str, identity: Owner, store: Store, after_id: str = Query(default="",max_length=80), limit: int = Query(default=20,ge=1,le=100)):
+    with api_errors():
+        return store.person_photos(identity.owner_profile_id,person_id,after_id=after_id,limit=limit)
 
 
 @router.get("/batches/{batch_id}/undo-time-preview")
