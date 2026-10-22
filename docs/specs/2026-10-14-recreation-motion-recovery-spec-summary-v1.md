@@ -110,3 +110,5 @@
 和 [枪法_2 复刻验证计划](../agents/deliverables/2026-10-13-recreation-failure-dimensions-validation-plan-v1.md)的关系：本摘要是可选的 3D 动作恢复分支，不替代该计划中的源帧证据表、镜头切点与 H3 输出验收。
 
 - 2026-10-22 PersPose官方源码核对（43eb2c2）：PE输入K逆射线，PR使用KRK逆，裁剪同步更新K；demo要求EXIF/文件名焦距，缺失默认50mm，并非估计未知焦距。可作给定GeoCalib有效K的源姿态对照候选；仍需SMPL和独立权重，公开Drive可下载性/运行效果未验证、demo硬编码CUDA。主链路未改。[PersPose适用性](../agents/deliverables/2026-10-22-recreation2-perspose-review-v1.md)
+
+- 2026-10-22固定有效K/骨长、仅四条近端方向≤5°/10°：early末端加权RMSE14.761→14.336/14.634px，later21.101→20.589/20.634，仍差于原始源19.465。源23反升12.822→14.986/17.292；拟合点更准不保证整条链更准。79/79优化成功，骨长误差≤1.11e−16、旧基线回归0、评分点扰动不影响本轮解。非严格独立验证、无体态/接触/H3通过，主链路未改。[有限方向对照](../agents/deliverables/2026-10-22-recreation2-limited-direction-v1.md)
