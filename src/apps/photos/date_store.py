@@ -78,17 +78,22 @@ CREATE TABLE IF NOT EXISTS photo_date_history (
 
 
 class DateStore:
-    def __init__(self, path: str | Path):
+    def __init__(self, path: str | Path, *, initialize: bool = True):
         if not str(path) or str(path) == ":memory:":
             raise ValueError("An explicit persistent SQLite file is required")
         self.path = Path(path)
+        self._existing_only = not initialize
         # Parent must already exist: a typo must not silently choose new storage.
-        with self._connection() as connection:
-            connection.executescript(_SCHEMA)
+        if initialize:
+            with self._connection() as connection:
+                connection.executescript(_SCHEMA)
 
     @contextmanager
     def _connection(self, *, write=False):
-        connection = sqlite3.connect(self.path, timeout=5)
+        connection = (
+            sqlite3.connect(self.path.resolve().as_uri() + "?mode=rw", uri=True, timeout=5)
+            if self._existing_only else sqlite3.connect(self.path, timeout=5)
+        )
         connection.row_factory = sqlite3.Row
         try:
             connection.execute("PRAGMA foreign_keys = ON")
@@ -159,13 +164,16 @@ class DateStore:
             row = self._photo(connection, owner, photo_id)
             return DateAnnotation.model_validate_json(row["annotation"])
 
-    def history(self, owner: str, photo_id: str) -> list[DateChange]:
+    def history(self, owner: str, photo_id: str, *, after_revision: int = 0,
+                limit: int = 100) -> list[DateChange]:
+        if after_revision < 0 or not 1 <= limit <= 101:
+            raise ValueError("Invalid history page")
         with self._connection() as connection:
             self._photo(connection, owner, photo_id)
             rows = connection.execute(
                 "SELECT change_json FROM photo_date_history "
-                "WHERE owner = ? AND photo_id = ? ORDER BY revision",
-                (owner, photo_id),
+                "WHERE owner = ? AND photo_id = ? AND revision > ? ORDER BY revision LIMIT ?",
+                (owner, photo_id, after_revision, limit),
             ).fetchall()
             return [DateChange.model_validate_json(row[0]) for row in rows]
 

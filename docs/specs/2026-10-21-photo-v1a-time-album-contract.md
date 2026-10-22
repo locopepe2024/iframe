@@ -38,6 +38,16 @@ CopilotKit 评估：`/Users/owen/Developer/codex/docs/copilotkit-companion-evalu
 
 ## API 候选（命名可在实现时按项目约定调整）
 
+### 日期工作区 API 切片（2026-10-22）
+
+实现独立 FastAPI app 工厂 `src.apps.photos.api.create_app`，不挂主产品路由。仅开放已预置照片的日期读取、历史分页、更正与恢复；不开放注册照片、上传、授权变更或后台任务。用户明确当前是 Demo，允许沿用既有浏览器标识/API key 指纹工作区和 Bearer 身份；不额外强制登录。owner/actor 均取服务端上下文，请求不能自报。此工作区隔离不是私密照片的正式安全认证，后续改为注册账号与鉴权后才能据此评估生产隐私保证。
+
+本地存储仅在显式配置 `IFRAME_PHOTOS_LOCAL_DB_PATH` 且指定文件已存在时使用，路径必须绝对；未配置、文件丢失或数据库错误返回 503，不新建默认数据库、不泄露内部异常。生产数据库选择仍未确定。返回 private/no-store；历史按修订游标分页，每页最多 100 条。修改使用 expected_revision、consent_version、operation_id；有效授权由既有本地预置记录提供，不通过 HTTP 设置。
+
+验收：真实本地数据库经 HTTP 更正/恢复/重读，服务端 owner/actor 归属、Demo 浏览器/指纹工作区兼容、无效 Bearer 拒绝、跨 owner 404、旧版本/操作冲突 409、失效授权 403、非法输入 422、存储未配置 503、无默认文件创建及历史分页。未接主产品、真实上传或正式授权，因此不算照片 MVP 端到端通过。
+
+实施结果：日期规则、SQLite 与 API 共 78 项定向测试通过，API 10 项；身份 provider 使用测试替身，无真实账号远程调用。独立 app 不自动迁移数据库，可使用 `python -m uvicorn src.apps.photos.api:create_app --factory` 显式启动；需预置测试数据库及授权，并配置 `IFRAME_PHOTOS_LOCAL_DB_PATH`。当前没有照片注册/上传页面，默认产品路由不变。
+
 | API | 目的与约束 |
 | --- | --- |
 | POST /photos/batches | 建立 owner 范围的批次；幂等键防止重复 |
