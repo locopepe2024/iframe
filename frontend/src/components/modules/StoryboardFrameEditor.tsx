@@ -25,7 +25,7 @@ function formatReferenceValue(value: unknown): string {
             .filter(Boolean)
             .join("；");
     }
-    return value == null ? "" : String(value).trim();
+    return value == null ? "" : String(value).trim().replace(/\b(?:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}|[0-9a-f]{32})\b/gi, "已关联对象");
 }
 
 export default function StoryboardFrameEditor({ frame: initialFrame, onClose }: StoryboardFrameEditorProps) {
@@ -41,6 +41,7 @@ export default function StoryboardFrameEditor({ frame: initialFrame, onClose }: 
         if (!currentProject?.frames) return initialFrame;
         return currentProject.frames.find((f: any) => f.id === initialFrame.id) || initialFrame;
     }, [currentProject?.frames, initialFrame.id, initialFrame]);
+    const frameNumber = (currentProject?.frames ?? []).findIndex((item: any) => item.id === frame.id) + 1;
 
     const [prompt, setPrompt] = useState(frame.image_prompt || frame.action_description || "");
     const [stylePromptOverride, setStylePromptOverride] = useState(frame.style_prompt_override || "");
@@ -268,7 +269,7 @@ export default function StoryboardFrameEditor({ frame: initialFrame, onClose }: 
                 {/* Header */}
                 <div className="h-16 border-b border-glass-border flex justify-between items-center px-6 bg-surface">
                     <div className="flex items-center gap-4">
-                        <h2 className="text-lg font-bold text-foreground">分镜首帧编辑 <span className="text-text-muted font-normal text-sm ml-2">#{frame.id.substring(0, 8)}</span></h2>
+                        <h2 className="text-lg font-bold text-foreground">分镜首帧编辑 {frameNumber > 0 && <span className="text-text-muted font-normal text-sm ml-2">分镜 {frameNumber}</span>}</h2>
                     </div>
                     <button onClick={onClose} className="p-2 hover:bg-hover-bg rounded-full text-text-secondary hover:text-foreground transition-colors">
                         <X size={24} />
@@ -379,7 +380,7 @@ export default function StoryboardFrameEditor({ frame: initialFrame, onClose }: 
                                         </select>
                                         <button type="button" onClick={() => void applyVisualPreset()} disabled={!selectedVisualPresetId || !visualPresetProjection?.reference_image_available || visualPresetProjectionLoading || visualPresetBusy || (visualPresetApplyMode === "image_and_context" && !selectedReferenceFields.length)} className="rounded bg-primary px-2 py-1 text-xs text-white disabled:opacity-40">确认应用</button>
                                     </div>
-                                    {frame.reference_visual_projection?.source_preset_id && <p className="text-[0.6875rem] text-text-muted">当前参考：{frame.reference_visual_projection.source_preset_id} · {frame.reference_visual_projection.selected_fields?.length ? `已确认 ${frame.reference_visual_projection.selected_fields.join("、")}` : "仅参考图"}</p>}
+                                    {frame.reference_visual_projection?.source_preset_id && <p className="text-[0.6875rem] text-text-muted">当前参考：{visualPresets.find((preset: any) => preset.id === frame.reference_visual_projection.source_preset_id)?.name || "来源不可用"} · {frame.reference_visual_projection.selected_fields?.length ? `已确认 ${frame.reference_visual_projection.selected_fields.join("、")}` : "仅参考图"}</p>}
                                     <div className="flex gap-2">
                                         <input aria-label="视觉预设名称" value={visualPresetName} onChange={event => setVisualPresetName(event.target.value)} placeholder="保存当前参数为预设" className="min-w-0 flex-1 rounded border border-glass-border bg-surface p-2 text-xs text-foreground" />
                                         <button type="button" onClick={() => void saveVisualPreset()} disabled={!visualPresetName.trim() || visualPresetBusy} className="rounded border border-glass-border px-2 py-1 text-xs text-foreground disabled:opacity-40">保存预设</button>

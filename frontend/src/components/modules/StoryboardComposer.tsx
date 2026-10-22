@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
+import { Fragment, useState, useRef, useEffect } from "react";
 import { useTranslations } from "next-intl";
 import { motion, AnimatePresence } from "framer-motion";
 import {
@@ -54,6 +54,8 @@ export default function StoryboardComposer() {
         setGenerateDialogOpen(false);
         setAnalysisDraft(null);
         setAnalysisFeedback([]);
+        setShowContinuitySheet(false);
+        setContinuityFrameId(null);
     }, [currentProject?.id]);
 
     const [editingFrameId, setEditingFrameId] = useState<string | null>(null);
@@ -62,6 +64,8 @@ export default function StoryboardComposer() {
     const [extractingFrameId, setExtractingFrameId] = useState<string | null>(null);
     const [showScriptOverlay, setShowScriptOverlay] = useState(false);
     const [showContinuitySheet, setShowContinuitySheet] = useState(false);
+    const [continuityFrameId, setContinuityFrameId] = useState<string | null>(null);
+    const [continuityFocusVersion, setContinuityFocusVersion] = useState(0);
     const [pendingRender, setPendingRender] = useState<(FrameRenderPreview & { frameId: string; compositionData: any }) | null>(null);
 
     const fileInputRef = useRef<HTMLInputElement>(null);
@@ -480,7 +484,7 @@ export default function StoryboardComposer() {
                             variant="ghost"
                             size="sm"
                             leftIcon={<ListChecks />}
-                            onClick={() => setShowContinuitySheet(value => !value)}
+                            onClick={() => { setContinuityFrameId(null); setShowContinuitySheet(value => !value); }}
                             title="查看分镜结构化一致性"
                         >一致性</WorkflowActionButton>
                         <WorkflowActionButton
@@ -510,6 +514,8 @@ export default function StoryboardComposer() {
             {showContinuitySheet && currentProject?.id && <StoryboardContinuitySheet
                 projectId={currentProject.id}
                 revisionKey={JSON.stringify((currentProject.frames || []).map((frame: any) => [frame.id, frame.updated_at, frame.reference_visual_projection?.revision]))}
+                focusedFrameId={continuityFrameId}
+                focusVersion={continuityFocusVersion}
                 onOpenFrame={setEditingFrameId}
             />}
 
@@ -528,9 +534,8 @@ export default function StoryboardComposer() {
                         </div>
 
                         {currentProject?.frames?.map((frame: any, index: number) => (
-                            <>
+                            <Fragment key={frame.id}>
                                 <motion.div
-                                    key={frame.id}
                                     layoutId={frame.id}
                                     onClick={() => setSelectedFrameId(frame.id)}
                                     className={`group relative flex gap-6 p-4 rounded-xl border transition-all cursor-pointer ${selectedFrameId === frame.id
@@ -660,6 +665,15 @@ export default function StoryboardComposer() {
                                             </div>
 
                                             <button
+                                                type="button"
+                                                onClick={(e) => { e.stopPropagation(); setContinuityFrameId(frame.id); setContinuityFocusVersion(value => value + 1); setShowContinuitySheet(true); }}
+                                                className="flex items-center gap-1 rounded px-2 py-1 text-xs text-text-secondary hover:bg-hover-bg hover:text-foreground"
+                                                title={`查看分镜 ${index + 1} 的一致性`}
+                                                aria-label={`查看分镜 ${index + 1} 的一致性`}
+                                            >
+                                                <ListChecks size={14} />一致性
+                                            </button>
+                                            <button
                                                 onClick={(e) => handleCopyFrame(frame.id, e)}
                                                 className="btn-tip p-2 hover:bg-hover-bg text-text-secondary hover:text-foreground rounded-lg transition-colors"
                                                 data-tip={t("duplicateFrame")}
@@ -710,7 +724,7 @@ export default function StoryboardComposer() {
                                         <Plus size={16} />
                                     </button>
                                 </div>
-                            </>
+                            </Fragment>
                         ))}
                 </div>
             </div>

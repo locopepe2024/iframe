@@ -29,16 +29,39 @@ it("filters diagnostics and shows source revisions before opening a shot", async
     });
     const onOpenFrame = vi.fn();
     render(<StoryboardContinuitySheet projectId="p" revisionKey="r1" onOpenFrame={onOpenFrame} />);
-    await screen.findByText("S01");
+    await screen.findByText("分镜 1");
     fireEvent.change(screen.getByLabelText("筛选场景"), { target: { value: "street" } });
-    expect(screen.getByText("S01")).toBeTruthy();
-    expect(screen.queryByText("S02")).toBeNull();
-    fireEvent.click(screen.getByText("S01"));
+    expect(screen.getByText("分镜 1")).toBeTruthy();
+    expect(screen.queryByText("分镜 2")).toBeNull();
+    fireEvent.click(screen.getByText("分镜 1"));
     expect(screen.getByText(/拍摄计划光线 r2/)).toBeTruthy();
-    expect(screen.getByText(/来源设计 r1/)).toBeTruthy();
+    expect(screen.getByText(/来源设计版本 1/)).toBeTruthy();
     expect(screen.getByText(/晴 \/ 雨/)).toBeTruthy();
-    fireEvent.click(screen.getByText("打开本镜头"));
+    expect(screen.queryByText("v1")).toBeNull();
+    expect(screen.queryByText("street:dusk")).toBeNull();
+    fireEvent.click(screen.getByText("编辑分镜首帧"));
     expect(onOpenFrame).toHaveBeenCalledWith("a");
     fireEvent.change(screen.getByLabelText("筛选一致性状态"), { target: { value: "unresolved" } });
     await waitFor(() => expect(screen.getByText("当前筛选没有镜头。")).toBeTruthy());
+});
+
+it("focuses a shot from its card and clears filters that would hide it", async () => {
+    getStoryboardContinuitySheet.mockResolvedValue({
+        rows: [
+            { frame_id: "first", scene_id: "a", scene_name: "长街", continuity_status: "confirmed", fields: {}, reference: null },
+            { frame_id: "second", scene_id: "b", scene_name: "粮店", continuity_status: "unresolved", fields: {}, reference: null },
+        ],
+        issues: [],
+    });
+    const { rerender } = render(<StoryboardContinuitySheet projectId="p" revisionKey="r1" onOpenFrame={() => {}} />);
+    await screen.findByText("分镜 1");
+    fireEvent.change(screen.getByLabelText("筛选场景"), { target: { value: "a" } });
+    rerender(<StoryboardContinuitySheet projectId="p" revisionKey="r1" focusedFrameId="second" focusVersion={1} onOpenFrame={() => {}} />);
+    await waitFor(() => expect(screen.getByText("分镜 2")).toBeTruthy());
+    expect(screen.getByText("编辑分镜首帧")).toBeTruthy();
+    expect((screen.getByLabelText("筛选场景") as HTMLSelectElement).value).toBe("");
+    fireEvent.click(screen.getByText("分镜 2"));
+    expect(screen.queryByText("编辑分镜首帧")).toBeNull();
+    rerender(<StoryboardContinuitySheet projectId="p" revisionKey="r1" focusedFrameId="second" focusVersion={2} onOpenFrame={() => {}} />);
+    expect(screen.getByText("编辑分镜首帧")).toBeTruthy();
 });

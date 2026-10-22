@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { AlertTriangle, Check, ChevronDown, ChevronRight, RefreshCw } from "lucide-react";
 import { api } from "@/lib/api";
 
@@ -24,11 +24,11 @@ const SOURCE_LABELS: Record<string, string> = {
 function valueText(value: unknown): string {
     if (Array.isArray(value)) return value.map(valueText).filter(Boolean).join("、");
     if (value && typeof value === "object") return Object.entries(value).map(([key, item]) => `${key}: ${valueText(item)}`).join("; ");
-    return value == null ? "未确认" : String(value);
+    return value == null ? "未确认" : String(value).replace(/\b(?:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}|[0-9a-f]{32})\b/gi, "已关联对象");
 }
 
-export default function StoryboardContinuitySheet({ projectId, revisionKey, onOpenFrame }: {
-    projectId: string; revisionKey: string; onOpenFrame: (frameId: string) => void;
+export default function StoryboardContinuitySheet({ projectId, revisionKey, focusedFrameId, focusVersion, onOpenFrame }: {
+    projectId: string; revisionKey: string; focusedFrameId?: string | null; focusVersion?: number; onOpenFrame: (frameId: string) => void;
 }) {
     const [sheet, setSheet] = useState<Sheet | null>(null);
     const [loading, setLoading] = useState(true);
@@ -37,6 +37,14 @@ export default function StoryboardContinuitySheet({ projectId, revisionKey, onOp
     const [statusFilter, setStatusFilter] = useState("all");
     const [openRow, setOpenRow] = useState<string | null>(null);
     const [refreshCount, setRefreshCount] = useState(0);
+    const focusedRowRef = useRef<HTMLDivElement | null>(null);
+
+    useEffect(() => {
+        if (!focusedFrameId) return;
+        setSceneFilter("");
+        setStatusFilter("all");
+        setOpenRow(focusedFrameId);
+    }, [focusedFrameId, focusVersion]);
 
     useEffect(() => {
         let active = true;
@@ -49,7 +57,7 @@ export default function StoryboardContinuitySheet({ projectId, revisionKey, onOp
         return () => { active = false; };
     }, [projectId, revisionKey, refreshCount]);
 
-    const sceneOptions = useMemo(() => Array.from(new Map((sheet?.rows || []).map(row => [row.scene_id, row.scene_name || row.scene_id])).entries()), [sheet]);
+    const sceneOptions = useMemo(() => Array.from(new Map((sheet?.rows || []).map(row => [row.scene_id, row.scene_name])).entries()), [sheet]);
     const rows = useMemo(() => (sheet?.rows || []).filter(row => {
         const issues = sheet?.issues.filter(issue => issue.frame_ids.includes(row.frame_id)) || [];
         return (!sceneFilter || row.scene_id === sceneFilter) &&
@@ -57,6 +65,12 @@ export default function StoryboardContinuitySheet({ projectId, revisionKey, onOp
                 (statusFilter === "unresolved" && row.continuity_status === "unresolved") ||
                 (statusFilter === "clear" && row.continuity_status === "confirmed" && issues.length === 0));
     }), [sheet, sceneFilter, statusFilter]);
+    useEffect(() => {
+        if (focusedFrameId && sheet?.rows.some(row => row.frame_id === focusedFrameId)) {
+            focusedRowRef.current?.scrollIntoView?.({ block: "nearest" });
+        }
+    }, [focusedFrameId, focusVersion, sheet, rows]);
+    const frameNumbers = useMemo(() => new Map((sheet?.rows || []).map((row, index) => [row.frame_id, index + 1])), [sheet]);
 
     return <section aria-label="分镜结构化一致性表" className="border-b border-border-subtle bg-surface/70 px-4 py-3 md:px-8">
         <div className="mx-auto max-w-6xl">
@@ -68,7 +82,7 @@ export default function StoryboardContinuitySheet({ projectId, revisionKey, onOp
                 <div className="flex flex-wrap items-center gap-2">
                     <select aria-label="筛选场景" value={sceneFilter} onChange={event => setSceneFilter(event.target.value)} className="rounded border border-glass-border bg-surface px-2 py-1 text-xs text-foreground">
                         <option value="">所有场景</option>
-                        {sceneOptions.map(([id, name]) => <option key={id} value={id}>{name}</option>)}
+                        {sceneOptions.map(([id, name], index) => <option key={id} value={id}>{name || `未命名场景 ${index + 1}`}</option>)}
                     </select>
                     <select aria-label="筛选一致性状态" value={statusFilter} onChange={event => setStatusFilter(event.target.value)} className="rounded border border-glass-border bg-surface px-2 py-1 text-xs text-foreground">
                         <option value="all">全部</option><option value="issues">有差异</option>
@@ -84,25 +98,25 @@ export default function StoryboardContinuitySheet({ projectId, revisionKey, onOp
                 {rows.map(row => {
                     const issues = sheet.issues.filter(issue => issue.frame_ids.includes(row.frame_id));
                     const expanded = openRow === row.frame_id;
-                    return <div key={row.frame_id} className="border-b border-border-subtle">
+                    return <div key={row.frame_id} ref={row.frame_id === focusedFrameId ? focusedRowRef : undefined} className={`border-b border-border-subtle ${row.frame_id === focusedFrameId ? "bg-primary/10" : ""}`}>
                         <button type="button" aria-expanded={expanded} onClick={() => setOpenRow(expanded ? null : row.frame_id)} className="flex w-full items-center gap-3 py-2 text-left text-xs hover:bg-hover-bg/50">
                             {expanded ? <ChevronDown size={14} className="shrink-0" /> : <ChevronRight size={14} className="shrink-0" />}
-                            <span className="w-20 shrink-0 font-mono text-text-secondary">{row.shot_id || row.frame_id.slice(0, 8)}</span>
-                            <span className="min-w-0 flex-1 truncate text-foreground">{row.scene_name || row.scene_id}</span>
+                            <span className="w-20 shrink-0 text-text-secondary">分镜 {frameNumbers.get(row.frame_id)}</span>
+                            <span className="min-w-0 flex-1 truncate text-foreground">{row.scene_name || "未命名场景"}</span>
                             <span className="hidden text-text-muted sm:inline">{row.fields.story_time ? valueText(row.fields.story_time.value) : "时间未确认"} · {row.fields.aspect_ratio ? valueText(row.fields.aspect_ratio.value) : "画幅未确认"}</span>
                             {row.continuity_status === "unresolved" ? <span className="text-text-muted">无法判断</span> : issues.length ? <span className="flex items-center gap-1 text-amber-400"><AlertTriangle size={13} />{issues.length} 项</span> : <span className="flex items-center gap-1 text-emerald-400"><Check size={13} />无已知差异</span>}
                         </button>
                         {expanded && <div className="pb-3 pl-7 text-xs">
-                            <p className="mb-2 text-text-muted">地点 ID：{row.place_continuity_id || "未确认"} · 时间 ID：{row.time_continuity_id || "未确认"} · 计划 r{row.plan_revision || "?"} · 场景设计 r{row.scene_design_revision || "?"}</p>
+                            <p className="mb-2 text-text-muted">地点连续性：{row.place_continuity_id ? "已确认" : "未确认"} · 时间连续性：{row.time_continuity_id ? "已确认" : "未确认"} · 计划版本 {row.plan_revision || "未确认"} · 场景设计版本 {row.scene_design_revision || "未确认"}</p>
                             <div className="grid gap-x-5 gap-y-1 sm:grid-cols-2 lg:grid-cols-3">
                                 {Object.entries(row.fields).map(([key, field]) => <div key={key} className="min-w-0 border-l border-glass-border pl-2">
                                     <span className="text-text-muted">{FIELD_LABELS[key] || key} · {SOURCE_LABELS[field.source_kind] || field.source_kind}{field.source_revision ? ` r${field.source_revision}` : ""}</span>
                                     <p className="break-words text-foreground">{valueText(field.value)}</p>
                                 </div>)}
                             </div>
-                            {row.reference && <p className="mt-2 text-text-muted">参考变体：{row.reference.source_variant_id || "未确认"} · 来源设计 r{row.reference.source_design_revision || "?"} · 已勾选：{row.reference.selected_fields.join("、") || "仅参考图"}</p>}
+                            {row.reference && <p className="mt-2 text-text-muted">参考图：{row.reference.source_variant_id ? "已绑定" : "未确认"} · 来源设计版本 {row.reference.source_design_revision || "未确认"} · 已勾选：{row.reference.selected_fields.join("、") || "仅参考图"}</p>}
                             {issues.map((issue, index) => <p key={`${issue.field}-${index}`} className="mt-2 text-amber-300">{FIELD_LABELS[issue.field] || issue.field}：{issue.values.map(item => valueText(item.value)).join(" / ")} · {issue.status === "explicit_override" ? "镜头显式覆盖，需审阅" : "跨镜差异，需审阅"}</p>)}
-                            <button type="button" onClick={() => onOpenFrame(row.frame_id)} className="mt-2 text-primary hover:underline">打开本镜头</button>
+                            <button type="button" onClick={() => onOpenFrame(row.frame_id)} className="mt-2 text-primary hover:underline">编辑分镜首帧</button>
                         </div>}
                     </div>;
                 })}
