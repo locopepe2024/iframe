@@ -14,6 +14,7 @@ export interface PhotoAnalysis {
 }
 export interface TimeConsent { granted: boolean; consent_version: number }
 export interface DescriptionReview { revision: number; description: string; actor: string; created_at: string }
+export interface PhotoStory { revision: number; text: string; actor: string; created_at: string }
 export interface TimeQuestion { question_id: string; text: string }
 export interface DateChange {
   revision: number; after: PhotoDateAnnotation; kind: string; created_at: string;
@@ -42,6 +43,9 @@ function serviceError(status: number) {
     : "服务暂不可用，请稍后重试。");
 }
 export const photoApi = {
+  story: (id: string) => request<PhotoStory | null>(`/${encodeURIComponent(id)}/story`),
+  saveStory: (id: string, body: { text: string; expected_revision: number; operation_id: string }) => request<PhotoStory>(`/${encodeURIComponent(id)}/story`, "POST", body),
+  storyHistory: (id: string, after = 0) => request<{ changes: PhotoStory[]; next_after_revision: number | null }>(`/${encodeURIComponent(id)}/story/history?after_revision=${after}`),
   description: (id: string) => request<DescriptionReview | null>(`/${encodeURIComponent(id)}/description`),
   confirmDescription: (id: string, body: { description: string; expected_revision: number; operation_id: string }) => request<DescriptionReview>(`/${encodeURIComponent(id)}/description`, "POST", body),
   descriptionHistory: (id: string, after = 0) => request<{ changes: DescriptionReview[]; next_after_revision: number | null }>(`/${encodeURIComponent(id)}/description/history?after_revision=${after}`),

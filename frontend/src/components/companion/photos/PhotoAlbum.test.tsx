@@ -9,6 +9,7 @@ const mock = vi.hoisted(() => ({
 }));
 vi.mock("@/lib/photoApi", () => ({ photoApi: mock }));
 vi.mock("./PhotoContent", () => ({ default: () => null }));
+vi.mock("./PhotoStory", () => ({ default: () => null }));
 
 const pending = { date: null, status: "pending_confirmation", reason: "not_processed", source: "none", revision: 1, evidence: [] };
 const confirmed = { ...pending, date: { value: "1985", precision: "year", utc_offset: null }, reason: null, status: "confirmed", source: "user", revision: 2 };

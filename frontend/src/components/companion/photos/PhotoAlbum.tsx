@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import PhotoContent from "./PhotoContent";
+import PhotoStory from "./PhotoStory";
 import { photoApi, type AlbumPhoto, type DateChange, type PhotoDateAnnotation, type TimeConsent, type TimeQuestion } from "@/lib/photoApi";
 import { useCompanionVoice } from "../useCompanionVoice";
 import { parseSpokenPhotoDate, type DateSuggestion } from "./spokenDate";
@@ -218,6 +219,7 @@ export default function PhotoAlbum() {
     {selected && <section className={styles.panel} aria-label="当前照片">
       <h2 ref={detailHeading} tabIndex={-1}>这张照片</h2><PhotoImage id={selected.photo_id} large />
       <PhotoContent key={selected.photo_id} photoId={selected.photo_id} />
+      <PhotoStory key={`story-${selected.photo_id}`} photoId={selected.photo_id} />
       <p>{dateLabel(selected.date)}</p>
       <p>{consent?.granted ? "您已允许按时间整理。" : "当前未授权整理。"}</p>
       <button disabled={busy || voice.listening || voice.finishing} onClick={speakCurrentPrompt}>{voice.speaking ? "停止朗读" : "读出当前提示"}</button>

@@ -45,4 +45,5 @@
 .largeImage { display: block; width: 100%; max-height: 70dvh; object-fit: contain; background: #080e16; border-radius: .5rem; }
 .confirm { border: 2px solid var(--accent); border-radius: .75rem; padding: .75rem; margin-top: 1rem; }
 .history { border-top: 1px solid #52687d; margin-top: 1rem; }
+.storyText { white-space: pre-wrap; }
 .error { color: #ffd2d2; border: 2px solid #e09d9d; padding: 1rem; border-radius: .75rem; }
