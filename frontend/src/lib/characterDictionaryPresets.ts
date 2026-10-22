@@ -8,6 +8,7 @@ import { MODERN_MALE_PANEL, MODERN_MALE_TEMPLATE, MODERN_MALE_TERMS } from "./mo
 import { CHARACTER_EXPRESSION_DETAIL_TERMS, CHARACTER_EXPRESSION_PROMPTS } from "./characterExpressionPrompts";
 import { CHARACTER_EXPRESSION_TERMS } from "./characterExpressionDictionary";
 import type { CharacterConstraints } from "./characterStructuredDesign";
+import { characterDictionaryField } from "./characterDictionaryFields";
 export type DictionarySection = { label: string; parts: string[] };
 export type OutfitField = { key: string; label: string; value: string; options: readonly string[]; output?: Record<string, string>; dependentKeys?: readonly string[] };
 export type CharacterDictionaryPreset = {
@@ -246,20 +247,13 @@ export const CHARACTER_DICTIONARY_PRESETS: CharacterDictionaryPreset[] = [
 
 /** Preserve exact panel values alongside prose instead of parsing the rendered sentence. */
 export function dictionaryStructuredFields(preset: CharacterDictionaryPreset, values: Record<string, string>) {
-  const keys: Record<string, ["identity" | "look", string]> = {
-    '额头': ['identity', 'forehead'], '颧骨': ['identity', 'cheekbones'], '下颌': ['identity', 'jaw'], '下巴': ['identity', 'chin'],
-    '性别': ['identity', 'gender'], '年龄阶段': ['identity', 'age'], '脸型': ['identity', 'face_shape'], '眉形': ['identity', 'eyebrows'], '眼型': ['identity', 'eyes'],
-    '眼周纹理': ['identity', 'eye_detail'], '肤色': ['identity', 'skin_tone'], '肤质': ['identity', 'skin_texture'],
-    '妆容': ['identity', 'makeup'], '发型': ['identity', 'hair'], '身高': ['identity', 'height'],
-    '体态': ['identity', 'build'], '衣物状态': ['look', 'condition'],
-  };
   const result: { identity: Record<string, string>; look: Record<string, string>; constraints?: CharacterConstraints } = { identity: {}, look: {} };
   if (preset.type !== "配置面板") return result;
   if (["basic", "face", "skin", "hair", "height", "posture"].some(id => preset.id === `dictionary.panel.${id}`)) {
     for (const field of dictionaryPresetFields(preset, values)) {
-      const target = keys[field.key];
+      const target = characterDictionaryField(field.key)?.structured;
       const selected = values[field.key] !== undefined && field.options.includes(values[field.key]) ? values[field.key] : field.value;
-      if (target && selected && !selected.includes('[')) result[target[0]][target[1]] = field.output?.[selected] ?? selected;
+      if (target && selected && !selected.includes('[')) result[target.section][target.key] = field.output?.[selected] ?? selected;
     }
   } else {
     // These are authored section labels, not a reverse parse of user prose.

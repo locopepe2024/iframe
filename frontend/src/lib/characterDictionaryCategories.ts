@@ -1,3 +1,5 @@
+import { characterDictionaryField } from './characterDictionaryFields';
+
 export const CHARACTER_DICTIONARY_GROUPS = [
   { id: "face", label: "面部", children: [
     ["face-shape", "脸型"], ["forehead", "额头"], ["cheekbones", "颧骨"], ["jaw", "下颌"], ["chin", "下巴"], ["eyes", "眼型"], ["brows", "眉形"], ["nose", "鼻形"],
@@ -64,8 +66,8 @@ export function platformDictionaryCategories(path: string | undefined): string[]
 /** Slot labels describe a destination; they are not text to append to the Prompt. */
 export function dictionarySlotCategory(label: string | undefined): string | null {
   if (!label) return null;
-  const expressionFields: Record<string, string> = { "眉部表现": "expression-brow-state", "眼睑表现": "expression-lid-state", "视线表现": "expression-gaze-state", "嘴部表现": "expression-mouth-state", "下颌状态": "expression-jaw-state", "面部气色": "expression-complexion-state" };
-  if (expressionFields[label]) return expressionFields[label];
+  const registered = characterDictionaryField(label);
+  if (registered) return registered.category;
   const modernFields: Record<string, string> = { "男装款式": "modern-male-garment", "女装款式": "modern-female-garment", "男装上衣款式": "modern-male-upper", "男装外套款式": "modern-male-outer", "男装裤装款式": "modern-male-bottoms", "男装鞋履": "modern-male-shoes" };
   if (modernFields[label]) return modernFields[label];
   if (/男装外衣款式/.test(label)) return "classical-male-outer";
@@ -73,8 +75,6 @@ export function dictionarySlotCategory(label: string | undefined): string | null
   if (/古装里衣款式/.test(label)) return "classical-inner";
   if (/古装裤装款式/.test(label)) return "classical-trousers";
   if (/古装裙装款式/.test(label)) return "classical-skirt";
-  const footwearFields: Record<string, string> = { "鞋履颜色": "shoe-color", "鞋履材质": "shoe-material", "鞋履工艺": "shoe-craft", "鞋履图案": "shoe-pattern", "鞋头形状": "shoe-toe", "鞋底结构": "shoe-sole", "鞋履装饰": "shoe-decoration", "鞋履内衬": "shoe-lining" };
-  if (footwearFields[label]) return footwearFields[label];
   if (/古装鞋履/.test(label)) return "classical-shoes";
   if (/角色定位|身份/.test(label)) return "role";
   if (/性别/.test(label)) return "gender";
@@ -83,8 +83,6 @@ export function dictionarySlotCategory(label: string | undefined): string | null
   if (/肤色/.test(label)) return "skin-tone";
   if (/肤质|皮肤纹理/.test(label)) return "skin";
   if (/眼周|眼角纹|鱼尾纹|下眼睑纹|眼袋/.test(label)) return "eye-detail";
-  const faceParts: Record<string, string> = { "额头": "forehead", "颧骨": "cheekbones", "下颌": "jaw", "下巴": "chin" };
-  if (faceParts[label]) return faceParts[label];
   if (/脸型/.test(label)) return "face-shape";
   if (/眉形/.test(label)) return "brows";
   if (/眼型/.test(label)) return "eyes";

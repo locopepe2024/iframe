@@ -50,6 +50,15 @@ it("starts with categories and lets creators compare face shapes without changin
   expect(replaceWithText).not.toHaveBeenCalled();
 });
 
+it("keeps same-name material terms distinct by usage part and description", () => {
+  getPlatformReferenceLibrary.mockResolvedValueOnce({ resources: [] });
+  setup('丝绸');
+  const matches = screen.getAllByRole('option', { name: /选项 · 丝绸/ });
+  expect(matches).toHaveLength(2);
+  expect(matches.some(option => option.textContent?.includes('服装') && option.textContent?.includes('面料'))).toBe(true);
+  expect(matches.some(option => option.textContent?.includes('鞋履') && option.textContent?.includes('材质'))).toBe(true);
+});
+
 it("separates rendering style from genre and inserts a complete style without assigning identity or clothing", () => {
   getPlatformReferenceLibrary.mockResolvedValueOnce({ resources: [] });
   const { replaceWithText } = setup("");

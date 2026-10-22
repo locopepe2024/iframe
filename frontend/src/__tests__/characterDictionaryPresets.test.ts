@@ -2,6 +2,32 @@ import { expect, it } from "vitest";
 import { CHARACTER_DICTIONARY_PRESETS, dictionaryPresetFields, renderDictionaryPreset } from "@/lib/characterDictionaryPresets";
 import { CLASSICAL_FOOTWEAR_STYLES } from "@/lib/classicalFootwearDictionary";
 import { dictionarySlotCategory, localDictionaryCategories } from "@/lib/characterDictionaryCategories";
+import { CHARACTER_DICTIONARY_FIELDS, characterDictionaryField } from "@/lib/characterDictionaryFields";
+
+it("uses distinct stable destinations for face shape, skin and expression fields", async () => {
+  expect(new Set(CHARACTER_DICTIONARY_FIELDS.map(field => field.id)).size).toBe(CHARACTER_DICTIONARY_FIELDS.length);
+  expect(new Set(CHARACTER_DICTIONARY_FIELDS.map(field => field.label)).size).toBe(CHARACTER_DICTIONARY_FIELDS.length);
+  for (const field of CHARACTER_DICTIONARY_FIELDS) expect(dictionarySlotCategory(field.label)).toBe(field.category);
+  expect(characterDictionaryField('下颌')?.domain).toBe('character.identity');
+  expect(characterDictionaryField('下颌状态')?.domain).toBe('character.performance');
+  expect(characterDictionaryField('唇形')?.dimension).toBe('稳定形状');
+  expect(characterDictionaryField('嘴部表现')?.dimension).toBe('当前状态');
+  const { dictionaryStructuredFields, dictionaryConfiguration } = await import('@/lib/characterDictionaryPresets');
+  const face = CHARACTER_DICTIONARY_PRESETS.find(entry => entry.id === 'dictionary.panel.face')!;
+  const skin = CHARACTER_DICTIONARY_PRESETS.find(entry => entry.id === 'dictionary.panel.skin')!;
+  const values = { 肤色: '暖小麦肤色', 肤质: '轻微干燥肤质' };
+  expect(dictionaryStructuredFields(face, values).identity).toMatchObject(dictionaryStructuredFields(skin, values).identity);
+  expect(dictionaryConfiguration(face, values).selections.肤色).toBe(values.肤色);
+  expect(dictionaryConfiguration(skin, values).resolved_fields.肤质).toBe('面颊皮肤略显干燥，保留细微干燥纹理');
+});
+
+it("registers every basic panel field without changing panel IDs", () => {
+  const panels = CHARACTER_DICTIONARY_PRESETS.filter(entry => entry.type === '配置面板');
+  expect(panels).toHaveLength(14);
+  const missing = panels.flatMap(panel => dictionaryPresetFields(panel)
+    .filter(field => !characterDictionaryField(field.key)).map(field => `${panel.id}:${field.key}`));
+  expect(missing).toEqual([]);
+});
 
 it("keeps optional face texture precise and reuses skin choices", () => {
   const face = CHARACTER_DICTIONARY_PRESETS.find((entry) => entry.id === "dictionary.panel.face")!;

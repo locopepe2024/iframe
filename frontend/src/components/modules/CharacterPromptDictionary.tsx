@@ -13,6 +13,7 @@ import { PROMPT_TASKS, PROMPT_TOPICS, PROMPT_STYLES, templateDimensions, charact
 import { CHARACTER_PANEL_GROUPS, CHARACTER_PANEL_LABELS, CHARACTER_PANEL_ORDER, characterPanelGroup } from "@/lib/characterPanelCatalog";
 import type { PromptSlashSuggestion } from "./playground/ReferencePromptEditor";
 import type { CharacterConstraints } from "@/lib/characterStructuredDesign";
+import { characterDictionaryField } from "@/lib/characterDictionaryFields";
 
 type Entry = {
   id: string; title: string; text: string; type: "词条" | "配置面板" | "Prompt 模板" | "Prompt 案例";
@@ -156,7 +157,9 @@ export default function CharacterPromptDictionary({ suggestion, onClose, onApply
     ...navigation.map(item => ({ id: `category-${item.id}`, label: item.label, detail: item.detail, choose: () => enterCategory(item.id) })),
     ...(showTasks ? [] : visible.map(entry => ({ id: entry.id,
       label: entry.type === "配置面板" ? CHARACTER_PANEL_LABELS[entry.id] || entry.title : `${entry.type === "词条" ? "选项" : entry.type === "Prompt 案例" ? "Prompt 模板" : entry.type} · ${entry.title}`,
-      detail: browsing && entry.type === "配置面板" ? "选择款式并调整细节" : `${entry.domain} · ${entry.source}`, choose: () => { setSelected(entry); setFieldValues({}); } }))),
+      detail: browsing && entry.type === "配置面板" ? "选择款式并调整细节" : entry.type === "词条"
+        ? `${entry.categories.map(dictionaryCategoryPath).filter(Boolean).join("、") || entry.domain} · ${entry.text}`
+        : `${entry.domain} · ${entry.source}`, choose: () => { setSelected(entry); setFieldValues({}); } }))),
     ...related.map(key => ({ id: `browse-${key}`, label: `浏览 ${dictionaryCategoryPath(key)}`, detail: `${count(key)} 个选项，可比较其他描述`, choose: () => enterCategory(key) })),
   ];
   useEffect(() => {
@@ -233,12 +236,12 @@ export default function CharacterPromptDictionary({ suggestion, onClose, onApply
     </div>}
     {selected ? <>
       <h4 className="mt-2 text-sm text-foreground">{selected.type === "配置面板" ? CHARACTER_PANEL_LABELS[selected.id] || selected.title : <>{selected.type === "词条" ? "选项" : selected.type === "Prompt 案例" ? "Prompt 模板" : selected.type} · {selected.title}</>}</h4>
-      {selected.type !== "配置面板" && <p className="mt-1 break-all text-xs text-text-muted">{selected.source}</p>}
+      {selected.type !== "配置面板" && <p className="mt-1 break-all text-xs text-text-muted">{selected.categories.map(dictionaryCategoryPath).filter(Boolean).join("、") || selected.domain} · {selected.source}</p>}
       {!suggestion.slot && selectedFields.length > 0 && <div className="mt-2 space-y-3">
         {fieldGroups.map((group) => <fieldset key={group.label} className="grid grid-cols-1 gap-2 sm:grid-cols-2">
         <legend className="mb-1 text-xs font-medium text-text-secondary">{group.label === "装饰" ? "配饰" : group.label}</legend>
         {group.fields.map((field) => <label key={field.key} className="text-xs text-text-secondary">
-          {field.label}<select aria-label={field.label} value={fieldValues[field.key] ?? field.value}
+          {field.label}{characterDictionaryField(field.key) && <span aria-hidden="true" className="ml-1 text-text-muted">· {characterDictionaryField(field.key)!.part} / {characterDictionaryField(field.key)!.dimension}</span>}<select aria-label={field.label} value={fieldValues[field.key] ?? field.value}
             onChange={(event) => {
               const value = event.target.value;
               setFieldValues((values) => {
@@ -296,7 +299,7 @@ export default function CharacterPromptDictionary({ suggestion, onClose, onApply
       <div role="listbox" aria-label="面板和模板结果" className={tileLayout ? "grid grid-cols-3 gap-2" : ""} aria-activedescendant={options.length ? `${id}-${Math.min(active, options.length - 1)}` : undefined}>
         {options.map((option, index) => <Fragment key={option.id}>
           {quickPanels && index === options.findIndex((item) => characterPanelGroup(item.id) === characterPanelGroup(option.id)) && <h5 className="col-span-full pt-2 text-xs font-medium text-text-secondary">{CHARACTER_PANEL_GROUPS.find((group) => group.id === characterPanelGroup(option.id))?.label}</h5>}
-          <button id={`${id}-${index}`} type="button" role="option" aria-label={templateTiles ? option.label : undefined} aria-selected={active === index} onClick={option.choose} className={`${templateTiles ? buttonStyle.replace("text-xs", "text-sm leading-relaxed") : buttonStyle} min-w-0 w-full py-2 ${tileLayout ? "border border-glass-border text-center" : "block text-left"} ${active === index ? "bg-primary/10" : ""}`}>
+          <button id={`${id}-${index}`} type="button" role="option" aria-label={templateTiles ? option.label : option.label.startsWith("选项 · ") ? `${option.label} 词条` : undefined} aria-selected={active === index} onClick={option.choose} className={`${templateTiles ? buttonStyle.replace("text-xs", "text-sm leading-relaxed") : buttonStyle} min-w-0 w-full py-2 ${tileLayout ? "border border-glass-border text-center" : "block text-left"} ${active === index ? "bg-primary/10" : ""}`}>
           <span className="block break-words text-foreground">{templateTiles ? option.label.replace(/^Prompt 模板 · /, "") : option.label}</span>{!tileLayout && <span className="block text-text-muted">{option.detail}</span>}
           </button>
         </Fragment>)}
