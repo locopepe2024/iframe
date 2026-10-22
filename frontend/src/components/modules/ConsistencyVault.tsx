@@ -26,7 +26,7 @@ import {
     normalizeTaskFailureDetail,
 } from "@/lib/assetTaskPolling";
 import ReferencePromptEditor, { type ReferenceCandidate, type ReferenceSuggestion } from "./playground/ReferencePromptEditor";
-import { searchReferenceCandidates } from "@/lib/referenceCandidateSearch";
+import { searchReferenceCandidates, selectedReferenceCandidates } from "@/lib/referenceCandidateSearch";
 import { toast } from "@/store/toastStore";
 import type { EpisodeAssetSyncDiff, EpisodeVisualContext, EpisodeVisualContextState } from "@/lib/directorShootingPlan";
 import { getAssetPlanEntries, getUnboundCharacterRequirements, type AssetPlanEntry } from "@/lib/episodeAssetPlan";
@@ -1187,6 +1187,8 @@ function CharacterDetailModal({ asset, type, onClose, onUpdateDescription, onUpd
     );
     const [mention, setMention] = useState<ReferenceSuggestion | null>(null);
     const [mentionIndex, setMentionIndex] = useState(0);
+    const [referencePickerOpen, setReferencePickerOpen] = useState(false);
+    const [referencePickerQuery, setReferencePickerQuery] = useState("");
 
     // Style Controls
     const [negativePrompt, setNegativePrompt] = useState(styleNegativePrompt || DEFAULT_CHARACTER_NEGATIVE_PROMPT);
@@ -1207,6 +1209,8 @@ function CharacterDetailModal({ asset, type, onClose, onUpdateDescription, onUpd
     useEffect(() => {
         setDescription(asset.description);
         setMention(null);
+        setReferencePickerOpen(false);
+        setReferencePickerQuery("");
         if (asset.video_prompt) setVideoPrompt(asset.video_prompt);
         else if (!videoPrompt) {
             setVideoPrompt(buildCharacterVideoPrompt(asset.name, asset.description));
@@ -1261,8 +1265,10 @@ function CharacterDetailModal({ asset, type, onClose, onUpdateDescription, onUpd
         }).filter(Boolean) as ReferenceCandidate[]);
     }, [assetIndex]);
 
-    const matchingReferenceCandidates = searchReferenceCandidates(referenceCandidates, mention?.query ?? "")
+    const selectedCandidates = useMemo(() => selectedReferenceCandidates(referenceCandidates, visibleReferences), [referenceCandidates, visibleReferences]);
+    const matchingReferenceCandidates = searchReferenceCandidates(selectedCandidates, mention?.query ?? "")
         .sort((left, right) => Number(Boolean(right.isActive)) - Number(Boolean(left.isActive)));
+    const pickerCandidates = searchReferenceCandidates(referenceCandidates, referencePickerQuery);
     const lightingReferences = useMemo<LightingReference[]>(() => referenceCandidates.flatMap((candidate) => candidate.reference && candidate.previewUrl ? [{ key: `${candidate.reference.asset_type}:${candidate.reference.asset_id}:${candidate.reference.variant_id}`, label: candidate.label, url: candidate.previewUrl, reference: candidate.reference }] : []), [referenceCandidates]);
 
     const handleMentionKeyDown = (event: KeyboardEvent) => {
@@ -1758,12 +1764,41 @@ function CharacterDetailModal({ asset, type, onClose, onUpdateDescription, onUpd
                                     </div>
                                 </div>}
                                 <div className="relative rounded-lg border border-glass-border bg-input-bg p-3 focus-within:border-primary/50">
+                                    <div className="mb-2 flex flex-wrap items-center gap-2" aria-label="场景参考素材列表">
+                                        {selectedCandidates.map((candidate) => <span key={`${candidate.reference?.asset_type}:${candidate.reference?.asset_id}:${candidate.reference?.variant_id}`}
+                                            className="inline-flex max-w-full items-center gap-1 rounded border border-glass-border px-1.5 py-1 text-xs text-foreground">
+                                            {candidate.previewUrl && <img src={candidate.previewUrl} alt="" className="h-7 w-7 rounded object-cover" />}
+                                            <span className="max-w-36 truncate" title={candidate.label}>{candidate.label}</span>
+                                            <button type="button" aria-label={`移除参考素材 ${candidate.label}`} onClick={() => setVisibleReferences(visibleReferences.filter((reference) =>
+                                                reference.asset_type !== candidate.reference?.asset_type || reference.asset_id !== candidate.reference?.asset_id || reference.variant_id !== candidate.reference?.variant_id))}
+                                                className="flex h-7 w-7 items-center justify-center rounded hover:bg-hover-bg"><X size={14} /></button>
+                                        </span>)}
+                                        <button type="button" onClick={() => setReferencePickerOpen((open) => !open)}
+                                            aria-expanded={referencePickerOpen} aria-label="添加场景参考素材"
+                                            className="flex min-h-9 items-center gap-1 rounded border border-glass-border px-2 text-xs hover:bg-hover-bg"><Plus size={14} />参考素材</button>
+                                    </div>
+                                    {referencePickerOpen && <div className="mb-2 rounded border border-glass-border bg-surface p-2">
+                                        <input aria-label="搜索场景参考素材" value={referencePickerQuery} onChange={(event) => setReferencePickerQuery(event.target.value)}
+                                            className="mb-2 min-h-9 w-full rounded border border-glass-border bg-input-bg px-2 text-sm" placeholder="搜索素材" />
+                                        <div className="max-h-48 overflow-y-auto" role="listbox" aria-label="可添加的场景参考素材">
+                                            {pickerCandidates.length === 0 && <p className="p-2 text-xs text-text-muted">没有可用素材</p>}
+                                            {pickerCandidates.map((candidate) => {
+                                                const reference = candidate.reference!;
+                                                const selected = visibleReferences.some((item) => item.asset_type === reference.asset_type && item.asset_id === reference.asset_id && item.variant_id === reference.variant_id);
+                                                return <button key={`${reference.asset_type}:${reference.asset_id}:${reference.variant_id}`} type="button" role="option" aria-selected={selected}
+                                                    onClick={() => setVisibleReferences(selected ? visibleReferences.filter((item) => item.asset_type !== reference.asset_type || item.asset_id !== reference.asset_id || item.variant_id !== reference.variant_id) : [...visibleReferences, reference])}
+                                                    className="flex min-h-10 w-full items-center gap-2 rounded px-2 text-left text-xs hover:bg-hover-bg">
+                                                    {candidate.previewUrl ? <img src={candidate.previewUrl} alt="" className="h-8 w-8 rounded object-cover" /> : <ImageIcon size={16} />}
+                                                    <span className="min-w-0 flex-1 truncate">{candidate.label}</span>{selected && <Check size={14} aria-label="已选" />}
+                                                </button>;
+                                            })}
+                                        </div>
+                                    </div>}
                                     <ReferencePromptEditor
                                         key={usingSceneAi ? "ai" : "design"}
                                         value={visibleImagePrompt}
-                                        candidates={referenceCandidates}
+                                        candidates={selectedCandidates}
                                         onChange={setVisibleImagePrompt}
-                                        onReferencesChange={setVisibleReferences}
                                         restoreSelectedReferences={visibleReferences}
                                         onMentionChange={(suggestion) => { setMention(suggestion); setMentionIndex(0); }}
                                         onMentionKeyDown={handleMentionKeyDown}
@@ -1776,7 +1811,7 @@ function CharacterDetailModal({ asset, type, onClose, onUpdateDescription, onUpd
                                         <div role="listbox" aria-label="Reference index" className="absolute bottom-full left-0 z-50 mb-2 max-h-56 w-[min(100%,24rem)] overflow-y-auto rounded-xl border border-glass-border bg-elevated p-2 shadow-2xl">
                                             <div className="px-2 pb-1.5 pt-1 font-mono text-[0.625rem] uppercase tracking-[0.12em] text-text-muted">{tv("referenceIndex")} · {tv("referenceSearchHint")}</div>
                                             {matchingReferenceCandidates.length === 0 ? (
-                                                <div className="px-2 py-2 text-xs text-text-muted">{referenceCandidates.length ? tv("noMatchingReference") : tv("noAvailableReference")}</div>
+                                                <div className="px-2 py-2 text-xs text-text-muted">{selectedCandidates.length ? tv("noMatchingReference") : "请先在参考素材列表中添加素材"}</div>
                                             ) : matchingReferenceCandidates.map((candidate, index) => (
                                                 <button
                                                     key={`${candidate.reference?.asset_type}:${candidate.reference?.asset_id}:${candidate.reference?.variant_id}`}

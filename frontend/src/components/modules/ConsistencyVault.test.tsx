@@ -38,8 +38,9 @@ vi.mock("../common/VariantSelector", () => ({ VariantSelector: ({ asset, onRenam
     <button type="button" onClick={() => onGenerate(1)}>测试生成图片</button></> }));
 vi.mock("../common/VideoVariantSelector", () => ({ VideoVariantSelector: () => null }));
 vi.mock("../modals/UploadAssetModal", () => ({ default: () => null }));
-vi.mock("./playground/ReferencePromptEditor", () => ({ default: ({ value, onChange }: any) =>
-    <textarea aria-label="图像提示词" value={value} onChange={event => onChange(event.target.value)} /> }));
+vi.mock("./playground/ReferencePromptEditor", () => ({ default: ({ value, onChange, candidates }: any) =>
+    <textarea aria-label="图像提示词" data-mention-candidates={candidates.map((candidate: any) => candidate.label).join("|")}
+        value={value} onChange={event => onChange(event.target.value)} /> }));
 
 function state(assetType: string, assetId: string, bound = true) {
     return {
@@ -196,6 +197,28 @@ it("edits scene light and view before refinement and submits only the applied vi
     fireEvent.click(confirm);
     await waitFor(() => expect(mocks.generateAsset).toHaveBeenCalled());
     expect(mocks.generateAsset.mock.calls[0][6]).toBe(visible);
+});
+
+it("offers @ only from the scene's selected reference list", async () => {
+    const scene = { id: "street", name: "粮店门前", description: "青石板街" };
+    const project = { id: "episode-1", characters: [], scenes: [scene], props: [] };
+    useProjectStore.setState({ currentProject: project as any });
+    mocks.getEpisodeVisualContext.mockResolvedValue({ context: null, bindings: [] });
+    mocks.getAssetReferenceIndex.mockResolvedValue({ assets: [
+        { asset_type: "scene", asset_id: "street-1", name: "青石长街", source_scope: "episode", variants: [{ id: "day", url: "/day.png" }] },
+        { asset_type: "prop", asset_id: "grain", name: "粮袋", source_scope: "episode", variants: [{ id: "bag", url: "/bag.png" }] },
+    ] });
+    render(<ConsistencyVault />);
+    fireEvent.click(screen.getByRole("button", { name: /Scenes/ }));
+    fireEvent.click(screen.getByText("粮店门前"));
+    const prompt = await screen.findByRole("textbox", { name: "图像提示词" });
+    expect(prompt).toHaveAttribute("data-mention-candidates", "");
+    fireEvent.click(screen.getByRole("button", { name: "添加场景参考素材" }));
+    fireEvent.click(within(screen.getByRole("listbox", { name: "可添加的场景参考素材" })).getByRole("option", { name: /青石长街/ }));
+    expect(prompt).toHaveAttribute("data-mention-candidates", "青石长街");
+    expect(prompt.getAttribute("data-mention-candidates")).not.toContain("粮袋");
+    fireEvent.click(screen.getByRole("button", { name: "移除参考素材 青石长街" }));
+    expect(prompt).toHaveAttribute("data-mention-candidates", "");
 });
 
 it("reviews a scene image tool with its source and settings before enqueue", async () => {

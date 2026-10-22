@@ -32,7 +32,7 @@ import ReferencePromptEditor, {
     type ReferenceSuggestion,
     type PromptSlashSuggestion,
 } from "./playground/ReferencePromptEditor";
-import { searchReferenceCandidates } from "@/lib/referenceCandidateSearch";
+import { searchReferenceCandidates, selectedReferenceCandidates } from "@/lib/referenceCandidateSearch";
 import { IDENTITY_FIELDS, LOOK_FIELDS, characterSectionText, characterStructuredText, normalizeCharacterFeatures,
     characterConstraintsText, normalizeCharacterConstraints, type CharacterConstraints,
     type CharacterSectionEditorMode, type IdentityFeatures, type LookFeatures } from "@/lib/characterStructuredDesign";
@@ -1667,12 +1667,8 @@ export function WorkbenchPanel({
     const [promptSlash, setPromptSlash] = useState<PromptSlashSuggestion | null>(null);
     const [openSlashRequest, setOpenSlashRequest] = useState(0);
     const slashKeyHandler = useRef<((event: globalThis.KeyboardEvent) => boolean) | null>(null);
-    const mentionQuery = mention?.query.toLocaleLowerCase() ?? "";
-    const matchingReferenceCandidates = referenceCandidates.filter((candidate: ReferenceCandidate) =>
-        [candidate.label, candidate.description, candidate.sourceLabel, candidate.variantLabel]
-            .filter(Boolean)
-            .some((value) => value!.toLocaleLowerCase().includes(mentionQuery)),
-    );
+    const selectedCandidates = useMemo(() => selectedReferenceCandidates(referenceCandidates, pickerReferences), [referenceCandidates, pickerReferences]);
+    const matchingReferenceCandidates = searchReferenceCandidates(selectedCandidates, mention?.query ?? "");
 
     const imageReferenceControls = <>
                 <div className="p-2 border-b border-border-subtle flex justify-between items-center bg-surface">
@@ -1721,7 +1717,7 @@ export function WorkbenchPanel({
                 <div className="relative min-h-[150px] flex-1 p-4">
                     <ReferencePromptEditor
                         value={prompt}
-                        candidates={referenceCandidates}
+                        candidates={selectedCandidates}
                         onChange={(text) => {
                             setPrompt(text);
                             if (platformPromptSource && onPlatformPromptSourceChange && text !== platformPromptSource.appliedText) {
@@ -1730,7 +1726,6 @@ export function WorkbenchPanel({
                         }}
                         onReferencesChange={onReferencesChange}
                         onMentionChange={(next) => {
-                            if (next && !mention) onRefreshReferences?.();
                             setMention(next);
                         }}
                         onSlashChange={!isVideo && !designEditor ? (next) => { setPromptSlash(next); if (next) setMention(null); } : undefined}
@@ -1753,13 +1748,13 @@ export function WorkbenchPanel({
                     {mention && (
                         <div
                             role="listbox"
-                            aria-label="资产检索"
+                            aria-label="已选参考素材"
                             className="absolute bottom-full left-3 z-50 mb-2 max-h-64 w-[min(100%-1.5rem,24rem)] overflow-y-auto rounded-xl border border-glass-border bg-elevated p-2 shadow-2xl"
                         >
-                            <div className="px-2 pb-1.5 pt-1 font-mono text-[0.625rem] uppercase tracking-[0.12em] text-text-muted">项目参考图</div>
+                            <div className="px-2 pb-1.5 pt-1 font-mono text-[0.625rem] uppercase tracking-[0.12em] text-text-muted">当前参考素材</div>
                             {matchingReferenceCandidates.length === 0 ? (
                                 <div className="px-2 py-2 text-xs text-text-muted">
-                                    没有匹配的参考资产
+                                    {selectedCandidates.length ? "没有匹配的参考素材" : "请先在参考素材列表中添加素材"}
                                 </div>
                             ) : matchingReferenceCandidates.map((candidate: ReferenceCandidate) => (
                                 <button

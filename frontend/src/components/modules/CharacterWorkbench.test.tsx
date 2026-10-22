@@ -288,7 +288,7 @@ it("keeps image references separate from generated variants", () => {
     expect(screen.queryByLabelText("uploadRef: Full body")).not.toBeInTheDocument();
 });
 
-it("shows indexed clips when typing @ and emits the stable selected reference", () => {
+it("suggests only selected references when typing @ and emits their stable identity", () => {
     apiMocks.getPlatformReferenceLibrary.mockClear();
     const setPrompt = vi.fn();
     const onReferencesChange = vi.fn();
@@ -304,6 +304,7 @@ it("shows indexed clips when typing @ and emits the stable selected reference", 
             prompt=""
             setPrompt={setPrompt}
             referenceCandidates={[candidate]}
+            pickerReferences={[candidate.reference]}
             onReferencesChange={onReferencesChange}
         />,
     );
@@ -315,14 +316,24 @@ it("shows indexed clips when typing @ and emits the stable selected reference", 
     });
     expect(editor.editor.getText()).toBe("@wat");
 
-    expect(screen.getByRole("listbox")).toHaveTextContent("Pocket watch");
-    expect(screen.getByRole("listbox", { name: "资产检索" })).not.toHaveTextContent("Prompt");
+    expect(screen.getByRole("listbox", { name: "已选参考素材" })).toHaveTextContent("Pocket watch");
+    expect(screen.getByRole("listbox", { name: "已选参考素材" })).not.toHaveTextContent("Prompt");
     expect(apiMocks.getPlatformReferenceLibrary).not.toHaveBeenCalled();
-    fireEvent.mouseDown(within(screen.getByRole("listbox")).getByRole("option"));
-    fireEvent.click(within(screen.getByRole("listbox")).getByRole("option"));
+    fireEvent.mouseDown(within(screen.getByRole("listbox", { name: "已选参考素材" })).getByRole("option"));
+    fireEvent.click(within(screen.getByRole("listbox", { name: "已选参考素材" })).getByRole("option"));
 
     expect(setPrompt).toHaveBeenLastCalledWith("@Pocket watch ");
     expect(onReferencesChange).toHaveBeenLastCalledWith([candidate.reference]);
+});
+
+it("does not search the asset index through @ before a reference is selected", () => {
+    const candidate = { label: "Pocket watch", reference: { asset_type: "prop" as const, asset_id: "watch-1", variant_id: "front" } };
+    render(<WorkbenchPanel {...baseProps} referenceCandidates={[candidate]} pickerReferences={[]} showReferencePicker />);
+    const editor = screen.getByRole("textbox") as HTMLElement & { editor: import("@tiptap/core").Editor };
+    act(() => { editor.editor.chain().setContent("<p>@watch</p>").focus("end").run(); });
+    const suggestions = screen.getByRole("listbox", { name: "已选参考素材" });
+    expect(suggestions).toHaveTextContent("请先在参考素材列表中添加素材");
+    expect(within(suggestions).queryByRole("option")).not.toBeInTheDocument();
 });
 
 it("provides a searchable reference picker without requiring an @ prefix", () => {
@@ -432,14 +443,16 @@ it("loads the project reference index for the character workbench", async () => 
 
     await waitFor(() => expect(apiMocks.getAssetReferenceIndex).toHaveBeenCalledWith("project-1"));
     openImagePrompt();
+    fireEvent.click(screen.getByRole("button", { name: "选择参考素材" }));
+    fireEvent.click(await screen.findByRole("option", { name: /Pocket watch/ }));
     const editors = screen.getAllByRole("textbox") as Array<HTMLElement & { editor?: import("@tiptap/core").Editor }>;
     const promptEditor = imagePromptInput() as HTMLElement & { editor: import("@tiptap/core").Editor };
     expect(promptEditor?.editor).toBeDefined();
     act(() => { promptEditor!.editor!.chain().setContent("<p>@wat</p>").focus("end").run(); });
     await waitFor(() => expect(promptEditor).toHaveFocus());
-    expect(await screen.findByRole("listbox")).toHaveTextContent("Pocket watch");
-    fireEvent.mouseDown(within(screen.getByRole("listbox")).getByRole("option"));
-    fireEvent.click(within(screen.getByRole("listbox")).getByRole("option"));
+    expect(await screen.findByRole("listbox", { name: "已选参考素材" })).toHaveTextContent("Pocket watch");
+    fireEvent.mouseDown(within(screen.getByRole("listbox", { name: "已选参考素材" })).getByRole("option"));
+    fireEvent.click(within(screen.getByRole("listbox", { name: "已选参考素材" })).getByRole("option"));
     await waitFor(() => expect(document.querySelector('[data-reference-variant-id="watch-front"]')).toBeInTheDocument(),
         { timeout: 3000 });
     fireEvent.click(screen.getAllByRole("button", { name: "Reference image" })[0]);
@@ -601,10 +614,13 @@ it("refreshes the reference index when a generated project snapshot arrives", as
     rerender(workbench(vi.fn()));
     await waitFor(() => expect(apiMocks.getAssetReferenceIndex).toHaveBeenCalledTimes(2));
 
+    openImagePrompt();
+    fireEvent.click(screen.getByRole("button", { name: "选择参考素材" }));
+    fireEvent.click(await screen.findByRole("option", { name: /Hero/ }));
     const editor = imagePromptInput() as HTMLElement & { editor: import("@tiptap/core").Editor };
     expect(editor?.editor).toBeDefined();
     act(() => { editor!.editor!.chain().setContent("<p>@Hero</p>").focus("end").run(); });
-    fireEvent.click(within(screen.getByRole("listbox")).getByRole("option"));
+    fireEvent.click(within(screen.getByRole("listbox", { name: "已选参考素材" })).getByRole("option"));
     await waitFor(() => expect(document.querySelector('[data-reference-variant-id="new-view"]')).toBeInTheDocument());
     fireEvent.click(screen.getAllByRole("button", { name: "Reference image" })[0]);
     fireEvent.click(screen.getAllByTestId("variant-generate")[0]);
