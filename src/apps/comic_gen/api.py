@@ -4084,6 +4084,16 @@ def preview_shot_visual_preset_projection(
         raise HTTPException(status_code=404, detail=str(exc)) from exc
 
 
+@app.get("/projects/{script_id}/storyboard/continuity-sheet")
+def storyboard_continuity_sheet(
+    script_id: str, user: UserContext = Depends(require_studio_user),
+):
+    script = pipeline.get_script(script_id, user.owner_profile_id)
+    if not script:
+        raise HTTPException(status_code=404, detail="Script not found")
+    return pipeline.storyboard_continuity_sheet(script_id)
+
+
 @app.post("/projects/{script_id}/frames/{frame_id}/shot-visual-presets", response_model=ShotVisualPreset)
 def save_shot_visual_preset(script_id: str, frame_id: str, request: SaveShotVisualPresetRequest):
     try:

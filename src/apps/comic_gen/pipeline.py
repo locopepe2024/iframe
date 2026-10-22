@@ -84,6 +84,7 @@ from .visual_continuity import (
     reference_projection_prompt_clauses,
     select_projection_fields,
 )
+from .continuity_sheet import build_continuity_sheet
 from .video import VideoGenerator
 from .audio import AudioGenerator
 from .export import ExportManager
@@ -777,6 +778,14 @@ class ComicGenPipeline(StudioOwnerMixin):
             "source_label": preset.name,
             "projection": snapshot.model_dump(mode="json"),
         }
+
+    def storyboard_continuity_sheet(self, script_id: str) -> Dict[str, Any]:
+        script = self.scripts.get(script_id)
+        if not script:
+            raise ValueError("Script not found")
+        series = self.series_store.get(script.series_id) if script.series_id else None
+        model_name = series.model_settings.i2i_model if series else script.model_settings.i2i_model
+        return build_continuity_sheet(script, self.resolve_project_assets(script)["scenes"], model_name=model_name)
 
     def save_shot_visual_preset(
         self,
