@@ -1,0 +1,42 @@
+{
+  "schema": "recreation2-humanfov-bone-length-verification.v1",
+  "input_tool_and_contract_hashes_match": true,
+  "source_video_hash_matches": true,
+  "exact_decoded_source_frame_hashes": [
+    {
+      "source_frame": 195,
+      "image": "late-01.png",
+      "sha256": "b0b7252ea5eee021999b85702ea2da22f7c91f84a343ab79a71cb37526ae8b8a"
+    },
+    {
+      "source_frame": 197,
+      "image": "late-02.png",
+      "sha256": "186bab9fa698bd17bf74e0a6520e1d53845099f2b2b6a703bf9be427ed33037d"
+    }
+  ],
+  "paired_detected_frame_set_matches": true,
+  "frame_count": 79,
+  "events_present": true,
+  "numerical_verification": {
+    "rigid_transform_length_max_error": 4.440892098500626e-16,
+    "uniform_scale_factors": [
+      1.0,
+      2.0
+    ],
+    "single_forearm_30pct_shape_ratio": 1.3,
+    "fixed_tree_length_max_error": 2.220446049250313e-16,
+    "global_scale_reprojection_max_difference_px": 5.649314971378772e-07,
+    "fixed_tree_direction_unit_vector_max_difference": 8.968369378123981e-16,
+    "fixed_tree_reference_length_max_difference": 1.1102230246251565e-16,
+    "prior_external_K_all_heldout_rmse_delta_px": 0.0
+  },
+  "humanfov_runtime_executed": false,
+  "credentials_submitted": false,
+  "artifact_sha256": {
+    "bone-length-report.json": "57fb60ac664cc8dfb59941d59ba1c05a06ec2e7dd112913b9bcbd1063239533c",
+    "humanfov-contract.json": "c5774ba2188372850d7881b3222d31334390d3e87276ae56c79cdf0a1bd95c00"
+  },
+  "limits": [
+    "numerical and provenance checks only; no independent camera/body/physical contact truth"
+  ]
+}

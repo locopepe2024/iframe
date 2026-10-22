@@ -1,0 +1,29 @@
+{
+  "schema": "recreation2-humanfov-public-contract.v1",
+  "repo_url": "https://github.com/pixelite1201/CameraHMR",
+  "repo_sha": "65d11a0640d23c60f55ec82ae54298e9e7e549e0",
+  "source_sha256": {
+    "ReadMe.md": "c9d0d5995b1e03db9c428a07d26871fd7cb6ddca6dfb5b60a242235fdc045037",
+    "scripts/fetch_demo_data.sh": "e78682bf236258d9f787949c16235bd5b1b276684a815ebf98cff17d2dffc84e",
+    "core/cam_model/fl_net.py": "d49db55ae6c415952ab40b85a9982de596f444ab0f7d3e803a4825281de18790",
+    "core/constants.py": "43f42e0d4526bd108e519c19a89bf1ae42446bdd3bb2c5d92bbe0c64aaaf2585",
+    "mesh_estimator.py": "eaf9e534b3041b557c1537d6ec7595340f5137de3879cd828158da1dc9c4a836"
+  },
+  "runtime_executed": false,
+  "status": "official_weight_download_requires_registered_credentials",
+  "checkpoint_filename": "cam_model_cleaned.ckpt",
+  "download_script": "scripts/fetch_demo_data.sh: explicit registration, interactive username/password, authenticated POST for the camera checkpoint",
+  "scope": "public repository read only; did not run download script, access accounts, or submit credentials",
+  "inference_contract": {
+    "network": "core.cam_model.fl_net.FLNet",
+    "preprocess": "mesh_estimator.resize_image: aspect-preserving INTER_AREA resize, white padding to 256 square; CHW /255 and IMAGE_MEAN/STD; follow official color handling rather than guessing",
+    "output": "estimated_fov[0,1] interpreted as vfov radians",
+    "full_frame_focal_formula": "input_height / (2*tan(vfov/2))",
+    "K": "fx=fy=focal, cx=input_width/2, cy=input_height/2",
+    "training_prior_not_camera_measurement": true
+  },
+  "not_proven": [
+    "no HumanFoV focal values or GeoCalib agreement measured",
+    "no inference results produced by randomly initialized weights or substitute model"
+  ]
+}
