@@ -28,6 +28,18 @@ it("restores valid saved choices and ignores options retired from the current pa
   expect(configuration.selections.肤质).toBe("已停用肤质");
 });
 
+it.each([
+  ["dictionary.panel.classical-robe", "古装鞋履"],
+  ["dictionary.panel.classical-footwear", "古装外套"],
+] as const)("inherits shared footwear selections from %s when opening a different panel", (sourceId, targetLabel) => {
+  getPlatformReferenceLibrary.mockResolvedValueOnce({ resources: [] });
+  const source = CHARACTER_DICTIONARY_PRESETS.find(item => item.id === sourceId)!;
+  setup("", undefined, [dictionaryConfiguration(source, { 古装鞋履: "翘头履" })]);
+  fireEvent.click(screen.getByRole("option", { name: targetLabel }));
+  expect(screen.getByRole("combobox", { name: "古装鞋履" })).toHaveValue("翘头履");
+  expect(screen.getByText(/初始选项来源：/)).toBeInTheDocument();
+});
+
 it('keeps face shape, forehead, cheekbones and jaw independent through apply', () => {
   getPlatformReferenceLibrary.mockResolvedValueOnce({ resources: [] });
   const { onApply, onConfiguration } = setup('面容');

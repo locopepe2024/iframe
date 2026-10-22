@@ -64,6 +64,7 @@ export default function CharacterPromptDictionary({ suggestion, onClose, onApply
   const [browsing, setBrowsing] = useState(!suggestion.query.trim());
   const [selected, setSelected] = useState<Entry | null>(null);
   const [fieldValues, setFieldValues] = useState<Record<string, string>>({});
+  const [inheritedSources, setInheritedSources] = useState<string[]>([]);
   const [previewUrl, setPreviewUrl] = useState("");
   const [active, setActive] = useState(0);
   const externalNeedle = suggestion.query.trim().toLocaleLowerCase();
@@ -180,9 +181,15 @@ export default function CharacterPromptDictionary({ suggestion, onClose, onApply
         : `${entry.domain} · ${entry.source}`, choose: () => {
           setSelected(entry);
           const saved = entry.type === "配置面板" ? configurations?.find(item => item.preset_id === entry.id)?.selections : undefined;
-          setFieldValues(entry.preset && saved ? Object.fromEntries(dictionaryPresetFields(entry.preset, saved)
-            .flatMap(field => saved[field.key] !== undefined && field.options.includes(saved[field.key])
-              ? [[field.key, saved[field.key]]] : [])) : {});
+          const candidates = saved || Object.assign({}, ...(configurations || []).map(item => item.selections));
+          const valid = entry.preset && entry.type === "配置面板" ? Object.fromEntries(dictionaryPresetFields(entry.preset, candidates)
+            .flatMap(field => candidates[field.key] !== undefined && field.options.includes(candidates[field.key])
+              ? [[field.key, candidates[field.key]]] : [])) : {};
+          setFieldValues(valid);
+          setInheritedSources(saved ? [] : Array.from(new Set(Object.keys(valid).flatMap(key => {
+            const source = [...(configurations || [])].reverse().find(item => item.selections[key] === valid[key]);
+            return source ? [CHARACTER_PANEL_LABELS[source.preset_id] || source.preset_id] : [];
+          }))));
         } }))),
     ...related.map(key => ({ id: `browse-${key}`, label: `浏览 ${dictionaryCategoryPath(key)}`, detail: `${count(key)} 个选项，可比较其他描述`, choose: () => enterCategory(key) })),
   ];
@@ -261,6 +268,7 @@ export default function CharacterPromptDictionary({ suggestion, onClose, onApply
     {selected ? <>
       <h4 className="mt-2 text-sm text-foreground">{selected.type === "配置面板" ? CHARACTER_PANEL_LABELS[selected.id] || selected.title : <>{selected.type === "词条" ? "选项" : selected.type === "Prompt 案例" ? "Prompt 模板" : selected.type} · {selected.title}</>}</h4>
       {selected.type !== "配置面板" && <p className="mt-1 break-all text-xs text-text-muted">{selected.categories.map(dictionaryCategoryPath).filter(Boolean).join("、") || selected.domain} · {selected.source}</p>}
+      {selected.type === "配置面板" && inheritedSources.length > 0 && <p className="mt-1 text-xs text-text-muted">初始选项来源：{inheritedSources.join("、")}</p>}
       {!suggestion.slot && selectedFields.length > 0 && <div className="mt-2 space-y-3">
         {fieldGroups.map((group) => <fieldset key={group.label} className="grid grid-cols-1 gap-2 sm:grid-cols-2">
         <legend className="mb-1 text-xs font-medium text-text-secondary">{group.label === "装饰" ? "配饰" : group.label}</legend>

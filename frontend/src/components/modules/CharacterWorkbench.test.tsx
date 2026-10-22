@@ -1087,7 +1087,7 @@ it("warns before an older outfit panel overwrites a later footwear edit", async 
     expect(screen.getByRole("textbox", { name: "设计字段 · 鞋履" })).toHaveValue(design.look.features.footwear);
 });
 
-it("warns when a first-time outfit selection would replace existing footwear", async () => {
+it("inherits existing footwear when a first-time outfit panel opens", async () => {
     apiMocks.getAssetReferenceIndex.mockResolvedValueOnce({ assets: [] });
     mountSimpleDesign();
     fireEvent.click(screen.getByRole("button", { name: "面板与模板" }));
@@ -1097,11 +1097,12 @@ it("warns when a first-time outfit selection would replace existing footwear", a
 
     fireEvent.click(screen.getByRole("button", { name: "面板与模板" }));
     fireEvent.click(await screen.findByRole("option", { name: /^古装外套$/ }));
-    expect(within(screen.getByRole("dialog", { name: "基础面板、词典和 Prompt 模板" })).getByRole("status")).toHaveTextContent("鞋履");
-    expect(screen.getByRole("button", { name: "覆盖冲突并应用" })).toBeInTheDocument();
+    expect(screen.getByRole("combobox", { name: "古装鞋履" })).toHaveValue("翘头履");
+    expect(screen.queryByRole("button", { name: "覆盖冲突并应用" })).not.toBeInTheDocument();
 });
 
 it("does not turn the previous panel preview into supplemental prose when applying a second panel", async () => {
+    apiMocks.getAssetReferenceIndex.mockResolvedValueOnce({ assets: [] });
     const { onUpdateAttributes } = mountSimpleDesign();
     act(() => designDetailsEditor().chain().selectAll().insertContent({ type: "text", text: "靛蓝外衣。 /面容" }).run());
     fireEvent.click(await screen.findByRole("option", { name: /^面容$/ }));

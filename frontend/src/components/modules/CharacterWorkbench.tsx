@@ -1163,17 +1163,17 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
         setIdentityEditorMode("fields"); setLookEditorMode("fields");
         const legacyNotes = [identityEditorMode === "notes" ? designNotes : "", lookEditorMode === "notes" ? lookNotes : ""].filter(Boolean).join("\n");
         // Only remove exact text recorded by an applied panel; edited prose remains authored input.
-        const previousPanelText = [...dictionaryConfigurations].reverse()
+        const previousPanelTexts = [...dictionaryConfigurations].reverse()
             .filter(configuration => configuration.preset_id !== "dictionary.panel.expression")
             .map(configuration => configuration.rendered_text.trim())
-            .find(rendered => rendered && remainingText?.includes(rendered));
-        const authoredRemaining = previousPanelText
-            ? remainingText!.replace(previousPanelText, "").trim() : remainingText?.trim();
+            .filter(rendered => rendered && remainingText?.includes(rendered));
+        const authoredRemaining = previousPanelTexts.reduce((text, rendered) => text.replace(rendered, ""), remainingText || "").trim();
         const supplemental = remainingText !== undefined ? authoredRemaining || "" : supplementalPrompt || legacyNotes ||
             (!Object.keys(identityFeatures).length && !Object.keys(lookFeatures).length ? designInput : "");
         setSupplementalPrompt(supplemental);
         clearAIResultForInput();
-        if (details !== undefined) setDesignInput(details);
+        if (details !== undefined) setDesignInput(previousPanelTexts.reduce((text, rendered) => text.replace(rendered, ""), details)
+            .replace(/[ \t]+(?=\n)/g, "").trim());
         setDesignIdentityBasis(["user_specified"]); setDesignLookBasis(["user_specified"]);
         setDesignStatus("draft"); setPromptsNeedDesignApply(true);
     };
