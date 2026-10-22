@@ -177,7 +177,7 @@ export default function PhotoAlbum() {
     <a href={`${process.env.NEXT_PUBLIC_COMPANION_BASE_PATH || ""}/companion`}>返回陪伴首页</a>
     <h1>我的生活相册</h1>
     <p>留住照片，慢慢说说照片里的故事。</p>
-    <p className={styles.note}>照片 Demo · 支持单张、批量上传与后台时间整理。照片保存在当前服务端；人物识别尚未加入。</p>
+    <p className={styles.note}>照片 Demo · 支持单张、批量上传与后台时间整理。照片保存在当前服务端；人物分析需在上传批次中单独允许，候选由您核对。</p>
     <PeopleAlbums />
     <section className={styles.panel} aria-label="上传照片">
       <h2>添一张照片</h2>
