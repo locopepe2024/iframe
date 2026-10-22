@@ -7481,6 +7481,7 @@ class ComicGenPipeline(StudioOwnerMixin):
             "props": [props[item_id].model_dump(mode="json") if item_id in props else None
                       for item_id in frame.prop_ids],
             "image_prompt_en": frame.image_prompt_en,
+            "micro_expression_timing": frame.micro_expression_timing,
             "image_polish_source": frame.image_polish_source,
             "image_polish_candidate": frame.image_polish_candidate,
             "style_prompt_override": frame.style_prompt_override,
@@ -7739,7 +7740,8 @@ class ComicGenPipeline(StudioOwnerMixin):
             raise RuntimeError("Storyboard candidate render returned no image")
         return image_variant_storage_key(variant)
 
-    def preview_storyboard_candidate_prompt(self, script_id: str, frame_id: str, prompt: str) -> str:
+    def preview_storyboard_candidate_prompt(self, script_id: str, frame_id: str, prompt: str,
+                                            slot: str = "first") -> str:
         script = self.scripts.get(script_id)
         if not script:
             raise ValueError("Script not found")
@@ -7748,6 +7750,8 @@ class ComicGenPipeline(StudioOwnerMixin):
             raise ValueError("Frame not found")
         if not prompt.strip():
             raise ValueError("Storyboard prompt cannot be empty")
+        from .micro_expression import frame_static_expression_descriptions
+        static_states = frame_static_expression_descriptions(frame.micro_expression_timing, slot)
         self._validate_reference_visual_projection(script, frame)
         scene = self._storyboard_scene_asset(script, frame)
         revision, design = self._confirmed_scene_design(scene)
@@ -7775,6 +7779,11 @@ class ComicGenPipeline(StudioOwnerMixin):
                     scene_parts.append(f"可见人脸上限：{face_limit} 张")
         reference_clauses = reference_projection_prompt_clauses(frame.reference_visual_projection, frame, scene)
         additions = [item for item in [*scene_parts, *reference_clauses] if item and item not in prompt]
+        if static_states:
+            label = "首帧静态表情" if slot == "first" else "尾帧静态表情"
+            clause = f"{label}：{'；'.join(static_states)}"
+            if clause not in prompt:
+                additions.append(clause)
         return "\n".join([prompt.strip(), *additions])
 
     def storyboard_candidate_preview_token(

@@ -5597,6 +5597,7 @@ class RenderFramePreviewRequest(BaseModel):
     frame_id: str
     prompt: str
     negative_prompt: Optional[str] = None
+    slot: Literal["first", "last"] = "first"
 
 class RenderFrameCandidateRequest(BaseModel):
     frame_id: str
@@ -5618,9 +5619,14 @@ def preview_frame_candidate(script_id: str, request: RenderFramePreviewRequest,
     if not request.prompt.strip():
         raise HTTPException(status_code=422, detail="Storyboard prompt cannot be empty")
     try:
+        before = pipeline.storyboard_render_context_token(script_id, request.frame_id)
         candidate_prompt = pipeline.preview_storyboard_candidate_prompt(
-            script_id, request.frame_id, request.prompt,
+            script_id, request.frame_id, request.prompt, slot=request.slot,
         )
+        if before != pipeline.storyboard_render_context_token(script_id, request.frame_id):
+            raise HTTPException(status_code=409, detail="镜头内容已变化，请重新预览首尾帧输入")
+    except HTTPException:
+        raise
     except ValueError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     series = pipeline.series_store.get(script.series_id) if script.series_id else None

@@ -75,6 +75,22 @@ def opening_static_state(candidate: MicroExpressionCandidate) -> str:
     return item.visible_change
 
 
+def frame_static_expression_descriptions(items: List[Dict[str, Any]], slot: str) -> List[str]:
+    """Project accepted timing to the visible state of one image slot."""
+    if slot not in {"first", "last"}:
+        raise ValueError("Unknown frame slot")
+    phase = "trigger" if slot == "first" else "release"
+    descriptions = []
+    for item in items:
+        candidate = MicroExpressionCandidate.model_validate(
+            {key: value for key, value in item.items() if key != "character_name"}
+        )
+        state = next(entry.visible_change for entry in candidate.timing if entry.phase == phase)
+        name = item.get("character_name") or "当前角色"
+        descriptions.append(f"{name}：{state}")
+    return descriptions
+
+
 def video_timing_description(candidate: MicroExpressionCandidate) -> str:
     """Render the full ordered timing for video prompt compilation."""
     return "；".join(

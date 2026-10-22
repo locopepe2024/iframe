@@ -2,6 +2,7 @@ import pytest
 from types import SimpleNamespace
 
 from src.apps.comic_gen.micro_expression import (
+    frame_static_expression_descriptions,
     opening_static_state,
     validate_micro_expression_payload,
     video_timing_description,
@@ -32,6 +33,40 @@ def test_micro_expression_accepts_ordered_relative_timing():
     result = validate_micro_expression_payload(payload(), duration_seconds=6)
     assert opening_static_state(result[0]) == "视线短暂停住"
     assert "change(0.20-0.50)" in video_timing_description(result[0])
+
+
+def test_static_frame_projection_uses_only_selected_boundary():
+    accepted = {**payload(character_id="private-character-id")["candidates"][0], "character_name": "玄宸"}
+    first = frame_static_expression_descriptions([accepted], "first")
+    last = frame_static_expression_descriptions([accepted], "last")
+    assert first == ["玄宸：视线短暂停住"]
+    assert last == ["玄宸：视线恢复正前方"]
+    assert "眉心轻微收紧" not in str(first + last)
+    assert "private-character-id" not in str(first + last)
+
+
+def test_frame_candidate_preview_binds_accepted_timing_and_slot():
+    from unittest.mock import Mock
+    from src.apps.comic_gen.models import Script, StoryboardFrame
+    from src.apps.comic_gen.pipeline import ComicGenPipeline
+
+    frame = StoryboardFrame(id="frame", scene_id="", character_ids=["hero"])
+    script = Script(id="film", title="T", original_text="", created_at=1, updated_at=1, frames=[frame])
+    pipeline = ComicGenPipeline.__new__(ComicGenPipeline)
+    pipeline.scripts = {script.id: script}
+    pipeline.series_store = {}
+    pipeline.resolve_project_assets = Mock(return_value={"characters": [], "scenes": [], "props": []})
+
+    before = pipeline.storyboard_candidate_preview_token("film", "frame", "草稿", None)
+    frame.micro_expression_timing = [{**payload(character_id="hero")["candidates"][0], "character_name": "玄宸"}]
+    assert pipeline.storyboard_candidate_preview_token("film", "frame", "草稿", None) != before
+
+    first = pipeline.preview_storyboard_candidate_prompt("film", "frame", "草稿", slot="first")
+    last = pipeline.preview_storyboard_candidate_prompt("film", "frame", "草稿", slot="last")
+    assert "首帧静态表情：玄宸：视线短暂停住" in first
+    assert "尾帧静态表情：玄宸：视线恢复正前方" in last
+    assert "release" not in first and "trigger" not in last
+    assert "眉心轻微收紧" not in first + last
 
 
 @pytest.mark.parametrize("bad", [

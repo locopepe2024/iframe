@@ -74,6 +74,25 @@ def test_candidate_preview_labels_do_not_expose_variant_ids(monkeypatch):
     assert result["polish_review"].startswith("场景设计已变化")
 
 
+def test_candidate_preview_rejects_shot_change_during_static_projection(monkeypatch):
+    pipeline = Mock()
+    pipeline.get_script.return_value = SimpleNamespace(
+        frames=[SimpleNamespace(id="shot")], series_id=None,
+        model_settings=SimpleNamespace(i2i_model="test-model", storyboard_aspect_ratio="16:9"),
+    )
+    pipeline.storyboard_render_context_token.side_effect = ["before", "after"]
+    pipeline.preview_storyboard_candidate_prompt.return_value = "首帧静态表情：玄宸：视线停住"
+    monkeypatch.setattr(api, "pipeline", pipeline)
+
+    with pytest.raises(HTTPException) as error:
+        api.preview_frame_candidate(
+            "episode", api.RenderFramePreviewRequest(frame_id="shot", prompt="草稿", slot="first"),
+            SimpleNamespace(owner_profile_id="owner"),
+        )
+    assert error.value.status_code == 409
+    pipeline.storyboard_candidate_preview_token.assert_not_called()
+
+
 def test_preview_rejects_context_change_during_prompt_assembly(monkeypatch):
     pipeline = Mock()
     pipeline.get_script.return_value = SimpleNamespace()
