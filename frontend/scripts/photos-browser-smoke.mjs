@@ -1,5 +1,6 @@
 #!/usr/bin/env node
-// Real local API + exported webpage. Uses temporary synthetic images and DB.
+// Real local API + exported webpage; simulated speech APIs, not microphone/audio.
+// Uses temporary synthetic images and DB. No recordings or screenshots are saved.
 import { spawn } from "node:child_process";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { existsSync } from "node:fs";
@@ -75,6 +76,8 @@ uvicorn.Server(uvicorn.Config(app, log_level='error')).run(sockets=[sock])
   socket = new WebSocket(targets.find(target => target.type === "page").webSocketDebuggerUrl);
   await new Promise((resolve, reject) => { socket.once("open", resolve); socket.once("error", reject); });
   let id = 0; const pending = new Map(); const errors = []; const blocked = [];
+  const dateWrites = [];
+  let dateUrl, identityHeaders;
   function send(method, params = {}) {
     return new Promise((resolve, reject) => {
       const key = ++id;
@@ -88,6 +91,15 @@ uvicorn.Server(uvicorn.Config(app, log_level='error')).run(sockets=[sock])
     if (message.method === "Runtime.exceptionThrown") errors.push(message.params.exceptionDetails.text);
     if (message.method === "Fetch.requestPaused") {
       const url = new URL(message.params.request.url);
+      const request = message.params.request;
+      if (url.origin === origin && url.pathname.endsWith('/organize-time')) {
+        dateUrl = url.href.replace(/organize-time$/, 'date');
+        identityHeaders = Object.fromEntries(Object.entries(request.headers).filter(([name]) =>
+          /^(authorization|cookie|x-)/i.test(name)));
+      }
+      if (url.origin === origin && request.method === 'PATCH' && url.pathname.endsWith('/date')) {
+        dateWrites.push(JSON.parse(request.postData));
+      }
       const allowed = url.origin === origin || ["data:", "blob:"].includes(url.protocol)
         || ["fonts.googleapis.com", "fonts.gstatic.com"].includes(url.hostname);
       if (!allowed) blocked.push(url.href);
@@ -110,7 +122,7 @@ uvicorn.Server(uvicorn.Config(app, log_level='error')).run(sockets=[sock])
     for (let i = 0; i < 100; i++) { if (await evaluate(expression)) return; await pause(100); }
     throw Error(`Timed out: ${label}; ${await evaluate("document.body.innerText")}`);
   }
-  const button = label => `[...document.querySelectorAll('button')].find(b => (b.textContent.trim() === ${JSON.stringify(label)} || b.getAttribute('aria-label') === ${JSON.stringify(label)}) && !b.disabled)`;
+  const button = label => `[...document.querySelectorAll('button,label')].find(b => (b.textContent.trim() === ${JSON.stringify(label)} || b.getAttribute('aria-label') === ${JSON.stringify(label)}) && !b.disabled)`;
   async function tap(label) {
     await wait(label, `!!(${button(label)})`);
     let point;
@@ -135,7 +147,36 @@ uvicorn.Server(uvicorn.Config(app, log_level='error')).run(sockets=[sock])
     await tap("上传照片");
     await wait("uploaded", "document.body.innerText.includes('照片已保存，尚未开始整理。')");
   }
+  async function snapshot() {
+    if (!dateUrl || !identityHeaders) throw Error('No organized photo captured');
+    const read = async url => {
+      const response = await fetch(url, { headers: identityHeaders });
+      if (!response.ok) throw Error(`Photo verification failed: HTTP ${response.status}`);
+      return response.json();
+    };
+    return { date: await read(dateUrl), history: await read(`${dateUrl}/history`) };
+  }
+  async function unchanged(before, label) {
+    if (JSON.stringify(await snapshot()) !== JSON.stringify(before)) throw Error(`${label} changed server date/history`);
+  }
   await send("Page.enable"); await send("Runtime.enable");
+  // Installed before React loads, including after reload. No real speech service is called.
+  await send("Page.addScriptToEvaluateOnNewDocument", { source: `
+    window.__voiceTest = { starts: 0, stops: 0, aborts: 0, spoken: [], cancels: 0 };
+    class Recognition {
+      start() { window.__voiceTest.current = this; window.__voiceTest.starts++; }
+      stop() { window.__voiceTest.stops++; }
+      abort() { window.__voiceTest.aborts++; }
+    }
+    Object.defineProperty(window, 'SpeechRecognition', { configurable: true, value: Recognition });
+    Object.defineProperty(window, 'SpeechSynthesisUtterance', { configurable: true, value: class {
+      constructor(text) { this.text = text; }
+    } });
+    Object.defineProperty(window, 'speechSynthesis', { configurable: true, value: {
+      speak(utterance) { window.__voiceTest.spoken.push({ text: utterance.text, lang: utterance.lang, rate: utterance.rate }); },
+      cancel() { window.__voiceTest.cancels++; }
+    } });
+  ` });
   await send("Fetch.enable", { patterns: [{ urlPattern: "*" }] });
   await send("Emulation.setDeviceMetricsOverride", { width: 390, height: 844, deviceScaleFactor: 1, mobile: true });
   await send("Emulation.setTouchEmulationEnabled", { enabled: true });
@@ -159,12 +200,43 @@ uvicorn.Server(uvicorn.Config(app, log_level='error')).run(sockets=[sock])
   const unknownButton = await evaluate("[...document.querySelectorAll('button')].find(b=>b.getAttribute('aria-label')?.startsWith('查看照片') && b.textContent.includes('尚未整理')).getAttribute('aria-label')");
   await tap(unknownButton); await tap("按时间整理"); await tap("同意并整理");
   await wait("unknown date", "document.querySelector('[aria-label=\"当前照片\"]').innerText.includes('时间待确认')");
-  await evaluate("(() => {const input=document.querySelector('#photo-spoken-draft');Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype,'value').set.call(input,'一九八五年六月拍的');input.dispatchEvent(new Event('input',{bubbles:true}));})()");
+  const beforeVoice = await snapshot(), writesBeforeVoice = dateWrites.length;
+  if (!await evaluate("[...document.querySelectorAll('button')].find(b=>b.textContent.trim()==='点一下，说日期').disabled && window.__voiceTest.starts === 0")) throw Error('Listening enabled before consent');
+  await tap("读出当前提示");
+  if (!await evaluate("window.__voiceTest.spoken.length === 1 && window.__voiceTest.spoken[0].text.includes('时间待确认') && window.__voiceTest.spoken[0].lang === 'zh-CN' && window.__voiceTest.spoken[0].rate === 0.7")) throw Error('Incorrect simulated reading');
+  const cancels = await evaluate("window.__voiceTest.cancels");
+  await tap("停止朗读");
+  if (!await evaluate(`window.__voiceTest.cancels > ${cancels} && window.__voiceTest.spoken.length === 1`)) throw Error('Reading was not stopped');
+  // Tap the full consent label, rather than the deliberately smaller checkbox.
+  await tap("本次允许使用浏览器听写");
+  await tap("点一下，说日期");
+  await wait("listening", `!!(${button("停止听写")})`);
+  if (!await evaluate("window.__voiceTest.starts === 1 && window.__voiceTest.current.lang === 'zh-CN' && window.__voiceTest.current.interimResults === false && document.querySelector('#photo-spoken-draft').disabled")) throw Error('Listening state incorrect');
+  await tap("停止听写");
+  await wait("finishing", "document.body.innerText.includes('正在结束听写') && window.__voiceTest.stops === 1");
+  await evaluate("window.__voiceTest.current.onresult({results:[[{transcript:'一九八五年六月拍的'}]]}); window.__voiceTest.current.onend()");
+  await wait("simulated transcript", "document.querySelector('#photo-spoken-draft').value === '一九八五年六月拍的' && !document.querySelector('#photo-spoken-draft').disabled");
+  await unchanged(beforeVoice, 'Transcription');
   await tap("核对语音日期");
   await wait("spoken date proposal", "document.body.innerText.includes('按您说的，记录为 1985-06，可以吗？')");
   if (!await evaluate("document.querySelector('[aria-label=\"当前照片\"]').innerText.includes('时间待确认')")) throw Error("Spoken proposal changed the date before confirmation");
+  await unchanged(beforeVoice, 'Proposal');
+  await tap("取消");
+  await unchanged(beforeVoice, 'Cancelled proposal');
+  if (dateWrites.length !== writesBeforeVoice) throw Error('Date PATCH sent before confirmation');
+  await tap("核对语音日期");
   await tap("确认日期");
   await wait("confirmed spoken month", "document.querySelector('[aria-label=\"当前照片\"]').innerText.includes('1985-06（您确认的）')");
+  const afterVoice = await snapshot(), write = dateWrites.at(-1);
+  if (dateWrites.length !== writesBeforeVoice + 1 || write.value !== '1985-06' || write.precision !== 'month'
+    || write.expected_revision !== beforeVoice.date.revision || write.consent_version < 1
+    || afterVoice.date.revision !== beforeVoice.date.revision + 1 || afterVoice.date.date?.value !== '1985-06'
+    || afterVoice.date.date?.precision !== 'month' || afterVoice.date.source !== 'user'
+    || afterVoice.history.changes.length !== beforeVoice.history.changes.length + 1) throw Error('Confirmed date/history incorrect');
+  await send("Page.reload", { ignoreCache: true });
+  await wait("voice date persistence", "document.body?.innerText.includes('1985-06（您确认的）')");
+  await unchanged(afterVoice, 'Reload');
+  await tap(unknownButton);
   const layouts = [];
   for (const [width, height, scale] of [[320, 568, "100%"], [375, 812, "200%"], [844, 390, "100%"]]) {
     await send("Emulation.setDeviceMetricsOverride", { width, height, deviceScaleFactor: 1, mobile: true });
@@ -175,7 +247,7 @@ uvicorn.Server(uvicorn.Config(app, log_level='error')).run(sockets=[sock])
     layouts.push({ width, height, scale });
   }
   if (errors.length || blocked.length) throw Error(`Browser errors/requests: ${JSON.stringify({errors,blocked})}`);
-  console.log(JSON.stringify({ result: "passed", backend: "real local FastAPI and temporary SQLite", input: "CDP touch, file chooser, editable transcript", checks: ["upload", "decline", "consent", "EXIF organization", "year confirmation", "history restoration", "reload persistence", "revocation", "missing date stays pending", "spoken date proposal requires confirmation", "responsive layout"], layouts }, null, 2));
+  console.log(JSON.stringify({ result: "passed", backend: "real local FastAPI and temporary SQLite", input: "CDP touch, file chooser, simulated speech recognition and synthesis", checks: ["upload", "decline", "consent", "EXIF organization", "year confirmation", "history restoration", "reload persistence", "revocation", "missing date stays pending", "listening requires consent", "reading and stop", "stop listening accepts final transcript", "transcription/proposal/cancel leave server date and history unchanged", "confirmation sends exactly one date PATCH and appends one revision", "spoken month persists after reload", "responsive layout"], unverified: ["real microphone permission", "speech service accuracy", "audio playback quality", "physical device and older adult usability"], layouts }, null, 2));
 } catch (error) { console.error(error.stack || String(error)); process.exitCode = 1; }
 finally {
   if (socket) socket.terminate();
