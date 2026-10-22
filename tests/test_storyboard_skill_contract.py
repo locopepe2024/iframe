@@ -37,6 +37,25 @@ def test_explicit_skill_must_match_target_model():
     assert exc_info.value.detail['reason'] == 'incompatible_optimization_skill'
 
 
+def test_unrelated_h3_workflow_cannot_load_as_shot_polish_skill():
+    with pytest.raises(api.HTTPException) as exc_info:
+        api._storyboard_polish_contract(
+            'uniart/minimax-h3-vip', '', '', optimization_skills=['h3-product-recreation']
+        )
+    assert exc_info.value.status_code == 422
+    assert exc_info.value.detail['reason'] == 'ineligible_optimization_skill'
+
+
+def test_legacy_model_guidance_loads_only_the_model_adapter():
+    h3 = api._target_model_guidance('uniart/minimax-h3-vip')
+    seedance = api._target_model_guidance('uniart/seedance-2.5-vip')
+    assert '基础／关键帧输出' in h3
+    assert '商品替换' not in h3
+    assert '多镜头、续拍、长故事' not in h3
+    assert '按参考素材及用途' in seedance
+    assert '多镜头、续拍、长故事' not in seedance
+
+
 def test_empty_explicit_skill_selection_disables_legacy_target_guidance():
     text = api._storyboard_polish_contract(
         'uniart/minimax-h3-vip', '', '', optimization_skills=[]

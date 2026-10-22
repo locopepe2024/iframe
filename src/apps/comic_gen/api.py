@@ -7192,6 +7192,12 @@ def _polish_error_response(err) -> Dict[str, Any]:
     return body
 
 
+_STORYBOARD_VIDEO_POLISH_SKILLS = frozenset({
+    "minimax-h3-director", "seedance-prompt", "seedance-camera",
+    "sequence-continuity", "director-style",
+})
+
+
 def _target_model_guidance(model_id: str) -> str:
     """Legacy model-to-skill mapping for callers before explicit skill selection."""
     value = (model_id or "").lower()
@@ -7199,8 +7205,11 @@ def _target_model_guidance(model_id: str) -> str:
     label = "MiniMax H3" if "h3" in value else "Seedance" if "seedance" in value else ""
     if not label:
         return ""
-    packages = [p for p in catalog() if label in p.get("targets", [])]
-    text = "\n\n".join(p["instructions"] for p in packages)
+    default_id = "minimax-h3-director" if label == "MiniMax H3" else "seedance-prompt"
+    package = next((p for p in catalog() if p["id"] == default_id), None)
+    if package is None:
+        return ""
+    text = package["instructions"]
     return f"TARGET VIDEO MODEL: {label}. Shared Agent skill guidance:\n{text}"
 
 
@@ -7217,6 +7226,9 @@ def _selected_skill_guidance(skill_ids: Optional[List[str]], model_id: str = "")
     unknown = [skill_id for skill_id in skill_ids if skill_id not in packages]
     if unknown:
         raise HTTPException(status_code=422, detail={"reason": "unknown_optimization_skill", "skill_ids": unknown})
+    ineligible = [skill_id for skill_id in skill_ids if skill_id not in _STORYBOARD_VIDEO_POLISH_SKILLS]
+    if ineligible:
+        raise HTTPException(status_code=422, detail={"reason": "ineligible_optimization_skill", "skill_ids": ineligible})
     selected = [packages[skill_id] for skill_id in dict.fromkeys(skill_ids)]
     model = (model_id or "").lower()
     target = "MiniMax H3" if "h3" in model else "Seedance" if "seedance" in model else ""

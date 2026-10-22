@@ -1,6 +1,6 @@
 # Storyboard 首帧与分镜设计 Skill 盘点及加载 V1
 
-状态：设计规格；现有润色入口的模型兼容过滤、默认选项与预览指令回显已实现，结构化分镜设计器及完整 Skill 加载合同仍待实现。承接 `2026-10-22-storyboard-shot-design-inheritance-and-performance-v1.md`。
+状态：设计规格；现有润色入口的模型兼容过滤、默认选项、预览指令回显及单镜润色目录项准入已实现，结构化分镜设计器及完整 Skill 加载合同仍待实现。承接 `2026-10-22-storyboard-shot-design-inheritance-and-performance-v1.md`。
 
 阶段、实际产出物与各 Skill 的当前加载位置，见 [分镜生成阶段核对](2026-10-22-storyboard-stage-artifact-skill-audit-v1.md)。下方早期 `Observed` 是设计时的历史快照；实施状态以上述核对文档为准。
 
@@ -17,7 +17,7 @@
 | 分镜视频/R2V 润色 | `catalog.json`；`OptimizerSelector` | MiniMax H3 导演、Seedance 提示词、Seedance 运镜、连续分镜与风格一致性、导演风格与视觉叙事 | 复选框提交 ID；本地 GPT/Qwen/DeepSeek/GLM 路径按目录文本拼入优化契约 |
 | Agent 对话 | 同一 `catalog.json`；`/skills` 安装状态 | 上述条目及角色/短片/图片/商品工作流 | `creative_guidance` 依据 owner 的已启用安装项和请求文字筛选；不是分镜润色复选框的加载规则 |
 
-现状更新：分镜润色显式选择已验证目录 ID 与 H3/Seedance 目标模型兼容，仍未核对用户安装状态、阶段或字段范围，因此不能称复选框为“已安装 Skill”。缺省旧请求按目标模型分别载入 H3 导演或 Seedance 提示词；显式空数组不载入。前端默认选择随目标模型变化。MiniMax 官方 Context-IR 是优化器，不是 Skill；服务端已能将显式选中的指导文本展开到预览，但当前前端 IR 入口隐藏 Skill 选项并传空数组。目标模型硬输出合同仍另行存在。
+现状更新：分镜润色显式选择已验证目录 ID、单镜润色准入集合与 H3/Seedance 目标模型兼容，仍未核对用户安装状态、目录声明的阶段或字段范围，因此不能称复选框为“已安装 Skill”。缺省旧请求按目标模型分别只载入 H3 导演或 Seedance 提示词；显式空数组不载入。商品替换等其他同模型工作流不能进入单镜润色，旧默认也不再加载所有目标模型条目。前端默认选择随目标模型变化。MiniMax 官方 Context-IR 是优化器，不是 Skill；服务端已能将显式选中的指导文本展开到预览，但当前前端 IR 入口隐藏 Skill 选项并传空数组。目标模型硬输出合同仍另行存在。
 
 当前目录没有微表情时序 Skill。`storyboard-emotion` 是上游拆镜方法卡，虽可建议用特写呈现情绪，但它不是首帧图片 Skill，也不包含单镜视频内的触发、变化、保持、恢复。其余三张方法卡也只参与拆镜：悬念呈现决定画面揭示范围，动作拆解决定取哪个可见动作状态，对白调度决定说话/回应镜头的位置；首帧只接收其中已确认、在 0.00 秒可见的结果，不接收方法卡全文、台词过程或动作时间线。`sequence-continuity` 是多镜规划指导，不等于已确认参考图的结构化投影规则。`viewpoint-staging`、`audiovisual-strategy`、`continuity-review` 属于导演拍摄计划阶段；短片五阶段、竖屏短剧结构属于 Creative Agent 的整体规划；角色身份 Skill 属角色工作台。它们可提供上游已确认结果，不应在单镜优化时自动全文加载。
 
