@@ -46,7 +46,6 @@ export function directorShotSuggestions(shot: ShotNode): string[] {
         ["导演效果", context.shot?.director_effect],
         ["角色表演", context.shot?.performance_action],
         ["动作物理", context.shot?.action_physics],
-        ["运镜", context.shot?.camera_movement],
         ["构图", context.shot?.composition],
         ["环境音", context.shot?.ambient_sound],
     ];

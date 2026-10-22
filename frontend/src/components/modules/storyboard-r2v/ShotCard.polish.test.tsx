@@ -136,3 +136,23 @@ it("uses one four-mode tab control for video input selection", () => {
     fireEvent.click(screen.getByRole("tab", { name: "tabTextVideo" }));
     expect(onSetVideoMode).toHaveBeenCalledWith("t2v");
 });
+
+it("applies only the selected director field to the shot", () => {
+    const onUpdateField = vi.fn();
+    const onUpdatePrompt = vi.fn();
+    render(<ShotCard
+        shot={{ ...shot, cameraAngle: "平视", directorShotContext: { shot: {
+            camera_angle: "低角度", camera_movement: "缓慢推进", performance_action: "前镜动作",
+        } } }}
+        index={0} totalShots={1} characters={[]} scenes={[]} props={[]}
+        onUpdatePrompt={onUpdatePrompt} onUpdateField={onUpdateField}
+        onGenerateT2I={vi.fn()} onGenerateVideo={vi.fn()} onDelete={vi.fn()}
+        onMoveUp={vi.fn()} onMoveDown={vi.fn()} onDuplicate={vi.fn()}
+        onSetVideoMode={vi.fn()} onOpenDrawer={vi.fn()} onInsertAsset={vi.fn()}
+        expanded={false} onToggleExpanded={vi.fn()}
+    />);
+    fireEvent.click(screen.getByText(/拍摄计划字段/));
+    fireEvent.click(screen.getByRole("button", { name: "采用机位" }));
+    expect(onUpdateField).toHaveBeenCalledExactlyOnceWith("cameraAngle", "低角度");
+    expect(onUpdatePrompt).not.toHaveBeenCalled();
+});

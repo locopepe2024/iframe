@@ -30,6 +30,7 @@ import PromptExpandModal from "./PromptExpandModal";
 import PolishPanel from "./PolishPanel";
 import FieldTagChip, { AddFieldButton, type FieldType } from "./FieldTagChip";
 import { buildGenerationPrompt, directorShotSuggestions } from "./buildAssembledPrompt";
+import { directorFieldProposals } from "./directorFieldProposals";
 import { resolveShotVideoInput } from "./shotVideoInput";
 import { PendingTaskAffordance } from "@/components/shared/PendingTaskAffordance";
 import PreviewImage from "@/components/shared/preview/PreviewImage";
@@ -353,6 +354,7 @@ export default function ShotCard({
         shot.stylePromptOverride, shot.lightingOverride, shot.directorShotContext, globalStylePrompt, shot.promptIsOptimized, generateAudio, videoModel,
     ]);
     const planSuggestions = useMemo(() => directorShotSuggestions(shot), [shot]);
+    const planFieldProposals = useMemo(() => directorFieldProposals(shot, durationEditorConfig ?? { min: 3, max: 15 }), [shot, durationEditorConfig]);
 
     useEffect(() => {
         const ta = textareaRef.current;
@@ -809,6 +811,18 @@ export default function ShotCard({
                                 <Maximize2 size={12} aria-hidden="true" />
                             </button>
                         </div>
+                        {planFieldProposals.length > 0 && <details className="border-t border-border-subtle py-2 text-xs text-text-secondary">
+                            <summary className="cursor-pointer text-foreground">拍摄计划字段 · {planFieldProposals.length} 项待审</summary>
+                            <ul className="mt-2 divide-y divide-border-subtle">
+                                {planFieldProposals.map(({ field, label, current, proposed, unavailableReason }) => <li key={field} className="flex flex-wrap items-center gap-x-3 gap-y-1 py-2">
+                                    <span className="w-8 shrink-0 font-medium text-foreground">{label}</span>
+                                    <span className="min-w-0 flex-1 break-words">当前：{current}　计划：{proposed}{field === "duration" ? " 秒" : ""}</span>
+                                    {unavailableReason && <span className="text-accent">{unavailableReason}</span>}
+                                    <button type="button" className="shrink-0 text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/55 disabled:cursor-not-allowed disabled:text-text-muted disabled:no-underline"
+                                        aria-label={`采用${label}`} disabled={!!unavailableReason} onClick={() => onUpdateField(field, proposed)}>采用</button>
+                                </li>)}
+                            </ul>
+                        </details>}
                         {planSuggestions.length > 0 && <details className="rounded-md border border-glass-border px-3 py-2 text-xs text-text-secondary">
                             <summary className="cursor-pointer text-foreground">拍摄计划参考 · {planSuggestions.length} 条（不会自动加入生成提示词）</summary>
                             <ul className="mt-2 space-y-2">
