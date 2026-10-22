@@ -10,11 +10,12 @@ import type { DictionaryConfiguration } from "@/lib/characterDictionaryPresets";
 import CharacterPromptDictionary, { CharacterDictionaryHost } from "./CharacterPromptDictionary";
 
 export default function CharacterDesignPanel({ description, details, onDetailsChange, result, onResultChange,
-    identityFields, lookFields, onFieldsChange, onDictionaryFields, onDictionaryConfiguration, constraints, onConstraintsChange, supplemental, onSupplementalChange, reviewItems, models, model, onModelChange, busy, saving, canSave, canReedit, error, status, tab, onTabChange, onSubmit, onSave, onReedit,
+    identityFields, lookFields, onFieldsChange, onDictionaryFields, onDictionaryConfiguration, previousExpressionText, constraints, onConstraintsChange, supplemental, onSupplementalChange, reviewItems, models, model, onModelChange, busy, saving, canSave, canReedit, error, status, tab, onTabChange, onSubmit, onSave, onReedit,
 }: {
     description: string; details: string; onDetailsChange: (value: string) => void;
     result: string | null; onResultChange: (value: string) => void;
     onDictionaryConfiguration: (configuration: DictionaryConfiguration) => void;
+    previousExpressionText?: string;
     supplemental: string; onSupplementalChange: (value: string) => void;
     identityFields: IdentityFeatures; lookFields: LookFeatures;
     onFieldsChange: (section: "identity" | "look", key: string, value: string) => void;
@@ -112,7 +113,14 @@ export default function CharacterDesignPanel({ description, details, onDetailsCh
                     allowImplicitMentions={false} onSlashChange={setSlash}
                     onSlashKeyDown={event => keyHandler.current?.(event) || false} />
                 {slash && <CharacterPromptDictionary suggestion={slash} onClose={() => setSlash(null)}
-                    onConfiguration={onDictionaryConfiguration} onApply={(text, entry) => entry.structuredFields ? onDictionaryFields(text, entry.structuredFields, entry.remainingText || "") : onDetailsChange(text)} keyHandler={keyHandler} />}
+                    onConfiguration={onDictionaryConfiguration} onApply={(text, entry) => {
+                        if (entry.structuredFields) onDictionaryFields(text, entry.structuredFields, entry.remainingText || "");
+                        else if (entry.preset?.id === "dictionary.panel.expression") {
+                            const remaining = previousExpressionText
+                                ? (entry.remainingText || "").replace(previousExpressionText.trim(), "").trim() : entry.remainingText;
+                            onDictionaryFields(text, { identity: {}, look: {} }, [remaining, entry.text].filter(Boolean).join("\n"));
+                        } else onDetailsChange(text);
+                    }} keyHandler={keyHandler} />}
             </div>
         </div>
         {supplemental && <label className="block text-xs text-text-secondary">其他已输入细节

@@ -1164,6 +1164,7 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
         const legacyNotes = [identityEditorMode === "notes" ? designNotes : "", lookEditorMode === "notes" ? lookNotes : ""].filter(Boolean).join("\n");
         // Only remove exact text recorded by an applied panel; edited prose remains authored input.
         const previousPanelText = [...dictionaryConfigurations].reverse()
+            .filter(configuration => configuration.preset_id !== "dictionary.panel.expression")
             .map(configuration => configuration.rendered_text.trim())
             .find(rendered => rendered && remainingText?.includes(rendered));
         const authoredRemaining = previousPanelText
@@ -1180,6 +1181,7 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
     const designEditor = <CharacterDesignPanel
         description={asset.description} details={designInput}
         onDictionaryConfiguration={recordDictionaryConfiguration}
+        previousExpressionText={dictionaryConfigurations.find(configuration => configuration.preset_id === "dictionary.panel.expression")?.rendered_text}
         identityFields={identityFeatures} lookFields={lookFeatures}
         onFieldsChange={(section, key, value) => updateStructuredDesign(section === "identity" ? { [key]: value } : {}, section === "look" ? { [key]: value } : {})}
         onDictionaryFields={(text, fields, remaining) => {

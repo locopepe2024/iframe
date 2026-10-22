@@ -1071,6 +1071,32 @@ it("does not turn the previous panel preview into supplemental prose when applyi
     expect(screen.getByRole("textbox", { name: "其他已输入细节" })).toHaveValue("靛蓝外衣。");
 });
 
+it("keeps stable facial fields when an expression panel adds a temporary performance cue", async () => {
+    const { onUpdateAttributes } = mountSimpleDesign();
+    fireEvent.click(screen.getByRole("button", { name: "设计面板" }));
+    fireEvent.change(screen.getByRole("textbox", { name: "设计字段 · 唇形" }), { target: { value: "上唇略薄、下唇自然饱满" } });
+    fireEvent.click(screen.getByRole("button", { name: "关闭设计面板" }));
+    fireEvent.click(screen.getByRole("button", { name: "面板与模板" }));
+    fireEvent.click(await screen.findByRole("option", { name: /^表情$/ }));
+    fireEvent.change(screen.getByRole("combobox", { name: "表情" }), { target: { value: "忍不住笑" } });
+    fireEvent.click(screen.getByRole("button", { name: "应用配置" }));
+    act(() => designDetailsEditor().chain().insertContentAt(designDetailsEditor().state.doc.content.size, " /肤色").run());
+    fireEvent.click(await screen.findByRole("option", { name: /^肤色与肤质$/ }));
+    fireEvent.change(screen.getByRole("combobox", { name: "肤色" }), { target: { value: "暖小麦肤色" } });
+    fireEvent.click(screen.getByRole("button", { name: "应用配置" }));
+    fireEvent.click(screen.getByRole("button", { name: "面板与模板" }));
+    fireEvent.click(await screen.findByRole("option", { name: /^表情$/ }));
+    fireEvent.change(screen.getByRole("combobox", { name: "表情" }), { target: { value: "不动声色" } });
+    fireEvent.click(screen.getByRole("button", { name: "应用配置" }));
+    fireEvent.click(screen.getByRole("button", { name: /^保存并使用/ }));
+    await waitFor(() => expect(onUpdateAttributes).toHaveBeenCalled());
+    const design = onUpdateAttributes.mock.calls.at(-1)![0].character_design;
+    expect(design.identity.features.lips).toBe("上唇略薄、下唇自然饱满");
+    expect(design.identity.features.skin_tone).toBe("暖小麦肤色");
+    expect(design.design_result.prompt).not.toContain("嘴角明显上扬");
+    expect(design.design_result.prompt.match(/面部表情克制/g)).toHaveLength(1);
+});
+
 it('preserves authored negative prompt arrays through AI, confirmation and reload', async () => {
     const { onUpdateAttributes } = mountSimpleDesign();
     fireEvent.click(screen.getByRole('button', { name: '设计面板' }));
