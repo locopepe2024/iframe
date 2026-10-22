@@ -10,16 +10,18 @@
 
 ## 本片契约
 
-数据库路径必须显式指定，应用启动显式初始化，HTTP构造store不隐式建表。独立module/API router，不依赖有未提交修改的agent_api.py；不导入其数据库以免迁移或混写旧记忆。每用户最多200会话、每会话5000用户消息、10000条有效记忆；明确到上限报错，不静默截断。消息最大4000字；会话消息与记忆稳定序号keyset分页。模型上下文注入后续另定，不能称10000条都会发送模型。容量为Demo保护值，非准确率/性能承诺。
+数据库路径必须显式指定，应用启动显式初始化，HTTP构造store不隐式建表。独立module/API router，不依赖有未提交修改的agent_api.py；不导入其数据库以免迁移或混写旧记忆。每用户最多100个有效待确认预览、200会话、每会话5000用户消息、10000条有效记忆；明确到上限报错，不静默截断。消息最大4000字；会话消息与记忆稳定序号keyset分页。模型上下文注入后续另定，不能称10000条都会发送模型。容量为Demo保护值，非准确率/性能承诺。
 
 用户消息只接受text与operation_id，不接受role/owner；服务端产生ID、追加不可变消息。此API只记录用户文本，不产生假assistant消息。重试同operation_id内容相同返回原消息，不同报冲突。会话读取与记忆来源读取都校验owner，跨用户与不存在同404。当前不提供会话/消息删除，避免留下未定义的来源撤回行为；未来须设计撤回后上下文和记忆处理。
 
 memory.save提议需当前用户的source_message_id、逐字quote（必须是原文非空子串）、可编辑content、type（preference/personal_fact/photo_recollection）、importance1..5。展示原话和拟保存文字，二者不能混作事实；确认仅表示用户同意保存，不能证明客观真实性。photo_recollection仍属用户回忆，不当拍摄日期/身份事实。未知/伪造来源拒绝。预览15分钟有效，绑定owner、actor、内容、来源和操作；token随机且不包含个人资料。写入actor取当前请求身份，必须与预览一致。请求operation_id按owner唯一，重复返回回执，变更token/操作报409。
 
-memory.delete提议读取指定记忆、显示完整当前内容与来源；token绑定ID和当前内容版本摘要。无更新接口，删除后不可再次确认；同operation重试返回已删除回执，不把回执误当当前有效记忆。删除保留的回执只有ID/action/time，无content/quote副本。已删除记忆不出现在search/list/get；原用户消息独立保留并明确说明，不宣称清除完整聊天。预览表删除/失效处理不得保留内容副本：保存预览只保留source ID与draft供确认，15分钟后在下一次显式写操作清理过期预览；删除记忆时清除该记忆的其他预览。取消不写memory，只删除/不提交预览。
+memory.delete提议读取指定记忆、显示完整当前内容与来源；token绑定ID和当前内容版本摘要。无更新接口，删除后不可再次确认；同operation重试返回已删除回执，不把回执误当当前有效记忆。删除保留的回执只有ID/action/time，无content/quote副本。已删除记忆不出现在search/list/get；原用户消息独立保留并明确说明，不宣称清除完整聊天。预览表删除/失效处理不得保留内容副本：保存预览只保留source ID与draft供确认，15分钟后在下一次成功的预览或确认操作清理过期预览；删除记忆时清除该记忆的其他预览。取消不写memory，只删除/不提交预览。
 
-memory.search必须使用query参与连续文字匹配（content或quote），不以高重要度无关条目冒充命中；LIKE特殊字符视为普通文字。可按类型/最低重要度筛选，按importance DESC、ID ASC稳定分页，cursor绑定query/type/min_importance。不声称分词、向量或语义检索。memory.list按ID分页列全部有效记忆，可筛类型/最低重要度；无隐含最近100条限制。读取工具不写最终记忆、不执行模型，空结果明确空。工具dispatch严格校验参数，拒绝额外owner/actor/method及未知工具；save/delete只返回pending_confirmation。
+memory.search必须使用query参与连续文字匹配（content或quote），不以高重要度无关条目冒充命中；LIKE特殊字符视为普通文字。可按类型/最低重要度筛选，按importance DESC、ID ASC稳定分页，cursor绑定owner/query/type/min_importance。不声称分词、向量或语义检索。memory.list按ID分页列全部有效记忆，可筛类型/最低重要度；无隐含最近100条限制。读取工具不写最终记忆、不执行模型，空结果明确空。工具dispatch严格校验参数，拒绝额外owner/actor/method及未知工具；save/delete只返回pending_confirmation。
 
 ## 成功标准/路径
 
 新增src/apps/companion_runtime/{store,api,tools}.py和专用tests，不改既有聊天/照片API默认挂载。用真实SQLite验证owner隔离、真实检索/特殊字符、按类型/重要度/游标分页、超过100条可查询、来源校验、未确认零记忆写入、取消、过期、绑定actor、伪造method/来源、同操作幂等、并发确认及事务回滚、删除后所有读入口不可见且回执无内容。现有照片测试回归按影响选择；不把独立路由TestClient验证当部署或真实模型调用证据。
+
+取消接口只关闭预览，不撤销已确认的操作，返回preview_closed及说明；重复取消不推断先前是否已写入。记忆删除不会抹除原用户消息；回执重放不重新写入已删除记忆。
