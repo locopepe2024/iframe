@@ -1,4 +1,5 @@
 import hashlib
+from concurrent.futures import ThreadPoolExecutor
 from io import BytesIO
 
 import pytest
@@ -7,6 +8,7 @@ from PIL import Image
 from tests.test_photos_analysis import setup
 from src.apps.identity import UserContext, require_user_context
 from src.apps.photos.intake import PhotoIntakeStore
+from src.apps.photos.media import prepare_photo
 
 
 def image(color='blue'):
@@ -79,6 +81,19 @@ def test_multiple_photos_share_one_scoped_time_consent_and_page(setup):
     rest = client.get('/photos/upload-batches?limit=1&after_id=batch-a').json()
     assert rest['batches'][0]['batch_id'] == 'batch-b'
     assert rest['next_after_id'] is None
+
+
+def test_concurrent_item_retry_commits_one_photo(setup):
+    _, original, _, _ = setup
+    store = PhotoIntakeStore(original.path, initialize=False)
+    raw = image()
+    store.create_intake('owner', 'concurrent', [item(raw)])
+    prepared = prepare_photo(raw)
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        receipts = list(pool.map(lambda _: store.upload_intake_item('owner', 'concurrent', 'one', prepared), range(2)))
+    assert sorted(row['created'] for row in receipts) == [False, True]
+    assert receipts[0]['photo_id'] == receipts[1]['photo_id']
+    assert store.intake('owner', 'concurrent')['counts'] == dict(pending=0, uploaded=1, failed=0)
 
 
 @pytest.mark.parametrize('items', [[], [item(b'a')]*2, [item(b'a', str(i)) for i in range(21)],
