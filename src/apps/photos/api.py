@@ -15,7 +15,7 @@ from ..identity import UserContext, require_user_context
 from .date_store import OperationConflict, PhotoNotAvailable, TimeConsentRequired
 from .dates import DateRevisionConflict, ManualPrecision
 from . import media
-from .people_review import PhotoPeopleReviewStore
+from .people_corrections import PhotoPeopleCorrectionStore as PhotoPeopleReviewStore
 from .people_tasks import PeopleConsentRequired
 from .analysis import analyze_photo, AnalysisUnavailable, AnalysisCredentialRejected
 
@@ -45,6 +45,28 @@ class PeopleReviewRequest(BaseModel):
     consent_version: int = Field(ge=1)
     action: Literal["confirm","split","defer"]
     label: str = Field(default="",max_length=80)
+
+
+class PeopleFaceSelection(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+    task_id: str = Field(min_length=1,max_length=80)
+    face_id: str = Field(min_length=1,max_length=80)
+
+
+class PeopleCorrectionSelection(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+    action: Literal["remove","split","merge","undo_batch"]
+    person_id: str = Field(default="",max_length=80)
+    target_id: str = Field(default="",max_length=80)
+    batch_id: str = Field(default="",max_length=80)
+    members: list[PeopleFaceSelection] = Field(default_factory=list,max_length=400)
+    label: str = Field(default="",max_length=80)
+
+
+class PeopleCorrectionRequest(PeopleCorrectionSelection):
+    operation_id: str = Field(min_length=1,max_length=120,pattern=r"^[a-zA-Z0-9_-]+$")
+    preview_token: str = Field(pattern=r"^[a-f0-9]{64}$")
+    method: Literal["button"]
 
 
 class DateMutation(BaseModel):
@@ -221,6 +243,24 @@ def people_albums(identity: Owner, store: Store, after_id: str = Query(default="
 def person_photos(person_id: str, identity: Owner, store: Store, after_id: str = Query(default="",max_length=80), limit: int = Query(default=20,ge=1,le=100)):
     with api_errors():
         return store.person_photos(identity.owner_profile_id,person_id,after_id=after_id,limit=limit)
+
+
+@router.post("/people-corrections/preview")
+def people_correction_preview(body: PeopleCorrectionSelection, identity: Owner, store: Store):
+    with api_errors():
+        return store.people_correction_preview(identity.owner_profile_id, **body.model_dump())
+
+
+@router.post("/people-corrections")
+def correct_people(body: PeopleCorrectionRequest, identity: Owner, store: Store):
+    with api_errors():
+        return store.correct_people(identity.owner_profile_id, identity.user_id, **body.model_dump(exclude={"method"}))
+
+
+@router.get("/people-corrections/history")
+def people_correction_history(identity: Owner, store: Store, after: int = Query(default=0,ge=0), limit: int = Query(default=20,ge=1,le=100)):
+    with api_errors():
+        return store.people_correction_history(identity.owner_profile_id,after=after,limit=limit)
 
 
 @router.get("/batches/{batch_id}/undo-time-preview")

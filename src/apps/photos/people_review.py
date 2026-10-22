@@ -133,5 +133,6 @@ class PhotoPeopleReviewStore(PhotoPeopleStore):
             photos=[]
             for photo in ids[:limit]:
                 boxes=[json.loads(row[0]) for row in connection.execute('SELECT box FROM photo_people_members WHERE owner=? AND person_id=? AND photo_id=?',(owner,person,photo))]
-                photos.append(dict(photo_id=photo,boxes=boxes))
+                members=[dict(row) for row in connection.execute('SELECT task_id,face_id,box FROM photo_people_members WHERE owner=? AND person_id=? AND photo_id=? ORDER BY task_id,face_id',(owner,person,photo))]
+                photos.append(dict(photo_id=photo,boxes=boxes,members=[{**m,'box':json.loads(m['box'])} for m in members]))
             return dict(photos=photos,next_after_id=ids[limit-1] if len(ids)>limit else None)

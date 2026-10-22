@@ -94,7 +94,7 @@ class PhotoPeopleStore(PhotoUndoStore):
 
     def _clear_people_candidates(self, connection, owner, batch):
         # Only automatic, unconfirmed suggestions are removed with features.
-        connection.execute("DELETE FROM photo_people_groups WHERE owner=? AND status!='confirmed' AND task_id IN (SELECT task_id FROM photo_people_tasks WHERE owner=? AND batch_id=?)", (owner,owner,batch))
+        connection.execute("DELETE FROM photo_people_groups WHERE owner=? AND status NOT IN ('confirmed','corrected') AND task_id IN (SELECT task_id FROM photo_people_tasks WHERE owner=? AND batch_id=?)", (owner,owner,batch))
 
     def _people_task(self, connection, owner, task):
         row = connection.execute('SELECT * FROM photo_people_tasks WHERE owner=? AND task_id=?',(owner,task)).fetchone()

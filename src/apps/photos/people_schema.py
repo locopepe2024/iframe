@@ -71,3 +71,17 @@ CREATE TABLE IF NOT EXISTS photo_people_review_events (
  PRIMARY KEY(owner,group_id,operation_id)
 );
 """
+
+PEOPLE_SCHEMA += """
+CREATE TABLE IF NOT EXISTS photo_people_manual_members (
+ owner TEXT NOT NULL, task_id TEXT NOT NULL, face_id TEXT NOT NULL,
+ operation_id TEXT NOT NULL,
+ PRIMARY KEY(owner,task_id,face_id)
+);
+CREATE TABLE IF NOT EXISTS photo_people_correction_events (
+ sequence INTEGER PRIMARY KEY AUTOINCREMENT,
+ owner TEXT NOT NULL, operation_id TEXT NOT NULL, request TEXT NOT NULL,
+ actor TEXT NOT NULL, result TEXT NOT NULL, created_at REAL NOT NULL,
+ UNIQUE(owner,operation_id)
+);
+"""
