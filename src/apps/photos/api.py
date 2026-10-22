@@ -1,27 +1,28 @@
-"""Isolated local photo Demo API; no public consent or worker endpoints yet."""
+"""Isolated local photo Demo API with explicit consent and synchronous date rules."""
 
 import os
 import sqlite3
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Annotated
+from typing import Annotated, Literal
 
 from fastapi import APIRouter, Depends, FastAPI, HTTPException, Query, Request, Response, Path as APIPath
 from starlette.concurrency import run_in_threadpool
 from pydantic import BaseModel, ConfigDict, Field
 
 from ..identity import UserContext, require_user_context
-from .date_store import DateStore, OperationConflict, PhotoNotAvailable, TimeConsentRequired
+from .date_store import OperationConflict, PhotoNotAvailable, TimeConsentRequired
 from .dates import DateRevisionConflict, ManualPrecision
 from . import media
+from .workflow import PhotoWorkflowStore
 
 
-def get_store() -> DateStore:
+def get_store() -> PhotoWorkflowStore:
     configured = os.getenv("IFRAME_PHOTOS_LOCAL_DB_PATH", "")
     path = Path(configured)
     if not configured or not path.is_absolute() or not path.is_file():
         raise HTTPException(503, "Photo storage is not configured")
-    return DateStore(path, initialize=False)
+    return PhotoWorkflowStore(path, initialize=False)
 
 
 class DateMutation(BaseModel):
@@ -39,6 +40,18 @@ class DateCorrection(DateMutation):
 
 class DateRestoration(DateMutation):
     target_revision: int = Field(ge=1)
+
+
+class TimeAnswer(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+    question_id: str = Field(min_length=1, max_length=80)
+    granted: bool
+    method: Literal["button", "voice_confirmed"]
+
+
+class TimeRevocation(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+    expected_consent_version: int = Field(ge=0)
 
 
 @contextmanager
@@ -60,8 +73,45 @@ def api_errors():
 # Demo uses the existing workspace identity, including browser/key-fingerprint
 # scopes. Replace this dependency with registered-account auth before production.
 Owner = Annotated[UserContext, Depends(require_user_context)]
-Store = Annotated[DateStore, Depends(get_store)]
+Store = Annotated[PhotoWorkflowStore, Depends(get_store)]
 router = APIRouter(prefix="/photos", tags=["photo-date-trial"])
+
+
+@router.post("/batches/{batch_id}/time-question", status_code=201)
+def time_question(batch_id: str, identity: Owner, store: Store):
+    with api_errors():
+        return store.time_question(identity.owner_profile_id, batch_id)
+
+
+@router.post("/batches/{batch_id}/time-consent")
+def time_answer(batch_id: str, body: TimeAnswer, identity: Owner, store: Store):
+    with api_errors():
+        return store.answer_time(identity.owner_profile_id, batch_id,
+                                 actor=identity.user_id, **body.model_dump())
+
+
+@router.post("/batches/{batch_id}/revoke-time")
+def revoke_time(batch_id: str, body: TimeRevocation, identity: Owner, store: Store):
+    with api_errors():
+        return store.revoke_time(identity.owner_profile_id, batch_id,
+                                 actor=identity.user_id, **body.model_dump())
+
+
+@router.post("/{photo_id}/organize-time")
+def organize_time(photo_id: str, body: DateMutation, identity: Owner, store: Store):
+    with api_errors():
+        return store.organize_time(owner=identity.owner_profile_id, photo_id=photo_id,
+                                   actor=identity.user_id, **body.model_dump())
+
+
+@router.get("/albums")
+def albums(identity: Owner, store: Store, view: Literal["all", "pending"] = "all",
+            year: int | None = Query(default=None, ge=1, le=9999),
+            after_id: str = Query(default="", max_length=80),
+            limit: int = Query(default=50, ge=1, le=100)):
+    with api_errors():
+        return store.album_page(identity.owner_profile_id, view=view, year=year,
+                                after_id=after_id, limit=limit)
 
 
 @router.post("/uploads/{upload_id}", status_code=201)

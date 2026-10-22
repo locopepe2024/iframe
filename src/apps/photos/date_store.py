@@ -42,7 +42,7 @@ class DateChange(Snapshot):
     actor: str
     created_at: datetime
     operation_id: str
-    kind: Literal["register", "correct", "restore"]
+    kind: Literal["register", "correct", "restore", "organize"]
     restored_from_revision: int | None = None
 
 
@@ -78,11 +78,39 @@ CREATE TABLE IF NOT EXISTS photo_media (
 CREATE TABLE IF NOT EXISTS photo_date_history (
     owner TEXT NOT NULL, photo_id TEXT NOT NULL, revision INTEGER NOT NULL,
     operation_id TEXT NOT NULL, request TEXT NOT NULL,
-    kind TEXT NOT NULL CHECK(kind IN ('register', 'correct', 'restore')),
+    kind TEXT NOT NULL CHECK(kind IN ('register', 'correct', 'restore', 'organize')),
     change_json TEXT NOT NULL,
     PRIMARY KEY(owner, photo_id, revision),
     UNIQUE(owner, photo_id, operation_id),
     FOREIGN KEY(owner, photo_id) REFERENCES photo_date_states(owner, photo_id)
+);
+CREATE TABLE IF NOT EXISTS photo_time_questions (
+    owner TEXT NOT NULL, batch_id TEXT NOT NULL, question_id TEXT NOT NULL,
+    consent_version INTEGER NOT NULL, expires_at TEXT NOT NULL,
+    question_version INTEGER NOT NULL, processing_location TEXT NOT NULL,
+    question_text TEXT NOT NULL,
+    PRIMARY KEY(owner, batch_id), UNIQUE(question_id),
+    FOREIGN KEY(owner, batch_id) REFERENCES photo_time_consents(owner, batch_id)
+);
+CREATE TABLE IF NOT EXISTS photo_time_question_answers (
+    owner TEXT NOT NULL, batch_id TEXT NOT NULL, question_id TEXT NOT NULL,
+    granted INTEGER NOT NULL, consent_version INTEGER NOT NULL,
+    actor TEXT NOT NULL, method TEXT NOT NULL, processing_location TEXT NOT NULL,
+    question_version INTEGER NOT NULL, created_at TEXT NOT NULL,
+    PRIMARY KEY(owner, question_id),
+    FOREIGN KEY(owner, batch_id) REFERENCES photo_time_consents(owner, batch_id)
+);
+CREATE TABLE IF NOT EXISTS photo_date_noop_receipts (
+    owner TEXT NOT NULL, photo_id TEXT NOT NULL, operation_id TEXT NOT NULL,
+    request TEXT NOT NULL, result TEXT NOT NULL,
+    PRIMARY KEY(owner, photo_id, operation_id),
+    FOREIGN KEY(owner, photo_id) REFERENCES photo_date_states(owner, photo_id)
+);
+CREATE TABLE IF NOT EXISTS photo_time_revocations (
+    owner TEXT NOT NULL, batch_id TEXT NOT NULL, previous_version INTEGER NOT NULL,
+    actor TEXT NOT NULL, result_version INTEGER NOT NULL,
+    PRIMARY KEY(owner, batch_id, previous_version),
+    FOREIGN KEY(owner, batch_id) REFERENCES photo_time_consents(owner, batch_id)
 );
 """
 
@@ -97,6 +125,19 @@ class DateStore:
         if initialize:
             with self._connection() as connection:
                 connection.executescript(_SCHEMA)
+            # Explicit local migration: expand the old history CHECK while
+            # retaining every row. HTTP constructs initialize=False stores.
+            with self._connection(write=True) as connection:
+                definition = connection.execute(
+                    "SELECT sql FROM sqlite_master WHERE name = 'photo_date_history'"
+                ).fetchone()[0]
+                if "'organize'" not in definition:
+                    connection.execute("ALTER TABLE photo_date_history RENAME TO old_date_history")
+                    start = _SCHEMA.index("CREATE TABLE IF NOT EXISTS photo_date_history")
+                    end = _SCHEMA.index(";", start) + 1
+                    connection.execute(_SCHEMA[start:end])
+                    connection.execute("INSERT INTO photo_date_history SELECT * FROM old_date_history")
+                    connection.execute("DROP TABLE old_date_history")
 
     @contextmanager
     def _connection(self, *, write=False):
@@ -271,12 +312,31 @@ class DateStore:
                 if previous["request"] != request:
                     raise OperationConflict("Operation ID was used for another request")
                 return DateChange.model_validate_json(previous["change_json"]).after
+            noop = connection.execute(
+                "SELECT request, result FROM photo_date_noop_receipts "
+                "WHERE owner = ? AND photo_id = ? AND operation_id = ?",
+                (owner, photo_id, operation_id),
+            ).fetchone()
+            if noop:
+                if noop["request"] != request:
+                    raise OperationConflict("Operation ID was used for another request")
+                return DateAnnotation.model_validate_json(noop["result"])
             current = DateAnnotation.model_validate_json(row["annotation"])
             if expected_revision != current.revision:
                 raise DateRevisionConflict("Date changed; reload before confirming")
             target_revision = payload.get("target_revision")
             if kind == "correct":
                 after = correct_date(current, expected_revision=expected_revision, **payload)
+            elif kind == "organize":
+                after = resolve_photo_date(
+                    PhotoTimeEvidence.model_validate_json(row["evidence"]), current=current,
+                )
+                if after == current:
+                    connection.execute(
+                        "INSERT INTO photo_date_noop_receipts VALUES (?, ?, ?, ?, ?)",
+                        (owner, photo_id, operation_id, request, current.model_dump_json()),
+                    )
+                    return current
             else:
                 target = connection.execute(
                     "SELECT change_json FROM photo_date_history "

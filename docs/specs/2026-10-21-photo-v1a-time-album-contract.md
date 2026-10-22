@@ -1,7 +1,7 @@
 # 老人照片 V1-A：时间相册工程契约草案
 
 日期：2026-10-21
-状态：日期规则、本地历史/恢复、独立 Demo API 与真实单图上传/读取已实现并通过定向测试；完整整理服务和页面未完成、未部署。不据此宣布生产存储部署或正式身份方案已最终确定。
+状态：日期规则、本地历史/恢复、独立 Demo API、真实单图上传/读取、授权问题及同步时间整理/列表已实现并通过定向测试；后台任务、多批次撤销和页面未完成、未部署。不据此宣布生产存储部署或正式身份方案已最终确定。
 
 上游基线：`/Users/owen/Developer/codex/docs/photo-organization-mvp-2026-10-21.md`。
 模型/Skill 梳理：`/Users/owen/Developer/codex/docs/photo-album-memory-model-skill-map-2026-10-21.md`。
@@ -37,6 +37,16 @@ CopilotKit 评估：`/Users/owen/Developer/codex/docs/copilotkit-companion-evalu
 数据库是授权、任务和已确认标注的事实源。原图存储受保护，缩略图按 EXIF 方向生成；日期归档不移动或重写原图。只在授权后进行时间整理，上传阶段仅做文件校验/缩略图和必要元数据保存，不创建相册关系。未获人物授权绝不执行检测、特征或聚类。
 
 ## API 候选（命名可在实现时按项目约定调整）
+
+### Demo 授权与同步整理切片（2026-10-22）
+
+单照片批次先采用同步 EXIF 整理，不伪装后台任务。服务端创建一次性授权问题，固定 time scope、问题文本版本及“当前 Demo 服务端本地处理，无外部模型”披露，绑定 owner、batch 与 consent_version；有效期 15 分钟。确认/拒绝需当前 question_id，旧授权版本或已过期问题拒绝；同问题同回答重试幂等，不同回答冲突。新问题使同批次旧问题失效。记录真实 actor、确认方式与服务端时间。
+
+撤回使用 expected_consent_version，原子递增版本并记录审计；重复提交同一撤回幂等；撤回不删除已提交日期/原图。授权后显式执行同步整理，传 consent_version、日期 expected_revision 和 operation_id，事务提交前核验授权，用户确认日期保持不变。新增 organize 历史类型，已有本地历史表通过显式初始化迁移保留；HTTP 不自动迁移。
+
+提供年份/待确认列表分页，区分 not_processed、parsed、confirmed、pending_confirmation，显示数据来自持久化标注。不增加人脸、外部模型、后台租约、多批次撤销或人物授权。验证覆盖真实上传→授权→整理→列表→更正/恢复及撤回阻断，问题跨 owner/过期/失效/重试与审计。
+
+实施结果：96 项照片后端测试通过（其中 workflow 8 项）。真实合成图片经 HTTP 完成上传、问题创建、回答、同步整理、年份/待确认查询与撤回阻断。补充验证分页无重复、无改动的整理请求回执、旧 history CHECK 迁移保留数据。命令：`.venv/bin/python -m pytest -q tests/test_photos_dates.py tests/test_photos_date_store.py tests/test_photos_api.py tests/test_photos_upload.py tests/test_photos_workflow.py`。不将该 HTTP 测试当作网页端到端、真实长者实测或后台 worker 验证。
 
 ### 真实图片上传切片（2026-10-22 已验证）
 
