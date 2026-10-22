@@ -10,11 +10,12 @@ import type { DictionaryConfiguration } from "@/lib/characterDictionaryPresets";
 import CharacterPromptDictionary, { CharacterDictionaryHost } from "./CharacterPromptDictionary";
 
 export default function CharacterDesignPanel({ description, details, onDetailsChange, result, onResultChange,
-    identityFields, lookFields, onFieldsChange, onDictionaryFields, onDictionaryConfiguration, previousExpressionText, constraints, onConstraintsChange, supplemental, onSupplementalChange, reviewItems, models, model, onModelChange, busy, saving, canSave, canReedit, error, status, tab, onTabChange, onSubmit, onSave, onReedit,
+    identityFields, lookFields, onFieldsChange, onDictionaryFields, onDictionaryConfiguration, configurations, previousExpressionText, constraints, onConstraintsChange, supplemental, onSupplementalChange, reviewItems, models, model, onModelChange, busy, saving, canSave, canReedit, error, status, tab, onTabChange, onSubmit, onSave, onReedit,
 }: {
     description: string; details: string; onDetailsChange: (value: string) => void;
     result: string | null; onResultChange: (value: string) => void;
     onDictionaryConfiguration: (configuration: DictionaryConfiguration) => void;
+    configurations: DictionaryConfiguration[];
     previousExpressionText?: string;
     supplemental: string; onSupplementalChange: (value: string) => void;
     identityFields: IdentityFeatures; lookFields: LookFeatures;
@@ -112,7 +113,7 @@ export default function CharacterDesignPanel({ description, details, onDetailsCh
                     placeholder="角色设计，/ 选择词典，[] 调整细节" openSlashRequest={openSlashRequest}
                     allowImplicitMentions={false} onSlashChange={setSlash}
                     onSlashKeyDown={event => keyHandler.current?.(event) || false} />
-                {slash && <CharacterPromptDictionary suggestion={slash} onClose={() => setSlash(null)}
+                {slash && <CharacterPromptDictionary suggestion={slash} onClose={() => setSlash(null)} configurations={configurations}
                     onConfiguration={onDictionaryConfiguration} onApply={(text, entry) => {
                         if (entry.structuredFields) onDictionaryFields(text, entry.structuredFields, entry.remainingText || "");
                         else if (entry.preset?.id === "dictionary.panel.expression") {

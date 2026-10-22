@@ -1,20 +1,31 @@
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { expect, it, vi } from "vitest";
 import CharacterPromptDictionary from "./CharacterPromptDictionary";
+import type { DictionaryConfiguration } from "@/lib/characterDictionaryPresets";
 
 const { getPlatformReferenceLibrary } = vi.hoisted(() => ({ getPlatformReferenceLibrary: vi.fn() }));
 vi.mock("@/lib/api", () => ({ api: { getPlatformReferenceLibrary } }));
 
-function setup(query: string, slot?: string) {
+function setup(query: string, slot?: string, configurations?: DictionaryConfiguration[]) {
   const replaceWithText = vi.fn((text: string) => `前文 ${text} 后文`);
   const onApply = vi.fn();
   const onClose = vi.fn();
   const onConfiguration = vi.fn();
   const keyHandler = { current: null as ((event: KeyboardEvent) => boolean) | null };
-  render(<CharacterPromptDictionary suggestion={{ query, slot, replaceWithText }} onApply={onApply}
+  render(<CharacterPromptDictionary suggestion={{ query, slot, replaceWithText }} configurations={configurations} onApply={onApply}
     onClose={onClose} onConfiguration={onConfiguration} keyHandler={keyHandler} />);
   return { replaceWithText, onApply, onClose, onConfiguration, keyHandler };
 }
+
+it("restores valid saved choices and ignores options retired from the current panel", () => {
+  getPlatformReferenceLibrary.mockResolvedValueOnce({ resources: [] });
+  const configuration = { preset_id: "dictionary.panel.face", selections: { 肤色: "暖小麦肤色", 肤质: "已停用肤质" } } as DictionaryConfiguration;
+  setup("面容", undefined, [configuration]);
+  fireEvent.click(screen.getByRole("option", { name: /^面容$/ }));
+  expect(screen.getByRole("combobox", { name: "肤色" })).toHaveValue("暖小麦肤色");
+  expect(screen.getByRole("combobox", { name: "肤质" })).toHaveValue("");
+  expect(configuration.selections.肤质).toBe("已停用肤质");
+});
 
 it('keeps face shape, forehead, cheekbones and jaw independent through apply', () => {
   getPlatformReferenceLibrary.mockResolvedValueOnce({ resources: [] });

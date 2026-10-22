@@ -1181,6 +1181,7 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
     const designEditor = <CharacterDesignPanel
         description={asset.description} details={designInput}
         onDictionaryConfiguration={recordDictionaryConfiguration}
+        configurations={dictionaryConfigurations}
         previousExpressionText={dictionaryConfigurations.find(configuration => configuration.preset_id === "dictionary.panel.expression")?.rendered_text}
         identityFields={identityFeatures} lookFields={lookFeatures}
         onFieldsChange={(section, key, value) => updateStructuredDesign(section === "identity" ? { [key]: value } : {}, section === "look" ? { [key]: value } : {})}

@@ -37,11 +37,12 @@ export const CharacterDictionaryHost = createContext<HTMLElement | null>(null);
 
 const buttonStyle = "min-h-11 rounded px-2 text-xs focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary hover:bg-hover-bg";
 
-export default function CharacterPromptDictionary({ suggestion, onClose, onApply, keyHandler, onConfiguration }: {
+export default function CharacterPromptDictionary({ suggestion, onClose, onApply, keyHandler, onConfiguration, configurations }: {
   suggestion: PromptSlashSuggestion;
   onClose: () => void;
   onApply: (text: string, source: Entry) => void;
   onConfiguration?: (configuration: DictionaryConfiguration) => void;
+  configurations?: DictionaryConfiguration[];
   keyHandler: MutableRefObject<((event: KeyboardEvent) => boolean) | null>;
 }) {
   const host = useContext(CharacterDictionaryHost);
@@ -159,7 +160,13 @@ export default function CharacterPromptDictionary({ suggestion, onClose, onApply
       label: entry.type === "配置面板" ? CHARACTER_PANEL_LABELS[entry.id] || entry.title : `${entry.type === "词条" ? "选项" : entry.type === "Prompt 案例" ? "Prompt 模板" : entry.type} · ${entry.title}`,
       detail: browsing && entry.type === "配置面板" ? "选择款式并调整细节" : entry.type === "词条"
         ? `${entry.categories.map(dictionaryCategoryPath).filter(Boolean).join("、") || entry.domain} · ${entry.text}`
-        : `${entry.domain} · ${entry.source}`, choose: () => { setSelected(entry); setFieldValues({}); } }))),
+        : `${entry.domain} · ${entry.source}`, choose: () => {
+          setSelected(entry);
+          const saved = entry.type === "配置面板" ? configurations?.find(item => item.preset_id === entry.id)?.selections : undefined;
+          setFieldValues(entry.preset && saved ? Object.fromEntries(dictionaryPresetFields(entry.preset, saved)
+            .flatMap(field => saved[field.key] !== undefined && field.options.includes(saved[field.key])
+              ? [[field.key, saved[field.key]]] : [])) : {});
+        } }))),
     ...related.map(key => ({ id: `browse-${key}`, label: `浏览 ${dictionaryCategoryPath(key)}`, detail: `${count(key)} 个选项，可比较其他描述`, choose: () => enterCategory(key) })),
   ];
   useEffect(() => {

@@ -1038,6 +1038,26 @@ it("saves dictionary face choices as fields and keeps the remaining clothing tex
     }) }));
 });
 
+it("restores a panel's saved selections when reopening it after save and reload", async () => {
+    const { onUpdateAttributes } = mountSimpleDesign();
+    fireEvent.click(screen.getByRole("button", { name: "面板与模板" }));
+    fireEvent.click(await screen.findByRole("option", { name: /^面容$/ }));
+    fireEvent.change(screen.getByRole("combobox", { name: "肤色" }), { target: { value: "暖小麦肤色" } });
+    fireEvent.click(screen.getByRole("button", { name: "应用配置" }));
+    fireEvent.click(screen.getByRole("button", { name: "面板与模板" }));
+    fireEvent.click(await screen.findByRole("option", { name: /^面容$/ }));
+    expect(screen.getByRole("combobox", { name: "肤色" })).toHaveValue("暖小麦肤色");
+    fireEvent.click(screen.getByRole("button", { name: "关闭面板" }));
+    fireEvent.click(screen.getByRole("button", { name: /^保存并使用/ }));
+    await waitFor(() => expect(onUpdateAttributes).toHaveBeenCalled());
+    const design = onUpdateAttributes.mock.calls.at(-1)![0].character_design;
+    cleanup();
+    mountSimpleDesign({ character_design: { design_draft: design } });
+    fireEvent.click(screen.getByRole("button", { name: "面板与模板" }));
+    fireEvent.click(await screen.findByRole("option", { name: /^面容$/ }));
+    expect(screen.getByRole("combobox", { name: "肤色" })).toHaveValue("暖小麦肤色");
+});
+
 it("does not turn the previous panel preview into supplemental prose when applying a second panel", async () => {
     const { onUpdateAttributes } = mountSimpleDesign();
     act(() => designDetailsEditor().chain().selectAll().insertContent({ type: "text", text: "靛蓝外衣。 /面容" }).run());
