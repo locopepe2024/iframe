@@ -20,10 +20,16 @@ Port 3443 has a separate TLS nginx listener (`/etc/nginx/sites-available/iframe-
 
 Rollback: restore `/etc/nginx/sites-available/garage.uniart.fun` from `/srv/lumenx/companion-demo/garage.nginx.before-preview`, remove only the demo site's enabled symlink, run `sudo nginx -t` then reload nginx, and stop `iframe-companion-demo`. Retain the data directory unless deletion is separately requested. The server-side `enable-preview.py` and original nginx backup are under `/srv/lumenx/companion-demo/`.
 
-Known navigation limit: the photo page's plain “返回陪伴首页” link still points to `/companion` outside the preview prefix. Use the explicit companion entry above during this test; a prefix-aware navigation change is a separate UI fix.
+The earlier navigation limit was fixed in c4fa248d: “返回陪伴首页” uses `/companion-demo/companion` in the preview build. Public browser regression verified this prefix.
 
 ## Qwen current-user channel update
 
 The demo now also mounts `/srv/lumenx/output/lumenx_users.db` read-only at `/user-config/lumenx_users.db`, selected with `IFRAME_PHOTOS_USER_CONFIG_DB`. No production data directory or provider environment key is mounted. Photo analysis passes the request's existing UserContext into the shared user-config decryption path and requires a personal UniArt configuration; shared-provider fallback is disabled for this path. The model is `qwen3.8-flash`. The original container was retained stopped as `iframe-companion-demo-before-user-channel` for rollback; restoring its old behavior also requires restoring its source files from the previous release backup.
 
 Observed: the user's uploaded photo belongs to the same API-key owner as an existing personal configuration. An authorized real HTTP photo-analysis request succeeded using that configuration; the structured observation persisted and reread identically, while the date remained unchanged. Only success metadata and field lengths were printed by the verification script, not photo descriptions or credentials. The earlier 401 applies to the stale shared environment key, not this verified personal configuration. Single-image success does not verify video analysis or general accuracy. Code validation: 103 backend tests, 16 UI tests, typecheck and isolated static build passed. No branch push/merge.
+
+## Photo storytelling update
+
+Deployed source/frontend revision: `1fe936ef` (backend story storage commit `c299fef6`). Same container, release paths and persistent database; startup explicitly creates the new append-only `photo_stories` table. Existing personal photos and their review status were not changed by test scripts. No new provider call is needed for storytelling. No push/merge.
+
+Validation: 112 photo backend tests, 35 companion UI tests, typecheck and isolated static build passed. Public Chrome/CDP regression used a new synthetic image/owner: text preview and cancellation, simulated voice draft, explicit save, edits, history restore as revision 3, reload persistence and unchanged date passed. Existing description flow/recovery and microphone handoff also passed. Layout checks found no horizontal overflow at 320×568, 375×812 with root font at 200%, and 844×390. Targets were checked at >=44px; CSS specifies 48px. No screenshot, recording, or actual user's photo was collected. DOM clicks/simulated speech do not establish physical touch reliability, real microphone behavior or elderly usability. Health reports `source_revision=1fe936ef`.
