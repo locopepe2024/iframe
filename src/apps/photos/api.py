@@ -233,6 +233,12 @@ def review_people_group(group_id: str, body: PeopleReviewRequest, identity: Owne
         return store.review_people_group(identity.owner_profile_id,group_id,identity.user_id,**body.model_dump())
 
 
+@router.get("/people-reviews")
+def pending_people_reviews(identity: Owner, store: Store, after_id: str = Query(default="",max_length=80), limit: int = Query(default=20,ge=1,le=100)):
+    with api_errors():
+        return store.pending_people_reviews(identity.owner_profile_id,after_id=after_id,limit=limit)
+
+
 @router.get("/people-albums")
 def people_albums(identity: Owner, store: Store, after_id: str = Query(default="",max_length=80), limit: int = Query(default=20,ge=1,le=100)):
     with api_errors():

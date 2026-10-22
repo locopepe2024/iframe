@@ -10,6 +10,30 @@ from .faces import FaceObservation, CandidateFace, candidate_groups
 
 
 class PhotoPeopleReviewStore(PhotoPeopleStore):
+    def pending_people_reviews(self, owner, *, after_id='', limit=20):
+        """Current-authorized suggestions only; reading never performs analysis."""
+        if not 1 <= limit <= 100:
+            raise ValueError('Invalid review page')
+        with self._connection() as connection:
+            rows = connection.execute("""SELECT t.task_id,t.batch_id,t.consent_version,
+                    SUM(CASE WHEN g.status='pending' THEN 1 ELSE 0 END) AS pending_groups,
+                    SUM(CASE WHEN g.status='deferred' THEN 1 ELSE 0 END) AS deferred_groups
+                FROM photo_people_tasks t
+                JOIN photo_people_consents c ON c.owner=t.owner AND c.batch_id=t.batch_id
+                JOIN photo_people_groups g ON g.owner=t.owner AND g.task_id=t.task_id
+                WHERE t.owner=? AND t.task_id>? AND t.fingerprint=?
+                    AND c.granted=1 AND c.version=t.consent_version
+                    AND g.status IN ('pending','deferred')
+                GROUP BY t.task_id ORDER BY t.task_id LIMIT ?""",
+                (owner, after_id, FINGERPRINT, limit+1)).fetchall()
+            reviews = []
+            for row in rows[:limit]:
+                groups = connection.execute("SELECT members FROM photo_people_groups WHERE owner=? AND task_id=? AND status IN ('pending','deferred')",
+                                            (owner, row['task_id'])).fetchall()
+                photo_ids = {member['photo_id'] for group in groups for member in json.loads(group['members'])}
+                reviews.append(dict(row, photo_count=len(photo_ids)))
+            return dict(reviews=reviews, next_after_id=rows[limit-1]['task_id'] if len(rows)>limit else None)
+
     def people_tasks(self, owner, batch):
         with self._connection() as connection:
             self._batch(connection,owner,batch)
