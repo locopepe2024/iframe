@@ -22,6 +22,12 @@ export interface UploadBatch {
   items: (UploadManifestItem & { status: "pending" | "uploaded" | "failed"; photo_id: string | null; error_code: string | null })[];
   counts: { pending: number; uploaded: number; failed: number };
 }
+export interface PhotoTimeTask {
+  task_id: string; batch_id: string; status: "queued" | "running" | "completed" | "needs_confirmation" | "partial_failed" | "failed" | "cancelled";
+  consent_version: number; created_at: string;
+  counts: { pending: number; completed: number; needs_confirmation: number; failed: number; cancelled: number };
+  items: { photo_id: string; expected_revision: number; status: string; error_code: string | null; result: PhotoDateAnnotation | null }[];
+}
 export interface DescriptionReview { revision: number; description: string; actor: string; created_at: string }
 export interface PhotoStory { revision: number; text: string; actor: string; created_at: string }
 export interface TimeQuestion { question_id: string; text: string }
@@ -52,6 +58,8 @@ function serviceError(status: number) {
     : "服务暂不可用，请稍后重试。");
 }
 export const photoApi = {
+  timeTasks: (id: string) => request<PhotoTimeTask[]>(`/batches/${encodeURIComponent(id)}/time-tasks`),
+  createTimeTask: (id: string, body: { operation_id: string; consent_version: number; retry_task_id?: string }) => request<PhotoTimeTask>(`/batches/${encodeURIComponent(id)}/time-tasks`, "POST", body),
   fingerprint: async (file: File) => {
     const digest = await crypto.subtle.digest("SHA-256", await file.arrayBuffer());
     return Array.from(new Uint8Array(digest), byte => byte.toString(16).padStart(2, "0")).join("");
