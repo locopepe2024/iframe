@@ -280,8 +280,9 @@ it("groups 60 expressions and keeps the role design interface static", () => {
   const { replaceWithText } = setup("表情");
   fireEvent.click(screen.getByRole("option", { name: /^表情$/ }));
   const select = screen.getByRole("combobox", { name: "表情" });
-  expect(select.querySelectorAll("optgroup")).toHaveLength(6);
-  expect(select.querySelectorAll("optgroup option")).toHaveLength(60);
+  expect(select.querySelectorAll("optgroup")).toHaveLength(7);
+  expect(select.querySelectorAll("optgroup:not([label='可调整组合']) option")).toHaveLength(60);
+  expect(select.querySelectorAll("optgroup[label='可调整组合'] option")).toHaveLength(13);
   fireEvent.change(select, { target: { value: "被背叛的怒" } });
   const text = (screen.getByRole("textbox", { name: "将插入的完整文字" }) as HTMLTextAreaElement).value;
   expect(text).toContain("目光冰冷");
@@ -583,37 +584,45 @@ it('searches modules locally and only inserts the preview after confirmation', (
 });
 
 
-it("filters expression templates and applies editable performance with a structured configuration", () => {
+it("edits an expression combination inside the existing expression panel", () => {
   getPlatformReferenceLibrary.mockResolvedValueOnce({ resources: [] });
   const onApply = vi.fn();
   const onConfiguration = vi.fn();
-  render(<CharacterPromptDictionary suggestion={{ query: "", replaceWithText: text => text }} onApply={onApply}
+  render(<CharacterPromptDictionary suggestion={{ query: "表情", replaceWithText: text => text }} onApply={onApply}
     onClose={vi.fn()} onConfiguration={onConfiguration} keyHandler={{ current: null }} />);
-  fireEvent.click(screen.getByRole("tab", { name: "Prompt 模板" }));
-  fireEvent.click(screen.getByRole("option", { name: /^角色设计/ }));
-  fireEvent.change(screen.getByRole("combobox", { name: "角色模板类型" }), { target: { value: "expression" } });
-  fireEvent.change(screen.getByRole("combobox", { name: "模板题材" }), { target: { value: "现代" } });
-  fireEvent.change(screen.getByRole("combobox", { name: "模板画风" }), { target: { value: "真人写实" } });
-  expect(screen.queryByRole("option", { name: /Prompt 模板 · 写实真人古装/ })).not.toBeInTheDocument();
-  fireEvent.click(screen.getByRole("option", { name: /Prompt 模板 · 角色表情 · 含泪强忍/ }));
+  fireEvent.click(screen.getByRole("option", { name: /^表情$/ }));
+  fireEvent.change(screen.getByRole("combobox", { name: "表情" }), { target: { value: "角色表情 · 含泪强忍" } });
   fireEvent.change(screen.getByRole("combobox", { name: "嘴部表现" }), { target: { value: "嘴唇微张" } });
   fireEvent.change(screen.getByRole("combobox", { name: "面部气色" }), { target: { value: "" } });
   const text = (screen.getByRole("textbox", { name: "将插入的完整文字" }) as HTMLTextAreaElement).value;
   expect(text).toContain("嘴部表现：嘴唇微微张开。");
   expect(text).not.toMatch(/面部气色|秒|随后|背景|肤质/);
-  fireEvent.click(screen.getByRole("button", { name: "使用此模板" }));
+  fireEvent.click(screen.getByRole("button", { name: "应用配置" }));
   expect(onApply).toHaveBeenCalledWith(text, expect.objectContaining({ structuredFields: undefined }));
   expect(onConfiguration).toHaveBeenCalledWith(expect.objectContaining({
-    preset_id: "dictionary.template.expression.held-tears",
+    preset_id: "dictionary.panel.expression",
+    selections: expect.objectContaining({ 表情: "角色表情 · 含泪强忍" }),
     resolved_fields: expect.objectContaining({ 嘴部表现: "嘴唇微微张开" }), rendered_text: text,
   }));
+});
+it("clears combination details when switching back to a single expression", () => {
+  getPlatformReferenceLibrary.mockResolvedValueOnce({ resources: [] });
+  const { replaceWithText } = setup("表情");
+  fireEvent.click(screen.getByRole("option", { name: /^表情$/ }));
+  const select = screen.getByRole("combobox", { name: "表情" });
+  fireEvent.change(select, { target: { value: "角色表情 · 含泪强忍" } });
+  fireEvent.change(screen.getByRole("combobox", { name: "嘴部表现" }), { target: { value: "嘴唇微张" } });
+  fireEvent.change(select, { target: { value: "平静克制" } });
+  expect(screen.queryByRole("combobox", { name: "嘴部表现" })).not.toBeInTheDocument();
+  expect(screen.getByRole("textbox", { name: "将插入的完整文字" })).toHaveValue("表情：眼神稳定，眉头放松，嘴唇自然闭合，脸上没有明显笑意。");
+  fireEvent.click(screen.getByRole("button", { name: "应用配置" }));
+  expect(replaceWithText).toHaveBeenCalled();
 });
 it("keeps full role templates available independently", () => {
   getPlatformReferenceLibrary.mockResolvedValueOnce({ resources: [] });
   setup("");
   fireEvent.click(screen.getByRole("tab", { name: "Prompt 模板" }));
   fireEvent.click(screen.getByRole("option", { name: /^角色设计/ }));
-  fireEvent.change(screen.getByRole("combobox", { name: "角色模板类型" }), { target: { value: "design" } });
   expect(screen.getByRole("option", { name: /Prompt 模板 · 写实真人古装/ })).toBeInTheDocument();
   expect(screen.queryByRole("option", { name: /Prompt 模板 · 角色表情/ })).not.toBeInTheDocument();
 });

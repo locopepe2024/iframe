@@ -10,7 +10,7 @@ import { CHARACTER_DICTIONARY_PRESETS, dictionaryPresetFields, configurationQuer
 import { IDENTITY_FIELDS, LOOK_FIELDS, type IdentityFeatures, type LookFeatures } from "@/lib/characterStructuredDesign";
 import { editablePlatformPrompt, isUsablePlatformPrompt } from "@/lib/platformPrompts";
 import { CHARACTER_DICTIONARY_GROUPS, dictionaryCategoryPath, dictionaryCategorySearch, dictionarySlotCategory, localDictionaryCategories, platformDictionaryCategories } from "@/lib/characterDictionaryCategories";
-import { PROMPT_TASKS, PROMPT_TOPICS, PROMPT_STYLES, templateDimensions, characterTemplateKind, type PromptTask } from "@/lib/promptTemplateCategories";
+import { PROMPT_TASKS, PROMPT_TOPICS, PROMPT_STYLES, templateDimensions, type PromptTask } from "@/lib/promptTemplateCategories";
 import { CHARACTER_PANEL_GROUPS, CHARACTER_PANEL_LABELS, CHARACTER_PANEL_ORDER, characterPanelGroup } from "@/lib/characterPanelCatalog";
 import type { PromptSlashSuggestion } from "./playground/ReferencePromptEditor";
 import type { CharacterConstraints } from "@/lib/characterStructuredDesign";
@@ -75,7 +75,6 @@ export default function CharacterPromptDictionary({ suggestion, onClose, onApply
   const [task, setTask] = useState<PromptTask | null>(null);
   const [promptTag, setPromptTag] = useState("");
   const [editedText, setEditedText] = useState<string | null>(null);
-  const [characterKind, setCharacterKind] = useState("");
   const [topic, setTopic] = useState("");
   const [style, setStyle] = useState("");
   const [category, setCategory] = useState<string | null>(null);
@@ -90,7 +89,10 @@ export default function CharacterPromptDictionary({ suggestion, onClose, onApply
   const needle = searchQuery.trim().toLocaleLowerCase();
   const quickPanels = section === "基础面板" && !suggestion.slot;
   const selectedFields = selected?.preset ? dictionaryPresetFields(selected.preset, fieldValues) : [];
-  const fieldGroups = selected?.preset?.sections
+  const fieldGroups = selected?.id === "dictionary.panel.expression" ? [
+    { label: "整体表情", fields: selectedFields.filter(field => field.key === "表情") },
+    ...selectedFields.filter(field => field.key !== "表情").map(field => ({ label: field.label, fields: [field] })),
+  ] : selected?.preset?.sections
     ? selected.preset.sections.map((section) => ({ label: section.label, fields: selectedFields.filter((field) => section.parts.some((part) => part.includes(`[${field.key}]`))) })).filter((group) => group.fields.length > 0)
     : [{ label: "选择细节，预览同步更新", fields: selectedFields }];
   const selectedText = editedText ?? (selected ? suggestion.slot ? selected.slotValue || selected.text
@@ -175,12 +177,12 @@ export default function CharacterPromptDictionary({ suggestion, onClose, onApply
     } else if (!template) return false;
     if (!browsing && needle && !`${CHARACTER_PANEL_LABELS[entry.id] || ""} ${entry.title} ${entry.search} ${entry.text} ${entry.categories.map(dictionaryCategorySearch).join(" ")}`.toLocaleLowerCase().includes(needle)) return false;
     if (section === "Prompt 模板") {
+      if (entry.categories.includes("expression-template")) return false;
       const dimensions = templateDimensions(entry.title, entry.search);
-      const kind = characterTemplateKind(entry.title, entry.categories);
-      const neutralExpression = kind === "expression";
-      return (task !== "character" || !characterKind || kind === characterKind)
-        && (!task || (entry.promptTask ? entry.promptTask === task : dimensions.tasks.includes(task))) && (!promptTag || entry.promptTag === promptTag) && (!topic || neutralExpression || dimensions.topics.includes(topic as typeof PROMPT_TOPICS[number]))
-        && (!style || neutralExpression || dimensions.styles.includes(style as typeof PROMPT_STYLES[number]));
+      return (!task || (entry.promptTask ? entry.promptTask === task : dimensions.tasks.includes(task)))
+        && (!promptTag || entry.promptTag === promptTag)
+        && (!topic || dimensions.topics.includes(topic as typeof PROMPT_TOPICS[number]))
+        && (!style || dimensions.styles.includes(style as typeof PROMPT_STYLES[number]));
     }
     return section === "基础面板" || !browsing || !category || inCategory(entry, category);
   }).sort((a, b) => quickPanels ? CHARACTER_PANEL_ORDER.indexOf(a.id) - CHARACTER_PANEL_ORDER.indexOf(b.id) : 0);
@@ -215,10 +217,10 @@ export default function CharacterPromptDictionary({ suggestion, onClose, onApply
   useEffect(() => {
     setSearchQuery(suggestion.query);
     setActive(0); setSelected(null); setFieldValues({}); setCategory(dictionarySlotCategory(suggestion.slot)); setBrowsing(!externalNeedle);
-    setTask(null); setPromptTag(""); setCharacterKind(""); setTopic(""); setStyle("");
+    setTask(null); setPromptTag(""); setTopic(""); setStyle("");
     setSection(suggestion.slot ? "词典" : /^(古装|古风|现代|女装|动漫|国风|换装|写真|电商|风格|运镜|九宫格|多视图|推演|ugc)$/i.test(externalNeedle) ? "Prompt 模板" : !externalNeedle || isConfigurationQuery(externalNeedle) ? "基础面板" : "词典");
   }, [externalNeedle, suggestion.slot, suggestion.contextKey]);
-  useEffect(() => { setActive(0); setSelected(null); }, [section, category, browsing, task, characterKind, topic, style, needle, promptTag]);
+  useEffect(() => { setActive(0); setSelected(null); }, [section, category, browsing, task, topic, style, needle, promptTag]);
   useEffect(() => { setEditedText(null); }, [selected]);
   const back = () => {
     if (selected) setSelected(null);
@@ -302,11 +304,14 @@ export default function CharacterPromptDictionary({ suggestion, onClose, onApply
               });
             }}
             className="mt-1 min-h-11 w-full rounded border border-glass-border bg-surface px-2 text-sm text-foreground focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary">
-            {dictionarySlotCategory(field.label) === "expression" ? <>
+            {selected.id === "dictionary.panel.expression" && field.key === "表情" ? <>
               {field.options.includes("") && <option value="">不指定</option>}
               {CHARACTER_DICTIONARY_GROUPS.find((group) => group.id === "expression")!.children.map(([key, label]) => <optgroup key={key} label={label}>
                 {CHARACTER_DICTIONARY_PRESETS.filter((term) => term.type === "词条" && term.categories.includes(key)).map((term) => <option key={term.id} value={term.title}>{term.title}</option>)}
               </optgroup>)}
+              <optgroup label="可调整组合">
+                {field.options.filter(value => value.startsWith("角色表情 · ")).map(value => <option key={value} value={value}>{value}</option>)}
+              </optgroup>
               <option value={`[${field.label}]`}>稍后填写 [{field.label}]</option>
             </> : field.options.map((value) => <option key={value} value={value}>{value === "" ? "不指定" : value.startsWith("[") ? `稍后填写 ${value}` : value}</option>)}
           </select>
@@ -325,9 +330,6 @@ export default function CharacterPromptDictionary({ suggestion, onClose, onApply
       {section === "Prompt 模板" && !suggestion.slot && <div className="mt-2 flex flex-wrap gap-2">
         {task && <button type="button" onClick={() => { setTask(null); setPromptTag(""); }} className={buttonStyle}>返回任务分类</button>}
         {task && <span className="py-3 text-xs text-text-secondary">{PROMPT_TASKS.find(([key]) => key === task)?.[1]}</span>}
-        {task === "character" && <label className="text-xs text-text-secondary">模板类型<select aria-label="角色模板类型" value={characterKind} onChange={event => setCharacterKind(event.target.value)} className="ml-1 min-h-11 rounded border border-glass-border bg-surface px-2">
-          <option value="">全部</option><option value="design">完整设计</option><option value="expression">角色表情</option>
-        </select></label>}
         {task && ['visual-style', 'camera-motion'].includes(task) && <label className="text-xs text-text-secondary">分类<select aria-label="来源模板分类" value={promptTag} onChange={event => setPromptTag(event.target.value)} className="ml-1 min-h-11 rounded border border-glass-border bg-surface px-2">
           <option value="">全部</option>{Array.from(new Set(OPEN_AI_CANVAS_PROMPTS.filter(entry => entry.promptTask === task).map(entry => entry.promptTag))).filter(Boolean).map(tag => <option key={tag}>{tag}</option>)}
         </select></label>}

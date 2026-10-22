@@ -117,6 +117,13 @@ export function renderDictionaryPreset(preset: CharacterDictionaryPreset, values
       return value ? [`${labels[field.key] || field.label}：${field.output?.[value] ?? value}`] : [];
     }).join("\n");
   }
+  if (preset.id === "dictionary.panel.expression") {
+    const choice = values["表情"] || "";
+    const combination = CHARACTER_EXPRESSION_PROMPTS.find(item => item.title === choice);
+    if (combination) return renderDictionaryPreset(combination, values);
+    const term = CHARACTER_EXPRESSION_TERMS.find(item => item.title === choice);
+    if (term) return `表情：${term.slotValue || term.text}`;
+  }
   if (!preset.sections) return substitute(preset.text);
   return preset.sections.flatMap((section) => {
     const sectionFields = fields.filter((field) => section.parts.some((part) => part.includes(`[${field.key}]`)));
@@ -134,6 +141,17 @@ export function renderDictionaryPreset(preset: CharacterDictionaryPreset, values
 
 /** Both reusable templates and Skill [slots] draw their choices from the dictionary. */
 export function dictionaryPresetFields(preset: CharacterDictionaryPreset, values: Record<string, string> = {}): OutfitField[] {
+  if (preset.id === "dictionary.panel.expression") {
+    const terms = CHARACTER_EXPRESSION_TERMS;
+    const choice: OutfitField = {
+      key: "表情", label: "表情", value: "",
+      options: ["", ...terms.map(item => item.title), ...CHARACTER_EXPRESSION_PROMPTS.map(item => item.title), "[表情]"],
+      output: Object.fromEntries(terms.map(item => [item.title, item.slotValue || item.text])),
+      dependentKeys: CHARACTER_EXPRESSION_PROMPTS[0].fields?.map(field => field.key),
+    };
+    const combination = CHARACTER_EXPRESSION_PROMPTS.find(item => item.title === values["表情"]);
+    return combination ? [choice, ...dictionaryPresetFields(combination, values)] : [choice];
+  }
   if (preset.fields) return preset.fields;
   if (preset.type !== "Prompt 模板" && preset.type !== "配置面板") return [];
   const defaults: Record<string, string> = { "角色定位": "行旅侠客", "外衣颜色": "靛蓝色", "下装颜色": "浅灰色", "外衣面料": "棉布", "表情": "平静克制", ...preset.defaults };
