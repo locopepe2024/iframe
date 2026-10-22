@@ -83,7 +83,7 @@ class PhotoDate(Snapshot):
 class DateAnnotation(Snapshot):
     date: PhotoDate | None
     status: Literal["parsed", "confirmed", "pending_confirmation"]
-    reason: Literal["missing", "invalid", "conflict"] | None = None
+    reason: Literal["missing", "invalid", "conflict", "not_processed"] | None = None
     source: Literal["exif", "user", "none"]
     revision: int = Field(ge=1)
     evidence: tuple[ExifCaptureTime, ...] = ()
