@@ -114,6 +114,7 @@ export default function CharacterDesignPanel({ description, details, onDetailsCh
                     allowImplicitMentions={false} onSlashChange={setSlash}
                     onSlashKeyDown={event => keyHandler.current?.(event) || false} />
                 {slash && <CharacterPromptDictionary suggestion={slash} onClose={() => setSlash(null)} configurations={configurations}
+                    currentFields={{ identity: identityFields, look: lookFields }}
                     onConfiguration={onDictionaryConfiguration} onApply={(text, entry) => {
                         if (entry.structuredFields) onDictionaryFields(text, entry.structuredFields, entry.remainingText || "");
                         else if (entry.preset?.id === "dictionary.panel.expression") {

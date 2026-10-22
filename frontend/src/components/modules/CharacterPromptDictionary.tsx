@@ -7,6 +7,7 @@ import { createPortal } from "react-dom";
 import { API_URL, api, authenticatedFetch, type PlatformReferenceResource } from "@/lib/api";
 import { searchCharacterQuickPresets } from "@/lib/characterQuickActions";
 import { CHARACTER_DICTIONARY_PRESETS, dictionaryPresetFields, configurationQueryCategory, isConfigurationQuery, renderDictionaryPreset, dictionaryStructuredFields, dictionaryConfiguration, type DictionaryConfiguration, type CharacterDictionaryPreset } from "@/lib/characterDictionaryPresets";
+import { IDENTITY_FIELDS, LOOK_FIELDS, type IdentityFeatures, type LookFeatures } from "@/lib/characterStructuredDesign";
 import { editablePlatformPrompt, isUsablePlatformPrompt } from "@/lib/platformPrompts";
 import { CHARACTER_DICTIONARY_GROUPS, dictionaryCategoryPath, dictionaryCategorySearch, dictionarySlotCategory, localDictionaryCategories, platformDictionaryCategories } from "@/lib/characterDictionaryCategories";
 import { PROMPT_TASKS, PROMPT_TOPICS, PROMPT_STYLES, templateDimensions, characterTemplateKind, type PromptTask } from "@/lib/promptTemplateCategories";
@@ -37,12 +38,13 @@ export const CharacterDictionaryHost = createContext<HTMLElement | null>(null);
 
 const buttonStyle = "min-h-11 rounded px-2 text-xs focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary hover:bg-hover-bg";
 
-export default function CharacterPromptDictionary({ suggestion, onClose, onApply, keyHandler, onConfiguration, configurations }: {
+export default function CharacterPromptDictionary({ suggestion, onClose, onApply, keyHandler, onConfiguration, configurations, currentFields }: {
   suggestion: PromptSlashSuggestion;
   onClose: () => void;
   onApply: (text: string, source: Entry) => void;
   onConfiguration?: (configuration: DictionaryConfiguration) => void;
   configurations?: DictionaryConfiguration[];
+  currentFields?: { identity: IdentityFeatures; look: LookFeatures };
   keyHandler: MutableRefObject<((event: KeyboardEvent) => boolean) | null>;
 }) {
   const host = useContext(CharacterDictionaryHost);
@@ -74,6 +76,15 @@ export default function CharacterPromptDictionary({ suggestion, onClose, onApply
     : [{ label: "选择细节，预览同步更新", fields: selectedFields }];
   const selectedText = editedText ?? (selected ? suggestion.slot ? selected.slotValue || selected.text
     : selected.preset ? renderDictionaryPreset(selected.preset, fieldValues) : selected.text : "");
+  const savedSelection = selected?.preset && configurations?.find(item => item.preset_id === selected.id);
+  const projectedFields = savedSelection && selected?.preset ? dictionaryStructuredFields(selected.preset, fieldValues) : null;
+  const fieldLabels = Object.fromEntries([...IDENTITY_FIELDS, ...LOOK_FIELDS]);
+  const conflictingFields = projectedFields && currentFields ? [
+    ...Object.entries(projectedFields.identity).filter(([key, value]) => currentFields.identity[key as keyof IdentityFeatures] !== value)
+      .map(([key]) => fieldLabels[key] || key),
+    ...Object.entries(projectedFields.look).filter(([key, value]) => currentFields.look[key as keyof LookFeatures] !== value)
+      .map(([key]) => fieldLabels[key] || key),
+  ] : [];
   useEffect(() => {
     setPreviewUrl("");
     const resource = selected?.resource;
@@ -273,8 +284,9 @@ export default function CharacterPromptDictionary({ suggestion, onClose, onApply
       {previewUrl && <img src={previewUrl} alt={`${selected.title} 案例预览`} className="mt-2 max-h-40 w-full rounded object-contain" />}
       <label className="mt-2 block text-xs text-text-secondary" htmlFor={`${id}-preview`}>将插入的完整文字</label>
       <textarea id={`${id}-preview`} readOnly={!selected.editableText} value={selectedText} onChange={event => setEditedText(event.target.value)} placeholder="选择项目后在此预览；不指定的项目不会写入。" rows={5} className="mt-1 w-full rounded border border-glass-border bg-surface p-2 text-xs text-foreground" />
+      {conflictingFields.length > 0 && <p role="status" className="mt-2 text-xs text-amber-300">当前设计中的{conflictingFields.join("、")}已与此面板上次应用的值不同。再次应用会用上方选择覆盖这些字段。</p>}
       <p className="mt-1 text-xs text-text-muted">{suggestion.slot ? `仅替换当前 [${suggestion.slot}]，保留模板其他文字与参考图；也可关闭后手动填写。` : selected.editableText ? "可直接修改预览文字，确认后换行追加到提示词末尾；参考图和出图参数由你另行选择。" : selected.type === "配置面板" ? "先在面板选择细节，确认后应用预览文字；也可保留 [变量] 稍后填写。" : selected.type === "Prompt 模板" ? "先选择细节并预览；模板将换行追加到提示词末尾，也可保留 [变量] 稍后填写。" : "替换光标处的 /检索词，保留其他文字与参考图；插入后可编辑。"}</p>
-      <button type="button" disabled={!selectedText.trim()} onClick={apply} className={`${buttonStyle} mt-2 bg-primary text-primary-foreground disabled:opacity-50`}>{suggestion.slot ? "填写当前槽位" : selected.type === "配置面板" ? "应用配置" : selected.type === "Prompt 模板" ? "使用此模板" : "插入到当前 Prompt"}</button>
+      <button type="button" disabled={!selectedText.trim()} onClick={apply} className={`${buttonStyle} mt-2 bg-primary text-primary-foreground disabled:opacity-50`}>{suggestion.slot ? "填写当前槽位" : selected.type === "配置面板" ? conflictingFields.length ? "覆盖冲突并应用" : "应用配置" : selected.type === "Prompt 模板" ? "使用此模板" : "插入到当前 Prompt"}</button>
       <button type="button" onClick={() => setSelected(null)} className={`${buttonStyle} ml-2`}>返回结果</button>
     </> : <>
       {section === "Prompt 模板" && !suggestion.slot && <div className="mt-2 flex flex-wrap gap-2">

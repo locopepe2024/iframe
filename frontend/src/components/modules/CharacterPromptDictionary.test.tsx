@@ -1,7 +1,7 @@
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { expect, it, vi } from "vitest";
 import CharacterPromptDictionary from "./CharacterPromptDictionary";
-import type { DictionaryConfiguration } from "@/lib/characterDictionaryPresets";
+import { CHARACTER_DICTIONARY_PRESETS, dictionaryConfiguration, type DictionaryConfiguration } from "@/lib/characterDictionaryPresets";
 
 const { getPlatformReferenceLibrary } = vi.hoisted(() => ({ getPlatformReferenceLibrary: vi.fn() }));
 vi.mock("@/lib/api", () => ({ api: { getPlatformReferenceLibrary } }));
@@ -19,7 +19,8 @@ function setup(query: string, slot?: string, configurations?: DictionaryConfigur
 
 it("restores valid saved choices and ignores options retired from the current panel", () => {
   getPlatformReferenceLibrary.mockResolvedValueOnce({ resources: [] });
-  const configuration = { preset_id: "dictionary.panel.face", selections: { 肤色: "暖小麦肤色", 肤质: "已停用肤质" } } as DictionaryConfiguration;
+  const configuration = dictionaryConfiguration(CHARACTER_DICTIONARY_PRESETS.find(item => item.id === "dictionary.panel.face")!, { 肤色: "暖小麦肤色" });
+  configuration.selections.肤质 = "已停用肤质";
   setup("面容", undefined, [configuration]);
   fireEvent.click(screen.getByRole("option", { name: /^面容$/ }));
   expect(screen.getByRole("combobox", { name: "肤色" })).toHaveValue("暖小麦肤色");
