@@ -5,6 +5,7 @@ import time
 import pytest
 from fastapi import HTTPException
 from src.apps.comic_gen.extraction_jobs import ExtractionJobs
+from src.apps.comic_gen.llm import DirectorShootingChunkError
 
 
 def wait_done(store, job):
@@ -72,6 +73,37 @@ def test_failure_is_explicit_and_retryable(tmp_path):
         retry = store.start('owner', 'project', 'key', lambda: {})
         assert retry['id'] != job['id']
     assert wait_done(store, retry)['status'] == 'completed'
+
+
+def test_shooting_plan_contract_failure_is_owner_scoped_and_specific(tmp_path):
+    with ThreadPoolExecutor(max_workers=1) as executor:
+        store = ExtractionJobs(tmp_path / 'jobs.db', executor=executor)
+
+        def fail():
+            raise DirectorShootingChunkError('contract_violation', 'scene 2 必须包含 beat')
+
+        job = store.start('owner', 'project', 'director_shooting_plan:revision', fail)
+        done = wait_done(store, job)
+        assert done['status'] == 'failed'
+        assert 'scene 2 必须包含 beat' in done['error']
+        assert done['progress'] is None
+        with pytest.raises(HTTPException) as denied:
+            store.get('other', 'project', job['id'])
+        assert denied.value.status_code == 404
+
+
+def test_shooting_plan_unknown_failure_does_not_expose_exception_text(tmp_path):
+    with ThreadPoolExecutor(max_workers=1) as executor:
+        store = ExtractionJobs(tmp_path / 'jobs.db', executor=executor)
+
+        def fail():
+            raise RuntimeError('private screenplay and provider token')
+
+        job = store.start('owner', 'project', 'director_shooting_plan:revision', fail)
+        done = wait_done(store, job)
+        assert done['status'] == 'failed'
+        assert 'private screenplay' not in done['error']
+        assert '导演拍摄计划分析失败' in done['error']
 
 
 def test_interrupted_job_is_failed_and_can_be_retried_after_restart(tmp_path):

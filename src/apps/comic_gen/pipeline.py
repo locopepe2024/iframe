@@ -74,7 +74,7 @@ from .models import (
     normalize_director_profile_draft,
 )
 from .asset_revisions import commit_asset_revision
-from .llm import ScriptProcessor, numbered_episode_headings
+from .llm import DirectorShootingChunkError, ScriptProcessor, numbered_episode_headings
 from .structured_evidence import source_version
 from .assets import AssetGenerator
 from .storyboard import StoryboardGenerator
@@ -4515,15 +4515,20 @@ class ComicGenPipeline(StudioOwnerMixin):
                     }
                 if skill_snapshot:
                     entities["selected_creative_methods"] = skill_snapshot
-                chunk_result = self.script_processor.plan_director_shooting_chunk(
-                    chunk["text"],
-                    entities,
-                    director_execution_payload(profile),
-                    self.storyboard_visual_style(script),
-                    previous_scene,
-                    source_ref=chunk["source_ref"],
-                    **({"model": model} if model else {}),
-                )
+                try:
+                    chunk_result = self.script_processor.plan_director_shooting_chunk(
+                        chunk["text"],
+                        entities,
+                        director_execution_payload(profile),
+                        self.storyboard_visual_style(script),
+                        previous_scene,
+                        source_ref=chunk["source_ref"],
+                        **({"model": model} if model else {}),
+                    )
+                except DirectorShootingChunkError as exc:
+                    raise DirectorShootingChunkError(
+                        exc.category, f"第 {index + 1}/{len(chunks)} 段：{exc.public_reason}"
+                    ) from exc
                 chunk_error = ScriptProcessor._validate_director_shooting_chunk(chunk_result)
                 if chunk_error:
                     raise RuntimeError(

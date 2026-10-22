@@ -5,7 +5,7 @@ from unittest.mock import Mock
 import pytest
 from pydantic import ValidationError
 
-from src.apps.comic_gen.llm import ScriptProcessor, split_director_source
+from src.apps.comic_gen.llm import DirectorShootingChunkError, ScriptProcessor, split_director_source
 from src.apps.comic_gen.models import (
     ArtDirection,
     Character,
@@ -242,6 +242,27 @@ def test_llm_accepts_missing_visual_atoms_for_downstream_editing():
     assert result["scenes"][0]["beats"][0]["shots"][0]["action_physics"] == ""
     assert processor.llm.chat.call_count == 1
     assert processor.llm.chat.call_args.kwargs["stream"] is True
+
+
+@pytest.mark.parametrize(
+    ("response", "category", "reason"),
+    [
+        ('{"scenes": [', "invalid_json", "JSON 格式错误"),
+        ('{"scenes": []}', "contract_violation", "必须返回至少一个 scene"),
+    ],
+)
+def test_shooting_plan_reports_bounded_model_contract_failure(response, category, reason):
+    processor = ScriptProcessor.__new__(ScriptProcessor)
+    processor.llm = Mock(is_configured=True)
+    processor.llm.chat.return_value = response
+
+    with pytest.raises(DirectorShootingChunkError) as failure:
+        processor.plan_director_shooting_chunk("场景原文", {}, {}, {})
+
+    assert failure.value.category == category
+    assert reason in failure.value.public_reason
+    assert response not in failure.value.public_reason
+    assert processor.llm.chat.call_count == 2
 
 
 def test_shooting_plan_passes_selected_polish_model_to_llm():
@@ -1139,6 +1160,24 @@ def test_long_plan_batch_cache_shape_resumes_completed_chunks(monkeypatch):
     assert len(plan.scenes) == 1
     assert plan.scenes[0].source_chunk_refs == chunk_refs
     assert len(plan.scenes[0].beats) == 2
+
+
+def test_plan_contract_failure_identifies_source_chunk(monkeypatch):
+    pipeline, _ = make_pipeline()
+    chunks = [
+        {"source_ref": "source:first", "text": "scene start"},
+        {"source_ref": "source:second", "text": "scene continuation"},
+    ]
+    monkeypatch.setattr("src.apps.comic_gen.llm.split_director_source", lambda *args, **kwargs: chunks)
+    pipeline.script_processor.plan_director_shooting_chunk.side_effect = [
+        valid_chunk(), DirectorShootingChunkError("contract_violation", "必须返回至少一个 scene"),
+    ]
+
+    with pytest.raises(DirectorShootingChunkError) as failure:
+        pipeline.preview_director_shooting_plan("film")
+
+    assert "第 2/2 段" in failure.value.public_reason
+    assert "必须返回至少一个 scene" in failure.value.public_reason
 
 
 def test_continued_scene_retains_first_continuity_ids_and_flags_chunk_conflict(monkeypatch):
