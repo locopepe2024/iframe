@@ -1,18 +1,19 @@
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { expect, it, vi } from "vitest";
 import CharacterPromptDictionary from "./CharacterPromptDictionary";
-import { CHARACTER_DICTIONARY_PRESETS, dictionaryConfiguration, type DictionaryConfiguration } from "@/lib/characterDictionaryPresets";
+import { CHARACTER_DICTIONARY_PRESETS, dictionaryConfiguration, dictionaryStructuredFields, type DictionaryConfiguration } from "@/lib/characterDictionaryPresets";
+import type { IdentityFeatures, LookFeatures } from "@/lib/characterStructuredDesign";
 
 const { getPlatformReferenceLibrary } = vi.hoisted(() => ({ getPlatformReferenceLibrary: vi.fn() }));
 vi.mock("@/lib/api", () => ({ api: { getPlatformReferenceLibrary } }));
 
-function setup(query: string, slot?: string, configurations?: DictionaryConfiguration[]) {
+function setup(query: string, slot?: string, configurations?: DictionaryConfiguration[], currentFields?: { identity: IdentityFeatures; look: LookFeatures }) {
   const replaceWithText = vi.fn((text: string) => `前文 ${text} 后文`);
   const onApply = vi.fn();
   const onClose = vi.fn();
   const onConfiguration = vi.fn();
   const keyHandler = { current: null as ((event: KeyboardEvent) => boolean) | null };
-  render(<CharacterPromptDictionary suggestion={{ query, slot, replaceWithText }} configurations={configurations} onApply={onApply}
+  render(<CharacterPromptDictionary suggestion={{ query, slot, replaceWithText }} configurations={configurations} currentFields={currentFields} onApply={onApply}
     onClose={onClose} onConfiguration={onConfiguration} keyHandler={keyHandler} />);
   return { replaceWithText, onApply, onClose, onConfiguration, keyHandler };
 }
@@ -34,10 +35,21 @@ it.each([
 ] as const)("inherits shared footwear selections from %s when opening a different panel", (sourceId, targetLabel) => {
   getPlatformReferenceLibrary.mockResolvedValueOnce({ resources: [] });
   const source = CHARACTER_DICTIONARY_PRESETS.find(item => item.id === sourceId)!;
-  setup("", undefined, [dictionaryConfiguration(source, { 古装鞋履: "翘头履" })]);
+  const configuration = dictionaryConfiguration(source, { 古装鞋履: "翘头履" });
+  setup("", undefined, [configuration], dictionaryStructuredFields(source, configuration.selections));
   fireEvent.click(screen.getByRole("option", { name: targetLabel }));
   expect(screen.getByRole("combobox", { name: "古装鞋履" })).toHaveValue("翘头履");
   expect(screen.getByText(/初始选项来源：/)).toBeInTheDocument();
+});
+
+it.each(["", "手写鞋履设计"])('ignores stale footwear selections after the current field becomes %s', currentFootwear => {
+  getPlatformReferenceLibrary.mockResolvedValueOnce({ resources: [] });
+  const source = CHARACTER_DICTIONARY_PRESETS.find(item => item.id === "dictionary.panel.classical-robe")!;
+  setup("", undefined, [dictionaryConfiguration(source, { 古装鞋履: "翘头履" })],
+    { identity: {}, look: { footwear: currentFootwear } });
+  fireEvent.click(screen.getByRole("option", { name: "古装鞋履" }));
+  expect(screen.getByRole("combobox", { name: "古装鞋履" })).toHaveValue("云纹皂靴");
+  expect(screen.queryByText(/初始选项来源：/)).not.toBeInTheDocument();
 });
 
 it('keeps face shape, forehead, cheekbones and jaw independent through apply', () => {

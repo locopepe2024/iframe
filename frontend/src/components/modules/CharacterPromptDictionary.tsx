@@ -37,6 +37,24 @@ const DISCOVERY_SECTIONS = ["基础面板", "词典", "Prompt 模板"] as const;
 export const CharacterDictionaryHost = createContext<HTMLElement | null>(null);
 
 const buttonStyle = "min-h-11 rounded px-2 text-xs focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary hover:bg-hover-bg";
+const sectionLookKeys: Record<string, keyof LookFeatures> = { "服装": "clothing", "鞋履": "footwear", "首饰": "jewelry", "装饰": "decoration" };
+
+function currentConfigurationSelections(configuration: DictionaryConfiguration, currentFields?: { identity: IdentityFeatures; look: LookFeatures }) {
+  if (!currentFields) return {};
+  const preset = CHARACTER_DICTIONARY_PRESETS.find(item => item.id === configuration.preset_id);
+  if (!preset) return {};
+  const projected = dictionaryStructuredFields(preset, configuration.selections);
+  return Object.fromEntries(Object.entries(configuration.selections).filter(([key]) => {
+    const target = characterDictionaryField(key)?.structured;
+    if (target) {
+      const current = currentFields[target.section] as Record<string, string | undefined>;
+      return !!current[target.key] && current[target.key] === projected[target.section][target.key];
+    }
+    const section = preset.sections?.find(item => item.parts.some(part => part.includes(`[${key}]`)));
+    const lookKey = section && sectionLookKeys[section.label];
+    return !!lookKey && !!currentFields.look[lookKey] && currentFields.look[lookKey] === projected.look[lookKey];
+  }));
+}
 
 export default function CharacterPromptDictionary({ suggestion, onClose, onApply, keyHandler, onConfiguration, configurations, currentFields }: {
   suggestion: PromptSlashSuggestion;
@@ -181,13 +199,14 @@ export default function CharacterPromptDictionary({ suggestion, onClose, onApply
         : `${entry.domain} · ${entry.source}`, choose: () => {
           setSelected(entry);
           const saved = entry.type === "配置面板" ? configurations?.find(item => item.preset_id === entry.id)?.selections : undefined;
-          const candidates = saved || Object.assign({}, ...(configurations || []).map(item => item.selections));
+          const inherited = (configurations || []).map(item => ({ configuration: item, selections: currentConfigurationSelections(item, currentFields) }));
+          const candidates = saved || Object.assign({}, ...inherited.map(item => item.selections));
           const valid = entry.preset && entry.type === "配置面板" ? Object.fromEntries(dictionaryPresetFields(entry.preset, candidates)
             .flatMap(field => candidates[field.key] !== undefined && field.options.includes(candidates[field.key])
               ? [[field.key, candidates[field.key]]] : [])) : {};
           setFieldValues(valid);
           setInheritedSources(saved ? [] : Array.from(new Set(Object.keys(valid).flatMap(key => {
-            const source = [...(configurations || [])].reverse().find(item => item.selections[key] === valid[key]);
+            const source = [...inherited].reverse().find(item => item.selections[key] === valid[key])?.configuration;
             return source ? [CHARACTER_PANEL_LABELS[source.preset_id] || source.preset_id] : [];
           }))));
         } }))),
