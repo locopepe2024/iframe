@@ -132,3 +132,5 @@
 - 2026-10-23全片VFR扫描：308帧PTS严格递增，仅第11→12帧超过两个30Hz步长（271.265ms），且BGR MAE0.00162、差>3像素变化率2.42e-6；全片无系统性长间隔。近重复阈值命中5对，只有11→12与长间隔重合。该局部低信息区间可污染速度/接触统计，但不能解释后段195–211腕点异常；接触评估应单独标记并排除该区间，主链路不改。[全片VFR扫描](../agents/deliverables/2026-10-23-recreation2-vfr-global-scan-v1.md)
 
 - 2026-10-23鞋底代理核对：79个有效MediaPipe帧中，heel/foot-index中点与踝点垂直差左/右中位26.21/25.83px，p95 34.20/37.60px；鞋跟-脚尖段长度中位27.84/37.29px且变化明显。真实PTS下鞋底代理速度中位84.59/83.15px/s，踝点80.23/60.46px/s，不能互换为接触真值。支持脚约束必须独立使用鞋底/网格底面与地面线，不能直接把踝点当鞋底；未选阈值、未改IK/主链路。[鞋底代理报告](../agents/deliverables/2026-10-23-recreation2-shoe-sole-proxy-v1.md)
+
+- 2026-10-23目标 rig 脚链/网格只读解析：GLB含77 nodes、3 meshes、73 joints；两侧脚链为 ankle→foot→DEF_foot→toe→toe_attachment。主体 mesh primitive 0 每侧381个强脚链权重点，primitive 1仅每侧2个强脚链点；左右静止包围盒近似镜像。按GLB局部Y取最低点可定义“脚链影响网格最低点代理”，但轴语义、鞋底材质归属、renderer矩阵闭环和源帧接触尚未证明；未执行IK、未改主链路。[rig鞋底代理报告](../agents/deliverables/2026-10-23-recreation2-rig-sole-proxy-v1.md)
