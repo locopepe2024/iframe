@@ -34,6 +34,62 @@ async function select() {
   await screen.findByRole("button", { name: "按时间整理" });
 }
 
+it("searches only after explicit submit, keeps applied filters for paging and clears on success", async () => {
+  render(<PhotoAlbum />);
+  await screen.findByRole("button", { name: "查看照片 1" });
+  const initialCalls = mock.list.mock.calls.length;
+  fireEvent.change(screen.getByLabelText("找照片（输入讲述或描述中的词）"), { target: { value: "公园" } });
+  expect(mock.list).toHaveBeenCalledTimes(initialCalls);
+  mock.list.mockResolvedValueOnce({ photos: [{ ...photo, search_matches: [{ source: "story", revision: 2, excerpt: "在公园散步" }] }], next_after_id: "cursor" });
+  fireEvent.click(screen.getByRole("button", { name: "查找照片" }));
+  await screen.findByText("讲述第 2 版：…在公园散步…");
+  expect(mock.list).toHaveBeenLastCalledWith("all", "", "", "公园");
+  mock.list.mockResolvedValueOnce({ photos: [], next_after_id: null });
+  fireEvent.click(screen.getByRole("button", { name: "再看一些照片" }));
+  await waitFor(() => expect(mock.list).toHaveBeenLastCalledWith("all", "", "cursor", "公园"));
+  fireEvent.click(screen.getByRole("button", { name: "清除搜索词" }));
+  await waitFor(() => expect(screen.getByLabelText("找照片（输入讲述或描述中的词）")).toHaveValue(""));
+  expect(mock.list).toHaveBeenLastCalledWith("all", "", "", "");
+});
+
+it("retains original results and search input after failure; shows genuine empty results", async () => {
+  render(<PhotoAlbum />);
+  await screen.findByRole("button", { name: "查看照片 1" });
+  fireEvent.change(screen.getByLabelText("找照片（输入讲述或描述中的词）"), { target: { value: "山" } });
+  mock.list.mockRejectedValueOnce(new Error("搜索暂不可用"));
+  fireEvent.click(screen.getByRole("button", { name: "查找照片" }));
+  await screen.findByText("搜索暂不可用");
+  expect(screen.getByRole("button", { name: "查看照片 1" })).toBeInTheDocument();
+  expect(screen.getByLabelText("找照片（输入讲述或描述中的词）")).toHaveValue("山");
+  mock.list.mockResolvedValueOnce({ photos: [], next_after_id: null });
+  fireEvent.click(screen.getByRole("button", { name: "查找照片" }));
+  await screen.findByText("没有找到匹配照片。可缩短关键词，或清除搜索词。");
+});
+
+it("dictation fills search input without querying and yields to photo controls", async () => {
+  let recognition: any;
+  vi.stubGlobal("SpeechRecognition", class {
+    constructor() { recognition = this; }
+    start() {} stop() {} abort() {}
+  });
+  render(<PhotoAlbum />);
+  await screen.findByRole("button", { name: "查看照片 1" });
+  fireEvent.click(screen.getByText("也可以说出要找的词"));
+  expect(screen.getByRole("button", { name: "说出搜索词" })).toBeDisabled();
+  fireEvent.click(screen.getByLabelText("本次允许听写搜索词"));
+  fireEvent.click(screen.getByRole("button", { name: "说出搜索词" }));
+  expect(screen.getByRole("button", { name: "查找照片" })).toBeDisabled();
+  const calls = mock.list.mock.calls.length;
+  act(() => { recognition.onresult({ results: [[{ transcript: "公园" }]] }); recognition.onend(); });
+  expect(screen.getByLabelText("找照片（输入讲述或描述中的词）")).toHaveValue("公园");
+  expect(mock.list).toHaveBeenCalledTimes(calls);
+  fireEvent.click(screen.getByRole("button", { name: "说出搜索词" }));
+  const old = recognition;
+  fireEvent.click(screen.getByRole("button", { name: "查看照片 1" }));
+  await screen.findByRole("button", { name: "按时间整理" });
+  expect(old.onresult).toBeNull();
+});
+
 describe("Photo album real service UI", () => {
   it("loads persisted photos without starting organization", async () => {
     render(<PhotoAlbum />);
@@ -207,6 +263,6 @@ describe("Photo album real service UI", () => {
     fireEvent.change(screen.getByLabelText("年份（可不填）"), { target: { value: "1985" } });
     expect(screen.getByRole("button", { name: "再看一些照片" })).toBeDisabled();
     fireEvent.click(screen.getByRole("button", { name: "刷新相册" }));
-    await waitFor(() => expect(mock.list).toHaveBeenLastCalledWith("all", "1985", ""));
+    await waitFor(() => expect(mock.list).toHaveBeenLastCalledWith("all", "1985", "", ""));
   });
 });

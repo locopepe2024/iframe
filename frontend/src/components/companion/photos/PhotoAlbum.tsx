@@ -35,7 +35,11 @@ export default function PhotoAlbum() {
   const [cursor, setCursor] = useState<string | null>(null);
   const [view, setView] = useState("all");
   const [year, setYear] = useState("");
-  const [applied, setApplied] = useState({ view: "all", year: "" });
+  const [query, setQuery] = useState("");
+  const [searchVoiceConsent, setSearchVoiceConsent] = useState(false);
+  const searchVoice = useCompanionVoice(text => setQuery(text));
+  const [applied, setApplied] = useState({ view: "all", year: "", query: "" });
+  const filtersChanged = view !== applied.view || year !== applied.year || query.trim() !== applied.query;
   const [selected, setSelected] = useState<AlbumPhoto | null>(null);
   const [consent, setConsent] = useState<TimeConsent | null>(null);
   const [question, setQuestion] = useState<TimeQuestion | null>(null);
@@ -61,7 +65,7 @@ export default function PhotoAlbum() {
   useEffect(() => { if (error) errorRegion.current?.focus(); }, [error]);
 
   async function load(append = false, filters = applied) {
-    const page = await photoApi.list(filters.view, filters.year, append ? cursor ?? "" : "");
+    const page = await photoApi.list(filters.view, filters.year, append ? cursor ?? "" : "", filters.query);
     if (alive.current) {
       setPhotos(old => append ? [...old, ...page.photos] : page.photos);
       setCursor(page.next_after_id);
@@ -82,6 +86,16 @@ export default function PhotoAlbum() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  async function applyFilters(next: typeof applied) {
+    if (Array.from(next.query).length > 100) { setError("搜索文字请不超过 100 字。"); return; }
+    searchVoice.stopAll(); voice.stopAll();
+    await run(async () => {
+      setSpokenDraft(""); setSelected(null); setQuestion(null); setConfirmation(null);
+      await load(false, next);
+      if (alive.current) { setApplied(next); setQuery(next.query); }
+    });
+  }
+
   function applyDate(annotation: PhotoDateAnnotation) {
     if (!alive.current || !selected) return;
     setSelected({ ...selected, date: annotation });
@@ -90,7 +104,7 @@ export default function PhotoAlbum() {
     setPhotos(old => old.map(p => p.photo_id === selected.photo_id ? { ...p, date: annotation } : p));
   }
   async function open(photo: AlbumPhoto) {
-    voice.stopAll(); setSpokenDraft("");
+    searchVoice.stopAll(); voice.stopAll(); setSpokenDraft("");
     await run(async () => {
       const status = await photoApi.batch(photo.batch_id);
       if (!alive.current) return;
@@ -187,8 +201,8 @@ export default function PhotoAlbum() {
         if (!alive.current) return;
         setFile(null); if (fileInput.current) fileInput.current.value = "";
         setMessage("照片已保存，尚未开始整理。");
-        await load(false, { view: "all", year: "" });
-        if (alive.current) { setView("all"); setYear(""); setApplied({ view: "all", year: "" }); }
+        await load(false, { view: "all", year: "", query: "" });
+        if (alive.current) { setView("all"); setYear(""); setQuery(""); setApplied({ view: "all", year: "", query: "" }); }
       })}>上传照片</button>
     </section>
 
@@ -200,20 +214,35 @@ export default function PhotoAlbum() {
         </select></label>
         <label>年份（可不填）<input inputMode="numeric" maxLength={4} value={year} disabled={busy || view === "pending"} onChange={e => setYear(e.target.value)} /></label>
       </div>
-      <button disabled={busy} onClick={() => void run(async () => {
-        voice.stopAll(); setSpokenDraft("");
-        setSelected(null); setQuestion(null); setConfirmation(null);
-        await load(false, { view, year });
-        if (alive.current) setApplied({ view, year });
-      })}>刷新相册</button>
-      {(view !== applied.view || year !== applied.year) && <p>范围已更改，请点“刷新相册”查看。</p>}
+      <label htmlFor="photo-search">找照片（输入讲述或描述中的词）</label>
+      <input id="photo-search" value={query} maxLength={100} disabled={busy || searchVoice.listening || searchVoice.finishing} onChange={event => setQuery(event.target.value)} aria-describedby="photo-search-help" />
+      <p id="photo-search-help" className={styles.note}>只搜索已保存的最新讲述和已确认的画面描述，按连续文字匹配。可以试试“公园”。不会搜索未确认的 AI 描述，不调用模型。</p>
+      <details>
+        <summary>也可以说出要找的词</summary>
+        <p>听写可能由浏览器语音服务处理，不保存录音。听到的话只填入上方输入框，请修改后点击查找；查询会发送到当前相册服务，不作为长期记忆保存。</p>
+        <label className={styles.check}><input type="checkbox" checked={searchVoiceConsent} disabled={busy} onChange={event => {
+          setSearchVoiceConsent(event.target.checked); if (!event.target.checked) searchVoice.stopAll();
+        }} />本次允许听写搜索词</label>
+        <button disabled={busy || !searchVoiceConsent || searchVoice.finishing} aria-pressed={searchVoice.listening} onClick={searchVoice.toggleListening}>
+          {searchVoice.finishing ? "正在结束搜索听写" : searchVoice.listening ? "停止搜索听写" : "说出搜索词"}
+        </button>
+        <p role="status">{searchVoice.notice}</p>
+      </details>
+      <button disabled={busy || searchVoice.listening || searchVoice.finishing} onClick={() => void applyFilters({ view, year, query: query.trim() })}>查找照片</button>
+      <button disabled={busy || searchVoice.listening || searchVoice.finishing} onClick={() => void applyFilters({ view, year, query: query.trim() })}>刷新相册</button>
+      {(applied.query || query) && <button disabled={busy || searchVoice.listening || searchVoice.finishing} onClick={() => void applyFilters({ view, year, query: "" })}>清除搜索词</button>}
+      {filtersChanged && <p>条件已更改，请点“查找照片”或“刷新相册”查看。</p>}
+      {applied.query && <p role="status">当前结果：包含“{applied.query}”的照片。匹配讲述不代表内容已核实。</p>}
       <div className={styles.grid}>
         {photos.map((photo, index) => <button key={photo.photo_id} className={styles.photo} disabled={busy} aria-label={`查看照片 ${index + 1}`} aria-pressed={selected?.photo_id === photo.photo_id} onClick={() => void open(photo)}>
           <PhotoImage id={photo.photo_id} /><span>{dateLabel(photo.date)}</span>
+          {photo.search_matches?.map(match => <span key={match.source}>
+            {match.source === "story" ? "讲述" : "已确认描述"}第 {match.revision} 版：…{match.excerpt}…
+          </span>)}
         </button>)}
       </div>
-      {!photos.length && !busy && <p>这里还没有照片。可以先上传一张，或更换查看范围。</p>}
-      {cursor && <button disabled={busy || view !== applied.view || year !== applied.year} onClick={() => void run(() => load(true))}>再看一些照片</button>}
+      {!photos.length && !busy && <p>{applied.query ? "没有找到匹配照片。可缩短关键词，或清除搜索词。" : "这里还没有照片。可以先上传一张，或更换查看范围。"}</p>}
+      {cursor && <button disabled={busy || filtersChanged || searchVoice.listening || searchVoice.finishing} onClick={() => void run(() => load(true))}>再看一些照片</button>}
     </section>
 
     {selected && <section className={styles.panel} aria-label="当前照片">

@@ -34,6 +34,10 @@ def test_search_latest_sources_literal_text_owner_and_pagination(setup):
     assert search('公园')['photos'] == []  # Old revisions excluded.
     assert client.post(path + '/description', json=dict(description='公园中的椅子', expected_revision=0, operation_id='review')).status_code == 200
     assert search('公园')['photos'][0]['search_matches'][0]['source'] == 'description'
+    assert client.post(path + '/description', json=dict(description='公园中的朋友', expected_revision=1, operation_id='review2')).status_code == 200
+    assert search('椅子')['photos'] == []
+    matches = search('朋友')['photos'][0]['search_matches']
+    assert [(match['source'], match['revision']) for match in matches] == [('story', 2), ('description', 2)]
     raw = BytesIO(); Image.new('RGB', (8, 8), 'blue').save(raw, 'PNG')
     second = client.post('/photos/uploads/second', content=raw.getvalue()).json()['photo_id']
     assert client.post('/photos/' + second + '/story', json={**body, 'text': '公园游玩'}).status_code == 200

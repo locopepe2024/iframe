@@ -47,3 +47,5 @@
 .history { border-top: 1px solid #52687d; margin-top: 1rem; }
 .storyText { white-space: pre-wrap; }
 .error { color: #ffd2d2; border: 2px solid #e09d9d; padding: 1rem; border-radius: .75rem; }
+
+.shell summary { min-height: 48px; padding: .5rem 0; cursor: pointer; }

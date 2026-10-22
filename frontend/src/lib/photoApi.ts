@@ -7,7 +7,10 @@ export interface PhotoDateAnnotation {
   source: "exif" | "user" | "none";
   revision: number;
 }
-export interface AlbumPhoto { photo_id: string; batch_id: string; date: PhotoDateAnnotation }
+export interface AlbumPhoto {
+  photo_id: string; batch_id: string; date: PhotoDateAnnotation;
+  search_matches?: { source: "story" | "description"; revision: number; excerpt: string }[];
+}
 export interface PhotoAnalysis {
   model: string; provider: "qwen"; status: "needs_review"; created_at: string;
   observation: { visible_summary: string; visible_text: string[]; uncertainties: string[]; story_question: string };
@@ -51,8 +54,8 @@ export const photoApi = {
   descriptionHistory: (id: string, after = 0) => request<{ changes: DescriptionReview[]; next_after_revision: number | null }>(`/${encodeURIComponent(id)}/description/history?after_revision=${after}`),
   analysis: (id: string) => request<PhotoAnalysis | null>(`/${encodeURIComponent(id)}/analysis`),
   analyze: (id: string) => request<PhotoAnalysis>(`/${encodeURIComponent(id)}/analysis`, "POST", { allow_external_analysis: true }),
-  list: (view: string, year: string, after = "") => request<{ photos: AlbumPhoto[]; next_after_id: string | null }>(
-    `/albums?${new URLSearchParams({ view, ...(year ? { year } : {}), after_id: after, limit: "20" })}`),
+  list: (view: string, year: string, after = "", query = "") => request<{ photos: AlbumPhoto[]; next_after_id: string | null }>(
+    `/albums?${new URLSearchParams({ view, ...(year ? { year } : {}), ...(query ? { query } : {}), after_id: after, limit: "20" })}`),
   batch: (id: string) => request<TimeConsent>(`/batches/${encodeURIComponent(id)}`),
   question: (id: string) => request<TimeQuestion>(`/batches/${encodeURIComponent(id)}/time-question`, "POST"),
   answer: (id: string, question: string, granted: boolean) => request<TimeConsent>(
