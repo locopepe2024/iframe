@@ -13,6 +13,7 @@ it("uses distinct stable destinations for face shape, skin and expression fields
   expect(characterDictionaryField('下颌状态')?.domain).toBe('character.performance');
   expect(characterDictionaryField('唇形')?.dimension).toBe('稳定形状');
   expect(characterDictionaryField('唇形')?.structured).toEqual({ section: 'identity', key: 'lips' });
+  expect(characterDictionaryField('鼻型')?.structured).toEqual({ section: 'identity', key: 'nose' });
   expect(characterDictionaryField('嘴部表现')?.dimension).toBe('当前状态');
   const { dictionaryStructuredFields, dictionaryConfiguration } = await import('@/lib/characterDictionaryPresets');
   const face = CHARACTER_DICTIONARY_PRESETS.find(entry => entry.id === 'dictionary.panel.face')!;
@@ -22,6 +23,9 @@ it("uses distinct stable destinations for face shape, skin and expression fields
   expect(dictionaryConfiguration(face, values).selections.肤色).toBe(values.肤色);
   expect(dictionaryConfiguration(skin, values).resolved_fields.肤质).toBe('面颊皮肤略显干燥，保留细微干燥纹理');
   expect(dictionaryStructuredFields(face, { 唇形: '上唇略薄、下唇自然饱满' }).identity.lips).toBe('上唇略薄、下唇自然饱满');
+  const nose = dictionaryPresetFields(face).find(field => field.key === '鼻型')!;
+  expect(nose.options.length).toBeGreaterThan(1);
+  expect(dictionaryStructuredFields(face, { 鼻型: nose.options.find(value => value && !value.startsWith('['))! }).identity.nose).toBeTruthy();
 });
 
 it("registers every basic panel field without changing panel IDs", () => {

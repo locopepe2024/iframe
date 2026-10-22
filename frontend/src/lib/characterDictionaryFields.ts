@@ -27,6 +27,7 @@ export const CHARACTER_DICTIONARY_FIELDS: readonly CharacterDictionaryField[] = 
   field('identity.face.eyes', '眼型', 'character.identity', '眼睛', '稳定形状', 'eyes', { section: 'identity', key: 'eyes' }),
   field('identity.face.brows', '眉形', 'character.identity', '眉毛', '稳定形状', 'brows', { section: 'identity', key: 'eyebrows' }),
   field('identity.face.eye_detail', '眼周纹理', 'character.identity', '眼周', '稳定纹理', 'eye-detail', { section: 'identity', key: 'eye_detail' }),
+  field('identity.face.nose', '鼻型', 'character.identity', '鼻子', '稳定形状', 'nose', { section: 'identity', key: 'nose' }),
   field('identity.face.lips', '唇形', 'character.identity', '嘴唇', '稳定形状', 'lips', { section: 'identity', key: 'lips' }),
   field('identity.skin.tone', '肤色', 'character.identity', '皮肤', '基础颜色', 'skin-tone', { section: 'identity', key: 'skin_tone' }),
   field('identity.skin.texture', '肤质', 'character.identity', '皮肤', '稳定纹理', 'skin', { section: 'identity', key: 'skin_texture' }),
