@@ -105,6 +105,38 @@ def test_expanded_face_and_wardrobe_fields_survive_confirmation():
     assert saved['look']['features'] == look
 
 
+def test_distinct_condition_fields_survive_draft_snapshot_and_confirmation():
+    pipeline = ComicGenPipeline.__new__(ComicGenPipeline)
+    character = SimpleNamespace(character_design={})
+    script = SimpleNamespace(id='project')
+    pipeline.scripts = {script.id: script}
+    pipeline._find_asset_with_source = lambda *_: (character, script)
+    pipeline._save_after_asset_mutation = lambda *_: None
+    look = {'clothing': '深蓝劲装', 'garment_condition': '衣物整洁', 'jewelry_condition': '首饰旧化'}
+    snapshot = {'features': look, 'editor_mode': 'fields', 'basis': ['user_specified']}
+    design = {
+        'identity': {'features': {'face_shape': '圆脸'}, 'editor_mode': 'fields'},
+        'look': {'features': look, 'editor_mode': 'fields'},
+        'design_input': {'schema_version': 'iframe.character-design-input.v1', 'prompt': '造型设计',
+                         'identity': {'features': {}}, 'look': snapshot},
+        'design_result': {'schema_version': 'iframe.character-design-result.v1', 'prompt': '造型结果',
+                          'identity': {'features': {}}, 'look': snapshot, 'source': 'panel'},
+        'confirmed': True,
+    }
+    pipeline.update_asset_attributes('project', 'character', 'character', {'character_design': design})
+    draft = character.character_design['design_draft']
+    revision = character.character_design['design_revisions'][0]['design']
+    for saved in (draft, revision):
+        assert saved['look']['features'] == look
+        assert saved['design_input']['look']['features'] == look
+        assert saved['design_result']['look']['features'] == look
+
+    legacy = {'identity': {'features': {'face_shape': '圆脸'}, 'editor_mode': 'fields'},
+              'look': {'features': {'condition': '衣物与首饰均有使用痕迹'}, 'editor_mode': 'fields'}, 'confirmed': True}
+    pipeline.update_asset_attributes('project', 'character', 'character', {'character_design': legacy})
+    assert character.character_design['design_revisions'][1]['design']['look']['features'] == legacy['look']['features']
+
+
 def test_character_constraints_round_trip_and_reject_invalid_values():
     pipeline = ComicGenPipeline.__new__(ComicGenPipeline)
     character = SimpleNamespace(character_design={})

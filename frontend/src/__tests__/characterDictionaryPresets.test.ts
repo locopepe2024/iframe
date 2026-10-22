@@ -3,6 +3,7 @@ import { CHARACTER_DICTIONARY_PRESETS, dictionaryPresetFields, renderDictionaryP
 import { CLASSICAL_FOOTWEAR_STYLES } from "@/lib/classicalFootwearDictionary";
 import { dictionarySlotCategory, localDictionaryCategories } from "@/lib/characterDictionaryCategories";
 import { CHARACTER_DICTIONARY_FIELDS, characterDictionaryField } from "@/lib/characterDictionaryFields";
+import { characterStructuredText, normalizeCharacterFeatures, LOOK_FIELDS } from "@/lib/characterStructuredDesign";
 
 it("uses distinct stable destinations for face shape, skin and expression fields", async () => {
   expect(new Set(CHARACTER_DICTIONARY_FIELDS.map(field => field.id)).size).toBe(CHARACTER_DICTIONARY_FIELDS.length);
@@ -247,6 +248,30 @@ it('projects clothing panels into authored sections and explicit layer constrain
   expect(result.constraints?.negative_prompt).toContain('未指定的中衣、披风、护甲或装饰性叠领');
   const modern = CHARACTER_DICTIONARY_PRESETS.find(entry => entry.id === 'dictionary.panel.modern-male-clothing')!;
   expect(dictionaryStructuredFields(modern, {}).constraints).toBeUndefined();
+});
+
+it('keeps garment and jewelry condition independent across outfit and local panels', async () => {
+  const { dictionaryStructuredFields } = await import('@/lib/characterDictionaryPresets');
+  const outfit = CHARACTER_DICTIONARY_PRESETS.find(entry => entry.id === 'dictionary.panel.classical-robe')!;
+  const condition = CHARACTER_DICTIONARY_PRESETS.find(entry => entry.id === 'dictionary.panel.condition')!;
+  const first = dictionaryStructuredFields(outfit, { 衣物状态: '整洁完好', 首饰状态: '首饰轻微旧化' });
+  const second = dictionaryStructuredFields(condition, { 首饰状态: '首饰光洁' });
+  const merged = { ...first.look, ...second.look };
+  expect(merged.garment_condition).toBeTruthy();
+  expect(merged.jewelry_condition).toBeTruthy();
+  expect(merged.garment_condition).not.toBe(merged.jewelry_condition);
+  expect(merged.condition).toBeUndefined();
+  for (const id of ['classical-robe', 'classical-skirt', 'modern-male-clothing', 'modern-clothing']) {
+    const panel = CHARACTER_DICTIONARY_PRESETS.find(entry => entry.id === `dictionary.panel.${id}`)!;
+    const projected = dictionaryStructuredFields(panel, { 衣物状态: '整洁完好' });
+    expect(projected.look.garment_condition, id).toBeTruthy();
+    expect(projected.look.clothing, id).not.toContain('衣物状态');
+  }
+  const text = characterStructuredText({}, merged);
+  expect(text.match(/衣物状态：/g)).toHaveLength(1);
+  expect(text.match(/首饰状态：/g)).toHaveLength(1);
+  const legacy = normalizeCharacterFeatures({ condition: '衣物与首饰均有使用痕迹' }, LOOK_FIELDS.map(([key]) => key));
+  expect(characterStructuredText({}, legacy)).toContain('综合新旧状态（旧版）：衣物与首饰均有使用痕迹');
 });
 
 it('offers human age stages without implicit age, skin or wardrobe defaults', async () => {

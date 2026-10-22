@@ -257,12 +257,20 @@ export function dictionaryStructuredFields(preset: CharacterDictionaryPreset, va
     }
   } else {
     // These are authored section labels, not a reverse parse of user prose.
-    const sectionKeys: Record<string, string> = { '服装': 'clothing', '鞋履': 'footwear', '首饰': 'jewelry', '装饰': 'decoration', '新旧': 'condition' };
+    const sectionKeys: Record<string, string> = { '服装': 'clothing', '鞋履': 'footwear', '首饰': 'jewelry', '装饰': 'decoration' };
     for (const section of preset.sections || []) {
       const key = sectionKeys[section.label];
       if (!key) continue;
-      const rendered = renderDictionaryPreset({ ...preset, sections: [section] }, values);
+      const projectedSection = key === 'clothing'
+        ? { ...section, parts: section.parts.filter(part => !part.includes('[衣物状态]')) } : section;
+      const rendered = renderDictionaryPreset({ ...preset, sections: [projectedSection] }, values);
       if (rendered) result.look[key] = rendered.slice(section.label.length + 1);
+    }
+    for (const field of dictionaryPresetFields(preset, values)) {
+      const target = characterDictionaryField(field.key)?.structured;
+      if (!target || target.section !== 'look') continue;
+      const selected = values[field.key] !== undefined && field.options.includes(values[field.key]) ? values[field.key] : field.value;
+      if (selected && !selected.includes('[')) result.look[target.key] = field.output?.[selected] ?? selected;
     }
   }
   if (preset.constraints) result.constraints = preset.constraints;

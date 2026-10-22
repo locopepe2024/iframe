@@ -8,7 +8,8 @@ export const IDENTITY_FIELDS = [
 export const LOOK_FIELDS = [
   ['clothing', '服装结构与材质'], ['palette', '主色与配色'],
   ['footwear', '鞋履'], ['jewelry', '首饰'], ['decoration', '装饰'],
-  ['condition', '新旧状态'], ['accessories', '其他配件'], ['weapon', '武器外观'],
+  ['condition', '综合新旧状态（旧版）'], ['garment_condition', '衣物状态'], ['jewelry_condition', '首饰状态'],
+  ['accessories', '其他配件'], ['weapon', '武器外观'],
 ] as const;
 
 export type IdentityFeature = typeof IDENTITY_FIELDS[number][0];
