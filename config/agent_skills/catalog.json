@@ -86,6 +86,18 @@
       "instructions": "适用：多镜头、续拍、长故事、广告或连贯视频方案。先明确故事目标与结局，再按时间地点分场景，为每个镜头指定叙事任务、情绪意图、开场状态、唯一主要动作、结束状态、前后衔接、保留元素和允许变化。全局记录人物身份、服装、道具、位置、光线与屏幕方向。区分已发生、当前镜头、未来镜头；输出后续规划不等于已经生成。用户提供成片或尾帧后才依据观察修订下一段，未看到结果时将衔接标为计划，不能假设成功。连续生成出现身份漂移时建议回到原参考素材重新建立镜头，不保证跨段自动连续。声音分为对白、环境音、动作声、音乐；跨段音乐统一是后期规划。输出简明分镜表与当前待制作镜头的完整提示词，后续镜头保留为计划；不替用户提交生成，不硬编码模型时长、数量或专用接口语法。"
     },
     {
+      "id": "micro-expression-timing",
+      "name": "微表情时序设计",
+      "category": "分镜表演",
+      "targets": ["Storyboard performance"],
+      "version": "1.0.0",
+      "description": "按角色和可见性设计 trigger、change、hold、release 表情阶段；首帧只取起始状态。",
+      "license": "MIT（iFrame 原创工作流）",
+      "license_file": "lumenx-MIT.txt",
+      "adaptation": "独立表演层 Skill；不进入 H3/Seedance 普通提示词润色复选框。",
+      "instructions_file": "micro-expression-timing.md"
+    },
+    {
       "id": "minimax-h3-director",
       "name": "MiniMax H3 分段导演",
       "category": "导演规划",
