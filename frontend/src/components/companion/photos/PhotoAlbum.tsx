@@ -2,6 +2,8 @@
 
 import { useEffect, useRef, useState } from "react";
 import { photoApi, type AlbumPhoto, type DateChange, type PhotoDateAnnotation, type TimeConsent, type TimeQuestion } from "@/lib/photoApi";
+import { useCompanionVoice } from "../useCompanionVoice";
+import { parseSpokenPhotoDate, type DateSuggestion } from "./spokenDate";
 import styles from "./photos.module.css";
 
 function dateLabel(annotation: PhotoDateAnnotation) {
@@ -23,7 +25,7 @@ function PhotoImage({ id, large = false }: { id: string; large?: boolean }) {
     : <span>{failed ? "图片暂不可用，请刷新相册" : "正在读取照片…"}</span>;
 }
 
-type Confirmation = { kind: "date"; value: string; precision: "year" | "month" | "day" }
+type Confirmation = { kind: "date"; photoId: string; expectedRevision: number; consentVersion: number; value: string; precision: "year" | "month" | "day" }
   | { kind: "restore"; revision: number } | { kind: "revoke" };
 
 export default function PhotoAlbum() {
@@ -39,6 +41,9 @@ export default function PhotoAlbum() {
   const [changes, setChanges] = useState<DateChange[] | null>(null);
   const [historyCursor, setHistoryCursor] = useState<number | null>(null);
   const [dateInput, setDateInput] = useState("");
+  const [voiceConsent, setVoiceConsent] = useState(false);
+  const [spokenDraft, setSpokenDraft] = useState("");
+  const voice = useCompanionVoice(text => setSpokenDraft(text));
   const [file, setFile] = useState<File | null>(null);
   const uploadKey = useRef("");
   const [busy, setBusy] = useState(false);
@@ -79,9 +84,11 @@ export default function PhotoAlbum() {
     if (!alive.current || !selected) return;
     setSelected({ ...selected, date: annotation });
     setDateInput(annotation.date?.value.slice(0, 10) ?? "");
+    setSpokenDraft("");
     setPhotos(old => old.map(p => p.photo_id === selected.photo_id ? { ...p, date: annotation } : p));
   }
   async function open(photo: AlbumPhoto) {
+    voice.stopAll(); setSpokenDraft("");
     await run(async () => {
       const status = await photoApi.batch(photo.batch_id);
       if (!alive.current) return;
@@ -92,6 +99,13 @@ export default function PhotoAlbum() {
   function mutation() {
     return { expected_revision: selected!.date.revision, consent_version: consent!.consent_version, operation_id: crypto.randomUUID() };
   }
+  function proposeDate(suggestion: DateSuggestion) {
+    if (!selected || !consent?.granted) return;
+    voice.stopAll();
+    setError(""); setDateInput(suggestion.value);
+    setConfirmation({ kind: "date", photoId: selected.photo_id, expectedRevision: selected.date.revision,
+      consentVersion: consent.consent_version, ...suggestion });
+  }
   async function organize(status: TimeConsent) {
     if (!selected) return;
     const annotation = await photoApi.organize(selected.photo_id, { ...mutation(), consent_version: status.consent_version });
@@ -101,6 +115,7 @@ export default function PhotoAlbum() {
   }
   async function requestOrganization() {
     if (!selected || !consent) return;
+    voice.stopAll();
     await run(async () => {
       if (consent.granted) await organize(consent);
       else {
@@ -125,8 +140,14 @@ export default function PhotoAlbum() {
     await run(async () => {
       if (pending.kind === "revoke") {
         const status = await photoApi.revoke(selected.batch_id, consent.consent_version);
-        if (alive.current) { setConsent(status); setMessage("已停止后续整理，此前结果和原照片保留。"); }
+        if (alive.current) { voice.stopAll(); setSpokenDraft(""); setConsent(status); setMessage("已停止后续整理，此前结果和原照片保留。"); }
       } else {
+        if (pending.kind === "date" && (pending.photoId !== selected.photo_id
+          || pending.expectedRevision !== selected.date.revision || pending.consentVersion !== consent.consent_version
+          || !consent.granted)) {
+          if (alive.current) { setConfirmation(null); setError("照片或授权已变化，请重新核对日期。"); }
+          return;
+        }
         const annotation = pending.kind === "date"
           ? await photoApi.correct(selected.photo_id, { ...mutation(), value: pending.value, precision: pending.precision })
           : await photoApi.restore(selected.photo_id, { ...mutation(), target_revision: pending.revision });
@@ -138,11 +159,20 @@ export default function PhotoAlbum() {
     });
   }
 
+  function speakCurrentPrompt() {
+    if (!selected) return;
+    const prompt = question?.text ?? (confirmation?.kind === "date" ? "按您说的，记录为 " + confirmation.value + "，可以吗？"
+      : confirmation?.kind === "restore" ? "恢复到第 " + confirmation.revision + " 版的日期？历史仍保留。"
+      : confirmation?.kind === "revoke" ? "停止这批照片的后续时间整理？此前结果和原照片会保留。"
+      : "这张照片的拍摄时间：" + dateLabel(selected.date) + "。如果记得，可以只告诉我年份；不记得可以跳过。");
+    voice.speak(prompt, true);
+  }
+
   return <main className={styles.shell} aria-busy={busy}>
     <a href="/companion">返回陪伴首页</a>
     <h1>我的生活相册</h1>
     <p>留住照片，慢慢说说照片里的故事。</p>
-    <p className={styles.note}>照片 Demo · 当前支持一张一张上传，按时间整理。照片保存在当前服务端；人物和语音整理稍后加入。</p>
+    <p className={styles.note}>照片 Demo · 当前支持单张上传和按时间整理。照片保存在当前服务端；人物识别与自动语音整理尚未加入。</p>
     <section className={styles.panel} aria-label="上传照片">
       <h2>添一张照片</h2>
       <label htmlFor="photo-file">选择一张照片</label>
@@ -169,6 +199,7 @@ export default function PhotoAlbum() {
         <label>年份（可不填）<input inputMode="numeric" maxLength={4} value={year} disabled={busy || view === "pending"} onChange={e => setYear(e.target.value)} /></label>
       </div>
       <button disabled={busy} onClick={() => void run(async () => {
+        voice.stopAll(); setSpokenDraft("");
         setSelected(null); setQuestion(null); setConfirmation(null);
         await load(false, { view, year });
         if (alive.current) setApplied({ view, year });
@@ -187,6 +218,7 @@ export default function PhotoAlbum() {
       <h2 ref={detailHeading} tabIndex={-1}>这张照片</h2><PhotoImage id={selected.photo_id} large />
       <p>{dateLabel(selected.date)}</p>
       <p>{consent?.granted ? "您已允许按时间整理。" : "当前未授权整理。"}</p>
+      <button disabled={busy || voice.listening || voice.finishing} onClick={speakCurrentPrompt}>{voice.speaking ? "停止朗读" : "读出当前提示"}</button>
       {!question && !confirmation && <>
         <button disabled={busy || !consent} onClick={() => void requestOrganization()}>按时间整理</button>
         {consent?.granted && <>
@@ -194,12 +226,31 @@ export default function PhotoAlbum() {
           <input id="photo-date" value={dateInput} disabled={busy} onChange={e => setDateInput(e.target.value)} placeholder="例如 1985 或 1985-06" aria-describedby="photo-date-help" />
           <p id="photo-date-help" className={styles.note}>只记得年份也可以；还可填写 1985-06 或 1985-06-07。不记得可以跳过。</p>
           <button disabled={busy || !dateInput} onClick={() => {
-            const value = dateInput.trim();
-            const precision = /^[0-9]{4}$/.test(value) ? "year" : /^[0-9]{4}-[0-9]{2}$/.test(value) ? "month" : /^[0-9]{4}-[0-9]{2}-[0-9]{2}$/.test(value) ? "day" : null;
-            if (!precision) { setError("请填写四位年份、年月或完整日期，例如 1985。"); return; }
-            setError(""); setConfirmation({ kind: "date", value, precision });
+            const suggestion = parseSpokenPhotoDate(dateInput);
+            if (!suggestion || !/^[0-9-]+$/.test(dateInput.trim())) {
+              setError("请填写有效的四位年份、年月或完整日期，例如 1985。"); return;
+            }
+            proposeDate(suggestion);
           }}>核对日期</button>
-          <button disabled={busy} onClick={() => setConfirmation({ kind: "revoke" })}>停止后续整理</button>
+          <section className={styles.voice} aria-label="语音核对日期">
+            <h3>也可以说出拍摄时间</h3>
+            <p id="photo-voice-disclosure" className={styles.note}>听写可能由浏览器语音服务处理音频。识别文字只在本页供您核对；本 Demo 不保存录音或原话，也不会自动修改照片。</p>
+            <label className={styles.check}><input type="checkbox" checked={voiceConsent} onChange={event => {
+              setVoiceConsent(event.target.checked); if (!event.target.checked) voice.stopAll();
+            }} />本次允许使用浏览器听写</label>
+            <button disabled={busy || !voiceConsent || voice.finishing} aria-pressed={voice.listening} aria-describedby="photo-voice-disclosure" onClick={voice.toggleListening}>
+              {voice.finishing ? "正在结束听写" : voice.listening ? "停止听写" : "点一下，说日期"}
+            </button>
+            <p role="status">{voice.notice}</p>
+            <label htmlFor="photo-spoken-draft">听到的话（可修改）</label>
+            <textarea id="photo-spoken-draft" rows={2} value={spokenDraft} disabled={busy || voice.listening || voice.finishing} onChange={event => setSpokenDraft(event.target.value)} />
+            <button disabled={busy || voice.listening || voice.finishing || !spokenDraft.trim()} onClick={() => {
+              const suggestion = parseSpokenPhotoDate(spokenDraft);
+              if (!suggestion) { setError("没有识别出明确日期。请修改听写文字，或在上方直接填写年份、年月或日期。"); return; }
+              proposeDate(suggestion);
+            }}>核对语音日期</button>
+          </section>
+          <button disabled={busy} onClick={() => { voice.stopAll(); setConfirmation({ kind: "revoke" }); }}>停止后续整理</button>
         </>}
         <button disabled={busy} onClick={() => void run(async () => {
           const history = await photoApi.history(selected.photo_id);

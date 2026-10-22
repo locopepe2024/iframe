@@ -1,5 +1,5 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import PhotoAlbum from "./PhotoAlbum";
 
 const mock = vi.hoisted(() => ({
@@ -25,6 +25,7 @@ beforeEach(() => {
   mock.image.mockResolvedValue(new Blob(["image"], { type: "image/webp" }));
   vi.stubGlobal("URL", Object.assign(URL, { createObjectURL: vi.fn(() => "blob:photo"), revokeObjectURL: vi.fn() }));
 });
+afterEach(() => vi.unstubAllGlobals());
 
 async function select() {
   fireEvent.click(await screen.findByRole("button", { name: "查看照片 1" }));
@@ -69,6 +70,80 @@ describe("Photo album real service UI", () => {
     fireEvent.click(screen.getByRole("button", { name: "确认日期" }));
     await waitFor(() => expect(mock.correct).toHaveBeenCalledTimes(1));
     expect(mock.correct.mock.calls[0][1]).toMatchObject({ value: "1985", precision: "year", expected_revision: 1 });
+  });
+
+  it("holds a spoken date as editable text until explicit confirmation", async () => {
+    mock.batch.mockResolvedValue({ batch_id: "batch", granted: true, consent_version: 3 });
+    let recognition: { onresult: ((event: { results: { transcript: string }[][] }) => void) | null; onend: (() => void) | null };
+    class Recognition {
+      lang = ""; continuous = false; interimResults = false;
+      onresult = null; onerror = null; onend = null;
+      start = vi.fn(); stop = vi.fn(); abort = vi.fn();
+      constructor() { recognition = this; }
+    }
+    vi.stubGlobal("SpeechRecognition", Recognition);
+    render(<PhotoAlbum />); await select();
+    expect(screen.getByRole("button", { name: "点一下，说日期" })).toBeDisabled();
+    fireEvent.click(screen.getByLabelText("本次允许使用浏览器听写"));
+    fireEvent.click(screen.getByRole("button", { name: "点一下，说日期" }));
+    act(() => { recognition.onresult?.({ results: [[{ transcript: "一九八五年六月拍的" }]] }); recognition.onend?.(); });
+    expect(screen.getByLabelText("听到的话（可修改）")).toHaveValue("一九八五年六月拍的");
+    expect(mock.correct).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "核对语音日期" }));
+    expect(screen.getByText("按您说的，记录为 1985-06，可以吗？")).toBeInTheDocument();
+    expect(mock.correct).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "确认日期" }));
+    await waitFor(() => expect(mock.correct).toHaveBeenCalledTimes(1));
+    expect(mock.correct.mock.calls[0][1]).toMatchObject({ value: "1985-06", precision: "month", expected_revision: 1, consent_version: 3 });
+  });
+
+  it("rejects a vague transcript and clears it when switching photos", async () => {
+    mock.batch.mockResolvedValue({ batch_id: "batch", granted: true, consent_version: 1 });
+    mock.list.mockResolvedValue({ photos: [photo, { ...photo, photo_id: "another" }], next_after_id: null });
+    render(<PhotoAlbum />); await select();
+    fireEvent.change(screen.getByLabelText("听到的话（可修改）"), { target: { value: "大概八十年代" } });
+    fireEvent.click(screen.getByRole("button", { name: "核对语音日期" }));
+    expect(screen.getByRole("alert")).toHaveTextContent("没有识别出明确日期");
+    expect(mock.correct).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "查看照片 2" }));
+    await waitFor(() => expect(screen.getByLabelText("听到的话（可修改）")).toHaveValue(""));
+    expect(mock.correct).not.toHaveBeenCalled();
+  });
+
+  it("keeps text date entry when browser listening is unavailable", async () => {
+    mock.batch.mockResolvedValue({ batch_id: "batch", granted: true, consent_version: 1 });
+    vi.stubGlobal("SpeechRecognition", undefined); vi.stubGlobal("webkitSpeechRecognition", undefined);
+    render(<PhotoAlbum />); await select();
+    fireEvent.click(screen.getByLabelText("本次允许使用浏览器听写"));
+    fireEvent.click(screen.getByRole("button", { name: "点一下，说日期" }));
+    expect(screen.getByText("这个浏览器暂不支持听写，请用文字输入或试用示例。")).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText("拍摄时间"), { target: { value: "1985" } });
+    fireEvent.click(screen.getByRole("button", { name: "核对日期" }));
+    expect(screen.getByRole("button", { name: "确认日期" })).toBeInTheDocument();
+  });
+
+  it("reads only the stored date status and aborts listening on photo switch", async () => {
+    mock.batch.mockResolvedValue({ batch_id: "batch", granted: true, consent_version: 1 });
+    mock.list.mockResolvedValue({ photos: [photo, { ...photo, photo_id: "another" }], next_after_id: null });
+    const speak = vi.fn();
+    vi.stubGlobal("speechSynthesis", { speak, cancel: vi.fn() });
+    vi.stubGlobal("SpeechSynthesisUtterance", class { lang = ""; rate = 1; text: string; constructor(text: string) { this.text = text; } });
+    let abort: ReturnType<typeof vi.fn>;
+    class Recognition {
+      lang = ""; continuous = false; interimResults = false;
+      onresult = null; onerror = null; onend = null;
+      start = vi.fn(); stop = vi.fn(); abort = vi.fn();
+      constructor() { abort = this.abort; }
+    }
+    vi.stubGlobal("SpeechRecognition", Recognition);
+    render(<PhotoAlbum />); await select();
+    fireEvent.click(screen.getByRole("button", { name: "读出当前提示" }));
+    expect(speak).toHaveBeenCalledWith(expect.objectContaining({ lang: "zh-CN", rate: 0.7,
+      text: expect.stringContaining("尚未整理") }));
+    fireEvent.click(screen.getByLabelText("本次允许使用浏览器听写"));
+    fireEvent.click(screen.getByRole("button", { name: "点一下，说日期" }));
+    fireEvent.click(screen.getByRole("button", { name: "查看照片 2" }));
+    expect(abort!).toHaveBeenCalled();
   });
 
   it("shows service failure and allows refresh instead of simulated success", async () => {

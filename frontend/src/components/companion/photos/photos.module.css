@@ -17,7 +17,7 @@
 .shell h3 { font-size: 1.1em; }
 .shell a { color: var(--accent); display: inline-flex; min-height: 48px; align-items: center; }
 .panel { background: var(--surface); border: 1px solid #52687d; border-radius: 1rem; padding: 1rem; margin: 1rem 0; min-width: 0; }
-.shell button, .shell input, .shell select {
+.shell button, .shell input, .shell select, .shell textarea {
   font: inherit;
   min-height: 48px;
   max-width: 100%;
@@ -29,7 +29,11 @@
 .shell button:active { background: #356588; }
 .shell button:disabled { opacity: .55; cursor: default; }
 .shell :focus-visible { outline: 3px solid var(--accent); outline-offset: 3px; }
-.shell input, .shell select { background: #0c1520; color: var(--text); width: 100%; }
+.shell input, .shell select, .shell textarea { background: #0c1520; color: var(--text); width: 100%; }
+.shell textarea { min-height: 5rem; resize: vertical; }
+.voice { border-top: 1px solid #52687d; margin-top: 1rem; padding-top: 1rem; }
+.check { display: flex !important; align-items: center; gap: .75rem; min-height: 48px; }
+.shell .check input { width: 1.5rem; min-width: 1.5rem; min-height: 1.5rem; height: 1.5rem; margin: 0; }
 .shell label { display: block; margin-top: .75rem; }
 .shell input[type=file] { white-space: normal; font-size: .9em; }
 .note { color: var(--muted); font-size: .9em; }

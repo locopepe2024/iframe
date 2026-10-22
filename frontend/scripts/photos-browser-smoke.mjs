@@ -122,8 +122,11 @@ uvicorn.Server(uvicorn.Config(app, log_level='error')).run(sockets=[sock])
       await pause(100);
     }
     if (!point.hit || point.w < 44 || point.h < 44) throw Error(`Unreachable/small target: ${label}: ${JSON.stringify(point)}`);
+    await pause(80);
     await send("Input.dispatchTouchEvent", { type: "touchStart", touchPoints: [{ x: point.x, y: point.y }] });
+    await pause(80);
     await send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
+    await pause(80);
   }
   async function choose(filename) {
     const { root: document } = await send("DOM.getDocument");
@@ -156,6 +159,12 @@ uvicorn.Server(uvicorn.Config(app, log_level='error')).run(sockets=[sock])
   const unknownButton = await evaluate("[...document.querySelectorAll('button')].find(b=>b.getAttribute('aria-label')?.startsWith('查看照片') && b.textContent.includes('尚未整理')).getAttribute('aria-label')");
   await tap(unknownButton); await tap("按时间整理"); await tap("同意并整理");
   await wait("unknown date", "document.querySelector('[aria-label=\"当前照片\"]').innerText.includes('时间待确认')");
+  await evaluate("(() => {const input=document.querySelector('#photo-spoken-draft');Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype,'value').set.call(input,'一九八五年六月拍的');input.dispatchEvent(new Event('input',{bubbles:true}));})()");
+  await tap("核对语音日期");
+  await wait("spoken date proposal", "document.body.innerText.includes('按您说的，记录为 1985-06，可以吗？')");
+  if (!await evaluate("document.querySelector('[aria-label=\"当前照片\"]').innerText.includes('时间待确认')")) throw Error("Spoken proposal changed the date before confirmation");
+  await tap("确认日期");
+  await wait("confirmed spoken month", "document.querySelector('[aria-label=\"当前照片\"]').innerText.includes('1985-06（您确认的）')");
   const layouts = [];
   for (const [width, height, scale] of [[320, 568, "100%"], [375, 812, "200%"], [844, 390, "100%"]]) {
     await send("Emulation.setDeviceMetricsOverride", { width, height, deviceScaleFactor: 1, mobile: true });
@@ -166,7 +175,7 @@ uvicorn.Server(uvicorn.Config(app, log_level='error')).run(sockets=[sock])
     layouts.push({ width, height, scale });
   }
   if (errors.length || blocked.length) throw Error(`Browser errors/requests: ${JSON.stringify({errors,blocked})}`);
-  console.log(JSON.stringify({ result: "passed", backend: "real local FastAPI and temporary SQLite", input: "CDP touch, file chooser", checks: ["upload", "decline", "consent", "EXIF organization", "year confirmation", "history restoration", "reload persistence", "revocation", "missing date stays pending", "responsive layout"], layouts }, null, 2));
+  console.log(JSON.stringify({ result: "passed", backend: "real local FastAPI and temporary SQLite", input: "CDP touch, file chooser, editable transcript", checks: ["upload", "decline", "consent", "EXIF organization", "year confirmation", "history restoration", "reload persistence", "revocation", "missing date stays pending", "spoken date proposal requires confirmation", "responsive layout"], layouts }, null, 2));
 } catch (error) { console.error(error.stack || String(error)); process.exitCode = 1; }
 finally {
   if (socket) socket.terminate();

@@ -84,7 +84,7 @@ export function useCompanionVoice(onTranscript: (text: string) => void) {
     current.onresult = (event) => {
       const text = Array.from(event.results).map(result => result[0]?.transcript ?? "").join("");
       transcriptCallback.current(text);
-      setNotice("听写文字已放入输入框，请检查后发送。");
+      setNotice("听写文字已放入输入框，请检查后继续。");
     };
     current.onerror = () => {
       dispose();
