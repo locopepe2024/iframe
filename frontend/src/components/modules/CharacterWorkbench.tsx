@@ -1718,7 +1718,7 @@ export function WorkbenchPanel({
                 {!isVideo && !designEditor && <div className="px-4 pt-2">
                     <div className="flex flex-wrap items-center gap-2">
                         <button type="button" disabled={isLocked} onMouseDown={event => event.preventDefault()} onClick={() => { setOpenSlashRequest((value) => value + 1); }}
-                            className="min-h-11 rounded border border-glass-border px-3 text-xs text-foreground hover:bg-hover-bg disabled:opacity-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary">面板与模板</button>
+                            className="min-h-11 rounded border border-glass-border px-3 text-xs text-foreground hover:bg-hover-bg disabled:opacity-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary">快捷面板</button>
                     </div>
                     {platformPromptSource && <p className="mt-1 break-words text-[11px] text-text-muted" aria-label="平台 Prompt 来源">
                         来源：{platformPromptSource.title} · r{platformPromptSource.revision}
@@ -1746,7 +1746,7 @@ export function WorkbenchPanel({
                         pruneUnlistedReferences
                         expanded
                         editable={!isLocked}
-                        placeholder={isVideo ? "输入视频 Prompt，@ 检索资产" : designEditor ? "本次出图提示词，@ 检索资产" : "输入 Prompt，/ 打开面板与模板，@ 检索资产"}
+                        placeholder={isVideo ? "输入视频 Prompt，@ 检索资产" : designEditor ? "本次出图提示词，@ 检索资产" : "输入 Prompt，/ 打开快捷面板，@ 检索资产"}
                     />
                     {!isVideo && !designEditor && !isLocked && promptSlash && <CharacterPromptDictionary suggestion={promptSlash} onClose={() => setPromptSlash(null)}
                         onConfiguration={designEditor ? undefined : onDictionaryConfiguration} keyHandler={slashKeyHandler}
