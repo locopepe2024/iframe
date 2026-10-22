@@ -28,6 +28,7 @@ import { useTranslations } from "next-intl";
 import AssetChipBar from "./AssetChipBar";
 import PromptExpandModal from "./PromptExpandModal";
 import PolishPanel from "./PolishPanel";
+import MicroExpressionPanel from "./MicroExpressionPanel";
 import FieldTagChip, { AddFieldButton, type FieldType } from "./FieldTagChip";
 import { buildGenerationPrompt, directorShotSuggestions } from "./buildAssembledPrompt";
 import { directorFieldProposals } from "./directorFieldProposals";
@@ -156,6 +157,15 @@ export interface ShotNode {
         current_fields: Record<string, unknown>;
         rationale: Record<string, string>;
     } | null;
+    microExpressionCandidate?: {
+        id: string;
+        items: Array<{ character_id: string; emotion_intent: string; timing: Array<{ phase: string; visible_change: string }>; uncertainties?: string[]; facial_channels?: Record<string, string> }>;
+    } | null;
+    microExpressionTiming?: Array<{
+        character_id: string;
+        character_name?: string;
+        timing: Array<{ phase: string; visible_change: string; relative_start: number; relative_end: number }>;
+    }>;
 
     /** When true, the user has manually pinned an active take. Hero
      *  shows a "Pinned" chip; autoSelectLatestVideo skips this frame on
@@ -223,6 +233,8 @@ interface ShotCardProps {
     onRefineFrame?: () => void;
     onApplyRichRefinement?: (candidateId: string, fields: string[]) => void;
     onDiscardRichRefinement?: (candidateId: string) => void;
+    onMicroExpressionApplied?: () => Promise<void> | void;
+    onMicroExpressionBeforePreview?: () => Promise<void> | void;
     richRefinementBusy?: boolean;
     onUpdateDialogue?: (text: string) => void;
     /** Active-take pin controls. When the user has manually pinned an
@@ -272,6 +284,8 @@ export default function ShotCard({
     onRefineFrame,
     onApplyRichRefinement,
     onDiscardRichRefinement,
+    onMicroExpressionApplied,
+    onMicroExpressionBeforePreview,
     richRefinementBusy = false,
     onUnpinVideo,
 }: ShotCardProps) {
@@ -903,6 +917,15 @@ export default function ShotCard({
                             imageUrls={polishImageUrls}
                             onApply={(text) => onUpdatePrompt(text, true)}
                         />
+                        {currentProjectId && <MicroExpressionPanel
+                            projectId={currentProjectId}
+                            frameId={shot.id}
+                            initialCandidate={shot.microExpressionCandidate ?? null}
+                            characterNames={Object.fromEntries(characters.map((character: any) => [character.id, character.name]))}
+                            optimized={!!shot.promptIsOptimized}
+                            onBeforePreview={onMicroExpressionBeforePreview}
+                            onApplied={onMicroExpressionApplied}
+                        />}
 
                         {/* Structured field tags — interactive Popover editors */}
                         <div className="flex flex-wrap items-center gap-1.5 mt-0.5">

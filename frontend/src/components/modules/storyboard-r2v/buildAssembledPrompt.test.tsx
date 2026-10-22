@@ -1,6 +1,20 @@
 import { expect, it } from "vitest";
 
 import { buildGenerationPrompt, directorShotSuggestions, resolveNegativePrompt, resolveStylePrompt } from "./buildAssembledPrompt";
+
+it("adds only accepted micro-expression timing to video prompt", () => {
+    const shot = { id: "frame", prompt: "街头等待", tabMode: "t2i_i2v" as const,
+        microExpressionTiming: [{ character_id: "hero", character_name: "玄宸", timing: [
+            { phase: "trigger", relative_start: 0, relative_end: 0.2, visible_change: "视线停住" },
+            { phase: "release", relative_start: 0.8, relative_end: 1, visible_change: "恢复平静" },
+        ] }] };
+    const result = buildGenerationPrompt(shot, false, "uniart/seedance-2.5-vip");
+    expect(result).toContain("玄宸表情时序");
+    expect(result).toContain("release(0.80-1.00) 恢复平静");
+    expect(result).not.toContain("前镜对白");
+    const optimized = { ...shot, prompt: "街头等待，警觉地看向身后", promptIsOptimized: true };
+    expect(buildGenerationPrompt(optimized, false, "uniart/seedance-2.5-vip")).toContain("玄宸表情时序");
+});
 import { resolveStoryboardStyle, resolveStoryboardStyleForRender } from "@/lib/storyboardStyle";
 import type { ShotNode } from "./ShotCard";
 

@@ -246,6 +246,8 @@ export function frameToShotNode(
         lightingOverride: frame.lighting_override ?? null,
         negativePromptOverride: frame.negative_prompt_override ?? null,
         richRefinementCandidate: frame.rich_refinement_candidate ?? null,
+        microExpressionCandidate: frame.micro_expression_candidate ?? null,
+        microExpressionTiming: frame.micro_expression_timing ?? [],
         isVideoPinned: Boolean(frame.is_video_pinned),
     });
 }

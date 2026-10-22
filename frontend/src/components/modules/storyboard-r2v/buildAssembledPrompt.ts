@@ -130,6 +130,8 @@ export function buildAssembledPrompt(
         suffixes.push(shot.transitionHint);
     }
 
+    suffixes.push(...microExpressionDescriptions(shot));
+
     if (suffixes.length === 0) return [prefix, base].filter(Boolean).join(" . ");
 
     const separator = base.endsWith("。") || base.endsWith(".") || base.endsWith("，") || base.endsWith(",")
@@ -139,13 +141,26 @@ export function buildAssembledPrompt(
     return [prefix, assembled].filter(Boolean).join(" . ");
 }
 
+function microExpressionDescriptions(shot: ShotNode): string[] {
+    return (shot.microExpressionTiming ?? []).flatMap(item => {
+        const phases = item.timing.map(phase =>
+            `${phase.phase}(${phase.relative_start.toFixed(2)}-${phase.relative_end.toFixed(2)}) ${phase.visible_change}`,
+        );
+        return phases.length ? [`${item.character_name || "当前角色"}表情时序：${phases.join("；")}`] : [];
+    });
+}
+
 export function buildGenerationPrompt(
     shot: ShotNode,
     generateAudio: boolean,
     modelId: string,
     globalStylePrompt = "",
 ): string {
-    if (shot.promptIsOptimized) return shot.prompt.trim();
+    if (shot.promptIsOptimized) {
+        const base = shot.prompt.trim();
+        const accepted = microExpressionDescriptions(shot).filter(item => !base.includes(item));
+        return [base, ...accepted].filter(Boolean).join("，");
+    }
     // An accepted optimizer result is already a complete provider prompt.
     let prompt = buildAssembledPrompt(shot, true, globalStylePrompt);
     const line = shot.dialogueStructured?.line?.trim();

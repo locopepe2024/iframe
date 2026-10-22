@@ -2380,6 +2380,29 @@ export const api = {
         return response.json();
     },
 
+    previewMicroExpression: async (scriptId: string, frameId: string, emotionIntent: string, visibility: string) => {
+        const response = await axios.post(`${API_URL}/projects/${scriptId}/frames/${frameId}/micro-expression/preview`, {
+            frame_id: frameId, emotion_intent: emotionIntent, visibility,
+        });
+        return response.data as { messages: { system: string; user: string }; review_token: string; input: Record<string, unknown> };
+    },
+
+    generateMicroExpression: async (scriptId: string, frameId: string, emotionIntent: string, visibility: string,
+                                    review: { messages: { system: string; user: string }; review_token: string }) => {
+        const response = await axios.post(`${API_URL}/projects/${scriptId}/frames/${frameId}/micro-expression/generate`, {
+            frame_id: frameId, emotion_intent: emotionIntent, visibility,
+            reviewed_messages: review.messages, review_token: review.review_token,
+        });
+        return response.data as { id: string; items: Array<{ character_id: string; emotion_intent: string; timing: Array<{ phase: string; visible_change: string }>; uncertainties?: string[]; facial_channels?: Record<string, string> }> };
+    },
+
+    applyMicroExpression: async (scriptId: string, frameId: string, candidateId: string, characterIds: string[]) => {
+        const response = await axios.post(`${API_URL}/projects/${scriptId}/frames/${frameId}/micro-expression/apply`, {
+            candidate_id: candidateId, character_ids: characterIds,
+        });
+        return response.data;
+    },
+
     /** Schema v2 · Batch refine all frames via SSE stream. */
     refineBatchFrames: async (
         scriptId: string,

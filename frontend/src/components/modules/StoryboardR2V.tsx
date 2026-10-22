@@ -2251,6 +2251,14 @@ export default function StoryboardR2V() {
                             onRefineFrame={() => handleRefineFrame(shot.id)}
                             onApplyRichRefinement={(candidateId, fields) => { void handleRichRefinement(shot.id, candidateId, fields); }}
                             onDiscardRichRefinement={(candidateId) => { void handleRichRefinement(shot.id, candidateId); }}
+                            onMicroExpressionBeforePreview={async () => { await frameEdits.flush(); }}
+                            onMicroExpressionApplied={async () => {
+                                if (!currentProject?.id) return;
+                                const updated = await api.getProject(currentProject.id);
+                                updateProject(currentProject.id, updated);
+                                const defaultMode = updated.default_generation_mode === "i2v" ? "t2i_i2v" : "direct_r2v";
+                                setShots(updated.frames.map((frame: any) => frameToShotNode(frame, updated.video_tasks ?? [], defaultMode)));
+                            }}
                             richRefinementBusy={richRefinementBusyFrameId === shot.id}
                             onUnpinVideo={() => handleUnpinVideo(shot.id)}
                             onUpdateDialogue={async (text: string) => {
