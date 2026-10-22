@@ -1,0 +1,151 @@
+{
+  "schema": "recreation2-gvhmr-wham-contract.v1",
+  "upstream_commits": {
+    "gvhmr": "ee960bb6e2ea2d381aa97f08e9b71ef320b624b1",
+    "wham": "2b54f7797391c94876848b905ed875b154c4a295"
+  },
+  "runtime": {
+    "platform": "macOS-26.5.1-arm64-arm-64bit",
+    "torch": "2.14.1",
+    "cuda_available": false,
+    "mps_available": false,
+    "official_cuda_query": {
+      "error_type": "AssertionError",
+      "message": "Torch not compiled with CUDA enabled"
+    }
+  },
+  "camera": {
+    "effective_K": [
+      [
+        1601.14208984375,
+        0.0,
+        697.0
+      ],
+      [
+        0.0,
+        1601.141845703125,
+        396.0000305175781
+      ],
+      [
+        0.0,
+        0.0,
+        1.0
+      ]
+    ],
+    "effective_camera_report_sha256": "e65514c2cb9a1e1f20feee1ca79e953146937622a917dfacd410fecd6dba2e7f",
+    "default_K_both": [
+      [
+        1603.27783203125,
+        0.0,
+        697.0
+      ],
+      [
+        0.0,
+        1603.27783203125,
+        396.0
+      ],
+      [
+        0.0,
+        0.0,
+        1.0
+      ]
+    ],
+    "default_minus_effective_f_px": 2.1357421875,
+    "default_relative_f_difference_percent": 0.13338867306327273,
+    "equivalent_fullframe_mm_under_gvhmr_diagonal_convention": 43.208977796485094,
+    "gvhmr_cli_43mm_f_px": 1593.3983154296875,
+    "simplevo_default24mm_f_full_resolution_px": 889.338561473119
+  },
+  "synthetic_helper_execution": {
+    "gvhmr_baseline_translation": [
+      [
+        [
+          0.11499999999996251,
+          0.21999984741205938,
+          8.005710449198736
+        ]
+      ]
+    ],
+    "gvhmr_shifted_principal_translation": [
+      [
+        [
+          0.01500000000021251,
+          0.1449998474122469,
+          8.005710449198736
+        ]
+      ]
+    ],
+    "wham_baseline_translation": [
+      [
+        [
+          0.115,
+          0.22,
+          8.00571044921875
+        ]
+      ]
+    ],
+    "wham_shifted_principal_translation": [
+      [
+        [
+          0.115,
+          0.22,
+          8.00571044921875
+        ]
+      ]
+    ],
+    "gvhmr_fy_only_change_ignored_in_condition_and_translation": true,
+    "gvhmr_double_f_doubles_root_z_at_fixed_prediction": true,
+    "scope": "AST-extracted exact upstream function definitions on synthetic inputs; not end-to-end model inference"
+  },
+  "source_sha256": {
+    "gvhmr": {
+      "hmr4d/model/gvhmr/gvhmr_pl_demo.py": "0e866c8f486b46ab7fe3a67bd956e6a84a1212f17d3773f0de163dbfd384f250",
+      "hmr4d/model/gvhmr/pipeline/gvhmr_pipeline.py": "c99d514136d3b0ea321493b7f6486d645685176442b8ae8c478724ef694d77e4",
+      "hmr4d/model/gvhmr/utils/endecoder.py": "dd26cda551ec8bd9a974c8bd92baebcf513820bffaa4cb7fccdf7bad9e6f88b7",
+      "hmr4d/model/gvhmr/utils/postprocess.py": "4125839f39255fc25e9c773182d443f1ce619f14bcd016fe322c53d550815f44",
+      "hmr4d/utils/body_model/smplx_lite.py": "f64ce5c324ab406b90de98ad89bb616194412daa9dc0100e5a7c860947fb92d1",
+      "hmr4d/utils/geo/hmr_cam.py": "d81e2528b10ae11e45b15d09acf43e4619f2711520c4d686b6ea672a6c034adf",
+      "hmr4d/utils/geo/hmr_global.py": "2bf268e8b5049b9b07c1e7cd80b2785783883b242fc72406213f9f07ae2bdb61",
+      "hmr4d/utils/preproc/relpose/simple_vo.py": "b1677b61f28940d15b75b6529152e7997d07f9bae5c995a8e736ce29850eec4e",
+      "hmr4d/utils/preproc/relpose/utils.py": "6e54d5fe6a96bcb049eac2a786f2b8624aefe56e56246d13008a1683d393ac90",
+      "hmr4d/utils/smplx_utils.py": "e4f9a663a0680d05101bfd47e049e22553f020190df65d203007f0c4ce4f6d78",
+      "tools/demo/demo.py": "36b9176a0ba75b887f7d657defefe263b684259a55e8ba4d26ecc3a0b7f56420"
+    },
+    "wham": {
+      "demo.py": "a637abf19f3ff41a0fb8bc0be06be315e0a7116f76af3d9d8e6af9477ffe0637",
+      "lib/data/datasets/dataset_custom.py": "d50726875c1f299dc108e0264c740c4fea8fc0b5d5a5d68ccdfebf354193f83e",
+      "lib/data/utils/normalizer.py": "041130291373943b5c2ce064845f81630711c3f14efecd30059629c6a9e3838a",
+      "lib/models/preproc/slam.py": "bc353e75735eca9a6878d1797cc805c275cc41f5e136f846120d5fad3d89daea",
+      "lib/models/smpl.py": "270baebe7a3a243b5ccba323b2ec17b9d71de83bf557ea2ec14f227e24a593c5",
+      "lib/models/wham.py": "be608c4991ecafd75a86ec55f7942c9e3e2979ead81f623622b22d5d7bb1f293",
+      "lib/models/layers/utils.py": "3255a646b1ef42ab6160b0a8b16683117eb1e2f5eec6d6c575fafc0846a06cbe",
+      "lib/models/__init__.py": "5c5f7a9c2249fa90623ca3fb53528c676462808601ea3bd94343d07a5cd49f46",
+      "lib/vis/run_vis.py": "f8bd143c712783936e276e8586c0d3f376b51d08c09d6e54eb76a6eb62c35dd6",
+      "lib/utils/imutils.py": "941ba265ff823a9c1adb34351aa2b4eded94a509ea66fe5ff7a443725b23a8a5"
+    }
+  },
+  "tool_sha256": "d6284dbee74b300b6e6860bfab291f10d4c81ecc0d5c7f891028660886bb2398",
+  "gvhmr_source_blob_verification": {
+    "matched_file_count": 11,
+    "tree_json_sha256": "46fcdfb81b6883eb788dd4fe499da67aaa286c53155371e5af9021231454089d"
+  },
+  "required_asset_presence_at_reviewed_roots": {
+    "gvhmr": {
+      "inputs/checkpoints/gvhmr/gvhmr_siga24_release.ckpt": false,
+      "inputs/checkpoints/body_models/smplx/SMPLX_NEUTRAL.npz": false,
+      "inputs/checkpoints/vitpose/vitpose-h-multi-coco.pth": false,
+      "inputs/checkpoints/hmr2/epoch=10-step=25000.ckpt": false
+    },
+    "wham": {
+      "dataset/body_models/smpl/SMPL_NEUTRAL.pkl": false,
+      "dataset/body_models/J_regressor_feet.npy": false,
+      "checkpoints/wham_vit_bedlam_w_3dpw.pth.tar": false,
+      "checkpoints/hmr2a.ckpt": false
+    }
+  },
+  "limits": [
+    "No WHAM/GVHMR model inference, no source motion accuracy measurements",
+    "No authenticated model download, production changes or CPU port",
+    "Default f is a heuristic, not an estimated source parameter"
+  ]
+}
