@@ -8,6 +8,7 @@ from src.apps.comic_gen.models import (
     Scene,
     Script,
     ShotVisualDesignSnapshot,
+    ShotVisualPreset,
     StoryboardFrame,
     LightingData,
 )
@@ -42,6 +43,34 @@ def context(scene_id, place, time_id, *, lighting=None):
         "shooting_plan_revision": 2,
         "shooting_plan_hash": "plan-hash",
     }
+
+
+def test_reference_picker_previews_bind_to_exact_source_variants(tmp_path, monkeypatch):
+    from src.apps.comic_gen import api
+    from src.apps.studio_access import UserContext
+
+    pipeline, script, source_scene, _ = make_pipeline(tmp_path)
+    source_scene.image_asset = ImageAsset(variants=[
+        ImageVariant(id="first", url="output/first.webp"),
+        ImageVariant(id="second", url="output/second.webp"),
+    ], selected_id="first")
+    script.shot_visual_presets = [ShotVisualPreset(
+        id="stale", name="unavailable", scene_id=source_scene.id, source_asset_id=source_scene.id,
+        source_variant_id="missing",
+    )]
+    monkeypatch.setattr(api, "pipeline", pipeline)
+    monkeypatch.setattr(pipeline, "get_script", lambda script_id, owner_id: script if owner_id == "owner" else None)
+    monkeypatch.setattr(api, "_owned_media_cover_url", lambda stored, owner, size: f"/preview/{stored}")
+    owner = UserContext("owner", "owner", "", "")
+
+    response = api.list_shot_visual_presets(script.id, user=owner)
+    import json
+    previews = {item["source_variant_id"]: item["preview_url"] for item in json.loads(response.body)}
+    assert previews["first"] == "/preview/output/first.webp"
+    assert previews["second"] == "/preview/output/second.webp"
+    assert previews["missing"] is None
+    source_scene.image_asset.variants = [source_scene.image_asset.variants[0]]
+    assert "second" not in {item["source_variant_id"] for item in json.loads(api.list_shot_visual_presets(script.id, user=owner).body)}
 
 
 def test_explicit_reference_defaults_to_image_only_and_never_copies_source_prompt(tmp_path):

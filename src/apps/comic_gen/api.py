@@ -4065,9 +4065,26 @@ class ApplyShotVisualPresetRequest(BaseModel):
     selected_fields: Optional[List[Literal["lighting", "space", "camera", "continuity_state"]]] = None
 
 
-@app.get("/projects/{script_id}/shot-visual-presets", response_model=List[ShotVisualPreset])
-def list_shot_visual_presets(script_id: str, scene_id: Optional[str] = None):
-    return pipeline.list_shot_visual_presets(script_id, scene_id=scene_id)
+@app.get("/projects/{script_id}/shot-visual-presets")
+def list_shot_visual_presets(
+    script_id: str, scene_id: Optional[str] = None,
+    user: UserContext = Depends(require_studio_user),
+):
+    script = pipeline.get_script(script_id, user.owner_profile_id)
+    if not script:
+        raise HTTPException(status_code=404, detail="Script not found")
+    result = []
+    for preset in pipeline.list_shot_visual_presets(script_id, scene_id=scene_id):
+        _, _, variant, _, _ = pipeline._visual_reference_source(script, preset)
+        stored = image_variant_storage_key(variant) if variant else None
+        preview_url = None
+        if stored:
+            try:
+                preview_url = _owned_media_cover_url(stored, user.owner_profile_id, 160)
+            except HTTPException:
+                pass
+        result.append({**preset.model_dump(mode="json"), "preview_url": preview_url})
+    return private_no_store_signed_response(result)
 
 
 @app.get("/projects/{script_id}/frames/{frame_id}/shot-visual-presets/{preset_id}/projection")
