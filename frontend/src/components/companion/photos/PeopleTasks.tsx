@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { photoApi, type PeopleConsentRequest, type PeopleTask, type TimeConsent, type TimeQuestion } from "@/lib/photoApi";
+import PeopleCorrection from "./PeopleCorrection";
 import PeopleCandidates from "./PeopleCandidates";
 import styles from "./photos.module.css";
 
@@ -96,6 +97,7 @@ export default function PeopleTasks({ batchId }: { batchId: string }) {
       })}>确认停止人物分析</button>
       <button disabled={busy} onClick={() => { setStop(false); consentOperation.current = null; }}>返回，不停止</button>
     </div>}
+    <PeopleCorrection key={batchId} selection={{ action: "undo_batch", batch_id: batchId }} disabled={busy || active} />
     {tasks.map(task => <div className={styles.history} key={task.task_id}>
       <p>{taskLabels[task.status] ?? "人物任务状态待刷新"}</p>
       <p>已检测到人脸 {task.counts.detected} 张，未检测到可用人脸 {task.counts.no_faces} 张，失败 {task.counts.failed} 张，待处理 {task.counts.pending} 张，处理中 {task.counts.running} 张，已停止 {task.counts.cancelled} 张，已清理 {task.counts.cleared} 张。</p>

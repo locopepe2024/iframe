@@ -34,10 +34,30 @@ export interface PeopleTask {
 }
 export type FaceBox = [number, number, number, number];
 export interface PeopleGroup {
-  group_id: string; revision: number; status: "pending" | "deferred" | "confirmed" | "split";
+  group_id: string; revision: number; status: "pending" | "deferred" | "confirmed" | "split" | "corrected";
   person_id: string | null; members: { face_id: string; photo_id: string; box: FaceBox }[];
 }
 export interface PersonAlbum { person_id: string; label: string; photo_count: number }
+export interface PersonFace { task_id: string; face_id: string; box: FaceBox }
+export interface PersonPhoto { photo_id: string; boxes: FaceBox[]; members: PersonFace[] }
+export interface PeopleCorrectionSelection {
+  action: "remove" | "split" | "merge" | "undo_batch";
+  person_id?: string; target_id?: string; batch_id?: string; label?: string;
+  members?: { task_id: string; face_id: string }[];
+}
+export interface PeopleCorrectionPreview {
+  preview_token: string; selection: PeopleCorrectionSelection;
+  counts: { members: number; photos: number; preserve: number };
+  people: { person_id: string; label: string; members: { task_id: string; face_id: string; photo_id: string; box: string }[] }[];
+  affected: { person_id: string; task_id: string; face_id: string; photo_id: string; box: string }[];
+}
+export interface PeopleCorrectionReceipt {
+  operation_id: string; action: PeopleCorrectionSelection["action"]; person_id: string | null;
+  counts: PeopleCorrectionPreview["counts"]; created_at: number;
+}
+export interface PeopleCorrectionRequest extends PeopleCorrectionSelection {
+  operation_id: string; preview_token: string; method: "button";
+}
 export interface PeopleReviewRequest {
   operation_id: string; expected_revision: number; consent_version: number;
   action: "confirm" | "split" | "defer"; label: string;
@@ -68,6 +88,8 @@ async function request<T>(path: string, method = "GET", body?: unknown): Promise
     ...(body === undefined ? {} : { headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }),
   });
   if (!response.ok) {
+    if (path.includes("people-corrections") && response.status === 409) throw new Error("人物关系已变化，请返回并重新预览。若上次提交未收到回执，请先用原确认按钮重试。");
+    if (path.includes("people-corrections") && response.status === 422) throw new Error("请选择要调整的人脸；拆分时需为原人物保留至少一张人脸。");
     if (path.includes("people") && response.status === 503) throw new Error("人物整理暂不可用，请稍后刷新；不会自动提交确认。");
     if (path.endsWith("/undo-time") && response.status === 409) throw new Error("照片或授权已变化，请重新预览后再确认撤销。");
     if (path.endsWith("/analysis") && response.status === 409) throw new Error("请先在 iFrame 创作台为当前用户配置 UniArt 渠道，再回来重试。");
@@ -85,6 +107,9 @@ function serviceError(status: number) {
     : "服务暂不可用，请稍后重试。");
 }
 export const photoApi = {
+  peopleCorrectionPreview: (body: PeopleCorrectionSelection) => request<PeopleCorrectionPreview>("/people-corrections/preview", "POST", body),
+  correctPeople: (body: PeopleCorrectionRequest) => request<PeopleCorrectionReceipt>("/people-corrections", "POST", body),
+  peopleCorrectionHistory: (after = 0) => request<{ changes: PeopleCorrectionReceipt[]; next_after: number | null }>(`/people-corrections/history?after=${after}`),
   peopleStatus: (id: string) => request<TimeConsent & { enabled: boolean }>(`/batches/${encodeURIComponent(id)}/people`),
   peopleQuestion: (id: string) => request<TimeQuestion & { consent_version: number }>(`/batches/${encodeURIComponent(id)}/people-question`, "POST"),
   peopleConsent: (id: string, body: PeopleConsentRequest) => request<TimeConsent>(`/batches/${encodeURIComponent(id)}/people-consent`, "POST", body),
@@ -93,7 +118,7 @@ export const photoApi = {
   peopleGroups: (id: string) => request<{ ready: boolean; groups: PeopleGroup[] }>(`/people-tasks/${encodeURIComponent(id)}/groups`),
   reviewPeopleGroup: (id: string, body: PeopleReviewRequest) => request<{ status: string; revision: number; person_id: string | null }>(`/people-groups/${encodeURIComponent(id)}/review`, "POST", body),
   peopleAlbums: (after = "") => request<{ people: PersonAlbum[]; next_after_id: string | null }>(`/people-albums?${new URLSearchParams({ after_id: after })}`),
-  personPhotos: (id: string, after = "") => request<{ photos: { photo_id: string; boxes: FaceBox[] }[]; next_after_id: string | null }>(`/people-albums/${encodeURIComponent(id)}?${new URLSearchParams({ after_id: after })}`),
+  personPhotos: (id: string, after = "") => request<{ photos: PersonPhoto[]; next_after_id: string | null }>(`/people-albums/${encodeURIComponent(id)}?${new URLSearchParams({ after_id: after })}`),
   undoPreview: (id: string) => request<BatchUndoPreview>(`/batches/${encodeURIComponent(id)}/undo-time-preview`),
   undoBatch: (id: string, body: { operation_id: string; preview_token: string }) => request<BatchUndoReceipt>(`/batches/${encodeURIComponent(id)}/undo-time`, "POST", body),
   undoHistory: (id: string, after = 0) => request<{ changes: BatchUndoReceipt[]; next_after: number | null }>(`/batches/${encodeURIComponent(id)}/undo-time/history?after=${after}`),

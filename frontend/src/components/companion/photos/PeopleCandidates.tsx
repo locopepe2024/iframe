@@ -69,8 +69,8 @@ export default function PeopleCandidates({ taskId, version }: { taskId: string; 
     }}>刷新人物候选</button>
     {error && <p role="alert">{error}</p>}{notice && <p role="status">{notice}</p>}
     {!busy && !ready && <p>正在等待后台生成候选，请稍后刷新。此时尚未建立人物相册。</p>}
-    {groups.filter(group => group.status !== "split").map((group, index) => <button key={group.group_id} disabled={busy || group.status === "confirmed"} onClick={() => { setSelected(group.group_id); setNotice(""); }}>
-      {group.status === "confirmed" ? "已确认" : group.status === "deferred" ? "以后再说" : "待核对"}人物组 {index + 1}：{group.members.length} 张人脸
+    {groups.filter(group => group.status !== "split").map((group, index) => <button key={group.group_id} disabled={busy || ["confirmed", "corrected"].includes(group.status)} onClick={() => { setSelected(group.group_id); setNotice(""); }}>
+      {group.status === "corrected" ? "确认后已调整" : group.status === "confirmed" ? "已确认" : group.status === "deferred" ? "以后再说" : "待核对"}人物组 {index + 1}：{group.members.length} 张人脸
     </button>)}
     {current && ["pending", "deferred"].includes(current.status) && <CandidateCard key={`${current.group_id}/${current.revision}`} group={current} version={version} onSaved={async () => {
       setNotice("核对已保存。只有确认的人物会进入人物相册。"); await refresh();
