@@ -85,3 +85,17 @@ def test_markdown_and_chinese_numbered_headings():
     episodes = split_numbered_episodes(text, 2)
     assert [episode["title"] for episode in episodes] == ["第一集：相遇", "第二集：离别"]
     assert text[episodes[0]["start_offset"]:episodes[0]["end_offset"]].endswith("正文一\n")
+
+
+def test_crlf_numbered_sixty_episode_import_keeps_exact_source():
+    text, _ = _sixty_episode_text()
+    source = text.replace("\n", "\r\n")
+    pipeline = ComicGenPipeline.__new__(ComicGenPipeline)
+    context, screenplay = pipeline._split_import_series_context(source)
+    preview = split_numbered_episodes(screenplay, 60)
+    chunks = pipeline._split_text_by_markers(screenplay, preview)
+
+    assert context["preamble"] == "剧本梗概：一部武侠漫剧。"
+    assert len(chunks) == 60
+    assert "".join(chunks) == screenplay
+    assert "\r\n" in chunks[0]
