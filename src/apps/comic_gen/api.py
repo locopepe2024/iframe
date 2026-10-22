@@ -5473,12 +5473,12 @@ def preview_frame_candidate(script_id: str, request: RenderFramePreviewRequest,
             continue
         selected = next((item for item in selected_assets
                          if item["asset_type"] == "character" and item["asset_id"] == item_id), None)
-        reference_labels.append(f"{character.name}（{selected['variant_id'] if selected and selected.get('variant_id') else '无参考图'}）")
+        reference_labels.append(f"{character.name}（{'已选参考图' if selected and selected.get('variant_id') else '无参考图'}）")
     if frame.scene_id:
         scene_asset = scene_assets.get(frame.scene_id)
         selected = next((item for item in selected_assets
                          if item["asset_type"] == "scene" and item["asset_id"] == frame.scene_id), None)
-        reference_labels.append(f"{scene_asset.name if scene_asset else frame.scene_id}（{selected['variant_id'] if selected and selected.get('variant_id') else '无参考图'}）")
+        reference_labels.append(f"{scene_asset.name if scene_asset else '场景'}（{'已选参考图' if selected and selected.get('variant_id') else '无参考图'}）")
     from .assets import ASPECT_RATIO_TO_SIZE
     return {
         "prompt": candidate_prompt,
@@ -5534,7 +5534,7 @@ def preview_render_frame(script_id: str, request: RenderFramePreviewRequest,
             raise HTTPException(status_code=409, detail="Storyboard render preview is outdated; preview the current frame again")
         return {
             "prompt": prompt,
-            "context_token": pipeline.storyboard_render_preview_token(after, prompt),
+            "context_token": pipeline.storyboard_render_preview_token(after, prompt, request.negative_prompt),
             "source_label": source_label,
             "omitted_plan_lighting": omitted_plan_lighting,
             "polish_review": polish_review,
@@ -5561,7 +5561,7 @@ def start_render_frame_job(script_id: str, request: RenderFrameJobRequest,
             current_token = pipeline.storyboard_render_context_token(script_id, request.frame_id)
         except ValueError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
-        expected = pipeline.storyboard_render_preview_token(current_token, request.prompt)
+        expected = pipeline.storyboard_render_preview_token(current_token, request.prompt, request.negative_prompt)
         if not request.prompt_is_complete or request.context_token != expected:
             raise HTTPException(status_code=409, detail="Storyboard render preview is outdated; preview the current frame again")
     fingerprint = hashlib.sha256(json.dumps({

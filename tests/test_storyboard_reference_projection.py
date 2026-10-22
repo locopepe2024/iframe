@@ -10,6 +10,7 @@ from src.apps.comic_gen.models import (
     ShotVisualDesignSnapshot,
     ShotVisualPreset,
     StoryboardFrame,
+    StoryboardReference,
     LightingData,
 )
 from src.apps.comic_gen.pipeline import ComicGenPipeline
@@ -435,6 +436,10 @@ def test_candidate_and_render_submit_reviewed_prompt_and_selected_image(tmp_path
     script.frames = [source, target]
     preset = pipeline.save_shot_visual_preset(script.id, source.id, "reference", source_variant_id="source-variant")
     pipeline.apply_shot_visual_preset(script.id, target.id, preset.id, "image_and_context", ["lighting"])
+    target.reference_package.references.extend([
+        StoryboardReference(kind="reference_video", url="output/motion.mp4"),
+        StoryboardReference(kind="upload", url="output/unselected.webp"),
+    ])
     reviewed = pipeline.preview_storyboard_render_prompt(script.id, target.id, "TARGET SHOT")
     assert "source lamp" in reviewed
     assert "high" not in reviewed
@@ -456,7 +461,7 @@ def test_candidate_and_render_submit_reviewed_prompt_and_selected_image(tmp_path
     pipeline.generate_storyboard_candidate(script.id, target.id, reviewed, context_token=candidate_token)
     candidate_call = pipeline.storyboard_generator.generate_frame.call_args.kwargs
     assert candidate_call["prompt"] == reviewed
-    assert candidate_call["supplemental_ref_image_paths"] == ["output/source.webp"]
+    assert candidate_call["supplemental_ref_image_paths"] == ["output/source.webp", "output/unselected.webp"]
 
     render_token = pipeline.storyboard_render_preview_token(
         pipeline.storyboard_render_context_token(script.id, target.id), reviewed,

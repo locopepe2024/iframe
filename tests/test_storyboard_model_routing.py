@@ -345,6 +345,14 @@ def test_shot_candidate_requires_current_reviewed_input(tmp_path):
         pipeline.generate_storyboard_candidate(script.id, frame.id, "reviewed", "negative", token)
 
 
+def test_canonical_render_token_binds_negative_prompt():
+    from src.apps.comic_gen.pipeline import ComicGenPipeline
+
+    reviewed = ComicGenPipeline.storyboard_render_preview_token("context", "frame", "no blur")
+    assert reviewed != ComicGenPipeline.storyboard_render_preview_token("context", "frame", "no motion")
+    assert reviewed != ComicGenPipeline.storyboard_render_preview_token("context", "changed", "no blur")
+
+
 def test_render_preview_is_the_exact_complete_generator_prompt():
     now = time.time()
     frame = StoryboardFrame(

@@ -7496,11 +7496,12 @@ class ComicGenPipeline(StudioOwnerMixin):
         return hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
     @staticmethod
-    def storyboard_render_preview_token(context_token: str, prompt: str) -> str:
+    def storyboard_render_preview_token(context_token: str, prompt: str,
+                                        negative_prompt: Optional[str] = None) -> str:
         """Bind the complete preview text to its source context."""
         import hashlib
 
-        payload = json.dumps([context_token, prompt], ensure_ascii=False, separators=(",", ":"))
+        payload = json.dumps([context_token, prompt, negative_prompt or ""], ensure_ascii=False, separators=(",", ":"))
         return hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
     def generate_storyboard_render(
@@ -7527,7 +7528,7 @@ class ComicGenPipeline(StudioOwnerMixin):
             raise ValueError("Complete storyboard prompt cannot be empty")
         if context_token:
             current_context = self.storyboard_render_context_token(script_id, frame_id)
-            expected = self.storyboard_render_preview_token(current_context, prompt)
+            expected = self.storyboard_render_preview_token(current_context, prompt, negative_prompt)
             if not prompt_is_complete or context_token != expected:
                 raise ValueError("Storyboard render preview is outdated; preview the current frame again")
         explicit_refs = list((composition_data or {}).get("reference_image_urls") or [])
@@ -7590,7 +7591,8 @@ class ComicGenPipeline(StudioOwnerMixin):
                 (resolve_studio_reference(item.url, script.owner_profile_id, output_root=self.output_root)
                  if item.url.startswith("/studio/media/") else item.url)
                 for item in frame.reference_package.references
-                if selected_source_variant_id and item.source_variant_id == selected_source_variant_id
+                if item.url and item.kind != "reference_video"
+                and selected_source_variant_id and item.source_variant_id == selected_source_variant_id
             ]
             
             ref_image_paths = []
@@ -7715,7 +7717,7 @@ class ComicGenPipeline(StudioOwnerMixin):
             (resolve_studio_reference(item.url, script.owner_profile_id, output_root=self.output_root)
              if item.url.startswith("/studio/media/") else item.url)
             for item in candidate.reference_package.references
-            if item.url
+            if item.url and item.kind != "reference_video"
         ] if candidate.reference_package.confirmed else []
         self.storyboard_generator.generate_frame(
             candidate,
