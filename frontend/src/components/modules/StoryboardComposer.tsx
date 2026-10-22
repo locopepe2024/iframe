@@ -6,7 +6,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import {
     Layout, Image as ImageIcon,
     Trash2, Copy, Wand2, FileText, RefreshCw, Loader2, X, Lock, Unlock,
-    Plus, ArrowUp, ArrowDown, Zap, Upload, Film
+    Plus, ArrowUp, ArrowDown, Zap, Upload, Film, ListChecks
 } from "lucide-react";
 import { useProjectStore } from "@/store/projectStore";
 import { api, crudApi } from "@/lib/api";
@@ -21,6 +21,7 @@ import StoryboardGenerateDialog from "./storyboard-r2v/StoryboardGenerateDialog"
 import StoryboardAnalysisModal from "./storyboard-r2v/StoryboardAnalysisModal";
 import type { StoryboardAnalysisDraft, StoryboardGenerationOptions } from "@/lib/storyboardAnalysis";
 import StoryboardFrameEditor from "./StoryboardFrameEditor";
+import StoryboardContinuitySheet from "./StoryboardContinuitySheet";
 import RenderPromptPreviewDialog, { type FrameRenderPreview } from "./RenderPromptPreviewDialog";
 import { resolveNegativePrompt, resolveStylePrompt } from "./storyboard-r2v/buildAssembledPrompt";
 import { reviewedEpisodeLookImage } from "./storyboard-r2v/episodeLookImage";
@@ -60,6 +61,7 @@ export default function StoryboardComposer() {
     const [insertIndex, setInsertIndex] = useState<number | null>(null);
     const [extractingFrameId, setExtractingFrameId] = useState<string | null>(null);
     const [showScriptOverlay, setShowScriptOverlay] = useState(false);
+    const [showContinuitySheet, setShowContinuitySheet] = useState(false);
     const [pendingRender, setPendingRender] = useState<(FrameRenderPreview & { frameId: string; compositionData: any }) | null>(null);
 
     const fileInputRef = useRef<HTMLInputElement>(null);
@@ -477,6 +479,13 @@ export default function StoryboardComposer() {
                         <WorkflowActionButton
                             variant="ghost"
                             size="sm"
+                            leftIcon={<ListChecks />}
+                            onClick={() => setShowContinuitySheet(value => !value)}
+                            title="查看分镜结构化一致性"
+                        >一致性</WorkflowActionButton>
+                        <WorkflowActionButton
+                            variant="ghost"
+                            size="sm"
                             leftIcon={<FileText />}
                             onClick={() => setShowScriptOverlay(true)}
                             title={t("viewOriginalScript")}
@@ -497,6 +506,12 @@ export default function StoryboardComposer() {
                     </div>
                 )}
             />
+
+            {showContinuitySheet && currentProject?.id && <StoryboardContinuitySheet
+                projectId={currentProject.id}
+                revisionKey={JSON.stringify((currentProject.frames || []).map((frame: any) => [frame.id, frame.updated_at, frame.reference_visual_projection?.revision]))}
+                onOpenFrame={setEditingFrameId}
+            />}
 
             {/* Frame List — full width */}
             <div className="flex-1 overflow-y-auto p-8">

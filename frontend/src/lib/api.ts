@@ -1062,6 +1062,22 @@ export const api = {
         return res.data;
     },
 
+    getStoryboardContinuitySheet: async (scriptId: string) => {
+        const res = await axios.get(`${API_URL}/projects/${scriptId}/storyboard/continuity-sheet`);
+        return res.data as {
+            rows: Array<{
+                frame_id: string; shot_id: string | null; scene_id: string; scene_name: string | null;
+                place_continuity_id: string | null; time_continuity_id: string | null;
+                continuity_status: "confirmed" | "unresolved";
+                scene_design_revision: number | null; plan_revision: number | null;
+                style_hash: string; model: string;
+                fields: Record<string, { value: unknown; source_kind: string; source_id: string | null; source_revision: number | null; status: string }>;
+                reference: { source_variant_id: string | null; source_design_revision: number | null; selected_fields: string[] } | null;
+            }>;
+            issues: Array<{ scope: string; field: string; frame_ids: string[]; values: Array<{ value: unknown; source_kind: string }>; status: string }>;
+        };
+    },
+
     listShotVisualPresets: async (scriptId: string, sceneId?: string) => {
         const res = await axios.get(
             `${API_URL}/projects/${scriptId}/shot-visual-presets`,
