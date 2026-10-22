@@ -21,6 +21,7 @@ from .dates import (
     Snapshot, correct_date, resolve_photo_date,
 )
 from .media import PreparedPhoto
+from .people_schema import PEOPLE_SCHEMA
 
 
 class PhotoNotAvailable(LookupError):
@@ -46,7 +47,7 @@ class DateChange(Snapshot):
     restored_from_revision: int | None = None
 
 
-_SCHEMA = """
+_SCHEMA = PEOPLE_SCHEMA + """
 CREATE TABLE IF NOT EXISTS photo_batch_undos (
  owner TEXT NOT NULL, batch_id TEXT NOT NULL, operation_id TEXT NOT NULL,
  preview_token TEXT NOT NULL, actor TEXT NOT NULL, created_at TEXT NOT NULL,
