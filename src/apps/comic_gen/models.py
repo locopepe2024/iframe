@@ -125,6 +125,46 @@ class Blocking(BaseModel):
     stage: Optional[List[StageSubject]] = Field(None, description="结构化站位数据")
     camera_relation: Optional[str] = Field(None, description="相机相对场景的空间关系")
 
+
+StoryboardReferenceField = Literal["lighting", "space", "camera", "continuity_state"]
+
+
+class StoryboardReferenceProjectionSnapshot(BaseModel):
+    """Creator-confirmed, bounded structured context from an explicit reference.
+
+    The image reference and this snapshot are deliberately separate.  The
+    snapshot contains only the four reviewable visual categories and retains
+    the source lineage needed to invalidate it when the source changes.
+    """
+
+    schema_version: Literal[1] = 1
+    source_preset_id: Optional[str] = Field(None, max_length=120)
+    source_frame_id: Optional[str] = Field(None, max_length=120)
+    source_shot_id: Optional[str] = Field(None, max_length=120)
+    source_scene_id: Optional[str] = Field(None, max_length=120)
+    source_asset_id: Optional[str] = Field(None, max_length=120)
+    source_variant_id: Optional[str] = Field(None, max_length=120)
+    source_media_id: Optional[str] = Field(None, max_length=200)
+    source_asset_revision: Optional[int] = Field(None, ge=1)
+    source_scene_design_revision: Optional[int] = Field(None, ge=1)
+    source_projection_hash: Optional[str] = Field(None, max_length=128)
+    source_plan_revision: Optional[int] = Field(None, ge=1)
+    source_plan_hash: Optional[str] = Field(None, max_length=128)
+    target_frame_id: str = Field(..., min_length=1, max_length=120)
+    target_shot_id: Optional[str] = Field(None, max_length=120)
+    target_scene_id: str = Field(..., min_length=1, max_length=120)
+    target_plan_revision: Optional[int] = Field(None, ge=1)
+    target_plan_hash: Optional[str] = Field(None, max_length=128)
+    selected_fields: List[StoryboardReferenceField] = Field(default_factory=list)
+    available_fields: List[StoryboardReferenceField] = Field(default_factory=list)
+    scope: Literal["same_place_time", "same_time_world_light", "different_time", "unresolved"] = "unresolved"
+    eligible_fields: List[StoryboardReferenceField] = Field(default_factory=list)
+    suggested_fields: List[StoryboardReferenceField] = Field(default_factory=list)
+    include_reference_image: bool = True
+    visual_design: Dict[str, Any] = Field(default_factory=dict)
+    revision: int = Field(1, ge=1)
+    created_at: float = Field(default_factory=time.time)
+
 class DialogueStructured(BaseModel):
     speaker: str = Field(..., description="说话人")
     line: str = Field(..., description="台词内容")
@@ -786,6 +826,9 @@ class ShotVisualPreset(BaseModel):
     source_frame_id: Optional[str] = None
     source_asset_id: Optional[str] = None
     source_variant_id: Optional[str] = None
+    source_media_id: Optional[str] = None
+    source_asset_revision: Optional[int] = Field(None, ge=1)
+    source_scope: Optional[Literal["project", "series", "global"]] = None
     source_scene_revision: Optional[int] = Field(None, ge=1)
     visual_design: Dict[str, Any] = Field(default_factory=dict)
     compiled_prompt: str = Field("", max_length=12000)
@@ -798,7 +841,13 @@ class ShotVisualDesignSnapshot(BaseModel):
     visual_design: Dict[str, Any] = Field(default_factory=dict)
     compiled_prompt: str = Field("", max_length=12000)
     source_preset_id: Optional[str] = None
+    source_asset_id: Optional[str] = None
+    source_frame_id: Optional[str] = None
     source_variant_id: Optional[str] = None
+    source_media_id: Optional[str] = None
+    source_asset_revision: Optional[int] = Field(None, ge=1)
+    source_scope: Optional[Literal["project", "series", "global"]] = None
+    selected_fields: List[StoryboardReferenceField] = Field(default_factory=list)
     source_scene_revision: Optional[int] = Field(None, ge=1)
     apply_mode: Optional[Literal["parameters_only", "parameters_with_reference"]] = None
     revision: int = Field(1, ge=1)
@@ -818,6 +867,10 @@ class StoryboardFrame(BaseModel):
     director_shot_context: Optional[Dict[str, Any]] = Field(
         None,
         description="Server-projected read-only context from the confirmed shooting-plan shot",
+    )
+    reference_visual_projection: Optional[StoryboardReferenceProjectionSnapshot] = Field(
+        None,
+        description="Creator-confirmed bounded structured context from the selected reference",
     )
     character_ids: List[str] = Field(default_factory=list, description="List of Character IDs present in the frame")
     character_use_ids: Dict[str, str] = Field(

@@ -4059,12 +4059,29 @@ class SaveShotVisualPresetRequest(BaseModel):
 
 
 class ApplyShotVisualPresetRequest(BaseModel):
-    apply_mode: Literal["parameters_only", "parameters_with_reference"] = "parameters_only"
+    apply_mode: Literal[
+        "parameters_only", "parameters_with_reference", "image_only", "image_and_context",
+    ] = "parameters_only"
+    selected_fields: Optional[List[Literal["lighting", "space", "camera", "continuity_state"]]] = None
 
 
 @app.get("/projects/{script_id}/shot-visual-presets", response_model=List[ShotVisualPreset])
 def list_shot_visual_presets(script_id: str, scene_id: Optional[str] = None):
     return pipeline.list_shot_visual_presets(script_id, scene_id=scene_id)
+
+
+@app.get("/projects/{script_id}/frames/{frame_id}/shot-visual-presets/{preset_id}/projection")
+def preview_shot_visual_preset_projection(
+    script_id: str, frame_id: str, preset_id: str,
+    user: UserContext = Depends(require_studio_user),
+):
+    script = pipeline.get_script(script_id, user.owner_profile_id)
+    if not script:
+        raise HTTPException(status_code=404, detail="Script not found")
+    try:
+        return pipeline.preview_shot_visual_preset(script_id, frame_id, preset_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
 
 
 @app.post("/projects/{script_id}/frames/{frame_id}/shot-visual-presets", response_model=ShotVisualPreset)
@@ -4089,7 +4106,10 @@ def save_shot_visual_preset(script_id: str, frame_id: str, request: SaveShotVisu
 @app.post("/projects/{script_id}/frames/{frame_id}/shot-visual-presets/{preset_id}/apply", response_model=StoryboardFrame)
 def apply_shot_visual_preset(script_id: str, frame_id: str, preset_id: str, request: ApplyShotVisualPresetRequest):
     try:
-        frame = pipeline.apply_shot_visual_preset(script_id, frame_id, preset_id, request.apply_mode)
+        frame = pipeline.apply_shot_visual_preset(
+            script_id, frame_id, preset_id, request.apply_mode,
+            selected_fields=request.selected_fields,
+        )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
     if frame is None:
@@ -5368,6 +5388,12 @@ def preview_frame_candidate(script_id: str, request: RenderFramePreviewRequest,
         raise HTTPException(status_code=404, detail="Frame not found")
     if not request.prompt.strip():
         raise HTTPException(status_code=422, detail="Storyboard prompt cannot be empty")
+    try:
+        candidate_prompt = pipeline.preview_storyboard_candidate_prompt(
+            script_id, request.frame_id, request.prompt,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
     series = pipeline.series_store.get(script.series_id) if script.series_id else None
     assets = pipeline.resolve_project_assets(script)
     character_assets = {item.id: item for item in assets["characters"]}
@@ -5389,7 +5415,7 @@ def preview_frame_candidate(script_id: str, request: RenderFramePreviewRequest,
         reference_labels.append(f"{scene_asset.name if scene_asset else frame.scene_id}（{selected['variant_id'] if selected and selected.get('variant_id') else '无参考图'}）")
     from .assets import ASPECT_RATIO_TO_SIZE
     return {
-        "prompt": request.prompt,
+        "prompt": candidate_prompt,
         "negative_prompt": request.negative_prompt or "",
         "model": series.model_settings.i2i_model if series else script.model_settings.i2i_model,
         "aspect_ratio": script.model_settings.storyboard_aspect_ratio,
@@ -5398,7 +5424,7 @@ def preview_frame_candidate(script_id: str, request: RenderFramePreviewRequest,
         "scene_id": frame.scene_id,
         "reference_asset_labels": reference_labels,
         "context_token": pipeline.storyboard_candidate_preview_token(
-            script_id, request.frame_id, request.prompt, request.negative_prompt,
+            script_id, request.frame_id, candidate_prompt, request.negative_prompt,
         ),
     }
 

@@ -27,8 +27,10 @@ from .models import (
     Scene,
     Prop,
     StoryboardFrame,
+    StoryboardReference,
     ShotVisualPreset,
     ShotVisualDesignSnapshot,
+    StoryboardReferenceProjectionSnapshot,
     DialogueStructured,
     LightingData,
     Series,
@@ -77,6 +79,11 @@ from .structured_evidence import source_version
 from .assets import AssetGenerator
 from .storyboard import StoryboardGenerator
 from .prompt_assembly import append_projected_shot_context, append_storyboard_character_descriptions
+from .visual_continuity import (
+    build_reference_projection,
+    reference_projection_prompt_clauses,
+    select_projection_fields,
+)
 from .video import VideoGenerator
 from .audio import AudioGenerator
 from .export import ExportManager
@@ -587,28 +594,189 @@ class ComicGenPipeline(StudioOwnerMixin):
         if not script:
             return []
         presets = list(getattr(script, "shot_visual_presets", []) or [])
-        scenes = [scene for scene in (script.scenes or []) if not scene_id or scene.id == scene_id]
+        resolved = self.resolve_project_assets(script)
+        scenes = [scene for scene in resolved["scenes"] if not scene_id or scene.id == scene_id]
         for scene in scenes:
-            for variant in (scene.image_asset.variants or []):
+            image_asset = getattr(scene, "image_asset", None)
+            for variant in (getattr(image_asset, "variants", None) or []):
                 snapshot = variant.submission_snapshot
-                if not snapshot or not snapshot.visual_design:
-                    continue
                 derived_id = f"asset_variant_visual_{scene.id}_{variant.id}"
                 if any(item.id == derived_id for item in presets):
                     continue
+                _, source = self._find_asset_with_source(script, scene.id, "scene")
                 presets.append(ShotVisualPreset(
                     id=derived_id,
                     name=f"{scene.name} · {variant.display_name or variant.id[:8]}",
                     scene_id=scene.id,
                     source_asset_id=scene.id,
                     source_variant_id=variant.id,
-                    source_scene_revision=snapshot.design_revision_at_submission,
-                    visual_design=copy.deepcopy(snapshot.visual_design),
-                    compiled_prompt=snapshot.positive_prompt,
+                    source_media_id=variant.media_id,
+                    source_asset_revision=getattr(scene, "asset_revision", None) or None,
+                    source_scope={"script": "project", "series": "series", "global": "global"}.get(source),
+                    source_scene_revision=snapshot.design_revision_at_submission if snapshot else None,
+                    visual_design=copy.deepcopy(snapshot.visual_design or {}) if snapshot else {},
+                    # The complete source prompt may contain subjects, actions,
+                    # and dialogue. Reference projection reads only structured
+                    # design fields from the selected source variant.
+                    compiled_prompt="",
                 ))
         if scene_id:
             presets = [preset for preset in presets if preset.scene_id == scene_id]
-        return presets
+        # Existing user-saved presets can predate bounded projection. Do not
+        # send their complete prompt to the reference picker.
+        return [item.model_copy(update={"compiled_prompt": ""}) for item in presets]
+
+    def _visual_reference_context_for_scene_asset(self, script: Script, scene_asset: Any) -> Dict[str, Any]:
+        """Resolve continuity IDs only when the selected scene asset maps to
+        one confirmed place/time identity in this episode's visual context."""
+        context = script.episode_visual_context
+        location = getattr(scene_asset, "name", "")
+        if not context:
+            return {"scene": {"location": location}}
+        matches = [item for item in context.scenes if scene_asset.id in {
+            item.scene_asset_id, item.plan_scene_asset_id,
+        }]
+        pairs = {
+            (item.place_continuity_id, item.time_continuity_id)
+            for item in matches
+            if item.place_continuity_id and item.time_continuity_id
+        }
+        scene_context: Dict[str, Any] = {"location": location}
+        result: Dict[str, Any] = {"scene": scene_context}
+        if len(pairs) != 1:
+            return result
+        place_id, time_id = next(iter(pairs))
+        matching = next((item for item in matches
+                         if (item.place_continuity_id, item.time_continuity_id) == (place_id, time_id)), None)
+        if not matching:
+            return result
+        scene_context.update({
+            "scene_id": matching.scene_id,
+            "location": matching.location or location,
+            "time_anchor": matching.time_anchor,
+            "place_continuity_id": place_id,
+            "time_continuity_id": time_id,
+            "time_of_day": matching.time_of_day,
+            "season": matching.season,
+            "weather": matching.weather,
+        })
+        result.update({
+            "shooting_plan_revision": context.shooting_plan_revision,
+            "shooting_plan_hash": context.shooting_plan_hash,
+        })
+        baseline = next((item for item in context.lighting_baselines
+                         if item.place_continuity_id == place_id and item.time_continuity_id == time_id), None)
+        if baseline:
+            result["lighting_baseline"] = baseline.model_dump(exclude_none=True)
+        return result
+
+    def _visual_reference_source(
+        self, script: Script, preset: ShotVisualPreset,
+    ) -> Tuple[Optional[StoryboardFrame], Any, Any, Any, Dict[str, Any]]:
+        source_frame = next((item for item in script.frames if item.id == preset.source_frame_id), None)
+        source_asset = None
+        source_variant = None
+        source_scene = None
+        source_context: Dict[str, Any] = {}
+        if preset.source_asset_id:
+            source_asset, _ = self._find_asset_with_source(script, preset.source_asset_id, "scene")
+            if source_asset is not None:
+                source_scene = source_asset
+                source_variant = next((item for item in (source_asset.image_asset.variants or [])
+                                       if item.id == preset.source_variant_id), None)
+                source_context = self._visual_reference_context_for_scene_asset(script, source_asset)
+        elif source_frame is not None:
+            source_scene = self._storyboard_scene_asset(script, source_frame)
+            source_asset = source_scene
+            asset = source_frame.rendered_image_asset or source_frame.image_asset
+            source_variant = next((item for item in (asset.variants or [])
+                                   if item.id == preset.source_variant_id), None)
+            source_context = {}
+        return source_frame, source_asset, source_variant, source_scene, source_context
+
+    def _visual_reference_projection_candidate(
+        self, script: Script, frame: StoryboardFrame, preset_id: str,
+    ) -> Tuple[ShotVisualPreset, StoryboardReferenceProjectionSnapshot, Any, Any, Any, Optional[str]]:
+        preset = next((item for item in self.list_shot_visual_presets(script.id)
+                       if item.id == preset_id), None)
+        if preset is None:
+            raise ValueError("visual preset not found")
+        source_frame, source_asset, source_variant, source_scene, source_context = self._visual_reference_source(script, preset)
+        if preset.source_variant_id and source_variant is None:
+            raise ValueError("visual preset reference variant is unavailable")
+        target_scene = self._storyboard_scene_asset(script, frame)
+        assets = self.resolve_project_assets(script)
+        target_refs: set[str] = set()
+        for asset_type, ids in (("character", frame.character_ids), ("prop", frame.prop_ids)):
+            for asset_id in ids:
+                target_refs.add(asset_id)
+                asset = next((item for item in assets.get(f"{asset_type}s", []) if item.id == asset_id), None)
+                if asset is not None and getattr(asset, "name", None):
+                    target_refs.add(asset.name)
+        snapshot = build_reference_projection(
+            frame,
+            source_frame=source_frame,
+            source_asset=source_asset,
+            source_variant=source_variant,
+            source_scene=source_scene,
+            target_scene=target_scene,
+            source_context=source_context or None,
+            source_asset_id=preset.source_asset_id,
+            source_variant_id=preset.source_variant_id,
+            source_media_id=getattr(source_variant, "media_id", None),
+            source_asset_revision=getattr(source_asset, "asset_revision", None),
+            target_entity_refs=target_refs,
+        ).model_copy(update={"source_preset_id": preset.id})
+        source_projection_hash = self._reference_projection_hash(snapshot)
+        snapshot = snapshot.model_copy(update={"source_projection_hash": source_projection_hash})
+        _, source_scope = self._find_asset_with_source(script, source_asset.id, "scene") if source_asset and source_asset.id else (None, None)
+        scope = {"script": "project", "series": "series", "global": "global"}.get(source_scope)
+        return preset, snapshot, source_frame, source_asset, source_variant, scope
+
+    @staticmethod
+    def _reference_projection_hash(snapshot: StoryboardReferenceProjectionSnapshot) -> str:
+        payload = {
+            "source_frame_id": snapshot.source_frame_id,
+            "source_shot_id": snapshot.source_shot_id,
+            "source_scene_id": snapshot.source_scene_id,
+            "source_asset_id": snapshot.source_asset_id,
+            "source_variant_id": snapshot.source_variant_id,
+            "source_media_id": snapshot.source_media_id,
+            "source_scene_design_revision": snapshot.source_scene_design_revision,
+            "source_plan_revision": snapshot.source_plan_revision,
+            "source_plan_hash": snapshot.source_plan_hash,
+            "scope": snapshot.scope,
+            "eligible_fields": snapshot.eligible_fields,
+            "visual_design": snapshot.visual_design,
+        }
+        encoded = json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+        return hashlib.sha256(encoded.encode("utf-8")).hexdigest()
+
+    def preview_shot_visual_preset(
+        self, script_id: str, frame_id: str, preset_id: str,
+    ) -> Dict[str, Any]:
+        script = self.scripts.get(script_id)
+        if not script:
+            raise ValueError("Script not found")
+        frame = next((item for item in script.frames if item.id == frame_id), None)
+        if not frame:
+            raise ValueError("Frame not found")
+        preset, snapshot, _source_frame, _source_asset, source_variant, _scope = self._visual_reference_projection_candidate(
+            script, frame, preset_id,
+        )
+        source_url = image_variant_storage_key(source_variant) if source_variant else None
+        return {
+            "preset": {
+                "id": preset.id,
+                "name": preset.name,
+                "source_frame_id": preset.source_frame_id,
+                "source_asset_id": preset.source_asset_id,
+                "source_variant_id": preset.source_variant_id,
+            },
+            "reference_image_available": bool(source_url),
+            "source_label": preset.name,
+            "projection": snapshot.model_dump(mode="json"),
+        }
 
     def save_shot_visual_preset(
         self,
@@ -659,41 +827,96 @@ class ComicGenPipeline(StudioOwnerMixin):
         frame_id: str,
         preset_id: str,
         apply_mode: str = "parameters_only",
+        selected_fields: Optional[List[str]] = None,
     ) -> Optional[StoryboardFrame]:
-        """Copy a preset into the current frame; never create a live link."""
-        if apply_mode not in ("parameters_only", "parameters_with_reference"):
+        """Apply an explicitly selected reference as an immutable snapshot.
+
+        ``image_only`` and ``image_and_context`` are the new reviewable modes.
+        The two ``parameters_*`` modes remain for old saved projects.
+        """
+        valid_modes = {
+            "parameters_only", "parameters_with_reference", "image_only", "image_and_context",
+        }
+        if apply_mode not in valid_modes:
             raise ValueError("invalid visual preset apply_mode")
         with self._save_lock:
             script = self.scripts.get(script_id)
             if not script:
                 return None
             frame = next((item for item in (script.frames or []) if item.id == frame_id), None)
-            preset = next((item for item in (getattr(script, "shot_visual_presets", []) or []) if item.id == preset_id), None)
-            if not frame or not preset:
+            if not frame:
                 return None
-            if frame.scene_id != preset.scene_id:
-                raise ValueError("visual preset belongs to another scene")
-            source_frame = next((item for item in (script.frames or []) if item.id == preset.source_frame_id), None)
-            source_variant = None
-            if preset.source_asset_id and preset.source_variant_id:
-                source_asset = next((item for item in (script.scenes or []) if item.id == preset.source_asset_id), None)
-                source_variant = next((item for item in ((source_asset.image_asset.variants if source_asset else []) or []) if item.id == preset.source_variant_id), None)
-            elif source_frame and preset.source_variant_id:
-                source_asset = source_frame.rendered_image_asset or source_frame.image_asset
-                source_variant = next((item for item in (source_asset.variants or []) if item.id == preset.source_variant_id), None)
-            if apply_mode == "parameters_with_reference":
+            preset, candidate, source_frame, source_asset, source_variant, source_scope = self._visual_reference_projection_candidate(
+                script, frame, preset_id,
+            )
+            include_image = apply_mode in ("parameters_with_reference", "image_only", "image_and_context")
+            include_context = apply_mode in ("parameters_only", "image_and_context") or (
+                apply_mode == "parameters_with_reference" and selected_fields is not None
+            )
+            projection: Optional[StoryboardReferenceProjectionSnapshot] = None
+            if include_context and selected_fields is not None:
+                projection = select_projection_fields(candidate, selected_fields)
+                projection = projection.model_copy(update={
+                    "include_reference_image": include_image,
+                })
+            elif apply_mode == "image_only":
+                projection = select_projection_fields(candidate, [])
+            if include_image:
                 if not source_variant:
                     raise ValueError("visual preset reference variant is unavailable")
                 source_key = image_variant_storage_key(source_variant)
                 frame.t2i_image_urls = [*([u for u in (frame.t2i_image_urls or []) if u != source_key]), source_key][-self._T2I_HISTORY_LIMIT:]
                 frame.t2i_selected_index = len(frame.t2i_image_urls) - 1
+                source_asset_id = preset.source_asset_id if preset.source_asset_id else None
+                reference = StoryboardReference(
+                    kind="scene" if source_asset_id else "upload",
+                    url=source_key or source_variant.url,
+                    media_id=source_variant.media_id,
+                    label=preset.name,
+                    source_asset_id=source_asset_id,
+                    source_variant_id=source_variant.id,
+                )
+                previous_projection = frame.reference_visual_projection
+                old_refs = [item for item in frame.reference_package.references
+                            if not (
+                                (item.source_asset_id == reference.source_asset_id
+                                 and item.source_variant_id == reference.source_variant_id)
+                                or (previous_projection and item.source_asset_id == previous_projection.source_asset_id
+                                    and item.source_variant_id == previous_projection.source_variant_id)
+                            )]
+                frame.reference_package.references = [*old_refs, reference]
+                frame.reference_package.confirmed = True
+                frame.reference_package.revision += 1
+                frame.reference_package.updated_at = time.time()
+                # Pin only library assets. A frame-rendered variant has no
+                # asset-library revision and remains identified by frame ID.
+                if source_asset_id:
+                    frame.reference_package.asset_revision_pins = self._pin_frame_assets(
+                        script, frame, frame.reference_package,
+                    )
+            if projection is not None:
+                frame.reference_visual_projection = projection
+            # Keep the older snapshot surface readable for existing clients,
+            # but it contains only the selected structured categories.
+            visual_design = projection.visual_design if projection else (
+                copy.deepcopy(preset.visual_design) if apply_mode in ("parameters_only", "parameters_with_reference") else {}
+            )
+            compiled_prompt = "\n".join(reference_projection_prompt_clauses(
+                projection, frame, self._storyboard_scene_asset(script, frame),
+            )) if projection else ""
             frame.shot_visual_design = ShotVisualDesignSnapshot(
-                visual_design=copy.deepcopy(preset.visual_design),
-                compiled_prompt=preset.compiled_prompt,
+                visual_design=copy.deepcopy(visual_design),
+                compiled_prompt=compiled_prompt,
                 source_preset_id=preset.id,
-                source_variant_id=preset.source_variant_id if apply_mode == "parameters_with_reference" else None,
+                source_asset_id=preset.source_asset_id if include_image else None,
+                source_frame_id=preset.source_frame_id if include_image else None,
+                source_variant_id=preset.source_variant_id if include_image else None,
+                source_media_id=getattr(source_variant, "media_id", None) if include_image else None,
+                source_asset_revision=getattr(source_asset, "asset_revision", None) or None if include_image else None,
+                source_scope=source_scope if include_image else None,
+                selected_fields=list(projection.selected_fields) if projection else [],
                 source_scene_revision=preset.source_scene_revision,
-                apply_mode=apply_mode,
+                apply_mode=("parameters_with_reference" if include_image else "parameters_only"),
                 revision=(frame.shot_visual_design.revision + 1) if frame.shot_visual_design else 1,
             )
             frame.updated_at = time.time()
@@ -3370,6 +3593,7 @@ class ComicGenPipeline(StudioOwnerMixin):
 
     def storyboard_render_prompt_projection(self, script: Script, frame: StoryboardFrame, prompt: str) -> str:
         """Compose a draft render prompt with only this frame's constraints."""
+        self._validate_reference_visual_projection(script, frame)
         context = frame.director_shot_context
         _, scene_design = self._confirmed_scene_design(self._storyboard_scene_asset(script, frame))
         if self._scene_design_has_light(scene_design) and isinstance(context, dict):
@@ -3382,9 +3606,16 @@ class ComicGenPipeline(StudioOwnerMixin):
                 context.pop("lighting", None)
         projected_context = append_projected_shot_context(prompt.strip(), context)
         frame_projection = self.storyboard_frame_prompt_projection(script, frame)
-        if not frame_projection:
-            return projected_context
-        return "\n\n".join(filter(None, [projected_context, "CURRENT SHOT VISUAL CONSTRAINTS:\n" + frame_projection]))
+        reference_clauses = reference_projection_prompt_clauses(
+            frame.reference_visual_projection,
+            frame,
+            self._storyboard_scene_asset(script, frame),
+        )
+        return "\n\n".join(filter(None, [
+            projected_context,
+            "CURRENT SHOT VISUAL CONSTRAINTS:\n" + frame_projection if frame_projection else "",
+            "EXPLICIT REFERENCE VISUAL CONTEXT:\n" + "\n".join(reference_clauses) if reference_clauses else "",
+        ]))
 
     def director_prompt_context(
         self,
@@ -6951,7 +7182,9 @@ class ComicGenPipeline(StudioOwnerMixin):
         if not prompt.strip():
             raise ValueError("Storyboard prompt cannot be empty")
         polished = (frame.image_prompt_en or "").strip()
-        if polished and polished == prompt.strip():
+        if polished and polished == prompt.strip() and not (
+            frame.reference_visual_projection and frame.reference_visual_projection.selected_fields
+        ):
             return prompt
         projected = self.storyboard_render_prompt_projection(script, frame, prompt)
         characters = self.resolve_project_assets(script)["characters"]
@@ -7065,6 +7298,50 @@ class ComicGenPipeline(StudioOwnerMixin):
             return "；".join(item for item in values if item) or None
         return lighting.strip() if isinstance(lighting, str) and lighting.strip() else None
 
+    def _validate_reference_visual_projection(self, script: Script, frame: StoryboardFrame) -> None:
+        """Reject a confirmed projection after its selected source changed."""
+        snapshot = frame.reference_visual_projection
+        if snapshot is None:
+            return
+        if not snapshot.source_preset_id:
+            raise ValueError("Selected visual reference source is missing; review it again")
+        source_asset = None
+        source_variant = None
+        if snapshot.source_asset_id:
+            source_asset, _ = self._find_asset_with_source(script, snapshot.source_asset_id, "scene")
+            if source_asset is None:
+                raise ValueError("Selected visual reference asset is no longer available")
+            source_variant = next((item for item in (source_asset.image_asset.variants or [])
+                                   if item.id == snapshot.source_variant_id), None)
+        elif snapshot.source_frame_id:
+            source_frame = next((item for item in script.frames if item.id == snapshot.source_frame_id), None)
+            if source_frame is None:
+                raise ValueError("Selected visual reference frame is no longer available")
+            asset = source_frame.rendered_image_asset or source_frame.image_asset
+            source_variant = next((item for item in (asset.variants or [])
+                                   if item.id == snapshot.source_variant_id), None)
+        if snapshot.source_variant_id and source_variant is None:
+            raise ValueError("Selected visual reference variant is no longer available")
+        if source_variant is not None:
+            if snapshot.source_media_id and source_variant.media_id != snapshot.source_media_id:
+                raise ValueError("Selected visual reference media changed; review it again")
+        if source_asset is not None:
+            variant_has_design_snapshot = bool(
+                source_variant and source_variant.submission_snapshot
+                and source_variant.submission_snapshot.visual_design
+            )
+            if not variant_has_design_snapshot:
+                if snapshot.source_asset_revision and source_asset.asset_revision != snapshot.source_asset_revision:
+                    raise ValueError("Selected visual reference asset changed; review it again")
+                design_revision = self._confirmed_asset_design_revision(source_asset, "scene")
+                if snapshot.source_scene_design_revision != design_revision:
+                    raise ValueError("Selected visual reference design changed; review it again")
+        _, current_projection, _, _, _, _ = self._visual_reference_projection_candidate(
+            script, frame, snapshot.source_preset_id,
+        )
+        if snapshot.source_projection_hash != self._reference_projection_hash(current_projection):
+            raise ValueError("Selected visual reference changed; review it again")
+
     def storyboard_render_context_token(self, script_id: str, frame_id: str) -> str:
         """Fingerprint inputs that can change a prepared storyboard render."""
         import hashlib
@@ -7075,6 +7352,7 @@ class ComicGenPipeline(StudioOwnerMixin):
         frame = next((item for item in script.frames if item.id == frame_id), None)
         if not frame:
             raise ValueError("Frame not found")
+        self._validate_reference_visual_projection(script, frame)
         resolved = self.resolve_project_assets(script)
         characters = {item.id: item for item in resolved["characters"]}
         scenes = {item.id: item for item in resolved["scenes"]}
@@ -7097,6 +7375,8 @@ class ComicGenPipeline(StudioOwnerMixin):
             "character_ids": frame.character_ids,
             "character_use_ids": frame.character_use_ids,
             "workbench_reference_variant_ids": frame.workbench_reference_variant_ids,
+            "reference_package": frame.reference_package.model_dump(mode="json") if frame.reference_package else None,
+            "reference_visual_projection": frame.reference_visual_projection.model_dump(mode="json") if frame.reference_visual_projection else None,
             "characters": [characters[item_id].model_dump(mode="json") if item_id in characters else None
                            for item_id in frame.character_ids],
             "scene": scenes[frame.scene_id].model_dump(mode="json") if frame.scene_id in scenes else None,
@@ -7200,6 +7480,21 @@ class ComicGenPipeline(StudioOwnerMixin):
             if composition_data:
                 ref_image_url = composition_data.get('reference_image_url')
                 ref_image_urls = composition_data.get('reference_image_urls', [])
+
+            # The selected reference supplements automatic shot references.
+            # Keeping this list separate means a scene reference does not
+            # suppress the frame's selected character anchors.
+            selected_source_variant_id = (
+                frame.shot_visual_design.source_variant_id
+                if frame.shot_visual_design and frame.shot_visual_design.apply_mode == "parameters_with_reference"
+                else None
+            )
+            supplemental_ref_image_paths = [
+                (resolve_studio_reference(item.url, script.owner_profile_id, output_root=self.output_root)
+                 if item.url.startswith("/studio/media/") else item.url)
+                for item in frame.reference_package.references
+                if selected_source_variant_id and item.source_variant_id == selected_source_variant_id
+            ]
             
             ref_image_paths = []
             
@@ -7266,6 +7561,7 @@ class ComicGenPipeline(StudioOwnerMixin):
                 scene,
                 ref_image_path=ref_image_path,
                 ref_image_paths=ref_image_paths,
+                supplemental_ref_image_paths=supplemental_ref_image_paths,
                 prompt=final_prompt,
                 negative_prompt=negative_prompt,
                 batch_size=batch_size,
@@ -7318,10 +7614,17 @@ class ComicGenPipeline(StudioOwnerMixin):
         from .assets import ASPECT_RATIO_TO_SIZE
         series = self.series_store.get(script.series_id) if script.series_id else None
         model = series.model_settings.i2i_model if series else script.model_settings.i2i_model
+        supplemental_ref_image_paths = [
+            (resolve_studio_reference(item.url, script.owner_profile_id, output_root=self.output_root)
+             if item.url.startswith("/studio/media/") else item.url)
+            for item in candidate.reference_package.references
+            if item.url
+        ] if candidate.reference_package.confirmed else []
         self.storyboard_generator.generate_frame(
             candidate,
             resolved["characters"],
             scene,
+            supplemental_ref_image_paths=supplemental_ref_image_paths,
             prompt=prompt,
             negative_prompt=negative_prompt,
             batch_size=1,
@@ -7336,6 +7639,20 @@ class ComicGenPipeline(StudioOwnerMixin):
         if not variant:
             raise RuntimeError("Storyboard candidate render returned no image")
         return image_variant_storage_key(variant)
+
+    def preview_storyboard_candidate_prompt(self, script_id: str, frame_id: str, prompt: str) -> str:
+        script = self.scripts.get(script_id)
+        if not script:
+            raise ValueError("Script not found")
+        frame = next((item for item in script.frames if item.id == frame_id), None)
+        if not frame:
+            raise ValueError("Frame not found")
+        if not prompt.strip():
+            raise ValueError("Storyboard prompt cannot be empty")
+        self._validate_reference_visual_projection(script, frame)
+        if frame.reference_visual_projection and frame.reference_visual_projection.selected_fields:
+            return self.preview_storyboard_render_prompt(script_id, frame_id, prompt)
+        return prompt
 
     def storyboard_candidate_preview_token(
         self, script_id: str, frame_id: str, prompt: str, negative_prompt: Optional[str]

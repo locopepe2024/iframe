@@ -82,6 +82,7 @@ class StoryboardGenerator:
         scene: Scene,
         ref_image_path: str = None,
         ref_image_paths: List[str] = None,
+        supplemental_ref_image_paths: List[str] = None,
         prompt: str = None,
         batch_size: int = 1,
         size: str = None,
@@ -224,6 +225,9 @@ class StoryboardGenerator:
         char_text = ", ".join(char_descriptions)
 
         # Remove duplicates
+        for reference in supplemental_ref_image_paths or []:
+            if reference:
+                asset_ref_paths.append(self._reference_path(reference))
         asset_ref_paths = list(dict.fromkeys(asset_ref_paths))
         
         if not prompt:
