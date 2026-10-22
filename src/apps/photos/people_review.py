@@ -59,7 +59,7 @@ class PhotoPeopleReviewStore(PhotoPeopleStore):
     def prepare_next_people_candidates(self):
         with self._connection() as connection:
             # Ignore revoked historic tasks; a new authorization never revives them.
-            row=connection.execute("SELECT t.owner,t.task_id FROM photo_people_tasks t JOIN photo_people_consents c ON c.owner=t.owner AND c.batch_id=t.batch_id WHERE t.status IN ('needs_review','partial_failed') AND c.granted=1 AND c.version=t.consent_version AND NOT EXISTS (SELECT 1 FROM photo_people_group_runs g WHERE g.owner=t.owner AND g.task_id=t.task_id) ORDER BY t.created_at LIMIT 1").fetchone()
+            row=connection.execute("SELECT t.owner,t.task_id FROM photo_people_tasks t JOIN photo_people_consents c ON c.owner=t.owner AND c.batch_id=t.batch_id WHERE t.status IN ('needs_review','partial_failed') AND c.granted=1 AND c.version=t.consent_version AND t.fingerprint=? AND NOT EXISTS (SELECT 1 FROM photo_people_group_runs g WHERE g.owner=t.owner AND g.task_id=t.task_id) ORDER BY t.created_at LIMIT 1",(FINGERPRINT,)).fetchone()
         if row is None:
             return False
         try:

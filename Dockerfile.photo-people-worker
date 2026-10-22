@@ -1,0 +1,11 @@
+# Build with the explicitly selected existing backend dependency image.
+ARG PHOTO_WORKER_BASE_IMAGE
+FROM ${PHOTO_WORKER_BASE_IMAGE}
+WORKDIR /demo
+COPY requirements-photos-faces.txt /tmp/requirements-photos-faces.txt
+RUN pip install --no-cache-dir -r /tmp/requirements-photos-faces.txt
+COPY src/apps/photos /demo/src/apps/photos
+# No models, credentials, DB or HTTP server baked into this image.
+# Source, initialized DB and verified models/licenses are explicit runtime mounts.
+ENV PYTHONUNBUFFERED=1 OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1
+ENTRYPOINT ["python", "-m", "src.apps.photos.people_worker"]
