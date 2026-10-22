@@ -353,6 +353,33 @@ def test_canonical_render_token_binds_negative_prompt():
     assert reviewed != ComicGenPipeline.storyboard_render_preview_token("context", "changed", "no blur")
 
 
+def test_candidate_preview_uses_confirmed_scene_design_without_video_timing():
+    scene = Scene(id="scene-1", name="长街", description="青石路", asset_design={
+        "design_revisions": [{"revision": 1, "design": {
+            "visual_notes": "粮铺沿街排列", "ambient_lighting": "冷灰蓝天光",
+            "visual_constraints": {"key_light_direction": "side", "visible_face_limit": 2},
+        }}],
+    })
+    frame = StoryboardFrame(id="frame-1", scene_id=scene.id, camera_movement="快速推进", transition_hint="叠化")
+    script = Script(id="episode-1", title="Episode", original_text="", scenes=[scene], frames=[frame],
+                    created_at=time.time(), updated_at=time.time())
+    pipeline = ComicGenPipeline.__new__(ComicGenPipeline)
+    pipeline.scripts = {script.id: script}
+    pipeline.series_store = {}
+    pipeline.resolve_project_assets = Mock(return_value={"characters": [], "scenes": [scene], "props": []})
+
+    preview = pipeline.preview_storyboard_candidate_prompt(script.id, frame.id, "人物站在粮铺前")
+    assert "粮铺沿街排列" in preview
+    assert "冷灰蓝天光" in preview
+    assert "主光方向：侧面光" in preview
+    assert "可见人脸上限：2 张" in preview
+    assert "快速推进" not in preview
+    assert "叠化" not in preview
+    original_token = pipeline.storyboard_candidate_preview_token(script.id, frame.id, preview, None)
+    scene.asset_design["design_revisions"].append({"revision": 2, "design": {"visual_notes": "粮铺门面已改"}})
+    assert pipeline.storyboard_candidate_preview_token(script.id, frame.id, preview, None) != original_token
+
+
 def test_render_preview_is_the_exact_complete_generator_prompt():
     now = time.time()
     frame = StoryboardFrame(

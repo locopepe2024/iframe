@@ -60,6 +60,8 @@ def test_candidate_preview_labels_do_not_expose_variant_ids(monkeypatch):
         {"asset_type": "scene", "asset_id": "scene-id", "variant_id": "private-scene-uuid"},
     ]}
     pipeline.preview_storyboard_candidate_prompt.return_value = "已预览提示词"
+    pipeline.storyboard_render_scene_design_source.return_value = "关联场景设计：长街 r2"
+    pipeline.storyboard_image_polish_review.return_value = "场景设计已变化；请核对润色正文后再生成。"
     monkeypatch.setattr(api, "pipeline", pipeline)
 
     result = api.preview_frame_candidate(
@@ -68,6 +70,8 @@ def test_candidate_preview_labels_do_not_expose_variant_ids(monkeypatch):
     )
 
     assert result["reference_asset_labels"] == ["阿青（已选参考图）", "长街（已选参考图）"]
+    assert result["source_label"] == "关联场景设计：长街 r2"
+    assert result["polish_review"].startswith("场景设计已变化")
 
 
 def test_preview_rejects_context_change_during_prompt_assembly(monkeypatch):

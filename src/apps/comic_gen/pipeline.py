@@ -7749,9 +7749,33 @@ class ComicGenPipeline(StudioOwnerMixin):
         if not prompt.strip():
             raise ValueError("Storyboard prompt cannot be empty")
         self._validate_reference_visual_projection(script, frame)
-        if frame.reference_visual_projection and frame.reference_visual_projection.selected_fields:
-            return self.preview_storyboard_render_prompt(script_id, frame_id, prompt)
-        return prompt
+        scene = self._storyboard_scene_asset(script, frame)
+        revision, design = self._confirmed_scene_design(scene)
+        scene_parts = []
+        if scene:
+            scene_parts.append(f"场景：{scene.name}。{scene.description}")
+        if revision is not None:
+            for key, label in (
+                ("visual_notes", "空间与内容"), ("style", "场景风格"),
+                ("ambient_lighting", "环境光"), ("reference_viewpoint", "基础视角"),
+                ("reference_framing", "占位与深度"),
+            ):
+                value = design.get(key)
+                if isinstance(value, str) and value.strip():
+                    scene_parts.append(f"{label}：{value.strip()}")
+            constraints = design.get("visual_constraints")
+            if isinstance(constraints, dict):
+                light_names = {"front": "正面光", "back": "背面光", "side": "侧面光",
+                               "top": "顶部光", "bottom": "底部光", "mixed": "混合光"}
+                direction = constraints.get("key_light_direction")
+                if direction in light_names:
+                    scene_parts.append(f"主光方向：{light_names[direction]}")
+                face_limit = constraints.get("visible_face_limit")
+                if isinstance(face_limit, int) and not isinstance(face_limit, bool):
+                    scene_parts.append(f"可见人脸上限：{face_limit} 张")
+        reference_clauses = reference_projection_prompt_clauses(frame.reference_visual_projection, frame, scene)
+        additions = [item for item in [*scene_parts, *reference_clauses] if item and item not in prompt]
+        return "\n".join([prompt.strip(), *additions])
 
     def storyboard_candidate_preview_token(
         self, script_id: str, frame_id: str, prompt: str, negative_prompt: Optional[str]

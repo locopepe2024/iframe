@@ -186,7 +186,8 @@ def test_confirmed_subset_projects_only_world_light_and_keeps_provenance(tmp_pat
     candidate_prompt = pipeline.preview_storyboard_candidate_prompt(
         script.id, target.id, "TARGET PROMPT ONLY",
     )
-    assert candidate_prompt == prompt
+    assert "参考结构化光影" in candidate_prompt
+    assert target_scene.name in candidate_prompt
     assert "参考结构化光影" in prompt
     assert "lantern" not in prompt
     assert "SOURCE ACTION" not in prompt

@@ -5489,6 +5489,8 @@ def preview_frame_candidate(script_id: str, request: RenderFramePreviewRequest,
         "character_ids": frame.character_ids,
         "scene_id": frame.scene_id,
         "reference_asset_labels": reference_labels,
+        "source_label": pipeline.storyboard_render_scene_design_source(script_id, request.frame_id),
+        "polish_review": pipeline.storyboard_image_polish_review(script_id, request.frame_id, request.prompt),
         "context_token": pipeline.storyboard_candidate_preview_token(
             script_id, request.frame_id, candidate_prompt, request.negative_prompt,
         ),
