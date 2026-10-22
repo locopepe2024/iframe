@@ -1,0 +1,20 @@
+import { fireEvent, render, screen } from "@testing-library/react";
+import { afterEach, expect, it, vi } from "vitest";
+import FacePhoto from "./FacePhoto";
+const api = vi.hoisted(() => ({ image: vi.fn() }));
+vi.mock("@/lib/photoApi", () => ({ photoApi: api }));
+afterEach(() => vi.restoreAllMocks());
+it("allows confirmation after image load and releases private object URLs", async () => {
+  api.image.mockResolvedValue(new Blob(["image"]));
+  vi.spyOn(URL, "createObjectURL").mockReturnValue("blob:test-face");
+  const revoke = vi.spyOn(URL, "revokeObjectURL").mockImplementation(() => {});
+  const ready = vi.fn();
+  const view = render(<FacePhoto photoId="photo" boxes={[[0.1, 0.2, 0.3, 0.4]]} onReady={ready} />);
+  const image = await screen.findByAltText("请核对照片中边框标出的人脸");
+  expect(ready).not.toHaveBeenCalledWith(true);
+  fireEvent.load(image); expect(ready).toHaveBeenLastCalledWith(true);
+  expect(image.parentElement?.querySelector('[aria-hidden="true"]')).toHaveStyle({ left: "10%", top: "20%", width: "30%", height: "40%" });
+  fireEvent.error(image); expect(ready).toHaveBeenLastCalledWith(false);
+  await screen.findByRole("alert");
+  view.unmount(); expect(revoke).toHaveBeenCalledWith("blob:test-face");
+});
