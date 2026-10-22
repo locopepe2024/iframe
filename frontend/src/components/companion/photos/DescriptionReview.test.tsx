@@ -53,4 +53,10 @@ it("loads existing review and history", async () => {
   await screen.findByText("用户描述");
   fireEvent.click(screen.getByRole("button", { name: "查看描述修改历史" }));
   await screen.findByText("第 1 版：旧描述");
+  fireEvent.click(screen.getByRole("button", { name: "使用第 1 版描述" }));
+  expect(api.confirmDescription).not.toHaveBeenCalled();
+  expect(screen.getByRole("region", { name: "描述保存确认" })).toHaveTextContent("旧描述");
+  fireEvent.click(screen.getByRole("button", { name: "确认保存描述" }));
+  await screen.findByText("您确认的描述");
+  expect(api.confirmDescription).toHaveBeenCalledWith("photo", expect.objectContaining({ description: "旧描述", expected_revision: 2 }));
 });

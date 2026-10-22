@@ -12,6 +12,7 @@ const BACKEND_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:17177';
 // Docker build: output to frontend/out/
 // Default prod: output to ../static/ with /static basePath
 const nextConfig = {
+    env: { NEXT_PUBLIC_COMPANION_BASE_PATH: previewBasePath || '' },
     webpack(config) {
         // Filerobot is client-only; Konva's server entry must not require native canvas.
         config.resolve.alias = { ...config.resolve.alias, canvas: false };

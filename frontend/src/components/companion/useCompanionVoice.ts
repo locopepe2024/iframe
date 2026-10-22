@@ -17,8 +17,10 @@ type VoiceWindow = Window & {
   SpeechRecognition?: new () => Recognition;
   webkitSpeechRecognition?: new () => Recognition;
 };
+let activeVoice: { id: symbol; stop: () => void } | null = null;
 
 export function useCompanionVoice(onTranscript: (text: string) => void) {
+  const owner = useRef(Symbol("companion-voice"));
   const [listening, setListening] = useState(false);
   const [finishing, setFinishing] = useState(false);
   const [speaking, setSpeaking] = useState(false);
@@ -37,17 +39,23 @@ export function useCompanionVoice(onTranscript: (text: string) => void) {
       current.onend = current.onerror = current.onresult = null;
       current.abort();
     }
+    if (activeVoice?.id === owner.current && !utteranceRef.current) activeVoice = null;
   }
   function cancelSpeech() {
     if (utteranceRef.current) {
       utteranceRef.current.onend = utteranceRef.current.onerror = null;
       utteranceRef.current = null;
+      window.speechSynthesis?.cancel();
     }
-    window.speechSynthesis?.cancel();
+    if (activeVoice?.id === owner.current && !recognition.current) activeVoice = null;
   }
   function stopAll() {
     dispose(); cancelSpeech();
     setListening(false); setFinishing(false); setSpeaking(false);
+  }
+  function claimVoice() {
+    if (activeVoice && activeVoice.id !== owner.current) activeVoice.stop();
+    activeVoice = { id: owner.current, stop: stopAll };
   }
   useEffect(() => () => {
     dispose();
@@ -76,6 +84,7 @@ export function useCompanionVoice(onTranscript: (text: string) => void) {
     }
     cancelSpeech();
     setSpeaking(false);
+    claimVoice();
     const current = new Constructor();
     recognition.current = current;
     current.lang = "zh-CN";
@@ -121,12 +130,18 @@ export function useCompanionVoice(onTranscript: (text: string) => void) {
     cancelSpeech();
     if (speaking) { setSpeaking(false); return; }
     if (listening) { dispose(); setListening(false); setFinishing(false); }
+    claimVoice();
     const utterance = new SpeechSynthesisUtterance(text);
     utterance.lang = "zh-CN";
     utterance.rate = slow ? 0.7 : 0.9;
     utteranceRef.current = utterance;
-    utterance.onend = () => setSpeaking(false);
-    utterance.onerror = () => { setSpeaking(false); setNotice("朗读未完成，请重试。"); };
+    const finished = () => {
+      utteranceRef.current = null;
+      if (activeVoice?.id === owner.current) activeVoice = null;
+      setSpeaking(false);
+    };
+    utterance.onend = finished;
+    utterance.onerror = () => { finished(); setNotice("朗读未完成，请重试。"); };
     setSpeaking(true);
     window.speechSynthesis.speak(utterance);
   }

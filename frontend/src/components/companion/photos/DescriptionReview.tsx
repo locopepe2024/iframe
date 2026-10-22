@@ -83,7 +83,9 @@ export default function DescriptionReview({ photoId, original }: { photoId: stri
         const page = await photoApi.descriptionHistory(photoId);
         if (alive.current) { setHistory(page.changes); setCursor(page.next_after_revision); }
       })}>查看描述修改历史</button>
-      {history && <section aria-label="描述修改历史">{!history.length && <p>还没有确认记录。</p>}{history.map(item => <p key={item.revision}>第 {item.revision} 版：{item.description}</p>)}
+      {history && <section aria-label="描述修改历史">{!history.length && <p>还没有确认记录。</p>}{history.map(item => <div key={item.revision}><p>第 {item.revision} 版：{item.description}</p>
+        <button disabled={busy || item.revision === review?.revision} onClick={() => propose(item.description)}>使用第 {item.revision} 版描述</button>
+      </div>)}
         {cursor !== null && <button disabled={busy} onClick={() => void run(async () => {
           const page = await photoApi.descriptionHistory(photoId, cursor);
           if (alive.current) { setHistory(old => [...old!, ...page.changes]); setCursor(page.next_after_revision); }
