@@ -6434,9 +6434,27 @@ class ComicGenPipeline(StudioOwnerMixin):
         self._save_data()
         return script
 
+    _RICH_REFINEMENT_FIELDS = (
+        "visual_description", "shot_size", "camera_angle", "duration", "transition_hint",
+        "camera_movement_structured", "blocking", "dialogue_structured", "audio_note", "lighting",
+    )
+
+    def _rich_refinement_source_hash(self, script: Script, frame: StoryboardFrame) -> str:
+        index = script.frames.index(frame)
+        neighbors = [script.frames[pos] for pos in (index - 1, index + 1) if 0 <= pos < len(script.frames)]
+        assets = self.resolve_project_assets(script)
+        payload = {
+            "frame": frame.model_dump(exclude={"rich_refinement_candidate", "updated_at"}, mode="json"),
+            "neighbors": [item.model_dump(exclude={"rich_refinement_candidate", "updated_at"}, mode="json") for item in neighbors],
+            "characters": [item.model_dump(mode="json") for item in assets["characters"]],
+            "scenes": [item.model_dump(mode="json") for item in assets["scenes"]],
+            "style": self.storyboard_visual_style(script),
+            "director": self.director_prompt_context(script),
+        }
+        return hashlib.sha256(json.dumps(payload, sort_keys=True, ensure_ascii=False, default=str).encode()).hexdigest()
+
     def refine_frame(self, script_id: str, frame_id: str) -> Optional[StoryboardFrame]:
-        """Phase 2: Refine a single coarse frame into a rich frame."""
-        from .prompt_assembly import assemble_prompt, sync_dialogue_to_tts
+        """Phase 2: propose rich fields without changing the accepted frame."""
         from .models import DialogueStructured, CameraMovementData, Blocking, AudioNote, LightingData, StageSubject
 
         script = self.scripts.get(script_id)
@@ -6447,6 +6465,7 @@ class ComicGenPipeline(StudioOwnerMixin):
         if not frame:
             raise ValueError(f"Frame {frame_id} not found")
 
+        source_hash = self._rich_refinement_source_hash(script, frame)
         frame_idx = script.frames.index(frame)
         resolved = self.resolve_project_assets(script)
         all_characters = resolved["characters"]
@@ -6504,6 +6523,8 @@ class ComicGenPipeline(StudioOwnerMixin):
                 f"Shot: {nf.shot_size}, {nf.camera_angle}."
             )
 
+        if self._rich_refinement_source_hash(script, frame) != source_hash:
+            raise ValueError("Shot or context changed while preparing refinement; retry this frame")
         result = self.script_processor.refine_frame_to_rich(
             coarse, char_assets, scene_assets, prev_ctx, next_ctx,
             visual_style=self.storyboard_visual_style(script),
@@ -6515,25 +6536,28 @@ class ComicGenPipeline(StudioOwnerMixin):
         if not result:
             return frame
 
-        # Map result onto frame fields
+        if self._rich_refinement_source_hash(script, frame) != source_hash:
+            raise ValueError("Shot or context changed while refining; retry this frame")
+        proposed = frame.model_copy(deep=True)
+        # Normalize the model response through the existing frame field types.
         if result.get("visual_description"):
             from .prompt_assembly import inject_reference_tags
-            frame.visual_description = inject_reference_tags(
+            proposed.visual_description = inject_reference_tags(
                 result["visual_description"], frame, all_characters, all_scenes
             )
         if result.get("shot_size"):
-            frame.shot_size = result["shot_size"]
+            proposed.shot_size = result["shot_size"]
         if result.get("camera_angle"):
-            frame.camera_angle = result["camera_angle"]
+            proposed.camera_angle = result["camera_angle"]
         if result.get("duration"):
-            frame.duration = result["duration"]
+            proposed.duration = result["duration"]
         if result.get("transition_hint"):
-            frame.transition_hint = result["transition_hint"]
+            proposed.transition_hint = result["transition_hint"]
 
         # Camera movement structured
         cm = result.get("camera_movement")
         if cm and isinstance(cm, dict) and cm.get("primary"):
-            frame.camera_movement_structured = CameraMovementData(
+            proposed.camera_movement_structured = CameraMovementData(
                 primary=cm["primary"],
                 secondary=cm.get("secondary"),
                 speed=cm.get("speed", "normal"),
@@ -6556,7 +6580,7 @@ class ComicGenPipeline(StudioOwnerMixin):
                     )
                     for s in blk["stage"] if isinstance(s, dict)
                 ]
-            frame.blocking = Blocking(
+            proposed.blocking = Blocking(
                 description=blk["description"],
                 stage=stage_list,
                 camera_relation=blk.get("camera_relation"),
@@ -6565,7 +6589,7 @@ class ComicGenPipeline(StudioOwnerMixin):
         # Dialogue structured
         ds = result.get("dialogue_structured")
         if ds and isinstance(ds, dict) and ds.get("line"):
-            frame.dialogue_structured = DialogueStructured(
+            proposed.dialogue_structured = DialogueStructured(
                 speaker=ds.get("speaker", frame.speaker or ""),
                 line=ds["line"],
                 emotion=ds.get("emotion"),
@@ -6575,7 +6599,7 @@ class ComicGenPipeline(StudioOwnerMixin):
         # Audio note
         an = result.get("audio_note")
         if an and isinstance(an, dict) and (an.get("sfx") or an.get("ambience")):
-            frame.audio_note = AudioNote(
+            proposed.audio_note = AudioNote(
                 sfx=an.get("sfx"),
                 ambience=an.get("ambience"),
                 bgm_note=an.get("bgm_note"),
@@ -6584,20 +6608,83 @@ class ComicGenPipeline(StudioOwnerMixin):
         # Lighting
         lt = result.get("lighting")
         if lt and isinstance(lt, dict) and (lt.get("description") or lt.get("direction")):
-            frame.lighting = LightingData(
+            proposed.lighting = LightingData(
                 direction=lt.get("direction"),
                 quality=lt.get("quality"),
                 color_temp=lt.get("color_temp"),
                 description=lt.get("description"),
             )
 
-        # Sync dialogue → TTS instructions & compute assembled prompt
-        sync_dialogue_to_tts(frame)
-        frame.assembled_prompt = assemble_prompt(frame, all_characters)
+        validated = StoryboardFrame.model_validate(proposed.model_dump(mode="json"))
+        fields = {
+            key: getattr(validated, key).model_dump(mode="json") if hasattr(getattr(validated, key), "model_dump") else getattr(validated, key)
+            for key in self._RICH_REFINEMENT_FIELDS
+            if getattr(validated, key) != getattr(frame, key)
+        }
+        if not fields:
+            frame.rich_refinement_candidate = None
+            frame.updated_at = time.time()
+            self._save_data()
+            return frame
+        rationales = result.get("rationale") if isinstance(result.get("rationale"), dict) else {}
+        frame.rich_refinement_candidate = {
+            "id": str(uuid.uuid4()), "source_hash": source_hash, "source": "AI 分镜细化",
+            "fields": fields,
+            "current_fields": {
+                key: getattr(frame, key).model_dump(mode="json") if hasattr(getattr(frame, key), "model_dump") else getattr(frame, key)
+                for key in fields
+            },
+            "rationale": {key: str(rationales.get(key) or "")[:500] for key in fields},
+        }
         frame.updated_at = time.time()
 
         self._save_data()
         return frame
+
+    def apply_rich_refinement_candidate(self, script_id: str, frame_id: str,
+                                        candidate_id: str, selected_fields: List[str]) -> Script:
+        from .prompt_assembly import assemble_prompt, sync_dialogue_to_tts
+
+        script = self.scripts.get(script_id)
+        frame = next((item for item in script.frames if item.id == frame_id), None) if script else None
+        if frame is None:
+            raise ValueError("Frame not found")
+        candidate = frame.rich_refinement_candidate or {}
+        if not candidate_id or candidate.get("id") != candidate_id:
+            raise ValueError("Rich-frame candidate is no longer current")
+        if candidate.get("source_hash") != self._rich_refinement_source_hash(script, frame):
+            raise ValueError("Shot or context changed; refine this frame again")
+        fields = candidate.get("fields") or {}
+        if not selected_fields or len(set(selected_fields)) != len(selected_fields) or any(
+            key not in fields or key not in self._RICH_REFINEMENT_FIELDS for key in selected_fields
+        ):
+            raise ValueError("Select valid rich-frame fields to apply")
+        if frame.workbench_prompt_is_optimized and any(key != "duration" for key in selected_fields):
+            raise ValueError("Full optimized prompt must be reviewed again before applying rich fields")
+        proposed = StoryboardFrame.model_validate({**frame.model_dump(mode="json"), **{
+            key: fields[key] for key in selected_fields
+        }})
+        for key in selected_fields:
+            setattr(frame, key, getattr(proposed, key))
+        if "dialogue_structured" in selected_fields:
+            sync_dialogue_to_tts(frame)
+        all_characters = self.resolve_project_assets(script)["characters"]
+        frame.assembled_prompt = assemble_prompt(frame, all_characters)
+        frame.rich_refinement_candidate = None
+        frame.updated_at = time.time()
+        self._save_data()
+        return script
+
+    def discard_rich_refinement_candidate(self, script_id: str, frame_id: str,
+                                          candidate_id: str) -> Script:
+        script = self.scripts.get(script_id)
+        frame = next((item for item in script.frames if item.id == frame_id), None) if script else None
+        if frame is None or not frame.rich_refinement_candidate or frame.rich_refinement_candidate.get("id") != candidate_id:
+            raise ValueError("Rich-frame candidate is no longer current")
+        frame.rich_refinement_candidate = None
+        frame.updated_at = time.time()
+        self._save_data()
+        return script
 
     def upload_last_frame(self, script_id: str, frame_id: str, file_path: str) -> Optional["StoryboardFrame"]:
         with self._save_lock:

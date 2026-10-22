@@ -2470,7 +2470,8 @@ Return a JSON object with ALL fields below. null is acceptable for optional fiel
         "description": "Natural language lighting description"
     }},
     "transition_hint": "Cut type to next frame (硬切|叠化|黑场|匹配剪辑) or null",
-    "duration": 5
+    "duration": 5,
+    "rationale": {{"shot_size": "Why this framing serves the current shot; cite the supplied shot or confirmed plan, not an invented event."}}
 }}
 
 # Rules
@@ -2480,6 +2481,7 @@ Return a JSON object with ALL fields below. null is acceptable for optional fiel
 4. blocking.stage should cover all visible characters and key props.
 5. Maintain continuity with adjacent frames: preserve character appearance/clothing, scene layout, time/weather, screen direction, eyelines, action direction, and prop state unless an explicit script event changes them. Camera framing may vary without accidentally reversing the axis.
 6. camera_movement has at most primary + secondary.
+7. For each field you change, add a short rationale keyed by that field name. If the supplied evidence does not support a change, keep the original value. Do not copy an adjacent frame's action or dialogue into the current frame.
 
 # Project Visual Style
 {json.dumps(visual_style or {}, ensure_ascii=False, indent=2)}

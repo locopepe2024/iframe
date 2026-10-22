@@ -728,6 +728,8 @@ def test_rich_frame_prompt_keeps_project_style_and_continuity_constraints():
     assert "left to right" in prompt
     assert "将产品放回桌面" in prompt
     assert "preserve character appearance/clothing" in prompt
+    assert '"rationale": {"shot_size":' in prompt
+    assert "Do not copy an adjacent frame's action or dialogue" in prompt
     assert result["visual_description"].startswith("主播保持同一造型")
 
 
@@ -789,6 +791,102 @@ def test_rich_frame_pipeline_forwards_style_and_confirmed_continuity():
     assert "左侧暖光" in kwargs["director_context"]
     assert "暖色顶光" in pipeline.script_processor.refine_frame_to_rich.call_args.args[3]
     assert "将产品放回桌面" in pipeline.script_processor.refine_frame_to_rich.call_args.args[4]
+
+
+def test_rich_refinement_requires_field_review_and_rejects_stale_context():
+    from src.apps.comic_gen.pipeline import ComicGenPipeline
+
+    scene = Scene(id="scene", name="客栈", description="木窗")
+    previous = StoryboardFrame(id="previous", scene_id="scene", action_description="甲推门")
+    current = StoryboardFrame(id="current", scene_id="scene", action_description="乙抬眼", shot_size="中景", camera_angle="平视")
+    script = Script(id="project", title="Story", original_text="source", created_at=1, updated_at=1,
+                    scenes=[scene], frames=[previous, current])
+    pipeline = ComicGenPipeline.__new__(ComicGenPipeline)
+    pipeline.scripts = {script.id: script}
+    pipeline.series_store = {}
+    pipeline.resolve_project_assets = lambda _: {"characters": [], "scenes": [scene], "props": []}
+    pipeline.script_processor = Mock()
+    pipeline.script_processor.refine_frame_to_rich.return_value = {
+        "shot_size": "近景", "camera_angle": "低角度", "rationale": {"shot_size": "突出乙的视线"},
+    }
+    pipeline._save_data = Mock()
+
+    pipeline.refine_frame("project", "current")
+    candidate = current.rich_refinement_candidate
+    assert current.shot_size == "中景"
+    assert current.camera_angle == "平视"
+    assert candidate["fields"] == {"shot_size": "近景", "camera_angle": "低角度"}
+    assert candidate["current_fields"] == {"shot_size": "中景", "camera_angle": "平视"}
+    assert candidate["rationale"]["shot_size"] == "突出乙的视线"
+
+    with pytest.raises(ValueError, match="Select valid"):
+        pipeline.apply_rich_refinement_candidate("project", "current", candidate["id"], ["dialogue"])
+    assert current.shot_size == "中景"
+    pipeline.apply_rich_refinement_candidate("project", "current", candidate["id"], ["shot_size"])
+    assert current.shot_size == "近景"
+    assert current.camera_angle == "平视"
+    assert current.rich_refinement_candidate is None
+
+    pipeline.refine_frame("project", "current")
+    stale_id = current.rich_refinement_candidate["id"]
+    previous.action_description = "甲关门"
+    with pytest.raises(ValueError, match="context changed"):
+        pipeline.apply_rich_refinement_candidate("project", "current", stale_id, ["camera_angle"])
+    assert current.camera_angle == "平视"
+
+
+def test_rich_refinement_rejects_context_change_during_model_call():
+    from src.apps.comic_gen.pipeline import ComicGenPipeline
+
+    frame = StoryboardFrame(id="frame", scene_id="scene", action_description="人物站立", camera_angle="平视")
+    script = Script(id="project", title="Story", original_text="source", created_at=1, updated_at=1,
+                    frames=[frame])
+    pipeline = ComicGenPipeline.__new__(ComicGenPipeline)
+    pipeline.scripts = {script.id: script}
+    pipeline.series_store = {}
+    pipeline.resolve_project_assets = lambda _: {"characters": [], "scenes": [], "props": []}
+    pipeline.script_processor = Mock()
+    pipeline._save_data = Mock()
+
+    def change_while_running(*args, **kwargs):
+        frame.action_description = "人物离开"
+        return {"camera_angle": "俯视"}
+
+    pipeline.script_processor.refine_frame_to_rich.side_effect = change_while_running
+    with pytest.raises(ValueError, match="while refining"):
+        pipeline.refine_frame("project", "frame")
+    assert frame.camera_angle == "平视"
+    assert frame.rich_refinement_candidate is None
+    pipeline._save_data.assert_not_called()
+
+
+def test_rich_refinement_routes_reject_other_owner(monkeypatch):
+    from src.apps.comic_gen import api
+
+    observed = []
+    pipeline = SimpleNamespace(
+        get_script=lambda project, owner: observed.append(owner) or None,
+        refine_frame=Mock(), apply_rich_refinement_candidate=Mock(),
+        discard_rich_refinement_candidate=Mock(),
+    )
+    monkeypatch.setattr(api, "pipeline", pipeline)
+    other = UserContext("other", "other-owner", "", "")
+    calls = [
+        lambda: api.refine_single_frame("project", "frame", other),
+        lambda: api.refine_storyboard_batch("project", other),
+        lambda: api.apply_rich_refinement("project", "frame", api.RichFrameCandidateApplyRequest(
+            candidate_id="candidate", selected_fields=["shot_size"]), other),
+        lambda: api.discard_rich_refinement("project", "frame", api.RichFrameCandidateDiscardRequest(
+            candidate_id="candidate"), other),
+    ]
+    for call in calls:
+        with pytest.raises(HTTPException) as exc_info:
+            call()
+        assert exc_info.value.status_code == 404
+    assert observed == ["other-owner"] * len(calls)
+    pipeline.refine_frame.assert_not_called()
+    pipeline.apply_rich_refinement_candidate.assert_not_called()
+    pipeline.discard_rich_refinement_candidate.assert_not_called()
 
 
 def test_storyboard_analysis_context_passes_project_style_to_all_frames():

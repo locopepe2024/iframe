@@ -938,6 +938,9 @@ class StoryboardFrame(BaseModel):
     lighting: Optional[LightingData] = Field(None, description="光影方向与质感")
     transition_hint: Optional[str] = Field(None, description="与下一帧的转场方式")
     assembled_prompt: Optional[str] = Field(None, description="由 visual_description + 结构化字段自动拼装的最终 prompt（只读）")
+    rich_refinement_candidate: Optional[Dict[str, Any]] = Field(
+        None, description="Unapplied rich-frame field proposals with source snapshot"
+    )
 
     # === Prompts ===
     # Per-shot art-direction overrides.  Empty values inherit the project's

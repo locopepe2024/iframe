@@ -3878,8 +3878,11 @@ def discard_frame_image_polish(script_id: str, frame_id: str, request: ApplyFram
 
 
 @app.post("/projects/{script_id}/frames/{frame_id}/refine")
-def refine_single_frame(script_id: str, frame_id: str):
-    """Phase 2: Refine a single coarse frame into a rich frame with structured fields."""
+def refine_single_frame(script_id: str, frame_id: str,
+                        user: UserContext = Depends(require_studio_user)):
+    """Phase 2: Propose rich fields for creator review."""
+    if not pipeline.get_script(script_id, user.owner_profile_id):
+        raise HTTPException(status_code=404, detail="Script not found")
     try:
         frame = pipeline.refine_frame(script_id, frame_id)
         if not frame:
@@ -3892,12 +3895,48 @@ def refine_single_frame(script_id: str, frame_id: str):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+class RichFrameCandidateApplyRequest(BaseModel):
+    candidate_id: str
+    selected_fields: List[str] = Field(min_length=1, max_length=10)
+
+
+class RichFrameCandidateDiscardRequest(BaseModel):
+    candidate_id: str
+
+
+@app.post("/projects/{script_id}/frames/{frame_id}/rich-refinement/apply", response_model=Script)
+def apply_rich_refinement(script_id: str, frame_id: str, request: RichFrameCandidateApplyRequest,
+                          user: UserContext = Depends(require_studio_user)):
+    if not pipeline.get_script(script_id, user.owner_profile_id):
+        raise HTTPException(status_code=404, detail="Script not found")
+    try:
+        return signed_response(pipeline.apply_rich_refinement_candidate(
+            script_id, frame_id, request.candidate_id, request.selected_fields,
+        ))
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+
+@app.post("/projects/{script_id}/frames/{frame_id}/rich-refinement/discard", response_model=Script)
+def discard_rich_refinement(script_id: str, frame_id: str, request: RichFrameCandidateDiscardRequest,
+                            user: UserContext = Depends(require_studio_user)):
+    if not pipeline.get_script(script_id, user.owner_profile_id):
+        raise HTTPException(status_code=404, detail="Script not found")
+    try:
+        return signed_response(pipeline.discard_rich_refinement_candidate(
+            script_id, frame_id, request.candidate_id,
+        ))
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+
 @app.post("/projects/{script_id}/storyboard/refine_batch")
-def refine_storyboard_batch(script_id: str):
+def refine_storyboard_batch(script_id: str,
+                            user: UserContext = Depends(require_studio_user)):
     """Phase 2: Batch refine all coarse frames. Streams SSE events."""
     from fastapi.responses import StreamingResponse
 
-    script = pipeline.get_script(script_id)
+    script = pipeline.get_script(script_id, user.owner_profile_id)
     if not script:
         raise HTTPException(status_code=404, detail="Script not found")
 
