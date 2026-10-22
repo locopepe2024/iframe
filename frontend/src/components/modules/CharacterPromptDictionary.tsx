@@ -76,13 +76,19 @@ export default function CharacterPromptDictionary({ suggestion, onClose, onApply
     : [{ label: "选择细节，预览同步更新", fields: selectedFields }];
   const selectedText = editedText ?? (selected ? suggestion.slot ? selected.slotValue || selected.text
     : selected.preset ? renderDictionaryPreset(selected.preset, fieldValues) : selected.text : "");
-  const savedSelection = selected?.preset && configurations?.find(item => item.preset_id === selected.id);
-  const projectedFields = savedSelection && selected?.preset ? dictionaryStructuredFields(selected.preset, fieldValues) : null;
+  const projectedFields = selected?.type === "配置面板" && selected.preset
+    ? dictionaryStructuredFields(selected.preset, fieldValues) : null;
   const fieldLabels = Object.fromEntries([...IDENTITY_FIELDS, ...LOOK_FIELDS]);
   const conflictingFields = projectedFields && currentFields ? [
-    ...Object.entries(projectedFields.identity).filter(([key, value]) => currentFields.identity[key as keyof IdentityFeatures] !== value)
+    ...Object.entries(projectedFields.identity).filter(([key, value]) => {
+      const current = currentFields.identity[key as keyof IdentityFeatures];
+      return current && current !== value;
+    })
       .map(([key]) => fieldLabels[key] || key),
-    ...Object.entries(projectedFields.look).filter(([key, value]) => currentFields.look[key as keyof LookFeatures] !== value)
+    ...Object.entries(projectedFields.look).filter(([key, value]) => {
+      const current = currentFields.look[key as keyof LookFeatures];
+      return current && current !== value;
+    })
       .map(([key]) => fieldLabels[key] || key),
   ] : [];
   useEffect(() => {
@@ -284,7 +290,7 @@ export default function CharacterPromptDictionary({ suggestion, onClose, onApply
       {previewUrl && <img src={previewUrl} alt={`${selected.title} 案例预览`} className="mt-2 max-h-40 w-full rounded object-contain" />}
       <label className="mt-2 block text-xs text-text-secondary" htmlFor={`${id}-preview`}>将插入的完整文字</label>
       <textarea id={`${id}-preview`} readOnly={!selected.editableText} value={selectedText} onChange={event => setEditedText(event.target.value)} placeholder="选择项目后在此预览；不指定的项目不会写入。" rows={5} className="mt-1 w-full rounded border border-glass-border bg-surface p-2 text-xs text-foreground" />
-      {conflictingFields.length > 0 && <p role="status" className="mt-2 text-xs text-amber-300">当前设计中的{conflictingFields.join("、")}已与此面板上次应用的值不同。再次应用会用上方选择覆盖这些字段。</p>}
+      {conflictingFields.length > 0 && <p role="status" className="mt-2 text-xs text-amber-300">当前设计中的{conflictingFields.join("、")}与上方选择不同。应用会覆盖这些字段。</p>}
       <p className="mt-1 text-xs text-text-muted">{suggestion.slot ? `仅替换当前 [${suggestion.slot}]，保留模板其他文字与参考图；也可关闭后手动填写。` : selected.editableText ? "可直接修改预览文字，确认后换行追加到提示词末尾；参考图和出图参数由你另行选择。" : selected.type === "配置面板" ? "先在面板选择细节，确认后应用预览文字；也可保留 [变量] 稍后填写。" : selected.type === "Prompt 模板" ? "先选择细节并预览；模板将换行追加到提示词末尾，也可保留 [变量] 稍后填写。" : "替换光标处的 /检索词，保留其他文字与参考图；插入后可编辑。"}</p>
       <button type="button" disabled={!selectedText.trim()} onClick={apply} className={`${buttonStyle} mt-2 bg-primary text-primary-foreground disabled:opacity-50`}>{suggestion.slot ? "填写当前槽位" : selected.type === "配置面板" ? conflictingFields.length ? "覆盖冲突并应用" : "应用配置" : selected.type === "Prompt 模板" ? "使用此模板" : "插入到当前 Prompt"}</button>
       <button type="button" onClick={() => setSelected(null)} className={`${buttonStyle} ml-2`}>返回结果</button>

@@ -1068,7 +1068,7 @@ it("warns before an older outfit panel overwrites a later footwear edit", async 
     fireEvent.click(screen.getByRole("button", { name: "面板与模板" }));
     fireEvent.click(await screen.findByRole("option", { name: /^古装鞋履$/ }));
     fireEvent.change(screen.getByRole("combobox", { name: "古装鞋履" }), { target: { value: "翘头履" } });
-    fireEvent.click(screen.getByRole("button", { name: "应用配置" }));
+    fireEvent.click(screen.getByRole("button", { name: "覆盖冲突并应用" }));
 
     fireEvent.click(screen.getByRole("button", { name: "面板与模板" }));
     fireEvent.click(await screen.findByRole("option", { name: /^古装外套$/ }));
@@ -1085,6 +1085,20 @@ it("warns before an older outfit panel overwrites a later footwear edit", async 
     mountSimpleDesign({ character_design: { design_draft: design } });
     fireEvent.click(screen.getByRole("button", { name: "设计面板" }));
     expect(screen.getByRole("textbox", { name: "设计字段 · 鞋履" })).toHaveValue(design.look.features.footwear);
+});
+
+it("warns when a first-time outfit selection would replace existing footwear", async () => {
+    apiMocks.getAssetReferenceIndex.mockResolvedValueOnce({ assets: [] });
+    mountSimpleDesign();
+    fireEvent.click(screen.getByRole("button", { name: "面板与模板" }));
+    fireEvent.click(await screen.findByRole("option", { name: /^古装鞋履$/ }));
+    fireEvent.change(screen.getByRole("combobox", { name: "古装鞋履" }), { target: { value: "翘头履" } });
+    fireEvent.click(screen.getByRole("button", { name: "应用配置" }));
+
+    fireEvent.click(screen.getByRole("button", { name: "面板与模板" }));
+    fireEvent.click(await screen.findByRole("option", { name: /^古装外套$/ }));
+    expect(within(screen.getByRole("dialog", { name: "基础面板、词典和 Prompt 模板" })).getByRole("status")).toHaveTextContent("鞋履");
+    expect(screen.getByRole("button", { name: "覆盖冲突并应用" })).toBeInTheDocument();
 });
 
 it("does not turn the previous panel preview into supplemental prose when applying a second panel", async () => {
