@@ -6,7 +6,9 @@ slice; batch undo and shared ownership are deliberately not implemented.
 """
 
 import json
+import hashlib
 import sqlite3
+import uuid
 from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
@@ -18,6 +20,7 @@ from .dates import (
     DateAnnotation, DateRevisionConflict, ManualPrecision, PhotoTimeEvidence,
     Snapshot, correct_date, resolve_photo_date,
 )
+from .media import PreparedPhoto
 
 
 class PhotoNotAvailable(LookupError):
@@ -65,6 +68,13 @@ CREATE TABLE IF NOT EXISTS photo_time_consent_history (
     FOREIGN KEY(owner, batch_id) REFERENCES photo_time_consents(owner, batch_id)
 );
 CREATE INDEX IF NOT EXISTS photo_date_year ON photo_date_states(owner, album_year);
+CREATE TABLE IF NOT EXISTS photo_media (
+    owner TEXT NOT NULL, photo_id TEXT NOT NULL, upload_id TEXT NOT NULL,
+    sha256 TEXT NOT NULL, media_type TEXT NOT NULL,
+    original BLOB NOT NULL, thumbnail BLOB NOT NULL,
+    PRIMARY KEY(owner, photo_id), UNIQUE(owner, upload_id),
+    FOREIGN KEY(owner, photo_id) REFERENCES photo_date_states(owner, photo_id)
+);
 CREATE TABLE IF NOT EXISTS photo_date_history (
     owner TEXT NOT NULL, photo_id TEXT NOT NULL, revision INTEGER NOT NULL,
     operation_id TEXT NOT NULL, request TEXT NOT NULL,
@@ -120,22 +130,58 @@ class DateStore:
                        evidence: PhotoTimeEvidence) -> None:
         if not all((owner, batch_id, photo_id)):
             raise ValueError("Owner, batch and photo identifiers are required")
+        with self._connection(write=True) as connection:
+            self._register(connection, owner, batch_id, photo_id, evidence)
+
+    def _register(self, connection, owner, batch_id, photo_id, evidence):
         # Registration saves evidence without starting date organization.
         initial = DateAnnotation(
             date=None, status="pending_confirmation", reason="not_processed",
             source="none", revision=1, evidence=evidence.original_capture_times,
         )
+        connection.execute(
+            "INSERT OR IGNORE INTO photo_time_consents VALUES (?, ?, 0, 0)",
+            (owner, batch_id),
+        )
+        connection.execute(
+            "INSERT INTO photo_date_states VALUES (?, ?, ?, ?, ?, 1, NULL)",
+            (owner, photo_id, batch_id, evidence.model_dump_json(), initial.model_dump_json()),
+        )
+        self._record(connection, owner, photo_id, None, initial, actor=owner,
+                     operation_id="register", request="{}", kind="register")
+
+    def upload(self, owner: str, upload_id: str, prepared: PreparedPhoto) -> dict:
+        digest = hashlib.sha256(prepared.original).hexdigest()
         with self._connection(write=True) as connection:
+            previous = connection.execute(
+                "SELECT m.photo_id, m.sha256, s.batch_id FROM photo_media m "
+                "JOIN photo_date_states s ON s.owner = m.owner AND s.photo_id = m.photo_id "
+                "WHERE m.owner = ? AND m.upload_id = ?", (owner, upload_id),
+            ).fetchone()
+            if previous:
+                if previous["sha256"] != digest:
+                    raise OperationConflict("Upload ID was used for different bytes")
+                return {"photo_id": previous["photo_id"], "batch_id": previous["batch_id"],
+                        "created": False}
+            photo_id, batch_id = str(uuid.uuid4()), str(uuid.uuid4())
+            self._register(connection, owner, batch_id, photo_id, prepared.evidence)
             connection.execute(
-                "INSERT OR IGNORE INTO photo_time_consents VALUES (?, ?, 0, 0)",
-                (owner, batch_id),
+                "INSERT INTO photo_media VALUES (?, ?, ?, ?, ?, ?, ?)",
+                (owner, photo_id, upload_id, digest, prepared.media_type,
+                 prepared.original, prepared.thumbnail),
             )
-            connection.execute(
-                "INSERT INTO photo_date_states VALUES (?, ?, ?, ?, ?, 1, NULL)",
-                (owner, photo_id, batch_id, evidence.model_dump_json(), initial.model_dump_json()),
-            )
-            self._record(connection, owner, photo_id, None, initial, actor=owner,
-                         operation_id="register", request="{}", kind="register")
+            return {"photo_id": photo_id, "batch_id": batch_id, "created": True}
+
+    def media(self, owner: str, photo_id: str, *, thumbnail: bool) -> tuple[bytes, str]:
+        with self._connection() as connection:
+            column = "thumbnail" if thumbnail else "original"
+            row = connection.execute(
+                f"SELECT {column} AS content, media_type FROM photo_media "
+                "WHERE owner = ? AND photo_id = ?", (owner, photo_id),
+            ).fetchone()
+            if row is None:
+                raise PhotoNotAvailable("Photo is not available")
+            return row["content"], "image/webp" if thumbnail else row["media_type"]
 
     def set_time_consent(self, owner: str, batch_id: str, *, granted: bool) -> int:
         """Trusted service boundary only; a UI checkbox alone is not authorization."""

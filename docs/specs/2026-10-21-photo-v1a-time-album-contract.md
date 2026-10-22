@@ -1,7 +1,7 @@
 # 老人照片 V1-A：时间相册工程契约草案
 
 日期：2026-10-21
-状态：时间相册工程契约；日期规则及本地 SQLite 修改历史/恢复原型已实现并通过定向测试，完整服务未实现、未部署。采用 iFrame FastAPI 作为候选服务，移动网页作为交互入口；不据此宣布生产存储部署或身份方案已最终确定。
+状态：日期规则、本地历史/恢复、独立 Demo API 与真实单图上传/读取已实现并通过定向测试；完整整理服务和页面未完成、未部署。不据此宣布生产存储部署或正式身份方案已最终确定。
 
 上游基线：`/Users/owen/Developer/codex/docs/photo-organization-mvp-2026-10-21.md`。
 模型/Skill 梳理：`/Users/owen/Developer/codex/docs/photo-album-memory-model-skill-map-2026-10-21.md`。
@@ -38,9 +38,21 @@ CopilotKit 评估：`/Users/owen/Developer/codex/docs/copilotkit-companion-evalu
 
 ## API 候选（命名可在实现时按项目约定调整）
 
+### 真实图片上传切片（2026-10-22 已验证）
+
+Demo 先开放单文件上传，每次形成独立单照片批次（不可追加），多文件批次后置。`POST /photos/uploads/{upload_id}` 接受原始图片请求体，upload_id 是当前 owner 的幂等键；相同键/相同字节返回已有照片，不同字节返回 409。服务端检测 JPEG/PNG/WebP，最多 10 MiB、2000 万像素，只支持静态图片；无效、截断、超限输入拒绝。
+
+本地原图与 WebP 缩略图直接存入当前显式 SQLite 文件的独立 media 表，与照片注册同事务提交，不新增默认目录或公开静态路径。保留原图字节；缩略图按 EXIF 方向转正且不携带原始 EXIF。日期原始标签从 EXIF IFD 的 DateTimeOriginal/OffsetTimeOriginal 读取，上传时间单存；不采信 HTTP 文件名/时间为拍摄日期。上传状态 `not_processed`，不建立年份归属，不授予时间/人物授权。
+
+`GET /photos/{photo_id}/original|thumbnail` 先按服务端 owner 查归属，返回 private/no-store、nosniff，不暴露本地路径。生产照片量、数据库体积/备份和多批次复用未由此决定；当前用有上限的 SQLite BLOB 完成本地原子上传验证，正式存储适配后置。现有本地 DB 需显式重新执行 DateStore 初始化创建附加表，HTTP 不自动迁移。
+
+验证：真实内存生成图片经 HTTP 上传/重读与字节一致性、EXIF 来源、旋转缩略图、无授权不整理、跨 owner 不可见、幂等/冲突、非法/超限/动画拒绝、事务失败不留下照片或媒体。
+
+结果：合计 88 项定向测试通过，新增上传/媒体行为 10 项。样本由 Pillow 合成生成，未使用老人私照。测试证明 JPEG/PNG/WebP 实际字节经 HTTP 持久化、重开可读，缩略图方向与来源隔离有效；不代表 HEIC、复杂损坏 EXIF、手机图库批量上传或老人端到端交互已验证。当前版本未挂主产品路由，接下来需补服务端授权问题/时间整理执行及列表，之后接网页。
+
 ### 日期工作区 API 切片（2026-10-22）
 
-实现独立 FastAPI app 工厂 `src.apps.photos.api.create_app`，不挂主产品路由。仅开放已预置照片的日期读取、历史分页、更正与恢复；不开放注册照片、上传、授权变更或后台任务。用户明确当前是 Demo，允许沿用既有浏览器标识/API key 指纹工作区和 Bearer 身份；不额外强制登录。owner/actor 均取服务端上下文，请求不能自报。此工作区隔离不是私密照片的正式安全认证，后续改为注册账号与鉴权后才能据此评估生产隐私保证。
+实现独立 FastAPI app 工厂 `src.apps.photos.api.create_app`，不挂主产品路由。最初开放日期读取、历史分页、更正与恢复，现增加上节上传/媒体读取；仍不开放授权变更或后台任务。用户明确当前是 Demo，允许沿用既有浏览器标识/API key 指纹工作区和 Bearer 身份；不额外强制登录。owner/actor 均取服务端上下文，请求不能自报。此工作区隔离不是私密照片的正式安全认证，后续改为注册账号与鉴权后才能据此评估生产隐私保证。
 
 本地存储仅在显式配置 `IFRAME_PHOTOS_LOCAL_DB_PATH` 且指定文件已存在时使用，路径必须绝对；未配置、文件丢失或数据库错误返回 503，不新建默认数据库、不泄露内部异常。生产数据库选择仍未确定。返回 private/no-store；历史按修订游标分页，每页最多 100 条。修改使用 expected_revision、consent_version、operation_id；有效授权由既有本地预置记录提供，不通过 HTTP 设置。
 
@@ -104,7 +116,7 @@ CopilotKit 候选试验以“字号设置确认”和“单批时间授权”两
 3. `npm run typecheck`、定向 `npm run test:ui -- <photos tests>`、`npm run build`。
 4. 真机与老人任务测试另行记录，不以单元测试或 CopilotKit 演示代替。模型参与部分以实际授权样本验证。
 
-上述 API、worker、上传与页面尚未实现；日期规则和本地 SQLite 历史恢复是当前已实现切片。
+上述完整 API 集合、worker 与页面尚未完成；独立日期 API、单图上传/媒体读取、日期规则和本地 SQLite 历史恢复已实现。正式批次授权/撤销尚未接通。
 
 ## 日期规则基础切片（2026-10-22）
 

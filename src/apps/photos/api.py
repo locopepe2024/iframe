@@ -1,4 +1,4 @@
-"""Isolated, explicitly configured photo-date API; no upload or consent endpoints."""
+"""Isolated local photo Demo API; no public consent or worker endpoints yet."""
 
 import os
 import sqlite3
@@ -6,12 +6,14 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, FastAPI, HTTPException, Query
+from fastapi import APIRouter, Depends, FastAPI, HTTPException, Query, Request, Response, Path as APIPath
+from starlette.concurrency import run_in_threadpool
 from pydantic import BaseModel, ConfigDict, Field
 
 from ..identity import UserContext, require_user_context
 from .date_store import DateStore, OperationConflict, PhotoNotAvailable, TimeConsentRequired
 from .dates import DateRevisionConflict, ManualPrecision
+from . import media
 
 
 def get_store() -> DateStore:
@@ -60,6 +62,41 @@ def api_errors():
 Owner = Annotated[UserContext, Depends(require_user_context)]
 Store = Annotated[DateStore, Depends(get_store)]
 router = APIRouter(prefix="/photos", tags=["photo-date-trial"])
+
+
+@router.post("/uploads/{upload_id}", status_code=201)
+async def upload(request: Request, identity: Owner, store: Store,
+                 upload_id: str = APIPath(min_length=1, max_length=120,
+                                          pattern=r"^[a-zA-Z0-9_-]+$")):
+    raw = bytearray()
+    async for chunk in request.stream():
+        if len(raw) + len(chunk) > media.MAX_UPLOAD_BYTES:
+            raise HTTPException(413, "Image exceeds upload limit")
+        raw.extend(chunk)
+    with api_errors():
+        try:
+            prepared = await run_in_threadpool(media.prepare_photo, bytes(raw))
+        except media.ImageLimitExceeded as exc:
+            raise HTTPException(413, "Image exceeds processing limits") from exc
+        return await run_in_threadpool(store.upload, identity.owner_profile_id, upload_id, prepared)
+
+
+def _read_media(photo_id, identity, store, *, thumbnail):
+    with api_errors():
+        raw, media_type = store.media(identity.owner_profile_id, photo_id, thumbnail=thumbnail)
+        return Response(raw, media_type=media_type, headers={
+            "Cache-Control": "private, no-store", "X-Content-Type-Options": "nosniff",
+        })
+
+
+@router.get("/{photo_id}/original")
+def original(photo_id: str, identity: Owner, store: Store):
+    return _read_media(photo_id, identity, store, thumbnail=False)
+
+
+@router.get("/{photo_id}/thumbnail")
+def thumbnail(photo_id: str, identity: Owner, store: Store):
+    return _read_media(photo_id, identity, store, thumbnail=True)
 
 
 @router.get("/{photo_id}/date")
