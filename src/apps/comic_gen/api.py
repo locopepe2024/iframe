@@ -7161,11 +7161,10 @@ def _target_model_guidance(model_id: str) -> str:
     return f"TARGET VIDEO MODEL: {label}. Shared Agent skill guidance:\n{text}"
 
 
-def _selected_skill_guidance(skill_ids: Optional[List[str]]) -> str:
+def _selected_skill_guidance(skill_ids: Optional[List[str]], model_id: str = "") -> str:
     """Compose explicitly selected catalog skills in request order.
 
-    This is intentionally independent of the target video model.  The catalog
-    remains the source of truth, so arbitrary prompt text cannot inject a new
+    The catalog remains the source of truth, so arbitrary prompt text cannot inject a new
     instruction package or a missing skill id.
     """
     if skill_ids is None:
@@ -7176,6 +7175,11 @@ def _selected_skill_guidance(skill_ids: Optional[List[str]]) -> str:
     if unknown:
         raise HTTPException(status_code=422, detail={"reason": "unknown_optimization_skill", "skill_ids": unknown})
     selected = [packages[skill_id] for skill_id in dict.fromkeys(skill_ids)]
+    model = (model_id or "").lower()
+    target = "MiniMax H3" if "h3" in model else "Seedance" if "seedance" in model else ""
+    incompatible = [package["id"] for package in selected if target and target not in package.get("targets", [])]
+    if incompatible:
+        raise HTTPException(status_code=422, detail={"reason": "incompatible_optimization_skill", "skill_ids": incompatible})
     if not selected:
         return ""
     text = "\n\n".join(f"[{package['id']} · {package['name']} v{package['version']}]\n{package.get('instructions', '')}" for package in selected)
@@ -7202,7 +7206,7 @@ Do not add a new body heading or append an afterword to the polished prompt.
 
 
 def _storyboard_polish_contract(model_id: str, custom: str, default: str, generate_audio=None, target_duration=None, dialogue_speaker="", dialogue_line="", optimization_skills: Optional[List[str]] = None, reference_mode: bool = False, generation_mode: str = "i2v") -> str:
-    guidance = _selected_skill_guidance(optimization_skills) if optimization_skills is not None else _target_model_guidance(model_id)
+    guidance = _selected_skill_guidance(optimization_skills, model_id) if optimization_skills is not None else _target_model_guidance(model_id)
     is_h3 = "h3" in (model_id or "").lower()
     if not guidance and not is_h3 and generation_mode != "first_last_frame":
         return custom or default
@@ -7341,8 +7345,10 @@ def _compile_ir_polish_text(request, custom_prompt: str) -> str:
     if getattr(request, "generation_mode", "") == "first_last_frame":
         instruction += _first_last_polish_guidance(request.target_duration)
     instruction += "\n\nH3 constraint: do not add subtitles, captions, title cards, watermarks, labels, or any burned-in on-screen text. Dialogue is audio only."
-    if request.optimization_skills:
-        instruction += "\n\nApply the selected skills above as constraints while preserving the official H3 output format."
+    selected_skills = _effective_optimization_skills(request)
+    if selected_skills:
+        instruction += "\n\n" + _selected_skill_guidance(selected_skills, request.target_video_model)
+        instruction += "\nPreserve the official H3 output format."
     text = f"{instruction}\n\n[DRAFT PROMPT]\n{request.draft_prompt.strip()}"
     if request.feedback.strip():
         text += f"\n\n[USER FEEDBACK]\n{request.feedback.strip()}"
@@ -7496,11 +7502,16 @@ _OPTIMIZER_MODEL_IDS = {
 
 
 def _effective_optimization_skills(request) -> Optional[List[str]]:
-    """Non-IR optimizer models use the H3 Director skill by default."""
+    """Choose legacy default guidance only for a matching video model."""
     if request.optimization_skills is not None:
         return request.optimization_skills
     if request.optimizer_provider in _OPTIMIZER_MODEL_IDS:
-        return ["minimax-h3-director"]
+        model = (request.target_video_model or "").lower()
+        if "h3" in model:
+            return ["minimax-h3-director"]
+        if "seedance" in model:
+            return ["seedance-prompt"]
+        return []
     return None
 
 
