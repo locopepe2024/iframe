@@ -1161,6 +1161,40 @@ it("keeps stable facial fields when an expression panel adds a temporary perform
     expect(design.design_result.prompt.match(/面部表情克制/g)).toHaveLength(1);
 });
 
+it("replaces a saved legacy expression template when applying the expression panel", async () => {
+    apiMocks.getAssetReferenceIndex.mockResolvedValueOnce({ assets: [] });
+    const oldText = "眉部表现：眉头自然放松。\n嘴部表现：嘴唇自然闭合。";
+    const { onUpdateAttributes } = mountSimpleDesign({ character_design: { design_draft: {
+        design_input: { prompt: `素黑劲装。\n${oldText}`, dictionary_configurations: [{
+            preset_id: "dictionary.template.expression.neutral", schema_version: "iframe.dictionary-config.v1",
+            source: "本地词典", preset_text: "旧表情模板", selections: {}, resolved_fields: {}, rendered_text: oldText,
+        }] },
+    } } });
+    expect(designDetailsEditor().getText()).toContain("嘴唇自然闭合");
+    fireEvent.click(screen.getByRole("button", { name: "面板与模板" }));
+    fireEvent.click(await screen.findByRole("option", { name: /^表情$/ }));
+    fireEvent.change(screen.getByRole("combobox", { name: "表情" }), { target: { value: "不动声色" } });
+    fireEvent.click(screen.getByRole("button", { name: "应用配置" }));
+    fireEvent.click(screen.getByRole("button", { name: /^保存并使用/ }));
+    await waitFor(() => expect(onUpdateAttributes).toHaveBeenCalled());
+    const design = onUpdateAttributes.mock.calls.at(-1)![0].character_design;
+    for (const prompt of [design.design_input.prompt, design.design_result.prompt, design.supplemental_prompt]) {
+        expect(prompt).toContain("面部表情克制");
+        expect(prompt).not.toContain("嘴唇自然闭合");
+    }
+    expect(design.design_result.prompt).toContain("素黑劲装");
+    expect(design.dictionary_configurations).toEqual(expect.arrayContaining([
+        expect.objectContaining({ preset_id: "dictionary.template.expression.neutral" }),
+        expect.objectContaining({ preset_id: "dictionary.panel.expression", selections: { 表情: "不动声色" } }),
+    ]));
+    cleanup();
+    apiMocks.getAssetReferenceIndex.mockResolvedValueOnce({ assets: [] });
+    mountSimpleDesign({ character_design: { design_draft: design } });
+    fireEvent.click(screen.getByRole("button", { name: "面板与模板" }));
+    fireEvent.click(await screen.findByRole("option", { name: /^表情$/ }));
+    expect(screen.getByRole("combobox", { name: "表情" })).toHaveValue("不动声色");
+});
+
 it('preserves authored negative prompt arrays through AI, confirmation and reload', async () => {
     const { onUpdateAttributes } = mountSimpleDesign();
     fireEvent.click(screen.getByRole('button', { name: '设计面板' }));
