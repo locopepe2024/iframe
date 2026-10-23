@@ -41,3 +41,12 @@ it("keeps icon controls accessible and clears a search back to all photos",async
   await waitFor(()=>expect(api.list).toHaveBeenLastCalledWith("all","","",""));
   expect(screen.getByLabelText("搜索照片")).toHaveValue("");
 });
+
+it("opens as a dialog sheet and closes from Escape or the backdrop",async()=>{
+  const close=vi.fn();render(<AlbumPicker onPhoto={()=>{}} onClose={close}/>);
+  await screen.findByRole("dialog",{name:"浏览相册"});
+  fireEvent.keyDown(window,{key:"Escape"});
+  expect(close).toHaveBeenCalledOnce();
+  fireEvent.mouseDown(screen.getByRole("presentation"));
+  expect(close).toHaveBeenCalledTimes(2);
+});

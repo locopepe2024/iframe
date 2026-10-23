@@ -70,6 +70,17 @@
 .mediaScope { font-size: .9em; padding: .5rem; }
 .mediaScope p { margin: 0 0 .4rem; }
 
+.sheetBackdrop { position: fixed; inset: 0; z-index: 20; display: flex; align-items: flex-end; justify-content: center; padding: 1rem; background: rgba(0,0,0,.58); }
+.albumSheet { width: min(100%, 48rem); max-height: min(88dvh, 52rem); overflow-y: auto; overscroll-behavior: contain; padding: .5rem 1rem 1.25rem; border: 1px solid var(--line); border-radius: 1.25rem 1.25rem .8rem .8rem; background: var(--surface); box-shadow: 0 18px 60px rgba(0,0,0,.45); }
+.sheetHandle { width: 3.5rem; height: .3rem; margin: .25rem auto .65rem; border-radius: 999px; background: color-mix(in srgb, var(--text) 28%, transparent); }
+.shell .albumSheet h2 { font-size: 1.15em; }
+.shell .albumSheet .albumGrid { margin-bottom: .25rem; }
+@media (min-width: 37rem) {
+  .sheetBackdrop { align-items: center; }
+  .albumSheet { max-height: min(82dvh, 56rem); border-radius: 1.25rem; }
+}
+@media (max-width: 24rem) { .sheetBackdrop { padding: 0; } .albumSheet { max-height: 92dvh; border-radius: 1.25rem 1.25rem 0 0; padding-inline: .75rem; } }
+
 .albumHeader { display: flex; align-items: center; justify-content: space-between; gap: .5rem; }
 .shell .albumHeader h2 { margin: 0; }
 .shell .albumIcon { display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; width: 48px; height: 48px; min-height: 48px; padding: 0; margin: 0; border: 0; background: transparent; }

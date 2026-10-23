@@ -31,10 +31,16 @@ export default function AlbumPicker({ disabled = false, onPhoto, onVideo, onClos
     } catch { if (serial.current === request) setError("相册暂时没有打开，请重试。"); }
     finally { if (serial.current === request) { lock.current=false; setBusy(false); } }
   }
-  useEffect(() => { void load("photos", ""); return () => { serial.current++; }; }, []);
+  useEffect(() => {
+    void load("photos", "");
+    const onKeyDown = (event: KeyboardEvent) => { if (event.key === "Escape") onClose(); };
+    window.addEventListener("keydown", onKeyDown);
+    return () => { serial.current++; window.removeEventListener("keydown", onKeyDown); };
+  }, []);
   const blocked = busy || disabled;
-  return <section className={styles.guideCard} aria-label="浏览相册" aria-busy={busy}>
-    <div className={styles.albumHeader}><h2>相册</h2><button className={styles.albumIcon} type="button" aria-label="关闭相册" onClick={onClose}><X size={24} aria-hidden="true" /></button></div>
+  return <div className={styles.sheetBackdrop} role="presentation" onMouseDown={event => { if (event.target === event.currentTarget) onClose(); }}>
+    <section className={styles.albumSheet} role="dialog" aria-modal="true" aria-label="浏览相册" aria-busy={busy} onMouseDown={event => event.stopPropagation()}>
+    <div className={styles.sheetHandle} aria-hidden="true" /><div className={styles.albumHeader}><h2>相册</h2><button className={styles.albumIcon} type="button" aria-label="关闭相册" onClick={onClose}><X size={24} aria-hidden="true" /></button></div>
     {onVideo && <div className={styles.choices}><button type="button" disabled={blocked} aria-pressed={kind === "photos"} onClick={() => { setKind("photos");setQuery("");void load("photos", ""); }}>照片</button><button type="button" disabled={blocked} aria-pressed={kind === "videos"} onClick={() => { setKind("videos");setQuery("");void load("videos", ""); }}>视频</button></div>}
     <form className={styles.albumSearch} onSubmit={event => { event.preventDefault(); if (!lock.current && !disabled) void load(kind, query.trim()); }}>
       <button className={styles.albumIcon} type="submit" disabled={blocked} aria-label="搜索"><Search size={24} aria-hidden="true" /></button>
@@ -55,5 +61,6 @@ export default function AlbumPicker({ disabled = false, onPhoto, onVideo, onClos
       </button>)}</div>
       {cursor && <button type="button" disabled={blocked} onClick={() => void load(kind,applied,cursor)}>更多{kind === "photos" ? "照片" : "视频"}</button>}
     </>}
-  </section>;
+    </section>
+  </div>;
 }
