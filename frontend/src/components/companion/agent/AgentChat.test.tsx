@@ -28,7 +28,7 @@ it("offers large guided cards without sending automatically",async()=>{
 it("loads recent photos into the conversation card stream on demand",async()=>{
   await start();
   photoApi.list.mockResolvedValue({photos:[{photo_id:"photo-1",batch_id:"batch",date:{date:null,status:"pending_confirmation",reason:"missing",source:"none",revision:0}}]});
-  fireEvent.click(screen.getByRole("button",{name:"看看相册照片"}));
+  fireEvent.click(screen.getByRole("button",{name:"从相册添加"}));
   await screen.findByText("相册照片 1");
   expect(photoApi.list).toHaveBeenCalledWith("all","","","");
 });
@@ -89,4 +89,60 @@ it("keeps debugging controls off the main screen and restores paired replies",as
   expect(screen.queryByText("已保存的用户原话")).not.toBeInTheDocument();
   expect(screen.queryByText(/文字聊天测试/)).not.toBeInTheDocument();
   expect(screen.queryByRole("button",{name:"重新读取本会话原话"})).not.toBeInTheDocument();
+});
+
+async function switchMode(label: string) {
+  fireEvent.click(screen.getByRole("button", {name: /^创作类型：/}));
+  fireEvent.click(screen.getByRole("menuitemradio", {name: label}));
+}
+it("keeps chat, image and video drafts independent without sending a media request to chat", async () => {
+  await start();
+  await switchMode("图片");
+  fireEvent.change(screen.getByLabelText("想生成的图片"), {target:{value:"一朵花"}});
+  await switchMode("视频");
+  fireEvent.change(screen.getByLabelText("想生成的视频"), {target:{value:"花朵慢慢开放"}});
+  await switchMode("聊天");
+  expect(screen.getByLabelText("和我聊聊天")).toHaveValue("请记住我喜欢散步");
+  await switchMode("图片");
+  expect(screen.getByLabelText("想生成的图片")).toHaveValue("一朵花");
+  fireEvent.click(screen.getByRole("button",{name:"发送"}));
+  expect(screen.getByRole("region",{name:"图片创作引导"})).toBeInTheDocument();
+  expect(api.chat).not.toHaveBeenCalled();
+  expect(photoApi.list).not.toHaveBeenCalled();
+  await switchMode("视频");
+  expect(screen.getByLabelText("想生成的视频")).toHaveValue("花朵慢慢开放");
+  await switchMode("图片");
+  expect(screen.getByRole("region",{name:"图片创作引导"})).toBeInTheDocument();
+});
+it("previews recommended media settings honestly and can go back or cancel", async () => {
+  await start(); await switchMode("视频");
+  fireEvent.change(screen.getByLabelText("想生成的视频"),{target:{value:"老街骑马"}});
+  fireEvent.click(screen.getByRole("button",{name:"发送"}));
+  fireEvent.click(screen.getByRole("button",{name:"不加参考图片"}));
+  fireEvent.click(screen.getByRole("button",{name:"10 秒"}));
+  expect(screen.getByText("老街骑马",{selector:"dd"})).toBeInTheDocument();
+  expect(screen.getByText("10 秒",{selector:"dd"})).toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button",{name:"返回修改"}));
+  fireEvent.click(screen.getByRole("button",{name:"用推荐设置"}));
+  expect(screen.getByText("5 秒",{selector:"dd"})).toBeInTheDocument();
+  expect(screen.getByText("尚未报价")).toBeInTheDocument();
+  expect(screen.getByRole("button",{name:"确认生成（暂未开放）"})).toBeDisabled();
+  fireEvent.click(screen.getByRole("button",{name:"确认设置"}));
+  expect(screen.getByText("已确认本次设置，尚未开始生成。")).toBeInTheDocument();
+  expect(api.chat).not.toHaveBeenCalled();
+  fireEvent.click(screen.getByRole("button",{name:"取消创作"}));
+  expect(screen.getByLabelText("想生成的视频")).toHaveValue("老街骑马");
+  expect(screen.queryByRole("region",{name:"视频创作引导"})).not.toBeInTheDocument();
+});
+it("does not reuse an already-sent chat draft when switching modes",async()=>{
+  api.chat.mockResolvedValue({turn_id:"t",status:"completed",result:{kind:"text",text:"您好"}});
+  await start();fireEvent.click(screen.getByText("开始聊天前，请确认文字发送范围", {selector:"summary"}));fireEvent.click(screen.getByRole("checkbox"));fireEvent.click(screen.getByRole("button",{name:"发送"}));
+  await screen.findByText("您好"); await switchMode("图片"); await switchMode("聊天");
+  expect(screen.getByLabelText("和我聊聊天")).toHaveValue("");
+});
+it("supports Escape and arrow navigation in the mode menu",async()=>{
+  await start(); const trigger=screen.getByRole("button",{name:"创作类型：聊天"});
+  fireEvent.click(trigger); expect(screen.getByRole("menuitemradio",{name:"聊天"})).toHaveFocus();
+  fireEvent.keyDown(document.activeElement!,{key:"ArrowDown"});expect(screen.getByRole("menuitemradio",{name:"图片"})).toHaveFocus();
+  fireEvent.keyDown(document.activeElement!,{key:"Escape"});expect(screen.queryByRole("menu")).not.toBeInTheDocument();expect(trigger).toHaveFocus();
 });

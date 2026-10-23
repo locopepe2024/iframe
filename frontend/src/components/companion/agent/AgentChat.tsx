@@ -5,6 +5,8 @@ import styles from "../photos/photos.module.css";
 import chatStyles from "./chat.module.css";
 import PhotoConversationCard from "../PhotoConversationCard";
 import { photoApi, type AlbumPhoto } from "@/lib/photoApi";
+import CompanionComposer, { type ComposerMode } from "./CompanionComposer";
+import GenerationGuide, { createGenerationDraft, type GenerationDraft, type MediaMode } from "./GenerationGuide";
 
 const prefix = process.env.NEXT_PUBLIC_API_URL === "/companion-demo" ? "/companion-demo" : "";
 const sessionKey = "iframe-companion-agent-session-v1";
@@ -14,7 +16,12 @@ export default function AgentChat() {
   const [session, setSession] = useState("");
   const [menu, setMenu] = useState(false);
   const [messages, setMessages] = useState<UserMessage[]>([]), [after, setAfter] = useState<number | null>(null);
-  const [text, setText] = useState(""), [allowed, setAllowed] = useState(false);
+  const [allowed, setAllowed] = useState(false);
+  const [mode, setMode] = useState<ComposerMode>("chat");
+  const [drafts, setDrafts] = useState<Record<ComposerMode, string>>({ chat: "", image: "", video: "" });
+  const [guides, setGuides] = useState<Record<MediaMode, GenerationDraft | null>>({ image: null, video: null });
+  const text = drafts[mode];
+  const guide = mode === "chat" ? null : guides[mode];
   const [turn, setTurn] = useState<Turn | null>(null), [preview, setPreview] = useState<Preview | null>(null);
   const [page, setPage] = useState<MemoryPage | null>(null), [query, setQuery] = useState(""), [appliedQuery, setAppliedQuery] = useState("");
   const [busy, setBusy] = useState(false), [error, setError] = useState(""), [notice, setNotice] = useState("");
@@ -28,10 +35,17 @@ export default function AgentChat() {
   const [photoAnchor, setPhotoAnchor] = useState(0);
   const streamRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  const updateDraft = (value: string) => {
+    setDrafts(old => ({ ...old, [mode]: value }));
+    if (mode !== "chat") setGuides(old => ({ ...old, [mode]: null }));
+  };
+  const inputDisabled = busy || hasRetry;
+  function fillChat(value: string) { setMode("chat"); setDrafts(old => ({ ...old, chat: value })); inputRef.current?.focus(); }
+  function updateGuide(value: GenerationDraft | null) { if (mode !== "chat") setGuides(old => ({ ...old, [mode]: value })); }
   useEffect(() => {
     const node = streamRef.current;
     if (node) node.scrollTop = node.scrollHeight;
-  }, [turn, recentPhotos, busy]);
+  }, [turn, recentPhotos, busy, guide, mode]);
   async function run(action: () => Promise<void>) {
     if (locked.current) return;
     locked.current = true; setBusy(true); setError("");
@@ -60,7 +74,7 @@ export default function AgentChat() {
     const result = await companionApi.session(sessionOperation.current);
     localStorage.setItem(sessionKey, result.session_id); localStorage.removeItem(turnKey);
     sessionOperation.current = ""; sendOperation.current = null; setHasRetry(false);
-    setMenu(false); setRecentPhotos(null); setSession(result.session_id); setMessages([]); setAfter(null); setTurn(null); setPreview(null); setDraft(null); setText(""); setNotice("已开始新的聊天。");
+    setMenu(false); setRecentPhotos(null); setSession(result.session_id); setMessages([]); setAfter(null); setTurn(null); setPreview(null); setDraft(null); setDrafts({ chat: "", image: "", video: "" }); setGuides({ image: null, video: null }); setMode("chat"); setNotice("已开始新的聊天。");
   }
   async function send(retry = false) {
     if (!sendOperation.current || !retry) sendOperation.current = { operation_id: crypto.randomUUID(), text, allow_external_text: true };
@@ -70,7 +84,7 @@ export default function AgentChat() {
     if (!session) { sessionOperation.current = ""; setSession(activeSession); localStorage.setItem(sessionKey, activeSession); }
     const result = await companionApi.chat(activeSession, sendOperation.current);
     localStorage.setItem(turnKey, result.turn_id);
-    if (alive.current) { setDraft(null); setTurn(result); setPreview(result.result?.kind === "confirmation" ? result.result : null); setText(""); sendOperation.current = null; setHasRetry(false); }
+    if (alive.current) { setDraft(null); setTurn(result); setPreview(result.result?.kind === "confirmation" ? result.result : null); setDrafts(old => ({ ...old, chat: "" })); sendOperation.current = null; setHasRetry(false); }
     await history(activeSession);
   }
   async function memories(search: string, cursor = "") {
@@ -80,6 +94,10 @@ export default function AgentChat() {
   async function loadRecentPhotos() {
     const result = await photoApi.list("all", "", "", "");
     if (alive.current) { setRecentPhotos(result.photos.slice(0, 6)); setPhotoAnchor(messages.length); }
+  }
+  function submit() {
+    if (mode === "chat") void run(() => send());
+    else { updateGuide(createGenerationDraft(mode, text.trim())); setNotice(""); }
   }
   const activePreview = preview ?? (turn?.result?.kind === "confirmation" ? turn.result : null);
   const pending = activePreview?.status === "pending_confirmation";
@@ -97,21 +115,20 @@ export default function AgentChat() {
     </aside>}
     <div ref={streamRef} className={chatStyles.stream} role="region" aria-label="聊天内容">
     <article className={chatStyles.assistant}><span>陪伴助手</span><p>您好，我在。想聊聊今天，还是一起看看照片？</p></article>
-    {!messages.length && <section className={styles.guide} aria-labelledby="chat-guide-title">
+    {mode === "chat" && !messages.length && <section className={styles.guide} aria-labelledby="chat-guide-title">
       <h2 id="chat-guide-title">想从哪里聊起？</h2>
       <div className={styles.guideGrid}>
-        <button type="button" className={styles.guideCard} disabled={busy || pending || hasRetry} onClick={() => { setText("聊聊今天发生的事情"); inputRef.current?.focus(); }}>
+        <button type="button" className={styles.guideCard} disabled={busy || pending || hasRetry} onClick={() => { fillChat("聊聊今天发生的事情"); }}>
           <strong>聊聊今天</strong><span>说说今天的生活</span>
         </button>
         <button type="button" className={styles.guideCard} disabled={busy || pending || hasRetry} onClick={() => { void run(loadRecentPhotos); }}>
           <strong>讲讲一张照片</strong><span>在这里看看照片</span>
         </button>
-        <button type="button" className={styles.guideCard} disabled={busy || pending || hasRetry} onClick={() => { setText("请把我们今天聊的内容整理成一篇回忆日记"); inputRef.current?.focus(); }}>
+        <button type="button" className={styles.guideCard} disabled={busy || pending || hasRetry} onClick={() => { fillChat("请把我们今天聊的内容整理成一篇回忆日记"); }}>
           <strong>整理今天的回忆</strong><span>把故事记下来</span>
         </button>
       </div>
     </section>}
-    {!recentPhotos && <button type="button" disabled={busy || pending} onClick={() => void run(loadRecentPhotos)}>看看相册照片</button>}
     <section aria-label="会话消息">
       {recentPhotos && photoAnchor === 0 && <section aria-label="相册照片">{!recentPhotos.length && <p>相册里还没有照片。</p>}{recentPhotos.map((photo, index) => <PhotoConversationCard key={photo.photo_id} photoId={photo.photo_id} label={`相册照片 ${index + 1}`} />)}</section>}
       {messages.map((message, messageIndex) => <Fragment key={message.id}><div>
@@ -123,6 +140,7 @@ export default function AgentChat() {
       {after !== null && <button disabled={busy} onClick={() => void run(() => history(session, after))}>更多历史消息</button>}
     </section>
     {turn?.result?.kind === "text" && !messages.some(m => m.turn?.turn_id === turn.turn_id) && <article className={chatStyles.assistant}><span>陪伴助手</span><p>{turn.result.text}</p></article>}
+    {mode !== "chat" && (guide ? <GenerationGuide key={mode} value={guide} disabled={inputDisabled || pending} onChange={updateGuide} onEdit={() => { updateGuide(null); inputRef.current?.focus(); }} onCancel={() => { updateGuide(null); setNotice("已取消创作，描述草稿仍保留。"); }} /> : <article className={chatStyles.assistant}><span>陪伴助手</span><p>{mode === "video" ? "想做一段什么视频？" : "想生成一张什么图片？"}在下面说说，点箭头后我们一步步来。</p></article>)}
     {busy && <p role="status">正在处理…</p>}
     {notice && <p role="status">{notice}</p>}{error && <p role="alert">{error}</p>}
     {turn?.result?.kind === "read" && <section className={styles.panel} aria-label="工具读取结果"><h2>实际记忆查询结果</h2>
@@ -165,14 +183,9 @@ export default function AgentChat() {
       {page?.next_cursor && <button disabled={busy || pending} onClick={() => void run(() => memories(appliedQuery, page.next_cursor!))}>更多个人记忆</button>}
     </section>
     </details>}
-    <footer className={chatStyles.composer}>
-      <label>和我聊聊天<textarea ref={inputRef} rows={2} placeholder="想说什么，都可以写在这里…" maxLength={4000} value={text} disabled={busy || pending || hasRetry} onChange={e => setText(e.target.value)} /></label>
-      {!allowed && <details><summary>开始聊天前，请确认文字发送范围</summary>
-        <p>您本次及最近最多 20 条发言将发送至您配置的 UniArt / Qwen 服务。照片不会随文字自动发送。</p>
-        <label className={styles.check}><input type="checkbox" checked={allowed} disabled={busy} onChange={e => setAllowed(e.target.checked)} />允许发送文字，开始聊天</label>
-      </details>}
-      <button disabled={busy || pending || !allowed || !text.trim() || hasRetry} onClick={() => void run(() => send())}>发送</button>
-      {hasRetry && <button disabled={busy || !allowed} onClick={() => void run(() => send(true))}>重试原请求</button>}
-    </footer>
+    <CompanionComposer mode={mode} value={text} disabled={inputDisabled || pending} busy={busy} allowed={allowed} inputRef={inputRef}
+      onMode={setMode} onChange={updateDraft} onSend={submit} onAllow={setAllowed}
+      onAlbum={() => { if (mode === "chat") void run(loadRecentPhotos); else if (text.trim()) { updateGuide({ ...(guide ?? createGenerationDraft(mode, text.trim())), step: "reference" }); } else { setNotice("先说说想做什么，再选择参考照片。"); inputRef.current?.focus(); } }}
+      retry={hasRetry ? () => void run(() => send(true)) : null} />
   </main>;
 }

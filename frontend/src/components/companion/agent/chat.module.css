@@ -1,17 +1,60 @@
-.shell { max-width: 48rem; padding: 0 1rem; height: 100dvh; display: flex; flex-direction: column; overflow: hidden; --surface: #172331; }
-.header { position: sticky; top: 0; z-index: 3; display: flex; align-items: center; justify-content: space-between; background: #0c1520; padding: .5rem 0; border-bottom: 1px solid #52687d; }
+.shell {
+  --surface: var(--color-bg-surface, #131116);
+  --text: var(--color-text-primary, #f2ede4);
+  --muted: color-mix(in srgb, var(--color-text-primary, #f2ede4) 78%, var(--surface));
+  --accent: var(--color-primary, #34d8c4);
+  --line: color-mix(in srgb, var(--text) 28%, var(--surface));
+  max-width: 48rem; padding: 0 1rem; height: 100dvh; display: flex; flex-direction: column;
+  overflow: hidden; background: var(--color-bg-base, #0c0b0e); color: var(--text);
+}
+.shell button, .shell input, .shell select, .shell textarea { border-color: var(--line); }
+.shell button { background: var(--color-bg-elevated, #181620); color: var(--text); }
+.shell button:active { background: color-mix(in srgb, var(--accent) 18%, var(--surface)); }
+.shell input, .shell select, .shell textarea { background: var(--color-bg-input, rgba(0,0,0,.28)); color: var(--text); }
+.shell section, .shell article { border-color: var(--line); }
+.shell section > div > button { background: var(--color-bg-elevated, #181620); }
+.shell fieldset { border: 0; padding: 0; min-width: 0; }
+.shell button[aria-pressed=true] { border-color: var(--accent); outline: 2px solid var(--accent); outline-offset: -2px; }
+.header { flex-shrink: 0; display: flex; align-items: center; justify-content: space-between; background: var(--color-bg-base, #0c0b0e); padding: .5rem 0; border-bottom: 1px solid var(--line); }
 .shell .header h1 { font-size: 1.3em; margin: 0; }
 .stream { padding: 1rem 0; flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; }
-.assistant, .user { width: fit-content; max-width: 92%; padding: .8rem 1rem; margin: 1rem 0; border-radius: 1rem 1rem 1rem .2rem; background: #172331; border: 1px solid #52687d; }
-.user { margin-left: auto; background: #244d6b; border-radius: 1rem 1rem .2rem 1rem; }
-.assistant span, .user span { font-size: .8em; color: #bdcbd9; }
+.assistant, .user { width: fit-content; max-width: 92%; padding: .8rem 1rem; margin: 1rem 0; border-radius: 1rem 1rem 1rem .2rem; background: var(--surface); border: 1px solid var(--line); }
+.user { margin-left: auto; background: color-mix(in srgb, var(--accent) 14%, var(--surface)); border-radius: 1rem 1rem .2rem 1rem; }
+.assistant span, .user span { font-size: .85em; color: var(--muted); }
 .assistant p, .user p { margin: .25rem 0; white-space: pre-wrap; }
-.composer { position: sticky; bottom: 0; z-index: 2; padding: .75rem 0 max(.75rem, env(safe-area-inset-bottom)); background: #0c1520; border-top: 1px solid #52687d; }
+.composer { max-height: 60dvh; overflow-y: auto; flex-shrink: 0; position: relative; z-index: 2; padding: .75rem 0 max(.75rem, env(safe-area-inset-bottom)); background: var(--color-bg-base, #0c0b0e); }
+.inputPanel { padding: .7rem; border: 1px solid var(--line); border-radius: 1.25rem; background: var(--surface); }
 .shell .composer label { margin-top: 0; }
-.shell .composer textarea { display: block; min-height: 3.5rem; max-height: 22dvh; }
+.shell .composer textarea { display: block; min-height: 3.5rem; max-height: 18dvh; border: 0; padding: .25rem 0; background: transparent; resize: vertical; }
+.toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem; margin-top: .5rem; }
+.shell .toolbar button { display: inline-flex; align-items: center; justify-content: center; gap: .3rem; margin: 0; padding: .5rem; min-height: 52px; }
+.modePicker { position: relative; }
+.modeMenu { position: fixed; max-height: 50dvh; overflow-y: auto; bottom: calc(100% + .5rem); left: 0; z-index: 5; display: grid; gap: .5rem; min-width: 9rem; padding: .5rem; border-radius: .8rem; background: var(--surface); border: 1px solid var(--line); box-shadow: 0 8px 30px rgba(0,0,0,.35); }
+.shell .modeMenu button { justify-content: flex-start; }
+.shell .modeMenu button[aria-checked=true] { border-color: var(--accent); }
+.composerActions { display: flex; align-items: center; gap: .5rem; margin-left: auto; }
+.shell .voiceButton { min-width: 7.5rem; }
+.shell .sendButton { width: 56px; height: 56px; border-radius: 50%; background: var(--accent); color: var(--color-on-accent, #0c0b0e); }
+.shell .albumButton { min-width: 52px; }
+.consent { margin-top: .5rem; font-size: .9em; }
+.check { display: flex !important; align-items: center; gap: .75rem; min-height: 48px; }
+.shell .check input { width: 1.5rem; min-width: 1.5rem; min-height: 1.5rem; height: 1.5rem; margin: 0; }
+.voiceConsent { max-height: 25dvh; overflow-y: auto; }
+.voiceStatus { margin: .25rem 0 0; font-size: .9em; color: var(--muted); }
+.guideCard { padding: 1rem; margin: 1rem 0; border: 1px solid var(--line); border-radius: 1rem; background: var(--surface); }
+.shell .guideCard h2 { font-size: 1.15em; }
+.guideCard button { margin: .35rem .35rem .35rem 0; }
+.referenceGrid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .75rem; margin: .75rem 0; }
+.shell .referenceGrid button { display: flex; flex-direction: column; gap: .5rem; min-height: 64px; margin: 0; text-align: left; }
+.referenceGrid img { aspect-ratio: 4 / 3; }
+.selectedReference { max-width: 15rem; }
+.guideCard dl { margin: .75rem 0; }
+.guideCard dt { color: var(--muted); font-size: .9em; }
+.guideCard dd { margin: 0 0 .5rem; white-space: pre-wrap; }
+.choices { display: flex; flex-wrap: wrap; gap: .5rem; }
+.muted { color: var(--muted); }
 .management { max-height: 35dvh; overflow: auto; flex-shrink: 0; margin-bottom: .5rem; }
-.header, .composer { flex-shrink: 0; }
 .shell aside { max-height: 25dvh; overflow: auto; margin: .5rem 0; flex-shrink: 0; }
-@media (max-height: 480px) { .composer { position: static; } }
-
-@media (max-height: 480px) { .shell { height: auto; min-height: 100dvh; overflow: visible; } .stream { overflow: visible; } }
+@media (max-width: 36rem) { .albumButton span { display: none; } }
+@media (max-width: 24rem) { .shell { padding: 0 .6rem; } .inputPanel { padding: .5rem; } .toolbar { gap: .35rem; } .composerActions { gap: .35rem; } .shell .voiceButton { min-width: 52px; flex-direction: column; gap: 0; font-size: .85em; } }
+@media (max-height: 480px) { .composer { max-height: none; overflow: visible; } .shell { height: auto; min-height: 100dvh; overflow: visible; } .stream { overflow: visible; } }
