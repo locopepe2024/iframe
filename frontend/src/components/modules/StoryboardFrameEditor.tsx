@@ -388,6 +388,10 @@ export default function StoryboardFrameEditor({ frame: initialFrame, onClose }: 
                                         <button type="button" onClick={() => void applyVisualPreset()} disabled={!selectedVisualPresetId || !visualPresetProjection?.reference_image_available || visualPresetProjectionLoading || visualPresetBusy || (visualPresetApplyMode === "image_and_context" && !selectedReferenceFields.length)} className="rounded bg-primary px-2 py-1 text-xs text-white disabled:opacity-40">确认应用</button>
                                     </div>
                                     {frame.reference_visual_projection?.source_preset_id && <p className="text-[0.6875rem] text-text-muted">当前参考：{visualPresets.find((preset: any) => preset.id === frame.reference_visual_projection.source_preset_id)?.name || "来源不可用"} · {frame.reference_visual_projection.selected_fields?.length ? `已确认 ${frame.reference_visual_projection.selected_fields.join("、")}` : "仅参考图"}</p>}
+                                    {frame.reference_visual_projection?.source_preset_id
+                                        && Object.keys(frame.reference_visual_projection.visual_design?.lighting ?? {}).length > 0
+                                        && !frame.reference_visual_projection.selected_fields?.includes("lighting")
+                                        && <p role="status" className="text-[0.6875rem] text-amber-600">所选参考图的结构化光影未带入本镜首帧。</p>}
                                     <div className="flex gap-2">
                                         <input aria-label="视觉预设名称" value={visualPresetName} onChange={event => setVisualPresetName(event.target.value)} placeholder="保存当前参数为预设" className="min-w-0 flex-1 rounded border border-glass-border bg-surface p-2 text-xs text-foreground" />
                                         <button type="button" onClick={() => void saveVisualPreset()} disabled={!visualPresetName.trim() || visualPresetBusy} className="rounded border border-glass-border px-2 py-1 text-xs text-foreground disabled:opacity-40">保存预设</button>

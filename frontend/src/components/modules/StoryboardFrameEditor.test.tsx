@@ -57,3 +57,26 @@ it("identifies a legacy image with no structured version and keeps image-only su
     fireEvent.click(screen.getByRole("button", { name: "确认应用" }));
     await waitFor(() => expect(api.applyShotVisualPreset).toHaveBeenCalledWith("project", "frame", "legacy", "image_only", []));
 });
+
+it("shows when a selected reference has light that was not accepted", async () => {
+    const originalFrames = state.currentProject.frames;
+    state.currentProject.frames = [{
+        id: "frame", action_description: "target action",
+        reference_visual_projection: {
+            source_preset_id: "previous", selected_fields: [],
+            visual_design: { lighting: { daylight_phase: "暮秋残阳" } },
+        },
+    } as any];
+    api.listShotVisualPresets.mockResolvedValue([{ id: "previous", name: "上一镜首帧" }]);
+    api.previewShotVisualPreset.mockResolvedValue({ reference_image_available: true, projection: {
+        scope: "same_place_time", eligible_fields: ["lighting"], available_fields: ["lighting"],
+        visual_design: { lighting: { daylight_phase: "暮秋残阳" } },
+    } });
+    try {
+        render(<StoryboardFrameEditor frame={state.currentProject.frames[0]} onClose={() => {}} />);
+        expect(await screen.findByText("所选参考图的结构化光影未带入本镜首帧。")).toBeInTheDocument();
+        expect(screen.getByText(/当前参考：上一镜首帧/)).toBeInTheDocument();
+    } finally {
+        state.currentProject.frames = originalFrames;
+    }
+});
