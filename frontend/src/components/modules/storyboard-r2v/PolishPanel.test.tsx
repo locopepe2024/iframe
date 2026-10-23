@@ -88,6 +88,41 @@ it("refreshes R2V references for preview and submits the same reviewed images", 
     expect(vi.mocked(api.polishR2VPrompt).mock.calls[1][5]).toEqual(["series/elder.jpg", "series/chief.jpg"]);
 });
 
+it("requires a scene lighting choice and submits the reviewed reference priority", async () => {
+    const sceneLighting = {
+        scene_name: "粮铺门前", variant_id: "shop", source_variant_id: "street",
+        fields: { light_side: "right", brightness: 50 },
+        shot_lighting: { direction: { value: "左后侧" } }, requires_decision: true,
+    };
+    vi.mocked(api.polishR2VPrompt)
+        .mockResolvedValueOnce({
+            messages: { system: "pending", user: "粮铺冲突" }, media: [], review_token: "pending-token",
+            review_context: { effective_shot_fields: {}, selected_skills: [], target_duration: 6,
+                scene_lighting: { ...sceneLighting, choice: null } },
+        } as any)
+        .mockResolvedValueOnce({
+            messages: { system: "reference lighting", user: "粮铺冲突" }, media: [], review_token: "reference-token",
+            review_context: { effective_shot_fields: {}, selected_skills: [], target_duration: 6,
+                scene_lighting: { ...sceneLighting, choice: "reference" } },
+        } as any)
+        .mockResolvedValueOnce({ prompt_cn: "中文", prompt_en: "English" } as any);
+    render(<PolishPanel prompt="粮铺冲突" tabMode="direct_r2v" scriptId="project"
+        resolveR2VImageUrls={vi.fn().mockResolvedValue(["shop.jpg"])} onApply={vi.fn()} />);
+    fireEvent.click(screen.getByTitle("查看并确认模型输入"));
+    await screen.findByText("场景参考光影 · 粮铺门前");
+    expect(screen.getByText("确认输入并润色")).toBeDisabled();
+    fireEvent.click(screen.getByText("采用场景参考光影"));
+    await waitFor(() => expect(api.polishR2VPrompt).toHaveBeenCalledTimes(2));
+    expect(vi.mocked(api.polishR2VPrompt).mock.calls[1][17]).toBe("reference");
+    await waitFor(() => expect(screen.getByText("确认输入并润色")).toBeEnabled());
+    fireEvent.click(screen.getByText("确认输入并润色"));
+    await waitFor(() => expect(api.polishR2VPrompt).toHaveBeenCalledTimes(3));
+    expect(vi.mocked(api.polishR2VPrompt).mock.calls[2][16]).toEqual({
+        messages: { system: "reference lighting", user: "粮铺冲突" }, token: "reference-token",
+    });
+    expect(vi.mocked(api.polishR2VPrompt).mock.calls[2][17]).toBe("reference");
+});
+
 it("blocks R2V polish when fresh reference resolution yields no images", async () => {
     render(<PolishPanel prompt="粮铺冲突" tabMode="direct_r2v" scriptId="project"
         resolveR2VImageUrls={vi.fn().mockResolvedValue([])} onApply={vi.fn()} />);

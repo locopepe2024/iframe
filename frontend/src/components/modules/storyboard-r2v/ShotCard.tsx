@@ -943,6 +943,7 @@ export default function ShotCard({
                                 lighting: shot.lightingOverride || effectiveVisual?.lighting || "" }}
                             slots={r2vSlots}
                             imageUrls={polishImageUrls}
+                            referenceVariantIds={shot.referenceVariantIds}
                             resolveR2VImageUrls={shot.tabMode === "direct_r2v" ? onResolvePolishReferences : undefined}
                             onBeforePreview={onMicroExpressionBeforePreview}
                             onApply={(text) => onUpdatePrompt(text, true)}

@@ -17,6 +17,17 @@ interface VideoPolishReviewProps {
         effective_shot_fields: Record<string, { value: unknown; source: string; revision: number | null }>;
         selected_skills: string[];
         target_duration: number | null;
+        scene_lighting?: {
+            scene_name: string;
+            source_scene_name?: string;
+            source_variant_name?: string | null;
+            variant_id: string;
+            source_variant_id: string;
+            fields: Record<string, unknown>;
+            shot_lighting: Record<string, unknown>;
+            requires_decision: boolean;
+            choice?: "shot" | "reference" | null;
+        } | null;
     };
     isContextIr: boolean;
     isSubmitting: boolean;
@@ -24,6 +35,7 @@ interface VideoPolishReviewProps {
     userLabel?: string;
     confirmLabel?: string;
     onChange: (messages: VideoPolishMessages) => void;
+    onLightingChoice?: (choice: "shot" | "reference") => void;
     onCancel: () => void;
     onConfirm: () => void;
 }
@@ -42,6 +54,10 @@ const sourceLabels: Record<string, string> = {
     plan_baseline: "拍摄计划", plan_shot: "导演计划",
     selected_reference: "参考图",
 };
+const lightingLabels: Record<string, string> = {
+    ambient_lighting: "环境光", local_lighting: "局部光", key_light_direction: "主光方向",
+    light_side: "主光来向", color: "主光颜色", brightness: "亮度", rim_light: "轮廓光",
+};
 
 function displayValue(value: unknown): string {
     if (Array.isArray(value)) return value.map(displayValue).join("、");
@@ -51,7 +67,7 @@ function displayValue(value: unknown): string {
 
 export default function VideoPolishReview({ messages, media, formatNote, targetModel, reviewContext, isContextIr,
     isSubmitting, error, userLabel = "用户／镜头文字", confirmLabel = "确认输入并润色",
-    onChange, onCancel, onConfirm }: VideoPolishReviewProps) {
+    onChange, onLightingChoice, onCancel, onConfirm }: VideoPolishReviewProps) {
     const fields = Object.entries(reviewContext?.effective_shot_fields ?? {})
         .filter(([name, field]) => name in fieldLabels && field.value != null && field.value !== "");
     const skills = reviewContext?.selected_skills.map(id =>
@@ -67,6 +83,37 @@ export default function VideoPolishReview({ messages, media, formatNote, targetM
                 && <p>时长：<span className="text-foreground">{reviewContext.target_duration} 秒</span></p>}
             {skills.length > 0 && <p>已选技能：<span className="text-foreground">{skills.join("、")}</span></p>}
         </div>
+        {reviewContext?.scene_lighting && <section aria-label="场景参考光影" className="border-t border-glass-border pt-3 text-xs">
+            <h3 className="font-medium text-foreground">场景参考光影 · {reviewContext.scene_lighting.scene_name}</h3>
+            <p className="mt-1 text-text-muted">来源：{reviewContext.scene_lighting.source_scene_name || reviewContext.scene_lighting.scene_name}
+                {reviewContext.scene_lighting.source_variant_name ? ` · ${reviewContext.scene_lighting.source_variant_name}` : ""}</p>
+            <dl className="mt-2 grid gap-x-4 gap-y-1 sm:grid-cols-2">
+                {Object.entries(reviewContext.scene_lighting.fields).map(([key, value]) =>
+                    <div key={key} className="flex min-w-0 gap-2">
+                        <dt className="shrink-0 text-text-muted">{lightingLabels[key] ?? key}</dt>
+                        <dd className="min-w-0 break-words text-foreground">
+                            {key === "color" && typeof value === "string" && <span aria-hidden="true"
+                                className="mr-1 inline-block size-3 border border-glass-border align-middle"
+                                style={{ backgroundColor: value }} />}
+                            {key === "light_side" ? ({ left: "左侧", right: "右侧", front: "正面", back: "背面" }[String(value)] ?? displayValue(value))
+                                : key === "brightness" ? `${displayValue(value)}%`
+                                : key === "rim_light" ? (value ? "有" : "无") : displayValue(value)}
+                        </dd>
+                    </div>)}
+            </dl>
+            {reviewContext.scene_lighting.requires_decision && <>
+                <p className="mt-1 text-accent">本镜已有光线设置，请确认本次优化使用哪一方。</p>
+                <div className="mt-2 flex gap-1" role="group" aria-label="光影来源">
+                    {([ ["reference", "采用场景参考光影"], ["shot", "保持本镜光影"] ] as const).map(([value, label]) =>
+                        <button key={value} type="button" disabled={isSubmitting} onClick={() => onLightingChoice?.(value)}
+                            aria-pressed={reviewContext.scene_lighting?.choice === value}
+                            className={`rounded border px-2 py-1 ${reviewContext.scene_lighting?.choice === value
+                                ? "border-primary bg-primary/15 text-primary" : "border-glass-border text-text-secondary"}`}>
+                            {label}
+                        </button>)}
+                </div>
+            </>}
+        </section>}
         <label className="block text-xs text-text-secondary">{isContextIr ? "送入 IR 的文字" : userLabel}
             <textarea aria-label={isContextIr ? "送入 IR 的文字" : userLabel} value={messages.user}
                 onChange={(event) => onChange({ ...messages, user: event.target.value })}
@@ -100,7 +147,8 @@ export default function VideoPolishReview({ messages, media, formatNote, targetM
         {error && <p role="alert" className="text-xs text-status-failed-fg">{error}</p>}
         <div className="flex justify-end gap-2">
             <button type="button" onClick={onCancel} className="rounded border border-glass-border px-3 py-1.5 text-xs text-foreground">返回</button>
-            <button type="button" onClick={onConfirm} disabled={isSubmitting || !messages.user.trim()}
+            <button type="button" onClick={onConfirm} disabled={isSubmitting || !messages.user.trim()
+                || Boolean(reviewContext?.scene_lighting?.requires_decision && !reviewContext.scene_lighting.choice)}
                 className="rounded bg-primary px-3 py-1.5 text-xs text-white disabled:opacity-50">
                 {isSubmitting ? "模型处理中…" : confirmLabel}
             </button>

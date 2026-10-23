@@ -1868,6 +1868,8 @@ export const api = {
         frameId: string = "",
         shotOverrides?: { style: string; lighting: string },
         review?: { messages: { system: string; user: string }; token: string },
+        referenceLightingChoice?: "shot" | "reference",
+        referenceVariantIds?: Record<string, string[]>,
     ) => {
         const payload = {
             draft_prompt: draftPrompt,
@@ -1878,6 +1880,8 @@ export const api = {
             shot_overrides: shotOverrides,
             prev_cn: prevCn,
             image_urls: imageUrls,
+            reference_variant_ids: referenceVariantIds,
+            reference_lighting_choice: referenceLightingChoice,
             polish_model: polishModel,
             target_video_model: targetVideoModel,
             optimizer_provider: optimizerProvider,

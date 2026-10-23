@@ -1,6 +1,8 @@
 from unittest.mock import Mock
+from types import SimpleNamespace
 import pytest
 from src.apps.comic_gen import api
+from src.apps.comic_gen.models import AssetImageSubmissionSnapshot
 
 
 def _confirmed_video(request):
@@ -586,6 +588,96 @@ def test_r2v_h3_result_rejects_t2va_label():
             reference_mode=True,
         )
     assert "误标为 T2VA" in error.value.message_zh
+
+
+def test_r2v_scene_lighting_reads_exact_selected_variant_lineage(monkeypatch):
+    parent_variant = SimpleNamespace(id="street-final", scene_tool={
+        "kind": "lighting", "light_side": "right", "color": "#f3f4f6",
+        "brightness": 50, "rim_light": False,
+    })
+    parent = SimpleNamespace(id="street", name="长街", image_asset=SimpleNamespace(variants=[parent_variant]))
+    snapshot = AssetImageSubmissionSnapshot(
+        positive_prompt="Do not transfer this action or dialogue", selected_model_id="image",
+        aspect_ratio="16:9", generation_type="all", image_generation_mode="reference",
+        reference_inputs=[{"asset_type": "scene", "asset_id": "street", "variant_id": "street-final"}],
+        visual_design={"ambient_lighting": "黄昏", "visual_notes": "前镜人物挥刀"},
+        design_revision_at_submission=3,
+    )
+    shop_variant = SimpleNamespace(id="shop-final", submission_snapshot=snapshot, scene_tool=None)
+    shop = SimpleNamespace(id="shop", name="粮铺门前", image_asset=SimpleNamespace(
+        selected_id="shop-final", variants=[shop_variant],
+    ))
+    monkeypatch.setattr(api.pipeline, "resolve_project_assets", lambda script: {"scenes": [shop, parent]})
+    frame = SimpleNamespace(scene_id="shop", workbench_reference_variant_ids={})
+    lighting = api._r2v_scene_lighting(object(), frame, "[character2:粮铺门前]")
+    assert lighting["variant_id"] == "shop-final"
+    assert lighting["source_variant_id"] == "street-final"
+    assert lighting["fields"] == {
+        "ambient_lighting": "黄昏", "light_side": "right", "color": "#f3f4f6",
+        "brightness": 50, "rim_light": False,
+    }
+    assert "挥刀" not in str(lighting)
+    assert api._r2v_scene_lighting(object(), SimpleNamespace(
+        scene_id="another-place", workbench_reference_variant_ids={},
+    ), "[character2:粮铺门前]") is None
+    shop.image_asset.variants.append(SimpleNamespace(id="shop-old", submission_snapshot=None, scene_tool=None))
+    assert api._r2v_scene_lighting(object(), frame, "[character2:粮铺门前]",
+                                   {"shop": ["shop-old"]}) is None
+    shop_variant.submission_snapshot = None
+    assert api._r2v_scene_lighting(object(), frame, "[character2:粮铺门前]") is None
+
+
+def test_r2v_scene_lighting_conflict_requires_review_and_changes_model_input(monkeypatch):
+    frame = SimpleNamespace(id="shot", workbench_reference_variant_ids={})
+    script = SimpleNamespace(frames=[frame])
+    monkeypatch.setattr(api, "current_studio_user", lambda: SimpleNamespace(owner_profile_id="owner"))
+    monkeypatch.setattr(api.pipeline, "get_script", lambda *args: script)
+    monkeypatch.setattr(api.pipeline, "storyboard_continuity_sheet", lambda *args: {"rows": [{
+        "frame_id": "shot", "fields": {"direction": {
+            "value": "左后侧", "source_kind": "frame", "source_revision": None,
+        }},
+    }]})
+    monkeypatch.setattr(api, "_get_custom_prompt", lambda *args: "")
+    monkeypatch.setattr(api, "_get_director_prompt_context", lambda *args: "")
+    monkeypatch.setattr(api, "_r2v_scene_lighting", lambda *args: {
+        "scene_name": "粮铺门前", "scene_id": "shop", "variant_id": "shop-final",
+        "source_variant_id": "street-final", "design_revision": 3,
+        "fields": {"light_side": "right", "brightness": 50},
+    })
+    request = api.PolishR2VPromptRequest(
+        draft_prompt="[character2:粮铺门前]", slots=[], script_id="project", frame_id="shot",
+        image_urls=["signed-shop-image"], target_video_model="uniart/minimax-h3-vip",
+        optimization_skills=[],
+    )
+    pending = api.preview_r2v_polish_prompt(request)
+    assert pending["review_context"]["scene_lighting"]["requires_decision"] is True
+    with pytest.raises(api.HTTPException) as error:
+        api._require_video_polish_review(request.model_copy(update={
+            "review_token": pending["review_token"], "reviewed_messages": pending["messages"],
+        }), True)
+    assert error.value.status_code == 422
+
+    reference_request = request.model_copy(update={"reference_lighting_choice": "reference"})
+    reference = api.preview_r2v_polish_prompt(reference_request)
+    assert "Use these frozen reference lighting fields" in reference["messages"]["system"]
+    assert '"direction":' not in reference["messages"]["system"]
+    assert reference["review_token"] != pending["review_token"]
+    assert api._require_video_polish_review(reference_request.model_copy(update={
+        "review_token": reference["review_token"], "reviewed_messages": reference["messages"],
+    }), True) == reference["messages"]
+    shot = api.preview_r2v_polish_prompt(request.model_copy(update={"reference_lighting_choice": "shot"}))
+    assert "Keep this shot's lighting values" in shot["messages"]["system"]
+    assert '"direction":' in shot["messages"]["system"]
+    monkeypatch.setattr(api, "_r2v_scene_lighting", lambda *args: {
+        "scene_name": "粮铺门前", "scene_id": "shop", "variant_id": "shop-new",
+        "source_variant_id": "street-new", "design_revision": 4,
+        "fields": {"light_side": "left", "brightness": 40},
+    })
+    with pytest.raises(api.HTTPException) as stale:
+        api._require_video_polish_review(reference_request.model_copy(update={
+            "review_token": reference["review_token"], "reviewed_messages": reference["messages"],
+        }), True)
+    assert stale.value.status_code == 409
 
 
 def test_non_h3_submission_strips_semantic_editor_tags():

@@ -8071,11 +8071,74 @@ def _video_polish_user_text(request) -> str:
     return request.draft_prompt
 
 
+def _r2v_scene_lighting(script, frame, draft_prompt: str,
+                        reference_variant_ids: Optional[Dict[str, List[str]]] = None) -> Optional[Dict[str, Any]]:
+    """Read lighting only from the selected scene image's frozen lineage."""
+    if frame is None:
+        return None
+    names = set(re.findall(r"\[(?:character\d+|scene):([^\]]+)\]", draft_prompt))
+    scenes = pipeline.resolve_project_assets(script)["scenes"]
+    matches = [scene for scene in scenes if scene.id == getattr(frame, "scene_id", None) and scene.name in names]
+    if len(matches) != 1 or sum(scene.name == matches[0].name for scene in scenes) != 1:
+        return None
+    scene = matches[0]
+    variants = {item.id: item for item in scene.image_asset.variants}
+    selections = reference_variant_ids if reference_variant_ids is not None else frame.workbench_reference_variant_ids
+    selected_ids = (selections or {}).get(scene.id) or []
+    if len(selected_ids) > 1:
+        return None
+    selected_id = selected_ids[0] if selected_ids else scene.image_asset.selected_id
+    variant = variants.get(selected_id)
+    if variant is None:
+        return None
+    snapshot = variant.submission_snapshot
+    design = snapshot.visual_design if snapshot and isinstance(snapshot.visual_design, dict) else {}
+    fields: Dict[str, Any] = {}
+    for key in ("ambient_lighting", "local_lighting"):
+        value = design.get(key)
+        if value and (not isinstance(value, dict) or any(str(part).strip() for part in value.values())):
+            fields[key] = value
+    constraints = design.get("visual_constraints")
+    if isinstance(constraints, dict) and constraints.get("key_light_direction") not in (None, "", "unspecified"):
+        fields["key_light_direction"] = constraints["key_light_direction"]
+
+    source_variant = variant
+    source_scene_name = scene.name
+    tool = variant.scene_tool if isinstance(variant.scene_tool, dict) else None
+    if (not tool or tool.get("kind") != "lighting") and snapshot and isinstance(snapshot.scene_tool, dict):
+        tool = snapshot.scene_tool
+    if snapshot:
+        lighting_sources = []
+        for reference in snapshot.reference_inputs:
+            if reference.asset_type != "scene":
+                continue
+            parent = next((item for item in scenes if item.id == reference.asset_id), None)
+            candidate = next((item for item in parent.image_asset.variants
+                              if item.id == reference.variant_id), None) if parent else None
+            if candidate and isinstance(candidate.scene_tool, dict) and candidate.scene_tool.get("kind") == "lighting":
+                lighting_sources.append((candidate, parent.name))
+        if (not tool or tool.get("kind") != "lighting") and len(lighting_sources) == 1:
+            source_variant, source_scene_name = lighting_sources[0]
+            tool = source_variant.scene_tool
+    if tool and tool.get("kind") == "lighting":
+        fields.update({key: tool[key] for key in ("light_side", "color", "brightness", "rim_light") if key in tool})
+    if not fields:
+        return None
+    return {
+        "scene_name": scene.name, "scene_id": scene.id, "variant_id": variant.id,
+        "source_variant_id": source_variant.id, "source_scene_name": source_scene_name,
+        "source_variant_name": source_variant.display_name if hasattr(source_variant, "display_name") else None,
+        "design_revision": snapshot.design_revision_at_submission if snapshot else None,
+        "fields": fields,
+    }
+
+
 def _compile_video_polish_review(request, reference_mode: bool) -> Dict[str, Any]:
     from .llm import DEFAULT_R2V_POLISH_PROMPT, DEFAULT_VIDEO_POLISH_PROMPT
     user = current_studio_user()
     frame_snapshot: Dict[str, Any] = {}
     effective_shot_fields: Dict[str, Any] = {}
+    scene_lighting: Optional[Dict[str, Any]] = None
     if user is not None and request.script_id:
         script = pipeline.get_script(request.script_id, user.owner_profile_id)
         if not script:
@@ -8084,6 +8147,10 @@ def _compile_video_polish_review(request, reference_mode: bool) -> Dict[str, Any
             frame = next((item for item in script.frames if item.id == request.frame_id), None)
             if frame is None:
                 raise HTTPException(404, "Frame not found")
+            if reference_mode and request.image_urls:
+                scene_lighting = _r2v_scene_lighting(
+                    script, frame, request.draft_prompt, request.reference_variant_ids,
+                )
             frame_snapshot = {name: getattr(frame, name, None) for name in (
                 "scene_id", "shot_id", "director_profile_revision", "director_profile_hash",
                 "director_shot_context", "action_description", "style_prompt_override",
@@ -8112,13 +8179,40 @@ def _compile_video_polish_review(request, reference_mode: bool) -> Dict[str, Any
     ):
         raise HTTPException(422, "首尾帧润色需要两张不同的已选图片")
     custom = _get_custom_prompt(request.script_id, "r2v_polish" if reference_mode else "video_polish")
-    if effective_shot_fields:
+    lighting_choice = getattr(request, "reference_lighting_choice", None)
+    lighting_values: Dict[str, Any] = {}
+    if scene_lighting:
+        lighting_values = {key: value for key, value in effective_shot_fields.items()
+                           if key in ("direction", "quality", "color_temp", "key_source", "ambient_lighting",
+                                      "color_tone", "contrast", "lighting_override") and value.get("value") not in (None, "")}
+        if request.shot_overrides and request.shot_overrides.get("lighting"):
+            lighting_values["shot_override"] = request.shot_overrides["lighting"]
+        if not lighting_values and lighting_choice is None:
+            lighting_choice = "reference"
+        scene_lighting = {**scene_lighting, "requires_decision": bool(lighting_values),
+                          "shot_lighting": lighting_values, "choice": lighting_choice}
+    model_shot_fields = ({key: value for key, value in effective_shot_fields.items()
+                          if key not in ("direction", "quality", "color_temp", "key_source", "ambient_lighting",
+                                         "color_tone", "contrast", "lighting_override")}
+                         if lighting_choice == "reference" and scene_lighting else effective_shot_fields)
+    if model_shot_fields:
         custom = "\n\n".join(filter(None, [custom,
             "ACCEPTED SHOT FIELDS AND VISUAL CONTINUITY (preserve these values; do not rewrite them):\n"
-            + json.dumps(effective_shot_fields, ensure_ascii=False, sort_keys=True)]))
+            + json.dumps(model_shot_fields, ensure_ascii=False, sort_keys=True)]))
     director = _get_director_prompt_context(request.script_id, request.frame_id, request.shot_overrides)
     if director:
         custom = "\n\n".join(filter(None, [custom, "CURRENT SHOT CONTEXT (editable overrides replace planned shot settings; matching continuity baseline is background):\n" + director]))
+    if scene_lighting:
+        if lighting_choice == "reference":
+            instruction = "Use these frozen reference lighting fields for this shot. They supersede conflicting shot lighting values above; preserve all non-lighting shot fields."
+        elif lighting_choice == "shot":
+            instruction = "Keep this shot's lighting values. The scene image still anchors space and appearance, but do not transfer its lighting."
+        else:
+            instruction = "Scene lighting is available, but the shot also defines lighting. A creator choice is required before generation."
+        source_text = ("SELECTED SCENE IMAGE LIGHTING (frozen variant; do not copy its actions or full prompt):\n"
+                       + json.dumps({"scene_name": scene_lighting["scene_name"], "fields": scene_lighting["fields"]},
+                                    ensure_ascii=False, sort_keys=True) + "\n") if lighting_choice == "reference" else ""
+        custom = "\n\n".join(filter(None, [custom, source_text + instruction]))
     default = DEFAULT_R2V_POLISH_PROMPT if reference_mode else DEFAULT_VIDEO_POLISH_PROMPT
     if request.optimizer_provider == "minimax_context_ir":
         if request.target_video_model and "h3" not in request.target_video_model.lower():
@@ -8146,7 +8240,8 @@ def _compile_video_polish_review(request, reference_mode: bool) -> Dict[str, Any
     media = [{"label": labels[i], "url": url} for i, url in enumerate(request.image_urls)]
     source = request.model_dump(exclude={"reviewed_messages", "review_token"})
     token = hashlib.sha256(json.dumps({"source": source, "frame": frame_snapshot,
-                                      "effective_shot_fields": effective_shot_fields, "compiled": messages},
+                                      "effective_shot_fields": effective_shot_fields,
+                                      "scene_lighting": scene_lighting, "compiled": messages},
                                       sort_keys=True, ensure_ascii=False, default=str).encode()).hexdigest()
     format_note = (
         "MiniMax Context IR 按所选模型的原生结构生成；这里展示送入 IR 的完整文字。"
@@ -8161,11 +8256,15 @@ def _compile_video_polish_review(request, reference_mode: bool) -> Dict[str, Any
                 "effective_shot_fields": effective_shot_fields,
                 "selected_skills": _effective_optimization_skills(request) or [],
                 "target_duration": request.target_duration,
+                "scene_lighting": scene_lighting,
             }}
 
 
 def _require_video_polish_review(request, reference_mode: bool) -> Dict[str, str]:
     compiled = _compile_video_polish_review(request, reference_mode)
+    lighting = compiled.get("review_context", {}).get("scene_lighting")
+    if lighting and lighting.get("requires_decision") and not lighting.get("choice"):
+        raise HTTPException(422, "参考场景光影与本镜设置并存，请先选择采用哪一方")
     messages = request.reviewed_messages
     if not request.review_token or request.review_token != compiled["review_token"] or not messages:
         raise HTTPException(409, "润色输入或来源已变化，请重新预览并确认")
@@ -8359,6 +8458,8 @@ class PolishR2VPromptRequest(BaseModel):
     # R2V 模式：用户挂载的 character1/2/3 参考图 URL(s)，让 vision 模型
     # 看清各角色实际形象。空列表 = 纯文本润色（兼容旧调用方）。
     image_urls: List[str] = Field(default_factory=list, max_length=9)
+    reference_variant_ids: Optional[Dict[str, List[str]]] = None
+    reference_lighting_choice: Optional[Literal["shot", "reference"]] = None
     polish_model: str = ""
     optimizer_provider: Literal["local_llm", "minimax_context_ir", "gpt", "qwen", "deepseek", "glm"] = "local_llm"
     optimization_skills: Optional[List[str]] = Field(default=None, max_length=12)
