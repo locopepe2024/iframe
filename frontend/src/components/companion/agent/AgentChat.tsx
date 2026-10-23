@@ -4,6 +4,7 @@ import { companionApi, type MemoryPage, type Preview, type Turn, type UserMessag
 import styles from "../photos/photos.module.css";
 import chatStyles from "./chat.module.css";
 import PhotoConversationCard from "../PhotoConversationCard";
+import TodayPlanCards from "./TodayPlanCards";
 import { photoApi, type AlbumPhoto } from "@/lib/photoApi";
 import CompanionComposer, { type ComposerMode } from "./CompanionComposer";
 import GenerationGuide, { createGenerationDraft, type GenerationDraft, type MediaMode } from "./GenerationGuide";
@@ -44,7 +45,7 @@ export default function AgentChat() {
   function updateGuide(value: GenerationDraft | null) { if (mode !== "chat") setGuides(old => ({ ...old, [mode]: value })); }
   useEffect(() => {
     const node = streamRef.current;
-    if (node) node.scrollTop = node.scrollHeight;
+    if (node) node.scrollTop = !messages.length && !turn && !guide && !recentPhotos ? 0 : node.scrollHeight;
   }, [turn, recentPhotos, busy, guide, mode]);
   async function run(action: () => Promise<void>) {
     if (locked.current) return;
@@ -114,6 +115,10 @@ export default function AgentChat() {
       <p className={styles.note}>聊天内容会保留，可继续查看历史消息。</p>
     </aside>}
     <div ref={streamRef} className={chatStyles.stream} role="region" aria-label="聊天内容">
+    <div hidden={mode !== "chat"}><TodayPlanCards disabled={inputDisabled || pending} onPhotos={() => void run(loadRecentPhotos)} onDiary={() => {
+      if (!drafts.chat.trim()) fillChat("请把我们今天聊的内容整理成一篇回忆日记");
+      else { setNotice("输入框里还有未发送的话，先聊完这段，再一起记录今天。"); inputRef.current?.focus(); }
+    }} /></div>
     <article className={chatStyles.assistant}><span>陪伴助手</span><p>您好，我在。想聊聊今天，还是一起看看照片？</p></article>
     {mode === "chat" && !messages.length && <section className={styles.guide} aria-labelledby="chat-guide-title">
       <h2 id="chat-guide-title">想从哪里聊起？</h2>

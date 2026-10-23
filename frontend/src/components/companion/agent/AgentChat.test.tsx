@@ -19,7 +19,7 @@ async function start(){
 }
 it("offers large guided cards without sending automatically",async()=>{
   await start();
-  fireEvent.click(screen.getByRole("button",{name:/聊聊今天/}));
+  fireEvent.click(screen.getByRole("button",{name:/说说今天的生活/}));
   expect(screen.getByLabelText("和我聊聊天")).toHaveValue("聊聊今天发生的事情");
   expect(api.chat).not.toHaveBeenCalled();
   fireEvent.click(screen.getByRole("button",{name:/整理今天的回忆/}));
@@ -145,4 +145,18 @@ it("supports Escape and arrow navigation in the mode menu",async()=>{
   fireEvent.click(trigger); expect(screen.getByRole("menuitemradio",{name:"聊天"})).toHaveFocus();
   fireEvent.keyDown(document.activeElement!,{key:"ArrowDown"});expect(screen.getByRole("menuitemradio",{name:"图片"})).toHaveFocus();
   fireEvent.keyDown(document.activeElement!,{key:"Escape"});expect(screen.queryByRole("menu")).not.toBeInTheDocument();expect(trigger).toHaveFocus();
+});
+
+it("opens daily sample plans without calling the model and preserves an existing draft",async()=>{
+  await start();
+  fireEvent.click(screen.getByRole("button",{name:"看看安排"}));
+  expect(screen.getByRole("region",{name:"计划对话"})).toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button",{name:"稍后提醒"}));
+  expect(api.chat).not.toHaveBeenCalled();expect(api.tool).not.toHaveBeenCalled();
+  fireEvent.click(screen.getByRole("button",{name:"返回今日计划"}));
+  fireEvent.click(screen.getByRole("button",{name:"聊聊今天"}));
+  fireEvent.click(screen.getByRole("button",{name:"开始记录"}));
+  expect(screen.getByLabelText("和我聊聊天")).toHaveValue("请记住我喜欢散步");
+  expect(screen.getByText(/输入框里还有未发送的话/)).toBeInTheDocument();
+  expect(api.chat).not.toHaveBeenCalled();
 });
