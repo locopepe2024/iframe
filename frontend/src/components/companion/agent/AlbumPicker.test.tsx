@@ -20,8 +20,24 @@ it("browses without attaching, searches server descriptions, paginates and only 
 });
 it("can browse videos separately and close without choosing",async()=>{
   const select=vi.fn(),close=vi.fn();render(<AlbumPicker onPhoto={()=>{}} onVideo={select} onClose={close}/>);
-  await screen.findByText("image first");fireEvent.click(screen.getByRole("button",{name:"视频"}));await screen.findByText("选择视频：garden.mp4");
+  await screen.findByText("image first");fireEvent.click(screen.getByRole("button",{name:"视频"}));await screen.findByRole("button",{name:"选择视频：garden.mp4"});
   expect(videos.list).toHaveBeenCalledWith("","");expect(select).not.toHaveBeenCalled();
   fireEvent.click(screen.getByRole("button",{name:"选择视频：garden.mp4"}));expect(select).toHaveBeenCalledWith({video_id:"v",name:"garden.mp4"});
   fireEvent.click(screen.getByRole("button",{name:"关闭相册"}));expect(close).toHaveBeenCalledOnce();
+});
+
+it("keeps icon controls accessible and clears a search back to all photos",async()=>{
+  render(<AlbumPicker onPhoto={()=>{}} onClose={()=>{}}/>);
+  await screen.findByText("image first");
+  expect(screen.queryByText("关闭相册")).not.toBeInTheDocument();
+  expect(screen.queryByText("搜索照片")).not.toBeInTheDocument();
+  expect(screen.queryByText("选择照片 1")).not.toBeInTheDocument();
+  expect(screen.getByRole("button",{name:"选择照片 1"})).toBeEnabled();
+  fireEvent.change(screen.getByLabelText("搜索照片"),{target:{value:"女儿"}});
+  fireEvent.submit(screen.getByRole("button",{name:"搜索"}).closest("form")!);
+  await waitFor(()=>expect(api.list).toHaveBeenLastCalledWith("all","","","女儿"));
+  await waitFor(()=>expect(screen.getByRole("button",{name:"清除搜索"})).toBeEnabled());
+  fireEvent.click(screen.getByRole("button",{name:"清除搜索"}));
+  await waitFor(()=>expect(api.list).toHaveBeenLastCalledWith("all","","",""));
+  expect(screen.getByLabelText("搜索照片")).toHaveValue("");
 });
