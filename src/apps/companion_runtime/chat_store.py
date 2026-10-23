@@ -9,7 +9,10 @@ from .store import CompanionStore, Missing, Conflict, encode
 from .tools import dispatch, MODELS
 
 
-class ChatStore(CompanionStore):
+from .diary_store import DiaryStore
+
+
+class ChatStore(DiaryStore, CompanionStore):
     def conversation(self, owner, actor, session, *, after=0, limit=20):
         page = self.messages(owner, session, after=after, limit=limit)
         ids = [message['id'] for message in page['messages']]

@@ -7,6 +7,7 @@ import time
 import uuid
 from contextlib import contextmanager
 from pathlib import Path
+from .diary_schema import DIARY_SCHEMA
 
 
 class Missing(LookupError):
@@ -54,6 +55,7 @@ CREATE TABLE IF NOT EXISTS companion_turns (
  UNIQUE(owner,operation_id)
 );
 """
+SCHEMA += DIARY_SCHEMA
 TYPES = ('preference', 'personal_fact', 'photo_recollection')
 
 

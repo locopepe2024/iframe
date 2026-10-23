@@ -7,6 +7,7 @@ export interface Preview {
 }
 export interface Turn { turn_id: string; status: string; result?: ({ kind: "text"; text: string } | ({ kind: "confirmation" } & Preview) | { kind: "read"; name: string; memories: Memory[]; next_cursor: string | null }) }
 export interface MemoryPage { memories: Memory[]; next_cursor: string | null }
+export interface Diary { day: string; text: string; source_turn_id: string; revision: number; updated_at: number }
 const base = `${API_URL}/companion-agent-api/companion-runtime`;
 async function request<T>(path: string, method = "GET", body?: unknown): Promise<T> {
   const response = await authenticatedFetch(base + path, { method, credentials: "include", cache: "no-store",
@@ -18,6 +19,8 @@ async function request<T>(path: string, method = "GET", body?: unknown): Promise
   return response.json();
 }
 export const companionApi = {
+  diaries: (month: string) => request<{diaries: Diary[]}>(`/diaries?${new URLSearchParams({month})}`),
+  saveDiary: (day: string, body: {operation_id: string; text: string; source_turn_id: string; expected_revision: number}) => request<Diary>(`/diaries/${encodeURIComponent(day)}`, "PUT", body),
   session: (operation_id: string) => request<{ session_id: string }>("/sessions", "POST", { operation_id }),
   messages: (id: string, after = 0) => request<{ messages: UserMessage[]; next_after: number | null }>(`/sessions/${encodeURIComponent(id)}/conversation?after=${after}`),
   chat: (id: string, body: { operation_id: string; text: string; allow_external_text: true }) => request<Turn>(`/sessions/${encodeURIComponent(id)}/chat`, "POST", body),

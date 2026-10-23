@@ -27,6 +27,12 @@ class ChatRequest(UserMessage):
     allow_external_text: Literal[True]
 
 
+class DiarySave(Operation):
+    text: str = Field(min_length=1, max_length=12000)
+    source_turn_id: str = Field(min_length=1, max_length=120)
+    expected_revision: int = Field(ge=0)
+
+
 class ToolRequest(Strict):
     name: Literal['memory.save', 'memory.search', 'memory.list', 'memory.delete']
     arguments: dict
@@ -66,6 +72,18 @@ def errors():
 Owner = Annotated[UserContext, Depends(require_user_context)]
 Store = Annotated[CompanionStore, Depends(get_store)]
 router = APIRouter(prefix='/companion-runtime', tags=['companion-runtime'])
+
+
+@router.get('/diaries')
+def diaries(identity: Owner, store: Store, month: str = Query(pattern=r'^\d{4}-\d{2}$')):
+    with errors():
+        return store.diaries(identity.owner_profile_id, identity.user_id, month)
+
+
+@router.put('/diaries/{day}')
+def save_diary(day: str, body: DiarySave, identity: Owner, store: Store):
+    with errors():
+        return store.save_diary(identity.owner_profile_id, identity.user_id, day, **body.model_dump())
 
 
 @router.post('/sessions')

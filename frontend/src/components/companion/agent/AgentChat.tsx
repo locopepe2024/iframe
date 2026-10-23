@@ -12,6 +12,8 @@ import VideoConversationCard from "./VideoConversationCard";
 import CompanionComposer, { type ComposerMode } from "./CompanionComposer";
 import GenerationGuide, { createGenerationDraft, type GenerationDraft, type MediaMode } from "./GenerationGuide";
 import CompanionFeatureSheet, { type CompanionFeature } from "./CompanionFeatureSheet";
+import DiaryCalendar from "./DiaryCalendar";
+import DiaryCard, { diaryDay, diaryPrompt, today } from "./DiaryCard";
 import { BookOpen, Images, UserRound, Compass } from "lucide-react";
 
 const prefix = process.env.NEXT_PUBLIC_API_URL === "/companion-demo" ? "/companion-demo" : "";
@@ -53,8 +55,9 @@ export default function AgentChat() {
   };
   const inputDisabled = busy || hasRetry || uploading;
   function fillChat(value: string) { setMode("chat"); setDrafts(old => ({ ...old, chat: value })); inputRef.current?.focus(); }
-  function startDiaryPrompt() {
-    fillChat("请把我们今天聊的内容整理成一篇回忆日记");
+  function startDiaryPrompt(day = today()) {
+    if (drafts.chat.trim()) { setNotice("输入框里还有未发送的话，请先发送或清空，再整理日记。"); return; }
+    fillChat(diaryPrompt(day));
     if (!allowed) setNotice("日记草稿已写入。请先勾选“允许发送文字，开始聊天”，再点击发送。");
   }
   function updateGuide(value: GenerationDraft | null) { if (mode !== "chat") setGuides(old => ({ ...old, [mode]: value })); }
@@ -167,7 +170,7 @@ export default function AgentChat() {
         <button type="button" className={styles.guideCard} disabled={busy || pending || hasRetry} onClick={() => { setAlbumOpen(true); }}>
           <strong>讲讲一张照片</strong><span>在这里看看照片</span>
         </button>
-        <button type="button" className={styles.guideCard} disabled={busy || pending || hasRetry} onClick={startDiaryPrompt}>
+        <button type="button" className={styles.guideCard} disabled={busy || pending || hasRetry} onClick={()=>startDiaryPrompt()}>
           <strong>整理今天的回忆</strong><span>把故事记下来</span>
         </button>
       </div>
@@ -176,7 +179,7 @@ export default function AgentChat() {
       {renderAttached(0)}
       {messages.map((message,index) => <Fragment key={message.id}><div>
         <article className={chatStyles.user}><span>我</span><p>{message.text}</p></article>
-        {message.turn?.result?.kind === "text" && <article className={chatStyles.assistant}><span>陪伴助手</span><p>{message.turn.result.text}</p></article>}
+        {message.turn?.result?.kind === "text" && (diaryDay(message.text) ? <DiaryCard day={diaryDay(message.text)!} text={message.turn.result.text} sourceTurn={message.turn.turn_id}/> : <article className={chatStyles.assistant}><span>陪伴助手</span><p>{message.turn.result.text}</p></article>)}
       </div>{renderAttached(index+1)}</Fragment>
       )}
       {after !== null && <button disabled={busy} onClick={() => void run(() => history(session, after))}>更多历史消息</button>}
@@ -186,7 +189,7 @@ export default function AgentChat() {
     {albumOpen && <AlbumPicker disabled={inputDisabled || pending} onClose={() => setAlbumOpen(false)} onPhoto={photo => {
       attach({kind:"photo",id:photo.photo_id,name:"相册照片"});setAlbumOpen(false);
     }} onVideo={video => {attach({kind:"video",id:video.video_id,name:video.name});setAlbumOpen(false);}} />}
-    {feature && <CompanionFeatureSheet feature={feature} onClose={() => setFeature(null)} onDiary={() => { setFeature(null); startDiaryPrompt(); }} />}
+    {feature === "diary" ? <DiaryCalendar onClose={()=>setFeature(null)} onCreate={day=>{setFeature(null);startDiaryPrompt(day);}}/> : feature && <CompanionFeatureSheet feature={feature} onClose={() => setFeature(null)} />}
     {mode !== "chat" && (guide ? <GenerationGuide key={mode} value={guide} disabled={inputDisabled || pending} onChange={updateGuide} onEdit={() => { updateGuide(null); inputRef.current?.focus(); }} onCancel={() => { updateGuide(null); setNotice("已取消创作，描述草稿仍保留。"); }} /> : <article className={chatStyles.assistant}><span>陪伴助手</span><p>{mode === "video" ? "想做一段什么视频？" : "想生成一张什么图片？"}在下面说说，点箭头后我们一步步来。</p></article>)}
     {busy && <p role="status">正在处理…</p>}
     {notice && <p role="status">{notice}</p>}{error && <p role="alert">{error}</p>}
