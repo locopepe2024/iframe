@@ -1,12 +1,13 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { photoApi, type PhotoStory as Story } from "@/lib/photoApi";
 import { useCompanionVoice } from "../useCompanionVoice";
 import styles from "./photos.module.css";
 
 // The parent keys this component by photo ID so unsaved stories and voice stay scoped.
 export default function PhotoStory({ photoId }: { photoId: string }) {
+  const draftId = useId();
   const [story, setStory] = useState<Story | null>(null);
   const [loaded, setLoaded] = useState(false);
   const [draft, setDraft] = useState("");
@@ -55,8 +56,8 @@ export default function PhotoStory({ photoId }: { photoId: string }) {
         voice.stopAll(); setDraft(story?.text ?? ""); setNotice(""); setMode("edit");
       }}>{story ? "修改我的讲述" : "讲讲这张照片"}</button>}
       {mode === "edit" && <>
-        <label htmlFor="photo-story-draft">我的讲述草稿（可修改）</label>
-        <textarea id="photo-story-draft" rows={6} value={draft} disabled={busy || voice.listening || voice.finishing} onChange={event => setDraft(event.target.value)} />
+        <label htmlFor={draftId}>我的讲述草稿（可修改）</label>
+        <textarea id={draftId} rows={6} value={draft} disabled={busy || voice.listening || voice.finishing} onChange={event => setDraft(event.target.value)} />
         <p>最多 4000 字。未保存的草稿在切换照片后会清除。</p>
         <p>听写可能由浏览器语音服务处理。不保存录音；说“同意”不会自动保存。听写结果会替换当前草稿。</p>
         <label className={styles.check}><input type="checkbox" checked={allowed} disabled={busy} onChange={event => {

@@ -5,7 +5,7 @@ const api=vi.hoisted(()=>({session:vi.fn(),messages:vi.fn(),chat:vi.fn(),turn:vi
 const photoApi=vi.hoisted(()=>({list:vi.fn()}));
 vi.mock("@/lib/companionApi",()=>({companionApi:api}));
 vi.mock("@/lib/photoApi",()=>({photoApi}));
-vi.mock("../PhotoConversationCard",()=>({default: ({label,onOpen}:{label:string;onOpen:()=>void})=><button onClick={onOpen}>{label}</button>}));
+vi.mock("../PhotoConversationCard",()=>({default: ({label}:{label:string})=><article>{label}</article>}));
 const preview={status:"pending_confirmation",preview_token:"token",action:"save",preview:{content:"喜欢散步",quote:"喜欢散步",source_text:"请记住我喜欢散步",source_message_id:"m",type:"preference",importance:3}};
 beforeEach(()=>{
   localStorage.clear();vi.resetAllMocks();photoApi.list.mockResolvedValue({photos:[]});api.session.mockResolvedValue({session_id:"s"});api.messages.mockResolvedValue({messages:[],next_after:null});
@@ -28,8 +28,8 @@ it("offers large guided cards without sending automatically",async()=>{
 it("loads recent photos into the conversation card stream on demand",async()=>{
   await start();
   photoApi.list.mockResolvedValue({photos:[{photo_id:"photo-1",batch_id:"batch",date:{date:null,status:"pending_confirmation",reason:"missing",source:"none",revision:0}}]});
-  fireEvent.click(screen.getByRole("button",{name:"看看最近照片"}));
-  await screen.findByRole("button",{name:"最近照片 1"});
+  fireEvent.click(screen.getByRole("button",{name:"看看相册照片"}));
+  await screen.findByText("相册照片 1");
   expect(photoApi.list).toHaveBeenCalledWith("all","","","");
 });
 it("requires external text consent and final explicit button before saving",async()=>{

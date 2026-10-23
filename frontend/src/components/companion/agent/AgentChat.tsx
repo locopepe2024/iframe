@@ -100,12 +100,12 @@ export default function AgentChat() {
         </button>
       </div>
     </section>
-    <section className={styles.conversationCard} aria-label="最近照片">
+    <section className={styles.panel} aria-label="相册照片">
       <h2>想聊聊照片吗？</h2>
-      <p>可以先看看最近的照片，再慢慢讲照片里的故事。</p>
-      {!recentPhotos && <button type="button" disabled={busy || pending} onClick={() => void run(loadRecentPhotos)}>看看最近照片</button>}
+      <p>可以先看看相册里的照片，再慢慢讲故事。这里展示部分照片，更多照片可进入生活相册查看。</p>
+      {!recentPhotos && <button type="button" disabled={busy || pending} onClick={() => void run(loadRecentPhotos)}>看看相册照片</button>}
       {recentPhotos && !recentPhotos.length && <p>相册里还没有照片。</p>}
-      {recentPhotos?.map((photo, index) => <PhotoConversationCard key={photo.photo_id} photoId={photo.photo_id} label={`最近照片 ${index + 1}`} onOpen={() => { window.location.href = `${prefix}/companion/photos`; }} />)}
+      {recentPhotos?.map((photo, index) => <PhotoConversationCard key={photo.photo_id} photoId={photo.photo_id} label={`相册照片 ${index + 1}`} />)}
     </section>
     <section className={styles.panel} aria-label="会话原话">
       <h2>已保存的用户原话</h2><p>原话按页查看，不受模型最近 20 条上下文限制。这里只恢复用户消息和最近一次模型结果。</p>
