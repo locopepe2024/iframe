@@ -72,6 +72,7 @@ def _get_character_appearance_keywords(
 
 def _director_shot_context_parts(
     context: Optional[Dict[str, Any]], *, include_camera_movement: bool = True,
+    include_composition: bool = True,
 ) -> List[str]:
     """Convert the server-projected plan context into concise prompt clauses.
 
@@ -114,6 +115,8 @@ def _director_shot_context_parts(
     )
     for key, label in labels:
         if key == "camera_movement" and not include_camera_movement:
+            continue
+        if key == "composition" and not include_composition:
             continue
         value = shot.get(key)
         if isinstance(value, str) and value.strip():
@@ -264,6 +267,7 @@ def assemble_prompt(
     for clause in _director_shot_context_parts(
         frame.director_shot_context,
         include_camera_movement=frame.camera_movement_structured is None,
+        include_composition=not bool(frame.composition),
     ):
         value = clause.split("：", 1)[-1]
         normalized_value = re.sub(r"[\s，。；：、,.!?！？:;]+", "", value).casefold()
@@ -281,6 +285,8 @@ def assemble_prompt(
         angle_shot.append(frame.camera_angle)
     if angle_shot:
         parts.append("，".join(angle_shot))
+    if frame.composition and frame.composition not in " ".join(parts):
+        parts.append(f"构图：{frame.composition}")
 
     # 5. Character appearance keywords
     char_desc = _get_character_appearance_keywords(frame.character_ids, characters)

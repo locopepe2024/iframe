@@ -947,6 +947,9 @@ class StoryboardFrame(BaseModel):
     camera_movement_candidate: Optional[Dict[str, Any]] = Field(
         None, description="Unapplied model-independent camera movement proposal"
     )
+    static_framing_candidate: Optional[Dict[str, Any]] = Field(
+        None, description="Unapplied model-independent static framing proposal"
+    )
     micro_expression_timing: List[Dict[str, Any]] = Field(
         default_factory=list, description="Creator-accepted performance timing by character"
     )

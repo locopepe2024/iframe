@@ -70,6 +70,18 @@
       "instructions_file": "shot-camera-movement.md"
     },
     {
+      "id": "shot-static-framing",
+      "name": "分镜静态起幅设计",
+      "category": "分镜摄影",
+      "targets": ["Storyboard camera"],
+      "version": "1.0.0",
+      "description": "为当前镜头提出景别、机位和构图字段候选，逐字段审核。",
+      "license": "MIT（iFrame 原创工作流）",
+      "license_file": "lumenx-MIT.txt",
+      "adaptation": "独立静态摄影字段方法；不负责运镜、站位或模型专属完整提示词。",
+      "instructions_file": "shot-static-framing.md"
+    },
+    {
       "id": "seedance-prompt",
       "name": "Seedance 提示词优化",
       "category": "提示词优化",

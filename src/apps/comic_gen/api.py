@@ -4184,6 +4184,138 @@ def apply_camera_movement(script_id: str, frame_id: str, request: CameraMovement
     return signed_response(script)
 
 
+class StaticFramingRequest(BaseModel):
+    frame_id: str
+    reviewed_messages: Optional[Dict[str, str]] = None
+    review_token: Optional[str] = None
+
+
+def _static_framing_review(script_id: str, frame_id: str, user: UserContext) -> Dict[str, Any]:
+    from ..agent_skills import catalog as skill_catalog
+
+    script = pipeline.get_script(script_id, user.owner_profile_id)
+    if not script:
+        raise HTTPException(status_code=404, detail="Script not found")
+    frame = next((item for item in script.frames if item.id == frame_id), None)
+    if frame is None:
+        raise HTTPException(status_code=404, detail="Frame not found")
+    skill = next(item for item in skill_catalog() if item["id"] == "shot-static-framing")
+    projection = frame.reference_visual_projection
+    selected = set(projection.selected_fields) & {"space", "camera"} if projection else set()
+    plan_shot = (frame.director_shot_context or {}).get("shot") or {}
+    payload = {
+        "duration_seconds": frame.duration,
+        "current_action": frame.action_description or "",
+        "opening_performance": frame.character_acting or "",
+        "shot_size": frame.shot_size or "",
+        "camera_angle": frame.camera_angle or "",
+        "composition": frame.composition or "",
+        "blocking": frame.blocking.model_dump(mode="json") if frame.blocking else None,
+        "current_camera_movement": frame.camera_movement_structured.model_dump(mode="json") if frame.camera_movement_structured else None,
+        "director_static_suggestion": {key: plan_shot[key] for key in
+            ("shot_size", "camera_angle", "composition", "visual_intent") if plan_shot.get(key)},
+        "continuity_constraints": {
+            "scope": projection.scope,
+            "visual_design": {key: projection.visual_design[key] for key in selected if key in projection.visual_design},
+        } if selected else None,
+    }
+    messages = {"system": skill["instructions"], "user": json.dumps(payload, ensure_ascii=False)}
+    source = {
+        "frame": frame.model_dump(exclude={"static_framing_candidate", "camera_movement_candidate",
+                                            "micro_expression_candidate", "rich_refinement_candidate",
+                                            "updated_at", "assembled_prompt"}, mode="json"),
+        "skill_revision": skill["revision"],
+    }
+    token = hashlib.sha256(json.dumps(source, sort_keys=True, ensure_ascii=False).encode()).hexdigest()
+    return {"messages": messages, "review_token": token, "input": payload}
+
+
+@app.post("/projects/{script_id}/frames/{frame_id}/static-framing/preview")
+def preview_static_framing(script_id: str, frame_id: str, request: StaticFramingRequest,
+                           user: UserContext = Depends(require_studio_user)):
+    if request.frame_id != frame_id:
+        raise HTTPException(status_code=422, detail="Frame ID mismatch")
+    return _static_framing_review(script_id, frame_id, user)
+
+
+@app.post("/projects/{script_id}/frames/{frame_id}/static-framing/generate")
+def generate_static_framing(script_id: str, frame_id: str, request: StaticFramingRequest,
+                            user: UserContext = Depends(require_studio_user)):
+    if request.frame_id != frame_id:
+        raise HTTPException(status_code=422, detail="Frame ID mismatch")
+    review = _static_framing_review(script_id, frame_id, user)
+    if request.review_token != review["review_token"] or request.reviewed_messages != review["messages"]:
+        raise HTTPException(status_code=409, detail="请先审核并确认完整的静态起幅模型输入")
+    try:
+        content = pipeline.script_processor.llm.chat(
+            messages=[{"role": "system", "content": review["messages"]["system"]},
+                      {"role": "user", "content": review["messages"]["user"]}],
+            response_format={"type": "json_object"}, timeout_seconds=300, max_retries=1,
+        )
+        from .static_framing import validate_static_framing_payload
+        proposal = validate_static_framing_payload(json.loads(content or ""))
+        if any(set(refs) - set(review["input"]) for refs in proposal.source_refs.values()):
+            raise ValueError("静态起幅来源不在当前镜头输入中")
+        if _static_framing_review(script_id, frame_id, user)["review_token"] != review["review_token"]:
+            raise HTTPException(status_code=409, detail="镜头已变化，请重新预览")
+        script = pipeline.get_script(script_id, user.owner_profile_id)
+        frame = next(item for item in script.frames if item.id == frame_id)
+        frame.static_framing_candidate = {
+            "id": str(uuid.uuid4()), "source_hash": review["review_token"],
+            "current_fields": {key: getattr(frame, key) for key in proposal.fields},
+            **proposal.model_dump(mode="json"),
+        }
+        frame.updated_at = time.time()
+        pipeline._save_data()
+        return frame.static_framing_candidate
+    except HTTPException:
+        raise
+    except (json.JSONDecodeError, ValueError) as exc:
+        logger.warning("Static framing result failed validation: %s", type(exc).__name__)
+        raise HTTPException(status_code=502, detail="静态起幅候选未通过结构校验，请重试") from exc
+
+
+class StaticFramingApplyRequest(BaseModel):
+    candidate_id: str
+    selected_fields: List[str] = Field(min_length=1, max_length=3)
+
+
+@app.post("/projects/{script_id}/frames/{frame_id}/static-framing/apply", response_model=Script)
+def apply_static_framing(script_id: str, frame_id: str, request: StaticFramingApplyRequest,
+                         user: UserContext = Depends(require_studio_user)):
+    script = pipeline.get_script(script_id, user.owner_profile_id)
+    if not script:
+        raise HTTPException(status_code=404, detail="Script not found")
+    frame = next((item for item in script.frames if item.id == frame_id), None)
+    if frame is None:
+        raise HTTPException(status_code=404, detail="Frame not found")
+    candidate = frame.static_framing_candidate or {}
+    if candidate.get("id") != request.candidate_id:
+        raise HTTPException(status_code=409, detail="静态起幅候选已过期")
+    if frame.workbench_prompt_is_optimized:
+        raise HTTPException(status_code=409, detail="完整优化稿需重新审核后才能应用静态起幅")
+    if candidate.get("source_hash") != _static_framing_review(script_id, frame_id, user)["review_token"]:
+        raise HTTPException(status_code=409, detail="镜头已变化，请重新生成")
+    from .static_framing import validate_static_framing_payload
+    from .prompt_assembly import assemble_prompt
+    proposal = validate_static_framing_payload({key: candidate[key] for key in
+        ("fields", "rationale", "source_refs", "uncertainties")})
+    selected = request.selected_fields
+    if len(set(selected)) != len(selected) or set(selected) - set(proposal.fields):
+        raise HTTPException(status_code=422, detail="请选择有效的静态起幅字段")
+    proposed_frame = frame.model_copy(deep=True)
+    for key in selected:
+        setattr(proposed_frame, key, proposal.fields[key])
+    assembled = assemble_prompt(proposed_frame, pipeline.resolve_project_assets(script)["characters"])
+    for key in selected:
+        setattr(frame, key, proposal.fields[key])
+    frame.assembled_prompt = assembled
+    frame.static_framing_candidate = None
+    frame.updated_at = time.time()
+    pipeline._save_data()
+    return signed_response(script)
+
+
 @app.post("/projects/{script_id}/frames/{frame_id}/rich-refinement/apply", response_model=Script)
 def apply_rich_refinement(script_id: str, frame_id: str, request: RichFrameCandidateApplyRequest,
                           user: UserContext = Depends(require_studio_user)):

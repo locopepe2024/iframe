@@ -3595,6 +3595,7 @@ class ComicGenPipeline(StudioOwnerMixin):
             f"Lighting: {'; '.join(lighting_parts)}" if lighting_parts else "",
             f"Shot size: {frame.shot_size}" if frame.shot_size else "",
             f"Camera angle: {frame.camera_angle}" if frame.camera_angle else "",
+            f"Composition: {frame.composition}" if frame.composition else "",
         ]
         return "\n".join(item for item in parts if item)
 
@@ -3602,6 +3603,10 @@ class ComicGenPipeline(StudioOwnerMixin):
         """Compose a draft render prompt with only this frame's constraints."""
         self._validate_reference_visual_projection(script, frame)
         context = frame.director_shot_context
+        if frame.composition and isinstance(context, dict):
+            context = {**context}
+            if isinstance(context.get("shot"), dict):
+                context["shot"] = {key: value for key, value in context["shot"].items() if key != "composition"}
         _, scene_design = self._confirmed_scene_design(self._storyboard_scene_asset(script, frame))
         if self._scene_design_has_light(scene_design) and isinstance(context, dict):
             # A confirmed scene baseline supersedes older plan lighting. The
@@ -6485,6 +6490,7 @@ class ComicGenPipeline(StudioOwnerMixin):
             "lighting": frame.lighting.model_dump() if frame.lighting else None,
             "shot_size": frame.shot_size,
             "camera_angle": frame.camera_angle,
+            "composition": frame.composition,
             "camera_movement": frame.camera_movement,
             "shot_id": frame.shot_id,
             "dialogue": frame.dialogue,
@@ -7469,6 +7475,7 @@ class ComicGenPipeline(StudioOwnerMixin):
             "visual_description": frame.visual_description,
             "shot_size": frame.shot_size,
             "camera_angle": frame.camera_angle,
+            "composition": frame.composition,
             "camera_movement": frame.camera_movement,
             "camera_movement_structured": frame.camera_movement_structured.model_dump(mode="json") if frame.camera_movement_structured else None,
             "transition_hint": frame.transition_hint,

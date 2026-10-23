@@ -259,6 +259,19 @@ def test_storyboard_image_projection_excludes_video_movement_and_transition(pipe
     assert submitted == preview
 
 
+def test_accepted_composition_replaces_plan_composition_in_render_preview(pipeline, project):
+    frame = project.frames[0]
+    frame.director_shot_context = {"shot": {"composition": "旧计划主体居中"}}
+    before = pipeline.storyboard_render_context_token(project.id, frame.id)
+    frame.composition = "主体位于画面左侧"
+
+    preview = pipeline.preview_storyboard_render_prompt(project.id, frame.id, "当前首帧")
+
+    assert "Composition: 主体位于画面左侧" in preview
+    assert "旧计划主体居中" not in preview
+    assert pipeline.storyboard_render_context_token(project.id, frame.id) != before
+
+
 def test_storyboard_video_prompt_keeps_structured_movement(project):
     from src.apps.comic_gen.prompt_assembly import assemble_prompt
 
