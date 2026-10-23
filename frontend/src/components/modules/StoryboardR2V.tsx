@@ -10,6 +10,7 @@ import { motion } from "framer-motion";
 import { Plus, Loader2, Sparkles, PanelBottomOpen, PanelBottomClose } from "lucide-react";
 import StepPageHeader, { StepPill } from "@/components/shared/StepPageHeader";
 import RenderPromptPreviewDialog, { type FrameRenderPreview } from "./RenderPromptPreviewDialog";
+import VideoSubmissionPreviewDialog, { type VideoSubmissionPreview } from "./storyboard-r2v/VideoSubmissionPreviewDialog";
 import StoryboardContinuitySheet from "./StoryboardContinuitySheet";
 import { useTranslations } from "next-intl";
 import { useProjectStore } from "@/store/projectStore";
@@ -74,6 +75,11 @@ export default function StoryboardR2V() {
     const [pendingCandidate, setPendingCandidate] = useState<{
         projectId: string; frameId: string; slot: "first" | "last";
         preview: FrameRenderPreview;
+    } | null>(null);
+    const [pendingVideoSubmission, setPendingVideoSubmission] = useState<{
+        shotId: string;
+        preview: VideoSubmissionPreview;
+        submit: () => Promise<void>;
     } | null>(null);
     const currentProject = useProjectStore((state) => state.currentProject);
     const currentSeries = useProjectStore((state) => state.currentSeries);
@@ -1202,19 +1208,6 @@ export default function StoryboardR2V() {
             return;
         }
         submittingShotsRef.current.add(shot.id);
-        window.setTimeout(() => submittingShotsRef.current.delete(shot.id), 500);
-        // Clear any prior error once this attempt is valid; success
-        // path or backend-side rejection will overwrite if needed.
-        setShotErrors(prev => {
-            if (!prev[shot.id]) return prev;
-            const next = { ...prev };
-            delete next[shot.id];
-            return next;
-        });
-
-        setShots(prev => prev.map((s, i) =>
-            i === index ? { ...s, videoStatus: "pending" } : s
-        ));
 
         try {
             const style = await loadGenerationStyle();
@@ -1226,6 +1219,14 @@ export default function StoryboardR2V() {
                 params?.negativePrompt ?? videoConfig.negativePrompt,
                 shot.negativePromptOverride,
             );
+            const explicitR2v = params?.model ?? videoConfig.r2vModel;
+            const routeModelId = tabMode === "direct_r2v"
+                ? (VIDEO_R2V_MODELS.some(m => m.id === explicitR2v) ? explicitR2v : getR2vRouteModelId(videoConfig.model))
+                : params?.model ?? videoConfig.model;
+            const imageBased = isR2vImageBased(routeModelId);
+            const promptText = tabMode === "direct_r2v" && routeModelId.toLowerCase().includes("minimax-h3")
+                ? bindH3MultiReferencePrompt(basePromptText, referenceSubmission.groups)
+                : basePromptText;
             // Build a per-call factory so the batch fires N parallel
             // requests through Promise.all — fail-fast on any one
             // failure leaves the others untouched on the backend (the
@@ -1233,15 +1234,6 @@ export default function StoryboardR2V() {
             const createOne = async (): Promise<string | null> => {
                 if (tabMode === "direct_r2v") {
                     const referenceUrls = referenceSubmission.urls;
-                    const explicitR2v = params?.model ?? videoConfig.r2vModel;
-                    const explicitOk = VIDEO_R2V_MODELS.some(m => m.id === explicitR2v);
-                    const routeModelId = explicitOk
-                        ? explicitR2v
-                        : getR2vRouteModelId(videoConfig.model);
-                    const imageBased = isR2vImageBased(routeModelId);
-                    const promptText = routeModelId.toLowerCase().includes("minimax-h3")
-                        ? bindH3MultiReferencePrompt(basePromptText, referenceSubmission.groups)
-                        : basePromptText;
                     const tasks = await api.createVideoTask(
                         currentProject.id,
                         "",
@@ -1272,7 +1264,7 @@ export default function StoryboardR2V() {
                     return task?.id ?? null;
                 }
                 // I2V branch — same defensive check on the model.
-                const i2vModelId = params?.model ?? videoConfig.model;
+                const i2vModelId = routeModelId;
                 const i2vModelOk = VIDEO_I2V_MODELS.some(m => m.id === i2vModelId);
                 if (!i2vModelOk) {
                     debugLog.warn("Studio", `Refusing I2V submission with non-I2V model "${i2vModelId}".`);
@@ -1282,7 +1274,7 @@ export default function StoryboardR2V() {
                 const tasks = await api.createVideoTask(
                     currentProject.id,
                     imageUrl,
-                    basePromptText,
+                    promptText,
                     generationDuration,
                     params?.seed,
                     params?.resolution ?? videoConfig.resolution,
@@ -1314,38 +1306,77 @@ export default function StoryboardR2V() {
                 return task?.id ?? null;
             };
 
-            const taskIds = (await Promise.all(
-                Array.from({ length: effectiveCount }, createOne),
-            )).filter((id): id is string => !!id);
-
-            if (taskIds.length > 0) {
-                setShotErrors(prev => {
-                    if (!prev[shot.id]) return prev;
-                    const next = { ...prev };
-                    delete next[shot.id];
-                    return next;
-                });
-                setShots(prev => prev.map((s, i) => {
-                    if (i !== index) return s;
-                    // Mirror the latest task id on the legacy single
-                    // field so the ShotCard preview spinner / cancel
-                    // CTA keep working. The candidates panel reads
-                    // from project.video_tasks (filtered by
-                    // frame_id + workbench_tab), so the per-tab id
-                    // bucket on the shot is no longer needed.
-                    return {
-                        ...s,
-                        videoTaskId: taskIds[taskIds.length - 1],
-                        videoStatus: "processing" as const,
-                    };
-                }));
-            } else {
-                toast.error(t("videoGenSubmitFailedToast"));
-                setShots(prev => prev.map((s, i) =>
-                    i === index ? { ...s, videoStatus: "failed" as const } : s
-                ));
-            }
+            setPendingVideoSubmission({
+                shotId: shot.id,
+                preview: {
+                    prompt: promptText,
+                    negativePrompt: effectiveNegativePrompt,
+                    model: routeModelId,
+                    mode: videoInput.mode,
+                    duration: generationDuration,
+                    resolution: params?.resolution ?? videoConfig.resolution,
+                    count: effectiveCount,
+                    generateAudio,
+                    references: tabMode === "direct_r2v" ? [...referenceSubmission.urls] : [],
+                    settings: [
+                        ...(tabMode === "direct_r2v" ? [{ label: "画幅", value: String(params?.ratio ?? "模型默认") }] : []),
+                        { label: "随机种子", value: params?.seed == null ? "模型默认" : String(params.seed) },
+                        { label: "提示词扩展", value: (params?.promptExtend ?? videoConfig.promptExtend) ? "开启" : "关闭" },
+                        { label: "水印", value: params?.watermark == null ? "模型默认" : params.watermark ? "开启" : "关闭" },
+                        { label: "姿态参考", value: `${Object.values(shot.poseReferenceVariantIds ?? {}).reduce((sum, ids) => sum + ids.length, 0)} 张` },
+                        { label: "导演定格", value: shot.directorSnapshotMediaId ? "已附" : "无" },
+                        ...(tabMode === "direct_r2v" ? [
+                            { label: "镜头类型", value: params?.shotType ?? "multi" },
+                        ] : [
+                            { label: "生成模式", value: String(params?.mode ?? videoConfig.mode ?? "模型默认") },
+                            { label: "声音模式", value: String(params?.sound ?? videoConfig.sound ?? "模型默认") },
+                            { label: "引导强度", value: params?.cfgScale == null && videoConfig.cfgScale == null ? "模型默认" : String(params?.cfgScale ?? videoConfig.cfgScale) },
+                            { label: "运动幅度", value: String(params?.movementAmplitude ?? videoConfig.movementAmplitude ?? "模型默认") },
+                        ]),
+                    ],
+                    firstFrame: videoInput.mode === "i2v" || videoInput.mode === "first_last_frame" ? videoInput.firstFrameUrl : undefined,
+                    lastFrame: videoInput.mode === "first_last_frame" ? videoInput.lastFrameUrl : undefined,
+                },
+                submit: async () => {
+                    if (useProjectStore.getState().currentProject?.id !== currentProject.id) {
+                        submittingShotsRef.current.delete(shot.id);
+                        toast.warning("项目已切换，请重新检查视频输入。");
+                        return;
+                    }
+                    setShotErrors(prev => {
+                        if (!prev[shot.id]) return prev;
+                        const next = { ...prev };
+                        delete next[shot.id];
+                        return next;
+                    });
+                    setShots(prev => prev.map(s => s.id === shot.id ? { ...s, videoStatus: "pending" } : s));
+                    try {
+                        const taskIds = (await Promise.all(
+                            Array.from({ length: effectiveCount }, createOne),
+                        )).filter((id): id is string => !!id);
+                        if (taskIds.length > 0) {
+                            setShots(prev => prev.map(s => s.id === shot.id ? {
+                                ...s, videoTaskId: taskIds[taskIds.length - 1], videoStatus: "processing" as const,
+                            } : s));
+                        } else {
+                            toast.error(t("videoGenSubmitFailedToast"));
+                            setShots(prev => prev.map(s => s.id === shot.id ? { ...s, videoStatus: "failed" as const } : s));
+                        }
+                    } catch (error: any) {
+                        debugLog.error("Studio", "Batch generate failed for shot:", error);
+                        const detail = error?.response?.data?.detail || error?.message || t("unknownErrorFallback");
+                        if (error?.response?.status === 400 && typeof detail === "string") {
+                            setShotErrors(prev => ({ ...prev, [shot.id]: detail }));
+                        }
+                        toast.error(t("videoGenFailedToast", { detail: String(detail).slice(0, 150) }));
+                        setShots(prev => prev.map(s => s.id === shot.id ? { ...s, videoStatus: "failed" as const } : s));
+                    } finally {
+                        window.setTimeout(() => submittingShotsRef.current.delete(shot.id), 500);
+                    }
+                },
+            });
         } catch (error: any) {
+            submittingShotsRef.current.delete(shot.id);
             debugLog.error("Studio", "Batch generate failed for shot:", error);
             const status = error?.response?.status;
             const detail = error?.response?.data?.detail || error?.message || t("unknownErrorFallback");
@@ -1353,9 +1384,6 @@ export default function StoryboardR2V() {
                 setShotErrors(prev => ({ ...prev, [shot.id]: detail }));
             }
             toast.error(t("videoGenFailedToast", { detail: String(detail).slice(0, 150) }));
-            setShots(prev => prev.map((s, i) =>
-                i === index ? { ...s, videoStatus: "failed" as const } : s
-            ));
         }
     }, [shots, currentProject, videoConfig, resolveShotReferences, loadShotReferences, missingRefsMessage, t, loadGenerationStyle]);
 
@@ -1974,6 +2002,18 @@ export default function StoryboardR2V() {
             preview={pendingCandidate.preview}
             onConfirm={confirmT2I}
             onClose={() => setPendingCandidate(null)}
+        />}
+        {pendingVideoSubmission && <VideoSubmissionPreviewDialog
+            preview={pendingVideoSubmission.preview}
+            onConfirm={() => {
+                const prepared = pendingVideoSubmission;
+                setPendingVideoSubmission(null);
+                void prepared.submit();
+            }}
+            onClose={() => {
+                submittingShotsRef.current.delete(pendingVideoSubmission.shotId);
+                setPendingVideoSubmission(null);
+            }}
         />}
         {/* Main column — pushed (compressed) when the queue panel opens
             so the queue doesn't overlay content. Bloom/grain now global in
