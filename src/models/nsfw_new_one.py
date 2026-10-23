@@ -138,12 +138,18 @@ class GreenAVideoModel(VideoGenModel):
         headers = {"Authorization": f"Bearer {self.config['api_key']}"}
         task_id = kwargs.get("resume_task_id")
         if not task_id:
-            duration = int(kwargs.get("duration") or 4)
-            resolution = kwargs.get("resolution") or "720p"
-            ratio = kwargs.get("aspect_ratio") or "16:9"
-            if not 2 <= duration <= 30 or resolution not in {"480p", "720p", "1080p"}:
+            is_c1 = model_id.split("/", 1)[1] == "wan3.0"
+            raw_duration = kwargs.get("duration")
+            raw_duration = (5 if is_c1 else 4) if raw_duration is None else raw_duration
+            duration = int(raw_duration)
+            resolution = str(kwargs.get("resolution") or ("1080p" if is_c1 else "720p")).lower()
+            ratio = kwargs.get("aspect_ratio") or ("adaptive" if is_c1 else "16:9")
+            if duration != float(raw_duration) or not 2 <= duration <= 30 or resolution not in {"480p", "720p", "1080p"}:
                 raise ValueError("Unsupported Wan 3.0 duration or resolution")
-            if ratio not in {"16:9", "9:16", "1:1", "4:3", "3:4"}:
+            ratios = {"16:9", "9:16", "1:1", "4:3", "3:4"}
+            if is_c1:
+                ratios.update({"adaptive", "21:9"})
+            if ratio not in ratios:
                 raise ValueError("Unsupported Wan 3.0 aspect ratio")
             body = {
                 "model": model_id.split("/", 1)[1],
@@ -154,14 +160,37 @@ class GreenAVideoModel(VideoGenModel):
             }
             references = list(kwargs.get("ref_image_urls") or [])
             image = kwargs.get("img_url") or kwargs.get("img_path")
-            if image and image not in references:
+            mode = kwargs.get("generation_mode") or ("r2v" if references else "i2v" if image else "t2v")
+            if is_c1 and mode in {"i2v", "f2v", "first_last_frame"}:
+                if not image:
+                    raise ValueError("Wan 3.0 first-frame input is required")
+                body["first_image"] = _reference_url(image)
+                if mode in {"f2v", "first_last_frame"}:
+                    last = kwargs.get("last_frame") or kwargs.get("last_frame_url")
+                    if not last:
+                        raise ValueError("Wan 3.0 last-frame input is required")
+                    body["last_image"] = _reference_url(last)
+            elif image and image not in references:
                 references.insert(0, image)
             if len(references) > 10:
                 raise ValueError("Wan 3.0 accepts at most 10 reference images")
             if references:
                 body["reference_images"] = [_reference_url(value) for value in references]
-            if kwargs.get("ref_video_urls") or kwargs.get("ref_audio_urls"):
-                raise ValueError("Wan 3.0 accepts image references only")
+            videos = list(kwargs.get("ref_video_urls") or [])
+            audios = list(kwargs.get("ref_audio_urls") or [])
+            if not is_c1 and (videos or audios):
+                raise ValueError("Wan 3.0 Prime accepts image references only")
+            if len(videos) > 1 or len(audios) > 5:
+                raise ValueError("Wan 3.0 accepts at most 1 reference video and 5 reference audios")
+            if videos:
+                body["reference_videos"] = [_reference_url(value) for value in videos]
+            if audios:
+                body["reference_audios"] = [_reference_url(value) for value in audios]
+            if is_c1 and kwargs.get("seed") is not None:
+                seed = kwargs["seed"]
+                if int(seed) != float(seed):
+                    raise ValueError("Wan 3.0 seed must be an integer")
+                body["seed"] = int(seed)
             response = requests.post(base + "/videos", headers=headers, json=body, timeout=120)
             response.raise_for_status()
             result = response.json()

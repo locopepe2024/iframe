@@ -343,8 +343,10 @@ class PlaygroundService:
     def _generate_video_nsfw(self, gen: PlaygroundGeneration, out_path: str, *, batch_index: int = 0) -> None:
         from ...models.nsfw_new_one import NSFWNewOneVideoModel
 
-        if gen.mode not in (PlaygroundMode.T2V, PlaygroundMode.I2V, PlaygroundMode.R2V):
-            raise ValueError("Wan 3.0 supports text, image, and image-reference video modes only")
+        is_c1 = gen.model_id.split("/", 1)[1] == "wan3.0"
+        modes = (PlaygroundMode.T2V, PlaygroundMode.I2V, PlaygroundMode.R2V)
+        if gen.mode not in modes and not (is_c1 and gen.mode == PlaygroundMode.F2V):
+            raise ValueError("Unsupported Wan 3.0 video mode")
         saved_task = gen.provider_tasks.get(str(batch_index))
         model = NSFWNewOneVideoModel(self._load_nsfw_config())
         if saved_task:
@@ -356,10 +358,17 @@ class PlaygroundService:
             raise ValueError("Text-to-video does not accept reference media")
         if gen.mode == PlaygroundMode.I2V and len(references) != 1:
             raise ValueError("Image-to-video requires exactly one image")
+        if gen.mode == PlaygroundMode.F2V and len(references) != 2:
+            raise ValueError("First/last-frame video requires exactly two images")
         if gen.mode == PlaygroundMode.R2V and not references:
-            raise ValueError("Reference-to-video requires at least one image")
-        if any(media_kind(ref) != "image" for ref in references):
-            raise ValueError("Wan 3.0 accepts image references only")
+            raise ValueError("Reference-to-video requires at least one reference")
+        grouped = {kind: [ref for ref in references if media_kind(ref) == kind] for kind in ("image", "video", "audio")}
+        if sum(map(len, grouped.values())) != len(references):
+            raise ValueError("Unsupported Wan 3.0 reference media")
+        if (gen.mode != PlaygroundMode.R2V or not is_c1) and (grouped["video"] or grouped["audio"]):
+            raise ValueError("Wan 3.0 accepts image references only in this mode")
+        if len(grouped["image"]) > 10 or len(grouped["video"]) > 1 or len(grouped["audio"]) > 5:
+            raise ValueError("Wan 3.0 reference media limit exceeded")
 
         params = gen.parameters
         if params.get("duration") is None or not params.get("resolution"):
@@ -369,14 +378,24 @@ class PlaygroundService:
             gen.provider_tasks[str(batch_index)] = task_id
             self.storage.update_generation(gen)
 
+        media_kwargs = {"ref_image_urls": grouped["image"]}
+        if is_c1:
+            media_kwargs.update(generation_mode=gen.mode.value, ref_video_urls=grouped["video"], ref_audio_urls=grouped["audio"])
+            if gen.mode in (PlaygroundMode.I2V, PlaygroundMode.F2V):
+                media_kwargs["ref_image_urls"] = []
+                media_kwargs["img_url"] = references[0]
+                if gen.mode == PlaygroundMode.F2V:
+                    media_kwargs["last_frame"] = references[1]
+            if params.get("seed") is not None:
+                media_kwargs["seed"] = params["seed"]
         model.generate(
             video_reference_prompt(gen.prompt, references, references, gen.media_names),
             out_path,
             model=gen.model_id,
             duration=params["duration"],
             resolution=params["resolution"],
-            aspect_ratio=params.get("aspect_ratio") or params.get("ratio") or "16:9",
-            ref_image_urls=references,
+            aspect_ratio=params.get("aspect_ratio") or params.get("ratio") or ("adaptive" if is_c1 else "16:9"),
+            **media_kwargs,
             on_task_submitted=save_task,
         )
 

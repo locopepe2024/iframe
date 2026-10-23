@@ -96,3 +96,13 @@ def test_false_audio_metadata_still_exposes_optional_audio_control():
         "video_capability": {"modes": [{"id": "omni_reference"}], "supports_generate_audio": False},
     }]})[0]
     assert model["params"]["audio"] is True
+
+
+def test_greena_wan_c1_exposes_four_modes_and_documented_controls():
+    model = normalize_uniart_catalog({'data': [{'id': 'wan3.0'}]})[0]
+    assert model['capabilities'] == ['t2v', 'i2v', 'f2v', 'r2v']
+    assert model['duration'] == {'type': 'slider', 'min': 2, 'max': 30, 'step': 1, 'default': 5}
+    assert model['params']['ratio']['default'] == 'adaptive'
+    assert set(model['params']['ratio']['options']) == {'adaptive', '21:9', '16:9', '4:3', '1:1', '3:4', '9:16'}
+    assert model['params']['resolution']['default'] == '1080p'
+    assert model['inputs'] == {'reference_images': {'max': 10}, 'reference_videos': {'max': 1}, 'reference_audios': {'max': 5}}
