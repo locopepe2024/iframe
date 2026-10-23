@@ -42,3 +42,32 @@
 4. 以源第 1、17、23、29、41、55 帧及连续支持段复核，并保留真实 PTS；任何方案都必须同时通过接触、滑移和全身投影，不能用单一中位误差替代事件帧验收。
 
 [原始解析结果](../raw/2026-10-23-rig-sole-proxy/report.json)；[只读工具](../tools/recreation2_rig_sole_proxy.py)。
+
+
+## Media Blender known-pose closure
+
+### Observed
+
+- 通过 media 主机 `/opt/blender-4.5.9/blender`（Blender 4.5.9 LTS，hash `8bf95cbd38d1`）读取 pinned rig；rig SHA-256 为 `95eeb19c8abce2325479804b3dda429ebddfa6e8d07a2688541cc990fb676855`。只读探针没有修改远端 rig。
+- 在源 1、17、23、29、41、55 对应的已知 bundle 姿态上，脚链影响网格最低带均能被评估。探针使用 Blender mesh 的 `DEF_foot`、`toe`、`toe_attachment` 顶点组；每侧静止姿态最低带 48 个顶点。
+- 静止姿态下，最低带质心相对 `foot` 骨头 head 的偏移约为左 `[+0.01487,-0.08674,-0.05507]`、右 `[-0.01487,-0.08674,-0.05507]` Blender units。
+- 六个动作姿态中，该偏移随脚部旋转变化：例如源 1 左/右约 `[-0.00323,-0.08388,-0.05109]` / `[-0.01998,-0.10660,-0.05301]`，源 55 左/右约 `[-0.02743,+0.03073,-0.05866]` / `[-0.03939,-0.06404,-0.06106]`。因此不能用固定世界轴偏移替代脚链局部变换。
+- 脚底最低带的世界最低高度在六个姿态中明显不同；源 41 的右脚约 `-0.00353`，而源 55 的左脚约 `0.21738`。这只是目标 bundle 的网格高度，不能直接当源片地面高度。
+
+### Direct implication
+
+- media Blender 闭环确认：脚底候选必须从蒙皮后的网格重新计算，且应随 foot/toe 局部旋转更新；直接把静止态 ankle/foot head 加固定偏移会在转脚时产生系统误差。
+- 该探针已经验证了候选点的运行时网格变换可以在 pinned rig 上读取；下一步可在诊断副本中把最低带质心作为局部 IK 目标，与 ankle head 和 toe head 做三路对照。
+
+### Not yet proven
+
+- 最低带是否为视觉鞋底接触面；
+- 哪个源帧/哪只脚是真正支持脚；
+- 目标地面平面、相机投影和 IK 约束是否会改善源帧误差；
+- GLB primitive 0 代理与 pinned Blender vertex groups 是否完全同一网格语义。
+
+### What would verify it
+
+在 media Blender 上继续运行局部 IK 副本：每个候选目标分别比较网格最低高度残差、水平滑移、另一脚偏移和 12 关节投影；至少覆盖源 1/17/23/29/41/55，并保留 PTS。
+
+[Media Blender 原始结果](../raw/2026-10-23-rig-sole-proxy/media-projection-report.json)
