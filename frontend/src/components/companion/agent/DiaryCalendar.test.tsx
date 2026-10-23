@@ -23,6 +23,8 @@ it("edits explicitly, preserves failed content and retries the same save without
   render(<DiaryCard day="2026-10-23" text="原始日记" sourceTurn="turn" onSaved={saved}/>);
   await waitFor(()=>expect(screen.getByRole("button",{name:"编辑日记"})).toBeEnabled());
   fireEvent.click(screen.getByRole("button",{name:"编辑日记"}));
+  expect(screen.getByRole("dialog",{name:"日记编辑器"})).toBeInTheDocument();
+  expect(screen.getByText("修改只保留在编辑器中，点击“保存日记”后才会更新这一天的日记。")).toBeInTheDocument();
   fireEvent.change(screen.getByLabelText("日记内容"),{target:{value:"取消的内容"}});
   fireEvent.click(screen.getByRole("button",{name:"取消编辑"}));expect(api.saveDiary).not.toHaveBeenCalled();
   fireEvent.click(screen.getByRole("button",{name:"编辑日记"}));

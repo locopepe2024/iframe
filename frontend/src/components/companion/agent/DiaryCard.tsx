@@ -49,7 +49,8 @@ export default function DiaryCard({ day, text, sourceTurn, saved, onSaved }: {
     {!entry && <button type="button" disabled={busy || !loaded} onClick={()=>void save(text)}>{busy ? "正在保存…" : previous ? "确认替换当日日记" : "不修改，直接保存"}</button>}
     {!loaded && !error && <p role="status">正在核对日记…</p>}
     {error && !editing && <p role="alert">{error}{!loaded && <button type="button" onClick={()=>setReload(value=>value+1)}>重试核对日记</button>}</p>}
-    {editing && <FeatureDialog title="编辑日记" onClose={()=>{if(!busy)setEditing(false);}}>
+    {editing && <FeatureDialog title="日记编辑器" onClose={()=>{if(!busy)setEditing(false);}}>
+      <p className={styles.muted}>修改只保留在编辑器中，点击“保存日记”后才会更新这一天的日记。</p>
       <label>日记内容<textarea rows={12} maxLength={12000} value={draft} disabled={busy} onChange={event=>setDraft(event.target.value)}/></label>
       {error && <p role="alert">{error}</p>}
       <button type="button" disabled={busy || !draft.trim()} onClick={()=>void save(draft)}>{busy ? "正在保存…" : "保存日记"}</button>
