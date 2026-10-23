@@ -122,3 +122,14 @@ it('uses the model catalog limit of sixteen for GPT Image 2.5', async () => {
   await waitFor(() => expect(usePlaygroundStore.getState().inputMedia).toEqual([...existing, '/new.png']));
   expect(screen.getByText('media.localUpload')).toBeDisabled();
 });
+
+it.each([['i2v', 1], ['f2v', 2]] as const)('caps GreenA %s frame slots independently of omni capacity', (mode, max) => {
+  installUniArtCatalog([{ id:'nsfw/wan3.0', api_model_id:'wan3.0', display_name:'Wan 3.0', description:'', family:'wan', provider:'nsfw', capabilities:['t2v','i2v','f2v','r2v'], inputs:{reference_images:{max:10},reference_videos:{max:1},reference_audios:{max:5}} }]);
+  const frames = Array.from({length:max}, (_,i)=>`/frame-${i}.png`);
+  usePlaygroundStore.setState({mode,modelId:'nsfw/wan3.0',inputMedia:frames});
+  const {container} = render(<MediaInput />);
+  expect(screen.getByText('media.localUpload')).toBeDisabled();
+  expect(screen.getByText('media.pickFromLibrary')).toBeDisabled();
+  expect(container.querySelector('input[type="file"]')?.getAttribute('accept')).toBe('image/*');
+  expect(usePlaygroundStore.getState().inputMedia).toEqual(frames);
+});

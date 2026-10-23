@@ -36,7 +36,11 @@ def test_agent_wan_video_uses_new_one_and_saves_task(monkeypatch, tmp_path, mode
     assert gen.provider_tasks == {"0": "upstream-video"}
     assert storage.update_generation.called
     assert adapter.generate.call_args.kwargs["model"] == model_id
-    assert adapter.generate.call_args.kwargs["ref_image_urls"] == ["https://example.com/frame.jpg"]
+    if model_id == "nsfw/wan3.0":
+        assert adapter.generate.call_args.kwargs["img_url"] == "https://example.com/frame.jpg"
+        assert adapter.generate.call_args.kwargs["ref_image_urls"] == []
+    else:
+        assert adapter.generate.call_args.kwargs["ref_image_urls"] == ["https://example.com/frame.jpg"]
     assert adapter.generate.call_args.kwargs["resolution"] == "480p"
 
     adapter.generate.reset_mock()
@@ -50,9 +54,29 @@ def test_agent_wan_rejects_video_reference_before_submission(monkeypatch, tmp_pa
     service = PlaygroundService(storage, provider_config_loader=lambda: {"api_key": "test"})
     adapter = Mock()
     monkeypatch.setattr("src.models.nsfw_new_one.NSFWNewOneVideoModel", lambda _config: adapter)
-    gen = generation(mode=PlaygroundMode.R2V)
+    gen = generation(model="nsfw/wan3.0-Prime", mode=PlaygroundMode.R2V)
     gen.input_media = ["https://example.com/clip.mp4"]
 
     with pytest.raises(RuntimeError, match="image references only"):
         service._process_video_generation(gen)
     adapter.generate.assert_not_called()
+
+
+@pytest.mark.parametrize("mode,media,expected", [
+    (PlaygroundMode.T2V, [], {"generation_mode": "t2v", "ref_image_urls": []}),
+    (PlaygroundMode.F2V, ["https://example.com/first.jpg", "https://example.com/last.jpg"],
+     {"generation_mode": "f2v", "img_url": "https://example.com/first.jpg", "last_frame": "https://example.com/last.jpg", "ref_image_urls": []}),
+    (PlaygroundMode.R2V, ["https://example.com/a.jpg", "https://example.com/b.mp4", "https://example.com/c.mp3"],
+     {"generation_mode": "r2v", "ref_image_urls": ["https://example.com/a.jpg"], "ref_video_urls": ["https://example.com/b.mp4"], "ref_audio_urls": ["https://example.com/c.mp3"]}),
+])
+def test_c1_playground_dispatches_frame_roles_and_mixed_media(monkeypatch, tmp_path, mode, media, expected):
+    service = PlaygroundService(Mock(output_dir=str(tmp_path)), provider_config_loader=lambda: {"api_key": "test"})
+    adapter = Mock()
+    monkeypatch.setattr("src.models.nsfw_new_one.NSFWNewOneVideoModel", lambda _config: adapter)
+    gen = generation(mode=mode)
+    gen.input_media = media
+    gen.parameters["aspect_ratio"] = "adaptive"
+    service._generate_video_nsfw(gen, str(tmp_path / "video.mp4"))
+    for key, value in expected.items():
+        assert adapter.generate.call_args.kwargs[key] == value
+    assert adapter.generate.call_args.kwargs["aspect_ratio"] == "adaptive"
