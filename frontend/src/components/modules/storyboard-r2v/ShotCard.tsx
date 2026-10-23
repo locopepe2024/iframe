@@ -706,9 +706,9 @@ export default function ShotCard({
                 </div>
 
                 {/* Main content: Preview + Editor */}
-                <div className="flex px-5">
+                <div className="flex flex-col gap-4 px-4 pb-4 lg:flex-row lg:gap-0 lg:px-5 lg:pb-0">
                     {/* Left: Preview */}
-                    <div className="group/preview relative w-72 shrink-0 bg-surface-inset flex flex-col items-center justify-center overflow-hidden rounded-[14px] border border-glass-border shadow-[inset_0_0_0_1px_rgba(255,255,255,0.04)]">
+                    <div className="group/preview relative w-full shrink-0 self-start bg-surface-inset flex flex-col items-center justify-center overflow-hidden rounded-[14px] border border-glass-border shadow-[inset_0_0_0_1px_rgba(255,255,255,0.04)] lg:w-72">
                         {renderPreview()}
                         {/* Selected-take amber halation */}
                         {(shot.isVideoPinned || shot.finalTakeId) && shot.videoUrl ? (
@@ -768,7 +768,7 @@ export default function ShotCard({
                     </div>
 
                     {/* Right: Prompt + Controls */}
-                    <div className="flex-1 py-0.5 pl-5 pr-0 flex flex-col gap-3">
+                    <div className="flex min-w-0 w-full flex-col gap-3 py-0.5 lg:w-auto lg:flex-1 lg:pl-5">
                         {/* Cast avatar group */}
                         {castAvatars.length > 0 ? (
                             <div className="flex items-center gap-2">
@@ -1118,7 +1118,7 @@ export default function ShotCard({
                 </div>
 
                 {/* actions row — full-width per mock (lives outside editor/card-body) */}
-                <div className="flex items-center justify-between gap-3 px-5 py-3.5 border-t border-border-subtle">
+                <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3.5 border-t border-border-subtle lg:px-5">
                             <div className="flex items-center gap-1 shrink-0">
                                 <motion.button
                                     whileHover={{ scale: 1.06 }}
@@ -1180,7 +1180,7 @@ export default function ShotCard({
                                 </motion.button>
                             </div>
 
-                            <div className="flex items-center gap-3">
+                            <div className="flex flex-wrap items-center gap-3">
                                 {genSummary && (
                                     <span className="inline-flex items-center gap-1.5 shrink-0 font-mono text-[0.6875rem] text-text-secondary">
                                         <span className="h-1.5 w-1.5 rounded-full bg-primary shadow-[var(--glow-primary)]" />
