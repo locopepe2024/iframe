@@ -15,7 +15,7 @@
  * 视觉寄存于 Studio 现有 chrome-sm / display-sm / status colors token 体系。
  */
 import { syncPromptSettings } from "./shotPromptSettings";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Loader2, Sparkles, Check, X, RefreshCw, Copy, CornerDownLeft, AlertCircle, AlertTriangle } from "lucide-react";
 import clsx from "clsx";
 import { useTranslations } from "next-intl";
@@ -156,7 +156,14 @@ export default function PolishPanel({
     const selectedSkills = compatibleOptimizationSkills(videoModel, optimizerProvider, optimizationSkills);
     const targetModel = [...VIDEO_I2V_MODELS, ...VIDEO_R2V_MODELS]
         .find((model) => model.id === videoModel)?.name ?? videoModel;
+    const previousVideoModel = useRef(videoModel);
     useEffect(() => {
+        if (previousVideoModel.current !== videoModel) {
+            setReview(null);
+            setPolished(null);
+            setError(null);
+            previousVideoModel.current = videoModel;
+        }
         const provider = optimizerProvider === "minimax_context_ir" && videoModel.toLowerCase().includes("seedance")
             ? "qwen" : optimizerProvider;
         if (provider !== optimizerProvider) setOptimizerProvider(provider);

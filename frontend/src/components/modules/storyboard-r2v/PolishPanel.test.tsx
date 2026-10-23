@@ -106,6 +106,18 @@ it("submits the H3 model and its matching skill for preview", async () => {
     expect(screen.getByText("当前镜头目标模型：", { exact: false })).toHaveTextContent("MiniMax");
 });
 
+it("closes a stale preview when the shot target model changes", async () => {
+    vi.mocked(api.polishVideoPrompt).mockResolvedValue({ messages: { system: "Seedance contract", user: "shot" }, media: [], review_token: "token", format_note: "" } as any);
+    const props = { prompt: "镜头", tabMode: "t2i_i2v" as const, scriptId: "project", onApply: vi.fn() };
+    const { rerender } = render(<PolishPanel {...props} videoModel="uniart/seedance-2.5-vip" />);
+    fireEvent.click(screen.getByTitle("查看并确认模型输入"));
+    await screen.findByText("提交前检查模型输入");
+    rerender(<PolishPanel {...props} videoModel="uniart/minimax-h3-vip" />);
+    await waitFor(() => expect(screen.queryByText("提交前检查模型输入")).not.toBeInTheDocument());
+    expect(screen.getByLabelText("MiniMax H3 导演")).toBeChecked();
+    expect(screen.getByText("当前镜头目标模型：", { exact: false })).toHaveTextContent("MiniMax");
+});
+
 it("hides optional skills and submits none with the official IR optimizer", async () => {
     vi.mocked(api.polishVideoPrompt).mockResolvedValue({ messages: { system: "", user: "shot" }, media: [], review_token: "token", format_note: "" } as any);
     render(<PolishPanel prompt="镜头" videoModel="uniart/minimax-h3-vip" tabMode="t2i_i2v" scriptId="project" onApply={vi.fn()} />);
