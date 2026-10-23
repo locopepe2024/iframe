@@ -12,8 +12,16 @@ beforeEach(()=>{
 async function start(){
   render(<AgentChat/>);await waitFor(()=>expect(screen.getByRole("button",{name:"新建会话"})).not.toBeDisabled());
   fireEvent.click(screen.getByRole("button",{name:"新建会话"}));await screen.findByText(/已打开新会话/);
-  fireEvent.change(screen.getByLabelText("想说的话"),{target:{value:"请记住我喜欢散步"}});
+  fireEvent.change(screen.getByLabelText("和我聊聊天"),{target:{value:"请记住我喜欢散步"}});
 }
+it("offers large guided cards without sending automatically",async()=>{
+  await start();
+  fireEvent.click(screen.getByRole("button",{name:/聊聊今天/}));
+  expect(screen.getByLabelText("和我聊聊天")).toHaveValue("聊聊今天发生的事情");
+  expect(api.chat).not.toHaveBeenCalled();
+  fireEvent.click(screen.getByRole("button",{name:/整理今天的回忆/}));
+  expect(screen.getByLabelText("和我聊聊天")).toHaveValue("请把我们今天聊的内容整理成一篇回忆日记");
+});
 it("requires external text consent and final explicit button before saving",async()=>{
   await start();expect(screen.getByRole("button",{name:"发送给陪伴助手"})).toBeDisabled();
   fireEvent.click(screen.getByRole("checkbox"));fireEvent.click(screen.getByRole("button",{name:"发送给陪伴助手"}));

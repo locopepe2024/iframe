@@ -49,3 +49,8 @@
 .error { color: #ffd2d2; border: 2px solid #e09d9d; padding: 1rem; border-radius: .75rem; }
 
 .shell summary { min-height: 48px; padding: .5rem 0; cursor: pointer; }
+.guide { margin: 1rem 0; }
+.guideGrid { display: grid; gap: .75rem; grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.shell .guideCard { display: flex; flex-direction: column; align-items: flex-start; justify-content: center; gap: .2rem; min-height: 7rem; margin: 0; text-align: left; background: #1d3b52; }
+.guideCard span { color: var(--muted); font-size: .85em; }
+@media (max-width: 32rem) { .guideGrid { grid-template-columns: 1fr; } .shell .guideCard { min-height: 5rem; } }

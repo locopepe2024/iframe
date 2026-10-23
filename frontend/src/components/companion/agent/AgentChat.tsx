@@ -20,6 +20,7 @@ export default function AgentChat() {
   const confirmOperation = useRef<{ token: string; id: string } | null>(null);
   const [draft, setDraft] = useState<string | null>(null);
   const [hasRetry, setHasRetry] = useState(false);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
   async function run(action: () => Promise<void>) {
     if (locked.current) return;
     locked.current = true; setBusy(true); setError("");
@@ -76,12 +77,27 @@ export default function AgentChat() {
     <button disabled={busy || pending} onClick={() => void run(newSession)}>新建会话</button>
     {session && <button disabled={busy || pending} onClick={() => void run(() => history(session))}>重新读取本会话原话</button>}
     {notice && <p role="status">{notice}</p>}{error && <p role="alert">{error}</p>}
+    <section className={styles.guide} aria-labelledby="chat-guide-title">
+      <h2 id="chat-guide-title">你想做什么？</h2>
+      <p>选一张卡片开始，也可以直接告诉我。</p>
+      <div className={styles.guideGrid}>
+        <button type="button" className={styles.guideCard} disabled={busy || pending || !session} onClick={() => { setText("聊聊今天发生的事情"); inputRef.current?.focus(); }}>
+          <strong>聊聊今天</strong><span>说说今天的生活</span>
+        </button>
+        <button type="button" className={styles.guideCard} disabled={busy || pending} onClick={() => { window.location.href = `${prefix}/companion/photos`; }}>
+          <strong>讲讲一张照片</strong><span>去生活相册看看</span>
+        </button>
+        <button type="button" className={styles.guideCard} disabled={busy || pending || !session} onClick={() => { setText("请把我们今天聊的内容整理成一篇回忆日记"); inputRef.current?.focus(); }}>
+          <strong>整理今天的回忆</strong><span>把故事记下来</span>
+        </button>
+      </div>
+    </section>
     <section className={styles.panel} aria-label="会话原话">
       <h2>已保存的用户原话</h2><p>原话按页查看，不受模型最近 20 条上下文限制。这里只恢复用户消息和最近一次模型结果。</p>
       {messages.map(message => <p key={message.id}>{message.text}</p>)}
       {after !== null && <button disabled={busy} onClick={() => void run(() => history(session, after))}>更多历史原话</button>}
     </section>
-    <label>想说的话<textarea maxLength={4000} value={text} disabled={busy || pending || hasRetry} onChange={e => setText(e.target.value)} /></label>
+    <label>和我聊聊天<textarea ref={inputRef} placeholder="在这里打字，比如：今天有什么开心的事？" maxLength={4000} value={text} disabled={busy || pending || hasRetry} onChange={e => setText(e.target.value)} /></label>
     <label className={styles.check}><input type="checkbox" checked={allowed} disabled={busy} onChange={e => setAllowed(e.target.checked)} />允许将上述范围的文字发送给个人 UniArt / Qwen 渠道</label>
     <button disabled={busy || pending || !session || !allowed || !text.trim() || hasRetry} onClick={() => void run(() => send())}>发送给陪伴助手</button>
     {hasRetry && <button disabled={busy || !allowed} onClick={() => void run(() => send(true))}>重试原请求</button>}
