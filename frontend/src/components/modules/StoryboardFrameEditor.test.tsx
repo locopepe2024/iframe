@@ -9,6 +9,7 @@ const { api, state } = vi.hoisted(() => ({
         listShotVisualPresets: vi.fn(),
         previewShotVisualPreset: vi.fn(),
         applyShotVisualPreset: vi.fn(),
+        applyStaticFraming: vi.fn(),
     },
     state: { currentProject: { id: "project", frames: [{ id: "frame", action_description: "target action" }] }, currentSeries: null, updateProject: vi.fn() },
 }));
@@ -33,6 +34,7 @@ it("selects a source thumbnail and applies only confirmed fields", async () => {
     render(<StoryboardFrameEditor frame={state.currentProject.frames[0]} onClose={() => {}} />);
 
     expect(screen.getByText("分镜首帧编辑")).toBeTruthy();
+    expect(screen.getByText("静态起幅")).toBeInTheDocument();
     fireEvent.click(await screen.findByRole("button", { name: "选择参考图 长街变体 B" }));
     await waitFor(() => expect(api.previewShotVisualPreset).toHaveBeenCalledWith("project", "frame", "second"));
     expect(await screen.findByText("来源图片：场景设计版本 2")).toBeInTheDocument();
@@ -76,6 +78,30 @@ it("distinguishes image-only reference from the effective lighting input", async
         render(<StoryboardFrameEditor frame={state.currentProject.frames[0]} onClose={() => {}} />);
         expect(await screen.findByText("此参考仅提交图片，未选择其结构化光影。请在生成预览中核对本镜实际光影输入。")).toBeInTheDocument();
         expect(screen.getByText(/当前参考：上一镜首帧/)).toBeInTheDocument();
+    } finally {
+        state.currentProject.frames = originalFrames;
+    }
+});
+
+it("applies a reviewed opening composition in Storyboard and refreshes the project", async () => {
+    const originalFrames = state.currentProject.frames;
+    const updated = { id: "project", frames: [{ id: "frame", shot_size: "近景" }] };
+    state.currentProject.frames = [{
+        id: "frame", action_description: "target action", shot_size: "中景",
+        static_framing_candidate: {
+            id: "opening", fields: { shot_size: "近景" }, current_fields: { shot_size: "中景" },
+            rationale: { shot_size: "看清起始表情" }, source_refs: { shot_size: ["current_action"] }, uncertainties: [],
+        },
+    } as any];
+    api.listShotVisualPresets.mockResolvedValue([]);
+    api.applyStaticFraming.mockResolvedValue(updated);
+    state.updateProject.mockClear();
+    try {
+        const { container } = render(<StoryboardFrameEditor frame={state.currentProject.frames[0]} onClose={() => {}} />);
+        fireEvent.click(container.querySelector("summary")!);
+        fireEvent.click(screen.getByRole("button", { name: "应用所选字段" }));
+        await waitFor(() => expect(api.applyStaticFraming).toHaveBeenCalledWith("project", "frame", "opening", ["shot_size"]));
+        expect(state.updateProject).toHaveBeenCalledWith("project", updated);
     } finally {
         state.currentProject.frames = originalFrames;
     }

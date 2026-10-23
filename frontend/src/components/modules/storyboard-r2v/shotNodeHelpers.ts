@@ -249,7 +249,6 @@ export function frameToShotNode(
         richRefinementCandidate: frame.rich_refinement_candidate ?? null,
         microExpressionCandidate: frame.micro_expression_candidate ?? null,
         cameraMovementCandidate: frame.camera_movement_candidate ?? null,
-        staticFramingCandidate: frame.static_framing_candidate ?? null,
         microExpressionTiming: frame.micro_expression_timing ?? [],
         isVideoPinned: Boolean(frame.is_video_pinned),
     });

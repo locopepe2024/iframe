@@ -22,10 +22,11 @@ interface Props {
     current: { shot_size?: string | null; camera_angle?: string | null; composition?: string | null };
     optimized: boolean;
     onBeforePreview?: () => Promise<void> | void;
-    onApplied?: () => Promise<void> | void;
+    onGenerated?: (candidate: Candidate) => void;
+    onApplied?: (updatedProject: any) => Promise<void> | void;
 }
 
-export default function StaticFramingPanel({ projectId, frameId, initialCandidate, current, optimized, onBeforePreview, onApplied }: Props) {
+export default function StaticFramingPanel({ projectId, frameId, initialCandidate, current, optimized, onBeforePreview, onGenerated, onApplied }: Props) {
     const [review, setReview] = useState<Review | null>(null);
     const [candidate, setCandidate] = useState<Candidate | null>(initialCandidate);
     const [selected, setSelected] = useState<string[]>([]);
@@ -57,6 +58,7 @@ export default function StaticFramingPanel({ projectId, frameId, initialCandidat
         try {
             const next = await api.generateStaticFraming(projectId, frameId, review);
             setCandidate(next);
+            onGenerated?.(next);
             setSelected(Object.keys(next.fields));
             setReview(null);
         } catch {
@@ -70,9 +72,9 @@ export default function StaticFramingPanel({ projectId, frameId, initialCandidat
         setBusy(true);
         setError("");
         try {
-            await api.applyStaticFraming(projectId, frameId, candidate.id, selected);
+            const updatedProject = await api.applyStaticFraming(projectId, frameId, candidate.id, selected);
             setCandidate(null);
-            await onApplied?.();
+            await onApplied?.(updatedProject);
         } catch {
             setError("候选已过期或完整优化稿需重审，请重新生成。");
         } finally {

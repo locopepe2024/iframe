@@ -22,25 +22,27 @@ beforeEach(() => {
     vi.clearAllMocks();
     vi.mocked(api.previewStaticFraming).mockResolvedValue(review);
     vi.mocked(api.generateStaticFraming).mockResolvedValue(candidate);
-    vi.mocked(api.applyStaticFraming).mockResolvedValue({});
+    vi.mocked(api.applyStaticFraming).mockResolvedValue({ frames: [{ id: "frame", shot_size: "近景" }] });
 });
 
 it("previews before generation and applies only selected fields", async () => {
     const applied = vi.fn();
+    const generated = vi.fn();
     const { container } = render(<StaticFramingPanel projectId="film" frameId="frame"
         current={{ shot_size: "中景", camera_angle: "平视", composition: "主体偏左" }}
-        initialCandidate={null} optimized={false} onApplied={applied} />);
+        initialCandidate={null} optimized={false} onGenerated={generated} onApplied={applied} />);
     fireEvent.click(container.querySelector("summary")!);
     fireEvent.click(screen.getByRole("button", { name: "预览模型输入" }));
     await waitFor(() => expect(api.previewStaticFraming).toHaveBeenCalledWith("film", "frame"));
     expect(api.generateStaticFraming).not.toHaveBeenCalled();
     fireEvent.click(screen.getByRole("button", { name: "确认并生成候选" }));
     await waitFor(() => expect(api.generateStaticFraming).toHaveBeenCalledWith("film", "frame", review));
+    expect(generated).toHaveBeenCalledExactlyOnceWith(candidate);
     expect(api.applyStaticFraming).not.toHaveBeenCalled();
     fireEvent.click(screen.getByRole("checkbox", { name: "采纳景别" }));
     fireEvent.click(screen.getByRole("button", { name: "应用所选字段" }));
     await waitFor(() => expect(api.applyStaticFraming).toHaveBeenCalledWith("film", "frame", "candidate", ["composition"]));
-    expect(applied).toHaveBeenCalledOnce();
+    expect(applied).toHaveBeenCalledExactlyOnceWith({ frames: [{ id: "frame", shot_size: "近景" }] });
 });
 
 it("blocks application over a complete optimized prompt", () => {

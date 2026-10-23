@@ -11,6 +11,7 @@ import { useProjectStore } from "@/store/projectStore";
 import { resolveNegativePrompt, resolveStylePrompt } from "./storyboard-r2v/buildAssembledPrompt";
 import RenderPromptPreviewDialog, { type FrameRenderPreview } from "./RenderPromptPreviewDialog";
 import { getAssetUrl } from "@/lib/utils";
+import StaticFramingPanel from "./storyboard-r2v/StaticFramingPanel";
 
 interface StoryboardFrameEditorProps {
     frame: any;
@@ -331,6 +332,23 @@ export default function StoryboardFrameEditor({ frame: initialFrame, onClose }: 
                                 </p>
                             )}
                         </div>
+
+                        {currentProject?.id && <div className="border-b border-border-subtle px-4 pb-3">
+                            <StaticFramingPanel
+                                projectId={currentProject.id}
+                                frameId={frame.id}
+                                current={{ shot_size: frame.shot_size, camera_angle: frame.camera_angle, composition: frame.composition }}
+                                initialCandidate={frame.static_framing_candidate ?? null}
+                                optimized={!!frame.workbench_prompt_is_optimized}
+                                onGenerated={(candidate) => updateProject(currentProject.id, {
+                                    frames: (currentProject.frames ?? []).map((item: any) => item.id === frame.id
+                                        ? { ...item, static_framing_candidate: candidate } : item),
+                                })}
+                                onApplied={(updatedProject) => {
+                                    updateProject(currentProject.id, updatedProject);
+                                }}
+                            />
+                        </div>}
 
                         <div className="flex-1 p-4 flex flex-col">
                             <h3 className="font-bold text-sm uppercase tracking-wider text-text-secondary mb-2">
