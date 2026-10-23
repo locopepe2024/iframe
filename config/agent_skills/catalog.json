@@ -70,6 +70,18 @@
       "instructions_file": "shot-camera-movement.md"
     },
     {
+      "id": "shot-field-continuity",
+      "name": "分镜字段与一致性",
+      "category": "分镜设计",
+      "targets": ["Storyboard camera"],
+      "version": "1.0.0",
+      "description": "为现有单镜摄影、时长、转场和本镜风格光线字段提出有来源的候选。",
+      "license": "MIT（iFrame 原创工作流）",
+      "license_file": "lumenx-MIT.txt",
+      "adaptation": "模型无关的字段提案；不进入模型专属完整提示词润色。",
+      "instructions_file": "shot-field-continuity.md"
+    },
+    {
       "id": "shot-static-framing",
       "name": "分镜静态起幅设计",
       "category": "分镜摄影",

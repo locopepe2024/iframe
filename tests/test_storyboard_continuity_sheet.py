@@ -99,3 +99,35 @@ def test_confirmed_scene_light_takes_priority_over_plan_baseline(tmp_path):
     assert fields["weather"]["source_kind"] == "scene_design"
     assert fields["key_source"]["value"] == "confirmed lantern"
     assert fields["key_source"]["source_revision"] == 3
+
+
+def test_confirmed_scene_style_and_shot_fields_have_distinct_sources(tmp_path):
+    scene = Scene(id="street", name="街", description="")
+    scene.asset_design = {"design_draft": {"style": "unconfirmed draft"},
+                          "design_revisions": [{"revision": 4, "design": {"style": "写实电影", "ambient_lighting": "暮秋残阳"}}]}
+    shot = frame("a", "street", "street", "dusk")
+    shot.duration = 6
+    shot.shot_size = "大远景"
+    shot.camera_angle = "鸟瞰"
+    shot.camera_movement_structured = {"primary": "static", "speed": "normal", "description": "固定机位"}
+    shot.transition_hint = "硬切"
+    pipeline, script = make_pipeline(tmp_path, [shot], [scene])
+    fields = pipeline.storyboard_continuity_sheet(script.id)["rows"][0]["fields"]
+    assert fields["style"] == {"value": "写实电影", "source_kind": "scene_design",
+                               "source_id": "street", "source_revision": 4, "status": "confirmed"}
+    assert fields["ambient_lighting"]["value"] == "暮秋残阳"
+    for key, value in {"duration": 6, "shot_size": "大远景", "camera_angle": "鸟瞰",
+                       "camera_movement": "固定机位", "transition_hint": "硬切"}.items():
+        assert fields[key]["value"] == value
+        assert fields[key]["source_kind"] == "frame"
+
+
+def test_different_confirmed_scene_styles_are_not_project_conflicts(tmp_path):
+    first = Scene(id="street", name="街", description="", asset_design={
+        "design_revisions": [{"revision": 1, "design": {"style": "写实电影"}}],
+    })
+    second = Scene(id="dream", name="梦境", description="", asset_design={
+        "design_revisions": [{"revision": 1, "design": {"style": "水墨梦境"}}],
+    })
+    pipeline, script = make_pipeline(tmp_path, [frame("a", "street"), frame("b", "dream")], [first, second])
+    assert not [issue for issue in pipeline.storyboard_continuity_sheet(script.id)["issues"] if issue["field"] == "style"]

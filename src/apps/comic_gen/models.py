@@ -950,6 +950,9 @@ class StoryboardFrame(BaseModel):
     static_framing_candidate: Optional[Dict[str, Any]] = Field(
         None, description="Unapplied model-independent static framing proposal"
     )
+    shot_field_candidate: Optional[Dict[str, Any]] = Field(
+        None, description="Unapplied model-independent proposal for existing shot controls"
+    )
     micro_expression_timing: List[Dict[str, Any]] = Field(
         default_factory=list, description="Creator-accepted performance timing by character"
     )
@@ -1045,6 +1048,9 @@ class StoryboardFrame(BaseModel):
         description="Per-shot generated-audio choice; None inherits the current project/UI default",
     )
     workbench_prompt_is_optimized: bool = False
+    workbench_visual_source_hash: Optional[str] = Field(
+        None, description="Visual and shot-field source hash when the full workbench prompt was accepted"
+    )
     workbench_reference_variant_ids: Dict[str, List[str]] = Field(
         default_factory=dict,
         description="Explicit per-shot image variant selections keyed by semantic asset ID",

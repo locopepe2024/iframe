@@ -12,6 +12,7 @@ import StepPageHeader, { StepPill } from "@/components/shared/StepPageHeader";
 import RenderPromptPreviewDialog, { type FrameRenderPreview } from "./RenderPromptPreviewDialog";
 import VideoSubmissionPreviewDialog, { type VideoSubmissionPreview } from "./storyboard-r2v/VideoSubmissionPreviewDialog";
 import StoryboardContinuitySheet from "./StoryboardContinuitySheet";
+import { effectiveShotVisual, type ContinuityRow } from "./storyboard-r2v/effectiveShotVisual";
 import { useTranslations } from "next-intl";
 import { useProjectStore } from "@/store/projectStore";
 import { api, crudApi, type VideoTask, type AssetReferenceIndexEntry, type EpisodeCharacterUse } from "@/lib/api";
@@ -71,6 +72,7 @@ import {
 
 export default function StoryboardR2V() {
     const [showContinuitySheet, setShowContinuitySheet] = useState(false);
+    const [continuityRows, setContinuityRows] = useState<Record<string, ContinuityRow>>({});
     const candidateRenderBusyRef = useRef(false);
     const [pendingCandidate, setPendingCandidate] = useState<{
         projectId: string; frameId: string; slot: "first" | "last";
@@ -98,6 +100,15 @@ export default function StoryboardR2V() {
         if (!currentProject) throw new Error("Project is unavailable");
         return resolveStoryboardStyleForRender(currentProject, currentSeries, api.getSeries);
     }, [currentProject, currentSeries]);
+
+    useEffect(() => {
+        if (!currentProject?.id) return;
+        let active = true;
+        api.getStoryboardContinuitySheet(currentProject.id).then(sheet => {
+            if (active) setContinuityRows(Object.fromEntries(sheet.rows.map(row => [row.frame_id, row])));
+        }).catch(() => { if (active) setContinuityRows({}); });
+        return () => { active = false; };
+    }, [currentProject]);
 
     useEffect(() => {
         const projectId = currentProject?.id;
@@ -918,19 +929,29 @@ export default function StoryboardR2V() {
             if (field === "cameraAngle") return { ...s, cameraAngle: typeof value === "string" ? value : null };
             if (field === "cameraMovement") {
                 const desc = typeof value === "string" ? value : "固定镜头";
+                const presets: Record<string, { primary: string; speed: string }> = {
+                    "固定镜头": { primary: "static", speed: "normal" },
+                    "缓慢推进": { primary: "push_in", speed: "slow" },
+                    "跟随平移": { primary: "follow", speed: "normal" },
+                    "环绕旋转": { primary: "orbit", speed: "normal" },
+                    "快速拉远": { primary: "pull_out", speed: "fast" },
+                    "缓慢上升": { primary: "crane_up", speed: "slow" },
+                };
                 return {
                     ...s,
                     cameraMovementStructured: {
-                        primary: desc,
-                        speed: s.cameraMovementStructured?.speed ?? "normal",
+                        primary: presets[desc]?.primary ?? "custom",
+                        speed: presets[desc]?.speed ?? "normal",
                         description: desc,
-                        secondary: s.cameraMovementStructured?.secondary ?? null,
+                        secondary: null,
                     },
                 };
             }
             if (field === "transitionHint") return { ...s, transitionHint: typeof value === "string" ? value : null };
             if (field === "stylePromptOverride" || field === "lightingOverride") {
-                const next = editShotSettings(s, field, typeof value === "string" ? value : null, displayedStyle.positivePrompt);
+                const visual = effectiveShotVisual(continuityRows[s.id], displayedStyle.positivePrompt);
+                const next = editShotSettings(s, field, typeof value === "string" ? value : null,
+                    visual.style, visual.lighting);
                 persistFrameEdit(s.id, {
                     style_prompt_override: next.stylePromptOverride ?? "",
                     lighting_override: next.lightingOverride ?? "",
@@ -952,7 +973,7 @@ export default function StoryboardR2V() {
         if (field === "transitionHint") backendField.transition_hint = typeof value === "string" ? value : undefined;
         if (field === "negativePromptOverride") backendField.negative_prompt_override = typeof value === "string" ? value : undefined;
         persistFrameEdit(shotId, backendField);
-    }, [shots, persistFrameEdit, displayedStyle.positivePrompt]);
+    }, [shots, persistFrameEdit, displayedStyle.positivePrompt, continuityRows]);
 
     // Duration editor config — derived from active R2V model's catalog entry
     const durationEditorCfg = useMemo(() => {
@@ -1210,9 +1231,15 @@ export default function StoryboardR2V() {
         submittingShotsRef.current.add(shot.id);
 
         try {
+            await frameEdits.flush();
             const style = await loadGenerationStyle();
+            const continuitySheet = await api.getStoryboardContinuitySheet(currentProject.id);
+            const visualSourceHash = continuitySheet.rows.find(row => row.frame_id === shot.id)?.visual_source_hash;
+            const effectiveVisual = effectiveShotVisual(
+                continuitySheet.rows.find(row => row.frame_id === shot.id), style.positivePrompt,
+            );
             const basePromptText = buildGenerationPrompt(
-                shot, generateAudio, requestedModelId, style.positivePrompt,
+                shot, generateAudio, requestedModelId, effectiveVisual.style, effectiveVisual.lighting,
             );
             const effectiveNegativePrompt = resolveNegativePrompt(
                 style.negativePrompt,
@@ -1259,6 +1286,9 @@ export default function StoryboardR2V() {
                         params?.watermark,
                         shot.poseReferenceVariantIds,
                         shot.directorSnapshotMediaId ?? undefined,
+                        undefined,
+                        undefined,
+                        visualSourceHash,
                     );
                     const task = Array.isArray(tasks) ? tasks[0] : tasks;
                     return task?.id ?? null;
@@ -1301,6 +1331,7 @@ export default function StoryboardR2V() {
                     shot.directorSnapshotMediaId ?? undefined,
                     videoInput.mode === "first_last_frame" ? videoInput.lastFrameUrl : undefined,
                     videoInput.mode === "first_last_frame" ? shot.lastFrameMediaId : undefined,
+                    visualSourceHash,
                 );
                 const task = Array.isArray(tasks) ? tasks[0] : tasks;
                 return task?.id ?? null;
@@ -2213,6 +2244,8 @@ export default function StoryboardR2V() {
                             targetDuration={paramsState.duration}
                             shot={shot}
                             globalStylePrompt={displayedStyle.positivePrompt}
+                            effectiveVisual={effectiveShotVisual(continuityRows[shot.id], displayedStyle.positivePrompt)}
+                            effectiveFields={continuityRows[shot.id]?.fields}
                             index={index}
                             totalShots={shots.length}
                             characters={characters}

@@ -14,6 +14,7 @@ WORLD_FIELDS = ("story_time", "daylight_phase", "weather", "shadow_direction")
 LOCAL_FIELDS = ("key_source", "color_tone", "contrast", "practical_sources", "direction", "quality", "color_temp", "ambient_lighting")
 SPACE_FIELDS = ("location", "reference_viewpoint", "reference_framing")
 CAMERA_FIELDS = ("shot_size", "camera_angle", "composition", "camera_movement")
+SHOT_FIELDS = ("duration", "transition_hint")
 
 
 def _record(value: Any, kind: str, source_id: Optional[str], revision: Optional[int] = None,
@@ -40,6 +41,9 @@ def build_continuity_sheet(script: Script, scenes: Iterable[Any], *, model_name:
     scene_by_id = {item.id: item for item in scenes}
     style_id = script.art_direction.selected_style_id if script.art_direction else script.style_preset
     style_payload = script.art_direction.style_config if script.art_direction else script.style_prompt
+    style_text = (script.art_direction.style_config.get("positive_prompt")
+                  or script.art_direction.style_config.get("style_prompt")
+                  or style_id) if script.art_direction else (script.style_prompt or style_id)
     style_hash = hashlib.sha256(json.dumps(style_payload, sort_keys=True, ensure_ascii=False,
                                            default=str).encode("utf-8")).hexdigest()[:16]
     rows = []
@@ -71,12 +75,19 @@ def build_continuity_sheet(script: Script, scenes: Iterable[Any], *, model_name:
                     raw.get("shooting_plan_revision"), replace=False)
         _set_fields(fields, shot_context, CAMERA_FIELDS, "plan_shot", frame.shot_id,
                     raw.get("shooting_plan_revision"))
-        _set_fields(fields, _as_dict(shot_context.get("lighting")), WORLD_FIELDS + LOCAL_FIELDS,
-                    "plan_shot", frame.shot_id, raw.get("shooting_plan_revision"), "explicit_override")
+        for key, value in _as_dict(shot_context.get("lighting")).items():
+            if key in WORLD_FIELDS + LOCAL_FIELDS and _nonempty(value) and fields.get(key, {}).get("source_kind") != "scene_design":
+                fields[key] = _record(value, "plan_shot", frame.shot_id,
+                                      raw.get("shooting_plan_revision"), "explicit_override")
+        movement = _as_dict(frame.camera_movement_structured)
         _set_fields(fields, {"shot_size": frame.shot_size,
                              "camera_angle": frame.camera_angle if frame.camera_angle != "Medium Shot" else None,
-                             "composition": frame.composition, "camera_movement": frame.camera_movement},
+                             "composition": frame.composition,
+                             "camera_movement": movement.get("description") or movement.get("primary")
+                             or frame.camera_movement},
                     CAMERA_FIELDS, "frame", frame.id, status="explicit_override")
+        _set_fields(fields, {"duration": frame.duration, "transition_hint": frame.transition_hint},
+                    SHOT_FIELDS, "frame", frame.id, status="explicit_override")
         _set_fields(fields, _as_dict(frame.lighting), LOCAL_FIELDS, "frame", frame.id,
                     status="explicit_override")
         if frame.lighting_override and frame.lighting_override.strip():
@@ -90,8 +101,11 @@ def build_continuity_sheet(script: Script, scenes: Iterable[Any], *, model_name:
                             WORLD_FIELDS + LOCAL_FIELDS + SPACE_FIELDS + CAMERA_FIELDS,
                             "selected_reference", snapshot.source_variant_id or snapshot.source_frame_id,
                             snapshot.source_scene_design_revision, replace=False)
-        fields["style"] = _record(style_id, "art_direction" if script.art_direction else "project",
+        fields["style"] = _record(style_text, "art_direction" if script.art_direction else "project",
                                   script.id, status="confirmed")
+        if isinstance(design.get("style"), str) and design["style"].strip():
+            fields["style"] = _record(design["style"].strip(), "scene_design", scene_id,
+                                      design_revision, status="confirmed")
         if frame.style_prompt_override and frame.style_prompt_override.strip():
             fields["style"] = _record(frame.style_prompt_override.strip(), "frame", frame.id,
                                       status="explicit_override")
@@ -118,8 +132,13 @@ def build_continuity_sheet(script: Script, scenes: Iterable[Any], *, model_name:
 def _diagnose(rows: list[dict]) -> list[dict]:
     issues = []
     anchors: Dict[tuple, tuple[dict, dict]] = {}
+    scene_style_scopes = {
+        row["scene_id"] for row in rows
+        if row["fields"].get("style", {}).get("source_kind") in {"scene_design", "frame"}
+    }
     for row in rows:
-        candidates = [("project_style", "project", ("style",))]
+        style_scope = row["scene_id"] if row["scene_id"] in scene_style_scopes else "project"
+        candidates = [("project_style", style_scope, ("style",))]
         if row["continuity_status"] == "confirmed":
             time_id = row["time_continuity_id"]
             place_id = row["place_continuity_id"]

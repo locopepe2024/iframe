@@ -30,6 +30,7 @@ import PromptExpandModal from "./PromptExpandModal";
 import PolishPanel from "./PolishPanel";
 import MicroExpressionPanel from "./MicroExpressionPanel";
 import CameraMovementPanel from "./CameraMovementPanel";
+import ShotFieldPanel from "./ShotFieldPanel";
 import FieldTagChip, { AddFieldButton, type FieldType } from "./FieldTagChip";
 import { buildGenerationPrompt, directorShotSuggestions } from "./buildAssembledPrompt";
 import { directorFieldProposals } from "./directorFieldProposals";
@@ -174,6 +175,13 @@ export interface ShotNode {
         camera_movement_structured: { primary: string; secondary?: string | null; speed: string; description?: string | null };
         rationale: string; source_refs: string[]; uncertainties: string[];
     } | null;
+    shotFieldCandidate?: {
+        id: string;
+        fields: Record<string, unknown>;
+        rationale: Record<string, string>;
+        source_refs: Record<string, string[]>;
+        uncertainties: string[];
+    } | null;
 
     /** When true, the user has manually pinned an active take. Hero
      *  shows a "Pinned" chip; autoSelectLatestVideo skips this frame on
@@ -202,6 +210,8 @@ interface ShotCardProps {
     onUpdatePrompt: (prompt: string, optimized?: boolean) => void;
     onUpdateField: (field: string, value: string | number | null) => void;
     globalStylePrompt?: string;
+    effectiveVisual?: { style: string; lighting: string };
+    effectiveFields?: Record<string, { value: unknown; source_kind: string; source_revision: number | null }>;
     onGenerateT2I: () => void;
     onGenerateVideo: () => void;
     onDelete: () => void;
@@ -267,6 +277,8 @@ export default function ShotCard({
     onUpdatePrompt,
     onUpdateField,
     globalStylePrompt = "",
+    effectiveVisual,
+    effectiveFields,
     onGenerateT2I,
     onGenerateVideo,
     onDelete,
@@ -384,9 +396,12 @@ export default function ShotCard({
         return out;
     }, [shot.prompt, characters])();
 
-    const assembledPromptPreview = useMemo(() => buildGenerationPrompt(shot, generateAudio ?? false, videoModel ?? "", globalStylePrompt), [
+    const assembledPromptPreview = useMemo(() => buildGenerationPrompt(
+        shot, generateAudio ?? false, videoModel ?? "", effectiveVisual?.style ?? globalStylePrompt, effectiveVisual?.lighting ?? "",
+    ), [
         shot.prompt, shot.shotSize, shot.cameraAngle, shot.cameraMovementStructured, shot.transitionHint,
-        shot.stylePromptOverride, shot.lightingOverride, shot.directorShotContext, globalStylePrompt, shot.promptIsOptimized, generateAudio, videoModel,
+        shot.stylePromptOverride, shot.lightingOverride, shot.directorShotContext, globalStylePrompt,
+        effectiveVisual?.style, effectiveVisual?.lighting, shot.promptIsOptimized, generateAudio, videoModel,
     ]);
     const planSuggestions = useMemo(() => directorShotSuggestions(shot), [shot]);
     const planFieldProposals = useMemo(() => directorFieldProposals(shot, durationEditorConfig ?? { min: 3, max: 15 }), [shot, durationEditorConfig]);
@@ -916,14 +931,17 @@ export default function ShotCard({
                             dialogue={shot.dialogueStructured}
                             videoModel={videoModel}
                             prompt={shot.prompt}
-                            optimizationDraft={buildGenerationPrompt(shot, generateAudio ?? false, videoModel ?? "", globalStylePrompt)}
+                            optimizationDraft={buildGenerationPrompt(shot, generateAudio ?? false, videoModel ?? "",
+                                effectiveVisual?.style ?? globalStylePrompt, effectiveVisual?.lighting ?? "")}
                             tabMode={shot.tabMode}
                             videoMode={shot.videoMode}
                             scriptId={currentProjectId ?? ""}
                             frameId={shot.id}
-                            shotOverrides={{ style: shot.stylePromptOverride || globalStylePrompt, lighting: shot.lightingOverride || "" }}
+                            shotOverrides={{ style: shot.stylePromptOverride || effectiveVisual?.style || globalStylePrompt,
+                                lighting: shot.lightingOverride || effectiveVisual?.lighting || "" }}
                             slots={r2vSlots}
                             imageUrls={polishImageUrls}
+                            onBeforePreview={onMicroExpressionBeforePreview}
                             onApply={(text) => onUpdatePrompt(text, true)}
                         />
                         {currentProjectId && <MicroExpressionPanel
@@ -936,7 +954,7 @@ export default function ShotCard({
                             onBeforePreview={onMicroExpressionBeforePreview}
                             onApplied={onMicroExpressionApplied}
                         />}
-                        {currentProjectId && <CameraMovementPanel
+                        {currentProjectId && shot.cameraMovementCandidate && <CameraMovementPanel
                             projectId={currentProjectId}
                             frameId={shot.id}
                             current={shot.cameraMovementStructured ?? null}
@@ -1031,7 +1049,7 @@ export default function ShotCard({
                                         <textarea
                                             value={shot.stylePromptOverride ?? ""}
                                             onChange={(event) => onUpdateField("stylePromptOverride", event.target.value)}
-                                            placeholder={globalStylePrompt || t("shotStylePlaceholder")}
+                                            placeholder={effectiveVisual?.style || globalStylePrompt || t("shotStylePlaceholder")}
                                             rows={2}
                                             className="w-full resize-y rounded-md border border-glass-border bg-surface-inset px-2.5 py-2 text-[0.75rem] leading-relaxed text-foreground placeholder:text-text-muted focus:border-primary/50 focus:outline-none focus:ring-1 focus:ring-primary/30"
                                         />
@@ -1043,7 +1061,7 @@ export default function ShotCard({
                                         <textarea
                                             value={shot.lightingOverride ?? ""}
                                             onChange={(event) => onUpdateField("lightingOverride", event.target.value)}
-                                            placeholder={t("shotLightingPlaceholder")}
+                                            placeholder={effectiveVisual?.lighting || t("shotLightingPlaceholder")}
                                             rows={2}
                                             className="w-full resize-y rounded-md border border-glass-border bg-surface-inset px-2.5 py-2 text-[0.75rem] leading-relaxed text-foreground placeholder:text-text-muted focus:border-primary/50 focus:outline-none focus:ring-1 focus:ring-primary/30"
                                         />
@@ -1066,6 +1084,16 @@ export default function ShotCard({
                                 </div>
                             ) : null}
                         </div>
+
+                        {currentProjectId && <ShotFieldPanel
+                            projectId={currentProjectId}
+                            frameId={shot.id}
+                            initialCandidate={shot.shotFieldCandidate ?? null}
+                            effectiveFields={effectiveFields}
+                            optimized={!!shot.promptIsOptimized}
+                            onBeforePreview={onMicroExpressionBeforePreview}
+                            onApplied={onMicroExpressionApplied}
+                        />}
 
                         {/* Dialogue text display (read-only — editing via 配音工作台 modal) */}
                         {shot.dialogueStructured?.line && (

@@ -957,6 +957,7 @@ export const api = {
         directorSnapshotMediaId?: string,
         lastFrameUrl?: string,
         lastFrameMediaId?: string,
+        visualSourceHash?: string,
     ) => {
         const res = await axios.post(`${API_URL}/projects/${id}/video_tasks`, {
             image_url,
@@ -990,6 +991,7 @@ export const api = {
             director_snapshot_media_id: directorSnapshotMediaId,
             last_frame_url: lastFrameUrl,
             last_frame_media_id: lastFrameMediaId,
+            visual_source_hash: visualSourceHash,
         });
         return res.data;
     },
@@ -1074,6 +1076,7 @@ export const api = {
                 continuity_status: "confirmed" | "unresolved";
                 scene_design_revision: number | null; plan_revision: number | null;
                 style_hash: string; model: string;
+                visual_source_hash: string;
                 fields: Record<string, { value: unknown; source_kind: string; source_id: string | null; source_revision: number | null; status: string }>;
                 reference: { source_variant_id: string | null; source_design_revision: number | null; selected_fields: string[] } | null;
             }>;
@@ -2433,6 +2436,27 @@ export const api = {
 
     applyCameraMovement: async (scriptId: string, frameId: string, candidateId: string) => {
         const response = await axios.post(`${API_URL}/projects/${scriptId}/frames/${frameId}/camera-movement/apply`, { candidate_id: candidateId });
+        return response.data;
+    },
+
+    previewShotFields: async (scriptId: string, frameId: string) => {
+        const response = await axios.post(`${API_URL}/projects/${scriptId}/frames/${frameId}/shot-fields/preview`, { frame_id: frameId });
+        return response.data as { messages: { system: string; user: string }; review_token: string; input: Record<string, unknown> };
+    },
+
+    generateShotFields: async (scriptId: string, frameId: string,
+        review: { messages: { system: string; user: string }; review_token: string }) => {
+        const response = await axios.post(`${API_URL}/projects/${scriptId}/frames/${frameId}/shot-fields/generate`, {
+            frame_id: frameId, reviewed_messages: review.messages, review_token: review.review_token,
+        });
+        return response.data as { id: string; fields: Record<string, unknown>; rationale: Record<string, string>;
+            source_refs: Record<string, string[]>; uncertainties: string[] };
+    },
+
+    applyShotFields: async (scriptId: string, frameId: string, candidateId: string, selectedFields: string[]) => {
+        const response = await axios.post(`${API_URL}/projects/${scriptId}/frames/${frameId}/shot-fields/apply`, {
+            candidate_id: candidateId, selected_fields: selectedFields,
+        });
         return response.data;
     },
 

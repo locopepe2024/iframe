@@ -785,7 +785,25 @@ class ComicGenPipeline(StudioOwnerMixin):
             raise ValueError("Script not found")
         series = self.series_store.get(script.series_id) if script.series_id else None
         model_name = series.model_settings.i2i_model if series else script.model_settings.i2i_model
-        return build_continuity_sheet(script, self.resolve_project_assets(script)["scenes"], model_name=model_name)
+        sheet = build_continuity_sheet(script, self.resolve_project_assets(script)["scenes"], model_name=model_name)
+        frames = {frame.id: frame for frame in script.frames}
+        for row in sheet["rows"]:
+            row["visual_source_hash"] = self._workbench_visual_source_hash(script, frames[row["frame_id"]], row)
+        return sheet
+
+    def _workbench_visual_source_hash(self, script: Script, frame: StoryboardFrame,
+                                      row: Optional[Dict[str, Any]] = None) -> str:
+        if row is None:
+            row = next(item for item in self.storyboard_continuity_sheet(script.id)["rows"]
+                       if item["frame_id"] == frame.id)
+        payload = {
+            "fields": row["fields"], "scene_design_revision": row["scene_design_revision"],
+            "style_hash": row["style_hash"], "reference": row["reference"],
+            "camera_movement_structured": frame.camera_movement_structured.model_dump(mode="json")
+            if hasattr(frame.camera_movement_structured, "model_dump") else frame.camera_movement_structured,
+            "negative_prompt_override": frame.negative_prompt_override,
+        }
+        return hashlib.sha256(json.dumps(payload, sort_keys=True, ensure_ascii=False, default=str).encode()).hexdigest()
 
     def save_shot_visual_preset(
         self,
@@ -7000,16 +7018,8 @@ class ComicGenPipeline(StudioOwnerMixin):
         if kwargs.get('shot_size') is not None:
             frame.shot_size = kwargs['shot_size']
         if kwargs.get('camera_movement_description') is not None:
-            if frame.camera_movement_structured:
-                frame.camera_movement_structured.description = kwargs['camera_movement_description']
-                frame.camera_movement_structured.primary = kwargs['camera_movement_description']
-            else:
-                from .models import CameraMovementData
-                frame.camera_movement_structured = CameraMovementData(
-                    primary=kwargs['camera_movement_description'],
-                    speed="normal",
-                    description=kwargs['camera_movement_description'],
-                )
+            from .camera_movement_input import movement_from_editor
+            frame.camera_movement_structured = movement_from_editor(kwargs['camera_movement_description'])
         if kwargs.get('transition_hint') is not None:
             frame.transition_hint = kwargs['transition_hint']
         if kwargs.get('style_prompt_override') is not None:
@@ -7030,6 +7040,13 @@ class ComicGenPipeline(StudioOwnerMixin):
             frame.reference_package.asset_revision_pins = []
             frame.reference_package.revision += 1
             frame.reference_package.updated_at = time.time()
+
+        if frame.workbench_prompt_is_optimized and (kwargs.get("action_description") is not None
+                                                  or kwargs.get("style_prompt_override") is not None
+                                                  or kwargs.get("lighting_override") is not None):
+            frame.workbench_visual_source_hash = self._workbench_visual_source_hash(script, frame)
+        elif kwargs.get("workbench_prompt_is_optimized") is False:
+            frame.workbench_visual_source_hash = None
         
         self._save_data()
         return script
@@ -7854,6 +7871,10 @@ class ComicGenPipeline(StudioOwnerMixin):
         script = self.get_script(script_id)
         if not script:
             raise ValueError("Script not found")
+        frame = next((item for item in script.frames if item.id == frame_id), None) if frame_id else None
+        if (frame and frame.workbench_prompt_is_optimized and frame.workbench_visual_source_hash
+                and frame.workbench_visual_source_hash != self._workbench_visual_source_hash(script, frame)):
+            raise ValueError("Full optimized prompt is stale; review the current shot fields and optimize again")
         
         task_id = str(uuid.uuid4())
         

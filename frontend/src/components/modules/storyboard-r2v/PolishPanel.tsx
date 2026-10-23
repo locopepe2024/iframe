@@ -79,6 +79,7 @@ interface PolishPanelProps {
      *  pure text-only polish (back-compat for shots with no frame). */
     imageUrls?: string[];
     targetRatio?: string;
+    onBeforePreview?: () => Promise<void> | void;
     onApply: (text: string) => void;
 }
 
@@ -137,6 +138,7 @@ export default function PolishPanel({
     slots = [],
     imageUrls = [],
     targetRatio = "16:9",
+    onBeforePreview,
     onApply,
 }: PolishPanelProps) {
     const t = useTranslations("storyboardR2V");
@@ -200,6 +202,7 @@ export default function PolishPanel({
         // 成功后再 setPolished 覆盖。
 
         try {
+            await onBeforePreview?.();
             const res = await requestPolish(draft, prevCn, feedbackText);
             if (res?.messages?.user && res?.review_token) {
                 setReview({ ...res, draft, prevCn, feedbackText, sourceSignature, targetModel });
@@ -224,7 +227,7 @@ export default function PolishPanel({
         } finally {
             setIsPolishing(false);
         }
-    }, [sourceSignature, polished?.en, polished?.cn, prompt, optimizationDraft]);
+    }, [sourceSignature, polished?.en, polished?.cn, prompt, optimizationDraft, onBeforePreview]);
 
     const confirmPolish = async () => {
         if (!review) return;

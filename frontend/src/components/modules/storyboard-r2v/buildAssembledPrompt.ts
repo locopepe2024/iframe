@@ -93,6 +93,7 @@ export function buildAssembledPrompt(
     shot: ShotNode,
     preserveReferences = false,
     globalStylePrompt = "",
+    inheritedLighting = "",
 ): string {
     let base = (shot.prompt || "").trim();
 
@@ -108,7 +109,7 @@ export function buildAssembledPrompt(
     const prefix = resolveStylePrompt(
         globalStylePrompt,
         shot.stylePromptOverride,
-        shot.lightingOverride,
+        shot.lightingOverride || inheritedLighting,
     );
     const suffixes: string[] = [];
 
@@ -157,6 +158,7 @@ export function buildGenerationPrompt(
     generateAudio: boolean,
     modelId: string,
     globalStylePrompt = "",
+    inheritedLighting = "",
 ): string {
     if (shot.promptIsOptimized) {
         const base = shot.prompt.trim();
@@ -164,7 +166,7 @@ export function buildGenerationPrompt(
         return [base, ...accepted].filter(Boolean).join("，");
     }
     // An accepted optimizer result is already a complete provider prompt.
-    let prompt = buildAssembledPrompt(shot, true, globalStylePrompt);
+    let prompt = buildAssembledPrompt(shot, true, globalStylePrompt, inheritedLighting);
     const line = shot.dialogueStructured?.line?.trim();
     if (!generateAudio || !line) return prompt;
     const speaker = shot.dialogueStructured?.speaker?.trim() || "Speaker";

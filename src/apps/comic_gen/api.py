@@ -4175,6 +4175,161 @@ class CameraMovementApplyRequest(BaseModel):
     candidate_id: str
 
 
+class ShotFieldRequest(BaseModel):
+    frame_id: str
+    reviewed_messages: Optional[Dict[str, str]] = None
+    review_token: Optional[str] = None
+
+
+class ShotFieldApplyRequest(BaseModel):
+    candidate_id: str
+    selected_fields: List[str]
+
+
+def _shot_field_review(script_id: str, frame_id: str, user: UserContext) -> Dict[str, Any]:
+    from ..agent_skills import catalog as skill_catalog
+    script = pipeline.get_script(script_id, user.owner_profile_id)
+    if not script:
+        raise HTTPException(status_code=404, detail="Script not found")
+    frame = next((item for item in script.frames if item.id == frame_id), None)
+    if frame is None:
+        raise HTTPException(status_code=404, detail="Frame not found")
+    rows = pipeline.storyboard_continuity_sheet(script_id)["rows"]
+    row_index = next(index for index, item in enumerate(rows) if item["frame_id"] == frame_id)
+    row = rows[row_index]
+    following = rows[row_index + 1] if row_index + 1 < len(rows) else None
+    relationship = "unresolved"
+    if following and row["time_continuity_id"] and following["time_continuity_id"]:
+        if row["time_continuity_id"] != following["time_continuity_id"]:
+            relationship = "different_time"
+        elif row["place_continuity_id"] and following["place_continuity_id"]:
+            relationship = ("same_place_time" if row["place_continuity_id"] == following["place_continuity_id"]
+                            else "same_time_different_place")
+    movement = frame.camera_movement_structured
+    current = {
+        "duration": frame.duration, "shot_size": frame.shot_size,
+        "camera_angle": frame.camera_angle,
+        "camera_movement_structured": movement.model_dump(mode="json") if hasattr(movement, "model_dump") else movement,
+        "transition_hint": frame.transition_hint,
+        "style_prompt_override": frame.style_prompt_override or None,
+        "lighting_override": frame.lighting_override or None,
+    }
+    visual_keys = ("style", "story_time", "daylight_phase", "weather", "shadow_direction",
+                   "key_source", "ambient_lighting", "color_tone", "contrast", "practical_sources",
+                   "direction", "quality", "color_temp", "lighting_override")
+    effective_visual = {
+        key: {"value": row["fields"][key]["value"],
+              "source": row["fields"][key]["source_kind"],
+              "revision": row["fields"][key]["source_revision"]}
+        for key in visual_keys if key in row["fields"]
+    }
+    payload = {
+        "current_action": frame.action_description or "",
+        "fields": current,
+        "effective_visual": effective_visual,
+        "scene": row["scene_name"] or "",
+        "next_shot": {"scene": following["scene_name"] or "", "relationship": relationship}
+        if following else None,
+        "continuity": {"status": row["continuity_status"],
+                       "reference_fields": row["reference"]["selected_fields"] if row["reference"] else []},
+    }
+    skill = next(item for item in skill_catalog() if item["id"] == "shot-field-continuity")
+    system = skill["instructions"]
+    messages = {"system": system, "user": json.dumps(payload, ensure_ascii=False)}
+    source = {
+        "frame": frame.model_dump(exclude={"shot_field_candidate", "updated_at", "assembled_prompt"}, mode="json"),
+        "row": row, "messages": messages, "skill_revision": skill["revision"],
+    }
+    token = hashlib.sha256(json.dumps(source, sort_keys=True, ensure_ascii=False, default=str).encode()).hexdigest()
+    return {"messages": messages, "review_token": token, "input": payload}
+
+
+@app.post("/projects/{script_id}/frames/{frame_id}/shot-fields/preview")
+def preview_shot_fields(script_id: str, frame_id: str, request: ShotFieldRequest,
+                        user: UserContext = Depends(require_studio_user)):
+    if request.frame_id != frame_id:
+        raise HTTPException(status_code=422, detail="Frame ID mismatch")
+    return _shot_field_review(script_id, frame_id, user)
+
+
+@app.post("/projects/{script_id}/frames/{frame_id}/shot-fields/generate")
+def generate_shot_fields(script_id: str, frame_id: str, request: ShotFieldRequest,
+                         user: UserContext = Depends(require_studio_user)):
+    if request.frame_id != frame_id:
+        raise HTTPException(status_code=422, detail="Frame ID mismatch")
+    review = _shot_field_review(script_id, frame_id, user)
+    if request.review_token != review["review_token"] or request.reviewed_messages != review["messages"]:
+        raise HTTPException(status_code=409, detail="请先审核并确认当前镜头字段输入")
+    try:
+        from .shot_field_optimization import validate_shot_field_payload
+        content = pipeline.script_processor.llm.chat(
+            messages=[{"role": "system", "content": review["messages"]["system"]},
+                      {"role": "user", "content": review["messages"]["user"]}],
+            response_format={"type": "json_object"}, timeout_seconds=300, max_retries=1,
+        )
+        proposal = validate_shot_field_payload(json.loads(content or ""))
+        if "transition_hint" in proposal.fields and review["input"]["next_shot"] is None:
+            raise ValueError("Last shot has no transition target")
+        def supplied_path(ref: str) -> bool:
+            value: Any = review["input"]
+            for key in ref.split("."):
+                if not isinstance(value, dict) or key not in value:
+                    return False
+                value = value[key]
+            return value is not None and value != ""
+
+        if any(not supplied_path(ref) for refs in proposal.source_refs.values() for ref in refs):
+            raise ValueError("Shot field source is not in current input")
+        if _shot_field_review(script_id, frame_id, user)["review_token"] != review["review_token"]:
+            raise HTTPException(status_code=409, detail="镜头或场景已变化，请重新预览")
+        if not proposal.fields:
+            return {"id": "", **proposal.model_dump(mode="json")}
+        frame = next(item for item in pipeline.get_script(script_id, user.owner_profile_id).frames if item.id == frame_id)
+        frame.shot_field_candidate = {"id": str(uuid.uuid4()), "source_hash": review["review_token"],
+                                      **proposal.model_dump(mode="json")}
+        frame.updated_at = time.time()
+        pipeline._save_data()
+        return frame.shot_field_candidate
+    except HTTPException:
+        raise
+    except (json.JSONDecodeError, ValueError) as exc:
+        raise HTTPException(status_code=502, detail="镜头字段候选未通过结构校验，请重试") from exc
+
+
+@app.post("/projects/{script_id}/frames/{frame_id}/shot-fields/apply", response_model=Script)
+def apply_shot_fields(script_id: str, frame_id: str, request: ShotFieldApplyRequest,
+                      user: UserContext = Depends(require_studio_user)):
+    script = pipeline.get_script(script_id, user.owner_profile_id)
+    if not script:
+        raise HTTPException(status_code=404, detail="Script not found")
+    frame = next((item for item in script.frames if item.id == frame_id), None)
+    if frame is None:
+        raise HTTPException(status_code=404, detail="Frame not found")
+    candidate = frame.shot_field_candidate or {}
+    if candidate.get("id") != request.candidate_id or candidate.get("source_hash") != _shot_field_review(script_id, frame_id, user)["review_token"]:
+        raise HTTPException(status_code=409, detail="镜头字段候选已过期")
+    if frame.workbench_prompt_is_optimized:
+        raise HTTPException(status_code=409, detail="完整优化稿需重新审核后才能应用镜头字段")
+    from .shot_field_optimization import validate_shot_field_payload
+    from .prompt_assembly import assemble_prompt
+    proposal = validate_shot_field_payload({key: candidate[key] for key in ("fields", "rationale", "source_refs", "uncertainties")})
+    selected = request.selected_fields
+    if not selected or len(set(selected)) != len(selected) or set(selected) - set(proposal.fields):
+        raise HTTPException(status_code=422, detail="请选择有效的镜头字段")
+    proposed = frame.model_copy(deep=True)
+    for key in selected:
+        setattr(proposed, key, proposal.fields[key])
+    proposed = StoryboardFrame.model_validate(proposed.model_dump(mode="json"))
+    assembled = assemble_prompt(proposed, pipeline.resolve_project_assets(script)["characters"])
+    for key in selected:
+        setattr(frame, key, getattr(proposed, key))
+    frame.assembled_prompt = assembled
+    frame.shot_field_candidate = None
+    frame.updated_at = time.time()
+    pipeline._save_data()
+    return signed_response(script)
+
+
 @app.post("/projects/{script_id}/frames/{frame_id}/camera-movement/apply", response_model=Script)
 def apply_camera_movement(script_id: str, frame_id: str, request: CameraMovementApplyRequest,
                           user: UserContext = Depends(require_studio_user)):
@@ -4434,6 +4589,7 @@ class CreateVideoTaskRequest(BaseModel):
     last_frame_media_id: Optional[str] = None
     prompt: str
     frame_id: Optional[str] = None
+    visual_source_hash: Optional[str] = None
     duration: int = 5
     seed: Optional[int] = None
     resolution: str = "720p"
@@ -4689,6 +4845,14 @@ def cancel_video_task(script_id: str, task_id: str):
 @app.post("/projects/{script_id}/video_tasks", response_model=List[VideoTask])
 def create_video_task(script_id: str, request: CreateVideoTaskRequest, background_tasks: BackgroundTasks):
     """Creates new video generation tasks."""
+    if request.visual_source_hash:
+        try:
+            row = next(item for item in pipeline.storyboard_continuity_sheet(script_id)["rows"]
+                       if item["frame_id"] == request.frame_id)
+        except (ValueError, StopIteration):
+            raise HTTPException(status_code=404, detail="Shot not found")
+        if row["visual_source_hash"] != request.visual_source_hash:
+            raise HTTPException(status_code=409, detail="Shot visual sources changed; review video input again")
     try:
         tasks = []
         for _ in range(request.batch_size):
@@ -7873,6 +8037,7 @@ def _compile_video_polish_review(request, reference_mode: bool) -> Dict[str, Any
     from .llm import DEFAULT_R2V_POLISH_PROMPT, DEFAULT_VIDEO_POLISH_PROMPT
     user = current_studio_user()
     frame_snapshot: Dict[str, Any] = {}
+    effective_shot_fields: Dict[str, Any] = {}
     if user is not None and request.script_id:
         script = pipeline.get_script(request.script_id, user.owner_profile_id)
         if not script:
@@ -7891,11 +8056,28 @@ def _compile_video_polish_review(request, reference_mode: bool) -> Dict[str, Any
                 key: value.model_dump() if hasattr(value, "model_dump") else value
                 for key, value in frame_snapshot.items()
             }
+            row = next((item for item in pipeline.storyboard_continuity_sheet(request.script_id)["rows"]
+                        if item["frame_id"] == request.frame_id), None)
+            if row:
+                keys = ("duration", "shot_size", "camera_angle", "camera_movement", "transition_hint",
+                        "style", "story_time", "daylight_phase", "weather", "shadow_direction",
+                        "key_source", "ambient_lighting", "color_tone", "contrast", "practical_sources",
+                        "direction", "quality", "color_temp", "lighting_override")
+                effective_shot_fields = {
+                    key: {"value": row["fields"][key]["value"],
+                          "source": row["fields"][key]["source_kind"],
+                          "revision": row["fields"][key]["source_revision"]}
+                    for key in keys if key in row["fields"]
+                }
     if not reference_mode and request.generation_mode == "first_last_frame" and (
         len(request.image_urls) != 2 or request.image_urls[0] == request.image_urls[1]
     ):
         raise HTTPException(422, "首尾帧润色需要两张不同的已选图片")
     custom = _get_custom_prompt(request.script_id, "r2v_polish" if reference_mode else "video_polish")
+    if effective_shot_fields:
+        custom = "\n\n".join(filter(None, [custom,
+            "ACCEPTED SHOT FIELDS AND VISUAL CONTINUITY (preserve these values; do not rewrite them):\n"
+            + json.dumps(effective_shot_fields, ensure_ascii=False, sort_keys=True)]))
     director = _get_director_prompt_context(request.script_id, request.frame_id, request.shot_overrides)
     if director:
         custom = "\n\n".join(filter(None, [custom, "CURRENT SHOT CONTEXT (editable overrides replace planned shot settings; matching continuity baseline is background):\n" + director]))
@@ -7925,7 +8107,8 @@ def _compile_video_polish_review(request, reference_mode: bool) -> Dict[str, Any
     labels = (["首帧 0.00 秒", "尾帧 结束时"] if getattr(request, "generation_mode", "") == "first_last_frame" else [f"参考图 {i + 1}" for i in range(len(request.image_urls))])
     media = [{"label": labels[i], "url": url} for i, url in enumerate(request.image_urls)]
     source = request.model_dump(exclude={"reviewed_messages", "review_token"})
-    token = hashlib.sha256(json.dumps({"source": source, "frame": frame_snapshot, "compiled": messages},
+    token = hashlib.sha256(json.dumps({"source": source, "frame": frame_snapshot,
+                                      "effective_shot_fields": effective_shot_fields, "compiled": messages},
                                       sort_keys=True, ensure_ascii=False, default=str).encode()).hexdigest()
     format_note = (
         "MiniMax Context IR 按所选模型的原生结构生成；这里展示送入 IR 的完整文字。"

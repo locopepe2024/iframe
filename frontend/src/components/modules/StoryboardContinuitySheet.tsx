@@ -14,6 +14,7 @@ const FIELD_LABELS: Record<string, string> = {
     location: "地点", reference_viewpoint: "空间视角", reference_framing: "空间取景",
     shot_size: "景别", camera_angle: "机位", composition: "构图", camera_movement: "运镜",
     lighting_override: "局部光覆盖", style: "风格", aspect_ratio: "画幅",
+    duration: "时长", transition_hint: "转场",
 };
 const SOURCE_LABELS: Record<string, string> = {
     scene_asset: "场景资产", scene_design: "场景设计", plan_scene: "拍摄计划场景",

@@ -66,6 +66,19 @@ it("shows editable compiled input and waits for confirmation before optimization
     expect(vi.mocked(api.polishVideoPrompt).mock.calls[0][0]).toBe("原始镜头；黄昏光影；远景");
 });
 
+it("flushes pending shot edits before compiling model input", async () => {
+    const sequence: string[] = [];
+    vi.mocked(api.polishVideoPrompt).mockImplementation(async () => {
+        sequence.push("preview");
+        return { messages: { system: "current", user: "shot" }, media: [], review_token: "token", format_note: "" } as any;
+    });
+    render(<PolishPanel prompt="镜头" tabMode="t2i_i2v" scriptId="project"
+        onBeforePreview={async () => { sequence.push("flush"); }} onApply={vi.fn()} />);
+    fireEvent.click(screen.getByTitle("查看并确认模型输入"));
+    await screen.findByText("提交前检查模型输入");
+    expect(sequence).toEqual(["flush", "preview"]);
+});
+
 it("rejects confirmation after the shot lighting changes", async () => {
     vi.mocked(api.polishVideoPrompt).mockResolvedValue({ messages: { system: "old light", user: "action" }, media: [], review_token: "token", format_note: "" } as any);
     const { rerender } = render(<PolishPanel prompt="action" tabMode="t2i_i2v" scriptId="project" shotOverrides={{ style: "", lighting: "old light" }} onApply={vi.fn()} />);
