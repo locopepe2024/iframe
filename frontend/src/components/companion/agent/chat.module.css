@@ -55,6 +55,17 @@
 .muted { color: var(--muted); }
 .management { max-height: 35dvh; overflow: auto; flex-shrink: 0; margin-bottom: .5rem; }
 .shell aside { max-height: 25dvh; overflow: auto; margin: .5rem 0; flex-shrink: 0; }
-@media (max-width: 36rem) { .albumButton span { display: none; } }
+ .videoImage { display: block; width: 100%; max-height: 60dvh; object-fit: contain; border-radius: .6rem; }
+@media (max-width: 36rem) { .shell .albumButton { flex-direction: column; gap: 0; } }
 @media (max-width: 24rem) { .shell { padding: 0 .6rem; } .inputPanel { padding: .5rem; } .toolbar { gap: .35rem; } .composerActions { gap: .35rem; } .shell .voiceButton { min-width: 52px; flex-direction: column; gap: 0; font-size: .85em; } }
 @media (max-height: 480px) { .composer { max-height: none; overflow: visible; } .shell { height: auto; min-height: 100dvh; overflow: visible; } .stream { overflow: visible; } }
+
+.attachmentDraft { padding: .5rem; margin-bottom: .6rem; border: 1px solid var(--line); border-radius: 1rem; }
+.shell .attachmentDraft h2 { font-size: 1em; margin: 0 0 .5rem; }
+.attachmentGrid { display: grid; grid-template-columns: repeat(auto-fit,minmax(min(100%,12rem),1fr)); gap: .6rem; }
+.attachmentItem { min-width: 0; padding: .5rem; border: 1px solid var(--line); border-radius: .7rem; }
+.attachmentItem p { margin: .3rem 0; }
+.attachmentItem span { font-size: .85em; }
+.attachmentCover { max-width: 8rem; }
+.mediaScope { font-size: .9em; padding: .5rem; }
+.mediaScope p { margin: 0 0 .4rem; }

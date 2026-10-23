@@ -5,7 +5,10 @@ import styles from "../photos/photos.module.css";
 import chatStyles from "./chat.module.css";
 import PhotoConversationCard from "../PhotoConversationCard";
 import TodayPlanCards from "./TodayPlanCards";
-import { photoApi, type AlbumPhoto } from "@/lib/photoApi";
+import AttachmentDraft from "./AttachmentDraft";
+import AlbumPicker from "./AlbumPicker";
+import MediaUpload, { type UploadedMedia } from "./MediaUpload";
+import VideoConversationCard from "./VideoConversationCard";
 import CompanionComposer, { type ComposerMode } from "./CompanionComposer";
 import GenerationGuide, { createGenerationDraft, type GenerationDraft, type MediaMode } from "./GenerationGuide";
 
@@ -32,21 +35,26 @@ export default function AgentChat() {
   const confirmOperation = useRef<{ token: string; id: string } | null>(null);
   const [draft, setDraft] = useState<string | null>(null);
   const [hasRetry, setHasRetry] = useState(false);
-  const [recentPhotos, setRecentPhotos] = useState<AlbumPhoto[] | null>(null);
-  const [photoAnchor, setPhotoAnchor] = useState(0);
+  const [albumOpen,setAlbumOpen] = useState(false);
+  const [uploading,setUploading] = useState(false);
+  const [pendingMedia,setPendingMedia] = useState<Record<ComposerMode,UploadedMedia[]>>({chat:[],image:[],video:[]});
+  const [mediaAcknowledged,setMediaAcknowledged] = useState(false);
+  const [uploadFiles,setUploadFiles] = useState<File[]>([]);
+  const [attached,setAttached] = useState<(UploadedMedia & { anchor: number })[]>([]);
+  const fileRef = useRef<HTMLInputElement>(null);
   const streamRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const updateDraft = (value: string) => {
     setDrafts(old => ({ ...old, [mode]: value }));
     if (mode !== "chat") setGuides(old => ({ ...old, [mode]: null }));
   };
-  const inputDisabled = busy || hasRetry;
+  const inputDisabled = busy || hasRetry || uploading;
   function fillChat(value: string) { setMode("chat"); setDrafts(old => ({ ...old, chat: value })); inputRef.current?.focus(); }
   function updateGuide(value: GenerationDraft | null) { if (mode !== "chat") setGuides(old => ({ ...old, [mode]: value })); }
   useEffect(() => {
     const node = streamRef.current;
-    if (node) node.scrollTop = !messages.length && !turn && !guide && !recentPhotos ? 0 : node.scrollHeight;
-  }, [turn, recentPhotos, busy, guide, mode]);
+    if (node) node.scrollTop = !messages.length && !turn && !guide && !albumOpen && !uploadFiles.length && !attached.length ? 0 : node.scrollHeight;
+  }, [turn, busy, guide, mode, albumOpen, uploadFiles, attached]);
   async function run(action: () => Promise<void>) {
     if (locked.current) return;
     locked.current = true; setBusy(true); setError("");
@@ -75,7 +83,7 @@ export default function AgentChat() {
     const result = await companionApi.session(sessionOperation.current);
     localStorage.setItem(sessionKey, result.session_id); localStorage.removeItem(turnKey);
     sessionOperation.current = ""; sendOperation.current = null; setHasRetry(false);
-    setMenu(false); setRecentPhotos(null); setSession(result.session_id); setMessages([]); setAfter(null); setTurn(null); setPreview(null); setDraft(null); setDrafts({ chat: "", image: "", video: "" }); setGuides({ image: null, video: null }); setMode("chat"); setNotice("已开始新的聊天。");
+    setMenu(false); setAlbumOpen(false); setUploadFiles([]); setAttached([]); setPendingMedia({chat:[],image:[],video:[]}); setMediaAcknowledged(false); setSession(result.session_id); setMessages([]); setAfter(null); setTurn(null); setPreview(null); setDraft(null); setDrafts({ chat: "", image: "", video: "" }); setGuides({ image: null, video: null }); setMode("chat"); setNotice("已开始新的聊天。");
   }
   async function send(retry = false) {
     if (!sendOperation.current || !retry) sendOperation.current = { operation_id: crypto.randomUUID(), text, allow_external_text: true };
@@ -85,20 +93,43 @@ export default function AgentChat() {
     if (!session) { sessionOperation.current = ""; setSession(activeSession); localStorage.setItem(sessionKey, activeSession); }
     const result = await companionApi.chat(activeSession, sendOperation.current);
     localStorage.setItem(turnKey, result.turn_id);
-    if (alive.current) { setDraft(null); setTurn(result); setPreview(result.result?.kind === "confirmation" ? result.result : null); setDrafts(old => ({ ...old, chat: "" })); sendOperation.current = null; setHasRetry(false); }
+    if (alive.current) { setDraft(null); setTurn(result); setPreview(result.result?.kind === "confirmation" ? result.result : null); setDrafts(old => ({ ...old, chat: "" })); sendOperation.current = null; setHasRetry(false);
+      commitAttachments();
+    }
     await history(activeSession);
   }
   async function memories(search: string, cursor = "") {
     const value = await companionApi.tool<MemoryPage>(search ? "memory.search" : "memory.list", { ...(search ? { query: search } : {}), cursor, limit: 20 });
     setPage(old => cursor ? { ...value, memories: [...(old?.memories ?? []), ...value.memories] } : value); setAppliedQuery(search);
   }
-  async function loadRecentPhotos() {
-    const result = await photoApi.list("all", "", "", "");
-    if (alive.current) { setRecentPhotos(result.photos.slice(0, 6)); setPhotoAnchor(messages.length); }
+  function attach(media: UploadedMedia) {
+    setPendingMedia(old => ({ ...old, [mode]: old[mode].some(item => item.id === media.id) ? old[mode] : [...old[mode], media] }));
+    setMediaAcknowledged(false);
+  }
+  function commitAttachments() {
+    const items = pendingMedia.chat;
+    setAttached(old => [...old, ...items.map(item => ({ ...item, anchor: messages.length }))]);
+    setPendingMedia(old => ({ ...old, chat: [] }));
+    setMediaAcknowledged(false);
+  }
+  function renderAttached(anchor: number) {
+    return attached.filter(item => item.anchor === anchor).map((item,index) => item.kind === "photo" ? <PhotoConversationCard key={`${item.id}-${index}`} photoId={item.id} label={item.name} /> : <VideoConversationCard key={`${item.id}-${index}`} id={item.id} name={item.name} />);
   }
   function submit() {
-    if (mode === "chat") void run(() => send());
-    else { updateGuide(createGenerationDraft(mode, text.trim())); setNotice(""); }
+    if (inputDisabled || pending) return;
+    if (mode === "chat") {
+      if (text.trim()) {
+        if (!allowed || (pendingMedia.chat.length && !mediaAcknowledged)) return;
+        void run(() => send());
+      } else if (pendingMedia.chat.length) {
+        commitAttachments(); setNotice("素材已加入本页对话，未发送给助手。刷新后可从相册重新选择。");
+      }
+    } else {
+      const items = pendingMedia[mode];
+      if (!text.trim()) {setNotice("先描述想创作什么，再继续。");return;}
+      if (items.length > 1 || items.some(item => item.kind !== "photo")) {setNotice("本次创作支持一张参考照片，请先移除多余素材或视频。");return;}
+      updateGuide({ ...createGenerationDraft(mode, text.trim()), reference: items[0]?.id ?? null, step: items.length ? "parameters" : "reference" }); setNotice("");
+    }
   }
   const activePreview = preview ?? (turn?.result?.kind === "confirmation" ? turn.result : null);
   const pending = activePreview?.status === "pending_confirmation";
@@ -111,11 +142,11 @@ export default function AgentChat() {
     <header className={chatStyles.header}><h1>聊天</h1><button type="button" aria-expanded={menu} onClick={() => setMenu(!menu)}>更多</button></header>
     {menu && <aside className={styles.panel} aria-label="聊天管理">
       <a href={`${prefix}/companion/photos`}>生活相册</a>
-      <button disabled={busy || pending} onClick={() => void run(newSession)}>新建会话</button>
+      <button disabled={inputDisabled || pending} onClick={() => void run(newSession)}>新建会话</button>
       <p className={styles.note}>聊天内容会保留，可继续查看历史消息。</p>
     </aside>}
     <div ref={streamRef} className={chatStyles.stream} role="region" aria-label="聊天内容">
-    <div hidden={mode !== "chat"}><TodayPlanCards disabled={inputDisabled || pending} onPhotos={() => void run(loadRecentPhotos)} onDiary={() => {
+    <div hidden={mode !== "chat"}><TodayPlanCards disabled={inputDisabled || pending} onPhotos={() => setAlbumOpen(true)} onDiary={() => {
       if (!drafts.chat.trim()) fillChat("请把我们今天聊的内容整理成一篇回忆日记");
       else { setNotice("输入框里还有未发送的话，先聊完这段，再一起记录今天。"); inputRef.current?.focus(); }
     }} /></div>
@@ -126,7 +157,7 @@ export default function AgentChat() {
         <button type="button" className={styles.guideCard} disabled={busy || pending || hasRetry} onClick={() => { fillChat("聊聊今天发生的事情"); }}>
           <strong>聊聊今天</strong><span>说说今天的生活</span>
         </button>
-        <button type="button" className={styles.guideCard} disabled={busy || pending || hasRetry} onClick={() => { void run(loadRecentPhotos); }}>
+        <button type="button" className={styles.guideCard} disabled={busy || pending || hasRetry} onClick={() => { setAlbumOpen(true); }}>
           <strong>讲讲一张照片</strong><span>在这里看看照片</span>
         </button>
         <button type="button" className={styles.guideCard} disabled={busy || pending || hasRetry} onClick={() => { fillChat("请把我们今天聊的内容整理成一篇回忆日记"); }}>
@@ -135,16 +166,19 @@ export default function AgentChat() {
       </div>
     </section>}
     <section aria-label="会话消息">
-      {recentPhotos && photoAnchor === 0 && <section aria-label="相册照片">{!recentPhotos.length && <p>相册里还没有照片。</p>}{recentPhotos.map((photo, index) => <PhotoConversationCard key={photo.photo_id} photoId={photo.photo_id} label={`相册照片 ${index + 1}`} />)}</section>}
-      {messages.map((message, messageIndex) => <Fragment key={message.id}><div>
+      {renderAttached(0)}
+      {messages.map((message,index) => <Fragment key={message.id}><div>
         <article className={chatStyles.user}><span>我</span><p>{message.text}</p></article>
         {message.turn?.result?.kind === "text" && <article className={chatStyles.assistant}><span>陪伴助手</span><p>{message.turn.result.text}</p></article>}
-      </div>
-      {recentPhotos && photoAnchor === messageIndex + 1 && <section aria-label="相册照片">{!recentPhotos.length && <p>相册里还没有照片。</p>}{recentPhotos.map((photo, index) => <PhotoConversationCard key={photo.photo_id} photoId={photo.photo_id} label={`相册照片 ${index + 1}`} />)}</section>}
-      </Fragment>)}
+      </div>{renderAttached(index+1)}</Fragment>
+      )}
       {after !== null && <button disabled={busy} onClick={() => void run(() => history(session, after))}>更多历史消息</button>}
     </section>
     {turn?.result?.kind === "text" && !messages.some(m => m.turn?.turn_id === turn.turn_id) && <article className={chatStyles.assistant}><span>陪伴助手</span><p>{turn.result.text}</p></article>}
+    {uploadFiles.length > 0 && <MediaUpload files={uploadFiles} disabled={inputDisabled || pending} onUploaded={attach} onBusyChange={setUploading} onClose={() => setUploadFiles([])} />}
+    {albumOpen && <AlbumPicker disabled={inputDisabled || pending} onClose={() => setAlbumOpen(false)} onPhoto={photo => {
+      attach({kind:"photo",id:photo.photo_id,name:"相册照片"});setAlbumOpen(false);
+    }} onVideo={video => {attach({kind:"video",id:video.video_id,name:video.name});setAlbumOpen(false);}} />}
     {mode !== "chat" && (guide ? <GenerationGuide key={mode} value={guide} disabled={inputDisabled || pending} onChange={updateGuide} onEdit={() => { updateGuide(null); inputRef.current?.focus(); }} onCancel={() => { updateGuide(null); setNotice("已取消创作，描述草稿仍保留。"); }} /> : <article className={chatStyles.assistant}><span>陪伴助手</span><p>{mode === "video" ? "想做一段什么视频？" : "想生成一张什么图片？"}在下面说说，点箭头后我们一步步来。</p></article>)}
     {busy && <p role="status">正在处理…</p>}
     {notice && <p role="status">{notice}</p>}{error && <p role="alert">{error}</p>}
@@ -188,9 +222,16 @@ export default function AgentChat() {
       {page?.next_cursor && <button disabled={busy || pending} onClick={() => void run(() => memories(appliedQuery, page.next_cursor!))}>更多个人记忆</button>}
     </section>
     </details>}
+    <input ref={fileRef} type="file" hidden accept="image/jpeg,image/png,image/webp,video/mp4,video/quicktime,video/webm,.mov" multiple aria-label="选择要上传的照片或视频" onChange={event => {
+      const files=Array.from(event.target.files ?? []);event.target.value="";
+      if(files.length>20){setNotice("每次最多选择 20 个文件，请重新选择。");return;}
+      if(files.length){setUploadFiles(files);setNotice("");}
+    }} />
     <CompanionComposer mode={mode} value={text} disabled={inputDisabled || pending} busy={busy} allowed={allowed} inputRef={inputRef}
-      onMode={setMode} onChange={updateDraft} onSend={submit} onAllow={setAllowed}
-      onAlbum={() => { if (mode === "chat") void run(loadRecentPhotos); else if (text.trim()) { updateGuide({ ...(guide ?? createGenerationDraft(mode, text.trim())), step: "reference" }); } else { setNotice("先说说想做什么，再选择参考照片。"); inputRef.current?.focus(); } }}
+      attachments={<AttachmentDraft items={pendingMedia[mode]} disabled={inputDisabled || pending} onRemove={id => {setPendingMedia(old => ({...old,[mode]:old[mode].filter(item=>item.id!==id)}));setMediaAcknowledged(false);}} />}
+      hasAttachments={pendingMedia[mode].length > 0} mediaAcknowledged={mediaAcknowledged} onMediaAcknowledged={setMediaAcknowledged}
+      onMode={next => {setMode(next);setAlbumOpen(false);setMediaAcknowledged(false);}} onChange={updateDraft} onSend={submit} onAllow={setAllowed}
+      onAlbum={() => setAlbumOpen(true)} onUpload={() => { if (uploadFiles.length) setNotice("请先完成或关闭当前上传。"); else fileRef.current?.click(); }}
       retry={hasRetry ? () => void run(() => send(true)) : null} />
   </main>;
 }

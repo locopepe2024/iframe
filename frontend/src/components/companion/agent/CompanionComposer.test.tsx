@@ -13,7 +13,7 @@ class FakeRecognition {
 const send=vi.fn();
 function Harness(){
   const [mode,setMode]=useState<ComposerMode>("chat"),[text,setText]=useState("原有草稿");
-  return <CompanionComposer mode={mode} value={text} disabled={false} busy={false} allowed inputRef={createRef()} onMode={setMode} onChange={setText} onSend={send} onAlbum={()=>{}} onAllow={()=>{}} retry={null}/>;
+  return <CompanionComposer mode={mode} value={text} disabled={false} busy={false} allowed inputRef={createRef()} onMode={setMode} onChange={setText} onSend={send} onAlbum={()=>{}} onUpload={()=>{}} onAllow={()=>{}} retry={null}/>;
 }
 beforeEach(()=>{send.mockReset();Object.defineProperty(window,"SpeechRecognition",{configurable:true,value:FakeRecognition});});
 afterEach(()=>{delete (window as Window & {SpeechRecognition?:unknown}).SpeechRecognition;});
@@ -38,4 +38,10 @@ it("adds final dictation text without sending and aborts capture on unmount",asy
   expect(send).not.toHaveBeenCalled();
   fireEvent.click(screen.getByRole("button",{name:"对话中"}));view.unmount();
   expect(recognition.abort).toHaveBeenCalledOnce();expect(recognition.onresult).toBeNull();
+});
+
+it("keeps upload and album as separately labeled actions",()=>{
+  const upload=vi.fn(),album=vi.fn();render(<CompanionComposer mode="chat" value="" disabled={false} busy={false} allowed inputRef={createRef()} onMode={()=>{}} onChange={()=>{}} onSend={()=>{}} onAlbum={album} onUpload={upload} onAllow={()=>{}} retry={null}/>);
+  fireEvent.click(screen.getByRole("button",{name:"上传"}));expect(upload).toHaveBeenCalledOnce();expect(album).not.toHaveBeenCalled();
+  fireEvent.click(screen.getByRole("button",{name:"相册"}));expect(album).toHaveBeenCalledOnce();
 });

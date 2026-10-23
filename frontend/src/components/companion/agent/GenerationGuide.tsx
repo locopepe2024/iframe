@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { photoApi, type AlbumPhoto } from "@/lib/photoApi";
+import { useState } from "react";
+import AlbumPicker from "./AlbumPicker";
 import PhotoImage from "../photos/PhotoImage";
 import styles from "./chat.module.css";
 
@@ -23,19 +23,7 @@ export default function GenerationGuide({ value, disabled, onChange, onEdit, onC
   value: GenerationDraft; disabled: boolean;
   onChange: (next: GenerationDraft) => void; onEdit: () => void; onCancel: () => void;
 }) {
-  const [photos, setPhotos] = useState<AlbumPhoto[] | null>(null);
-  const [loading, setLoading] = useState(false), [error, setError] = useState("");
-  const [attempt, setAttempt] = useState(0);
-  // Load only when the user explicitly opens the album selector.
-  useEffect(() => {
-    if (!attempt) return;
-    let active = true;
-    setLoading(true); setError("");
-    photoApi.list("all", "", "", "").then(result => { if (active) setPhotos(result.photos.slice(0, 6)); })
-      .catch(() => { if (active) setError("相册暂时没有打开，请重试。"); })
-      .finally(() => { if (active) setLoading(false); });
-    return () => { active = false; };
-  }, [attempt]);
+  const [album,setAlbum] = useState(false);
   const video = value.mode === "video";
   const set = (patch: Partial<GenerationDraft>) => onChange({ ...value, ...patch });
   const recommended = () => set({ setting: video ? "5 秒" : "方形 1:1", step: "review" });
@@ -46,12 +34,8 @@ export default function GenerationGuide({ value, disabled, onChange, onEdit, onC
         {value.step === "reference" ? <>
           <h2>需要参考一张照片吗？</h2>
           <p>从相册选择，或直接用文字创作。</p>
-          <button type="button" onClick={() => setAttempt(n => n + 1)} disabled={loading}>从相册添加</button>
-          {loading && <p role="status">正在打开相册…</p>}
-          {error && <p role="alert">{error}</p>}
-          {photos && <><div className={styles.referenceGrid}>{photos.map((photo, i) => <button type="button" key={photo.photo_id} aria-pressed={value.reference === photo.photo_id} onClick={() => set({ reference: photo.photo_id, step: "parameters" })}>
-            <PhotoImage id={photo.photo_id} /><span>选择照片 {i + 1}</span>
-          </button>)}</div>{!photos.length && <p>相册里还没有照片。</p>}<a href={`${process.env.NEXT_PUBLIC_COMPANION_BASE_PATH ?? ""}/companion/photos`}>打开完整相册</a></>}
+          <button type="button" onClick={() => setAlbum(true)}>相册</button>
+          {album && <AlbumPicker disabled={disabled} onClose={() => setAlbum(false)} onPhoto={photo => { set({reference:photo.photo_id,step:"parameters"});setAlbum(false); }} />}
           <button type="button" onClick={() => set({ reference: null, step: "parameters" })}>不加参考图片</button>
           <button type="button" onClick={recommended}>用推荐设置</button>
           <button type="button" onClick={onEdit}>返回修改描述</button>

@@ -12,7 +12,7 @@ function Harness(){
 }
 it("loads album on demand, binds the selected photo ID and preserves it through recommended settings",async()=>{
   render(<Harness/>); expect(api.list).not.toHaveBeenCalled();
-  fireEvent.click(screen.getByRole("button",{name:"从相册添加"}));
+  fireEvent.click(screen.getByRole("button",{name:"相册"}));
   await screen.findByRole("button",{name:/选择照片 2/});
   fireEvent.click(screen.getByRole("button",{name:/选择照片 2/}));
   expect(screen.getByLabelText("reference id")).toHaveTextContent("second");
@@ -20,7 +20,7 @@ it("loads album on demand, binds the selected photo ID and preserves it through 
   fireEvent.click(screen.getByRole("button",{name:"用推荐设置"}));
   fireEvent.click(screen.getByRole("button",{name:"返回修改"}));
   fireEvent.click(screen.getByRole("button",{name:"返回修改"}));
-  expect(screen.getByRole("button",{name:/选择照片 2/})).toHaveAttribute("aria-pressed","true");
+  expect(screen.getByLabelText("reference id")).toHaveTextContent("second");
   fireEvent.click(screen.getByRole("button",{name:"用推荐设置"}));
   fireEvent.click(screen.getByRole("button",{name:"确认设置"}));
   expect(screen.getByLabelText("reference id")).toHaveTextContent("second");
@@ -29,8 +29,8 @@ it("loads album on demand, binds the selected photo ID and preserves it through 
 });
 it("lets an album read failure retry without clearing the description",async()=>{
   api.list.mockRejectedValueOnce(new Error("offline"));render(<Harness/>);
-  fireEvent.click(screen.getByRole("button",{name:"从相册添加"}));await screen.findByRole("alert");
-  await waitFor(()=>expect(screen.getByRole("button",{name:"从相册添加"})).not.toBeDisabled());
-  fireEvent.click(screen.getByRole("button",{name:"从相册添加"}));await screen.findByRole("button",{name:/选择照片 1/});
+  fireEvent.click(screen.getByRole("button",{name:"相册"}));await screen.findByRole("alert");
+  await waitFor(()=>expect(screen.getByRole("button",{name:"重试打开相册"})).not.toBeDisabled());
+  fireEvent.click(screen.getByRole("button",{name:"重试打开相册"}));await screen.findByRole("button",{name:/选择照片 1/});
   expect(screen.getByText("花朵开放")).toBeInTheDocument();
 });

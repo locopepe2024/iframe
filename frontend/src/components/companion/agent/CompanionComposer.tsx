@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useRef, useState, type RefObject } from "react";
-import { ArrowUp, ChevronDown, Image, MessageCircle, Mic, Plus, Square, Video } from "lucide-react";
+import { useEffect, useRef, useState, type ReactNode, type RefObject } from "react";
+import { ArrowUp, ChevronDown, Image, MessageCircle, Mic, Plus, Search, Square, Video } from "lucide-react";
 import { useCompanionVoice } from "../useCompanionVoice";
 import styles from "./chat.module.css";
 
@@ -12,12 +12,14 @@ const modes = [
   { value: "video", label: "视频", icon: Video },
 ] as const;
 
-export default function CompanionComposer({ mode, value, disabled, busy, allowed, inputRef, onMode, onChange, onSend, onAlbum, onAllow, retry }: {
+export default function CompanionComposer({ mode, value, disabled, busy, allowed, inputRef, onMode, onChange, onSend, onAlbum, onUpload, onAllow, retry, attachments, hasAttachments = false, mediaAcknowledged = false, onMediaAcknowledged }: {
   mode: ComposerMode; value: string; disabled: boolean; busy: boolean; allowed: boolean;
   inputRef: RefObject<HTMLTextAreaElement>;
   onMode: (mode: ComposerMode) => void; onChange: (text: string) => void;
-  onSend: () => void; onAlbum: () => void; onAllow: (allowed: boolean) => void;
+  onSend: () => void; onAlbum: () => void; onUpload: () => void; onAllow: (allowed: boolean) => void;
   retry: (() => void) | null;
+  attachments?: ReactNode; hasAttachments?: boolean;
+  mediaAcknowledged?: boolean; onMediaAcknowledged?: (value: boolean) => void;
 }) {
   const [menu, setMenu] = useState(false);
   const [voiceConsent, setVoiceConsent] = useState(false), [voicePrompt, setVoicePrompt] = useState(false);
@@ -34,6 +36,11 @@ export default function CompanionComposer({ mode, value, disabled, busy, allowed
     return () => document.removeEventListener("pointerdown", outside);
   }, [menu]);
   return <footer className={styles.composer}>
+    {attachments}
+    {mode === "chat" && hasAttachments && <div className={styles.mediaScope}>
+      <p>本次素材只在页面展示，助手暂时看不到。刷新后请从相册重新选择。</p>
+      {value.trim() && <label className={styles.check}><input type="checkbox" disabled={disabled || recording} checked={mediaAcknowledged} onChange={event => onMediaAcknowledged?.(event.target.checked)}/>我知道本次只发送文字给助手</label>}
+    </div>}
     <div className={styles.inputPanel}>
       <label>{mode === "chat" ? "和我聊聊天" : mode === "image" ? "想生成的图片" : "想生成的视频"}
         <textarea ref={inputRef} rows={2} placeholder={mode === "chat" ? "想说什么，都可以写在这里…" : "说说想做什么，再点箭头继续…"} maxLength={4000} value={value} disabled={disabled || recording} onChange={event => onChange(event.target.value)} />
@@ -52,12 +59,13 @@ export default function CompanionComposer({ mode, value, disabled, busy, allowed
           <button ref={trigger} type="button" aria-label={`创作类型：${selected.label}`} aria-haspopup="menu" aria-expanded={menu} disabled={disabled || recording} onClick={() => setMenu(!menu)}><ModeIcon size={22} aria-hidden="true" /><span>{selected.label}</span><ChevronDown size={18} aria-hidden="true" /></button>
           {menu && <div role="menu" aria-label="选择创作类型" className={styles.modeMenu} style={{ left: Math.max(8, trigger.current?.getBoundingClientRect().left ?? 8), bottom: Math.max(8, Math.min(window.innerHeight * .45, window.innerHeight - (trigger.current?.getBoundingClientRect().top ?? 0) + 8)) }}>{modes.map(({ value: next, label, icon: Icon }) => <button type="button" role="menuitemradio" aria-checked={mode === next} key={next} onClick={() => { voice.stopAll(); onMode(next); setMenu(false); trigger.current?.focus(); }}><Icon size={22} aria-hidden="true" />{label}</button>)}</div>}
         </div>
-        <button type="button" className={styles.albumButton} aria-label="从相册添加" disabled={disabled || recording} onClick={onAlbum}><Plus size={24} aria-hidden="true" /><span>从相册添加</span></button>
+        <button type="button" className={styles.albumButton} aria-label="上传" disabled={disabled || recording} onClick={onUpload}><Plus size={24} aria-hidden="true" /><span>上传</span></button>
+        <button type="button" className={styles.albumButton} aria-label="相册" disabled={disabled || recording} onClick={onAlbum}><Search size={24} aria-hidden="true" /><span>相册</span></button>
         <div className={styles.composerActions}>
           <button type="button" className={styles.voiceButton} disabled={disabled || voice.finishing} onClick={() => { if (voiceConsent) voice.toggleListening(); else setVoicePrompt(true); }}>
             {recording ? <Square size={28} aria-hidden="true" /> : <Mic size={28} aria-hidden="true" />}<span>{voice.finishing ? "正在整理" : recording ? "停止" : "对话中"}</span>
           </button>
-          <button type="button" className={styles.sendButton} aria-label="发送" disabled={disabled || recording || !value.trim() || (mode === "chat" && !allowed)} onClick={onSend}><ArrowUp size={30} aria-hidden="true" /></button>
+          <button type="button" className={styles.sendButton} aria-label="发送" disabled={disabled || recording || (!value.trim() && !hasAttachments) || (mode === "chat" && !!value.trim() && (!allowed || (hasAttachments && !mediaAcknowledged)))} onClick={onSend}><ArrowUp size={30} aria-hidden="true" /></button>
         </div>
       </div>
     </div>

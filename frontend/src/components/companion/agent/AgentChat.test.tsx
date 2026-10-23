@@ -1,10 +1,11 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { beforeEach, expect, it, vi } from "vitest";
 import AgentChat from "./AgentChat";
 const api=vi.hoisted(()=>({session:vi.fn(),messages:vi.fn(),chat:vi.fn(),turn:vi.fn(),tool:vi.fn(),confirm:vi.fn(),cancel:vi.fn()}));
 const photoApi=vi.hoisted(()=>({list:vi.fn()}));
 vi.mock("@/lib/companionApi",()=>({companionApi:api}));
 vi.mock("@/lib/photoApi",()=>({photoApi}));
+vi.mock("../photos/PhotoImage",()=>({default:()=> <img alt="照片缩略图"/>}));
 vi.mock("../PhotoConversationCard",()=>({default: ({label}:{label:string})=><article>{label}</article>}));
 const preview={status:"pending_confirmation",preview_token:"token",action:"save",preview:{content:"喜欢散步",quote:"喜欢散步",source_text:"请记住我喜欢散步",source_message_id:"m",type:"preference",importance:3}};
 beforeEach(()=>{
@@ -25,11 +26,14 @@ it("offers large guided cards without sending automatically",async()=>{
   fireEvent.click(screen.getByRole("button",{name:/整理今天的回忆/}));
   expect(screen.getByLabelText("和我聊聊天")).toHaveValue("请把我们今天聊的内容整理成一篇回忆日记");
 });
-it("loads recent photos into the conversation card stream on demand",async()=>{
+it("selects photos into an unsent attachment draft",async()=>{
   await start();
   photoApi.list.mockResolvedValue({photos:[{photo_id:"photo-1",batch_id:"batch",date:{date:null,status:"pending_confirmation",reason:"missing",source:"none",revision:0}}]});
-  fireEvent.click(screen.getByRole("button",{name:"从相册添加"}));
-  await screen.findByText("相册照片 1");
+  fireEvent.click(screen.getByRole("button",{name:"相册"}));
+  await screen.findByRole("button",{name:/选择照片 1/});
+  fireEvent.click(screen.getByRole("button",{name:/选择照片 1/}));
+  expect(screen.getByRole("region",{name:"待发送附件"})).toHaveTextContent("相册照片");
+  expect(within(screen.getByRole("region",{name:"会话消息"})).queryByText("相册照片")).not.toBeInTheDocument();
   expect(photoApi.list).toHaveBeenCalledWith("all","","","");
 });
 it("requires external text consent and final explicit button before saving",async()=>{
@@ -158,5 +162,51 @@ it("opens daily sample plans without calling the model and preserves an existing
   fireEvent.click(screen.getByRole("button",{name:"开始记录"}));
   expect(screen.getByLabelText("和我聊聊天")).toHaveValue("请记住我喜欢散步");
   expect(screen.getByText(/输入框里还有未发送的话/)).toBeInTheDocument();
+  expect(api.chat).not.toHaveBeenCalled();
+});
+
+async function selectPhoto() {
+  photoApi.list.mockResolvedValue({photos:[{photo_id:"p"}],next_after_id:null});
+  fireEvent.click(screen.getByRole("button",{name:"相册"}));
+  fireEvent.click(await screen.findByRole("button",{name:/选择照片 1/}));
+}
+it("removes a selected photo without sending or deleting the original",async()=>{
+  await start();await selectPhoto();
+  fireEvent.click(screen.getByRole("button",{name:"移除附件：相册照片"}));
+  expect(screen.queryByRole("region",{name:"待发送附件"})).not.toBeInTheDocument();
+  expect(api.chat).not.toHaveBeenCalled();expect(api.tool).not.toHaveBeenCalled();
+});
+it("adds an attachment-only message locally without making a model request",async()=>{
+  await start();fireEvent.change(screen.getByLabelText("和我聊聊天"),{target:{value:""}});await selectPhoto();
+  expect(screen.getByText(/助手暂时看不到/)).toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button",{name:"发送"}));
+  expect(within(screen.getByRole("region",{name:"会话消息"})).getByText("相册照片")).toBeInTheDocument();
+  expect(screen.queryByRole("region",{name:"待发送附件"})).not.toBeInTheDocument();
+  expect(api.chat).not.toHaveBeenCalled();expect(api.session).toHaveBeenCalledTimes(1);
+});
+it("retains attachments through an uncertain text request and only clears them after a successful retry",async()=>{
+  api.chat.mockRejectedValueOnce(new Error("网络中断"));
+  await start();await selectPhoto();
+  fireEvent.click(screen.getByText("开始聊天前，请确认文字发送范围",{selector:"summary"}));
+  fireEvent.click(screen.getByLabelText("允许发送文字，开始聊天"));
+  expect(screen.getByRole("button",{name:"发送"})).toBeDisabled();
+  fireEvent.click(screen.getByLabelText("我知道本次只发送文字给助手"));fireEvent.click(screen.getByRole("button",{name:"发送"}));
+  await screen.findByRole("alert");
+  expect(screen.getByRole("region",{name:"待发送附件"})).toBeInTheDocument();
+  expect(screen.getByRole("button",{name:"移除附件：相册照片"})).toBeDisabled();
+  fireEvent.click(screen.getByRole("button",{name:"重试原请求"}));await screen.findByRole("region",{name:"记忆操作确认"});
+  expect(screen.queryByRole("region",{name:"待发送附件"})).not.toBeInTheDocument();
+  expect(api.chat.mock.calls[0]).toEqual(api.chat.mock.calls[1]);
+  expect(Object.keys(api.chat.mock.calls[0][1]).sort()).toEqual(["allow_external_text","operation_id","text"]);
+  expect(within(screen.getByRole("region",{name:"会话消息"})).getAllByText("相册照片")).toHaveLength(1);
+});
+it("keeps attachments independent between types and binds a single photo when submitting a media description",async()=>{
+  await start();await selectPhoto();await switchMode("视频");
+  expect(screen.queryByRole("region",{name:"待发送附件"})).not.toBeInTheDocument();
+  fireEvent.change(screen.getByLabelText("想生成的视频"),{target:{value:"花园里的光"}});
+  await selectPhoto();fireEvent.click(screen.getByRole("button",{name:"发送"}));
+  expect(screen.getByText("已选择参考照片")).toBeInTheDocument();
+  expect(screen.getByRole("button",{name:"5 秒"})).toBeInTheDocument();
+  await switchMode("聊天");expect(screen.getByRole("region",{name:"待发送附件"})).toBeInTheDocument();
   expect(api.chat).not.toHaveBeenCalled();
 });
