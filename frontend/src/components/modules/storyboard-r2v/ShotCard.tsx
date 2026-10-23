@@ -156,6 +156,7 @@ export interface ShotNode {
     richRefinementCandidate?: {
         id: string;
         source: string;
+        mode?: string;
         fields: Record<string, unknown>;
         current_fields: Record<string, unknown>;
         rationale: Record<string, string>;
@@ -246,7 +247,6 @@ interface ShotCardProps {
     onGenerateBatch?: (count: number) => void;
     /** Active in-flight count for label flip (生成 ×N → 生成中 · N). */
     inFlightCount?: number;
-    onRefineFrame?: () => void;
     onApplyRichRefinement?: (candidateId: string, fields: string[]) => void;
     onDiscardRichRefinement?: (candidateId: string) => void;
     onMicroExpressionApplied?: () => Promise<void> | void;
@@ -297,7 +297,6 @@ export default function ShotCard({
     onSetGenerateCount,
     onGenerateBatch,
     inFlightCount = 0,
-    onRefineFrame,
     onApplyRichRefinement,
     onDiscardRichRefinement,
     onMicroExpressionApplied,
@@ -868,7 +867,7 @@ export default function ShotCard({
                                 </li>)}
                             </ul>
                         </details>}
-                        {shot.richRefinementCandidate && <details className="border-t border-border-subtle py-2 text-xs text-text-secondary" open>
+                        {shot.richRefinementCandidate && shot.richRefinementCandidate.mode !== "initialization" && <details className="border-t border-border-subtle py-2 text-xs text-text-secondary" open>
                             <summary className="cursor-pointer font-medium text-foreground">{shot.richRefinementCandidate.source} · {Object.keys(shot.richRefinementCandidate.fields).length} 项待审</summary>
                             <div className="mt-2 divide-y divide-border-subtle">
                                 {Object.entries(shot.richRefinementCandidate.fields).map(([field, proposed]) => {
@@ -1194,17 +1193,6 @@ export default function ShotCard({
                                 >
                                     <Copy size={15} strokeWidth={1.8} />
                                 </motion.button>
-                                {onRefineFrame && (
-                                    <motion.button
-                                        whileHover={{ scale: 1.06 }}
-                                        whileTap={{ scale: 0.94 }}
-                                        onClick={onRefineFrame}
-                                        className="ico-btn flex h-8 w-8 items-center justify-center rounded-[14px] text-text-muted transition-colors duration-fast ease-out-quart hover:bg-hover-bg hover:text-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/55"
-                                        title={t("refineFrame")}
-                                    >
-                                        <Sparkles size={15} strokeWidth={1.8} />
-                                    </motion.button>
-                                )}
                                 <motion.button
                                     whileHover={{ scale: 1.06 }}
                                     whileTap={{ scale: 0.94 }}

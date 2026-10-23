@@ -12,7 +12,7 @@ import StepPageHeader, { StepPill } from "@/components/shared/StepPageHeader";
 import RenderPromptPreviewDialog, { type FrameRenderPreview } from "./RenderPromptPreviewDialog";
 import { useTranslations } from "next-intl";
 import { useProjectStore } from "@/store/projectStore";
-import { api, crudApi, type VideoTask, type RefineSSEEvent, type AssetReferenceIndexEntry, type EpisodeCharacterUse } from "@/lib/api";
+import { api, crudApi, type VideoTask, type AssetReferenceIndexEntry, type EpisodeCharacterUse } from "@/lib/api";
 import { resolveMediaDelivery, resolveVideoTaskDelivery } from "@/lib/mediaDelivery";
 import { resolveStoryboardStyle, resolveStoryboardStyleForRender } from "@/lib/storyboardStyle";
 import { getAssetUrl } from "@/lib/utils";
@@ -676,32 +676,6 @@ export default function StoryboardR2V() {
                 const videoTasks: any[] = updated.video_tasks ?? [];
                 setShots(updated.frames.map((frame: any) => frameToShotNode(frame, videoTasks, defaultMode)));
             }
-            if (newFrameCount > 0) {
-                if (useProjectStore.getState().currentProject?.id === projectId) {
-                    setBannerState("phase2");
-                    setRefineProgress({ current: 0, total: newFrameCount });
-                }
-                let initializationFailed = 0;
-                try {
-                    const initialization = await api.initializeBatchFrames(projectId, (event: RefineSSEEvent) => {
-                        if (event.type === "frame_initialize_start" && useProjectStore.getState().currentProject?.id === projectId) {
-                            setRefineProgress({ current: (event.frame_index ?? 0) + 1, total: event.total ?? newFrameCount });
-                        }
-                    });
-                    initializationFailed = initialization.failed;
-                    const refreshed = await api.getProject(projectId);
-                    if (refreshed?.frames && useProjectStore.getState().currentProject?.id === projectId) {
-                        updateProject(projectId, { frames: refreshed.frames });
-                        const videoTasks: any[] = refreshed.video_tasks ?? [];
-                        setShots(refreshed.frames.map((frame: any) => frameToShotNode(frame, videoTasks, defaultMode)));
-                    }
-                } catch (error: any) {
-                    initializationFailed = newFrameCount;
-                    const detail = error?.response?.data?.detail || error?.message || t("genToastErrUnknown");
-                    toast.error(`${t("genToastErr")}: ${String(detail).slice(0, 200)}`);
-                }
-                if (initializationFailed) toast.error(t("initializePartial", { count: initializationFailed }));
-            }
             if (useProjectStore.getState().currentProject?.id === projectId) setBannerState("summary");
             toast.success(t(lineage.storyboard_mode === "plan" ? "planApplied" : "genToastDone", { count: newFrameCount }));
         } finally {
@@ -788,25 +762,6 @@ export default function StoryboardR2V() {
         setStoryboardDraftText("");
         setStoryboardFeedback([]);
     }, [storyboardDraftBusy]);
-
-    const handleInitializeFrame = useCallback(async (frameId: string) => {
-        if (!currentProject?.id) return;
-        try {
-            await frameEdits.flush();
-            const initialized = await api.initializeSingleFrame(currentProject.id, frameId);
-            const updated = await api.getProject(currentProject.id);
-            if (updated?.frames) {
-                updateProject(currentProject.id, { frames: updated.frames });
-                const defaultMode = currentProject.default_generation_mode === "i2v" ? "t2i_i2v" : "direct_r2v";
-                const videoTasks: any[] = (updated as any).video_tasks ?? [];
-                setShots(updated.frames.map((frame: any) => frameToShotNode(frame, videoTasks, defaultMode)));
-            }
-            toast.success(t(initialized.rich_refinement_candidate ? "initializeDoneToast" : "initializeNoMissing"));
-        } catch (err) {
-            toast.error(t("refineFailedToast"));
-            debugLog.warn("Studio", "single frame initialization failed", err);
-        }
-    }, [currentProject, frameEdits, updateProject]);
 
     const handleRichRefinement = useCallback(async (frameId: string, candidateId: string, selectedFields?: string[]) => {
         if (!currentProject?.id || richRefinementBusyFrameId) return;
@@ -2270,7 +2225,6 @@ export default function StoryboardR2V() {
                             onSetGenerateCount={(n) => handleShotParamsChange(shot, { ...paramsState, count: n })}
                             onGenerateBatch={(n) => generateVideoBatch(index, n, paramsState)}
                             inFlightCount={shotInFlight}
-                            onRefineFrame={() => handleInitializeFrame(shot.id)}
                             onApplyRichRefinement={(candidateId, fields) => { void handleRichRefinement(shot.id, candidateId, fields); }}
                             onDiscardRichRefinement={(candidateId) => { void handleRichRefinement(shot.id, candidateId); }}
                             onMicroExpressionBeforePreview={async () => { await frameEdits.flush(); }}

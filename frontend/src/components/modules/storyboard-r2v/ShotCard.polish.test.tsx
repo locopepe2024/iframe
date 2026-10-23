@@ -182,3 +182,21 @@ it("reviews rich-frame fields without applying any by default", () => {
     fireEvent.click(screen.getByRole("button", { name: "应用所选" }));
     expect(onApplyRichRefinement).toHaveBeenCalledExactlyOnceWith("candidate-1", ["visual_description"]);
 });
+
+it("does not show a legacy initialization review", () => {
+    render(<ShotCard
+        shot={{ ...shot, richRefinementCandidate: {
+            id: "old-init", mode: "initialization", source: "初始化补全",
+            fields: { visual_description: "重复的场景描述" },
+            current_fields: { visual_description: null }, rationale: {},
+        } }}
+        index={0} totalShots={1} characters={[]} scenes={[]} props={[]}
+        onUpdatePrompt={vi.fn()} onUpdateField={vi.fn()}
+        onGenerateT2I={vi.fn()} onGenerateVideo={vi.fn()} onDelete={vi.fn()}
+        onMoveUp={vi.fn()} onMoveDown={vi.fn()} onDuplicate={vi.fn()}
+        onSetVideoMode={vi.fn()} onOpenDrawer={vi.fn()} onInsertAsset={vi.fn()}
+        expanded={false} onToggleExpanded={vi.fn()}
+    />);
+    expect(screen.queryByText(/初始化补全/)).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "应用所选" })).not.toBeInTheDocument();
+});
