@@ -25,3 +25,15 @@ memory.search必须使用query参与连续文字匹配（content或quote），�
 新增src/apps/companion_runtime/{store,api,tools}.py和专用tests，不改既有聊天/照片API默认挂载。用真实SQLite验证owner隔离、真实检索/特殊字符、按类型/重要度/游标分页、超过100条可查询、来源校验、未确认零记忆写入、取消、过期、绑定actor、伪造method/来源、同操作幂等、并发确认及事务回滚、删除后所有读入口不可见且回执无内容。现有照片测试回归按影响选择；不把独立路由TestClient验证当部署或真实模型调用证据。
 
 取消接口只关闭预览，不撤销已确认的操作，返回preview_closed及说明；重复取消不推断先前是否已写入。记忆删除不会抹除原用户消息；回执重放不重新写入已删除记忆。
+
+## Qwen网页首个往返切片
+
+2026-10-23通过CLI读取阿里云公开官方文档 https://www.alibabacloud.com/help/en/model-studio/qwen-function-calling ，核对OpenAI-compatible tools、tool_calls[].id/function.name/function.arguments及工具结果role=tool/tool_call_id结构。该来源证明协议形状，不证明UniArt当前账户支持选定SKU。固定使用个人UniArt渠道的qwen3.8-flash（可通过服务端Qwen环境配置覆盖），无共享key降级；真实渠道验证须另记录。
+
+独立网页`/companion/agent`，原型入口不替换。发送前说明本轮文字及最近最多20条用户消息会发送个人UniArt/Qwen服务；不自动发送图片、全库记忆或旧Playground聊天。每轮最多一次模型请求、一个工具调用；不使用CopilotKit远程runtime、不声称本片已做AG-UI模型事件桥。读取工具结果直接显示服务端条目，不进行第二次模型改写，不把工具结果/用户记忆自动注入后续聊天。本片对话上下文只含最近用户原话，不自动携带assistant历史；UI说明这一限制。
+
+服务端保存turn状态，operation_id绑定session/actor/text。原子claim写running、进程中断120秒后可同操作重试；claim token在最终提交事务核对，旧执行不能覆盖。模型请求超时上限60秒。失败标failed供显式原操作重试；成功重试不重复模型调用。模型请求在事务外，不占数据库写锁。用户消息先幂等保存，失败不丢用户原话。仅以用户来源消息供模型引用；save仅允许本轮明确可见来源ID，delete仅允许用户本轮明确包含的已保存memory_id（若只是“删除那条”须先展示列表让用户选择）。多工具/未知函数/非法参数/跨owner/伪造source拒绝，不部分执行。工具规范采用无点号wire名memory_save等，内部再映射memory.save等。
+
+turn持久化普通聊天文字或工具引用，不复制有效记忆内容：list/search保存筛选参数、每次读取重新执行；写提议仅存preview token，确认/取消后重新读取显示预览已关闭，原draft不另存turn。列表结果及删除预览不写assistant正文，删除后turn重读不返回已删除条目。模型普通回复只基于用户原话，未来若注入记忆必须设计衍生聊天撤回规则。允许模型文字出错，界面标“模型回复”，不据回复标记业务成功。
+
+网页提供新建会话、当前会话恢复、分页用户消息历史、文字发送、显式外发勾选、工具确认/取消，以及个人记忆分页/关键词搜索/删除按钮。保存内容可先在确认卡编辑，编辑生成新预览并关闭旧预览后再次确认；不允许直接改已绑定token内容。页面切换会话/记忆浏览时不自动确认；丢响应保留operation_id。暂不接语音、照片工具和旧记忆迁移。后端和UI先完成测试再决定部署；本片无真实Qwen请求不宣称运行验证。

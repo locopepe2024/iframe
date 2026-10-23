@@ -9,7 +9,9 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import Field
 
 from ..identity import UserContext, require_user_context
-from .store import CompanionStore, Missing, Conflict
+from .store import Missing, Conflict
+from .chat_store import ChatStore as CompanionStore
+from .model import propose, ModelUnavailable
 from .tools import Strict, dispatch, tool_schemas
 
 
@@ -19,6 +21,10 @@ class Operation(Strict):
 
 class UserMessage(Operation):
     text: str = Field(min_length=1, max_length=4000)
+
+
+class ChatRequest(UserMessage):
+    allow_external_text: Literal[True]
 
 
 class ToolRequest(Strict):
@@ -107,3 +113,31 @@ def confirm(body: Confirmation, identity: Owner, store: Store):
 def cancel(body: Cancellation, identity: Owner, store: Store):
     with errors():
         return store.cancel(identity.owner_profile_id, identity.user_id, body.preview_token)
+
+
+@router.post('/sessions/{session_id}/chat')
+def chat(session_id: str, body: ChatRequest, identity: Owner, store: Store):
+    with errors():
+        claim=store.claim_turn(identity.owner_profile_id,identity.user_id,session_id,body.operation_id,body.text)
+        if claim['cached']:
+            return store.turn(identity.owner_profile_id,identity.user_id,claim['id'])
+        try:
+            proposal=propose(identity,claim['messages'],claim['message_id'])
+            return store.finish_turn(identity.owner_profile_id,identity.user_id,claim,proposal)
+        except BaseException as exc:
+            store.fail_turn(identity.owner_profile_id,claim)
+            if isinstance(exc,ModelUnavailable):
+                raise HTTPException(503,'Qwen暂不可用，原话已保留；请用原请求重试。') from exc
+            raise
+
+
+@router.get('/turns/{turn_id}')
+def turn(turn_id: str, identity: Owner, store: Store):
+    with errors():
+        return store.turn(identity.owner_profile_id,identity.user_id,turn_id)
+
+
+@router.get('/previews/{token}')
+def preview(token: str, identity: Owner, store: Store):
+    with errors():
+        return store.preview(identity.owner_profile_id,identity.user_id,token)

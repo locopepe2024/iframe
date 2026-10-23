@@ -45,6 +45,15 @@ CREATE TABLE IF NOT EXISTS companion_memory_receipts (
 CREATE INDEX IF NOT EXISTS companion_memory_owner ON companion_memories(owner,id);
 CREATE INDEX IF NOT EXISTS companion_message_owner ON companion_messages(owner,session_id,sequence);
 """
+SCHEMA += """
+CREATE TABLE IF NOT EXISTS companion_turns (
+ sequence INTEGER PRIMARY KEY AUTOINCREMENT, id TEXT NOT NULL UNIQUE,
+ owner TEXT NOT NULL, actor TEXT NOT NULL, session_id TEXT NOT NULL,
+ operation_id TEXT NOT NULL, text TEXT NOT NULL, message_id TEXT NOT NULL,
+ status TEXT NOT NULL, token TEXT, lease_until REAL, result TEXT,
+ UNIQUE(owner,operation_id)
+);
+"""
 TYPES = ('preference', 'personal_fact', 'photo_recollection')
 
 
