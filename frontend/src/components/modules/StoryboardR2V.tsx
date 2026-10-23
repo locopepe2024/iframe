@@ -2011,8 +2011,8 @@ export default function StoryboardR2V() {
                         {currentProject?.art_direction?.style_config?.name ? (
                             <StepPill label={t("artStyleLabel")} value={currentProject.art_direction.style_config.name} />
                         ) : null}
-                        <span className="inline-flex items-center gap-1.5 rounded-full border border-glass-border bg-surface-inset px-2.5 py-1 font-mono text-[0.59375rem] text-text-secondary">
-                            <span className="text-text-muted">{t("currentModel")}</span>
+                        <span className="inline-flex max-w-full min-w-0 items-center gap-1.5 rounded-full border border-glass-border bg-surface-inset px-2.5 py-1 font-mono text-[0.59375rem] text-text-secondary">
+                            <span className="shrink-0 text-text-muted">{t("currentModel")}</span>
                             <select
                                 aria-label={t("currentModel")}
                                 value={isR2VWorkflow ? videoConfig.r2vModel : videoConfig.model}
