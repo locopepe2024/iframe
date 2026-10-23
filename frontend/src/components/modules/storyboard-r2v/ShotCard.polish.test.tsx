@@ -183,7 +183,7 @@ it("reviews rich-frame fields without applying any by default", () => {
     expect(onApplyRichRefinement).toHaveBeenCalledExactlyOnceWith("candidate-1", ["visual_description"]);
 });
 
-it("does not show a legacy initialization review", () => {
+it("shows the current initialization proposal as pending review", () => {
     render(<ShotCard
         shot={{ ...shot, richRefinementCandidate: {
             id: "old-init", mode: "initialization", source: "初始化补全",
@@ -195,8 +195,9 @@ it("does not show a legacy initialization review", () => {
         onGenerateT2I={vi.fn()} onGenerateVideo={vi.fn()} onDelete={vi.fn()}
         onMoveUp={vi.fn()} onMoveDown={vi.fn()} onDuplicate={vi.fn()}
         onSetVideoMode={vi.fn()} onOpenDrawer={vi.fn()} onInsertAsset={vi.fn()}
-        expanded={false} onToggleExpanded={vi.fn()}
+        expanded={true} onToggleExpanded={vi.fn()}
     />);
-    expect(screen.queryByText(/初始化补全/)).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "应用所选" })).not.toBeInTheDocument();
+    expect(screen.getByText(/初始化补全/)).toBeInTheDocument();
+    expect(screen.getByText(/尚未应用，不会进入生成提示词/)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "应用所选" })).toBeInTheDocument();
 });

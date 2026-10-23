@@ -867,8 +867,9 @@ export default function ShotCard({
                                 </li>)}
                             </ul>
                         </details>}
-                        {shot.richRefinementCandidate && shot.richRefinementCandidate.mode !== "initialization" && <details className="border-t border-border-subtle py-2 text-xs text-text-secondary" open>
+                        {shot.richRefinementCandidate && <details className="border-t border-border-subtle py-2 text-xs text-text-secondary" open>
                             <summary className="cursor-pointer font-medium text-foreground">{shot.richRefinementCandidate.source} · {Object.keys(shot.richRefinementCandidate.fields).length} 项待审</summary>
+                            {shot.richRefinementCandidate.mode === "initialization" && <p className="mt-2 text-text-muted">当前镜头的初始化建议；尚未应用，不会进入生成提示词。画面描述是起始画面候选，采纳前请检查首帧布局与光影。</p>}
                             <div className="mt-2 divide-y divide-border-subtle">
                                 {Object.entries(shot.richRefinementCandidate.fields).map(([field, proposed]) => {
                                     const labels: Record<string, string> = {

@@ -36,7 +36,7 @@ it("reloads the saved adopted body and optimization flag", () => {
     expect(buildGenerationPrompt(restored, false, "wan3.0")).toBe(next.prompt);
 });
 
-it("does not project an unaccepted initialization proposal into a shot", () => {
+it("keeps the current initialization proposal visible without projecting it into the prompt", () => {
     const shot = frameToShotNode({
         id: "f", action_description: "商贩穿行", scene_id: "street",
         rich_refinement_candidate: {
@@ -45,7 +45,7 @@ it("does not project an unaccepted initialization proposal into a shot", () => {
             current_fields: { visual_description: null }, rationale: {},
         },
     } as any, [], "direct_r2v");
-    expect(shot.richRefinementCandidate).toBeNull();
+    expect(shot.richRefinementCandidate?.id).toBe("old-init");
     expect(buildGenerationPrompt(shot, false, "uniart/minimax-h3-vip")).not.toContain("[character1:青石板长街]");
 });
 
