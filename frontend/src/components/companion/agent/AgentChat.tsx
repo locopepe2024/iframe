@@ -11,6 +11,8 @@ import MediaUpload, { type UploadedMedia } from "./MediaUpload";
 import VideoConversationCard from "./VideoConversationCard";
 import CompanionComposer, { type ComposerMode } from "./CompanionComposer";
 import GenerationGuide, { createGenerationDraft, type GenerationDraft, type MediaMode } from "./GenerationGuide";
+import CompanionFeatureSheet, { type CompanionFeature } from "./CompanionFeatureSheet";
+import { BookOpen, Images, UserRound, Compass } from "lucide-react";
 
 const prefix = process.env.NEXT_PUBLIC_API_URL === "/companion-demo" ? "/companion-demo" : "";
 const sessionKey = "iframe-companion-agent-session-v1";
@@ -36,6 +38,7 @@ export default function AgentChat() {
   const [draft, setDraft] = useState<string | null>(null);
   const [hasRetry, setHasRetry] = useState(false);
   const [albumOpen,setAlbumOpen] = useState(false);
+  const [feature,setFeature] = useState<CompanionFeature | null>(null);
   const [uploading,setUploading] = useState(false);
   const [pendingMedia,setPendingMedia] = useState<Record<ComposerMode,UploadedMedia[]>>({chat:[],image:[],video:[]});
   const [mediaAcknowledged,setMediaAcknowledged] = useState(false);
@@ -179,6 +182,7 @@ export default function AgentChat() {
     {albumOpen && <AlbumPicker disabled={inputDisabled || pending} onClose={() => setAlbumOpen(false)} onPhoto={photo => {
       attach({kind:"photo",id:photo.photo_id,name:"相册照片"});setAlbumOpen(false);
     }} onVideo={video => {attach({kind:"video",id:video.video_id,name:video.name});setAlbumOpen(false);}} />}
+    {feature && <CompanionFeatureSheet feature={feature} onClose={() => setFeature(null)} onDiary={() => { setFeature(null); fillChat("请把我们今天聊的内容整理成一篇回忆日记"); }} />}
     {mode !== "chat" && (guide ? <GenerationGuide key={mode} value={guide} disabled={inputDisabled || pending} onChange={updateGuide} onEdit={() => { updateGuide(null); inputRef.current?.focus(); }} onCancel={() => { updateGuide(null); setNotice("已取消创作，描述草稿仍保留。"); }} /> : <article className={chatStyles.assistant}><span>陪伴助手</span><p>{mode === "video" ? "想做一段什么视频？" : "想生成一张什么图片？"}在下面说说，点箭头后我们一步步来。</p></article>)}
     {busy && <p role="status">正在处理…</p>}
     {notice && <p role="status">{notice}</p>}{error && <p role="alert">{error}</p>}
@@ -231,7 +235,13 @@ export default function AgentChat() {
       attachments={<AttachmentDraft items={pendingMedia[mode]} disabled={inputDisabled || pending} onRemove={id => {setPendingMedia(old => ({...old,[mode]:old[mode].filter(item=>item.id!==id)}));setMediaAcknowledged(false);}} />}
       hasAttachments={pendingMedia[mode].length > 0} mediaAcknowledged={mediaAcknowledged} onMediaAcknowledged={setMediaAcknowledged}
       onMode={next => {setMode(next);setAlbumOpen(false);setMediaAcknowledged(false);}} onChange={updateDraft} onSend={submit} onAllow={setAllowed}
-      onAlbum={() => setAlbumOpen(true)} onUpload={() => { if (uploadFiles.length) setNotice("请先完成或关闭当前上传。"); else fileRef.current?.click(); }}
+      onUpload={() => { if (uploadFiles.length) setNotice("请先完成或关闭当前上传。"); else fileRef.current?.click(); }}
       retry={hasRetry ? () => void run(() => send(true)) : null} />
+    <nav className={chatStyles.bottomNav} aria-label="主要功能">
+      <button type="button" aria-current={feature === "diary" ? "page" : undefined} onClick={() => setFeature("diary")}><BookOpen size={22} aria-hidden="true" /><span>日记</span></button>
+      <button type="button" aria-current={feature === "plaza" ? "page" : undefined} onClick={() => setFeature("plaza")}><Compass size={22} aria-hidden="true" /><span>广场</span></button>
+      <button type="button" aria-current={albumOpen ? "page" : undefined} onClick={() => { setFeature(null); setAlbumOpen(true); }}><Images size={22} aria-hidden="true" /><span>相册</span></button>
+      <button type="button" aria-current={feature === "mine" ? "page" : undefined} onClick={() => setFeature("mine")}><UserRound size={22} aria-hidden="true" /><span>我的</span></button>
+    </nav>
   </main>;
 }
