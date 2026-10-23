@@ -103,7 +103,7 @@ export default function Companion() {
       <p role="status" className={styles.status}>{notice || "聊天暂存在本页，刷新后会消失。"}</p>
       {tab === "today" && <>
         <section className={styles.hero}><p>{new Date().toLocaleDateString("zh-CN", { month: "long", day: "numeric", weekday: "long" })}</p><h2>慢慢说，我在听</h2><p>一顿可口的饭，一次散步，<br />或是今天惦记的人。</p><button className={styles.primary} onClick={() => setTab("chat")}><MessageCircle aria-hidden="true" /> 和我聊聊天</button></section>
-        <FeatureCardNav onSelect={target => target === "photos" ? window.location.assign("/companion/photos") : setTab(target)} />
+        <FeatureCardNav onSelect={target => target === "photos" ? window.location.assign(`${process.env.NEXT_PUBLIC_API_URL === "/companion-demo" ? "/companion-demo" : ""}/companion/photos`) : setTab(target)} />
         <section className={styles.card}><h2>按您的习惯来</h2><p>可以直接告诉我“字调大一点”或“说慢一点”，我会先和您确认，再调整。</p><button onClick={() => setTab("chat")}>试试说一句</button></section>
         <section className={styles.card}><h2>留住今天的小事</h2><p>先聊聊，再整理成日记。保存前都能修改。</p><button onClick={draftDiary}>整理今天的日记</button></section>
         <section className={styles.card}><h2>提醒与问候</h2><p>后续可由您选择问候时段、安静时段和提醒内容。</p><p>本原型尚不提供到点提醒，也不会在后台主动发消息。</p></section>
