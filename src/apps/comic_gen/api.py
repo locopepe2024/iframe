@@ -1,3 +1,4 @@
+from src.apps import director_skills
 # ─────────────────────────────────────────────────────────────────────────────
 # IMPORTANT — handler async/sync convention (audited 2026-05-21):
 #
@@ -167,6 +168,7 @@ from ..agent_api import router as agent_router
 from ..knowledge.api import router as knowledge_router
 from ..recreation.api import router as recreation_router
 from ..director_depth import router as director_depth_router
+from ..director_design import router as director_design_router
 app.include_router(identity_router)
 app.include_router(user_config_router)
 app.include_router(playground_router, prefix="/playground")
@@ -174,6 +176,7 @@ app.include_router(agent_router)
 app.include_router(knowledge_router)
 app.include_router(recreation_router)
 app.include_router(director_depth_router)
+app.include_router(director_design_router)
 
 
 @app.get("/platform-reference-library")
@@ -182,11 +185,16 @@ def get_platform_reference_library(
     category: Optional[str] = None,
     tag: Optional[str] = None,
     query: str = "",
+    semantic_domain: Optional[str] = None,
+    entry_type: Optional[str] = None,
     user: UserContext = Depends(require_user_context),
 ):
     """Read active deployment-scoped resources; mutations are not exposed here."""
     try:
-        return private_no_store_signed_response(list_platform_reference_resources(kind=kind, category=category, tag=tag, query=query))
+        return private_no_store_signed_response(list_platform_reference_resources(
+            kind=kind, category=category, tag=tag, query=query,
+            semantic_domain=semantic_domain, entry_type=entry_type,
+        ))
     except ValueError as exc:
         raise HTTPException(status_code=500, detail=str(exc))
 
@@ -235,6 +243,8 @@ class PlatformCandidateRequest(BaseModel):
     title: str = Field(min_length=1, max_length=200)
     description: str = Field(max_length=20000)
     rights_confirmed: bool
+    dictionary_entry_type: Optional[Literal["term", "pattern", "case"]] = None
+    dictionary_members: Optional[list[dict[str, Any]]] = None
 
 
 @app.post("/platform-reference-library/candidates")
@@ -261,6 +271,8 @@ def submit_platform_candidate(request: PlatformCandidateRequest, user: UserConte
             media_source=Path(output.media_path) if output else None,
             media_owner_root=Path(storage.output_dir),
             rights_confirmed=request.rights_confirmed,
+            dictionary_entry_type=request.dictionary_entry_type,
+            dictionary_members=request.dictionary_members,
         )
         return private_no_store_signed_response(resource)
     except PermissionError as exc:
@@ -435,6 +447,11 @@ async def enforce_studio_owner_boundary(request: Request, call_next):
         or path == "/upload"
         or path == "/config/models"
         or path == "/config/uniart/models"
+        # Voice catalog and preview need the same owner-scoped UniArt
+        # credentials as project audio generation.  Without this context,
+        # /voices fails even for an authenticated browser session.
+        or path == "/voices"
+        or path.startswith("/voice/")
         or path == "/studio/media-delivery"
         or path.startswith("/studio/media-records/")
         or path.startswith("/studio/owned-media/")
@@ -450,6 +467,7 @@ async def enforce_studio_owner_boundary(request: Request, call_next):
     if not protected or request.method == "OPTIONS":
         return await call_next(request)
 
+    identity_started = time.perf_counter()
     try:
         user, should_set_cookie = await asyncio.to_thread(
             _resolve_request_context,
@@ -473,7 +491,17 @@ async def enforce_studio_owner_boundary(request: Request, call_next):
 
     context_token = set_studio_user(user)
     try:
+        handler_started = time.perf_counter()
         response = await call_next(request)
+        if path.startswith("/projects/") and path.endswith("/assets/update_attributes"):
+            identity_ms = (handler_started - identity_started) * 1000
+            handler_ms = (time.perf_counter() - handler_started) * 1000
+            timing = response.headers.get("Server-Timing")
+            response.headers["Server-Timing"] = ", ".join(filter(None, [
+                timing, f"identity;dur={identity_ms:.1f}", f"handler;dur={handler_ms:.1f}",
+            ]))
+            logger.info("Asset save request status=%d identity_ms=%.1f handler_ms=%.1f",
+                        response.status_code, identity_ms, handler_ms)
         if should_set_cookie:
             _set_browser_profile_cookie(response, request, user)
         return response
@@ -536,12 +564,15 @@ def signed_response(data):
     if isinstance(data, Script):
         pipeline.migrate_legacy_storyboard_media(data)
         processed_data = _script_response_dump(data)
+    elif isinstance(data, Series):
+        processed_data = _series_response_dump(data)
     elif hasattr(data, "model_dump"):
         processed_data = data.model_dump()
     elif isinstance(data, list):
         processed_data = [
             _script_response_dump(item)
             if isinstance(item, Script)
+            else _series_response_dump(item) if isinstance(item, Series)
             else item.model_dump() if hasattr(item, "model_dump") else item
             for item in data
         ]
@@ -564,6 +595,18 @@ def signed_response(data):
     
     # Return JSONResponse directly to avoid Pydantic re-validation stripping fields
     return JSONResponse(content=processed_data)
+
+
+_ASSET_HISTORY_EXCLUDE = {
+    collection: {"__all__": {"asset_revisions"}}
+    for collection in ("characters", "scenes", "props")
+}
+
+
+def _series_response_dump(series: Series) -> Dict[str, Any]:
+    # Immutable asset snapshots have dedicated revision endpoints. Do not
+    # serialize/sign/transfer them for navigation or the live asset view.
+    return series.model_dump(exclude=_ASSET_HISTORY_EXCLUDE)
 
 
 def _script_response_dump(script: Script) -> Dict[str, Any]:
@@ -846,6 +889,7 @@ class UpdateAssetAttributesRequest(BaseModel):
     asset_id: str
     asset_type: str
     attributes: Dict[str, Any]
+    response_mode: Literal["project", "design"] = "project"
 
 
 @app.get("/health")
@@ -1399,7 +1443,7 @@ def get_series(series_id: str, user: UserContext = Depends(require_studio_user))
         raise HTTPException(status_code=404, detail="Series not found")
     # Include episode summaries
     episodes = pipeline.get_series_episodes(series_id)
-    result = series.model_dump()
+    result = _series_response_dump(series)
     _add_asset_cover_urls(result, user.owner_profile_id)
     result["episodes"] = [
         {
@@ -2147,7 +2191,7 @@ def _import_text_path(owner_profile_id: str, import_id: str) -> Path:
 def _store_import_text(owner_profile_id: str, import_id: str, text: str) -> None:
     target = _import_text_path(owner_profile_id, import_id)
     temporary = target.with_suffix(".tmp")
-    temporary.write_text(text, encoding="utf-8")
+    temporary.write_bytes(text.encode("utf-8"))
     os.replace(temporary, target)
 
 
@@ -2155,7 +2199,7 @@ def _load_import_text(owner_profile_id: str, import_id: str) -> Optional[str]:
     path = _import_text_path(owner_profile_id, import_id)
     if not path.is_file():
         return None
-    return path.read_text(encoding="utf-8")
+    return path.read_bytes().decode("utf-8")
 
 
 def _delete_import_text(owner_profile_id: str, import_id: str) -> None:
@@ -2189,8 +2233,8 @@ async def import_file_preview(
     user: UserContext = Depends(require_studio_user),
 ):
     """Upload text once and start or resume a durable episode-split job."""
-    if suggested_episodes < 1 or suggested_episodes > 50:
-        raise HTTPException(status_code=400, detail="建议集数应在 1-50 之间")
+    if suggested_episodes < 1 or suggested_episodes > 100:
+        raise HTTPException(status_code=400, detail="建议集数应在 1-100 之间")
     try:
         content_bytes = await file.read()
         if len(content_bytes) > 2 * 1024 * 1024:
@@ -2210,6 +2254,7 @@ async def import_file_preview(
         llm = pipeline.script_processor.llm
         filename = file.filename or "import.txt"
         fingerprint = hashlib.sha256(json.dumps([
+            "source-newlines-v2",
             hashlib.sha256(text.encode("utf-8")).hexdigest(),
             suggested_episodes,
             llm.provider,
@@ -2255,6 +2300,8 @@ async def import_file_confirm(
 ):
     """Confirm the episode split and create Series + Episodes."""
     try:
+        if not 1 <= len(request.episodes) <= 100:
+            raise ValueError("确认导入集数应在 1-100 之间")
         # Prefer persistent owner-scoped source, then legacy memory cache,
         # and finally direct text for compatibility with older clients.
         text = None
@@ -3562,6 +3609,8 @@ def generate_motion_ref(script_id: str, request: GenerateMotionRefRequest, backg
 class AnalyzeToStoryboardRequest(BaseModel):
     """Request to analyze script text into storyboard frames."""
     text: str
+    mode: Literal["auto", "plan", "script"] = "auto"
+    skills: List[director_skills.SkillSelection] = Field(default_factory=list, max_length=12)
 
 
 class StoryboardAnalysisRefineRequest(BaseModel):
@@ -3580,7 +3629,9 @@ class StoryboardAnalysisApplyRequest(BaseModel):
 def _storyboard_analysis_fingerprint(script_id: str, text: str,
                                      draft=None, instructions=None,
                                      lineage: Optional[ArtifactLineage] = None) -> str:
-    script, entities, prompt = pipeline.storyboard_analysis_context(script_id)
+    script, entities, prompt = pipeline.storyboard_analysis_context(
+        script_id, include_plan=not (lineage and lineage.storyboard_mode == "script"),
+    )
     resolve_director = getattr(pipeline, "effective_director_profile", None)
     director_profile = resolve_director(script) if resolve_director else None
     visual_style = pipeline.storyboard_visual_style(script)
@@ -3610,7 +3661,11 @@ def start_storyboard_analysis(
     """Create or resume a durable storyboard draft without replacing frames."""
     if not request.text.strip():
         raise HTTPException(422, "Script text is required")
-    lineage = pipeline.storyboard_analysis_lineage(script_id, request.text)
+    try:
+        skill_snapshot = director_skills.freeze("storyboard", request.skills)
+        lineage = pipeline.storyboard_workflow_lineage(script_id, request.text, request.mode, skill_snapshot)
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from exc
     fingerprint = _storyboard_analysis_fingerprint(
         script_id, request.text, lineage=lineage,
     )
@@ -3619,7 +3674,7 @@ def start_storyboard_analysis(
     from .llm import split_director_source
     total_batches = len(split_director_source(
         request.text, direct_max_chars=1800, target_chars=1600, max_chars=1800
-    )) if len(request.text) > 1800 else 0
+    )) if lineage.storyboard_mode != "plan" and len(request.text) > 1800 else 0
     return extraction_jobs.start(
         user.owner_profile_id,
         script_id,
@@ -3636,6 +3691,7 @@ def start_storyboard_analysis(
                 ),
                 expected_lineage=lineage,
                 model=selected_model,
+                skill_snapshot=skill_snapshot,
             ),
             "lineage": lineage.model_dump(),
         },
@@ -3659,9 +3715,16 @@ def start_storyboard_analysis_refinement(
             pipeline.validate_storyboard_lineage(script_id, request.text, request.lineage)
         except StaleStoryboardDraftError as exc:
             raise HTTPException(status_code=409, detail=str(exc)) from exc
-        lineage = pipeline.storyboard_analysis_lineage(script_id, request.text)
+        lineage = request.lineage.model_copy(deep=True)
     else:
         lineage = ArtifactLineage(status="legacy_unpinned")
+    try:
+        snapshot = director_skills.freeze("storyboard", [
+            {"id": item["id"], "revision": item["revision"]} for item in lineage.creative_skill_run
+        ])
+        pipeline.validate_storyboard_coverage(script_id, request.draft, lineage)
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from exc
     fingerprint = _storyboard_analysis_fingerprint(
         script_id, request.text, request.draft, instructions, lineage,
     )
@@ -3675,6 +3738,7 @@ def start_storyboard_analysis_refinement(
                 script_id, request.text, request.draft, instructions,
                 lineage=lineage,
                 model=selected_model,
+                skill_snapshot=snapshot,
             ),
             "lineage": lineage.model_dump(),
         },
@@ -3720,7 +3784,10 @@ def analyze_to_storyboard(script_id: str, request: AnalyzeToStoryboardRequest):
     Replaces existing frames with newly generated ones.
     """
     try:
-        updated_script = pipeline.analyze_text_to_frames(script_id, request.text)
+        snapshot = director_skills.freeze("storyboard", request.skills)
+        lineage = pipeline.storyboard_workflow_lineage(script_id, request.text, request.mode, snapshot)
+        draft = pipeline.preview_storyboard_analysis(script_id, request.text, expected_lineage=lineage, skill_snapshot=snapshot)
+        updated_script = pipeline.analyze_text_to_frames(script_id, request.text, draft, lineage)
         return signed_response(updated_script)
     except StaleStoryboardDraftError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
@@ -3814,8 +3881,11 @@ def discard_frame_image_polish(script_id: str, frame_id: str, request: ApplyFram
 
 
 @app.post("/projects/{script_id}/frames/{frame_id}/refine")
-def refine_single_frame(script_id: str, frame_id: str):
-    """Phase 2: Refine a single coarse frame into a rich frame with structured fields."""
+def refine_single_frame(script_id: str, frame_id: str,
+                        user: UserContext = Depends(require_studio_user)):
+    """Phase 2: Propose rich fields for creator review."""
+    if not pipeline.get_script(script_id, user.owner_profile_id):
+        raise HTTPException(status_code=404, detail="Script not found")
     try:
         frame = pipeline.refine_frame(script_id, frame_id)
         if not frame:
@@ -3828,17 +3898,653 @@ def refine_single_frame(script_id: str, frame_id: str):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@app.post("/projects/{script_id}/frames/{frame_id}/initialize")
+def initialize_single_frame(script_id: str, frame_id: str,
+                            user: UserContext = Depends(require_studio_user)):
+    """Initialize one shot by proposing only fields that are still empty."""
+    if not pipeline.get_script(script_id, user.owner_profile_id):
+        raise HTTPException(status_code=404, detail="Script not found")
+    try:
+        frame = pipeline.refine_frame(script_id, frame_id, initialization=True)
+        if not frame:
+            raise HTTPException(status_code=500, detail="Initialization returned no result")
+        return frame.model_dump() if hasattr(frame, 'model_dump') else frame.dict()
+    except ValueError as e:
+        status_code = 502 if "initialization returned" in str(e).lower() else 404
+        raise HTTPException(status_code=status_code, detail=str(e))
+    except Exception as e:
+        logger.error(f"Error in initialize_single_frame: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+class RichFrameCandidateApplyRequest(BaseModel):
+    candidate_id: str
+    selected_fields: List[str] = Field(min_length=1, max_length=10)
+
+
+class RichFrameCandidateDiscardRequest(BaseModel):
+    candidate_id: str
+
+
+class MicroExpressionTimingRequest(BaseModel):
+    frame_id: str
+    emotion_intent: str = Field("", max_length=500)
+    visibility: Literal["unknown", "close", "medium", "wide", "occluded"] = "unknown"
+    reviewed_messages: Optional[Dict[str, str]] = None
+    review_token: Optional[str] = None
+
+
+def _micro_expression_review(script_id: str, request: MicroExpressionTimingRequest, user: UserContext) -> Dict[str, Any]:
+    from .micro_expression import CHANNELS, PHASES
+    from ..agent_skills import catalog as skill_catalog
+
+    script = pipeline.get_script(script_id, user.owner_profile_id)
+    if not script:
+        raise HTTPException(status_code=404, detail="Script not found")
+    frame = next((item for item in script.frames if item.id == request.frame_id), None)
+    if frame is None:
+        raise HTTPException(status_code=404, detail="Frame not found")
+    duration = frame.duration or 0
+    if duration <= 0 or not frame.character_ids:
+        raise HTTPException(status_code=422, detail="请先确定镜头时长和角色")
+    character_by_id = {character.id: character for character in script.characters}
+    aliases = {f"character{index + 1}": character_id for index, character_id in enumerate(frame.character_ids)}
+    characters = []
+    anchors = {}
+    for alias, character_id in aliases.items():
+        character = character_by_id.get(character_id)
+        characters.append({"ref": alias, "name": character.name if character else f"角色 {len(characters) + 1}"})
+        if character and character.asset_pack:
+            anchors[alias] = {"revision": character.asset_pack.current_revision}
+    payload = {
+        "characters": characters,
+        "duration_seconds": duration,
+        "shot_size": frame.shot_size or "",
+        "composition": frame.composition or "",
+        "visibility": request.visibility,
+        "character_anchors": anchors,
+        "current_dialogue": frame.dialogue or "",
+        "current_action": frame.action_description or "",
+        "emotion_intent": request.emotion_intent.strip(),
+        "allowed_phases": PHASES,
+        "allowed_facial_channels": CHANNELS,
+        "invariants": ["character_identity", "clothing", "scene", "lighting", "camera", "dialogue", "reference_media"],
+    }
+    skill = next(item for item in skill_catalog() if item["id"] == "micro-expression-timing")
+    messages = {
+        "system": skill["instructions"],
+        "user": json.dumps(payload, ensure_ascii=False),
+    }
+    source = {"frame": frame.model_dump(exclude={"micro_expression_candidate", "updated_at"}, mode="json"),
+              "payload": payload, "skill_revision": skill["revision"]}
+    token = hashlib.sha256(json.dumps(source, sort_keys=True, ensure_ascii=False, default=str).encode()).hexdigest()
+    return {"messages": messages, "review_token": token, "input": payload}
+
+
+@app.post("/projects/{script_id}/frames/{frame_id}/micro-expression/preview")
+def preview_micro_expression(script_id: str, frame_id: str, request: MicroExpressionTimingRequest,
+                             user: UserContext = Depends(require_studio_user)):
+    if request.frame_id != frame_id:
+        raise HTTPException(status_code=422, detail="Frame ID mismatch")
+    try:
+        return _micro_expression_review(script_id, request, user)
+    except HTTPException:
+        raise
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+@app.post("/projects/{script_id}/frames/{frame_id}/micro-expression/generate")
+def generate_micro_expression(script_id: str, frame_id: str, request: MicroExpressionTimingRequest,
+                              user: UserContext = Depends(require_studio_user)):
+    if request.frame_id != frame_id:
+        raise HTTPException(status_code=422, detail="Frame ID mismatch")
+    review = _micro_expression_review(script_id, request, user)
+    if request.review_token != review["review_token"] or request.reviewed_messages != review["messages"]:
+        raise HTTPException(status_code=409, detail="请先审核并确认完整的微表情模型输入")
+    try:
+        content = pipeline.script_processor.llm.chat(
+            messages=[{"role": "system", "content": review["messages"]["system"]},
+                      {"role": "user", "content": review["messages"]["user"]}],
+            response_format={"type": "json_object"},
+            timeout_seconds=300, max_retries=1,
+        )
+        payload = json.loads(content or "")
+        from .micro_expression import validate_micro_expression_payload
+        candidates = validate_micro_expression_payload(payload, duration_seconds=review["input"]["duration_seconds"])
+        aliases = {f"character{index + 1}": character_id for index, character_id in enumerate(
+            next(item for item in pipeline.get_script(script_id, user.owner_profile_id).frames if item.id == frame_id).character_ids
+        )}
+        allowed = set(aliases)
+        if len({item.character_id for item in candidates}) != len(candidates) or any(item.character_id not in allowed for item in candidates):
+            raise ValueError("微表情结果包含未选角色或重复角色")
+        if any(
+            (request.visibility == "unknown" or item.character_id not in review["input"]["character_anchors"])
+            and not item.uncertainties for item in candidates
+        ):
+            raise ValueError("缺少可见性或角色锚点时必须标记待确认项")
+        if _micro_expression_review(script_id, request, user)["review_token"] != review["review_token"]:
+            raise HTTPException(status_code=409, detail="镜头或锚点已变化，请重新预览")
+        script = pipeline.get_script(script_id, user.owner_profile_id)
+        frame = next(item for item in script.frames if item.id == frame_id)
+        normalized = []
+        for item in candidates:
+            value = item.model_dump(mode="json")
+            value["character_id"] = aliases[item.character_id]
+            normalized.append(value)
+        frame.micro_expression_candidate = {
+            "id": str(uuid.uuid4()), "source_hash": review["review_token"],
+            "items": normalized,
+            "emotion_intent": request.emotion_intent.strip(),
+            "visibility": request.visibility,
+        }
+        frame.updated_at = time.time()
+        pipeline._save_data()
+        return frame.micro_expression_candidate
+    except HTTPException:
+        raise
+    except (json.JSONDecodeError, ValueError) as exc:
+        logger.warning("Micro-expression result failed validation: %s", type(exc).__name__)
+        raise HTTPException(status_code=502, detail="微表情结果未通过结构校验，请重试") from exc
+
+
+class MicroExpressionApplyRequest(BaseModel):
+    candidate_id: str
+    character_ids: List[str] = Field(min_length=1)
+
+
+@app.post("/projects/{script_id}/frames/{frame_id}/micro-expression/apply", response_model=Script)
+def apply_micro_expression(script_id: str, frame_id: str, request: MicroExpressionApplyRequest,
+                           user: UserContext = Depends(require_studio_user)):
+    script = pipeline.get_script(script_id, user.owner_profile_id)
+    if not script:
+        raise HTTPException(status_code=404, detail="Script not found")
+    frame = next((item for item in script.frames if item.id == frame_id), None)
+    if not frame:
+        raise HTTPException(status_code=404, detail="Frame not found")
+    candidate = frame.micro_expression_candidate or {}
+    if candidate.get("id") != request.candidate_id:
+        raise HTTPException(status_code=409, detail="微表情候选已过期")
+    if frame.workbench_prompt_is_optimized:
+        raise HTTPException(status_code=409, detail="完整优化稿需重新审核后才能应用微表情时序")
+    refresh = MicroExpressionTimingRequest(frame_id=frame_id, emotion_intent=candidate.get("emotion_intent", ""),
+                                           visibility=candidate.get("visibility", "unknown"))
+    if candidate.get("source_hash") != _micro_expression_review(script_id, refresh, user)["review_token"]:
+        raise HTTPException(status_code=409, detail="镜头或锚点已变化，请重新生成")
+    selected = set(request.character_ids)
+    items = candidate.get("items") or []
+    if len(selected) != len(request.character_ids) or not selected.issubset({item["character_id"] for item in items}):
+        raise HTTPException(status_code=422, detail="请选择有效角色")
+    frame.micro_expression_timing = [item for item in frame.micro_expression_timing if item.get("character_id") not in selected]
+    names = {character.id: character.name for character in script.characters}
+    frame.micro_expression_timing.extend(
+        {**item, "character_name": names.get(item["character_id"], "当前角色")}
+        for item in items if item["character_id"] in selected
+    )
+    frame.micro_expression_candidate = None
+    frame.updated_at = time.time()
+    pipeline._save_data()
+    return signed_response(script)
+
+
+class CameraMovementRequest(BaseModel):
+    frame_id: str
+    reviewed_messages: Optional[Dict[str, str]] = None
+    review_token: Optional[str] = None
+
+
+def _camera_movement_review(script_id: str, frame_id: str, user: UserContext) -> Dict[str, Any]:
+    from ..agent_skills import catalog as skill_catalog
+
+    script = pipeline.get_script(script_id, user.owner_profile_id)
+    if not script:
+        raise HTTPException(status_code=404, detail="Script not found")
+    frame = next((item for item in script.frames if item.id == frame_id), None)
+    if frame is None:
+        raise HTTPException(status_code=404, detail="Frame not found")
+    skill = next(item for item in skill_catalog() if item["id"] == "shot-camera-movement")
+    projection = frame.reference_visual_projection
+    selected = set(projection.selected_fields) & {"space", "camera"} if projection else set()
+    payload = {
+        "duration_seconds": frame.duration,
+        "current_action": frame.action_description or "",
+        "shot_size": frame.shot_size or "",
+        "camera_angle": frame.camera_angle or "",
+        "composition": frame.composition or "",
+        "blocking": frame.blocking.model_dump(mode="json") if frame.blocking else None,
+        "camera_movement_structured": frame.camera_movement_structured.model_dump(mode="json") if frame.camera_movement_structured else None,
+        "continuity_constraints": {
+            "scope": projection.scope,
+            "visual_design": {key: projection.visual_design[key] for key in selected if key in projection.visual_design},
+        } if selected else None,
+    }
+    messages = {"system": skill["instructions"], "user": json.dumps(payload, ensure_ascii=False)}
+    source = {
+        "frame": frame.model_dump(exclude={"camera_movement_candidate", "updated_at", "assembled_prompt"}, mode="json"),
+        "skill_revision": skill["revision"],
+    }
+    token = hashlib.sha256(json.dumps(source, sort_keys=True, ensure_ascii=False).encode()).hexdigest()
+    return {"messages": messages, "review_token": token, "input": payload}
+
+
+@app.post("/projects/{script_id}/frames/{frame_id}/camera-movement/preview")
+def preview_camera_movement(script_id: str, frame_id: str, request: CameraMovementRequest,
+                            user: UserContext = Depends(require_studio_user)):
+    if request.frame_id != frame_id:
+        raise HTTPException(status_code=422, detail="Frame ID mismatch")
+    return _camera_movement_review(script_id, frame_id, user)
+
+
+@app.post("/projects/{script_id}/frames/{frame_id}/camera-movement/generate")
+def generate_camera_movement(script_id: str, frame_id: str, request: CameraMovementRequest,
+                             user: UserContext = Depends(require_studio_user)):
+    if request.frame_id != frame_id:
+        raise HTTPException(status_code=422, detail="Frame ID mismatch")
+    review = _camera_movement_review(script_id, frame_id, user)
+    if request.review_token != review["review_token"] or request.reviewed_messages != review["messages"]:
+        raise HTTPException(status_code=409, detail="请先审核并确认完整的运镜模型输入")
+    try:
+        content = pipeline.script_processor.llm.chat(
+            messages=[{"role": "system", "content": review["messages"]["system"]},
+                      {"role": "user", "content": review["messages"]["user"]}],
+            response_format={"type": "json_object"}, timeout_seconds=300, max_retries=1,
+        )
+        from .camera_movement import validate_movement_payload
+        proposal = validate_movement_payload(json.loads(content or ""))
+        if set(proposal.source_refs) - set(review["input"]):
+            raise ValueError("运镜来源不在当前镜头输入中")
+        if _camera_movement_review(script_id, frame_id, user)["review_token"] != review["review_token"]:
+            raise HTTPException(status_code=409, detail="镜头已变化，请重新预览")
+        script = pipeline.get_script(script_id, user.owner_profile_id)
+        frame = next(item for item in script.frames if item.id == frame_id)
+        frame.camera_movement_candidate = {
+            "id": str(uuid.uuid4()), "source_hash": review["review_token"],
+            **proposal.model_dump(mode="json"),
+        }
+        frame.updated_at = time.time()
+        pipeline._save_data()
+        return frame.camera_movement_candidate
+    except HTTPException:
+        raise
+    except (json.JSONDecodeError, ValueError) as exc:
+        logger.warning("Camera movement result failed validation: %s", type(exc).__name__)
+        raise HTTPException(status_code=502, detail="运镜候选未通过结构校验，请重试") from exc
+
+
+class CameraMovementApplyRequest(BaseModel):
+    candidate_id: str
+
+
+class ShotFieldRequest(BaseModel):
+    frame_id: str
+    reviewed_messages: Optional[Dict[str, str]] = None
+    review_token: Optional[str] = None
+
+
+class ShotFieldApplyRequest(BaseModel):
+    candidate_id: str
+    selected_fields: List[str]
+
+
+def _shot_field_review(script_id: str, frame_id: str, user: UserContext) -> Dict[str, Any]:
+    from ..agent_skills import catalog as skill_catalog
+    script = pipeline.get_script(script_id, user.owner_profile_id)
+    if not script:
+        raise HTTPException(status_code=404, detail="Script not found")
+    frame = next((item for item in script.frames if item.id == frame_id), None)
+    if frame is None:
+        raise HTTPException(status_code=404, detail="Frame not found")
+    rows = pipeline.storyboard_continuity_sheet(script_id)["rows"]
+    row_index = next(index for index, item in enumerate(rows) if item["frame_id"] == frame_id)
+    row = rows[row_index]
+    following = rows[row_index + 1] if row_index + 1 < len(rows) else None
+    relationship = "unresolved"
+    if following and row["time_continuity_id"] and following["time_continuity_id"]:
+        if row["time_continuity_id"] != following["time_continuity_id"]:
+            relationship = "different_time"
+        elif row["place_continuity_id"] and following["place_continuity_id"]:
+            relationship = ("same_place_time" if row["place_continuity_id"] == following["place_continuity_id"]
+                            else "same_time_different_place")
+    movement = frame.camera_movement_structured
+    current = {
+        "duration": frame.duration, "shot_size": frame.shot_size,
+        "camera_angle": frame.camera_angle,
+        "camera_movement_structured": movement.model_dump(mode="json") if hasattr(movement, "model_dump") else movement,
+        "transition_hint": frame.transition_hint,
+        "style_prompt_override": frame.style_prompt_override or None,
+        "lighting_override": frame.lighting_override or None,
+    }
+    visual_keys = ("style", "story_time", "daylight_phase", "weather", "shadow_direction",
+                   "key_source", "ambient_lighting", "color_tone", "contrast", "practical_sources",
+                   "direction", "quality", "color_temp", "lighting_override")
+    effective_visual = {
+        key: {"value": row["fields"][key]["value"],
+              "source": row["fields"][key]["source_kind"],
+              "revision": row["fields"][key]["source_revision"]}
+        for key in visual_keys if key in row["fields"]
+    }
+    payload = {
+        "current_action": frame.action_description or "",
+        "fields": current,
+        "effective_visual": effective_visual,
+        "scene": row["scene_name"] or "",
+        "next_shot": {"scene": following["scene_name"] or "", "relationship": relationship}
+        if following else None,
+        "continuity": {"status": row["continuity_status"],
+                       "reference_fields": row["reference"]["selected_fields"] if row["reference"] else []},
+    }
+    skill = next(item for item in skill_catalog() if item["id"] == "shot-field-continuity")
+    system = skill["instructions"]
+    messages = {"system": system, "user": json.dumps(payload, ensure_ascii=False)}
+    source = {
+        "frame": frame.model_dump(exclude={"shot_field_candidate", "updated_at", "assembled_prompt"}, mode="json"),
+        "row": row, "messages": messages, "skill_revision": skill["revision"],
+    }
+    token = hashlib.sha256(json.dumps(source, sort_keys=True, ensure_ascii=False, default=str).encode()).hexdigest()
+    return {"messages": messages, "review_token": token, "input": payload}
+
+
+@app.post("/projects/{script_id}/frames/{frame_id}/shot-fields/preview")
+def preview_shot_fields(script_id: str, frame_id: str, request: ShotFieldRequest,
+                        user: UserContext = Depends(require_studio_user)):
+    if request.frame_id != frame_id:
+        raise HTTPException(status_code=422, detail="Frame ID mismatch")
+    return _shot_field_review(script_id, frame_id, user)
+
+
+@app.post("/projects/{script_id}/frames/{frame_id}/shot-fields/generate")
+def generate_shot_fields(script_id: str, frame_id: str, request: ShotFieldRequest,
+                         user: UserContext = Depends(require_studio_user)):
+    if request.frame_id != frame_id:
+        raise HTTPException(status_code=422, detail="Frame ID mismatch")
+    review = _shot_field_review(script_id, frame_id, user)
+    if request.review_token != review["review_token"] or request.reviewed_messages != review["messages"]:
+        raise HTTPException(status_code=409, detail="请先审核并确认当前镜头字段输入")
+    try:
+        from .shot_field_optimization import validate_shot_field_payload
+        content = pipeline.script_processor.llm.chat(
+            messages=[{"role": "system", "content": review["messages"]["system"]},
+                      {"role": "user", "content": review["messages"]["user"]}],
+            response_format={"type": "json_object"}, timeout_seconds=300, max_retries=1,
+        )
+        proposal = validate_shot_field_payload(json.loads(content or ""))
+        if "transition_hint" in proposal.fields and review["input"]["next_shot"] is None:
+            raise ValueError("Last shot has no transition target")
+        def supplied_path(ref: str) -> bool:
+            value: Any = review["input"]
+            for key in ref.split("."):
+                if not isinstance(value, dict) or key not in value:
+                    return False
+                value = value[key]
+            return value is not None and value != ""
+
+        if any(not supplied_path(ref) for refs in proposal.source_refs.values() for ref in refs):
+            raise ValueError("Shot field source is not in current input")
+        if _shot_field_review(script_id, frame_id, user)["review_token"] != review["review_token"]:
+            raise HTTPException(status_code=409, detail="镜头或场景已变化，请重新预览")
+        if not proposal.fields:
+            return {"id": "", **proposal.model_dump(mode="json")}
+        frame = next(item for item in pipeline.get_script(script_id, user.owner_profile_id).frames if item.id == frame_id)
+        frame.shot_field_candidate = {"id": str(uuid.uuid4()), "source_hash": review["review_token"],
+                                      **proposal.model_dump(mode="json")}
+        frame.updated_at = time.time()
+        pipeline._save_data()
+        return frame.shot_field_candidate
+    except HTTPException:
+        raise
+    except (json.JSONDecodeError, ValueError) as exc:
+        raise HTTPException(status_code=502, detail="镜头字段候选未通过结构校验，请重试") from exc
+
+
+@app.post("/projects/{script_id}/frames/{frame_id}/shot-fields/apply", response_model=Script)
+def apply_shot_fields(script_id: str, frame_id: str, request: ShotFieldApplyRequest,
+                      user: UserContext = Depends(require_studio_user)):
+    script = pipeline.get_script(script_id, user.owner_profile_id)
+    if not script:
+        raise HTTPException(status_code=404, detail="Script not found")
+    frame = next((item for item in script.frames if item.id == frame_id), None)
+    if frame is None:
+        raise HTTPException(status_code=404, detail="Frame not found")
+    candidate = frame.shot_field_candidate or {}
+    if candidate.get("id") != request.candidate_id or candidate.get("source_hash") != _shot_field_review(script_id, frame_id, user)["review_token"]:
+        raise HTTPException(status_code=409, detail="镜头字段候选已过期")
+    if frame.workbench_prompt_is_optimized:
+        raise HTTPException(status_code=409, detail="完整优化稿需重新审核后才能应用镜头字段")
+    from .shot_field_optimization import validate_shot_field_payload
+    from .prompt_assembly import assemble_prompt
+    proposal = validate_shot_field_payload({key: candidate[key] for key in ("fields", "rationale", "source_refs", "uncertainties")})
+    selected = request.selected_fields
+    if not selected or len(set(selected)) != len(selected) or set(selected) - set(proposal.fields):
+        raise HTTPException(status_code=422, detail="请选择有效的镜头字段")
+    proposed = frame.model_copy(deep=True)
+    for key in selected:
+        setattr(proposed, key, proposal.fields[key])
+    proposed = StoryboardFrame.model_validate(proposed.model_dump(mode="json"))
+    assembled = assemble_prompt(proposed, pipeline.resolve_project_assets(script)["characters"])
+    for key in selected:
+        setattr(frame, key, getattr(proposed, key))
+    frame.assembled_prompt = assembled
+    frame.shot_field_candidate = None
+    frame.updated_at = time.time()
+    pipeline._save_data()
+    return signed_response(script)
+
+
+@app.post("/projects/{script_id}/frames/{frame_id}/camera-movement/apply", response_model=Script)
+def apply_camera_movement(script_id: str, frame_id: str, request: CameraMovementApplyRequest,
+                          user: UserContext = Depends(require_studio_user)):
+    script = pipeline.get_script(script_id, user.owner_profile_id)
+    if not script:
+        raise HTTPException(status_code=404, detail="Script not found")
+    frame = next((item for item in script.frames if item.id == frame_id), None)
+    if frame is None:
+        raise HTTPException(status_code=404, detail="Frame not found")
+    candidate = frame.camera_movement_candidate or {}
+    if candidate.get("id") != request.candidate_id:
+        raise HTTPException(status_code=409, detail="运镜候选已过期")
+    if frame.workbench_prompt_is_optimized:
+        raise HTTPException(status_code=409, detail="完整优化稿需重新审核后才能应用运镜")
+    if candidate.get("source_hash") != _camera_movement_review(script_id, frame_id, user)["review_token"]:
+        raise HTTPException(status_code=409, detail="镜头已变化，请重新生成")
+    from .camera_movement import validate_movement_payload
+    from .prompt_assembly import assemble_prompt
+    proposal = validate_movement_payload({key: candidate[key] for key in
+        ("camera_movement_structured", "rationale", "source_refs", "uncertainties")})
+    frame.camera_movement_structured = proposal.camera_movement_structured
+    frame.assembled_prompt = assemble_prompt(frame, pipeline.resolve_project_assets(script)["characters"])
+    frame.camera_movement_candidate = None
+    frame.updated_at = time.time()
+    pipeline._save_data()
+    return signed_response(script)
+
+
+class StaticFramingRequest(BaseModel):
+    frame_id: str
+    reviewed_messages: Optional[Dict[str, str]] = None
+    review_token: Optional[str] = None
+
+
+def _static_framing_review(script_id: str, frame_id: str, user: UserContext) -> Dict[str, Any]:
+    from ..agent_skills import catalog as skill_catalog
+
+    script = pipeline.get_script(script_id, user.owner_profile_id)
+    if not script:
+        raise HTTPException(status_code=404, detail="Script not found")
+    frame = next((item for item in script.frames if item.id == frame_id), None)
+    if frame is None:
+        raise HTTPException(status_code=404, detail="Frame not found")
+    skill = next(item for item in skill_catalog() if item["id"] == "shot-static-framing")
+    projection = frame.reference_visual_projection
+    selected = set(projection.selected_fields) & {"space", "camera"} if projection else set()
+    plan_shot = (frame.director_shot_context or {}).get("shot") or {}
+    payload = {
+        "duration_seconds": frame.duration,
+        "current_action": frame.action_description or "",
+        "opening_performance": frame.character_acting or "",
+        "shot_size": frame.shot_size or "",
+        "camera_angle": frame.camera_angle or "",
+        "composition": frame.composition or "",
+        "blocking": frame.blocking.model_dump(mode="json") if frame.blocking else None,
+        "current_camera_movement": frame.camera_movement_structured.model_dump(mode="json") if frame.camera_movement_structured else None,
+        "director_static_suggestion": {key: plan_shot[key] for key in
+            ("shot_size", "camera_angle", "composition", "visual_intent") if plan_shot.get(key)},
+        "continuity_constraints": {
+            "scope": projection.scope,
+            "visual_design": {key: projection.visual_design[key] for key in selected if key in projection.visual_design},
+        } if selected else None,
+    }
+    messages = {"system": skill["instructions"], "user": json.dumps(payload, ensure_ascii=False)}
+    source = {
+        "frame": frame.model_dump(exclude={"static_framing_candidate", "camera_movement_candidate",
+                                            "micro_expression_candidate", "rich_refinement_candidate",
+                                            "updated_at", "assembled_prompt"}, mode="json"),
+        "skill_revision": skill["revision"],
+    }
+    token = hashlib.sha256(json.dumps(source, sort_keys=True, ensure_ascii=False).encode()).hexdigest()
+    return {"messages": messages, "review_token": token, "input": payload}
+
+
+@app.post("/projects/{script_id}/frames/{frame_id}/static-framing/preview")
+def preview_static_framing(script_id: str, frame_id: str, request: StaticFramingRequest,
+                           user: UserContext = Depends(require_studio_user)):
+    if request.frame_id != frame_id:
+        raise HTTPException(status_code=422, detail="Frame ID mismatch")
+    return _static_framing_review(script_id, frame_id, user)
+
+
+@app.post("/projects/{script_id}/frames/{frame_id}/static-framing/generate")
+def generate_static_framing(script_id: str, frame_id: str, request: StaticFramingRequest,
+                            user: UserContext = Depends(require_studio_user)):
+    if request.frame_id != frame_id:
+        raise HTTPException(status_code=422, detail="Frame ID mismatch")
+    review = _static_framing_review(script_id, frame_id, user)
+    if request.review_token != review["review_token"] or request.reviewed_messages != review["messages"]:
+        raise HTTPException(status_code=409, detail="请先审核并确认完整的静态起幅模型输入")
+    try:
+        content = pipeline.script_processor.llm.chat(
+            messages=[{"role": "system", "content": review["messages"]["system"]},
+                      {"role": "user", "content": review["messages"]["user"]}],
+            response_format={"type": "json_object"}, timeout_seconds=300, max_retries=1,
+        )
+        from .static_framing import validate_static_framing_payload
+        proposal = validate_static_framing_payload(json.loads(content or ""))
+        if any(set(refs) - set(review["input"]) for refs in proposal.source_refs.values()):
+            raise ValueError("静态起幅来源不在当前镜头输入中")
+        if _static_framing_review(script_id, frame_id, user)["review_token"] != review["review_token"]:
+            raise HTTPException(status_code=409, detail="镜头已变化，请重新预览")
+        script = pipeline.get_script(script_id, user.owner_profile_id)
+        frame = next(item for item in script.frames if item.id == frame_id)
+        frame.static_framing_candidate = {
+            "id": str(uuid.uuid4()), "source_hash": review["review_token"],
+            "current_fields": {key: getattr(frame, key) for key in proposal.fields},
+            **proposal.model_dump(mode="json"),
+        }
+        frame.updated_at = time.time()
+        pipeline._save_data()
+        return frame.static_framing_candidate
+    except HTTPException:
+        raise
+    except (json.JSONDecodeError, ValueError) as exc:
+        logger.warning("Static framing result failed validation: %s", type(exc).__name__)
+        raise HTTPException(status_code=502, detail="静态起幅候选未通过结构校验，请重试") from exc
+
+
+class StaticFramingApplyRequest(BaseModel):
+    candidate_id: str
+    selected_fields: List[str] = Field(min_length=1, max_length=3)
+
+
+@app.post("/projects/{script_id}/frames/{frame_id}/static-framing/apply", response_model=Script)
+def apply_static_framing(script_id: str, frame_id: str, request: StaticFramingApplyRequest,
+                         user: UserContext = Depends(require_studio_user)):
+    script = pipeline.get_script(script_id, user.owner_profile_id)
+    if not script:
+        raise HTTPException(status_code=404, detail="Script not found")
+    frame = next((item for item in script.frames if item.id == frame_id), None)
+    if frame is None:
+        raise HTTPException(status_code=404, detail="Frame not found")
+    candidate = frame.static_framing_candidate or {}
+    if candidate.get("id") != request.candidate_id:
+        raise HTTPException(status_code=409, detail="静态起幅候选已过期")
+    if frame.workbench_prompt_is_optimized:
+        raise HTTPException(status_code=409, detail="完整优化稿需重新审核后才能应用静态起幅")
+    if candidate.get("source_hash") != _static_framing_review(script_id, frame_id, user)["review_token"]:
+        raise HTTPException(status_code=409, detail="镜头已变化，请重新生成")
+    from .static_framing import validate_static_framing_payload
+    from .prompt_assembly import assemble_prompt
+    proposal = validate_static_framing_payload({key: candidate[key] for key in
+        ("fields", "rationale", "source_refs", "uncertainties")})
+    selected = request.selected_fields
+    if len(set(selected)) != len(selected) or set(selected) - set(proposal.fields):
+        raise HTTPException(status_code=422, detail="请选择有效的静态起幅字段")
+    proposed_frame = frame.model_copy(deep=True)
+    for key in selected:
+        setattr(proposed_frame, key, proposal.fields[key])
+    assembled = assemble_prompt(proposed_frame, pipeline.resolve_project_assets(script)["characters"])
+    for key in selected:
+        setattr(frame, key, proposal.fields[key])
+    frame.assembled_prompt = assembled
+    frame.static_framing_candidate = None
+    frame.updated_at = time.time()
+    pipeline._save_data()
+    return signed_response(script)
+
+
+@app.post("/projects/{script_id}/frames/{frame_id}/rich-refinement/apply", response_model=Script)
+def apply_rich_refinement(script_id: str, frame_id: str, request: RichFrameCandidateApplyRequest,
+                          user: UserContext = Depends(require_studio_user)):
+    if not pipeline.get_script(script_id, user.owner_profile_id):
+        raise HTTPException(status_code=404, detail="Script not found")
+    try:
+        return signed_response(pipeline.apply_rich_refinement_candidate(
+            script_id, frame_id, request.candidate_id, request.selected_fields,
+        ))
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+
+@app.post("/projects/{script_id}/frames/{frame_id}/rich-refinement/discard", response_model=Script)
+def discard_rich_refinement(script_id: str, frame_id: str, request: RichFrameCandidateDiscardRequest,
+                            user: UserContext = Depends(require_studio_user)):
+    if not pipeline.get_script(script_id, user.owner_profile_id):
+        raise HTTPException(status_code=404, detail="Script not found")
+    try:
+        return signed_response(pipeline.discard_rich_refinement_candidate(
+            script_id, frame_id, request.candidate_id,
+        ))
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+
 @app.post("/projects/{script_id}/storyboard/refine_batch")
-def refine_storyboard_batch(script_id: str):
+def refine_storyboard_batch(script_id: str,
+                            user: UserContext = Depends(require_studio_user)):
     """Phase 2: Batch refine all coarse frames. Streams SSE events."""
     from fastapi.responses import StreamingResponse
 
-    script = pipeline.get_script(script_id)
+    script = pipeline.get_script(script_id, user.owner_profile_id)
     if not script:
         raise HTTPException(status_code=404, detail="Script not found")
 
     def event_stream():
         for event_type, data in pipeline.refine_batch_generator(script_id):
+            yield f"event: {event_type}\ndata: {json.dumps(data, ensure_ascii=False)}\n\n"
+
+    return StreamingResponse(event_stream(), media_type="text/event-stream")
+
+
+@app.post("/projects/{script_id}/storyboard/initialize")
+def initialize_storyboard_batch(script_id: str,
+                                user: UserContext = Depends(require_studio_user)):
+    """Initialize all shots, proposing only missing fields for review."""
+    from fastapi.responses import StreamingResponse
+
+    script = pipeline.get_script(script_id, user.owner_profile_id)
+    if not script:
+        raise HTTPException(status_code=404, detail="Script not found")
+
+    def event_stream():
+        for event_type, data in pipeline.initialize_batch_generator(script_id):
             yield f"event: {event_type}\ndata: {json.dumps(data, ensure_ascii=False)}\n\n"
 
     return StreamingResponse(event_stream(), media_type="text/event-stream")
@@ -3883,6 +4589,7 @@ class CreateVideoTaskRequest(BaseModel):
     last_frame_media_id: Optional[str] = None
     prompt: str
     frame_id: Optional[str] = None
+    visual_source_hash: Optional[str] = None
     duration: int = 5
     seed: Optional[int] = None
     resolution: str = "720p"
@@ -3995,12 +4702,56 @@ class SaveShotVisualPresetRequest(BaseModel):
 
 
 class ApplyShotVisualPresetRequest(BaseModel):
-    apply_mode: Literal["parameters_only", "parameters_with_reference"] = "parameters_only"
+    apply_mode: Literal[
+        "parameters_only", "parameters_with_reference", "image_only", "image_and_context",
+    ] = "parameters_only"
+    selected_fields: Optional[List[Literal["lighting", "space", "camera", "continuity_state"]]] = None
 
 
-@app.get("/projects/{script_id}/shot-visual-presets", response_model=List[ShotVisualPreset])
-def list_shot_visual_presets(script_id: str, scene_id: Optional[str] = None):
-    return pipeline.list_shot_visual_presets(script_id, scene_id=scene_id)
+@app.get("/projects/{script_id}/shot-visual-presets")
+def list_shot_visual_presets(
+    script_id: str, scene_id: Optional[str] = None,
+    user: UserContext = Depends(require_studio_user),
+):
+    script = pipeline.get_script(script_id, user.owner_profile_id)
+    if not script:
+        raise HTTPException(status_code=404, detail="Script not found")
+    result = []
+    for preset in pipeline.list_shot_visual_presets(script_id, scene_id=scene_id):
+        _, _, variant, _, _ = pipeline._visual_reference_source(script, preset)
+        stored = image_variant_storage_key(variant) if variant else None
+        preview_url = None
+        if stored:
+            try:
+                preview_url = _owned_media_cover_url(stored, user.owner_profile_id, 160)
+            except HTTPException:
+                pass
+        result.append({**preset.model_dump(mode="json"), "preview_url": preview_url})
+    return private_no_store_signed_response(result)
+
+
+@app.get("/projects/{script_id}/frames/{frame_id}/shot-visual-presets/{preset_id}/projection")
+def preview_shot_visual_preset_projection(
+    script_id: str, frame_id: str, preset_id: str,
+    user: UserContext = Depends(require_studio_user),
+):
+    script = pipeline.get_script(script_id, user.owner_profile_id)
+    if not script:
+        raise HTTPException(status_code=404, detail="Script not found")
+    try:
+        return pipeline.preview_shot_visual_preset(script_id, frame_id, preset_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@app.get("/projects/{script_id}/storyboard/continuity-sheet")
+def storyboard_continuity_sheet(
+    script_id: str, user: UserContext = Depends(require_studio_user),
+):
+    script = pipeline.get_script(script_id, user.owner_profile_id)
+    if not script:
+        raise HTTPException(status_code=404, detail="Script not found")
+    return pipeline.storyboard_continuity_sheet(script_id)
 
 
 @app.post("/projects/{script_id}/frames/{frame_id}/shot-visual-presets", response_model=ShotVisualPreset)
@@ -4025,7 +4776,10 @@ def save_shot_visual_preset(script_id: str, frame_id: str, request: SaveShotVisu
 @app.post("/projects/{script_id}/frames/{frame_id}/shot-visual-presets/{preset_id}/apply", response_model=StoryboardFrame)
 def apply_shot_visual_preset(script_id: str, frame_id: str, preset_id: str, request: ApplyShotVisualPresetRequest):
     try:
-        frame = pipeline.apply_shot_visual_preset(script_id, frame_id, preset_id, request.apply_mode)
+        frame = pipeline.apply_shot_visual_preset(
+            script_id, frame_id, preset_id, request.apply_mode,
+            selected_fields=request.selected_fields,
+        )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
     if frame is None:
@@ -4091,6 +4845,14 @@ def cancel_video_task(script_id: str, task_id: str):
 @app.post("/projects/{script_id}/video_tasks", response_model=List[VideoTask])
 def create_video_task(script_id: str, request: CreateVideoTaskRequest, background_tasks: BackgroundTasks):
     """Creates new video generation tasks."""
+    if request.visual_source_hash:
+        try:
+            row = next(item for item in pipeline.storyboard_continuity_sheet(script_id)["rows"]
+                       if item["frame_id"] == request.frame_id)
+        except (ValueError, StopIteration):
+            raise HTTPException(status_code=404, detail="Shot not found")
+        if row["visual_source_hash"] != request.visual_source_hash:
+            raise HTTPException(status_code=409, detail="Shot visual sources changed; review video input again")
     try:
         tasks = []
         for _ in range(request.batch_size):
@@ -4343,14 +5105,38 @@ def update_asset_image(script_id: str, request: UpdateAssetImageRequest):
 @app.post("/projects/{script_id}/assets/update_attributes")
 def update_asset_attributes(script_id: str, request: UpdateAssetAttributesRequest):
     """Updates arbitrary attributes of an asset."""
+    if request.response_mode == "design" and (
+        request.asset_type != "character" or set(request.attributes) != {"character_design"}
+    ):
+        raise HTTPException(status_code=422, detail="Design response requires only a character design update")
+    started = time.perf_counter()
     try:
-        pipeline.update_asset_attributes(
+        script = pipeline.update_asset_attributes(
             script_id,
             request.asset_id,
             request.asset_type,
             request.attributes
         )
-        return get_project(script_id)
+        persisted = time.perf_counter()
+        if request.response_mode == "design":
+            asset, _ = pipeline._find_asset_with_source(script, request.asset_id, "character")
+            response = signed_response({
+                "project_id": script_id,
+                "asset_id": request.asset_id,
+                "asset_revision": asset.asset_revision,
+                "character_design": asset.character_design,
+            })
+        else:
+            response = get_project(script_id)
+        finished = time.perf_counter()
+        response.headers["Server-Timing"] = (
+            f"persist;dur={(persisted - started) * 1000:.1f}, "
+            f"response;dur={(finished - persisted) * 1000:.1f}"
+        )
+        logger.info("Asset save mode=%s persist_ms=%.1f response_ms=%.1f bytes=%d",
+                    request.response_mode, (persisted - started) * 1000,
+                    (finished - persisted) * 1000, len(response.body))
+        return response
     except InvalidAssetName as e:
         raise HTTPException(status_code=422, detail=str(e))
     except ValueError as e:
@@ -4648,7 +5434,7 @@ def toggle_variant_favorite(script_id: str, request: FavoriteVariantRequest):
             request.is_favorited,
             request.generation_type
         )
-        return signed_response(updated_script)
+        return get_project(script_id)
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
     except Exception as e:
@@ -4793,7 +5579,11 @@ def update_voice_params(script_id: str, char_id: str, request: UpdateVoiceParams
 @app.get("/voices")
 def get_voices():
     """Returns list of available voices."""
-    return pipeline.audio_generator.get_available_voices()
+    from ...audio.uniart_tts import UniArtTTSError
+    try:
+        return pipeline.audio_generator.get_available_voices()
+    except UniArtTTSError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=str(exc)) from None
 
 
 class VoicePreviewRequest(BaseModel):
@@ -4813,61 +5603,18 @@ class VoicePreviewRequest(BaseModel):
 
 @app.post("/voice/preview")
 def voice_preview(request: VoicePreviewRequest):
-    """Generate or fetch cached preview audio for a voice.
-
-    Cache key = md5(voice_id|text|speed|pitch|volume|instructions). First
-    call triggers TTSProcessor.synthesize() and writes to
-    output/cache/voice_preview/{key}.mp3. Subsequent identical calls
-    return the cached URL instantly.
-
-    PR-3h #2: handles CUSTOM voices (clones/designs) by looking up
-    series.custom_voices[] for target_model + family overrides — required
-    because cloned voice_ids aren't in static TTS_VOICE_REGISTRY.
-
-    Spec: r2v-workflow-v3-unified.md §4.2.3 (cache strategy) + Q5 b/c.
-    """
-    import hashlib
+    """Owner-scoped UniArt preview; no global SDK credentials or shared cache."""
+    from ...audio.uniart_tts import UniArtTTSError
     if not pipeline.audio_generator.tts:
-        raise HTTPException(
-            status_code=503,
-            detail="TTS service unavailable. Check DASHSCOPE_API_KEY configuration.",
-        )
-
-    # PR-3h #2: resolve custom voice → target_model/family override
-    custom = pipeline.find_custom_voice(request.voice_id)
-    model_override = custom.target_model if custom else None
-    family_override = custom.family if custom else None
-
-    cache_dir = os.path.join(pipeline.output_root, "cache", "voice_preview")
-    os.makedirs(cache_dir, exist_ok=True)
-    cache_key = hashlib.md5(
-        f"{request.voice_id}|{request.text}|{request.speed}|{request.pitch}|{request.volume}|{request.instructions or ''}".encode("utf-8")
-    ).hexdigest()
-    cache_path = os.path.join(cache_dir, f"{cache_key}.mp3")
-    cached = os.path.exists(cache_path)
-
-    if not cached:
-        try:
-            pipeline.audio_generator.tts.synthesize(
-                text=request.text,
-                output_path=cache_path,
-                voice=request.voice_id,
-                speech_rate=request.speed,
-                pitch_rate=request.pitch,
-                volume=request.volume,
-                instructions=request.instructions,
-                model_override=model_override,
-                family_override=family_override,
-            )
-        except Exception as e:
-            logger.error(f"[/voice/preview] TTS error voice={request.voice_id}: {e}")
-            raise HTTPException(status_code=500, detail=f"TTS generation failed: {e}")
-
-    # Static mount /files maps to output/, so the relative path under output/
-    # becomes the URL path frontend can hit. signed_response wraps for OSS
-    # signing when configured, no-op otherwise.
-    url = f"cache/voice_preview/{cache_key}.mp3"
-    return signed_response({"url": url, "cached": cached})
+        raise HTTPException(status_code=503, detail="UniArt 语音服务不可用。")
+    try:
+        return signed_response(pipeline.audio_generator.tts.preview(
+            output_root=pipeline.output_root, text=request.text, voice=request.voice_id,
+            speech_rate=request.speed, pitch_rate=request.pitch, volume=request.volume,
+            instructions=request.instructions,
+        ))
+    except UniArtTTSError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=str(exc)) from None
 
 
 # ─────────────────────────────────────────────────────────────
@@ -4889,23 +5636,7 @@ class VoiceCloneRequest(BaseModel):
 
 @app.post("/voice/clone")
 def voice_clone(request: VoiceCloneRequest):
-    """Create a custom voice by cloning a reference audio sample.
-
-    Per Q15.2: stored at series level so any character in the series can
-    pick from the clone via the VoicePickerModal '我的复刻' tab.
-    """
-    try:
-        custom = pipeline.create_voice_clone(
-            series_id=request.series_id,
-            audio_url=request.audio_url,
-            label=request.label,
-            target_model=request.target_model,
-        )
-        return signed_response(custom)
-    except ValueError as e:
-        raise HTTPException(status_code=404, detail=str(e))
-    except RuntimeError as e:
-        raise HTTPException(status_code=500, detail=str(e))
+    raise HTTPException(status_code=409, detail="UniArt 网关暂未接入音色复刻与音色设计，请选择系统音色。")
 
 
 @app.get("/series/{series_id}/custom_voices")
@@ -4943,20 +5674,7 @@ class VoiceDesignPreviewRequest(BaseModel):
 
 @app.post("/voice/design/preview")
 def voice_design_preview(request: VoiceDesignPreviewRequest):
-    """Mint a fresh design voice and return a preview audio URL.
-
-    The user re-calls this with a tweaked voice_prompt to iterate.
-    Returns: {voice_id, preview_url, target_model}.
-    """
-    try:
-        result = pipeline.voice_design_preview(
-            voice_prompt=request.voice_prompt,
-            preview_text=request.preview_text,
-            target_model=request.target_model,
-        )
-        return signed_response(result)
-    except RuntimeError as e:
-        raise HTTPException(status_code=500, detail=str(e))
+    raise HTTPException(status_code=409, detail="UniArt 网关暂未接入音色复刻与音色设计，请选择系统音色。")
 
 
 class VoiceDesignSaveRequest(BaseModel):
@@ -4969,20 +5687,7 @@ class VoiceDesignSaveRequest(BaseModel):
 
 @app.post("/voice/design/accept")
 def voice_design_accept(request: VoiceDesignSaveRequest):
-    """Persist a previewed design voice into series.custom_voices[]."""
-    try:
-        custom = pipeline.voice_design_save(
-            series_id=request.series_id,
-            voice_id=request.voice_id,
-            voice_prompt=request.voice_prompt,
-            label=request.label,
-            target_model=request.target_model,
-        )
-        return signed_response(custom)
-    except ValueError as e:
-        raise HTTPException(status_code=404, detail=str(e))
-    except RuntimeError as e:
-        raise HTTPException(status_code=500, detail=str(e))
+    raise HTTPException(status_code=409, detail="UniArt 网关暂未接入音色复刻与音色设计，请选择系统音色。")
 
 
 class VoiceDesignTranslateRequest(BaseModel):
@@ -4991,14 +5696,7 @@ class VoiceDesignTranslateRequest(BaseModel):
 
 @app.post("/voice/design/translate")
 def voice_design_translate(request: VoiceDesignTranslateRequest):
-    """LLM helper: character.description → CosyVoice voice_prompt."""
-    if not request.description.strip():
-        raise HTTPException(status_code=400, detail="description is empty")
-    try:
-        voice_prompt = pipeline.translate_character_to_voice_prompt(request.description)
-        return {"voice_prompt": voice_prompt}
-    except RuntimeError as e:
-        raise HTTPException(status_code=500, detail=str(e))
+    raise HTTPException(status_code=409, detail="UniArt 网关暂未接入音色复刻与音色设计，请选择系统音色。")
 
 
 class GenerateLineAudioRequest(BaseModel):
@@ -5158,8 +5856,12 @@ def generate_dialogue_audio_batch(script_id: str):
                 skipped += 1
                 continue
             try:
-                pipeline.generate_dialogue_line(script_id, frame.id)
-                generated += 1
+                updated = pipeline.generate_dialogue_line(script_id, frame.id)
+                result = next((item for item in updated.frames if item.id == frame.id), None)
+                if result and result.status == GenerationStatus.COMPLETED and result.audio_url and not result.audio_error:
+                    generated += 1
+                else:
+                    failed += 1
             except Exception as exc:
                 logger.error(f"[batch_dialogue_audio] frame={frame.id} error={exc}")
                 failed += 1
@@ -5344,6 +6046,7 @@ class RenderFramePreviewRequest(BaseModel):
     frame_id: str
     prompt: str
     negative_prompt: Optional[str] = None
+    slot: Literal["first", "last"] = "first"
 
 class RenderFrameCandidateRequest(BaseModel):
     frame_id: str
@@ -5364,6 +6067,17 @@ def preview_frame_candidate(script_id: str, request: RenderFramePreviewRequest,
         raise HTTPException(status_code=404, detail="Frame not found")
     if not request.prompt.strip():
         raise HTTPException(status_code=422, detail="Storyboard prompt cannot be empty")
+    try:
+        before = pipeline.storyboard_render_context_token(script_id, request.frame_id)
+        candidate_prompt = pipeline.preview_storyboard_candidate_prompt(
+            script_id, request.frame_id, request.prompt, slot=request.slot,
+        )
+        if before != pipeline.storyboard_render_context_token(script_id, request.frame_id):
+            raise HTTPException(status_code=409, detail="镜头内容已变化，请重新预览首尾帧输入")
+    except HTTPException:
+        raise
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
     series = pipeline.series_store.get(script.series_id) if script.series_id else None
     assets = pipeline.resolve_project_assets(script)
     character_assets = {item.id: item for item in assets["characters"]}
@@ -5377,15 +6091,15 @@ def preview_frame_candidate(script_id: str, request: RenderFramePreviewRequest,
             continue
         selected = next((item for item in selected_assets
                          if item["asset_type"] == "character" and item["asset_id"] == item_id), None)
-        reference_labels.append(f"{character.name}（{selected['variant_id'] if selected and selected.get('variant_id') else '无参考图'}）")
+        reference_labels.append(f"{character.name}（{'已选参考图' if selected and selected.get('variant_id') else '无参考图'}）")
     if frame.scene_id:
         scene_asset = scene_assets.get(frame.scene_id)
         selected = next((item for item in selected_assets
                          if item["asset_type"] == "scene" and item["asset_id"] == frame.scene_id), None)
-        reference_labels.append(f"{scene_asset.name if scene_asset else frame.scene_id}（{selected['variant_id'] if selected and selected.get('variant_id') else '无参考图'}）")
+        reference_labels.append(f"{scene_asset.name if scene_asset else '场景'}（{'已选参考图' if selected and selected.get('variant_id') else '无参考图'}）")
     from .assets import ASPECT_RATIO_TO_SIZE
     return {
-        "prompt": request.prompt,
+        "prompt": candidate_prompt,
         "negative_prompt": request.negative_prompt or "",
         "model": series.model_settings.i2i_model if series else script.model_settings.i2i_model,
         "aspect_ratio": script.model_settings.storyboard_aspect_ratio,
@@ -5393,8 +6107,10 @@ def preview_frame_candidate(script_id: str, request: RenderFramePreviewRequest,
         "character_ids": frame.character_ids,
         "scene_id": frame.scene_id,
         "reference_asset_labels": reference_labels,
+        "source_label": pipeline.storyboard_render_scene_design_source(script_id, request.frame_id),
+        "polish_review": pipeline.storyboard_image_polish_review(script_id, request.frame_id, request.prompt),
         "context_token": pipeline.storyboard_candidate_preview_token(
-            script_id, request.frame_id, request.prompt, request.negative_prompt,
+            script_id, request.frame_id, candidate_prompt, request.negative_prompt,
         ),
     }
 
@@ -5438,7 +6154,7 @@ def preview_render_frame(script_id: str, request: RenderFramePreviewRequest,
             raise HTTPException(status_code=409, detail="Storyboard render preview is outdated; preview the current frame again")
         return {
             "prompt": prompt,
-            "context_token": pipeline.storyboard_render_preview_token(after, prompt),
+            "context_token": pipeline.storyboard_render_preview_token(after, prompt, request.negative_prompt),
             "source_label": source_label,
             "omitted_plan_lighting": omitted_plan_lighting,
             "polish_review": polish_review,
@@ -5465,7 +6181,7 @@ def start_render_frame_job(script_id: str, request: RenderFrameJobRequest,
             current_token = pipeline.storyboard_render_context_token(script_id, request.frame_id)
         except ValueError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
-        expected = pipeline.storyboard_render_preview_token(current_token, request.prompt)
+        expected = pipeline.storyboard_render_preview_token(current_token, request.prompt, request.negative_prompt)
         if not request.prompt_is_complete or request.context_token != expected:
             raise HTTPException(status_code=409, detail="Storyboard render preview is outdated; preview the current frame again")
     fingerprint = hashlib.sha256(json.dumps({
@@ -5858,6 +6574,53 @@ class SaveArtDirectionRequest(BaseModel):
     ai_recommendations: List[Dict[str, Any]] = []
 
 
+def _freeze_director_skills(stage, request):
+    try:
+        return director_skills.freeze(stage, request.skills)
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from exc
+
+
+@app.get("/projects/{script_id}/director-skills/{stage}")
+def get_project_director_skills(script_id: str, stage: director_skills.Stage,
+                                user: UserContext = Depends(require_studio_user)):
+    if stage == "series":
+        raise HTTPException(422, "Use the series scope for series Skills")
+    if not pipeline.get_script(script_id):
+        raise HTTPException(404, "Project not found")
+    return {"catalog": [{k: v for k, v in task.items() if k != "instructions"} for task in director_skills.catalog(stage)],
+            "skills": director_skills.preferences(user.owner_profile_id, "project:" + script_id, stage)}
+
+
+@app.put("/projects/{script_id}/director-skills/{stage}")
+def save_project_director_skills(script_id: str, stage: director_skills.Stage,
+                                 request: director_skills.DirectorSkillsRequest,
+                                 user: UserContext = Depends(require_studio_user)):
+    if stage == "series":
+        raise HTTPException(422, "Use the series scope for series Skills")
+    if not pipeline.get_script(script_id):
+        raise HTTPException(404, "Project not found")
+    _freeze_director_skills(stage, request)
+    return {"skills": director_skills.preferences(user.owner_profile_id, "project:" + script_id, stage, request.skills)}
+
+
+@app.get("/series/{series_id}/director-skills")
+def get_series_director_skills(series_id: str, user: UserContext = Depends(require_studio_user)):
+    if not pipeline.get_series(series_id):
+        raise HTTPException(404, "Series not found")
+    return {"catalog": [{k: v for k, v in task.items() if k != "instructions"} for task in director_skills.catalog("series")],
+            "skills": director_skills.preferences(user.owner_profile_id, "series:" + series_id, "series")}
+
+
+@app.put("/series/{series_id}/director-skills")
+def save_series_director_skills(series_id: str, request: director_skills.DirectorSkillsRequest,
+                                user: UserContext = Depends(require_studio_user)):
+    if not pipeline.get_series(series_id):
+        raise HTTPException(404, "Series not found")
+    _freeze_director_skills("series", request)
+    return {"skills": director_skills.preferences(user.owner_profile_id, "series:" + series_id, "series", request.skills)}
+
+
 class DirectorProfileRefineRequest(BaseModel):
     draft: Dict[str, Any]
     instructions: List[str] = Field(min_length=1, max_length=12)
@@ -6077,13 +6840,15 @@ def _director_profile_fingerprint(script_id: str, draft=None, instructions=None)
 @app.post("/projects/{script_id}/director-profile-jobs", status_code=202)
 def start_director_profile_analysis(
     script_id: str,
+    request: director_skills.DirectorSkillsRequest = director_skills.DirectorSkillsRequest(),
     user: UserContext = Depends(require_studio_user),
 ):
-    fingerprint = _director_profile_fingerprint(script_id)
+    skill_snapshot = _freeze_director_skills("episode", request)
+    fingerprint = _director_profile_fingerprint(script_id) + hashlib.sha256(json.dumps(skill_snapshot, sort_keys=True).encode()).hexdigest()
     return extraction_jobs.start(
         user.owner_profile_id, script_id, "director:" + fingerprint,
         lambda: {
-            "profile": pipeline.preview_director_profile(script_id),
+            "profile": pipeline.preview_director_profile(script_id, skill_snapshot=skill_snapshot),
             "source_audit": getattr(pipeline, "_last_director_analysis_audit", {}),
         },
         queue_group="director",
@@ -6229,19 +6994,21 @@ def get_series_director_profile(
 @app.post("/series/{series_id}/director-profile-jobs", status_code=202)
 def start_series_director_profile_analysis(
     series_id: str,
+    request: director_skills.DirectorSkillsRequest = director_skills.DirectorSkillsRequest(),
     user: UserContext = Depends(require_studio_user),
 ):
+    skill_snapshot = _freeze_director_skills("series", request)
     series = pipeline.get_series(series_id)
     if not series:
         raise HTTPException(404, "Series not found")
     fingerprint = hashlib.sha256(json.dumps([
-        series.source_context,
+        series.source_context, skill_snapshot,
         [pipeline.get_script(item).original_text for item in series.episode_ids if pipeline.get_script(item)],
         series.characters, series.scenes, series.props,
     ], ensure_ascii=False, default=str, sort_keys=True).encode()).hexdigest()
     return extraction_jobs.start(
         user.owner_profile_id, "series:" + series_id, "series-director:" + fingerprint,
-        lambda: pipeline.preview_series_director_profile(series_id),
+        lambda: pipeline.preview_series_director_profile(series_id, skill_snapshot=skill_snapshot),
         queue_group="series-director",
     )
 
@@ -6660,8 +7427,10 @@ def _director_shooting_plan_fingerprint(script_id: str, lineage: Dict[str, Any],
 @app.post("/projects/{script_id}/director-shooting-plan-jobs", status_code=202)
 def start_director_shooting_plan(
     script_id: str,
+    request: director_skills.DirectorSkillsRequest = director_skills.DirectorSkillsRequest(),
     user: UserContext = Depends(require_studio_user),
 ):
+    skill_snapshot = _freeze_director_skills("shooting_plan", request)
     script = pipeline.get_script(script_id)
     if not script:
         raise HTTPException(404, "Project not found")
@@ -6683,7 +7452,7 @@ def start_director_shooting_plan(
             raise HTTPException(502, f"uniart_models_unavailable: {exc}") from exc
         if not any(item["api_model_id"] == model and "chat" in item["capabilities"] for item in published):
             raise HTTPException(422, "Selected LLM model is not published for this user")
-    fingerprint = "director_shooting_plan:" + _director_shooting_plan_fingerprint(script_id, lineage, model)
+    fingerprint = "director_shooting_plan:" + _director_shooting_plan_fingerprint(script_id, lineage, model) + hashlib.sha256(json.dumps(skill_snapshot, sort_keys=True).encode()).hexdigest()
     return extraction_jobs.start(
         user.owner_profile_id,
         script_id,
@@ -6700,6 +7469,7 @@ def start_director_shooting_plan(
                 ),
                 expected_lineage=lineage,
                 model=model,
+                skill_snapshot=skill_snapshot,
             ).model_dump(),
         },
         pass_job_id=True,
@@ -7038,6 +7808,12 @@ def _polish_error_response(err) -> Dict[str, Any]:
     return body
 
 
+_STORYBOARD_VIDEO_POLISH_SKILLS = frozenset({
+    "minimax-h3-director", "seedance-prompt", "seedance-camera",
+    "sequence-continuity", "director-style",
+})
+
+
 def _target_model_guidance(model_id: str) -> str:
     """Legacy model-to-skill mapping for callers before explicit skill selection."""
     value = (model_id or "").lower()
@@ -7045,16 +7821,18 @@ def _target_model_guidance(model_id: str) -> str:
     label = "MiniMax H3" if "h3" in value else "Seedance" if "seedance" in value else ""
     if not label:
         return ""
-    packages = [p for p in catalog() if label in p.get("targets", [])]
-    text = "\n\n".join(p["instructions"] for p in packages)
+    default_id = "minimax-h3-director" if label == "MiniMax H3" else "seedance-prompt"
+    package = next((p for p in catalog() if p["id"] == default_id), None)
+    if package is None:
+        return ""
+    text = package["instructions"]
     return f"TARGET VIDEO MODEL: {label}. Shared Agent skill guidance:\n{text}"
 
 
-def _selected_skill_guidance(skill_ids: Optional[List[str]]) -> str:
+def _selected_skill_guidance(skill_ids: Optional[List[str]], model_id: str = "") -> str:
     """Compose explicitly selected catalog skills in request order.
 
-    This is intentionally independent of the target video model.  The catalog
-    remains the source of truth, so arbitrary prompt text cannot inject a new
+    The catalog remains the source of truth, so arbitrary prompt text cannot inject a new
     instruction package or a missing skill id.
     """
     if skill_ids is None:
@@ -7064,7 +7842,15 @@ def _selected_skill_guidance(skill_ids: Optional[List[str]]) -> str:
     unknown = [skill_id for skill_id in skill_ids if skill_id not in packages]
     if unknown:
         raise HTTPException(status_code=422, detail={"reason": "unknown_optimization_skill", "skill_ids": unknown})
+    ineligible = [skill_id for skill_id in skill_ids if skill_id not in _STORYBOARD_VIDEO_POLISH_SKILLS]
+    if ineligible:
+        raise HTTPException(status_code=422, detail={"reason": "ineligible_optimization_skill", "skill_ids": ineligible})
     selected = [packages[skill_id] for skill_id in dict.fromkeys(skill_ids)]
+    model = (model_id or "").lower()
+    target = "MiniMax H3" if "h3" in model else "Seedance" if "seedance" in model else ""
+    incompatible = [package["id"] for package in selected if target and target not in package.get("targets", [])]
+    if incompatible:
+        raise HTTPException(status_code=422, detail={"reason": "incompatible_optimization_skill", "skill_ids": incompatible})
     if not selected:
         return ""
     text = "\n\n".join(f"[{package['id']} · {package['name']} v{package['version']}]\n{package.get('instructions', '')}" for package in selected)
@@ -7091,13 +7877,15 @@ Do not add a new body heading or append an afterword to the polished prompt.
 
 
 def _storyboard_polish_contract(model_id: str, custom: str, default: str, generate_audio=None, target_duration=None, dialogue_speaker="", dialogue_line="", optimization_skills: Optional[List[str]] = None, reference_mode: bool = False, generation_mode: str = "i2v") -> str:
-    guidance = _selected_skill_guidance(optimization_skills) if optimization_skills is not None else _target_model_guidance(model_id)
+    guidance = _selected_skill_guidance(optimization_skills, model_id) if optimization_skills is not None else _target_model_guidance(model_id)
     is_h3 = "h3" in (model_id or "").lower()
     if not guidance and not is_h3 and generation_mode != "first_last_frame":
         return custom or default
     constraints = ""
     if generate_audio is False:
-        constraints += "\nOUTPUT MUST BE SILENT: overall_soundscape and non_diegetic_music must be N/A. No spoken dialogue, vocalization or sound cues. Preserve visual actions."
+        constraints += ("\nOUTPUT MUST BE SILENT: overall_soundscape and non_diegetic_music must be N/A. "
+                        if is_h3 else "\nOUTPUT MUST BE SILENT: omit all audio and music cues. ")
+        constraints += "No spoken dialogue, vocalization or sound cues. Preserve visual actions."
     elif generate_audio is True:
         constraints += "\nAudio is enabled. Preserve specified dialogue exactly; do not invent dialogue or music without permission."
         if dialogue_line.strip():
@@ -7118,12 +7906,8 @@ request subtitle tracks in either prompt language.
     base_prompt = custom or (default if not guidance else "")
     contract = guidance + "\n" + base_prompt + constraints + """
 STORYBOARD OUTPUT CONTRACT:
-Return only JSON with string fields prompt_cn and prompt_en. Each string contains
-all fields required by the selected model skill and generation mode (H3 base:
-integrated_multimodal_description, overall_soundscape, non_diegetic_music;
-H3 reference mode: subject_definitions, summary, retention_analysis,
-detailed_description, overall_soundscape, non_diegetic_music).
-Do not replace that structure with scene/action/camera headings.
+Return only JSON with string fields prompt_cn and prompt_en. Each string follows
+the selected target model's prompt format and generation mode.
 Preserve every existing [characterN:name] editor token exactly, including its
 number and name. These are stable editor references; use them as source labels
 inside the model-specific structure. Do not invent or renumber references.
@@ -7137,6 +7921,7 @@ cannot establish exact cut times. Missing images must not be described as seen.
 """
     if not is_h3:
         return contract
+    contract += "\nFor H3, preserve every required model-specific heading. Do not replace that structure with scene/action/camera headings.\n"
     headings = (
         "subject_definitions:\nsummary:\nretention_analysis:\ndetailed_description:\noverall_soundscape:\nnon_diegetic_music:"
         if reference_mode else
@@ -7230,8 +8015,10 @@ def _compile_ir_polish_text(request, custom_prompt: str) -> str:
     if getattr(request, "generation_mode", "") == "first_last_frame":
         instruction += _first_last_polish_guidance(request.target_duration)
     instruction += "\n\nH3 constraint: do not add subtitles, captions, title cards, watermarks, labels, or any burned-in on-screen text. Dialogue is audio only."
-    if request.optimization_skills:
-        instruction += "\n\nApply the selected skills above as constraints while preserving the official H3 output format."
+    selected_skills = _effective_optimization_skills(request)
+    if selected_skills:
+        instruction += "\n\n" + _selected_skill_guidance(selected_skills, request.target_video_model)
+        instruction += "\nPreserve the official H3 output format."
     text = f"{instruction}\n\n[DRAFT PROMPT]\n{request.draft_prompt.strip()}"
     if request.feedback.strip():
         text += f"\n\n[USER FEEDBACK]\n{request.feedback.strip()}"
@@ -7250,6 +8037,7 @@ def _compile_video_polish_review(request, reference_mode: bool) -> Dict[str, Any
     from .llm import DEFAULT_R2V_POLISH_PROMPT, DEFAULT_VIDEO_POLISH_PROMPT
     user = current_studio_user()
     frame_snapshot: Dict[str, Any] = {}
+    effective_shot_fields: Dict[str, Any] = {}
     if user is not None and request.script_id:
         script = pipeline.get_script(request.script_id, user.owner_profile_id)
         if not script:
@@ -7268,11 +8056,28 @@ def _compile_video_polish_review(request, reference_mode: bool) -> Dict[str, Any
                 key: value.model_dump() if hasattr(value, "model_dump") else value
                 for key, value in frame_snapshot.items()
             }
+            row = next((item for item in pipeline.storyboard_continuity_sheet(request.script_id)["rows"]
+                        if item["frame_id"] == request.frame_id), None)
+            if row:
+                keys = ("duration", "shot_size", "camera_angle", "camera_movement", "transition_hint",
+                        "style", "story_time", "daylight_phase", "weather", "shadow_direction",
+                        "key_source", "ambient_lighting", "color_tone", "contrast", "practical_sources",
+                        "direction", "quality", "color_temp", "lighting_override")
+                effective_shot_fields = {
+                    key: {"value": row["fields"][key]["value"],
+                          "source": row["fields"][key]["source_kind"],
+                          "revision": row["fields"][key]["source_revision"]}
+                    for key in keys if key in row["fields"]
+                }
     if not reference_mode and request.generation_mode == "first_last_frame" and (
         len(request.image_urls) != 2 or request.image_urls[0] == request.image_urls[1]
     ):
         raise HTTPException(422, "首尾帧润色需要两张不同的已选图片")
     custom = _get_custom_prompt(request.script_id, "r2v_polish" if reference_mode else "video_polish")
+    if effective_shot_fields:
+        custom = "\n\n".join(filter(None, [custom,
+            "ACCEPTED SHOT FIELDS AND VISUAL CONTINUITY (preserve these values; do not rewrite them):\n"
+            + json.dumps(effective_shot_fields, ensure_ascii=False, sort_keys=True)]))
     director = _get_director_prompt_context(request.script_id, request.frame_id, request.shot_overrides)
     if director:
         custom = "\n\n".join(filter(None, [custom, "CURRENT SHOT CONTEXT (editable overrides replace planned shot settings; matching continuity baseline is background):\n" + director]))
@@ -7302,7 +8107,8 @@ def _compile_video_polish_review(request, reference_mode: bool) -> Dict[str, Any
     labels = (["首帧 0.00 秒", "尾帧 结束时"] if getattr(request, "generation_mode", "") == "first_last_frame" else [f"参考图 {i + 1}" for i in range(len(request.image_urls))])
     media = [{"label": labels[i], "url": url} for i, url in enumerate(request.image_urls)]
     source = request.model_dump(exclude={"reviewed_messages", "review_token"})
-    token = hashlib.sha256(json.dumps({"source": source, "frame": frame_snapshot, "compiled": messages},
+    token = hashlib.sha256(json.dumps({"source": source, "frame": frame_snapshot,
+                                      "effective_shot_fields": effective_shot_fields, "compiled": messages},
                                       sort_keys=True, ensure_ascii=False, default=str).encode()).hexdigest()
     format_note = (
         "MiniMax Context IR 按所选模型的原生结构生成；这里展示送入 IR 的完整文字。"
@@ -7385,11 +8191,16 @@ _OPTIMIZER_MODEL_IDS = {
 
 
 def _effective_optimization_skills(request) -> Optional[List[str]]:
-    """Non-IR optimizer models use the H3 Director skill by default."""
+    """Choose legacy default guidance only for a matching video model."""
     if request.optimization_skills is not None:
         return request.optimization_skills
     if request.optimizer_provider in _OPTIMIZER_MODEL_IDS:
-        return ["minimax-h3-director"]
+        model = (request.target_video_model or "").lower()
+        if "h3" in model:
+            return ["minimax-h3-director"]
+        if "seedance" in model:
+            return ["seedance-prompt"]
+        return []
     return None
 
 

@@ -133,3 +133,27 @@ def test_invalid_text_reference_fails_before_generation(monkeypatch, tmp_path):
     with pytest.raises(RuntimeError, match='UTF-8'):
         PlaygroundService(Mock(output_dir=str(tmp_path), media_root=str(tmp_path)))._process_video_generation(gen)
     post.assert_not_called()
+
+
+def test_h3_i2v_agent_ir_with_editor_mention_submits_canonical_only(monkeypatch, tmp_path):
+    post = capture(monkeypatch)
+    ref = 'https://cdn.example/street.webp'
+    prompt = (
+        'subject_definitions:\n<Picture 1> is the first frame of [Shot 1].\n'
+        '<Subject 1> is the ancient street in <Picture 1>.\n'
+        'summary:\n[keyframe completion] Ride a black horse through <Subject 1>.\n'
+        'detailed_description:\n[Shot 1] Begin with <Picture 1> and move forward.\n'
+        '@素材-7d...'
+    )
+    gen = PlaygroundGeneration(
+        id='h3-agent-ir', model_id='uniart/minimax-h3-vip', mode='i2v',
+        prompt=prompt, input_media=[ref], media_names={ref: '素材-7d12345'},
+        parameters={'resolution': '720p', 'duration': 15}, created_at='today',
+    )
+    PlaygroundService(Mock(output_dir=str(tmp_path)))._process_video_generation(gen)
+    body = post.call_args.args[2]
+    assert body['content'][0]['text'] == prompt.removesuffix('@素材-7d...') + '<Picture 1>'
+    assert '@' not in body['content'][0]['text']
+    assert body['content'][1]['image_url']['url'] == ref
+    assert len(body['content']) == 2
+    assert gen.prompt == prompt and gen.input_media == [ref]

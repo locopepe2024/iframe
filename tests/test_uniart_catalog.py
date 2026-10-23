@@ -90,9 +90,15 @@ def test_gpt_image_route_aliases_remain_image_models_without_capability_block():
     assert all(model["capabilities"] == ["t2i", "i2i"] for model in models)
 
 
-def test_false_audio_metadata_still_exposes_optional_audio_control():
+def test_h3_v2_preserves_audio_toggle():
     model = normalize_uniart_catalog({"data": [{
         "id": "minimax-h3-vip",
         "video_capability": {"modes": [{"id": "omni_reference"}], "supports_generate_audio": False},
     }]})[0]
     assert model["params"]["audio"] is True
+
+
+def test_provider_frame_mode_aliases_are_projected_for_the_selector():
+    model = normalize_uniart_catalog({"data": [{"id": "minimax-h3-discount",
+        "video_capability": {"modes": [{"id": mode} for mode in ["text2video", "image2video", "frames2video", "omni_reference"]]}}]})[0]
+    assert model["capabilities"] == ["t2v", "i2v", "f2v", "r2v"]

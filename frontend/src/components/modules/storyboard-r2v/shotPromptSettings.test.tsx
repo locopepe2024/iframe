@@ -36,6 +36,19 @@ it("reloads the saved adopted body and optimization flag", () => {
     expect(buildGenerationPrompt(restored, false, "wan3.0")).toBe(next.prompt);
 });
 
+it("keeps the current initialization proposal visible without projecting it into the prompt", () => {
+    const shot = frameToShotNode({
+        id: "f", action_description: "商贩穿行", scene_id: "street",
+        rich_refinement_candidate: {
+            id: "old-init", mode: "initialization", source: "初始化补全",
+            fields: { visual_description: "青石板长街[character1:青石板长街]" },
+            current_fields: { visual_description: null }, rationale: {},
+        },
+    } as any, [], "direct_r2v");
+    expect(shot.richRefinementCandidate?.id).toBe("old-init");
+    expect(buildGenerationPrompt(shot, false, "uniart/minimax-h3-vip")).not.toContain("[character1:青石板长街]");
+});
+
 it("restores inherited lighting on clear and keeps ordinary user text on later edits", () => {
     const next = editShotSettings({ id: "f", tabMode: "t2i_i2v", prompt: "detailed_description: old light; my action\noverall_soundscape: N/A",
         promptIsOptimized: true, lightingOverride: "old light", directorShotContext: { shot: { lighting: { key_source: "window light" } } } }, "lightingOverride", "");

@@ -13,7 +13,10 @@ interface VariantSelectorProps {
     currentImageUrl?: string; // Fallback/Legacy URL
     onSelect: (variantId: string) => void | Promise<void>;
     onDelete: (variantId: string) => void | Promise<void>;
-    onFavorite?: (variantId: string, isFavorited: boolean) => void;
+    onFavorite?: (variantId: string, isFavorited: boolean) => void | Promise<void>;
+    markedVariantId?: string | null;
+    variantNameLabel?: string;
+    variantNameFallback?: (index: number) => string;
     onRename?: (variantId: string, displayName: string) => Promise<void>;
     onGenerate: (batchSize: number) => void;
     isGenerating: boolean;
@@ -40,6 +43,9 @@ export const VariantSelector: React.FC<VariantSelectorProps> = ({
     onDelete,
     onFavorite,
     onRename,
+    markedVariantId,
+    variantNameLabel = "素材名称",
+    variantNameFallback = (index: number) => `未命名素材 ${index + 1}`,
     onGenerate,
     isGenerating,
     generatingBatchSize: propGeneratingBatchSize,
@@ -57,7 +63,12 @@ export const VariantSelector: React.FC<VariantSelectorProps> = ({
     const [variantName, setVariantName] = useState('');
     const [savingName, setSavingName] = useState(false);
     const [renameError, setRenameError] = useState(false);
+    const [selectionError, setSelectionError] = useState(false);
+    const [favoriteBusy, setFavoriteBusy] = useState<string[]>([]);
+    const [favoriteError, setFavoriteError] = useState(false);
     const [previewUrls, setPreviewUrls] = useState<Record<string, string>>({});
+    const [previewErrors, setPreviewErrors] = useState<string[]>([]);
+    const [previewAttempt, setPreviewAttempt] = useState(0);
     const prevIsGenerating = useRef(isGenerating);
 
     // Automatically save batchSize when generation starts
@@ -76,7 +87,7 @@ export const VariantSelector: React.FC<VariantSelectorProps> = ({
     const variants = (asset?.variants || []).filter(variant => !pendingDeletions.includes(variant.id));
     const selectedId = pendingSelection && variants.some(variant => variant.id === pendingSelection)
         ? pendingSelection
-        : pendingDeletions.includes(asset?.selected_id || '') ? variants.at(-1)?.id : asset?.selected_id;
+        : pendingDeletions.includes(asset?.selected_id || '') ? variants.at(-1)?.id : asset?.selected_id || variants.find(variant => variant.url === currentImageUrl)?.id || variants[0]?.id;
     const selectedVariant = variants.find(v => v.id === selectedId);
     useEffect(() => {
         setVariantName(selectedVariant?.display_name || '');
@@ -85,8 +96,8 @@ export const VariantSelector: React.FC<VariantSelectorProps> = ({
     const apiBase = getApiBaseUrl();
     const displayUrl = selectedVariant
         ? (previewLocator ? previewUrls[selectedVariant.id] || '' : getAssetUrl(selectedVariant.url))
-        : pendingDeletions.includes(asset?.selected_id || '') ? '' : getAssetUrl(currentImageUrl);
-    const fullImageUrl = selectedVariant ? getAssetUrl(selectedVariant.url) : getAssetUrl(currentImageUrl);
+        : variants.length || pendingDeletions.includes(asset?.selected_id || '') ? '' : getAssetUrl(currentImageUrl);
+    const fullImageUrl = selectedVariant ? getAssetUrl(selectedVariant.url) : displayUrl;
 
     useEffect(() => {
         if (pendingSelection && asset?.selected_id === pendingSelection) setPendingSelection(null);
@@ -100,8 +111,10 @@ export const VariantSelector: React.FC<VariantSelectorProps> = ({
 
     const selectVariant = (variantId: string) => {
         setPendingSelection(variantId);
+        setSelectionError(false);
         Promise.resolve().then(() => onSelect(variantId)).catch(() => {
             setPendingSelection(current => current === variantId ? null : current);
+            setSelectionError(true);
         });
     };
 
@@ -110,6 +123,7 @@ export const VariantSelector: React.FC<VariantSelectorProps> = ({
         const controller = new AbortController();
         const objectUrls: string[] = [];
         setPreviewUrls({});
+        setPreviewErrors([]);
         variants.forEach((variant) => {
             const params = new URLSearchParams({
                 scope: previewLocator.scope,
@@ -128,13 +142,15 @@ export const VariantSelector: React.FC<VariantSelectorProps> = ({
                     }
                     objectUrls.push(objectUrl);
                     setPreviewUrls((current) => ({ ...current, [variant.id]: objectUrl }));
-                }).catch(() => undefined);
+                }).catch(() => {
+                    if (!controller.signal.aborted) setPreviewErrors((current) => [...current, variant.id]);
+                });
         });
         return () => {
             controller.abort();
             objectUrls.forEach((url) => URL.revokeObjectURL(url));
         };
-    }, [apiBase, previewLocator?.scope, previewLocator?.containerId, previewLocator?.assetType, previewLocator?.assetId, variants.map((variant) => variant.id).join('|')]);
+    }, [apiBase, previewLocator?.scope, previewLocator?.containerId, previewLocator?.assetType, previewLocator?.assetId, variants.map((variant) => variant.id).join('|'), previewAttempt]);
 
     const deleteVariant = (variantId: string) => {
         setPendingDeletions(current => [...current, variantId]);
@@ -142,6 +158,15 @@ export const VariantSelector: React.FC<VariantSelectorProps> = ({
         Promise.resolve().then(() => onDelete(variantId)).catch(() => {
             setPendingDeletions(current => current.filter(id => id !== variantId));
         });
+    };
+
+    const toggleFavorite = async (variantId: string, isFavorited: boolean) => {
+        if (!onFavorite || favoriteBusy.includes(variantId)) return;
+        setFavoriteBusy(current => [...current, variantId]);
+        setFavoriteError(false);
+        try { await onFavorite(variantId, isFavorited); }
+        catch { setFavoriteError(true); }
+        finally { setFavoriteBusy(current => current.filter(id => id !== variantId)); }
     };
 
     const saveVariantName = async () => {
@@ -190,8 +215,13 @@ export const VariantSelector: React.FC<VariantSelectorProps> = ({
                         </div>
                     </>
                 ) : (
-                    <div className="w-full h-full flex items-center justify-center text-text-muted">
-                        {t("noImageGenerated")}
+                    <div className="w-full h-full flex flex-col gap-3 items-center justify-center text-text-muted">
+                        {selectedVariant && previewLocator ? previewErrors.includes(selectedVariant.id) ? <>
+                            <p role="alert">{t("previewLoadFailed")}</p>
+                            <button type="button" onClick={(event) => { event.stopPropagation(); setPreviewAttempt((current) => current + 1); }}
+                                className="min-h-11 rounded border border-glass-border px-3 text-sm text-foreground focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary">{t("retryPreview")}</button>
+                        </> : <p role="status">{t("previewLoading")}</p>
+                            : variants.length ? <p role="alert">{t("selectedVariantUnavailable")}</p> : t("noImageGenerated")}
                     </div>
                 )}
 
@@ -256,8 +286,8 @@ export const VariantSelector: React.FC<VariantSelectorProps> = ({
                     <div className="relative">
                         <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-thin scrollbar-thumb-gray-700 scrollbar-track-transparent snap-x">
                             {variants.map((variant, index) => {
-                                const isSelected = variant.id === selectedId;
-                                const isFavorited = (variant as any).is_favorited || false;
+                                const isSelected = variant.id === (pendingSelection || markedVariantId || selectedId);
+                                const isFavorited = variant.is_favorited || false;
                                 const url = previewLocator ? previewUrls[variant.id] : getAssetUrl(variant.url);
 
                                 return (
@@ -271,18 +301,26 @@ export const VariantSelector: React.FC<VariantSelectorProps> = ({
                                         {/* Clickable image area */}
                                         {url ? <img
                                             src={url}
-                                            alt={variant.display_name || `未命名素材 ${index + 1}`}
+                                            alt={variant.display_name || variantNameFallback(index)}
                                             loading="lazy"
-                                            className="h-20 w-full object-cover cursor-pointer"
+                                            className="h-20 w-full object-cover cursor-pointer focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary"
+                                            role="button"
+                                            tabIndex={0}
+                                            onKeyDown={(event) => {
+                                                if (event.key === 'Enter' || event.key === ' ') {
+                                                    event.preventDefault();
+                                                    selectVariant(variant.id);
+                                                }
+                                            }}
                                             onClick={() => selectVariant(variant.id)}
                                         /> : <div className="h-20 w-full bg-elevated" />}
-                                        <span className="block truncate bg-surface px-1 py-1 text-[0.6875rem] text-foreground" title={variant.display_name || `未命名素材 ${index + 1}`}>
-                                            {variant.display_name || `未命名素材 ${index + 1}`}
+                                        <span className="block truncate bg-surface px-1 py-1 text-[0.6875rem] text-foreground" title={variant.display_name || variantNameFallback(index)}>
+                                            {variant.display_name || variantNameFallback(index)}
                                         </span>
 
                                         {/* Selected indicator */}
                                         {isSelected && (
-                                            <div className="absolute top-1 left-1 bg-blue-500 rounded-full p-0.5">
+                                            <div aria-label={markedVariantId ? "角色封面" : "已选择"} className="absolute top-1 left-1 bg-blue-500 rounded-full p-0.5">
                                                 <Check size={10} className="text-white" />
                                             </div>
                                         )}
@@ -292,12 +330,16 @@ export const VariantSelector: React.FC<VariantSelectorProps> = ({
                                             <button
                                                 onClick={(e) => {
                                                     e.stopPropagation();
-                                                    onFavorite(variant.id, !isFavorited);
+                                                    void toggleFavorite(variant.id, !isFavorited);
                                                 }}
-                                                className={`absolute top-1 right-1 p-1 rounded-full transition-all ${isFavorited
+                                                className={`absolute top-1 right-1 grid h-11 w-11 place-items-center rounded-full transition-all focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary disabled:opacity-50 sm:h-6 sm:w-6 ${isFavorited
                                                     ? 'bg-yellow-500 text-white'
-                                                    : 'bg-overlay/50 text-text-secondary opacity-0 group-hover/variant:opacity-100 hover:bg-yellow-500 hover:text-white'
+                                                    : 'bg-overlay/50 text-text-secondary sm:opacity-0 sm:group-hover/variant:opacity-100 focus-visible:opacity-100 hover:bg-yellow-500 hover:text-white'
                                                     }`}
+                                                type="button"
+                                                disabled={favoriteBusy.includes(variant.id)}
+                                                aria-pressed={isFavorited}
+                                                aria-label={isFavorited ? t("clickToUnfavorite") : t("clickToFavorite")}
                                                 title={isFavorited ? t("clickToUnfavorite") : t("clickToFavorite")}
                                             >
                                                 <Star size={12} fill={isFavorited ? 'currentColor' : 'none'} />
@@ -333,23 +375,26 @@ export const VariantSelector: React.FC<VariantSelectorProps> = ({
                     </div>
                 )}
                 {onRename && selectedVariant && (
-                    <div className="flex min-w-0 items-center gap-2">
-                        <label htmlFor={`variant-name-${selectedVariant.id}`} className="shrink-0 text-xs text-text-secondary">素材名称</label>
+                    <div className="flex min-w-0 flex-wrap items-center gap-2">
+                        <label htmlFor={`variant-name-${selectedVariant.id}`} className="shrink-0 text-xs text-text-secondary">{variantNameLabel}</label>
                         <input
                             id={`variant-name-${selectedVariant.id}`}
                             value={variantName}
                             maxLength={120}
                             onChange={(event) => { setVariantName(event.target.value); setRenameError(false); }}
                             onKeyDown={(event) => { if (event.key === 'Enter') void saveVariantName(); }}
-                            placeholder="例如：粮店黄昏·黑衣持剑·近景"
+                            placeholder={variantNameFallback(variants.indexOf(selectedVariant))}
                             className="h-9 min-w-0 flex-1 rounded border border-glass-border bg-surface px-2 text-sm text-foreground focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary"
                         />
-                        <button type="button" onClick={() => void saveVariantName()} disabled={savingName || variantName.trim() === (selectedVariant.display_name || '')} title="保存素材名称" aria-label="保存素材名称" className="grid h-9 w-9 shrink-0 place-items-center rounded border border-glass-border text-foreground hover:bg-hover-bg disabled:opacity-50">
+                        <button type="button" onClick={() => void saveVariantName()} disabled={savingName || variantName.trim() === (selectedVariant.display_name || '')} title={`保存${variantNameLabel}`} aria-label={`保存${variantNameLabel}`} className="grid h-11 w-11 shrink-0 place-items-center rounded border border-glass-border text-foreground hover:bg-hover-bg disabled:opacity-50">
                             <Save size={16} />
                         </button>
+
                     </div>
                 )}
-                {renameError && <p role="alert" className="text-xs text-red-400">素材名称保存失败</p>}
+                {selectionError && <p role="alert" className="text-xs text-red-400">图片选择保存失败，请重试</p>}
+                {favoriteError && <p role="alert" className="text-xs text-red-400">收藏更新失败，请重试</p>}
+                {renameError && <p role="alert" className="text-xs text-red-400">{variantNameLabel}保存失败</p>}
             </div>
 
             {/* Lightbox Modal */}

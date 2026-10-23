@@ -178,3 +178,60 @@ def test_h3_video_submission_uses_canonical_prompt_without_model_name_error(tmp_
 
     assert captured["prompt"] == "<Picture 1> is the subject; <Video 1> supplies motion."
     assert generation.provider_tasks == {"0": "upstream-task"}
+
+
+def test_t2v_with_attachments_requires_explicit_reference_mode(tmp_path):
+    storage = make_storage(tmp_path)
+    service = PlaygroundService(storage)
+    generation = PlaygroundGeneration(
+        id="h3-agent-t2v",
+        owner_user_id="user-a",
+        owner_profile_id="profile-a",
+        mode=PlaygroundMode.T2V,
+        model_id="uniart/minimax-h3-vip",
+        prompt="<Picture 1> is the first frame; make her dance.",
+        input_media=["https://cdn.example/identity.jpg"],
+        media_names={"https://cdn.example/identity.jpg": "Screenshot.png"},
+        parameters={"resolution": "720p", "duration": 15},
+        created_at="2026-10-04T00:00:00+00:00",
+    )
+
+    with pytest.raises(ValueError, match="请切换到图生视频或全能视频"):
+        service._generate_video_mulerouter(generation, str(tmp_path / "result.mp4"))
+
+
+def test_h3_v2_i2v_keeps_single_frame_transport(tmp_path, monkeypatch):
+    storage = make_storage(tmp_path)
+    service = PlaygroundService(storage)
+    service._load_provider_config = lambda: {"base_url": "https://uniart.test", "api_key": "test"}
+    captured = {}
+
+    class FakeUniArtVideoModel:
+        def __init__(self, _config):
+            pass
+
+        def generate(self, prompt, output_path, **kwargs):
+            captured.update(prompt=prompt, kwargs=kwargs)
+            return output_path, 0.0
+
+    monkeypatch.setattr("src.models.uniart.UniArtVideoModel", FakeUniArtVideoModel)
+    monkeypatch.setattr("src.models.mulerouter.MuleRouterVideoModel", FakeUniArtVideoModel)
+    generation = PlaygroundGeneration(
+        id="h3-i2v",
+        owner_user_id="user-a",
+        owner_profile_id="profile-a",
+        mode=PlaygroundMode.I2V,
+        model_id="uniart/minimax-h3-vip",
+        prompt="<Picture 1> is the subject; make her dance.",
+        input_media=["https://cdn.example/identity.jpg"],
+        media_names={"https://cdn.example/identity.jpg": "Screenshot.png"},
+        parameters={"resolution": "720p", "duration": 15},
+        created_at="2026-10-04T00:00:00+00:00",
+    )
+
+    service._generate_video_mulerouter(generation, str(tmp_path / "result.mp4"))
+
+    assert generation.mode is PlaygroundMode.I2V
+    assert captured["kwargs"]["mode"] == "image2video"
+    assert "ref_image_urls" not in captured["kwargs"]
+    assert captured["kwargs"]["img_url"] == "https://cdn.example/identity.jpg"

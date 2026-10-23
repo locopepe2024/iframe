@@ -274,11 +274,11 @@ def test_character_design_draft_accepts_annotated_visual_notes(ctx, monkeypatch)
 
 def test_character_design_draft_returns_bounded_visual_features(ctx, monkeypatch):
     monkeypatch.setattr(agent, 'validate_model', lambda *_: None)
-    monkeypatch.setattr(agent, 'complete', lambda *_: '{"identity":{"features":{"face":"窄长脸","hair":"黑发束起"}},"look":{"features":{"clothing":"深蓝劲装"}},"review_items":[]}')
+    monkeypatch.setattr(agent, 'complete', lambda *_: '{"identity":{"features":{"face":"窄长脸","hair":"黑发束起","height":"身高约178厘米"}},"look":{"features":{"clothing":"深蓝劲装"}},"review_items":[]}')
     body = agent.CharacterDesignRequest(model='qwen', character_name='苏砚', profile='少年剑客', route='historical-costume')
     result = run_reviewed_character_draft(body, ctx)
-    assert result['identity']['features'] == {'face': '窄长脸', 'hair': '黑发束起'}
-    assert result['identity']['visual_notes'] == '窄长脸；黑发束起'
+    assert result['identity']['features'] == {'face': '窄长脸', 'hair': '黑发束起', 'height': '身高约178厘米'}
+    assert result['identity']['visual_notes'] == '窄长脸；黑发束起；身高约178厘米'
     assert result['look']['features'] == {'clothing': '深蓝劲装'}
 
 
@@ -355,7 +355,7 @@ def test_character_design_draft_keeps_previous_ai_draft_separate_from_profile(ct
     assert '"profile": "剧本写少年剑客"' in user_data
     assert '"current_draft": "上一轮 AI 草稿：深棕眼"' in user_data
     assert '"user_answers": {"年龄表现": "十七八岁少年感"}' in user_data
-    assert 'current_draft 是上一轮可编辑草稿' in complete.call_args.args[2][0]['content']
+    assert 'current_draft 是用户当前编辑的角色视觉要求' in complete.call_args.args[2][0]['content']
 
 
 def test_character_design_draft_receives_user_visual_requirements_separately(ctx, monkeypatch):
@@ -622,3 +622,151 @@ def test_product_recreation_installs_alone_reaches_chat_and_respects_target(ctx,
     assert package['instructions'] not in skills.creative_guidance('other-owner', '用H3换商品')
     skills.patch(package['id'], skills.SkillPatch(enabled=False), ctx)
     assert package['instructions'] not in skills.creative_guidance(ctx.owner_profile_id, '用H3换商品')
+
+
+def test_character_design_unifies_completion_and_polish_while_preserving_constraints(ctx, monkeypatch):
+    monkeypatch.setattr(agent, 'validate_model', lambda *_: None)
+    body = agent.CharacterDesignRequest(model='qwen', character_name='苏砚', profile='成年剑客',
+        current_draft='身高178厘米，肤色小麦色，上身仅两件衣物', route='historical-costume')
+    preview = agent.preview_character_design_draft(body, ctx)
+    assert '一次完成当前草稿的表达整理与缺失细节提案' in preview['messages']['system']
+    assert '不得为了丰富细节擅自改写' in preview['messages']['system']
+    assert '不得由单张参考图推断精确厘米数' in preview['messages']['system']
+    assert '身高178厘米，肤色小麦色，上身仅两件衣物' in preview['messages']['user']
+
+
+def test_character_design_accepts_profile_and_current_details_without_an_implicit_style_route(ctx, monkeypatch):
+    calls = []
+    monkeypatch.setattr(agent, 'validate_model', lambda *_: None)
+    monkeypatch.setattr(agent, 'complete', lambda _ctx, _model, messages: (
+        calls.append(messages) or json.dumps({
+            'identity': {'features': {'face': '眉目清冽', 'height': '身姿挺拔'}},
+            'look': {'features': {'clothing': '素黑劲装', 'accessories': '窄红发带'}},
+            'review_items': [],
+        })
+    ))
+    profile = '外观：少年，身姿挺拔；性格：沉静淡漠，坚守本心。'
+    details = '里衣一件、素黑外衣一件，布靴，无额外披风。'
+    body = agent.CharacterDesignRequest(model='qwen', character_name='苏砚', profile=profile, current_draft=details)
+    result = run_reviewed_character_draft(body, ctx)
+    assert len(calls) == 1
+    data = json.loads(calls[0][1]['content'])
+    assert data['profile'] == profile
+    assert data['current_draft'] == details
+    assert data['route'] == ''
+    assert '不默认补成现代写实' in calls[0][0]['content']
+    assert '资产出图指令不写入 identity 或 look' in calls[0][0]['content']
+    assert result['look']['features']['clothing'] == '素黑劲装'
+
+
+def test_character_design_still_rejects_an_unknown_explicit_style_route(ctx, monkeypatch):
+    monkeypatch.setattr(agent, 'validate_model', lambda *_: None)
+    body = agent.CharacterDesignRequest(model='qwen', character_name='苏砚', profile='少年剑客', route='invented-route')
+    with pytest.raises(HTTPException) as exc:
+        agent.preview_character_design_draft(body, ctx)
+    assert exc.value.status_code == 422
+
+
+def test_character_design_output_contract_defines_types_bounds_and_current_details(ctx, monkeypatch):
+    monkeypatch.setattr(agent, 'validate_model', lambda *_: None)
+    body = agent.CharacterDesignRequest(model='qwen', character_name='角色', profile='少年，素黑劲装',
+        current_draft='靛蓝色交领长袍，米白里衣，上身仅两件，身高约180厘米')
+    system = agent.preview_character_design_draft(body, ctx)['messages']['system']
+    assert '每个 features 值最多 500 个字符' in system
+    assert '"review_items": []' in system
+    assert '当前由用户编辑的角色细节' in system
+    assert '不得将缺失字段写成 null' in system
+    assert '每个非空字段附 `basis`' not in system
+    assert '每个非空字段带 `basis`' not in system
+    assert '来源依据统一放在 `identity.basis` 和 `look.basis`' in system
+
+
+def test_character_design_rejection_has_safe_reason_and_reference(ctx, monkeypatch, caplog):
+    monkeypatch.setattr(agent, 'validate_model', lambda *_: None)
+    monkeypatch.setattr(agent, 'complete', lambda *_: '{"identity":{"features":{"height":180}},"look":{},"review_items":[]}')
+    body = agent.CharacterDesignRequest(model='qwen', character_name='角色', profile='PRIVATE_PROFILE')
+    with pytest.raises(HTTPException) as exc:
+        run_reviewed_character_draft(body, ctx)
+    assert exc.value.status_code == 502
+    assert '视觉字段的类型或长度不符合要求' in exc.value.detail
+    assert '诊断编号' in exc.value.detail
+    assert 'reason=invalid_feature_value' in caplog.text
+    assert 'PRIVATE_PROFILE' not in caplog.text
+    assert '"height":180' not in caplog.text
+
+
+def test_character_design_distinguishes_missing_object_from_review_failure(ctx, monkeypatch):
+    monkeypatch.setattr(agent, 'validate_model', lambda *_: None)
+    body = agent.CharacterDesignRequest(model='qwen', character_name='角色', profile='少年')
+    for answer, reason in [
+        ('设计：黑发少年。', '未返回包含 identity 和 look 的 JSON 对象'),
+        ('{"identity":{"visual_notes":"黑发"},"look":{},"review_items":[{"question":"发型未指定","suggestion":"长发"}]}', '返回了待办问题或不完整的冲突建议'),
+    ]:
+        complete = Mock(return_value=answer)
+        monkeypatch.setattr(agent, 'complete', complete)
+        with pytest.raises(HTTPException) as exc:
+            run_reviewed_character_draft(body, ctx)
+        assert reason in exc.value.detail
+        assert complete.call_count == 1
+
+
+def test_character_design_contract_preserves_realistic_prompt_baseline(ctx, monkeypatch):
+    monkeypatch.setattr(agent, 'validate_model', lambda *_: None)
+    body = agent.CharacterDesignRequest(model='qwen', character_name='苏砚', profile='雪痕客', current_draft='圆脸；自然皮肤纹理；纯白背景；真人写实')
+    system = agent.preview_character_design_draft(body, ctx)['messages']['system']
+    assert 'AI 完善是保守编辑，不是重写或概念设计改编' in system
+    assert '禁止新增概念设计、插画、动漫' in system
+    assert '不得用‘概念设计’作为开头' in system
+
+
+def test_character_design_result_restores_realism_guard(ctx, monkeypatch):
+    monkeypatch.setattr(agent, 'validate_model', lambda *_: None)
+    monkeypatch.setattr(agent, 'complete', lambda *_: (
+        '{"identity":{"visual_notes":"圆脸；概念设计；自然米色肤色；高质量；杰作级细节；自然皮肤纹理",'
+        '"features":{"skin":"自然米色肤色；磨皮"}},"look":{"visual_notes":"靛蓝长袍"},"review_items":[]}'
+    ))
+    body = agent.CharacterDesignRequest(
+        model='qwen', character_name='苏砚', profile='雪痕客',
+        current_draft='圆脸；自然米色肤色；保留可见的自然皮肤纹理；真人写实',
+    )
+    result = run_reviewed_character_draft(body, ctx)
+    combined = result['identity']['visual_notes'] + result['identity']['features']['skin']
+    assert '概念设计' not in combined
+    assert '杰作级细节' not in combined
+    assert '；磨皮' not in combined
+    assert '不磨皮' in combined
+    assert '可见毛孔' in combined
+
+
+def test_structured_panel_choices_override_ai_proposals(ctx, monkeypatch):
+    monkeypatch.setattr(agent, 'validate_model', lambda *_: None)
+    monkeypatch.setattr(agent, 'complete', lambda *_: json.dumps({
+        'identity': {'visual_notes': '模型面容', 'features': {'gender': '男性', 'age': '青年', 'eyebrows': '浓眉', 'skin_texture': '光滑皮肤', 'hair': '黑色长发'}},
+        'look': {'visual_notes': '服装', 'features': {'footwear': '皮靴'}}, 'review_items': [],
+    }))
+    body = agent.CharacterDesignRequest(model='qwen', character_name='苏砚', profile='少年',
+        structured_identity={'face_shape': '圆脸', 'forehead': '额头饱满', 'cheekbones': '颧骨平缓', 'jaw': '下颌轮廓分明', 'chin': '下巴圆润', 'gender': '女性', 'age': '约72岁', 'eyebrows': '柳叶眉', 'skin_texture': '面颊略干，保留干燥纹理'},
+        structured_look={'footwear': '素面布靴'})
+    result = run_reviewed_character_draft(body, ctx)
+    for key, value in body.structured_identity.items():
+        assert result['identity']['features'][key] == value
+    assert result['identity']['features']['gender'] == '女性'
+    assert result['identity']['features']['age'] == '约72岁'
+    assert result['identity']['features']['eyebrows'] == '柳叶眉'
+    assert result['identity']['features']['skin_texture'] == '面颊略干，保留干燥纹理'
+    assert result['identity']['features']['hair'] == '黑色长发'
+    assert result['look']['features']['footwear'] == '素面布靴'
+
+
+def test_character_constraints_are_authored_not_model_proposals(ctx, monkeypatch):
+    monkeypatch.setattr(agent, 'validate_model', lambda *_: None)
+    monkeypatch.setattr(agent, 'complete', lambda *_: json.dumps({
+        'identity': {'visual_notes': '圆脸', 'features': {'face_shape': '圆脸'}},
+        'look': {'visual_notes': '布衣', 'features': {'clothing': '布衣'}},
+        'constraints': {'must_keep': ['光滑肌肤'], 'negative_prompt': []}, 'review_items': [],
+    }))
+    constraints = {'must_keep': ['自然皮肤纹理'], 'negative_prompt': ['额外披风']}
+    body = agent.CharacterDesignRequest(model='qwen', character_name='苏砚', profile='少年', constraints=constraints)
+    preview = agent.preview_character_design_draft(body, ctx)
+    assert json.loads(preview['messages']['user'])['constraints'] == constraints
+    assert run_reviewed_character_draft(body, ctx)['constraints'] == constraints

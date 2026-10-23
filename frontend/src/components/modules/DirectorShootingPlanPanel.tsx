@@ -18,6 +18,8 @@ import {
 import { useTranslations } from "next-intl";
 import axios from "axios";
 import { api } from "@/lib/api";
+import { useDirectorSkills } from "@/lib/directorSkills";
+import DirectorSkillsSelector from "@/components/modules/DirectorSkillsSelector";
 import type {
     DirectorPlanBeat,
     DirectorPlanCastBinding,
@@ -188,6 +190,7 @@ export default function DirectorShootingPlanPanel({ selectedDirector = null, his
     const t = useTranslations("artDirection.directorPlan");
     const { currentProject } = useProjectStore();
     const projectId = currentProject?.id;
+    const creativeSkills = useDirectorSkills(projectId, "shooting_plan");
     const confirmedProfile = currentProject?.art_direction?.director_profile;
     const viewedDirector = selectedDirector ?? confirmedProfile;
     const examples = Array.isArray(confirmedProfile?.sample_plan)
@@ -354,6 +357,7 @@ export default function DirectorShootingPlanPanel({ selectedDirector = null, his
     }));
 
     const generate = async () => {
+        if (!creativeSkills.canRun) return;
         if (!projectId) return;
         setAction("generate");
         setError("");
@@ -363,7 +367,7 @@ export default function DirectorShootingPlanPanel({ selectedDirector = null, his
             const generated = await api.generateDirectorShootingPlan(projectId, job => {
                 setJobStatus(job.status);
                 setJobProgress(job.progress ?? null);
-            });
+            }, creativeSkills.selected);
             setPlan(generated);
             setSavedPlan(null);
             setExpandedShots(new Set());
@@ -487,7 +491,8 @@ export default function DirectorShootingPlanPanel({ selectedDirector = null, his
                         <p className="mt-1 text-sm text-text-secondary">{t("selectedSource", { revision: viewedDirectorRevision })}</p>
                     </div>
                     {!historical && <div className="flex flex-wrap gap-2">
-                        <button type="button" onClick={generate} disabled={action !== null || dirty || Boolean(serverState?.readiness_error)} className="inline-flex min-h-10 items-center gap-2 rounded-md bg-primary px-3 py-2 text-sm text-white disabled:opacity-50"><Sparkles size={16} />{t("generate")}</button>
+                        <DirectorSkillsSelector state={creativeSkills} disabled={action !== null} />
+                        <button type="button" onClick={generate} disabled={action !== null || dirty || !creativeSkills.canRun || Boolean(serverState?.readiness_error)} className="inline-flex min-h-10 items-center gap-2 rounded-md bg-primary px-3 py-2 text-sm text-white disabled:opacity-50"><Sparkles size={16} />{t("generate")}</button>
                     </div>}
                 </div>
                 {error && <p role="alert" className="text-sm text-red-300">{error}</p>}
@@ -554,7 +559,7 @@ export default function DirectorShootingPlanPanel({ selectedDirector = null, his
                     <button
                         type="button"
                         onClick={generate}
-                        disabled={locked || dirty || Boolean(serverState?.readiness_error)}
+                        disabled={locked || dirty || !creativeSkills.canRun || Boolean(serverState?.readiness_error)}
                         className="inline-flex min-h-10 items-center gap-2 rounded-md bg-primary px-3 py-2 text-sm font-medium text-white transition hover:brightness-110 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-background disabled:cursor-not-allowed disabled:opacity-50"
                     >
                         {action === "generate" ? <Loader2 size={16} className="animate-spin" aria-hidden="true" /> : <Sparkles size={16} aria-hidden="true" />}
@@ -563,6 +568,7 @@ export default function DirectorShootingPlanPanel({ selectedDirector = null, his
                 </div>
             </header>
 
+            <DirectorSkillsSelector state={creativeSkills} disabled={action !== null} />
             {action === "load" && <p className="flex items-center gap-2 text-sm text-text-secondary" role="status"><Loader2 size={15} className="animate-spin" aria-hidden="true" />{t("loading")}</p>}
             {error && <div className="flex items-start gap-2 rounded-md border border-red-400/30 bg-red-400/10 p-3 text-sm text-red-200" role="alert"><AlertCircle size={16} className="mt-0.5 shrink-0" aria-hidden="true" />{error}</div>}
             {notice && <div className="flex items-start gap-2 rounded-md border border-emerald-400/30 bg-emerald-400/10 p-3 text-sm text-emerald-100" role="status"><CheckCircle2 size={16} className="mt-0.5 shrink-0" aria-hidden="true" />{notice}</div>}
@@ -888,6 +894,13 @@ export default function DirectorShootingPlanPanel({ selectedDirector = null, his
                                                 <Field label={t("fields.duration")} type="number" min={1} max={30} value={shot.duration_seconds} onChange={value => updateShot(sceneIndex, beatIndex, shotIndex, { duration_seconds: value ? Number(value) : null })} />
                                                 <div className="sm:col-span-2"><Field label={t("fields.visualIntent")} value={shot.visual_intent} multiline onChange={value => updateShot(sceneIndex, beatIndex, shotIndex, { visual_intent: value })} /></div>
                                                 <div className="sm:col-span-2"><Field label={t("fields.directorEffect")} value={shot.director_effect} multiline onChange={value => updateShot(sceneIndex, beatIndex, shotIndex, { director_effect: value })} /></div>
+                                                {!shot.information_design && <button type="button" className="min-h-11 text-left text-xs text-text-secondary underline" onClick={() => updateShot(sceneIndex, beatIndex, shotIndex, { information_design: { audience_question: '', audience_knows: '', character_knows: '', withhold: '', presentation: '', source_event_ids: [], reveal_event_ids: [], payoff_event_ids: [], evidence_status: 'needs_review' } })}>添加观众信息与揭示安排</button>}
+                                                {shot.information_design && <details className="sm:col-span-2 rounded-md border border-border p-3"><summary className="cursor-pointer text-sm text-foreground">观众信息与揭示安排</summary><p className="my-2 text-xs text-text-secondary">随本计划确认后传递；来源引用不代表建议已核验。</p><div className="grid gap-3 sm:grid-cols-2">
+                                                    {([['audience_question', '观众问题'], ['audience_knows', '观众已知'], ['character_knows', '人物已知'], ['withhold', '当前镜头暂缓展示'], ['presentation', '呈现方式']] as const).map(([key, label]) => <Field key={key} label={label} value={shot.information_design![key]} multiline onChange={value => updateShot(sceneIndex, beatIndex, shotIndex, { information_design: { ...shot.information_design!, [key]: value } })} />)}
+                                                    {([['source_event_ids', '依据事件'], ['reveal_event_ids', '揭示事件'], ['payoff_event_ids', '兑现事件']] as const).map(([key, label]) => <Field key={key} label={`${label} ID（逗号分隔）`} value={shot.information_design![key].join(', ')} onChange={value => updateShot(sceneIndex, beatIndex, shotIndex, { information_design: { ...shot.information_design!, [key]: value.split(/[,，]/).map(s => s.trim()).filter(Boolean) } })} />)}
+                                                    <label className="text-xs text-text-secondary">依据状态<select className="mt-1 min-h-10 w-full rounded border border-border bg-background p-2" value={shot.information_design.evidence_status} onChange={event => updateShot(sceneIndex, beatIndex, shotIndex, { information_design: { ...shot.information_design!, evidence_status: event.target.value as 'source_linked' | 'needs_review' } })}><option value="needs_review">待核验</option><option value="source_linked">已关联来源（仍需审阅）</option></select></label>
+                                                </div></details>}
+
                                                 <Field label={t("fields.performanceAction")} value={shot.performance_action} multiline onChange={value => updateShot(sceneIndex, beatIndex, shotIndex, { performance_action: value })} />
                                                 <Field label={t("fields.actionPhysics")} value={shot.action_physics} multiline onChange={value => updateShot(sceneIndex, beatIndex, shotIndex, { action_physics: value })} />
                                                 <Field label={t("fields.shotSize")} value={shot.shot_size} onChange={value => updateShot(sceneIndex, beatIndex, shotIndex, { shot_size: value })} />

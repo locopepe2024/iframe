@@ -46,8 +46,7 @@ export function directorShotSuggestions(shot: ShotNode): string[] {
         ["导演效果", context.shot?.director_effect],
         ["角色表演", context.shot?.performance_action],
         ["动作物理", context.shot?.action_physics],
-        ["运镜", context.shot?.camera_movement],
-        ["构图", context.shot?.composition],
+        ["构图", shot.composition ? undefined : context.shot?.composition],
         ["环境音", context.shot?.ambient_sound],
     ];
     const lighting = context.shot?.lighting;
@@ -65,6 +64,7 @@ export function directorShotSuggestions(shot: ShotNode): string[] {
         shot.cameraMovementStructured?.description || shot.cameraMovementStructured?.primary || "",
         shot.shotSize || "",
         shot.cameraAngle || "",
+        shot.composition || "",
         shot.transitionHint || "",
     ].map(normalizedPromptText).filter(Boolean);
     const clauses = values.flatMap(([label, raw]) => {
@@ -93,6 +93,7 @@ export function buildAssembledPrompt(
     shot: ShotNode,
     preserveReferences = false,
     globalStylePrompt = "",
+    inheritedLighting = "",
 ): string {
     let base = (shot.prompt || "").trim();
 
@@ -108,7 +109,7 @@ export function buildAssembledPrompt(
     const prefix = resolveStylePrompt(
         globalStylePrompt,
         shot.stylePromptOverride,
-        shot.lightingOverride,
+        shot.lightingOverride || inheritedLighting,
     );
     const suffixes: string[] = [];
 
@@ -125,11 +126,14 @@ export function buildAssembledPrompt(
     if (framingParts.length > 0) {
         suffixes.push(framingParts.join("，"));
     }
+    if (shot.composition) suffixes.push(`构图：${shot.composition}`);
 
     // Transition hint (optional, for multi-shot internal transitions)
     if (shot.transitionHint) {
         suffixes.push(shot.transitionHint);
     }
+
+    suffixes.push(...microExpressionDescriptions(shot));
 
     if (suffixes.length === 0) return [prefix, base].filter(Boolean).join(" . ");
 
@@ -140,15 +144,29 @@ export function buildAssembledPrompt(
     return [prefix, assembled].filter(Boolean).join(" . ");
 }
 
+function microExpressionDescriptions(shot: ShotNode): string[] {
+    return (shot.microExpressionTiming ?? []).flatMap(item => {
+        const phases = item.timing.map(phase =>
+            `${phase.phase}(${phase.relative_start.toFixed(2)}-${phase.relative_end.toFixed(2)}) ${phase.visible_change}`,
+        );
+        return phases.length ? [`${item.character_name || "当前角色"}表情时序：${phases.join("；")}`] : [];
+    });
+}
+
 export function buildGenerationPrompt(
     shot: ShotNode,
     generateAudio: boolean,
     modelId: string,
     globalStylePrompt = "",
+    inheritedLighting = "",
 ): string {
-    if (shot.promptIsOptimized) return shot.prompt.trim();
+    if (shot.promptIsOptimized) {
+        const base = shot.prompt.trim();
+        const accepted = microExpressionDescriptions(shot).filter(item => !base.includes(item));
+        return [base, ...accepted].filter(Boolean).join("，");
+    }
     // An accepted optimizer result is already a complete provider prompt.
-    let prompt = buildAssembledPrompt(shot, true, globalStylePrompt);
+    let prompt = buildAssembledPrompt(shot, true, globalStylePrompt, inheritedLighting);
     const line = shot.dialogueStructured?.line?.trim();
     if (!generateAudio || !line) return prompt;
     const speaker = shot.dialogueStructured?.speaker?.trim() || "Speaker";

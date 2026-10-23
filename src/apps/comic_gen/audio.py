@@ -5,7 +5,7 @@ from typing import Dict, Any, List, Optional
 from .models import StoryboardFrame, Character, GenerationStatus
 from ..studio_access import studio_media_dir
 from ...utils import get_logger
-from ...audio.tts import TTSProcessor
+from ...audio.uniart_tts import UniArtTTSProcessor as TTSProcessor
 
 logger = get_logger(__name__)
 
@@ -94,38 +94,10 @@ class AudioGenerator:
         return self.output_dir
 
     def get_available_voices(self) -> List[Dict[str, Any]]:
-        """Returns a list of available voices with full registry metadata.
-
-        Shape expanded in PR-3g #3 — frontend voice picker (Q15.5 B) needs
-        family/dialect/lang_primary/supports_instruction to render the
-        3 tabs (系统音色 / 我的复刻 / 我的设计) with dialect/international
-        sub-groupings inside 系统音色.
-        """
-        if self.tts:
-            voices_dict = TTSProcessor.list_voices()
-            return [
-                {
-                    # Use actual model_id (server sends "Cherry" not "qwen3_cherry")
-                    # so frontend can pass it back unchanged for synthesis.
-                    "id": meta['model_id'],
-                    "name": meta['name'],
-                    "gender": meta.get('gender', 'Unknown'),
-                    "model": meta.get('model', 'cosyvoice-v2'),
-                    "family": meta.get('family', 'cosyvoice'),
-                    "supports_instruction": meta.get('supports_instruction', False),
-                    "dialect": meta.get('dialect'),
-                    "lang_primary": meta.get('lang_primary'),
-                    "origin": "system",  # custom voices (clone/design) come from a separate endpoint
-                }
-                for meta in voices_dict.values()
-            ]
-        else:
-            return [
-                {"id": "longxiaochun_v2", "name": "龙小淳 (知性女) - CosyVoice", "gender": "Female", "family": "cosyvoice", "origin": "system"},
-                {"id": "longyue_v2", "name": "龙悦 (温柔女) - CosyVoice", "gender": "Female", "family": "cosyvoice", "origin": "system"},
-                {"id": "longcheng_v2", "name": "龙诚 (睿智青年) - CosyVoice", "gender": "Male", "family": "cosyvoice", "origin": "system"},
-                {"id": "longshu_v2", "name": "龙书 (播报男) - CosyVoice", "gender": "Male", "family": "cosyvoice", "origin": "system"},
-            ]
+        """Return only compatible voices authorized by the current UniArt owner."""
+        if not self.tts:
+            return []
+        return self.tts.list_voices()
 
     def generate_dialogue(
         self,
@@ -152,7 +124,7 @@ class AudioGenerator:
 
         if not self.tts:
             frame.status = GenerationStatus.FAILED
-            frame.audio_error = "TTS service not available. Check DASHSCOPE_API_KEY configuration."
+            frame.audio_error = "UniArt 语音服务不可用，请检查网关配置。"
             logger.warning(f"TTS not initialized, cannot generate audio for frame {frame.id}")
             return frame
 

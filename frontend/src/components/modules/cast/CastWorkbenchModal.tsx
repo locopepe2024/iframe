@@ -32,7 +32,7 @@ import { toast } from "@/store/toastStore";
 import { getAssetUrl } from "@/lib/utils";
 import { AssetIndexPreview } from "@/components/shared/AssetIndexPreview";
 import { searchStructuredAssets, type AssetSearchScope, type AssetSearchType } from "@/lib/structuredAssetSearch";
-import { searchReferenceCandidates } from "@/lib/referenceCandidateSearch";
+import { searchReferenceCandidates, selectedReferenceCandidates } from "@/lib/referenceCandidateSearch";
 import AssetImageSubmissionReview from "@/components/shared/AssetImageSubmissionReview";
 import PreviewImage from "@/components/shared/preview/PreviewImage";
 import GroupedModelGrid from "@/components/common/GroupedModelGrid";
@@ -481,7 +481,8 @@ export default function CastWorkbenchModal({ isOpen, kind, entityId, onClose }: 
         }));
     }, [visibleReferenceLibraryAssets, availableReferences]);
 
-    const matchingReferenceCandidates = useMemo(() => searchReferenceCandidates(referenceCandidates, mention?.query ?? ""), [mention, referenceCandidates]);
+    const selectedCandidates = useMemo(() => selectedReferenceCandidates(referenceCandidates, availableReferences), [referenceCandidates, availableReferences]);
+    const matchingReferenceCandidates = useMemo(() => searchReferenceCandidates(selectedCandidates, mention?.query ?? ""), [mention, selectedCandidates]);
 
     // Reset prompt to template ONLY when the entity changes (not on every
     // open) so the user's in-flight edits aren't clobbered if they happen
@@ -1375,7 +1376,7 @@ export default function CastWorkbenchModal({ isOpen, kind, entityId, onClose }: 
                             <div className="relative rounded-md border border-glass-border bg-black/30 px-3.5 py-2.5 focus-within:border-primary/40">
                                 <ReferencePromptEditor
                                     value={prompt}
-                                    candidates={referenceCandidates}
+                                    candidates={selectedCandidates}
                                     onChange={(value) => {
                                         setPrompt(value);
                                         setPromptDirty(true);
@@ -1398,7 +1399,7 @@ export default function CastWorkbenchModal({ isOpen, kind, entityId, onClose }: 
                                         </div>
                                         {matchingReferenceCandidates.length === 0 ? (
                                             <div className="px-2 py-2 text-xs text-text-muted">
-                                                {referenceCandidates.length ? t("noMatchingReference") : t("noAvailableReferences")}
+                                                {selectedCandidates.length ? t("noMatchingReference") : t("noAvailableReferences")}
                                             </div>
                                         ) : matchingReferenceCandidates.map((candidate) => (
                                             <button
@@ -1407,10 +1408,6 @@ export default function CastWorkbenchModal({ isOpen, kind, entityId, onClose }: 
                                                 role="option"
                                                 onMouseDown={(event) => event.preventDefault()}
                                                 onClick={() => {
-                                                    const asset = visibleReferenceLibraryAssets.find((item) => item.asset_type === candidate.reference?.asset_type && item.asset_id === candidate.reference?.asset_id);
-                                                    const variant = asset?.variants.find((item) => item.id === candidate.reference?.variant_id);
-                                                    if (!asset || !variant) return;
-                                                    addAvailableReference(asset, variant);
                                                     mention.choose(candidate);
                                                     setMention(null);
                                                 }}

@@ -52,3 +52,5 @@ it("marks the report adopted after explicit confirmation", async () => {
     fireEvent.click(confirm);
     expect(await screen.findByText("Adopted global v2")).toBeInTheDocument();
   });
+
+vi.mock("@/lib/directorSkills", () => ({ useDirectorSkills: () => ({ catalog: [], selected: [], loading: false, saving: false, error: "", canRun: true, update: vi.fn(), retry: vi.fn() }) }));

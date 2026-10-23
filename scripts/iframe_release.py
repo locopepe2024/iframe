@@ -31,6 +31,8 @@ KNOWLEDGE_SECRETS = Path("/srv/lumenx/runtime/knowledge-pg-provision")
 KNOWLEDGE_MOUNT = "/run/iframe-knowledge"
 REVIEW_CONFIG = Path("/opt/.iframe")
 REVIEW_CONFIG_MOUNT = "/run/iframe-review-key"
+DIRECTOR_SSH = Path("/srv/lumenx/runtime/director-depth-ssh")
+DIRECTOR_SSH_MOUNT = "/root/.ssh"
 KNOWLEDGE_PATHS = {"/knowledge/collections", "/knowledge/search", "/knowledge/collections/{collection_id}/sources"}
 
 
@@ -90,6 +92,7 @@ def verify_topology(backend, frontend):
     allowed_extra = {
         (str(KNOWLEDGE_SECRETS), KNOWLEDGE_MOUNT),
         (str(REVIEW_CONFIG), REVIEW_CONFIG_MOUNT),
+        (str(DIRECTOR_SSH), DIRECTOR_SSH_MOUNT),
     }
     if any(
         mount["Type"] != "bind"
@@ -253,6 +256,13 @@ def create_backend(name, image, env_path, output, host_port, *, restart=False):
         args += ["-v", f"{KNOWLEDGE_SECRETS}:{KNOWLEDGE_MOUNT}:ro"]
     if REVIEW_CONFIG.is_file():
         args += ["-v", f"{REVIEW_CONFIG}:{REVIEW_CONFIG_MOUNT}:ro", "-e", f"IFRAME_PLATFORM_REVIEW_CONFIG={REVIEW_CONFIG_MOUNT}"]
+    remote_depth = any(line.partition("=")[0].strip() == "DIRECTOR_DEPTH_MEDIA_SSH_TARGET"
+                       and line.partition("=")[2].strip().strip("\"'")
+                       for line in env_path.read_text().splitlines())
+    if remote_depth:
+        if DIRECTOR_SSH.is_symlink() or not DIRECTOR_SSH.is_dir() or DIRECTOR_SSH.stat().st_mode & (stat.S_IWGRP | stat.S_IWOTH):
+            raise RuntimeError("Missing or unsafe media SSH directory")
+        args += ["-v", f"{DIRECTOR_SSH}:{DIRECTOR_SSH_MOUNT}:ro"]
     if restart:
         args += ["--restart", "unless-stopped"]
     run(*(args + [image]))

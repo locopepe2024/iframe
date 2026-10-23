@@ -269,9 +269,13 @@ function PlatformReferenceReviewQueue() {
   const [grantBusy, setGrantBusy] = useState(false);
   const [platformSearch, setPlatformSearch] = useState("");
   const [platformTag, setPlatformTag] = useState("");
+  const [platformDomain, setPlatformDomain] = useState("");
+  const [platformEntryType, setPlatformEntryType] = useState("");
   const activeTags = Array.from(new Set((activeCatalog?.resources ?? []).flatMap((resource) => resource.tags ?? []))).sort();
   const visibleActive = (activeCatalog?.resources ?? []).filter((resource) => {
     if (platformTag && !resource.tags?.includes(platformTag)) return false;
+    if (platformDomain && resource.dictionary?.semantic_domain !== platformDomain) return false;
+    if (platformEntryType && resource.dictionary?.entry_type !== platformEntryType) return false;
     const needle = platformSearch.trim().toLocaleLowerCase();
     return !needle || [resource.title, resource.summary ?? "", ...(resource.tags ?? [])].join(" ").toLocaleLowerCase().includes(needle);
   });
@@ -337,6 +341,8 @@ function PlatformReferenceReviewQueue() {
           </div>
           {resource.summary && <p className="text-sm text-text-secondary mt-3">{resource.summary}</p>}
           {resource.category_path && <p className="mt-2 text-xs text-text-muted">类别：{resource.category_path}</p>}
+          {resource.dictionary && <p className="mt-1 text-xs text-text-muted">词典：{resource.dictionary.semantic_domain} · {resource.dictionary.entry_type}</p>}
+          {!!resource.dictionary?.members?.length && <ol className="mt-2 list-inside list-decimal text-xs text-text-muted" aria-label="组合成员固定引用">{resource.dictionary.members.map((member) => <li key={`${member.platform_resource_id}@${member.revision}`}>{member.role} · {member.platform_resource_id} · r{member.revision}</li>)}</ol>}
           {!!resource.payload && typeof resource.payload === "object" && <details className="mt-3 text-xs text-text-secondary">
             <summary>提示词与生成来源</summary>
             {typeof resource.payload.prompt_used === "string" && <div className="mt-2"><strong>模型原始提示词</strong><pre className="mt-1 max-h-40 overflow-auto whitespace-pre-wrap break-words">{resource.payload.prompt_used}</pre></div>}
@@ -358,12 +364,22 @@ function PlatformReferenceReviewQueue() {
           <option value="">全部标签</option>
           {activeTags.map((tag) => <option key={tag} value={tag}>{tag}</option>)}
         </select>
+        <select aria-label="筛选词典领域" value={platformDomain} onChange={(event) => setPlatformDomain(event.target.value)} className="glass-input px-3 py-2 text-sm">
+          <option value="">全部语义层</option>
+          <option value="character.identity">身份</option><option value="character.look">造型</option>
+          <option value="character.performance">表演</option><option value="world.style">风格</option>
+        </select>
+        <select aria-label="筛选词典类型" value={platformEntryType} onChange={(event) => setPlatformEntryType(event.target.value)} className="glass-input px-3 py-2 text-sm">
+          <option value="">全部内容</option><option value="term">原子词条</option><option value="case">效果案例</option>
+        </select>
       </div>}
       {!activeCatalog?.resources.length ? <div className="glass-panel rounded-xl p-8 text-text-secondary">{t("publishedEmpty")}</div> : !visibleActive.length ? <div className="glass-panel rounded-xl p-8 text-text-secondary">没有匹配的已发布资源</div> :
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
         {visibleActive.map((resource) => <article key={resource.platform_resource_id} className="glass-panel rounded-xl border border-glass-border p-4">
           <h2 className="font-semibold text-foreground">{resource.title}</h2>
           <div className="text-xs text-text-muted mt-1">{resource.kind} · v{resource.revision}</div>
+          {resource.dictionary && <div className="mt-1 text-xs text-text-muted">词典：{resource.dictionary.semantic_domain} · {resource.dictionary.entry_type}</div>}
+          {!!resource.dictionary?.members?.length && <p className="mt-1 text-xs text-text-muted">固定成员 {resource.dictionary.members.length} 项</p>}
           {!!resource.payload?.media_file && <PlatformCandidatePreview resourceId={resource.platform_resource_id} kind={resource.kind} />}
           {(resource.payload?.structured_prompt?.content || resource.summary) && <details className="mt-3 text-sm text-text-secondary">
             <summary>查看配套 Prompt</summary>

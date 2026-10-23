@@ -3,6 +3,8 @@ import { useEffect, useState } from "react";
 import { BrainCircuit, Check, Loader2, Save, RotateCcw } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { api } from "@/lib/api";
+import { useDirectorSkills } from "@/lib/directorSkills";
+import DirectorSkillsSelector from "@/components/modules/DirectorSkillsSelector";
 import WorkflowActionButton from "@/components/shared/WorkflowActionButton";
 import type { DirectorProfile } from "@/store/projectStore";
 
@@ -38,6 +40,7 @@ function SeriesUnderstandingReport({ profile, t }: { profile: DirectorProfile | 
 
 export default function SeriesDirectorProfilePanel({ seriesId, onSaved }: { seriesId: string; onSaved: () => void }) {
   const t = useTranslations("series");
+  const creativeSkills = useDirectorSkills(seriesId, "series");
   const [draftText, setDraftText] = useState("");
   const [profile, setProfile] = useState<DirectorProfile | null>(null);
   const [savedText, setSavedText] = useState("");
@@ -68,9 +71,10 @@ export default function SeriesDirectorProfilePanel({ seriesId, onSaved }: { seri
   useEffect(() => { void load().catch(e => setError(String(e?.message || e))); }, [seriesId]);
 
   const analyze = async () => {
+        if (!creativeSkills.canRun) return;
     setBusy("analyze"); setError("");
     try {
-      const result = await api.analyzeSeriesDirectorProfile(seriesId);
+      const result = await api.analyzeSeriesDirectorProfile(seriesId, undefined, creativeSkills.selected);
       setProfile(result.profile as unknown as DirectorProfile);
       setHasDraft(true);
       const text = JSON.stringify(result.profile, null, 2);
@@ -110,8 +114,9 @@ export default function SeriesDirectorProfilePanel({ seriesId, onSaved }: { seri
       <BrainCircuit size={22} className="text-emerald-400" />
       <div className="flex-1"><h2 className="font-display text-xl text-foreground">{t("seriesDirectorTitle")}</h2><p className="mt-1 text-xs text-text-secondary">{t("seriesDirectorHint")}</p></div>
       {confirmedRevision && <span className="text-xs text-text-secondary">{t("seriesDirectorConfirmed", { revision: confirmedRevision })}</span>}
-      <WorkflowActionButton variant="secondary" leftIcon={<RotateCcw />} loading={busy === "analyze"} disabled={busy !== null} onClick={analyze}>{t("seriesDirectorAnalyze")}</WorkflowActionButton>
+      <WorkflowActionButton variant="secondary" leftIcon={<RotateCcw />} loading={busy === "analyze"} disabled={busy !== null || !creativeSkills.canRun} onClick={analyze}>{t("seriesDirectorAnalyze")}</WorkflowActionButton>
     </header>
+    <div className="px-8 pt-3"><DirectorSkillsSelector state={creativeSkills} disabled={busy !== null} /></div>
     {error && <p role="alert" className="mx-8 mt-4 rounded border border-red-500/30 bg-red-500/10 p-3 text-xs text-red-200">{error}</p>}
     {styleReviewRequired && <p role="status" className="mx-8 mt-4 rounded border border-amber-400/30 bg-amber-400/10 p-3 text-xs text-amber-100">{t("seriesDirectorStyleReview")}</p>}
     <div className="min-h-0 flex-1 overflow-y-auto p-8">

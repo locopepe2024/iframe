@@ -241,10 +241,16 @@ export function frameToShotNode(
         cameraMovementStructured: frame.camera_movement_structured ?? null,
         shotSize: frame.shot_size ?? frame.director_shot_context?.shot?.shot_size ?? null,
         cameraAngle: frame.camera_angle ?? frame.director_shot_context?.shot?.camera_angle ?? null,
+        composition: frame.composition ?? null,
         transitionHint: frame.transition_hint ?? null,
         stylePromptOverride: frame.style_prompt_override ?? null,
         lightingOverride: frame.lighting_override ?? null,
         negativePromptOverride: frame.negative_prompt_override ?? null,
+        richRefinementCandidate: frame.rich_refinement_candidate ?? null,
+        microExpressionCandidate: frame.micro_expression_candidate ?? null,
+        cameraMovementCandidate: frame.camera_movement_candidate ?? null,
+        shotFieldCandidate: frame.shot_field_candidate ?? null,
+        microExpressionTiming: frame.micro_expression_timing ?? [],
         isVideoPinned: Boolean(frame.is_video_pinned),
     });
 }

@@ -23,6 +23,31 @@ const assets = [
 ];
 
 describe("storyboard multi-reference assets", () => {
+    it("resolves typed project tags by kind when a character and scene share a name", () => {
+        const sameName = [
+            { id: "person", name: "长街", kind: "character" as const, variants: [{ id: "face", url: "person.jpg" }] },
+            { id: "place", name: "长街", kind: "scene" as const, variants: [{ id: "street", url: "street.jpg" }] },
+        ];
+        const result = resolveReferenceSubmission("[scene:长街] [character:长街]", sameName);
+        expect(result.urls).toEqual(["street.jpg", "person.jpg"]);
+        expect(result.groups.map((group) => group.kind)).toEqual(["scene", "character"]);
+        const prompt = bindH3MultiReferencePrompt("[scene:长街] [character:长街]", result.groups);
+        expect(prompt).toContain("长街 (reference asset 1) 长街 (reference asset 2)");
+    });
+
+    it("does not bind a typed scene tag to a same-named character", () => {
+        const result = resolveReferenceSubmission("[scene:女主播]", assets);
+        expect(result.urls).toEqual([]);
+        expect(result.unresolvedNames).toEqual(["女主播"]);
+    });
+
+    it("requires disambiguation when two project assets have the same type and name", () => {
+        const repeated = [assets[0], { ...assets[0], id: "host-copy", variants: [{ id: "other", url: "wrong.jpg" }] }];
+        const result = resolveReferenceSubmission("[character:女主播]", repeated);
+        expect(result.urls).toEqual([]);
+        expect(result.unresolvedNames).toEqual(["女主播"]);
+    });
+
     it("uses one primary image for assets without an explicit shot selection", () => {
         const result = resolveReferenceSubmission(
             "[character:女主播] holds [prop:穿心莲]",

@@ -125,6 +125,47 @@ class Blocking(BaseModel):
     stage: Optional[List[StageSubject]] = Field(None, description="结构化站位数据")
     camera_relation: Optional[str] = Field(None, description="相机相对场景的空间关系")
 
+
+StoryboardReferenceField = Literal["lighting", "space", "camera", "continuity_state"]
+
+
+class StoryboardReferenceProjectionSnapshot(BaseModel):
+    """Creator-confirmed, bounded structured context from an explicit reference.
+
+    The image reference and this snapshot are deliberately separate.  The
+    snapshot contains only the four reviewable visual categories and retains
+    the source lineage needed to invalidate it when the source changes.
+    """
+
+    schema_version: Literal[1] = 1
+    source_preset_id: Optional[str] = Field(None, max_length=120)
+    source_frame_id: Optional[str] = Field(None, max_length=120)
+    source_shot_id: Optional[str] = Field(None, max_length=120)
+    source_scene_id: Optional[str] = Field(None, max_length=120)
+    source_asset_id: Optional[str] = Field(None, max_length=120)
+    source_variant_id: Optional[str] = Field(None, max_length=120)
+    source_media_id: Optional[str] = Field(None, max_length=200)
+    source_asset_revision: Optional[int] = Field(None, ge=1)
+    source_scene_design_revision: Optional[int] = Field(None, ge=1)
+    source_visual_version_known: bool = False
+    source_projection_hash: Optional[str] = Field(None, max_length=128)
+    source_plan_revision: Optional[int] = Field(None, ge=1)
+    source_plan_hash: Optional[str] = Field(None, max_length=128)
+    target_frame_id: str = Field(..., min_length=1, max_length=120)
+    target_shot_id: Optional[str] = Field(None, max_length=120)
+    target_scene_id: str = Field(..., min_length=1, max_length=120)
+    target_plan_revision: Optional[int] = Field(None, ge=1)
+    target_plan_hash: Optional[str] = Field(None, max_length=128)
+    selected_fields: List[StoryboardReferenceField] = Field(default_factory=list)
+    available_fields: List[StoryboardReferenceField] = Field(default_factory=list)
+    scope: Literal["same_place_time", "same_time_world_light", "different_time", "unresolved"] = "unresolved"
+    eligible_fields: List[StoryboardReferenceField] = Field(default_factory=list)
+    suggested_fields: List[StoryboardReferenceField] = Field(default_factory=list)
+    include_reference_image: bool = True
+    visual_design: Dict[str, Any] = Field(default_factory=dict)
+    revision: int = Field(1, ge=1)
+    created_at: float = Field(default_factory=time.time)
+
 class DialogueStructured(BaseModel):
     speaker: str = Field(..., description="说话人")
     line: str = Field(..., description="台词内容")
@@ -191,6 +232,22 @@ class AssetImageSubmissionSnapshot(BaseModel):
     submitted_at: float = Field(default_factory=time.time)
 
 
+class StoryboardVariantVisualSnapshot(BaseModel):
+    """Structured visual state frozen with a generated storyboard image."""
+
+    schema_version: Literal[1] = 1
+    visual_design: Dict[str, Any] = Field(default_factory=dict)
+    source_scene_id: Optional[str] = None
+    scene_asset_revision: Optional[int] = Field(None, ge=1)
+    scene_design_revision: Optional[int] = Field(None, ge=1)
+    shot_visual_design_revision: Optional[int] = Field(None, ge=1)
+    place_continuity_id: Optional[str] = None
+    time_continuity_id: Optional[str] = None
+    shooting_plan_revision: Optional[int] = Field(None, ge=1)
+    shooting_plan_hash: Optional[str] = None
+    captured_at: float = Field(default_factory=time.time)
+
+
 class ImageVariant(BaseModel):
     model_config = ConfigDict(validate_assignment=True)
     id: str = Field(..., description="Unique identifier for the variant")
@@ -210,6 +267,9 @@ class ImageVariant(BaseModel):
     prompt_used: Optional[str] = Field(None, description="Prompt used for this specific variant")
     submission_snapshot: Optional[AssetImageSubmissionSnapshot] = Field(
         None, description="Reviewed image request frozen at enqueue; absent for legacy or uploaded media"
+    )
+    storyboard_visual_snapshot: Optional[StoryboardVariantVisualSnapshot] = Field(
+        None, description="Structured visual state frozen for a generated storyboard variant"
     )
     is_favorited: bool = Field(False, description="Whether this variant is favorited/pinned (won't be auto-deleted)")
     # NEW: 上传来源标记
@@ -355,6 +415,23 @@ class AssetLibraryReference(BaseModel):
     applied_fields: List[str] = Field(default_factory=list, max_length=16)
 
 
+class ScenePromptSource(BaseModel):
+    """Editable prompt and explicit references, independent of the other source."""
+
+    model_config = {"extra": "forbid"}
+    prompt: str = Field(default="", max_length=30000, strict=True)
+    mode: Literal["text", "reference"] = "text"
+    references: List[AssetLibraryReference] = Field(default_factory=list, max_length=32)
+
+
+class ScenePromptWorkspace(BaseModel):
+    model_config = {"extra": "forbid"}
+    active_source: Optional[Literal["design", "ai"]] = None
+    settings_pending: bool = Field(default=False, strict=True)
+    design: ScenePromptSource
+    ai: ScenePromptSource
+
+
 class AssetReferenceIndexEntry(BaseModel):
     """Normalized reusable asset entry projected for reference pickers."""
 
@@ -444,6 +521,7 @@ class VideoTask(BaseModel):
     # provider_name labels the platform so the UI can render "dashscope: 1ce3..."
     # rather than guessing from model_name.
     provider_name: Optional[str] = Field(None, description="Which provider handled this task (dashscope / kling / vidu / pixverse / etc.)")
+    provider_api_version: Optional[str] = Field(None, description="Accepted H3 API version; absent on legacy V1 tasks")
     provider_task_id: Optional[str] = Field(None, description="Provider-side task ID; pasteable into the provider's console for diagnosis")
     provider_request_id: Optional[str] = Field(None, description="Provider-side request ID for support tickets (optional — not all providers return one)")
     # User annotations on this take (抽卡 review). Storyboard's candidates
@@ -489,6 +567,10 @@ class ArtifactLineage(BaseModel):
     fact_ledger_revision: Optional[int] = Field(None, ge=1)
     fact_ledger_source_revision_id: Optional[str] = None
     fact_ledger_status: Literal["none", "current", "stale", "unavailable"] = "none"
+    storyboard_mode: Optional[Literal["plan", "script"]] = None
+    shooting_plan_revision: Optional[int] = None
+    shooting_plan_hash: Optional[str] = None
+    creative_skill_run: List[Dict[str, str]] = Field(default_factory=list, max_length=12)
     fact_ids: List[str] = Field(default_factory=list, max_length=40)
     source_ranges: List[SourceRange] = Field(default_factory=list, max_length=40)
 
@@ -764,6 +846,9 @@ class ShotVisualPreset(BaseModel):
     source_frame_id: Optional[str] = None
     source_asset_id: Optional[str] = None
     source_variant_id: Optional[str] = None
+    source_media_id: Optional[str] = None
+    source_asset_revision: Optional[int] = Field(None, ge=1)
+    source_scope: Optional[Literal["project", "series", "global"]] = None
     source_scene_revision: Optional[int] = Field(None, ge=1)
     visual_design: Dict[str, Any] = Field(default_factory=dict)
     compiled_prompt: str = Field("", max_length=12000)
@@ -776,7 +861,13 @@ class ShotVisualDesignSnapshot(BaseModel):
     visual_design: Dict[str, Any] = Field(default_factory=dict)
     compiled_prompt: str = Field("", max_length=12000)
     source_preset_id: Optional[str] = None
+    source_asset_id: Optional[str] = None
+    source_frame_id: Optional[str] = None
     source_variant_id: Optional[str] = None
+    source_media_id: Optional[str] = None
+    source_asset_revision: Optional[int] = Field(None, ge=1)
+    source_scope: Optional[Literal["project", "series", "global"]] = None
+    selected_fields: List[StoryboardReferenceField] = Field(default_factory=list)
     source_scene_revision: Optional[int] = Field(None, ge=1)
     apply_mode: Optional[Literal["parameters_only", "parameters_with_reference"]] = None
     revision: int = Field(1, ge=1)
@@ -796,6 +887,10 @@ class StoryboardFrame(BaseModel):
     director_shot_context: Optional[Dict[str, Any]] = Field(
         None,
         description="Server-projected read-only context from the confirmed shooting-plan shot",
+    )
+    reference_visual_projection: Optional[StoryboardReferenceProjectionSnapshot] = Field(
+        None,
+        description="Creator-confirmed bounded structured context from the selected reference",
     )
     character_ids: List[str] = Field(default_factory=list, description="List of Character IDs present in the frame")
     character_use_ids: Dict[str, str] = Field(
@@ -843,6 +938,24 @@ class StoryboardFrame(BaseModel):
     lighting: Optional[LightingData] = Field(None, description="光影方向与质感")
     transition_hint: Optional[str] = Field(None, description="与下一帧的转场方式")
     assembled_prompt: Optional[str] = Field(None, description="由 visual_description + 结构化字段自动拼装的最终 prompt（只读）")
+    rich_refinement_candidate: Optional[Dict[str, Any]] = Field(
+        None, description="Unapplied rich-frame field proposals with source snapshot"
+    )
+    micro_expression_candidate: Optional[Dict[str, Any]] = Field(
+        None, description="Unapplied shot-scoped micro-expression proposal"
+    )
+    camera_movement_candidate: Optional[Dict[str, Any]] = Field(
+        None, description="Unapplied model-independent camera movement proposal"
+    )
+    static_framing_candidate: Optional[Dict[str, Any]] = Field(
+        None, description="Unapplied model-independent static framing proposal"
+    )
+    shot_field_candidate: Optional[Dict[str, Any]] = Field(
+        None, description="Unapplied model-independent proposal for existing shot controls"
+    )
+    micro_expression_timing: List[Dict[str, Any]] = Field(
+        default_factory=list, description="Creator-accepted performance timing by character"
+    )
 
     # === Prompts ===
     # Per-shot art-direction overrides.  Empty values inherit the project's
@@ -935,6 +1048,9 @@ class StoryboardFrame(BaseModel):
         description="Per-shot generated-audio choice; None inherits the current project/UI default",
     )
     workbench_prompt_is_optimized: bool = False
+    workbench_visual_source_hash: Optional[str] = Field(
+        None, description="Visual and shot-field source hash when the full workbench prompt was accepted"
+    )
     workbench_reference_variant_ids: Dict[str, List[str]] = Field(
         default_factory=dict,
         description="Explicit per-shot image variant selections keyed by semantic asset ID",
@@ -1215,6 +1331,7 @@ class DirectorStoryMap(_DirectorStoryMapModel):
 
 class DirectorProfile(BaseModel):
     """Confirmed narrative direction carried into downstream generation."""
+    creative_skill_run: List[Dict[str, str]] = Field(default_factory=list, max_length=12)
     setting: Dict[str, Any] = Field(default_factory=dict)
     timeline: List[Dict[str, Any]] = Field(default_factory=list)
     relationships: List[Dict[str, Any]] = Field(default_factory=list)
@@ -1327,7 +1444,28 @@ class DirectorPlanPropBinding(_DirectorShootingPlanModel):
     binding_status: Literal["unresolved", "suggested", "selected", "confirmed"] = "unresolved"
 
 
+class DirectorInformationDesign(BaseModel):
+    """Proposed disclosure arrangement; adopted only with its enclosing plan."""
+    model_config = ConfigDict(extra="forbid")
+    audience_question: str = Field("", max_length=600)
+    audience_knows: str = Field("", max_length=600)
+    character_knows: str = Field("", max_length=600)
+    withhold: str = Field("", max_length=600)
+    presentation: str = Field("", max_length=1000)
+    source_event_ids: List[str] = Field(default_factory=list, max_length=20)
+    reveal_event_ids: List[str] = Field(default_factory=list, max_length=20)
+    payoff_event_ids: List[str] = Field(default_factory=list, max_length=20)
+    evidence_status: Literal["source_linked", "needs_review"] = "needs_review"
+
+    @model_validator(mode="after")
+    def validate_source_link(self):
+        if self.evidence_status == "source_linked" and not self.source_event_ids:
+            raise ValueError("source_linked information design requires source_event_ids")
+        return self
+
+
 class DirectorPlanShot(_DirectorShootingPlanModel):
+    information_design: Optional[DirectorInformationDesign] = None
     shot_id: str = Field(..., min_length=1, max_length=120)
     order: int = Field(..., ge=0)
     title: str = Field("", max_length=180)
@@ -1430,6 +1568,7 @@ class DirectorPlanScene(_DirectorShootingPlanModel):
 
 
 class DirectorShootingPlan(_DirectorShootingPlanModel):
+    creative_skill_run: List[Dict[str, str]] = Field(default_factory=list, max_length=12)
     schema_version: Literal[1] = 1
     source_revision: int = Field(..., ge=1)
     source_revision_id: str = Field("", max_length=240)
@@ -1519,6 +1658,7 @@ class EpisodeVisualPropContext(BaseModel):
 
 
 class EpisodeVisualShotContext(BaseModel):
+    information_design: Optional[DirectorInformationDesign] = None
     scene_id: str
     beat_id: str
     shot_id: str

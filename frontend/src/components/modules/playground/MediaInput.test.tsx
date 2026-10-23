@@ -122,3 +122,49 @@ it('uses the model catalog limit of sixteen for GPT Image 2.5', async () => {
   await waitFor(() => expect(usePlaygroundStore.getState().inputMedia).toEqual([...existing, '/new.png']));
   expect(screen.getByText('media.localUpload')).toBeDisabled();
 });
+
+it('uses the existing reference picker for PDF, Word and multimedia uploads', async () => {
+  usePlaygroundStore.setState({ mode: 't2v', modelId: 'test', inputMedia: ['/old.png'] });
+  const { container } = render(<MediaInput agentMode />);
+  expect(container.querySelectorAll('input[type="file"]')).toHaveLength(1);
+  expect(screen.queryByRole('button', { name: 'media.documentUpload' })).not.toBeInTheDocument();
+  const picker = container.querySelector('input[type="file"]') as HTMLInputElement;
+  const click = vi.spyOn(picker, 'click');
+  fireEvent.click(screen.getByRole('button', { name: 'media.localUpload' }));
+  expect(click).toHaveBeenCalledOnce();
+  expect(picker.accept).toContain('.pdf');
+  expect(picker.accept).toContain('application/pdf');
+  expect(picker.accept).toContain('.docx');
+  expect(picker.accept).toContain('application/vnd.openxmlformats-officedocument.wordprocessingml.document');
+  expect(picker.accept).toContain('image/*');
+  expect(picker.accept).toContain('video/*');
+  expect(picker.accept).toContain('audio/*');
+  expect(picker).toHaveAttribute('multiple');
+  expect(picker).not.toHaveAttribute('capture');
+  upload.mockResolvedValueOnce({ path: '/report.pdf' }).mockResolvedValueOnce({ path: '/brief.docx' });
+  fireEvent.change(picker, { target: { files: [new File(['pdf'], 'report.pdf', { type: 'application/pdf' }), new File(['word'], 'brief.docx', { type: '' })] } });
+  await waitFor(() => expect(usePlaygroundStore.getState().inputMedia).toEqual(['/old.png', '/report.pdf', '/brief.docx']));
+  expect(usePlaygroundStore.getState().mode).toBe('t2v');
+});
+
+it('shows document upload failure and permits retry without removing existing references', async () => {
+  usePlaygroundStore.setState({ mode: 'i2i', modelId: 'test', inputMedia: ['/old.png'] });
+  const { container } = render(<MediaInput agentMode />);
+  const picker = container.querySelector('input[type="file"]')!;
+  upload.mockRejectedValueOnce(new Error('offline'));
+  const file = new File(['word'], 'brief.docx');
+  fireEvent.change(picker, { target: { files: [file] } });
+  expect(screen.getByRole('button', { name: 'media.localUpload' })).toBeDisabled();
+  await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('brief.docx'));
+  expect(usePlaygroundStore.getState().inputMedia).toEqual(['/old.png']);
+  upload.mockResolvedValueOnce({ path: '/brief.docx' });
+  fireEvent.change(picker, { target: { files: [file] } });
+  await waitFor(() => expect(usePlaygroundStore.getState().inputMedia).toEqual(['/old.png', '/brief.docx']));
+  expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+});
+
+it('keeps document picker out of generation-only media selection', () => {
+  usePlaygroundStore.setState({ mode: 'i2i', modelId: 'test', inputMedia: [] });
+  render(<MediaInput />);
+  expect(screen.queryByRole('button', { name: 'media.documentUpload' })).not.toBeInTheDocument();
+});

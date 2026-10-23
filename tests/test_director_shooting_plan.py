@@ -5,7 +5,7 @@ from unittest.mock import Mock
 import pytest
 from pydantic import ValidationError
 
-from src.apps.comic_gen.llm import ScriptProcessor, split_director_source
+from src.apps.comic_gen.llm import DirectorShootingChunkError, ScriptProcessor, split_director_source
 from src.apps.comic_gen.models import (
     ArtDirection,
     Character,
@@ -242,6 +242,27 @@ def test_llm_accepts_missing_visual_atoms_for_downstream_editing():
     assert result["scenes"][0]["beats"][0]["shots"][0]["action_physics"] == ""
     assert processor.llm.chat.call_count == 1
     assert processor.llm.chat.call_args.kwargs["stream"] is True
+
+
+@pytest.mark.parametrize(
+    ("response", "category", "reason"),
+    [
+        ('{"scenes": [', "invalid_json", "JSON 格式错误"),
+        ('{"scenes": []}', "contract_violation", "必须返回至少一个 scene"),
+    ],
+)
+def test_shooting_plan_reports_bounded_model_contract_failure(response, category, reason):
+    processor = ScriptProcessor.__new__(ScriptProcessor)
+    processor.llm = Mock(is_configured=True)
+    processor.llm.chat.return_value = response
+
+    with pytest.raises(DirectorShootingChunkError) as failure:
+        processor.plan_director_shooting_chunk("场景原文", {}, {}, {})
+
+    assert failure.value.category == category
+    assert reason in failure.value.public_reason
+    assert response not in failure.value.public_reason
+    assert processor.llm.chat.call_count == 2
 
 
 def test_shooting_plan_passes_selected_polish_model_to_llm():
@@ -1141,6 +1162,24 @@ def test_long_plan_batch_cache_shape_resumes_completed_chunks(monkeypatch):
     assert len(plan.scenes[0].beats) == 2
 
 
+def test_plan_contract_failure_identifies_source_chunk(monkeypatch):
+    pipeline, _ = make_pipeline()
+    chunks = [
+        {"source_ref": "source:first", "text": "scene start"},
+        {"source_ref": "source:second", "text": "scene continuation"},
+    ]
+    monkeypatch.setattr("src.apps.comic_gen.llm.split_director_source", lambda *args, **kwargs: chunks)
+    pipeline.script_processor.plan_director_shooting_chunk.side_effect = [
+        valid_chunk(), DirectorShootingChunkError("contract_violation", "必须返回至少一个 scene"),
+    ]
+
+    with pytest.raises(DirectorShootingChunkError) as failure:
+        pipeline.preview_director_shooting_plan("film")
+
+    assert "第 2/2 段" in failure.value.public_reason
+    assert "必须返回至少一个 scene" in failure.value.public_reason
+
+
 def test_continued_scene_retains_first_continuity_ids_and_flags_chunk_conflict(monkeypatch):
     pipeline, _ = make_pipeline()
     chunks = [
@@ -1316,3 +1355,43 @@ def test_plan_api_keeps_large_resource_separate_and_confirms_without_touching_fr
     finally:
         api.app.dependency_overrides.pop(require_studio_user, None)
         executor.shutdown(wait=True)
+
+
+def test_information_design_rejects_unknown_events_and_hands_off_only_confirmed_plan():
+    from src.apps.comic_gen.models import DirectorInformationDesign
+    pipeline, script = make_pipeline()
+    plan = make_plan(pipeline)
+    information = DirectorInformationDesign(
+        audience_question='为什么在入口停步？', audience_knows='两人走向入口',
+        character_knows='角色看见前方', withhold='未到揭示事件前不展示额外信息',
+        presentation='先拍人物反应', source_event_ids=['event-cinema'],
+        reveal_event_ids=['invented-event'],
+    )
+    plan.scenes[0].beats[0].shots[0].information_design = information
+    with pytest.raises(ValueError, match='unknown Director story events'):
+        pipeline.save_director_shooting_plan_draft('film', 1, 0, plan)
+    information.reveal_event_ids = []
+    pipeline.save_director_shooting_plan_draft('film', 1, 0, plan)
+    assert script.episode_visual_context is None
+    pipeline.apply_director_shooting_plan('film', plan, 0, 1)
+    context = pipeline.project_episode_visual_context('film')
+    assert context.shots[0].information_design == information
+    assert context.shooting_plan_revision == 1
+
+
+def test_generated_information_design_survives_normalization_and_remains_draft():
+    from src.apps import director_skills
+    pipeline, script = make_pipeline()
+    scene = raw_scene()
+    scene['beats'][0]['shots'][0]['information_design'] = {
+        'audience_question': '入口有什么？', 'withhold': '暂不展示入口内细节',
+        'source_event_ids': ['event-cinema'], 'evidence_status': 'needs_review',
+    }
+    pipeline.script_processor.plan_director_shooting_chunk.return_value = valid_chunk(scene)
+    task = next(t for t in director_skills.catalog('shooting_plan') if t['id'] == 'opening-hook')
+    snapshot = director_skills.freeze('shooting_plan', [director_skills.SkillSelection(id=task['id'], revision=task['revision'])])
+    result = pipeline.preview_director_shooting_plan('film', skill_snapshot=snapshot)
+    assert result.scenes[0].beats[0].shots[0].information_design.withhold == '暂不展示入口内细节'
+    assert result.creative_skill_run[0]['id'] == 'opening-hook'
+    assert script.episode_visual_context is None
+    assert pipeline.script_processor.plan_director_shooting_chunk.call_args.args[1]['selected_creative_methods'] == snapshot

@@ -2,6 +2,7 @@ import * as THREE from 'three';
 
 export interface DepthSnapshot {
   schema_version: 'director-scene-depth-snapshot.v1';
+  packageChecksum?: string;
   frame: number; fps: number; cameraLabel: string; nearM: number; farM: number;
   width: number; height: number;
   camera: { type: 'PERSP' | 'ORTHO'; matrixWorld: number[][]; near: number; far: number; aspect: number; verticalFovDeg: number; orthoHeight: number };

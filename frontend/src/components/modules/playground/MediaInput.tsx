@@ -80,7 +80,7 @@ const MODE_CONFIG: Partial<Record<PlaygroundMode, ModeConfig>> = {
 // Neutral glass action button (本地上传 / 从资产库选取). Replaces the
 // old `border-primary/30 text-primary` accent so the panel reads quiet in Line B.
 const ACTION_BTN_CLASS =
-  'flex-1 px-3 py-1.5 rounded-full text-xs border border-border-subtle ' +
+  'min-h-11 min-w-0 px-3 py-2 rounded-full text-xs border border-border-subtle touch-manipulation ' +
   'text-foreground/80 hover:bg-hover-bg hover:text-foreground ' +
   'transition-colors disabled:opacity-40';
 
@@ -89,6 +89,12 @@ const ACTION_BTN_CLASS =
 // documented million-reference ceiling so ordinary model limits cannot leak
 // into the Agent composer.
 const AGENT_MAX_REFERENCES = 1_000_000;
+// Native mobile file providers may use MIME filters rather than extensions.
+const DOCUMENT_ACCEPT = [
+  '.pdf', 'application/pdf',
+  '.docx', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  '.pptx', 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+].join(',');
 
 export default function MediaInput({ agentMode = false }: { agentMode?: boolean } = {}) {
   const mode = usePlaygroundStore((s) => s.mode);
@@ -147,7 +153,7 @@ export default function MediaInput({ agentMode = false }: { agentMode?: boolean 
         ? publishedMaterialLimit
         : Math.max(config?.maxFiles || 0, 16),
     accept: 'image/*,video/*,audio/*,.mp3,.wav,.m4a,.aac,.ogg,.flac,.opus,.aiff,.aif,.wma,.txt,.md,.csv,.json,.srt,.vtt' +
-      (agentMode ? ',.pdf,.docx,.pptx' : ''),
+      (agentMode ? `,${DOCUMENT_ACCEPT}` : ''),
   };
 
   // Don't render for t2v mode (no input media needed)
@@ -305,7 +311,7 @@ export default function MediaInput({ agentMode = false }: { agentMode?: boolean 
             <ImagePlus className="w-8 h-8 text-text-muted" />
           )}
 
-          <span className="text-xs text-text-secondary">
+          <span role={uploading ? "status" : undefined} className="text-xs text-text-secondary">
             {atLimit ? t('media.limitReached', { count: config.maxFiles }) : uploading ? t('media.uploading') : t('media.dragOrClick')}
           </span>
 
@@ -313,7 +319,7 @@ export default function MediaInput({ agentMode = false }: { agentMode?: boolean 
         </div>
 
         {/* Action buttons */}
-        <div className="flex items-center gap-2">
+        <div className="grid grid-cols-2 gap-2">
           <button
             type="button"
             onClick={handleClick}
@@ -335,6 +341,7 @@ export default function MediaInput({ agentMode = false }: { agentMode?: boolean 
 
         {uploadError && <p role="alert" className="text-xs text-status-failed-fg">{uploadError}</p>}
         {fileInput}
+        {agentMode && <p className="text-xs leading-5 text-text-muted">{t('media.documentHint')}</p>}
 
         <AssetPickerModal
           isOpen={showAssetPicker}

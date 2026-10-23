@@ -34,10 +34,9 @@ export function buildCharacterImagePrompt(
         return sentence(
             preserveReference && "严格保持参考图中的角色外观、脸型、发型、肤色和服装",
             `全身角色设计：${characterName}`,
-            "概念设计",
             characterDescription,
-            "站立姿势，中性表情，正面看向镜头",
-            "纯白背景，主体独立，无其他物体和场景，背景简洁，高质量，杰作级细节",
+            "站立姿势，未指定表情时采用中性表情，未指定视线时正面看向镜头",
+            "纯白背景，主体独立，无其他物体和场景，背景简洁",
         );
     }
 
@@ -47,8 +46,8 @@ export function buildCharacterImagePrompt(
             `角色设定参考图：${characterName}`,
             characterDescription,
             "三视图角色设计：正面、侧面和背面",
-            "全身站立，中性表情，所有视图保持服装与细节一致",
-            "简洁白色背景，线条清晰，摄影棚光线，高质量",
+            "全身站立，未指定表情时采用中性表情，所有视图保持服装与细节一致",
+            "简洁白色背景，所有视图细节清晰",
         );
     }
 
@@ -56,8 +55,7 @@ export function buildCharacterImagePrompt(
         preserveReference && "严格保持参考图中的角色面孔、发型、肤色和五官",
         `角色${characterName}的近景肖像`,
         characterDescription,
-        "聚焦面部和肩部，刻画清晰的面部细节，中性表情，正面看向镜头",
-        "高质量，杰作级细节",
+        "聚焦面部和肩部，刻画清晰的面部细节，未指定表情时采用中性表情，未指定视线时正面看向镜头",
     );
 }
 

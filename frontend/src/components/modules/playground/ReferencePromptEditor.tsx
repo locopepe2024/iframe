@@ -3,6 +3,7 @@
 import { useEffect, useRef } from 'react';
 import { Node, type JSONContent } from '@tiptap/core';
 import { EditorContent, useEditor } from '@tiptap/react';
+import { closeHistory } from '@tiptap/pm/history';
 import StarterKit from '@tiptap/starter-kit';
 import Placeholder from '@tiptap/extension-placeholder';
 import { shortReferenceLabel } from './referenceMedia';
@@ -28,7 +29,83 @@ export type ReferenceCandidate = {
 export type ReferenceSuggestion = {
   query: string;
   choose: (candidate: string | ReferenceCandidate) => void;
+  replaceWithText: (text: string) => string;
 };
+
+export type PromptSlashSuggestion = {
+  query: string;
+  /** Read-only text outside the replacement range. */
+  remainingText?: string;
+  /** A Skill's [label] placeholder. The replacement covers just this occurrence. */
+  slot?: string;
+  contextKey?: string;
+  /** Append a template after the complete draft, preserving references and suffix text. */
+  appendWithText?: (text: string) => string;
+  replaceWithText: (text: string) => string;
+};
+
+function appendPromptTemplate(editor: Editor, source: Editor['state']['doc'], text: string, slashRange?: { from: number; to: number }): string {
+  if (!editor.state.doc.eq(source) || !text.trim()) return editor.getText({ blockSeparator: '\n' });
+  editor.view.dispatch(closeHistory(editor.state.tr));
+  editor.chain().focus().command(({ tr }) => {
+    if (slashRange) tr.delete(slashRange.from, slashRange.to);
+    // Keep the document and its reference nodes; only normalize trailing space.
+    let end = tr.doc.content.size - 1;
+    const lastBlock = tr.doc.lastChild;
+    const trailing = lastBlock?.textContent.match(/\s+$/)?.[0].length || 0;
+    if (trailing) { tr.delete(end - trailing, end); end -= trailing; }
+    const existing = tr.doc.textBetween(0, tr.doc.content.size, '\n', '\ufffc');
+    const trimmed = existing.trimEnd();
+    const nodes = [];
+    if (trimmed && !/[。！？.!?…][”’"')）\]]?$/.test(trimmed)) {
+      // Add punctuation to the last nonempty block, even if empty lines follow it.
+      let lastContentEnd = 0;
+      tr.doc.descendants((node, pos) => { if (node.isText || node.isAtom && node.isInline) lastContentEnd = pos + node.nodeSize; });
+      if (lastContentEnd) { tr.insertText('。', lastContentEnd); end = tr.doc.content.size - 1; }
+    }
+    if (trimmed && !existing.endsWith('\n')) nodes.push(editor.schema.nodes.hardBreak.create());
+    nodes.push(editor.schema.text(text.trim()));
+    tr.insert(end, nodes);
+    return true;
+  }).run();
+  return editor.getText({ blockSeparator: '\n' });
+}
+
+function slashSuggestion(editor: Editor): PromptSlashSuggestion | null {
+  const { selection } = editor.state;
+  const parentText = selection.$from.parent.textBetween(0, selection.$from.parent.content.size, '\n', '\ufffc');
+  const offset = selection.$from.parentOffset;
+  const slot = Array.from(parentText.matchAll(/\[([^\[\]\n/@]{1,40})\]/g)).find((match) => {
+    const start = match.index!;
+    return selection.empty ? offset > start && offset < start + match[0].length
+      : selection.$from.sameParent(selection.$to) && offset === start && selection.$to.parentOffset === start + match[0].length;
+  });
+  if (slot) {
+    const from = selection.$from.start() + slot.index!;
+    const to = from + slot[0].length;
+    return { query: '', slot: slot[1].trim(), contextKey: `slot:${from}:${to}`, replaceWithText: (text) => {
+      // Refuse a stale selection if the source template changed while browsing.
+      if (to > editor.state.doc.content.size || editor.state.doc.textBetween(from, to) !== slot[0]) return editor.getText({ blockSeparator: '\n' });
+      editor.view.dispatch(closeHistory(editor.state.tr));
+      editor.chain().focus().insertContentAt({ from, to }, text ? { type: 'text', text } : []).run();
+      return editor.getText({ blockSeparator: '\n' });
+    } };
+  }
+  if (!selection.empty) return null;
+  const before = selection.$from.parent.textBetween(0, selection.$from.parentOffset, '\n', '\ufffc');
+  const match = before.match(/(?:^|[\s（(，。！？、\u3400-\u9fff])\/([^/@\n]*)$/);
+  if (!match) return null;
+  const from = selection.from - match[1].length - 1;
+  const to = selection.from;
+  const sourceDocument = editor.state.doc;
+  return { query: match[1], appendWithText: text => appendPromptTemplate(editor, sourceDocument, text, { from, to }), remainingText: editor.state.doc.textBetween(0, from, "\n") + editor.state.doc.textBetween(to, editor.state.doc.content.size, "\n"), replaceWithText: (text) => {
+    editor.view.dispatch(closeHistory(editor.state.tr));
+    if (text) {
+      editor.chain().focus().insertContentAt({ from, to }, { type: 'text', text }).run();
+    } else editor.chain().focus().deleteRange({ from, to }).run();
+    return editor.getText({ blockSeparator: '\n' });
+  } };
+}
 
 function candidateAttrs(candidate: string | ReferenceCandidate): Record<string, string> {
   const normalized = typeof candidate === 'string' ? { label: candidate } : candidate;
@@ -54,6 +131,9 @@ function referenceSuggestion(editor: Editor): ReferenceSuggestion | null {
     editor.chain().focus().insertContentAt({ from, to }, [
       { type: 'referenceToken', attrs: candidateAttrs(candidate) }, { type: 'text', text: ' ' },
     ]).run();
+  }, replaceWithText: (text) => {
+    editor.chain().focus().insertContentAt({ from, to }, text).run();
+    return editor.getText({ blockSeparator: '\n' });
   } };
 }
 
@@ -136,10 +216,13 @@ export function referenceSelectionsFromEditor(editor: Editor): AssetLibraryRefer
   return references;
 }
 
-export default function ReferencePromptEditor({ value, labels = EMPTY_LABELS, candidates, placeholder, onChange, onSubmit, onMentionChange, onMentionKeyDown, onReferencesChange, allowImplicitMentions = true, editable = true, pruneUnlistedReferences = false, restoreSelectedReferences = EMPTY_REFERENCES, expanded = false }: {
+export default function ReferencePromptEditor({ value, labels = EMPTY_LABELS, candidates, placeholder, onChange, onSubmit, onMentionChange, onMentionKeyDown, onSlashChange, onSlashKeyDown, onReferencesChange, allowImplicitMentions = true, editable = true, pruneUnlistedReferences = false, restoreSelectedReferences = EMPTY_REFERENCES, expanded = false, openSlashRequest = 0 }: {
   value: string; labels?: string[]; candidates?: ReferenceCandidate[]; placeholder: string; onChange: (text: string) => void; onSubmit?: () => void;
   onMentionChange?: (suggestion: ReferenceSuggestion | null) => void;
   onMentionKeyDown?: (event: KeyboardEvent) => boolean;
+  onSlashChange?: (suggestion: PromptSlashSuggestion | null) => void;
+  onSlashKeyDown?: (event: KeyboardEvent) => boolean;
+  openSlashRequest?: number;
   onReferencesChange?: (references: AssetLibraryReference[]) => void;
   allowImplicitMentions?: boolean;
   editable?: boolean;
@@ -150,10 +233,11 @@ export default function ReferencePromptEditor({ value, labels = EMPTY_LABELS, ca
   restoreSelectedReferences?: AssetLibraryReference[];
 }) {
   const lastLocalValue = useRef<string | null>(null);
+  const lastSlashRequest = useRef(0);
   const currentCandidates = useRef<ReferenceCandidate[]>(candidates ?? labels.map((label) => ({ label })));
   currentCandidates.current = candidates ?? labels.map((label) => ({ label }));
-  const callbacks = useRef({ onChange, onSubmit, onMentionChange, onMentionKeyDown, onReferencesChange });
-  callbacks.current = { onChange, onSubmit, onMentionChange, onMentionKeyDown, onReferencesChange };
+  const callbacks = useRef({ onChange, onSubmit, onMentionChange, onMentionKeyDown, onSlashChange, onSlashKeyDown, onReferencesChange });
+  callbacks.current = { onChange, onSubmit, onMentionChange, onMentionKeyDown, onSlashChange, onSlashKeyDown, onReferencesChange };
   const initialCandidates = candidates ?? labels.map((label) => ({ label }));
   const editor = useEditor({
     immediatelyRender: false,
@@ -164,8 +248,10 @@ export default function ReferencePromptEditor({ value, labels = EMPTY_LABELS, ca
     editorProps: {
       attributes: { role: 'textbox', 'aria-label': placeholder, 'aria-multiline': 'true', style: 'outline: none; box-shadow: none;', class: `${expanded ? 'min-h-[280px] max-h-[420px]' : 'min-h-[100px] max-h-[160px]'} overflow-y-auto whitespace-pre-wrap break-words border-0 bg-transparent text-[0.9375rem] leading-[1.65] text-foreground outline-none focus:outline-none focus:ring-0 [&_p]:m-0 [&_p.is-editor-empty:first-child::before]:content-[attr(data-placeholder)] [&_p.is-editor-empty:first-child::before]:text-text-muted [&_p.is-editor-empty:first-child::before]:float-left [&_p.is-editor-empty:first-child::before]:h-0 [&_p.is-editor-empty:first-child::before]:pointer-events-none` },
       handleKeyDown: (_view, event) => {
+        if (event.isComposing) return false;
+        if (callbacks.current.onSlashKeyDown?.(event)) return true;
         if (callbacks.current.onMentionKeyDown?.(event)) return true;
-        if (event.key === 'Escape') callbacks.current.onMentionChange?.(null);
+        if (event.key === 'Escape') { callbacks.current.onMentionChange?.(null); callbacks.current.onSlashChange?.(null); }
         if (!event.isComposing && (event.metaKey || event.ctrlKey) && event.key === 'Enter') {
           callbacks.current.onSubmit?.(); return true;
         }
@@ -185,10 +271,16 @@ export default function ReferencePromptEditor({ value, labels = EMPTY_LABELS, ca
       callbacks.current.onChange(text);
       callbacks.current.onReferencesChange?.(referenceSelectionsFromEditor(editor));
       callbacks.current.onMentionChange?.(referenceSuggestion(editor));
+      callbacks.current.onSlashChange?.(slashSuggestion(editor));
     },
-    onSelectionUpdate: ({ editor }) => callbacks.current.onMentionChange?.(referenceSuggestion(editor)),
-    onBlur: ({ editor }) => {
+    onSelectionUpdate: ({ editor }) => {
+      callbacks.current.onMentionChange?.(referenceSuggestion(editor));
+      callbacks.current.onSlashChange?.(slashSuggestion(editor));
+    },
+    onBlur: ({ editor, event }) => {
+      if ((event.relatedTarget as HTMLElement | null)?.closest?.('[data-prompt-discovery]')) return;
       callbacks.current.onMentionChange?.(null);
+      callbacks.current.onSlashChange?.(null);
       const text = editor.getText({ blockSeparator: '\n' });
       const document = referencePromptDocument(text, currentCandidates.current, true, allowImplicitMentions);
       if (allowImplicitMentions && !editor.state.doc.eq(editor.schema.nodeFromJSON(document))) {
@@ -196,6 +288,26 @@ export default function ReferencePromptEditor({ value, labels = EMPTY_LABELS, ca
       }
     },
   });
+  useEffect(() => {
+    if (!editor || !openSlashRequest || !editable || lastSlashRequest.current === openSlashRequest) return;
+    lastSlashRequest.current = openSlashRequest;
+    const existing = slashSuggestion(editor);
+    if (existing) { callbacks.current.onSlashChange?.(existing); return; }
+    // Opening a chooser must not edit the draft or clear its structured fields.
+    const { from, to } = editor.state.selection;
+    const sourceDocument = editor.state.doc;
+    callbacks.current.onSlashChange?.({
+      query: '', contextKey: `panel:${openSlashRequest}:${from}:${to}`,
+      appendWithText: text => appendPromptTemplate(editor, sourceDocument, text),
+      remainingText: sourceDocument.textBetween(0, from, '\n') + sourceDocument.textBetween(to, sourceDocument.content.size, '\n'),
+      replaceWithText: (text) => {
+        if (!editor.state.doc.eq(sourceDocument)) return editor.getText({ blockSeparator: '\n' });
+        editor.view.dispatch(closeHistory(editor.state.tr));
+        editor.chain().focus().insertContentAt({ from, to }, text ? { type: 'text', text } : []).run();
+        return editor.getText({ blockSeparator: '\n' });
+      },
+    });
+  }, [editor, openSlashRequest, editable]);
   useEffect(() => {
     if (!editor) return;
     const existingNames: string[] = [];
@@ -224,7 +336,7 @@ export default function ReferencePromptEditor({ value, labels = EMPTY_LABELS, ca
     // Character prompts use explicit selection only. Keeping the current rich
     // document when its plain text is unchanged preserves selected token
     // metadata and avoids upgrading manually typed @names into references.
-    if (!allowImplicitMentions && editor.getText({ blockSeparator: '\n' }) === value) return;
+    if (!allowImplicitMentions && restoreSelectedReferences.length === 0 && editor.getText({ blockSeparator: '\n' }) === value) return;
     const selectedKeys = new Set(restoreSelectedReferences.map((reference) =>
       `${reference.asset_type}:${reference.asset_id}:${reference.variant_id}`,
     ));

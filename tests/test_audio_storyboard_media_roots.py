@@ -132,3 +132,18 @@ def test_audio_instances_do_not_share_directory_configuration(workspace):
         assert (location / frame.audio_url).read_bytes() == b'audio bytes'
         keys.append(frame.audio_url)
     assert keys[0] == keys[1]
+
+
+@pytest.mark.parametrize('shot_override', [False, True])
+def test_storyboard_prefers_cover_but_keeps_explicit_shot_reference(workspace, shot_override):
+    from src.apps.comic_gen.models import AssetUnit, ImageAsset, ImageVariant
+    root, _, model = workspace
+    old_key, old_path = reference_at(root, 'old.png')
+    cover_key, cover_path = reference_at(root, 'cover.png')
+    character = Character(id='actor', name='Actor', description='Actor', cover_variant_id='cover',
+        reference_sheet=AssetUnit(selected_image_id='old', image_variants=[ImageVariant(id='old', url=old_key)]),
+        headshot_asset=ImageAsset(selected_id='cover', variants=[ImageVariant(id='cover', url=cover_key)]))
+    frame = StoryboardFrame(id='frame-cover', scene_id='scene', owner_profile_id='owner-a', character_ids=['actor'],
+        workbench_reference_variant_ids={'actor': ['old']} if shot_override else {})
+    StoryboardGenerator(output_root=root).generate_frame(frame, [character], None, prompt='Test')
+    assert model.generate.call_args.kwargs['ref_image_paths'] == [str(old_path if shot_override else cover_path)]

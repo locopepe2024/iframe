@@ -1,5 +1,7 @@
 # 角色工作台 `/` 快捷面板 V1
 
+> 历史实现与决策记录。后续 `/` Command、`@` Context 的交互目标以 `2026-10-19-character-workbench-discovery-reference-ux-v2.md` 为准；本文件中“`/` 直接搜索词条／Prompt 案例”的未来目标已被替代。
+
 日期：2026-10-19。范围：项目角色设计草稿；与图片 Prompt 中的 `@` 资产引用分离。
 
 ## Observed

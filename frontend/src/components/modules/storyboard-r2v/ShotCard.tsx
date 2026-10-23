@@ -28,8 +28,12 @@ import { useTranslations } from "next-intl";
 import AssetChipBar from "./AssetChipBar";
 import PromptExpandModal from "./PromptExpandModal";
 import PolishPanel from "./PolishPanel";
+import MicroExpressionPanel from "./MicroExpressionPanel";
+import CameraMovementPanel from "./CameraMovementPanel";
+import ShotFieldPanel from "./ShotFieldPanel";
 import FieldTagChip, { AddFieldButton, type FieldType } from "./FieldTagChip";
 import { buildGenerationPrompt, directorShotSuggestions } from "./buildAssembledPrompt";
+import { directorFieldProposals } from "./directorFieldProposals";
 import { resolveShotVideoInput } from "./shotVideoInput";
 import { PendingTaskAffordance } from "@/components/shared/PendingTaskAffordance";
 import PreviewImage from "@/components/shared/preview/PreviewImage";
@@ -144,10 +148,40 @@ export interface ShotNode {
     } | null;
     shotSize?: string | null;
     cameraAngle?: string | null;
+    composition?: string | null;
     transitionHint?: string | null;
     stylePromptOverride?: string | null;
     lightingOverride?: string | null;
     negativePromptOverride?: string | null;
+    richRefinementCandidate?: {
+        id: string;
+        source: string;
+        mode?: string;
+        fields: Record<string, unknown>;
+        current_fields: Record<string, unknown>;
+        rationale: Record<string, string>;
+    } | null;
+    microExpressionCandidate?: {
+        id: string;
+        items: Array<{ character_id: string; emotion_intent: string; timing: Array<{ phase: string; visible_change: string; relative_start: number; relative_end: number }>; uncertainties?: string[]; facial_channels?: Record<string, string> }>;
+    } | null;
+    microExpressionTiming?: Array<{
+        character_id: string;
+        character_name?: string;
+        timing: Array<{ phase: string; visible_change: string; relative_start: number; relative_end: number }>;
+    }>;
+    cameraMovementCandidate?: {
+        id: string;
+        camera_movement_structured: { primary: string; secondary?: string | null; speed: string; description?: string | null };
+        rationale: string; source_refs: string[]; uncertainties: string[];
+    } | null;
+    shotFieldCandidate?: {
+        id: string;
+        fields: Record<string, unknown>;
+        rationale: Record<string, string>;
+        source_refs: Record<string, string[]>;
+        uncertainties: string[];
+    } | null;
 
     /** When true, the user has manually pinned an active take. Hero
      *  shows a "Pinned" chip; autoSelectLatestVideo skips this frame on
@@ -176,6 +210,8 @@ interface ShotCardProps {
     onUpdatePrompt: (prompt: string, optimized?: boolean) => void;
     onUpdateField: (field: string, value: string | number | null) => void;
     globalStylePrompt?: string;
+    effectiveVisual?: { style: string; lighting: string };
+    effectiveFields?: Record<string, { value: unknown; source_kind: string; source_revision: number | null }>;
     onGenerateT2I: () => void;
     onGenerateVideo: () => void;
     onDelete: () => void;
@@ -212,7 +248,11 @@ interface ShotCardProps {
     onGenerateBatch?: (count: number) => void;
     /** Active in-flight count for label flip (生成 ×N → 生成中 · N). */
     inFlightCount?: number;
-    onRefineFrame?: () => void;
+    onApplyRichRefinement?: (candidateId: string, fields: string[]) => void;
+    onDiscardRichRefinement?: (candidateId: string) => void;
+    onMicroExpressionApplied?: () => Promise<void> | void;
+    onMicroExpressionBeforePreview?: () => Promise<void> | void;
+    richRefinementBusy?: boolean;
     onUpdateDialogue?: (text: string) => void;
     /** Active-take pin controls. When the user has manually pinned an
      *  active take (shot.isVideoPinned=true), the hero shows a "📌 Pinned"
@@ -237,6 +277,8 @@ export default function ShotCard({
     onUpdatePrompt,
     onUpdateField,
     globalStylePrompt = "",
+    effectiveVisual,
+    effectiveFields,
     onGenerateT2I,
     onGenerateVideo,
     onDelete,
@@ -258,7 +300,11 @@ export default function ShotCard({
     onSetGenerateCount,
     onGenerateBatch,
     inFlightCount = 0,
-    onRefineFrame,
+    onApplyRichRefinement,
+    onDiscardRichRefinement,
+    onMicroExpressionApplied,
+    onMicroExpressionBeforePreview,
+    richRefinementBusy = false,
     onUnpinVideo,
 }: ShotCardProps) {
     const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -272,6 +318,8 @@ export default function ShotCard({
     const [styleOpen, setStyleOpen] = useState(
         Boolean(shot.stylePromptOverride || shot.lightingOverride || shot.negativePromptOverride),
     );
+    const [selectedRichFields, setSelectedRichFields] = useState<string[]>([]);
+    useEffect(() => setSelectedRichFields([]), [shot.richRefinementCandidate?.id]);
     // currentProjectId — needed by PolishPanel to look up the
     // project's PromptConfig override server-side.
     const currentProjectId = useProjectStore((state) => state.currentProject?.id);
@@ -348,11 +396,15 @@ export default function ShotCard({
         return out;
     }, [shot.prompt, characters])();
 
-    const assembledPromptPreview = useMemo(() => buildGenerationPrompt(shot, generateAudio ?? false, videoModel ?? "", globalStylePrompt), [
+    const assembledPromptPreview = useMemo(() => buildGenerationPrompt(
+        shot, generateAudio ?? false, videoModel ?? "", effectiveVisual?.style ?? globalStylePrompt, effectiveVisual?.lighting ?? "",
+    ), [
         shot.prompt, shot.shotSize, shot.cameraAngle, shot.cameraMovementStructured, shot.transitionHint,
-        shot.stylePromptOverride, shot.lightingOverride, shot.directorShotContext, globalStylePrompt, shot.promptIsOptimized, generateAudio, videoModel,
+        shot.stylePromptOverride, shot.lightingOverride, shot.directorShotContext, globalStylePrompt,
+        effectiveVisual?.style, effectiveVisual?.lighting, shot.promptIsOptimized, generateAudio, videoModel,
     ]);
     const planSuggestions = useMemo(() => directorShotSuggestions(shot), [shot]);
+    const planFieldProposals = useMemo(() => directorFieldProposals(shot, durationEditorConfig ?? { min: 3, max: 15 }), [shot, durationEditorConfig]);
 
     useEffect(() => {
         const ta = textareaRef.current;
@@ -675,9 +727,9 @@ export default function ShotCard({
                 </div>
 
                 {/* Main content: Preview + Editor */}
-                <div className="flex px-5">
+                <div className="flex flex-col gap-4 px-4 pb-4 lg:flex-row lg:gap-0 lg:px-5 lg:pb-0">
                     {/* Left: Preview */}
-                    <div className="group/preview relative w-72 shrink-0 bg-surface-inset flex flex-col items-center justify-center overflow-hidden rounded-[14px] border border-glass-border shadow-[inset_0_0_0_1px_rgba(255,255,255,0.04)]">
+                    <div className="group/preview relative w-full shrink-0 self-start bg-surface-inset flex flex-col items-center justify-center overflow-hidden rounded-[14px] border border-glass-border shadow-[inset_0_0_0_1px_rgba(255,255,255,0.04)] lg:w-72">
                         {renderPreview()}
                         {/* Selected-take amber halation */}
                         {(shot.isVideoPinned || shot.finalTakeId) && shot.videoUrl ? (
@@ -737,7 +789,7 @@ export default function ShotCard({
                     </div>
 
                     {/* Right: Prompt + Controls */}
-                    <div className="flex-1 py-0.5 pl-5 pr-0 flex flex-col gap-3">
+                    <div className="flex min-w-0 w-full flex-col gap-3 py-0.5 lg:w-auto lg:flex-1 lg:pl-5">
                         {/* Cast avatar group */}
                         {castAvatars.length > 0 ? (
                             <div className="flex items-center gap-2">
@@ -809,6 +861,55 @@ export default function ShotCard({
                                 <Maximize2 size={12} aria-hidden="true" />
                             </button>
                         </div>
+                        {planFieldProposals.length > 0 && <details className="border-t border-border-subtle py-2 text-xs text-text-secondary">
+                            <summary className="cursor-pointer text-foreground">拍摄计划字段 · {planFieldProposals.length} 项待审</summary>
+                            <ul className="mt-2 divide-y divide-border-subtle">
+                                {planFieldProposals.map(({ field, label, current, proposed, unavailableReason }) => <li key={field} className="flex flex-wrap items-center gap-x-3 gap-y-1 py-2">
+                                    <span className="w-8 shrink-0 font-medium text-foreground">{label}</span>
+                                    <span className="min-w-0 flex-1 break-words">当前：{current}　计划：{proposed}{field === "duration" ? " 秒" : ""}</span>
+                                    {unavailableReason && <span className="text-accent">{unavailableReason}</span>}
+                                    <button type="button" className="shrink-0 text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/55 disabled:cursor-not-allowed disabled:text-text-muted disabled:no-underline"
+                                        aria-label={`采用${label}`} disabled={!!unavailableReason} onClick={() => onUpdateField(field, proposed)}>采用</button>
+                                </li>)}
+                            </ul>
+                        </details>}
+                        {shot.richRefinementCandidate && <details className="border-t border-border-subtle py-2 text-xs text-text-secondary" open>
+                            <summary className="cursor-pointer font-medium text-foreground">{shot.richRefinementCandidate.source} · {Object.keys(shot.richRefinementCandidate.fields).length} 项待审</summary>
+                            {shot.richRefinementCandidate.mode === "initialization" && <p className="mt-2 text-text-muted">当前镜头的初始化建议；尚未应用，不会进入生成提示词。画面描述是起始画面候选，采纳前请检查首帧布局与光影。</p>}
+                            <div className="mt-2 divide-y divide-border-subtle">
+                                {Object.entries(shot.richRefinementCandidate.fields).map(([field, proposed]) => {
+                                    const labels: Record<string, string> = {
+                                        visual_description: "画面描述", shot_size: "景别", camera_angle: "机位", duration: "时长",
+                                        transition_hint: "转场", camera_movement_structured: "运镜", blocking: "站位",
+                                        dialogue_structured: "对白", audio_note: "声音", lighting: "光线",
+                                    };
+                                    const movedToDedicatedPanel = ["shot_size", "camera_angle", "composition", "camera_movement_structured"].includes(field);
+                                    const unavailable = movedToDedicatedPanel || (shot.promptIsOptimized && field !== "duration");
+                                    const display = (value: unknown) => value == null || value === "" ? "未设置"
+                                        : typeof value === "object" ? JSON.stringify(value, null, 2) : String(value);
+                                    return <label key={field} className="flex items-start gap-2 py-2">
+                                        <input type="checkbox" className="mt-0.5" checked={selectedRichFields.includes(field)} disabled={richRefinementBusy || unavailable}
+                                            onChange={() => setSelectedRichFields((items) => items.includes(field)
+                                                ? items.filter((item) => item !== field) : [...items, field])} />
+                                        <span className="min-w-0 flex-1">
+                                            <span className="block font-medium text-foreground">{labels[field] || field}</span>
+                                            <span className="block whitespace-pre-wrap break-words">当前：{display(shot.richRefinementCandidate?.current_fields?.[field])}</span>
+                                            <span className="block whitespace-pre-wrap break-words">建议：{display(proposed)}</span>
+                                            <span className="block text-text-muted">理由：{shot.richRefinementCandidate?.rationale?.[field] || "此候选缺少理由，请丢弃后重新生成"}</span>
+                                            {movedToDedicatedPanel && <span className="block text-accent">此字段已移至静态起幅或运镜设计，请在对应入口重新生成</span>}
+                                            {!movedToDedicatedPanel && unavailable && <span className="block text-accent">已采用完整优化稿，需重新审阅生成提示词后才能应用此项</span>}
+                                        </span>
+                                    </label>;
+                                })}
+                            </div>
+                            <div className="mt-2 flex justify-end gap-3">
+                                <button type="button" className="text-text-secondary hover:text-foreground"
+                                    disabled={richRefinementBusy} onClick={() => onDiscardRichRefinement?.(shot.richRefinementCandidate!.id)}>丢弃</button>
+                                <button type="button" className="text-primary hover:underline disabled:cursor-not-allowed disabled:text-text-muted"
+                                    disabled={richRefinementBusy || !selectedRichFields.length}
+                                    onClick={() => onApplyRichRefinement?.(shot.richRefinementCandidate!.id, selectedRichFields)}>应用所选</button>
+                            </div>
+                        </details>}
                         {planSuggestions.length > 0 && <details className="rounded-md border border-glass-border px-3 py-2 text-xs text-text-secondary">
                             <summary className="cursor-pointer text-foreground">拍摄计划参考 · {planSuggestions.length} 条（不会自动加入生成提示词）</summary>
                             <ul className="mt-2 space-y-2">
@@ -830,17 +931,38 @@ export default function ShotCard({
                             dialogue={shot.dialogueStructured}
                             videoModel={videoModel}
                             prompt={shot.prompt}
-                            optimizationDraft={buildGenerationPrompt(shot, generateAudio ?? false, videoModel ?? "", globalStylePrompt)}
+                            optimizationDraft={buildGenerationPrompt(shot, generateAudio ?? false, videoModel ?? "",
+                                effectiveVisual?.style ?? globalStylePrompt, effectiveVisual?.lighting ?? "")}
                             tabMode={shot.tabMode}
                             videoMode={shot.videoMode}
                             scriptId={currentProjectId ?? ""}
                             frameId={shot.id}
-                            shotOverrides={{ style: shot.stylePromptOverride || globalStylePrompt, lighting: shot.lightingOverride || "" }}
+                            shotOverrides={{ style: shot.stylePromptOverride || effectiveVisual?.style || globalStylePrompt,
+                                lighting: shot.lightingOverride || effectiveVisual?.lighting || "" }}
                             slots={r2vSlots}
                             imageUrls={polishImageUrls}
+                            onBeforePreview={onMicroExpressionBeforePreview}
                             onApply={(text) => onUpdatePrompt(text, true)}
                         />
-
+                        {currentProjectId && <MicroExpressionPanel
+                            projectId={currentProjectId}
+                            frameId={shot.id}
+                            initialCandidate={shot.microExpressionCandidate ?? null}
+                            accepted={shot.microExpressionTiming ?? []}
+                            characterNames={Object.fromEntries(characters.map((character: any) => [character.id, character.name]))}
+                            optimized={!!shot.promptIsOptimized}
+                            onBeforePreview={onMicroExpressionBeforePreview}
+                            onApplied={onMicroExpressionApplied}
+                        />}
+                        {currentProjectId && shot.cameraMovementCandidate && <CameraMovementPanel
+                            projectId={currentProjectId}
+                            frameId={shot.id}
+                            current={shot.cameraMovementStructured ?? null}
+                            initialCandidate={shot.cameraMovementCandidate ?? null}
+                            optimized={!!shot.promptIsOptimized}
+                            onBeforePreview={onMicroExpressionBeforePreview}
+                            onApplied={onMicroExpressionApplied}
+                        />}
                         {/* Structured field tags — interactive Popover editors */}
                         <div className="flex flex-wrap items-center gap-1.5 mt-0.5">
                             {/* Duration: always visible */}
@@ -927,7 +1049,7 @@ export default function ShotCard({
                                         <textarea
                                             value={shot.stylePromptOverride ?? ""}
                                             onChange={(event) => onUpdateField("stylePromptOverride", event.target.value)}
-                                            placeholder={globalStylePrompt || t("shotStylePlaceholder")}
+                                            placeholder={effectiveVisual?.style || globalStylePrompt || t("shotStylePlaceholder")}
                                             rows={2}
                                             className="w-full resize-y rounded-md border border-glass-border bg-surface-inset px-2.5 py-2 text-[0.75rem] leading-relaxed text-foreground placeholder:text-text-muted focus:border-primary/50 focus:outline-none focus:ring-1 focus:ring-primary/30"
                                         />
@@ -939,7 +1061,7 @@ export default function ShotCard({
                                         <textarea
                                             value={shot.lightingOverride ?? ""}
                                             onChange={(event) => onUpdateField("lightingOverride", event.target.value)}
-                                            placeholder={t("shotLightingPlaceholder")}
+                                            placeholder={effectiveVisual?.lighting || t("shotLightingPlaceholder")}
                                             rows={2}
                                             className="w-full resize-y rounded-md border border-glass-border bg-surface-inset px-2.5 py-2 text-[0.75rem] leading-relaxed text-foreground placeholder:text-text-muted focus:border-primary/50 focus:outline-none focus:ring-1 focus:ring-primary/30"
                                         />
@@ -962,6 +1084,16 @@ export default function ShotCard({
                                 </div>
                             ) : null}
                         </div>
+
+                        {currentProjectId && <ShotFieldPanel
+                            projectId={currentProjectId}
+                            frameId={shot.id}
+                            initialCandidate={shot.shotFieldCandidate ?? null}
+                            effectiveFields={effectiveFields}
+                            optimized={!!shot.promptIsOptimized}
+                            onBeforePreview={onMicroExpressionBeforePreview}
+                            onApplied={onMicroExpressionApplied}
+                        />}
 
                         {/* Dialogue text display (read-only — editing via 配音工作台 modal) */}
                         {shot.dialogueStructured?.line && (
@@ -1031,7 +1163,7 @@ export default function ShotCard({
                 </div>
 
                 {/* actions row — full-width per mock (lives outside editor/card-body) */}
-                <div className="flex items-center justify-between gap-3 px-5 py-3.5 border-t border-border-subtle">
+                <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3.5 border-t border-border-subtle lg:px-5">
                             <div className="flex items-center gap-1 shrink-0">
                                 <motion.button
                                     whileHover={{ scale: 1.06 }}
@@ -1071,17 +1203,6 @@ export default function ShotCard({
                                 >
                                     <Copy size={15} strokeWidth={1.8} />
                                 </motion.button>
-                                {onRefineFrame && (
-                                    <motion.button
-                                        whileHover={{ scale: 1.06 }}
-                                        whileTap={{ scale: 0.94 }}
-                                        onClick={onRefineFrame}
-                                        className="ico-btn flex h-8 w-8 items-center justify-center rounded-[14px] text-text-muted transition-colors duration-fast ease-out-quart hover:bg-hover-bg hover:text-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/55"
-                                        title={t("refineFrame")}
-                                    >
-                                        <Sparkles size={15} strokeWidth={1.8} />
-                                    </motion.button>
-                                )}
                                 <motion.button
                                     whileHover={{ scale: 1.06 }}
                                     whileTap={{ scale: 0.94 }}
@@ -1093,7 +1214,7 @@ export default function ShotCard({
                                 </motion.button>
                             </div>
 
-                            <div className="flex items-center gap-3">
+                            <div className="flex flex-wrap items-center gap-3">
                                 {genSummary && (
                                     <span className="inline-flex items-center gap-1.5 shrink-0 font-mono text-[0.6875rem] text-text-secondary">
                                         <span className="h-1.5 w-1.5 rounded-full bg-primary shadow-[var(--glow-primary)]" />

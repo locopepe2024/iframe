@@ -19,6 +19,7 @@ export type {
 export interface ImageVariant {
     id: string;
     display_name?: string | null;
+    is_favorited?: boolean;
     url: string;
     created_at: number;
     prompt_used?: string;
@@ -78,6 +79,7 @@ export interface GenerationLineage {
 }
 
 export interface Character {
+    asset_revision?: number;
     id: string;
     name: string;
     description?: string;
@@ -555,8 +557,8 @@ interface ProjectStore {
     setSelectedFrameId: (id: string | null) => void;
 
     // Asset Generation State
-    generatingTasks: { assetId: string; generationType: string; batchSize: number; taskId?: string }[];
-    addGeneratingTask: (assetId: string, generationType: string, batchSize: number) => void;
+    generatingTasks: { assetId: string; generationType: string; batchSize: number; taskId?: string; initialVariantIds?: string[] }[];
+    addGeneratingTask: (assetId: string, generationType: string, batchSize: number, initialVariantIds?: string[]) => void;
     removeGeneratingTask: (assetId: string, generationType: string) => void;
 
     // Storyboard Frame Rendering State
@@ -906,8 +908,8 @@ export const useProjectStore = create<ProjectStore>()(
 
             // Asset Generation State
             generatingTasks: [],
-            addGeneratingTask: (assetId: string, generationType: string, batchSize: number) => set((state) => ({
-                generatingTasks: [...state.generatingTasks, { assetId, generationType, batchSize }]
+            addGeneratingTask: (assetId: string, generationType: string, batchSize: number, initialVariantIds: string[] = []) => set((state) => ({
+                generatingTasks: [...state.generatingTasks, { assetId, generationType, batchSize, initialVariantIds }]
             })),
             removeGeneratingTask: (assetId: string, generationType: string) => set((state) => ({
                 generatingTasks: state.generatingTasks.filter((t) => !(t.assetId === assetId && t.generationType === generationType))

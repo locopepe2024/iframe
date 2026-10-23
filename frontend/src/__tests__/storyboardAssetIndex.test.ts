@@ -46,3 +46,15 @@ it("does not relabel series assets as episode assets while the index loads", () 
     expect(storyboardAssetIndex(fallback, { frames: [] }).map((asset) => asset.name))
         .toEqual(["本集道具"]);
 });
+
+
+it("uses the character cover as the default reference across image categories", () => {
+  const [entry] = legacyAssetsToReferenceIndex([{
+    id: "actor", name: "Actor", cover_variant_id: "portrait",
+    reference_sheet: { selected_image_id: "body", image_variants: [{ id: "body", url: "body.png" }] },
+    headshot_asset: { selected_id: "portrait", variants: [{ id: "portrait", url: "portrait.png" }] },
+  }], [], []);
+  expect(entry.selected_variant_id).toBe("portrait");
+  expect(entry.cover_variant_id).toBe("portrait");
+  expect(entry.variants.map(variant => variant.id)).toEqual(["body", "portrait"]);
+});

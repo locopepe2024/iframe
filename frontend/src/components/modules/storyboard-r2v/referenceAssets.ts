@@ -69,33 +69,36 @@ export function resolveReferenceSubmission(
     assets: ReferenceAsset[],
     selections: Record<string, string[]> = {},
 ): ReferenceSubmission {
-    const assetByName = new Map(assets.map((asset) => [asset.name, asset]));
-    const slots = new Map<number, string>();
-    const genericNames: string[] = [];
+    const slots = new Map<number, { name: string; kind?: ReferenceAsset["kind"] }>();
+    const genericTags: Array<{ name: string; kind: ReferenceAsset["kind"] }> = [];
     const tagPattern = /\[(character(\d+)|character|scene|prop):([^\]]+)\]/g;
     let match: RegExpExecArray | null;
     while ((match = tagPattern.exec(prompt)) !== null) {
         const explicitSlot = match[2] ? Number(match[2]) : undefined;
         const name = match[3];
         if (explicitSlot !== undefined) {
-            if (!slots.has(explicitSlot)) slots.set(explicitSlot, name);
-        } else if (!genericNames.includes(name)) {
-            genericNames.push(name);
+            if (!slots.has(explicitSlot)) slots.set(explicitSlot, { name });
+        } else if (!genericTags.some((tag) => tag.name === name && tag.kind === match![1])) {
+            genericTags.push({ name, kind: match[1] as ReferenceAsset["kind"] });
         }
     }
-    for (const name of genericNames) {
-        if (Array.from(slots.values()).includes(name)) continue;
+    for (const tag of genericTags) {
+        if (Array.from(slots.values()).some((slot) => slot.name === tag.name && (!slot.kind || slot.kind === tag.kind))) continue;
         let slot = 1;
         while (slots.has(slot)) slot += 1;
-        slots.set(slot, name);
+        slots.set(slot, tag);
     }
 
     const urls: string[] = [];
     const groups: ResolvedReferenceGroup[] = [];
     const invalidVariantIds: string[] = [];
     const unresolvedNames = new Set<string>();
-    for (const [slot, name] of Array.from(slots.entries()).sort((a, b) => a[0] - b[0])) {
-        const asset = assetByName.get(name);
+    for (const [slot, tag] of Array.from(slots.entries()).sort((a, b) => a[0] - b[0])) {
+        const { name, kind } = tag;
+        const matches = assets.filter((asset) => asset.name === name && (!kind || asset.kind === kind));
+        // Numbered characterN tags are legacy slots that could refer to any
+        // type. If names collide, require a typed tag instead of guessing.
+        const asset = matches.length === 1 ? matches[0] : undefined;
         if (!asset) {
             unresolvedNames.add(name);
             continue;
@@ -160,7 +163,7 @@ export function bindH3MultiReferencePrompt(
 ): string {
     if (!groups.length) return prompt;
     const bySlot = new Map(groups.map((group) => [group.slot, group]));
-    const byName = new Map(groups.map((group) => [group.name, group]));
+    const byTypedName = new Map(groups.map((group) => [`${group.kind}:${group.name}`, group]));
     const byOrdinal = new Map(groups.map((group, index) => [index + 1, group.pictureNumbers[0]]));
 
     let bound = prompt.replace(/<Picture (\d+)>/g, (token, ordinalText) => {
@@ -170,10 +173,10 @@ export function bindH3MultiReferencePrompt(
     bound = bound.replace(/__IFRAME_PICTURE_(\d+)__/g, "<Picture $1>");
     bound = bound.replace(/\[character(\d+):([^\]]+)\]/g, (token, slotText, name) => {
         const group = bySlot.get(Number(slotText));
-        return group ? `${name} (reference asset ${group.slot})` : token;
+        return group && group.name === name ? `${name} (reference asset ${group.slot})` : token;
     });
-    bound = bound.replace(/\[(character|scene|prop):([^\]]+)\]/g, (token, _kind, name) => {
-        const group = byName.get(name);
+    bound = bound.replace(/\[(character|scene|prop):([^\]]+)\]/g, (token, kind, name) => {
+        const group = byTypedName.get(`${kind}:${name}`);
         return group ? `${name} (reference asset ${group.slot})` : token;
     });
 

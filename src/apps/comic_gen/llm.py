@@ -1,4 +1,6 @@
 import json
+from src.apps.director_skills import guidance as director_skill_guidance
+
 import hashlib
 import os
 import time
@@ -27,6 +29,15 @@ from .models import (
 )
 
 
+class DirectorShootingChunkError(RuntimeError):
+    """A bounded, model-output-only failure safe for an owner-scoped job status."""
+
+    def __init__(self, category: str, reason: str):
+        self.category = category
+        self.public_reason = reason[:180]
+        super().__init__(f"拍摄计划模型结果连续两次未通过校验：{self.public_reason}")
+
+
 def _strip_markdown_json(content: str) -> str:
     """Strip markdown code fences from LLM JSON output."""
     if "```json" in content:
@@ -34,6 +45,60 @@ def _strip_markdown_json(content: str) -> str:
     elif "```" in content:
         content = content.split("```")[1].split("```")[0]
     return content.strip()
+
+
+_EPISODE_HEADING = re.compile(
+    r"(?m)^[ \t]*(?:#{1,6}[ \t]+)?第[ \t]*([0-9]{1,3}|[一二三四五六七八九十百零两]+)[ \t]*集"
+    r"(?:[ \t]*[：:、.．-]?[ \t]*([^\r\n]{0,80}))?[ \t]*\r?$"
+)
+
+
+def _episode_number(value: str) -> int:
+    if value.isdigit():
+        return int(value)
+    digits = {"零": 0, "一": 1, "二": 2, "两": 2, "三": 3, "四": 4,
+              "五": 5, "六": 6, "七": 7, "八": 8, "九": 9}
+    if "百" in value:
+        before, after = value.split("百", 1)
+        return digits.get(before, 1) * 100 + (_episode_number(after) if after else 0)
+    if "十" in value:
+        before, after = value.split("十", 1)
+        return (digits.get(before, 1) if before else 1) * 10 + digits.get(after, 0)
+    return digits.get(value, -1)
+
+
+def numbered_episode_headings(text: str) -> list[re.Match[str]]:
+    """Find consecutive episode headings without treating scene numbers as episodes."""
+    matches = list(_EPISODE_HEADING.finditer(text))
+    if len(matches) < 2:
+        return []
+    numbers = [_episode_number(match.group(1)) for match in matches]
+    if numbers != list(range(1, len(matches) + 1)):
+        raise ValueError("分集标题编号不连续；请检查重复或缺失的“第 N 集”标题")
+    return matches
+
+
+def split_numbered_episodes(text: str, suggested_episodes: int) -> list[dict[str, Any]]:
+    headings = numbered_episode_headings(text)
+    if not headings:
+        return []
+    if len(headings) != suggested_episodes:
+        raise ValueError(f"原文识别到 {len(headings)} 集，与建议集数 {suggested_episodes} 不一致")
+    episodes = []
+    for index, heading in enumerate(headings):
+        start = 0 if index == 0 else heading.start()
+        end = headings[index + 1].start() if index + 1 < len(headings) else len(text)
+        body = text[heading.end():end].strip()
+        if not body:
+            raise ValueError(f"第 {index + 1} 集没有正文")
+        episodes.append({
+            "episode_number": index + 1,
+            "title": heading.group(0).lstrip(" \t#").strip(),
+            "summary": body[:50],
+            "start_offset": start,
+            "end_offset": end,
+        })
+    return episodes
 
 
 def _prompt_json(value: Any) -> str:
@@ -1268,8 +1333,13 @@ class ScriptProcessor:
         Uses LLM to split a long text into episodes by narrative rhythm.
         Returns a list of episode dicts with title, summary, start/end markers, etc.
         """
+        numbered = split_numbered_episodes(text, suggested_episodes)
+        if numbered:
+            return numbered
         if not self.is_configured:
             raise ValueError("LLM API Key 未配置。请在 API 配置中设置对应的 API Key 后重试。")
+        if suggested_episodes > 50 and len(text) > 80000:
+            raise ValueError("超过 50 集的长篇剧本请使用连续的“第 1 集”至“第 N 集”标题，确保每集原文完整导入")
 
         # RAG-style map/reduce for long scripts: retain coverage and stable
         # entities instead of silently truncating after 80k characters.
@@ -1646,6 +1716,7 @@ class ScriptProcessor:
 
 <stage_preset name="director-interpretation">{preset}</stage_preset>
 <stage_preset name="director-intent">{intent_preset}</stage_preset>
+{director_skill_guidance(entities_json.get("selected_creative_methods", []))}
 
 {source_label}：
 <script>{source_context}</script>
@@ -1655,7 +1726,7 @@ tail_anchor 是原文锚点；source_ref/char_start/char_end 仅用于回指来�
 不得把摘要中没有证据的内容补成事实，也不要把分块边界当作叙事边界。
 
 已确认实体（名称和关系不得擅自替换）：
-<entities>{_prompt_json(entities_json)}</entities>
+<entities>{_prompt_json({k: v for k, v in entities_json.items() if k != "selected_creative_methods"})}</entities>
 
 如果 entities 中包含 series_context 或 series_director_understanding，它们是系列级只读 handoff：
 用于约束全剧背景、人物关系和跨集连续性，不等于本集已经发生的事件。Episode 输出只能把本集原文
@@ -1859,7 +1930,7 @@ fact_id，事实变化时保留 source_refs，并用 status/supersedes_fact_id �
         }
         beat_keys = {"title", "dramatic_purpose", "emotional_change", "duration_seconds", "keep_with_next", "source_chunk_refs", "story_event_ids", "shots"}
         shot_keys = {
-            "title", "visual_intent", "director_effect", "performance_action", "action_physics",
+            "title", "visual_intent", "director_effect", "performance_action", "action_physics", "information_design",
             "shot_size", "camera_angle", "composition", "camera_movement",
             "lighting", "lighting_override_reason", "duration_seconds", "dialogue", "ambient_sound",
             "character_ids", "prop_ids", "unresolved_entity_refs",
@@ -1916,6 +1987,12 @@ fact_id，事实变化时保留 source_refs，并用 status/supersedes_fact_id �
                         return f"scene {scene_index + 1} beat {beat_index + 1} shot {shot_index + 1} 字段不符合结构"
                     if "title" in shot and not isinstance(shot["title"], str):
                         return f"scene {scene_index + 1} beat {beat_index + 1} shot {shot_index + 1} 标题必须是字符串"
+                    if shot.get("information_design") is not None:
+                        from .models import DirectorInformationDesign
+                        try:
+                            DirectorInformationDesign.model_validate(shot["information_design"])
+                        except ValueError:
+                            return "information_design 不符合信息披露合同"
                     if "director_effect" in shot and not isinstance(shot["director_effect"], str):
                         return f"scene {scene_index + 1} beat {beat_index + 1} shot {shot_index + 1} director_effect 必须是字符串"
                     if "lighting_override_reason" in shot and not isinstance(shot["lighting_override_reason"], str):
@@ -1969,12 +2046,14 @@ fact_id，事实变化时保留 source_refs，并用 status/supersedes_fact_id �
 
         retry_note = ""
         last_error = ""
+        last_category = "contract_violation"
         style_summary = build_visual_style_summary(style_config)
         for attempt in range(2):
             handoff_preset = _load_director_preset("shooting-plan-handoff")
             prompt = f"""你是电影导演和场记统筹。请根据提供的剧本片段、已确认故事理解、人物/场景/道具实体和视觉风格，提出可供用户审阅的拍摄计划。
 
 <stage_preset name="shooting-plan-handoff">{handoff_preset}</stage_preset>
+{director_skill_guidance(entities_json.get("selected_creative_methods", []))}
 
 事实边界：剧本片段是剧情事实来源；Director story_map 只提供已确认的事件 ID 和叙事组织；实体只提供可引用 ID；视觉风格只决定拍摄表达。不得添加剧本没有的对白、动作或剧情事实。来源片段边界由系统切分，不能把片段边界直接当作场景边界。
 
@@ -1987,6 +2066,7 @@ fact_id，事实变化时保留 source_refs，并用 status/supersedes_fact_id �
 4. 每个 shot 必须填 title、visual_intent、performance_action、action_physics、shot_size、camera_angle、composition、camera_movement、lighting、duration_seconds、dialogue、ambient_sound、character_ids、prop_ids，并返回 director_effect 字段。director_effect 写该镜头希望观众感受到或注意到的导演效果；没有明确效果时返回空字符串。表演写视线/表情/姿态/节奏；动作物理写身体或物体的可观察位移、接触、支撑、速度和结果，两者不要混为动作摘要。构图写人物在画面中的位置、关系和空间留白。
 5. lighting 包含 key_source（主光来源与方向）、color_tone（冷暖倾向）、contrast（明暗关系）、practical_sources（画内实际光源数组）。同一 place_continuity_id 与 time_continuity_id 的镜头默认继承同一光影基线；不要为每个镜头改写同一光影。lighting_override_reason 是用户决定字段，模型必须始终返回空字符串，不得替用户选择独立光影；用户在计划编辑器填写原因后，运行时才保留本镜头独立光影。
 6. camera_movement 必须说明固定/推拉摇移/跟拍方向与速度；ambient_sound 可选；有明确环境声时填写此镜头能听见的环境底噪/具体声响，没有明确内容时返回空字符串。没有明确对白就 dialogue=[]；不要发明台词。shot 时长为 1–30 整数秒，依据动作和情绪节奏估计。
+如果本次选择开场吸引力、信息差与悬念或节奏与情绪方法，可在相关 shot 返回 information_design 对象：audience_question、audience_knows、character_knows、withhold、presentation（字符串）；source_event_ids、reveal_event_ids、payoff_event_ids（仅用已确认 story_map 的 event_id 数组）；evidence_status（source_linked 或 needs_review）。无依据时数组留空并标 needs_review，不猜测后续事件；无信息编排时省略或 null。source_linked 仅表示有来源引用，不代表建议已核验或采用。暂缓展示的内容不要写入当前镜头可见描述。
 7. character_ids 和 prop_ids 必须使用下方实体 ID，不能用名字代替；如无实体则用空数组。只返回合法 JSON，不要 Markdown、解释或额外键。
 
 必须返回如下根结构：{{"scenes":[...],"unresolved_questions":[]}}。不要输出 IDs、order 或 source_chunk_refs，这些由系统生成；source_chunk_refs 由系统根据输入片段回填。只有片段开头有明确连续动作/连续场次证据时才设 continues_previous_scene=true，不要仅因地点相同而续接。
@@ -1994,7 +2074,7 @@ fact_id，事实变化时保留 source_refs，并用 status/supersedes_fact_id �
 <source_chunk ref="{source_ref}">
 {script_chunk}
 </source_chunk>
-<entities>{_prompt_json(entities_json)}</entities>
+<entities>{_prompt_json({k: v for k, v in entities_json.items() if k != "selected_creative_methods"})}</entities>
 <confirmed_director_profile>{_prompt_json(director_profile)}</confirmed_director_profile>
 <visual_style>{_prompt_json(style_config)}</visual_style>
 <visual_style_summary>{style_summary}</visual_style_summary>
@@ -2013,7 +2093,8 @@ fact_id，事实变化时保留 source_refs，并用 status/supersedes_fact_id �
             try:
                 result = json.loads(_strip_markdown_json(content))
             except json.JSONDecodeError as exc:
-                last_error = f"JSON 格式错误：{exc}"
+                last_category = "invalid_json"
+                last_error = f"JSON 格式错误（第 {exc.lineno} 行，第 {exc.colno} 列）"
             else:
                 # Keep the plan usable when creative details are omitted. The
                 # storyboard editor exposes these empty fields for later completion.
@@ -2037,6 +2118,7 @@ fact_id，事实变化时保留 source_refs，并用 status/supersedes_fact_id �
                                 shot.setdefault("character_ids", [])
                                 shot.setdefault("prop_ids", [])
                 last_error = self._validate_director_shooting_chunk(result) or ""
+                last_category = "contract_violation"
                 if not last_error:
                     return result
             if attempt == 0:
@@ -2044,7 +2126,7 @@ fact_id，事实变化时保留 source_refs，并用 status/supersedes_fact_id �
                     "上次结果未通过契约校验，请完整重做本段并修正以下问题：" + last_error
                 )
 
-        raise RuntimeError(f"拍摄计划模型结果连续两次不符合完整镜头契约：{last_error}")
+        raise DirectorShootingChunkError(last_category, last_error)
 
     @staticmethod
     def _storyboard_visual_style_context(visual_style: Optional[Dict[str, Any]]) -> str:
@@ -2194,6 +2276,7 @@ fact_id，事实变化时保留 source_refs，并用 status/supersedes_fact_id �
             else DEFAULT_STORYBOARD_EXTRACTION_PROMPT
         )
         system_prompt = template.replace("{entities_str}", entities_str).replace("{text}", text)
+        system_prompt += director_skill_guidance(entities_json.get("selected_creative_methods", []))
         system_prompt += system_visual_context
         system_prompt += self._storyboard_visual_style_context(visual_style)
         system_prompt += STORYBOARD_CONTINUITY_CONTEXT
@@ -2324,6 +2407,8 @@ scene_summaries 是场景级连续性记忆。为每个镜头优先匹配原文�
         baseline += self._storyboard_episode_visual_context(entities_json, text, source_range)
         baseline += self._storyboard_visual_style_context(visual_style)
         baseline += STORYBOARD_CONTINUITY_CONTEXT
+        baseline += entities_json.get("storyboard_workflow_rules", "")
+        baseline += director_skill_guidance(entities_json.get("selected_creative_methods", []))
         if director_profile:
             execution_context = director_execution_payload(director_profile)
             baseline += "\n\n<confirmed_director_execution_summary>\n" + json.dumps(
@@ -2396,34 +2481,66 @@ scene_summaries 是场景级连续性记忆。为每个镜头优先匹配原文�
         next_frame_context: Optional[str] = None,
         visual_style: Optional[Dict[str, Any]] = None,
         director_context: str = "",
+        initialization: bool = False,
     ) -> Optional[Dict[str, Any]]:
         """Phase 2: Refine a coarse frame into a rich frame with full structured fields."""
         if not self.is_configured:
             logger.warning("LLM not configured, cannot refine frame")
             return None
 
+        if initialization:
+            system_prompt = f"""# Role
+Initialize only the missing static visual description and spatial blocking of this storyboard shot.
+
+# Output
+Return valid JSON with only visual_description, blocking, and rationale. Omit fields without enough current-shot evidence.
+rationale must be an object with a nonempty, evidence-based explanation for every proposed field, keyed exactly by visual_description or blocking. Explain why the current shot and confirmed assets support the proposal; do not use generic claims.
+visual_description describes the opening state, not the complete action timeline. blocking describes current visible subjects' fixed positions; do not invent missing subjects or props. Do not return action, dialogue, duration, shot size, camera angle, composition, movement, lighting, transition, or sound.
+Never copy an adjacent shot; adjacent shot text is not supplied. Treat existing fields, confirmed director context, asset identity, clothing, and style as read-only constraints. No model-specific prompt syntax.
+
+# Current Shot
+{json.dumps(coarse_frame, ensure_ascii=False, indent=2)}
+
+# Confirmed Character Assets
+{json.dumps(character_assets, ensure_ascii=False, indent=2)}
+
+# Confirmed Scene Assets
+{json.dumps(scene_assets, ensure_ascii=False, indent=2)}
+
+# Visual Style
+{json.dumps(visual_style or {}, ensure_ascii=False, indent=2)}
+
+# Confirmed Director Context
+{director_context or "None"}
+"""
+            try:
+                content = self.llm.chat(
+                    messages=[{"role": "system", "content": system_prompt},
+                              {"role": "user", "content": "Initialize missing fields. Return JSON only."}],
+                    response_format={"type": "json_object"},
+                ).strip()
+                result = json.loads(_strip_markdown_json(content))
+                if not isinstance(result, dict) or set(result) - {"visual_description", "blocking", "rationale"}:
+                    raise ValueError("Initialization returned unrelated fields")
+                return result
+            except (json.JSONDecodeError, ValueError) as exc:
+                logger.warning("Frame initialization result failed validation: %s", type(exc).__name__)
+                raise ValueError("Frame initialization returned invalid JSON fields") from exc
+
         system_prompt = f"""# Role
-You are a film storyboard refinement specialist. Enrich one coarse frame into full structured data + visual description.
+You are a film storyboard refinement specialist. Enrich one coarse frame into performance, sound and visual-description proposals.
 
 # Input Context
-- Coarse frame info (scene, characters, action, shot_size, angle, duration)
+- Coarse frame info (scene, characters, action, accepted shot_size, angle, duration)
 - Character assets (appearance, clothing)
 - Scene assets (environment, atmosphere)
 - Adjacent frames for continuity
 
 # Output
-Return a JSON object with ALL fields below. null is acceptable for optional fields.
+Return a JSON object with the fields below. null is acceptable for optional fields. The accepted shot size, angle, composition and movement are read-only context.
 
 {{
     "visual_description": "Complete visual description (100-200 chars). Describe environment, character acting, physical action, lighting.",
-    "shot_size": "One of: 大特写|特写|近景|中景|全景|远景|大远景",
-    "camera_angle": "One of: 平视|俯视|仰视|鸟瞰|蚁视|过肩|荷兰角|主观视角",
-    "camera_movement": {{
-        "primary": "static|push_in|pull_out|pan_left|pan_right|tilt_up|tilt_down|orbit|follow|crane_up|crane_down|handheld|zoom_in|zoom_out",
-        "secondary": null,
-        "speed": "slow|normal|fast",
-        "description": "Natural language description of camera motion"
-    }},
     "blocking": {{
         "description": "Spatial layout description: left->right: CharA(depth) | CharB(depth)",
         "stage": [
@@ -2456,16 +2573,18 @@ Return a JSON object with ALL fields below. null is acceptable for optional fiel
         "description": "Natural language lighting description"
     }},
     "transition_hint": "Cut type to next frame (硬切|叠化|黑场|匹配剪辑) or null",
-    "duration": 5
+    "duration": 5,
+    "rationale": {{"visual_description": "Why this change serves the current shot; cite supplied evidence, not an invented event."}}
 }}
 
 # Rules
-1. visual_description must be fluent Chinese, covering environment + performance + action + lighting feel. Preserve and refine the supplied visual_atmosphere, character_acting, key_action_physics, shot_size, camera, and lighting; follow the confirmed episode shot context when present. Follow the project visual style below in every frame; allow local lighting changes only when the script supports them.
+1. visual_description must be fluent Chinese, covering environment + performance + action + lighting feel. Preserve the accepted shot_size, camera angle, composition and movement as read-only constraints; follow the confirmed episode shot context when present. Follow the project visual style below in every frame; allow local lighting changes only when the script supports them.
 2. dialogue_structured is null if this frame has no dialogue.
 3. audio_note can be null.
 4. blocking.stage should cover all visible characters and key props.
 5. Maintain continuity with adjacent frames: preserve character appearance/clothing, scene layout, time/weather, screen direction, eyelines, action direction, and prop state unless an explicit script event changes them. Camera framing may vary without accidentally reversing the axis.
-6. camera_movement has at most primary + secondary.
+6. Never return shot_size, camera_angle, composition, camera_movement or camera_movement_structured. Dedicated field stages own these decisions.
+7. For each field you change, add a short rationale keyed by that field name. If the supplied evidence does not support a change, keep the original value. Do not copy an adjacent frame's action or dialogue into the current frame.
 
 # Project Visual Style
 {json.dumps(visual_style or {}, ensure_ascii=False, indent=2)}

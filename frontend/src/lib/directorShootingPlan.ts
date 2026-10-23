@@ -47,7 +47,15 @@ export interface DirectorPlanPropBinding {
     binding_status: DirectorPlanBindingStatus;
 }
 
+export interface DirectorInformationDesign {
+    audience_question: string; audience_knows: string; character_knows: string;
+    withhold: string; presentation: string;
+    source_event_ids: string[]; reveal_event_ids: string[]; payoff_event_ids: string[];
+    evidence_status: "source_linked" | "needs_review";
+}
+
 export interface DirectorPlanShot {
+    information_design?: DirectorInformationDesign | null;
     shot_id: string;
     order: number;
     title: string;
@@ -233,9 +241,10 @@ async function runJob(
     baseUrl: string,
     projectId: string,
     onStatus?: DirectorShootingPlanJobListener,
+    skills: import("./directorSkills").CreativeSkillSelection[] = [],
 ): Promise<DirectorShootingPlan> {
     const base = `${baseUrl}/projects/${projectId}/director-shooting-plan-jobs`;
-    let job = (await axios.post<DirectorShootingPlanJob>(base, {}, { timeout: 15000 })).data;
+    let job = (await axios.post<DirectorShootingPlanJob>(base, { skills }, { timeout: 15000 })).data;
     if (!job?.id) throw new Error("Invalid Director shooting-plan task response");
     onStatus?.(job);
     let failures = 0;
@@ -265,8 +274,9 @@ export function generateDirectorShootingPlan(
     baseUrl: string,
     projectId: string,
     onStatus?: DirectorShootingPlanJobListener,
+    skills: import("./directorSkills").CreativeSkillSelection[] = [],
 ) {
-    return runJob(baseUrl, projectId, onStatus);
+    return runJob(baseUrl, projectId, onStatus, skills);
 }
 
 export async function getDirectorShootingPlan(baseUrl: string, projectId: string) {

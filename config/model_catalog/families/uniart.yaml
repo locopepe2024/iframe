@@ -55,8 +55,8 @@ models:
       ratio: {options: ["16:9", "9:16"], default: "16:9"}
 
   - id: uniart/minimax-h3-vip
-    display_name: UniArt Minimax H3 VIP
-    description: Minimax H3 video generation through the UniArt gateway
+    display_name: UniArt MiniMax H3 VIP V2
+    description: MiniMax H3 V2 via the dedicated UniArt endpoint; SKU requires an active V2 route
     status: active
     release_stage: stable
     capabilities: [t2v, i2v, r2v, f2v]
@@ -64,9 +64,12 @@ models:
     runtime: {uniart: {gateway: uniart, api_model_id: minimax-h3-vip}}
     ui: {selection_group: i2v, visible_in: [project_settings, series_settings, video_sidebar, global_settings], order: 25, badges: [UniArt]}
     duration: {type: slider, min: 4, max: 15, step: 1, default: 5}
+    inputs:
+      reference_images: {max: 9}
+      reference_videos: {max: 3}
+      reference_audios: {max: 3}
     params:
       audio: true
-      seed: true
       resolution: {options: [720p, 2k], default: 2k}
       ratio: {options: ["16:9", "9:16", "1:1", "4:3", "3:4"], default: "16:9"}
 

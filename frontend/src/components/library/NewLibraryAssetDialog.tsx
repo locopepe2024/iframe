@@ -3,7 +3,7 @@
 import { useState, useRef, useEffect, type FormEvent, type ChangeEvent } from "react";
 import { useTranslations } from "next-intl";
 import { X, Loader2, Plus, Upload, Image as ImageIcon } from "lucide-react";
-import { api } from "@/lib/api";
+import { api, type PlatformReferenceResource } from "@/lib/api";
 import { getAssetUrl } from "@/lib/utils";
 import { toast } from "@/store/toastStore";
 
@@ -11,6 +11,13 @@ type AssetTab = "characters" | "scenes" | "props";
 
 // 资产类型 → 后端单数 type（/library/assets 端点用）。
 const SINGULAR: Record<AssetTab, string> = { characters: "character", scenes: "scene", props: "prop" };
+function dictionaryDomain(category: string) {
+  if (category.startsWith("character/identity/")) return "character.identity";
+  if (category.startsWith("character/look/")) return "character.look";
+  if (category === "character/performance") return "character.performance";
+  if (category === "character/style") return "world.style";
+  return "";
+}
 
 interface NewLibraryAssetDialogProps {
   onClose: () => void;
@@ -46,6 +53,10 @@ export default function NewLibraryAssetDialog({ onClose, onCreated, initialImage
   const [targetScope, setTargetScope] = useState<"asset" | "platform">(initialMediaType === "video" ? "platform" : "asset");
   const [platformKind, setPlatformKind] = useState<"image" | "video" | "prompt_preset">(initialMediaType);
   const [platformCategory, setPlatformCategory] = useState("character/reference");
+  const [dictionaryEntryType, setDictionaryEntryType] = useState<"" | "term" | "pattern" | "case">("");
+  const [dictionaryTerms, setDictionaryTerms] = useState<PlatformReferenceResource[]>([]);
+  const [dictionaryMembers, setDictionaryMembers] = useState<PlatformReferenceResource[]>([]);
+  const [dictionaryLoadError, setDictionaryLoadError] = useState("");
   const [platformCategories, setPlatformCategories] = useState<{ id: string; label: string }[]>([]);
   const [platformSuggestedTags, setPlatformSuggestedTags] = useState<string[]>([]);
   const [platformTagsText, setPlatformTagsText] = useState("");
@@ -77,6 +88,18 @@ export default function NewLibraryAssetDialog({ onClose, onCreated, initialImage
     }).catch(() => { if (active) setPlatformError("无法读取平台类别，请刷新后重试。"); });
     return () => { active = false; };
   }, [initialSourceGenerationId]);
+  useEffect(() => {
+    if (targetScope !== "platform" || dictionaryEntryType !== "pattern") return;
+    let active = true;
+    setDictionaryLoadError("");
+    void api.getPlatformReferenceLibrary().then((catalog) => {
+      if (active) setDictionaryTerms(catalog.resources.filter((resource) =>
+        resource.status === "active" && resource.dictionary?.entry_type === "term" && resource.kind === "prompt_preset"
+        && !!resource.payload?.structured_prompt?.content?.trim()
+      ));
+    }).catch(() => { if (active) setDictionaryLoadError("平台词条读取失败，请重试打开组合方案。"); });
+    return () => { active = false; };
+  }, [targetScope, dictionaryEntryType]);
   // a11y：打开时聚焦名称、Escape 关闭、关闭后还原焦点。
   useEffect(() => {
     const prevFocused = document.activeElement as HTMLElement | null;
@@ -138,11 +161,21 @@ export default function NewLibraryAssetDialog({ onClose, onCreated, initialImage
         if (tags.length > 12 || tags.some((tag) => tag.length > 32)) {
           throw new Error("最多填写 12 个标签，每个不超过 32 字。");
         }
+        if (dictionaryEntryType === "pattern" && (dictionaryMembers.length < 2 || dictionaryMembers.length > 12)) {
+          throw new Error("组合方案须选择 2–12 个同领域已发布词条。");
+        }
+        if (dictionaryEntryType === "term" && (description.trim().length > 500 || description.includes("\n"))) {
+          throw new Error("原子描述词须是单行、最多 500 字；完整 Prompt 请发布为普通参考。");
+        }
         await api.submitPlatformCandidate({
           source_generation_id: initialSourceGenerationId,
           source_output_id: platformKind === "prompt_preset" ? undefined : initialSourceOutputId,
           kind: platformKind,
           category_path: platformCategory,
+          ...(dictionaryEntryType ? { dictionary_entry_type: dictionaryEntryType } : {}),
+          ...(dictionaryEntryType === "pattern" ? { dictionary_members: dictionaryMembers.map((resource, index) => ({
+            platform_resource_id: resource.platform_resource_id, revision: resource.revision, role: `part_${index + 1}`,
+          })) } : {}),
           tags,
           title: trimmed,
           description: description.trim(),
@@ -251,7 +284,7 @@ export default function NewLibraryAssetDialog({ onClose, onCreated, initialImage
 
           {targetScope === "platform" && <div className="grid gap-3">
             <label className="text-xs text-text-secondary">平台类别
-              <select aria-label="平台类别" value={platformCategory} onChange={(event) => setPlatformCategory(event.target.value)}
+              <select aria-label="平台类别" value={platformCategory} onChange={(event) => { setPlatformCategory(event.target.value); setDictionaryEntryType(""); setDictionaryMembers([]); }}
                 className="mt-2 w-full rounded-lg border border-glass-border bg-surface-inset px-3 py-2 text-sm text-foreground">
                 {platformCategories.map((item) => <option key={item.id} value={item.id}>{item.label} · {item.id}</option>)}
               </select>
@@ -272,12 +305,40 @@ export default function NewLibraryAssetDialog({ onClose, onCreated, initialImage
               </div>}
             </div>
             <label className="text-xs text-text-secondary">发布内容
-              <select aria-label="发布内容" value={platformKind} onChange={(event) => setPlatformKind(event.target.value as typeof platformKind)}
+              <select aria-label="发布内容" value={platformKind} onChange={(event) => { setPlatformKind(event.target.value as typeof platformKind); setDictionaryEntryType(""); setDictionaryMembers([]); }}
                 className="mt-2 w-full rounded-lg border border-glass-border bg-surface-inset px-3 py-2 text-sm text-foreground">
                 <option value={initialMediaType}>{initialMediaType === "video" ? "视频与提示词" : "图片与提示词"}</option>
                 <option value="prompt_preset">仅提示词</option>
               </select>
             </label>
+            {platformCategory !== "character/reference" && <label className="text-xs text-text-secondary">词典归类
+              <select aria-label="词典归类" value={dictionaryEntryType} onChange={(event) => { setDictionaryEntryType(event.target.value as typeof dictionaryEntryType); setDictionaryMembers([]); }}
+                className="mt-2 w-full rounded-lg border border-glass-border bg-surface-inset px-3 py-2 text-sm text-foreground">
+                <option value="">普通参考素材</option>
+                {platformKind === "prompt_preset"
+                  ? <><option value="term">原子描述词 · 供检索引用</option><option value="pattern">组合方案 · 选择已发布词条</option></>
+                  : <option value="case">效果案例 · 媒体与 Prompt</option>}
+              </select>
+              <span className="mt-1 block text-xs text-text-muted">仅供检索与审核；不会自动加入模型请求。组合方案需单独建立成员引用。</span>
+            </label>}
+            {dictionaryEntryType === "term" && <p className="text-xs text-text-muted">词条使用下方可编辑描述，限单行 500 字；原始完整生成 Prompt 仍保存在审核记录。</p>}
+            {dictionaryEntryType === "pattern" && <div className="rounded-md border border-glass-border p-2 text-xs text-text-secondary">
+              <p className="font-medium text-foreground">按点击顺序选择 2–12 个词条</p>
+              {dictionaryLoadError && <p role="alert" className="mt-1 text-status-failed-fg">{dictionaryLoadError}</p>}
+              <div className="mt-2 max-h-40 overflow-y-auto">
+                {dictionaryTerms.filter((resource) => resource.dictionary?.semantic_domain === dictionaryDomain(platformCategory)).map((resource) => {
+                  const index = dictionaryMembers.findIndex((member) => member.platform_resource_id === resource.platform_resource_id);
+                  return <button key={resource.platform_resource_id} type="button" aria-pressed={index >= 0}
+                    onClick={() => setDictionaryMembers((current) => index >= 0
+                      ? current.filter((member) => member.platform_resource_id !== resource.platform_resource_id)
+                      : current.length < 12 ? [...current, resource] : current)}
+                    className="flex min-h-9 w-full items-center gap-2 rounded px-2 text-left hover:bg-hover-bg focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary">
+                    <span className="w-5 text-primary">{index >= 0 ? index + 1 : "·"}</span><span>{resource.title} · r{resource.revision}</span>
+                  </button>;
+                })}
+              </div>
+              <p className="mt-1">已选 {dictionaryMembers.length} 项；保存固定版本引用。提交前可调整。</p>
+            </div>}
             <p className="text-xs text-text-muted">描述可编辑；审核记录会另存实际生成提示词、模型、参数与来源结果。</p>
           </div>}
 

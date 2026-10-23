@@ -304,7 +304,7 @@ it('shows the Cast generation-description @ menu and submits only selected stabl
  expect(args[14]).toBe('reference');
  expect(JSON.stringify(args)).not.toContain('scene.png');
 });
-it('finds an indexed variant by description and binds it from @ without opening the image picker', async () => {
+it('requires adding an indexed variant before @ can find it by description', async () => {
  const withScene = { ...project, scenes: [{ id: 'street', name: '青溪镇长街', description: '冷灰蓝黄昏' }] };
  useProjectStore.setState({ currentProject: withScene, projects: [withScene] });
  vi.mocked(api.getProject).mockResolvedValue(withScene as any);
@@ -314,6 +314,10 @@ it('finds an indexed variant by description and binds it from @ without opening 
  vi.mocked(api.generateAsset).mockResolvedValue(withScene as any);
  show();
  await waitFor(() => expect(api.getAssetReferenceIndex).toHaveBeenCalled());
+ setPromptDocument('<p>@冷灰蓝</p>');
+ expect(screen.queryByRole('option', { name: /青溪镇长街/ })).not.toBeInTheDocument();
+ fireEvent.click(screen.getAllByRole('button', { name: 'Add reference images' })[0]);
+ fireEvent.click(await screen.findByRole('button', { name: 'Toggle this 青溪镇长街 variant in the available reference pool' }));
  setPromptDocument('<p>@冷灰蓝</p>');
  fireEvent.click(await screen.findByRole('option', { name: /青溪镇长街/ }));
  fireEvent.click(screen.getByRole('button', { name: 'Reference image' }));

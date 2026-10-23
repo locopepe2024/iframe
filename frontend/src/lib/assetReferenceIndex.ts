@@ -9,8 +9,15 @@ export function legacyAssetsToReferenceIndex(
     const container = assetType === "character"
       ? (item.reference_sheet?.image_variants?.length ? item.reference_sheet : item.full_body_asset)
       : item.image_asset;
-    const variants = container?.image_variants ?? container?.variants ?? [];
-    const selected = container?.selected_image_id ?? container?.selected_id ?? variants[0]?.id ?? null;
+    const pools = assetType === "character"
+      ? [item.reference_sheet?.image_variants, item.full_body_asset?.variants, item.three_view_asset?.variants, item.headshot_asset?.variants]
+      : [container?.variants];
+    const variants = pools.flatMap(pool => pool || []).filter((variant, index, all) =>
+      all.findIndex(candidate => candidate.id === variant.id) === index);
+    const cover = item.cover_variant_id && variants.some(variant => variant.id === item.cover_variant_id)
+      ? item.cover_variant_id : null;
+    const selected = (assetType === "character" ? cover : null)
+      ?? container?.selected_image_id ?? container?.selected_id ?? variants[0]?.id ?? null;
     return {
       asset_type: assetType,
       asset_id: item.id,
@@ -19,6 +26,7 @@ export function legacyAssetsToReferenceIndex(
       starred: item.starred,
       source_scope: item.source === "series" || item.source === "global" ? item.source : "episode",
       selected_variant_id: selected,
+      cover_variant_id: cover,
       variants,
     };
   };

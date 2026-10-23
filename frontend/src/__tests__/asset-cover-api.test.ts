@@ -4,6 +4,7 @@ import { API_URL, api } from "../lib/api";
 
 vi.mock("axios", () => ({
   default: {
+    interceptors: { request: { use: vi.fn() } },
     get: vi.fn(),
     post: vi.fn(),
     isAxiosError: (error: any) => error?.isAxiosError === true,

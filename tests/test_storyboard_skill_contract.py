@@ -28,13 +28,32 @@ def test_skill_loads_outside_repo_and_preserves_editor_contract(monkeypatch, tmp
     assert 'replacement' in text
 
 
-def test_explicit_skill_selection_is_independent_from_target_model():
-    text = api._storyboard_polish_contract(
-        'uniart/minimax-h3-vip', '', '', optimization_skills=['seedance-camera']
-    )
-    assert 'SELECTED OPTIMIZATION SKILLS' in text
-    assert 'seedance-camera' in text
-    assert 'MiniMax H3 分段导演' not in text
+def test_explicit_skill_must_match_target_model():
+    with pytest.raises(api.HTTPException) as exc_info:
+        api._storyboard_polish_contract(
+            'uniart/minimax-h3-vip', '', '', optimization_skills=['seedance-camera']
+        )
+    assert exc_info.value.status_code == 422
+    assert exc_info.value.detail['reason'] == 'incompatible_optimization_skill'
+
+
+def test_unrelated_h3_workflow_cannot_load_as_shot_polish_skill():
+    with pytest.raises(api.HTTPException) as exc_info:
+        api._storyboard_polish_contract(
+            'uniart/minimax-h3-vip', '', '', optimization_skills=['h3-product-recreation']
+        )
+    assert exc_info.value.status_code == 422
+    assert exc_info.value.detail['reason'] == 'ineligible_optimization_skill'
+
+
+def test_legacy_model_guidance_loads_only_the_model_adapter():
+    h3 = api._target_model_guidance('uniart/minimax-h3-vip')
+    seedance = api._target_model_guidance('uniart/seedance-2.5-vip')
+    assert '基础／关键帧输出' in h3
+    assert '商品替换' not in h3
+    assert '多镜头、续拍、长故事' not in h3
+    assert '按参考素材及用途' in seedance
+    assert '多镜头、续拍、长故事' not in seedance
 
 
 def test_empty_explicit_skill_selection_disables_legacy_target_guidance():
@@ -60,8 +79,23 @@ def test_unknown_explicit_skill_is_rejected():
     ('glm', 'minimax-h3-director'),
 ])
 def test_non_ir_optimizer_defaults_to_h3_director_skill(provider, expected):
-    request = api.PolishVideoPromptRequest(draft_prompt='动作', optimizer_provider=provider)
+    request = api.PolishVideoPromptRequest(draft_prompt='动作', optimizer_provider=provider, target_video_model='uniart/minimax-h3-vip')
     assert api._effective_optimization_skills(request) == [expected]
+
+
+def test_seedance_optimizer_defaults_to_seedance_prompt():
+    request = api.PolishVideoPromptRequest(draft_prompt='动作', optimizer_provider='qwen', target_video_model='uniart/seedance-2.5-vip')
+    assert api._effective_optimization_skills(request) == ['seedance-prompt']
+
+
+def test_ir_preview_contains_selected_skill_text():
+    request = api.PolishVideoPromptRequest(
+        draft_prompt='动作', target_video_model='uniart/minimax-h3-vip',
+        optimizer_provider='minimax_context_ir', optimization_skills=['minimax-h3-director'],
+    )
+    preview = api.preview_video_polish_prompt(request)
+    assert '[minimax-h3-director' in preview['messages']['user']
+    assert '基础／关键帧输出' in preview['messages']['user']
 
 
 def test_minimax_ir_does_not_force_local_director_skill():
@@ -167,8 +201,13 @@ def test_h3_final_contract_matches_base_or_reference_mode():
 
 def test_seedance_polish_contract_does_not_demand_h3_fields():
     text = api._storyboard_polish_contract(
-        'uniart/seedance-2.5-vip', '', '', optimization_skills=['seedance-camera'])
+        'uniart/seedance-2.5-vip', '', '', optimization_skills=['seedance-prompt'], generate_audio=False)
     assert 'FINAL H3 ENFORCEMENT' not in text
+    assert 'H3 base:' not in text
+    assert 'H3 reference mode:' not in text
+    assert 'integrated_multimodal_description' not in text
+    assert 'overall_soundscape' not in text
+    assert 'non_diegetic_music' not in text
 
 
 def test_h3_contract_mismatch_logs_headings_without_model_text(caplog):

@@ -11,6 +11,7 @@ interface VideoPolishReviewProps {
     messages: VideoPolishMessages;
     media: { label: string; url: string }[];
     formatNote: string;
+    targetModel?: string;
     isContextIr: boolean;
     isSubmitting: boolean;
     error?: string;
@@ -21,7 +22,7 @@ interface VideoPolishReviewProps {
     onConfirm: () => void;
 }
 
-export default function VideoPolishReview({ messages, media, formatNote, isContextIr,
+export default function VideoPolishReview({ messages, media, formatNote, targetModel, isContextIr,
     isSubmitting, error, userLabel = "用户／镜头文字", confirmLabel = "确认输入并润色",
     onChange, onCancel, onConfirm }: VideoPolishReviewProps) {
     return <div className="space-y-3 rounded-lg border border-glass-border bg-surface-inset p-3">
@@ -30,6 +31,7 @@ export default function VideoPolishReview({ messages, media, formatNote, isConte
             <button type="button" onClick={onCancel} aria-label="关闭润色输入检查" className="rounded p-1 text-text-secondary hover:text-foreground"><X size={14} /></button>
         </div>
         <p className="text-xs text-text-secondary">检查并修改以下文字后确认；图片按下列顺序提交给润色模型。</p>
+        {targetModel && <p className="text-xs text-text-secondary">当前镜头目标模型：<span className="text-foreground">{targetModel}</span></p>}
         {media.length ? <ul className="space-y-1 text-xs text-text-secondary">{media.map((item, index) =>
             <li key={`${item.url}-${index}`} className="break-all">{item.label}：{item.url}</li>)}</ul>
             : <p className="text-xs text-text-muted">本次润色未附参考图。</p>}

@@ -1,5 +1,7 @@
 # 设计过程中的平台参考发现与使用 V1
 
+> 历史设计基线。角色工作台后续的 `/` 动作、`@` 资源引用与带图 Prompt 案例分型操作以 `2026-10-19-character-workbench-discovery-reference-ux-v2.md` 为准；本文件中案例直接列在 `/` 的设计已被替代。
+
 日期：2026-10-19。范围：iFrame 角色、场景、道具、分镜工作台的参考检索与显式应用。参考 `iyi/docs/product/2026-10-18-iyishow-asset-library-2.0.md` 的资源身份和治理模型；两个产品的权限与数据实现分别验证。
 
 ## Observed

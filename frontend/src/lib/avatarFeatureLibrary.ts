@@ -41,6 +41,8 @@ export const AVATAR_FEATURE_LIBRARY: Record<string, AvatarFeatureOption[]> = {
     { id: "angular-jaw", zh: "下颌轮廓较分明，颧骨结构清晰", en: "Defined jawline and cheekbones", provenance: IFRAME_TEST_TERM },
     { id: "wide-cheekbones", zh: "颧骨略宽，面中部轮廓鲜明", en: "Slightly broad cheekbones", provenance: IFRAME_TEST_TERM },
     { id: "narrow-chin", zh: "面颊向较窄的下巴自然收束", en: "Cheeks taper naturally to a narrow chin", provenance: IFRAME_TEST_TERM },
+    { id: "classical-long-face", zh: "偏长脸型，颧骨与下颌宽度有自然差异", en: "Longer face with natural cheekbone and jaw variation", provenance: IFRAME_TEST_TERM },
+    { id: "classical-weathered-face", zh: "面颊略瘦，下颌轮廓柔和且不完全对称", en: "Lean cheeks and a softly asymmetric jaw", provenance: IFRAME_TEST_TERM },
   ],
   facial_features: [
     { id: "soft-balanced", zh: "柔和均衡的五官比例", en: "Soft, balanced features" },
@@ -64,6 +66,7 @@ export const AVATAR_FEATURE_LIBRARY: Record<string, AvatarFeatureOption[]> = {
     { id: "thick", zh: "浓密自然眉", en: "Full natural brows" },
     { id: "soft-arched", zh: "眉峰柔和，眉尾自然收细", en: "Soft brow arch", provenance: IFRAME_TEST_TERM },
     { id: "low-straight", zh: "眉形较平，眉眼距离略近", en: "Low straight brows", provenance: IFRAME_TEST_TERM },
+    { id: "classical-uneven-brows", zh: "双眉浓淡略有差异，保留自然毛流", en: "Slightly uneven brow density with natural hair growth", provenance: IFRAME_TEST_TERM },
     { id: "sparse", zh: "眉毛略稀疏，保留自然毛流", en: "Sparse natural brows", provenance: IFRAME_TEST_TERM },
   ],
   nose_shape: [
@@ -88,6 +91,7 @@ export const AVATAR_FEATURE_LIBRARY: Record<string, AvatarFeatureOption[]> = {
     { id: "smile-lines", zh: "嘴角有细微笑纹", en: "Subtle smile lines", provenance: IFRAME_TEST_TERM },
     { id: "under-eye", zh: "眼下有轻微自然阴影", en: "Subtle under-eye shadows", provenance: IFRAME_TEST_TERM },
     { id: "forehead-lines", zh: "额头有淡淡表情纹", en: "Faint forehead expression lines", provenance: IFRAME_TEST_TERM },
+    { id: "classical-crows-feet", zh: "眼角有细微笑纹，左右深浅略不同", en: "Subtle uneven crow's feet", provenance: IFRAME_TEST_TERM },
   ],
   skin: [
     { id: "warm-light", zh: "暖调浅肤色，自然肤质", en: "Warm light skin with natural texture" },
@@ -100,6 +104,8 @@ export const AVATAR_FEATURE_LIBRARY: Record<string, AvatarFeatureOption[]> = {
     { id: "pores", zh: "面颊和鼻翼保留细微毛孔纹理", en: "Subtle pores on cheeks and nose", provenance: IFRAME_TEST_TERM },
     { id: "sun-weathered", zh: "肤色有轻微日晒痕迹，不作整体脏污", en: "Mild sun exposure marks", provenance: IFRAME_TEST_TERM },
     { id: "natural-blush", zh: "面颊有轻微自然血色", en: "Subtle natural cheek color", provenance: IFRAME_TEST_TERM },
+    { id: "classical-weathered-skin", zh: "面部有轻微风吹日晒的肤色变化，保留毛孔与细纹", en: "Light weathering with visible pores and fine lines", provenance: IFRAME_TEST_TERM },
+    { id: "classical-aged-skin", zh: "眼周与嘴角有自然细纹，肤色分布不完全均匀", en: "Natural lines around eyes and mouth with uneven tone", provenance: IFRAME_TEST_TERM },
   ],
   body: [
     { id: "slim", zh: "偏瘦匀称，肩颈自然", en: "Slim build with natural shoulders" },
@@ -110,6 +116,8 @@ export const AVATAR_FEATURE_LIBRARY: Record<string, AvatarFeatureOption[]> = {
     { id: "narrow-shoulders", zh: "肩部较窄，身形轻盈", en: "Narrow shoulders and light build", provenance: IFRAME_TEST_TERM },
     { id: "rounded-posture", zh: "站姿略松弛，肩颈不过度挺直", en: "Relaxed posture", provenance: IFRAME_TEST_TERM },
     { id: "upright-posture", zh: "站姿挺直，重心稳定", en: "Upright stable posture", provenance: IFRAME_TEST_TERM },
+    { id: "classical-traveler-posture", zh: "重心平稳，肩背自然舒展，便于行走的体态", en: "Balanced walking-ready posture", provenance: IFRAME_TEST_TERM },
+    { id: "classical-shopkeeper-posture", zh: "肩背略松弛，站姿稳定且符合日常劳作", en: "Relaxed stable posture shaped by daily work", provenance: IFRAME_TEST_TERM },
     { id: "long-limbs", zh: "四肢比例略修长，关节结构自然", en: "Slightly long limbs", provenance: IFRAME_TEST_TERM },
   ],
   age_appearance: [
@@ -133,6 +141,9 @@ export const AVATAR_FEATURE_LIBRARY: Record<string, AvatarFeatureOption[]> = {
     { id: "tight-curls", zh: "细密卷发，发量与轮廓稳定", en: "Tight curls with stable silhouette", provenance: IFRAME_TEST_TERM },
     { id: "receding-hairline", zh: "发际线略后移，轮廓自然", en: "Slightly receding hairline", provenance: IFRAME_TEST_TERM },
     { id: "gray-streaks", zh: "发间有少量灰白发丝", en: "Subtle gray streaks", provenance: IFRAME_TEST_TERM },
+    { id: "classical-high-tie", zh: "长发高束，发际线和鬓角保留自然碎发", en: "High-tied long hair with natural hairline wisps", provenance: IFRAME_TEST_TERM },
+    { id: "classical-half-up", zh: "长发半束，后发自然垂落且轮廓清晰", en: "Half-up long hair with a clear silhouette", provenance: IFRAME_TEST_TERM },
+    { id: "classical-low-bun", zh: "低盘发髻，鬓角有少量不规则碎发", en: "Low bun with a few irregular temple wisps", provenance: IFRAME_TEST_TERM },
   ],
   clothing_silhouette: [
     { id: "simple-silhouette", zh: "简洁、易辨认的服装廓形", en: "Simple recognizable clothing silhouette", provenance: IFRAME_TEST_TERM },
@@ -141,6 +152,10 @@ export const AVATAR_FEATURE_LIBRARY: Record<string, AvatarFeatureOption[]> = {
     { id: "layered-controlled", zh: "服装层次清晰，配饰数量克制", en: "Controlled layered clothing", provenance: IFRAME_TEST_TERM },
     { id: "workwear", zh: "实用工作服轮廓，活动范围清楚", en: "Practical workwear silhouette", provenance: IFRAME_TEST_TERM },
     { id: "formal-tailored", zh: "挺括的正式服装剪裁，接缝清晰", en: "Structured formal tailoring", provenance: IFRAME_TEST_TERM },
+    { id: "classical-cross-collar", zh: "交领长衣，衣襟交叠关系清楚，袖口宽度适中", en: "Cross-collar long robe with clear overlap", provenance: IFRAME_TEST_TERM },
+    { id: "classical-travel-layers", zh: "便于行走的交领短衣与外层长衣，层次清楚", en: "Practical layered cross-collar travel clothes", provenance: IFRAME_TEST_TERM },
+    { id: "classical-workwear", zh: "简朴短衣与宽松下装，轮廓适合市井劳作", en: "Plain short upper garment and loose work trousers", provenance: IFRAME_TEST_TERM },
+    { id: "classical-shopkeeper-robe", zh: "简洁交领长衣，衣摆与袖口有日常使用褶痕", en: "Plain cross-collar robe with everyday folds", provenance: IFRAME_TEST_TERM },
   ],
   clothing_material: [
     { id: "matte-cotton", zh: "哑光棉布质感，保留细小褶皱", en: "Matte cotton with small folds", provenance: IFRAME_TEST_TERM },
@@ -149,5 +164,7 @@ export const AVATAR_FEATURE_LIBRARY: Record<string, AvatarFeatureOption[]> = {
     { id: "leather-accents", zh: "少量皮革结构件，磨损控制在边缘", en: "Limited leather accents", provenance: IFRAME_TEST_TERM },
     { id: "natural-folds", zh: "布料有自然褶皱，避免过度装饰", en: "Natural folds without over-decoration", provenance: IFRAME_TEST_TERM },
     { id: "subtle-wear", zh: "衣物有轻微使用痕迹，不改变原有版型", en: "Subtle wear without changing cut", provenance: IFRAME_TEST_TERM },
+    { id: "classical-coarse-weave", zh: "粗纺棉麻布面有可见经纬纹理，颜色克制", en: "Visible coarse cotton-linen weave in restrained colors", provenance: IFRAME_TEST_TERM },
+    { id: "classical-matte-silk", zh: "低光泽丝织面料，受光处仅有柔和反射", en: "Low-sheen silk with soft highlights", provenance: IFRAME_TEST_TERM },
   ],
 };

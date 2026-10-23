@@ -71,3 +71,34 @@ it("renders structured preview validation errors as readable text", async () => 
     expect(await screen.findByRole("alert")).toHaveTextContent("Reference variant is unavailable");
     expect(screen.getByRole("button", { name: "确认并生成" })).toBeDisabled();
 });
+
+
+it("invalidates a previous fingerprint immediately and ignores older responses after editing", async () => {
+    const projection = (input: typeof request, fingerprint: string) => ({
+        positive_prompt: input.prompt, negative_prompt: input.negative_prompt,
+        selected_model_id: "model", aspect_ratio: "16:9", generation_type: input.generation_type,
+        image_generation_mode: input.image_generation_mode, batch_size: input.batch_size,
+        reference_inputs: input.references, fingerprint,
+    });
+    preview.mockResolvedValueOnce(projection(request, "first"));
+    const confirm = vi.fn();
+    const view = render(<AssetImageSubmissionReview projectId="project" request={request} onBack={vi.fn()} onConfirm={confirm} />);
+    const button = screen.getByRole('button', { name: '确认并生成' });
+    await waitFor(() => expect(button).toBeEnabled());
+    let finishOld!: (value: unknown) => void;
+    let finishLatest!: (value: unknown) => void;
+    preview.mockImplementationOnce(() => new Promise(resolve => { finishOld = resolve; }));
+    const intermediate = { ...request, prompt: 'Intermediate draft' };
+    view.rerender(<AssetImageSubmissionReview projectId="project" request={intermediate} onBack={vi.fn()} onConfirm={confirm} />);
+    expect(button).toBeDisabled();
+    preview.mockImplementationOnce(() => new Promise(resolve => { finishLatest = resolve; }));
+    const latest = { ...request, prompt: 'Latest checked prompt', negative_prompt: 'No extra cloak' };
+    view.rerender(<AssetImageSubmissionReview projectId="project" request={latest} onBack={vi.fn()} onConfirm={confirm} />);
+    finishOld(projection(intermediate, 'outdated'));
+    await waitFor(() => expect(preview).toHaveBeenLastCalledWith('project', latest));
+    expect(button).toBeDisabled();
+    finishLatest(projection(latest, 'latest-fingerprint'));
+    await waitFor(() => expect(button).toBeEnabled());
+    fireEvent.click(button);
+    expect(confirm).toHaveBeenCalledExactlyOnceWith(projection(latest, 'latest-fingerprint'));
+});
