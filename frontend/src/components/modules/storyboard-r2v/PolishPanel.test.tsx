@@ -57,6 +57,7 @@ it("shows editable compiled input and waits for confirmation before optimization
     fireEvent.click(screen.getByTitle("查看并确认模型输入"));
     await screen.findByText("提交前检查模型输入");
     expect(api.polishVideoPrompt).toHaveBeenCalledTimes(1);
+    fireEvent.click(screen.getByText("高级模型输入 · 完整规则"));
     fireEvent.change(screen.getByLabelText("系统／任务文字"), { target: { value: "冷灰蓝环境光" } });
     fireEvent.click(screen.getByText("确认输入并润色"));
     await waitFor(() => expect(api.polishVideoPrompt).toHaveBeenCalledTimes(2));
@@ -64,6 +65,40 @@ it("shows editable compiled input and waits for confirmation before optimization
         messages: { system: "冷灰蓝环境光", user: "原始镜头；黄昏光影；远景" }, token: "token",
     });
     expect(vi.mocked(api.polishVideoPrompt).mock.calls[0][0]).toBe("原始镜头；黄昏光影；远景");
+});
+
+it("shows a readable shot summary while preserving the full model input", async () => {
+    vi.mocked(api.polishVideoPrompt)
+        .mockResolvedValueOnce({
+            messages: { system: "LONG H3 RULES\nACCEPTED SHOT FIELDS", user: "商贩穿行青石长街" },
+            media: [{ label: "首帧 0.00 秒", url: "https://example.test/frame.jpg" }],
+            review_token: "token", format_note: "H3 结构要求",
+            review_context: {
+                selected_skills: ["minimax-h3-director"], target_duration: 6,
+                effective_shot_fields: {
+                    duration: { value: 6, source: "frame", revision: null },
+                    shot_size: { value: "大远景", source: "frame", revision: null },
+                    ambient_lighting: { value: "暮秋残阳", source: "scene_design", revision: 2 },
+                },
+            },
+        } as any)
+        .mockResolvedValueOnce({ prompt_cn: "中文结果", prompt_en: "English result" } as any);
+    render(<PolishPanel prompt="商贩穿行青石长街" videoModel="uniart/minimax-h3-vip"
+        tabMode="t2i_i2v" scriptId="project" onApply={vi.fn()} />);
+    fireEvent.click(screen.getByTitle("查看并确认模型输入"));
+    await screen.findByText("提交前检查模型输入");
+    expect(screen.getByLabelText("用户／镜头文字")).toHaveValue("商贩穿行青石长街");
+    expect(screen.getByText("大远景")).toBeInTheDocument();
+    expect(screen.getByText("暮秋残阳")).toBeInTheDocument();
+    expect(screen.getByText("环境光 · 场景设计 r2")).toBeInTheDocument();
+    expect(screen.getByText("MiniMax H3 导演", { selector: "span" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "首帧 0.00 秒" })).toHaveAttribute("href", "https://example.test/frame.jpg");
+    expect(screen.getByText("高级模型输入 · 完整规则").closest("details")).not.toHaveAttribute("open");
+    fireEvent.click(screen.getByText("确认输入并润色"));
+    await waitFor(() => expect(api.polishVideoPrompt).toHaveBeenCalledTimes(2));
+    expect(vi.mocked(api.polishVideoPrompt).mock.calls[1][16]).toEqual({
+        messages: { system: "LONG H3 RULES\nACCEPTED SHOT FIELDS", user: "商贩穿行青石长街" }, token: "token",
+    });
 });
 
 it("flushes pending shot edits before compiling model input", async () => {
@@ -103,7 +138,7 @@ it("switches the default skill when the target video model changes", async () =>
     expect(screen.queryByLabelText("MiniMax H3 导演")).not.toBeInTheDocument();
     fireEvent.click(screen.getByTitle("查看并确认模型输入"));
     await waitFor(() => expect(api.polishVideoPrompt).toHaveBeenCalledTimes(1));
-    expect(screen.getByText("当前镜头目标模型：", { exact: false })).toHaveTextContent("Seedance");
+    expect(screen.getByText("目标模型：", { exact: false })).toHaveTextContent("Seedance");
     expect(vi.mocked(api.polishVideoPrompt).mock.calls[0][10]).toBe("qwen");
     expect(vi.mocked(api.polishVideoPrompt).mock.calls[0][11]).toEqual(["seedance-prompt"]);
     expect(screen.queryByRole("option", { name: "MiniMax 官方 IR" })).not.toBeInTheDocument();
@@ -116,7 +151,7 @@ it("submits the H3 model and its matching skill for preview", async () => {
     await screen.findByText("提交前检查模型输入");
     expect(vi.mocked(api.polishVideoPrompt).mock.calls[0][6]).toBe("uniart/minimax-h3-vip");
     expect(vi.mocked(api.polishVideoPrompt).mock.calls[0][11]).toEqual(["minimax-h3-director"]);
-    expect(screen.getByText("当前镜头目标模型：", { exact: false })).toHaveTextContent("MiniMax");
+    expect(screen.getByText("目标模型：", { exact: false })).toHaveTextContent("MiniMax");
 });
 
 it("closes a stale preview when the shot target model changes", async () => {

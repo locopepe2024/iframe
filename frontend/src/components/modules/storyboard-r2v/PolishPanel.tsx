@@ -42,6 +42,11 @@ interface PolishReview {
     feedbackText: string;
     sourceSignature: string;
     targetModel: string;
+    review_context?: {
+        effective_shot_fields: Record<string, { value: unknown; source: string; revision: number | null }>;
+        selected_skills: string[];
+        target_duration: number | null;
+    };
 }
 
 type PolishErrorReason =
@@ -306,6 +311,7 @@ export default function PolishPanel({
     if (review) {
         return <VideoPolishReview messages={review.messages} media={review.media}
             targetModel={review.targetModel}
+            reviewContext={review.review_context}
             formatNote={review.format_note} isContextIr={optimizerProvider === "minimax_context_ir"}
             isSubmitting={isPolishing} error={error?.messageZh}
             onChange={(messages) => setReview({ ...review, messages })}

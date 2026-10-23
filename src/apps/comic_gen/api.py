@@ -8118,7 +8118,12 @@ def _compile_video_polish_review(request, reference_mode: bool) -> Dict[str, Any
         "模型以 JSON 返回中英双语提示词。"
     )
     return {"messages": messages, "media": media, "review_token": token,
-            "format_note": format_note}
+            "format_note": format_note,
+            "review_context": {
+                "effective_shot_fields": effective_shot_fields,
+                "selected_skills": _effective_optimization_skills(request) or [],
+                "target_duration": request.target_duration,
+            }}
 
 
 def _require_video_polish_review(request, reference_mode: bool) -> Dict[str, str]:
