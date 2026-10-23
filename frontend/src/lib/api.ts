@@ -2425,6 +2425,29 @@ export const api = {
         return response.data;
     },
 
+    previewStaticFraming: async (scriptId: string, frameId: string) => {
+        const response = await axios.post(`${API_URL}/projects/${scriptId}/frames/${frameId}/static-framing/preview`, { frame_id: frameId });
+        return response.data as { messages: { system: string; user: string }; review_token: string };
+    },
+
+    generateStaticFraming: async (scriptId: string, frameId: string,
+        review: { messages: { system: string; user: string }; review_token: string }) => {
+        const response = await axios.post(`${API_URL}/projects/${scriptId}/frames/${frameId}/static-framing/generate`, {
+            frame_id: frameId, reviewed_messages: review.messages, review_token: review.review_token,
+        });
+        return response.data as {
+            id: string; fields: Record<string, string>; current_fields: Record<string, string | null>;
+            rationale: Record<string, string>; source_refs: Record<string, string[]>; uncertainties: string[];
+        };
+    },
+
+    applyStaticFraming: async (scriptId: string, frameId: string, candidateId: string, selectedFields: string[]) => {
+        const response = await axios.post(`${API_URL}/projects/${scriptId}/frames/${frameId}/static-framing/apply`, {
+            candidate_id: candidateId, selected_fields: selectedFields,
+        });
+        return response.data;
+    },
+
     /** Schema v2 · Batch refine all frames via SSE stream. */
     refineBatchFrames: async (
         scriptId: string,

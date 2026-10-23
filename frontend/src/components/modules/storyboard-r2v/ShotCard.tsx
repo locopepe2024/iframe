@@ -30,6 +30,7 @@ import PromptExpandModal from "./PromptExpandModal";
 import PolishPanel from "./PolishPanel";
 import MicroExpressionPanel from "./MicroExpressionPanel";
 import CameraMovementPanel from "./CameraMovementPanel";
+import StaticFramingPanel from "./StaticFramingPanel";
 import FieldTagChip, { AddFieldButton, type FieldType } from "./FieldTagChip";
 import { buildGenerationPrompt, directorShotSuggestions } from "./buildAssembledPrompt";
 import { directorFieldProposals } from "./directorFieldProposals";
@@ -147,6 +148,7 @@ export interface ShotNode {
     } | null;
     shotSize?: string | null;
     cameraAngle?: string | null;
+    composition?: string | null;
     transitionHint?: string | null;
     stylePromptOverride?: string | null;
     lightingOverride?: string | null;
@@ -171,6 +173,14 @@ export interface ShotNode {
         id: string;
         camera_movement_structured: { primary: string; secondary?: string | null; speed: string; description?: string | null };
         rationale: string; source_refs: string[]; uncertainties: string[];
+    } | null;
+    staticFramingCandidate?: {
+        id: string;
+        fields: Record<string, string>;
+        current_fields: Record<string, string | null>;
+        rationale: Record<string, string>;
+        source_refs: Record<string, string[]>;
+        uncertainties: string[];
     } | null;
 
     /** When true, the user has manually pinned an active take. Hero
@@ -938,6 +948,15 @@ export default function ShotCard({
                             frameId={shot.id}
                             current={shot.cameraMovementStructured ?? null}
                             initialCandidate={shot.cameraMovementCandidate ?? null}
+                            optimized={!!shot.promptIsOptimized}
+                            onBeforePreview={onMicroExpressionBeforePreview}
+                            onApplied={onMicroExpressionApplied}
+                        />}
+                        {currentProjectId && <StaticFramingPanel
+                            projectId={currentProjectId}
+                            frameId={shot.id}
+                            current={{ shot_size: shot.shotSize, camera_angle: shot.cameraAngle, composition: shot.composition }}
+                            initialCandidate={shot.staticFramingCandidate ?? null}
                             optimized={!!shot.promptIsOptimized}
                             onBeforePreview={onMicroExpressionBeforePreview}
                             onApplied={onMicroExpressionApplied}

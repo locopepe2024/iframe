@@ -46,7 +46,7 @@ export function directorShotSuggestions(shot: ShotNode): string[] {
         ["导演效果", context.shot?.director_effect],
         ["角色表演", context.shot?.performance_action],
         ["动作物理", context.shot?.action_physics],
-        ["构图", context.shot?.composition],
+        ["构图", shot.composition ? undefined : context.shot?.composition],
         ["环境音", context.shot?.ambient_sound],
     ];
     const lighting = context.shot?.lighting;
@@ -64,6 +64,7 @@ export function directorShotSuggestions(shot: ShotNode): string[] {
         shot.cameraMovementStructured?.description || shot.cameraMovementStructured?.primary || "",
         shot.shotSize || "",
         shot.cameraAngle || "",
+        shot.composition || "",
         shot.transitionHint || "",
     ].map(normalizedPromptText).filter(Boolean);
     const clauses = values.flatMap(([label, raw]) => {
@@ -124,6 +125,7 @@ export function buildAssembledPrompt(
     if (framingParts.length > 0) {
         suffixes.push(framingParts.join("，"));
     }
+    if (shot.composition) suffixes.push(`构图：${shot.composition}`);
 
     // Transition hint (optional, for multi-shot internal transitions)
     if (shot.transitionHint) {

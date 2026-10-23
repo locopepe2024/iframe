@@ -57,6 +57,17 @@ it("keeps shooting-plan prose as an explicit suggestion instead of appending it"
     expect(buildGenerationPrompt(withPlan, false, "wan2.7-i2v")).not.toContain("残阳如血");
 });
 
+it("submits accepted composition instead of suggesting the old plan composition", () => {
+    const framed: ShotNode = {
+        ...shot,
+        composition: "主体位于画面左侧",
+        directorShotContext: { shot: { composition: "旧计划主体居中" } },
+    };
+    expect(buildGenerationPrompt(framed, false, "uniart/minimax-h3-vip"))
+        .toContain("构图：主体位于画面左侧");
+    expect(directorShotSuggestions(framed)).not.toContain("构图：旧计划主体居中");
+});
+
 it("does not add dialogue when generated audio is disabled", () => {
     expect(buildGenerationPrompt(shot, false, "uniart/minimax-h3-vip")).not.toContain("随机立减");
 });
