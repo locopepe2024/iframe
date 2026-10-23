@@ -67,6 +67,54 @@ it("shows editable compiled input and waits for confirmation before optimization
     expect(vi.mocked(api.polishVideoPrompt).mock.calls[0][0]).toBe("原始镜头；黄昏光影；远景");
 });
 
+it("refreshes R2V references for preview and submits the same reviewed images", async () => {
+    const resolveR2VImageUrls = vi.fn().mockResolvedValue(["series/elder.jpg", "series/chief.jpg"]);
+    vi.mocked(api.polishR2VPrompt)
+        .mockResolvedValueOnce({
+            messages: { system: "reference contract", user: "粮铺冲突" },
+            media: [{ label: "参考图 1", url: "series/elder.jpg" }],
+            review_token: "reference-token", format_note: "",
+        } as any)
+        .mockResolvedValueOnce({ prompt_cn: "中文结果", prompt_en: "English result" } as any);
+    render(<PolishPanel prompt="粮铺冲突" tabMode="direct_r2v" scriptId="project"
+        imageUrls={[]} resolveR2VImageUrls={resolveR2VImageUrls} onApply={vi.fn()} />);
+
+    fireEvent.click(screen.getByTitle("查看并确认模型输入"));
+    await screen.findByText("提交前检查模型输入");
+    expect(vi.mocked(api.polishR2VPrompt).mock.calls[0][5]).toEqual(["series/elder.jpg", "series/chief.jpg"]);
+    fireEvent.click(screen.getByText("确认输入并润色"));
+    await waitFor(() => expect(api.polishR2VPrompt).toHaveBeenCalledTimes(2));
+    expect(resolveR2VImageUrls).toHaveBeenCalledTimes(2);
+    expect(vi.mocked(api.polishR2VPrompt).mock.calls[1][5]).toEqual(["series/elder.jpg", "series/chief.jpg"]);
+});
+
+it("blocks R2V polish when fresh reference resolution yields no images", async () => {
+    render(<PolishPanel prompt="粮铺冲突" tabMode="direct_r2v" scriptId="project"
+        resolveR2VImageUrls={vi.fn().mockResolvedValue([])} onApply={vi.fn()} />);
+    fireEvent.click(screen.getByTitle("查看并确认模型输入"));
+    await screen.findByText("R2V 优化需要已选参考图，请先在参考素材中选择图片。");
+    expect(api.polishR2VPrompt).not.toHaveBeenCalled();
+});
+
+it("rejects an R2V confirmation when the selected reference changed after preview", async () => {
+    const resolveR2VImageUrls = vi.fn()
+        .mockResolvedValueOnce(["series/elder-v1.jpg"])
+        .mockResolvedValueOnce(["series/elder-v2.jpg"]);
+    vi.mocked(api.polishR2VPrompt).mockResolvedValueOnce({
+        messages: { system: "reference contract", user: "粮铺冲突" },
+        media: [{ label: "参考图 1", url: "series/elder-v1.jpg" }],
+        review_token: "reference-token", format_note: "",
+    } as any);
+    render(<PolishPanel prompt="粮铺冲突" tabMode="direct_r2v" scriptId="project"
+        resolveR2VImageUrls={resolveR2VImageUrls} onApply={vi.fn()} />);
+
+    fireEvent.click(screen.getByTitle("查看并确认模型输入"));
+    await screen.findByText("提交前检查模型输入");
+    fireEvent.click(screen.getByText("确认输入并润色"));
+    await screen.findByText("参考素材已变化，请重新查看模型输入。");
+    expect(api.polishR2VPrompt).toHaveBeenCalledTimes(1);
+});
+
 it("shows a readable shot summary while preserving the full model input", async () => {
     vi.mocked(api.polishVideoPrompt)
         .mockResolvedValueOnce({

@@ -96,6 +96,28 @@ def test_ir_preview_contains_selected_skill_text():
     preview = api.preview_video_polish_prompt(request)
     assert '[minimax-h3-director' in preview['messages']['user']
     assert '基础／关键帧输出' in preview['messages']['user']
+    assert 'a slow Push In or Zoom In does not make a' in preview['messages']['user']
+
+
+@pytest.mark.parametrize('reference_mode', [False, True])
+def test_shot_polish_separates_action_rhythm_from_camera_speed(reference_mode):
+    text = api._storyboard_polish_contract(
+        'uniart/minimax-h3-vip', '', '', target_duration=6,
+        optimization_skills=['minimax-h3-director'], reference_mode=reference_mode,
+    )
+    assert 'initiating movement, immediate reaction' in text
+    assert 'a slow Push In or Zoom In does not make a' in text
+    assert 'Push In moves the camera; Zoom In changes' in text
+    assert 'do not invent an action sequence' in text
+    assert 'without adding a new output field' in text
+
+
+def test_unselected_model_skill_keeps_action_rhythm_guidance():
+    text = api._storyboard_polish_contract(
+        'other-video-model', '', 'existing prompt', optimization_skills=[],
+    )
+    assert text.startswith('existing prompt')
+    assert 'a slow Push In or Zoom In does not make a' in text
 
 
 def test_minimax_ir_does_not_force_local_director_skill():
@@ -539,6 +561,31 @@ def test_h3_submission_rejects_mixed_unresolved_syntax():
     from src.apps.comic_gen.reference_prompt import bind_storyboard_prompt
     with pytest.raises(ValueError):
         bind_storyboard_prompt('use @product and [Picture 1]', 'uniart/minimax-h3-vip', 1)
+
+
+def test_r2v_h3_contract_forbids_t2va_label():
+    text = api._storyboard_polish_contract(
+        'uniart/minimax-h3-vip', '', '', optimization_skills=['minimax-h3-director'],
+        reference_mode=True,
+    )
+    assert 'R2V / REF2VA MODE' in text
+    assert 'Never label the task' in text
+
+
+def test_r2v_h3_result_rejects_t2va_label():
+    from src.apps.comic_gen.llm import PolishError
+    body = (
+        'subject_definitions:\nS1: character\nsummary:\n[T2VA] scene\n'
+        'retention_analysis:\nnone\ndetailed_description:\nscene\n'
+        'overall_soundscape:\nN/A\nnon_diegetic_music:\nN/A'
+    )
+    with pytest.raises(PolishError) as error:
+        api._validate_storyboard_polish_result(
+            'uniart/minimax-h3-vip',
+            {'prompt_cn': body, 'prompt_en': body},
+            reference_mode=True,
+        )
+    assert "误标为 T2VA" in error.value.message_zh
 
 
 def test_non_h3_submission_strips_semantic_editor_tags():

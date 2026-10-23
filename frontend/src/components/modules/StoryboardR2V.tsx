@@ -2240,6 +2240,17 @@ export default function StoryboardR2V() {
                             referenceImageUrls={isR2vImageBased(paramsState.model)
                                 ? parseAssetTags(shot.prompt, shot.referenceVariantIds)
                                 : []}
+                            onResolvePolishReferences={async () => {
+                                const fresh = await loadShotReferences(shot);
+                                if (!fresh) throw new Error("参考素材读取失败，请重试。");
+                                if (fresh.invalidVariantIds.length) {
+                                    throw new Error("部分参考图版本已失效，请重新选择。");
+                                }
+                                if (fresh.unresolvedNames.length) {
+                                    throw new Error(`参考素材未找到：${fresh.unresolvedNames.join("、")}`);
+                                }
+                                return fresh.urls;
+                            }}
                             generateAudio={storyboardGeneratedAudio(paramsState.model, paramsState.audio)}
                             targetDuration={paramsState.duration}
                             shot={shot}

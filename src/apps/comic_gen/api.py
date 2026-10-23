@@ -7876,11 +7876,29 @@ Do not add a new body heading or append an afterword to the polished prompt.
 """
 
 
+_ACTION_RHYTHM_GUIDANCE = """
+SHOT ACTION RHYTHM:
+When the current shot contains a causal action, organize its visible progress
+into a small number of beats: initiating movement, immediate reaction, and
+changed end state. Let related actions overlap where natural, but specify
+which action triggers the next and where the motion stops. Fit the beats into
+the requested duration; any timings are a newly designed timeline, never
+claimed as measured source cuts. Keep camera trajectory, lens changes, and
+subject/object tempo independent: a slow Push In or Zoom In does not make a
+grab, recoil, or fall slow motion. Push In moves the camera; Zoom In changes
+focal length. Do not add slow motion, prolonged posing, extra events,
+shots, or characters unless requested. For an atmospheric shot without a
+causal action, keep its intended pace and do not invent an action sequence.
+Place the rhythm inside the existing model-specific visual description,
+without adding a new output field.
+"""
+
+
 def _storyboard_polish_contract(model_id: str, custom: str, default: str, generate_audio=None, target_duration=None, dialogue_speaker="", dialogue_line="", optimization_skills: Optional[List[str]] = None, reference_mode: bool = False, generation_mode: str = "i2v") -> str:
     guidance = _selected_skill_guidance(optimization_skills, model_id) if optimization_skills is not None else _target_model_guidance(model_id)
     is_h3 = "h3" in (model_id or "").lower()
     if not guidance and not is_h3 and generation_mode != "first_last_frame":
-        return custom or default
+        return (custom or default) + _ACTION_RHYTHM_GUIDANCE
     constraints = ""
     if generate_audio is False:
         constraints += ("\nOUTPUT MUST BE SILENT: overall_soundscape and non_diegetic_music must be N/A. "
@@ -7904,7 +7922,7 @@ requested, is audio only and must not be rendered as text. Do not describe or
 request subtitle tracks in either prompt language.
 """
     base_prompt = custom or (default if not guidance else "")
-    contract = guidance + "\n" + base_prompt + constraints + """
+    contract = guidance + "\n" + base_prompt + constraints + _ACTION_RHYTHM_GUIDANCE + """
 STORYBOARD OUTPUT CONTRACT:
 Return only JSON with string fields prompt_cn and prompt_en. Each string follows
 the selected target model's prompt format and generation mode.
@@ -7918,6 +7936,15 @@ Do not invent dialogue text, music, extra shots or replacement identities unless
 requested. Inspect all attached images, including scene, prop and storyboard
 images. Distinguish observed image content from user requirements; sampling
 cannot establish exact cut times. Missing images must not be described as seen.
+"""
+    if reference_mode and is_h3:
+        contract += """
+R2V / REF2VA MODE:
+This is reference-guided video generation, not T2VA. Never label the task
+[T2VA]. In summary, use an appropriate reference-generation task label such
+as [reference generation] when reference media is present. If no reference
+media is attached, state that no reference media is attached instead of
+claiming that character labels are visual references.
 """
     if not is_h3:
         return contract
@@ -7953,6 +7980,16 @@ def _validate_storyboard_polish_result(model_id: str, result: Dict[str, Any], re
             )
     if "h3" not in (model_id or "").lower():
         return
+    if reference_mode and any(
+        re.search(r"(?i)\[\s*T2VA\s*\]", result.get(key, ""))
+        for key in ("prompt_cn", "prompt_en")
+    ):
+        from .llm import PolishError
+        raise PolishError(
+            reason="model_contract_mismatch",
+            message_zh="R2V 润色结果被误标为 T2VA，本次结果未应用。请检查参考素材后重试。",
+            message_en="The R2V polish was mislabeled as T2VA and was not applied. Check the references and retry.",
+        )
     reference_fields = ("subject_definitions", "summary", "retention_analysis", "detailed_description", "overall_soundscape", "non_diegetic_music")
     base_fields = ("integrated_multimodal_description", "overall_soundscape", "non_diegetic_music")
     def has_field(text: Any, field: str) -> bool:
@@ -8012,6 +8049,7 @@ def _validate_storyboard_polish_result(model_id: str, result: Dict[str, Any], re
 
 def _compile_ir_polish_text(request, custom_prompt: str) -> str:
     instruction = custom_prompt.strip()
+    instruction += _ACTION_RHYTHM_GUIDANCE
     if getattr(request, "generation_mode", "") == "first_last_frame":
         instruction += _first_last_polish_guidance(request.target_duration)
     instruction += "\n\nH3 constraint: do not add subtitles, captions, title cards, watermarks, labels, or any burned-in on-screen text. Dialogue is audio only."

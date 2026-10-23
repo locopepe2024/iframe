@@ -199,6 +199,7 @@ interface ShotCardProps {
     generateAudio?: boolean;
     targetDuration?: number;
     referenceImageUrls?: string[];
+    onResolvePolishReferences?: () => Promise<string[]>;
     videoModel?: string;
     shot: ShotNode;
     index: number;
@@ -266,6 +267,7 @@ export default function ShotCard({
     generateAudio,
     targetDuration,
     referenceImageUrls = [],
+    onResolvePolishReferences,
     videoModel,
     shot,
     index,
@@ -941,6 +943,7 @@ export default function ShotCard({
                                 lighting: shot.lightingOverride || effectiveVisual?.lighting || "" }}
                             slots={r2vSlots}
                             imageUrls={polishImageUrls}
+                            resolveR2VImageUrls={shot.tabMode === "direct_r2v" ? onResolvePolishReferences : undefined}
                             onBeforePreview={onMicroExpressionBeforePreview}
                             onApply={(text) => onUpdatePrompt(text, true)}
                         />

@@ -42,6 +42,7 @@ interface PolishReview {
     feedbackText: string;
     sourceSignature: string;
     targetModel: string;
+    submittedImageUrls: string[];
     review_context?: {
         effective_shot_fields: Record<string, { value: unknown; source: string; revision: number | null }>;
         selected_skills: string[];
@@ -85,6 +86,7 @@ interface PolishPanelProps {
     imageUrls?: string[];
     targetRatio?: string;
     onBeforePreview?: () => Promise<void> | void;
+    resolveR2VImageUrls?: () => Promise<string[]>;
     onApply: (text: string) => void;
 }
 
@@ -123,7 +125,8 @@ function parsePolishError(err: any, t: (key: string) => string): PolishErrorStat
     }
     return {
         reason: "api_error",
-        messageZh: t("polishErrorApi"),
+        messageZh: typeof err?.message === "string" && err.message.trim()
+            ? err.message : t("polishErrorApi"),
         messageEn: "Model call failed. Please retry or check your network.",
     };
 }
@@ -144,6 +147,7 @@ export default function PolishPanel({
     imageUrls = [],
     targetRatio = "16:9",
     onBeforePreview,
+    resolveR2VImageUrls,
     onApply,
 }: PolishPanelProps) {
     const t = useTranslations("storyboardR2V");
@@ -178,14 +182,15 @@ export default function PolishPanel({
     }, [videoModel]);
     const [review, setReview] = useState<PolishReview | null>(null);
     const sourceSignature = JSON.stringify([prompt, optimizationDraft, polished?.cn, polished?.en,
-        shotOverrides, slots, imageUrls, videoModel, generateAudio, targetDuration, dialogue,
+        shotOverrides, slots, resolveR2VImageUrls ? null : imageUrls, videoModel, generateAudio, targetDuration, dialogue,
         optimizerProvider, selectedSkills, targetRatio, videoMode, tabMode, scriptId, frameId]);
 
     const requestPolish = (draft: string, prevCn: string, feedbackText: string,
+        submittedImageUrls: string[],
         confirmed?: { messages: { system: string; user: string }; token: string }) =>
         tabMode === "direct_r2v"
-            ? api.polishR2VPrompt(draft, slots, feedbackText, scriptId, prevCn, imageUrls, "", videoModel, generateAudio, targetDuration, dialogue ?? undefined, optimizerProvider, selectedSkills, targetRatio, frameId, shotOverrides, confirmed)
-            : api.polishVideoPrompt(draft, feedbackText, scriptId, prevCn, imageUrls, "", videoModel, generateAudio, targetDuration, dialogue ?? undefined, optimizerProvider, selectedSkills, targetRatio, frameId, shotOverrides, videoMode ?? "i2v", confirmed);
+            ? api.polishR2VPrompt(draft, slots, feedbackText, scriptId, prevCn, submittedImageUrls, "", videoModel, generateAudio, targetDuration, dialogue ?? undefined, optimizerProvider, selectedSkills, targetRatio, frameId, shotOverrides, confirmed)
+            : api.polishVideoPrompt(draft, feedbackText, scriptId, prevCn, submittedImageUrls, "", videoModel, generateAudio, targetDuration, dialogue ?? undefined, optimizerProvider, selectedSkills, targetRatio, frameId, shotOverrides, videoMode ?? "i2v", confirmed);
 
     const toggleSkill = (skillId: string) => {
         setOptimizationSkills((current) => current.includes(skillId)
@@ -208,9 +213,14 @@ export default function PolishPanel({
 
         try {
             await onBeforePreview?.();
-            const res = await requestPolish(draft, prevCn, feedbackText);
+            const submittedImageUrls = resolveR2VImageUrls
+                ? await resolveR2VImageUrls() : imageUrls;
+            if (tabMode === "direct_r2v" && !submittedImageUrls.length) {
+                throw new Error("R2V 优化需要已选参考图，请先在参考素材中选择图片。");
+            }
+            const res = await requestPolish(draft, prevCn, feedbackText, submittedImageUrls);
             if (res?.messages?.user && res?.review_token) {
-                setReview({ ...res, draft, prevCn, feedbackText, sourceSignature, targetModel });
+                setReview({ ...res, draft, prevCn, feedbackText, sourceSignature, targetModel, submittedImageUrls });
             } else {
                 // 200 但缺 key 走错误态
                 setError({
@@ -232,7 +242,8 @@ export default function PolishPanel({
         } finally {
             setIsPolishing(false);
         }
-    }, [sourceSignature, polished?.en, polished?.cn, prompt, optimizationDraft, onBeforePreview]);
+    }, [sourceSignature, polished?.en, polished?.cn, prompt, optimizationDraft,
+        onBeforePreview, resolveR2VImageUrls, imageUrls, tabMode, requestPolish, targetModel, shotOverrides, t]);
 
     const confirmPolish = async () => {
         if (!review) return;
@@ -244,7 +255,13 @@ export default function PolishPanel({
         setIsPolishing(true);
         setError(null);
         try {
-            const res = await requestPolish(review.draft, review.prevCn, review.feedbackText,
+            if (resolveR2VImageUrls) {
+                const currentImageUrls = await resolveR2VImageUrls();
+                if (JSON.stringify(currentImageUrls) !== JSON.stringify(review.submittedImageUrls)) {
+                    throw new Error("参考素材已变化，请重新查看模型输入。");
+                }
+            }
+            const res = await requestPolish(review.draft, review.prevCn, review.feedbackText, review.submittedImageUrls,
                 { messages: review.messages, token: review.review_token });
             if (!res?.prompt_cn || !res?.prompt_en) throw new Error("Missing bilingual polish result");
             setPolishedSettings(shotOverrides);
