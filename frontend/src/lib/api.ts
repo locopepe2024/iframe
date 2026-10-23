@@ -672,10 +672,13 @@ export interface LightingData {
 }
 
 export interface RefineSSEEvent {
-    type: "frame_refine_start" | "frame_refine_complete" | "frame_refine_error" | "batch_complete";
+    type: "frame_refine_start" | "frame_refine_complete" | "frame_refine_error" | "batch_complete"
+        | "frame_initialize_start" | "frame_initialize_complete" | "frame_initialize_error" | "initialize_complete";
     frame_id?: string;
     frame_index?: number;
     total?: number;
+    success?: number;
+    failed?: number;
     error?: string;
 }
 
@@ -2362,6 +2365,14 @@ export const api = {
         return response.json();
     },
 
+    initializeSingleFrame: async (scriptId: string, frameId: string) => {
+        const response = await authenticatedFetch(`${API_URL}/projects/${scriptId}/frames/${frameId}/initialize`, {
+            method: "POST",
+        });
+        if (!response.ok) throw new Error(`Shot initialization failed (${response.status})`);
+        return response.json();
+    },
+
     applyRichRefinement: async (scriptId: string, frameId: string, candidateId: string, selectedFields: string[]) => {
         const response = await authenticatedFetch(`${API_URL}/projects/${scriptId}/frames/${frameId}/rich-refinement/apply`, {
             method: "POST", headers: { "Content-Type": "application/json" },
@@ -2479,6 +2490,37 @@ export const api = {
                 }
             }
         }
+    },
+
+    initializeBatchFrames: async (scriptId: string, onEvent: (event: RefineSSEEvent) => void): Promise<{ success: number; failed: number }> => {
+        const response = await authenticatedFetch(`${API_URL}/projects/${scriptId}/storyboard/initialize`, { method: "POST" });
+        if (!response.ok) throw new Error("Failed to initialize storyboard");
+        const reader = response.body?.getReader();
+        if (!reader) throw new Error("Initialization stream is unavailable");
+        const decoder = new TextDecoder();
+        let buffer = "";
+        let eventType = "";
+        let result: { success: number; failed: number } | null = null;
+        while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            buffer += decoder.decode(value, { stream: true });
+            const lines = buffer.split("\n");
+            buffer = lines.pop() || "";
+            for (const line of lines) {
+                if (line.startsWith("event: ")) eventType = line.slice(7).trim();
+                else if (line.startsWith("data: ")) {
+                    try {
+                        const event = { type: eventType as RefineSSEEvent["type"], ...JSON.parse(line.slice(6)) };
+                        onEvent(event);
+                        if (event.type === "initialize_complete") result = { success: event.success, failed: event.failed };
+                    }
+                    catch { /* skip malformed event */ }
+                }
+            }
+        }
+        if (!result) throw new Error("Initialization did not report a completion result");
+        return result;
     },
 
     /** PR-3k · BGM preset catalog for Assembly Mix phase. */
