@@ -297,10 +297,7 @@ class ImageVariant(BaseModel):
         # storage key until the next persistence write; new records get the
         # canonical field immediately. Runtime signing never mutates either
         # field on the model instance.
-        if self.url and (
-            not self.storage_key
-            or (self.url != self.storage_key and not self.url.startswith(("http://", "https://")))
-        ):
+        if self.url and not self.storage_key:
             self.storage_key = self.url
         return self
     reference_inputs: List[Dict[str, str]] = Field(
