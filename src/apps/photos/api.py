@@ -541,5 +541,7 @@ def create_app() -> FastAPI:
         response.headers["Cache-Control"] = "private, no-store"
         return response
 
+    from .videos import router as videos_router
     app.include_router(router)
+    app.include_router(videos_router)
     return app
