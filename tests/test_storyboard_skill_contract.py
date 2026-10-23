@@ -650,6 +650,7 @@ def test_r2v_character_design_resolves_selected_asset_id_and_image_revision(monk
     )
     designs = api._r2v_reference_designs(object(), request)
     assert designs == [{"slot": 2, "name": "探子", "source": "image_submission",
+                        "asset_binding": "selected_variant_of_character",
                         "design_revision": 1, "design": {
                             "identity": {"visual_notes": "脸颊有浅细纹"},
                             "look": {"features": {"衣服": "玄色短衣"}},
@@ -680,7 +681,9 @@ def test_r2v_character_design_marks_unbound_image_revision(monkeypatch):
             "name": "掌柜", "variant_ids": ["uploaded"],
         }], image_urls=["uploaded-url"],
     )
-    assert api._r2v_reference_designs(object(), request)[0]["source"] == "current_confirmed_unbound"
+    design = api._r2v_reference_designs(object(), request)[0]
+    assert design["source"] == "current_confirmed_legacy_image"
+    assert design["asset_binding"] == "selected_variant_of_character"
 
 
 def test_r2v_preview_uses_character_design_and_rejects_stale_review(monkeypatch):
@@ -709,7 +712,9 @@ def test_r2v_preview_uses_character_design_and_rejects_stale_review(monkeypatch)
     )
     reviewed = api.preview_r2v_polish_prompt(request)
     assert "灰白发髻" in reviewed["messages"]["system"]
-    assert "current_confirmed_unbound" in reviewed["messages"]["system"]
+    assert "current_confirmed_legacy_image" in reviewed["messages"]["system"]
+    assert "selected_variant_of_character" in reviewed["messages"]["system"]
+    assert "not proven to match this image" not in reviewed["messages"]["system"]
     character.character_design["design_revisions"].append({
         "revision": 2, "design": {"identity": {"visual_notes": "黑发"}},
     })

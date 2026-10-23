@@ -8181,7 +8181,7 @@ def _r2v_reference_designs(script, request) -> List[Dict[str, Any]]:
         revisions = (asset.character_design or {}).get("design_revisions") or []
         if revision is None:
             confirmed = revisions[-1] if revisions else None
-            source = "current_confirmed_unbound" if confirmed else "missing_confirmed_design"
+            source = "current_confirmed_legacy_image" if confirmed else "missing_confirmed_design"
         else:
             confirmed = next((item for item in revisions if item.get("revision") == revision), None)
             if confirmed is None:
@@ -8197,6 +8197,7 @@ def _r2v_reference_designs(script, request) -> List[Dict[str, Any]]:
                         structured[section] = selected_fields
         result.append({
             "slot": number, "name": asset.name, "source": source,
+            "asset_binding": "selected_variant_of_character",
             "design_revision": confirmed.get("revision") if isinstance(confirmed, dict) else None,
             "design": structured,
         })
@@ -8289,7 +8290,7 @@ def _compile_video_polish_review(request, reference_mode: bool) -> Dict[str, Any
         custom = "\n\n".join(filter(None, [custom,
             "SELECTED CHARACTER ASSET DESIGNS (server-resolved by asset ID; use confirmed identity/look as the appearance source, not generic descriptions or invented image details):\n"
             + json.dumps(reference_designs, ensure_ascii=False, sort_keys=True)
-            + "\nFor current_confirmed_unbound, the design is confirmed for the character but its revision is not proven to match this image; do not claim image/design version agreement. For missing_confirmed_design, do not invent structured asset facts. Keep shot action, blocking and camera separate from asset identity/look."]))
+            + "\nEvery listed image is a selected variant of the named character asset. For current_confirmed_legacy_image, the older image lacks a generation-time design revision record; use the character's current confirmed identity/look as the requested appearance without claiming it was the image's original generation input. For missing_confirmed_design, do not invent structured asset facts. Keep shot action, blocking and camera separate from asset identity/look."]))
     default = DEFAULT_R2V_POLISH_PROMPT if reference_mode else DEFAULT_VIDEO_POLISH_PROMPT
     if request.optimizer_provider == "minimax_context_ir":
         if request.target_video_model and "h3" not in request.target_video_model.lower():
