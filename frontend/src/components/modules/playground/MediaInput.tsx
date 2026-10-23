@@ -122,6 +122,11 @@ export default function MediaInput({ agentMode = false }: { agentMode?: boolean 
     config = { ...config, multiple: publishedMaterialLimit > 1, maxFiles: publishedMaterialLimit };
   }
 
+  // Frame modes have positional inputs, independent of the omni capacity.
+  if (config && modelId === 'nsfw/wan3.0' && (mode === 'i2v' || mode === 'f2v')) {
+    config = { ...config, multiple: mode === 'f2v', maxFiles: mode === 'f2v' ? 2 : 1 };
+  }
+
   // Override r2v config when Seedance is selected
   if (config && mode === 'r2v' && isSeedance) {
     config = {
