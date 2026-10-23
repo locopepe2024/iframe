@@ -25,6 +25,7 @@ import BorderGlow from "@/components/shared/BorderGlow/BorderGlow";
 import WorkflowActionButton from "@/components/shared/WorkflowActionButton";
 import OptimizerSelector, { compatibleOptimizationSkills, defaultOptimizationSkills, type OptimizerProvider } from "./OptimizerSelector";
 import VideoPolishReview from "./VideoPolishReview";
+import { VIDEO_I2V_MODELS, VIDEO_R2V_MODELS } from "@/lib/modelCatalog";
 
 interface PolishedPrompt {
     cn: string;
@@ -40,6 +41,7 @@ interface PolishReview {
     prevCn: string;
     feedbackText: string;
     sourceSignature: string;
+    targetModel: string;
 }
 
 type PolishErrorReason =
@@ -152,6 +154,8 @@ export default function PolishPanel({
     const [optimizerProvider, setOptimizerProvider] = useState<OptimizerProvider>("qwen");
     const [optimizationSkills, setOptimizationSkills] = useState<string[]>(() => defaultOptimizationSkills(videoModel, "qwen"));
     const selectedSkills = compatibleOptimizationSkills(videoModel, optimizerProvider, optimizationSkills);
+    const targetModel = [...VIDEO_I2V_MODELS, ...VIDEO_R2V_MODELS]
+        .find((model) => model.id === videoModel)?.name ?? videoModel;
     useEffect(() => {
         const provider = optimizerProvider === "minimax_context_ir" && videoModel.toLowerCase().includes("seedance")
             ? "qwen" : optimizerProvider;
@@ -191,7 +195,7 @@ export default function PolishPanel({
         try {
             const res = await requestPolish(draft, prevCn, feedbackText);
             if (res?.messages?.user && res?.review_token) {
-                setReview({ ...res, draft, prevCn, feedbackText, sourceSignature });
+                setReview({ ...res, draft, prevCn, feedbackText, sourceSignature, targetModel });
             } else {
                 // 200 但缺 key 走错误态
                 setError({
@@ -275,6 +279,7 @@ export default function PolishPanel({
     // ────────────────────────────────────────────────────────────────────
     const optimizerControls = (
         <div className="mb-2">
+            {targetModel && <p className="mb-1 text-xs text-text-secondary">当前镜头目标模型：<span className="text-foreground">{targetModel}</span></p>}
             <OptimizerSelector
                 provider={optimizerProvider}
                 modelId={videoModel}
@@ -290,6 +295,7 @@ export default function PolishPanel({
 
     if (review) {
         return <VideoPolishReview messages={review.messages} media={review.media}
+            targetModel={review.targetModel}
             formatNote={review.format_note} isContextIr={optimizerProvider === "minimax_context_ir"}
             isSubmitting={isPolishing} error={error?.messageZh}
             onChange={(messages) => setReview({ ...review, messages })}

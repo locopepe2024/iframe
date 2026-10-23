@@ -81,6 +81,7 @@ it("switches the default skill when the target video model changes", async () =>
     vi.mocked(api.polishVideoPrompt).mockResolvedValue({ messages: { system: "system", user: "shot" }, media: [], review_token: "token", format_note: "" } as any);
     const props = { prompt: "镜头", tabMode: "t2i_i2v" as const, scriptId: "project", onApply: vi.fn() };
     const { rerender } = render(<PolishPanel {...props} videoModel="uniart/minimax-h3-vip" />);
+    expect(screen.getByText("当前镜头目标模型：", { exact: false })).toHaveTextContent("MiniMax");
     expect(screen.getByLabelText("MiniMax H3 导演")).toBeChecked();
     expect(screen.queryByLabelText("Seedance 提示词")).not.toBeInTheDocument();
 
@@ -89,9 +90,20 @@ it("switches the default skill when the target video model changes", async () =>
     expect(screen.queryByLabelText("MiniMax H3 导演")).not.toBeInTheDocument();
     fireEvent.click(screen.getByTitle("查看并确认模型输入"));
     await waitFor(() => expect(api.polishVideoPrompt).toHaveBeenCalledTimes(1));
+    expect(screen.getByText("当前镜头目标模型：", { exact: false })).toHaveTextContent("Seedance");
     expect(vi.mocked(api.polishVideoPrompt).mock.calls[0][10]).toBe("qwen");
     expect(vi.mocked(api.polishVideoPrompt).mock.calls[0][11]).toEqual(["seedance-prompt"]);
     expect(screen.queryByRole("option", { name: "MiniMax 官方 IR" })).not.toBeInTheDocument();
+});
+
+it("submits the H3 model and its matching skill for preview", async () => {
+    vi.mocked(api.polishVideoPrompt).mockResolvedValue({ messages: { system: "H3 contract", user: "shot" }, media: [], review_token: "token", format_note: "" } as any);
+    render(<PolishPanel prompt="镜头" videoModel="uniart/minimax-h3-vip" tabMode="t2i_i2v" scriptId="project" onApply={vi.fn()} />);
+    fireEvent.click(screen.getByTitle("查看并确认模型输入"));
+    await screen.findByText("提交前检查模型输入");
+    expect(vi.mocked(api.polishVideoPrompt).mock.calls[0][6]).toBe("uniart/minimax-h3-vip");
+    expect(vi.mocked(api.polishVideoPrompt).mock.calls[0][11]).toEqual(["minimax-h3-director"]);
+    expect(screen.getByText("当前镜头目标模型：", { exact: false })).toHaveTextContent("MiniMax");
 });
 
 it("hides optional skills and submits none with the official IR optimizer", async () => {
