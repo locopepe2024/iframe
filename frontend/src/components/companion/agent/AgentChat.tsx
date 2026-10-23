@@ -13,7 +13,7 @@ import CompanionComposer, { type ComposerMode } from "./CompanionComposer";
 import GenerationGuide, { createGenerationDraft, type GenerationDraft, type MediaMode } from "./GenerationGuide";
 import CompanionFeatureSheet, { type CompanionFeature } from "./CompanionFeatureSheet";
 import DiaryCalendar from "./DiaryCalendar";
-import DiaryCard, { diaryDay, diaryPrompt, today } from "./DiaryCard";
+import DiaryCard, { diaryDay, diaryPrompt, formatDiaryDay, today } from "./DiaryCard";
 import { BookOpen, Images, UserRound, Compass } from "lucide-react";
 
 const prefix = process.env.NEXT_PUBLIC_API_URL === "/companion-demo" ? "/companion-demo" : "";
@@ -178,7 +178,7 @@ export default function AgentChat() {
     <section aria-label="会话消息">
       {renderAttached(0)}
       {messages.map((message,index) => <Fragment key={message.id}><div>
-        <article className={chatStyles.user}><span>我</span><p>{message.text}</p></article>
+        <article className={chatStyles.user}><span>{diaryDay(message.text) ? `我 · ${formatDiaryDay(diaryDay(message.text)!)}` : "我"}</span><p>{message.text}</p></article>
         {message.turn?.result?.kind === "text" && (diaryDay(message.text) ? <DiaryCard day={diaryDay(message.text)!} text={message.turn.result.text} sourceTurn={message.turn.turn_id}/> : <article className={chatStyles.assistant}><span>陪伴助手</span><p>{message.turn.result.text}</p></article>)}
       </div>{renderAttached(index+1)}</Fragment>
       )}

@@ -5,8 +5,12 @@ import { companionApi, type Diary } from "@/lib/companionApi";
 import FeatureDialog from "./FeatureDialog";
 import styles from "./chat.module.css";
 
-export const diaryPrompt = (day: string) => `请把我们今天聊的内容整理成一篇回忆日记（日记日期：${day}）。只使用已经讲过的事实，缺少内容时先询问，不要编造。`;
-export function diaryDay(text: string) { return text.match(/^请把我们今天聊的内容整理成一篇回忆日记（日记日期：(\d{4}-\d{2}-\d{2})）/)?.[1]; }
+export const diaryPrompt = (day: string) => `请把 ${day} 我们聊的内容整理成一篇回忆日记。只使用已经讲过的事实，缺少内容时先询问，不要编造。`;
+export function diaryDay(text: string) {
+  return text.match(/^请把\s+(\d{4}-\d{2}-\d{2})\s+我们聊的内容整理成一篇回忆日记/)?.[1]
+    ?? text.match(/^请把我们今天聊的内容整理成一篇回忆日记（日记日期：(\d{4}-\d{2}-\d{2})）/)?.[1];
+}
+export function formatDiaryDay(day: string) { const [year,month,date] = day.split("-"); return `${year}年${Number(month)}月${Number(date)}日`; }
 export function today() { const now=new Date();return `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,"0")}-${String(now.getDate()).padStart(2,"0")}`; }
 
 export default function DiaryCard({ day, text, sourceTurn, saved, onSaved }: {
