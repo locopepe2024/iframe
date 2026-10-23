@@ -102,3 +102,15 @@ def test_personal_channel_wire_strict_tools_and_safe_failure(monkeypatch):
     from fastapi import HTTPException
     with pytest.raises(HTTPException):model.propose(identity,[],'m')
     assert post.call_count==2
+
+
+def test_conversation_history_pairs_replies_and_enforces_owner_actor(chat):
+    store,_,client,session,callback=chat
+    callback.side_effect=None
+    callback.return_value=dict(kind='text',text='你们一起做了什么？')
+    result=request(client,session).json()
+    page=client.get(f'/companion-runtime/sessions/{session}/conversation').json()
+    assert page['messages'][0]['turn']==result
+    assert store.conversation('owner','someone-else',session)['messages'][0].get('turn') is None
+    from src.apps.companion_runtime.store import Missing
+    with pytest.raises(Missing):store.conversation('other-owner','actor',session)

@@ -86,6 +86,12 @@ def messages(session_id: str, identity: Owner, store: Store, after: int = Query(
         return store.messages(identity.owner_profile_id, session_id, after=after, limit=limit)
 
 
+@router.get('/sessions/{session_id}/conversation')
+def conversation(session_id: str, identity: Owner, store: Store, after: int = Query(default=0,ge=0), limit: int = Query(default=20,ge=1,le=100)):
+    with errors():
+        return store.conversation(identity.owner_profile_id, identity.user_id, session_id, after=after, limit=limit)
+
+
 @router.get('/tools')
 def schemas(identity: Owner):
     return dict(tools=tool_schemas())

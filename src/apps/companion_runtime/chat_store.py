@@ -10,6 +10,21 @@ from .tools import dispatch, MODELS
 
 
 class ChatStore(CompanionStore):
+    def conversation(self, owner, actor, session, *, after=0, limit=20):
+        page = self.messages(owner, session, after=after, limit=limit)
+        ids = [message['id'] for message in page['messages']]
+        if not ids:
+            return page
+        with self.connection() as db:
+            placeholders = ','.join('?' for _ in ids)
+            turns = {row['message_id']: row['id'] for row in db.execute(
+                f'SELECT id,message_id FROM companion_turns WHERE owner=? AND actor=? AND session_id=? AND message_id IN ({placeholders})',
+                (owner, actor, session, *ids)).fetchall()}
+        for message in page['messages']:
+            if message['id'] in turns:
+                message['turn'] = self.turn(owner, actor, turns[message['id']])
+        return page
+
     def claim_turn(self, owner, actor, session, operation_id, text):
         message=self.message(owner,session,operation_id,text)
         with self.connection(write=True) as db:
