@@ -161,3 +161,9 @@ Evidence:21 related UI tests, repository frontend typecheck and isolated static 
 Frontend commit `915244ae` deployed to the existing isolated demo URL. Only static `_next` assets and `companion/agent.html` were synchronized; backend health/runtime and data stores were unchanged. The album picker now renders as a reusable dialog Sheet with a scrim, mobile bottom alignment, desktop centered alignment, independent scrolling, a drag handle, Escape/backdrop close, and `role="dialog"`/`aria-modal` semantics. Photo/video search and masonry selection remain unchanged.
 
 Evidence: 22 related UI tests and repository frontend typecheck passed; isolated static build passed. The existing broad public browser script reached the updated flow but stopped later at its pre-existing generation-guide/upload touch assertion because the guide section covered the upload button; this run does not claim full end-to-end browser regression. No screenshots, real photos or model calls were used. The Sheet-specific close and dialog behavior is covered by UI tests.
+
+## 2026-10-23 — Bottom feature navigation
+
+Frontend commit `2aa5c13f` deployed to the existing isolated demo. The composer no longer exposes a duplicate album action; bottom navigation now provides 日记、广场、相册、我的. 相册 opens the existing album Sheet. 日记、广场、我的 open the same Sheet shell with truthful demo placeholder content, and 日记 can return a diary prompt to the chat input. Navigation and feature Sheet buttons are borderless icon controls with visible focus/pressed feedback and 44px+ targets. Backend, workers and data stores were unchanged.
+
+Evidence: 25 related UI tests and frontend typecheck passed; isolated static build passed. This slice was not re-run through the broad public upload/video script after deployment; its previous run stopped at an older generation-guide/upload touch assertion unrelated to the Sheet. No screenshots, real photos or model calls were used.
