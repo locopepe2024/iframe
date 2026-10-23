@@ -2,10 +2,13 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, expect, it, vi } from "vitest";
 import AgentChat from "./AgentChat";
 const api=vi.hoisted(()=>({session:vi.fn(),messages:vi.fn(),chat:vi.fn(),turn:vi.fn(),tool:vi.fn(),confirm:vi.fn(),cancel:vi.fn()}));
+const photoApi=vi.hoisted(()=>({list:vi.fn()}));
 vi.mock("@/lib/companionApi",()=>({companionApi:api}));
+vi.mock("@/lib/photoApi",()=>({photoApi}));
+vi.mock("../PhotoConversationCard",()=>({default: ({label,onOpen}:{label:string;onOpen:()=>void})=><button onClick={onOpen}>{label}</button>}));
 const preview={status:"pending_confirmation",preview_token:"token",action:"save",preview:{content:"喜欢散步",quote:"喜欢散步",source_text:"请记住我喜欢散步",source_message_id:"m",type:"preference",importance:3}};
 beforeEach(()=>{
-  localStorage.clear();vi.resetAllMocks();api.session.mockResolvedValue({session_id:"s"});api.messages.mockResolvedValue({messages:[],next_after:null});
+  localStorage.clear();vi.resetAllMocks();photoApi.list.mockResolvedValue({photos:[]});api.session.mockResolvedValue({session_id:"s"});api.messages.mockResolvedValue({messages:[],next_after:null});
   api.chat.mockResolvedValue({turn_id:"t",status:"completed",result:{kind:"confirmation",...preview}});
   api.confirm.mockResolvedValue({action:"save",memory_id:"memory"});api.cancel.mockResolvedValue({status:"preview_closed"});
 });
@@ -21,6 +24,13 @@ it("offers large guided cards without sending automatically",async()=>{
   expect(api.chat).not.toHaveBeenCalled();
   fireEvent.click(screen.getByRole("button",{name:/整理今天的回忆/}));
   expect(screen.getByLabelText("和我聊聊天")).toHaveValue("请把我们今天聊的内容整理成一篇回忆日记");
+});
+it("loads recent photos into the conversation card stream on demand",async()=>{
+  await start();
+  photoApi.list.mockResolvedValue({photos:[{photo_id:"photo-1",batch_id:"batch",date:{date:null,status:"pending_confirmation",reason:"missing",source:"none",revision:0}}]});
+  fireEvent.click(screen.getByRole("button",{name:"看看最近照片"}));
+  await screen.findByRole("button",{name:"最近照片 1"});
+  expect(photoApi.list).toHaveBeenCalledWith("all","","","");
 });
 it("requires external text consent and final explicit button before saving",async()=>{
   await start();expect(screen.getByRole("button",{name:"发送给陪伴助手"})).toBeDisabled();
