@@ -22,6 +22,8 @@ export default function CompanionComposer({ mode, value, disabled, busy, allowed
   mediaAcknowledged?: boolean; onMediaAcknowledged?: (value: boolean) => void;
 }) {
   const [menu, setMenu] = useState(false);
+  const consentRef = useRef<HTMLDetailsElement>(null);
+  const [consentRequested, setConsentRequested] = useState(false);
   const [voiceConsent, setVoiceConsent] = useState(false), [voicePrompt, setVoicePrompt] = useState(false);
   const picker = useRef<HTMLDivElement>(null), trigger = useRef<HTMLButtonElement>(null);
   const voice = useCompanionVoice(text => onChange(`${value}${value ? " " : ""}${text}`.slice(0, 4000)));
@@ -64,14 +66,22 @@ export default function CompanionComposer({ mode, value, disabled, busy, allowed
           <button type="button" className={styles.voiceButton} disabled={disabled || voice.finishing} onClick={() => { if (voiceConsent) voice.toggleListening(); else setVoicePrompt(true); }}>
             {recording ? <Square size={28} aria-hidden="true" /> : <Mic size={28} aria-hidden="true" />}<span>{voice.finishing ? "正在整理" : recording ? "停止" : "对话中"}</span>
           </button>
-          <button type="button" className={styles.sendButton} aria-label="发送" disabled={disabled || recording || (!value.trim() && !hasAttachments) || (mode === "chat" && !!value.trim() && (!allowed || (hasAttachments && !mediaAcknowledged)))} onClick={onSend}><ArrowUp size={30} aria-hidden="true" /></button>
+          <button type="button" className={styles.sendButton} aria-label="发送" disabled={disabled || recording || (!value.trim() && !hasAttachments) || (mode === "chat" && !!value.trim() && (hasAttachments && !mediaAcknowledged))} onClick={() => {
+            if (mode === "chat" && value.trim() && !allowed) {
+              setConsentRequested(true);
+              if (consentRef.current) { consentRef.current.open = true; consentRef.current.scrollIntoView?.({block:"nearest"}); consentRef.current.querySelector<HTMLInputElement>("input")?.focus(); }
+              return;
+            }
+            onSend();
+          }}><ArrowUp size={30} aria-hidden="true" /></button>
         </div>
       </div>
     </div>
-    {mode === "chat" && !allowed && <details className={styles.consent}><summary>开始聊天前，请确认文字发送范围</summary>
+    {mode === "chat" && !allowed && <details ref={consentRef} className={styles.consent}><summary>开始聊天前，请确认文字发送范围</summary>
       <p>您本次及最近最多 20 条发言将发送至您配置的 UniArt / Qwen 服务。照片不会随文字自动发送。</p>
       <label className={styles.check}><input type="checkbox" checked={allowed} disabled={busy} onChange={event => onAllow(event.target.checked)} />允许发送文字，开始聊天</label>
     </details>}
+    {consentRequested && !allowed && <p role="status">请先确认允许发送文字，再点箭头发送。</p>}
     {voicePrompt && <section className={styles.voiceConsent} aria-label="语音输入说明"><p>语音会交给浏览器的语音服务识别，文字先放入输入框，您检查后再发送。</p><button type="button" disabled={disabled} onClick={() => { setVoiceConsent(true); setVoicePrompt(false); voice.toggleListening(); }}>同意并开始听写</button><button type="button" onClick={() => setVoicePrompt(false)}>先用文字</button></section>}
     {recording ? <p role="status" className={styles.voiceStatus}>{voice.finishing ? "正在整理语音，请稍等…" : "正在听，点停止结束。"}</p> : voice.notice && <p role="status" className={styles.voiceStatus}>{voice.notice}</p>}
     {retry && <button disabled={busy || !allowed} onClick={retry}>重试原请求</button>}

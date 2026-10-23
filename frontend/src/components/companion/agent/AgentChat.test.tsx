@@ -37,7 +37,7 @@ it("selects photos into an unsent attachment draft",async()=>{
   expect(photoApi.list).toHaveBeenCalledWith("all","","","");
 });
 it("requires external text consent and final explicit button before saving",async()=>{
-  await start();expect(screen.getByRole("button",{name:"发送"})).toBeDisabled();
+  await start();fireEvent.click(screen.getByRole("button",{name:"发送"}));expect(api.chat).not.toHaveBeenCalled();
   fireEvent.click(screen.getByText("开始聊天前，请确认文字发送范围", {selector:"summary"}));fireEvent.click(screen.getByRole("checkbox"));fireEvent.click(screen.getByRole("button",{name:"发送"}));
   await screen.findByRole("region",{name:"记忆操作确认"});expect(api.confirm).not.toHaveBeenCalled();
   fireEvent.click(screen.getByRole("button",{name:"更多"}));
@@ -163,6 +163,20 @@ it("opens daily sample plans without calling the model and preserves an existing
   expect(screen.getByLabelText("和我聊聊天")).toHaveValue("请记住我喜欢散步");
   expect(screen.getByText(/输入框里还有未发送的话/)).toBeInTheDocument();
   expect(api.chat).not.toHaveBeenCalled();
+});
+it("explains the text consent before sending a diary draft",async()=>{
+  await start();
+  fireEvent.click(screen.getByRole("button",{name:"日记"}));
+  fireEvent.click(screen.getByRole("button",{name:"开始记录今天"}));
+  expect(screen.getByLabelText("和我聊聊天")).toHaveValue("请把我们今天聊的内容整理成一篇回忆日记");
+  expect(screen.getByText(/日记草稿已写入/)).toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button",{name:"发送"}));
+  expect(screen.getByText("请先确认允许发送文字，再点箭头发送。")).toBeInTheDocument();
+  expect(screen.getByLabelText("允许发送文字，开始聊天")).toHaveFocus();
+  expect(api.chat).not.toHaveBeenCalled();
+  fireEvent.click(screen.getByLabelText("允许发送文字，开始聊天"));
+  fireEvent.click(screen.getByRole("button",{name:"发送"}));
+  await waitFor(()=>expect(api.chat).toHaveBeenCalledOnce());
 });
 
 async function selectPhoto() {
