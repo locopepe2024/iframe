@@ -179,3 +179,7 @@ Evidence: 34 related UI tests, 15 backend tests, frontend typecheck and isolated
 Backend commit `843cd827` deployed and demo worker restarted. A diary request with an explicit date now has a system-level writing instruction forbidding memory tools. The runtime also guards the turn boundary: if a diary-shaped request nevertheless returns a memory tool proposal, it returns a truthful text asking for the missing day's facts instead of exposing “实际记忆查询结果”. Existing memory behavior is unchanged for non-diary requests.
 
 Evidence: 16 companion backend tests passed, including the accidental memory-search regression; frontend date display tests/typecheck remained passing. No provider call was used for the regression test. Real Qwen compliance remains runtime-dependent, with the boundary guard preventing the misleading UI result.
+
+## 2026-10-24 — Diary editor work-surface refinement
+
+Frontend commit `87f45c76` deployed. The diary draft card now labels its separate Sheet as “日记编辑器” and states that changes are held until the explicit “保存日记” action. Cancel/close remains non-persistent. The local diary calendar and API regression suite remained green: 21 focused UI tests and 16 backend tests across the diary/chat/runtime paths, plus frontend typecheck. Host DNS was unavailable for an additional curl health probe in this shell; deployment synchronization itself completed through the existing iframe host path.
