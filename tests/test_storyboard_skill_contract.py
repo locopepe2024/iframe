@@ -649,8 +649,7 @@ def test_r2v_character_design_resolves_selected_asset_id_and_image_revision(monk
         }], image_urls=["portrait-url"],
     )
     designs = api._r2v_reference_designs(object(), request)
-    assert designs == [{"slot": 2, "name": "探子", "source": "image_submission",
-                        "asset_binding": "selected_variant_of_character",
+    assert designs == [{"slot": 2, "name": "探子",
                         "design_revision": 1, "design": {
                             "identity": {"visual_notes": "脸颊有浅细纹"},
                             "look": {"features": {"衣服": "玄色短衣"}},
@@ -665,7 +664,7 @@ def test_r2v_character_design_resolves_selected_asset_id_and_image_revision(monk
     assert wrong_id.value.status_code == 422
 
 
-def test_r2v_character_design_marks_unbound_image_revision(monkeypatch):
+def test_r2v_character_design_uses_current_confirmed_fields_without_image_constraints(monkeypatch):
     variant = SimpleNamespace(id="uploaded", submission_snapshot=None)
     character = SimpleNamespace(
         id="role", name="掌柜", character_design={"design_revisions": [{
@@ -682,8 +681,12 @@ def test_r2v_character_design_marks_unbound_image_revision(monkeypatch):
         }], image_urls=["uploaded-url"],
     )
     design = api._r2v_reference_designs(object(), request)[0]
-    assert design["source"] == "current_confirmed_legacy_image"
-    assert design["asset_binding"] == "selected_variant_of_character"
+    assert design == {"slot": 1, "name": "掌柜", "design_revision": 3,
+                      "design": {"identity": {"visual_notes": "灰白发髻"}}}
+    character.character_design = {"design_revisions": [{
+        "revision": 4, "design": {"identity": {}, "look": {}},
+    }]}
+    assert api._r2v_reference_designs(object(), request) == []
 
 
 def test_r2v_preview_uses_character_design_and_rejects_stale_review(monkeypatch):
@@ -712,9 +715,10 @@ def test_r2v_preview_uses_character_design_and_rejects_stale_review(monkeypatch)
     )
     reviewed = api.preview_r2v_polish_prompt(request)
     assert "灰白发髻" in reviewed["messages"]["system"]
-    assert "current_confirmed_legacy_image" in reviewed["messages"]["system"]
-    assert "selected_variant_of_character" in reviewed["messages"]["system"]
-    assert "not proven to match this image" not in reviewed["messages"]["system"]
+    assert "CHARACTER ASSET IDENTITY AND LOOK" in reviewed["messages"]["system"]
+    assert "legacy_image" not in reviewed["messages"]["system"]
+    assert "submission_snapshot" not in reviewed["messages"]["system"]
+    assert "design_revision" not in reviewed["messages"]["system"]
     character.character_design["design_revisions"].append({
         "revision": 2, "design": {"identity": {"visual_notes": "黑发"}},
     })

@@ -8171,17 +8171,14 @@ def _r2v_reference_designs(script, request) -> List[Dict[str, Any]]:
         variant = variants[slot.variant_ids[0]]
         snapshot = variant.submission_snapshot
         revision = snapshot.design_revision_at_submission if snapshot else None
-        source = "image_submission"
         if revision is None and asset.asset_pack:
             anchor = next((item for item in reversed(asset.asset_pack.revisions)
                            if item.variant_id == variant.id), None)
             if anchor:
                 revision = anchor.source_design_revision
-                source = "confirmed_anchor"
         revisions = (asset.character_design or {}).get("design_revisions") or []
         if revision is None:
             confirmed = revisions[-1] if revisions else None
-            source = "current_confirmed_legacy_image" if confirmed else "missing_confirmed_design"
         else:
             confirmed = next((item for item in revisions if item.get("revision") == revision), None)
             if confirmed is None:
@@ -8195,12 +8192,12 @@ def _r2v_reference_designs(script, request) -> List[Dict[str, Any]]:
                     selected_fields = {key: value[key] for key in ("visual_notes", "features") if value.get(key)}
                     if selected_fields:
                         structured[section] = selected_fields
-        result.append({
-            "slot": number, "name": asset.name, "source": source,
-            "asset_binding": "selected_variant_of_character",
-            "design_revision": confirmed.get("revision") if isinstance(confirmed, dict) else None,
-            "design": structured,
-        })
+        if structured:
+            result.append({
+                "slot": number, "name": asset.name,
+                "design_revision": confirmed.get("revision"),
+                "design": structured,
+            })
     return result
 
 
@@ -8287,10 +8284,12 @@ def _compile_video_polish_review(request, reference_mode: bool) -> Dict[str, Any
                                     ensure_ascii=False, sort_keys=True) + "\n") if lighting_choice == "reference" else ""
         custom = "\n\n".join(filter(None, [custom, source_text + instruction]))
     if reference_designs:
+        model_designs = [{"slot": item["slot"], "name": item["name"], **item["design"]}
+                         for item in reference_designs]
         custom = "\n\n".join(filter(None, [custom,
-            "SELECTED CHARACTER ASSET DESIGNS (server-resolved by asset ID; use confirmed identity/look as the appearance source, not generic descriptions or invented image details):\n"
-            + json.dumps(reference_designs, ensure_ascii=False, sort_keys=True)
-            + "\nEvery listed image is a selected variant of the named character asset. For current_confirmed_legacy_image, the older image lacks a generation-time design revision record; use the character's current confirmed identity/look as the requested appearance without claiming it was the image's original generation input. For missing_confirmed_design, do not invent structured asset facts. Keep shot action, blocking and camera separate from asset identity/look."]))
+            "CHARACTER ASSET IDENTITY AND LOOK (confirmed structured fields for the selected character references):\n"
+            + json.dumps(model_designs, ensure_ascii=False, sort_keys=True)
+            + "\nUse these fields as the character appearance constraints. Unspecified fields are unconstrained. Keep shot action, blocking and camera separate from character identity/look."]))
     default = DEFAULT_R2V_POLISH_PROMPT if reference_mode else DEFAULT_VIDEO_POLISH_PROMPT
     if request.optimizer_provider == "minimax_context_ir":
         if request.target_video_model and "h3" not in request.target_video_model.lower():
