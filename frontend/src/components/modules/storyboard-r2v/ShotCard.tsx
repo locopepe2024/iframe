@@ -880,7 +880,7 @@ export default function ShotCard({
                                             <span className="block font-medium text-foreground">{labels[field] || field}</span>
                                             <span className="block whitespace-pre-wrap break-words">当前：{display(shot.richRefinementCandidate?.current_fields?.[field])}</span>
                                             <span className="block whitespace-pre-wrap break-words">建议：{display(proposed)}</span>
-                                            <span className="block text-text-muted">理由：{shot.richRefinementCandidate?.rationale?.[field] || "模型未提供理由"}</span>
+                                            <span className="block text-text-muted">理由：{shot.richRefinementCandidate?.rationale?.[field] || "此候选缺少理由，请丢弃后重新生成"}</span>
                                             {movedToDedicatedPanel && <span className="block text-accent">此字段已移至静态起幅或运镜设计，请在对应入口重新生成</span>}
                                             {!movedToDedicatedPanel && unavailable && <span className="block text-accent">已采用完整优化稿，需重新审阅生成提示词后才能应用此项</span>}
                                         </span>

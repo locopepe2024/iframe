@@ -6636,6 +6636,9 @@ class ComicGenPipeline(StudioOwnerMixin):
             self._save_data()
             return frame
         rationales = result.get("rationale") if isinstance(result.get("rationale"), dict) else {}
+        missing_rationales = [key for key in fields if not isinstance(rationales.get(key), str) or not rationales[key].strip()]
+        if missing_rationales:
+            raise ValueError(f"Frame refinement missing rationale for: {', '.join(missing_rationales)}")
         frame.rich_refinement_candidate = {
             "id": str(uuid.uuid4()), "source_hash": source_hash,
             "source": "初始化补全" if initialization else "AI 分镜细化",
@@ -6645,7 +6648,7 @@ class ComicGenPipeline(StudioOwnerMixin):
                 key: getattr(frame, key).model_dump(mode="json") if hasattr(getattr(frame, key), "model_dump") else getattr(frame, key)
                 for key in fields
             },
-            "rationale": {key: str(rationales.get(key) or "")[:500] for key in fields},
+            "rationale": {key: rationales[key].strip()[:500] for key in fields},
         }
         frame.updated_at = time.time()
 

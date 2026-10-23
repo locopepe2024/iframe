@@ -28,6 +28,7 @@ def test_initialization_proposes_only_missing_fields_without_neighbor_input():
     pipeline.script_processor.refine_frame_to_rich.return_value = {
         "visual_description": "乙站在长街抬眼", "blocking": {"description": "乙在画面左侧"},
         "shot_size": "特写", "duration": 9, "dialogue_structured": {"speaker": "乙", "line": "重写对白"},
+        "rationale": {"visual_description": "依据本镜动作和长街场景确定起始画面", "blocking": "依据已确认的主体偏左构图"},
     }
     before = pipeline._rich_refinement_source_hash(script, current, initialization=True)
     pipeline.refine_frame(script.id, current.id, initialization=True)
@@ -64,6 +65,7 @@ def test_initialization_only_proposes_remaining_missing_field_and_rejects_stale_
     current.visual_description = "已确认首帧"
     pipeline.script_processor.refine_frame_to_rich.return_value = {
         "visual_description": "模型重写首帧", "blocking": {"description": "乙在左侧"},
+        "rationale": {"blocking": "依据已确认的主体偏左构图"},
     }
     pipeline.refine_frame(script.id, current.id, initialization=True)
     candidate = current.rich_refinement_candidate
@@ -77,7 +79,9 @@ def test_initialization_only_proposes_remaining_missing_field_and_rejects_stale_
 
 def test_initialization_batch_uses_missing_field_mode():
     pipeline, script, _, current = setup_pipeline()
-    pipeline.script_processor.refine_frame_to_rich.return_value = {"visual_description": "乙抬眼"}
+    pipeline.script_processor.refine_frame_to_rich.return_value = {
+        "visual_description": "乙抬眼", "rationale": {"visual_description": "依据本镜动作"},
+    }
     events = list(pipeline.initialize_batch_generator(script.id))
     assert events[-1] == ("initialize_complete", {"total": 2, "success": 2, "failed": 0})
     assert current.rich_refinement_candidate["mode"] == "initialization"
@@ -92,6 +96,17 @@ def test_initialization_batch_counts_missing_model_proposal_as_failure(result):
     assert events[-1] == ("initialize_complete", {"total": 2, "success": 0, "failed": 2})
     assert [event for event, _ in events].count("frame_initialize_error") == 2
     assert all(frame.rich_refinement_candidate is None for frame in script.frames)
+
+
+def test_initialization_rejects_proposal_without_per_field_rationale():
+    pipeline, script, _, current = setup_pipeline()
+    pipeline.script_processor.refine_frame_to_rich.return_value = {
+        "visual_description": "乙站在长街抬眼", "rationale": {},
+    }
+    with pytest.raises(ValueError, match="missing rationale"):
+        pipeline.refine_frame(script.id, current.id, initialization=True)
+    assert current.rich_refinement_candidate is None
+    pipeline._save_data.assert_not_called()
 
 
 def test_initialization_llm_rejects_extra_fields():

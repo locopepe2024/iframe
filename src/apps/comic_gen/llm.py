@@ -2494,6 +2494,7 @@ Initialize only the missing static visual description and spatial blocking of th
 
 # Output
 Return valid JSON with only visual_description, blocking, and rationale. Omit fields without enough current-shot evidence.
+rationale must be an object with a nonempty, evidence-based explanation for every proposed field, keyed exactly by visual_description or blocking. Explain why the current shot and confirmed assets support the proposal; do not use generic claims.
 visual_description describes the opening state, not the complete action timeline. blocking describes current visible subjects' fixed positions; do not invent missing subjects or props. Do not return action, dialogue, duration, shot size, camera angle, composition, movement, lighting, transition, or sound.
 Never copy an adjacent shot; adjacent shot text is not supplied. Treat existing fields, confirmed director context, asset identity, clothing, and style as read-only constraints. No model-specific prompt syntax.
 
