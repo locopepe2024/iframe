@@ -194,7 +194,7 @@ export default function StoryboardGenerateDialog({
                                 <div className="flex items-start gap-2 rounded-md border border-accent/40 bg-accent/10 px-3 py-2">
                                     <AlertTriangle size={13} className="text-accent mt-0.5 shrink-0" />
                                     <p className="text-[0.75rem] text-accent">
-                                        {t("willReplaceWarning", { count: existingShotCount })}
+                                        {t(mode === "plan" ? "planReplaceWarning" : "willReplaceWarning", { count: existingShotCount })}
                                     </p>
                                 </div>
                             )}
@@ -203,7 +203,7 @@ export default function StoryboardGenerateDialog({
                             {allPass && existingShotCount === 0 && (
                                 <p className="text-[0.75rem] text-text-muted flex items-center gap-1.5">
                                     <Film size={12} />
-                                    {t("freshHint")}
+                                    {t(mode === "plan" ? "planFreshHint" : "freshHint")}
                                 </p>
                             )}
                         </div>
@@ -224,9 +224,9 @@ export default function StoryboardGenerateDialog({
                                 leftIcon={<Wand2 />}
                                 onClick={handleConfirm}
                             >
-                                {existingShotCount > 0
-                                    ? t("replaceAndGenerate")
-                                    : t("generate")}
+                                {mode === "plan"
+                                    ? t(existingShotCount > 0 ? "replaceFromPlan" : "applyPlan")
+                                    : t(existingShotCount > 0 ? "replaceAndGenerate" : "generate")}
                             </WorkflowActionButton>
                         </footer>
                     </motion.div>

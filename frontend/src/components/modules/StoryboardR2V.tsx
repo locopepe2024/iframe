@@ -662,6 +662,53 @@ export default function StoryboardR2V() {
         }
     }, [currentProject, updateProject]);
 
+    const applyStoryboardFrames = useCallback(async (
+        projectId: string, scriptText: string, frames: StoryboardDraftFrame[],
+        lineage: StoryboardAnalysisLineage, defaultMode: "t2i_i2v" | "direct_r2v",
+    ) => {
+        try {
+            const updated = await api.applyStoryboardDraft(
+                projectId, scriptText, frames, lineage,
+            );
+            const newFrameCount = Array.isArray(updated?.frames) ? updated.frames.length : 0;
+            updateProject(projectId, updated);
+            if (Array.isArray(updated?.frames) && useProjectStore.getState().currentProject?.id === projectId) {
+                const videoTasks: any[] = updated.video_tasks ?? [];
+                setShots(updated.frames.map((frame: any) => frameToShotNode(frame, videoTasks, defaultMode)));
+            }
+            if (newFrameCount > 0) {
+                if (useProjectStore.getState().currentProject?.id === projectId) {
+                    setBannerState("phase2");
+                    setRefineProgress({ current: 0, total: newFrameCount });
+                }
+                let initializationFailed = 0;
+                try {
+                    const initialization = await api.initializeBatchFrames(projectId, (event: RefineSSEEvent) => {
+                        if (event.type === "frame_initialize_start" && useProjectStore.getState().currentProject?.id === projectId) {
+                            setRefineProgress({ current: (event.frame_index ?? 0) + 1, total: event.total ?? newFrameCount });
+                        }
+                    });
+                    initializationFailed = initialization.failed;
+                    const refreshed = await api.getProject(projectId);
+                    if (refreshed?.frames && useProjectStore.getState().currentProject?.id === projectId) {
+                        updateProject(projectId, { frames: refreshed.frames });
+                        const videoTasks: any[] = refreshed.video_tasks ?? [];
+                        setShots(refreshed.frames.map((frame: any) => frameToShotNode(frame, videoTasks, defaultMode)));
+                    }
+                } catch (error: any) {
+                    initializationFailed = newFrameCount;
+                    const detail = error?.response?.data?.detail || error?.message || t("genToastErrUnknown");
+                    toast.error(`${t("genToastErr")}: ${String(detail).slice(0, 200)}`);
+                }
+                if (initializationFailed) toast.error(t("initializePartial", { count: initializationFailed }));
+            }
+            if (useProjectStore.getState().currentProject?.id === projectId) setBannerState("summary");
+            toast.success(t(lineage.storyboard_mode === "plan" ? "planApplied" : "genToastDone", { count: newFrameCount }));
+        } finally {
+            setRefineProgress(null);
+        }
+    }, [updateProject, t]);
+
     const handleSmartGenerate = useCallback(async (options?: import("@/lib/storyboardAnalysis").StoryboardGenerationOptions) => {
         if (!currentProject?.id) return;
         const projectId = currentProject.id;
@@ -678,11 +725,19 @@ export default function StoryboardR2V() {
                 setAnalysisProgress({ completed, total });
             }, options);
             if (useProjectStore.getState().currentProject?.id !== projectId) return;
-            setStoryboardDraft(result.frames);
-            setStoryboardDraftLineage(result.lineage);
-            setStoryboardDraftText(scriptText);
-            setStoryboardFeedback([]);
-            setBannerState((currentProject.frames?.length ?? 0) > 0 ? "summary" : "idle");
+            if (options?.mode === "plan" && result.lineage.storyboard_mode !== "plan") {
+                throw new Error("Director plan conversion returned the wrong storyboard mode");
+            }
+            if (options?.mode === "plan") {
+                await applyStoryboardFrames(projectId, scriptText, result.frames, result.lineage,
+                    currentProject.default_generation_mode === "i2v" ? "t2i_i2v" : "direct_r2v");
+            } else {
+                setStoryboardDraft(result.frames);
+                setStoryboardDraftLineage(result.lineage);
+                setStoryboardDraftText(scriptText);
+                setStoryboardFeedback([]);
+                setBannerState((currentProject.frames?.length ?? 0) > 0 ? "summary" : "idle");
+            }
         } catch (err: any) {
             const detail = err?.response?.data?.detail || err?.message || t("genToastErrUnknown");
             toast.error(`${t("genToastErr")}: ${String(detail).slice(0, 200)}`);
@@ -691,7 +746,7 @@ export default function StoryboardR2V() {
             setGenerating(false);
             setAnalysisProgress(null);
         }
-    }, [currentProject, t]);
+    }, [currentProject, applyStoryboardFrames, t]);
 
     const handleRefineStoryboardDraft = useCallback(async (instruction: string) => {
         if (!currentProject?.id || !storyboardDraft || !storyboardDraftText || !storyboardDraftLineage) return;
@@ -713,56 +768,18 @@ export default function StoryboardR2V() {
 
     const handleApplyStoryboardDraft = useCallback(async () => {
         if (!currentProject?.id || !storyboardDraft || !storyboardDraftText || !storyboardDraftLineage) return;
-        const projectId = currentProject.id;
         setStoryboardDraftBusy(true);
         try {
-            const updated = await api.applyStoryboardDraft(
-                projectId, storyboardDraftText, storyboardDraft, storyboardDraftLineage,
-            );
-            const newFrameCount = Array.isArray(updated?.frames) ? updated.frames.length : 0;
-            updateProject(projectId, updated);
-            if (Array.isArray(updated?.frames)) {
-                const defaultMode = currentProject.default_generation_mode === "i2v" ? "t2i_i2v" : "direct_r2v";
-                const videoTasks: any[] = updated.video_tasks ?? [];
-                setShots(updated.frames.map((frame: any) => frameToShotNode(frame, videoTasks, defaultMode)));
-            }
+            await applyStoryboardFrames(currentProject.id, storyboardDraftText, storyboardDraft, storyboardDraftLineage,
+                currentProject.default_generation_mode === "i2v" ? "t2i_i2v" : "direct_r2v");
             setStoryboardDraft(null);
             setStoryboardDraftLineage(null);
             setStoryboardDraftText("");
             setStoryboardFeedback([]);
-
-            if (newFrameCount > 0) {
-                setBannerState("phase2");
-                setRefineProgress({ current: 0, total: newFrameCount });
-                let initializationFailed = 0;
-                try {
-                    const initialization = await api.initializeBatchFrames(projectId, (event: RefineSSEEvent) => {
-                        if (event.type === "frame_initialize_start") {
-                            setRefineProgress({ current: (event.frame_index ?? 0) + 1, total: event.total ?? newFrameCount });
-                        }
-                    });
-                    initializationFailed = initialization.failed;
-                    const refreshed = await api.getProject(projectId);
-                    if (refreshed?.frames && useProjectStore.getState().currentProject?.id === projectId) {
-                        updateProject(projectId, { frames: refreshed.frames });
-                        const defaultMode = currentProject.default_generation_mode === "i2v" ? "t2i_i2v" : "direct_r2v";
-                        const videoTasks: any[] = refreshed.video_tasks ?? [];
-                        setShots(refreshed.frames.map((frame: any) => frameToShotNode(frame, videoTasks, defaultMode)));
-                    }
-                } catch (error: any) {
-                    initializationFailed = newFrameCount;
-                    const detail = error?.response?.data?.detail || error?.message || t("genToastErrUnknown");
-                    toast.error(`${t("genToastErr")}: ${String(detail).slice(0, 200)}`);
-                }
-                if (initializationFailed) toast.error(t("initializePartial", { count: initializationFailed }));
-            }
-            setBannerState("summary");
-            toast.success(t("genToastDone", { count: newFrameCount }));
         } finally {
-            setRefineProgress(null);
             setStoryboardDraftBusy(false);
         }
-    }, [currentProject, storyboardDraft, storyboardDraftText, storyboardDraftLineage, updateProject, t]);
+    }, [currentProject, storyboardDraft, storyboardDraftText, storyboardDraftLineage, applyStoryboardFrames]);
 
     const handleDiscardStoryboardDraft = useCallback(() => {
         if (storyboardDraftBusy) return;
