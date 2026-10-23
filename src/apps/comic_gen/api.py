@@ -7719,7 +7719,9 @@ def _storyboard_polish_contract(model_id: str, custom: str, default: str, genera
         return custom or default
     constraints = ""
     if generate_audio is False:
-        constraints += "\nOUTPUT MUST BE SILENT: overall_soundscape and non_diegetic_music must be N/A. No spoken dialogue, vocalization or sound cues. Preserve visual actions."
+        constraints += ("\nOUTPUT MUST BE SILENT: overall_soundscape and non_diegetic_music must be N/A. "
+                        if is_h3 else "\nOUTPUT MUST BE SILENT: omit all audio and music cues. ")
+        constraints += "No spoken dialogue, vocalization or sound cues. Preserve visual actions."
     elif generate_audio is True:
         constraints += "\nAudio is enabled. Preserve specified dialogue exactly; do not invent dialogue or music without permission."
         if dialogue_line.strip():
@@ -7740,12 +7742,8 @@ request subtitle tracks in either prompt language.
     base_prompt = custom or (default if not guidance else "")
     contract = guidance + "\n" + base_prompt + constraints + """
 STORYBOARD OUTPUT CONTRACT:
-Return only JSON with string fields prompt_cn and prompt_en. Each string contains
-all fields required by the selected model skill and generation mode (H3 base:
-integrated_multimodal_description, overall_soundscape, non_diegetic_music;
-H3 reference mode: subject_definitions, summary, retention_analysis,
-detailed_description, overall_soundscape, non_diegetic_music).
-Do not replace that structure with scene/action/camera headings.
+Return only JSON with string fields prompt_cn and prompt_en. Each string follows
+the selected target model's prompt format and generation mode.
 Preserve every existing [characterN:name] editor token exactly, including its
 number and name. These are stable editor references; use them as source labels
 inside the model-specific structure. Do not invent or renumber references.
@@ -7759,6 +7757,7 @@ cannot establish exact cut times. Missing images must not be described as seen.
 """
     if not is_h3:
         return contract
+    contract += "\nFor H3, preserve every required model-specific heading. Do not replace that structure with scene/action/camera headings.\n"
     headings = (
         "subject_definitions:\nsummary:\nretention_analysis:\ndetailed_description:\noverall_soundscape:\nnon_diegetic_music:"
         if reference_mode else

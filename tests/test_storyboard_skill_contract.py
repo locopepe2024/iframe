@@ -201,8 +201,13 @@ def test_h3_final_contract_matches_base_or_reference_mode():
 
 def test_seedance_polish_contract_does_not_demand_h3_fields():
     text = api._storyboard_polish_contract(
-        'uniart/seedance-2.5-vip', '', '', optimization_skills=['seedance-camera'])
+        'uniart/seedance-2.5-vip', '', '', optimization_skills=['seedance-prompt'], generate_audio=False)
     assert 'FINAL H3 ENFORCEMENT' not in text
+    assert 'H3 base:' not in text
+    assert 'H3 reference mode:' not in text
+    assert 'integrated_multimodal_description' not in text
+    assert 'overall_soundscape' not in text
+    assert 'non_diegetic_music' not in text
 
 
 def test_h3_contract_mismatch_logs_headings_without_model_text(caplog):
