@@ -627,6 +627,99 @@ def test_r2v_scene_lighting_reads_exact_selected_variant_lineage(monkeypatch):
     assert api._r2v_scene_lighting(object(), frame, "[character2:粮铺门前]") is None
 
 
+def test_r2v_character_design_resolves_selected_asset_id_and_image_revision(monkeypatch):
+    old = {"revision": 1, "design": {"identity": {"visual_notes": "脸颊有浅细纹"},
+                                     "look": {"features": {"衣服": "玄色短衣"}},
+                                     "field_answers": {"action": "上一镜挥刀"}}}
+    newer = {"revision": 2, "design": {"identity": {"visual_notes": "另一版容貌"}}}
+    variant = SimpleNamespace(id="portrait-1", submission_snapshot=SimpleNamespace(
+        design_revision_at_submission=1,
+    ))
+    character = SimpleNamespace(
+        id="character-42", name="探子", character_design={"design_revisions": [old, newer]},
+        asset_pack=None, reference_sheet=SimpleNamespace(image_variants=[variant]),
+    )
+    monkeypatch.setattr(api.pipeline, "resolve_project_assets", lambda script: {
+        "characters": [character], "scenes": [], "props": [],
+    })
+    request = api.PolishR2VPromptRequest(
+        draft_prompt="[character2:探子]走进房间", slots=[{
+            "description": "探子", "slot": 2, "asset_id": "character-42", "asset_type": "character",
+            "name": "探子", "variant_ids": ["portrait-1"],
+        }], image_urls=["portrait-url"],
+    )
+    designs = api._r2v_reference_designs(object(), request)
+    assert designs == [{"slot": 2, "name": "探子", "source": "image_submission",
+                        "design_revision": 1, "design": {
+                            "identity": {"visual_notes": "脸颊有浅细纹"},
+                            "look": {"features": {"衣服": "玄色短衣"}},
+                        }}]
+    assert "上一镜挥刀" not in str(designs)
+    assert "另一版容貌" not in str(designs)
+    with pytest.raises(api.HTTPException) as wrong_id:
+        api._r2v_reference_designs(object(), request.model_copy(update={"slots": [
+            api.RefSlot(description="探子", slot=2, asset_id="other", asset_type="character",
+                        name="探子", variant_ids=["portrait-1"]),
+        ]}))
+    assert wrong_id.value.status_code == 422
+
+
+def test_r2v_character_design_marks_unbound_image_revision(monkeypatch):
+    variant = SimpleNamespace(id="uploaded", submission_snapshot=None)
+    character = SimpleNamespace(
+        id="role", name="掌柜", character_design={"design_revisions": [{
+            "revision": 3, "design": {"identity": {"visual_notes": "灰白发髻"}},
+        }]}, asset_pack=None, reference_sheet=SimpleNamespace(image_variants=[variant]),
+    )
+    monkeypatch.setattr(api.pipeline, "resolve_project_assets", lambda script: {
+        "characters": [character], "scenes": [], "props": [],
+    })
+    request = api.PolishR2VPromptRequest(
+        draft_prompt="[character1:掌柜]", slots=[{
+            "description": "掌柜", "slot": 1, "asset_id": "role", "asset_type": "character",
+            "name": "掌柜", "variant_ids": ["uploaded"],
+        }], image_urls=["uploaded-url"],
+    )
+    assert api._r2v_reference_designs(object(), request)[0]["source"] == "current_confirmed_unbound"
+
+
+def test_r2v_preview_uses_character_design_and_rejects_stale_review(monkeypatch):
+    variant = SimpleNamespace(id="portrait", submission_snapshot=None)
+    character = SimpleNamespace(
+        id="role", name="掌柜", character_design={"design_revisions": [{
+            "revision": 1, "design": {"identity": {"visual_notes": "灰白发髻"}},
+        }]}, asset_pack=None, reference_sheet=SimpleNamespace(image_variants=[variant]),
+    )
+    frame = SimpleNamespace(id="shot", workbench_reference_variant_ids={})
+    script = SimpleNamespace(frames=[frame])
+    monkeypatch.setattr(api, "current_studio_user", lambda: SimpleNamespace(owner_profile_id="owner"))
+    monkeypatch.setattr(api.pipeline, "get_script", lambda *args: script)
+    monkeypatch.setattr(api.pipeline, "resolve_project_assets", lambda script: {
+        "characters": [character], "scenes": [], "props": [],
+    })
+    monkeypatch.setattr(api.pipeline, "storyboard_continuity_sheet", lambda *args: {"rows": []})
+    monkeypatch.setattr(api, "_r2v_scene_lighting", lambda *args: None)
+    monkeypatch.setattr(api, "_get_custom_prompt", lambda *args: "")
+    monkeypatch.setattr(api, "_get_director_prompt_context", lambda *args: "")
+    request = api.PolishR2VPromptRequest(
+        draft_prompt="[character1:掌柜]", script_id="project", frame_id="shot",
+        slots=[{"description": "掌柜", "slot": 1, "asset_id": "role",
+                "asset_type": "character", "name": "掌柜", "variant_ids": ["portrait"]}],
+        image_urls=["portrait-url"], optimization_skills=[],
+    )
+    reviewed = api.preview_r2v_polish_prompt(request)
+    assert "灰白发髻" in reviewed["messages"]["system"]
+    assert "current_confirmed_unbound" in reviewed["messages"]["system"]
+    character.character_design["design_revisions"].append({
+        "revision": 2, "design": {"identity": {"visual_notes": "黑发"}},
+    })
+    with pytest.raises(api.HTTPException) as stale:
+        api._require_video_polish_review(request.model_copy(update={
+            "review_token": reviewed["review_token"], "reviewed_messages": reviewed["messages"],
+        }), True)
+    assert stale.value.status_code == 409
+
+
 def test_r2v_scene_lighting_conflict_requires_review_and_changes_model_input(monkeypatch):
     frame = SimpleNamespace(id="shot", workbench_reference_variant_ids={})
     script = SimpleNamespace(frames=[frame])

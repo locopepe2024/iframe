@@ -8133,12 +8133,83 @@ def _r2v_scene_lighting(script, frame, draft_prompt: str,
     }
 
 
+def _r2v_reference_designs(script, request) -> List[Dict[str, Any]]:
+    """Resolve reviewed character design through the referenced asset identity."""
+    if not request.slots:
+        return []
+    assets = pipeline.resolve_project_assets(script)
+    by_id = {
+        kind: {asset.id: asset for asset in assets.get(f"{kind}s", [])}
+        for kind in ("character", "scene", "prop")
+    }
+    result: List[Dict[str, Any]] = []
+    seen_slots: set[int] = set()
+    for ordinal, slot in enumerate(request.slots, 1):
+        if not slot.asset_id:
+            continue  # Legacy text-only caller.
+        number = slot.slot or ordinal
+        if number in seen_slots or not 1 <= number <= 9:
+            raise HTTPException(422, "参考图槽位无效，请重新选择参考素材")
+        seen_slots.add(number)
+        kind = slot.asset_type
+        asset = by_id.get(kind or "", {}).get(slot.asset_id)
+        if asset is None or not slot.name or asset.name != slot.name:
+            raise HTTPException(422, "参考素材身份已变化，请重新选择参考素材")
+        tag = f"[character{number}:{slot.name}]"
+        if tag not in request.draft_prompt and f"[{kind}:{slot.name}]" not in request.draft_prompt:
+            raise HTTPException(422, "参考素材与当前镜头文字不匹配，请重新预览")
+        variants = {item.id: item for item in pipeline._asset_image_variants(asset, kind)}
+        if not slot.variant_ids or any(variant_id not in variants for variant_id in slot.variant_ids):
+            raise HTTPException(422, "参考图版本已变化，请重新选择参考素材")
+        selected = (request.reference_variant_ids or {}).get(asset.id)
+        if selected and selected != slot.variant_ids:
+            raise HTTPException(422, "参考图版本与镜头选择不一致，请重新预览")
+        if kind != "character":
+            continue
+        if len(slot.variant_ids) != 1:
+            raise HTTPException(422, "角色参考图必须对应一个已选版本")
+        variant = variants[slot.variant_ids[0]]
+        snapshot = variant.submission_snapshot
+        revision = snapshot.design_revision_at_submission if snapshot else None
+        source = "image_submission"
+        if revision is None and asset.asset_pack:
+            anchor = next((item for item in reversed(asset.asset_pack.revisions)
+                           if item.variant_id == variant.id), None)
+            if anchor:
+                revision = anchor.source_design_revision
+                source = "confirmed_anchor"
+        revisions = (asset.character_design or {}).get("design_revisions") or []
+        if revision is None:
+            confirmed = revisions[-1] if revisions else None
+            source = "current_confirmed_unbound" if confirmed else "missing_confirmed_design"
+        else:
+            confirmed = next((item for item in revisions if item.get("revision") == revision), None)
+            if confirmed is None:
+                raise HTTPException(422, "角色参考图对应的设计版本已缺失，请重新确认角色设计")
+        design = confirmed.get("design") if isinstance(confirmed, dict) else None
+        structured = {}
+        if isinstance(design, dict):
+            for section in ("identity", "look"):
+                value = design.get(section)
+                if isinstance(value, dict):
+                    selected_fields = {key: value[key] for key in ("visual_notes", "features") if value.get(key)}
+                    if selected_fields:
+                        structured[section] = selected_fields
+        result.append({
+            "slot": number, "name": asset.name, "source": source,
+            "design_revision": confirmed.get("revision") if isinstance(confirmed, dict) else None,
+            "design": structured,
+        })
+    return result
+
+
 def _compile_video_polish_review(request, reference_mode: bool) -> Dict[str, Any]:
     from .llm import DEFAULT_R2V_POLISH_PROMPT, DEFAULT_VIDEO_POLISH_PROMPT
     user = current_studio_user()
     frame_snapshot: Dict[str, Any] = {}
     effective_shot_fields: Dict[str, Any] = {}
     scene_lighting: Optional[Dict[str, Any]] = None
+    reference_designs: List[Dict[str, Any]] = []
     if user is not None and request.script_id:
         script = pipeline.get_script(request.script_id, user.owner_profile_id)
         if not script:
@@ -8151,6 +8222,7 @@ def _compile_video_polish_review(request, reference_mode: bool) -> Dict[str, Any
                 scene_lighting = _r2v_scene_lighting(
                     script, frame, request.draft_prompt, request.reference_variant_ids,
                 )
+                reference_designs = _r2v_reference_designs(script, request)
             frame_snapshot = {name: getattr(frame, name, None) for name in (
                 "scene_id", "shot_id", "director_profile_revision", "director_profile_hash",
                 "director_shot_context", "action_description", "style_prompt_override",
@@ -8213,6 +8285,11 @@ def _compile_video_polish_review(request, reference_mode: bool) -> Dict[str, Any
                        + json.dumps({"scene_name": scene_lighting["scene_name"], "fields": scene_lighting["fields"]},
                                     ensure_ascii=False, sort_keys=True) + "\n") if lighting_choice == "reference" else ""
         custom = "\n\n".join(filter(None, [custom, source_text + instruction]))
+    if reference_designs:
+        custom = "\n\n".join(filter(None, [custom,
+            "SELECTED CHARACTER ASSET DESIGNS (server-resolved by asset ID; use confirmed identity/look as the appearance source, not generic descriptions or invented image details):\n"
+            + json.dumps(reference_designs, ensure_ascii=False, sort_keys=True)
+            + "\nFor current_confirmed_unbound, the design is confirmed for the character but its revision is not proven to match this image; do not claim image/design version agreement. For missing_confirmed_design, do not invent structured asset facts. Keep shot action, blocking and camera separate from asset identity/look."]))
     default = DEFAULT_R2V_POLISH_PROMPT if reference_mode else DEFAULT_VIDEO_POLISH_PROMPT
     if request.optimizer_provider == "minimax_context_ir":
         if request.target_video_model and "h3" not in request.target_video_model.lower():
@@ -8226,7 +8303,7 @@ def _compile_video_polish_review(request, reference_mode: bool) -> Dict[str, Any
             generation_mode=getattr(request, "generation_mode", "r2v"),
         ).strip()
         if reference_mode:
-            slots = "\n".join(f"- character{i + 1}: {slot.description}" for i, slot in enumerate(request.slots)) or "No reference videos provided."
+            slots = "\n".join(f"- character{slot.slot or i + 1}: {slot.description}" for i, slot in enumerate(request.slots)) or "No reference videos provided."
             system = system.replace("{SLOTS}", slots)
         if request.image_urls:
             if reference_mode:
@@ -8241,7 +8318,9 @@ def _compile_video_polish_review(request, reference_mode: bool) -> Dict[str, Any
     source = request.model_dump(exclude={"reviewed_messages", "review_token"})
     token = hashlib.sha256(json.dumps({"source": source, "frame": frame_snapshot,
                                       "effective_shot_fields": effective_shot_fields,
-                                      "scene_lighting": scene_lighting, "compiled": messages},
+                                      "scene_lighting": scene_lighting,
+                                      "reference_designs": reference_designs,
+                                      "compiled": messages},
                                       sort_keys=True, ensure_ascii=False, default=str).encode()).hexdigest()
     format_note = (
         "MiniMax Context IR 按所选模型的原生结构生成；这里展示送入 IR 的完整文字。"
@@ -8257,6 +8336,7 @@ def _compile_video_polish_review(request, reference_mode: bool) -> Dict[str, Any
                 "selected_skills": _effective_optimization_skills(request) or [],
                 "target_duration": request.target_duration,
                 "scene_lighting": scene_lighting,
+                "reference_designs": reference_designs,
             }}
 
 
@@ -8443,6 +8523,11 @@ def polish_video_prompt(request: PolishVideoPromptRequest):
 
 class RefSlot(BaseModel):
     description: str  # Character name, e.g., "雷震", "白兔"
+    slot: Optional[int] = Field(None, ge=1, le=9)
+    asset_id: Optional[str] = None
+    asset_type: Optional[Literal["character", "scene", "prop"]] = None
+    name: Optional[str] = None
+    variant_ids: List[str] = Field(default_factory=list)
 
 
 class PolishR2VPromptRequest(BaseModel):

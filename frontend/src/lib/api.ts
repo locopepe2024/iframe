@@ -1852,7 +1852,7 @@ export const api = {
     },
     polishR2VPrompt: async (
         draftPrompt: string,
-        slots: { description: string }[],
+        slots: { description: string; slot?: number; asset_id?: string; asset_type?: "character" | "scene" | "prop"; name?: string; variant_ids?: string[] }[],
         feedback: string = "",
         scriptId: string = "",
         prevCn: string = "",

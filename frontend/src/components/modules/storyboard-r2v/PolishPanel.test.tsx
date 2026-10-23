@@ -68,7 +68,14 @@ it("shows editable compiled input and waits for confirmation before optimization
 });
 
 it("refreshes R2V references for preview and submits the same reviewed images", async () => {
-    const resolveR2VImageUrls = vi.fn().mockResolvedValue(["series/elder.jpg", "series/chief.jpg"]);
+    const freshReferences = {
+        urls: ["series/elder.jpg", "series/chief.jpg"],
+        slots: [
+            { slot: 1, asset_id: "elder-id", asset_type: "character" as const, name: "老掌柜", variant_ids: ["elder-v1"], description: "老掌柜" },
+            { slot: 2, asset_id: "chief-id", asset_type: "character" as const, name: "匪首", variant_ids: ["chief-v2"], description: "匪首" },
+        ],
+    };
+    const resolveR2VImageUrls = vi.fn().mockResolvedValue(freshReferences);
     vi.mocked(api.polishR2VPrompt)
         .mockResolvedValueOnce({
             messages: { system: "reference contract", user: "粮铺冲突" },
@@ -82,10 +89,12 @@ it("refreshes R2V references for preview and submits the same reviewed images", 
     fireEvent.click(screen.getByTitle("查看并确认模型输入"));
     await screen.findByText("提交前检查模型输入");
     expect(vi.mocked(api.polishR2VPrompt).mock.calls[0][5]).toEqual(["series/elder.jpg", "series/chief.jpg"]);
+    expect(vi.mocked(api.polishR2VPrompt).mock.calls[0][1]).toEqual(freshReferences.slots);
     fireEvent.click(screen.getByText("确认输入并润色"));
     await waitFor(() => expect(api.polishR2VPrompt).toHaveBeenCalledTimes(2));
     expect(resolveR2VImageUrls).toHaveBeenCalledTimes(2);
     expect(vi.mocked(api.polishR2VPrompt).mock.calls[1][5]).toEqual(["series/elder.jpg", "series/chief.jpg"]);
+    expect(vi.mocked(api.polishR2VPrompt).mock.calls[1][1]).toEqual(freshReferences.slots);
 });
 
 it("requires a scene lighting choice and submits the reviewed reference priority", async () => {

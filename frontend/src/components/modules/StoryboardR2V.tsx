@@ -2249,7 +2249,17 @@ export default function StoryboardR2V() {
                                 if (fresh.unresolvedNames.length) {
                                     throw new Error(`参考素材未找到：${fresh.unresolvedNames.join("、")}`);
                                 }
-                                return fresh.urls;
+                                return {
+                                    urls: fresh.urls,
+                                    slots: fresh.groups.map((group) => ({
+                                        slot: group.slot,
+                                        asset_id: group.assetId,
+                                        asset_type: group.kind,
+                                        name: group.name,
+                                        variant_ids: group.variants.map((variant) => variant.id),
+                                        description: group.name,
+                                    })),
+                                };
                             }}
                             generateAudio={storyboardGeneratedAudio(paramsState.model, paramsState.audio)}
                             targetDuration={paramsState.duration}

@@ -32,6 +32,8 @@ interface PolishedPrompt {
     en: string;
 }
 
+type R2VPolishSlot = { description: string; slot?: number; asset_id?: string; asset_type?: "character" | "scene" | "prop"; name?: string; variant_ids?: string[] };
+
 interface PolishReview {
     messages: { system: string; user: string };
     media: { label: string; url: string }[];
@@ -43,6 +45,7 @@ interface PolishReview {
     sourceSignature: string;
     targetModel: string;
     submittedImageUrls: string[];
+    submittedSlots: R2VPolishSlot[];
     lightingChoice?: "shot" | "reference";
     review_context?: {
         effective_shot_fields: Record<string, { value: unknown; source: string; revision: number | null }>;
@@ -91,7 +94,7 @@ interface PolishPanelProps {
     videoMode?: "t2v" | "i2v" | "first_last_frame" | "r2v";
     scriptId: string;
     frameId?: string;
-    slots?: { description: string }[];
+    slots?: R2VPolishSlot[];
     /** Image URLs to ground the polish (Issue 13). i2v: active first frame
      *  (T2I or storyboard render); r2v: reference image URLs. Empty/omit =
      *  pure text-only polish (back-compat for shots with no frame). */
@@ -99,7 +102,7 @@ interface PolishPanelProps {
     referenceVariantIds?: Record<string, string[]>;
     targetRatio?: string;
     onBeforePreview?: () => Promise<void> | void;
-    resolveR2VImageUrls?: () => Promise<string[]>;
+    resolveR2VImageUrls?: () => Promise<string[] | { urls: string[]; slots: R2VPolishSlot[] }>;
     onApply: (text: string) => void;
 }
 
@@ -200,11 +203,11 @@ export default function PolishPanel({
         optimizerProvider, selectedSkills, targetRatio, videoMode, tabMode, scriptId, frameId]);
 
     const requestPolish = (draft: string, prevCn: string, feedbackText: string,
-        submittedImageUrls: string[],
+        submittedImageUrls: string[], submittedSlots: R2VPolishSlot[],
         confirmed?: { messages: { system: string; user: string }; token: string },
         lightingChoice?: "shot" | "reference") =>
         tabMode === "direct_r2v"
-            ? api.polishR2VPrompt(draft, slots, feedbackText, scriptId, prevCn, submittedImageUrls, "", videoModel, generateAudio, targetDuration, dialogue ?? undefined, optimizerProvider, selectedSkills, targetRatio, frameId, shotOverrides, confirmed, lightingChoice, referenceVariantIds)
+            ? api.polishR2VPrompt(draft, submittedSlots, feedbackText, scriptId, prevCn, submittedImageUrls, "", videoModel, generateAudio, targetDuration, dialogue ?? undefined, optimizerProvider, selectedSkills, targetRatio, frameId, shotOverrides, confirmed, lightingChoice, referenceVariantIds)
             : api.polishVideoPrompt(draft, feedbackText, scriptId, prevCn, submittedImageUrls, "", videoModel, generateAudio, targetDuration, dialogue ?? undefined, optimizerProvider, selectedSkills, targetRatio, frameId, shotOverrides, videoMode ?? "i2v", confirmed);
 
     const toggleSkill = (skillId: string) => {
@@ -228,14 +231,15 @@ export default function PolishPanel({
 
         try {
             await onBeforePreview?.();
-            const submittedImageUrls = resolveR2VImageUrls
-                ? await resolveR2VImageUrls() : imageUrls;
+            const resolved = resolveR2VImageUrls ? await resolveR2VImageUrls() : imageUrls;
+            const submittedImageUrls = Array.isArray(resolved) ? resolved : resolved.urls;
+            const submittedSlots = Array.isArray(resolved) ? slots : resolved.slots;
             if (tabMode === "direct_r2v" && !submittedImageUrls.length) {
                 throw new Error("R2V 优化需要已选参考图，请先在参考素材中选择图片。");
             }
-            const res = await requestPolish(draft, prevCn, feedbackText, submittedImageUrls);
+            const res = await requestPolish(draft, prevCn, feedbackText, submittedImageUrls, submittedSlots);
             if (res?.messages?.user && res?.review_token) {
-                setReview({ ...res, draft, prevCn, feedbackText, sourceSignature, targetModel, submittedImageUrls,
+                setReview({ ...res, draft, prevCn, feedbackText, sourceSignature, targetModel, submittedImageUrls, submittedSlots,
                     lightingChoice: res.review_context?.scene_lighting?.choice ?? undefined });
             } else {
                 // 200 但缺 key 走错误态
@@ -272,12 +276,15 @@ export default function PolishPanel({
         setError(null);
         try {
             if (resolveR2VImageUrls) {
-                const currentImageUrls = await resolveR2VImageUrls();
-                if (JSON.stringify(currentImageUrls) !== JSON.stringify(review.submittedImageUrls)) {
+                const resolved = await resolveR2VImageUrls();
+                const currentImageUrls = Array.isArray(resolved) ? resolved : resolved.urls;
+                const currentSlots = Array.isArray(resolved) ? slots : resolved.slots;
+                if (JSON.stringify(currentImageUrls) !== JSON.stringify(review.submittedImageUrls)
+                    || JSON.stringify(currentSlots) !== JSON.stringify(review.submittedSlots)) {
                     throw new Error("参考素材已变化，请重新查看模型输入。");
                 }
             }
-            const res = await requestPolish(review.draft, review.prevCn, review.feedbackText, review.submittedImageUrls,
+            const res = await requestPolish(review.draft, review.prevCn, review.feedbackText, review.submittedImageUrls, review.submittedSlots,
                 { messages: review.messages, token: review.review_token }, review.lightingChoice);
             if (!res?.prompt_cn || !res?.prompt_en) throw new Error("Missing bilingual polish result");
             setPolishedSettings(shotOverrides);
@@ -297,7 +304,7 @@ export default function PolishPanel({
         setError(null);
         try {
             const res = await requestPolish(review.draft, review.prevCn, review.feedbackText,
-                review.submittedImageUrls, undefined, choice);
+                review.submittedImageUrls, review.submittedSlots, undefined, choice);
             if (!res?.review_token) throw new Error("参考光影预览更新失败");
             setReview({ ...review, ...res, lightingChoice: choice });
         } catch (err: any) {
