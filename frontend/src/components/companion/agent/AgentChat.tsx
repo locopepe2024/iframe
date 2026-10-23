@@ -1,8 +1,8 @@
 "use client";
-import { useEffect, useRef, useState } from "react";
+import { Fragment, useEffect, useRef, useState } from "react";
 import { companionApi, type MemoryPage, type Preview, type Turn, type UserMessage } from "@/lib/companionApi";
 import styles from "../photos/photos.module.css";
-import ConversationCard from "../ConversationCard";
+import chatStyles from "./chat.module.css";
 import PhotoConversationCard from "../PhotoConversationCard";
 import { photoApi, type AlbumPhoto } from "@/lib/photoApi";
 
@@ -12,6 +12,7 @@ const turnKey = "iframe-companion-agent-turn-v1";
 
 export default function AgentChat() {
   const [session, setSession] = useState("");
+  const [menu, setMenu] = useState(false);
   const [messages, setMessages] = useState<UserMessage[]>([]), [after, setAfter] = useState<number | null>(null);
   const [text, setText] = useState(""), [allowed, setAllowed] = useState(false);
   const [turn, setTurn] = useState<Turn | null>(null), [preview, setPreview] = useState<Preview | null>(null);
@@ -24,7 +25,13 @@ export default function AgentChat() {
   const [draft, setDraft] = useState<string | null>(null);
   const [hasRetry, setHasRetry] = useState(false);
   const [recentPhotos, setRecentPhotos] = useState<AlbumPhoto[] | null>(null);
+  const [photoAnchor, setPhotoAnchor] = useState(0);
+  const streamRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  useEffect(() => {
+    const node = streamRef.current;
+    if (node) node.scrollTop = node.scrollHeight;
+  }, [turn, recentPhotos, busy]);
   async function run(action: () => Promise<void>) {
     if (locked.current) return;
     locked.current = true; setBusy(true); setError("");
@@ -53,15 +60,18 @@ export default function AgentChat() {
     const result = await companionApi.session(sessionOperation.current);
     localStorage.setItem(sessionKey, result.session_id); localStorage.removeItem(turnKey);
     sessionOperation.current = ""; sendOperation.current = null; setHasRetry(false);
-    setSession(result.session_id); setMessages([]); setAfter(null); setTurn(null); setPreview(null); setDraft(null); setText(""); setNotice("已打开新会话，先前记忆仍可在下方查询。");
+    setMenu(false); setRecentPhotos(null); setSession(result.session_id); setMessages([]); setAfter(null); setTurn(null); setPreview(null); setDraft(null); setText(""); setNotice("已开始新的聊天。");
   }
   async function send(retry = false) {
     if (!sendOperation.current || !retry) sendOperation.current = { operation_id: crypto.randomUUID(), text, allow_external_text: true };
     setHasRetry(true); setPreview(null);
-    const result = await companionApi.chat(session, sendOperation.current);
+    if (!session && !sessionOperation.current) sessionOperation.current = crypto.randomUUID();
+    const activeSession = session || (await companionApi.session(sessionOperation.current)).session_id;
+    if (!session) { sessionOperation.current = ""; setSession(activeSession); localStorage.setItem(sessionKey, activeSession); }
+    const result = await companionApi.chat(activeSession, sendOperation.current);
     localStorage.setItem(turnKey, result.turn_id);
     if (alive.current) { setDraft(null); setTurn(result); setPreview(result.result?.kind === "confirmation" ? result.result : null); setText(""); sendOperation.current = null; setHasRetry(false); }
-    await history(session);
+    await history(activeSession);
   }
   async function memories(search: string, cursor = "") {
     const value = await companionApi.tool<MemoryPage>(search ? "memory.search" : "memory.list", { ...(search ? { query: search } : {}), cursor, limit: 20 });
@@ -69,7 +79,7 @@ export default function AgentChat() {
   }
   async function loadRecentPhotos() {
     const result = await photoApi.list("all", "", "", "");
-    if (alive.current) setRecentPhotos(result.photos.slice(0, 6));
+    if (alive.current) { setRecentPhotos(result.photos.slice(0, 6)); setPhotoAnchor(messages.length); }
   }
   const activePreview = preview ?? (turn?.result?.kind === "confirmation" ? turn.result : null);
   const pending = activePreview?.status === "pending_confirmation";
@@ -78,45 +88,43 @@ export default function AgentChat() {
     await companionApi.cancel(activePreview.preview_token);
     setDraft(null); setPreview({ status: "preview_closed", preview_token: activePreview.preview_token }); setNotice("已关闭预览，未执行新的保存或删除。");
   }
-  return <main className={styles.shell}>
-    <a href={`${prefix}/companion/photos`}>返回生活相册</a>
-    <h1>陪伴聊天与个人记忆</h1>
-    <p>文字聊天测试。发送时，本轮及最近最多 20 条用户原话经您个人的 UniArt 渠道发给 Qwen。暂不发送照片、全库记忆或此前助手回复；模型可能说错，请核对。</p>
-    <button disabled={busy || pending} onClick={() => void run(newSession)}>新建会话</button>
-    {session && <button disabled={busy || pending} onClick={() => void run(() => history(session))}>重新读取本会话原话</button>}
-    {notice && <p role="status">{notice}</p>}{error && <p role="alert">{error}</p>}
-    <section className={styles.guide} aria-labelledby="chat-guide-title">
-      <h2 id="chat-guide-title">你想做什么？</h2>
-      <p>选一张卡片开始，也可以直接告诉我。</p>
+  return <main className={`${styles.shell} ${chatStyles.shell}`}>
+    <header className={chatStyles.header}><h1>聊天</h1><button type="button" aria-expanded={menu} onClick={() => setMenu(!menu)}>更多</button></header>
+    {menu && <aside className={styles.panel} aria-label="聊天管理">
+      <a href={`${prefix}/companion/photos`}>生活相册</a>
+      <button disabled={busy || pending} onClick={() => void run(newSession)}>新建会话</button>
+      <p className={styles.note}>聊天内容会保留，可继续查看历史消息。</p>
+    </aside>}
+    <div ref={streamRef} className={chatStyles.stream} role="region" aria-label="聊天内容">
+    <article className={chatStyles.assistant}><span>陪伴助手</span><p>您好，我在。想聊聊今天，还是一起看看照片？</p></article>
+    {!messages.length && <section className={styles.guide} aria-labelledby="chat-guide-title">
+      <h2 id="chat-guide-title">想从哪里聊起？</h2>
       <div className={styles.guideGrid}>
-        <button type="button" className={styles.guideCard} disabled={busy || pending || !session} onClick={() => { setText("聊聊今天发生的事情"); inputRef.current?.focus(); }}>
+        <button type="button" className={styles.guideCard} disabled={busy || pending || hasRetry} onClick={() => { setText("聊聊今天发生的事情"); inputRef.current?.focus(); }}>
           <strong>聊聊今天</strong><span>说说今天的生活</span>
         </button>
-        <button type="button" className={styles.guideCard} disabled={busy || pending} onClick={() => { window.location.href = `${prefix}/companion/photos`; }}>
-          <strong>讲讲一张照片</strong><span>去生活相册看看</span>
+        <button type="button" className={styles.guideCard} disabled={busy || pending || hasRetry} onClick={() => { void run(loadRecentPhotos); }}>
+          <strong>讲讲一张照片</strong><span>在这里看看照片</span>
         </button>
-        <button type="button" className={styles.guideCard} disabled={busy || pending || !session} onClick={() => { setText("请把我们今天聊的内容整理成一篇回忆日记"); inputRef.current?.focus(); }}>
+        <button type="button" className={styles.guideCard} disabled={busy || pending || hasRetry} onClick={() => { setText("请把我们今天聊的内容整理成一篇回忆日记"); inputRef.current?.focus(); }}>
           <strong>整理今天的回忆</strong><span>把故事记下来</span>
         </button>
       </div>
+    </section>}
+    {!recentPhotos && <button type="button" disabled={busy || pending} onClick={() => void run(loadRecentPhotos)}>看看相册照片</button>}
+    <section aria-label="会话消息">
+      {recentPhotos && photoAnchor === 0 && <section aria-label="相册照片">{!recentPhotos.length && <p>相册里还没有照片。</p>}{recentPhotos.map((photo, index) => <PhotoConversationCard key={photo.photo_id} photoId={photo.photo_id} label={`相册照片 ${index + 1}`} />)}</section>}
+      {messages.map((message, messageIndex) => <Fragment key={message.id}><div>
+        <article className={chatStyles.user}><span>我</span><p>{message.text}</p></article>
+        {message.turn?.result?.kind === "text" && <article className={chatStyles.assistant}><span>陪伴助手</span><p>{message.turn.result.text}</p></article>}
+      </div>
+      {recentPhotos && photoAnchor === messageIndex + 1 && <section aria-label="相册照片">{!recentPhotos.length && <p>相册里还没有照片。</p>}{recentPhotos.map((photo, index) => <PhotoConversationCard key={photo.photo_id} photoId={photo.photo_id} label={`相册照片 ${index + 1}`} />)}</section>}
+      </Fragment>)}
+      {after !== null && <button disabled={busy} onClick={() => void run(() => history(session, after))}>更多历史消息</button>}
     </section>
-    <section className={styles.panel} aria-label="相册照片">
-      <h2>想聊聊照片吗？</h2>
-      <p>可以先看看相册里的照片，再慢慢讲故事。这里展示部分照片，更多照片可进入生活相册查看。</p>
-      {!recentPhotos && <button type="button" disabled={busy || pending} onClick={() => void run(loadRecentPhotos)}>看看相册照片</button>}
-      {recentPhotos && !recentPhotos.length && <p>相册里还没有照片。</p>}
-      {recentPhotos?.map((photo, index) => <PhotoConversationCard key={photo.photo_id} photoId={photo.photo_id} label={`相册照片 ${index + 1}`} />)}
-    </section>
-    <section className={styles.panel} aria-label="会话原话">
-      <h2>已保存的用户原话</h2><p>原话按页查看，不受模型最近 20 条上下文限制。这里只恢复用户消息和最近一次模型结果。</p>
-      {messages.map(message => <p key={message.id}>{message.text}</p>)}
-      {after !== null && <button disabled={busy} onClick={() => void run(() => history(session, after))}>更多历史原话</button>}
-    </section>
-    <label>和我聊聊天<textarea ref={inputRef} placeholder="在这里打字，比如：今天有什么开心的事？" maxLength={4000} value={text} disabled={busy || pending || hasRetry} onChange={e => setText(e.target.value)} /></label>
-    <label className={styles.check}><input type="checkbox" checked={allowed} disabled={busy} onChange={e => setAllowed(e.target.checked)} />允许将上述范围的文字发送给个人 UniArt / Qwen 渠道</label>
-    <button disabled={busy || pending || !session || !allowed || !text.trim() || hasRetry} onClick={() => void run(() => send())}>发送给陪伴助手</button>
-    {hasRetry && <button disabled={busy || !allowed} onClick={() => void run(() => send(true))}>重试原请求</button>}
-    {turn?.result?.kind === "text" && <ConversationCard card={{ kind: "text", title: "陪伴助手", body: turn.result.text }} />}
+    {turn?.result?.kind === "text" && !messages.some(m => m.turn?.turn_id === turn.turn_id) && <article className={chatStyles.assistant}><span>陪伴助手</span><p>{turn.result.text}</p></article>}
+    {busy && <p role="status">正在处理…</p>}
+    {notice && <p role="status">{notice}</p>}{error && <p role="alert">{error}</p>}
     {turn?.result?.kind === "read" && <section className={styles.panel} aria-label="工具读取结果"><h2>实际记忆查询结果</h2>
       {turn.result.memories.length === 0 && <p>没有匹配的记忆。</p>}{turn.result.memories.map(m => <p key={m.id}>{m.content}（原话：{m.quote}）</p>)}
       {turn.result.next_cursor && <p>还有更多结果，请使用下方个人记忆列表分页查看。</p>}
@@ -143,6 +151,8 @@ export default function AgentChat() {
       })}>{activePreview.action === "save" ? "确认保存记忆" : "确认删除记忆"}</button>
       <button disabled={busy} onClick={() => void run(closePreview)}>取消，不执行</button>
     </section>}
+    </div>
+    {menu && <details className={chatStyles.management}><summary>我的记忆</summary>
     <section className={styles.panel} aria-label="个人记忆">
       <h2>个人记忆</h2><p>只展示明确确认过的记忆。搜索按原文文字匹配，不是语义检索。</p>
       <label>搜索记忆<input maxLength={100} disabled={busy || pending} value={query} onChange={e => setQuery(e.target.value)} /></label>
@@ -154,5 +164,15 @@ export default function AgentChat() {
       </article>)}
       {page?.next_cursor && <button disabled={busy || pending} onClick={() => void run(() => memories(appliedQuery, page.next_cursor!))}>更多个人记忆</button>}
     </section>
+    </details>}
+    <footer className={chatStyles.composer}>
+      <label>和我聊聊天<textarea ref={inputRef} rows={2} placeholder="想说什么，都可以写在这里…" maxLength={4000} value={text} disabled={busy || pending || hasRetry} onChange={e => setText(e.target.value)} /></label>
+      {!allowed && <details><summary>开始聊天前，请确认文字发送范围</summary>
+        <p>您本次及最近最多 20 条发言将发送至您配置的 UniArt / Qwen 服务。照片不会随文字自动发送。</p>
+        <label className={styles.check}><input type="checkbox" checked={allowed} disabled={busy} onChange={e => setAllowed(e.target.checked)} />允许发送文字，开始聊天</label>
+      </details>}
+      <button disabled={busy || pending || !allowed || !text.trim() || hasRetry} onClick={() => void run(() => send())}>发送</button>
+      {hasRetry && <button disabled={busy || !allowed} onClick={() => void run(() => send(true))}>重试原请求</button>}
+    </footer>
   </main>;
 }

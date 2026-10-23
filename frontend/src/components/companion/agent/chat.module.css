@@ -1,0 +1,17 @@
+.shell { max-width: 48rem; padding: 0 1rem; height: 100dvh; display: flex; flex-direction: column; overflow: hidden; --surface: #172331; }
+.header { position: sticky; top: 0; z-index: 3; display: flex; align-items: center; justify-content: space-between; background: #0c1520; padding: .5rem 0; border-bottom: 1px solid #52687d; }
+.shell .header h1 { font-size: 1.3em; margin: 0; }
+.stream { padding: 1rem 0; flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; }
+.assistant, .user { width: fit-content; max-width: 92%; padding: .8rem 1rem; margin: 1rem 0; border-radius: 1rem 1rem 1rem .2rem; background: #172331; border: 1px solid #52687d; }
+.user { margin-left: auto; background: #244d6b; border-radius: 1rem 1rem .2rem 1rem; }
+.assistant span, .user span { font-size: .8em; color: #bdcbd9; }
+.assistant p, .user p { margin: .25rem 0; white-space: pre-wrap; }
+.composer { position: sticky; bottom: 0; z-index: 2; padding: .75rem 0 max(.75rem, env(safe-area-inset-bottom)); background: #0c1520; border-top: 1px solid #52687d; }
+.shell .composer label { margin-top: 0; }
+.shell .composer textarea { display: block; min-height: 3.5rem; max-height: 22dvh; }
+.management { max-height: 35dvh; overflow: auto; flex-shrink: 0; margin-bottom: .5rem; }
+.header, .composer { flex-shrink: 0; }
+.shell aside { max-height: 25dvh; overflow: auto; margin: .5rem 0; flex-shrink: 0; }
+@media (max-height: 480px) { .composer { position: static; } }
+
+@media (max-height: 480px) { .shell { height: auto; min-height: 100dvh; overflow: visible; } .stream { overflow: visible; } }

@@ -1,6 +1,6 @@
 import { API_URL, authenticatedFetch } from "./api";
 export interface Memory { id: string; content: string; type: string; importance: number; quote: string; source_message_id: string }
-export interface UserMessage { id: string; sequence: number; text: string }
+export interface UserMessage { id: string; sequence: number; text: string; turn?: Turn }
 export interface Preview {
   status: "pending_confirmation" | "preview_closed"; preview_token: string; action?: "save" | "delete";
   preview?: { content?: string; quote?: string; source_text?: string; source_message_id?: string; type?: string; importance?: number; memory?: Memory; notice?: string };
@@ -19,7 +19,7 @@ async function request<T>(path: string, method = "GET", body?: unknown): Promise
 }
 export const companionApi = {
   session: (operation_id: string) => request<{ session_id: string }>("/sessions", "POST", { operation_id }),
-  messages: (id: string, after = 0) => request<{ messages: UserMessage[]; next_after: number | null }>(`/sessions/${encodeURIComponent(id)}/messages?after=${after}`),
+  messages: (id: string, after = 0) => request<{ messages: UserMessage[]; next_after: number | null }>(`/sessions/${encodeURIComponent(id)}/conversation?after=${after}`),
   chat: (id: string, body: { operation_id: string; text: string; allow_external_text: true }) => request<Turn>(`/sessions/${encodeURIComponent(id)}/chat`, "POST", body),
   turn: (id: string) => request<Turn>(`/turns/${encodeURIComponent(id)}`),
   tool: <T>(name: string, args: object) => request<T>("/tools", "POST", { name, arguments: args }),

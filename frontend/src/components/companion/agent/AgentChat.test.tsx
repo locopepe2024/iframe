@@ -13,8 +13,8 @@ beforeEach(()=>{
   api.confirm.mockResolvedValue({action:"save",memory_id:"memory"});api.cancel.mockResolvedValue({status:"preview_closed"});
 });
 async function start(){
-  render(<AgentChat/>);await waitFor(()=>expect(screen.getByRole("button",{name:"新建会话"})).not.toBeDisabled());
-  fireEvent.click(screen.getByRole("button",{name:"新建会话"}));await screen.findByText(/已打开新会话/);
+  render(<AgentChat/>);fireEvent.click(screen.getByRole("button",{name:"更多"}));await waitFor(()=>expect(screen.getByRole("button",{name:"新建会话"})).not.toBeDisabled());
+  fireEvent.click(screen.getByRole("button",{name:"新建会话"}));await screen.findByText(/已开始新的聊天/);
   fireEvent.change(screen.getByLabelText("和我聊聊天"),{target:{value:"请记住我喜欢散步"}});
 }
 it("offers large guided cards without sending automatically",async()=>{
@@ -33,15 +33,16 @@ it("loads recent photos into the conversation card stream on demand",async()=>{
   expect(photoApi.list).toHaveBeenCalledWith("all","","","");
 });
 it("requires external text consent and final explicit button before saving",async()=>{
-  await start();expect(screen.getByRole("button",{name:"发送给陪伴助手"})).toBeDisabled();
-  fireEvent.click(screen.getByRole("checkbox"));fireEvent.click(screen.getByRole("button",{name:"发送给陪伴助手"}));
+  await start();expect(screen.getByRole("button",{name:"发送"})).toBeDisabled();
+  fireEvent.click(screen.getByText("开始聊天前，请确认文字发送范围", {selector:"summary"}));fireEvent.click(screen.getByRole("checkbox"));fireEvent.click(screen.getByRole("button",{name:"发送"}));
   await screen.findByRole("region",{name:"记忆操作确认"});expect(api.confirm).not.toHaveBeenCalled();
+  fireEvent.click(screen.getByRole("button",{name:"更多"}));
   expect(screen.getByRole("button",{name:"新建会话"})).toBeDisabled();
   fireEvent.click(screen.getByRole("button",{name:"确认保存记忆"}));await screen.findByText("个人记忆已保存。");
   expect(api.confirm).toHaveBeenCalledOnce();expect(api.chat.mock.calls[0][1].allow_external_text).toBe(true);
 });
 it("cancels without saving and edits through a new preview",async()=>{
-  await start();fireEvent.click(screen.getByRole("checkbox"));fireEvent.click(screen.getByRole("button",{name:"发送给陪伴助手"}));
+  await start();fireEvent.click(screen.getByText("开始聊天前，请确认文字发送范围", {selector:"summary"}));fireEvent.click(screen.getByRole("checkbox"));fireEvent.click(screen.getByRole("button",{name:"发送"}));
   await screen.findByRole("region",{name:"记忆操作确认"});
   api.tool.mockResolvedValue({...preview,preview_token:"edited",preview:{...preview.preview,content:"喜欢慢慢散步"}});
   fireEvent.change(screen.getByLabelText(/修改拟保存内容/),{target:{value:"喜欢慢慢散步"}});
@@ -53,13 +54,15 @@ it("cancels without saving and edits through a new preview",async()=>{
 });
 it("retains same request after uncertain response and paginates actual memories",async()=>{
   api.chat.mockRejectedValueOnce(new Error("暂不可用"));
-  await start();fireEvent.click(screen.getByRole("checkbox"));fireEvent.click(screen.getByRole("button",{name:"发送给陪伴助手"}));
+  await start();fireEvent.click(screen.getByText("开始聊天前，请确认文字发送范围", {selector:"summary"}));fireEvent.click(screen.getByRole("checkbox"));fireEvent.click(screen.getByRole("button",{name:"发送"}));
   await screen.findByRole("alert");fireEvent.click(screen.getByRole("button",{name:"重试原请求"}));
   await screen.findByRole("region",{name:"记忆操作确认"});expect(api.chat.mock.calls[0]).toEqual(api.chat.mock.calls[1]);
   fireEvent.click(screen.getByRole("button",{name:"取消，不执行"}));await screen.findByText(/已关闭预览/);
   api.tool.mockResolvedValueOnce({memories:[{id:"one",content:"第一条",quote:"原话"}],next_cursor:"next"})
     .mockResolvedValueOnce({memories:[{id:"two",content:"第二条",quote:"原话"}],next_cursor:null})
     .mockResolvedValueOnce({...preview,action:"delete",preview:{memory:{id:"two",content:"第二条",quote:"原话"}}});
+  fireEvent.click(screen.getByRole("button",{name:"更多"}));
+  fireEvent.click(screen.getByText("我的记忆", {selector:"summary"}));
   fireEvent.click(screen.getByRole("button",{name:"列出全部记忆"}));await screen.findByText("第一条");
   fireEvent.click(screen.getByRole("button",{name:"更多个人记忆"}));await screen.findByText("第二条");
   expect(api.tool.mock.calls[1]).toEqual(["memory.list",{cursor:"next",limit:20}]);
@@ -71,7 +74,19 @@ it("restores server history and latest result from identifiers only",async()=>{
   api.messages.mockResolvedValueOnce({messages:[{id:"m",sequence:1,text:"历史用户原话"}],next_after:1}).mockResolvedValueOnce({messages:[{id:"m2",sequence:2,text:"下一页"}],next_after:null});
   api.turn.mockResolvedValue({turn_id:"t",status:"completed",result:{kind:"confirmation",status:"preview_closed",preview_token:"old"}});
   render(<AgentChat/>);await screen.findByText("历史用户原话");
-  await waitFor(()=>expect(screen.getByRole("button",{name:"更多历史原话"})).not.toBeDisabled());
-  fireEvent.click(screen.getByRole("button",{name:"更多历史原话"}));await screen.findByText("下一页");
+  await waitFor(()=>expect(screen.getByRole("button",{name:"更多历史消息"})).not.toBeDisabled());
+  fireEvent.click(screen.getByRole("button",{name:"更多历史消息"}));await screen.findByText("下一页");
   expect(api.messages).toHaveBeenLastCalledWith("s",1);expect(screen.queryByRole("region",{name:"记忆操作确认"})).not.toBeInTheDocument();
+});
+
+it("keeps debugging controls off the main screen and restores paired replies",async()=>{
+  localStorage.setItem("iframe-companion-agent-session-v1","s");
+  api.messages.mockResolvedValue({messages:[{id:"m",sequence:1,text:"今天女儿来看我了",turn:{turn_id:"t",status:"completed",result:{kind:"text",text:"你们一起做了什么？"}}}],next_after:null});
+  render(<AgentChat/>);
+  await screen.findByText("你们一起做了什么？");
+  expect(screen.getByText("今天女儿来看我了")).toBeInTheDocument();
+  expect(screen.queryByRole("button",{name:"新建会话"})).not.toBeInTheDocument();
+  expect(screen.queryByText("已保存的用户原话")).not.toBeInTheDocument();
+  expect(screen.queryByText(/文字聊天测试/)).not.toBeInTheDocument();
+  expect(screen.queryByRole("button",{name:"重新读取本会话原话"})).not.toBeInTheDocument();
 });
