@@ -124,7 +124,7 @@ def chat(session_id: str, body: ChatRequest, identity: Owner, store: Store):
         try:
             proposal=propose(identity,claim['messages'],claim['message_id'])
             return store.finish_turn(identity.owner_profile_id,identity.user_id,claim,proposal)
-        except BaseException as exc:
+        except Exception as exc:
             store.fail_turn(identity.owner_profile_id,claim)
             if isinstance(exc,ModelUnavailable):
                 raise HTTPException(503,'Qwen暂不可用，原话已保留；请用原请求重试。') from exc

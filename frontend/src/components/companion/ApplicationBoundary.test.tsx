@@ -7,7 +7,7 @@ vi.mock("@/components/Providers", () => ({ Providers: ({ children }: { children:
 vi.mock("@/components/EnvConfigChecker", () => ({ default: () => <div>config-check</div> }));
 vi.mock("@/components/layout/TauriDragBar", () => ({ default: () => <div>desktop-drag</div> }));
 describe("ApplicationBoundary", () => {
-  it.each(["/companion", "/companion/", "/static/companion/", "/static/companion.html", "/companion/copilot-trial", "/companion/copilot-trial/", "/static/companion/copilot-trial.html", "/companion/photos", "/static/companion/photos.html"])("isolates %s from account/config initialization", pathname => {
+  it.each(["/companion", "/companion/", "/static/companion/", "/static/companion.html", "/companion/copilot-trial", "/companion/copilot-trial/", "/static/companion/copilot-trial.html", "/companion/agent", "/static/companion/agent.html", "/companion/photos", "/static/companion/photos.html"])("isolates %s from account/config initialization", pathname => {
     route.pathname = pathname; render(<ApplicationBoundary><p>demo</p></ApplicationBoundary>);
     expect(screen.getByText("demo")).toBeInTheDocument();
     expect(screen.queryByTestId("providers")).not.toBeInTheDocument();

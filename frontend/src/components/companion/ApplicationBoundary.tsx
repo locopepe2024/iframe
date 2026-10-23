@@ -7,6 +7,6 @@ import TauriDragBar from "@/components/layout/TauriDragBar";
 
 export function ApplicationBoundary({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
-  if (/^(?:\/static)?\/companion(?:\/(?:copilot-trial|photos))?(?:\.html|\/)?$/.test(pathname ?? "")) return <>{children}</>;
+  if (/^(?:\/static)?\/companion(?:\/(?:copilot-trial|photos|agent))?(?:\.html|\/)?$/.test(pathname ?? "")) return <>{children}</>;
   return <Providers><TauriDragBar /><EnvConfigChecker />{children}</Providers>;
 }
