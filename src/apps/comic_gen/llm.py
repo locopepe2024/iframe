@@ -2481,11 +2481,50 @@ scene_summaries 是场景级连续性记忆。为每个镜头优先匹配原文�
         next_frame_context: Optional[str] = None,
         visual_style: Optional[Dict[str, Any]] = None,
         director_context: str = "",
+        initialization: bool = False,
     ) -> Optional[Dict[str, Any]]:
         """Phase 2: Refine a coarse frame into a rich frame with full structured fields."""
         if not self.is_configured:
             logger.warning("LLM not configured, cannot refine frame")
             return None
+
+        if initialization:
+            system_prompt = f"""# Role
+Initialize only the missing static visual description and spatial blocking of this storyboard shot.
+
+# Output
+Return valid JSON with only visual_description, blocking, and rationale. Omit fields without enough current-shot evidence.
+visual_description describes the opening state, not the complete action timeline. blocking describes current visible subjects' fixed positions; do not invent missing subjects or props. Do not return action, dialogue, duration, shot size, camera angle, composition, movement, lighting, transition, or sound.
+Never copy an adjacent shot; adjacent shot text is not supplied. Treat existing fields, confirmed director context, asset identity, clothing, and style as read-only constraints. No model-specific prompt syntax.
+
+# Current Shot
+{json.dumps(coarse_frame, ensure_ascii=False, indent=2)}
+
+# Confirmed Character Assets
+{json.dumps(character_assets, ensure_ascii=False, indent=2)}
+
+# Confirmed Scene Assets
+{json.dumps(scene_assets, ensure_ascii=False, indent=2)}
+
+# Visual Style
+{json.dumps(visual_style or {}, ensure_ascii=False, indent=2)}
+
+# Confirmed Director Context
+{director_context or "None"}
+"""
+            try:
+                content = self.llm.chat(
+                    messages=[{"role": "system", "content": system_prompt},
+                              {"role": "user", "content": "Initialize missing fields. Return JSON only."}],
+                    response_format={"type": "json_object"},
+                ).strip()
+                result = json.loads(_strip_markdown_json(content))
+                if not isinstance(result, dict) or set(result) - {"visual_description", "blocking", "rationale"}:
+                    raise ValueError("Initialization returned unrelated fields")
+                return result
+            except (json.JSONDecodeError, ValueError) as exc:
+                logger.warning("Frame initialization result failed validation: %s", type(exc).__name__)
+                raise ValueError("Frame initialization returned invalid JSON fields") from exc
 
         system_prompt = f"""# Role
 You are a film storyboard refinement specialist. Enrich one coarse frame into performance, sound and visual-description proposals.

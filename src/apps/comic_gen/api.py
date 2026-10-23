@@ -3898,6 +3898,25 @@ def refine_single_frame(script_id: str, frame_id: str,
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@app.post("/projects/{script_id}/frames/{frame_id}/initialize")
+def initialize_single_frame(script_id: str, frame_id: str,
+                            user: UserContext = Depends(require_studio_user)):
+    """Initialize one shot by proposing only fields that are still empty."""
+    if not pipeline.get_script(script_id, user.owner_profile_id):
+        raise HTTPException(status_code=404, detail="Script not found")
+    try:
+        frame = pipeline.refine_frame(script_id, frame_id, initialization=True)
+        if not frame:
+            raise HTTPException(status_code=500, detail="Initialization returned no result")
+        return frame.model_dump() if hasattr(frame, 'model_dump') else frame.dict()
+    except ValueError as e:
+        status_code = 502 if "initialization returned" in str(e).lower() else 404
+        raise HTTPException(status_code=status_code, detail=str(e))
+    except Exception as e:
+        logger.error(f"Error in initialize_single_frame: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 class RichFrameCandidateApplyRequest(BaseModel):
     candidate_id: str
     selected_fields: List[str] = Field(min_length=1, max_length=10)
@@ -4354,6 +4373,23 @@ def refine_storyboard_batch(script_id: str,
 
     def event_stream():
         for event_type, data in pipeline.refine_batch_generator(script_id):
+            yield f"event: {event_type}\ndata: {json.dumps(data, ensure_ascii=False)}\n\n"
+
+    return StreamingResponse(event_stream(), media_type="text/event-stream")
+
+
+@app.post("/projects/{script_id}/storyboard/initialize")
+def initialize_storyboard_batch(script_id: str,
+                                user: UserContext = Depends(require_studio_user)):
+    """Initialize all shots, proposing only missing fields for review."""
+    from fastapi.responses import StreamingResponse
+
+    script = pipeline.get_script(script_id, user.owner_profile_id)
+    if not script:
+        raise HTTPException(status_code=404, detail="Script not found")
+
+    def event_stream():
+        for event_type, data in pipeline.initialize_batch_generator(script_id):
             yield f"event: {event_type}\ndata: {json.dumps(data, ensure_ascii=False)}\n\n"
 
     return StreamingResponse(event_stream(), media_type="text/event-stream")

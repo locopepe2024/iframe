@@ -6449,22 +6449,24 @@ class ComicGenPipeline(StudioOwnerMixin):
         "dialogue_structured", "audio_note", "lighting",
     )
 
-    def _rich_refinement_source_hash(self, script: Script, frame: StoryboardFrame) -> str:
+    def _rich_refinement_source_hash(self, script: Script, frame: StoryboardFrame, *, initialization: bool = False) -> str:
         index = script.frames.index(frame)
-        neighbors = [script.frames[pos] for pos in (index - 1, index + 1) if 0 <= pos < len(script.frames)]
+        neighbors = [] if initialization else [script.frames[pos] for pos in (index - 1, index + 1) if 0 <= pos < len(script.frames)]
         assets = self.resolve_project_assets(script)
+        characters = [item for item in assets["characters"] if not initialization or item.id in frame.character_ids]
+        scenes = [item for item in assets["scenes"] if not initialization or item.id == frame.scene_id]
         payload = {
             "frame": frame.model_dump(exclude={"rich_refinement_candidate", "updated_at"}, mode="json"),
             "neighbors": [item.model_dump(exclude={"rich_refinement_candidate", "updated_at"}, mode="json") for item in neighbors],
-            "characters": [item.model_dump(mode="json") for item in assets["characters"]],
-            "scenes": [item.model_dump(mode="json") for item in assets["scenes"]],
+            "characters": [item.model_dump(mode="json") for item in characters],
+            "scenes": [item.model_dump(mode="json") for item in scenes],
             "style": self.storyboard_visual_style(script),
-            "director": self.director_prompt_context(script),
+            "director": self._episode_shot_context_prompt(script, frame) if initialization else self.director_prompt_context(script),
         }
         return hashlib.sha256(json.dumps(payload, sort_keys=True, ensure_ascii=False, default=str).encode()).hexdigest()
 
-    def refine_frame(self, script_id: str, frame_id: str) -> Optional[StoryboardFrame]:
-        """Phase 2: propose rich fields without changing the accepted frame."""
+    def refine_frame(self, script_id: str, frame_id: str, *, initialization: bool = False) -> Optional[StoryboardFrame]:
+        """Propose reviewable fields; initialization mode only fills missing values."""
         from .models import DialogueStructured, Blocking, AudioNote, LightingData, StageSubject
 
         script = self.scripts.get(script_id)
@@ -6475,7 +6477,10 @@ class ComicGenPipeline(StudioOwnerMixin):
         if not frame:
             raise ValueError(f"Frame {frame_id} not found")
 
-        source_hash = self._rich_refinement_source_hash(script, frame)
+        source_hash = self._rich_refinement_source_hash(script, frame, initialization=initialization)
+        initialization_fields = ("visual_description", "blocking")
+        if initialization and all(getattr(frame, key) not in (None, "", [], {}) for key in initialization_fields):
+            return frame
         frame_idx = script.frames.index(frame)
         resolved = self.resolve_project_assets(script)
         all_characters = resolved["characters"]
@@ -6512,7 +6517,7 @@ class ComicGenPipeline(StudioOwnerMixin):
 
         # Adjacent frame context
         prev_ctx = None
-        if frame_idx > 0:
+        if not initialization and frame_idx > 0:
             pf = script.frames[frame_idx - 1]
             prev_scene = next((s.name for s in all_scenes if s.id == pf.scene_id), None)
             prev_characters = [c.name for c in all_characters if c.id in pf.character_ids]
@@ -6523,7 +6528,7 @@ class ComicGenPipeline(StudioOwnerMixin):
                 f"Shot: {pf.shot_size}, {pf.camera_angle}."
             )
         next_ctx = None
-        if frame_idx < len(script.frames) - 1:
+        if not initialization and frame_idx < len(script.frames) - 1:
             nf = script.frames[frame_idx + 1]
             next_scene = next((s.name for s in all_scenes if s.id == nf.scene_id), None)
             next_characters = [c.name for c in all_characters if c.id in nf.character_ids]
@@ -6534,20 +6539,24 @@ class ComicGenPipeline(StudioOwnerMixin):
                 f"Shot: {nf.shot_size}, {nf.camera_angle}."
             )
 
-        if self._rich_refinement_source_hash(script, frame) != source_hash:
+        if self._rich_refinement_source_hash(script, frame, initialization=initialization) != source_hash:
             raise ValueError("Shot or context changed while preparing refinement; retry this frame")
         result = self.script_processor.refine_frame_to_rich(
             coarse, char_assets, scene_assets, prev_ctx, next_ctx,
             visual_style=self.storyboard_visual_style(script),
-            director_context="\n".join(filter(None, [
-                self.director_prompt_context(script),
-                self._episode_shot_context_prompt(script, frame),
-            ])),
+            director_context=(self._episode_shot_context_prompt(script, frame) if initialization else
+                "\n".join(filter(None, [
+                    self.director_prompt_context(script),
+                    self._episode_shot_context_prompt(script, frame),
+                ]))),
+            initialization=initialization,
         )
+        if initialization and not result:
+            raise ValueError("Frame initialization returned no missing-field proposal")
         if not result:
             return frame
 
-        if self._rich_refinement_source_hash(script, frame) != source_hash:
+        if self._rich_refinement_source_hash(script, frame, initialization=initialization) != source_hash:
             raise ValueError("Shot or context changed while refining; retry this frame")
         proposed = frame.model_copy(deep=True)
         # Normalize the model response through the existing frame field types.
@@ -6617,15 +6626,20 @@ class ComicGenPipeline(StudioOwnerMixin):
             key: getattr(validated, key).model_dump(mode="json") if hasattr(getattr(validated, key), "model_dump") else getattr(validated, key)
             for key in self._RICH_REFINEMENT_FIELDS
             if getattr(validated, key) != getattr(frame, key)
+            and (not initialization or key in initialization_fields and getattr(frame, key) in (None, "", [], {}))
         }
         if not fields:
+            if initialization:
+                raise ValueError("Frame initialization returned no valid missing-field proposal")
             frame.rich_refinement_candidate = None
             frame.updated_at = time.time()
             self._save_data()
             return frame
         rationales = result.get("rationale") if isinstance(result.get("rationale"), dict) else {}
         frame.rich_refinement_candidate = {
-            "id": str(uuid.uuid4()), "source_hash": source_hash, "source": "AI 分镜细化",
+            "id": str(uuid.uuid4()), "source_hash": source_hash,
+            "source": "初始化补全" if initialization else "AI 分镜细化",
+            "mode": "initialization" if initialization else "legacy_refinement",
             "fields": fields,
             "current_fields": {
                 key: getattr(frame, key).model_dump(mode="json") if hasattr(getattr(frame, key), "model_dump") else getattr(frame, key)
@@ -6649,7 +6663,9 @@ class ComicGenPipeline(StudioOwnerMixin):
         candidate = frame.rich_refinement_candidate or {}
         if not candidate_id or candidate.get("id") != candidate_id:
             raise ValueError("Rich-frame candidate is no longer current")
-        if candidate.get("source_hash") != self._rich_refinement_source_hash(script, frame):
+        if candidate.get("source_hash") != self._rich_refinement_source_hash(
+            script, frame, initialization=candidate.get("mode") == "initialization",
+        ):
             raise ValueError("Shot or context changed; refine this frame again")
         fields = candidate.get("fields") or {}
         if not selected_fields or len(set(selected_fields)) != len(selected_fields) or any(
@@ -6733,6 +6749,31 @@ class ComicGenPipeline(StudioOwnerMixin):
                 })
 
         yield ("batch_complete", {"total": total, "success": success, "failed": failed})
+
+    def initialize_batch_generator(self, script_id: str):
+        """Initialize storyboard frames by proposing only missing fields."""
+        script = self.scripts.get(script_id)
+        if not script:
+            raise ValueError("Script not found")
+        total = len(script.frames)
+        success = 0
+        failed = 0
+        for idx, frame in enumerate(script.frames):
+            yield ("frame_initialize_start", {
+                "frame_id": frame.id, "frame_index": idx, "total": total,
+                "label": frame.action_description[:40] if frame.action_description else f"Frame {idx + 1}",
+            })
+            try:
+                self.refine_frame(script_id, frame.id, initialization=True)
+                success += 1
+                yield ("frame_initialize_complete", {"frame_id": frame.id, "frame_index": idx, "total": total})
+            except Exception as exc:
+                failed += 1
+                logger.error("[initialize_batch] frame=%s error=%s", frame.id, exc)
+                yield ("frame_initialize_error", {
+                    "frame_id": frame.id, "frame_index": idx, "error": f"分镜初始化失败（{type(exc).__name__}）",
+                })
+        yield ("initialize_complete", {"total": total, "success": success, "failed": failed})
 
     def preview_frame_polish_input(self, script_id: str, frame_id: str, raw_prompt: str,
                                    assets: List[Dict[str, Any]], feedback: str = "") -> Dict[str, Any]:
