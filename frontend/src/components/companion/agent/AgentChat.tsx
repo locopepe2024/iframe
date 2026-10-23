@@ -2,6 +2,7 @@
 import { useEffect, useRef, useState } from "react";
 import { companionApi, type MemoryPage, type Preview, type Turn, type UserMessage } from "@/lib/companionApi";
 import styles from "../photos/photos.module.css";
+import ConversationCard from "../ConversationCard";
 
 const prefix = process.env.NEXT_PUBLIC_API_URL === "/companion-demo" ? "/companion-demo" : "";
 const sessionKey = "iframe-companion-agent-session-v1";
@@ -101,7 +102,7 @@ export default function AgentChat() {
     <label className={styles.check}><input type="checkbox" checked={allowed} disabled={busy} onChange={e => setAllowed(e.target.checked)} />允许将上述范围的文字发送给个人 UniArt / Qwen 渠道</label>
     <button disabled={busy || pending || !session || !allowed || !text.trim() || hasRetry} onClick={() => void run(() => send())}>发送给陪伴助手</button>
     {hasRetry && <button disabled={busy || !allowed} onClick={() => void run(() => send(true))}>重试原请求</button>}
-    {turn?.result?.kind === "text" && <section className={styles.panel} aria-label="模型回复"><h2>模型回复</h2><p>{turn.result.text}</p></section>}
+    {turn?.result?.kind === "text" && <ConversationCard card={{ kind: "text", title: "陪伴助手", body: turn.result.text }} />}
     {turn?.result?.kind === "read" && <section className={styles.panel} aria-label="工具读取结果"><h2>实际记忆查询结果</h2>
       {turn.result.memories.length === 0 && <p>没有匹配的记忆。</p>}{turn.result.memories.map(m => <p key={m.id}>{m.content}（原话：{m.quote}）</p>)}
       {turn.result.next_cursor && <p>还有更多结果，请使用下方个人记忆列表分页查看。</p>}
