@@ -162,9 +162,9 @@ it("reviews rich-frame fields without applying any by default", () => {
     render(<ShotCard
         shot={{ ...shot, cameraAngle: "平视", richRefinementCandidate: {
             id: "candidate-1", source: "AI 分镜细化",
-            fields: { camera_angle: "低角度", shot_size: "近景" },
-            current_fields: { camera_angle: "平视", shot_size: "中景" },
-            rationale: { camera_angle: "突出人物视线", shot_size: "看清表情" },
+            fields: { camera_angle: "低角度", visual_description: "人物抬眼" },
+            current_fields: { camera_angle: "平视", visual_description: "人物站立" },
+            rationale: { camera_angle: "突出人物视线", visual_description: "延续当前动作" },
         } }}
         index={0} totalShots={1} characters={[]} scenes={[]} props={[]}
         onUpdatePrompt={vi.fn()} onUpdateField={vi.fn()}
@@ -176,7 +176,9 @@ it("reviews rich-frame fields without applying any by default", () => {
     />);
     expect(screen.getByRole("button", { name: "应用所选" })).toBeDisabled();
     expect(screen.getByText("理由：突出人物视线")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("checkbox", { name: /机位/ }));
+    expect(screen.getByRole("checkbox", { name: /机位/ })).toBeDisabled();
+    expect(screen.getByText("此字段已移至静态起幅或运镜设计，请在对应入口重新生成")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("checkbox", { name: /画面描述/ }));
     fireEvent.click(screen.getByRole("button", { name: "应用所选" }));
-    expect(onApplyRichRefinement).toHaveBeenCalledExactlyOnceWith("candidate-1", ["camera_angle"]);
+    expect(onApplyRichRefinement).toHaveBeenCalledExactlyOnceWith("candidate-1", ["visual_description"]);
 });

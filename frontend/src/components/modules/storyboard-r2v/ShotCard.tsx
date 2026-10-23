@@ -877,7 +877,8 @@ export default function ShotCard({
                                         transition_hint: "转场", camera_movement_structured: "运镜", blocking: "站位",
                                         dialogue_structured: "对白", audio_note: "声音", lighting: "光线",
                                     };
-                                    const unavailable = shot.promptIsOptimized && field !== "duration";
+                                    const movedToDedicatedPanel = ["shot_size", "camera_angle", "composition", "camera_movement_structured"].includes(field);
+                                    const unavailable = movedToDedicatedPanel || (shot.promptIsOptimized && field !== "duration");
                                     const display = (value: unknown) => value == null || value === "" ? "未设置"
                                         : typeof value === "object" ? JSON.stringify(value, null, 2) : String(value);
                                     return <label key={field} className="flex items-start gap-2 py-2">
@@ -889,7 +890,8 @@ export default function ShotCard({
                                             <span className="block whitespace-pre-wrap break-words">当前：{display(shot.richRefinementCandidate?.current_fields?.[field])}</span>
                                             <span className="block whitespace-pre-wrap break-words">建议：{display(proposed)}</span>
                                             <span className="block text-text-muted">理由：{shot.richRefinementCandidate?.rationale?.[field] || "模型未提供理由"}</span>
-                                            {unavailable && <span className="block text-accent">已采用完整优化稿，需重新审阅生成提示词后才能应用此项</span>}
+                                            {movedToDedicatedPanel && <span className="block text-accent">此字段已移至静态起幅或运镜设计，请在对应入口重新生成</span>}
+                                            {!movedToDedicatedPanel && unavailable && <span className="block text-accent">已采用完整优化稿，需重新审阅生成提示词后才能应用此项</span>}
                                         </span>
                                     </label>;
                                 })}
