@@ -1,6 +1,7 @@
 """Leased turn persistence. Provider calls happen outside transactions."""
 import copy
 import json
+import re
 import secrets
 import uuid
 from contextlib import contextmanager
@@ -58,8 +59,13 @@ class ChatStore(DiaryStore, CompanionStore):
             row=db.execute('SELECT * FROM companion_turns WHERE owner=? AND id=?',(owner,claim['id'])).fetchone()
             if not row or row['actor']!=actor or row['status']!='running' or row['token']!=claim['token'] or row['lease_until']<=self.clock():
                 raise Conflict('Turn claim expired')
+            diary_request = bool(re.search(r'请把\s+\d{4}-\d{2}-\d{2}\s+我们聊的内容整理成一篇回忆日记', row['text']))
             if proposal['kind']=='text':
                 result=dict(kind='text',text=proposal['text'])
+            elif diary_request:
+                # A diary request is a writing task. Never expose an accidental
+                # memory read as the result; ask for the missing facts instead.
+                result=dict(kind='text',text='我会按这个日期整理回忆日记。现在还缺少可以整理的聊天内容，请先告诉我这一天发生了什么。')
             else:
                 name=proposal['name']
                 values=MODELS[name].model_validate(proposal['arguments']).model_dump()

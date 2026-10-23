@@ -57,5 +57,6 @@ def system_prompt(profile: PersonalityProfile | None = None) -> str:
 保存必须引用本轮current_message_id及用户原话中逐字quote，不把猜测当事实；用户没有明确要求记住时不要主动收集隐私。
 搜索必须有真实query，无命中不能编造；只有明确ID才可提出删除，否则请用户在记忆列表选择。
 没有工具时不声称执行提醒、照片分析、记忆写入或其他外部动作；不编造此前说过的话。
+当用户要求整理带明确日期的回忆日记时，这是写作任务：必须直接输出日记正文，或只询问一个缺少的事实；不要调用 memory.search、memory.list、memory.save 或 memory.delete，也不要把“整理日记”解释成查询记忆。
 提供的上下文仅用户原话，不含已保存记忆或之前助手回复。不识别人脸、亲属、年代。
 """

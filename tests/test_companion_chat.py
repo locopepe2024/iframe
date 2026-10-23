@@ -56,6 +56,15 @@ def test_no_permission_no_model_and_failed_request_retry(chat):
     assert len(store.messages('owner',session)['messages'])==1
 
 
+def test_diary_request_never_surfaces_an_accidental_memory_read(chat):
+    store,_,client,session,callback=chat
+    callback.return_value=dict(kind='tool',name='memory.search',arguments=dict(query='2026-10-24',limit=20,min_importance=1,type=None,cursor=''))
+    response=client.post(f'/companion-runtime/sessions/{session}/chat',json=dict(
+        operation_id='diary', text='请把 2026-10-24 我们聊的内容整理成一篇回忆日记。', allow_external_text=True))
+    assert response.status_code==200
+    assert response.json()['result']==dict(kind='text',text='我会按这个日期整理回忆日记。现在还缺少可以整理的聊天内容，请先告诉我这一天发生了什么。')
+
+
 def test_claim_reclaim_old_worker_and_invalid_source_never_writes(chat):
     store,now,_,session,_=chat
     claim=store.claim_turn('owner','actor',session,'one','我喜欢散步')
