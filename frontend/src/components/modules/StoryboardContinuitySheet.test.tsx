@@ -65,3 +65,16 @@ it("focuses a shot from its card and clears filters that would hide it", async (
     rerender(<StoryboardContinuitySheet projectId="p" revisionKey="r1" focusedFrameId="second" focusVersion={2} onOpenFrame={() => {}} />);
     expect(screen.getByText("编辑分镜首帧")).toBeTruthy();
 });
+
+it("uses the shot-design action without changing the continuity row", async () => {
+    getStoryboardContinuitySheet.mockResolvedValue({
+        rows: [{ frame_id: "shot", scene_id: "street", scene_name: "长街", continuity_status: "unresolved", fields: {}, reference: null }],
+        issues: [],
+    });
+    const onOpenFrame = vi.fn();
+    render(<StoryboardContinuitySheet projectId="p" revisionKey="r1" onOpenFrame={onOpenFrame} openFrameLabel="定位镜头设计" />);
+    fireEvent.click(await screen.findByText("分镜 1"));
+    expect(screen.getByText(/实际提交内容以各自生成预览为准/)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "定位镜头设计" }));
+    expect(onOpenFrame).toHaveBeenCalledWith("shot");
+});

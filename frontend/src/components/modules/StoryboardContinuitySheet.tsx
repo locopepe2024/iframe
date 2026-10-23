@@ -27,8 +27,8 @@ function valueText(value: unknown): string {
     return value == null ? "未确认" : String(value).replace(/\b(?:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}|[0-9a-f]{32})\b/gi, "已关联对象");
 }
 
-export default function StoryboardContinuitySheet({ projectId, revisionKey, focusedFrameId, focusVersion, onOpenFrame }: {
-    projectId: string; revisionKey: string; focusedFrameId?: string | null; focusVersion?: number; onOpenFrame: (frameId: string) => void;
+export default function StoryboardContinuitySheet({ projectId, revisionKey, focusedFrameId, focusVersion, onOpenFrame, openFrameLabel = "编辑分镜首帧" }: {
+    projectId: string; revisionKey: string; focusedFrameId?: string | null; focusVersion?: number; onOpenFrame: (frameId: string) => void; openFrameLabel?: string;
 }) {
     const [sheet, setSheet] = useState<Sheet | null>(null);
     const [loading, setLoading] = useState(true);
@@ -91,6 +91,7 @@ export default function StoryboardContinuitySheet({ projectId, revisionKey, focu
                     <button type="button" title="刷新一致性表" aria-label="刷新一致性表" onClick={() => setRefreshCount(value => value + 1)} className="rounded p-1.5 text-text-secondary hover:bg-hover-bg hover:text-foreground"><RefreshCw size={15} /></button>
                 </div>
             </div>
+            <p className="mt-1 text-xs text-text-muted">这里展示已保存字段的来源与差异；图片和视频的实际提交内容以各自生成预览为准。</p>
             {loading && <p role="status" className="mt-3 text-xs text-text-muted">正在读取一致性表…</p>}
             {error && <p role="alert" className="mt-3 text-xs text-red-400">{error}</p>}
             {!loading && !error && sheet && <div className="mt-3 max-h-72 overflow-auto border-t border-border-subtle">
@@ -116,7 +117,7 @@ export default function StoryboardContinuitySheet({ projectId, revisionKey, focu
                             </div>
                             {row.reference && <p className="mt-2 text-text-muted">参考图：{row.reference.source_variant_id ? "已绑定" : "未确认"} · 来源设计版本 {row.reference.source_design_revision || "未确认"} · 已勾选：{row.reference.selected_fields.join("、") || "仅参考图"}</p>}
                             {issues.map((issue, index) => <p key={`${issue.field}-${index}`} className="mt-2 text-amber-300">{FIELD_LABELS[issue.field] || issue.field}：{issue.values.map(item => valueText(item.value)).join(" / ")} · {issue.status === "explicit_override" ? "镜头显式覆盖，需审阅" : "跨镜差异，需审阅"}</p>)}
-                            <button type="button" onClick={() => onOpenFrame(row.frame_id)} className="mt-2 text-primary hover:underline">编辑分镜首帧</button>
+                            <button type="button" onClick={() => onOpenFrame(row.frame_id)} className="mt-2 text-primary hover:underline">{openFrameLabel}</button>
                         </div>}
                     </div>;
                 })}

@@ -10,6 +10,7 @@ import { motion } from "framer-motion";
 import { Plus, Loader2, Sparkles, PanelBottomOpen, PanelBottomClose } from "lucide-react";
 import StepPageHeader, { StepPill } from "@/components/shared/StepPageHeader";
 import RenderPromptPreviewDialog, { type FrameRenderPreview } from "./RenderPromptPreviewDialog";
+import StoryboardContinuitySheet from "./StoryboardContinuitySheet";
 import { useTranslations } from "next-intl";
 import { useProjectStore } from "@/store/projectStore";
 import { api, crudApi, type VideoTask, type AssetReferenceIndexEntry, type EpisodeCharacterUse } from "@/lib/api";
@@ -68,6 +69,7 @@ import {
 } from "./storyboard-r2v/referenceAssets";
 
 export default function StoryboardR2V() {
+    const [showContinuitySheet, setShowContinuitySheet] = useState(false);
     const candidateRenderBusyRef = useRef(false);
     const [pendingCandidate, setPendingCandidate] = useState<{
         projectId: string; frameId: string; slot: "first" | "last";
@@ -2079,6 +2081,15 @@ export default function StoryboardR2V() {
             />
 
             <div className="flex-1 overflow-y-auto px-5 pt-1.5 pb-10 space-y-5 sm:px-7">
+                {currentProject?.id && shots.length > 0 && <div className="border-b border-border-subtle pb-2">
+                    <button type="button" aria-expanded={showContinuitySheet} onClick={() => setShowContinuitySheet(value => !value)} className="text-xs text-primary hover:underline">结构化一致性与来源</button>
+                    {showContinuitySheet && <StoryboardContinuitySheet
+                        projectId={currentProject.id}
+                        revisionKey={JSON.stringify((currentProject.frames || []).map((frame: any) => [frame.id, frame.updated_at, frame.reference_visual_projection?.revision]))}
+                        onOpenFrame={handleJumpToShot}
+                        openFrameLabel="定位镜头设计"
+                    />}
+                </div>}
                 {shots.length === 0 && (
                     <div className="h-full min-h-[300px] flex flex-col items-center justify-center text-center px-6">
                         <div className="rounded-2xl border border-glass-border bg-glass p-8 max-w-lg">

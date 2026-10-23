@@ -58,7 +58,7 @@ it("identifies a legacy image with no structured version and keeps image-only su
     await waitFor(() => expect(api.applyShotVisualPreset).toHaveBeenCalledWith("project", "frame", "legacy", "image_only", []));
 });
 
-it("shows when a selected reference has light that was not accepted", async () => {
+it("distinguishes image-only reference from the effective lighting input", async () => {
     const originalFrames = state.currentProject.frames;
     state.currentProject.frames = [{
         id: "frame", action_description: "target action",
@@ -74,7 +74,7 @@ it("shows when a selected reference has light that was not accepted", async () =
     } });
     try {
         render(<StoryboardFrameEditor frame={state.currentProject.frames[0]} onClose={() => {}} />);
-        expect(await screen.findByText("所选参考图的结构化光影未带入本镜首帧。")).toBeInTheDocument();
+        expect(await screen.findByText("此参考仅提交图片，未选择其结构化光影。请在生成预览中核对本镜实际光影输入。")).toBeInTheDocument();
         expect(screen.getByText(/当前参考：上一镜首帧/)).toBeInTheDocument();
     } finally {
         state.currentProject.frames = originalFrames;

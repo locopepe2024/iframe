@@ -391,7 +391,7 @@ export default function StoryboardFrameEditor({ frame: initialFrame, onClose }: 
                                     {frame.reference_visual_projection?.source_preset_id
                                         && Object.keys(frame.reference_visual_projection.visual_design?.lighting ?? {}).length > 0
                                         && !frame.reference_visual_projection.selected_fields?.includes("lighting")
-                                        && <p role="status" className="text-[0.6875rem] text-amber-600">所选参考图的结构化光影未带入本镜首帧。</p>}
+                                        && <p role="status" className="text-[0.6875rem] text-text-muted">此参考仅提交图片，未选择其结构化光影。请在生成预览中核对本镜实际光影输入。</p>}
                                     <div className="flex gap-2">
                                         <input aria-label="视觉预设名称" value={visualPresetName} onChange={event => setVisualPresetName(event.target.value)} placeholder="保存当前参数为预设" className="min-w-0 flex-1 rounded border border-glass-border bg-surface p-2 text-xs text-foreground" />
                                         <button type="button" onClick={() => void saveVisualPreset()} disabled={!visualPresetName.trim() || visualPresetBusy} className="rounded border border-glass-border px-2 py-1 text-xs text-foreground disabled:opacity-40">保存预设</button>
