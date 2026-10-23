@@ -58,6 +58,18 @@
       "instructions": "适用：Seedance 运镜、镜头设计、机位或图生视频提示词。每个短镜头选择一个主运镜，写清起始景别、角度、运动路径、速度、与主体的相对关系及结束构图。情绪领悟可缓慢推进；人物移动可跟拍；揭示空间可后拉或升起；精细表演与产品身份可固定机位。区分机位平移与原地摇摄、物理推进与镜头变焦，避免将矛盾运动堆在同一镜头。焦距词只在帮助空间表达时使用，并说明距离和主体。图生视频默认保留原构图与身份，明确允许变化的部分。视频参考明确只借用运镜、节奏或动作，不擅自借用人物身份或环境。多镜头维持屏幕方向、视线与轴线，复杂变化拆成分镜。输出一条可直接粘贴的运镜提示词；必要时附起幅、运动和落幅，不虚构模型支持的特殊语法或时长。"
     },
     {
+      "id": "shot-camera-movement",
+      "name": "分镜运镜设计",
+      "category": "分镜摄影",
+      "targets": ["Storyboard camera"],
+      "version": "1.0.0",
+      "description": "只提出当前镜头的结构化运镜候选，供 H3 和 Seedance 共用。",
+      "license": "MIT（iFrame 原创工作流）",
+      "license_file": "lumenx-MIT.txt",
+      "adaptation": "独立字段设计方法；不进入模型专属完整提示词润色。旧 seedance-camera 保持原行为。",
+      "instructions_file": "shot-camera-movement.md"
+    },
+    {
       "id": "seedance-prompt",
       "name": "Seedance 提示词优化",
       "category": "提示词优化",

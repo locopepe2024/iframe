@@ -261,7 +261,10 @@ def assemble_prompt(
     # not repeat them in the visual description. Compare clause values without
     # punctuation so the plan does not restate text already present in a frame.
     normalized_existing = re.sub(r"[\s，。；：、,.!?！？:;]+", "", " ".join(parts)).casefold()
-    for clause in _director_shot_context_parts(frame.director_shot_context):
+    for clause in _director_shot_context_parts(
+        frame.director_shot_context,
+        include_camera_movement=frame.camera_movement_structured is None,
+    ):
         value = clause.split("：", 1)[-1]
         normalized_value = re.sub(r"[\s，。；：、,.!?！？:;]+", "", value).casefold()
         if not normalized_value or normalized_value in normalized_existing:

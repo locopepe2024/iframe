@@ -4068,6 +4068,122 @@ def apply_micro_expression(script_id: str, frame_id: str, request: MicroExpressi
     return signed_response(script)
 
 
+class CameraMovementRequest(BaseModel):
+    frame_id: str
+    reviewed_messages: Optional[Dict[str, str]] = None
+    review_token: Optional[str] = None
+
+
+def _camera_movement_review(script_id: str, frame_id: str, user: UserContext) -> Dict[str, Any]:
+    from ..agent_skills import catalog as skill_catalog
+
+    script = pipeline.get_script(script_id, user.owner_profile_id)
+    if not script:
+        raise HTTPException(status_code=404, detail="Script not found")
+    frame = next((item for item in script.frames if item.id == frame_id), None)
+    if frame is None:
+        raise HTTPException(status_code=404, detail="Frame not found")
+    skill = next(item for item in skill_catalog() if item["id"] == "shot-camera-movement")
+    projection = frame.reference_visual_projection
+    selected = set(projection.selected_fields) & {"space", "camera"} if projection else set()
+    payload = {
+        "duration_seconds": frame.duration,
+        "current_action": frame.action_description or "",
+        "shot_size": frame.shot_size or "",
+        "camera_angle": frame.camera_angle or "",
+        "composition": frame.composition or "",
+        "blocking": frame.blocking.model_dump(mode="json") if frame.blocking else None,
+        "camera_movement_structured": frame.camera_movement_structured.model_dump(mode="json") if frame.camera_movement_structured else None,
+        "continuity_constraints": {
+            "scope": projection.scope,
+            "visual_design": {key: projection.visual_design[key] for key in selected if key in projection.visual_design},
+        } if selected else None,
+    }
+    messages = {"system": skill["instructions"], "user": json.dumps(payload, ensure_ascii=False)}
+    source = {
+        "frame": frame.model_dump(exclude={"camera_movement_candidate", "updated_at", "assembled_prompt"}, mode="json"),
+        "skill_revision": skill["revision"],
+    }
+    token = hashlib.sha256(json.dumps(source, sort_keys=True, ensure_ascii=False).encode()).hexdigest()
+    return {"messages": messages, "review_token": token, "input": payload}
+
+
+@app.post("/projects/{script_id}/frames/{frame_id}/camera-movement/preview")
+def preview_camera_movement(script_id: str, frame_id: str, request: CameraMovementRequest,
+                            user: UserContext = Depends(require_studio_user)):
+    if request.frame_id != frame_id:
+        raise HTTPException(status_code=422, detail="Frame ID mismatch")
+    return _camera_movement_review(script_id, frame_id, user)
+
+
+@app.post("/projects/{script_id}/frames/{frame_id}/camera-movement/generate")
+def generate_camera_movement(script_id: str, frame_id: str, request: CameraMovementRequest,
+                             user: UserContext = Depends(require_studio_user)):
+    if request.frame_id != frame_id:
+        raise HTTPException(status_code=422, detail="Frame ID mismatch")
+    review = _camera_movement_review(script_id, frame_id, user)
+    if request.review_token != review["review_token"] or request.reviewed_messages != review["messages"]:
+        raise HTTPException(status_code=409, detail="请先审核并确认完整的运镜模型输入")
+    try:
+        content = pipeline.script_processor.llm.chat(
+            messages=[{"role": "system", "content": review["messages"]["system"]},
+                      {"role": "user", "content": review["messages"]["user"]}],
+            response_format={"type": "json_object"}, timeout_seconds=300, max_retries=1,
+        )
+        from .camera_movement import validate_movement_payload
+        proposal = validate_movement_payload(json.loads(content or ""))
+        if set(proposal.source_refs) - set(review["input"]):
+            raise ValueError("运镜来源不在当前镜头输入中")
+        if _camera_movement_review(script_id, frame_id, user)["review_token"] != review["review_token"]:
+            raise HTTPException(status_code=409, detail="镜头已变化，请重新预览")
+        script = pipeline.get_script(script_id, user.owner_profile_id)
+        frame = next(item for item in script.frames if item.id == frame_id)
+        frame.camera_movement_candidate = {
+            "id": str(uuid.uuid4()), "source_hash": review["review_token"],
+            **proposal.model_dump(mode="json"),
+        }
+        frame.updated_at = time.time()
+        pipeline._save_data()
+        return frame.camera_movement_candidate
+    except HTTPException:
+        raise
+    except (json.JSONDecodeError, ValueError) as exc:
+        logger.warning("Camera movement result failed validation: %s", type(exc).__name__)
+        raise HTTPException(status_code=502, detail="运镜候选未通过结构校验，请重试") from exc
+
+
+class CameraMovementApplyRequest(BaseModel):
+    candidate_id: str
+
+
+@app.post("/projects/{script_id}/frames/{frame_id}/camera-movement/apply", response_model=Script)
+def apply_camera_movement(script_id: str, frame_id: str, request: CameraMovementApplyRequest,
+                          user: UserContext = Depends(require_studio_user)):
+    script = pipeline.get_script(script_id, user.owner_profile_id)
+    if not script:
+        raise HTTPException(status_code=404, detail="Script not found")
+    frame = next((item for item in script.frames if item.id == frame_id), None)
+    if frame is None:
+        raise HTTPException(status_code=404, detail="Frame not found")
+    candidate = frame.camera_movement_candidate or {}
+    if candidate.get("id") != request.candidate_id:
+        raise HTTPException(status_code=409, detail="运镜候选已过期")
+    if frame.workbench_prompt_is_optimized:
+        raise HTTPException(status_code=409, detail="完整优化稿需重新审核后才能应用运镜")
+    if candidate.get("source_hash") != _camera_movement_review(script_id, frame_id, user)["review_token"]:
+        raise HTTPException(status_code=409, detail="镜头已变化，请重新生成")
+    from .camera_movement import validate_movement_payload
+    from .prompt_assembly import assemble_prompt
+    proposal = validate_movement_payload({key: candidate[key] for key in
+        ("camera_movement_structured", "rationale", "source_refs", "uncertainties")})
+    frame.camera_movement_structured = proposal.camera_movement_structured
+    frame.assembled_prompt = assemble_prompt(frame, pipeline.resolve_project_assets(script)["characters"])
+    frame.camera_movement_candidate = None
+    frame.updated_at = time.time()
+    pipeline._save_data()
+    return signed_response(script)
+
+
 @app.post("/projects/{script_id}/frames/{frame_id}/rich-refinement/apply", response_model=Script)
 def apply_rich_refinement(script_id: str, frame_id: str, request: RichFrameCandidateApplyRequest,
                           user: UserContext = Depends(require_studio_user)):
