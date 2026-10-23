@@ -728,7 +728,8 @@ def test_rich_frame_prompt_keeps_project_style_and_continuity_constraints():
     assert "left to right" in prompt
     assert "将产品放回桌面" in prompt
     assert "preserve character appearance/clothing" in prompt
-    assert '"rationale": {"shot_size":' in prompt
+    assert '"rationale": {"visual_description":' in prompt
+    assert "Never return shot_size, camera_angle, composition" in prompt
     assert "Do not copy an adjacent frame's action or dialogue" in prompt
     assert result["visual_description"].startswith("主播保持同一造型")
 
@@ -807,7 +808,9 @@ def test_rich_refinement_requires_field_review_and_rejects_stale_context():
     pipeline.resolve_project_assets = lambda _: {"characters": [], "scenes": [scene], "props": []}
     pipeline.script_processor = Mock()
     pipeline.script_processor.refine_frame_to_rich.return_value = {
-        "shot_size": "近景", "camera_angle": "低角度", "rationale": {"shot_size": "突出乙的视线"},
+        "visual_description": "乙缓缓抬眼", "shot_size": "近景", "camera_angle": "低角度",
+        "camera_movement": {"primary": "push_in", "speed": "slow"},
+        "rationale": {"visual_description": "延续当前动作"},
     }
     pipeline._save_data = Mock()
 
@@ -815,24 +818,34 @@ def test_rich_refinement_requires_field_review_and_rejects_stale_context():
     candidate = current.rich_refinement_candidate
     assert current.shot_size == "中景"
     assert current.camera_angle == "平视"
-    assert candidate["fields"] == {"shot_size": "近景", "camera_angle": "低角度"}
-    assert candidate["current_fields"] == {"shot_size": "中景", "camera_angle": "平视"}
-    assert candidate["rationale"]["shot_size"] == "突出乙的视线"
+    assert candidate["fields"] == {"visual_description": "乙缓缓抬眼"}
+    assert candidate["rationale"]["visual_description"] == "延续当前动作"
 
     with pytest.raises(ValueError, match="Select valid"):
         pipeline.apply_rich_refinement_candidate("project", "current", candidate["id"], ["dialogue"])
     assert current.shot_size == "中景"
-    pipeline.apply_rich_refinement_candidate("project", "current", candidate["id"], ["shot_size"])
-    assert current.shot_size == "近景"
+    with pytest.raises(ValueError, match="Select valid"):
+        pipeline.apply_rich_refinement_candidate("project", "current", candidate["id"], ["shot_size"])
+    pipeline.apply_rich_refinement_candidate("project", "current", candidate["id"], ["visual_description"])
+    assert current.visual_description == "乙缓缓抬眼"
+    assert current.shot_size == "中景"
     assert current.camera_angle == "平视"
     assert current.rich_refinement_candidate is None
 
+    pipeline.script_processor.refine_frame_to_rich.return_value["visual_description"] = "乙停住视线"
     pipeline.refine_frame("project", "current")
     stale_id = current.rich_refinement_candidate["id"]
     previous.action_description = "甲关门"
     with pytest.raises(ValueError, match="context changed"):
-        pipeline.apply_rich_refinement_candidate("project", "current", stale_id, ["camera_angle"])
+        pipeline.apply_rich_refinement_candidate("project", "current", stale_id, ["visual_description"])
     assert current.camera_angle == "平视"
+
+    current.rich_refinement_candidate = {
+        "id": "legacy", "source_hash": pipeline._rich_refinement_source_hash(script, current),
+        "fields": {"camera_movement_structured": {"primary": "push_in", "speed": "slow"}},
+    }
+    with pytest.raises(ValueError, match="Select valid"):
+        pipeline.apply_rich_refinement_candidate("project", "current", "legacy", ["camera_movement_structured"])
 
 
 def test_rich_refinement_rejects_context_change_during_model_call():

@@ -2488,27 +2488,19 @@ scene_summaries 是场景级连续性记忆。为每个镜头优先匹配原文�
             return None
 
         system_prompt = f"""# Role
-You are a film storyboard refinement specialist. Enrich one coarse frame into full structured data + visual description.
+You are a film storyboard refinement specialist. Enrich one coarse frame into performance, sound and visual-description proposals.
 
 # Input Context
-- Coarse frame info (scene, characters, action, shot_size, angle, duration)
+- Coarse frame info (scene, characters, action, accepted shot_size, angle, duration)
 - Character assets (appearance, clothing)
 - Scene assets (environment, atmosphere)
 - Adjacent frames for continuity
 
 # Output
-Return a JSON object with ALL fields below. null is acceptable for optional fields.
+Return a JSON object with the fields below. null is acceptable for optional fields. The accepted shot size, angle, composition and movement are read-only context.
 
 {{
     "visual_description": "Complete visual description (100-200 chars). Describe environment, character acting, physical action, lighting.",
-    "shot_size": "One of: 大特写|特写|近景|中景|全景|远景|大远景",
-    "camera_angle": "One of: 平视|俯视|仰视|鸟瞰|蚁视|过肩|荷兰角|主观视角",
-    "camera_movement": {{
-        "primary": "static|push_in|pull_out|pan_left|pan_right|tilt_up|tilt_down|orbit|follow|crane_up|crane_down|handheld|zoom_in|zoom_out",
-        "secondary": null,
-        "speed": "slow|normal|fast",
-        "description": "Natural language description of camera motion"
-    }},
     "blocking": {{
         "description": "Spatial layout description: left->right: CharA(depth) | CharB(depth)",
         "stage": [
@@ -2542,16 +2534,16 @@ Return a JSON object with ALL fields below. null is acceptable for optional fiel
     }},
     "transition_hint": "Cut type to next frame (硬切|叠化|黑场|匹配剪辑) or null",
     "duration": 5,
-    "rationale": {{"shot_size": "Why this framing serves the current shot; cite the supplied shot or confirmed plan, not an invented event."}}
+    "rationale": {{"visual_description": "Why this change serves the current shot; cite supplied evidence, not an invented event."}}
 }}
 
 # Rules
-1. visual_description must be fluent Chinese, covering environment + performance + action + lighting feel. Preserve and refine the supplied visual_atmosphere, character_acting, key_action_physics, shot_size, camera, and lighting; follow the confirmed episode shot context when present. Follow the project visual style below in every frame; allow local lighting changes only when the script supports them.
+1. visual_description must be fluent Chinese, covering environment + performance + action + lighting feel. Preserve the accepted shot_size, camera angle, composition and movement as read-only constraints; follow the confirmed episode shot context when present. Follow the project visual style below in every frame; allow local lighting changes only when the script supports them.
 2. dialogue_structured is null if this frame has no dialogue.
 3. audio_note can be null.
 4. blocking.stage should cover all visible characters and key props.
 5. Maintain continuity with adjacent frames: preserve character appearance/clothing, scene layout, time/weather, screen direction, eyelines, action direction, and prop state unless an explicit script event changes them. Camera framing may vary without accidentally reversing the axis.
-6. camera_movement has at most primary + secondary.
+6. Never return shot_size, camera_angle, composition, camera_movement or camera_movement_structured. Dedicated field stages own these decisions.
 7. For each field you change, add a short rationale keyed by that field name. If the supplied evidence does not support a change, keep the original value. Do not copy an adjacent frame's action or dialogue into the current frame.
 
 # Project Visual Style

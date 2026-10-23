@@ -6445,8 +6445,8 @@ class ComicGenPipeline(StudioOwnerMixin):
         return script
 
     _RICH_REFINEMENT_FIELDS = (
-        "visual_description", "shot_size", "camera_angle", "duration", "transition_hint",
-        "camera_movement_structured", "blocking", "dialogue_structured", "audio_note", "lighting",
+        "visual_description", "duration", "transition_hint", "blocking",
+        "dialogue_structured", "audio_note", "lighting",
     )
 
     def _rich_refinement_source_hash(self, script: Script, frame: StoryboardFrame) -> str:
@@ -6465,7 +6465,7 @@ class ComicGenPipeline(StudioOwnerMixin):
 
     def refine_frame(self, script_id: str, frame_id: str) -> Optional[StoryboardFrame]:
         """Phase 2: propose rich fields without changing the accepted frame."""
-        from .models import DialogueStructured, CameraMovementData, Blocking, AudioNote, LightingData, StageSubject
+        from .models import DialogueStructured, Blocking, AudioNote, LightingData, StageSubject
 
         script = self.scripts.get(script_id)
         if not script:
@@ -6556,24 +6556,10 @@ class ComicGenPipeline(StudioOwnerMixin):
             proposed.visual_description = inject_reference_tags(
                 result["visual_description"], frame, all_characters, all_scenes
             )
-        if result.get("shot_size"):
-            proposed.shot_size = result["shot_size"]
-        if result.get("camera_angle"):
-            proposed.camera_angle = result["camera_angle"]
         if result.get("duration"):
             proposed.duration = result["duration"]
         if result.get("transition_hint"):
             proposed.transition_hint = result["transition_hint"]
-
-        # Camera movement structured
-        cm = result.get("camera_movement")
-        if cm and isinstance(cm, dict) and cm.get("primary"):
-            proposed.camera_movement_structured = CameraMovementData(
-                primary=cm["primary"],
-                secondary=cm.get("secondary"),
-                speed=cm.get("speed", "normal"),
-                description=cm.get("description"),
-            )
 
         # Blocking
         blk = result.get("blocking")
