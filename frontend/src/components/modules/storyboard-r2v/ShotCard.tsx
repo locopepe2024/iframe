@@ -29,6 +29,7 @@ import AssetChipBar from "./AssetChipBar";
 import PromptExpandModal from "./PromptExpandModal";
 import PolishPanel from "./PolishPanel";
 import MicroExpressionPanel from "./MicroExpressionPanel";
+import CameraMovementPanel from "./CameraMovementPanel";
 import FieldTagChip, { AddFieldButton, type FieldType } from "./FieldTagChip";
 import { buildGenerationPrompt, directorShotSuggestions } from "./buildAssembledPrompt";
 import { directorFieldProposals } from "./directorFieldProposals";
@@ -166,6 +167,11 @@ export interface ShotNode {
         character_name?: string;
         timing: Array<{ phase: string; visible_change: string; relative_start: number; relative_end: number }>;
     }>;
+    cameraMovementCandidate?: {
+        id: string;
+        camera_movement_structured: { primary: string; secondary?: string | null; speed: string; description?: string | null };
+        rationale: string; source_refs: string[]; uncertainties: string[];
+    } | null;
 
     /** When true, the user has manually pinned an active take. Hero
      *  shows a "Pinned" chip; autoSelectLatestVideo skips this frame on
@@ -923,6 +929,15 @@ export default function ShotCard({
                             initialCandidate={shot.microExpressionCandidate ?? null}
                             accepted={shot.microExpressionTiming ?? []}
                             characterNames={Object.fromEntries(characters.map((character: any) => [character.id, character.name]))}
+                            optimized={!!shot.promptIsOptimized}
+                            onBeforePreview={onMicroExpressionBeforePreview}
+                            onApplied={onMicroExpressionApplied}
+                        />}
+                        {currentProjectId && <CameraMovementPanel
+                            projectId={currentProjectId}
+                            frameId={shot.id}
+                            current={shot.cameraMovementStructured ?? null}
+                            initialCandidate={shot.cameraMovementCandidate ?? null}
                             optimized={!!shot.promptIsOptimized}
                             onBeforePreview={onMicroExpressionBeforePreview}
                             onApplied={onMicroExpressionApplied}

@@ -2403,6 +2403,28 @@ export const api = {
         return response.data;
     },
 
+    previewCameraMovement: async (scriptId: string, frameId: string) => {
+        const response = await axios.post(`${API_URL}/projects/${scriptId}/frames/${frameId}/camera-movement/preview`, { frame_id: frameId });
+        return response.data as { messages: { system: string; user: string }; review_token: string };
+    },
+
+    generateCameraMovement: async (scriptId: string, frameId: string,
+        review: { messages: { system: string; user: string }; review_token: string }) => {
+        const response = await axios.post(`${API_URL}/projects/${scriptId}/frames/${frameId}/camera-movement/generate`, {
+            frame_id: frameId, reviewed_messages: review.messages, review_token: review.review_token,
+        });
+        return response.data as {
+            id: string;
+            camera_movement_structured: { primary: string; secondary?: string | null; speed: string; description?: string | null };
+            rationale: string; source_refs: string[]; uncertainties: string[];
+        };
+    },
+
+    applyCameraMovement: async (scriptId: string, frameId: string, candidateId: string) => {
+        const response = await axios.post(`${API_URL}/projects/${scriptId}/frames/${frameId}/camera-movement/apply`, { candidate_id: candidateId });
+        return response.data;
+    },
+
     /** Schema v2 · Batch refine all frames via SSE stream. */
     refineBatchFrames: async (
         scriptId: string,
