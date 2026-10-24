@@ -90,8 +90,9 @@ export default function ParamsSection({
     const [open, setOpen] = usePanelSectionState(shotId, "params", true);
     const [advOpen, setAdvOpen] = usePanelSectionState(shotId, "params-advanced", false);
     const [modelOpen, setModelOpen] = useState(false);
-    const [menuPos, setMenuPos] = useState<{ top: number; left: number } | null>(null);
+    const [menuPos, setMenuPos] = useState<{ top: number; left: number; maxHeight: number } | null>(null);
     const trigRef = useRef<HTMLButtonElement>(null);
+    const menuRef = useRef<HTMLDivElement>(null);
     // Position the dropdown via a portal (escapes the shot card's stacking
     // context so it isn't covered by the next shot's frame) + close on
     // scroll/resize so it never floats away from its trigger.
@@ -100,13 +101,24 @@ export default function ParamsSection({
         const trig = trigRef.current;
         if (trig) {
             const r = trig.getBoundingClientRect();
-            setMenuPos({ top: r.bottom + 4, left: r.left });
+            const spaceBelow = window.innerHeight - r.bottom - 8;
+            const spaceAbove = r.top - 8;
+            const maxHeight = Math.min(240, Math.max(spaceBelow, spaceAbove));
+            setMenuPos({
+                top: spaceBelow < 240 && spaceAbove > spaceBelow ? r.top - maxHeight - 4 : r.bottom + 4,
+                left: r.left,
+                maxHeight,
+            });
         }
+        const closeOnOutsideScroll = (event: Event) => {
+            if (event.target instanceof Node && menuRef.current?.contains(event.target)) return;
+            setModelOpen(false);
+        };
         const close = () => setModelOpen(false);
-        window.addEventListener("scroll", close, true);
+        window.addEventListener("scroll", closeOnOutsideScroll, true);
         window.addEventListener("resize", close);
         return () => {
-            window.removeEventListener("scroll", close, true);
+            window.removeEventListener("scroll", closeOnOutsideScroll, true);
             window.removeEventListener("resize", close);
         };
     }, [modelOpen]);
@@ -207,8 +219,9 @@ export default function ParamsSection({
                             <>
                                 <div className="fixed inset-0 z-[60]" onClick={() => setModelOpen(false)} aria-hidden="true" />
                                 <div
-                                    className="fixed z-[70] max-h-60 min-w-[12rem] overflow-y-auto rounded-[14px] border border-border-subtle bg-elevated p-1 shadow-[var(--shadow-lift)]"
-                                    style={{ top: menuPos.top, left: menuPos.left }}
+                                    ref={menuRef}
+                                    className="fixed z-[70] min-w-[12rem] overflow-y-auto rounded-[14px] border border-border-subtle bg-elevated p-1 shadow-[var(--shadow-lift)]"
+                                    style={{ top: menuPos.top, left: menuPos.left, maxHeight: menuPos.maxHeight }}
                                 >
                                     {modelList.map((m) => {
                                         const active = params.model === m.id;
