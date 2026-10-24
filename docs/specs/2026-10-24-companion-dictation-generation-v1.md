@@ -1,0 +1,11 @@
+# Companion dictation to generation
+
+Realtime conversation is paused by user direction. All composer modes use the existing browser speech-recognition hook, with explicit consent and final text retained for editing. Recognition never sends chat or starts paid generation automatically. Chat/image/video drafts remain independent. Image/video send opens existing reference/parameter/review cards; paid submission still requires model selection and explicit confirmation. Preserve existing realtime implementation but remove it from the composer entry. Browser dictation depends on browser service availability; unsupported/permission errors retain manual text input. No provider ASR or fallback introduced. Reference-media generation transport remains outside this slice.
+
+Verification: composer consent/dictation/stop/cleanup tests; integrated image/video cases starting from mocked browser recognition through actual AgentChat cards and generation submission/result; no calls before explicit confirmation; existing chat/generation/voice regressions; isolated static build and demo artifact verification. No personal photos or paid generation needed for automated verification.
+
+## Validation
+
+33 UI tests pass across actual AgentChat, composer, generation guide/submit, channel settings and shared dictation. Two new integration cases drive mocked SpeechRecognition through image and video modes, editable text, send, parameters, model selection, explicit paid consent, completed result blob, and cleanup. Neither text chat nor generation is invoked by recognition alone. No paid image/video generation or real browser microphone was exercised by these automated tests; device/browser dictation and live channel generation remain user validation.
+
+Isolated static export passes. Separate TypeScript check reports only the two pre-existing ReferenceCandidate.description errors in CharacterWorkbench.tsx:404 and1275. Frontend deployed to the existing Companion test site chunks-first; backend unchanged. Public HTML and the composer-containing chunk match local artifact bytes. HTML SHA25620d4142c0245be4c4e0ae263a1d0fbe69334ac2b875502c432c69870522b545e; chunk2088.24404daca9b203c0.js SHA2567b420c562f37adf22459527fed65290d302445f5a0ee71cb2636c3195f5ba5f1. No push or merge.

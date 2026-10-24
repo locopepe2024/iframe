@@ -4,7 +4,6 @@ import { useEffect, useRef, useState, type ReactNode, type RefObject } from "rea
 import { ArrowUp, ChevronDown, Image, MessageCircle, Mic, Plus, Square, Video } from "lucide-react";
 import { useCompanionVoice } from "../useCompanionVoice";
 import styles from "./chat.module.css";
-import { useRealtimeVoice } from "./useRealtimeVoice";
 
 export type ComposerMode = "chat" | "image" | "video";
 const modes = [
@@ -26,9 +25,7 @@ export default function CompanionComposer({ mode, value, disabled, busy, allowed
   const [voiceConsent, setVoiceConsent] = useState(false), [voicePrompt, setVoicePrompt] = useState(false);
   const picker = useRef<HTMLDivElement>(null), trigger = useRef<HTMLButtonElement>(null);
   const voice = useCompanionVoice(text => onChange(`${value}${value ? " " : ""}${text}`.slice(0, 4000)));
-  const realtime = useRealtimeVoice();
-  const [realtimeConsent,setRealtimeConsent] = useState(false);
-  const recording = voice.listening || voice.finishing || realtime.active;
+  const recording = voice.listening || voice.finishing;
   const selected = modes.find(item => item.value === mode)!;
   const ModeIcon = selected.icon;
   useEffect(() => {
@@ -39,12 +36,6 @@ export default function CompanionComposer({ mode, value, disabled, busy, allowed
     return () => document.removeEventListener("pointerdown", outside);
   }, [menu]);
   return <footer className={styles.composer}>
-    {realtime.lines.length > 0 && <section aria-label="本次语音聊天" className={styles.realtimeTranscript}>{realtime.lines.map(line => <p key={line.id}><strong>{line.role}：</strong>{line.text}</p>)}</section>}
-    {realtime.active && <section aria-label="实时语音通话" className={styles.realtimeCall}>
-      <p role="status">{realtime.state === "connecting" ? "正在连接语音…" : realtime.state === "thinking" ? "正在想，稍等一下…" : realtime.state === "speaking" ? "正在回答，您随时可以插话。" : "我在听，您可以说话了。"}</p>
-      {realtime.state !== "connecting" && <button type="button" onClick={realtime.interrupt}>打断，让我说</button>}
-      <button type="button" onClick={() => realtime.stop()}>结束语音</button>
-    </section>}
     {attachments}
     {mode === "chat" && hasAttachments && <div className={styles.mediaScope}>
       <p>本次素材只在页面展示，助手暂时看不到。刷新后请从相册重新选择。</p>
@@ -70,12 +61,10 @@ export default function CompanionComposer({ mode, value, disabled, busy, allowed
         </div>
         <button type="button" className={styles.albumButton} aria-label="上传" disabled={disabled || recording} onClick={onUpload}><Plus size={24} aria-hidden="true" /><span>上传</span></button>
         <div className={styles.composerActions}>
-          <button type="button" className={styles.voiceButton} disabled={!realtime.active && (disabled || voice.finishing)} onClick={() => {
-            if (realtime.active) { realtime.stop(); return; }
-            if (mode === "chat") { if (realtimeConsent) void realtime.start(); else setVoicePrompt(true); }
-            else if (voiceConsent) voice.toggleListening(); else setVoicePrompt(true);
+          <button type="button" className={styles.voiceButton} disabled={disabled || voice.finishing} onClick={() => {
+            if (voiceConsent) voice.toggleListening(); else setVoicePrompt(true);
           }}>
-            {recording ? <Square size={28} aria-hidden="true" /> : <Mic size={28} aria-hidden="true" />}<span>{voice.finishing ? "正在整理" : realtime.active ? "结束语音" : recording ? "停止" : "对话中"}</span>
+            {recording ? <Square size={28} aria-hidden="true" /> : <Mic size={28} aria-hidden="true" />}<span>{voice.finishing ? "正在整理" : recording ? "停止" : "语音输入"}</span>
           </button>
           <button type="button" className={styles.sendButton} aria-label="发送" disabled={disabled || recording || (!value.trim() && !hasAttachments) || (mode === "chat" && !!value.trim() && (hasAttachments && !mediaAcknowledged))} onClick={() => {
             if (mode === "chat" && value.trim() && !allowed) { onRequestConsent(); return; }
@@ -84,14 +73,13 @@ export default function CompanionComposer({ mode, value, disabled, busy, allowed
         </div>
       </div>
     </div>
-    {voicePrompt && <section className={styles.voiceConsent} aria-label="语音输入说明">{mode === "chat" ? <>
-      <p>开始后，语音会发送至您的 UniArt / Qwen 服务并播放回复，可能计费。点“结束语音”即可关闭麦克风。</p>
-      <p>本次语音暂不写入聊天历史或日记；保存等操作请回到文字聊天确认。</p>
-      <button type="button" disabled={disabled} onClick={() => { setRealtimeConsent(true); setVoicePrompt(false); void realtime.start(); }}>同意并开始语音聊天</button>
-    </> : <><p>语音会交给浏览器的语音服务识别，文字先放入输入框，您检查后再发送。</p><button type="button" disabled={disabled} onClick={() => { setVoiceConsent(true); setVoicePrompt(false); voice.toggleListening(); }}>同意并开始听写</button></>}
-      <button type="button" onClick={() => setVoicePrompt(false)}>先用文字</button></section>}
-    {!realtime.active && realtime.notice && <p role="status" className={styles.voiceStatus}>{realtime.notice}</p>}
-    {voice.listening || voice.finishing ? <p role="status" className={styles.voiceStatus}>{voice.finishing ? "正在整理语音，请稍等…" : "正在听，点停止结束。"}</p> : voice.notice && <p role="status" className={styles.voiceStatus}>{voice.notice}</p>}
+    {voicePrompt && <section className={styles.voiceConsent} aria-label="语音输入说明">
+      <p>语音会交给浏览器的语音服务识别，文字先放入输入框，您检查后再发送。</p>
+      <button type="button" disabled={disabled} onClick={() => { setVoiceConsent(true); setVoicePrompt(false); voice.toggleListening(); }}>同意并开始听写</button>
+      <button type="button" onClick={() => setVoicePrompt(false)}>先用文字</button>
+    </section>}
+    {voice.notice && !recording && <p role="status" className={styles.voiceStatus}>{voice.notice}</p>}
+    {voice.listening || voice.finishing ? <p role="status" className={styles.voiceStatus}>{voice.finishing ? "正在整理语音，请稍等…" : "正在听，点停止结束。"}</p> : null}
     {retry && <button disabled={busy || !allowed} onClick={retry}>重试原请求</button>}
   </footer>;
 }

@@ -19,7 +19,7 @@ beforeEach(()=>{send.mockReset();Object.defineProperty(window,"SpeechRecognition
 afterEach(()=>{delete (window as Window & {SpeechRecognition?:unknown}).SpeechRecognition;});
 it("explains browser dictation first, locks switching while listening, and only appends a draft",()=>{
   render(<Harness/>);
-  fireEvent.click(screen.getByRole("button",{name:"对话中"}));
+  fireEvent.click(screen.getByRole("button",{name:"语音输入"}));
   expect(screen.getByRole("region",{name:"语音输入说明"})).toBeInTheDocument();
   fireEvent.click(screen.getByRole("button",{name:"同意并开始听写"}));
   expect(screen.getByRole("button",{name:"创作类型：图片"})).toBeDisabled();
@@ -32,11 +32,11 @@ it("explains browser dictation first, locks switching while listening, and only 
 it("adds final dictation text without sending and aborts capture on unmount",async()=>{
   const {act}=await import("@testing-library/react");
   const view=render(<Harness/>);
-  fireEvent.click(screen.getByRole("button",{name:"对话中"}));fireEvent.click(screen.getByRole("button",{name:"同意并开始听写"}));
+  fireEvent.click(screen.getByRole("button",{name:"语音输入"}));fireEvent.click(screen.getByRole("button",{name:"同意并开始听写"}));
   act(()=>{recognition.onresult?.({results:[[{transcript:"今天很开心"}]]});recognition.onend?.();});
   expect(screen.getByLabelText("想生成的图片")).toHaveValue("原有草稿 今天很开心");
   expect(send).not.toHaveBeenCalled();
-  fireEvent.click(screen.getByRole("button",{name:"对话中"}));view.unmount();
+  fireEvent.click(screen.getByRole("button",{name:"语音输入"}));view.unmount();
   expect(recognition.abort).toHaveBeenCalledOnce();expect(recognition.onresult).toBeNull();
 });
 
@@ -51,11 +51,11 @@ it("uses the chat invitation inside the input instead of spending a separate row
   expect(screen.getByText("和我聊聊天", {selector:"span"}).className).toMatch(/visuallyHidden/);
 });
 
-it("offers realtime chat consent in chat mode while retaining text drafts",()=>{
+it("offers dictation consent in chat mode while retaining text drafts",()=>{
  render(<CompanionComposer mode="chat" value="保留的文字" disabled={false} busy={false} allowed inputRef={createRef()} onMode={()=>{}} onChange={()=>{}} onSend={()=>{}} onUpload={()=>{}} onAllow={()=>{}} onRequestConsent={()=>{}} retry={null}/>);
- fireEvent.click(screen.getByRole("button",{name:"对话中"}));
- expect(screen.getByRole("button",{name:"同意并开始语音聊天"})).toBeInTheDocument();
- expect(screen.queryByRole("button",{name:"同意并开始听写"})).not.toBeInTheDocument();
+ fireEvent.click(screen.getByRole("button",{name:"语音输入"}));
+ expect(screen.queryByRole("button",{name:"同意并开始语音聊天"})).not.toBeInTheDocument();
+ expect(screen.getByRole("button",{name:"同意并开始听写"})).toBeInTheDocument();
  fireEvent.click(screen.getByRole("button",{name:"先用文字"}));
  expect(screen.getByLabelText("和我聊聊天")).toHaveValue("保留的文字");
 });
