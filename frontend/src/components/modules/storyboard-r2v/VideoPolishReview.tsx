@@ -1,6 +1,6 @@
 "use client";
 
-import { X } from "lucide-react";
+import { RefreshCw, X } from "lucide-react";
 import { OPTIMIZATION_SKILLS } from "./OptimizerSelector";
 
 export interface VideoPolishMessages {
@@ -36,6 +36,7 @@ interface VideoPolishReviewProps {
     confirmLabel?: string;
     onChange: (messages: VideoPolishMessages) => void;
     onLightingChoice?: (choice: "shot" | "reference") => void;
+    onRefresh?: () => void;
     onCancel: () => void;
     onConfirm: () => void;
 }
@@ -67,7 +68,7 @@ function displayValue(value: unknown): string {
 
 export default function VideoPolishReview({ messages, media, formatNote, targetModel, reviewContext, isContextIr,
     isSubmitting, error, userLabel = "用户／镜头文字", confirmLabel = "确认输入并润色",
-    onChange, onLightingChoice, onCancel, onConfirm }: VideoPolishReviewProps) {
+    onChange, onLightingChoice, onRefresh, onCancel, onConfirm }: VideoPolishReviewProps) {
     const fields = Object.entries(reviewContext?.effective_shot_fields ?? {})
         .filter(([name, field]) => name in fieldLabels && field.value != null && field.value !== "");
     const skills = reviewContext?.selected_skills.map(id =>
@@ -147,6 +148,10 @@ export default function VideoPolishReview({ messages, media, formatNote, targetM
         {error && <p role="alert" className="text-xs text-status-failed-fg">{error}</p>}
         <div className="flex justify-end gap-2">
             <button type="button" onClick={onCancel} className="rounded border border-glass-border px-3 py-1.5 text-xs text-foreground">返回</button>
+            {onRefresh && <button type="button" onClick={onRefresh} disabled={isSubmitting}
+                className="inline-flex items-center gap-1 rounded border border-glass-border px-3 py-1.5 text-xs text-foreground disabled:opacity-50">
+                <RefreshCw size={12} aria-hidden="true" />重新查看模型输入
+            </button>}
             <button type="button" onClick={onConfirm} disabled={isSubmitting || !messages.user.trim()
                 || Boolean(reviewContext?.scene_lighting?.requires_decision && !reviewContext.scene_lighting.choice)}
                 className="rounded bg-primary px-3 py-1.5 text-xs text-white disabled:opacity-50">

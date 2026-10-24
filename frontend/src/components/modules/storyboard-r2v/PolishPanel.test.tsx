@@ -140,23 +140,57 @@ it("blocks R2V polish when fresh reference resolution yields no images", async (
     expect(api.polishR2VPrompt).not.toHaveBeenCalled();
 });
 
-it("rejects an R2V confirmation when the selected reference changed after preview", async () => {
+it("accepts a refreshed URL for the same reviewed reference variant", async () => {
+    const slot = { slot: 1, asset_id: "elder-id", asset_type: "character" as const,
+        name: "老掌柜", variant_ids: ["elder-v1"], description: "老掌柜" };
     const resolveR2VImageUrls = vi.fn()
-        .mockResolvedValueOnce(["series/elder-v1.jpg"])
-        .mockResolvedValueOnce(["series/elder-v2.jpg"]);
-    vi.mocked(api.polishR2VPrompt).mockResolvedValueOnce({
-        messages: { system: "reference contract", user: "粮铺冲突" },
-        media: [{ label: "参考图 1", url: "series/elder-v1.jpg" }],
-        review_token: "reference-token", format_note: "",
-    } as any);
+        .mockResolvedValueOnce({ urls: ["series/elder.jpg?sig=first"], slots: [slot] })
+        .mockResolvedValueOnce({ urls: ["series/elder.jpg?sig=second"], slots: [slot] });
+    vi.mocked(api.polishR2VPrompt)
+        .mockResolvedValueOnce({ messages: { system: "reference contract", user: "粮铺冲突" },
+            media: [], review_token: "reference-token", format_note: "" } as any)
+        .mockResolvedValueOnce({ prompt_cn: "中文结果", prompt_en: "English result" } as any);
     render(<PolishPanel prompt="粮铺冲突" tabMode="direct_r2v" scriptId="project"
         resolveR2VImageUrls={resolveR2VImageUrls} onApply={vi.fn()} />);
 
     fireEvent.click(screen.getByTitle("查看并确认模型输入"));
     await screen.findByText("提交前检查模型输入");
     fireEvent.click(screen.getByText("确认输入并润色"));
-    await screen.findByText("参考素材已变化，请重新查看模型输入。");
-    expect(api.polishR2VPrompt).toHaveBeenCalledTimes(1);
+    await waitFor(() => expect(api.polishR2VPrompt).toHaveBeenCalledTimes(2));
+    expect(vi.mocked(api.polishR2VPrompt).mock.calls[1][5]).toEqual(["series/elder.jpg?sig=first"]);
+    expect(await screen.findByText("中文结果")).toBeInTheDocument();
+});
+
+it("refreshes R2V review after a reference variant changes and waits for confirmation", async () => {
+    const slot = { slot: 1, asset_id: "elder-id", asset_type: "character" as const,
+        name: "老掌柜", description: "老掌柜" };
+    const resolveR2VImageUrls = vi.fn()
+        .mockResolvedValueOnce({ urls: ["series/elder-v1.jpg"], slots: [{ ...slot, variant_ids: ["elder-v1"] }] })
+        .mockResolvedValueOnce({ urls: ["series/elder-v2.jpg"], slots: [{ ...slot, variant_ids: ["elder-v2"] }] })
+        .mockResolvedValueOnce({ urls: ["series/elder-v2.jpg"], slots: [{ ...slot, variant_ids: ["elder-v2"] }] })
+        .mockResolvedValueOnce({ urls: ["series/elder-v2.jpg"], slots: [{ ...slot, variant_ids: ["elder-v2"] }] });
+    vi.mocked(api.polishR2VPrompt)
+        .mockResolvedValueOnce({ messages: { system: "old contract", user: "粮铺冲突" },
+            media: [{ label: "参考图 1", url: "series/elder-v1.jpg" }],
+            review_token: "old-token", format_note: "" } as any)
+        .mockResolvedValueOnce({ messages: { system: "new contract", user: "粮铺冲突" },
+            media: [{ label: "参考图 1", url: "series/elder-v2.jpg" }],
+            review_token: "new-token", format_note: "" } as any)
+        .mockResolvedValueOnce({ prompt_cn: "中文结果", prompt_en: "English result" } as any);
+    render(<PolishPanel prompt="粮铺冲突" tabMode="direct_r2v" scriptId="project"
+        resolveR2VImageUrls={resolveR2VImageUrls} onApply={vi.fn()} />);
+
+    fireEvent.click(screen.getByTitle("查看并确认模型输入"));
+    await screen.findByText("提交前检查模型输入");
+    fireEvent.click(screen.getByText("确认输入并润色"));
+    await screen.findByText("参考素材已更新，请核对新的模型输入后再确认。");
+    expect(api.polishR2VPrompt).toHaveBeenCalledTimes(2);
+    expect(screen.getByLabelText("用户／镜头文字")).toHaveValue("粮铺冲突");
+    fireEvent.click(screen.getByText("确认输入并润色"));
+    await waitFor(() => expect(api.polishR2VPrompt).toHaveBeenCalledTimes(3));
+    expect(vi.mocked(api.polishR2VPrompt).mock.calls[2][16]).toEqual({
+        messages: { system: "new contract", user: "粮铺冲突" }, token: "new-token",
+    });
 });
 
 it("shows a readable shot summary while preserving the full model input", async () => {

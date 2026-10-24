@@ -216,6 +216,25 @@ export default function PolishPanel({
             : [...current, skillId]);
     };
 
+    const previewPolish = useCallback(async (draft: string, prevCn: string, feedbackText: string,
+        lightingChoice?: "shot" | "reference") => {
+        await onBeforePreview?.();
+        const resolved = resolveR2VImageUrls ? await resolveR2VImageUrls() : imageUrls;
+        const submittedImageUrls = Array.isArray(resolved) ? resolved : resolved.urls;
+        const submittedSlots = Array.isArray(resolved) ? slots : resolved.slots;
+        if (tabMode === "direct_r2v" && !submittedImageUrls.length) {
+            throw new Error("R2V 优化需要已选参考图，请先在参考素材中选择图片。");
+        }
+        const res = await requestPolish(draft, prevCn, feedbackText, submittedImageUrls, submittedSlots,
+            undefined, lightingChoice);
+        if (!res?.messages?.user || !res?.review_token) {
+            throw new Error(t("polishErrorMissingKeys"));
+        }
+        setReview({ ...res, draft, prevCn, feedbackText, sourceSignature, targetModel, submittedImageUrls, submittedSlots,
+            lightingChoice: res.review_context?.scene_lighting?.choice ?? undefined });
+    }, [onBeforePreview, resolveR2VImageUrls, imageUrls, slots, tabMode, requestPolish,
+        sourceSignature, targetModel, t]);
+
     const runPolish = useCallback(async (feedbackText: string = "") => {
         // 迭代时：draft=上一版 EN，prev_cn=上一版 CN，让后端双语锚点。
         // 首次：draft=用户原文，prev_cn 留空。
@@ -230,25 +249,7 @@ export default function PolishPanel({
         // 成功后再 setPolished 覆盖。
 
         try {
-            await onBeforePreview?.();
-            const resolved = resolveR2VImageUrls ? await resolveR2VImageUrls() : imageUrls;
-            const submittedImageUrls = Array.isArray(resolved) ? resolved : resolved.urls;
-            const submittedSlots = Array.isArray(resolved) ? slots : resolved.slots;
-            if (tabMode === "direct_r2v" && !submittedImageUrls.length) {
-                throw new Error("R2V 优化需要已选参考图，请先在参考素材中选择图片。");
-            }
-            const res = await requestPolish(draft, prevCn, feedbackText, submittedImageUrls, submittedSlots);
-            if (res?.messages?.user && res?.review_token) {
-                setReview({ ...res, draft, prevCn, feedbackText, sourceSignature, targetModel, submittedImageUrls, submittedSlots,
-                    lightingChoice: res.review_context?.scene_lighting?.choice ?? undefined });
-            } else {
-                // 200 但缺 key 走错误态
-                setError({
-                    reason: "missing_keys",
-                    messageZh: t("polishErrorMissingKeys"),
-                    messageEn: "Model returned incomplete bilingual result. Please retry.",
-                });
-            }
+            await previewPolish(draft, prevCn, feedbackText);
         } catch (err: any) {
             debugLog.error("Studio", "Polish failed:", err);
             const parsed = parsePolishError(err, t);
@@ -262,8 +263,20 @@ export default function PolishPanel({
         } finally {
             setIsPolishing(false);
         }
-    }, [sourceSignature, polished?.en, polished?.cn, prompt, optimizationDraft,
-        onBeforePreview, resolveR2VImageUrls, imageUrls, tabMode, requestPolish, targetModel, shotOverrides, t]);
+    }, [polished?.en, polished?.cn, prompt, optimizationDraft, previewPolish, shotOverrides, t]);
+
+    const refreshReview = async () => {
+        if (!review) return;
+        setIsPolishing(true);
+        setError(null);
+        try {
+            await previewPolish(review.draft, review.prevCn, review.feedbackText, review.lightingChoice);
+        } catch (err) {
+            setError(parsePolishError(err, t));
+        } finally {
+            setIsPolishing(false);
+        }
+    };
 
     const confirmPolish = async () => {
         if (!review) return;
@@ -279,9 +292,14 @@ export default function PolishPanel({
                 const resolved = await resolveR2VImageUrls();
                 const currentImageUrls = Array.isArray(resolved) ? resolved : resolved.urls;
                 const currentSlots = Array.isArray(resolved) ? slots : resolved.slots;
-                if (JSON.stringify(currentImageUrls) !== JSON.stringify(review.submittedImageUrls)
-                    || JSON.stringify(currentSlots) !== JSON.stringify(review.submittedSlots)) {
-                    throw new Error("参考素材已变化，请重新查看模型输入。");
+                const changed = review.submittedSlots.length || currentSlots.length
+                    ? JSON.stringify(currentSlots) !== JSON.stringify(review.submittedSlots)
+                    : JSON.stringify(currentImageUrls) !== JSON.stringify(review.submittedImageUrls);
+                if (changed) {
+                    await previewPolish(review.draft, review.prevCn, review.feedbackText, review.lightingChoice);
+                    setError({ reason: "api_error", messageZh: "参考素材已更新，请核对新的模型输入后再确认。",
+                        messageEn: "References changed. Review the refreshed model input before confirming." });
+                    return;
                 }
             }
             const res = await requestPolish(review.draft, review.prevCn, review.feedbackText, review.submittedImageUrls, review.submittedSlots,
@@ -372,6 +390,7 @@ export default function PolishPanel({
             isSubmitting={isPolishing} error={error?.messageZh}
             onChange={(messages) => setReview({ ...review, messages })}
             onLightingChoice={(choice) => void chooseLighting(choice)}
+            onRefresh={() => void refreshReview()}
             onCancel={() => setReview(null)} onConfirm={() => void confirmPolish()} />;
     }
 
