@@ -234,6 +234,6 @@ it("shows an explicit diary card for a completed diary request without auto savi
   api.messages.mockResolvedValue({messages:[{id:"dm",text:prompt,turn:{turn_id:"diary-turn",result:{kind:"text",text:"今天和女儿一起喝茶。"}}}],next_after:null});
   fireEvent.click(screen.getByRole("button",{name:"发送"}));fireEvent.click(screen.getByLabelText("允许发送文字，开始聊天"));fireEvent.click(screen.getByRole("button",{name:"发送"}));
   const card=await screen.findByRole("article",{name:"日记草稿"});
-  await waitFor(()=>expect(within(card).getByRole("button",{name:"编辑日记"})).toBeEnabled());
+  await waitFor(()=>expect(within(card).getByRole("button",{name:"继续写日记"})).toBeEnabled());
   expect(card).toHaveTextContent("今天和女儿一起喝茶。");expect(api.saveDiary).not.toHaveBeenCalled();
 });

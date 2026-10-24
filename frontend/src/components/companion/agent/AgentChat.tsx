@@ -31,6 +31,7 @@ export default function AgentChat() {
   const text = drafts[mode];
   const guide = mode === "chat" ? null : guides[mode];
   const [turn, setTurn] = useState<Turn | null>(null), [preview, setPreview] = useState<Preview | null>(null);
+  const [lastSubmittedText, setLastSubmittedText] = useState("");
   const [page, setPage] = useState<MemoryPage | null>(null), [query, setQuery] = useState(""), [appliedQuery, setAppliedQuery] = useState("");
   const [busy, setBusy] = useState(false), [error, setError] = useState(""), [notice, setNotice] = useState("");
   const locked = useRef(false), alive = useRef(true);
@@ -97,6 +98,7 @@ export default function AgentChat() {
   }
   async function send(retry = false) {
     if (!sendOperation.current || !retry) sendOperation.current = { operation_id: crypto.randomUUID(), text, allow_external_text: true };
+    if (!retry) setLastSubmittedText(text);
     setHasRetry(true); setPreview(null);
     if (!session && !sessionOperation.current) sessionOperation.current = crypto.randomUUID();
     const activeSession = session || (await companionApi.session(sessionOperation.current)).session_id;
@@ -191,7 +193,7 @@ export default function AgentChat() {
       )}
       {after !== null && <button disabled={busy} onClick={() => void run(() => history(session, after))}>更多历史消息</button>}
     </section>
-    {turn?.result?.kind === "text" && !messages.some(m => m.turn?.turn_id === turn.turn_id) && <article className={chatStyles.assistant}><span>陪伴助手</span><p>{turn.result.text}</p></article>}
+    {turn?.result?.kind === "text" && !messages.some(m => m.turn?.turn_id === turn.turn_id) && (diaryDay(lastSubmittedText) ? <DiaryCard day={diaryDay(lastSubmittedText)!} text={turn.result.text} sourceTurn={turn.turn_id} /> : <article className={chatStyles.assistant}><span>陪伴助手</span><p>{turn.result.text}</p></article>)}
     {uploadFiles.length > 0 && <MediaUpload files={uploadFiles} disabled={inputDisabled || pending} onUploaded={attach} onBusyChange={setUploading} onClose={() => setUploadFiles([])} />}
     {albumOpen && <AlbumPicker disabled={inputDisabled || pending} onClose={() => setAlbumOpen(false)} onPhoto={photo => {
       attach({kind:"photo",id:photo.photo_id,name:"相册照片"});setAlbumOpen(false);

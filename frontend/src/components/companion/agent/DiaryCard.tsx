@@ -23,7 +23,7 @@ export default function DiaryCard({ day, text, sourceTurn, saved, onSaved, conte
   const [entry,setEntry] = useState(saved);
   const [previous,setPrevious] = useState<Diary>();
   const [editing,setEditing] = useState(false), [draft,setDraft] = useState(saved?.text ?? text);
-  const [busy,setBusy] = useState(false), [error,setError] = useState("");
+  const [busy,setBusy] = useState(false), [error,setError] = useState(""), [dismissed,setDismissed] = useState(false);
   const [loaded,setLoaded] = useState(!!saved), [reload,setReload] = useState(0);
   useEffect(()=>{
     if(saved)return;
@@ -44,13 +44,14 @@ export default function DiaryCard({ day, text, sourceTurn, saved, onSaved, conte
     } catch(failure) {setError(failure instanceof Error ? failure.message : "日记没有保存，请重试。");}
     finally {lock.current=false;setBusy(false);}
   }
+  if (dismissed) return null;
   return <article className={styles.guideCard} aria-label={entry ? "已保存日记" : "日记草稿"}>
     <h2>{day} · {entry ? "日记已保存 ✅" : "日记草稿"}</h2>
     <p className={styles.diaryText}>{entry?.text ?? text}</p>
     {!entry && <p>要修改这篇日记吗？不修改可以直接保存。</p>}
     {previous && <details><summary>当天已有日记，保存将替换当天内容，点此核对原文</summary><p className={styles.diaryText}>{previous.text}</p></details>}
-    <button type="button" disabled={busy || !loaded} onClick={()=>{setDraft(entry?.text ?? text);setEditing(true);}}>编辑日记</button>
-    {!entry && <button type="button" disabled={busy || !loaded} onClick={()=>void save(text)}>{busy ? "正在保存…" : previous ? "确认替换当日日记" : "不修改，直接保存"}</button>}
+    <button type="button" disabled={busy || !loaded} onClick={()=>{setDraft(entry?.text ?? text);setEditing(true);}}>{entry ? "编辑日记" : "继续写日记"}</button>
+    {!entry && <><button type="button" disabled={busy || !loaded} onClick={()=>void save(text)}>{busy ? "正在保存…" : previous ? "确认替换当日日记" : "保存日记"}</button><button type="button" disabled={busy || !loaded} onClick={()=>setDismissed(true)}>放弃保存</button></>}
     {!loaded && !error && <p role="status">正在核对日记…</p>}
     {error && !editing && <p role="alert">{error}{!loaded && <button type="button" onClick={()=>setReload(value=>value+1)}>重试核对日记</button>}</p>}
     {editing && <FeatureDialog title="日记编辑器" onClose={()=>{if(!busy)setEditing(false);}}>
