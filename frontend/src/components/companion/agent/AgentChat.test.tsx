@@ -91,6 +91,28 @@ it("restores server history and latest result from identifiers only",async()=>{
   expect(api.messages).toHaveBeenLastCalledWith("s",1);expect(screen.queryByRole("region",{name:"记忆操作确认"})).not.toBeInTheDocument();
 });
 
+it("renders an upload guide for the live upload-help result",async()=>{
+  api.chat.mockResolvedValue({turn_id:"upload-turn",status:"completed",result:{kind:"upload_guide"}});
+  await start();
+  allowText();
+  fireEvent.change(screen.getByLabelText("和我聊聊天"),{target:{value:"怎么发"}});
+  fireEvent.click(screen.getByRole("button",{name:"发送"}));
+  const card=await screen.findByRole("article",{name:"上传素材引导"});
+  expect(card).toHaveTextContent("怎么加入照片或视频？");
+  expect(within(card).getByRole("button",{name:"上传照片或视频"})).toBeInTheDocument();
+  expect(within(card).getByRole("button",{name:"从相册选择"})).toBeInTheDocument();
+  expect(api.tool).not.toHaveBeenCalled();
+});
+
+it("restores an upload guide attached to a historical user message",async()=>{
+  localStorage.setItem("iframe-companion-agent-session-v1","s");
+  api.messages.mockResolvedValue({messages:[{id:"m-upload",sequence:1,text:"怎么发",turn:{turn_id:"upload-turn",status:"completed",result:{kind:"upload_guide"}}}],next_after:null});
+  render(<AgentChat/>);
+  const card=await screen.findByRole("article",{name:"上传素材引导"});
+  expect(card).toHaveTextContent("怎么加入照片或视频？");
+  expect(screen.getByText("怎么发")).toBeInTheDocument();
+});
+
 it("keeps debugging controls off the main screen and restores paired replies",async()=>{
   localStorage.setItem("iframe-companion-agent-session-v1","s");
   api.messages.mockResolvedValue({messages:[{id:"m",sequence:1,text:"今天女儿来看我了",turn:{turn_id:"t",status:"completed",result:{kind:"text",text:"你们一起做了什么？"}}}],next_after:null});

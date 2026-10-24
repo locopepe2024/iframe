@@ -190,6 +190,12 @@ Release `diary-intent-d6aebc72` was synchronized to the isolated Companion demo.
 
 The composer follow-up was synchronized to the same release after frontend commit `813e0576`. “和我聊聊天” is now the textarea placeholder with a visually hidden accessible label, so it no longer consumes a separate visible row. Twenty-two focused Companion UI tests and frontend typecheck passed; the backend container and data store were unchanged.
 
+## 2026-10-24 — Upload-help intent and guide card
+
+Frontend/backend revision `45a4ee97` is synchronized to the isolated Companion demo. The deterministic `media.upload_help` route recognizes short requests such as “怎么发”, “怎么上传照片” and “从相册选照片”. It returns `{"kind":"upload_guide"}` without invoking Qwen or memory tools. The agent renders an inline card with “上传照片或视频” and “从相册选择”; both actions enter the existing file picker or album Sheet flow. The same card is restored when the turn is read from conversation history.
+
+Evidence: the isolated remote API returned `upload_guide` for “怎么发”; Companion intent/chat tests passed (13), the focused Agent UI suite passed 20 tests after adding live-result and historical-result coverage, and frontend typecheck passed. This verifies routing and rendering, not the physical file picker, microphone or older-adult usability. No provider call, photo data change, push or merge was made.
+
 Frontend commit `6ab03032` was then synchronized to the same release. Live diary responses now render the diary action card immediately, including “继续写日记”, “保存日记”, and “放弃保存”; this also covers the interval before the message history reload pairs the turn. The static chunk containing “放弃保存” is present on the mounted test release and the container remained healthy.
 
 Frontend commit `5bd4c6d4` was synchronized afterward. Text-send consent now lives under “更多 → 聊天设置” and is retained in the browser after confirmation, so the composer no longer expands a consent panel for every message. The send button opens that setting when consent is missing. Twenty-two focused UI tests and typecheck passed; the backend and existing session data were unchanged.
