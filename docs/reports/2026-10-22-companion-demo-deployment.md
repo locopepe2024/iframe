@@ -208,6 +208,12 @@ Frontend commit `5c484039` was built with the `/companion-demo` base path and sy
 
 Evidence: 2 new UI tests plus the 20-test AgentChat suite passed, frontend typecheck and isolated static build passed. The deployed release contains the `照片结构化备注` chunk and public health remained 200. Existing static chunks were retained during synchronization to avoid breaking already-open cached pages. No backend/schema/provider change, push or merge.
 
+## 2026-10-24 — Dismissible upload guide
+
+Frontend commit `ce41dd68` was synchronized to the same isolated release. The upload guide now distinguishes “从手机添加照片或视频” from “从已有相册添加”, and each guide has a visible “返回聊天” action. Choosing either source also dismisses that one-time guide card; the dismissal is local to the turn, while the uploaded original remains in the album and the selected attachment remains available separately.
+
+Evidence: the focused Agent UI suite (20) and typecheck passed; the static build was synchronized while retaining previous chunks. No backend/data/provider change, push or merge.
+
 Frontend commit `6ab03032` was then synchronized to the same release. Live diary responses now render the diary action card immediately, including “继续写日记”, “保存日记”, and “放弃保存”; this also covers the interval before the message history reload pairs the turn. The static chunk containing “放弃保存” is present on the mounted test release and the container remained healthy.
 
 Frontend commit `5bd4c6d4` was synchronized afterward. Text-send consent now lives under “更多 → 聊天设置” and is retained in the browser after confirmation, so the composer no longer expands a consent panel for every message. The send button opens that setting when consent is missing. Twenty-two focused UI tests and typecheck passed; the backend and existing session data were unchanged.
