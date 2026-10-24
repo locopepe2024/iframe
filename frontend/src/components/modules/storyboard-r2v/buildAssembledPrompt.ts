@@ -1,4 +1,5 @@
 import type { ShotNode } from "./ShotCard";
+import { describeCharacterMove, findCharacterMove } from "@/lib/characterMoveDictionary";
 
 /** Resolve the art-direction layer for one shot.
  *
@@ -113,6 +114,9 @@ export function buildAssembledPrompt(
     );
     const suffixes: string[] = [];
 
+    const move = findCharacterMove(shot.moveRef);
+    if (move) suffixes.push(describeCharacterMove(move, shot.moveVariant));
+
     // Camera movement (natural language, speed naturally embedded)
     if (shot.cameraMovementStructured) {
         const desc = shot.cameraMovementStructured.description || shot.cameraMovementStructured.primary;
@@ -163,7 +167,9 @@ export function buildGenerationPrompt(
     if (shot.promptIsOptimized) {
         const base = shot.prompt.trim();
         const accepted = microExpressionDescriptions(shot).filter(item => !base.includes(item));
-        return [base, ...accepted].filter(Boolean).join("，");
+        const move = findCharacterMove(shot.moveRef);
+        const moveText = move ? describeCharacterMove(move, shot.moveVariant) : "";
+        return [base, moveText && move && !base.includes(move.move_ref) ? moveText : "", ...accepted].filter(Boolean).join("，");
     }
     // An accepted optimizer result is already a complete provider prompt.
     let prompt = buildAssembledPrompt(shot, true, globalStylePrompt, inheritedLighting);

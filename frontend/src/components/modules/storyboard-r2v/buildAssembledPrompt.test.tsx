@@ -15,6 +15,32 @@ it("adds only accepted micro-expression timing to video prompt", () => {
     const optimized = { ...shot, prompt: "街头等待，警觉地看向身后", promptIsOptimized: true };
     expect(buildGenerationPrompt(optimized, false, "uniart/seedance-2.5-vip")).toContain("玄宸表情时序");
 });
+
+it("compiles the selected character move into a generation prompt", () => {
+    const shot = {
+        id: "shot-15",
+        prompt: "苏砚从人群中央掠入，拔剑扫开匪寇兵刃。",
+        tabMode: "direct_r2v" as const,
+        moveRef: "suyan.sword.disarm_sweep.v1",
+        moveVariant: "面对数名匪寇的连续拨械",
+    };
+    const result = buildGenerationPrompt(shot, false, "uniart/minimax-h3-vip");
+    expect(result).toContain("连贯剑势·拨械");
+    expect(result).toContain("面对数名匪寇的连续拨械");
+    expect(result).toContain("只针对持械手或刀剑");
+    expect(result).toContain("刀剑沿受力方向翻飞");
+});
+
+it("removes the move text when an optimized prompt has no selected move", () => {
+    const shot = {
+        id: "shot-15",
+        prompt: "integrated_multimodal_description: one continuous sword action",
+        tabMode: "direct_r2v" as const,
+        promptIsOptimized: true,
+    };
+    expect(buildGenerationPrompt(shot, false, "uniart/minimax-h3-vip"))
+        .not.toContain("连贯剑势·拨械");
+});
 import { resolveStoryboardStyle, resolveStoryboardStyleForRender } from "@/lib/storyboardStyle";
 import type { ShotNode } from "./ShotCard";
 

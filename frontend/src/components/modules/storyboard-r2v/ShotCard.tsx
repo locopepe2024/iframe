@@ -33,6 +33,7 @@ import CameraMovementPanel from "./CameraMovementPanel";
 import ShotFieldPanel from "./ShotFieldPanel";
 import FieldTagChip, { AddFieldButton, type FieldType } from "./FieldTagChip";
 import { buildGenerationPrompt, directorShotSuggestions } from "./buildAssembledPrompt";
+import { CHARACTER_MOVE_DICTIONARY, findCharacterMove } from "@/lib/characterMoveDictionary";
 import { directorFieldProposals } from "./directorFieldProposals";
 import { resolveShotVideoInput } from "./shotVideoInput";
 import { PendingTaskAffordance } from "@/components/shared/PendingTaskAffordance";
@@ -153,6 +154,8 @@ export interface ShotNode {
     stylePromptOverride?: string | null;
     lightingOverride?: string | null;
     negativePromptOverride?: string | null;
+    moveRef?: string | null;
+    moveVariant?: string | null;
     richRefinementCandidate?: {
         id: string;
         source: string;
@@ -1098,6 +1101,42 @@ export default function ShotCard({
                             onBeforePreview={onMicroExpressionBeforePreview}
                             onApplied={onMicroExpressionApplied}
                         />}
+
+                        <details className="border-t border-glass-border pt-3 text-xs text-text-secondary">
+                            <summary className="cursor-pointer text-foreground">主角招式引用</summary>
+                            <div className="mt-3 space-y-2">
+                                <label className="block">
+                                    <span className="mb-1 block text-text-muted">招式词典</span>
+                                    <select
+                                        aria-label="主角招式词典"
+                                        value={shot.moveRef ?? ""}
+                                        onChange={(event) => {
+                                            onUpdateField("move_ref", event.target.value);
+                                            if (!event.target.value) onUpdateField("move_variant", "");
+                                        }}
+                                        className="min-h-9 w-full rounded-md border border-glass-border bg-surface px-2 text-xs text-foreground"
+                                    >
+                                        <option value="">不引用招式</option>
+                                        {CHARACTER_MOVE_DICTIONARY.map((move) => <option key={move.move_ref} value={move.move_ref}>{move.character_name} · {move.label}</option>)}
+                                    </select>
+                                </label>
+                                {findCharacterMove(shot.moveRef) && <>
+                                    <label className="block">
+                                        <span className="mb-1 block text-text-muted">本镜变体</span>
+                                        <select
+                                            aria-label="招式变体"
+                                            value={shot.moveVariant ?? ""}
+                                            onChange={(event) => onUpdateField("move_variant", event.target.value)}
+                                            className="min-h-9 w-full rounded-md border border-glass-border bg-surface px-2 text-xs text-foreground"
+                                        >
+                                            <option value="">默认招式表现</option>
+                                            {findCharacterMove(shot.moveRef)!.variants.map((variant) => <option key={variant} value={variant}>{variant}</option>)}
+                                        </select>
+                                    </label>
+                                    <p className="leading-relaxed text-text-muted">招式会进入当前镜头组装提示词；它不会自动新增受伤、击飞或其他剧情。</p>
+                                </>}
+                            </div>
+                        </details>
 
                         {/* Dialogue text display (read-only — editing via 配音工作台 modal) */}
                         {shot.dialogueStructured?.line && (

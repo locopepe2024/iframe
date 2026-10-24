@@ -947,6 +947,11 @@ export default function StoryboardR2V() {
                 };
             }
             if (field === "transitionHint") return { ...s, transitionHint: typeof value === "string" ? value : null };
+            if (field === "move_ref") {
+                const moveRef = typeof value === "string" && value.trim() ? value : null;
+                return { ...s, moveRef, moveVariant: moveRef ? s.moveVariant : null };
+            }
+            if (field === "move_variant") return { ...s, moveVariant: typeof value === "string" && value.trim() ? value : null };
             if (field === "stylePromptOverride" || field === "lightingOverride") {
                 const visual = effectiveShotVisual(continuityRows[s.id], displayedStyle.positivePrompt);
                 const next = editShotSettings(s, field, typeof value === "string" ? value : null,
@@ -971,6 +976,8 @@ export default function StoryboardR2V() {
         if (field === "cameraMovement") backendField.camera_movement_description = typeof value === "string" ? value : undefined;
         if (field === "transitionHint") backendField.transition_hint = typeof value === "string" ? value : undefined;
         if (field === "negativePromptOverride") backendField.negative_prompt_override = typeof value === "string" ? value : undefined;
+        if (field === "move_ref") backendField.move_ref = typeof value === "string" && value.trim() ? value : "";
+        if (field === "move_variant") backendField.move_variant = typeof value === "string" && value.trim() ? value : "";
         persistFrameEdit(shotId, backendField);
     }, [shots, persistFrameEdit, displayedStyle.positivePrompt, continuityRows]);
 

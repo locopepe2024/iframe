@@ -953,6 +953,8 @@ class StoryboardFrame(BaseModel):
     micro_expression_timing: List[Dict[str, Any]] = Field(
         default_factory=list, description="Creator-accepted performance timing by character"
     )
+    move_ref: Optional[str] = Field(None, description="Confirmed character-performance move dictionary reference")
+    move_variant: Optional[str] = Field(None, description="Current-shot variation of the referenced move")
 
     # === Prompts ===
     # Per-shot art-direction overrides.  Empty values inherit the project's

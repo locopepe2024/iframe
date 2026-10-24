@@ -246,6 +246,8 @@ export function frameToShotNode(
         stylePromptOverride: frame.style_prompt_override ?? null,
         lightingOverride: frame.lighting_override ?? null,
         negativePromptOverride: frame.negative_prompt_override ?? null,
+        moveRef: frame.move_ref ?? null,
+        moveVariant: frame.move_variant ?? null,
         richRefinementCandidate: frame.rich_refinement_candidate ?? null,
         microExpressionCandidate: frame.micro_expression_candidate ?? null,
         cameraMovementCandidate: frame.camera_movement_candidate ?? null,

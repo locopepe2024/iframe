@@ -7050,6 +7050,12 @@ class ComicGenPipeline(StudioOwnerMixin):
             frame.lighting_override = kwargs['lighting_override']
         if kwargs.get('negative_prompt_override') is not None:
             frame.negative_prompt_override = kwargs['negative_prompt_override']
+        if kwargs.get('move_ref') is not None:
+            frame.move_ref = kwargs['move_ref'].strip() or None
+            if not frame.move_ref:
+                frame.move_variant = None
+        if kwargs.get('move_variant') is not None:
+            frame.move_variant = kwargs['move_variant'].strip() or None
         if kwargs.get('reference_package') is not None:
             package = kwargs['reference_package']
             if package.confirmed:

@@ -1965,6 +1965,8 @@ export const api = {
         style_prompt_override?: string;
         lighting_override?: string;
         negative_prompt_override?: string;
+        move_ref?: string;
+        move_variant?: string;
         reference_package?: {
             revision?: number;
             first_frame_url?: string | null;
