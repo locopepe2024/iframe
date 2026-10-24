@@ -192,6 +192,8 @@ The composer follow-up was synchronized to the same release after frontend commi
 
 Frontend commit `6ab03032` was then synchronized to the same release. Live diary responses now render the diary action card immediately, including “继续写日记”, “保存日记”, and “放弃保存”; this also covers the interval before the message history reload pairs the turn. The static chunk containing “放弃保存” is present on the mounted test release and the container remained healthy.
 
+Frontend commit `5bd4c6d4` was synchronized afterward. Text-send consent now lives under “更多 → 聊天设置” and is retained in the browser after confirmation, so the composer no longer expands a consent panel for every message. The send button opens that setting when consent is missing. Twenty-two focused UI tests and typecheck passed; the backend and existing session data were unchanged.
+
 ## 2026-10-24 — Diary editor source context
 
 Frontend commit `c45a40d9` adds a read-only “这篇日记的依据” section inside the independent diary editor. It shows recent conversation excerpts and any photo/video attachments associated with the diary request, so the user can check what the draft is based on before saving. The context is explicitly informational: editing it does not append new facts to the diary or personal memory. Focused Companion UI tests (21), frontend typecheck, isolated static build, and diary/chat backend tests (8) passed. The existing four unrelated full-suite failures remain in axios interceptor tests whose mock has no `interceptors.request`.
