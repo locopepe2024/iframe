@@ -45,6 +45,9 @@
 .guideCard { padding: 1rem; margin: 1rem 0; border: 1px solid var(--line); border-radius: 1rem; background: var(--surface); }
 .shell .guideCard h2 { font-size: 1.15em; }
 .guideCard button { margin: .35rem .35rem .35rem 0; }
+.uploadItem { display: grid; grid-template-columns: 5rem minmax(0, 1fr); align-items: center; gap: .65rem; margin: .6rem 0; }
+.uploadItem p { margin: 0; overflow-wrap: anywhere; }
+.uploadPreview { display: block; width: 5rem; height: 4rem; object-fit: cover; border-radius: .55rem; background: var(--color-bg-input, rgba(0,0,0,.28)); }
 .referenceGrid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .75rem; margin: .75rem 0; }
 .shell .referenceGrid button { display: flex; flex-direction: column; gap: .5rem; min-height: 64px; margin: 0; text-align: left; }
 .referenceGrid img { aspect-ratio: 4 / 3; }

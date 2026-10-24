@@ -4,6 +4,11 @@ import MediaUpload from "./MediaUpload";
 const photo=vi.hoisted(()=>({upload:vi.fn()}));const video=vi.hoisted(()=>({upload:vi.fn()}));
 vi.mock("@/lib/photoApi",()=>({photoApi:photo}));vi.mock("@/lib/companionMediaApi",()=>({companionMediaApi:video}));
 beforeEach(()=>{vi.resetAllMocks();photo.upload.mockResolvedValue({photo_id:"p"});video.upload.mockResolvedValue({video_id:"v"});});
+it("shows a local thumbnail before the file is uploaded",()=>{
+  vi.stubGlobal("URL",{...URL,createObjectURL:vi.fn(()=>"blob:preview"),revokeObjectURL:vi.fn()});
+  render(<MediaUpload files={[new File(["photo"],"images (16).jpeg",{type:"image/jpeg"})]} disabled={false} onUploaded={()=>{}} onClose={()=>{}}/>);
+  expect(screen.getByAltText("images (16).jpeg 缩略图")).toBeInTheDocument();
+});
 it("uploads only after confirmation and retries the failed file with its original operation ID",async()=>{
   video.upload.mockRejectedValueOnce(new Error("网络中断"));const done=vi.fn();
   render(<MediaUpload files={[new File(["photo"],"one.png",{type:"image/png"}),new File(["video"],"two.mp4",{type:"video/mp4"})]} disabled={false} onUploaded={done} onClose={()=>{}}/>);
