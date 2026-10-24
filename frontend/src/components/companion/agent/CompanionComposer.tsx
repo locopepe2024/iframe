@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState, type ReactNode, type RefObject } from "react";
 import { ArrowUp, ChevronDown, Image, MessageCircle, Mic, Plus, Square, Video } from "lucide-react";
 import { useCompanionVoice } from "../useCompanionVoice";
+import { isOpenAlbumCommand } from "./localCommands";
 import styles from "./chat.module.css";
 
 export type ComposerMode = "chat" | "image" | "video";
@@ -26,6 +27,7 @@ export default function CompanionComposer({ mode, value, disabled, busy, allowed
   const picker = useRef<HTMLDivElement>(null), trigger = useRef<HTMLButtonElement>(null);
   const voice = useCompanionVoice(text => onChange(`${value}${value ? " " : ""}${text}`.slice(0, 4000)));
   const recording = voice.listening || voice.finishing;
+  const localCommand = isOpenAlbumCommand(value);
   const selected = modes.find(item => item.value === mode)!;
   const ModeIcon = selected.icon;
   useEffect(() => {
@@ -66,8 +68,8 @@ export default function CompanionComposer({ mode, value, disabled, busy, allowed
           }}>
             {recording ? <Square size={28} aria-hidden="true" /> : <Mic size={28} aria-hidden="true" />}<span>{voice.finishing ? "正在整理" : recording ? "停止" : "语音输入"}</span>
           </button>
-          <button type="button" className={styles.sendButton} aria-label="发送" disabled={disabled || recording || (!value.trim() && !hasAttachments) || (mode === "chat" && !!value.trim() && (hasAttachments && !mediaAcknowledged))} onClick={() => {
-            if (mode === "chat" && value.trim() && !allowed) { onRequestConsent(); return; }
+          <button type="button" className={styles.sendButton} aria-label="发送" disabled={disabled || recording || (!value.trim() && !hasAttachments) || (!localCommand && mode === "chat" && !!value.trim() && (hasAttachments && !mediaAcknowledged))} onClick={() => {
+            if (!localCommand && mode === "chat" && value.trim() && !allowed) { onRequestConsent(); return; }
             onSend();
           }}><ArrowUp size={30} aria-hidden="true" /></button>
         </div>

@@ -98,3 +98,21 @@ it("asks what to edit while retaining the selected photo",async()=>{
  expect(screen.getByRole("region",{name:"图片创作引导"})).toHaveTextContent("已选择参考照片");
  expect(services.generate).not.toHaveBeenCalled();
 });
+
+it.each([["聊天","和我聊聊天"],["图片","想生成的图片"],["视频","想生成的视频"]])("opens the album locally from a %s command without external consent",async(label,inputLabel)=>{
+ photos.list.mockResolvedValue({photos:[{photo_id:"my-photo",date:{status:"pending_confirmation"}}]});
+ render(<AgentChat/>);
+ await waitFor(()=>expect(screen.getByRole("button",{name:"创作类型：聊天"})).not.toBeDisabled());
+ if(label!=="聊天"){
+  fireEvent.click(screen.getByRole("button",{name:"创作类型：聊天"}));
+  fireEvent.click(screen.getByRole("menuitemradio",{name:label}));
+ }
+ fireEvent.change(screen.getByLabelText(inputLabel),{target:{value:"把相册打开"}});
+ fireEvent.click(screen.getByRole("button",{name:"发送"}));
+ fireEvent.click(await screen.findByRole("button",{name:/选择照片 1/}));
+ expect(screen.getByLabelText(inputLabel)).toHaveValue("");
+ expect(screen.getByRole("button",{name:`创作类型：${label}`})).toBeInTheDocument();
+ expect(screen.getByRole("region",{name:"待发送附件"})).toHaveTextContent("相册照片");
+ expect(screen.queryByText("需要参考一张照片吗？")).not.toBeInTheDocument();
+ expect(api.chat).not.toHaveBeenCalled();expect(services.generate).not.toHaveBeenCalled();
+});

@@ -27,3 +27,13 @@ Clarification follow-up:38 related tests pass. Static export passes; separate Ty
 User phrase “嗯我要优化一张图片” bypassed the creation-only guard. This was a coverage gap, not evidence of stale deployment. Extend complete-request matching to hesitation prefixes and intent-only editing/own-photo requests. Ask for concrete changes, retain selected attachment IDs, clear the consumed command, and accept the next instruction. Preserve prompts containing actual edits (e.g. change background to park, brighten photo). An integration test first reproduced the reported phrase with a selected album photo, then verifies clarification and photo retention. The guard remains bounded phrase recognition, not a semantic model; general intent ambiguity remains outside this local correction. Reference-media submission is still explicitly unavailable in GenerationSubmit; this change does not enable or imply a working image-edit adapter.
 
 Modification follow-up:41 related tests pass. Static export passes; separate typecheck reports only the two known CharacterWorkbench errors. Deployed frontend chunks-first; public HTML and changed chunk2088.888cc0fe13534d1f.js match local bytes. HTML SHA25673735f751ea21235c592faa2a9e78592b8c5a3dd0685e8e894f31e3e62890576.
+
+## 相册导航指令边界（2026-10-24）
+
+复现：图片模式输入“把相册打开”被当作生成描述，进入参考图引导；聊天模式未授权时还会先弹出文字发送授权。
+
+修复：仅完整匹配独立相册导航命令，在三种输入模式统一执行本地打开相册；消费并清空命令，保留模式、已有创作引导和附件。选中照片仍加入当前模式的待发送区。该本地动作不发送聊天文字、不调用生成，也不需要外发文字授权。复合指令与场景描述不走该规则；这不是完整语义路由。
+
+验证：先新增三模式集成测试，修复前均失败；补充独立导航与描述/否定/复合指令边界测试。部署与检查结果见本节后续记录。
+
+检查结果：相关集成/组件测试 49 项及命令边界测试 9 项通过，共 58 项；静态构建成功。构建后类型检查仅报既有 CharacterWorkbench.tsx:404/1275 的 ReferenceCandidate.description 两处错误。测试站已更新，公网 HTML 及 9613.810ea93da1ba96c9.js 与本地构建逐字节一致；尚未进行真实浏览器交互回归。仅提交本次变更，不推送/合并。

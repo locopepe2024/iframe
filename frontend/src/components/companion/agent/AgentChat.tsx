@@ -17,6 +17,7 @@ import DiaryCard, { diaryDay, diaryPrompt, formatDiaryDay, today, type DiaryCont
 import UniArtSettings from "./UniArtSettings";
 import SpeechPlayback from "./SpeechPlayback";
 import UploadGuideCard from "./UploadGuideCard";
+import { isOpenAlbumCommand } from "./localCommands";
 import { BookOpen, Images, UserRound, Compass } from "lucide-react";
 
 const prefix = process.env.NEXT_PUBLIC_API_URL === "/companion-demo" ? "/companion-demo" : "";
@@ -156,6 +157,12 @@ export default function AgentChat() {
   }
   function submit() {
     if (inputDisabled || pending) return;
+    if (isOpenAlbumCommand(text)) {
+      setAlbumOpen(true);
+      setDrafts(old => ({ ...old, [mode]: "" }));
+      setNotice("");
+      return;
+    }
     if (mode === "chat") {
       if (text.trim()) {
         if (!allowed || (pendingMedia.chat.length && !mediaAcknowledged)) return;
