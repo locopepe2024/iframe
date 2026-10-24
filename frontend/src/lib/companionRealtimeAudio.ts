@@ -46,6 +46,12 @@ export async function captureMicrophone(context: AudioContext, stream: MediaStre
 export class PcmPlayer {
   private until = 0;
   private nodes = new Set<AudioBufferSourceNode>();
+  private responseActive = false;
+  private underruns = 0;
+  private maxGapMs = 0;
+  private readonly headroom = .2;
+  finishResponse() { this.responseActive = false; }
+  stats() { return { underruns: this.underruns, maxGapMs: Math.round(this.maxGapMs), startupBufferMs: 200 }; }
   constructor(private readonly context: AudioContext, private readonly onIdle: () => void = () => {}) {}
   isPlaying() { return this.nodes.size > 0; }
   play(encoded: string) {
@@ -61,11 +67,19 @@ export class PcmPlayer {
     const node = this.context.createBufferSource(); node.buffer = buffer; node.connect(this.context.destination);
     node.onended = () => { this.nodes.delete(node); node.disconnect(); if (!this.nodes.size) this.onIdle(); };
     this.nodes.add(node);
-    const start = Math.max(this.context.currentTime + .02, this.until);
+    const now = this.context.currentTime;
+    const drained = this.until <= now;
+    if (drained && this.responseActive) {
+      this.underruns++;
+      this.maxGapMs = Math.max(this.maxGapMs, (now - this.until) * 1000);
+    }
+    // Add headroom only at startup/rebuffer, never between contiguous chunks.
+    const start = drained ? now + this.headroom : this.until;
+    this.responseActive = true;
     this.until = start + buffer.duration; node.start(start);
   }
   clear() {
     for (const node of Array.from(this.nodes)) { node.onended = null; node.stop(); node.disconnect(); }
-    this.nodes.clear(); this.until = 0;
+    this.nodes.clear(); this.until = 0; this.responseActive = false;
   }
 }

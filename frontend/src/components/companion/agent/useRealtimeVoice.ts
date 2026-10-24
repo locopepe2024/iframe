@@ -22,7 +22,10 @@ export function useRealtimeVoice() {
     stream.current?.getTracks().forEach(track => track.stop()); stream.current = null;
     const ws = socket.current; socket.current = null;
     if (ws) { ws.onopen = ws.onmessage = ws.onerror = ws.onclose = null; ws.close(); }
-    player.current?.clear(); player.current = null;
+    if (player.current) {
+      console.info("Companion voice playback", player.current.stats());
+      player.current.clear(); player.current = null;
+    }
     if (context.current) void context.current.close().catch(() => {});
     context.current = null;
   }, []);
@@ -77,7 +80,10 @@ export function useRealtimeVoice() {
           else if (event.type === "input_audio_buffer.speech_stopped") setState("thinking");
           else if (event.type === "response.created") { ignoreAudio.current = false; setState("thinking"); }
           else if (event.type === "response.audio.delta" && !ignoreAudio.current) { player.current?.play(event.delta); setState("speaking"); }
-          else if (event.type === "response.done" && !player.current?.isPlaying()) setState("listening");
+          else if (event.type === "response.done") {
+            player.current?.finishResponse();
+            if (!player.current?.isPlaying()) setState("listening");
+          }
           else if (event.type === "conversation.item.input_audio_transcription.delta") {
             const confirmed = (confirmedInput.get(event.item_id) || "") + (event.text || "");
             confirmedInput.set(event.item_id,confirmed);

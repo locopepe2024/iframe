@@ -3,7 +3,7 @@ import {afterEach,beforeEach,expect,it,vi} from "vitest";
 import {useRealtimeVoice} from "./useRealtimeVoice";
 const mocks=vi.hoisted(()=>({ticket:vi.fn(),capture:vi.fn(),endCapture:vi.fn(),play:vi.fn(),clear:vi.fn(),playing:vi.fn()}));
 vi.mock("@/lib/companionServices",()=>({companionServices:{realtimeTicket:mocks.ticket,realtimeUrl:()=>"wss://example.test/realtime"}}));
-vi.mock("@/lib/companionRealtimeAudio",()=>({captureMicrophone:mocks.capture,PcmPlayer:class {play=mocks.play;clear=mocks.clear;isPlaying=mocks.playing;}}));
+vi.mock("@/lib/companionRealtimeAudio",()=>({captureMicrophone:mocks.capture,PcmPlayer:class {stats=()=>({underruns:0});finishResponse=()=>{};play=mocks.play;clear=mocks.clear;isPlaying=mocks.playing;}}));
 let ws:FakeSocket;
 class FakeSocket {
  static OPEN=1;readyState=1;bufferedAmount=0;
