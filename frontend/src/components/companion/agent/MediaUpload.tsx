@@ -10,24 +10,28 @@ type Item = { file: File; operation: string; done: boolean; error: string };
 export default function MediaUpload({files,disabled,onUploaded,onClose,onBusyChange}:{files:File[];disabled:boolean;onUploaded:(media:UploadedMedia)=>void;onClose:()=>void;onBusyChange?:(busy:boolean)=>void}) {
   const [items,setItems]=useState<Item[]>(()=>files.map(file=>({file,operation:crypto.randomUUID(),done:false,error:""})));
   const [previews,setPreviews]=useState<Record<string,string>>({});
+  const [objectPreviews,setObjectPreviews]=useState<Record<string,string>>({});
   const [busy,setBusy]=useState(false);
   const alive=useRef(true),locked=useRef(false);
   const callback=useRef(onUploaded);callback.current=onUploaded;
   useEffect(()=>{alive.current=true;return()=>{alive.current=false;};},[]);
   useEffect(()=>{
     const next:Record<string,string> = {};
+    const objects:Record<string,string> = {};
     let cancelled = false;
     const objectUrls: string[] = [];
     files.forEach(file => {
+      if (typeof URL.createObjectURL === "function") { const url = URL.createObjectURL(file); objectUrls.push(url); objects[file.name] = url; }
       if (file.type.startsWith("image/") && typeof FileReader !== "undefined") {
         const reader = new FileReader();
         reader.onload = () => { if (!cancelled && typeof reader.result === "string") setPreviews(old => ({ ...old, [file.name]: reader.result as string })); };
         reader.readAsDataURL(file);
-      } else if (typeof URL.createObjectURL === "function") {
-        const url = URL.createObjectURL(file); objectUrls.push(url); next[file.name] = url;
+      } else if (objects[file.name]) {
+        next[file.name] = objects[file.name];
       }
     });
     if (Object.keys(next).length) setPreviews(next);
+    setObjectPreviews(objects);
     return () => { cancelled = true; objectUrls.forEach(url => URL.revokeObjectURL(url)); };
   },[files]);
   async function upload(){
@@ -49,7 +53,7 @@ export default function MediaUpload({files,disabled,onUploaded,onClose,onBusyCha
   return <section className={styles.guideCard} aria-label="上传照片或视频" aria-busy={busy}>
     <h2>上传照片或视频</h2><p>照片每张不超过 10 MB；视频每段不超过 25 MB、5 分钟。</p>
     <ul>{items.map((item,i)=><li key={item.operation} className={styles.uploadItem}>
-      {previews[item.file.name] && (item.file.type.startsWith("video/") ? <video className={styles.uploadPreview} src={previews[item.file.name]} muted playsInline preload="metadata" aria-label={`${item.file.name} 缩略图`} /> : <img className={styles.uploadPreview} src={previews[item.file.name]} alt={`${item.file.name} 缩略图`} />)}
+      {previews[item.file.name] && (item.file.type.startsWith("video/") ? <video className={styles.uploadPreview} src={previews[item.file.name]} muted playsInline preload="metadata" aria-label={`${item.file.name} 缩略图`} /> : <picture><source srcSet={previews[item.file.name]} /><img className={styles.uploadPreview} src={objectPreviews[item.file.name] || previews[item.file.name]} alt={`${item.file.name} 缩略图`} /></picture>)}
       <p>{item.file.name}：{item.done?"已上传":"待上传"}</p>{item.error&&<p role="alert">{item.error}</p>}
     </li>)}</ul>
     <button type="button" disabled={busy||disabled||items.every(item=>item.done)} onClick={()=>void upload()}>{busy?"正在上传…":items.some(item=>item.error)?"重试未完成的上传":"确认上传"}</button>
