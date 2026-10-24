@@ -8205,6 +8205,43 @@ def _validate_storyboard_polish_result(model_id: str, result: Dict[str, Any], re
         )
 
 
+def _validate_context_ir_polish_result(result: Dict[str, str], *, reference_mode: bool = False,
+                                       generation_mode: str = "i2v", generate_audio=None,
+                                       dialogue_line: str = "") -> None:
+    """Validate observable content without imposing local chat-model headings on IR."""
+    from .llm import PolishError
+
+    prompt = result.get("prompt_en", "")
+    if not prompt.strip():
+        raise PolishError(
+            reason="model_contract_mismatch",
+            message_zh="MiniMax IR 未返回提示词，本次结果未应用。",
+            message_en="MiniMax IR returned no prompt; this result was not applied.",
+        )
+    if reference_mode and re.search(r"(?i)\[\s*T2VA\s*\]", prompt):
+        raise PolishError(
+            reason="model_contract_mismatch",
+            message_zh="R2V 润色结果被误标为 T2VA，本次结果未应用。",
+            message_en="The R2V polish was mislabeled as T2VA and was not applied.",
+        )
+    if generation_mode == "first_last_frame":
+        first = re.compile(r"(?i)first[\s_-]*(?:frame|image)|opening[\s_-]*(?:frame|image)|picture\s*1\b|首帧|起始帧")
+        last = re.compile(r"(?i)last[\s_-]*(?:frame|image)|final[\s_-]*(?:frame|image)|ending[\s_-]*(?:frame|image)|picture\s*2\b|尾帧|终帧|末帧")
+        if not first.search(prompt) or not last.search(prompt):
+            raise PolishError(
+                reason="model_contract_mismatch",
+                message_zh="润色结果没有同时说明首帧与尾帧，本次结果未应用。",
+                message_en="Polished result omitted the first or last frame; it was not applied.",
+            )
+    exact_dialogue = dialogue_line.strip()
+    if generate_audio is True and exact_dialogue and exact_dialogue not in prompt:
+        raise PolishError(
+            reason="model_contract_mismatch",
+            message_zh="润色结果遗漏了镜头对白，本次结果未应用。",
+            message_en="The polished prompt omitted the shot dialogue; it was not applied.",
+        )
+
+
 def _compile_ir_polish_text(request, custom_prompt: str) -> str:
     instruction = custom_prompt.strip()
     instruction += "\n" + _IR_SHOT_GUIDANCE
@@ -8669,9 +8706,10 @@ def polish_video_prompt(request: PolishVideoPromptRequest):
         selected_skills = _effective_optimization_skills(request)
         if request.optimizer_provider == "minimax_context_ir":
             # Context-IR owns its provider-native structure. Keep the existing
-            # freeform instruction path; its output is still validated below.
+            # freeform instruction path and validate only observable IR invariants.
             result = _complete_minimax_ir_polish(request, custom or DEFAULT_VIDEO_POLISH_PROMPT, reviewed["user"])
-            _validate_storyboard_polish_result(request.target_video_model, result, reference_mode=False, generate_audio=request.generate_audio, dialogue_line=request.dialogue_line, generation_mode=request.generation_mode, short_action_duration=short_action_duration)
+            _validate_context_ir_polish_result(result, generation_mode=request.generation_mode,
+                                               generate_audio=request.generate_audio, dialogue_line=request.dialogue_line)
             return result
         custom_prompt = _storyboard_polish_contract(request.target_video_model, custom, DEFAULT_VIDEO_POLISH_PROMPT, request.generate_audio, request.target_duration, request.dialogue_speaker, request.dialogue_line, selected_skills, reference_mode=False, generation_mode=request.generation_mode)
         # Polish model: request override → project/series PromptConfig → ""
@@ -8761,7 +8799,8 @@ def polish_r2v_prompt(request: PolishR2VPromptRequest):
         selected_skills = _effective_optimization_skills(request)
         if request.optimizer_provider == "minimax_context_ir":
             result = _complete_minimax_ir_polish(request, custom or DEFAULT_R2V_POLISH_PROMPT, reviewed["user"])
-            _validate_storyboard_polish_result(request.target_video_model, result, reference_mode=True, generate_audio=request.generate_audio, dialogue_line=request.dialogue_line, short_action_duration=short_action_duration)
+            _validate_context_ir_polish_result(result, reference_mode=True, generate_audio=request.generate_audio,
+                                               dialogue_line=request.dialogue_line)
             return result
         custom_prompt = _storyboard_polish_contract(request.target_video_model, custom, DEFAULT_R2V_POLISH_PROMPT, request.generate_audio, request.target_duration, request.dialogue_speaker, request.dialogue_line, selected_skills, reference_mode=True)
         polish_model = request.polish_model or _OPTIMIZER_MODEL_IDS.get(request.optimizer_provider) or _get_polish_model_for_project(request.script_id)

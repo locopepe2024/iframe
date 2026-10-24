@@ -175,6 +175,38 @@ def test_minimax_ir_uses_reviewed_text(monkeypatch):
     assert complete.call_args.args[1][0]["text"] == "冷灰蓝长街。"
 
 
+def test_minimax_ir_accepts_native_prompt_without_local_h3_headings(monkeypatch):
+    from src.models import uniart
+    native_prompt = "镜头连续推进。0.00-0.40s 匪首踢中掌柜；掌柜撞到木桌，桌面物品滑落，随后倒地。"
+    request = api.PolishVideoPromptRequest(
+        draft_prompt="匪首踢中掌柜，掌柜撞桌倒地", optimizer_provider="minimax_context_ir",
+        target_video_model="uniart/minimax-h3-vip", target_duration=4,
+    )
+    confirmed, _ = _confirmed(request)
+    monkeypatch.setattr(api, "current_studio_user", lambda: SimpleNamespace(user_id="u", owner_profile_id="o"))
+    monkeypatch.setattr("src.apps.studio_access.runtime_uniart_for_owner", lambda *args: object())
+    monkeypatch.setattr(uniart, "complete_context_ir", Mock(return_value=native_prompt))
+
+    assert api.polish_video_prompt(confirmed) == {"prompt_cn": native_prompt, "prompt_en": native_prompt}
+
+
+def test_minimax_ir_native_prompt_keeps_mode_and_dialogue_checks():
+    from src.apps.comic_gen.llm import PolishError
+
+    with pytest.raises(PolishError, match="first or last frame"):
+        api._validate_context_ir_polish_result(
+            {"prompt_en": "首帧开始，人物走出门口。"}, generation_mode="first_last_frame",
+        )
+    with pytest.raises(PolishError, match="mislabeled as T2VA"):
+        api._validate_context_ir_polish_result(
+            {"prompt_en": "[T2VA] 人物走出门口。"}, reference_mode=True,
+        )
+    with pytest.raises(PolishError, match="omitted the shot dialogue"):
+        api._validate_context_ir_polish_result(
+            {"prompt_en": "人物走出门口。"}, generate_audio=True, dialogue_line="让开！",
+        )
+
+
 def test_minimax_ir_preview_keeps_long_draft_under_provider_limit():
     draft = "0.00-0.50s: 匪首踢击；0.50-1.00s: 掌柜撞桌。" + "保持首帧人物和光影。" * 330
     request = api.PolishVideoPromptRequest(
