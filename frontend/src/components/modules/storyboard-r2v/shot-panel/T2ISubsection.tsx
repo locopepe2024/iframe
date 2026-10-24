@@ -73,6 +73,9 @@ interface T2ISubsectionProps {
      *  upload error code (or void if success). Host owns the actual
      *  api.uploadT2IFrame call + state mutation. */
     onUpload: (file: File) => Promise<T2IUploadError | void>;
+    previousTailAvailable?: boolean;
+    previousTailBusy?: boolean;
+    onUsePreviousTail?: () => void;
     resolveUrl?: (url: string) => string;
 }
 
@@ -88,6 +91,9 @@ export default function T2ISubsection({
     onRemove,
     onGenerate,
     onUpload,
+    previousTailAvailable = false,
+    previousTailBusy = false,
+    onUsePreviousTail,
     resolveUrl,
 }: T2ISubsectionProps) {
     const t = useTranslations("storyboardR2V");
@@ -111,6 +117,9 @@ export default function T2ISubsection({
                 inFlightStatus={inFlightStatus}
                 onGenerate={onGenerate}
                 onUpload={onUpload}
+                previousTailAvailable={previousTailAvailable}
+                previousTailBusy={previousTailBusy}
+                onUsePreviousTail={onUsePreviousTail}
             />
         );
     }
@@ -129,6 +138,9 @@ export default function T2ISubsection({
             onRemove={onRemove}
             onGenerate={onGenerate}
             onUpload={onUpload}
+            previousTailAvailable={previousTailAvailable}
+            previousTailBusy={previousTailBusy}
+            onUsePreviousTail={onUsePreviousTail}
         />
     );
 }
@@ -146,10 +158,14 @@ interface HeroProps {
     inFlightStatus?: "pending" | "processing" | "completed" | "failed";
     onGenerate: () => void;
     onUpload: (file: File) => Promise<T2IUploadError | void>;
+    previousTailAvailable: boolean;
+    previousTailBusy: boolean;
+    onUsePreviousTail?: () => void;
 }
 
 function Hero({
     t, promptIsEmpty, generating, inFlightTaskId, inFlightStatus, onGenerate, onUpload,
+    previousTailAvailable, previousTailBusy, onUsePreviousTail,
 }: HeroProps) {
     const [uploading, setUploading] = useState(false);
     const [uploadError, setUploadError] = useState<T2IUploadError | null>(null);
@@ -252,6 +268,17 @@ function Hero({
 
                         <button
                             type="button"
+                            onClick={onUsePreviousTail}
+                            disabled={!previousTailAvailable || previousTailBusy || generating || uploading}
+                            title={previousTailAvailable ? "使用上一镜头尾帧作为本镜头首帧" : "上一镜头暂无已完成视频尾帧"}
+                            className="inline-flex min-h-[36px] items-center gap-1.5 rounded-md border border-glass-border bg-black/20 px-3 py-1.5 font-mono text-chrome font-medium text-text-secondary transition-colors hover:border-primary/45 hover:bg-primary/10 hover:text-primary disabled:cursor-not-allowed disabled:opacity-45"
+                        >
+                            {previousTailBusy ? <Loader2 size={13} className="animate-spin" aria-hidden="true" /> : <Pin size={13} aria-hidden="true" />}
+                            使用上一镜头尾帧
+                        </button>
+
+                        <button
+                            type="button"
                             onClick={() => inputRef.current?.click()}
                             disabled={uploadDisabled}
                             className="inline-flex min-h-[36px] items-center gap-1.5 rounded-md border border-glass-border bg-black/20 px-3 py-1.5 font-mono text-chrome font-medium text-text-secondary transition-colors duration-fast ease-out-quart hover:border-primary/45 hover:bg-primary/10 hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/55 disabled:cursor-not-allowed disabled:opacity-50"
@@ -314,12 +341,16 @@ interface CompactProps {
     onRemove: (index: number) => void;
     onGenerate: () => void;
     onUpload: (file: File) => Promise<T2IUploadError | void>;
+    previousTailAvailable: boolean;
+    previousTailBusy: boolean;
+    onUsePreviousTail?: () => void;
 }
 
 function Compact({
     t, imageUrls, selectedIndex, storyboardFrameUrl, generating,
     inFlightTaskId, inFlightStatus, promptIsEmpty,
     onSelect, onRemove, onGenerate, onUpload,
+    previousTailAvailable, previousTailBusy, onUsePreviousTail,
 }: CompactProps) {
     // 数据模型：active frame 来源优先级 = getActiveT2IImageUrl 然后 fallback shot.imageUrl。
     // 简化 v1 决定：storyboard frame thumb 只在 T2I 历史为空时显示（自动成为 active）；
@@ -427,6 +458,16 @@ function Compact({
                     >
                         <RefreshCw size={11} strokeWidth={1.8} aria-hidden="true" className={generating ? "animate-spin" : undefined} />
                         <span>{t("t2iCompactReroll")}</span>
+                    </button>
+                    <button
+                        type="button"
+                        onClick={onUsePreviousTail}
+                        disabled={!previousTailAvailable || previousTailBusy || generating || uploading}
+                        title={previousTailAvailable ? "使用上一镜头尾帧作为本镜头首帧" : "上一镜头暂无已完成视频尾帧"}
+                        className="btn-tip inline-flex items-center gap-1 px-1.5 h-7 rounded font-mono text-[0.65625rem] tracking-tight text-text-muted transition-colors hover:bg-hover-bg hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40"
+                    >
+                        {previousTailBusy ? <Loader2 size={11} className="animate-spin" aria-hidden="true" /> : <Pin size={11} aria-hidden="true" />}
+                        <span>使用上一镜头尾帧</span>
                     </button>
                     <button
                         type="button"

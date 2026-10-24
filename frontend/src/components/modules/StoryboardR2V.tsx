@@ -183,6 +183,7 @@ export default function StoryboardR2V() {
     // backend, so the user gets immediate feedback instead of a
     // task that queues, fails, and shows up only in the diagnose log.
     const [shotErrors, setShotErrors] = useState<Record<string, string>>({});
+    const [previousTailBusy, setPreviousTailBusy] = useState<Record<string, boolean>>({});
     const missingRefsMessage = useCallback(
         (modelLabel: string) =>
             t("missingRefs", { model: modelLabel }),
@@ -646,6 +647,45 @@ export default function StoryboardR2V() {
             debugLog.warn("Studio", "single frame refine failed", err);
         }
     }, [currentProject, updateProject]);
+
+    /** Attach the completed previous shot's tail as the current shot's
+     * storyboard/first-frame asset. The backend owns extraction and persists
+     * it as the current frame's selected rendered-image variant. */
+    const handleUsePreviousTail = useCallback(async (index: number) => {
+        if (!currentProject?.id || index <= 0) return;
+        const current = shots[index];
+        const previousFrame = currentProject.frames?.[index - 1] as any;
+        if (!current || !previousFrame) return;
+        const tasks: any[] = (currentProject as any).video_tasks ?? [];
+        const selectedId = previousFrame.selected_video_id;
+        const previousTask = tasks.find((task: any) =>
+            task.frame_id === previousFrame.id &&
+            task.status === "completed" &&
+            task.video_url &&
+            (selectedId ? task.id === selectedId : true)
+        ) || tasks.find((task: any) =>
+            task.frame_id === previousFrame.id && task.status === "completed" && task.video_url
+        );
+        if (!previousTask) {
+            toast.warning("上一镜头还没有可用的已完成视频尾帧");
+            return;
+        }
+        setPreviousTailBusy(prev => ({ ...prev, [current.id]: true }));
+        try {
+            const updated = await api.extractLastFrame(currentProject.id, current.id, previousTask.id);
+            if (updated?.frames) {
+                updateProject(currentProject.id, { frames: updated.frames, video_tasks: updated.video_tasks });
+                const defaultMode = currentProject.default_generation_mode === "i2v" ? "t2i_i2v" : "direct_r2v";
+                setShots(updated.frames.map((frame: any) => frameToShotNode(frame, updated.video_tasks ?? [], defaultMode)));
+            }
+            toast.success("已使用上一镜头尾帧作为本镜头首帧");
+        } catch (error: any) {
+            const detail = error?.response?.data?.detail || error?.message || "尾帧提取失败";
+            toast.error(`无法使用上一镜头尾帧：${String(detail).slice(0, 160)}`);
+        } finally {
+            setPreviousTailBusy(prev => ({ ...prev, [current.id]: false }));
+        }
+    }, [currentProject, shots, updateProject]);
 
     // Delete a shot
     const deleteShot = useCallback(async (index: number) => {
@@ -2138,7 +2178,17 @@ export default function StoryboardR2V() {
                         <div className="mx-5 mb-[18px] motion-safe:animate-[shotPanelIn_220ms_cubic-bezier(0.22,1,0.36,1)_both]">
                             {isI2vTab ? (
                                 <div>
-                                    <T2ISubsection
+                                    {(() => {
+                                        const previousFrame = currentProject?.frames?.[index - 1] as any;
+                                        const previousTasks: any[] = (currentProject as any)?.video_tasks ?? [];
+                                        const selectedPreviousId = previousFrame?.selected_video_id;
+                                        const previousTailAvailable = index > 0 && previousTasks.some((task: any) =>
+                                            task.frame_id === previousFrame?.id && task.status === "completed" && task.video_url &&
+                                            (selectedPreviousId ? task.id === selectedPreviousId : true)
+                                        ) || index > 0 && previousTasks.some((task: any) =>
+                                            task.frame_id === previousFrame?.id && task.status === "completed" && task.video_url
+                                        );
+                                        return <T2ISubsection
                                         imageUrls={shot.t2iImageUrls ?? []}
                                         selectedIndex={shot.t2iSelectedIndex ?? 0}
                                         storyboardFrameUrl={shot.imageUrl || undefined}
@@ -2146,6 +2196,9 @@ export default function StoryboardR2V() {
                                         generating={shot.t2iStatus === "pending" || shot.t2iStatus === "processing"}
                                         inFlightTaskId={shot.t2iTaskId}
                                         inFlightStatus={shot.t2iStatus}
+                                        previousTailAvailable={previousTailAvailable}
+                                        previousTailBusy={Boolean(previousTailBusy[shot.id])}
+                                        onUsePreviousTail={() => { void handleUsePreviousTail(index); }}
                                         onSelect={(i) => setShots(prev => prev.map((s, j) => {
                                             if (j !== index) return s;
                                             const next = setActiveT2IIndex(s, i);
@@ -2247,7 +2300,8 @@ export default function StoryboardR2V() {
                                             }
                                         }}
                                         resolveUrl={resolveAssetUrl}
-                                    />
+                                    />;
+                                    })()}
                                 </div>
                             ) : null}
                             {/* Step 2 · 生成视频 (ParamsSection) — always shown
