@@ -73,6 +73,7 @@ export default function VideoPolishReview({ messages, media, formatNote, targetM
         .filter(([name, field]) => name in fieldLabels && field.value != null && field.value !== "");
     const skills = reviewContext?.selected_skills.map(id =>
         OPTIMIZATION_SKILLS.find(([skillId]) => skillId === id)?.[1] ?? id) ?? [];
+    const irTextTooLong = isContextIr && messages.user.length > 7000;
     return <div className="space-y-3 rounded-lg border border-glass-border bg-surface-inset p-3">
         <div className="flex items-center justify-between gap-2">
             <strong className="text-sm text-foreground">提交前检查模型输入</strong>
@@ -144,7 +145,9 @@ export default function VideoPolishReview({ messages, media, formatNote, targetM
             </label>
             <p className="mt-2 text-text-muted">{formatNote}</p>
         </details>}
-        {isContextIr && <p className="text-xs text-text-muted">{formatNote}</p>}
+        {isContextIr && <p className={`text-xs ${irTextTooLong ? "text-status-failed-fg" : "text-text-muted"}`}>
+            MiniMax IR 输入：{messages.user.length}/7000 字符。{irTextTooLong ? "请缩短后提交。" : ""}
+        </p>}
         {error && <p role="alert" className="text-xs text-status-failed-fg">{error}</p>}
         <div className="flex justify-end gap-2">
             <button type="button" onClick={onCancel} className="rounded border border-glass-border px-3 py-1.5 text-xs text-foreground">返回</button>
@@ -152,7 +155,7 @@ export default function VideoPolishReview({ messages, media, formatNote, targetM
                 className="inline-flex items-center gap-1 rounded border border-glass-border px-3 py-1.5 text-xs text-foreground disabled:opacity-50">
                 <RefreshCw size={12} aria-hidden="true" />重新查看模型输入
             </button>}
-            <button type="button" onClick={onConfirm} disabled={isSubmitting || !messages.user.trim()
+            <button type="button" onClick={onConfirm} disabled={isSubmitting || !messages.user.trim() || irTextTooLong
                 || Boolean(reviewContext?.scene_lighting?.requires_decision && !reviewContext.scene_lighting.choice)}
                 className="rounded bg-primary px-3 py-1.5 text-xs text-white disabled:opacity-50">
                 {isSubmitting ? "模型处理中…" : confirmLabel}
