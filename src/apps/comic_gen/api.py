@@ -7944,7 +7944,15 @@ When the draft uses rapid-impact words such as "猛然", "快速", "立即", or
 "接触瞬间", preserve real-time motion: compress the reaction into the
 available beat instead of stretching it into slow motion or a gradual fall.
 If the user explicitly names a table, wall, counter, or prop collision, include
-that collision and its visible consequences in the same causal chain; do not
+that collision and its visible consequences in the same causal chain. For a
+kick followed by a table collision and fall: single contact, immediate recoil
+and backward steps, body hits the table, table visibly shifts or shakes,
+objects actually visible on it slide, tip, or fall, then the person falls.
+Do not make the person turn around to reach a table behind them. If no table
+objects are visible, do not invent them. Put the collision, table response,
+and any object response in the same or immediately following time beat.
+When audio is enabled, align impact, wood movement, and falling-object sounds
+with those visible events; when silent, do not invent sound cues. Do not
 apply the default prop-preservation rule to an explicitly authorized impact.
 Place the rhythm inside the existing model-specific visual description,
 without adding a new output field.
@@ -7985,6 +7993,23 @@ def _storyboard_polish_contract(model_id: str, custom: str, default: str, genera
             constraints += f"\nEXPLICIT DIALOGUE (verbatim, do not translate, omit, or rewrite): {speaker}: {dialogue_line.strip()}"
     if target_duration is not None:
         constraints += f"\nTarget duration: {target_duration} seconds. All action must fit within this duration; no invented exact source cut times."
+        if is_h3 and target_duration <= 6:
+            constraints += f"""
+SHORT H3 ACTION TIMELINE: For a causal action shot, write 3-6 contiguous,
+explicit time ranges inside the existing visual description, starting at
+0.00s and ending at {target_duration:.2f}s. Use the form 0.00-0.60s in BOTH
+prompt_cn and prompt_en. Each range must advance a visible action beat:
+initiation, single contact, immediate force reaction, authorized collision,
+and final state as applicable. These are authored action timings, not measured
+source cut points or extra [Shot] labels. A fast impact and fall remain real
+time; camera movement does not slow the subjects. For a purely atmospheric
+shot without causal action, do not invent motion just to fill ranges.
+If a person visibly collides with a table, show the table shift or shake and
+the resulting movement of objects actually visible on it, then the person's
+fall. Do not add table objects absent from the reference. Align permitted
+impact and falling-object sounds with those visual beats; silence means no
+sound cues at all.
+"""
     if generation_mode == "first_last_frame":
         constraints += _first_last_polish_guidance(target_duration)
     if is_h3:
@@ -8039,7 +8064,36 @@ Never omit a heading. Never put subtitles or any other text overlay in the promp
 """
 
 
-def _validate_storyboard_polish_result(model_id: str, result: Dict[str, Any], reference_mode: bool, generate_audio=None, dialogue_line="", generation_mode: str = "i2v") -> None:
+def _needs_short_action_timeline(model_id: str, target_duration: Optional[float], draft_prompt: str) -> bool:
+    return (
+        "h3" in (model_id or "").lower()
+        and target_duration is not None
+        and target_duration <= 6
+        and bool(re.search(r"踢|踹|受击|命中|碰撞|撞到|跌倒|倒地|摔倒|击飞|kick|impact|collision|stagger|fall", draft_prompt or "", re.I))
+    )
+
+
+def _has_short_action_timeline(text: str, duration: float, reference_mode: bool) -> bool:
+    heading = "detailed_description" if reference_mode and re.search(
+        r"(?im)^\s*detailed_description\s*[:：]", text
+    ) else "integrated_multimodal_description"
+    visual = re.search(rf"(?is){heading}\s*[:：](.*?)(?:overall_soundscape\s*[:：]|$)", text)
+    if not visual:
+        return False
+    ranges = [
+        (float(match.group(1)), float(match.group(2)))
+        for match in re.finditer(r"(?<!\d)(\d{1,2}(?:\.\d{1,2})?)\s*[-–—~至]\s*(\d{1,2}(?:\.\d{1,2})?)\s*(?:s|秒)", visual.group(1), re.I)
+    ]
+    return (
+        3 <= len(ranges) <= 6
+        and abs(ranges[0][0]) <= 0.05
+        and abs(ranges[-1][1] - duration) <= 0.05
+        and all(start < end for start, end in ranges)
+        and all(abs(left[1] - right[0]) <= 0.05 for left, right in zip(ranges, ranges[1:]))
+    )
+
+
+def _validate_storyboard_polish_result(model_id: str, result: Dict[str, Any], reference_mode: bool, generate_audio=None, dialogue_line="", generation_mode: str = "i2v", short_action_duration: Optional[float] = None) -> None:
     """Reject responses that ignore the selected provider's prompt contract."""
     if generation_mode == "first_last_frame":
         first = re.compile(r"(?i)first[\s_-]*(?:frame|image)|opening[\s_-]*(?:frame|image)|picture\s*1\b|首帧|起始帧")
@@ -8108,6 +8162,16 @@ def _validate_storyboard_polish_result(model_id: str, result: Dict[str, Any], re
             message_zh="润色模型未返回 MiniMax H3 所需的结构化提示词，请重试。本次结果未应用。",
             message_en="The polish model did not return the structured MiniMax H3 prompt. Retry; this result was not applied.",
         )
+    if short_action_duration is not None and any(
+        not _has_short_action_timeline(result.get(key, ""), short_action_duration, reference_mode)
+        for key in ("prompt_cn", "prompt_en")
+    ):
+        from .llm import PolishError
+        raise PolishError(
+            reason="model_contract_mismatch",
+            message_zh="润色结果缺少覆盖全片的分段动作节拍，本次结果未应用。请重试。",
+            message_en="The polished result lacks a complete timed action sequence; it was not applied. Retry.",
+        )
     exact_dialogue = dialogue_line.strip()
     if generate_audio is True and exact_dialogue and any(
         exact_dialogue not in result.get(key, "") or "<d>" not in result.get(key, "")
@@ -8124,6 +8188,8 @@ def _validate_storyboard_polish_result(model_id: str, result: Dict[str, Any], re
 def _compile_ir_polish_text(request, custom_prompt: str) -> str:
     instruction = custom_prompt.strip()
     instruction += _ACTION_RHYTHM_GUIDANCE + _SHOT_SPACE_VISIBILITY_GUIDANCE
+    if _needs_short_action_timeline(request.target_video_model, request.target_duration, request.draft_prompt):
+        instruction += f"\nUse 3-6 contiguous authored time ranges from 0.00s to {request.target_duration:.2f}s inside the H3 visual description in both language outputs."
     if getattr(request, "generation_mode", "") == "first_last_frame":
         instruction += _first_last_polish_guidance(request.target_duration)
     instruction += "\n\nH3 constraint: do not add subtitles, captions, title cards, watermarks, labels, or any burned-in on-screen text. Dialogue is audio only."
@@ -8559,6 +8625,9 @@ def polish_video_prompt(request: PolishVideoPromptRequest):
     try:
         reviewed = _require_video_polish_review(request, False)
         from .llm import DEFAULT_VIDEO_POLISH_PROMPT
+        short_action_duration = request.target_duration if _needs_short_action_timeline(
+            request.target_video_model, request.target_duration, request.draft_prompt
+        ) else None
         if request.generation_mode == "first_last_frame" and (
             len(request.image_urls) != 2 or request.image_urls[0] == request.image_urls[1]
         ):
@@ -8576,7 +8645,7 @@ def polish_video_prompt(request: PolishVideoPromptRequest):
             # Context-IR owns its provider-native structure. Keep the existing
             # freeform instruction path; its output is still validated below.
             result = _complete_minimax_ir_polish(request, custom or DEFAULT_VIDEO_POLISH_PROMPT, reviewed["user"])
-            _validate_storyboard_polish_result(request.target_video_model, result, reference_mode=False, generate_audio=request.generate_audio, dialogue_line=request.dialogue_line, generation_mode=request.generation_mode)
+            _validate_storyboard_polish_result(request.target_video_model, result, reference_mode=False, generate_audio=request.generate_audio, dialogue_line=request.dialogue_line, generation_mode=request.generation_mode, short_action_duration=short_action_duration)
             return result
         custom_prompt = _storyboard_polish_contract(request.target_video_model, custom, DEFAULT_VIDEO_POLISH_PROMPT, request.generate_audio, request.target_duration, request.dialogue_speaker, request.dialogue_line, selected_skills, reference_mode=False, generation_mode=request.generation_mode)
         # Polish model: request override → project/series PromptConfig → ""
@@ -8592,7 +8661,7 @@ def polish_video_prompt(request: PolishVideoPromptRequest):
             generation_mode=request.generation_mode,
             reviewed_messages=reviewed,
         )
-        _validate_storyboard_polish_result(request.target_video_model, result, reference_mode=False, generate_audio=request.generate_audio, dialogue_line=request.dialogue_line, generation_mode=request.generation_mode)
+        _validate_storyboard_polish_result(request.target_video_model, result, reference_mode=False, generate_audio=request.generate_audio, dialogue_line=request.dialogue_line, generation_mode=request.generation_mode, short_action_duration=short_action_duration)
         return {
             "prompt_cn": result.get("prompt_cn", ""),
             "prompt_en": result.get("prompt_en", "")
@@ -8656,6 +8725,9 @@ def polish_r2v_prompt(request: PolishR2VPromptRequest):
     try:
         reviewed = _require_video_polish_review(request, True)
         from .llm import DEFAULT_R2V_POLISH_PROMPT
+        short_action_duration = request.target_duration if _needs_short_action_timeline(
+            request.target_video_model, request.target_duration, request.draft_prompt
+        ) else None
         custom = _get_custom_prompt(request.script_id, "r2v_polish")
         director = _get_director_prompt_context(request.script_id, request.frame_id, request.shot_overrides)
         if director:
@@ -8663,7 +8735,7 @@ def polish_r2v_prompt(request: PolishR2VPromptRequest):
         selected_skills = _effective_optimization_skills(request)
         if request.optimizer_provider == "minimax_context_ir":
             result = _complete_minimax_ir_polish(request, custom or DEFAULT_R2V_POLISH_PROMPT, reviewed["user"])
-            _validate_storyboard_polish_result(request.target_video_model, result, reference_mode=True, generate_audio=request.generate_audio, dialogue_line=request.dialogue_line)
+            _validate_storyboard_polish_result(request.target_video_model, result, reference_mode=True, generate_audio=request.generate_audio, dialogue_line=request.dialogue_line, short_action_duration=short_action_duration)
             return result
         custom_prompt = _storyboard_polish_contract(request.target_video_model, custom, DEFAULT_R2V_POLISH_PROMPT, request.generate_audio, request.target_duration, request.dialogue_speaker, request.dialogue_line, selected_skills, reference_mode=True)
         polish_model = request.polish_model or _OPTIMIZER_MODEL_IDS.get(request.optimizer_provider) or _get_polish_model_for_project(request.script_id)
@@ -8679,7 +8751,7 @@ def polish_r2v_prompt(request: PolishR2VPromptRequest):
             polish_model=polish_model,
             reviewed_messages=reviewed,
         )
-        _validate_storyboard_polish_result(request.target_video_model, result, reference_mode=True, generate_audio=request.generate_audio, dialogue_line=request.dialogue_line)
+        _validate_storyboard_polish_result(request.target_video_model, result, reference_mode=True, generate_audio=request.generate_audio, dialogue_line=request.dialogue_line, short_action_duration=short_action_duration)
         return {
             "prompt_cn": result.get("prompt_cn", ""),
             "prompt_en": result.get("prompt_en", "")

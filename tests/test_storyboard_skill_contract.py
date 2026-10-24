@@ -30,6 +30,28 @@ def test_skill_loads_outside_repo_and_preserves_editor_contract(monkeypatch, tmp
     assert 'replacement' in text
 
 
+def test_short_h3_action_requires_contiguous_timing_but_atmosphere_does_not():
+    action = '匪首踹中老掌柜，老掌柜撞到木桌后倒地'
+    assert api._needs_short_action_timeline('uniart/minimax-h3-vip', 4, action)
+    contract = api._storyboard_polish_contract('uniart/minimax-h3-vip', '', '', target_duration=4)
+    assert 'SHORT H3 ACTION TIMELINE' in contract
+    assert not api._needs_short_action_timeline('uniart/minimax-h3-vip', 4, '暮秋残阳笼罩长街')
+    assert not api._needs_short_action_timeline('uniart/seedance-2.5-vip', 4, action)
+
+    timed = '\n'.join([
+        'integrated_multimodal_description:',
+        '[Shot 1] 0.00-0.60s 起腿；0.60-1.20s 接触；1.20-2.80s 撞桌；2.80-4.00s 倒地。',
+        'overall_soundscape: N/A',
+        'non_diegetic_music: N/A',
+    ])
+    api._validate_storyboard_polish_result('uniart/minimax-h3-vip',
+        {'prompt_cn': timed, 'prompt_en': timed}, reference_mode=False, short_action_duration=4)
+    untimed = timed.replace('0.60-1.20s', '1.00-1.20s')
+    with pytest.raises(Exception, match='timed action sequence'):
+        api._validate_storyboard_polish_result('uniart/minimax-h3-vip',
+            {'prompt_cn': untimed, 'prompt_en': untimed}, reference_mode=False, short_action_duration=4)
+
+
 def test_single_shot_polish_keeps_occluded_action_and_camera_tempo_separate():
     text = api._storyboard_polish_contract(
         'uniart/minimax-h3-vip', '', '', optimization_skills=[], reference_mode=True,
@@ -135,6 +157,9 @@ def test_rapid_impact_and_explicit_table_collision_preserve_real_time_causality(
     assert 'preserve real-time motion' in system
     assert 'explicitly names a table' in system
     assert 'a slow Push In or Zoom In does not make a' in system
+    assert 'backward steps, body hits the table, table visibly shifts or shakes' in system
+    assert 'If no table' in system
+    assert 'when silent, do not invent sound cues' in system
 
 
 def test_professional_martial_terms_attach_choreography_and_physics_baselines():
