@@ -19,6 +19,13 @@ async function start(){
   fireEvent.click(screen.getByRole("button",{name:"新建会话"}));await screen.findByText(/已开始新的聊天/);
   fireEvent.change(screen.getByLabelText("和我聊聊天"),{target:{value:"请记住我喜欢散步"}});
 }
+function allowText(){
+  const more=screen.getByRole("button",{name:"更多"});
+  if (more.getAttribute("aria-expanded") !== "true") fireEvent.click(more);
+  fireEvent.click(screen.getByText("聊天设置",{selector:"summary"}));
+  fireEvent.click(screen.getByLabelText("允许发送文字，开始聊天"));
+  fireEvent.click(more);
+}
 it("offers large guided cards without sending automatically",async()=>{
   await start();
   fireEvent.click(screen.getByRole("button",{name:/说说今天的生活/}));
@@ -39,7 +46,7 @@ it("selects photos into an unsent attachment draft",async()=>{
 });
 it("requires external text consent and final explicit button before saving",async()=>{
   await start();fireEvent.click(screen.getByRole("button",{name:"发送"}));expect(api.chat).not.toHaveBeenCalled();
-  fireEvent.click(screen.getByText("开始聊天前，请确认文字发送范围", {selector:"summary"}));fireEvent.click(screen.getByRole("checkbox"));fireEvent.click(screen.getByRole("button",{name:"发送"}));
+  allowText();fireEvent.click(screen.getByRole("button",{name:"发送"}));
   await screen.findByRole("region",{name:"记忆操作确认"});expect(api.confirm).not.toHaveBeenCalled();
   fireEvent.click(screen.getByRole("button",{name:"更多"}));
   expect(screen.getByRole("button",{name:"新建会话"})).toBeDisabled();
@@ -47,7 +54,7 @@ it("requires external text consent and final explicit button before saving",asyn
   expect(api.confirm).toHaveBeenCalledOnce();expect(api.chat.mock.calls[0][1].allow_external_text).toBe(true);
 });
 it("cancels without saving and edits through a new preview",async()=>{
-  await start();fireEvent.click(screen.getByText("开始聊天前，请确认文字发送范围", {selector:"summary"}));fireEvent.click(screen.getByRole("checkbox"));fireEvent.click(screen.getByRole("button",{name:"发送"}));
+  await start();allowText();fireEvent.click(screen.getByRole("button",{name:"发送"}));
   await screen.findByRole("region",{name:"记忆操作确认"});
   api.tool.mockResolvedValue({...preview,preview_token:"edited",preview:{...preview.preview,content:"喜欢慢慢散步"}});
   fireEvent.change(screen.getByLabelText(/修改拟保存内容/),{target:{value:"喜欢慢慢散步"}});
@@ -59,7 +66,7 @@ it("cancels without saving and edits through a new preview",async()=>{
 });
 it("retains same request after uncertain response and paginates actual memories",async()=>{
   api.chat.mockRejectedValueOnce(new Error("暂不可用"));
-  await start();fireEvent.click(screen.getByText("开始聊天前，请确认文字发送范围", {selector:"summary"}));fireEvent.click(screen.getByRole("checkbox"));fireEvent.click(screen.getByRole("button",{name:"发送"}));
+  await start();allowText();fireEvent.click(screen.getByRole("button",{name:"发送"}));
   await screen.findByRole("alert");fireEvent.click(screen.getByRole("button",{name:"重试原请求"}));
   await screen.findByRole("region",{name:"记忆操作确认"});expect(api.chat.mock.calls[0]).toEqual(api.chat.mock.calls[1]);
   fireEvent.click(screen.getByRole("button",{name:"取消，不执行"}));await screen.findByText(/已关闭预览/);
@@ -141,7 +148,7 @@ it("previews recommended media settings honestly and can go back or cancel", asy
 });
 it("does not reuse an already-sent chat draft when switching modes",async()=>{
   api.chat.mockResolvedValue({turn_id:"t",status:"completed",result:{kind:"text",text:"您好"}});
-  await start();fireEvent.click(screen.getByText("开始聊天前，请确认文字发送范围", {selector:"summary"}));fireEvent.click(screen.getByRole("checkbox"));fireEvent.click(screen.getByRole("button",{name:"发送"}));
+  await start();allowText();fireEvent.click(screen.getByRole("button",{name:"发送"}));
   await screen.findByText("您好"); await switchMode("图片"); await switchMode("聊天");
   expect(screen.getByLabelText("和我聊聊天")).toHaveValue("");
 });
@@ -173,8 +180,8 @@ it("explains the text consent before sending a diary draft",async()=>{
   expect(screen.getByLabelText("和我聊聊天")).toHaveValue(diaryPrompt(today()));
   expect(screen.getByText(/日记草稿已写入/)).toBeInTheDocument();
   fireEvent.click(screen.getByRole("button",{name:"发送"}));
-  expect(screen.getByText("请先确认允许发送文字，再点箭头发送。")).toBeInTheDocument();
-  expect(screen.getByLabelText("允许发送文字，开始聊天")).toHaveFocus();
+  expect(screen.getByText("请在“更多 → 聊天设置”中允许发送文字。")).toBeInTheDocument();
+  expect(screen.getByText("聊天设置",{selector:"summary"})).toBeInTheDocument();
   expect(api.chat).not.toHaveBeenCalled();
   fireEvent.click(screen.getByLabelText("允许发送文字，开始聊天"));
   fireEvent.click(screen.getByRole("button",{name:"发送"}));
@@ -203,8 +210,7 @@ it("adds an attachment-only message locally without making a model request",asyn
 it("retains attachments through an uncertain text request and only clears them after a successful retry",async()=>{
   api.chat.mockRejectedValueOnce(new Error("网络中断"));
   await start();await selectPhoto();
-  fireEvent.click(screen.getByText("开始聊天前，请确认文字发送范围",{selector:"summary"}));
-  fireEvent.click(screen.getByLabelText("允许发送文字，开始聊天"));
+  allowText();
   expect(screen.getByRole("button",{name:"发送"})).toBeDisabled();
   fireEvent.click(screen.getByLabelText("我知道本次只发送文字给助手"));fireEvent.click(screen.getByRole("button",{name:"发送"}));
   await screen.findByRole("alert");
@@ -232,7 +238,7 @@ it("shows an explicit diary card for a completed diary request without auto savi
   await start();fireEvent.change(screen.getByLabelText("和我聊聊天"),{target:{value:""}});
   fireEvent.click(screen.getByRole("button",{name:"日记"}));fireEvent.click(await screen.findByRole("button",{name:"整理这一天的日记"}));
   api.messages.mockResolvedValue({messages:[{id:"dm",text:prompt,turn:{turn_id:"diary-turn",result:{kind:"text",text:"今天和女儿一起喝茶。"}}}],next_after:null});
-  fireEvent.click(screen.getByRole("button",{name:"发送"}));fireEvent.click(screen.getByLabelText("允许发送文字，开始聊天"));fireEvent.click(screen.getByRole("button",{name:"发送"}));
+  fireEvent.click(screen.getByRole("button",{name:"发送"}));allowText();fireEvent.click(screen.getByRole("button",{name:"发送"}));
   const card=await screen.findByRole("article",{name:"日记草稿"});
   await waitFor(()=>expect(within(card).getByRole("button",{name:"继续写日记"})).toBeEnabled());
   expect(card).toHaveTextContent("今天和女儿一起喝茶。");expect(api.saveDiary).not.toHaveBeenCalled();

@@ -13,7 +13,7 @@ class FakeRecognition {
 const send=vi.fn();
 function Harness(){
   const [mode,setMode]=useState<ComposerMode>("chat"),[text,setText]=useState("原有草稿");
-  return <CompanionComposer mode={mode} value={text} disabled={false} busy={false} allowed inputRef={createRef()} onMode={setMode} onChange={setText} onSend={send} onUpload={()=>{}} onAllow={()=>{}} retry={null}/>;
+  return <CompanionComposer mode={mode} value={text} disabled={false} busy={false} allowed inputRef={createRef()} onMode={setMode} onChange={setText} onSend={send} onUpload={()=>{}} onAllow={()=>{}} onRequestConsent={()=>{}} retry={null}/>;
 }
 beforeEach(()=>{send.mockReset();Object.defineProperty(window,"SpeechRecognition",{configurable:true,value:FakeRecognition});});
 afterEach(()=>{delete (window as Window & {SpeechRecognition?:unknown}).SpeechRecognition;});
@@ -41,12 +41,12 @@ it("adds final dictation text without sending and aborts capture on unmount",asy
 });
 
 it("keeps upload in the composer and leaves album navigation to the bottom bar",()=>{
-  const upload=vi.fn();render(<CompanionComposer mode="chat" value="" disabled={false} busy={false} allowed inputRef={createRef()} onMode={()=>{}} onChange={()=>{}} onSend={()=>{}} onUpload={upload} onAllow={()=>{}} retry={null}/>);
+  const upload=vi.fn();render(<CompanionComposer mode="chat" value="" disabled={false} busy={false} allowed inputRef={createRef()} onMode={()=>{}} onChange={()=>{}} onSend={()=>{}} onUpload={upload} onAllow={()=>{}} onRequestConsent={()=>{}} retry={null}/>);
   fireEvent.click(screen.getByRole("button",{name:"上传"}));expect(upload).toHaveBeenCalledOnce();
   expect(screen.queryByRole("button",{name:"相册"})).not.toBeInTheDocument();
 });
 it("uses the chat invitation inside the input instead of spending a separate row",()=>{
-  render(<CompanionComposer mode="chat" value="" disabled={false} busy={false} allowed inputRef={createRef()} onMode={()=>{}} onChange={()=>{}} onSend={()=>{}} onUpload={()=>{}} onAllow={()=>{}} retry={null}/>);
+  render(<CompanionComposer mode="chat" value="" disabled={false} busy={false} allowed inputRef={createRef()} onMode={()=>{}} onChange={()=>{}} onSend={()=>{}} onUpload={()=>{}} onAllow={()=>{}} onRequestConsent={()=>{}} retry={null}/>);
   expect(screen.getByPlaceholderText("和我聊聊天…")).toBeInTheDocument();
   expect(screen.getByText("和我聊聊天", {selector:"span"}).className).toMatch(/visuallyHidden/);
 });

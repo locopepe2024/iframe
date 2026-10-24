@@ -19,6 +19,7 @@ import { BookOpen, Images, UserRound, Compass } from "lucide-react";
 const prefix = process.env.NEXT_PUBLIC_API_URL === "/companion-demo" ? "/companion-demo" : "";
 const sessionKey = "iframe-companion-agent-session-v1";
 const turnKey = "iframe-companion-agent-turn-v1";
+const consentKey = "iframe-companion-agent-text-consent-v1";
 
 export default function AgentChat() {
   const [session, setSession] = useState("");
@@ -80,6 +81,7 @@ export default function AgentChat() {
   useEffect(() => {
     alive.current = true;
     void run(async () => {
+      if (localStorage.getItem(consentKey) === "true") setAllowed(true);
       const id = localStorage.getItem(sessionKey);
       if (id) { await history(id); if (alive.current) setSession(id); }
       const savedTurn = localStorage.getItem(turnKey);
@@ -155,6 +157,13 @@ export default function AgentChat() {
     {menu && <aside className={styles.panel} aria-label="聊天管理">
       <a href={`${prefix}/companion/photos`}>生活相册</a>
       <button disabled={inputDisabled || pending} onClick={() => void run(newSession)}>新建会话</button>
+      <details open>
+        <summary>聊天设置</summary>
+        <p className={styles.note}>您本次及最近最多 20 条发言将发送至您配置的 UniArt / Qwen 服务。照片不会随文字自动发送。</p>
+        <label className={styles.check}><input type="checkbox" checked={allowed} disabled={busy} onChange={event => {
+          const value = event.target.checked; setAllowed(value); localStorage.setItem(consentKey, String(value));
+        }} />允许发送文字，开始聊天</label>
+      </details>
       <p className={styles.note}>聊天内容会保留，可继续查看历史消息。</p>
     </aside>}
     <div ref={streamRef} className={chatStyles.stream} role="region" aria-label="聊天内容">
@@ -252,6 +261,7 @@ export default function AgentChat() {
       hasAttachments={pendingMedia[mode].length > 0} mediaAcknowledged={mediaAcknowledged} onMediaAcknowledged={setMediaAcknowledged}
       onMode={next => {setMode(next);setAlbumOpen(false);setMediaAcknowledged(false);}} onChange={updateDraft} onSend={submit} onAllow={setAllowed}
       onUpload={() => { if (uploadFiles.length) setNotice("请先完成或关闭当前上传。"); else fileRef.current?.click(); }}
+      onRequestConsent={() => { setMenu(true); setNotice("请在“更多 → 聊天设置”中允许发送文字。"); }}
       retry={hasRetry ? () => void run(() => send(true)) : null} />
     <nav className={chatStyles.bottomNav} aria-label="主要功能">
       <button type="button" aria-current={feature === "diary" ? "page" : undefined} onClick={() => setFeature("diary")}><BookOpen size={22} aria-hidden="true" /><span>日记</span></button>
