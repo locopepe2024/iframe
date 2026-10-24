@@ -21,6 +21,7 @@ const prefix = process.env.NEXT_PUBLIC_API_URL === "/companion-demo" ? "/compani
 const sessionKey = "iframe-companion-agent-session-v1";
 const turnKey = "iframe-companion-agent-turn-v1";
 const consentKey = "iframe-companion-agent-text-consent-v1";
+const dismissedUploadGuideKey = "iframe-companion-agent-dismissed-upload-guides-v1";
 
 export default function AgentChat() {
   const [session, setSession] = useState("");
@@ -93,6 +94,12 @@ export default function AgentChat() {
     // The browser stores identifiers only; the server checks current ownership.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+  useEffect(() => {
+    try {
+      const saved = JSON.parse(localStorage.getItem(dismissedUploadGuideKey) || "[]");
+      if (Array.isArray(saved)) setDismissedUploadGuides(saved.filter(item => typeof item === "string"));
+    } catch { /* ignore malformed browser state */ }
+  }, []);
   async function newSession() {
     if (!sessionOperation.current) sessionOperation.current = crypto.randomUUID();
     const result = await companionApi.session(sessionOperation.current);
@@ -129,7 +136,11 @@ export default function AgentChat() {
     setMediaAcknowledged(false);
   }
   function dismissUploadGuide(turnId: string) {
-    setDismissedUploadGuides(old => old.includes(turnId) ? old : [...old, turnId]);
+    setDismissedUploadGuides(old => {
+      const next = old.includes(turnId) ? old : [...old, turnId];
+      localStorage.setItem(dismissedUploadGuideKey, JSON.stringify(next));
+      return next;
+    });
   }
   function uploadGuideActions(turnId: string) {
     return {
