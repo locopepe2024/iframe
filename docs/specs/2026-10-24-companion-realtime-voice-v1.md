@@ -1,0 +1,13 @@
+# Companion Qwen realtime voice V1
+
+Scope: web demo realtime voice chat via UniArt qwen-audio-3.1-realtime-plus. Preserve browser dictation for image/video prompt drafting. No voiceprint, native toolchain or production routing changes.
+
+Transport: owner-authenticated HTTP creates a short-lived one-use capability ticket. Browser sends ticket as first WS message, never query string; owner/key are server-held. Same-origin WS only. Demo identity HTTP middleware continues to resolve the owner; WS does not independently reinterpret browser cookies. Process-local tickets imply one worker for this demo. No reconnect or paid retry.
+
+Protocol: UniArt /v1/realtime native Ali JSON protocol; verify official client/server event schemas before implementation. Server chooses model/session configuration and only accepts bounded PCM append and interrupt commands. Continuous mic streaming with server VAD; stop on tab hidden, unmount, network failure or five-minute limit. Interrupt cancels model response and clears queued playback. No raw audio saved.
+
+UI: in chat mode the large voice icon opens a clear audio consent card, then starts realtime conversation. Always visible end button and textual connecting/listening/reply status, streamed transcript, manual interruption. Image/video mode retains dictation. Existing text drafts stay intact. No auto-execution of save/delete/reminder/generation; realtime has no tools and must direct these requests to the existing text/card workflow. Voice-session transcript is explicitly scoped to this panel in V1; do not imply durable history or diary inclusion until persistence is implemented.
+
+Success: no provider API key sent to browser; no connection/microphone capture until explicit start; owner ticket single-use/expiry; wrong-origin denied; audio/input limits; socket+mic+audio contexts cleaned up on end/hidden/unmount; capture resampling and PCM playback validated; mocked end-to-end WS relay and UI lifecycle tests; static build and demo WS reverse-proxy checks. Real provider/device verification reported separately.
+
+Verified protocol sources (2026-10-24): UniArt docs/api/alicloud-audio.md at local feature/alicloud-channel23-audio-20261023; official https://help.aliyun.com/zh/model-studio/fun-audiochat-client-events and https://help.aliyun.com/zh/model-studio/fun-audiochat-server-events. Input is pcm 16 kHz mono signed16; output pcm 24 kHz mono signed16. 3.1 voice longanhuan_v3.1. ASR delta uses text/stash, completed uses transcript; response audio/transcript delta uses delta. Server VAD auto-detects speech and cancels current generation on interruption. No voiceprint configured.

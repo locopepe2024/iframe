@@ -175,3 +175,6 @@ def preview(token: str, identity: Owner, store: Store):
 
 from .media_routes import router as media_router
 router.include_router(media_router)
+
+from .realtime import router as realtime_router
+router.include_router(realtime_router)
