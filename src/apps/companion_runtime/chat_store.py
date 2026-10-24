@@ -1,7 +1,6 @@
 """Leased turn persistence. Provider calls happen outside transactions."""
 import copy
 import json
-import re
 import secrets
 import uuid
 from contextlib import contextmanager
@@ -11,13 +10,7 @@ from .tools import dispatch, MODELS
 
 
 from .diary_store import DiaryStore
-
-DIARY_REQUEST_RE = re.compile(r'^\s*(?:请\s*)?把\s+(\d{4}-\d{2}-\d{2})\s+我们聊的内容整理成一篇回忆日记', re.S)
-
-
-def diary_day(text):
-    match = DIARY_REQUEST_RE.search(text or '')
-    return match.group(1) if match else None
+from .intent import diary_day
 
 
 class ChatStore(DiaryStore, CompanionStore):
