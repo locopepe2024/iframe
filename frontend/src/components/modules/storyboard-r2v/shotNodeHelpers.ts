@@ -248,6 +248,11 @@ export function frameToShotNode(
         negativePromptOverride: frame.negative_prompt_override ?? null,
         moveRef: frame.move_ref ?? null,
         moveVariant: frame.move_variant ?? null,
+        performanceMoves: Array.isArray(frame.performance_moves) ? frame.performance_moves.map((item: any) => ({
+            characterId: String(item.character_id ?? item.characterId ?? ""),
+            moveRef: String(item.move_ref ?? item.moveRef ?? ""),
+            moveVariant: item.move_variant ?? item.moveVariant ?? null,
+        })).filter((item: any) => item.characterId && item.moveRef) : [],
         richRefinementCandidate: frame.rich_refinement_candidate ?? null,
         microExpressionCandidate: frame.micro_expression_candidate ?? null,
         cameraMovementCandidate: frame.camera_movement_candidate ?? null,

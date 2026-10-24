@@ -7056,6 +7056,8 @@ class ComicGenPipeline(StudioOwnerMixin):
                 frame.move_variant = None
         if kwargs.get('move_variant') is not None:
             frame.move_variant = kwargs['move_variant'].strip() or None
+        if kwargs.get('performance_moves') is not None:
+            frame.performance_moves = kwargs['performance_moves'] or []
         if kwargs.get('reference_package') is not None:
             package = kwargs['reference_package']
             if package.confirmed:

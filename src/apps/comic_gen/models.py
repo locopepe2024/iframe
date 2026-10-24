@@ -955,6 +955,7 @@ class StoryboardFrame(BaseModel):
     )
     move_ref: Optional[str] = Field(None, description="Confirmed character-performance move dictionary reference")
     move_variant: Optional[str] = Field(None, description="Current-shot variation of the referenced move")
+    performance_moves: List[Dict[str, Any]] = Field(default_factory=list, description="Per-character confirmed performance move references")
 
     # === Prompts ===
     # Per-shot art-direction overrides.  Empty values inherit the project's

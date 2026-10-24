@@ -919,7 +919,7 @@ export default function StoryboardR2V() {
     }, [persistWorkbench]);
 
     // Structured edits update the visible body and join the ordered frame save.
-    const handleUpdateField = useCallback((index: number, field: string, value: string | number | null) => {
+    const handleUpdateField = useCallback((index: number, field: string, value: string | number | null | Array<{ characterId: string; moveRef: string; moveVariant?: string | null }>) => {
         setShots(prev => prev.map((s, i) => {
             if (i !== index) return s;
             if (field === "duration") return { ...s, duration: typeof value === "number" ? value : null };
@@ -952,6 +952,9 @@ export default function StoryboardR2V() {
                 return { ...s, moveRef, moveVariant: moveRef ? s.moveVariant : null };
             }
             if (field === "move_variant") return { ...s, moveVariant: typeof value === "string" && value.trim() ? value : null };
+            if (field === "performance_moves") {
+                return { ...s, performanceMoves: Array.isArray(value) ? value : [] };
+            }
             if (field === "stylePromptOverride" || field === "lightingOverride") {
                 const visual = effectiveShotVisual(continuityRows[s.id], displayedStyle.positivePrompt);
                 const next = editShotSettings(s, field, typeof value === "string" ? value : null,
@@ -978,6 +981,9 @@ export default function StoryboardR2V() {
         if (field === "negativePromptOverride") backendField.negative_prompt_override = typeof value === "string" ? value : undefined;
         if (field === "move_ref") backendField.move_ref = typeof value === "string" && value.trim() ? value : "";
         if (field === "move_variant") backendField.move_variant = typeof value === "string" && value.trim() ? value : "";
+        if (field === "performance_moves") backendField.performance_moves = Array.isArray(value)
+            ? value.map((item) => ({ character_id: item.characterId, move_ref: item.moveRef, move_variant: item.moveVariant ?? null })).filter((item) => item.character_id && item.move_ref)
+            : [];
         persistFrameEdit(shotId, backendField);
     }, [shots, persistFrameEdit, displayedStyle.positivePrompt, continuityRows]);
 

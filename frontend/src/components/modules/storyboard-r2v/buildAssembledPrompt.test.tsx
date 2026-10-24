@@ -64,6 +64,23 @@ it("keeps blade-line sweep as a separate move from blade-side slap", () => {
     expect(result).toContain("不改为剑身侧面拍刃");
     expect(result).not.toContain("类似抖动长竹竿");
 });
+
+it("compiles multiple character performance moves independently", () => {
+    const shot = {
+        id: "shot-multi",
+        prompt: "两名角色在粮铺门前同时交锋。",
+        tabMode: "direct_r2v" as const,
+        performanceMoves: [
+            { characterId: "suyan", moveRef: "suyan.sword.disarm_sweep.v1", moveVariant: "面对数名匪寇的连续拨械" },
+            { characterId: "bandit-leader", moveRef: "suyan.sword.edge_line_sweep.v1", moveVariant: null },
+        ],
+    };
+    const result = buildGenerationPrompt(shot, false, "uniart/minimax-h3-vip");
+    expect(result).toContain("角色suyan");
+    expect(result).toContain("角色bandit-leader");
+    expect(result).toContain("拍刃/抽击");
+    expect(result).toContain("明确横向刃线");
+});
 import { resolveStoryboardStyle, resolveStoryboardStyleForRender } from "@/lib/storyboardStyle";
 import type { ShotNode } from "./ShotCard";
 

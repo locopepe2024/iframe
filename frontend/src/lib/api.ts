@@ -1967,6 +1967,7 @@ export const api = {
         negative_prompt_override?: string;
         move_ref?: string;
         move_variant?: string;
+        performance_moves?: Array<{ character_id: string; move_ref: string; move_variant?: string | null }>;
         reference_package?: {
             revision?: number;
             first_frame_url?: string | null;

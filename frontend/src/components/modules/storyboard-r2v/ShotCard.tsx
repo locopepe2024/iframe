@@ -156,6 +156,7 @@ export interface ShotNode {
     negativePromptOverride?: string | null;
     moveRef?: string | null;
     moveVariant?: string | null;
+    performanceMoves?: Array<{ characterId: string; moveRef: string; moveVariant?: string | null }>;
     richRefinementCandidate?: {
         id: string;
         source: string;
@@ -195,6 +196,7 @@ export interface ShotNode {
 
 /** Cap on T2I image history per shot. Older drops off FIFO when adding. */
 export const T2I_HISTORY_LIMIT = 10;
+type PerformanceMoveValue = { characterId: string; moveRef: string; moveVariant?: string | null }[];
 
 interface ShotCardProps {
     projectId?: string;
@@ -212,7 +214,7 @@ interface ShotCardProps {
     props: any[];
     assetIndex?: AssetReferenceIndexEntry[];
     onUpdatePrompt: (prompt: string, optimized?: boolean) => void;
-    onUpdateField: (field: string, value: string | number | null) => void;
+    onUpdateField: (field: string, value: string | number | null | PerformanceMoveValue) => void;
     globalStylePrompt?: string;
     effectiveVisual?: { style: string; lighting: string };
     effectiveFields?: Record<string, { value: unknown; source_kind: string; source_revision: number | null }>;
@@ -1103,10 +1105,43 @@ export default function ShotCard({
                         />}
 
                         <details className="border-t border-glass-border pt-3 text-xs text-text-secondary">
-                            <summary className="cursor-pointer text-foreground">主角招式引用</summary>
+                            <summary className="cursor-pointer text-foreground">角色动作引用</summary>
                             <div className="mt-3 space-y-2">
+                                {(shot.performanceMoves ?? []).map((performanceMove, moveIndex) => {
+                                    const selectedMove = findCharacterMove(performanceMove.moveRef);
+                                    return <div key={`${performanceMove.characterId}-${moveIndex}`} className="space-y-1 rounded-md border border-glass-border p-2">
+                                        <label className="block">
+                                            <span className="mb-1 block text-text-muted">表演角色</span>
+                                            <select aria-label={`表演角色 ${moveIndex + 1}`} value={performanceMove.characterId}
+                                                onChange={(event) => onUpdateField("performance_moves", (shot.performanceMoves ?? []).map((item, index) => index === moveIndex ? { ...item, characterId: event.target.value } : item))}
+                                                className="min-h-9 w-full rounded-md border border-glass-border bg-surface px-2 text-xs text-foreground">
+                                                <option value="">选择角色</option>
+                                                {characters.map((character: any) => <option key={character.id} value={character.id}>{character.name ?? character.id}</option>)}
+                                            </select>
+                                        </label>
+                                        <label className="block">
+                                            <span className="mb-1 block text-text-muted">动作词典</span>
+                                            <select aria-label={`角色动作 ${moveIndex + 1}`} value={performanceMove.moveRef}
+                                                onChange={(event) => onUpdateField("performance_moves", (shot.performanceMoves ?? []).map((item, index) => index === moveIndex ? { ...item, moveRef: event.target.value, moveVariant: "" } : item))}
+                                                className="min-h-9 w-full rounded-md border border-glass-border bg-surface px-2 text-xs text-foreground">
+                                                <option value="">不引用动作</option>
+                                                {CHARACTER_MOVE_DICTIONARY.map((move) => <option key={move.move_ref} value={move.move_ref}>{move.character_name} · {move.label}</option>)}
+                                            </select>
+                                        </label>
+                                        {selectedMove && <select aria-label={`动作变体 ${moveIndex + 1}`} value={performanceMove.moveVariant ?? ""}
+                                            onChange={(event) => onUpdateField("performance_moves", (shot.performanceMoves ?? []).map((item, index) => index === moveIndex ? { ...item, moveVariant: event.target.value } : item))}
+                                            className="min-h-9 w-full rounded-md border border-glass-border bg-surface px-2 text-xs text-foreground">
+                                            <option value="">默认动作表现</option>
+                                            {selectedMove.variants.map((variant) => <option key={variant} value={variant}>{variant}</option>)}
+                                        </select>}
+                                        <button type="button" className="text-[0.6875rem] text-danger" onClick={() => onUpdateField("performance_moves", (shot.performanceMoves ?? []).filter((_, index) => index !== moveIndex))}>移除角色动作</button>
+                                    </div>;
+                                })}
+                                <button type="button" className="min-h-8 rounded border border-glass-border px-2 text-[0.6875rem] text-text-secondary" onClick={() => onUpdateField("performance_moves", [...(shot.performanceMoves ?? []), { characterId: characters[0]?.id ?? "", moveRef: CHARACTER_MOVE_DICTIONARY[0]?.move_ref ?? "", moveVariant: null }])}>添加角色动作</button>
+                                <p className="leading-relaxed text-text-muted">每个角色独立引用动作；不会把一个角色的招式套用到其他角色。</p>
+                                {/* Legacy single-move controls remain available for older saved shots. */}
                                 <label className="block">
-                                    <span className="mb-1 block text-text-muted">招式词典</span>
+                                    <span className="mb-1 block text-text-muted">旧版单角色动作</span>
                                     <select
                                         aria-label="主角招式词典"
                                         value={shot.moveRef ?? ""}

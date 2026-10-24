@@ -114,8 +114,13 @@ export function buildAssembledPrompt(
     );
     const suffixes: string[] = [];
 
-    const move = findCharacterMove(shot.moveRef);
-    if (move) suffixes.push(describeCharacterMove(move, shot.moveVariant));
+    const performanceMoves = shot.performanceMoves?.length
+        ? shot.performanceMoves
+        : (shot.moveRef ? [{ characterId: "", moveRef: shot.moveRef, moveVariant: shot.moveVariant }] : []);
+    for (const performanceMove of performanceMoves) {
+        const move = findCharacterMove(performanceMove.moveRef);
+        if (move) suffixes.push(`${performanceMove.characterId ? `角色${performanceMove.characterId}：` : ""}${describeCharacterMove(move, performanceMove.moveVariant)}`);
+    }
 
     // Camera movement (natural language, speed naturally embedded)
     if (shot.cameraMovementStructured) {
@@ -167,9 +172,15 @@ export function buildGenerationPrompt(
     if (shot.promptIsOptimized) {
         const base = shot.prompt.trim();
         const accepted = microExpressionDescriptions(shot).filter(item => !base.includes(item));
-        const move = findCharacterMove(shot.moveRef);
-        const moveText = move ? describeCharacterMove(move, shot.moveVariant) : "";
-        return [base, moveText && move && !base.includes(move.move_ref) ? moveText : "", ...accepted].filter(Boolean).join("，");
+        const performanceMoves = shot.performanceMoves?.length
+            ? shot.performanceMoves
+            : (shot.moveRef ? [{ characterId: "", moveRef: shot.moveRef, moveVariant: shot.moveVariant }] : []);
+        const moveTexts = performanceMoves.flatMap((performanceMove) => {
+            const move = findCharacterMove(performanceMove.moveRef);
+            if (!move || base.includes(move.move_ref)) return [];
+            return [`${performanceMove.characterId ? `角色${performanceMove.characterId}：` : ""}${describeCharacterMove(move, performanceMove.moveVariant)}`];
+        });
+        return [base, ...moveTexts, ...accepted].filter(Boolean).join("，");
     }
     // An accepted optimizer result is already a complete provider prompt.
     let prompt = buildAssembledPrompt(shot, true, globalStylePrompt, inheritedLighting);

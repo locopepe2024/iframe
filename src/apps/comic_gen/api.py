@@ -5936,6 +5936,7 @@ class UpdateFrameRequest(BaseModel):
     negative_prompt_override: Optional[str] = None
     move_ref: Optional[str] = None
     move_variant: Optional[str] = None
+    performance_moves: Optional[List[Dict[str, Any]]] = None
     reference_package: Optional[StoryboardReferencePackage] = None
 
 @app.post("/projects/{script_id}/frames/update", response_model=Script)
@@ -5961,6 +5962,7 @@ def update_frame(script_id: str, request: UpdateFrameRequest):
             negative_prompt_override=request.negative_prompt_override,
             move_ref=request.move_ref,
             move_variant=request.move_variant,
+            performance_moves=request.performance_moves,
             reference_package=request.reference_package,
         )
         return signed_response(updated_script)
