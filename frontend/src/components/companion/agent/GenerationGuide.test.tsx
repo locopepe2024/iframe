@@ -1,7 +1,7 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { useState } from "react";
 import { beforeEach, expect, it, vi } from "vitest";
-import GenerationGuide, { createGenerationDraft, type GenerationDraft } from "./GenerationGuide";
+import GenerationGuide, { createGenerationDraft, isBareCreationRequest, type GenerationDraft } from "./GenerationGuide";
 const api = vi.hoisted(() => ({ list: vi.fn() }));
 vi.mock("@/lib/photoApi", () => ({ photoApi: api }));
 vi.mock("../photos/PhotoImage", () => ({ default: ({id}:{id:string}) => <img alt={`照片 ${id}`} /> }));
@@ -34,3 +34,6 @@ it("lets an album read failure retry without clearing the description",async()=>
   fireEvent.click(screen.getByRole("button",{name:"重试打开相册"}));await screen.findByRole("button",{name:/选择照片 1/});
   expect(screen.getByText("花朵开放")).toBeInTheDocument();
 });
+
+it.each(["生成一张图片", "帮我生成一段视频", "请画一幅画。", "我想生成图片", "生成几张照片"])("recognizes the bare creation request %s",text=>{expect(isBareCreationRequest(text)).toBe(true);});
+it.each(["生成一张图片，两只小狗在奔跑", "两只小狗在奔跑", "画一只猫", "生成一张写着‘生成一张图片’的海报"])("keeps substantive content %s",text=>{expect(isBareCreationRequest(text)).toBe(false);});

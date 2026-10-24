@@ -10,7 +10,7 @@ import AlbumPicker from "./AlbumPicker";
 import MediaUpload, { type UploadedMedia } from "./MediaUpload";
 import VideoConversationCard from "./VideoConversationCard";
 import CompanionComposer, { type ComposerMode } from "./CompanionComposer";
-import GenerationGuide, { createGenerationDraft, type GenerationDraft, type MediaMode } from "./GenerationGuide";
+import GenerationGuide, { createGenerationDraft, isBareCreationRequest, type GenerationDraft, type MediaMode } from "./GenerationGuide";
 import CompanionFeatureSheet, { type CompanionFeature } from "./CompanionFeatureSheet";
 import DiaryCalendar from "./DiaryCalendar";
 import DiaryCard, { diaryDay, diaryPrompt, formatDiaryDay, today, type DiaryContextItem, type DiaryContextMedia } from "./DiaryCard";
@@ -166,6 +166,13 @@ export default function AgentChat() {
     } else {
       const items = pendingMedia[mode];
       if (!text.trim()) {setNotice("先描述想创作什么，再继续。");return;}
+      if (isBareCreationRequest(text)) {
+        setDrafts(old => ({ ...old, [mode]: "" }));
+        updateGuide(null);
+        setNotice("想创作什么内容？比如：两只小狗在草地上奔跑。可以继续说，也可以打字。");
+        inputRef.current?.focus();
+        return;
+      }
       if (items.length > 1 || items.some(item => item.kind !== "photo")) {setNotice("本次创作支持一张参考照片，请先移除多余素材或视频。");return;}
       updateGuide({ ...createGenerationDraft(mode, text.trim()), reference: items[0]?.id ?? null, step: items.length ? "parameters" : "reference" });
       setDrafts(old => ({ ...old, [mode]: "" })); setNotice("");

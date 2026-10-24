@@ -59,3 +59,20 @@ it.each([ ["图片","image","想生成的图片","方形 1:1"], ["视频","video
  else await waitFor(()=>expect(view.container.querySelector("video")).toHaveAttribute("src","blob:generated"));
  view.unmount();expect(URL.revokeObjectURL).toHaveBeenCalledWith("blob:generated");
 });
+
+it.each([["图片","生成一张图片","想生成的图片","两只小狗在草地上奔跑"],["视频","帮我生成一段视频","想生成的视频","两只小狗在草地上奔跑"]])("asks for content before opening %s settings",async(label,command,inputLabel,description)=>{
+ render(<AgentChat/>);
+ await waitFor(()=>expect(screen.getByRole("button",{name:"创作类型：聊天"})).not.toBeDisabled());
+ fireEvent.click(screen.getByRole("button",{name:"创作类型：聊天"}));fireEvent.click(screen.getByRole("menuitemradio",{name:label}));
+ fireEvent.change(screen.getByLabelText(inputLabel),{target:{value:command}});
+ fireEvent.click(screen.getByRole("button",{name:"发送"}));
+ expect(screen.queryByRole("region",{name:`${label}创作引导`})).not.toBeInTheDocument();
+ expect(screen.getByRole("status")).toHaveTextContent("想创作什么内容");
+ expect(screen.getByLabelText(inputLabel)).toHaveValue("");
+ expect(services.generate).not.toHaveBeenCalled();
+ fireEvent.click(screen.getByRole("button",{name:"语音输入"}));fireEvent.click(screen.getByRole("button",{name:"同意并开始听写"}));
+ act(()=>{recognition.onresult?.({results:[[{transcript:description}]]});recognition.onend?.();});
+ fireEvent.click(screen.getByRole("button",{name:"发送"}));
+ expect(screen.getByRole("region",{name:`${label}创作引导`})).toHaveTextContent(description);
+ expect(services.generate).not.toHaveBeenCalled();
+});

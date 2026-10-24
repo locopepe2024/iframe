@@ -19,6 +19,12 @@ export function createGenerationDraft(mode: MediaMode, prompt: string): Generati
   return { mode, prompt, step: "reference", reference: null, setting: mode === "image" ? "方形 1:1" : "5 秒" };
 }
 
+/** Only match a complete bare creation request; keep any actual scene description. */
+export function isBareCreationRequest(text: string): boolean {
+  const compact = text.replace(/[\s，。！？、,.!?：:]/g, "");
+  return /^(?:请|请你|麻烦|麻烦你)?(?:帮我|给我|为我|我想|我要|我想要)?(?:生成|创作|制作|做|画|拍)(?:一|1|几)?(?:张|幅|段|个)?(?:图片|图像|照片|图|画|视频|短视频)(?:吧|一下)?$/.test(compact);
+}
+
 /** Guided setup followed by explicit owner-channel submission. */
 export default function GenerationGuide({ value, disabled, onChange, onEdit, onCancel }: {
   value: GenerationDraft; disabled: boolean;
