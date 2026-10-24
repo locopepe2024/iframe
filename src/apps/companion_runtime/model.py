@@ -18,6 +18,11 @@ class ModelUnavailable(RuntimeError):
 WIRE_NAMES = {name.replace('.', '_'): name for name in ('memory.save','memory.search','memory.list','memory.delete')}
 def _propose(identity, messages, current_message_id, *, diary=False):
     path = os.getenv('IFRAME_COMPANION_USER_CONFIG_DB') or os.getenv('IFRAME_PHOTOS_USER_CONFIG_DB') or os.getenv('LUMENX_USER_DB_PATH')
+    local_path = os.getenv('IFRAME_COMPANION_DB_PATH')
+    if local_path:
+        local = UserConfigStore(local_path)
+        if local.get_public(identity)['secrets_configured']['UNIART_API_KEY']:
+            path = local_path
     if not path:
         raise ModelUnavailable('Personal channel is not configured')
     try:

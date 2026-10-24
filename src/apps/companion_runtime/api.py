@@ -171,3 +171,7 @@ def turn(turn_id: str, identity: Owner, store: Store):
 def preview(token: str, identity: Owner, store: Store):
     with errors():
         return store.preview(identity.owner_profile_id,identity.user_id,token)
+
+
+from .media_routes import router as media_router
+router.include_router(media_router)

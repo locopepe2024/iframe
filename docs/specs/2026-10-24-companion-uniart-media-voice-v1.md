@@ -1,0 +1,11 @@
+# Companion UniArt media and voice V1
+
+Scope: isolated Companion demo; no push/merge or UniArt routing/pricing changes. Reuse shared image/video adapters and owner identity. UI settings and capability lists are separate from generation; generation requires a final button. Existing speech recognition drafts plus explicit TTS playback provide turn-taking voice, not continuous realtime conversation.
+
+Evidence: shared src/models/uniart.py supports image generation/edit and H3 V2 video. UniArt audio contract at local bare repository feature/alicloud-channel23-audio-20261023 commit 37167cc, docs/api/alicloud-audio.md: POST /v1/audio/speech model qwen-audio-3.0-tts-flash, voice longanhuan_v3.6, returns binary. Realtime dialogue models use /v1/realtime and native JSON events; not interchangeable with HTTP TTS. No real provider calls made to validate this consumer yet.
+
+Configuration: encrypted demo-local user_configs in companion.db, fallback to existing read-only personal settings; never write production user configuration. Store image/video defaults as owner preferences. Discover current model capabilities through owner's /models; expose supported t2i/t2v for the first slice. Existing reference transport requires managed external storage; keep reference generation unavailable in this slice rather than leaking private photos or silently omitting references.
+
+Execution: owner-scoped durable generation rows, request digest and operation ID prevent duplicate submission. Background execution calls shared adapters and saves local results beside companion.db. Read/poll endpoints do not create jobs. Process restart may leave running state; do not automatically resubmit uncertain paid work. Errors generic, no provider payload/key exposed. Results accessible only after owner check.
+
+Success: settings credentials never returned, existing personal settings reused, image/video explicit submit and polling/result cards work with mock provider, same operation ID cannot create a second job; wrong owner denied; TTS explicit playback and stop, no automatic playback or replay after failure. Verify targeted backend/UI tests, typecheck, static build. Deploy only isolated source/static paths, chunks before nested agent.html, verify served HTML hash.
