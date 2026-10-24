@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import GenerationSubmit from "./GenerationSubmit";
 import AlbumPicker from "./AlbumPicker";
 import PhotoImage from "../photos/PhotoImage";
 import styles from "./chat.module.css";
@@ -18,12 +19,13 @@ export function createGenerationDraft(mode: MediaMode, prompt: string): Generati
   return { mode, prompt, step: "reference", reference: null, setting: mode === "image" ? "方形 1:1" : "5 秒" };
 }
 
-/** Configuration rehearsal only. No generation or quote endpoint is called here. */
+/** Guided setup followed by explicit owner-channel submission. */
 export default function GenerationGuide({ value, disabled, onChange, onEdit, onCancel }: {
   value: GenerationDraft; disabled: boolean;
   onChange: (next: GenerationDraft) => void; onEdit: () => void; onCancel: () => void;
 }) {
   const [album,setAlbum] = useState(false);
+  const [submitted,setSubmitted] = useState(false);
   const video = value.mode === "video";
   const set = (patch: Partial<GenerationDraft>) => onChange({ ...value, ...patch });
   const recommended = () => set({ setting: video ? "5 秒" : "方形 1:1", step: "review" });
@@ -50,14 +52,14 @@ export default function GenerationGuide({ value, disabled, onChange, onEdit, onC
           </> : <>
             <h2>{value.step === "confirmed" ? "设置已确认" : "看看完整设置"}</h2>
             <dl><dt>创作类型</dt><dd>{video ? "视频" : "图片"}</dd><dt>描述</dt><dd>{value.prompt}</dd><dt>{video ? "时长" : "比例"}</dt><dd>{value.setting}</dd><dt>参考图片</dt><dd>{value.reference ? "上方选中的照片" : "不添加"}</dd><dt>费用</dt><dd>尚未报价</dd></dl>
-            <details><summary>更多设置</summary><p>模型与分辨率将在生成服务接入后提供。</p></details>
-            <p>当前可预演设置流程，暂不能生成{video ? "视频" : "图片"}。</p>
+            <details><summary>更多设置</summary><p>下一步选择可用模型，分辨率使用该模型的默认设置。</p></details>
+            <p>先确认设置，再选择个人渠道模型生成{video ? "视频" : "图片"}。</p>
             {value.step === "review" ? <button type="button" onClick={() => set({ step: "confirmed" })}>确认设置</button> : <p role="status">已确认本次设置，尚未开始生成。</p>}
-            <button type="button" disabled>确认生成（暂未开放）</button>
-            <button type="button" onClick={() => set({ step: "parameters" })}>返回修改</button>
+            {value.step === "confirmed" && <GenerationSubmit key={`${value.mode}:${value.prompt}:${value.setting}:${value.reference}`} value={value} onSubmitted={setSubmitted}/> }
+            <button type="button" disabled={submitted} onClick={() => set({ step: "parameters" })}>返回修改</button>
           </>}
         </>}
-        <button type="button" onClick={onCancel}>取消创作</button>
+        <button type="button" disabled={submitted} onClick={onCancel}>取消创作</button>
       </fieldset>
     </article>
   </section>;

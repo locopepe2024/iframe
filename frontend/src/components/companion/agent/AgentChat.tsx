@@ -14,6 +14,8 @@ import GenerationGuide, { createGenerationDraft, type GenerationDraft, type Medi
 import CompanionFeatureSheet, { type CompanionFeature } from "./CompanionFeatureSheet";
 import DiaryCalendar from "./DiaryCalendar";
 import DiaryCard, { diaryDay, diaryPrompt, formatDiaryDay, today, type DiaryContextItem, type DiaryContextMedia } from "./DiaryCard";
+import UniArtSettings from "./UniArtSettings";
+import SpeechPlayback from "./SpeechPlayback";
 import UploadGuideCard from "./UploadGuideCard";
 import { BookOpen, Images, UserRound, Compass } from "lucide-react";
 
@@ -187,6 +189,7 @@ export default function AgentChat() {
           const value = event.target.checked; setAllowed(value); localStorage.setItem(consentKey, String(value));
         }} />允许发送文字，开始聊天</label>
       </section>
+      <UniArtSettings />
       <p className={styles.note}>聊天内容会保留，可继续查看历史消息。</p>
     </aside>}
     <div ref={streamRef} className={chatStyles.stream} role="region" aria-label="聊天内容">
@@ -220,13 +223,13 @@ export default function AgentChat() {
             return items;
           })}
           media={attached.filter(item => item.anchor === index + 1).map(item => ({ id: item.id, kind: item.kind, name: item.name })) as DiaryContextMedia[]}
-        /> : <article className={chatStyles.assistant}><span>陪伴助手</span><p>{message.turn.result.text}</p></article>)}
+        /> : <article className={chatStyles.assistant}><span>陪伴助手</span><p>{message.turn.result.text}</p><SpeechPlayback text={message.turn.result.text}/></article>)}
         {message.turn?.result?.kind === "upload_guide" && !dismissedUploadGuides.includes(message.turn.turn_id) && <UploadGuideCard {...uploadGuideActions(message.turn.turn_id)} />}
       </div>{renderAttached(index+1)}</Fragment>
       )}
       {after !== null && <button disabled={busy} onClick={() => void run(() => history(session, after))}>更多历史消息</button>}
     </section>
-    {turn?.result?.kind === "text" && !messages.some(m => m.turn?.turn_id === turn.turn_id) && (diaryDay(lastSubmittedText) ? <DiaryCard day={diaryDay(lastSubmittedText)!} text={turn.result.text} sourceTurn={turn.turn_id} /> : <article className={chatStyles.assistant}><span>陪伴助手</span><p>{turn.result.text}</p></article>)}
+    {turn?.result?.kind === "text" && !messages.some(m => m.turn?.turn_id === turn.turn_id) && (diaryDay(lastSubmittedText) ? <DiaryCard day={diaryDay(lastSubmittedText)!} text={turn.result.text} sourceTurn={turn.turn_id} /> : <article className={chatStyles.assistant}><span>陪伴助手</span><p>{turn.result.text}</p><SpeechPlayback text={turn.result.text}/></article>)}
     {turn?.result?.kind === "upload_guide" && !messages.some(m => m.turn?.turn_id === turn.turn_id) && !dismissedUploadGuides.includes(turn.turn_id) && <UploadGuideCard {...uploadGuideActions(turn.turn_id)} />}
     {uploadFiles.length > 0 && <MediaUpload files={uploadFiles} disabled={inputDisabled || pending} onUploaded={attach} onBusyChange={setUploading} onClose={() => setUploadFiles([])} />}
     {albumOpen && <AlbumPicker disabled={inputDisabled || pending} onClose={() => setAlbumOpen(false)} onPhoto={photo => {

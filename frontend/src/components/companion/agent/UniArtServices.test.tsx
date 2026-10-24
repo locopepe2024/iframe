@@ -1,0 +1,41 @@
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { beforeEach, expect, it, vi } from "vitest";
+import UniArtSettings from "./UniArtSettings";
+import GenerationSubmit from "./GenerationSubmit";
+import SpeechPlayback from "./SpeechPlayback";
+import {createGenerationDraft} from "./GenerationGuide";
+const api=vi.hoisted(()=>({channel:vi.fn(),saveChannel:vi.fn(),models:vi.fn(),generate:vi.fn(),job:vi.fn(),media:vi.fn(),speech:vi.fn()}));
+vi.mock("@/lib/companionServices",()=>({companionServices:api}));
+beforeEach(()=>{vi.resetAllMocks();api.channel.mockResolvedValue({configured:true,base_url:"https://example.test/v1"});URL.createObjectURL=vi.fn(()=>"blob:audio");URL.revokeObjectURL=vi.fn();});
+it("loads public channel status and saves a password without retaining it in the form",async()=>{
+ render(<UniArtSettings/>);await screen.findByText("个人渠道已配置。");
+ expect(api.saveChannel).not.toHaveBeenCalled();
+ fireEvent.change(screen.getByLabelText("API Key"),{target:{value:"new-secret"}});
+ fireEvent.click(screen.getByRole("button",{name:"保存渠道"}));
+ await screen.findByText(/渠道已保存/);
+ expect(api.saveChannel).toHaveBeenCalledWith("https://example.test/v1","new-secret");
+ expect(screen.getByLabelText("API Key")).toHaveValue("");
+});
+it("requires explicit generation and retains the same operation ID after an uncertain submission",async()=>{
+ api.models.mockResolvedValue({models:[{id:"uniart/image",display_name:"Image",capabilities:["t2i"]},{id:"uniart/video",display_name:"Video",capabilities:["t2v"]}]});
+ api.generate.mockRejectedValueOnce(new Error("提交状态未确认")).mockResolvedValueOnce({id:"job",status:"failed"});
+ const pending=vi.fn();render(<GenerationSubmit value={createGenerationDraft("image","一朵花")} onSubmitted={pending}/>);
+ expect(api.models).not.toHaveBeenCalled();expect(api.generate).not.toHaveBeenCalled();
+ fireEvent.click(screen.getByRole("button",{name:"读取我的可用模型"}));
+ await screen.findByRole("option",{name:"Image"});expect(screen.queryByRole("option",{name:"Video"})).not.toBeInTheDocument();
+ fireEvent.change(screen.getByLabelText("生成模型"),{target:{value:"uniart/image"}});
+ fireEvent.click(screen.getByRole("button",{name:"确认生成（可能计费）"}));
+ await screen.findByRole("alert");expect(pending).toHaveBeenCalledWith(true);
+ fireEvent.click(screen.getByRole("button",{name:"查询或重试原生成请求"}));
+ await screen.findByText("生成失败；没有自动重新提交。");
+ expect(api.generate).toHaveBeenCalledTimes(2);
+ expect(api.generate.mock.calls[0][0]).toEqual(api.generate.mock.calls[1][0]);
+ await waitFor(()=>expect(pending).toHaveBeenCalledWith(false));
+});
+it("only synthesizes after an explicit request and releases the audio resource on unmount",async()=>{
+ api.speech.mockResolvedValue(new Blob(["audio"],{type:"audio/wav"}));
+ const view=render(<SpeechPlayback text="你好"/>);expect(api.speech).not.toHaveBeenCalled();
+ fireEvent.click(screen.getByRole("button",{name:"用 UniArt 朗读（可能计费）"}));
+ const audio=await screen.findByLabelText("助手回复朗读");expect(audio).toHaveAttribute("controls");expect(audio).not.toHaveAttribute("autoplay");
+ expect(api.speech).toHaveBeenCalledWith("你好");view.unmount();expect(URL.revokeObjectURL).toHaveBeenCalledWith("blob:audio");
+});

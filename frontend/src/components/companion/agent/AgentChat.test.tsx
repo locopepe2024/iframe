@@ -4,6 +4,7 @@ import AgentChat from "./AgentChat";
 import {diaryPrompt,today} from "./DiaryCard";
 const api=vi.hoisted(()=>({session:vi.fn(),messages:vi.fn(),chat:vi.fn(),turn:vi.fn(),tool:vi.fn(),confirm:vi.fn(),cancel:vi.fn(),diaries:vi.fn(),saveDiary:vi.fn()}));
 const photoApi=vi.hoisted(()=>({list:vi.fn()}));
+vi.mock("./UniArtSettings",()=>({default:()=> <section aria-label="UniArt 渠道设置"/>}));
 vi.mock("@/lib/companionApi",()=>({companionApi:api}));
 vi.mock("@/lib/photoApi",()=>({photoApi}));
 vi.mock("../photos/PhotoImage",()=>({default:()=> <img alt="照片缩略图"/>}));
@@ -161,7 +162,7 @@ it("previews recommended media settings honestly and can go back or cancel", asy
   fireEvent.click(screen.getByRole("button",{name:"用推荐设置"}));
   expect(screen.getByText("5 秒",{selector:"dd"})).toBeInTheDocument();
   expect(screen.getByText("尚未报价")).toBeInTheDocument();
-  expect(screen.getByRole("button",{name:"确认生成（暂未开放）"})).toBeDisabled();
+  expect(screen.queryByRole("button",{name:"确认生成（可能计费）"})).not.toBeInTheDocument();
   fireEvent.click(screen.getByRole("button",{name:"确认设置"}));
   expect(screen.getByText("已确认本次设置，尚未开始生成。")).toBeInTheDocument();
   expect(api.chat).not.toHaveBeenCalled();
