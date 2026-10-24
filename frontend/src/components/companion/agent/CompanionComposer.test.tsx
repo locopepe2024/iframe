@@ -45,3 +45,8 @@ it("keeps upload in the composer and leaves album navigation to the bottom bar",
   fireEvent.click(screen.getByRole("button",{name:"上传"}));expect(upload).toHaveBeenCalledOnce();
   expect(screen.queryByRole("button",{name:"相册"})).not.toBeInTheDocument();
 });
+it("uses the chat invitation inside the input instead of spending a separate row",()=>{
+  render(<CompanionComposer mode="chat" value="" disabled={false} busy={false} allowed inputRef={createRef()} onMode={()=>{}} onChange={()=>{}} onSend={()=>{}} onUpload={()=>{}} onAllow={()=>{}} retry={null}/>);
+  expect(screen.getByPlaceholderText("和我聊聊天…")).toBeInTheDocument();
+  expect(screen.getByText("和我聊聊天", {selector:"span"}).className).toMatch(/visuallyHidden/);
+});

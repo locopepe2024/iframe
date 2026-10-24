@@ -44,8 +44,8 @@ export default function CompanionComposer({ mode, value, disabled, busy, allowed
       {value.trim() && <label className={styles.check}><input type="checkbox" disabled={disabled || recording} checked={mediaAcknowledged} onChange={event => onMediaAcknowledged?.(event.target.checked)}/>我知道本次只发送文字给助手</label>}
     </div>}
     <div className={styles.inputPanel}>
-      <label>{mode === "chat" ? "和我聊聊天" : mode === "image" ? "想生成的图片" : "想生成的视频"}
-        <textarea ref={inputRef} rows={2} placeholder={mode === "chat" ? "想说什么，都可以写在这里…" : "说说想做什么，再点箭头继续…"} maxLength={4000} value={value} disabled={disabled || recording} onChange={event => onChange(event.target.value)} />
+      <label><span className={styles.visuallyHidden}>{mode === "chat" ? "和我聊聊天" : mode === "image" ? "想生成的图片" : "想生成的视频"}</span>
+        <textarea ref={inputRef} rows={2} placeholder={mode === "chat" ? "和我聊聊天…" : "说说想做什么，再点箭头继续…"} maxLength={4000} value={value} disabled={disabled || recording} onChange={event => onChange(event.target.value)} />
       </label>
       <div className={styles.toolbar}>
         <div ref={picker} className={styles.modePicker} onKeyDown={event => {
