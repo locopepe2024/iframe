@@ -55,6 +55,7 @@ export class PcmPlayer {
   private maxArrivalIntervalMs = 0;
   private lastArrival: number | null = null;
   private receivedAudioSeconds = 0;
+  private audioChunks = 0;
   private readonly reserveSeconds = .6;
   private readonly schedulingLead = .05;
 
@@ -75,6 +76,8 @@ export class PcmPlayer {
       maxArrivalIntervalMs: Math.round(this.maxArrivalIntervalMs),
       receivedAudioMs: Math.round(this.receivedAudioSeconds * 1000),
       startupBufferMs: this.reserveSeconds * 1000,
+      queuedAudioMs: Math.round((Math.max(0, this.until - this.context.currentTime) + this.pendingSeconds) * 1000),
+      audioChunks: this.audioChunks,
     };
   }
 
@@ -93,6 +96,7 @@ export class PcmPlayer {
     }
     this.lastArrival = now;
     this.receivedAudioSeconds += duration;
+    this.audioChunks++;
     if (!this.buffering && this.until <= now && this.responseActive) {
       this.underruns++;
       this.maxGapMs = Math.max(this.maxGapMs, (now - this.until) * 1000);

@@ -1,9 +1,9 @@
 import {act,renderHook,waitFor} from "@testing-library/react";
 import {afterEach,beforeEach,expect,it,vi} from "vitest";
 import {useRealtimeVoice} from "./useRealtimeVoice";
-const mocks=vi.hoisted(()=>({ticket:vi.fn(),capture:vi.fn(),endCapture:vi.fn(),play:vi.fn(),clear:vi.fn(),playing:vi.fn()}));
+const mocks=vi.hoisted(()=>({ticket:vi.fn(),capture:vi.fn(),endCapture:vi.fn(),play:vi.fn(),clear:vi.fn(),playing:vi.fn(),idle:vi.fn(),finish:vi.fn()}));
 vi.mock("@/lib/companionServices",()=>({companionServices:{realtimeTicket:mocks.ticket,realtimeUrl:()=>"wss://example.test/realtime"}}));
-vi.mock("@/lib/companionRealtimeAudio",()=>({captureMicrophone:mocks.capture,PcmPlayer:class {stats=()=>({underruns:0});finishResponse=()=>{};play=mocks.play;clear=mocks.clear;isPlaying=mocks.playing;}}));
+vi.mock("@/lib/companionRealtimeAudio",()=>({captureMicrophone:mocks.capture,PcmPlayer:class {constructor(_audio:unknown,onIdle:()=>void){mocks.idle.mockImplementation(onIdle);}stats=()=>({underruns:0});finishResponse=mocks.finish;play=mocks.play;clear=mocks.clear;isPlaying=mocks.playing;}}));
 let ws:FakeSocket;
 class FakeSocket {
  static OPEN=1;readyState=1;bufferedAmount=0;
@@ -56,4 +56,13 @@ it("renders native Qwen ASR text/stash and replaces it with the final transcript
  expect(result.current.lines[0].text).toBe("今天开心");
  await act(async()=>{await ws.onmessage?.({data:JSON.stringify({type:"conversation.item.input_audio_transcription.completed",item_id:"u",transcript:"今天很开心"})});});
  expect(result.current.lines).toEqual([{id:"u",role:"我",text:"今天很开心"}]);
+});
+
+it("does not invite speech when an unfinished reply drains its playback queue",async()=>{
+ const {result}=renderHook(()=>useRealtimeVoice());await ready(result);
+ await act(async()=>{await ws.onmessage?.({data:JSON.stringify({type:"response.created"})});await ws.onmessage?.({data:JSON.stringify({type:"response.audio.delta",delta:"audio"})});});
+ expect(result.current.state).toBe("speaking");act(()=>mocks.idle());
+ expect(result.current.state).toBe("thinking");
+ await act(async()=>{await ws.onmessage?.({data:JSON.stringify({type:"response.done"})});});
+ expect(mocks.finish).toHaveBeenCalledOnce();expect(result.current.state).toBe("listening");
 });

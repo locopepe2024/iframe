@@ -127,3 +127,26 @@ def test_failure_messages_distinguish_upstream_auth_and_timeout():
         status_code=401
     assert '鉴权失败' in voice.public_failure(Rejected())
     assert '超时' in voice.public_failure(asyncio.TimeoutError())
+
+
+def test_playback_diagnostics_are_bounded_and_never_sent_upstream(client, caplog):
+    caplog.set_level('INFO', logger=voice.__name__)
+    c, upstream, _ = client
+    token = get_ticket(c)
+    with c.websocket_connect('/companion-runtime/realtime', headers={'origin':'http://testserver'}) as ws:
+        ws.send_json(dict(type='authenticate', ticket=token)); assert ws.receive_json()['type']=='ready'
+        ws.send_json(dict(type='playback.stats', stats=dict(underruns=2, vadDuringPlayback=1, sampleRate=48000)))
+        # A following audio response proves telemetry did not close the connection.
+        ws.send_json(dict(type='input_audio_buffer.append', audio='AAA='))
+        assert ws.receive_json()['type']=='response.created'
+        ws.send_json(dict(type='playback.stats', stats=dict(transcript='must not log')))
+        while ws.receive_json()['type']!='error': pass
+    assert 'Companion playback stats' in caplog.text and 'underruns' in caplog.text
+    assert 'must not log' not in caplog.text
+    assert 'playback.stats' not in [event['type'] for event in upstream.sent]
+
+
+def test_playback_diagnostic_numeric_limits():
+    for stats in [dict(underruns=True),dict(underruns=-1),dict(sampleRate=float('nan')),dict(underruns=30000001),dict(unknown=1)]:
+        with pytest.raises(ValueError): voice.playback_stats(stats)
+    assert voice.playback_stats(dict(underruns=2)) == dict(underruns=2)

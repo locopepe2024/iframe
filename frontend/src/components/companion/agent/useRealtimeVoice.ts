@@ -13,8 +13,25 @@ export function useRealtimeVoice() {
   const capture = useRef<(() => void) | null>(null), timeout = useRef<ReturnType<typeof setTimeout> | null>(null);
   const setupTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
   const ignoreAudio = useRef(false);
+  const replyInProgress = useRef(false);
+  const diagnosticsTimer = useRef<ReturnType<typeof setInterval> | null>(null);
+  const interruptions = useRef({ vadDuringPlayback: 0, manualInterrupts: 0 });
+  const reportStats = useCallback(() => {
+    const ws = socket.current, audio = context.current, playback = player.current;
+    if (!ws || ws.readyState !== WebSocket.OPEN || !audio || !playback || ws.bufferedAmount > 256000) return;
+    try {
+      ws.send(JSON.stringify({ type: "playback.stats", stats: {
+        ...playback.stats(), ...interruptions.current, sampleRate: audio.sampleRate,
+        contextState: audio.state === "running" ? 1 : audio.state === "suspended" ? 2 : 3,
+      } }));
+    } catch { /* Diagnostics must not prevent microphone/socket cleanup. */ }
+  }, []);
   const release = useCallback(() => {
+    reportStats();
     generation.current++;
+    replyInProgress.current = false;
+    if (diagnosticsTimer.current) clearInterval(diagnosticsTimer.current);
+    diagnosticsTimer.current = null;
     if (timeout.current) clearTimeout(timeout.current);
     if (setupTimeout.current) clearTimeout(setupTimeout.current);
     timeout.current = null; setupTimeout.current = null;
@@ -28,7 +45,7 @@ export function useRealtimeVoice() {
     }
     if (context.current) void context.current.close().catch(() => {});
     context.current = null;
-  }, []);
+  }, [reportStats]);
   const stop = useCallback((message = "语音已结束。") => { release(); setState("idle"); setNotice(message); }, [release]);
   useEffect(() => {
     const hidden = () => { if (document.hidden && context.current) stop("已暂停语音，返回页面后可重新开始。"); };
@@ -39,6 +56,7 @@ export function useRealtimeVoice() {
   }, [release, stop]);
   const start = useCallback(async () => {
     release(); const turn = generation.current;
+    interruptions.current = { vadDuringPlayback: 0, manualInterrupts: 0 };
     setNotice(""); setLines([]); setState("connecting"); ignoreAudio.current = false;
     const current = () => generation.current === turn;
     const fail = (message: string) => { if (current()) stop(message); };
@@ -50,7 +68,9 @@ export function useRealtimeVoice() {
       const ticket = await companionServices.realtimeTicket(); if (!current()) return;
       const microphone = await navigator.mediaDevices.getUserMedia({ audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true, autoGainControl: true } });
       if (!current()) { microphone.getTracks().forEach(track => track.stop()); return; }
-      stream.current = microphone; player.current = new PcmPlayer(audio, () => { if (current()) setState(old => old === "speaking" ? "listening" : old); });
+      stream.current = microphone; player.current = new PcmPlayer(audio, () => {
+        if (current()) setState(old => old === "speaking" ? (replyInProgress.current ? "thinking" : "listening") : old);
+      });
       const ws = new WebSocket(companionServices.realtimeUrl()); socket.current = ws;
       const append = (id: string, role: VoiceLine["role"], text: string, delta: boolean) => {
         if (!text) return;
@@ -75,12 +95,18 @@ export function useRealtimeVoice() {
             });
             if (!current()) { endCapture(); return; }
             capture.current = endCapture; setState("listening");
+            diagnosticsTimer.current = setInterval(reportStats, 10000);
           } else if (event.type === "error" || event.type === "ended") fail(event.message || "语音已结束。");
-          else if (event.type === "input_audio_buffer.speech_started") { ignoreAudio.current = true; player.current?.clear(); setState("listening"); }
+          else if (event.type === "input_audio_buffer.speech_started") {
+            if (player.current?.isPlaying()) interruptions.current.vadDuringPlayback++;
+            replyInProgress.current = false;
+            ignoreAudio.current = true; player.current?.clear(); setState("listening");
+          }
           else if (event.type === "input_audio_buffer.speech_stopped") setState("thinking");
-          else if (event.type === "response.created") { ignoreAudio.current = false; setState("thinking"); }
+          else if (event.type === "response.created") { replyInProgress.current = true; ignoreAudio.current = false; setState("thinking"); }
           else if (event.type === "response.audio.delta" && !ignoreAudio.current) { player.current?.play(event.delta); setState("speaking"); }
           else if (event.type === "response.done") {
+            replyInProgress.current = false;
             player.current?.finishResponse();
             if (!player.current?.isPlaying()) setState("listening");
           }
@@ -97,8 +123,10 @@ export function useRealtimeVoice() {
     } catch (error) {
       fail(error instanceof Error ? error.message : "无法使用麦克风，请检查权限。");
     }
-  }, [release, stop]);
+  }, [release, stop, reportStats]);
   const interrupt = useCallback(() => {
+    interruptions.current.manualInterrupts++;
+    replyInProgress.current = false;
     ignoreAudio.current = true; player.current?.clear();
     if (socket.current?.readyState === WebSocket.OPEN) socket.current.send(JSON.stringify({ type: "interrupt" }));
     setState("listening"); setNotice("已打断，您可以继续说。");

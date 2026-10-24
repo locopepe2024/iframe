@@ -4,6 +4,7 @@ import base64
 import binascii
 import json
 import logging
+import math
 import os
 import secrets
 import threading
@@ -19,12 +20,24 @@ from . import channel
 from .personality import get_profile, system_prompt
 
 logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)
 router = APIRouter(tags=['companion-voice'])
 MODEL = 'qwen-audio-3.1-realtime-plus'
 SESSION_SECONDS = 300
 _tickets = {}
 _active = set()
 _lock = threading.Lock()
+
+
+def playback_stats(value):
+    fields = {'underruns', 'maxGapMs', 'maxArrivalIntervalMs', 'receivedAudioMs',
+              'startupBufferMs', 'queuedAudioMs', 'audioChunks', 'vadDuringPlayback',
+              'manualInterrupts', 'sampleRate', 'contextState'}
+    if not isinstance(value, dict) or not value or value.keys() - fields:
+        raise ValueError('invalid playback stats')
+    if any(type(v) not in (int, float) or not math.isfinite(v) or not 0 <= v <= 30000000 for v in value.values()):
+        raise ValueError('invalid playback metric')
+    return value
 
 
 class VoiceConsent(BaseModel):
@@ -71,9 +84,10 @@ async def relay(client, upstream, diagnostics=None):
     responding = False
     diagnostics = diagnostics if diagnostics is not None else {}
     diagnostics.update(input_frames=0, last_event="none")
+    reports = 0
 
     async def input_loop():
-        nonlocal responding
+        nonlocal responding, reports
         total = 0
         while True:
             raw = await client.receive_text()
@@ -98,12 +112,25 @@ async def relay(client, upstream, diagnostics=None):
                 if responding:
                     await upstream.send(json.dumps(dict(type='response.cancel')))
                     responding = False
+            elif kind == 'playback.stats':
+                reports += 1
+                if reports > 60:
+                    raise ValueError('playback report limit')
+                logger.info('Companion playback stats: %s', playback_stats(event.get('stats')))
             else:
                 raise ValueError('event not allowed')
 
     async def output_loop():
         nonlocal responding
+        audio_bytes = 0
+        chunks = 0
+        last_audio = None
+        max_arrival_gap = 0
+        max_send_delay = 0
+        response_started = None
+        vad_during_response = 0
         async for raw in upstream:
+            received_at = time.monotonic()
             if not isinstance(raw, str) or len(raw) > 4 * 1024 * 1024:
                 raise ValueError('upstream event limit')
             event = json.loads(raw)
@@ -116,17 +143,35 @@ async def relay(client, upstream, diagnostics=None):
                 await client.send_json(dict(type='ready'))
             elif kind == 'response.created':
                 responding = True
+                audio_bytes = chunks = vad_during_response = 0
+                last_audio = None
+                max_arrival_gap = max_send_delay = 0
+                response_started = received_at
                 await client.send_json(dict(type=kind))
             elif kind == 'response.done':
                 responding = False
+                logger.info('Companion upstream audio: chunks=%s audio_ms=%s span_ms=%s max_arrival_gap_ms=%s max_send_delay_ms=%s vad_during_response=%s',
+                            chunks, round(audio_bytes / 48), round((received_at - response_started) * 1000) if response_started is not None else 0,
+                            round(max_arrival_gap * 1000), round(max_send_delay * 1000), vad_during_response)
                 await client.send_json(dict(type=kind))
             elif kind in {'input_audio_buffer.speech_started', 'input_audio_buffer.speech_stopped'}:
+                if kind == 'input_audio_buffer.speech_started' and responding:
+                    vad_during_response += 1
                 await client.send_json(dict(type=kind))
             elif kind in {'response.audio.delta', 'response.audio_transcript.delta',
                           'response.audio_transcript.done', 'conversation.item.input_audio_transcription.delta',
                           'conversation.item.input_audio_transcription.completed'}:
+                if kind == 'response.audio.delta':
+                    pcm = base64.b64decode(event['delta'], validate=True)
+                    audio_bytes += len(pcm)
+                    chunks += 1
+                    if last_audio is not None:
+                        max_arrival_gap = max(max_arrival_gap, received_at - last_audio)
+                    last_audio = received_at
                 safe = {k: event[k] for k in ('type', 'delta', 'text', 'stash', 'transcript', 'item_id', 'response_id') if k in event}
                 await client.send_json(safe)
+                if kind == 'response.audio.delta':
+                    max_send_delay = max(max_send_delay, time.monotonic() - received_at)
 
     tasks = [asyncio.create_task(input_loop()), asyncio.create_task(output_loop())]
     try:
