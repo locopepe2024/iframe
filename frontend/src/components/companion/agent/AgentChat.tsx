@@ -175,7 +175,7 @@ export default function AgentChat() {
     await companionApi.cancel(activePreview.preview_token);
     setDraft(null); setPreview({ status: "preview_closed", preview_token: activePreview.preview_token }); setNotice("已关闭预览，未执行新的保存或删除。");
   }
-  return <main className={`${styles.shell} ${chatStyles.shell}`}>
+  return <main className={`${styles.shell} ${chatStyles.shell}`} data-agent-build="upload-preview-20261024-v3">
     <header className={chatStyles.header}><h1>聊天</h1><button type="button" aria-expanded={menu} onClick={() => setMenu(!menu)}>更多</button></header>
     {menu && <aside className={styles.panel} aria-label="聊天管理">
       <a href={`${prefix}/companion/photos`}>生活相册</a>
