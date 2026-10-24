@@ -404,6 +404,10 @@ export default function StoryboardR2V() {
             && task.frame_id === previousFrame.id
             && task.status === "completed"
             && task.video_url,
+        ) || (currentProject.video_tasks ?? []).find((task: any) =>
+            task.frame_id === previousFrame.id
+            && task.status === "completed"
+            && task.video_url,
         );
         if (!selectedTask) return;
 
@@ -2205,12 +2209,16 @@ export default function StoryboardR2V() {
                     const projectFrames = currentProject?.frames ?? [];
                     const projectFrameIndex = projectFrames.findIndex((frame: any) => frame.id === shot.id);
                     const previousFrame = projectFrameIndex > 0 ? projectFrames[projectFrameIndex - 1] : null;
-                    const previousSelectedVideo = previousFrame && (currentProject?.video_tasks ?? []).find((task: any) =>
+                    const previousSelectedVideo = previousFrame && ((currentProject?.video_tasks ?? []).find((task: any) =>
                         task.id === previousFrame.selected_video_id
                         && task.frame_id === previousFrame.id
                         && task.status === "completed"
                         && task.video_url,
-                    );
+                    ) || (currentProject?.video_tasks ?? []).find((task: any) =>
+                        task.frame_id === previousFrame.id
+                        && task.status === "completed"
+                        && task.video_url,
+                    ));
                     const modelList = (shot.tabMode === "direct_r2v" ? VIDEO_R2V_MODELS : VIDEO_I2V_MODELS)
                         .filter(model => videoModelSupportsMode(model.id, resolveShotVideoInput(shot).mode));
                     return (
