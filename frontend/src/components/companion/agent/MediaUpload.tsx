@@ -15,11 +15,20 @@ export default function MediaUpload({files,disabled,onUploaded,onClose,onBusyCha
   const callback=useRef(onUploaded);callback.current=onUploaded;
   useEffect(()=>{alive.current=true;return()=>{alive.current=false;};},[]);
   useEffect(()=>{
-    if (typeof URL.createObjectURL !== "function") return;
     const next:Record<string,string> = {};
-    files.forEach(file => { next[file.name] = URL.createObjectURL(file); });
-    setPreviews(next);
-    return () => Object.values(next).forEach(url => URL.revokeObjectURL(url));
+    let cancelled = false;
+    const objectUrls: string[] = [];
+    files.forEach(file => {
+      if (file.type.startsWith("image/") && typeof FileReader !== "undefined") {
+        const reader = new FileReader();
+        reader.onload = () => { if (!cancelled && typeof reader.result === "string") setPreviews(old => ({ ...old, [file.name]: reader.result as string })); };
+        reader.readAsDataURL(file);
+      } else if (typeof URL.createObjectURL === "function") {
+        const url = URL.createObjectURL(file); objectUrls.push(url); next[file.name] = url;
+      }
+    });
+    if (Object.keys(next).length) setPreviews(next);
+    return () => { cancelled = true; objectUrls.forEach(url => URL.revokeObjectURL(url)); };
   },[files]);
   async function upload(){
     if(locked.current)return;locked.current=true;setBusy(true);onBusyChange?.(true);
