@@ -53,6 +53,7 @@ import {
     getActiveT2IImageUrl,
     frameToShotNode,
 } from "./storyboard-r2v/shotNodeHelpers";
+import { lockedPreviousTake } from "./storyboard-r2v/lockedPreviousTake";
 import { overridePanelSectionState } from "./storyboard-r2v/shot-panel/usePanelSectionState";
 import ParamsSection, { type ParamsState } from "./storyboard-r2v/shot-panel/ParamsSection";
 import T2ISubsection from "./storyboard-r2v/shot-panel/T2ISubsection";
@@ -399,13 +400,11 @@ export default function StoryboardR2V() {
         const frameIndex = frames.findIndex((frame: any) => frame.id === shot?.id);
         if (!currentProject || !shot || frameIndex <= 0 || extractingPreviousEndFrameId) return;
         const previousFrame = frames[frameIndex - 1];
-        const selectedTask = (currentProject.video_tasks ?? []).find((task: any) =>
-            task.id === previousFrame.selected_video_id
-            && task.frame_id === previousFrame.id
-            && task.status === "completed"
-            && task.video_url,
-        );
-        if (!selectedTask) return;
+        const selectedTask = lockedPreviousTake(previousFrame, currentProject.video_tasks ?? []);
+        if (!selectedTask) {
+            toast.warning(t("lockPreviousTakeFirst"));
+            return;
+        }
 
         setExtractingPreviousEndFrameId(shot.id);
         let pendingPatch: Parameters<typeof api.updateFrameWorkbench>[2] | null = null;
@@ -452,7 +451,7 @@ export default function StoryboardR2V() {
         } finally {
             setExtractingPreviousEndFrameId(null);
         }
-    }, [shots, currentProject, extractingPreviousEndFrameId, updateProject, persistWorkbench]);
+    }, [shots, currentProject, extractingPreviousEndFrameId, updateProject, persistWorkbench, t]);
 
     // Adopted text, its flag and editable direction share one ordered writer.
     const frameEdits = useMemo(() => createFrameEditQueue(
@@ -2205,12 +2204,7 @@ export default function StoryboardR2V() {
                     const projectFrames = currentProject?.frames ?? [];
                     const projectFrameIndex = projectFrames.findIndex((frame: any) => frame.id === shot.id);
                     const previousFrame = projectFrameIndex > 0 ? projectFrames[projectFrameIndex - 1] : null;
-                    const previousSelectedVideo = previousFrame && (currentProject?.video_tasks ?? []).find((task: any) =>
-                        task.id === previousFrame.selected_video_id
-                        && task.frame_id === previousFrame.id
-                        && task.status === "completed"
-                        && task.video_url,
-                    );
+                    const previousSelectedVideo = lockedPreviousTake(previousFrame, currentProject?.video_tasks ?? []);
                     const modelList = (shot.tabMode === "direct_r2v" ? VIDEO_R2V_MODELS : VIDEO_I2V_MODELS)
                         .filter(model => videoModelSupportsMode(model.id, resolveShotVideoInput(shot).mode));
                     return (
@@ -2564,7 +2558,10 @@ export default function StoryboardR2V() {
                                         resolveUrl={resolveAssetUrl}
                                         frameLabel="首帧"
                                         firstLastFrameMode={shot.videoMode === "first_last_frame"}
-                                        onUsePreviousEndFrame={previousSelectedVideo ? () => void usePreviousVideoEndFrame(index) : undefined}
+                                        onUsePreviousEndFrame={previousFrame ? () => void usePreviousVideoEndFrame(index) : undefined}
+                                        previousEndFrameUnavailableReason={previousFrame && !previousSelectedVideo
+                                            ? t(previousFrame.is_video_pinned ? "lockedPreviousTakeUnavailable" : "lockPreviousTakeFirst")
+                                            : undefined}
                                         extractingPreviousEndFrame={extractingPreviousEndFrameId === shot.id}
                                     />
                                     {shot.videoMode === "first_last_frame" ? (

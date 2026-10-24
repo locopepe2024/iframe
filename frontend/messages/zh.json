@@ -2612,6 +2612,8 @@
     "tabTextVideo": "文生 TEXT",
     "tabFirstLastFrame": "首尾帧 FL2V",
     "usePrevEndFrame": "使用上一镜头尾帧",
+    "lockPreviousTakeFirst": "请先在上一镜的视频候选中锁定有效视频",
+    "lockedPreviousTakeUnavailable": "上一镜锁定的视频未完成或文件不可用，请重新锁定",
     "videoModeTabsLabel": "视频生成模式",
     "videoSettings": "视频生成设置",
     "modelSelection": "选择模型",

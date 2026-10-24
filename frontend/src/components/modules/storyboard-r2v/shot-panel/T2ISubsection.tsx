@@ -78,6 +78,7 @@ interface T2ISubsectionProps {
     frameLabel?: string;
     firstLastFrameMode?: boolean;
     onUsePreviousEndFrame?: () => void;
+    previousEndFrameUnavailableReason?: string;
     extractingPreviousEndFrame?: boolean;
 }
 
@@ -97,6 +98,7 @@ export default function T2ISubsection({
     frameLabel = "首帧",
     firstLastFrameMode = false,
     onUsePreviousEndFrame,
+    previousEndFrameUnavailableReason,
     extractingPreviousEndFrame = false,
 }: T2ISubsectionProps) {
     const t = useTranslations("storyboardR2V");
@@ -124,6 +126,7 @@ export default function T2ISubsection({
                 frameLabel={frameLabel}
                 firstLastFrameMode={firstLastFrameMode}
                 onUsePreviousEndFrame={onUsePreviousEndFrame}
+                previousEndFrameUnavailableReason={previousEndFrameUnavailableReason}
                 extractingPreviousEndFrame={extractingPreviousEndFrame}
             />
         );
@@ -146,6 +149,7 @@ export default function T2ISubsection({
             onSelectAsset={onSelectAsset}
             frameLabel={frameLabel}
             onUsePreviousEndFrame={onUsePreviousEndFrame}
+            previousEndFrameUnavailableReason={previousEndFrameUnavailableReason}
             extractingPreviousEndFrame={extractingPreviousEndFrame}
         />
     );
@@ -168,12 +172,13 @@ interface HeroProps {
     frameLabel: string;
     firstLastFrameMode: boolean;
     onUsePreviousEndFrame?: () => void;
+    previousEndFrameUnavailableReason?: string;
     extractingPreviousEndFrame: boolean;
 }
 
 function Hero({
     t, promptIsEmpty, generating, inFlightTaskId, inFlightStatus, onGenerate, onUpload,
-    onSelectAsset, frameLabel, firstLastFrameMode, onUsePreviousEndFrame, extractingPreviousEndFrame,
+    onSelectAsset, frameLabel, firstLastFrameMode, onUsePreviousEndFrame, previousEndFrameUnavailableReason, extractingPreviousEndFrame,
 }: HeroProps) {
     const [uploading, setUploading] = useState(false);
     const [uploadError, setUploadError] = useState<T2IUploadError | null>(null);
@@ -304,12 +309,17 @@ function Hero({
                             <button
                                 type="button"
                                 onClick={onUsePreviousEndFrame}
-                                disabled={uploadDisabled || extractingPreviousEndFrame}
+                                disabled={uploadDisabled || extractingPreviousEndFrame || Boolean(previousEndFrameUnavailableReason)}
+                                title={previousEndFrameUnavailableReason || t("usePrevEndFrame")}
                                 className="inline-flex min-h-[36px] items-center gap-1.5 rounded-md border border-glass-border bg-black/20 px-3 py-1.5 font-mono text-chrome font-medium text-text-secondary hover:border-primary/45 hover:bg-primary/10 hover:text-primary disabled:opacity-50"
                             >
                                 {extractingPreviousEndFrame ? <Loader2 size={13} className="animate-spin" /> : <Film size={13} />}
                                 {t("usePrevEndFrame")}
                             </button>
+                        ) : null}
+
+                        {previousEndFrameUnavailableReason ? (
+                            <span className="text-xs text-text-muted">{previousEndFrameUnavailableReason}</span>
                         ) : null}
 
                         <span className="font-mono text-chrome-sm tracking-tight text-text-muted">
@@ -365,6 +375,7 @@ interface CompactProps {
     onSelectAsset?: () => void;
     frameLabel: string;
     onUsePreviousEndFrame?: () => void;
+    previousEndFrameUnavailableReason?: string;
     extractingPreviousEndFrame: boolean;
 }
 
@@ -372,7 +383,7 @@ function Compact({
     t, imageUrls, selectedIndex, storyboardFrameUrl, generating,
     inFlightTaskId, inFlightStatus, promptIsEmpty,
     onSelect, onRemove, onGenerate, onUpload, onSelectAsset, frameLabel,
-    onUsePreviousEndFrame, extractingPreviousEndFrame,
+    onUsePreviousEndFrame, previousEndFrameUnavailableReason, extractingPreviousEndFrame,
 }: CompactProps) {
     // 数据模型：active frame 来源优先级 = getActiveT2IImageUrl 然后 fallback shot.imageUrl。
     // 简化 v1 决定：storyboard frame thumb 只在 T2I 历史为空时显示（自动成为 active）；
@@ -469,8 +480,8 @@ function Compact({
                         <button
                             type="button"
                             onClick={onUsePreviousEndFrame}
-                            disabled={generating || extractingPreviousEndFrame}
-                            title={t("usePrevEndFrame")}
+                            disabled={generating || extractingPreviousEndFrame || Boolean(previousEndFrameUnavailableReason)}
+                            title={previousEndFrameUnavailableReason || t("usePrevEndFrame")}
                             className="btn-tip inline-flex h-7 items-center gap-1 rounded px-1.5 font-mono text-chrome-sm text-text-muted hover:bg-hover-bg hover:text-primary disabled:opacity-50"
                         >
                             {extractingPreviousEndFrame ? <Loader2 size={12} className="animate-spin" /> : <Film size={12} />}
@@ -583,6 +594,9 @@ function Compact({
                     </div>
                 </div>
             </div>
+            {previousEndFrameUnavailableReason ? (
+                <p className="mt-1 text-xs text-text-muted">{previousEndFrameUnavailableReason}</p>
+            ) : null}
 
             {/* Q4 C: single-frame inline preview (160×90, 16:9) when there's
                 only one option — most common after upload — so the user can

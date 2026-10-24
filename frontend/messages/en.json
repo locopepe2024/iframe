@@ -2612,6 +2612,8 @@
     "tabTextVideo": "Text TEXT",
     "tabFirstLastFrame": "First/Last FL2V",
     "usePrevEndFrame": "Use previous shot's last frame",
+    "lockPreviousTakeFirst": "Pin a completed take in the previous shot first",
+    "lockedPreviousTakeUnavailable": "The previous shot's pinned take is incomplete or unavailable; pin another take",
     "videoModeTabsLabel": "Video generation mode",
     "videoSettings": "Video Settings",
     "modelSelection": "Select Model",
