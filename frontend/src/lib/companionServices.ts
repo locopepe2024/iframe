@@ -8,6 +8,8 @@ async function request(path:string, body?:unknown, method=body===undefined?"GET"
 export interface ServiceModel { id:string; display_name:string; capabilities:string[]; duration?:{min:number;max:number}; }
 export interface GenerationJob {id:string;status:string;mode?:string}
 export const companionServices={
+  realtimeTicket:async():Promise<{ticket:string;max_seconds:number}> => (await request("/realtime/ticket",{allow_external_audio:true})).json(),
+  realtimeUrl:()=>{const url=new URL(base+"/realtime",window.location.href);url.protocol=url.protocol==="https:"?"wss:":"ws:";return url.toString();},
   channel:async():Promise<{configured:boolean;base_url:string}> => (await request("/channel")).json(),
   saveChannel:async(base_url:string,api_key?:string)=>(await request("/channel",{base_url,api_key},"PUT")).json(),
   models:async():Promise<{models:ServiceModel[]}> => (await request("/channel/models")).json(),

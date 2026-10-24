@@ -12,7 +12,7 @@ class FakeRecognition {
 }
 const send=vi.fn();
 function Harness(){
-  const [mode,setMode]=useState<ComposerMode>("chat"),[text,setText]=useState("原有草稿");
+  const [mode,setMode]=useState<ComposerMode>("image"),[text,setText]=useState("原有草稿");
   return <CompanionComposer mode={mode} value={text} disabled={false} busy={false} allowed inputRef={createRef()} onMode={setMode} onChange={setText} onSend={send} onUpload={()=>{}} onAllow={()=>{}} onRequestConsent={()=>{}} retry={null}/>;
 }
 beforeEach(()=>{send.mockReset();Object.defineProperty(window,"SpeechRecognition",{configurable:true,value:FakeRecognition});});
@@ -22,7 +22,7 @@ it("explains browser dictation first, locks switching while listening, and only 
   fireEvent.click(screen.getByRole("button",{name:"对话中"}));
   expect(screen.getByRole("region",{name:"语音输入说明"})).toBeInTheDocument();
   fireEvent.click(screen.getByRole("button",{name:"同意并开始听写"}));
-  expect(screen.getByRole("button",{name:"创作类型：聊天"})).toBeDisabled();
+  expect(screen.getByRole("button",{name:"创作类型：图片"})).toBeDisabled();
   expect(screen.getByRole("button",{name:"发送"})).toBeDisabled();
   fireEvent.click(screen.getByRole("button",{name:"停止"}));
   expect(recognition.stop).toHaveBeenCalledOnce();
@@ -34,7 +34,7 @@ it("adds final dictation text without sending and aborts capture on unmount",asy
   const view=render(<Harness/>);
   fireEvent.click(screen.getByRole("button",{name:"对话中"}));fireEvent.click(screen.getByRole("button",{name:"同意并开始听写"}));
   act(()=>{recognition.onresult?.({results:[[{transcript:"今天很开心"}]]});recognition.onend?.();});
-  expect(screen.getByLabelText("和我聊聊天")).toHaveValue("原有草稿 今天很开心");
+  expect(screen.getByLabelText("想生成的图片")).toHaveValue("原有草稿 今天很开心");
   expect(send).not.toHaveBeenCalled();
   fireEvent.click(screen.getByRole("button",{name:"对话中"}));view.unmount();
   expect(recognition.abort).toHaveBeenCalledOnce();expect(recognition.onresult).toBeNull();
@@ -49,4 +49,13 @@ it("uses the chat invitation inside the input instead of spending a separate row
   render(<CompanionComposer mode="chat" value="" disabled={false} busy={false} allowed inputRef={createRef()} onMode={()=>{}} onChange={()=>{}} onSend={()=>{}} onUpload={()=>{}} onAllow={()=>{}} onRequestConsent={()=>{}} retry={null}/>);
   expect(screen.getByPlaceholderText("和我聊聊天…")).toBeInTheDocument();
   expect(screen.getByText("和我聊聊天", {selector:"span"}).className).toMatch(/visuallyHidden/);
+});
+
+it("offers realtime chat consent in chat mode while retaining text drafts",()=>{
+ render(<CompanionComposer mode="chat" value="保留的文字" disabled={false} busy={false} allowed inputRef={createRef()} onMode={()=>{}} onChange={()=>{}} onSend={()=>{}} onUpload={()=>{}} onAllow={()=>{}} onRequestConsent={()=>{}} retry={null}/>);
+ fireEvent.click(screen.getByRole("button",{name:"对话中"}));
+ expect(screen.getByRole("button",{name:"同意并开始语音聊天"})).toBeInTheDocument();
+ expect(screen.queryByRole("button",{name:"同意并开始听写"})).not.toBeInTheDocument();
+ fireEvent.click(screen.getByRole("button",{name:"先用文字"}));
+ expect(screen.getByLabelText("和我聊聊天")).toHaveValue("保留的文字");
 });
