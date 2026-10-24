@@ -2,13 +2,28 @@
 import re
 
 
-def bind_storyboard_prompt(prompt: str, model: str, image_count: int) -> str:
+def bind_storyboard_prompt(prompt: str, model: str, image_count: int, *, single_frame_anchor: bool = False) -> str:
     pattern = r"\[character(\d+):([^\]]+)\]"
     tags = re.findall(pattern, prompt)
     is_h3 = "minimax-h3" in model.lower() or model.lower().endswith("h3")
     if not is_h3:
         prompt = re.sub(pattern, "", prompt)
         return re.sub(r"\[(?:character|scene|prop):[^\]]+\]", "", prompt)
+    if single_frame_anchor:
+        # I2V submits one actual first-frame image. Character/scene editor
+        # tags describe what is already visible in that frame; they are not
+        # additional picture slots. Keep the names in the prompt while
+        # removing slot semantics so a shot with several tagged subjects does
+        # not fail validation against the single submitted frame.
+        prompt = re.sub(pattern, lambda m: m[2], prompt)
+        prompt = re.sub(r"\[(?:character|scene|prop):([^\]]+)\]", r"\1", prompt)
+        for number in re.findall(r"<Picture (\d+)>", prompt):
+            if int(number) != 1:
+                raise ValueError("H3 picture reference is outside the submitted first-frame image")
+        prompt = re.sub(r"@(\d+)(?![\w])", lambda m: "<Picture 1>" if m[1] == "1" else m[0], prompt)
+        if re.search(r"@\w|\[Picture\s+\d+\]", prompt):
+            raise ValueError("H3 prompt contains unresolved reference syntax")
+        return prompt
     slots = sorted({int(slot) for slot, _ in tags})
     if tags:
         if len(slots) != image_count:

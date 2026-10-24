@@ -9318,7 +9318,10 @@ class ComicGenPipeline(StudioOwnerMixin):
                     reference_images.insert(0, task.image_url)
                 from .reference_prompt import bind_storyboard_prompt
                 image_count = 2 if task.generation_mode == "first_last_frame" else 1 if task.generation_mode == "i2v" else len(reference_images)
-                submitted_prompt = bind_storyboard_prompt(task.prompt, task.model, image_count)
+                submitted_prompt = bind_storyboard_prompt(
+                    task.prompt, task.model, image_count,
+                    single_frame_anchor=task.generation_mode == "i2v",
+                )
                 # Storyboard cuts can be shorter than the provider's output
                 # window. Normalize at the submission boundary as protection
                 # for mobile clients or cached frontends that predate the UI

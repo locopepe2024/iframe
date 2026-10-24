@@ -575,6 +575,14 @@ def test_h3_submission_rejects_mixed_unresolved_syntax():
         bind_storyboard_prompt('use @product and [Picture 1]', 'uniart/minimax-h3-vip', 1)
 
 
+def test_h3_i2v_single_first_frame_keeps_tagged_subject_names_without_extra_picture_slots():
+    from src.apps.comic_gen.reference_prompt import bind_storyboard_prompt
+    prompt = '[character1:老掌柜]在柜台后，[character2:匪首]站在门口，[scene:粮铺]，@1'
+    assert bind_storyboard_prompt(
+        prompt, 'uniart/minimax-h3-vip', 1, single_frame_anchor=True,
+    ) == '老掌柜在柜台后，匪首站在门口，粮铺，<Picture 1>'
+
+
 def test_r2v_h3_contract_forbids_t2va_label():
     text = api._storyboard_polish_contract(
         'uniart/minimax-h3-vip', '', '', optimization_skills=['minimax-h3-director'],
