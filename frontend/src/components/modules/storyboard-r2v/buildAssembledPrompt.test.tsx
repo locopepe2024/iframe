@@ -31,8 +31,10 @@ it("compiles the selected character move into a generation prompt", () => {
     expect(result).toContain("只针对持械手或刀剑");
     expect(result).toContain("不以锋刃切割");
     expect(result).toContain("钝器式拍击");
-    expect(result).toContain("竹鞭般的弹性抽击");
-    expect(result).toContain("手腕短促抖动发力");
+    expect(result).toContain("类似抖动长竹竿的弹性拍击");
+    expect(result).toContain("手腕短促加速并急停");
+    expect(result).toContain("剑身中段速度更快，剑尖滞后");
+    expect(result).toContain("手腕急停后剑尖因惯性回弹");
     expect(result).not.toContain("剑身横向扫过");
     expect(result).toContain("刀剑沿受力方向翻飞");
 });
