@@ -13,8 +13,12 @@ export function diaryDay(text: string) {
 export function formatDiaryDay(day: string) { const [year,month,date] = day.split("-"); return `${year}年${Number(month)}月${Number(date)}日`; }
 export function today() { const now=new Date();return `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,"0")}-${String(now.getDate()).padStart(2,"0")}`; }
 
-export default function DiaryCard({ day, text, sourceTurn, saved, onSaved }: {
+export interface DiaryContextItem { id: string; role: "user" | "assistant"; text: string }
+export interface DiaryContextMedia { id: string; kind: "photo" | "video"; name: string }
+
+export default function DiaryCard({ day, text, sourceTurn, saved, onSaved, context = [], media = [] }: {
   day: string; text: string; sourceTurn: string; saved?: Diary; onSaved?: (diary: Diary) => void;
+    context?: DiaryContextItem[]; media?: DiaryContextMedia[];
 }) {
   const [entry,setEntry] = useState(saved);
   const [previous,setPrevious] = useState<Diary>();
@@ -51,6 +55,16 @@ export default function DiaryCard({ day, text, sourceTurn, saved, onSaved }: {
     {error && !editing && <p role="alert">{error}{!loaded && <button type="button" onClick={()=>setReload(value=>value+1)}>重试核对日记</button>}</p>}
     {editing && <FeatureDialog title="日记编辑器" onClose={()=>{if(!busy)setEditing(false);}}>
       <p className={styles.muted}>修改只保留在编辑器中，点击“保存日记”后才会更新这一天的日记。</p>
+      {(context.length > 0 || media.length > 0) && <details className={styles.diaryContext} open>
+        <summary>这篇日记的依据</summary>
+        <p className={styles.muted}>这里只显示本次对话里已经出现的内容，编辑时不会自动加入新的事实。</p>
+        {context.length > 0 && <div className={styles.diarySourceList} aria-label="原始聊天片段">
+          {context.map(item => <blockquote key={item.id} data-role={item.role}><strong>{item.role === "user" ? "我" : "陪伴助手"}</strong><span>{item.text}</span></blockquote>)}
+        </div>}
+        {media.length > 0 && <div className={styles.diaryMediaList} aria-label="关联素材">
+          {media.map(item => <span key={item.id} className={styles.diaryMediaChip}>{item.kind === "photo" ? "照片" : "视频"} · {item.name}</span>)}
+        </div>}
+      </details>}
       <label>日记内容<textarea rows={12} maxLength={12000} value={draft} disabled={busy} onChange={event=>setDraft(event.target.value)}/></label>
       {error && <p role="alert">{error}</p>}
       <button type="button" disabled={busy || !draft.trim()} onClick={()=>void save(draft)}>{busy ? "正在保存…" : "保存日记"}</button>

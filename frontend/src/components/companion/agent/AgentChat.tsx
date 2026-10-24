@@ -13,7 +13,7 @@ import CompanionComposer, { type ComposerMode } from "./CompanionComposer";
 import GenerationGuide, { createGenerationDraft, type GenerationDraft, type MediaMode } from "./GenerationGuide";
 import CompanionFeatureSheet, { type CompanionFeature } from "./CompanionFeatureSheet";
 import DiaryCalendar from "./DiaryCalendar";
-import DiaryCard, { diaryDay, diaryPrompt, formatDiaryDay, today } from "./DiaryCard";
+import DiaryCard, { diaryDay, diaryPrompt, formatDiaryDay, today, type DiaryContextItem, type DiaryContextMedia } from "./DiaryCard";
 import { BookOpen, Images, UserRound, Compass } from "lucide-react";
 
 const prefix = process.env.NEXT_PUBLIC_API_URL === "/companion-demo" ? "/companion-demo" : "";
@@ -179,7 +179,14 @@ export default function AgentChat() {
       {renderAttached(0)}
       {messages.map((message,index) => <Fragment key={message.id}><div>
         <article className={chatStyles.user}><span>{diaryDay(message.text) ? `我 · ${formatDiaryDay(diaryDay(message.text)!)}` : "我"}</span><p>{message.text}</p></article>
-        {message.turn?.result?.kind === "text" && (diaryDay(message.text) ? <DiaryCard day={diaryDay(message.text)!} text={message.turn.result.text} sourceTurn={message.turn.turn_id}/> : <article className={chatStyles.assistant}><span>陪伴助手</span><p>{message.turn.result.text}</p></article>)}
+        {message.turn?.result?.kind === "text" && (diaryDay(message.text) ? <DiaryCard day={diaryDay(message.text)!} text={message.turn.result.text} sourceTurn={message.turn.turn_id}
+          context={messages.slice(Math.max(0, index - 7), index).flatMap(item => {
+            const items: DiaryContextItem[] = [{ id: item.id, role: "user", text: item.text }];
+            if (item.turn?.result?.kind === "text") items.push({ id: `${item.id}-reply`, role: "assistant", text: item.turn.result.text });
+            return items;
+          })}
+          media={attached.filter(item => item.anchor === index + 1).map(item => ({ id: item.id, kind: item.kind, name: item.name })) as DiaryContextMedia[]}
+        /> : <article className={chatStyles.assistant}><span>陪伴助手</span><p>{message.turn.result.text}</p></article>)}
       </div>{renderAttached(index+1)}</Fragment>
       )}
       {after !== null && <button disabled={busy} onClick={() => void run(() => history(session, after))}>更多历史消息</button>}

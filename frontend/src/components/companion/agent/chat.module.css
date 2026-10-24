@@ -121,6 +121,15 @@
 .shell .calendarGrid button { width: 100%; min-width: 44px; height: 48px; padding: .2rem 0; margin: 0; border: 0; border-radius: .5rem; background: transparent; display: flex; flex-direction: column; justify-content: center; align-items: center; }
 .calendarGrid small { font-size: .65em; }
 .diaryText { white-space: pre-wrap; overflow-wrap: anywhere; }
+.diaryContext { margin: .75rem 0 1rem; padding: .7rem; border: 1px solid var(--line); border-radius: .8rem; background: color-mix(in srgb, var(--surface) 78%, var(--accent)); }
+.diaryContext summary { cursor: pointer; font-weight: 600; min-height: 2.5rem; display: flex; align-items: center; }
+.diarySourceList { display: grid; gap: .5rem; margin-top: .5rem; }
+.diarySourceList blockquote { margin: 0; padding: .55rem .7rem; border-left: 3px solid var(--line); background: color-mix(in srgb, var(--surface) 88%, transparent); border-radius: .4rem; }
+.diarySourceList blockquote[data-role="user"] { border-left-color: var(--accent); }
+.diarySourceList strong { display: block; font-size: .8em; color: var(--muted); margin-bottom: .2rem; }
+.diarySourceList span { display: block; white-space: pre-wrap; overflow-wrap: anywhere; }
+.diaryMediaList { display: flex; flex-wrap: wrap; gap: .4rem; margin-top: .65rem; }
+.diaryMediaChip { display: inline-flex; align-items: center; min-height: 2rem; padding: .25rem .55rem; border: 1px solid var(--line); border-radius: 999px; font-size: .88em; }
 .shell .featureDialog textarea { width: 100%; min-height: 35dvh; resize: vertical; }
 @media (min-width: 37rem) { .featureDialog { inset: 0; max-height: 85dvh; margin: auto; border-radius: 1.25rem; } }
 
