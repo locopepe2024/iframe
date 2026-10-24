@@ -2,6 +2,9 @@ import {act,fireEvent,render,screen,waitFor,within} from "@testing-library/react
 import {afterEach,beforeEach,expect,it,vi} from "vitest";
 import AgentChat from "./AgentChat";
 const api=vi.hoisted(()=>({session:vi.fn(),messages:vi.fn(),diaries:vi.fn(),chat:vi.fn()}));
+const photos=vi.hoisted(()=>({list:vi.fn()}));
+vi.mock("@/lib/photoApi",()=>({photoApi:photos}));
+vi.mock("../photos/PhotoImage",()=>({default:()=> <img alt="照片预览"/>}));
 const services=vi.hoisted(()=>({models:vi.fn(),generate:vi.fn(),media:vi.fn()}));
 vi.mock("@/lib/companionApi",()=>({companionApi:api}));
 vi.mock("@/lib/companionServices",()=>({companionServices:services}));
@@ -74,5 +77,24 @@ it.each([["图片","生成一张图片","想生成的图片","两只小狗在草
  act(()=>{recognition.onresult?.({results:[[{transcript:description}]]});recognition.onend?.();});
  fireEvent.click(screen.getByRole("button",{name:"发送"}));
  expect(screen.getByRole("region",{name:`${label}创作引导`})).toHaveTextContent(description);
+ expect(services.generate).not.toHaveBeenCalled();
+});
+
+it("asks what to edit while retaining the selected photo",async()=>{
+ photos.list.mockResolvedValue({photos:[{photo_id:"my-photo",date:{status:"pending_confirmation"}}]});
+ render(<AgentChat/>);
+ await waitFor(()=>expect(screen.getByRole("button",{name:"创作类型：聊天"})).not.toBeDisabled());
+ fireEvent.click(screen.getByRole("button",{name:"创作类型：聊天"}));fireEvent.click(screen.getByRole("menuitemradio",{name:"图片"}));
+ fireEvent.click(screen.getByRole("button",{name:"相册"}));
+ fireEvent.click(await screen.findByRole("button",{name:/选择照片 1/}));
+ fireEvent.change(screen.getByLabelText("想生成的图片"),{target:{value:"嗯我要优化一张图片"}});
+ fireEvent.click(screen.getByRole("button",{name:"发送"}));
+ expect(screen.queryByRole("region",{name:"图片创作引导"})).not.toBeInTheDocument();
+ expect(screen.getByRole("status")).toHaveTextContent("想怎么修改");
+ expect(screen.getByRole("region",{name:"待发送附件"})).toHaveTextContent("相册照片");
+ fireEvent.change(screen.getByLabelText("想生成的图片"),{target:{value:"把背景换成公园，保留两只小狗"}});
+ fireEvent.click(screen.getByRole("button",{name:"发送"}));
+ expect(screen.getByRole("region",{name:"图片创作引导"})).toHaveTextContent("把背景换成公园，保留两只小狗");
+ expect(screen.getByRole("region",{name:"图片创作引导"})).toHaveTextContent("已选择参考照片");
  expect(services.generate).not.toHaveBeenCalled();
 });

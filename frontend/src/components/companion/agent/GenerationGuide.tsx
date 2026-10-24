@@ -19,10 +19,15 @@ export function createGenerationDraft(mode: MediaMode, prompt: string): Generati
   return { mode, prompt, step: "reference", reference: null, setting: mode === "image" ? "方形 1:1" : "5 秒" };
 }
 
-/** Only match a complete bare creation request; keep any actual scene description. */
-export function isBareCreationRequest(text: string): boolean {
-  const compact = text.replace(/[\s，。！？、,.!?：:]/g, "");
-  return /^(?:请|请你|麻烦|麻烦你)?(?:帮我|给我|为我|我想|我要|我想要)?(?:生成|创作|制作|做|画|拍)(?:一|1|几)?(?:张|幅|段|个)?(?:图片|图像|照片|图|画|视频|短视频)(?:吧|一下)?$/.test(compact);
+/** Match complete intent-only requests, never a request with concrete scene/edit details. */
+export function isUnderspecifiedMediaRequest(text: string): boolean {
+  const compact = text.replace(/[\s，。！？、,.!?：:]/g, "").replace(/^(?:(?:嗯|呃|额|那个|就是))+/, "");
+  const prefix = "(?:请|请你|麻烦|麻烦你)?(?:帮我|给我|为我|我想|我要|我想要)?";
+  const media = "(?:这|那|我的|这张|那张|一|1|几)?(?:张|幅|段|个)?(?:图片|图像|照片|图|画|视频|短视频)";
+  const create = new RegExp(`^${prefix}(?:生成|创作|制作|做|画|拍)${media}(?:吧|一下)?$`);
+  const edit = new RegExp(`^${prefix}(?:优化|加工|修改|修饰|编辑|美化|修)(?:一下)?${media}(?:吧|一下)?$`);
+  const ownPhoto = new RegExp(`^${prefix}用(?:我|自己)?的?(?:照片|图片)(?:给|帮)?(?:它|他)?(?:加工|优化|修改|美化)(?:一下)?(?:吧)?$`);
+  return create.test(compact) || edit.test(compact) || ownPhoto.test(compact);
 }
 
 /** Guided setup followed by explicit owner-channel submission. */

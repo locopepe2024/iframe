@@ -10,7 +10,7 @@ import AlbumPicker from "./AlbumPicker";
 import MediaUpload, { type UploadedMedia } from "./MediaUpload";
 import VideoConversationCard from "./VideoConversationCard";
 import CompanionComposer, { type ComposerMode } from "./CompanionComposer";
-import GenerationGuide, { createGenerationDraft, isBareCreationRequest, type GenerationDraft, type MediaMode } from "./GenerationGuide";
+import GenerationGuide, { createGenerationDraft, isUnderspecifiedMediaRequest, type GenerationDraft, type MediaMode } from "./GenerationGuide";
 import CompanionFeatureSheet, { type CompanionFeature } from "./CompanionFeatureSheet";
 import DiaryCalendar from "./DiaryCalendar";
 import DiaryCard, { diaryDay, diaryPrompt, formatDiaryDay, today, type DiaryContextItem, type DiaryContextMedia } from "./DiaryCard";
@@ -166,10 +166,12 @@ export default function AgentChat() {
     } else {
       const items = pendingMedia[mode];
       if (!text.trim()) {setNotice("先描述想创作什么，再继续。");return;}
-      if (isBareCreationRequest(text)) {
+      if (isUnderspecifiedMediaRequest(text)) {
         setDrafts(old => ({ ...old, [mode]: "" }));
         updateGuide(null);
-        setNotice("想创作什么内容？比如：两只小狗在草地上奔跑。可以继续说，也可以打字。");
+        setNotice(items.length || /优化|加工|修改|修饰|编辑|美化|修/.test(text)
+          ? "想怎么修改这张照片？比如：调亮一点，或把背景换成公园。可以继续说，也可以打字。"
+          : "想创作什么内容？比如：两只小狗在草地上奔跑。可以继续说，也可以打字。");
         inputRef.current?.focus();
         return;
       }
