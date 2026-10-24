@@ -221,3 +221,10 @@ Frontend commit `5bd4c6d4` was synchronized afterward. Text-send consent now liv
 ## 2026-10-24 — Diary editor source context
 
 Frontend commit `c45a40d9` adds a read-only “这篇日记的依据” section inside the independent diary editor. It shows recent conversation excerpts and any photo/video attachments associated with the diary request, so the user can check what the draft is based on before saving. The context is explicitly informational: editing it does not append new facts to the diary or personal memory. Focused Companion UI tests (21), frontend typecheck, isolated static build, and diary/chat backend tests (8) passed. The existing four unrelated full-suite failures remain in axios interceptor tests whose mock has no `interceptors.request`.
+
+
+## 2026-10-24 — Correct static entry deployment path
+
+Root cause confirmed: repeated deployments copied the new agent entry to `web/agent.html`, while the runtime serves `web/companion/agent.html`. Earlier claims that the public entry had updated, and that browser caching caused the stale interface, were not supported. Updated chunks existed but the served entry still selected the older runtime.
+
+Copied the current entry to the actual served path after backing up the previous entry as `companion/agent.html.before-entry-path-fix`. The new root entry, nested entry, loopback HTTP response and public HTTPS response all have SHA256 `f32386c1eb7f84a719a88b47fe93ff31c73b07b54e54e5d1a3ca0f443df29bd1`. This establishes the public entry update; an actual browser image-decode check has not been performed. Future deployment must upload chunks first, then explicitly replace `web/companion/agent.html`, and verify the HTTP response against the local entry. No data/backend/provider changes or push/merge.
