@@ -66,9 +66,11 @@ def session_update():
         '请用户通过文字输入和卡片完成保存记忆、生成、日记及提醒，绝不声称已执行。'))
 
 
-async def relay(client, upstream):
+async def relay(client, upstream, diagnostics=None):
     """Only allow PCM input and interruption; never arbitrary session/tool events."""
     responding = False
+    diagnostics = diagnostics if diagnostics is not None else {}
+    diagnostics.update(input_frames=0, last_event="none")
 
     async def input_loop():
         nonlocal responding
@@ -90,6 +92,7 @@ async def relay(client, upstream):
                 total += len(pcm)
                 if not pcm or len(pcm) % 2 or len(pcm) > 16000 or total > 12 * 1024 * 1024:
                     raise ValueError('audio limit')
+                diagnostics['input_frames'] += 1
                 await upstream.send(json.dumps(dict(type=kind, audio=audio)))
             elif kind == 'interrupt':
                 if responding:
@@ -105,6 +108,7 @@ async def relay(client, upstream):
                 raise ValueError('upstream event limit')
             event = json.loads(raw)
             kind = event.get('type')
+            diagnostics['last_event'] = kind if kind in {'session.created', 'session.updated', 'response.created', 'response.done', 'error', 'response.audio.delta', 'input_audio_buffer.speech_started', 'input_audio_buffer.speech_stopped'} else 'other'
             if kind == 'error':
                 await client.send_json(dict(type='error', message='语音服务暂不可用，请检查渠道或余额后重新开始。'))
                 return
@@ -137,6 +141,20 @@ async def relay(client, upstream):
         await asyncio.gather(*tasks, return_exceptions=True)
 
 
+def public_failure(exc):
+    """Describe the failing server boundary without leaking provider payloads."""
+    status = getattr(exc, 'status_code', None)
+    if status == 401:
+        return 'UniArt 语音鉴权失败，请检查个人渠道密钥。'
+    if status == 403:
+        return '当前 UniArt 渠道没有此语音模型的访问权限。'
+    if status == 429:
+        return 'UniArt 语音服务当前限流或额度不足，请检查渠道后稍后再试。'
+    if isinstance(exc, asyncio.TimeoutError):
+        return '连接 UniArt 语音服务超时，麦克风已关闭，请稍后重新开始。'
+    return '语音服务连接意外中断，麦克风已关闭，请重新开始。'
+
+
 @router.websocket('/realtime')
 async def realtime(socket: WebSocket):
     origin = urlsplit(socket.headers.get('origin', ''))
@@ -146,6 +164,8 @@ async def realtime(socket: WebSocket):
         return
     await socket.accept()
     owner = None
+    diagnostics = {}
+    started = time.monotonic()
     try:
         raw = await asyncio.wait_for(socket.receive_text(), timeout=10)
         if len(raw) > 500:
@@ -167,13 +187,15 @@ async def realtime(socket: WebSocket):
         async with connect(url, extra_headers={'Authorization': 'Bearer ' + config['api_key']},
                            open_timeout=15, close_timeout=3, max_size=4*1024*1024, max_queue=16) as upstream:
             await upstream.send(json.dumps(session_update(), ensure_ascii=False))
-            await relay(socket, upstream)
+            await relay(socket, upstream, diagnostics)
     except WebSocketDisconnect:
         pass
     except Exception as exc:
-        logger.warning("Companion realtime connection failed: %s", type(exc).__name__)
+        logger.warning("Companion realtime failed: type=%s close=%s sent_close=%s elapsed=%.1f input_frames=%s last_event=%s",
+                       type(exc).__name__, getattr(exc, "code", None), getattr(getattr(exc, "sent", None), "code", None),
+                       time.monotonic()-started, diagnostics.get("input_frames", 0), diagnostics.get("last_event", "connecting"))
         try:
-            await socket.send_json(dict(type='error', message='语音连接已结束，请检查渠道、网络或麦克风后重新开始。'))
+            await socket.send_json(dict(type='error', message=public_failure(exc)))
         except (RuntimeError, WebSocketDisconnect):
             pass
     finally:

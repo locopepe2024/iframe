@@ -105,3 +105,25 @@ def test_wrong_origin_never_connects_and_invalid_pcm_ends_session(client):
         ws.send_json(dict(type='input_audio_buffer.append',audio='not base64!'))
         result = ws.receive_json()
         assert result['type'] == 'error' and 'private-key' not in str(result)
+
+
+def test_failure_diagnostics_do_not_expose_credentials(client, monkeypatch, caplog):
+    c,_,_=client
+    class FailedConnection:
+        async def __aenter__(self): raise RuntimeError('private-key and provider payload')
+        async def __aexit__(self,*args): return False
+    monkeypatch.setattr(voice,'connect',lambda *args,**kwargs:FailedConnection())
+    token=get_ticket(c)
+    with c.websocket_connect('/companion-runtime/realtime',headers={'origin':'http://testserver'}) as ws:
+        ws.send_json(dict(type='authenticate',ticket=token))
+        reply=ws.receive_json()
+    assert reply['message']=='语音服务连接意外中断，麦克风已关闭，请重新开始。'
+    assert 'private-key' not in caplog.text and 'provider payload' not in caplog.text
+    assert 'last_event=connecting' in caplog.text and 'input_frames=0' in caplog.text
+
+
+def test_failure_messages_distinguish_upstream_auth_and_timeout():
+    class Rejected(Exception):
+        status_code=401
+    assert '鉴权失败' in voice.public_failure(Rejected())
+    assert '超时' in voice.public_failure(asyncio.TimeoutError())

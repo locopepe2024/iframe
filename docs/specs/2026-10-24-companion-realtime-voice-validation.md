@@ -14,3 +14,11 @@ Verification:
 Pending runtime evidence: no real microphone/speaker or paid Qwen provider dialogue has been exercised by this consumer. Browser echo cancellation, interruption quality, upstream permission and actual latency need testing with the user's configured personal channel. Session transcript persistence and voice-to-action cards remain later slices.
 
 Local implementation commits: a8c1f35b, 6291a4ab, 250ec90a. No push or merge performed.
+
+## Follow-up: reported connection close
+
+Runtime observation: original demo log shows ticket success and downstream WS acceptance, then an upstream ConnectionClosedError about46 seconds later. The earlier log recorded no close code/frame count, so root cause cannot be recovered from that entry. This does not prove a microphone or credential failure.
+
+Using the configuration associated with that reported session, verified native session.created/session.updated. Full public demo path then accepted two seconds, followed by a separate50-second continuous PCM silence test without disconnection. A local nonprivate synthetic phrase (“你好，今天我很开心。”) subsequently completed a real round trip: speech started/stopped,5 ASR delta events, final ASR, response.created/done,15 response transcript deltas and13 audio chunks totaling245760 PCM bytes. Raw reply audio was not saved. These observations establish current provider/relay functionality, not the historical cause or device microphone/playback quality.
+
+Added bounded diagnostics (exception class, received/sent close codes, elapsed time, input frame count and last event type; no keys/audio/transcript) and failure messages that identify upstream authentication, access, throttling or timeout when supported by the exception. Unknown upstream interruption no longer tells the user to troubleshoot a microphone. Regression:26 related backend tests pass. Need a repeat from the affected browser to locate an intermittent or device-specific failure; no alternate provider/retry path added.
