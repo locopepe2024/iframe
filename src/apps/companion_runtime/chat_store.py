@@ -12,6 +12,13 @@ from .tools import dispatch, MODELS
 
 from .diary_store import DiaryStore
 
+DIARY_REQUEST_RE = re.compile(r'^\s*(?:请\s*)?把\s+(\d{4}-\d{2}-\d{2})\s+我们聊的内容整理成一篇回忆日记', re.S)
+
+
+def diary_day(text):
+    match = DIARY_REQUEST_RE.search(text or '')
+    return match.group(1) if match else None
+
 
 class ChatStore(DiaryStore, CompanionStore):
     def conversation(self, owner, actor, session, *, after=0, limit=20):
@@ -59,7 +66,7 @@ class ChatStore(DiaryStore, CompanionStore):
             row=db.execute('SELECT * FROM companion_turns WHERE owner=? AND id=?',(owner,claim['id'])).fetchone()
             if not row or row['actor']!=actor or row['status']!='running' or row['token']!=claim['token'] or row['lease_until']<=self.clock():
                 raise Conflict('Turn claim expired')
-            diary_request = bool(re.search(r'请把\s+\d{4}-\d{2}-\d{2}\s+我们聊的内容整理成一篇回忆日记', row['text']))
+            diary_request = diary_day(row['text']) is not None
             if proposal['kind']=='text':
                 result=dict(kind='text',text=proposal['text'])
             elif diary_request:

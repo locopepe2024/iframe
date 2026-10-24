@@ -10,8 +10,8 @@ from pydantic import Field
 
 from ..identity import UserContext, require_user_context
 from .store import Missing, Conflict
-from .chat_store import ChatStore as CompanionStore
-from .model import propose, ModelUnavailable
+from .chat_store import ChatStore as CompanionStore, diary_day
+from .model import propose, propose_diary, ModelUnavailable
 from .tools import Strict, dispatch, tool_schemas
 
 
@@ -146,7 +146,10 @@ def chat(session_id: str, body: ChatRequest, identity: Owner, store: Store):
         if claim['cached']:
             return store.turn(identity.owner_profile_id,identity.user_id,claim['id'])
         try:
-            proposal=propose(identity,claim['messages'],claim['message_id'])
+            # Diary is a writing lane. It receives the current session's user
+            # messages but never receives memory tools, even if the model
+            # would otherwise interpret the request as a search.
+            proposal=(propose_diary if diary_day(body.text) else propose)(identity,claim['messages'],claim['message_id'])
             return store.finish_turn(identity.owner_profile_id,identity.user_id,claim,proposal)
         except Exception as exc:
             store.fail_turn(identity.owner_profile_id,claim)

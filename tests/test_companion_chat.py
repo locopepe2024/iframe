@@ -21,6 +21,7 @@ def chat(tmp_path,monkeypatch):
     session=store.session('owner','s')['session_id']
     callback=Mock(side_effect=lambda identity,messages,mid:dict(kind='tool',name='memory.save',arguments=dict(source_message_id=mid,quote='喜欢散步',content='喜欢散步',type='preference',importance=3)))
     monkeypatch.setattr('src.apps.companion_runtime.api.propose',callback)
+    monkeypatch.setattr('src.apps.companion_runtime.api.propose_diary',callback)
     with TestClient(app) as client:yield store,now,client,session,callback
 
 
@@ -60,7 +61,7 @@ def test_diary_request_never_surfaces_an_accidental_memory_read(chat):
     store,_,client,session,callback=chat
     callback.return_value=dict(kind='tool',name='memory.search',arguments=dict(query='2026-10-24',limit=20,min_importance=1,type=None,cursor=''))
     response=client.post(f'/companion-runtime/sessions/{session}/chat',json=dict(
-        operation_id='diary', text='请把 2026-10-24 我们聊的内容整理成一篇回忆日记。', allow_external_text=True))
+        operation_id='diary', text='把 2026-10-24 我们聊的内容整理成一篇回忆日记。', allow_external_text=True))
     assert response.status_code==200
     assert response.json()['result']==dict(kind='text',text='我会按这个日期整理回忆日记。现在还缺少可以整理的聊天内容，请先告诉我这一天发生了什么。')
 
@@ -101,16 +102,22 @@ def test_personal_channel_wire_strict_tools_and_safe_failure(monkeypatch):
     post=Mock(return_value=response);monkeypatch.setattr(model.requests,'post',post)
     identity=UserContext('actor','owner','','')
     assert model.propose(identity,[dict(id='m',text='散步')],'m')==dict(kind='tool',name='memory.search',arguments=dict(query='散步'))
+    response.json.return_value={'choices':[{'message':{'content':'今天女儿来看我，我们一起喝了茶。'}}]}
+    diary=model.propose_diary(identity,[dict(id='m',text='女儿今天来看我了。')],'m')
+    assert diary==dict(kind='text',text='今天女儿来看我，我们一起喝了茶。')
+    assert 'tools' not in post.call_args.kwargs['json']
     body=post.call_args.kwargs['json']
     assert body['parallel_tool_calls'] is False
-    assert {t['function']['name'] for t in body['tools']}=={'memory_save','memory_search','memory_list','memory_delete'}
-    assert 'confirm' not in str(body['tools'])
+    # The previous regular proposal still carried the four memory tools.
+    regular_body=post.call_args_list[0].kwargs['json']
+    assert {t['function']['name'] for t in regular_body['tools']}=={'memory_save','memory_search','memory_list','memory_delete'}
+    assert 'confirm' not in str(regular_body['tools'])
     response.json.return_value={'choices':[{'message':{'tool_calls':[dict(type='function',function=dict(name='memory_confirm',arguments='{}'))]}}]}
     with pytest.raises(model.ModelUnavailable):model.propose(identity,[],'m')
     configured.get_public.return_value={'secrets_configured':{'UNIART_API_KEY':False}}
     from fastapi import HTTPException
     with pytest.raises(HTTPException):model.propose(identity,[],'m')
-    assert post.call_count==2
+    assert post.call_count==3
 
 
 def test_conversation_history_pairs_replies_and_enforces_owner_actor(chat):

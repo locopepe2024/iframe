@@ -16,7 +16,7 @@ class ModelUnavailable(RuntimeError):
 
 
 WIRE_NAMES = {name.replace('.', '_'): name for name in ('memory.save','memory.search','memory.list','memory.delete')}
-def propose(identity, messages, current_message_id):
+def _propose(identity, messages, current_message_id, *, diary=False):
     path = os.getenv('IFRAME_COMPANION_USER_CONFIG_DB') or os.getenv('IFRAME_PHOTOS_USER_CONFIG_DB') or os.getenv('LUMENX_USER_DB_PATH')
     if not path:
         raise ModelUnavailable('Personal channel is not configured')
@@ -32,14 +32,17 @@ def propose(identity, messages, current_message_id):
         raise ModelUnavailable('Invalid personal Qwen configuration')
     tools = [dict(type='function', function=dict(name=item['name'].replace('.', '_'),
                   description='只提出待用户按钮确认的请求' if item['effect']=='proposal_only' else '读取当前用户实际记忆',
-                  parameters=item['parameters'])) for item in tool_schemas()]
+                  parameters=item['parameters'])) for item in tool_schemas()] if not diary else []
     try:
         profile = get_profile(os.getenv('IFRAME_COMPANION_PERSONALITY'))
+        instruction = '' if not diary else ('\n这是回忆日记写作任务。只根据 user_messages 中已经说过的事实写一篇简短日记；'
+            '如果事实不足，只提出一个最需要补充的问题。绝对不要查询、保存或删除个人记忆，也不要输出工具调用。')
         response = requests.post(configured['base_url'].rstrip('/')+'/chat/completions',
             headers={'Authorization': 'Bearer '+configured['api_key']},
             json=dict(model=model, max_tokens=1600, parallel_tool_calls=False,
-                      messages=[dict(role='system',content=system_prompt(profile)),dict(role='user',content=json.dumps(dict(current_message_id=current_message_id,user_messages=messages),ensure_ascii=False))],
-                      tools=tools), timeout=(10,60))
+                      messages=[dict(role='system',content=system_prompt(profile)+instruction),dict(role='user',content=json.dumps(dict(current_message_id=current_message_id,user_messages=messages),ensure_ascii=False)),
+                                ],
+                      **({'tools': tools} if tools else {})), timeout=(10,60))
         response.raise_for_status()
         result = response.json()['choices'][0]['message']
         if not isinstance(result,dict) or len(json.dumps(result))>32000:
@@ -60,3 +63,11 @@ def propose(identity, messages, current_message_id):
         return dict(kind='text',text=text)
     except (requests.RequestException,ValueError,KeyError,IndexError,TypeError) as exc:
         raise ModelUnavailable('Qwen request failed or returned an invalid proposal') from exc
+
+
+def propose(identity, messages, current_message_id):
+    return _propose(identity, messages, current_message_id)
+
+
+def propose_diary(identity, messages, current_message_id):
+    return _propose(identity, messages, current_message_id, diary=True)
