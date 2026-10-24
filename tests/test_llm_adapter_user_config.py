@@ -93,6 +93,26 @@ def test_chat_forwards_per_request_timeout_and_retry_options(monkeypatch):
     assert captured == {"timeout": 300, "max_retries": 0}
 
 
+def test_explicit_model_retries_transient_gateway_502_once(monkeypatch):
+    monkeypatch.setenv("LLM_PROVIDER", "openai")
+    monkeypatch.setenv("OPENAI_API_KEY", "key")
+    monkeypatch.setenv("OPENAI_BASE_URL", "https://example.test/v1")
+    monkeypatch.setitem(sys.modules, "openai", SimpleNamespace(OpenAI=lambda **kwargs: object()))
+    adapter = LLMAdapter()
+    attempts = []
+
+    def fake_once(*args, **kwargs):
+        attempts.append(kwargs.get("max_retries"))
+        if len(attempts) == 1:
+            raise RuntimeError("OpenAI API error status=502: Error code: 502")
+        return "ok"
+
+    monkeypatch.setattr(adapter, "_chat_once", fake_once)
+    monkeypatch.setattr("src.apps.comic_gen.llm_adapter.time.sleep", lambda _: None)
+    assert adapter.chat([{"role": "user", "content": "director"}], model="qwen3.8-flash") == "ok"
+    assert attempts == [None, 0]
+
+
 def test_chat_assembles_streamed_json_and_closes_response(monkeypatch):
     captured = {}
 
