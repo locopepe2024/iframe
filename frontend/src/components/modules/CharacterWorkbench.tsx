@@ -700,16 +700,30 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
             const preview = await agentRequest<{ messages: VideoPolishMessages; review_token: string }>(
                 "/character-design/draft/preview", "POST", request);
             if (characterDesignSourceRef.current !== source) return;
-            const result = await agentRequest<{
+            type CharacterDraft = {
                 identity: { visual_notes: string; features?: IdentityFeatures; basis?: string | string[] };
                 look: { visual_notes: string; features?: LookFeatures; basis?: string | string[] };
                 unresolved: string[];
                 field_suggestions?: Record<string, string>;
                 field_suggestion_choices?: Record<string, { age_stage?: string; route?: string }>;
                 skill_revision: string;
-            }>("/character-design/draft", "POST", {
+            };
+            type CharacterDraftJob = { id: string; status: string; result?: CharacterDraft | { detail: string } | null; error?: string | null };
+            const started = await agentRequest<CharacterDraftJob>("/character-design/draft/jobs", "POST", {
                 ...request, reviewed_messages: preview.messages, review_token: preview.review_token,
             });
+            if (!started.id) throw new Error("角色设计任务未返回编号，请重试。");
+            let job = started;
+            const deadline = Date.now() + 12 * 60_000;
+            while (job.status === "running" || job.status === "queued") {
+                if (source !== characterDesignSourceRef.current) return;
+                if (Date.now() >= deadline) throw new Error("角色设计处理时间过长，请稍后重试。");
+                await new Promise(resolve => setTimeout(resolve, 3000));
+                job = await agentRequest<CharacterDraftJob>(`/character-design/draft/jobs/${encodeURIComponent(started.id)}`);
+            }
+            if (job.status !== "completed") throw new Error(job.error || "角色设计任务失败，请重试。");
+            if (!job.result || "detail" in job.result) throw new Error(job.result?.detail || "角色设计未返回有效结果，请重试。");
+            const result = job.result;
             if (source !== characterDesignSourceRef.current) return;
             const nextIdentity = result.identity.visual_notes;
             const nextLook = result.look.visual_notes;

@@ -7,6 +7,7 @@ from fastapi import HTTPException
 
 from src.apps.comic_gen import api
 from src.apps.comic_gen.llm import ScriptProcessor
+from src.apps.comic_gen.models import Blocking, StoryboardFrame
 
 
 def _confirmed(request, reference_mode=False):
@@ -75,6 +76,9 @@ def test_saved_shot_edit_invalidates_review_even_with_same_submitted_overrides(m
     frame = SimpleNamespace(id="shot", lighting_override="old")
     monkeypatch.setattr(api, "current_studio_user", lambda: SimpleNamespace(owner_profile_id="owner"))
     monkeypatch.setattr(api.pipeline, "get_script", lambda script_id, owner: SimpleNamespace(frames=[frame]))
+    monkeypatch.setattr(api.pipeline, "storyboard_continuity_sheet", lambda script_id: {
+        "rows": [{"frame_id": "shot", "fields": {}}],
+    })
     monkeypatch.setattr(api, "_get_custom_prompt", lambda *args: "")
     monkeypatch.setattr(api, "_get_director_prompt_context", lambda *args: "")
     request = api.PolishVideoPromptRequest(script_id="project", frame_id="shot", draft_prompt="长街",
@@ -83,6 +87,26 @@ def test_saved_shot_edit_invalidates_review_even_with_same_submitted_overrides(m
     frame.lighting_override = "changed by another editor"
     with pytest.raises(HTTPException) as rejected:
         api._require_video_polish_review(confirmed, False)
+    assert rejected.value.status_code == 409
+
+
+def test_blocking_change_invalidates_reviewed_r2v_input(monkeypatch):
+    frame = StoryboardFrame(id="shot", scene_id="shop", blocking=Blocking(
+        description="掌柜在店内柜台后，匪寇在街上柜台前，柜台挡住掌柜双脚",
+        camera_relation="街道平视的连续单镜头",
+    ))
+    monkeypatch.setattr(api, "current_studio_user", lambda: SimpleNamespace(owner_profile_id="owner"))
+    monkeypatch.setattr(api.pipeline, "get_script", lambda *_args: SimpleNamespace(frames=[frame]))
+    monkeypatch.setattr(api.pipeline, "storyboard_continuity_sheet", lambda _script_id: {
+        "rows": [{"frame_id": "shot", "fields": {}}],
+    })
+    monkeypatch.setattr(api, "_get_custom_prompt", lambda *_args: "")
+    request = api.PolishR2VPromptRequest(script_id="project", frame_id="shot", draft_prompt="匪寇抢粮", slots=[])
+    reviewed, preview = _confirmed(request, True)
+    assert "柜台挡住掌柜双脚" in preview["messages"]["system"]
+    frame.blocking.description = "掌柜走到街上"
+    with pytest.raises(HTTPException) as rejected:
+        api._require_video_polish_review(reviewed, True)
     assert rejected.value.status_code == 409
 
 

@@ -121,6 +121,9 @@ def test_video_polish_preview_contains_effective_scene_style_and_light(monkeypat
         target_video_model="uniart/minimax-h3-vip", optimization_skills=[],
     ), False)
     system = preview["messages"]["system"]
+    assert preview["review_context"]["effective_shot_fields"]["ambient_lighting"] == {
+        "value": "暮秋残阳", "source": "scene_design", "revision": 2,
+    }
     assert '"style": {"revision": 2, "source": "scene_design", "value": "写实电影"}' in system
     assert '"ambient_lighting": {"revision": 2, "source": "scene_design", "value": "暮秋残阳"}' in system
 

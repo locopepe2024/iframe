@@ -7692,6 +7692,14 @@ def _get_director_prompt_context(script_id: str, frame_id: str = "", overrides: 
             "visual_intent", "performance_action", "composition", "camera_movement", "lighting", "ambient_sound",
         ) if shot.get(key)},
     }
+    if frame.blocking:
+        blocking = frame.blocking
+        selected["blocking"] = {
+            "description": blocking.description[:400],
+            **({"camera_relation": blocking.camera_relation[:160]} if blocking.camera_relation else {}),
+            **({"stage": [subject.model_dump(mode="json", exclude_none=True) for subject in blocking.stage[:8]]}
+               if blocking.stage else {}),
+        }
     current = overrides if overrides is not None else {
         "style": frame.style_prompt_override or "",
         "lighting": frame.lighting_override or "",
@@ -7702,7 +7710,7 @@ def _get_director_prompt_context(script_id: str, frame_id: str = "", overrides: 
     }
     if selected["shot_overrides"].get("lighting"):
         selected["shot"].pop("lighting", None)
-    if not context and not selected["shot_overrides"]:
+    if not context and not selected["shot_overrides"] and not frame.blocking:
         return ""
     baseline = context.get("lighting_baseline")
     if (isinstance(baseline, dict)
@@ -7740,6 +7748,8 @@ def _get_director_prompt_context(script_id: str, frame_id: str = "", overrides: 
         selected.get("lighting_baseline", {}).get("lighting", {}).pop(key, None)
     if len(encoded()) > 1200:
         selected["shot"].pop("lighting", None)
+    if len(encoded()) > 1200 and selected.get("blocking", {}).get("stage"):
+        selected["blocking"].pop("stage")
     return encoded()
 
 
@@ -7810,7 +7820,8 @@ def _polish_error_response(err) -> Dict[str, Any]:
 
 _STORYBOARD_VIDEO_POLISH_SKILLS = frozenset({
     "minimax-h3-director", "seedance-prompt", "seedance-camera",
-    "sequence-continuity", "director-style",
+    "sequence-continuity", "director-style", "shot-action-physics",
+    "shot-martial-choreography",
 })
 
 
@@ -7857,6 +7868,46 @@ def _selected_skill_guidance(skill_ids: Optional[List[str]], model_id: str = "")
     return "SELECTED OPTIMIZATION SKILLS (user-selected; do not infer additional skills):\n" + text
 
 
+def _automatic_motion_skill_ids(text: str) -> List[str]:
+    """Return model-independent motion baselines inferred from observable verbs.
+
+    These are separate from user-selected optimization skills: the baseline
+    protects causal movement and spatial continuity without changing the
+    user's chosen model/style packages.
+    """
+    value = text or ""
+    action = re.compile(
+        r"踢|踹|打|击|撞|推|拉扯|抓住|抓|掐|砍|刺|劈|受击|命中|踉跄|跌倒|倒伏|摔倒|击飞|追赶|追逐|搏斗|fight|impact|stagger|fall",
+        re.I,
+    )
+    martial = re.compile(
+        r"武术|武指|招式|套路|兵器|拳法|剑法|刀法|棍法|格斗编排|martial|choreograph",
+        re.I,
+    )
+    ids = ["shot-action-physics"] if action.search(value) else []
+    if martial.search(value):
+        ids.append("shot-martial-choreography")
+        if "shot-action-physics" not in ids:
+            ids.insert(0, "shot-action-physics")
+    return ids
+
+
+def _automatic_motion_skill_guidance(text: str, model_id: str = "") -> str:
+    ids = _automatic_motion_skill_ids(text)
+    if not ids:
+        return ""
+    from ..agent_skills import catalog
+    packages = {package["id"]: package for package in catalog()}
+    selected = [packages[item] for item in ids if item in packages]
+    if not selected:
+        return ""
+    text = "\n\n".join(
+        f"[{package['id']} · {package['name']} v{package['version']}]\n{package.get('instructions', '')}"
+        for package in selected
+    )
+    return "AUTOMATIC MOTION BASELINES (inferred from observable action terms; do not add new plot events):\n" + text
+
+
 def _first_last_polish_guidance(target_duration: Optional[float]) -> str:
     endpoint = f"{target_duration:.2f} seconds" if target_duration is not None else "the end of the clip"
     return f"""
@@ -7876,11 +7927,52 @@ Do not add a new body heading or append an afterword to the polished prompt.
 """
 
 
+_ACTION_RHYTHM_GUIDANCE = """
+SHOT ACTION RHYTHM:
+When the current shot contains a causal action, organize its visible progress
+into a small number of beats: initiating movement, immediate reaction, and
+changed end state. Let related actions overlap where natural, but specify
+which action triggers the next and where the motion stops. Fit the beats into
+the requested duration; any timings are a newly designed timeline, never
+claimed as measured source cuts. Keep camera trajectory, lens changes, and
+subject/object tempo independent: a slow Push In or Zoom In does not make a
+grab, recoil, or fall slow motion. Push In moves the camera; Zoom In changes
+focal length. Do not add slow motion, prolonged posing, extra events,
+shots, or characters unless requested. For an atmospheric shot without a
+causal action, keep its intended pace and do not invent an action sequence.
+When the draft uses rapid-impact words such as "猛然", "快速", "立即", or
+"接触瞬间", preserve real-time motion: compress the reaction into the
+available beat instead of stretching it into slow motion or a gradual fall.
+If the user explicitly names a table, wall, counter, or prop collision, include
+that collision and its visible consequences in the same causal chain; do not
+apply the default prop-preservation rule to an explicitly authorized impact.
+Place the rhythm inside the existing model-specific visual description,
+without adding a new output field.
+"""
+
+
+_SHOT_SPACE_VISIBILITY_GUIDANCE = """
+SHOT SPACE AND VISIBILITY:
+Treat confirmed blocking and camera relation as the opening screen geography.
+Keep each subject on the same side of barriers and at the same depth until an
+explicit visible movement changes that position. A reference image anchors
+appearance and environment; it does not prove an unseen movement or camera cut.
+For one continuous shot, describe only actions readable from its viewpoint.
+If a counter, doorway, crowd, or frame edge hides feet, hands, or a contact point,
+describe the visible reaction or object movement instead of claiming the hidden
+detail is seen. Do not move a subject across a barrier merely to show an action.
+If a hidden action must be shown, require an explicit new shot or camera angle;
+do not silently add one. State opening positions, causal action beats, and
+changed end positions in that order. Keep camera motion separate from subject
+timing and preserve the chosen shot count.
+"""
+
+
 def _storyboard_polish_contract(model_id: str, custom: str, default: str, generate_audio=None, target_duration=None, dialogue_speaker="", dialogue_line="", optimization_skills: Optional[List[str]] = None, reference_mode: bool = False, generation_mode: str = "i2v") -> str:
     guidance = _selected_skill_guidance(optimization_skills, model_id) if optimization_skills is not None else _target_model_guidance(model_id)
     is_h3 = "h3" in (model_id or "").lower()
     if not guidance and not is_h3 and generation_mode != "first_last_frame":
-        return custom or default
+        return (custom or default) + _ACTION_RHYTHM_GUIDANCE + _SHOT_SPACE_VISIBILITY_GUIDANCE
     constraints = ""
     if generate_audio is False:
         constraints += ("\nOUTPUT MUST BE SILENT: overall_soundscape and non_diegetic_music must be N/A. "
@@ -7904,7 +7996,7 @@ requested, is audio only and must not be rendered as text. Do not describe or
 request subtitle tracks in either prompt language.
 """
     base_prompt = custom or (default if not guidance else "")
-    contract = guidance + "\n" + base_prompt + constraints + """
+    contract = guidance + "\n" + base_prompt + constraints + _ACTION_RHYTHM_GUIDANCE + _SHOT_SPACE_VISIBILITY_GUIDANCE + """
 STORYBOARD OUTPUT CONTRACT:
 Return only JSON with string fields prompt_cn and prompt_en. Each string follows
 the selected target model's prompt format and generation mode.
@@ -7918,6 +8010,15 @@ Do not invent dialogue text, music, extra shots or replacement identities unless
 requested. Inspect all attached images, including scene, prop and storyboard
 images. Distinguish observed image content from user requirements; sampling
 cannot establish exact cut times. Missing images must not be described as seen.
+"""
+    if reference_mode and is_h3:
+        contract += """
+R2V / REF2VA MODE:
+This is reference-guided video generation, not T2VA. Never label the task
+[T2VA]. In summary, use an appropriate reference-generation task label such
+as [reference generation] when reference media is present. If no reference
+media is attached, state that no reference media is attached instead of
+claiming that character labels are visual references.
 """
     if not is_h3:
         return contract
@@ -7953,6 +8054,16 @@ def _validate_storyboard_polish_result(model_id: str, result: Dict[str, Any], re
             )
     if "h3" not in (model_id or "").lower():
         return
+    if reference_mode and any(
+        re.search(r"(?i)\[\s*T2VA\s*\]", result.get(key, ""))
+        for key in ("prompt_cn", "prompt_en")
+    ):
+        from .llm import PolishError
+        raise PolishError(
+            reason="model_contract_mismatch",
+            message_zh="R2V 润色结果被误标为 T2VA，本次结果未应用。请检查参考素材后重试。",
+            message_en="The R2V polish was mislabeled as T2VA and was not applied. Check the references and retry.",
+        )
     reference_fields = ("subject_definitions", "summary", "retention_analysis", "detailed_description", "overall_soundscape", "non_diegetic_music")
     base_fields = ("integrated_multimodal_description", "overall_soundscape", "non_diegetic_music")
     def has_field(text: Any, field: str) -> bool:
@@ -8012,6 +8123,7 @@ def _validate_storyboard_polish_result(model_id: str, result: Dict[str, Any], re
 
 def _compile_ir_polish_text(request, custom_prompt: str) -> str:
     instruction = custom_prompt.strip()
+    instruction += _ACTION_RHYTHM_GUIDANCE + _SHOT_SPACE_VISIBILITY_GUIDANCE
     if getattr(request, "generation_mode", "") == "first_last_frame":
         instruction += _first_last_polish_guidance(request.target_duration)
     instruction += "\n\nH3 constraint: do not add subtitles, captions, title cards, watermarks, labels, or any burned-in on-screen text. Dialogue is audio only."
@@ -8019,6 +8131,12 @@ def _compile_ir_polish_text(request, custom_prompt: str) -> str:
     if selected_skills:
         instruction += "\n\n" + _selected_skill_guidance(selected_skills, request.target_video_model)
         instruction += "\nPreserve the official H3 output format."
+    automatic = _automatic_motion_skill_guidance(
+        "\n".join([request.draft_prompt, request.feedback, custom_prompt]),
+        request.target_video_model,
+    )
+    if automatic:
+        instruction += "\n\n" + automatic
     text = f"{instruction}\n\n[DRAFT PROMPT]\n{request.draft_prompt.strip()}"
     if request.feedback.strip():
         text += f"\n\n[USER FEEDBACK]\n{request.feedback.strip()}"
@@ -8033,11 +8151,143 @@ def _video_polish_user_text(request) -> str:
     return request.draft_prompt
 
 
+def _r2v_scene_lighting(script, frame, draft_prompt: str,
+                        reference_variant_ids: Optional[Dict[str, List[str]]] = None) -> Optional[Dict[str, Any]]:
+    """Read lighting only from the selected scene image's frozen lineage."""
+    if frame is None:
+        return None
+    names = set(re.findall(r"\[(?:character\d+|scene):([^\]]+)\]", draft_prompt))
+    scenes = pipeline.resolve_project_assets(script)["scenes"]
+    matches = [scene for scene in scenes if scene.id == getattr(frame, "scene_id", None) and scene.name in names]
+    if len(matches) != 1 or sum(scene.name == matches[0].name for scene in scenes) != 1:
+        return None
+    scene = matches[0]
+    variants = {item.id: item for item in scene.image_asset.variants}
+    selections = reference_variant_ids if reference_variant_ids is not None else frame.workbench_reference_variant_ids
+    selected_ids = (selections or {}).get(scene.id) or []
+    if len(selected_ids) > 1:
+        return None
+    selected_id = selected_ids[0] if selected_ids else scene.image_asset.selected_id
+    variant = variants.get(selected_id)
+    if variant is None:
+        return None
+    snapshot = variant.submission_snapshot
+    design = snapshot.visual_design if snapshot and isinstance(snapshot.visual_design, dict) else {}
+    fields: Dict[str, Any] = {}
+    for key in ("ambient_lighting", "local_lighting"):
+        value = design.get(key)
+        if value and (not isinstance(value, dict) or any(str(part).strip() for part in value.values())):
+            fields[key] = value
+    constraints = design.get("visual_constraints")
+    if isinstance(constraints, dict) and constraints.get("key_light_direction") not in (None, "", "unspecified"):
+        fields["key_light_direction"] = constraints["key_light_direction"]
+
+    source_variant = variant
+    source_scene_name = scene.name
+    tool = variant.scene_tool if isinstance(variant.scene_tool, dict) else None
+    if (not tool or tool.get("kind") != "lighting") and snapshot and isinstance(snapshot.scene_tool, dict):
+        tool = snapshot.scene_tool
+    if snapshot:
+        lighting_sources = []
+        for reference in snapshot.reference_inputs:
+            if reference.asset_type != "scene":
+                continue
+            parent = next((item for item in scenes if item.id == reference.asset_id), None)
+            candidate = next((item for item in parent.image_asset.variants
+                              if item.id == reference.variant_id), None) if parent else None
+            if candidate and isinstance(candidate.scene_tool, dict) and candidate.scene_tool.get("kind") == "lighting":
+                lighting_sources.append((candidate, parent.name))
+        if (not tool or tool.get("kind") != "lighting") and len(lighting_sources) == 1:
+            source_variant, source_scene_name = lighting_sources[0]
+            tool = source_variant.scene_tool
+    if tool and tool.get("kind") == "lighting":
+        fields.update({key: tool[key] for key in ("light_side", "color", "brightness", "rim_light") if key in tool})
+    if not fields:
+        return None
+    return {
+        "scene_name": scene.name, "scene_id": scene.id, "variant_id": variant.id,
+        "source_variant_id": source_variant.id, "source_scene_name": source_scene_name,
+        "source_variant_name": source_variant.display_name if hasattr(source_variant, "display_name") else None,
+        "design_revision": snapshot.design_revision_at_submission if snapshot else None,
+        "fields": fields,
+    }
+
+
+def _r2v_reference_designs(script, request) -> List[Dict[str, Any]]:
+    """Resolve reviewed character design through the referenced asset identity."""
+    if not request.slots:
+        return []
+    assets = pipeline.resolve_project_assets(script)
+    by_id = {
+        kind: {asset.id: asset for asset in assets.get(f"{kind}s", [])}
+        for kind in ("character", "scene", "prop")
+    }
+    result: List[Dict[str, Any]] = []
+    seen_slots: set[int] = set()
+    for ordinal, slot in enumerate(request.slots, 1):
+        if not slot.asset_id:
+            continue  # Legacy text-only caller.
+        number = slot.slot or ordinal
+        if number in seen_slots or not 1 <= number <= 9:
+            raise HTTPException(422, "参考图槽位无效，请重新选择参考素材")
+        seen_slots.add(number)
+        kind = slot.asset_type
+        asset = by_id.get(kind or "", {}).get(slot.asset_id)
+        if asset is None or not slot.name or asset.name != slot.name:
+            raise HTTPException(422, "参考素材身份已变化，请重新选择参考素材")
+        tag = f"[character{number}:{slot.name}]"
+        if tag not in request.draft_prompt and f"[{kind}:{slot.name}]" not in request.draft_prompt:
+            raise HTTPException(422, "参考素材与当前镜头文字不匹配，请重新预览")
+        variants = {item.id: item for item in pipeline._asset_image_variants(asset, kind)}
+        if not slot.variant_ids or any(variant_id not in variants for variant_id in slot.variant_ids):
+            raise HTTPException(422, "参考图版本已变化，请重新选择参考素材")
+        selected = (request.reference_variant_ids or {}).get(asset.id)
+        if selected and selected != slot.variant_ids:
+            raise HTTPException(422, "参考图版本与镜头选择不一致，请重新预览")
+        if kind != "character":
+            continue
+        if len(slot.variant_ids) != 1:
+            raise HTTPException(422, "角色参考图必须对应一个已选版本")
+        variant = variants[slot.variant_ids[0]]
+        snapshot = variant.submission_snapshot
+        revision = snapshot.design_revision_at_submission if snapshot else None
+        if revision is None and asset.asset_pack:
+            anchor = next((item for item in reversed(asset.asset_pack.revisions)
+                           if item.variant_id == variant.id), None)
+            if anchor:
+                revision = anchor.source_design_revision
+        revisions = (asset.character_design or {}).get("design_revisions") or []
+        if revision is None:
+            confirmed = revisions[-1] if revisions else None
+        else:
+            confirmed = next((item for item in revisions if item.get("revision") == revision), None)
+            if confirmed is None:
+                raise HTTPException(422, "角色参考图对应的设计版本已缺失，请重新确认角色设计")
+        design = confirmed.get("design") if isinstance(confirmed, dict) else None
+        structured = {}
+        if isinstance(design, dict):
+            for section in ("identity", "look"):
+                value = design.get(section)
+                if isinstance(value, dict):
+                    selected_fields = {key: value[key] for key in ("visual_notes", "features") if value.get(key)}
+                    if selected_fields:
+                        structured[section] = selected_fields
+        if structured:
+            result.append({
+                "slot": number, "name": asset.name,
+                "design_revision": confirmed.get("revision"),
+                "design": structured,
+            })
+    return result
+
+
 def _compile_video_polish_review(request, reference_mode: bool) -> Dict[str, Any]:
     from .llm import DEFAULT_R2V_POLISH_PROMPT, DEFAULT_VIDEO_POLISH_PROMPT
     user = current_studio_user()
     frame_snapshot: Dict[str, Any] = {}
     effective_shot_fields: Dict[str, Any] = {}
+    scene_lighting: Optional[Dict[str, Any]] = None
+    reference_designs: List[Dict[str, Any]] = []
     if user is not None and request.script_id:
         script = pipeline.get_script(request.script_id, user.owner_profile_id)
         if not script:
@@ -8046,10 +8296,15 @@ def _compile_video_polish_review(request, reference_mode: bool) -> Dict[str, Any
             frame = next((item for item in script.frames if item.id == request.frame_id), None)
             if frame is None:
                 raise HTTPException(404, "Frame not found")
+            if reference_mode and request.image_urls:
+                scene_lighting = _r2v_scene_lighting(
+                    script, frame, request.draft_prompt, request.reference_variant_ids,
+                )
+                reference_designs = _r2v_reference_designs(script, request)
             frame_snapshot = {name: getattr(frame, name, None) for name in (
                 "scene_id", "shot_id", "director_profile_revision", "director_profile_hash",
                 "director_shot_context", "action_description", "style_prompt_override",
-                "lighting_override", "shot_visual_design", "composition", "shot_size",
+                "lighting_override", "shot_visual_design", "blocking", "composition", "shot_size",
                 "camera_angle", "camera_movement", "transition_hint", "dialogue",
             )}
             frame_snapshot = {
@@ -8074,13 +8329,47 @@ def _compile_video_polish_review(request, reference_mode: bool) -> Dict[str, Any
     ):
         raise HTTPException(422, "首尾帧润色需要两张不同的已选图片")
     custom = _get_custom_prompt(request.script_id, "r2v_polish" if reference_mode else "video_polish")
-    if effective_shot_fields:
+    lighting_choice = getattr(request, "reference_lighting_choice", None)
+    lighting_values: Dict[str, Any] = {}
+    if scene_lighting:
+        lighting_values = {key: value for key, value in effective_shot_fields.items()
+                           if key in ("direction", "quality", "color_temp", "key_source", "ambient_lighting",
+                                      "color_tone", "contrast", "lighting_override") and value.get("value") not in (None, "")}
+        if request.shot_overrides and request.shot_overrides.get("lighting"):
+            lighting_values["shot_override"] = request.shot_overrides["lighting"]
+        if not lighting_values and lighting_choice is None:
+            lighting_choice = "reference"
+        scene_lighting = {**scene_lighting, "requires_decision": bool(lighting_values),
+                          "shot_lighting": lighting_values, "choice": lighting_choice}
+    model_shot_fields = ({key: value for key, value in effective_shot_fields.items()
+                          if key not in ("direction", "quality", "color_temp", "key_source", "ambient_lighting",
+                                         "color_tone", "contrast", "lighting_override")}
+                         if lighting_choice == "reference" and scene_lighting else effective_shot_fields)
+    if model_shot_fields:
         custom = "\n\n".join(filter(None, [custom,
             "ACCEPTED SHOT FIELDS AND VISUAL CONTINUITY (preserve these values; do not rewrite them):\n"
-            + json.dumps(effective_shot_fields, ensure_ascii=False, sort_keys=True)]))
+            + json.dumps(model_shot_fields, ensure_ascii=False, sort_keys=True)]))
     director = _get_director_prompt_context(request.script_id, request.frame_id, request.shot_overrides)
     if director:
         custom = "\n\n".join(filter(None, [custom, "CURRENT SHOT CONTEXT (editable overrides replace planned shot settings; matching continuity baseline is background):\n" + director]))
+    if scene_lighting:
+        if lighting_choice == "reference":
+            instruction = "Use these frozen reference lighting fields for this shot. They supersede conflicting shot lighting values above; preserve all non-lighting shot fields."
+        elif lighting_choice == "shot":
+            instruction = "Keep this shot's lighting values. The scene image still anchors space and appearance, but do not transfer its lighting."
+        else:
+            instruction = "Scene lighting is available, but the shot also defines lighting. A creator choice is required before generation."
+        source_text = ("SELECTED SCENE IMAGE LIGHTING (frozen variant; do not copy its actions or full prompt):\n"
+                       + json.dumps({"scene_name": scene_lighting["scene_name"], "fields": scene_lighting["fields"]},
+                                    ensure_ascii=False, sort_keys=True) + "\n") if lighting_choice == "reference" else ""
+        custom = "\n\n".join(filter(None, [custom, source_text + instruction]))
+    if reference_designs:
+        model_designs = [{"slot": item["slot"], "name": item["name"], **item["design"]}
+                         for item in reference_designs]
+        custom = "\n\n".join(filter(None, [custom,
+            "CHARACTER ASSET IDENTITY AND LOOK (confirmed structured fields for the selected character references):\n"
+            + json.dumps(model_designs, ensure_ascii=False, sort_keys=True)
+            + "\nUse these fields as the character appearance constraints. Unspecified fields are unconstrained. Keep shot action, blocking and camera separate from character identity/look."]))
     default = DEFAULT_R2V_POLISH_PROMPT if reference_mode else DEFAULT_VIDEO_POLISH_PROMPT
     if request.optimizer_provider == "minimax_context_ir":
         if request.target_video_model and "h3" not in request.target_video_model.lower():
@@ -8093,8 +8382,14 @@ def _compile_video_polish_review(request, reference_mode: bool) -> Dict[str, Any
             _effective_optimization_skills(request), reference_mode=reference_mode,
             generation_mode=getattr(request, "generation_mode", "r2v"),
         ).strip()
+        automatic = _automatic_motion_skill_guidance(
+            "\n".join([request.draft_prompt, request.feedback, custom]),
+            request.target_video_model,
+        )
+        if automatic:
+            system += "\n\n" + automatic
         if reference_mode:
-            slots = "\n".join(f"- character{i + 1}: {slot.description}" for i, slot in enumerate(request.slots)) or "No reference videos provided."
+            slots = "\n".join(f"- character{slot.slot or i + 1}: {slot.description}" for i, slot in enumerate(request.slots)) or "No reference videos provided."
             system = system.replace("{SLOTS}", slots)
         if request.image_urls:
             if reference_mode:
@@ -8108,7 +8403,10 @@ def _compile_video_polish_review(request, reference_mode: bool) -> Dict[str, Any
     media = [{"label": labels[i], "url": url} for i, url in enumerate(request.image_urls)]
     source = request.model_dump(exclude={"reviewed_messages", "review_token"})
     token = hashlib.sha256(json.dumps({"source": source, "frame": frame_snapshot,
-                                      "effective_shot_fields": effective_shot_fields, "compiled": messages},
+                                      "effective_shot_fields": effective_shot_fields,
+                                      "scene_lighting": scene_lighting,
+                                      "reference_designs": reference_designs,
+                                      "compiled": messages},
                                       sort_keys=True, ensure_ascii=False, default=str).encode()).hexdigest()
     format_note = (
         "MiniMax Context IR 按所选模型的原生结构生成；这里展示送入 IR 的完整文字。"
@@ -8118,11 +8416,21 @@ def _compile_video_polish_review(request, reference_mode: bool) -> Dict[str, Any
         "模型以 JSON 返回中英双语提示词。"
     )
     return {"messages": messages, "media": media, "review_token": token,
-            "format_note": format_note}
+            "format_note": format_note,
+            "review_context": {
+                "effective_shot_fields": effective_shot_fields,
+                "selected_skills": _effective_optimization_skills(request) or [],
+                "target_duration": request.target_duration,
+                "scene_lighting": scene_lighting,
+                "reference_designs": reference_designs,
+            }}
 
 
 def _require_video_polish_review(request, reference_mode: bool) -> Dict[str, str]:
     compiled = _compile_video_polish_review(request, reference_mode)
+    lighting = compiled.get("review_context", {}).get("scene_lighting")
+    if lighting and lighting.get("requires_decision") and not lighting.get("choice"):
+        raise HTTPException(422, "参考场景光影与本镜设置并存，请先选择采用哪一方")
     messages = request.reviewed_messages
     if not request.review_token or request.review_token != compiled["review_token"] or not messages:
         raise HTTPException(409, "润色输入或来源已变化，请重新预览并确认")
@@ -8301,6 +8609,11 @@ def polish_video_prompt(request: PolishVideoPromptRequest):
 
 class RefSlot(BaseModel):
     description: str  # Character name, e.g., "雷震", "白兔"
+    slot: Optional[int] = Field(None, ge=1, le=9)
+    asset_id: Optional[str] = None
+    asset_type: Optional[Literal["character", "scene", "prop"]] = None
+    name: Optional[str] = None
+    variant_ids: List[str] = Field(default_factory=list)
 
 
 class PolishR2VPromptRequest(BaseModel):
@@ -8316,6 +8629,8 @@ class PolishR2VPromptRequest(BaseModel):
     # R2V 模式：用户挂载的 character1/2/3 参考图 URL(s)，让 vision 模型
     # 看清各角色实际形象。空列表 = 纯文本润色（兼容旧调用方）。
     image_urls: List[str] = Field(default_factory=list, max_length=9)
+    reference_variant_ids: Optional[Dict[str, List[str]]] = None
+    reference_lighting_choice: Optional[Literal["shot", "reference"]] = None
     polish_model: str = ""
     optimizer_provider: Literal["local_llm", "minimax_context_ir", "gpt", "qwen", "deepseek", "glm"] = "local_llm"
     optimization_skills: Optional[List[str]] = Field(default=None, max_length=12)

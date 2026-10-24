@@ -1,4 +1,7 @@
 import json
+import time
+from concurrent.futures import ThreadPoolExecutor
+from threading import Event
 from unittest.mock import Mock
 from types import SimpleNamespace
 
@@ -8,6 +11,7 @@ from fastapi.testclient import TestClient
 
 from src.apps import agent_api as agent, agent_skills as skills
 from src.apps.identity import UserContext, require_user_context
+from src.apps.comic_gen.extraction_jobs import ExtractionJobs
 
 
 @pytest.fixture
@@ -21,6 +25,60 @@ def run_reviewed_character_draft(body, ctx):
     return agent.character_design_draft(body.model_copy(update={
         'reviewed_messages': preview['messages'], 'review_token': preview['review_token'],
     }), ctx)
+
+
+def test_character_design_job_returns_before_model_and_is_owner_scoped(ctx, tmp_path, monkeypatch):
+    monkeypatch.setattr(agent, 'validate_model', lambda *_: None)
+    entered, release = Event(), Event()
+
+    def slow_model(*_args):
+        entered.set()
+        assert release.wait(3)
+        return json.dumps({
+            'identity': {'visual_notes': '清瘦中年男子'},
+            'look': {'visual_notes': '黑色短衣'},
+            'review_items': [],
+        })
+
+    monkeypatch.setattr(agent, 'complete', slow_model)
+    body = agent.CharacterDesignRequest(model='qwen', character_name='探子', profile='中年男子', project_id='project')
+    preview = agent.preview_character_design_draft(body, ctx)
+    reviewed = body.model_copy(update={
+        'reviewed_messages': preview['messages'], 'review_token': preview['review_token'],
+    })
+    with ThreadPoolExecutor(max_workers=1) as executor:
+        monkeypatch.setattr(agent, 'character_design_jobs', ExtractionJobs(tmp_path / 'jobs.sqlite3', executor=executor))
+        try:
+            started = agent.start_character_design_draft_job(reviewed, ctx)
+            assert started['status'] == 'running'
+            assert entered.wait(2)
+            assert agent.get_character_design_draft_job(started['id'], ctx)['status'] == 'running'
+            with pytest.raises(HTTPException) as denied:
+                agent.get_character_design_draft_job(started['id'], UserContext('other', 'other', '', ''))
+            assert denied.value.status_code == 404
+        finally:
+            release.set()
+        deadline = time.monotonic() + 3
+        while True:
+            result = agent.get_character_design_draft_job(started['id'], ctx)
+            if result['status'] == 'completed':
+                break
+            assert time.monotonic() < deadline
+            time.sleep(.01)
+        assert result['result']['identity']['visual_notes'] == '清瘦中年男子'
+
+
+def test_character_design_job_rejects_stale_preview_before_start(ctx, tmp_path, monkeypatch):
+    monkeypatch.setattr(agent, 'validate_model', lambda *_: None)
+    monkeypatch.setattr(agent, 'character_design_jobs', ExtractionJobs(tmp_path / 'jobs.sqlite3'))
+    body = agent.CharacterDesignRequest(model='qwen', character_name='探子', profile='中年男子')
+    preview = agent.preview_character_design_draft(body, ctx)
+    changed = body.model_copy(update={
+        'profile': '老年男子', 'reviewed_messages': preview['messages'], 'review_token': preview['review_token'],
+    })
+    with pytest.raises(HTTPException) as rejected:
+        agent.start_character_design_draft_job(changed, ctx)
+    assert rejected.value.status_code == 409
 
 
 def test_asset_image_prompt_refine_returns_reviewable_suggestion(ctx, monkeypatch):
@@ -118,7 +176,7 @@ def test_asset_refine_rejects_changed_saved_asset_and_foreign_project(ctx, monke
 
 def test_catalog_is_self_contained_and_attributed():
     packages = skills.catalog()
-    assert len(packages) == len({p['id'] for p in packages}) == 12
+    assert len(packages) == len({p['id'] for p in packages}) == 18
     for p in packages:
         assert len(p['revision']) == 64
         assert len(p['source_revision']) == 40
@@ -582,7 +640,9 @@ def test_explicit_h3_request_selects_only_h3_and_continue_retains_target(ctx, mo
         agent.send(sid, agent.MessageCreate(content=request), ctx)
         system = call.call_args.args[2][0]['content']
         for package in packages:
-            assert (package['instructions'] in system) == (package['id'] in {'minimax-h3-director', 'h3-product-recreation'})
+            assert (package['instructions'] in system) == (package['id'] in {
+                'minimax-h3-director', 'h3-product-recreation', 'shot-action-physics'
+            })
     agent.send(sid, agent.MessageCreate(content='为Seedance设计镜头'), ctx)
     assert next(p['instructions'] for p in packages if p['id'] == 'minimax-h3-director') not in call.call_args.args[2][0]['content']
     skills.patch('minimax-h3-director', skills.SkillPatch(enabled=False), ctx)
@@ -605,6 +665,27 @@ def test_h3_clarification_keeps_skill_without_overriding_explicit_new_target(ctx
     assert h3['instructions'] not in skills.creative_guidance(ctx.owner_profile_id, '帮我写一封邮件', history)
     skills.patch(h3['id'], skills.SkillPatch(enabled=False), ctx)
     assert h3['instructions'] not in skills.creative_guidance(ctx.owner_profile_id, '15秒允许切镜', history)
+
+
+def test_action_physics_auto_loads_for_impact_without_manual_skill_selection(ctx):
+    guidance = skills.creative_guidance(
+        ctx.owner_profile_id,
+        '匪首从画面右侧踹向老掌柜，老掌柜先踉跄退步再倒地。',
+    )
+    package = next(p for p in skills.catalog() if p['id'] == 'shot-action-physics')
+    assert package['instructions'] in guidance
+    assert '保持原有面向和左右画面位置' in guidance
+
+
+def test_martial_choreography_auto_loads_only_for_explicit_professional_terms(ctx):
+    ordinary = skills.creative_guidance(ctx.owner_profile_id, '两人推搡后跌倒。')
+    professional = skills.creative_guidance(ctx.owner_profile_id, '设计一段咏春近身攻防和兵器招式。')
+    action = next(p for p in skills.catalog() if p['id'] == 'shot-action-physics')
+    martial = next(p for p in skills.catalog() if p['id'] == 'shot-martial-choreography')
+    assert action['instructions'] in ordinary
+    assert martial['instructions'] not in ordinary
+    assert action['instructions'] in professional
+    assert martial['instructions'] in professional
 
 
 def test_product_recreation_installs_alone_reaches_chat_and_respects_target(ctx, monkeypatch):

@@ -137,7 +137,7 @@ def test_playground_preserves_video_model_and_all_url_references(monkeypatch, tm
         if mode != 't2v':
             assert 'prompt' not in body
         assert 'input_reference' not in body and 'aspect_ratio' not in body
-        assert body['ratio'] == ('adaptive' if model.startswith('minimax-h3') and mode in {'i2v', 'f2v'} else '16:9')
+        assert body['ratio'] == '16:9'
         captured.append(body)
         return {'task_id': 'accepted'}
     def poll(config, task_id, **kwargs):

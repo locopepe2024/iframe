@@ -1,6 +1,8 @@
 from unittest.mock import Mock
+from types import SimpleNamespace
 import pytest
 from src.apps.comic_gen import api
+from src.apps.comic_gen.models import AssetImageSubmissionSnapshot
 
 
 def _confirmed_video(request):
@@ -26,6 +28,16 @@ def test_skill_loads_outside_repo_and_preserves_editor_contract(monkeypatch, tmp
     assert label in text
     assert 'prompt_cn' in text and '[characterN:name]' in text
     assert 'replacement' in text
+
+
+def test_single_shot_polish_keeps_occluded_action_and_camera_tempo_separate():
+    text = api._storyboard_polish_contract(
+        'uniart/minimax-h3-vip', '', '', optimization_skills=[], reference_mode=True,
+    )
+    assert 'SHOT SPACE AND VISIBILITY' in text
+    assert 'describe the visible reaction or object movement' in text
+    assert 'do not silently add one' in text
+    assert 'Keep camera motion separate from subject' in text
 
 
 def test_explicit_skill_must_match_target_model():
@@ -96,6 +108,66 @@ def test_ir_preview_contains_selected_skill_text():
     preview = api.preview_video_polish_prompt(request)
     assert '[minimax-h3-director' in preview['messages']['user']
     assert '基础／关键帧输出' in preview['messages']['user']
+    assert 'a slow Push In or Zoom In does not make a' in preview['messages']['user']
+
+
+def test_action_terms_auto_attach_motion_baseline_to_h3_preview():
+    request = api.PolishVideoPromptRequest(
+        draft_prompt='匪首从画面右侧踹向中央老掌柜，老掌柜先踉跄退步再倒地。',
+        target_video_model='uniart/minimax-h3-vip',
+        optimizer_provider='qwen',
+    )
+    preview = api.preview_video_polish_prompt(request)
+    system = preview['messages']['system']
+    assert 'AUTOMATIC MOTION BASELINES' in system
+    assert '保持原有面向和左右画面位置' in system
+    assert '道具默认保持原位' in system
+
+
+def test_rapid_impact_and_explicit_table_collision_preserve_real_time_causality():
+    request = api.PolishVideoPromptRequest(
+        draft_prompt='匪首猛然踹中老掌柜胸腹。接触瞬间老人快速踉跄后退，撞到桌边，手臂扫落桌上器具后倒地，不使用慢动作。',
+        target_video_model='uniart/minimax-h3-vip',
+        optimizer_provider='qwen',
+    )
+    preview = api.preview_video_polish_prompt(request)
+    system = preview['messages']['system']
+    assert 'preserve real-time motion' in system
+    assert 'explicitly names a table' in system
+    assert 'a slow Push In or Zoom In does not make a' in system
+
+
+def test_professional_martial_terms_attach_choreography_and_physics_baselines():
+    request = api.PolishVideoPromptRequest(
+        draft_prompt='设计咏春近身攻防和兵器招式，明确起势、接触、反击与收势。',
+        target_video_model='uniart/minimax-h3-vip',
+        optimizer_provider='qwen',
+    )
+    preview = api.preview_video_polish_prompt(request)
+    system = preview['messages']['system']
+    assert '[shot-action-physics · 分镜动作与受力连续性' in system
+    assert '[shot-martial-choreography · 专业武术与动作编排' in system
+
+
+@pytest.mark.parametrize('reference_mode', [False, True])
+def test_shot_polish_separates_action_rhythm_from_camera_speed(reference_mode):
+    text = api._storyboard_polish_contract(
+        'uniart/minimax-h3-vip', '', '', target_duration=6,
+        optimization_skills=['minimax-h3-director'], reference_mode=reference_mode,
+    )
+    assert 'initiating movement, immediate reaction' in text
+    assert 'a slow Push In or Zoom In does not make a' in text
+    assert 'Push In moves the camera; Zoom In changes' in text
+    assert 'do not invent an action sequence' in text
+    assert 'without adding a new output field' in text
+
+
+def test_unselected_model_skill_keeps_action_rhythm_guidance():
+    text = api._storyboard_polish_contract(
+        'other-video-model', '', 'existing prompt', optimization_skills=[],
+    )
+    assert text.startswith('existing prompt')
+    assert 'a slow Push In or Zoom In does not make a' in text
 
 
 def test_minimax_ir_does_not_force_local_director_skill():
@@ -539,6 +611,231 @@ def test_h3_submission_rejects_mixed_unresolved_syntax():
     from src.apps.comic_gen.reference_prompt import bind_storyboard_prompt
     with pytest.raises(ValueError):
         bind_storyboard_prompt('use @product and [Picture 1]', 'uniart/minimax-h3-vip', 1)
+
+
+def test_h3_i2v_single_first_frame_keeps_tagged_subject_names_without_extra_picture_slots():
+    from src.apps.comic_gen.reference_prompt import bind_storyboard_prompt
+    prompt = '[character1:老掌柜]在柜台后，[character2:匪首]站在门口，[scene:粮铺]，@1'
+    assert bind_storyboard_prompt(
+        prompt, 'uniart/minimax-h3-vip', 1, single_frame_anchor=True,
+    ) == '老掌柜在柜台后，匪首站在门口，粮铺，<Picture 1>'
+
+
+def test_r2v_h3_contract_forbids_t2va_label():
+    text = api._storyboard_polish_contract(
+        'uniart/minimax-h3-vip', '', '', optimization_skills=['minimax-h3-director'],
+        reference_mode=True,
+    )
+    assert 'R2V / REF2VA MODE' in text
+    assert 'Never label the task' in text
+
+
+def test_r2v_h3_result_rejects_t2va_label():
+    from src.apps.comic_gen.llm import PolishError
+    body = (
+        'subject_definitions:\nS1: character\nsummary:\n[T2VA] scene\n'
+        'retention_analysis:\nnone\ndetailed_description:\nscene\n'
+        'overall_soundscape:\nN/A\nnon_diegetic_music:\nN/A'
+    )
+    with pytest.raises(PolishError) as error:
+        api._validate_storyboard_polish_result(
+            'uniart/minimax-h3-vip',
+            {'prompt_cn': body, 'prompt_en': body},
+            reference_mode=True,
+        )
+    assert "误标为 T2VA" in error.value.message_zh
+
+
+def test_r2v_scene_lighting_reads_exact_selected_variant_lineage(monkeypatch):
+    parent_variant = SimpleNamespace(id="street-final", scene_tool={
+        "kind": "lighting", "light_side": "right", "color": "#f3f4f6",
+        "brightness": 50, "rim_light": False,
+    })
+    parent = SimpleNamespace(id="street", name="长街", image_asset=SimpleNamespace(variants=[parent_variant]))
+    snapshot = AssetImageSubmissionSnapshot(
+        positive_prompt="Do not transfer this action or dialogue", selected_model_id="image",
+        aspect_ratio="16:9", generation_type="all", image_generation_mode="reference",
+        reference_inputs=[{"asset_type": "scene", "asset_id": "street", "variant_id": "street-final"}],
+        visual_design={"ambient_lighting": "黄昏", "visual_notes": "前镜人物挥刀"},
+        design_revision_at_submission=3,
+    )
+    shop_variant = SimpleNamespace(id="shop-final", submission_snapshot=snapshot, scene_tool=None)
+    shop = SimpleNamespace(id="shop", name="粮铺门前", image_asset=SimpleNamespace(
+        selected_id="shop-final", variants=[shop_variant],
+    ))
+    monkeypatch.setattr(api.pipeline, "resolve_project_assets", lambda script: {"scenes": [shop, parent]})
+    frame = SimpleNamespace(scene_id="shop", workbench_reference_variant_ids={})
+    lighting = api._r2v_scene_lighting(object(), frame, "[character2:粮铺门前]")
+    assert lighting["variant_id"] == "shop-final"
+    assert lighting["source_variant_id"] == "street-final"
+    assert lighting["fields"] == {
+        "ambient_lighting": "黄昏", "light_side": "right", "color": "#f3f4f6",
+        "brightness": 50, "rim_light": False,
+    }
+    assert "挥刀" not in str(lighting)
+    assert api._r2v_scene_lighting(object(), SimpleNamespace(
+        scene_id="another-place", workbench_reference_variant_ids={},
+    ), "[character2:粮铺门前]") is None
+    shop.image_asset.variants.append(SimpleNamespace(id="shop-old", submission_snapshot=None, scene_tool=None))
+    assert api._r2v_scene_lighting(object(), frame, "[character2:粮铺门前]",
+                                   {"shop": ["shop-old"]}) is None
+    shop_variant.submission_snapshot = None
+    assert api._r2v_scene_lighting(object(), frame, "[character2:粮铺门前]") is None
+
+
+def test_r2v_character_design_resolves_selected_asset_id_and_image_revision(monkeypatch):
+    old = {"revision": 1, "design": {"identity": {"visual_notes": "脸颊有浅细纹"},
+                                     "look": {"features": {"衣服": "玄色短衣"}},
+                                     "field_answers": {"action": "上一镜挥刀"}}}
+    newer = {"revision": 2, "design": {"identity": {"visual_notes": "另一版容貌"}}}
+    variant = SimpleNamespace(id="portrait-1", submission_snapshot=SimpleNamespace(
+        design_revision_at_submission=1,
+    ))
+    character = SimpleNamespace(
+        id="character-42", name="探子", character_design={"design_revisions": [old, newer]},
+        asset_pack=None, reference_sheet=SimpleNamespace(image_variants=[variant]),
+    )
+    monkeypatch.setattr(api.pipeline, "resolve_project_assets", lambda script: {
+        "characters": [character], "scenes": [], "props": [],
+    })
+    request = api.PolishR2VPromptRequest(
+        draft_prompt="[character2:探子]走进房间", slots=[{
+            "description": "探子", "slot": 2, "asset_id": "character-42", "asset_type": "character",
+            "name": "探子", "variant_ids": ["portrait-1"],
+        }], image_urls=["portrait-url"],
+    )
+    designs = api._r2v_reference_designs(object(), request)
+    assert designs == [{"slot": 2, "name": "探子",
+                        "design_revision": 1, "design": {
+                            "identity": {"visual_notes": "脸颊有浅细纹"},
+                            "look": {"features": {"衣服": "玄色短衣"}},
+                        }}]
+    assert "上一镜挥刀" not in str(designs)
+    assert "另一版容貌" not in str(designs)
+    with pytest.raises(api.HTTPException) as wrong_id:
+        api._r2v_reference_designs(object(), request.model_copy(update={"slots": [
+            api.RefSlot(description="探子", slot=2, asset_id="other", asset_type="character",
+                        name="探子", variant_ids=["portrait-1"]),
+        ]}))
+    assert wrong_id.value.status_code == 422
+
+
+def test_r2v_character_design_uses_current_confirmed_fields_without_image_constraints(monkeypatch):
+    variant = SimpleNamespace(id="uploaded", submission_snapshot=None)
+    character = SimpleNamespace(
+        id="role", name="掌柜", character_design={"design_revisions": [{
+            "revision": 3, "design": {"identity": {"visual_notes": "灰白发髻"}},
+        }]}, asset_pack=None, reference_sheet=SimpleNamespace(image_variants=[variant]),
+    )
+    monkeypatch.setattr(api.pipeline, "resolve_project_assets", lambda script: {
+        "characters": [character], "scenes": [], "props": [],
+    })
+    request = api.PolishR2VPromptRequest(
+        draft_prompt="[character1:掌柜]", slots=[{
+            "description": "掌柜", "slot": 1, "asset_id": "role", "asset_type": "character",
+            "name": "掌柜", "variant_ids": ["uploaded"],
+        }], image_urls=["uploaded-url"],
+    )
+    design = api._r2v_reference_designs(object(), request)[0]
+    assert design == {"slot": 1, "name": "掌柜", "design_revision": 3,
+                      "design": {"identity": {"visual_notes": "灰白发髻"}}}
+    character.character_design = {"design_revisions": [{
+        "revision": 4, "design": {"identity": {}, "look": {}},
+    }]}
+    assert api._r2v_reference_designs(object(), request) == []
+
+
+def test_r2v_preview_uses_character_design_and_rejects_stale_review(monkeypatch):
+    variant = SimpleNamespace(id="portrait", submission_snapshot=None)
+    character = SimpleNamespace(
+        id="role", name="掌柜", character_design={"design_revisions": [{
+            "revision": 1, "design": {"identity": {"visual_notes": "灰白发髻"}},
+        }]}, asset_pack=None, reference_sheet=SimpleNamespace(image_variants=[variant]),
+    )
+    frame = SimpleNamespace(id="shot", workbench_reference_variant_ids={})
+    script = SimpleNamespace(frames=[frame])
+    monkeypatch.setattr(api, "current_studio_user", lambda: SimpleNamespace(owner_profile_id="owner"))
+    monkeypatch.setattr(api.pipeline, "get_script", lambda *args: script)
+    monkeypatch.setattr(api.pipeline, "resolve_project_assets", lambda script: {
+        "characters": [character], "scenes": [], "props": [],
+    })
+    monkeypatch.setattr(api.pipeline, "storyboard_continuity_sheet", lambda *args: {"rows": []})
+    monkeypatch.setattr(api, "_r2v_scene_lighting", lambda *args: None)
+    monkeypatch.setattr(api, "_get_custom_prompt", lambda *args: "")
+    monkeypatch.setattr(api, "_get_director_prompt_context", lambda *args: "")
+    request = api.PolishR2VPromptRequest(
+        draft_prompt="[character1:掌柜]", script_id="project", frame_id="shot",
+        slots=[{"description": "掌柜", "slot": 1, "asset_id": "role",
+                "asset_type": "character", "name": "掌柜", "variant_ids": ["portrait"]}],
+        image_urls=["portrait-url"], optimization_skills=[],
+    )
+    reviewed = api.preview_r2v_polish_prompt(request)
+    assert "灰白发髻" in reviewed["messages"]["system"]
+    assert "CHARACTER ASSET IDENTITY AND LOOK" in reviewed["messages"]["system"]
+    assert "legacy_image" not in reviewed["messages"]["system"]
+    assert "submission_snapshot" not in reviewed["messages"]["system"]
+    assert "design_revision" not in reviewed["messages"]["system"]
+    character.character_design["design_revisions"].append({
+        "revision": 2, "design": {"identity": {"visual_notes": "黑发"}},
+    })
+    with pytest.raises(api.HTTPException) as stale:
+        api._require_video_polish_review(request.model_copy(update={
+            "review_token": reviewed["review_token"], "reviewed_messages": reviewed["messages"],
+        }), True)
+    assert stale.value.status_code == 409
+
+
+def test_r2v_scene_lighting_conflict_requires_review_and_changes_model_input(monkeypatch):
+    frame = SimpleNamespace(id="shot", workbench_reference_variant_ids={})
+    script = SimpleNamespace(frames=[frame])
+    monkeypatch.setattr(api, "current_studio_user", lambda: SimpleNamespace(owner_profile_id="owner"))
+    monkeypatch.setattr(api.pipeline, "get_script", lambda *args: script)
+    monkeypatch.setattr(api.pipeline, "storyboard_continuity_sheet", lambda *args: {"rows": [{
+        "frame_id": "shot", "fields": {"direction": {
+            "value": "左后侧", "source_kind": "frame", "source_revision": None,
+        }},
+    }]})
+    monkeypatch.setattr(api, "_get_custom_prompt", lambda *args: "")
+    monkeypatch.setattr(api, "_get_director_prompt_context", lambda *args: "")
+    monkeypatch.setattr(api, "_r2v_scene_lighting", lambda *args: {
+        "scene_name": "粮铺门前", "scene_id": "shop", "variant_id": "shop-final",
+        "source_variant_id": "street-final", "design_revision": 3,
+        "fields": {"light_side": "right", "brightness": 50},
+    })
+    request = api.PolishR2VPromptRequest(
+        draft_prompt="[character2:粮铺门前]", slots=[], script_id="project", frame_id="shot",
+        image_urls=["signed-shop-image"], target_video_model="uniart/minimax-h3-vip",
+        optimization_skills=[],
+    )
+    pending = api.preview_r2v_polish_prompt(request)
+    assert pending["review_context"]["scene_lighting"]["requires_decision"] is True
+    with pytest.raises(api.HTTPException) as error:
+        api._require_video_polish_review(request.model_copy(update={
+            "review_token": pending["review_token"], "reviewed_messages": pending["messages"],
+        }), True)
+    assert error.value.status_code == 422
+
+    reference_request = request.model_copy(update={"reference_lighting_choice": "reference"})
+    reference = api.preview_r2v_polish_prompt(reference_request)
+    assert "Use these frozen reference lighting fields" in reference["messages"]["system"]
+    assert '"direction":' not in reference["messages"]["system"]
+    assert reference["review_token"] != pending["review_token"]
+    assert api._require_video_polish_review(reference_request.model_copy(update={
+        "review_token": reference["review_token"], "reviewed_messages": reference["messages"],
+    }), True) == reference["messages"]
+    shot = api.preview_r2v_polish_prompt(request.model_copy(update={"reference_lighting_choice": "shot"}))
+    assert "Keep this shot's lighting values" in shot["messages"]["system"]
+    assert '"direction":' in shot["messages"]["system"]
+    monkeypatch.setattr(api, "_r2v_scene_lighting", lambda *args: {
+        "scene_name": "粮铺门前", "scene_id": "shop", "variant_id": "shop-new",
+        "source_variant_id": "street-new", "design_revision": 4,
+        "fields": {"light_side": "left", "brightness": 40},
+    })
+    with pytest.raises(api.HTTPException) as stale:
+        api._require_video_polish_review(reference_request.model_copy(update={
+            "review_token": reference["review_token"], "reviewed_messages": reference["messages"],
+        }), True)
+    assert stale.value.status_code == 409
 
 
 def test_non_h3_submission_strips_semantic_editor_tags():

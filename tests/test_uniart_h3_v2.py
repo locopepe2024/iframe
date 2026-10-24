@@ -23,7 +23,7 @@ def test_h3_v2_modes_use_dedicated_create_and_query(monkeypatch, tmp_path, mode,
     assert body['model'] == 'minimax-h3-discount'
     assert body['mode'] == expected
     assert [c['role'] for c in body['content'][1:]] == roles
-    assert body['ratio'] == ('adaptive' if 'first_frame' in roles else '16:9')
+    assert body['ratio'] == '16:9'
     assert set(body) == {'model', 'mode', 'content', 'duration', 'resolution', 'ratio'}
     assert poll.call_args.args[0]['base_url'] == 'https://gateway.test/oran/h3/v2'
 

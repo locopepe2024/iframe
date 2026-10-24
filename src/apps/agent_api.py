@@ -33,10 +33,12 @@ from .media_reference import normalize_managed_media_reference
 from .agent_tools import search_knowledge
 from . import agent_facts
 from .comic_gen.character_constraints import CharacterConstraints
+from .comic_gen.extraction_jobs import ExtractionJobs
 
 router = APIRouter(prefix="/agent", tags=["agent"])
 router.include_router(skills_router)
 logger = logging.getLogger(__name__)
+character_design_jobs = ExtractionJobs()
 
 COMPANION_SKILL_INSTRUCTIONS = {
     "listening": "以温和、尊重、简短、接地气的中文回应，优先倾听和安抚情绪。允许用户重复讲述，不纠正无关紧要的细节。适度提出一个开放问题，邀请分享回忆或近况；不要制造依赖或劝其疏远家人朋友。",
@@ -653,6 +655,10 @@ def preview_character_design_draft(body: CharacterDesignRequest, ctx: UserContex
 @router.post("/character-design/draft")
 def character_design_draft(body: CharacterDesignRequest, ctx: UserContext = Depends(require_user_context)):
     prepared = _compile_character_design_draft_input(body, ctx)
+    return _run_character_design_draft(body, ctx, prepared)
+
+
+def _run_character_design_draft(body: CharacterDesignRequest, ctx: UserContext, prepared: dict):
     allowed_age_stages = prepared["allowed_age_stages"]
     allowed_routes = prepared["allowed_routes"]
     messages = body.reviewed_messages
@@ -798,6 +804,40 @@ def character_design_draft(body: CharacterDesignRequest, ctx: UserContext = Depe
         "identity_skill_revision": prepared["identity_skill_revision"],
         "constraints": body.constraints.model_dump(),
     }
+
+
+@router.post("/character-design/draft/jobs", status_code=202)
+def start_character_design_draft_job(body: CharacterDesignRequest, ctx: UserContext = Depends(require_user_context)):
+    prepared = _compile_character_design_draft_input(body, ctx)
+    # Reject stale or malformed reviewed input before creating a durable task.
+    messages = body.reviewed_messages
+    if not body.review_token or body.review_token != prepared["review_token"] or not messages:
+        raise HTTPException(409, "角色设计输入已变化，请重新预览并确认")
+    if set(messages) != {"system", "user"} or not messages["user"].strip():
+        raise HTTPException(422, "确认后的模型输入缺少用户消息")
+    if "identity" not in messages["system"] or "look" not in messages["system"]:
+        raise HTTPException(422, "角色设计输出格式已被移除，请恢复后再提交")
+
+    def work():
+        try:
+            return _run_character_design_draft(body, ctx, prepared)
+        except HTTPException as exc:
+            return {"detail": exc.detail if isinstance(exc.detail, str) else "角色设计失败，请重试。"}
+        except Exception as exc:
+            logger.error("Character design job failed (%s)", type(exc).__name__)
+            return {"detail": "角色设计任务失败，请检查模型连接后重试。"}
+
+    project = f"character-design:{body.project_id or 'personal'}:{body.character_name}"
+    return character_design_jobs.start(
+        ctx.owner_profile_id, project, f"character-design:{uuid.uuid4().hex}", work,
+    )
+
+
+@router.get("/character-design/draft/jobs/{job_id}")
+def get_character_design_draft_job(job_id: str, ctx: UserContext = Depends(require_user_context)):
+    return character_design_jobs.get_for_project_prefix(
+        ctx.owner_profile_id, "character-design", job_id, "character-design:",
+    )
 
 
 def _compile_asset_design_draft_input(body: AssetDesignRequest, ctx: UserContext) -> dict:

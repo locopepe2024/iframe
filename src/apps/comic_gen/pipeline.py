@@ -2603,6 +2603,28 @@ class ComicGenPipeline(StudioOwnerMixin):
                 frame_changed = False
                 for variant in image_asset.variants:
                     old_key = image_variant_storage_key(variant)
+                    # Older last-frame extracts stored the OSS projection as
+                    # storage_key even though the owner-local file was retained.
+                    if (variant.prompt_used == "Extracted last frame from video"
+                            and old_key and not old_key.startswith("users/")):
+                        filename = os.path.basename(old_key)
+                        if filename.startswith(f"frame_{frame.id}_lastframe_") and filename.endswith(".jpg"):
+                            destination = os.path.join(owner_dir, filename)
+                            if os.path.isfile(destination):
+                                new_key = os.path.relpath(destination, self.output_root)
+                                variant.url = new_key
+                                variant.storage_key = new_key
+                                variant.media_id = None
+                                frame.t2i_image_urls = [
+                                    new_key if value == old_key else value
+                                    for value in frame.t2i_image_urls
+                                ]
+                                if image_asset.selected_id == variant.id:
+                                    frame.image_url = new_key
+                                    frame.rendered_image_url = new_key
+                                changed = True
+                                frame_changed = True
+                                continue
                     if not old_key or not old_key.startswith("storyboard/"):
                         continue
                     try:
@@ -8211,7 +8233,7 @@ class ComicGenPipeline(StudioOwnerMixin):
         frame.rendered_image_asset.selected_id = variant.id
         self._register_storyboard_frame_media(frame, script.owner_profile_id)
         # Also update rendered_image_url so VideoCreator can pick it up
-        frame.rendered_image_url = image_url
+        frame.rendered_image_url = variant.storage_key
 
         script.updated_at = time.time()
         self._save_data()
@@ -9296,7 +9318,10 @@ class ComicGenPipeline(StudioOwnerMixin):
                     reference_images.insert(0, task.image_url)
                 from .reference_prompt import bind_storyboard_prompt
                 image_count = 2 if task.generation_mode == "first_last_frame" else 1 if task.generation_mode == "i2v" else len(reference_images)
-                submitted_prompt = bind_storyboard_prompt(task.prompt, task.model, image_count)
+                submitted_prompt = bind_storyboard_prompt(
+                    task.prompt, task.model, image_count,
+                    single_frame_anchor=task.generation_mode == "i2v",
+                )
                 # Storyboard cuts can be shorter than the provider's output
                 # window. Normalize at the submission boundary as protection
                 # for mobile clients or cached frontends that predate the UI

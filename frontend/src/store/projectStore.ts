@@ -773,8 +773,7 @@ export const useProjectStore = create<ProjectStore>()(
             },
 
             loadProjects: () => {
-                // Projects are already loaded from localStorage via persist middleware
-                // This is mainly for future API sync if needed
+                // The workspace synchronizes projects from the backend.
             },
 
             selectProject: async (id: string) => {
@@ -1003,17 +1002,18 @@ export const useProjectStore = create<ProjectStore>()(
         }),
         {
             name: 'project-storage',
-            version: 2,
+            version: 3,
             migrate: (persistedState: any) => ({
                 ...persistedState,
+                // Project snapshots contain generated media and are restored
+                // from the backend; legacy browser copies can exceed quota.
+                projects: [],
                 // Generation markers are runtime state. Older releases
                 // persisted markers without a backend task ID, which left
                 // assets stuck after a server restart.
                 generatingTasks: [],
             }),
-            partialize: (state) => ({
-                projects: state.projects,
-            }),
+            partialize: () => ({}),
         }
     )
 );
