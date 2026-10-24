@@ -38,6 +38,16 @@ def test_short_h3_action_requires_contiguous_timing_but_atmosphere_does_not():
     assert not api._needs_short_action_timeline('uniart/minimax-h3-vip', 4, '暮秋残阳笼罩长街')
     assert not api._needs_short_action_timeline('uniart/seedance-2.5-vip', 4, action)
 
+    ir_request = api.PolishVideoPromptRequest(
+        draft_prompt='匪首快速踹中老掌柜，撞桌后倒地。',
+        target_video_model='uniart/minimax-h3-vip', target_duration=4,
+        optimizer_provider='minimax_context_ir',
+    )
+    ir_text = api.preview_video_polish_prompt(ir_request)['messages']['user']
+    assert 'Preserve explicit visual timings in the draft' in ir_text
+    assert 'do not copy stale sound times from the draft' in ir_text
+    assert 'do not silently retime them' in ir_text
+
     timed = '\n'.join([
         'integrated_multimodal_description:',
         '[Shot 1] 0.00-0.60s 起腿；0.60-1.20s 接触；1.20-2.80s 撞桌；2.80-4.00s 倒地。',
@@ -159,7 +169,7 @@ def test_rapid_impact_and_explicit_table_collision_preserve_real_time_causality(
     assert 'a slow Push In or Zoom In does not make a' in system
     assert 'backward steps, body hits the table, table visibly shifts or shakes' in system
     assert 'If no table' in system
-    assert 'when silent, do not invent sound cues' in system
+    assert 'When silent, do not invent sound cues' in system
 
 
 def test_professional_martial_terms_attach_choreography_and_physics_baselines():
