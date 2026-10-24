@@ -190,6 +190,8 @@ Release `diary-intent-d6aebc72` was synchronized to the isolated Companion demo.
 
 The composer follow-up was synchronized to the same release after frontend commit `813e0576`. “和我聊聊天” is now the textarea placeholder with a visually hidden accessible label, so it no longer consumes a separate visible row. Twenty-two focused Companion UI tests and frontend typecheck passed; the backend container and data store were unchanged.
 
+Frontend commit `6ab03032` was then synchronized to the same release. Live diary responses now render the diary action card immediately, including “继续写日记”, “保存日记”, and “放弃保存”; this also covers the interval before the message history reload pairs the turn. The static chunk containing “放弃保存” is present on the mounted test release and the container remained healthy.
+
 ## 2026-10-24 — Diary editor source context
 
 Frontend commit `c45a40d9` adds a read-only “这篇日记的依据” section inside the independent diary editor. It shows recent conversation excerpts and any photo/video attachments associated with the diary request, so the user can check what the draft is based on before saving. The context is explicitly informational: editing it does not append new facts to the diary or personal memory. Focused Companion UI tests (21), frontend typecheck, isolated static build, and diary/chat backend tests (8) passed. The existing four unrelated full-suite failures remain in axios interceptor tests whose mock has no `interceptors.request`.
