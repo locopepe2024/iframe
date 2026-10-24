@@ -25,18 +25,18 @@ it("compiles the selected character move into a generation prompt", () => {
         moveVariant: "面对数名匪寇的连续拨械",
     };
     const result = buildGenerationPrompt(shot, false, "uniart/minimax-h3-vip");
-    expect(result).toContain("连贯剑势·拨械");
-    expect(result).toContain("动作词：拍刃、抽击、剑鞭");
+    expect(result).toContain("拍刃·破势拨械");
+    expect(result).toContain("动作词：拍刃、Beat、Attack au Fer");
     expect(result).toContain("面对数名匪寇的连续拨械");
-    expect(result).toContain("只针对持械手或刀剑");
-    expect(result).toContain("不以锋刃切割");
-    expect(result).toContain("钝器式拍击");
-    expect(result).toContain("类似抖动长竹竿的弹性拍击");
-    expect(result).toContain("手腕短促加速并急停");
-    expect(result).toContain("剑身中段速度更快，剑尖滞后");
-    expect(result).toContain("手腕急停后剑尖因惯性回弹");
+    expect(result).toContain("主动攻击对方剑身或刀剑");
+    expect(result).toContain("定格或冻结3-5帧");
+    expect(result).toContain("强烈垂直方向抖动");
+    expect(result).toContain("不改为抽击绕剑");
+    expect(result).toContain("强力碰撞");
+    expect(result).toContain("己方中后段");
+    expect(result).not.toContain("抖动长竹竿");
     expect(result).not.toContain("剑身横向扫过");
-    expect(result).toContain("刀剑沿受力方向翻飞");
+    expect(result).toContain("受击武器或演员瞬间飞出");
 });
 
 it("removes the move text when an optimized prompt has no selected move", () => {
@@ -47,7 +47,7 @@ it("removes the move text when an optimized prompt has no selected move", () => 
         promptIsOptimized: true,
     };
     expect(buildGenerationPrompt(shot, false, "uniart/minimax-h3-vip"))
-        .not.toContain("连贯剑势·拨械");
+        .not.toContain("拍刃·破势拨械");
 });
 
 it("keeps blade-line sweep as a separate move from blade-side slap", () => {
@@ -78,7 +78,7 @@ it("compiles multiple character performance moves independently", () => {
     const result = buildGenerationPrompt(shot, false, "uniart/minimax-h3-vip");
     expect(result).toContain("角色suyan");
     expect(result).toContain("角色bandit-leader");
-    expect(result).toContain("拍刃/抽击");
+    expect(result).toContain("强力碰撞");
     expect(result).toContain("明确横向刃线");
 });
 import { resolveStoryboardStyle, resolveStoryboardStyleForRender } from "@/lib/storyboardStyle";
