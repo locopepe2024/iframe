@@ -44,6 +44,7 @@ export default function AgentChat() {
   const [hasRetry, setHasRetry] = useState(false);
   const [albumOpen,setAlbumOpen] = useState(false);
   const [feature,setFeature] = useState<CompanionFeature | null>(null);
+  const [dismissedUploadGuides, setDismissedUploadGuides] = useState<string[]>([]);
   const [uploading,setUploading] = useState(false);
   const [pendingMedia,setPendingMedia] = useState<Record<ComposerMode,UploadedMedia[]>>({chat:[],image:[],video:[]});
   const [mediaAcknowledged,setMediaAcknowledged] = useState(false);
@@ -127,6 +128,16 @@ export default function AgentChat() {
     setPendingMedia(old => ({ ...old, chat: [] }));
     setMediaAcknowledged(false);
   }
+  function dismissUploadGuide(turnId: string) {
+    setDismissedUploadGuides(old => old.includes(turnId) ? old : [...old, turnId]);
+  }
+  function uploadGuideActions(turnId: string) {
+    return {
+      onUpload: () => { dismissUploadGuide(turnId); fileRef.current?.click(); },
+      onAlbum: () => { dismissUploadGuide(turnId); setAlbumOpen(true); },
+      onDismiss: () => dismissUploadGuide(turnId),
+    };
+  }
   function renderAttached(anchor: number) {
     return attached.filter(item => item.anchor === anchor).map((item,index) => item.kind === "photo" ? <PhotoConversationCard key={`${item.id}-${index}`} photoId={item.id} label={item.name} /> : <VideoConversationCard key={`${item.id}-${index}`} id={item.id} name={item.name} />);
   }
@@ -199,13 +210,13 @@ export default function AgentChat() {
           })}
           media={attached.filter(item => item.anchor === index + 1).map(item => ({ id: item.id, kind: item.kind, name: item.name })) as DiaryContextMedia[]}
         /> : <article className={chatStyles.assistant}><span>陪伴助手</span><p>{message.turn.result.text}</p></article>)}
-        {message.turn?.result?.kind === "upload_guide" && <UploadGuideCard onUpload={() => fileRef.current?.click()} onAlbum={() => setAlbumOpen(true)} />}
+        {message.turn?.result?.kind === "upload_guide" && !dismissedUploadGuides.includes(message.turn.turn_id) && <UploadGuideCard {...uploadGuideActions(message.turn.turn_id)} />}
       </div>{renderAttached(index+1)}</Fragment>
       )}
       {after !== null && <button disabled={busy} onClick={() => void run(() => history(session, after))}>更多历史消息</button>}
     </section>
     {turn?.result?.kind === "text" && !messages.some(m => m.turn?.turn_id === turn.turn_id) && (diaryDay(lastSubmittedText) ? <DiaryCard day={diaryDay(lastSubmittedText)!} text={turn.result.text} sourceTurn={turn.turn_id} /> : <article className={chatStyles.assistant}><span>陪伴助手</span><p>{turn.result.text}</p></article>)}
-    {turn?.result?.kind === "upload_guide" && !messages.some(m => m.turn?.turn_id === turn.turn_id) && <UploadGuideCard onUpload={() => fileRef.current?.click()} onAlbum={() => setAlbumOpen(true)} />}
+    {turn?.result?.kind === "upload_guide" && !messages.some(m => m.turn?.turn_id === turn.turn_id) && !dismissedUploadGuides.includes(turn.turn_id) && <UploadGuideCard {...uploadGuideActions(turn.turn_id)} />}
     {uploadFiles.length > 0 && <MediaUpload files={uploadFiles} disabled={inputDisabled || pending} onUploaded={attach} onBusyChange={setUploading} onClose={() => setUploadFiles([])} />}
     {albumOpen && <AlbumPicker disabled={inputDisabled || pending} onClose={() => setAlbumOpen(false)} onPhoto={photo => {
       attach({kind:"photo",id:photo.photo_id,name:"相册照片"});setAlbumOpen(false);

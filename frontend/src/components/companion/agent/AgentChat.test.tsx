@@ -98,8 +98,10 @@ it("renders an upload guide for the live upload-help result",async()=>{
   fireEvent.click(screen.getByRole("button",{name:"发送"}));
   const card=await screen.findByRole("article",{name:"上传素材引导"});
   expect(card).toHaveTextContent("怎么加入照片或视频？");
-  expect(within(card).getByRole("button",{name:"上传照片或视频"})).toBeInTheDocument();
-  expect(within(card).getByRole("button",{name:"从相册选择"})).toBeInTheDocument();
+  expect(within(card).getByRole("button",{name:"从手机添加照片或视频"})).toBeInTheDocument();
+  expect(within(card).getByRole("button",{name:"从已有相册添加"})).toBeInTheDocument();
+  fireEvent.click(within(card).getByRole("button",{name:"返回聊天"}));
+  expect(screen.queryByRole("article",{name:"上传素材引导"})).not.toBeInTheDocument();
   expect(api.tool).not.toHaveBeenCalled();
 });
 
