@@ -67,7 +67,7 @@ class ChatStore(DiaryStore, CompanionStore):
             if not row or row['actor']!=actor or row['status']!='running' or row['token']!=claim['token'] or row['lease_until']<=self.clock():
                 raise Conflict('Turn claim expired')
             diary_request = diary_day(row['text']) is not None
-            if proposal['kind']=='text':
+            if proposal['kind']=='text' and not (diary_request and re.search(r'实际记忆查询结果|没有匹配的记忆|memory[._]search', proposal.get('text',''), re.I)):
                 result=dict(kind='text',text=proposal['text'])
             elif diary_request:
                 # A diary request is a writing task. Never expose an accidental

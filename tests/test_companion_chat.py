@@ -65,6 +65,11 @@ def test_diary_request_never_surfaces_an_accidental_memory_read(chat):
     assert response.status_code==200
     assert response.json()['result']==dict(kind='text',text='我会按这个日期整理回忆日记。现在还缺少可以整理的聊天内容，请先告诉我这一天发生了什么。')
 
+    callback.return_value=dict(kind='text',text='实际记忆查询结果：没有匹配的记忆。')
+    response=client.post(f'/companion-runtime/sessions/{session}/chat',json=dict(
+        operation_id='diary-text', text='请把 2026-10-24 我们聊的内容整理成一篇回忆日记。', allow_external_text=True))
+    assert response.json()['result']==dict(kind='text',text='我会按这个日期整理回忆日记。现在还缺少可以整理的聊天内容，请先告诉我这一天发生了什么。')
+
 
 def test_claim_reclaim_old_worker_and_invalid_source_never_writes(chat):
     store,now,_,session,_=chat
