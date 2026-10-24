@@ -31,7 +31,11 @@ const apiMocks = vi.hoisted(() => ({
         : path === "/character-design/draft/preview"
             ? Promise.resolve({ messages: { system: "返回 identity 与 look", user: JSON.stringify(body) },
                 media: [], review_token: "reviewed", format_note: "JSON" })
-            : Promise.resolve({ identity: { visual_notes: "深棕眼" }, look: { visual_notes: "黑色劲装" }, skill_revision: "skill-hash" })),
+            : path === "/character-design/draft/jobs"
+                ? Promise.resolve({ id: "design-job", status: "completed", result: {
+                    identity: { visual_notes: "深棕眼" }, look: { visual_notes: "黑色劲装" }, skill_revision: "skill-hash",
+                } })
+                : Promise.resolve({ id: "design-job", status: "completed" })),
 }));
 
 const projectStoreMocks = vi.hoisted(() => ({
@@ -836,7 +840,7 @@ it("submits the current edited Prompt and read-only description in one action an
         profile: "少年，身姿挺拔，素黑劲装；性格沉静寡言。",
         current_draft: "身高约178厘米，素黑外衣一件，脚穿布靴。", route: "", reference_assets: [],
     }));
-    expect(apiMocks.agentRequest).toHaveBeenCalledWith("/character-design/draft", "POST", expect.objectContaining({
+    expect(apiMocks.agentRequest).toHaveBeenCalledWith("/character-design/draft/jobs", "POST", expect.objectContaining({
         review_token: "reviewed", reviewed_messages: expect.objectContaining({ system: "返回 identity 与 look" }),
     }));
     expect(aiResult()).toHaveValue("身份：深棕眼\n造型：黑色劲装");
@@ -927,7 +931,7 @@ it("does not submit a stale compiled request after the creator edits role detail
     fireEvent.click(screen.getByRole("button", { name: "提交 AI 完善" }));
     act(() => designDetailsEditor().commands.setContent("<p>新的角色约束。</p>"));
     await act(async () => resolvePreview({ messages: { system: "identity look", user: "旧约束" }, review_token: "old" }));
-    expect(apiMocks.agentRequest.mock.calls.filter(([path]) => path === "/character-design/draft")).toHaveLength(0);
+    expect(apiMocks.agentRequest.mock.calls.filter(([path]) => path === "/character-design/draft/jobs")).toHaveLength(0);
     expect(screen.queryByRole("textbox", { name: "AI 优化" })).not.toBeInTheDocument();
 });
 
@@ -940,7 +944,9 @@ it("drops an in-flight generated result after role details change", async () => 
     fireEvent.click(screen.getByRole("button", { name: "提交 AI 完善" }));
     await waitFor(() => expect(resolveDraft).toBeDefined());
     act(() => designDetailsEditor().commands.setContent("<p>新的素白衣约束。</p>"));
-    await act(async () => resolveDraft({ identity: { visual_notes: "过期脸型" }, look: { visual_notes: "旧衣服" } }));
+    await act(async () => resolveDraft({ id: "design-job", status: "completed", result: {
+        identity: { visual_notes: "过期脸型" }, look: { visual_notes: "旧衣服" },
+    } }));
     expect(screen.queryByRole("textbox", { name: "AI 优化" })).not.toBeInTheDocument();
     expect(designDetailsEditor().getText()).toBe("新的素白衣约束。");
 });
@@ -951,6 +957,21 @@ it("shows model errors without overwriting role details or saving a design", asy
     apiMocks.agentRequest.mockRejectedValueOnce(new Error("模型服务暂不可用"));
     fireEvent.click(screen.getByRole("button", { name: "提交 AI 完善" }));
     expect(await screen.findByRole("alert")).toHaveTextContent("模型服务暂不可用");
+    expect(designDetailsEditor().getText()).toContain("素黑劲装，布靴");
+    expect(onUpdateAttributes).not.toHaveBeenCalled();
+});
+
+it("shows a completed background job error without replacing the current design", async () => {
+    const { onUpdateAttributes } = mountSimpleDesign();
+    await waitFor(() => expect(screen.getByRole("button", { name: "提交 AI 完善" })).toBeEnabled());
+    apiMocks.agentRequest.mockImplementationOnce((_path, _method, body) => Promise.resolve({
+        messages: { system: "identity look", user: JSON.stringify(body) }, review_token: "reviewed",
+    }));
+    apiMocks.agentRequest.mockImplementationOnce(() => Promise.resolve({
+        id: "failed-job", status: "completed", result: { detail: "角色设计模型返回校验失败，请重试。" },
+    }));
+    fireEvent.click(screen.getByRole("button", { name: "提交 AI 完善" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("角色设计模型返回校验失败，请重试。");
     expect(designDetailsEditor().getText()).toContain("素黑劲装，布靴");
     expect(onUpdateAttributes).not.toHaveBeenCalled();
 });
@@ -1201,7 +1222,7 @@ it('preserves authored negative prompt arrays through AI, confirmation and reloa
     fireEvent.change(screen.getByRole('textbox', { name: '设计约束 · 必须保留' }), { target: { value: '自然皮肤纹理' } });
     fireEvent.change(screen.getByRole('textbox', { name: '设计约束 · 负面提示词' }), { target: { value: '额外披风\ncartoon' } });
     await submitSimpleDesign();
-    const request = apiMocks.agentRequest.mock.calls.find(([path]) => path === '/character-design/draft')![2];
+    const request = apiMocks.agentRequest.mock.calls.find(([path]) => path === '/character-design/draft/jobs')![2];
     expect(request.constraints).toEqual({ must_keep: ['自然皮肤纹理'], negative_prompt: ['额外披风', 'cartoon'] });
     fireEvent.click(screen.getByRole('button', { name: /^保存并使用/ }));
     await waitFor(() => expect(onUpdateAttributes).toHaveBeenCalled());

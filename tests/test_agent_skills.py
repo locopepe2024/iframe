@@ -1,4 +1,7 @@
 import json
+import time
+from concurrent.futures import ThreadPoolExecutor
+from threading import Event
 from unittest.mock import Mock
 from types import SimpleNamespace
 
@@ -8,6 +11,7 @@ from fastapi.testclient import TestClient
 
 from src.apps import agent_api as agent, agent_skills as skills
 from src.apps.identity import UserContext, require_user_context
+from src.apps.comic_gen.extraction_jobs import ExtractionJobs
 
 
 @pytest.fixture
@@ -21,6 +25,60 @@ def run_reviewed_character_draft(body, ctx):
     return agent.character_design_draft(body.model_copy(update={
         'reviewed_messages': preview['messages'], 'review_token': preview['review_token'],
     }), ctx)
+
+
+def test_character_design_job_returns_before_model_and_is_owner_scoped(ctx, tmp_path, monkeypatch):
+    monkeypatch.setattr(agent, 'validate_model', lambda *_: None)
+    entered, release = Event(), Event()
+
+    def slow_model(*_args):
+        entered.set()
+        assert release.wait(3)
+        return json.dumps({
+            'identity': {'visual_notes': '清瘦中年男子'},
+            'look': {'visual_notes': '黑色短衣'},
+            'review_items': [],
+        })
+
+    monkeypatch.setattr(agent, 'complete', slow_model)
+    body = agent.CharacterDesignRequest(model='qwen', character_name='探子', profile='中年男子', project_id='project')
+    preview = agent.preview_character_design_draft(body, ctx)
+    reviewed = body.model_copy(update={
+        'reviewed_messages': preview['messages'], 'review_token': preview['review_token'],
+    })
+    with ThreadPoolExecutor(max_workers=1) as executor:
+        monkeypatch.setattr(agent, 'character_design_jobs', ExtractionJobs(tmp_path / 'jobs.sqlite3', executor=executor))
+        try:
+            started = agent.start_character_design_draft_job(reviewed, ctx)
+            assert started['status'] == 'running'
+            assert entered.wait(2)
+            assert agent.get_character_design_draft_job(started['id'], ctx)['status'] == 'running'
+            with pytest.raises(HTTPException) as denied:
+                agent.get_character_design_draft_job(started['id'], UserContext('other', 'other', '', ''))
+            assert denied.value.status_code == 404
+        finally:
+            release.set()
+        deadline = time.monotonic() + 3
+        while True:
+            result = agent.get_character_design_draft_job(started['id'], ctx)
+            if result['status'] == 'completed':
+                break
+            assert time.monotonic() < deadline
+            time.sleep(.01)
+        assert result['result']['identity']['visual_notes'] == '清瘦中年男子'
+
+
+def test_character_design_job_rejects_stale_preview_before_start(ctx, tmp_path, monkeypatch):
+    monkeypatch.setattr(agent, 'validate_model', lambda *_: None)
+    monkeypatch.setattr(agent, 'character_design_jobs', ExtractionJobs(tmp_path / 'jobs.sqlite3'))
+    body = agent.CharacterDesignRequest(model='qwen', character_name='探子', profile='中年男子')
+    preview = agent.preview_character_design_draft(body, ctx)
+    changed = body.model_copy(update={
+        'profile': '老年男子', 'reviewed_messages': preview['messages'], 'review_token': preview['review_token'],
+    })
+    with pytest.raises(HTTPException) as rejected:
+        agent.start_character_design_draft_job(changed, ctx)
+    assert rejected.value.status_code == 409
 
 
 def test_asset_image_prompt_refine_returns_reviewable_suggestion(ctx, monkeypatch):
