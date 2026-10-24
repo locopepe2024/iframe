@@ -1261,6 +1261,7 @@ function CharacterDetailModal({ asset, type, onClose, onUpdateDescription, onUpd
                 variantLabel,
                 isActive,
                 reference: { asset_type: entry.asset_type, asset_id: entry.asset_id, variant_id: variant.id },
+                sceneTool: entry.asset_type === "scene" ? variant.scene_tool : undefined,
             };
         }).filter(Boolean) as ReferenceCandidate[]);
     }, [assetIndex]);
@@ -1269,7 +1270,7 @@ function CharacterDetailModal({ asset, type, onClose, onUpdateDescription, onUpd
     const matchingReferenceCandidates = searchReferenceCandidates(selectedCandidates, mention?.query ?? "")
         .sort((left, right) => Number(Boolean(right.isActive)) - Number(Boolean(left.isActive)));
     const pickerCandidates = searchReferenceCandidates(referenceCandidates, referencePickerQuery);
-    const lightingReferences = useMemo<LightingReference[]>(() => referenceCandidates.flatMap((candidate) => candidate.reference && candidate.previewUrl ? [{ key: `${candidate.reference.asset_type}:${candidate.reference.asset_id}:${candidate.reference.variant_id}`, label: candidate.label, url: candidate.previewUrl, reference: candidate.reference }] : []), [referenceCandidates]);
+    const lightingReferences = useMemo<LightingReference[]>(() => referenceCandidates.flatMap((candidate) => candidate.reference && candidate.previewUrl ? [{ key: `${candidate.reference.asset_type}:${candidate.reference.asset_id}:${candidate.reference.variant_id}`, label: candidate.label, url: candidate.previewUrl, reference: candidate.reference, tool: candidate.sceneTool?.kind === "lighting" ? candidate.sceneTool : undefined }] : []), [referenceCandidates]);
 
     const handleMentionKeyDown = (event: KeyboardEvent) => {
         if (!mention) return false;

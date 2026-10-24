@@ -9,6 +9,7 @@ import Placeholder from '@tiptap/extension-placeholder';
 import { shortReferenceLabel } from './referenceMedia';
 import type { Editor } from '@tiptap/core';
 import type { AssetLibraryReference } from '@/lib/api';
+import type { SceneToolParams } from '@/components/modules/SceneImageTools';
 import type { AssetPreviewRef } from '@/components/shared/AssetIndexPreview';
 
 const EMPTY_LABELS: string[] = [];
@@ -24,6 +25,7 @@ export type ReferenceCandidate = {
   variantLabel?: string;
   isActive?: boolean;
   description?: string;
+  sceneTool?: SceneToolParams | null;
 };
 
 export type ReferenceSuggestion = {

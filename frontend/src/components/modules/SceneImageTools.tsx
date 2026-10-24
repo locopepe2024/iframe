@@ -21,7 +21,7 @@ export type SceneImageSource = {
     sourceVariantId?: string;
 };
 
-export type LightingReference = { key: string; label: string; url: string; reference: AssetLibraryReference };
+export type LightingReference = { key: string; label: string; url: string; reference: AssetLibraryReference; tool?: Extract<SceneToolParams, { kind: "lighting" }> };
 export type SceneToolParams = { panel_settings?: ScenePromptLayers } & (
     | { kind: "lighting"; view_mode: "perspective" | "front"; intelligent: boolean; brightness: number; color: string; light_side: "left" | "top" | "right" | "front" | "bottom" | "back"; azimuth?: number; elevation?: number; rim_light: boolean; preset: string | null; extra: string }
     | { kind: "camera"; preset: string; yaw: number; pitch: number; zoom: number; focus: boolean; focus_x: number; focus_y: number; focus_radius: number; prompt_enabled: boolean; extra: string });
@@ -33,7 +33,7 @@ const cameraPresets = [
     { key: "rear_view", label: "背面视角" },
 ] as const;
 const lightSides = ["左侧", "顶部", "右侧", "前方", "底部", "后方"] as const;
-const LIGHT_SIDE_LABELS: Record<"left" | "top" | "right" | "front" | "bottom" | "back", string> = {
+const LIGHT_SIDE_LABELS: Record<"left" | "top" | "right" | "front" | "bottom" | "back", (typeof lightSides)[number]> = {
     left: "左侧", top: "顶部", right: "右侧", front: "前方", bottom: "底部", back: "后方",
 };
 const distances = ["远景", "中远景", "中景", "近景", "特写"] as const;
@@ -73,12 +73,20 @@ export function SceneImageTools({ kind, sources, sceneAssetId, lightingReference
     const [color, setColor] = useState("#f3f4f6");
     const [lightSide, setLightSide] = useState<(typeof lightSides)[number]>("前方");
     const [lightAngles, setLightAngles] = useState<{ azimuth: number; elevation: number } | null>(null);
-    const [panelSettings, setPanelSettings] = useState<ScenePromptLayers>({});
+    const [panelSettings, setPanelSettings] = useState<ScenePromptLayers | undefined>({});
+    const [rimLight, setRimLight] = useState(false);
+    const [lightingPreset, setLightingPreset] = useState<string | null>(null);
     const [lightingReferenceKey, setLightingReferenceKey] = useState("");
     const [uploadedLightingReference, setUploadedLightingReference] = useState<LightingReference | null>(null);
     const [uploadingLightingReference, setUploadingLightingReference] = useState(false);
     const [lightingReferenceError, setLightingReferenceError] = useState("");
     const [reviewedPrompt, setReviewedPrompt] = useState("");
+    const manualLightingSettings = useRef<{
+        brightness: number; viewMode: "perspective" | "front"; color: string;
+        lightSide: (typeof lightSides)[number]; lightAngles: { azimuth: number; elevation: number } | null;
+        panelSettings: ScenePromptLayers | undefined; rimLight: boolean; lightingPreset: string | null; extra: string;
+    } | null>(null);
+    const copiedLightingReferenceKey = useRef<string | null>(null);
     const [cameraPreset, setCameraPreset] = useState<(typeof cameraPresets)[number]["key"]>("custom");
     const [yaw, setYaw] = useState(0);
     const [pitch, setPitch] = useState(0);
@@ -100,12 +108,44 @@ export function SceneImageTools({ kind, sources, sceneAssetId, lightingReference
     const control = "min-h-10 rounded-md border border-glass-border bg-surface px-3 text-sm text-foreground focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary";
     const option = "min-h-10 rounded-md border border-glass-border px-3 text-sm text-text-secondary hover:bg-hover-bg aria-pressed:border-primary aria-pressed:text-primary focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary";
 
+    function selectLightingReference(key: string, reference = allLightingReferences.find((item) => item.key === key)) {
+        setLightingReferenceKey(key);
+        setReviewedPrompt("");
+        setLightingReferenceError("");
+        if (reference?.tool) {
+            if (!copiedLightingReferenceKey.current) {
+                manualLightingSettings.current = { brightness, viewMode, color, lightSide, lightAngles, panelSettings, rimLight, lightingPreset, extra };
+            }
+            const tool = reference.tool;
+            setBrightness(tool.brightness);
+            setViewMode(tool.view_mode);
+            setColor(tool.color);
+            setLightSide(LIGHT_SIDE_LABELS[tool.light_side]);
+            setLightAngles(tool.azimuth != null && tool.elevation != null ? { azimuth: tool.azimuth, elevation: tool.elevation } : null);
+            setPanelSettings(tool.panel_settings ?? undefined);
+            setRimLight(tool.rim_light);
+            setLightingPreset(tool.preset);
+            setExtra(tool.extra);
+            copiedLightingReferenceKey.current = key;
+        } else if (copiedLightingReferenceKey.current) {
+            const previous = manualLightingSettings.current;
+            if (previous) {
+                setBrightness(previous.brightness); setViewMode(previous.viewMode); setColor(previous.color);
+                setLightSide(previous.lightSide); setLightAngles(previous.lightAngles);
+                setPanelSettings(previous.panelSettings); setRimLight(previous.rimLight);
+                setLightingPreset(previous.lightingPreset); setExtra(previous.extra);
+            }
+            copiedLightingReferenceKey.current = null;
+            manualLightingSettings.current = null;
+        }
+    }
+
     function submit() {
         if (!source || busy) return;
         const params: SceneToolParams = kind === "lighting" ? {
             kind, view_mode: viewMode, intelligent, brightness, color,
             light_side: ({ 左侧: "left", 顶部: "top", 右侧: "right", 前方: "front", 底部: "bottom", 后方: "back" } as const)[lightSide],
-            ...(lightAngles ?? {}), rim_light: false, preset: null, panel_settings: panelSettings, extra: intelligent ? extra.trim() : "",
+            ...(lightAngles ?? {}), rim_light: rimLight, preset: lightingPreset, panel_settings: panelSettings, extra: intelligent ? extra.trim() : "",
         } : {
             kind, preset: "custom", panel_settings: panelSettings, yaw, pitch, zoom: distance, focus,
             focus_x: focusX, focus_y: focusY, focus_radius: focusRadius,
@@ -142,7 +182,7 @@ export function SceneImageTools({ kind, sources, sceneAssetId, lightingReference
                 reference: { asset_type: "prop", asset_id: asset.id, variant_id: variant.id },
             };
             setUploadedLightingReference(reference);
-            setLightingReferenceKey(reference.key);
+            selectLightingReference(reference.key, reference);
         } catch (error) {
             setLightingReferenceError(error instanceof Error ? error.message : "上传光影参考图失败");
         } finally {
@@ -186,6 +226,8 @@ export function SceneImageTools({ kind, sources, sceneAssetId, lightingReference
         if (kind === "lighting") {
             setViewMode("perspective"); setIntelligent(true); setBrightness(50); setColor("#f3f4f6");
             setLightSide("前方"); setLightAngles(null); setPanelSettings({}); setLightingReferenceKey("");
+            setRimLight(false); setLightingPreset(null);
+            copiedLightingReferenceKey.current = null; manualLightingSettings.current = null;
         } else {
             setCameraPreset("custom"); setPanelSettings({}); setYaw(0); setPitch(0); setDistance(2);
             setFocus(false); setFocusX(50); setFocusY(50); setFocusRadius(18); setCameraPromptEnabled(false);
@@ -198,7 +240,7 @@ export function SceneImageTools({ kind, sources, sceneAssetId, lightingReference
                 <h3 className="text-base font-semibold text-foreground">{kind === "lighting" ? "光影效果" : "镜头视角"}</h3>
                 <p className="text-sm text-text-secondary">选择已保存的场景图片作为本次生成来源。结果将成为该场景的新候选。</p>
                 <label className="block text-sm text-text-secondary" htmlFor={`${kind}-source`}>来源图片</label>
-                <select id={`${kind}-source`} className={`${control} w-full`} value={source?.key ?? ""} onChange={(event) => setSourceKey(event.target.value)} disabled={!sources.length}>
+                <select id={`${kind}-source`} className={`${control} w-full`} value={source?.key ?? ""} onChange={(event) => { setSourceKey(event.target.value); setReviewedPrompt(""); }} disabled={!sources.length}>
                     {!sources.length && <option value="">暂无可用场景图片</option>}
                     {sources.map((item) => <option key={item.key} value={item.key}>{item.label}</option>)}
                 </select>
@@ -222,7 +264,7 @@ export function SceneImageTools({ kind, sources, sceneAssetId, lightingReference
                     <fieldset className="space-y-2"><legend className="text-sm font-medium text-foreground">观察模式</legend><div className="flex gap-2"><button type="button" className={option} aria-pressed={viewMode === "perspective"} onClick={() => setViewMode("perspective")}>透视</button><button type="button" className={option} aria-pressed={viewMode === "front"} onClick={() => setViewMode("front")}>正面</button></div></fieldset>
                     <label className="flex min-h-10 items-center gap-2 text-sm text-text-secondary"><input type="checkbox" checked={intelligent} onChange={(event) => setIntelligent(event.target.checked)} className="accent-primary" />智能模式</label>
                     <label className="block text-sm text-text-secondary" htmlFor="lighting-reference">光影参考图（可选）</label>
-                    <select id="lighting-reference" className={`${control} w-full`} value={activeLightingReference?.key ?? ""} onChange={(event) => setLightingReferenceKey(event.target.value)} disabled={!intelligent || !allLightingReferences.length}>
+                    <select id="lighting-reference" className={`${control} w-full`} value={activeLightingReference?.key ?? ""} onChange={(event) => selectLightingReference(event.target.value)} disabled={!intelligent || !allLightingReferences.length}>
                         <option value="">不使用附加参考图</option>{allLightingReferences.filter((item) => !(item.reference.asset_type === "scene" && item.reference.asset_id === sceneAssetId && item.reference.variant_id === source?.variantId)).map((item) => <option key={item.key} value={item.key}>{item.label}</option>)}
                     </select>
                     <label className="inline-flex min-h-10 cursor-pointer items-center rounded-md border border-glass-border px-3 text-sm text-text-secondary hover:bg-hover-bg focus-within:outline focus-within:outline-2 focus-within:outline-primary">
@@ -231,6 +273,7 @@ export function SceneImageTools({ kind, sources, sceneAssetId, lightingReference
                     </label>
                     {lightingReferenceError && <p role="alert" className="text-sm text-red-400">{lightingReferenceError}</p>}
                     {activeLightingReference && <img src={activeLightingReference.url} alt={`光影参考图：${activeLightingReference.label}`} className="h-24 w-24 rounded-md border border-glass-border object-cover" />}
+                    {activeLightingReference && <p className="text-xs text-text-muted">{activeLightingReference.tool ? "已读取参考图保存的光影参数，可继续调整。" : "这张图没有保存可复制的光影参数，仅作视觉参考。"}</p>}
                     <label className="block text-sm text-text-secondary">亮度 · {brightness}%<input type="range" min="0" max="100" value={brightness} onChange={(event) => setBrightness(Number(event.target.value))} className="mt-2 w-full accent-primary" /></label>
                     <label className="flex items-center gap-3 text-sm text-text-secondary">主光颜色<input type="color" aria-label="主光颜色" value={color} onChange={(event) => setColor(event.target.value)} className="h-10 w-14 cursor-pointer rounded border border-glass-border bg-surface" /></label>
                     <fieldset className="space-y-2"><legend className="text-sm font-medium text-foreground">主光方向</legend><div className="flex flex-wrap gap-2">{lightSides.map((side) => <button type="button" key={side} className={option} aria-pressed={!lightAngles && lightSide === side} onClick={() => { setLightSide(side); setLightAngles(null); }}>{side}</button>)}</div></fieldset>
@@ -244,12 +287,12 @@ export function SceneImageTools({ kind, sources, sceneAssetId, lightingReference
                 </>}
                 {kind === "lighting" && <SceneAtmosphereTemplates onApply={template => {
                     const { angles, direction: _direction, color: _color, ...lighting } = structuredClone(template.settings.lighting || {});
-                    setPanelSettings({ lighting });
+                    setPanelSettings({ lighting }); setRimLight(false); setLightingPreset(null);
                     setLightAngles(angles || null); setLightSide("前方");
                     setColor(template.color); setBrightness(template.brightness); setIntelligent(true);
                     setExtra(_color ? `光色关系：${_color}` : ""); setReviewedPrompt("");
                 }} />}
-                <ScenePromptLayersPanel value={panelSettings} onChange={value => { setPanelSettings(value); setReviewedPrompt(""); }}
+                <ScenePromptLayersPanel value={panelSettings ?? {}} onChange={value => { setPanelSettings(value); setRimLight(false); setLightingPreset(null); setReviewedPrompt(""); }}
                     fields={kind === "lighting" ? { lighting: ["season", "time_of_day", "source", "quality", "fill", "contrast", "shadow", "rim", "mood", "air"] }
                         : { camera: ["focal_length", "depth_of_field"], composition: ["frame_orientation", "subject_position", "spatial_layers", "leading_relation"] }} />
                 <label className="block text-sm text-text-secondary" htmlFor={`${kind}-extra`}>补充提示词</label>

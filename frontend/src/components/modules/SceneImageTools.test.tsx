@@ -97,6 +97,60 @@ it("submits shared lighting panel settings and stable reference identity", () =>
     expect(screen.getByTestId("lighting-preview")).toHaveTextContent("透视观察");
 });
 
+it("copies saved lighting settings from a scene reference and restores manual settings for unstructured images", () => {
+    const onGenerate = vi.fn();
+    const sceneReference = { asset_type: "scene" as const, asset_id: "street", variant_id: "relit" };
+    const uploadReference = { asset_type: "prop" as const, asset_id: "upload", variant_id: "image" };
+    render(<SceneImageTools kind="lighting" sources={sources} sceneAssetId="target" lightingReferences={[
+        { key: "street", label: "街道光影", url: "/street.png", reference: sceneReference, tool: {
+            kind: "lighting", view_mode: "front", intelligent: true, brightness: 68, color: "#abc123",
+            light_side: "right", azimuth: 45, elevation: 20, rim_light: false, preset: null,
+            panel_settings: { version: 1, lighting: { mood: "清冷疏离的空间氛围" } }, extra: "保持清晰阴影",
+        } },
+        { key: "upload", label: "普通图片", url: "/upload.png", reference: uploadReference },
+    ]} busy={false} onGenerate={onGenerate} />);
+    fireEvent.change(screen.getByLabelText("主光颜色"), { target: { value: "#123456" } });
+    fireEvent.change(screen.getByLabelText("光影参考图（可选）"), { target: { value: "street" } });
+    expect(screen.getByRole("button", { name: "正面" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByLabelText("主光颜色")).toHaveValue("#abc123");
+    expect(screen.getByLabelText("光源方位角")).toHaveValue("45");
+    expect(screen.getByText("已读取参考图保存的光影参数，可继续调整。")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "查看并确认提示词" }));
+    expect(screen.getByText("提交前提示词核对").nextElementSibling).toHaveTextContent("主光颜色 #abc123，亮度 68%");
+    fireEvent.click(screen.getByRole("button", { name: "确认并生成" }));
+    expect(onGenerate).toHaveBeenCalledWith(sources[0], expect.objectContaining({
+        color: "#abc123", brightness: 68, azimuth: 45, elevation: 20,
+        panel_settings: { version: 1, lighting: { mood: "清冷疏离的空间氛围" } },
+    }), expect.stringContaining("保持清晰阴影"), sceneReference);
+    fireEvent.change(screen.getByLabelText("光影参考图（可选）"), { target: { value: "upload" } });
+    expect(screen.queryByText("提交前提示词核对")).not.toBeInTheDocument();
+    expect(screen.getByLabelText("主光颜色")).toHaveValue("#123456");
+    expect(screen.getByLabelText("光源方位角")).toHaveValue("0");
+    expect(screen.getByText("这张图没有保存可复制的光影参数，仅作视觉参考。")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "查看并确认提示词" }));
+    fireEvent.click(screen.getByRole("button", { name: "确认并生成" }));
+    expect(onGenerate.mock.lastCall?.[1].color).toBe("#123456");
+    expect(onGenerate.mock.lastCall?.[3]).toEqual(uploadReference);
+});
+
+it("preserves saved legacy lighting presets when a reference has no panel settings", () => {
+    const onGenerate = vi.fn();
+    render(<SceneImageTools kind="lighting" sources={sources} sceneAssetId="target" lightingReferences={[
+        { key: "legacy", label: "旧光影", url: "/legacy.png", reference: { asset_type: "scene", asset_id: "street", variant_id: "legacy" }, tool: {
+            kind: "lighting", view_mode: "perspective", intelligent: true, brightness: 35, color: "#ddeeff",
+            light_side: "back", rim_light: true, preset: "blue_rim", extra: "",
+        } },
+    ]} busy={false} onGenerate={onGenerate} />);
+    fireEvent.change(screen.getByLabelText("光影参考图（可选）"), { target: { value: "legacy" } });
+    fireEvent.click(screen.getByRole("button", { name: "查看并确认提示词" }));
+    fireEvent.click(screen.getByRole("button", { name: "确认并生成" }));
+    expect(onGenerate.mock.lastCall?.[1]).toEqual(expect.objectContaining({
+        brightness: 35, color: "#ddeeff", light_side: "back", rim_light: true, preset: "blue_rim",
+        panel_settings: undefined,
+    }));
+    expect(onGenerate.mock.lastCall?.[2]).toContain("蓝色逆光勾勒主体");
+});
+
 it("uploads a separate lighting reference into the asset library before submission", async () => {
     apiMocks.uploadLibraryImage.mockResolvedValue({ image_url: "uploads/light.png" });
     apiMocks.createLibraryAsset.mockResolvedValue({

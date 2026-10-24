@@ -287,6 +287,8 @@ export interface AssetReferenceIndexVariant {
     is_favorited?: boolean;
     reference_view_role?: string;
     reference_distance?: string;
+    scene_tool?: import("@/components/modules/SceneImageTools").SceneToolParams | null;
+    scene_tool_source_variant_id?: string | null;
 }
 
 export interface AssetReferenceIndexEntry {
