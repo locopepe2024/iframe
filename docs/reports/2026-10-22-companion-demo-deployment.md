@@ -188,6 +188,8 @@ Frontend commit `87f45c76` deployed. The diary draft card now labels its separat
 
 Release `diary-intent-d6aebc72` was synchronized to the isolated Companion demo. It contains the deterministic `diary.compose` intent boundary, the writing-only model lane, session-context forwarding, and memory-text suppression. The demo container was recreated with the same data and user-config mounts; the previous container remains as `iframe-companion-demo-before-d6aebc72`. Remote health returned 200, the mounted source contains `intent.py` and `propose_diary`, and the public agent HTML served the new static chunk. No real Qwen request was issued during deployment verification; manual validation can use https://garage.uniart.fun/companion-demo/companion/agent.
 
+The composer follow-up was synchronized to the same release after frontend commit `813e0576`. “和我聊聊天” is now the textarea placeholder with a visually hidden accessible label, so it no longer consumes a separate visible row. Twenty-two focused Companion UI tests and frontend typecheck passed; the backend container and data store were unchanged.
+
 ## 2026-10-24 — Diary editor source context
 
 Frontend commit `c45a40d9` adds a read-only “这篇日记的依据” section inside the independent diary editor. It shows recent conversation excerpts and any photo/video attachments associated with the diary request, so the user can check what the draft is based on before saving. The context is explicitly informational: editing it does not append new facts to the diary or personal memory. Focused Companion UI tests (21), frontend typecheck, isolated static build, and diary/chat backend tests (8) passed. The existing four unrelated full-suite failures remain in axios interceptor tests whose mock has no `interceptors.request`.
