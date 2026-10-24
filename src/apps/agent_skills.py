@@ -17,7 +17,7 @@ router = APIRouter(prefix="/skills", tags=["agent-skills"])
 CATALOG_DIR = Path(__file__).resolve().parents[2] / "config" / "agent_skills"
 # The catalog includes the character workbench's evidence and route guidance;
 # keep enough room for the curated set while still bounding owner-scoped prompt context.
-MAX_GUIDANCE_CHARS = 20000
+MAX_GUIDANCE_CHARS = 24000
 
 
 def catalog():
@@ -138,6 +138,29 @@ def creative_guidance(owner, request="", history=()):
         skills = [p for p in skills if p['id'] not in h3_skills]
     elif request and not h3 and not seedance:
         skills = [p for p in skills if p['id'] not in {'minimax-h3-director', 'seedance-camera', 'seedance-prompt'}]
+
+    # Action physics is a baseline model-independent contract. It is loaded
+    # from the curated catalog when the request contains an observable contact
+    # or impact verb; users should not need to understand or manually select it.
+    action_pattern = re.compile(
+        r"踢|踹|打|击|撞|推|拉扯|抓住|抓|掐|砍|刺|劈|受击|命中|踉跄|跌倒|倒伏|摔倒|击飞|追赶|追逐|搏斗|fight|impact|stagger|fall",
+        re.I,
+    )
+    martial_pattern = re.compile(
+        r"武术|武指|招式|套路|兵器|拳法|剑法|刀法|棍法|格斗编排|martial|choreograph",
+        re.I,
+    )
+    if action_pattern.search(target_text):
+        action_package = next((p for p in catalog() if p["id"] == "shot-action-physics"), None)
+        if action_package and not any(p["id"] == action_package["id"] for p in skills):
+            skills.append(action_package)
+    if martial_pattern.search(target_text):
+        martial_package = next((p for p in catalog() if p["id"] == "shot-martial-choreography"), None)
+        if martial_package and not any(p["id"] == martial_package["id"] for p in skills):
+            skills.append(martial_package)
+        action_package = next((p for p in catalog() if p["id"] == "shot-action-physics"), None)
+        if action_package and not any(p["id"] == action_package["id"] for p in skills):
+            skills.append(action_package)
     if not skills:
         return ""
     contract = (CATALOG_DIR / "creative-contract.md").read_text(encoding="utf-8")

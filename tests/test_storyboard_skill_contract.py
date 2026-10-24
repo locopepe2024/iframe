@@ -111,6 +111,31 @@ def test_ir_preview_contains_selected_skill_text():
     assert 'a slow Push In or Zoom In does not make a' in preview['messages']['user']
 
 
+def test_action_terms_auto_attach_motion_baseline_to_h3_preview():
+    request = api.PolishVideoPromptRequest(
+        draft_prompt='匪首从画面右侧踹向中央老掌柜，老掌柜先踉跄退步再倒地。',
+        target_video_model='uniart/minimax-h3-vip',
+        optimizer_provider='qwen',
+    )
+    preview = api.preview_video_polish_prompt(request)
+    system = preview['messages']['system']
+    assert 'AUTOMATIC MOTION BASELINES' in system
+    assert '保持原有面向和左右画面位置' in system
+    assert '道具默认保持原位' in system
+
+
+def test_professional_martial_terms_attach_choreography_and_physics_baselines():
+    request = api.PolishVideoPromptRequest(
+        draft_prompt='设计咏春近身攻防和兵器招式，明确起势、接触、反击与收势。',
+        target_video_model='uniart/minimax-h3-vip',
+        optimizer_provider='qwen',
+    )
+    preview = api.preview_video_polish_prompt(request)
+    system = preview['messages']['system']
+    assert '[shot-action-physics · 分镜动作与受力连续性' in system
+    assert '[shot-martial-choreography · 专业武术与动作编排' in system
+
+
 @pytest.mark.parametrize('reference_mode', [False, True])
 def test_shot_polish_separates_action_rhythm_from_camera_speed(reference_mode):
     text = api._storyboard_polish_contract(

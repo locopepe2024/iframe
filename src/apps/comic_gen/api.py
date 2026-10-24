@@ -7820,7 +7820,8 @@ def _polish_error_response(err) -> Dict[str, Any]:
 
 _STORYBOARD_VIDEO_POLISH_SKILLS = frozenset({
     "minimax-h3-director", "seedance-prompt", "seedance-camera",
-    "sequence-continuity", "director-style",
+    "sequence-continuity", "director-style", "shot-action-physics",
+    "shot-martial-choreography",
 })
 
 
@@ -7865,6 +7866,46 @@ def _selected_skill_guidance(skill_ids: Optional[List[str]], model_id: str = "")
         return ""
     text = "\n\n".join(f"[{package['id']} · {package['name']} v{package['version']}]\n{package.get('instructions', '')}" for package in selected)
     return "SELECTED OPTIMIZATION SKILLS (user-selected; do not infer additional skills):\n" + text
+
+
+def _automatic_motion_skill_ids(text: str) -> List[str]:
+    """Return model-independent motion baselines inferred from observable verbs.
+
+    These are separate from user-selected optimization skills: the baseline
+    protects causal movement and spatial continuity without changing the
+    user's chosen model/style packages.
+    """
+    value = text or ""
+    action = re.compile(
+        r"踢|踹|打|击|撞|推|拉扯|抓住|抓|掐|砍|刺|劈|受击|命中|踉跄|跌倒|倒伏|摔倒|击飞|追赶|追逐|搏斗|fight|impact|stagger|fall",
+        re.I,
+    )
+    martial = re.compile(
+        r"武术|武指|招式|套路|兵器|拳法|剑法|刀法|棍法|格斗编排|martial|choreograph",
+        re.I,
+    )
+    ids = ["shot-action-physics"] if action.search(value) else []
+    if martial.search(value):
+        ids.append("shot-martial-choreography")
+        if "shot-action-physics" not in ids:
+            ids.insert(0, "shot-action-physics")
+    return ids
+
+
+def _automatic_motion_skill_guidance(text: str, model_id: str = "") -> str:
+    ids = _automatic_motion_skill_ids(text)
+    if not ids:
+        return ""
+    from ..agent_skills import catalog
+    packages = {package["id"]: package for package in catalog()}
+    selected = [packages[item] for item in ids if item in packages]
+    if not selected:
+        return ""
+    text = "\n\n".join(
+        f"[{package['id']} · {package['name']} v{package['version']}]\n{package.get('instructions', '')}"
+        for package in selected
+    )
+    return "AUTOMATIC MOTION BASELINES (inferred from observable action terms; do not add new plot events):\n" + text
 
 
 def _first_last_polish_guidance(target_duration: Optional[float]) -> str:
@@ -8084,6 +8125,12 @@ def _compile_ir_polish_text(request, custom_prompt: str) -> str:
     if selected_skills:
         instruction += "\n\n" + _selected_skill_guidance(selected_skills, request.target_video_model)
         instruction += "\nPreserve the official H3 output format."
+    automatic = _automatic_motion_skill_guidance(
+        "\n".join([request.draft_prompt, request.feedback, custom_prompt]),
+        request.target_video_model,
+    )
+    if automatic:
+        instruction += "\n\n" + automatic
     text = f"{instruction}\n\n[DRAFT PROMPT]\n{request.draft_prompt.strip()}"
     if request.feedback.strip():
         text += f"\n\n[USER FEEDBACK]\n{request.feedback.strip()}"
@@ -8329,6 +8376,12 @@ def _compile_video_polish_review(request, reference_mode: bool) -> Dict[str, Any
             _effective_optimization_skills(request), reference_mode=reference_mode,
             generation_mode=getattr(request, "generation_mode", "r2v"),
         ).strip()
+        automatic = _automatic_motion_skill_guidance(
+            "\n".join([request.draft_prompt, request.feedback, custom]),
+            request.target_video_model,
+        )
+        if automatic:
+            system += "\n\n" + automatic
         if reference_mode:
             slots = "\n".join(f"- character{slot.slot or i + 1}: {slot.description}" for i, slot in enumerate(request.slots)) or "No reference videos provided."
             system = system.replace("{SLOTS}", slots)
