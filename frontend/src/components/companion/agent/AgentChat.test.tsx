@@ -22,7 +22,6 @@ async function start(){
 function allowText(){
   const more=screen.getByRole("button",{name:"更多"});
   if (more.getAttribute("aria-expanded") !== "true") fireEvent.click(more);
-  fireEvent.click(screen.getByText("聊天设置",{selector:"summary"}));
   fireEvent.click(screen.getByLabelText("允许发送文字，开始聊天"));
   fireEvent.click(more);
 }
@@ -203,7 +202,7 @@ it("explains the text consent before sending a diary draft",async()=>{
   expect(screen.getByText(/日记草稿已写入/)).toBeInTheDocument();
   fireEvent.click(screen.getByRole("button",{name:"发送"}));
   expect(screen.getByText("请在“更多 → 聊天设置”中允许发送文字。")).toBeInTheDocument();
-  expect(screen.getByText("聊天设置",{selector:"summary"})).toBeInTheDocument();
+  expect(screen.getByRole("region",{name:"聊天设置"})).toBeInTheDocument();
   expect(api.chat).not.toHaveBeenCalled();
   fireEvent.click(screen.getByLabelText("允许发送文字，开始聊天"));
   fireEvent.click(screen.getByRole("button",{name:"发送"}));

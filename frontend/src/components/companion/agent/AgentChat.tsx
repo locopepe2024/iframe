@@ -158,13 +158,13 @@ export default function AgentChat() {
     {menu && <aside className={styles.panel} aria-label="聊天管理">
       <a href={`${prefix}/companion/photos`}>生活相册</a>
       <button disabled={inputDisabled || pending} onClick={() => void run(newSession)}>新建会话</button>
-      <details open>
-        <summary>聊天设置</summary>
+      <section aria-label="聊天设置">
+        <h2>聊天设置</h2>
         <p className={styles.note}>您本次及最近最多 20 条发言将发送至您配置的 UniArt / Qwen 服务。照片不会随文字自动发送。</p>
         <label className={styles.check}><input type="checkbox" checked={allowed} disabled={busy} onChange={event => {
           const value = event.target.checked; setAllowed(value); localStorage.setItem(consentKey, String(value));
         }} />允许发送文字，开始聊天</label>
-      </details>
+      </section>
       <p className={styles.note}>聊天内容会保留，可继续查看历史消息。</p>
     </aside>}
     <div ref={streamRef} className={chatStyles.stream} role="region" aria-label="聊天内容">
