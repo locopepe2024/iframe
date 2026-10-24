@@ -30,6 +30,16 @@ def test_skill_loads_outside_repo_and_preserves_editor_contract(monkeypatch, tmp
     assert 'replacement' in text
 
 
+def test_single_shot_polish_keeps_occluded_action_and_camera_tempo_separate():
+    text = api._storyboard_polish_contract(
+        'uniart/minimax-h3-vip', '', '', optimization_skills=[], reference_mode=True,
+    )
+    assert 'SHOT SPACE AND VISIBILITY' in text
+    assert 'describe the visible reaction or object movement' in text
+    assert 'do not silently add one' in text
+    assert 'Keep camera motion separate from subject' in text
+
+
 def test_explicit_skill_must_match_target_model():
     with pytest.raises(api.HTTPException) as exc_info:
         api._storyboard_polish_contract(

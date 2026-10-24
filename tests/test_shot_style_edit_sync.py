@@ -2,7 +2,7 @@ from unittest.mock import Mock
 import pytest
 
 from src.apps.comic_gen.pipeline import ComicGenPipeline
-from src.apps.comic_gen.models import Script, StoryboardFrame
+from src.apps.comic_gen.models import Blocking, Script, StageSubject, StoryboardFrame
 
 
 def test_style_edit_updates_adopted_video_and_image_prompts_in_one_save():
@@ -49,6 +49,21 @@ def test_polish_overrides_exist_without_plan_context(monkeypatch):
     frame = StoryboardFrame(id="frame", scene_id="room", lighting_override="current light")
     monkeypatch.setattr(api.pipeline, "get_script", lambda _: Mock(frames=[frame]))
     assert json.loads(api._get_director_prompt_context("project", "frame"))["shot_overrides"]["lighting"] == "current light"
+
+
+def test_polish_context_carries_confirmed_screen_geography_without_director_plan(monkeypatch):
+    import json
+    from src.apps.comic_gen import api
+    frame = StoryboardFrame(id="frame", scene_id="shop", blocking=Blocking(
+        description="掌柜始终在店内柜台后；匪寇在街侧柜台前，柜台遮住掌柜下半身",
+        camera_relation="街道平视，单镜头不进入店内",
+        stage=[StageSubject(ref="掌柜", zone="left", depth="back", posture="standing")],
+    ))
+    monkeypatch.setattr(api.pipeline, "get_script", lambda _: Mock(frames=[frame]))
+    context = json.loads(api._get_director_prompt_context("project", "frame"))
+    assert "柜台遮住掌柜下半身" in context["blocking"]["description"]
+    assert context["blocking"]["camera_relation"] == "街道平视，单镜头不进入店内"
+    assert context["blocking"]["stage"][0]["depth"] == "back"
 
 
 def test_settings_sync_preserves_structured_audio_and_later_edits():

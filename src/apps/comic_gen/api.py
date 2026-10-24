@@ -7692,6 +7692,14 @@ def _get_director_prompt_context(script_id: str, frame_id: str = "", overrides: 
             "visual_intent", "performance_action", "composition", "camera_movement", "lighting", "ambient_sound",
         ) if shot.get(key)},
     }
+    if frame.blocking:
+        blocking = frame.blocking
+        selected["blocking"] = {
+            "description": blocking.description[:400],
+            **({"camera_relation": blocking.camera_relation[:160]} if blocking.camera_relation else {}),
+            **({"stage": [subject.model_dump(mode="json", exclude_none=True) for subject in blocking.stage[:8]]}
+               if blocking.stage else {}),
+        }
     current = overrides if overrides is not None else {
         "style": frame.style_prompt_override or "",
         "lighting": frame.lighting_override or "",
@@ -7702,7 +7710,7 @@ def _get_director_prompt_context(script_id: str, frame_id: str = "", overrides: 
     }
     if selected["shot_overrides"].get("lighting"):
         selected["shot"].pop("lighting", None)
-    if not context and not selected["shot_overrides"]:
+    if not context and not selected["shot_overrides"] and not frame.blocking:
         return ""
     baseline = context.get("lighting_baseline")
     if (isinstance(baseline, dict)
@@ -7740,6 +7748,8 @@ def _get_director_prompt_context(script_id: str, frame_id: str = "", overrides: 
         selected.get("lighting_baseline", {}).get("lighting", {}).pop(key, None)
     if len(encoded()) > 1200:
         selected["shot"].pop("lighting", None)
+    if len(encoded()) > 1200 and selected.get("blocking", {}).get("stage"):
+        selected["blocking"].pop("stage")
     return encoded()
 
 
@@ -7894,11 +7904,28 @@ without adding a new output field.
 """
 
 
+_SHOT_SPACE_VISIBILITY_GUIDANCE = """
+SHOT SPACE AND VISIBILITY:
+Treat confirmed blocking and camera relation as the opening screen geography.
+Keep each subject on the same side of barriers and at the same depth until an
+explicit visible movement changes that position. A reference image anchors
+appearance and environment; it does not prove an unseen movement or camera cut.
+For one continuous shot, describe only actions readable from its viewpoint.
+If a counter, doorway, crowd, or frame edge hides feet, hands, or a contact point,
+describe the visible reaction or object movement instead of claiming the hidden
+detail is seen. Do not move a subject across a barrier merely to show an action.
+If a hidden action must be shown, require an explicit new shot or camera angle;
+do not silently add one. State opening positions, causal action beats, and
+changed end positions in that order. Keep camera motion separate from subject
+timing and preserve the chosen shot count.
+"""
+
+
 def _storyboard_polish_contract(model_id: str, custom: str, default: str, generate_audio=None, target_duration=None, dialogue_speaker="", dialogue_line="", optimization_skills: Optional[List[str]] = None, reference_mode: bool = False, generation_mode: str = "i2v") -> str:
     guidance = _selected_skill_guidance(optimization_skills, model_id) if optimization_skills is not None else _target_model_guidance(model_id)
     is_h3 = "h3" in (model_id or "").lower()
     if not guidance and not is_h3 and generation_mode != "first_last_frame":
-        return (custom or default) + _ACTION_RHYTHM_GUIDANCE
+        return (custom or default) + _ACTION_RHYTHM_GUIDANCE + _SHOT_SPACE_VISIBILITY_GUIDANCE
     constraints = ""
     if generate_audio is False:
         constraints += ("\nOUTPUT MUST BE SILENT: overall_soundscape and non_diegetic_music must be N/A. "
@@ -7922,7 +7949,7 @@ requested, is audio only and must not be rendered as text. Do not describe or
 request subtitle tracks in either prompt language.
 """
     base_prompt = custom or (default if not guidance else "")
-    contract = guidance + "\n" + base_prompt + constraints + _ACTION_RHYTHM_GUIDANCE + """
+    contract = guidance + "\n" + base_prompt + constraints + _ACTION_RHYTHM_GUIDANCE + _SHOT_SPACE_VISIBILITY_GUIDANCE + """
 STORYBOARD OUTPUT CONTRACT:
 Return only JSON with string fields prompt_cn and prompt_en. Each string follows
 the selected target model's prompt format and generation mode.
@@ -8049,7 +8076,7 @@ def _validate_storyboard_polish_result(model_id: str, result: Dict[str, Any], re
 
 def _compile_ir_polish_text(request, custom_prompt: str) -> str:
     instruction = custom_prompt.strip()
-    instruction += _ACTION_RHYTHM_GUIDANCE
+    instruction += _ACTION_RHYTHM_GUIDANCE + _SHOT_SPACE_VISIBILITY_GUIDANCE
     if getattr(request, "generation_mode", "") == "first_last_frame":
         instruction += _first_last_polish_guidance(request.target_duration)
     instruction += "\n\nH3 constraint: do not add subtitles, captions, title cards, watermarks, labels, or any burned-in on-screen text. Dialogue is audio only."
@@ -8224,7 +8251,7 @@ def _compile_video_polish_review(request, reference_mode: bool) -> Dict[str, Any
             frame_snapshot = {name: getattr(frame, name, None) for name in (
                 "scene_id", "shot_id", "director_profile_revision", "director_profile_hash",
                 "director_shot_context", "action_description", "style_prompt_override",
-                "lighting_override", "shot_visual_design", "composition", "shot_size",
+                "lighting_override", "shot_visual_design", "blocking", "composition", "shot_size",
                 "camera_angle", "camera_movement", "transition_hint", "dialogue",
             )}
             frame_snapshot = {
