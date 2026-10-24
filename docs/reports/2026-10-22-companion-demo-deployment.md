@@ -183,3 +183,7 @@ Evidence: 16 companion backend tests passed, including the accidental memory-sea
 ## 2026-10-24 — Diary editor work-surface refinement
 
 Frontend commit `87f45c76` deployed. The diary draft card now labels its separate Sheet as “日记编辑器” and states that changes are held until the explicit “保存日记” action. Cancel/close remains non-persistent. The local diary calendar and API regression suite remained green: 21 focused UI tests and 16 backend tests across the diary/chat/runtime paths, plus frontend typecheck. Host DNS was unavailable for an additional curl health probe in this shell; deployment synchronization itself completed through the existing iframe host path.
+
+## 2026-10-24 — Diary editor source context
+
+Frontend commit `c45a40d9` adds a read-only “这篇日记的依据” section inside the independent diary editor. It shows recent conversation excerpts and any photo/video attachments associated with the diary request, so the user can check what the draft is based on before saving. The context is explicitly informational: editing it does not append new facts to the diary or personal memory. Focused Companion UI tests (21), frontend typecheck, isolated static build, and diary/chat backend tests (8) passed. The existing four unrelated full-suite failures remain in axios interceptor tests whose mock has no `interceptors.request`.
