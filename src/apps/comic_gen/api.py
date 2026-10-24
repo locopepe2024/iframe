@@ -7943,6 +7943,8 @@ causal action, keep its intended pace and do not invent an action sequence.
 When the draft uses rapid-impact words such as "猛然", "快速", "立即", or
 "接触瞬间", preserve real-time motion: compress the reaction into the
 available beat instead of stretching it into slow motion or a gradual fall.
+Preserve explicit user-authored time windows; do not silently retime them or
+divide duration evenly by default.
 If the user explicitly names a table, wall, counter, or prop collision, include
 that collision and its visible consequences in the same causal chain. For a
 kick followed by a table collision and fall: single contact, immediate recoil
@@ -7952,7 +7954,9 @@ Do not make the person turn around to reach a table behind them. If no table
 objects are visible, do not invent them. Put the collision, table response,
 and any object response in the same or immediately following time beat.
 When audio is enabled, align impact, wood movement, and falling-object sounds
-with those visible events; when silent, do not invent sound cues. Do not
+with those visible events. If visual beats are retimed, rewrite any sound
+timestamps copied from the draft to match them; do not preserve stale sound
+timings. When silent, do not invent sound cues. Do not
 apply the default prop-preservation rule to an explicitly authorized impact.
 Place the rhythm inside the existing model-specific visual description,
 without adding a new output field.
@@ -8189,7 +8193,11 @@ def _compile_ir_polish_text(request, custom_prompt: str) -> str:
     instruction = custom_prompt.strip()
     instruction += _ACTION_RHYTHM_GUIDANCE + _SHOT_SPACE_VISIBILITY_GUIDANCE
     if _needs_short_action_timeline(request.target_video_model, request.target_duration, request.draft_prompt):
-        instruction += f"\nUse 3-6 contiguous authored time ranges from 0.00s to {request.target_duration:.2f}s inside the H3 visual description in both language outputs."
+        instruction += (f"\nUse 3-6 contiguous authored time ranges from 0.00s to {request.target_duration:.2f}s "
+                        "inside the H3 visual description in both language outputs. "
+                        "Preserve explicit visual timings in the draft; do not silently retime them. "
+                        "Rewrite sound timestamps to match the visual beats; do not copy stale "
+                        "sound times from the draft.")
     if getattr(request, "generation_mode", "") == "first_last_frame":
         instruction += _first_last_polish_guidance(request.target_duration)
     instruction += "\n\nH3 constraint: do not add subtitles, captions, title cards, watermarks, labels, or any burned-in on-screen text. Dialogue is audio only."
@@ -8537,12 +8545,12 @@ def _complete_minimax_ir_polish(request, custom_prompt: str, reviewed_text: Opti
     from ..studio_access import runtime_uniart_for_owner
     config = runtime_uniart_for_owner(user.user_id, user.owner_profile_id)
     text = reviewed_text if reviewed_text is not None else _compile_ir_polish_text(request, custom_prompt)
-    content: List[Dict[str, Any]] = [{"type": "text", "text": text}]
-    for index, value in enumerate(request.image_urls or []):
-        label = ("Actual first frame at 0.00 seconds", "Actual last frame at the end") if getattr(request, "generation_mode", "") == "first_last_frame" else ()
-        content.append({"type": "text", "text": label[index] if label else f"Reference image {index + 1}"})
-        content.append({"type": "image_url", "role": "reference_image", "image_url": {"url": _image_reference_url(value)}})
     try:
+        content: List[Dict[str, Any]] = [{"type": "text", "text": text}]
+        for index, value in enumerate(_polish_image_urls(request.image_urls or [])):
+            label = ("Actual first frame at 0.00 seconds", "Actual last frame at the end") if getattr(request, "generation_mode", "") == "first_last_frame" else ()
+            content.append({"type": "text", "text": label[index] if label else f"Reference image {index + 1}"})
+            content.append({"type": "image_url", "role": "reference_image", "image_url": {"url": _image_reference_url(value)}})
         prompt = complete_context_ir(
             config,
             content,
@@ -8550,6 +8558,8 @@ def _complete_minimax_ir_polish(request, custom_prompt: str, reviewed_text: Opti
             ratio=request.target_ratio or "16:9",
             idempotency_key=f"storyboard-polish:{request.script_id}:{hashlib.sha256(json.dumps([text, request.image_urls], ensure_ascii=False).encode('utf-8')).hexdigest()[:24]}",
         )
+    except PolishError:
+        raise
     except Exception as exc:
         logger.exception("MiniMax Context-IR storyboard polish failed")
         raise PolishError(reason="api_error", message_zh=f"MiniMax IR 调用失败：{exc}", message_en=f"MiniMax Context-IR failed: {exc}") from exc

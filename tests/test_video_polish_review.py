@@ -173,3 +173,44 @@ def test_minimax_ir_uses_reviewed_text(monkeypatch):
     monkeypatch.setattr(uniart, "complete_context_ir", complete)
     api._complete_minimax_ir_polish(confirmed, "unused", confirmed.reviewed_messages["user"])
     assert complete.call_args.args[1][0]["text"] == "冷灰蓝长街。"
+
+
+def test_minimax_ir_resolves_studio_media_before_provider_submission(monkeypatch):
+    from src.models import uniart
+    request = api.PolishVideoPromptRequest(
+        draft_prompt="踢击", optimizer_provider="minimax_context_ir",
+        target_video_model="uniart/minimax-h3-vip", image_urls=["/studio/media/owned/first.png"],
+    )
+    monkeypatch.setattr(api, "current_studio_user", lambda: SimpleNamespace(user_id="u", owner_profile_id="o"))
+    monkeypatch.setattr("src.apps.studio_access.runtime_uniart_for_owner", lambda *args: object())
+    resolved = Mock(return_value=["/app/output/users/owned/studio/first.png"])
+    signed = Mock(return_value="https://media.example/first.png")
+    complete = Mock(return_value="optimized prompt")
+    monkeypatch.setattr(api, "_polish_image_urls", resolved)
+    monkeypatch.setattr(uniart, "_image_reference_url", signed)
+    monkeypatch.setattr(uniart, "complete_context_ir", complete)
+
+    result = api._complete_minimax_ir_polish(request, "rules", "reviewed input")
+
+    resolved.assert_called_once_with(request.image_urls)
+    signed.assert_called_once_with("/app/output/users/owned/studio/first.png")
+    assert complete.call_args.args[1][-1]["image_url"]["url"] == "https://media.example/first.png"
+    assert result["prompt_en"] == "optimized prompt"
+
+
+def test_minimax_ir_reports_invalid_studio_media_without_provider_call(monkeypatch):
+    from src.models import uniart
+    from src.apps.comic_gen.llm import PolishError
+    request = api.PolishVideoPromptRequest(
+        draft_prompt="踢击", optimizer_provider="minimax_context_ir",
+        target_video_model="uniart/minimax-h3-vip", image_urls=["/studio/media/invalid/first.png"],
+    )
+    monkeypatch.setattr(api, "current_studio_user", lambda: SimpleNamespace(user_id="u", owner_profile_id="o"))
+    monkeypatch.setattr("src.apps.studio_access.runtime_uniart_for_owner", lambda *args: object())
+    monkeypatch.setattr(api, "resolve_studio_reference", Mock(side_effect=ValueError("invalid reference")))
+    complete = Mock()
+    monkeypatch.setattr(uniart, "complete_context_ir", complete)
+
+    with pytest.raises(PolishError, match="Reference image could not be read"):
+        api._complete_minimax_ir_polish(request, "rules", "reviewed input")
+    complete.assert_not_called()
