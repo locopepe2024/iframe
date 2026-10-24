@@ -46,40 +46,104 @@ export async function captureMicrophone(context: AudioContext, stream: MediaStre
 export class PcmPlayer {
   private until = 0;
   private nodes = new Set<AudioBufferSourceNode>();
+  private pending: AudioBuffer[] = [];
+  private pendingSeconds = 0;
+  private buffering = true;
   private responseActive = false;
   private underruns = 0;
   private maxGapMs = 0;
-  private readonly headroom = .2;
-  finishResponse() { this.responseActive = false; }
-  stats() { return { underruns: this.underruns, maxGapMs: Math.round(this.maxGapMs), startupBufferMs: 200 }; }
+  private maxArrivalIntervalMs = 0;
+  private lastArrival: number | null = null;
+  private receivedAudioSeconds = 0;
+  private readonly reserveSeconds = .6;
+  private readonly schedulingLead = .05;
+
   constructor(private readonly context: AudioContext, private readonly onIdle: () => void = () => {}) {}
-  isPlaying() { return this.nodes.size > 0; }
+
+  finishResponse() {
+    this.responseActive = false;
+    this.lastArrival = null;
+    // A short response must not wait forever for the startup threshold.
+    this.flush();
+    this.buffering = true;
+  }
+
+  stats() {
+    return {
+      underruns: this.underruns,
+      maxGapMs: Math.round(this.maxGapMs),
+      maxArrivalIntervalMs: Math.round(this.maxArrivalIntervalMs),
+      receivedAudioMs: Math.round(this.receivedAudioSeconds * 1000),
+      startupBufferMs: this.reserveSeconds * 1000,
+    };
+  }
+
+  isPlaying() { return this.pending.length > 0 || this.nodes.size > 0; }
+
   play(encoded: string) {
     const bytes = atob(encoded);
     if (!bytes.length || bytes.length % 2) throw new Error("语音数据无效。");
-    if (this.until - this.context.currentTime > 15) throw new Error("语音播放跟不上，已结束本次连接。");
+    const now = this.context.currentTime;
+    const duration = bytes.length / 2 / 24000;
+    if (Math.max(0, this.until - now) + this.pendingSeconds + duration > 15) {
+      throw new Error("语音播放跟不上，已结束本次连接。");
+    }
+    if (this.lastArrival !== null) {
+      this.maxArrivalIntervalMs = Math.max(this.maxArrivalIntervalMs, (now - this.lastArrival) * 1000);
+    }
+    this.lastArrival = now;
+    this.receivedAudioSeconds += duration;
+    if (!this.buffering && this.until <= now && this.responseActive) {
+      this.underruns++;
+      this.maxGapMs = Math.max(this.maxGapMs, (now - this.until) * 1000);
+      this.buffering = true;
+    }
+    this.responseActive = true;
     const buffer = this.context.createBuffer(1, bytes.length / 2, 24000);
     const floats = buffer.getChannelData(0);
     for (let i = 0; i < floats.length; i++) {
       const value = bytes.charCodeAt(i * 2) | (bytes.charCodeAt(i * 2 + 1) << 8);
       floats[i] = (value >= 32768 ? value - 65536 : value) / 32768;
     }
-    const node = this.context.createBufferSource(); node.buffer = buffer; node.connect(this.context.destination);
-    node.onended = () => { this.nodes.delete(node); node.disconnect(); if (!this.nodes.size) this.onIdle(); };
-    this.nodes.add(node);
-    const now = this.context.currentTime;
-    const drained = this.until <= now;
-    if (drained && this.responseActive) {
-      this.underruns++;
-      this.maxGapMs = Math.max(this.maxGapMs, (now - this.until) * 1000);
+    this.pending.push(buffer);
+    this.pendingSeconds += duration;
+    if (!this.buffering || this.pendingSeconds + 1e-9 >= this.reserveSeconds) {
+      this.flush();
+      this.buffering = false;
     }
-    // Add headroom only at startup/rebuffer, never between contiguous chunks.
-    const start = drained ? now + this.headroom : this.until;
-    this.responseActive = true;
-    this.until = start + buffer.duration; node.start(start);
   }
+
+  private flush() {
+    if (!this.pending.length) return;
+    // All buffered chunks share one continuous AudioContext timeline.
+    const now = this.context.currentTime;
+    let start = this.until > now ? this.until : now + this.schedulingLead;
+    for (const buffer of this.pending) {
+      const node = this.context.createBufferSource();
+      node.buffer = buffer;
+      node.connect(this.context.destination);
+      node.onended = () => {
+        this.nodes.delete(node);
+        node.disconnect();
+        if (!this.isPlaying()) this.onIdle();
+      };
+      this.nodes.add(node);
+      node.start(start);
+      start += buffer.duration;
+    }
+    this.until = start;
+    this.pending = [];
+    this.pendingSeconds = 0;
+  }
+
   clear() {
     for (const node of Array.from(this.nodes)) { node.onended = null; node.stop(); node.disconnect(); }
-    this.nodes.clear(); this.until = 0; this.responseActive = false;
+    this.nodes.clear();
+    this.pending = [];
+    this.pendingSeconds = 0;
+    this.until = 0;
+    this.responseActive = false;
+    this.buffering = true;
+    this.lastArrival = null;
   }
 }

@@ -30,3 +30,13 @@ Code fact: playback previously used only20 ms scheduling headroom. It now schedu
 Four audio unit tests and ten hook/composer tests pass, including deterministic jitter, rebuffer metrics, normal completion exclusion and immediate interruption cleanup. Isolated static export passes; TypeScript still reports only the two existing CharacterWorkbench errors above. Session-end console diagnostics contain underrun count, maximum arrival gap after queue drain (excluding the added cushion), and configured startup buffer; no audio/transcript. No paid provider test was repeated for this browser-only change. Affected-browser listening remains required to assess improvement.
 
 Deployed chunks before replacing the nested companion/agent.html, retaining previous chunks. Public HTML matches the built artifact (SHA256 dd65de0032b184129758671101e6efc9fd0f92b66215785d01909fccd34ac117); all11 referenced scripts return success.
+
+## Follow-up: actual buffered audio
+
+User runtime observation: reply text arrives but audio remains choppy after the200 ms change. This does not establish whether the stream is delayed before browser arrival or during playback. Tests reproduced that the previous implementation starts scheduling small chunks without accumulating audio, restarts each small chunk after depletion, and fails to bound an oversized incoming chunk.
+
+Changed startup/rebuffer to wait for600 ms of decoded audio before scheduling, with50 ms scheduling lead only when the timeline has drained. Once scheduled, chunks remain contiguous even when less than50 ms remains. Completion flushes short replies; pending audio counts toward busy state and the15-second limit, and interruption discards it. Session-end diagnostics now also include received audio duration and maximum inter-chunk arrival interval, excluding normal response boundaries and interruption. No raw audio or text is recorded by these diagnostics. Increased startup delay is intentional; sustained arrival slower than playback or stalls longer than the reserve can still exhaust it.
+
+Six audio tests and ten hook/composer tests pass. Four new behavioral tests failed against the prior implementation before the fix. TypeScript reports only the existing two CharacterWorkbench errors. Actual listening improvement remains pending user verification.
+
+Isolated static export passed and was deployed chunks-first without backend changes. Public HTML and the changed audio-containing chunk match local build bytes: HTML SHA256 a5a4c806e68493c569605e715cae3115dbccd219496de314a0ea5efd2ed138cc; chunk9270.d0f2abdac09c05e1.js SHA256 76a86e001d5b640f9e1978c4f3b2a9e1b1d112917969637de28d6087d8290d1e.

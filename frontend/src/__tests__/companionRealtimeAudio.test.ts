@@ -14,7 +14,7 @@ it("decodes signed 24kHz audio and cancels all queued playback on interruption",
  const player=new PcmPlayer(context as unknown as AudioContext);
  player.play(btoa(String.fromCharCode(0,128,255,127)));
  expect(context.createBuffer).toHaveBeenCalledWith(1,2,24000);expect(channel[0]).toBe(-1);expect(channel[1]).toBeCloseTo(32767/32768);
- expect(player.isPlaying()).toBe(true);player.clear();expect(source.stop).toHaveBeenCalledOnce();expect(player.isPlaying()).toBe(false);
+ expect(player.isPlaying()).toBe(true);player.finishResponse();player.clear();expect(source.stop).toHaveBeenCalledOnce();expect(player.isPlaying()).toBe(false);
 });
 
 function playbackHarness() {
@@ -26,20 +26,40 @@ function playbackHarness() {
  const chunk=btoa("\0".repeat(4800)); // 100 ms mono PCM16
  return {player,context,nodes,chunk};
 }
-it("absorbs jitter inside 200ms headroom and schedules chunks without artificial gaps",()=>{
+it("waits for 600ms of actual audio before starting, then schedules contiguously",()=>{
  const {player,context,nodes,chunk}=playbackHarness();
- player.play(chunk);expect(nodes[0].start).toHaveBeenCalledWith(1.2);
- context.currentTime=1.18;player.play(chunk);expect(nodes[1].start.mock.calls[0][0]).toBeCloseTo(1.3);
- context.currentTime=1.32;player.play(chunk);expect(nodes[2].start.mock.calls[0][0]).toBeCloseTo(1.4);
+ for(let i=0;i<5;i++){context.currentTime=1+i*.2;player.play(chunk);}
+ expect(nodes).toHaveLength(0);expect(player.isPlaying()).toBe(true);
+ context.currentTime=2;player.play(chunk);
+ expect(nodes).toHaveLength(6);expect(nodes[0].start.mock.calls[0][0]).toBeCloseTo(2.05);
+ for(let i=1;i<6;i++)expect(nodes[i].start.mock.calls[0][0]).toBeCloseTo(2.05+i*.1);
+ context.currentTime=2.4;player.play(chunk);
+ expect(nodes[6].start.mock.calls[0][0]).toBeCloseTo(2.65);
+ context.currentTime=2.73;player.play(chunk);
+ expect(nodes[7].start.mock.calls[0][0]).toBeCloseTo(2.75);
  expect(player.stats().underruns).toBe(0);
 });
-it("counts a real mid-response underrun, adds headroom and excludes normal ends and interruptions",()=>{
+it("flushes short responses at completion and never plays pending audio after interruption",()=>{
+ const {player,nodes,chunk}=playbackHarness();
+ player.play(chunk);expect(nodes).toHaveLength(0);player.finishResponse();
+ expect(nodes).toHaveLength(1);expect(nodes[0].start.mock.calls[0][0]).toBeCloseTo(1.05);
+ player.clear();player.play(chunk);player.clear();player.finishResponse();
+ expect(nodes).toHaveLength(1);expect(nodes[0].stop).toHaveBeenCalledOnce();
+ expect(player.isPlaying()).toBe(false);expect(player.stats().underruns).toBe(0);
+});
+it("rebuilds a real audio reserve after an underrun rather than restarting each small chunk",()=>{
  const {player,context,nodes,chunk}=playbackHarness();
- player.play(chunk);context.currentTime=1.5;player.play(chunk);
- expect(nodes[1].start).toHaveBeenCalledWith(1.7);
- expect(player.stats()).toEqual({underruns:1,maxGapMs:200,startupBufferMs:200});
- player.finishResponse();context.currentTime=3;player.play(chunk);
+ for(let i=0;i<6;i++)player.play(chunk);
+ context.currentTime=2;player.play(chunk);
+ expect(nodes).toHaveLength(6);expect(player.stats().underruns).toBe(1);
+ for(let i=0;i<4;i++){context.currentTime+=.1;player.play(chunk);}
+ expect(nodes).toHaveLength(6);expect(player.stats().underruns).toBe(1);
+ player.play(chunk);expect(nodes).toHaveLength(12);
+ expect(nodes[6].start.mock.calls[0][0]).toBeCloseTo(2.45);
+ player.finishResponse();player.clear();context.currentTime=5;player.play(chunk);player.finishResponse();
  expect(player.stats().underruns).toBe(1);
- player.clear();expect(nodes.every(node=>node.stop.mock.calls.length===1)).toBe(true);
- context.currentTime=5;player.play(chunk);expect(player.stats().underruns).toBe(1);
+});
+it("bounds pending audio as well as scheduled playback",()=>{
+ const {player}=playbackHarness();
+ expect(()=>player.play(btoa("\0".repeat(24000*2*16)))).toThrow();
 });
