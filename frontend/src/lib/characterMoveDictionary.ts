@@ -34,6 +34,22 @@ export const CHARACTER_MOVE_DICTIONARY: CharacterMoveEntry[] = [
         forbidden_interpretations: ["不改为锋刃切割或刺击", "不自动增加第二次斩击", "不自动造成身体伤口"],
         variants: ["面对数名匪寇的连续拨械"],
     },
+    {
+        move_ref: "suyan.sword.edge_line_sweep.v1",
+        character_name: "苏砚（雪痕客）",
+        label: "刃线横扫·拨械",
+        aliases: ["刃线横扫", "横扫", "刃线拨械"],
+        category: "剑法·刃线横扫",
+        starting_state: "中距，右手持剑，剑刃沿身体前侧展开，面向当前匪寇",
+        body_mechanics: ["前脚切入", "髋部带动躯干旋转", "肩肘带动剑臂", "腕部稳定刃线"],
+        weapon_trajectory: "剑刃沿明确横向刃线扫过对手持械手或刀剑外侧，轨迹连续清楚",
+        target_relation: "针对持械手或刀剑，不默认攻击身体",
+        contact_result: "锋刃侧向撞开或切断对方兵刃的控制线；是否造成伤口由当前镜头明确授权",
+        recovery_state: "完成横扫后保持面向匪寇，剑尖进入收势或下一招",
+        visible_cues: ["刃线方向清楚", "剑刃轨迹连续", "对手持械手被带开", "刀剑沿受力方向偏转或脱手"],
+        forbidden_interpretations: ["不改为剑身侧面拍刃", "不自动增加第二次斩击", "不自动造成身体伤口"],
+        variants: ["面对数名匪寇的连续刃线横扫"],
+    },
 ];
 
 export function findCharacterMove(moveRef?: string | null): CharacterMoveEntry | null {

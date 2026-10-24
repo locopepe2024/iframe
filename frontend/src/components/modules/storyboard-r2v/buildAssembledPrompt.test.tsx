@@ -49,6 +49,21 @@ it("removes the move text when an optimized prompt has no selected move", () => 
     expect(buildGenerationPrompt(shot, false, "uniart/minimax-h3-vip"))
         .not.toContain("连贯剑势·拨械");
 });
+
+it("keeps blade-line sweep as a separate move from blade-side slap", () => {
+    const shot = {
+        id: "shot-15-edge",
+        prompt: "苏砚以连续剑势拨开匪寇兵刃。",
+        tabMode: "direct_r2v" as const,
+        moveRef: "suyan.sword.edge_line_sweep.v1",
+        moveVariant: "面对数名匪寇的连续刃线横扫",
+    };
+    const result = buildGenerationPrompt(shot, false, "uniart/minimax-h3-vip");
+    expect(result).toContain("刃线横扫·拨械");
+    expect(result).toContain("剑刃沿明确横向刃线扫过");
+    expect(result).toContain("不改为剑身侧面拍刃");
+    expect(result).not.toContain("类似抖动长竹竿");
+});
 import { resolveStoryboardStyle, resolveStoryboardStyleForRender } from "@/lib/storyboardStyle";
 import type { ShotNode } from "./ShotCard";
 
