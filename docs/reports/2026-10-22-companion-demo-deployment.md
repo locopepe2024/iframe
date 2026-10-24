@@ -196,6 +196,12 @@ Frontend/backend revision `45a4ee97` is synchronized to the isolated Companion d
 
 Evidence: the isolated remote API returned `upload_guide` for “怎么发”; Companion intent/chat tests passed (13), the focused Agent UI suite passed 20 tests after adding live-result and historical-result coverage, and frontend typecheck passed. This verifies routing and rendering, not the physical file picker, microphone or older-adult usability. No provider call, photo data change, push or merge was made.
 
+## 2026-10-24 — Make chat settings directly visible
+
+Frontend commit `e1f8e587` was built with the `/companion-demo` base path and synchronized to the existing isolated release. The “更多” panel now shows a visible “聊天设置” section directly; it no longer relies on a nested collapsed details control. The text-send checkbox remains persisted in the current browser, so consent is requested once and can be changed from this section.
+
+Evidence: focused Agent UI tests (20) and frontend typecheck passed. The static release contains the updated `聊天设置` and `上传素材引导` chunks; the isolated API health endpoint remained 200. Backup files were created beside `agent.html` and `build-manifest.json` as `*.before-chat-settings-e1f8e587`. No backend/data/provider change, push or merge.
+
 Frontend commit `6ab03032` was then synchronized to the same release. Live diary responses now render the diary action card immediately, including “继续写日记”, “保存日记”, and “放弃保存”; this also covers the interval before the message history reload pairs the turn. The static chunk containing “放弃保存” is present on the mounted test release and the container remained healthy.
 
 Frontend commit `5bd4c6d4` was synchronized afterward. Text-send consent now lives under “更多 → 聊天设置” and is retained in the browser after confirmation, so the composer no longer expands a consent panel for every message. The send button opens that setting when consent is missing. Twenty-two focused UI tests and typecheck passed; the backend and existing session data were unchanged.
