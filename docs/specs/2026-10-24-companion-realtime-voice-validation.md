@@ -48,3 +48,25 @@ User reports no benefit from600 ms buffering and persistent listening status. Co
 Runtime observation: a nonprivate synthetic phrase was sent directly from the demo host to the configured UniArt realtime endpoint, bypassing Companion relay/browser/speaker. Sixteen PCM chunks contained6.08 seconds of audio; first-to-last audio arrival spanned23.346 seconds, maximum inter-chunk arrival gap4.808 seconds. There was one input speech_started event and one completed reply, without extra VAD interruptions. Chunk RMS was calculated in memory; raw reply audio/transcript was not stored or printed. This establishes slow/irregular upstream audio delivery in this one run, independent of browser playback. It does not distinguish UniArt relay, provider generation, or intervening network, nor prove every affected-user run shares that cause. Local600 ms buffering cannot mask a4.808-second gap.
 
 Added bounded numeric-only playback reports every10 seconds/end over the existing authenticated WS, capped60/session and never forwarded upstream. Reports include underruns, queued/received audio, audio chunk count, browser context/sample rate, VAD while playback queued and manual interruptions. Relay logs response audio duration, chunk arrival gaps and downstream send delays. No audio/text/credentials in metrics. Seven backend tests and17 audio/hook/composer tests pass; new status test reproduced the bug before the change. Static export passes; existing two CharacterWorkbench type errors persist. Backend restarted, diagnostics source verified, frontend deployed chunks-first. Public HTML SHA256 fde60ef8e83a8fefca2b2e4316c484682f03a04664e73d7f2e99b15fe0910b04 matches local. Stutter is not declared fixed; next affected session metrics can distinguish delivery starvation from VAD/browser issues. Local UniArt source forwards normal WS frames without an explicit batching timer; its production revision and runtime timing remain unverified.
+
+## UniArt boundary comparisons
+
+Read-only production inspection: UniArt currently runs8703b672af4dfb92b0c678c90e8031dd00470949, with the same native realtime relay implementation previously inspected. Caddy2.6.2 reverse-proxies to127.0.0.1:3000. Channel23 has no configured proxy. All measured gateway calls select channel23 per consumption-log channel IDs. Application CPU was0.00% in one snapshot; this is not a sustained load profile.
+
+Separate short synthetic text-input generations requested the same phrase. Plus3.1 used the configured3.1 voice; Flash3.0 used its provider default voice. These are small diagnostic samples, not a controlled benchmark or statistical evidence. Arrival span measures first-to-last audio chunk, excluding first-audio wait.
+
+| Boundary | Model | Audio duration | Audio arrival span | Maximum chunk gap |
+| --- | --- | --- | --- | --- |
+| UniArt host directly to provider, run1 |3.1 Plus|4.160s|2.864s|0.991s|
+| iframe host to public UniArt |3.1 Plus|4.160s|10.801s|1.605s|
+| UniArt host to local gateway HTTP |3.1 Plus|4.160s|1.543s|0.515s|
+| UniArt host to public UniArt HTTPS |3.1 Plus|4.160s|40.962s|14.411s|
+| UniArt host to loopback HTTPS/Caddy |3.1 Plus|4.240s|14.009s|2.152s|
+| UniArt host directly to provider, run2 |3.1 Plus|4.160s|22.138s|3.899s|
+| UniArt host directly to provider |3.0 Flash|4.240s|20.803s|4.078s|
+| UniArt host directly to provider, repeat |3.0 Flash|4.240s|16.635s|3.106s|
+| UniArt host directly to provider via temporary iframe egress |3.1 Plus|4.160s|10.819s|2.546s|
+
+Observed: direct-provider requests also stall, so earlier comparisons cannot attribute the cause uniquely to the public entrance or Caddy. Flash also stalls, so changing model default is unsupported. On the last Flash connection, TCP RTT was about278ms and rcv_ooopack grew to28 during the sampled interval. This supports investigating the network path, but does not establish packet-loss rate or exclude provider scheduling. No provider keys, raw reply audio, or reply transcripts were persisted by the probes. No UniArt production code/configuration or Companion model defaults changed.
+
+The iframe-egress probe used TLS end-to-end through loopback-only temporary SSH forwarding; credentials stayed in the UniArt probe process. It did not change the application route. The extra tunnel hops and independent generations mean10.819s versus22.138s is not a measured causal improvement; importantly, delivery remained slower than playback. Provider resource/queue telemetry is unavailable from the current host logs. Next discriminating evidence requires provider-side inference/queue/resource timing or an independently provisioned endpoint serving the same model, not another frontend buffer adjustment. No default model switch or permanent proxy workaround is justified by these runs.
