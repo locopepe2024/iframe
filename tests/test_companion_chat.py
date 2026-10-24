@@ -65,6 +65,22 @@ def test_diary_request_never_surfaces_an_accidental_memory_read(chat):
     assert response.status_code==200
     assert response.json()['result']==dict(kind='text',text='我会按这个日期整理回忆日记。现在还缺少可以整理的聊天内容，请先告诉我这一天发生了什么。')
 
+
+def test_diary_writer_receives_existing_session_user_context(chat):
+    store,_,client,session,callback=chat
+    callback.reset_mock()
+    callback.side_effect=None
+    callback.return_value=dict(kind='text',text='今天女儿来看我，我们一起喝了茶。')
+    first=client.post(f'/companion-runtime/sessions/{session}/chat',json=dict(
+        operation_id='fact', text='今天女儿来看我了，我们一起喝茶。', allow_external_text=True))
+    assert first.status_code==200
+    diary=client.post(f'/companion-runtime/sessions/{session}/chat',json=dict(
+        operation_id='diary-context', text='把 2026-10-24 我们聊的内容整理成一篇回忆日记。', allow_external_text=True))
+    assert diary.status_code==200
+    assert diary.json()['result']['text']=='今天女儿来看我，我们一起喝了茶。'
+    assert callback.call_args.args[1][-1]['text']=='把 2026-10-24 我们聊的内容整理成一篇回忆日记。'
+    assert any(item['text']=='今天女儿来看我了，我们一起喝茶。' for item in callback.call_args.args[1])
+
     callback.return_value=dict(kind='text',text='实际记忆查询结果：没有匹配的记忆。')
     response=client.post(f'/companion-runtime/sessions/{session}/chat',json=dict(
         operation_id='diary-text', text='请把 2026-10-24 我们聊的内容整理成一篇回忆日记。', allow_external_text=True))
