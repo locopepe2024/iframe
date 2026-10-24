@@ -175,6 +175,36 @@ def test_minimax_ir_uses_reviewed_text(monkeypatch):
     assert complete.call_args.args[1][0]["text"] == "冷灰蓝长街。"
 
 
+def test_minimax_ir_preview_keeps_long_draft_under_provider_limit():
+    draft = "0.00-0.50s: 匪首踢击；0.50-1.00s: 掌柜撞桌。" + "保持首帧人物和光影。" * 330
+    request = api.PolishVideoPromptRequest(
+        draft_prompt=draft, optimizer_provider="minimax_context_ir",
+        target_video_model="uniart/minimax-h3-vip", target_duration=4,
+    )
+    preview = api.preview_video_polish_prompt(request)
+    text = preview["messages"]["user"]
+    assert draft in text
+    assert "Preserve explicit visual timings" in text
+    assert len(text) < api._MINIMAX_IR_TEXT_LIMIT
+
+
+def test_minimax_ir_rejects_oversized_review_before_provider_call(monkeypatch):
+    from src.models import uniart
+    from src.apps.comic_gen.llm import PolishError
+    request = api.PolishVideoPromptRequest(
+        draft_prompt="动作", optimizer_provider="minimax_context_ir",
+        target_video_model="uniart/minimax-h3-vip",
+    )
+    monkeypatch.setattr(api, "current_studio_user", lambda: SimpleNamespace(user_id="u", owner_profile_id="o"))
+    monkeypatch.setattr("src.apps.studio_access.runtime_uniart_for_owner", lambda *args: object())
+    complete = Mock()
+    monkeypatch.setattr(uniart, "complete_context_ir", complete)
+
+    with pytest.raises(PolishError, match="7000-character limit"):
+        api._complete_minimax_ir_polish(request, "rules", "x" * 7001)
+    complete.assert_not_called()
+
+
 def test_minimax_ir_resolves_studio_media_before_provider_submission(monkeypatch):
     from src.models import uniart
     request = api.PolishVideoPromptRequest(

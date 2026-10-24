@@ -140,7 +140,7 @@ def test_ir_preview_contains_selected_skill_text():
     preview = api.preview_video_polish_prompt(request)
     assert '[minimax-h3-director' in preview['messages']['user']
     assert '基础／关键帧输出' in preview['messages']['user']
-    assert 'a slow Push In or Zoom In does not make a' in preview['messages']['user']
+    assert 'Keep camera motion independent of subject speed' in preview['messages']['user']
 
 
 def test_action_terms_auto_attach_motion_baseline_to_h3_preview():

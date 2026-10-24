@@ -7980,6 +7980,22 @@ timing and preserve the chosen shot count.
 """
 
 
+_IR_SHOT_GUIDANCE = """
+SHOT CONSTRAINTS: Preserve accepted shot fields, explicit visual timings,
+first-frame blocking, identities, scene lighting, and the chosen shot count.
+Keep camera motion independent of subject speed. For contact actions, show
+one contact followed by its immediate force reaction, displacement, any
+explicitly authorized collision and visible prop response, then the end state.
+Do not invent unseen objects or make a subject cross an occluding barrier.
+Fast action stays real-time unless the creator requests slow motion. Preserve
+user-authored timing windows. Align sound cues with the corresponding visual
+events; discard stale sound timestamps in the draft. Silent mode has no sound.
+"""
+
+
+_MINIMAX_IR_TEXT_LIMIT = 7000
+
+
 def _storyboard_polish_contract(model_id: str, custom: str, default: str, generate_audio=None, target_duration=None, dialogue_speaker="", dialogue_line="", optimization_skills: Optional[List[str]] = None, reference_mode: bool = False, generation_mode: str = "i2v") -> str:
     guidance = _selected_skill_guidance(optimization_skills, model_id) if optimization_skills is not None else _target_model_guidance(model_id)
     is_h3 = "h3" in (model_id or "").lower()
@@ -8191,7 +8207,7 @@ def _validate_storyboard_polish_result(model_id: str, result: Dict[str, Any], re
 
 def _compile_ir_polish_text(request, custom_prompt: str) -> str:
     instruction = custom_prompt.strip()
-    instruction += _ACTION_RHYTHM_GUIDANCE + _SHOT_SPACE_VISIBILITY_GUIDANCE
+    instruction += "\n" + _IR_SHOT_GUIDANCE
     if _needs_short_action_timeline(request.target_video_model, request.target_duration, request.draft_prompt):
         instruction += (f"\nUse 3-6 contiguous authored time ranges from 0.00s to {request.target_duration:.2f}s "
                         "inside the H3 visual description in both language outputs. "
@@ -8205,12 +8221,6 @@ def _compile_ir_polish_text(request, custom_prompt: str) -> str:
     if selected_skills:
         instruction += "\n\n" + _selected_skill_guidance(selected_skills, request.target_video_model)
         instruction += "\nPreserve the official H3 output format."
-    automatic = _automatic_motion_skill_guidance(
-        "\n".join([request.draft_prompt, request.feedback, custom_prompt]),
-        request.target_video_model,
-    )
-    if automatic:
-        instruction += "\n\n" + automatic
     text = f"{instruction}\n\n[DRAFT PROMPT]\n{request.draft_prompt.strip()}"
     if request.feedback.strip():
         text += f"\n\n[USER FEEDBACK]\n{request.feedback.strip()}"
@@ -8448,7 +8458,7 @@ def _compile_video_polish_review(request, reference_mode: bool) -> Dict[str, Any
     if request.optimizer_provider == "minimax_context_ir":
         if request.target_video_model and "h3" not in request.target_video_model.lower():
             raise HTTPException(422, "MiniMax Context-IR requires an H3 target")
-        messages = {"system": "", "user": _compile_ir_polish_text(request, custom or default)}
+        messages = {"system": "", "user": _compile_ir_polish_text(request, custom)}
     else:
         system = _storyboard_polish_contract(
             request.target_video_model, custom, default, request.generate_audio,
@@ -8545,6 +8555,12 @@ def _complete_minimax_ir_polish(request, custom_prompt: str, reviewed_text: Opti
     from ..studio_access import runtime_uniart_for_owner
     config = runtime_uniart_for_owner(user.user_id, user.owner_profile_id)
     text = reviewed_text if reviewed_text is not None else _compile_ir_polish_text(request, custom_prompt)
+    if len(text) > _MINIMAX_IR_TEXT_LIMIT:
+        raise PolishError(
+            reason="api_error",
+            message_zh=f"MiniMax IR 输入 {len(text)} 字符，超过 {_MINIMAX_IR_TEXT_LIMIT} 字符上限。请在模型输入检查中缩短文字后重试。",
+            message_en=f"MiniMax IR input is {len(text)} characters, above the {_MINIMAX_IR_TEXT_LIMIT}-character limit. Shorten the reviewed text and retry.",
+        )
     try:
         content: List[Dict[str, Any]] = [{"type": "text", "text": text}]
         for index, value in enumerate(_polish_image_urls(request.image_urls or [])):
