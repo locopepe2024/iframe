@@ -6,9 +6,17 @@ import FeatureDialog from "./FeatureDialog";
 import styles from "./chat.module.css";
 
 export const diaryPrompt = (day: string) => `请把 ${day} 我们聊的内容整理成一篇回忆日记。只使用已经讲过的事实，缺少内容时先询问，不要编造。`;
-export function diaryDay(text: string) {
-  return text.match(/^\s*(?:请\s*)?把\s+(\d{4}-\d{2}-\d{2})\s+我们聊的内容整理成一篇回忆日记/)?.[1]
+export function diaryDay(text: string, reply = "", fallbackDay?: string) {
+  const explicit = text.match(/^\s*(?:请\s*)?把\s+(\d{4}-\d{2}-\d{2})\s+我们聊的内容整理成一篇回忆日记/)?.[1]
     ?? text.match(/^请把我们今天聊的内容整理成一篇回忆日记（日记日期：(\d{4}-\d{2}-\d{2})）/)?.[1];
+  if (explicit) return explicit;
+  const compact = text.replace(/[\s，。！？、,.!?：:]/g, "");
+  if (!/^(?:请|请你|麻烦)?(?:帮我|给我)?(?:写|写一下|写一篇|写篇|整理|整理一下|整理一篇|记录)(?:今天的?)(?:回忆)?日记(?:吧|好吗)?$/.test(compact)) return undefined;
+  // Old messages have no timestamp in this API. Recover a date from the reply heading;
+  // never assign today's date to an undated historical reply.
+  const heading = reply.trim().split("\n")[0];
+  const dated = heading.match(/(\d{4})(?:年|-)(\d{1,2})(?:月|-)(\d{1,2})(?:日)?/);
+  return dated ? `${dated[1]}-${dated[2].padStart(2,"0")}-${dated[3].padStart(2,"0")}` : fallbackDay;
 }
 export function formatDiaryDay(day: string) { const [year,month,date] = day.split("-"); return `${year}年${Number(month)}月${Number(date)}日`; }
 export function today() { const now=new Date();return `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,"0")}-${String(now.getDate()).padStart(2,"0")}`; }
@@ -16,8 +24,9 @@ export function today() { const now=new Date();return `${now.getFullYear()}-${St
 export interface DiaryContextItem { id: string; role: "user" | "assistant"; text: string }
 export interface DiaryContextMedia { id: string; kind: "photo" | "video"; name: string }
 
-export default function DiaryCard({ day, text, sourceTurn, saved, onSaved, context = [], media = [] }: {
+export default function DiaryCard({ day, text, sourceTurn, saved, onSaved, onOpenDiary, context = [], media = [] }: {
   day: string; text: string; sourceTurn: string; saved?: Diary; onSaved?: (diary: Diary) => void;
+  onOpenDiary?: () => void;
     context?: DiaryContextItem[]; media?: DiaryContextMedia[];
 }) {
   const [entry,setEntry] = useState(saved);
@@ -52,6 +61,7 @@ export default function DiaryCard({ day, text, sourceTurn, saved, onSaved, conte
     {previous && <details><summary>当天已有日记，保存将替换当天内容，点此核对原文</summary><p className={styles.diaryText}>{previous.text}</p></details>}
     <button type="button" disabled={busy || !loaded} onClick={()=>{setDraft(entry?.text ?? text);setEditing(true);}}>{entry ? "编辑日记" : "继续写日记"}</button>
     {!entry && <><button type="button" disabled={busy || !loaded} onClick={()=>void save(text)}>{busy ? "正在保存…" : previous ? "确认替换当日日记" : "保存日记"}</button><button type="button" disabled={busy || !loaded} onClick={()=>setDismissed(true)}>放弃保存</button></>}
+    {onOpenDiary && <button type="button" disabled={busy} onClick={onOpenDiary}>查看已保存日记</button>}
     {!loaded && !error && <p role="status">正在核对日记…</p>}
     {error && !editing && <p role="alert">{error}{!loaded && <button type="button" onClick={()=>setReload(value=>value+1)}>重试核对日记</button>}</p>}
     {editing && <FeatureDialog title="日记编辑器" onClose={()=>{if(!busy)setEditing(false);}}>

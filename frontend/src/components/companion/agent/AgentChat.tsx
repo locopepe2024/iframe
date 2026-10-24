@@ -111,8 +111,10 @@ export default function AgentChat() {
     setMenu(false); setAlbumOpen(false); setUploadFiles([]); setAttached([]); setPendingMedia({chat:[],image:[],video:[]}); setMediaAcknowledged(false); setSession(result.session_id); setMessages([]); setAfter(null); setTurn(null); setPreview(null); setDraft(null); setDrafts({ chat: "", image: "", video: "" }); setGuides({ image: null, video: null }); setMode("chat"); setNotice("已开始新的聊天。");
   }
   async function send(retry = false) {
-    if (!sendOperation.current || !retry) sendOperation.current = { operation_id: crypto.randomUUID(), text, allow_external_text: true };
-    if (!retry) setLastSubmittedText(text);
+    const requestedDay = diaryDay(text, "", today());
+    const submittedText = requestedDay ? diaryPrompt(requestedDay) : text;
+    if (!sendOperation.current || !retry) sendOperation.current = { operation_id: crypto.randomUUID(), text: submittedText, allow_external_text: true };
+    if (!retry) setLastSubmittedText(submittedText);
     setHasRetry(true); setPreview(null);
     if (!session && !sessionOperation.current) sessionOperation.current = crypto.randomUUID();
     const activeSession = session || (await companionApi.session(sessionOperation.current)).session_id;
@@ -231,9 +233,11 @@ export default function AgentChat() {
     </section>}
     <section aria-label="会话消息">
       {renderAttached(0)}
-      {messages.map((message,index) => <Fragment key={message.id}><div>
+      {messages.map((message,index) => {
+        const day = diaryDay(message.text, message.turn?.result?.kind === "text" ? message.turn.result.text : "");
+        return <Fragment key={message.id}><div>
         <article className={chatStyles.user}><span>{diaryDay(message.text) ? `我 · ${formatDiaryDay(diaryDay(message.text)!)}` : "我"}</span><p>{message.text}</p></article>
-        {message.turn?.result?.kind === "text" && (diaryDay(message.text) ? <DiaryCard day={diaryDay(message.text)!} text={message.turn.result.text} sourceTurn={message.turn.turn_id}
+        {message.turn?.result?.kind === "text" && (day ? <DiaryCard day={day} text={message.turn.result.text} sourceTurn={message.turn.turn_id} onOpenDiary={() => setFeature("diary")}
           context={messages.slice(Math.max(0, index - 7), index).flatMap(item => {
             const items: DiaryContextItem[] = [{ id: item.id, role: "user", text: item.text }];
             if (item.turn?.result?.kind === "text") items.push({ id: `${item.id}-reply`, role: "assistant", text: item.turn.result.text });
@@ -242,11 +246,11 @@ export default function AgentChat() {
           media={attached.filter(item => item.anchor === index + 1).map(item => ({ id: item.id, kind: item.kind, name: item.name })) as DiaryContextMedia[]}
         /> : <article className={chatStyles.assistant}><span>陪伴助手</span><p>{message.turn.result.text}</p><SpeechPlayback text={message.turn.result.text}/></article>)}
         {message.turn?.result?.kind === "upload_guide" && !dismissedUploadGuides.includes(message.turn.turn_id) && <UploadGuideCard {...uploadGuideActions(message.turn.turn_id)} />}
-      </div>{renderAttached(index+1)}</Fragment>
-      )}
+      </div>{renderAttached(index+1)}</Fragment>;
+      })}
       {after !== null && <button disabled={busy} onClick={() => void run(() => history(session, after))}>更多历史消息</button>}
     </section>
-    {turn?.result?.kind === "text" && !messages.some(m => m.turn?.turn_id === turn.turn_id) && (diaryDay(lastSubmittedText) ? <DiaryCard day={diaryDay(lastSubmittedText)!} text={turn.result.text} sourceTurn={turn.turn_id} /> : <article className={chatStyles.assistant}><span>陪伴助手</span><p>{turn.result.text}</p><SpeechPlayback text={turn.result.text}/></article>)}
+    {turn?.result?.kind === "text" && !messages.some(m => m.turn?.turn_id === turn.turn_id) && (diaryDay(lastSubmittedText) ? <DiaryCard day={diaryDay(lastSubmittedText)!} text={turn.result.text} sourceTurn={turn.turn_id} onOpenDiary={() => setFeature("diary")} /> : <article className={chatStyles.assistant}><span>陪伴助手</span><p>{turn.result.text}</p><SpeechPlayback text={turn.result.text}/></article>)}
     {turn?.result?.kind === "upload_guide" && !messages.some(m => m.turn?.turn_id === turn.turn_id) && !dismissedUploadGuides.includes(turn.turn_id) && <UploadGuideCard {...uploadGuideActions(turn.turn_id)} />}
     {uploadFiles.length > 0 && <MediaUpload files={uploadFiles} disabled={inputDisabled || pending} onUploaded={attach} onBusyChange={setUploading} onClose={() => setUploadFiles([])} />}
     {albumOpen && <AlbumPicker disabled={inputDisabled || pending} onClose={() => setAlbumOpen(false)} onPhoto={photo => {

@@ -267,3 +267,31 @@ it("shows an explicit diary card for a completed diary request without auto savi
   await waitFor(()=>expect(within(card).getByRole("button",{name:"继续写日记"})).toBeEnabled());
   expect(card).toHaveTextContent("今天和女儿一起喝茶。");expect(api.saveDiary).not.toHaveBeenCalled();
 });
+
+it("gives a natural-language diary request save actions and calendar retrieval",async()=>{
+ const day=today(),body=`**${day} · 日记**\n今天和女儿一起喝茶。`;
+ api.chat.mockResolvedValue({turn_id:"natural-diary",status:"completed",result:{kind:"text",text:body}});
+ const saved={day,text:body,source_turn_id:"natural-diary",revision:1};
+ api.saveDiary.mockResolvedValue(saved);
+ await start();allowText();
+ fireEvent.change(screen.getByLabelText("和我聊聊天"),{target:{value:"写一下今天的日记吧"}});
+ fireEvent.click(screen.getByRole("button",{name:"发送"}));
+ const card=await screen.findByRole("article",{name:"日记草稿"});
+ await waitFor(()=>expect(within(card).getByRole("button",{name:"保存日记"})).toBeEnabled());
+ expect(api.chat.mock.calls[0][1].text).toBe(diaryPrompt(day));
+ expect(api.saveDiary).not.toHaveBeenCalled();
+ fireEvent.click(within(card).getByRole("button",{name:"保存日记"}));
+ await screen.findByRole("article",{name:"已保存日记"});
+ api.diaries.mockResolvedValue({diaries:[saved]});
+ fireEvent.click(screen.getByRole("button",{name:"查看已保存日记"}));
+ await screen.findByRole("button",{name:`${day}，已有日记`});
+ expect(screen.getAllByRole("article",{name:"已保存日记"})).toHaveLength(2);
+});
+
+it("restores save actions for a historical natural diary reply with a dated heading",async()=>{
+ localStorage.setItem("iframe-companion-agent-session-v1","s");
+ api.messages.mockResolvedValue({messages:[{id:"old",text:"写一下今天的日记吧",turn:{turn_id:"old-turn",result:{kind:"text",text:"**2026年10月24日 · 日记**\n今天喝茶。"}}}],next_after:null});
+ render(<AgentChat/>);
+ const card=await screen.findByRole("article",{name:"日记草稿"});
+ expect(card).toHaveTextContent("2026-10-24");
+});
