@@ -71,3 +71,21 @@
 在 media Blender 上继续运行局部 IK 副本：每个候选目标分别比较网格最低高度残差、水平滑移、另一脚偏移和 12 关节投影；至少覆盖源 1/17/23/29/41/55，并保留 PTS。
 
 [Media Blender 原始结果](../raw/2026-10-23-rig-sole-proxy/media-projection-report.json)
+
+## Fixed patch follow-up
+
+### Observed
+
+- 旧探针每帧重新选择最低网格顶点，最低带数量随姿态从 14–53 变化；这不适合直接计算同一鞋底区域的跨帧滑移。
+- 新探针先在静止姿态固定每侧 48 个 `DEF_foot/toe/toe_attachment` 顶点，再对源 1、17、23、29、41、55 对应输出帧重新蒙皮。固定 patch 数量保持 48。
+- 固定 patch 的左脚最低高度从源 1 的 `0.1030` 变化到源 55 的 `0.2229`；右脚从 `0.2111` 变化到源 41 的 `-0.0013`。固定 patch 质心也随足部旋转和 root 变换变化，不能用单一静止世界坐标锁定。
+
+### Direct implication
+
+接触滑移诊断必须固定顶点集合或固定面片集合，再比较其世界质心、最低高度和地面投影；每帧重选最低点只能用于高度下界，不能当作稳定的鞋底跟踪点。
+
+### Not yet proven
+
+固定的 48 顶点是否覆盖真实鞋底接触面、是否需要按前掌/后跟分成两个 patch，以及其与源图像 heel/toe 代理的对应关系，仍未验证。
+
+[固定 patch 原始结果](../raw/2026-10-23-rig-sole-proxy/fixed-patch-media.json)；[固定 patch 探针](../tools/recreation2_fixed_sole_patch_probe.py)
