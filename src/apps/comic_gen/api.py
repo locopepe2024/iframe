@@ -5663,6 +5663,10 @@ def _storyboard_polish_contract(model_id: str, custom: str, default: str, genera
             constraints += f"\nEXPLICIT DIALOGUE (verbatim, do not translate, omit, or rewrite): {speaker}: {dialogue_line.strip()}"
     if target_duration is not None:
         constraints += f"\nTarget duration: {target_duration} seconds. All action must fit within this duration; no invented exact source cut times."
+        if "h3" in (model_id or "").lower() and target_duration <= 6:
+            constraints += """
+SHORT SHOT TIMING: This is an authored short shot, not a measured source clip. If it contains multiple causal action beats, keep one [Shot 1] but divide its integrated_multimodal_description into 3-6 designed time windows (for example 0.00-0.60s, 0.60-1.20s). Each window advances one observable change and states the contact/impact, force direction, support change, collision result, or end state when applicable. These windows do not create cuts. Camera travel is independent from character speed. Do not use slow motion, time ramp, or prolonged pose transitions unless explicitly requested.
+"""
     return guidance + "\n" + custom + constraints + """
 STORYBOARD OUTPUT CONTRACT:
 Return only JSON with string fields prompt_cn and prompt_en. Each string contains
