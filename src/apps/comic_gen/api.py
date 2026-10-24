@@ -7940,6 +7940,12 @@ grab, recoil, or fall slow motion. Push In moves the camera; Zoom In changes
 focal length. Do not add slow motion, prolonged posing, extra events,
 shots, or characters unless requested. For an atmospheric shot without a
 causal action, keep its intended pace and do not invent an action sequence.
+When the draft uses rapid-impact words such as "猛然", "快速", "立即", or
+"接触瞬间", preserve real-time motion: compress the reaction into the
+available beat instead of stretching it into slow motion or a gradual fall.
+If the user explicitly names a table, wall, counter, or prop collision, include
+that collision and its visible consequences in the same causal chain; do not
+apply the default prop-preservation rule to an explicitly authorized impact.
 Place the rhythm inside the existing model-specific visual description,
 without adding a new output field.
 """

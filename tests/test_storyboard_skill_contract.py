@@ -124,6 +124,19 @@ def test_action_terms_auto_attach_motion_baseline_to_h3_preview():
     assert '道具默认保持原位' in system
 
 
+def test_rapid_impact_and_explicit_table_collision_preserve_real_time_causality():
+    request = api.PolishVideoPromptRequest(
+        draft_prompt='匪首猛然踹中老掌柜胸腹。接触瞬间老人快速踉跄后退，撞到桌边，手臂扫落桌上器具后倒地，不使用慢动作。',
+        target_video_model='uniart/minimax-h3-vip',
+        optimizer_provider='qwen',
+    )
+    preview = api.preview_video_polish_prompt(request)
+    system = preview['messages']['system']
+    assert 'preserve real-time motion' in system
+    assert 'explicitly names a table' in system
+    assert 'a slow Push In or Zoom In does not make a' in system
+
+
 def test_professional_martial_terms_attach_choreography_and_physics_baselines():
     request = api.PolishVideoPromptRequest(
         draft_prompt='设计咏春近身攻防和兵器招式，明确起势、接触、反击与收势。',
