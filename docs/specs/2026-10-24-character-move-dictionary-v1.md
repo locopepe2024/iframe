@@ -31,6 +31,7 @@
   "move_id": "suyan.sword.disarm_sweep.v1",
   "character_id": "suyan",
   "label": "连贯剑势·拨械",
+  "aliases": ["拍刃", "抽击", "剑鞭"],
   "category": "sword_disarm",
   "combat_profile_ref": "suyan.swordfighter.v1",
   "starting_state": {
@@ -38,12 +39,12 @@
     "weapon_hand": "右手",
     "guard": "剑身位于身体前侧"
   },
-  "body_mechanics": ["前脚切入", "髋部带动躯干旋转", "肩肘带动剑臂", "腕部完成刃线调整"],
-  "weapon_trajectory": "以剑身侧面沿横向路线抽击、拍击对手持械手或刀剑，不以锋刃切割",
+  "body_mechanics": ["前脚切入", "髋部带动躯干旋转", "肩肘带动剑臂", "手腕短促抖动发力", "剑身弯曲后快速回弹"],
+  "weapon_trajectory": "以剑身侧面沿横向路线作竹鞭般的弹性抽击、拍击对手持械手或刀剑，不以锋刃切割",
   "target_relation": "对手持械手或刀剑，不默认攻击身体",
   "contact_result": "剑身侧面以弹性和重量形成钝器式拍击，刀剑被精准撞开并脱手；是否飞出画面由当前镜头决定",
   "recovery_state": "剑势完成后保持面向对手，不自动转身",
-  "visible_cues": ["剑身侧面拍击接触清楚", "持械手被迫张开", "重心沿拍击方向转移"],
+  "visible_cues": ["剑身短促弯曲并回弹", "剑身侧面拍击接触清楚", "持械手被迫张开", "重心沿拍击方向转移"],
   "forbidden_interpretations": ["不改为锋刃切割或刺击", "不自动增加第二次斩击", "不自动造成身体伤口"],
   "source_refs": [],
   "status": "draft"

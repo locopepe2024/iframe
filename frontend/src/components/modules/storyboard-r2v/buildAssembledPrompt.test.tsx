@@ -26,10 +26,13 @@ it("compiles the selected character move into a generation prompt", () => {
     };
     const result = buildGenerationPrompt(shot, false, "uniart/minimax-h3-vip");
     expect(result).toContain("连贯剑势·拨械");
+    expect(result).toContain("动作词：拍刃、抽击、剑鞭");
     expect(result).toContain("面对数名匪寇的连续拨械");
     expect(result).toContain("只针对持械手或刀剑");
     expect(result).toContain("不以锋刃切割");
     expect(result).toContain("钝器式拍击");
+    expect(result).toContain("竹鞭般的弹性抽击");
+    expect(result).toContain("手腕短促抖动发力");
     expect(result).not.toContain("剑身横向扫过");
     expect(result).toContain("刀剑沿受力方向翻飞");
 });
