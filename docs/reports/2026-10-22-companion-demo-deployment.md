@@ -202,6 +202,12 @@ Frontend commit `e1f8e587` was built with the `/companion-demo` base path and sy
 
 Evidence: focused Agent UI tests (20) and frontend typecheck passed. The static release contains the updated `聊天设置` and `上传素材引导` chunks; the isolated API health endpoint remained 200. Backup files were created beside `agent.html` and `build-manifest.json` as `*.before-chat-settings-e1f8e587`. No backend/data/provider change, push or merge.
 
+## 2026-10-24 — Upload follow-up for photo metadata
+
+Frontend commit `5c484039` was built with the `/companion-demo` base path and synchronized to the isolated release. After a photo upload is staged in “待发送素材”, the card now asks whether to add a structured photo note. “现在整理” opens a labeled note editor; the text is previewed and requires an explicit “确认保存备注” button before calling the existing versioned photo-description endpoint. “以后再说” leaves the original in the album and does not write. The note is kept separate from chat attachments and is not sent to Qwen. Videos remain uploadable but do not show this photo-only prompt because no equivalent video description endpoint exists.
+
+Evidence: 2 new UI tests plus the 20-test AgentChat suite passed, frontend typecheck and isolated static build passed. The deployed release contains the `照片结构化备注` chunk and public health remained 200. Existing static chunks were retained during synchronization to avoid breaking already-open cached pages. No backend/schema/provider change, push or merge.
+
 Frontend commit `6ab03032` was then synchronized to the same release. Live diary responses now render the diary action card immediately, including “继续写日记”, “保存日记”, and “放弃保存”; this also covers the interval before the message history reload pairs the turn. The static chunk containing “放弃保存” is present on the mounted test release and the container remained healthy.
 
 Frontend commit `5bd4c6d4` was synchronized afterward. Text-send consent now lives under “更多 → 聊天设置” and is retained in the browser after confirmation, so the composer no longer expands a consent panel for every message. The send button opens that setting when consent is missing. Twenty-two focused UI tests and typecheck passed; the backend and existing session data were unchanged.
