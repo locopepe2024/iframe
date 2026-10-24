@@ -5,7 +5,7 @@ export interface Preview {
   status: "pending_confirmation" | "preview_closed"; preview_token: string; action?: "save" | "delete";
   preview?: { content?: string; quote?: string; source_text?: string; source_message_id?: string; type?: string; importance?: number; memory?: Memory; notice?: string };
 }
-export interface Turn { turn_id: string; status: string; result?: ({ kind: "text"; text: string } | ({ kind: "confirmation" } & Preview) | { kind: "read"; name: string; memories: Memory[]; next_cursor: string | null }) }
+export interface Turn { turn_id: string; status: string; result?: ({ kind: "text"; text: string } | { kind: "upload_guide" } | ({ kind: "confirmation" } & Preview) | { kind: "read"; name: string; memories: Memory[]; next_cursor: string | null }) }
 export interface MemoryPage { memories: Memory[]; next_cursor: string | null }
 export interface Diary { day: string; text: string; source_turn_id: string; revision: number; updated_at: number }
 const base = `${API_URL}/companion-agent-api/companion-runtime`;

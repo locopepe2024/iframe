@@ -8,3 +8,8 @@ def test_diary_intent_accepts_polite_and_direct_wording():
 
 def test_unrelated_chat_stays_chat():
     assert classify('今天女儿来看我了。').name == 'chat'
+
+
+def test_upload_question_uses_upload_help_lane():
+    assert classify('怎么发').name == 'media.upload_help'
+    assert classify('我想从相册选一张照片').name == 'media.upload_help'

@@ -57,6 +57,15 @@ def test_no_permission_no_model_and_failed_request_retry(chat):
     assert len(store.messages('owner',session)['messages'])==1
 
 
+def test_upload_question_returns_card_without_memory_model_call(chat):
+    _,_,client,session,callback=chat
+    response=client.post(f'/companion-runtime/sessions/{session}/chat',json=dict(
+        operation_id='upload-help', text='怎么发', allow_external_text=True))
+    assert response.status_code==200
+    assert response.json()['result']==dict(kind='upload_guide')
+    callback.assert_not_called()
+
+
 def test_diary_request_never_surfaces_an_accidental_memory_read(chat):
     store,_,client,session,callback=chat
     callback.return_value=dict(kind='tool',name='memory.search',arguments=dict(query='2026-10-24',limit=20,min_importance=1,type=None,cursor=''))

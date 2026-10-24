@@ -150,7 +150,9 @@ def chat(session_id: str, body: ChatRequest, identity: Owner, store: Store):
             # Diary is a writing lane. It receives the current session's user
             # messages but never receives memory tools, even if the model
             # would otherwise interpret the request as a search.
-            proposal=(propose_diary if classify(body.text).name == 'diary.compose' else propose)(identity,claim['messages'],claim['message_id'])
+            intent=classify(body.text)
+            proposal=({'kind':'upload_guide'} if intent.name == 'media.upload_help' else
+                      (propose_diary if intent.name == 'diary.compose' else propose)(identity,claim['messages'],claim['message_id']))
             return store.finish_turn(identity.owner_profile_id,identity.user_id,claim,proposal)
         except Exception as exc:
             store.fail_turn(identity.owner_profile_id,claim)

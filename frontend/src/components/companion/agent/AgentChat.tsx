@@ -14,6 +14,7 @@ import GenerationGuide, { createGenerationDraft, type GenerationDraft, type Medi
 import CompanionFeatureSheet, { type CompanionFeature } from "./CompanionFeatureSheet";
 import DiaryCalendar from "./DiaryCalendar";
 import DiaryCard, { diaryDay, diaryPrompt, formatDiaryDay, today, type DiaryContextItem, type DiaryContextMedia } from "./DiaryCard";
+import UploadGuideCard from "./UploadGuideCard";
 import { BookOpen, Images, UserRound, Compass } from "lucide-react";
 
 const prefix = process.env.NEXT_PUBLIC_API_URL === "/companion-demo" ? "/companion-demo" : "";
@@ -198,11 +199,13 @@ export default function AgentChat() {
           })}
           media={attached.filter(item => item.anchor === index + 1).map(item => ({ id: item.id, kind: item.kind, name: item.name })) as DiaryContextMedia[]}
         /> : <article className={chatStyles.assistant}><span>陪伴助手</span><p>{message.turn.result.text}</p></article>)}
+        {message.turn?.result?.kind === "upload_guide" && <UploadGuideCard onUpload={() => fileRef.current?.click()} onAlbum={() => setAlbumOpen(true)} />}
       </div>{renderAttached(index+1)}</Fragment>
       )}
       {after !== null && <button disabled={busy} onClick={() => void run(() => history(session, after))}>更多历史消息</button>}
     </section>
     {turn?.result?.kind === "text" && !messages.some(m => m.turn?.turn_id === turn.turn_id) && (diaryDay(lastSubmittedText) ? <DiaryCard day={diaryDay(lastSubmittedText)!} text={turn.result.text} sourceTurn={turn.turn_id} /> : <article className={chatStyles.assistant}><span>陪伴助手</span><p>{turn.result.text}</p></article>)}
+    {turn?.result?.kind === "upload_guide" && !messages.some(m => m.turn?.turn_id === turn.turn_id) && <UploadGuideCard onUpload={() => fileRef.current?.click()} onAlbum={() => setAlbumOpen(true)} />}
     {uploadFiles.length > 0 && <MediaUpload files={uploadFiles} disabled={inputDisabled || pending} onUploaded={attach} onBusyChange={setUploading} onClose={() => setUploadFiles([])} />}
     {albumOpen && <AlbumPicker disabled={inputDisabled || pending} onClose={() => setAlbumOpen(false)} onPhoto={photo => {
       attach({kind:"photo",id:photo.photo_id,name:"相册照片"});setAlbumOpen(false);
