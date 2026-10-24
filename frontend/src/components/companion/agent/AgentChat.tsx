@@ -167,7 +167,8 @@ export default function AgentChat() {
       const items = pendingMedia[mode];
       if (!text.trim()) {setNotice("先描述想创作什么，再继续。");return;}
       if (items.length > 1 || items.some(item => item.kind !== "photo")) {setNotice("本次创作支持一张参考照片，请先移除多余素材或视频。");return;}
-      updateGuide({ ...createGenerationDraft(mode, text.trim()), reference: items[0]?.id ?? null, step: items.length ? "parameters" : "reference" }); setNotice("");
+      updateGuide({ ...createGenerationDraft(mode, text.trim()), reference: items[0]?.id ?? null, step: items.length ? "parameters" : "reference" });
+      setDrafts(old => ({ ...old, [mode]: "" })); setNotice("");
     }
   }
   const activePreview = preview ?? (turn?.result?.kind === "confirmation" ? turn.result : null);
@@ -236,7 +237,7 @@ export default function AgentChat() {
       attach({kind:"photo",id:photo.photo_id,name:"相册照片"});setAlbumOpen(false);
     }} onVideo={video => {attach({kind:"video",id:video.video_id,name:video.name});setAlbumOpen(false);}} />}
     {feature === "diary" ? <DiaryCalendar onClose={()=>setFeature(null)} onCreate={day=>{setFeature(null);startDiaryPrompt(day);}}/> : feature && <CompanionFeatureSheet feature={feature} onClose={() => setFeature(null)} />}
-    {mode !== "chat" && (guide ? <GenerationGuide key={mode} value={guide} disabled={inputDisabled || pending} onChange={updateGuide} onEdit={() => { updateGuide(null); inputRef.current?.focus(); }} onCancel={() => { updateGuide(null); setNotice("已取消创作，描述草稿仍保留。"); }} /> : <article className={chatStyles.assistant}><span>陪伴助手</span><p>{mode === "video" ? "想做一段什么视频？" : "想生成一张什么图片？"}在下面说说，点箭头后我们一步步来。</p></article>)}
+    {mode !== "chat" && (guide ? <GenerationGuide key={mode} value={guide} disabled={inputDisabled || pending} onChange={updateGuide} onEdit={() => { updateDraft(guide.prompt); inputRef.current?.focus(); }} onCancel={() => { updateDraft(guide.prompt); setNotice("已取消创作，描述草稿仍保留。"); }} /> : <article className={chatStyles.assistant}><span>陪伴助手</span><p>{mode === "video" ? "想做一段什么视频？" : "想生成一张什么图片？"}在下面说说，点箭头后我们一步步来。</p></article>)}
     {busy && <p role="status">正在处理…</p>}
     {notice && <p role="status">{notice}</p>}{error && <p role="alert">{error}</p>}
     {turn?.result?.kind === "read" && <section className={styles.panel} aria-label="工具读取结果"><h2>实际记忆查询结果</h2>

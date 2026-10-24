@@ -33,6 +33,14 @@ it.each([ ["图片","image","想生成的图片","方形 1:1"], ["视频","video
  expect(api.chat).not.toHaveBeenCalled();expect(services.generate).not.toHaveBeenCalled();
  fireEvent.change(screen.getByLabelText(inputLabel),{target:{value:"阳光下的花园，有蝴蝶"}});
  fireEvent.click(screen.getByRole("button",{name:"发送"}));
+ expect(screen.getByLabelText(inputLabel)).toHaveValue("");
+ fireEvent.click(screen.getByRole("button",{name:"返回修改描述"}));
+ expect(screen.getByLabelText(inputLabel)).toHaveValue("阳光下的花园，有蝴蝶");
+ fireEvent.click(screen.getByRole("button",{name:"发送"}));
+ fireEvent.click(screen.getByRole("button",{name:"取消创作"}));
+ expect(screen.getByLabelText(inputLabel)).toHaveValue("阳光下的花园，有蝴蝶");
+ fireEvent.click(screen.getByRole("button",{name:"发送"}));
+ expect(screen.getByLabelText(inputLabel)).toHaveValue("");
  const guide=screen.getByRole("region",{name:`${label}创作引导`});
  fireEvent.click(within(guide).getByRole("button",{name:"不加参考图片"}));
  fireEvent.click(within(guide).getByRole("button",{name:setting}));
