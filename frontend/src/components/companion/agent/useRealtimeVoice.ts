@@ -28,9 +28,9 @@ export function useRealtimeVoice() {
   }, []);
   const stop = useCallback((message = "语音已结束。") => { release(); setState("idle"); setNotice(message); }, [release]);
   useEffect(() => {
-    const hidden = () => { if (document.hidden) stop("已暂停语音，返回页面后可重新开始。"); };
+    const hidden = () => { if (document.hidden && context.current) stop("已暂停语音，返回页面后可重新开始。"); };
     document.addEventListener("visibilitychange", hidden);
-    const leaving = () => stop("语音已结束。");
+    const leaving = () => { if (context.current) stop("语音已结束。"); };
     window.addEventListener("pagehide", leaving);
     return () => { document.removeEventListener("visibilitychange", hidden); window.removeEventListener("pagehide", leaving); release(); };
   }, [release, stop]);

@@ -3,6 +3,8 @@ import asyncio
 import base64
 import binascii
 import json
+import logging
+import os
 import secrets
 import threading
 import time
@@ -16,6 +18,7 @@ from .api import Owner
 from . import channel
 from .personality import get_profile, system_prompt
 
+logger = logging.getLogger(__name__)
 router = APIRouter(tags=['companion-voice'])
 MODEL = 'qwen-audio-3.1-realtime-plus'
 SESSION_SECONDS = 300
@@ -58,7 +61,7 @@ def session_update():
         input_audio_format='pcm', output_audio_format='pcm',
         input_audio_transcription=dict(language='zh'),
         turn_detection=dict(type='server_vad', threshold=0.5, silence_duration_ms=1000),
-        instructions=system_prompt(get_profile()) + '\n当前是实时语音聊天。用自然简短的中文回答。'
+        instructions=system_prompt(get_profile(os.getenv("IFRAME_COMPANION_PERSONALITY"))) + '\n当前是实时语音聊天。用自然简短的中文回答。'
         '本次语音会话没有外部工具，也没有相册、日记或文字聊天历史。'
         '请用户通过文字输入和卡片完成保存记忆、生成、日记及提醒，绝不声称已执行。'))
 
@@ -167,7 +170,8 @@ async def realtime(socket: WebSocket):
             await relay(socket, upstream)
     except WebSocketDisconnect:
         pass
-    except Exception:
+    except Exception as exc:
+        logger.warning("Companion realtime connection failed: %s", type(exc).__name__)
         try:
             await socket.send_json(dict(type='error', message='语音连接已结束，请检查渠道、网络或麦克风后重新开始。'))
         except (RuntimeError, WebSocketDisconnect):
