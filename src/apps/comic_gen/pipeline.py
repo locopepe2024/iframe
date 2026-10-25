@@ -7902,9 +7902,14 @@ class ComicGenPipeline(StudioOwnerMixin):
         if not script:
             raise ValueError("Script not found")
         frame = next((item for item in script.frames if item.id == frame_id), None) if frame_id else None
+        prompt_warning = None
         if (frame and frame.workbench_prompt_is_optimized and frame.workbench_visual_source_hash
                 and frame.workbench_visual_source_hash != self._workbench_visual_source_hash(script, frame)):
-            raise ValueError("Full optimized prompt is stale; review the current shot fields and optimize again")
+            prompt_warning = "完整优化稿基于旧版镜头字段；本次仍按当前镜头设置提交，如需完全匹配请重新优化。"
+            logger.warning(
+                "Submitting video task with stale optimized prompt: script=%s frame=%s",
+                script_id, frame_id,
+            )
         
         task_id = str(uuid.uuid4())
         
@@ -8109,6 +8114,7 @@ class ComicGenPipeline(StudioOwnerMixin):
             last_frame_media_id=effective_last_frame_media_id,
             input_media_id=input_media_id,
             prompt=prompt,
+            warning=prompt_warning,
             status="pending",
             duration=duration,
             seed=seed,

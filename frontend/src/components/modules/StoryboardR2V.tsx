@@ -1270,7 +1270,7 @@ export default function StoryboardR2V() {
             // requests through Promise.all — fail-fast on any one
             // failure leaves the others untouched on the backend (the
             // BG-task wrapper handles their lifecycle independently).
-            const createOne = async (): Promise<string | null> => {
+            const createOne = async (): Promise<{ id: string; warning?: string | null } | null> => {
                 if (tabMode === "direct_r2v") {
                     const referenceUrls = referenceSubmission.urls;
                     const tasks = await api.createVideoTask(
@@ -1303,7 +1303,7 @@ export default function StoryboardR2V() {
                         visualSourceHash,
                     );
                     const task = Array.isArray(tasks) ? tasks[0] : tasks;
-                    return task?.id ?? null;
+                    return task?.id ? { id: task.id, warning: task.warning } : null;
                 }
                 // I2V branch — same defensive check on the model.
                 const i2vModelId = routeModelId;
@@ -1346,7 +1346,7 @@ export default function StoryboardR2V() {
                     visualSourceHash,
                 );
                 const task = Array.isArray(tasks) ? tasks[0] : tasks;
-                return task?.id ?? null;
+                return task?.id ? { id: task.id, warning: task.warning } : null;
             };
 
             setPendingVideoSubmission({
@@ -1394,9 +1394,14 @@ export default function StoryboardR2V() {
                     });
                     setShots(prev => prev.map(s => s.id === shot.id ? { ...s, videoStatus: "pending" } : s));
                     try {
-                        const taskIds = (await Promise.all(
+                        const createdTasks = (await Promise.all(
                             Array.from({ length: effectiveCount }, createOne),
-                        )).filter((id): id is string => !!id);
+                        )).filter((task): task is { id: string; warning?: string | null } => !!task);
+                        const taskIds = createdTasks.map(task => task.id);
+                        const warnings = Array.from(new Set(
+                            createdTasks.map(task => task.warning).filter((warning): warning is string => !!warning),
+                        ));
+                        warnings.forEach((warning) => toast.warning(warning));
                         if (taskIds.length > 0) {
                             setShots(prev => prev.map(s => s.id === shot.id ? {
                                 ...s, videoTaskId: taskIds[taskIds.length - 1], videoStatus: "processing" as const,

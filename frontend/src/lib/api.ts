@@ -611,6 +611,8 @@ export interface VideoTask {
     ratio?: string;
     /** Failure reason set by pipeline / cancel / orphan recovery. */
     error?: string | null;
+    /** Non-blocking warning produced when current shot fields differ from the optimized snapshot. */
+    warning?: string | null;
     /** User-starred shortlist flag (multi-select per shot) — set via
      *  PATCH /annotate. Optional on the wire so older task records
      *  parse unchanged. */

@@ -128,15 +128,16 @@ def test_video_polish_preview_contains_effective_scene_style_and_light(monkeypat
     assert '"ambient_lighting": {"revision": 2, "source": "scene_design", "value": "暮秋残阳"}' in system
 
 
-def test_new_full_prompt_rejects_changed_scene_before_video_task(monkeypatch):
+def test_new_full_prompt_warns_but_allows_changed_scene_before_video_task(monkeypatch):
     pipeline, script, scene, frame = fixture_pipeline(monkeypatch)
     pipeline.update_frame(script.id, frame.id, action_description="H3 完整稿", workbench_prompt_is_optimized=True)
     assert frame.workbench_visual_source_hash == pipeline._workbench_visual_source_hash(script, frame)
     scene.asset_design["design_revisions"].append({"revision": 3, "design": {
         "style": "水墨", "ambient_lighting": "清晨冷光",
     }})
-    with pytest.raises(ValueError, match="stale"):
-        pipeline.create_video_task(script.id, "", "old optimized prompt", frame_id=frame.id)
+    updated, task_id = pipeline.create_video_task(script.id, "", "old optimized prompt", frame_id=frame.id)
+    task = next(item for item in updated.video_tasks if item.id == task_id)
+    assert task.warning and "旧版镜头字段" in task.warning
 
 
 def test_video_submission_rejects_visual_change_after_preview(monkeypatch):
@@ -157,15 +158,26 @@ def test_video_submission_rejects_visual_change_after_preview(monkeypatch):
     assert not script.video_tasks
 
 
-def test_new_full_prompt_rejects_changed_camera_field_before_video_task(monkeypatch):
+def test_new_full_prompt_warns_but_allows_changed_camera_field_before_video_task(monkeypatch):
     pipeline, script, _, frame = fixture_pipeline(monkeypatch)
     pipeline.update_frame(script.id, frame.id, action_description="H3 完整稿", workbench_prompt_is_optimized=True)
     pipeline.update_frame(script.id, frame.id, camera_angle="平视")
-    with pytest.raises(ValueError, match="stale"):
-        pipeline.create_video_task(script.id, "", "old optimized prompt", frame_id=frame.id)
+    updated, task_id = pipeline.create_video_task(script.id, "", "old optimized prompt", frame_id=frame.id)
+    task = next(item for item in updated.video_tasks if item.id == task_id)
+    assert task.warning and "旧版镜头字段" in task.warning
 
 
-def test_new_full_prompt_rejects_changed_reference_projection_before_video_task(monkeypatch):
+def test_new_full_prompt_warns_but_allows_changed_duration_before_video_task(monkeypatch):
+    pipeline, script, _, frame = fixture_pipeline(monkeypatch)
+    pipeline.update_frame(script.id, frame.id, action_description="H3 完整稿", workbench_prompt_is_optimized=True)
+    pipeline.update_frame(script.id, frame.id, duration=4)
+    updated, task_id = pipeline.create_video_task(script.id, "", "old optimized prompt", duration=4, frame_id=frame.id)
+    task = next(item for item in updated.video_tasks if item.id == task_id)
+    assert task.duration == 4
+    assert task.warning and "旧版镜头字段" in task.warning
+
+
+def test_new_full_prompt_warns_but_allows_changed_reference_projection_before_video_task(monkeypatch):
     from src.apps.comic_gen.models import StoryboardReferenceProjectionSnapshot
 
     pipeline, script, _, frame = fixture_pipeline(monkeypatch)
@@ -175,8 +187,9 @@ def test_new_full_prompt_rejects_changed_reference_projection_before_video_task(
         source_variant_id="v2", selected_fields=["lighting"],
         visual_design={"lighting": {"shadow_direction": "左前方"}},
     )
-    with pytest.raises(ValueError, match="stale"):
-        pipeline.create_video_task(script.id, "", "old optimized prompt", frame_id=frame.id)
+    updated, task_id = pipeline.create_video_task(script.id, "", "old optimized prompt", frame_id=frame.id)
+    task = next(item for item in updated.video_tasks if item.id == task_id)
+    assert task.warning and "旧版镜头字段" in task.warning
 
 
 def test_manual_movement_preset_and_custom_keep_distinct_type_and_description():

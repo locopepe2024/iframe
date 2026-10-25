@@ -469,6 +469,7 @@ class VideoTask(BaseModel):
     prompt: str
     status: str = "pending"  # pending, processing, completed, failed
     error: Optional[str] = Field(None, description="Failure reason, if any (set by pipeline / cancel / orphan recovery)")
+    warning: Optional[str] = Field(None, description="Non-blocking warning attached when the submitted shot differs from the optimized snapshot")
     video_url: Optional[str] = None
     video_media_id: Optional[str] = Field(None, description="Stable media identity of the generated video")
     duration: int = Field(5, description="Video duration in seconds (model-specific range)")
