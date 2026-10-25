@@ -70,3 +70,23 @@ OpenTalk 的 SDK/协议映射、是否支持 VRM/GLB、viseme 格式、鉴权和
 - 生成中的角色不会自动替换当前角色，必须明确确认。
 - OpenTalk 未接入时，不出现“已连接视频陪伴”的假状态。
 - 3D 资产加载失败只降级为 2D 海报并提示，不阻塞聊天/日记。
+
+## OpenTalking 源码核对（2026-10-25）
+
+来源：iyi-sgp:/opt/opentalking，commit `8c739a5a6f114daf71aeace832a668c3ad60f536`，与公开仓库当时 HEAD 一致。只读源码，未启动服务、下载模型或运行性能测试。
+
+代码事实：
+- `apps/api/routes/avatars.py:create_custom_avatar` 接收 `base_avatar_id/name/model` 和 image/video 二选一，复制基础 avatar bundle 后写入素材。不是 3D mesh 创建接口。
+- `opentalking/core/interfaces/avatar_asset.py:AvatarManifest` 定义 id/model_type/fps/sample_rate/width/height/version/metadata，已检索的接口与前端源码未发现 GLB/VRM/viseme/blendshape 协议，不能断言支持真实 3D 骨骼驱动。
+- `apps/api/schemas/session.py:CreateSessionRequest` 支持 persona_id/avatar_id/model、独立 STT/TTS provider/voice/model、agent/memory/knowledge 开关。
+- `opentalking/persona/session.py:build_session_defaults` 将 persona 的 avatar/voice/prompt/runtime/memory/knowledge 配置映射为会话默认值，可借鉴身份配置组织。
+- `apps/api/routes/sessions.py` 提供 speak、transcribe、speak_audio、speak_audio_stream、interrupt、webrtc/offer；speak 支持 replace 和 command_id/Idempotency-Key 一致性校验。
+- speak_audio_stream 是 WS PCM s16le mono 16kHz 输入，首帧 meta，end 结束；等待识别结果（120 秒上限）后提交 speak，返回 queued/text。存在流式传输不等于已证明持续双工低延迟。
+- WebRTC offer 使用 SDP/type，转给本地 runner 或 worker；尚未验证 TURN、移动网络可达性、音画延迟与打断清空效果。
+- README 建议 mock CPU 验证编排，真实 talking-head 模型需相应 GPU/模型服务；QuickTalk 以 template video+audio 为输入，Wav2Lip 接收参考图/frames+audio。这是项目文档的部署建议，不是本机跑分。
+
+直接推论：第一条可用资产路径应是“3D 风格角色图片/待机视频 → OpenTalking avatar bundle → 合成说话音视频 → WebRTC 视频卡片”。真实 GLB/VRM 资产保持可选，不能作为 OpenTalking 接入前置条件。角色的具体风格对各模型的稳定性仍需实测。
+
+接入建议：保留 Companion 为日记、记忆、会话事实的唯一来源；OpenTalking 第一阶段作为可选表现层。先验证不重复调用 LLM 的文本/音频驱动路径，再决定是否开启其 agent；不直接把当前日记听写接到 speak_audio_stream（该接口识别后进入 speak）。provider/voice_id 必须按 provider 显式映射，不能假定现有 UniArt 音色可原样用于 DashScope。
+
+下一步可验证切片：独立端口 mock + 合成测试角色素材，验证会话创建/SDP/播放/中断/销毁；之后使用已确认的 GPU backend 验证同一形象说话。当前仅完成源码审查与规格修订，未完成运行集成。
