@@ -16,7 +16,11 @@ from src.apps.comic_gen.models import (
 )
 from src.apps.comic_gen.pipeline import ComicGenPipeline
 from src.apps.comic_gen.storyboard import StoryboardGenerator
-from src.apps.comic_gen.visual_continuity import projected_design_for_target, reference_projection_prompt_clauses
+from src.apps.comic_gen.visual_continuity import (
+    build_reference_projection,
+    projected_design_for_target,
+    reference_projection_prompt_clauses,
+)
 
 
 def make_pipeline(tmp_path):
@@ -406,6 +410,66 @@ def test_generated_frame_variant_freezes_visual_design_for_later_reference(tmp_p
     assert "new frame light" not in str(projection.visual_design)
     assert projection.source_scene_design_revision == 2
     assert projection.source_visual_version_known is True
+
+
+def test_scene_tool_snapshot_projects_into_shot_design_layers(tmp_path):
+    scene = Scene(id="street", name="清溪镇长街", description="source")
+    frame = StoryboardFrame(id="frame", scene_id=scene.id)
+    target = StoryboardFrame(id="target", scene_id=scene.id)
+    variant = ImageVariant(
+        id="scene-variant", url="output/scene.webp",
+        submission_snapshot={
+            "positive_prompt": "scene",
+            "selected_model_id": "test-model",
+            "aspect_ratio": "16:9",
+            "generation_type": "all",
+            "image_generation_mode": "reference",
+            "visual_design": {},
+            "scene_tool": {
+                "kind": "lighting", "brightness": 68, "color": "#abc123",
+                "light_side": "right", "azimuth": 45, "elevation": 20,
+                "rim_light": False, "extra": "保持清晰阴影",
+                "panel_settings": {"version": 1, "lighting": {"mood": "清冷疏离"}},
+            },
+        },
+    )
+    projection = build_reference_projection(
+        target, source_frame=frame, source_asset=scene,
+        source_scene=scene, source_variant=variant,
+    )
+    lighting = projection.visual_design["lighting"]
+    assert lighting["brightness"] == 68
+    assert lighting["color"] == "#abc123"
+    assert lighting["azimuth"] == 45
+    assert lighting["elevation"] == 20
+    assert lighting["mood"] == "清冷疏离"
+
+    camera_variant = ImageVariant(
+        id="camera-variant", url="output/camera.webp",
+        submission_snapshot={
+            "positive_prompt": "scene",
+            "selected_model_id": "test-model",
+            "aspect_ratio": "16:9",
+            "generation_type": "all",
+            "image_generation_mode": "reference",
+            "visual_design": {},
+            "scene_tool": {
+                "kind": "camera", "preset": "custom", "yaw": 30, "pitch": -15,
+                "zoom": 3, "focus": True, "focus_x": 42, "focus_y": 57,
+                "focus_radius": 12, "extra": "保持主体清晰",
+                "panel_settings": {"version": 1, "camera": {"focal_length": "中长焦"}},
+            },
+        },
+    )
+    camera_projection = build_reference_projection(
+        target, source_frame=frame, source_asset=scene,
+        source_scene=scene, source_variant=camera_variant,
+    )
+    camera = camera_projection.visual_design["camera"]
+    assert camera["yaw"] == 30
+    assert camera["pitch"] == -15
+    assert camera["focus_x"] == 42
+    assert camera["focal_length"] == "中长焦"
 
 
 def test_generated_frame_reference_keeps_its_plan_scope_after_source_edits(tmp_path):

@@ -24,10 +24,14 @@ LIGHT_KEYS = (
     "key_source", "color_tone", "contrast", "practical_sources", "direction",
     "quality", "color_temp", "description", "ambient_lighting",
     "key_light_direction", "local_lighting", "source", "fill", "shadow",
-    "rim", "mood", "air", "color",
+    "rim", "mood", "air", "color", "brightness", "azimuth", "elevation",
 )
 SPACE_KEYS = ("location", "reference_viewpoint", "reference_framing")
-CAMERA_KEYS = ("shot_size", "camera_angle", "camera_movement", "composition")
+CAMERA_KEYS = (
+    "shot_size", "camera_angle", "camera_movement", "composition",
+    "yaw", "pitch", "zoom", "focus", "focus_x", "focus_y", "focus_radius",
+    "focal_length", "depth_of_field", "viewpoint", "framing",
+)
 
 
 def _as_dict(value: Any) -> Dict[str, Any]:
@@ -101,6 +105,42 @@ def _asset_variant_design(source_variant: Any) -> Dict[str, Any]:
     return _as_dict(snapshot.get("visual_design"))
 
 
+def _asset_variant_scene_tool(source_variant: Any) -> Dict[str, Any]:
+    """Return the confirmed scene design tool snapshot, if one exists.
+
+    Scene lighting/camera controls are stored on the image variant because
+    they describe how that concrete image was produced.  Shot Design needs
+    the same structured values when the variant is selected as a reference.
+    """
+    direct = _as_dict(getattr(source_variant, "scene_tool", None))
+    if direct:
+        return direct
+    snapshot = _as_dict(getattr(source_variant, "submission_snapshot", None))
+    return _as_dict(snapshot.get("scene_tool"))
+
+
+def _scene_tool_design(tool: Dict[str, Any]) -> Tuple[Dict[str, Any], Dict[str, Any]]:
+    """Convert scene-tool controls into the projection's lighting/camera layers."""
+    lighting: Dict[str, Any] = {}
+    camera: Dict[str, Any] = {}
+    if tool.get("kind") == "lighting":
+        for source_key, target_key in (("color", "color"), ("brightness", "brightness"),
+                                       ("light_side", "direction"), ("azimuth", "azimuth"),
+                                       ("elevation", "elevation"), ("rim_light", "rim"),
+                                       ("extra", "description")):
+            _put(lighting, target_key, tool.get(source_key))
+        _merge_lighting(lighting, {"prompt_layers": tool.get("panel_settings")})
+    elif tool.get("kind") == "camera":
+        for source_key, target_key in (("preset", "camera_angle"), ("yaw", "yaw"),
+                                       ("pitch", "pitch"), ("zoom", "zoom"),
+                                       ("focus", "focus"), ("focus_x", "focus_x"),
+                                       ("focus_y", "focus_y"), ("focus_radius", "focus_radius"),
+                                       ("extra", "camera_movement")):
+            _put(camera, target_key, tool.get(source_key))
+        _merge_camera(camera, {"prompt_layers": tool.get("panel_settings")})
+    return lighting, camera
+
+
 def _merge_lighting(result: Dict[str, Any], source: Dict[str, Any]) -> None:
     lighting = _as_dict(source.get("lighting"))
     if lighting:
@@ -142,6 +182,8 @@ def _merge_camera(result: Dict[str, Any], source: Dict[str, Any]) -> None:
     camera = _as_dict(layers.get("camera"))
     _put(result, "shot_size", camera.get("framing"))
     _put(result, "camera_angle", camera.get("viewpoint"))
+    for key in ("focal_length", "depth_of_field", "viewpoint", "framing"):
+        _put(result, key, camera.get(key))
     composition = _as_dict(layers.get("composition"))
     if composition:
         _put(result, "composition", composition)
@@ -204,10 +246,14 @@ def _source_visual_design(
             variant_design = submission["visual_design"]
             design_revision = submission.get("design_revision_at_submission")
         else:
-            return lighting, space, camera, continuity, None
+            variant_design = {}
+            design_revision = submission.get("design_revision_at_submission")
         _merge_lighting(lighting, variant_design)
         _merge_space(space, variant_design)
         _merge_camera(camera, variant_design)
+        tool_lighting, tool_camera = _scene_tool_design(_asset_variant_scene_tool(source_variant))
+        _merge_lighting(lighting, {"lighting": tool_lighting})
+        _merge_camera(camera, {"camera": tool_camera})
         continuity = _as_dict(variant_design.get("continuity_state"))
         return lighting, space, camera, continuity, design_revision
 
