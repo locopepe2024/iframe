@@ -30,6 +30,8 @@ it("compiles the selected character move into a generation prompt", () => {
     expect(result).toContain("面对数名匪寇的连续拨械");
     expect(result).toContain("剑尖先向目标腕部或前臂前伸并到达其附近");
     expect(result).toContain("剑身中段在横向发力并接触目标的负载下形成浅C形侧弯");
+    expect(result).toContain("剑身中段和剑尖出现短促受力颤振");
+    expect(result).toContain("不是整把剑像木棍一样刚性挥舞");
     expect(result).not.toContain("握柄和手腕突然刹停后");
     expect(result).toContain("一次可读的柔韧剑身接触");
     expect(result).toContain("剑尖先向目标腕部或前臂前伸并到达其附近");
