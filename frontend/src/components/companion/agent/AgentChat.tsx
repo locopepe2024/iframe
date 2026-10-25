@@ -19,7 +19,8 @@ import CompanionIdentitySettings, { defaultCompanionIdentity, readCompanionIdent
 import SpeechPlayback from "./SpeechPlayback";
 import UploadGuideCard from "./UploadGuideCard";
 import { isOpenAlbumCommand } from "./localCommands";
-import { BookOpen, Images, UserRound, Compass } from "lucide-react";
+import { BookOpen, Images, UserRound, Compass, Mic } from "lucide-react";
+import OpenTalkingPanel from "./OpenTalkingPanel";
 
 const prefix = process.env.NEXT_PUBLIC_API_URL === "/companion-demo" ? "/companion-demo" : "";
 const sessionKey = "iframe-companion-agent-session-v1";
@@ -30,6 +31,7 @@ const dismissedUploadGuideKey = "iframe-companion-agent-dismissed-upload-guides-
 export default function AgentChat() {
   const [session, setSession] = useState("");
   const [menu, setMenu] = useState(false);
+  const [openTalking, setOpenTalking] = useState(false);
   const [messages, setMessages] = useState<UserMessage[]>([]), [after, setAfter] = useState<number | null>(null);
   const [allowed, setAllowed] = useState(false);
   const [identity, setIdentity] = useState<CompanionIdentity>(defaultCompanionIdentity);
@@ -200,7 +202,7 @@ export default function AgentChat() {
     setDraft(null); setPreview({ status: "preview_closed", preview_token: activePreview.preview_token }); setNotice("已关闭预览，未执行新的保存或删除。");
   }
   return <main className={`${styles.shell} ${chatStyles.shell}`} data-agent-build="upload-preview-20261024-v3">
-    <header className={chatStyles.header}><h1><span aria-hidden="true">{identity.avatar}</span> {identity.name}</h1><button type="button" aria-expanded={menu} onClick={() => setMenu(!menu)}>更多</button></header>
+    <header className={chatStyles.header}><h1><span aria-hidden="true">{identity.avatar}</span> {identity.name}</h1><div className={chatStyles.headerActions}><button type="button" className={chatStyles.headerIcon} aria-label="打开语音聊天" onClick={() => setOpenTalking(true)}><Mic size={22} aria-hidden="true" /></button><button type="button" aria-expanded={menu} onClick={() => setMenu(!menu)}>更多</button></div></header>
     {menu && <aside className={styles.panel} aria-label="聊天管理">
       <a href={`${prefix}/companion/photos`}>生活相册</a>
       <button disabled={inputDisabled || pending} onClick={() => void run(newSession)}>新建会话</button>
@@ -304,6 +306,7 @@ export default function AgentChat() {
       {page?.next_cursor && <button disabled={busy || pending} onClick={() => void run(() => memories(appliedQuery, page.next_cursor!))}>更多个人记忆</button>}
     </section>
     </details>}
+    {openTalking && <OpenTalkingPanel onClose={() => setOpenTalking(false)} />}
     <input ref={fileRef} type="file" hidden accept="image/jpeg,image/png,image/webp,video/mp4,video/quicktime,video/webm,.mov" multiple aria-label="选择要上传的照片或视频" onChange={event => {
       const files=Array.from(event.target.files ?? []);event.target.value="";
       if(files.length>20){setNotice("每次最多选择 20 个文件，请重新选择。");return;}
