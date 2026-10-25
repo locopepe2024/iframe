@@ -31,7 +31,7 @@ export default function DiaryCalendar({onClose,onCreate}: {onClose:()=>void;onCr
     <div className={styles.calendarGrid} aria-label="日记日历" aria-busy={busy}>
       {["日","一","二","三","四","五","六"].map(item=><span key={item}>{item}</span>)}
       {Array.from({length:offset},(_,i)=><span key={`empty-${i}`} />)}
-      {Array.from({length:days},(_,i)=>{const day=`${month}-${String(i+1).padStart(2,"0")}`;const has=entries.some(item=>item.day===day);return <button key={day} type="button" aria-label={`${day}${has ? "，已有日记" : ""}`} aria-pressed={selected===day} onClick={()=>setSelected(day)}>{i+1}{has && <small aria-hidden="true">✅</small>}</button>;})}
+      {Array.from({length:days},(_,i)=>{const day=`${month}-${String(i+1).padStart(2,"0")}`;const has=entries.some(item=>item.day===day);return <button key={day} type="button" aria-label={`${day}${has ? "，已有日记" : ""}`} aria-pressed={selected===day} onClick={()=>setSelected(day)}><span className={styles.calendarDayNumber}>{i+1}</span>{has && <small className={styles.calendarDayMark} aria-hidden="true">✅</small>}</button>;})}
     </div>
     {busy ? <p role="status">正在读取日记…</p> : error ? <p role="alert">{error}<button type="button" onClick={()=>setReload(value=>value+1)}>重试读取日记</button></p> : entry ? <DiaryCard key={`${entry.day}-${entry.revision}`} day={entry.day} text={entry.text} sourceTurn={entry.source_turn_id} saved={entry} onSaved={result=>setEntries(old=>old.map(item=>item.day===result.day ? result : item))}/> : <div className={styles.featureEmpty}><p>{selected} 还没有保存日记。</p><button type="button" onClick={()=>onCreate(selected)}>整理这一天的日记</button></div>}
   </FeatureDialog>;

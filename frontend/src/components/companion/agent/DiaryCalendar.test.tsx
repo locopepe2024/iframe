@@ -11,6 +11,8 @@ it("defaults to today, marks only saved days and browses a different month",asyn
   const create=vi.fn();render(<DiaryCalendar onClose={()=>{}} onCreate={create}/>);
   expect(await screen.findByRole("button",{name:day+"，已有日记"})).toHaveAttribute("aria-pressed","true");
   expect(screen.getByText("和女儿一起喝茶。")).toBeInTheDocument();
+  const markedDay = screen.getByRole("button",{name:day+"，已有日记"});
+  expect(within(markedDay).getByText("✅")).toHaveClass(/calendarDayMark/);
   fireEvent.change(screen.getByLabelText("选择年月"),{target:{value:"2025-02"}});
   fireEvent.click(await screen.findByRole("button",{name:"2025-02-14"}));
   fireEvent.click(await screen.findByRole("button",{name:"整理这一天的日记"}));
