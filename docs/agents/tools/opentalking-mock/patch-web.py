@@ -36,4 +36,25 @@ if before in text:
     app.write_text(text.replace(before, after, 1))
 else:
     assert after in text
+text = app.read_text()
+if 'watchMediaFailure(playback.pc' not in text:
+    text = 'import { watchMediaFailure } from "./lib/rtcConnection";\n' + text
+    text = text.replace('  const pcRef = useRef<RTCPeerConnection | null>(null);',
+        '  const pcRef = useRef<RTCPeerConnection | null>(null);\n'
+        '  const disposeMediaWatchRef = useRef<(() => void) | null>(null);', 1)
+    needle = '  const closePeerConnection = useCallback(() => {'
+    assert needle in text
+    text = text.replace(needle, needle + '\n    disposeMediaWatchRef.current?.();\n'
+        '    disposeMediaWatchRef.current = null;', 1)
+    needle = '      pcRef.current = playback.pc;'
+    assert needle in text
+    text = text.replace(needle, needle + '''
+      disposeMediaWatchRef.current = watchMediaFailure(playback.pc, () => {
+        if (pcRef.current !== playback.pc) return;
+        resetLiveState();
+        setConnection("error");
+        notify("音视频连接已断开，已停止本次会话。请重新开始。", "error");
+        void releaseSession(created.session_id);
+      });''', 1)
+    app.write_text(text)
 print('WebUI media connection readiness overlay applied')

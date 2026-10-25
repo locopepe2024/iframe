@@ -8,7 +8,7 @@ import uuid
 import httpx
 import numpy as np
 from aioice.ice import TransportPolicy
-from aiortc import RTCPeerConnection, RTCSessionDescription, RTCConfiguration, RTCIceServer
+from aiortc import RTCPeerConnection, RTCSessionDescription, RTCConfiguration, RTCIceServer, RTCBundlePolicy
 
 
 async def main():
@@ -30,7 +30,9 @@ async def main():
                 server.urls = [url for url in urls if f'transport={transport}' in url]
             servers = [server for server in servers if server.urls]
             assert servers, 'requested TURN transport missing'
-    pc = RTCPeerConnection(RTCConfiguration(iceServers=servers))
+    pc = RTCPeerConnection(RTCConfiguration(iceServers=servers,
+        bundlePolicy=RTCBundlePolicy.MAX_BUNDLE if os.environ.get('MOCK_TEST_MAX_BUNDLE') == '1'
+        else RTCBundlePolicy.BALANCED))
     counts = {"video": 0, "audio": 0, "audible": 0}
     samples = []
     tasks = []
@@ -79,6 +81,10 @@ async def main():
             answer = await post(f"/sessions/{sid}/webrtc/offer", {
                 "sdp": pc.localDescription.sdp, "type": "offer"})
             await pc.setRemoteDescription(RTCSessionDescription(**answer))
+            early_hold = int(os.environ.get('MOCK_TEST_EARLY_HOLD', '0'))
+            if early_hold:
+                await asyncio.sleep(early_hold)
+                assert pc.connectionState == 'connected', f'idle connection lost: {pc.connectionState}'
             await post(f"/sessions/{sid}/speak", {"text": "请用中文介绍春夏秋冬，每个季节说两句话。",
                 "command_id": str(uuid.uuid4())})
             deadline = time.monotonic() + 100
@@ -86,6 +92,17 @@ async def main():
                 await asyncio.sleep(.1)
             assert counts["video"] > 0, "no decoded video"
             assert counts["audible"] >= 30, f"no sustained audible audio: {counts}"
+            hold = int(os.environ.get('MOCK_TEST_HOLD_SECONDS', '0'))
+            if hold:
+                await asyncio.sleep(hold)
+                assert pc.connectionState == 'connected', f'connection lost during hold: {pc.connectionState}'
+                previous = counts['audible']
+                await post(f'/sessions/{sid}/speak', {'text': '请只说一句：第二轮连接测试成功。',
+                    'command_id': str(uuid.uuid4())})
+                deadline = time.monotonic() + 100
+                while counts['audible'] < previous + 30 and time.monotonic() < deadline:
+                    await asyncio.sleep(.1)
+                assert counts['audible'] >= previous + 30, 'no second-round audio after hold'
             interrupted = time.monotonic()
             await post(f"/sessions/{sid}/interrupt")
             await asyncio.sleep(3)
@@ -100,6 +117,7 @@ async def main():
             assert state.status_code == 404 or payload.get("state") == "closed", payload
             print(json.dumps({"decoded_frames": counts, "interrupt_tail_peak": max(tail, default=0),
                 "interrupt_tail_frames": len(tail),
+                "hold_seconds": hold,
                 "destroy_http": state.status_code, "destroy_state": payload.get("state"),
                 "scope": "public relay-only WebRTC " + transport if relay else
                          "public WebRTC" if public else "same-host WebRTC"}))

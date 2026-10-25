@@ -18,3 +18,27 @@ export function waitForMediaConnection(pc: RTCPeerConnection, timeoutMs = 30000)
     check();
   });
 }
+
+export function watchMediaFailure(pc: RTCPeerConnection, onFailure: () => void,
+  disconnectedTimeoutMs = 8000): () => void {
+  let disposed = false;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const fail = () => {
+    if (disposed) return;
+    dispose();
+    onFailure();
+  };
+  const check = () => {
+    clearTimeout(timer);
+    if (pc.connectionState === 'failed' || pc.connectionState === 'closed') fail();
+    else if (pc.connectionState === 'disconnected') timer = setTimeout(fail, disconnectedTimeoutMs);
+  };
+  const dispose = () => {
+    disposed = true;
+    clearTimeout(timer);
+    pc.removeEventListener('connectionstatechange', check);
+  };
+  pc.addEventListener('connectionstatechange', check);
+  check();
+  return dispose;
+}

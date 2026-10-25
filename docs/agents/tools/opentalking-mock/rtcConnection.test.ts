@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { waitForMediaConnection } from "./rtcConnection";
+import { waitForMediaConnection, watchMediaFailure } from "./rtcConnection";
 
 class Peer extends EventTarget {
   connectionState = "new";
@@ -35,4 +35,17 @@ test("already connected peer resolves", async () => {
   const peer = new Peer();
   peer.state("connected");
   await waitForMediaConnection(asRtc(peer));
+});
+test('loss after connection notifies once and normal disposal is silent', () => {
+  const peer = new Peer();
+  let failures = 0;
+  watchMediaFailure(asRtc(peer), () => failures++);
+  peer.state('failed');
+  peer.state('closed');
+  assert.equal(failures, 1);
+  const other = new Peer();
+  const dispose = watchMediaFailure(asRtc(other), () => failures++);
+  dispose();
+  other.state('closed');
+  assert.equal(failures, 1);
 });

@@ -18,7 +18,7 @@ config.write_text('\n'.join([
 ]) + '\n')
 config.chmod(0o600)
 settings = {
-    'OPENTALKING_WEBRTC_TURN_URLS': 'turn:garage.uniart.fun:3478?transport=tcp,turn:garage.uniart.fun:3478?transport=udp',
+    'OPENTALKING_WEBRTC_TURN_URLS': 'turn:garage.uniart.fun:3478?transport=udp',
     'OPENTALKING_WEBRTC_TURN_USERNAME': username,
     'OPENTALKING_WEBRTC_TURN_CREDENTIAL': credential,
     'OPENTALKING_WEBRTC_ICE_TRANSPORT_POLICY': 'relay',

@@ -12,6 +12,7 @@ if not backup.exists():
     backup.chmod(0o600)
 values = dict(dotenv_values(env))
 values.update(json.loads((root / 'turn-env.json').read_text()))
+values['OPENTALKING_WEBRTC_TURN_URLS'] = 'turn:garage.uniart.fun:3478?transport=udp'
 env.write_text('\n'.join(k + '=' + json.dumps(v, ensure_ascii=False)
                          for k, v in values.items()) + '\n')
 env.chmod(0o600)
