@@ -30,6 +30,22 @@ def test_bind_requires_verified_bearer(monkeypatch):
     asyncio.run(run())
 
 
+def test_demo_browser_binding_requires_explicit_flag(monkeypatch):
+    app = make_app(monkeypatch, UserContext('browser-x', 'browser-x', 'Demo', ''))
+
+    async def run():
+        async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url='http://test') as client:
+            denied = await client.post('/companion-runtime/opentalking/bind',
+                json={'session_id': 's'})
+            assert denied.status_code == 401
+            monkeypatch.setenv('IFRAME_OPENTALKING_ALLOW_DEMO_IDENTITY', '1')
+            allowed = await client.post('/companion-runtime/opentalking/bind',
+                headers={'cookie': 'lumenx-browser-profile=demo-profile'},
+                json={'session_id': 's'})
+            assert allowed.status_code == 200
+    asyncio.run(run())
+
+
 def test_bind_issues_opaque_token_and_context_uses_bound_identity(monkeypatch):
     identity = UserContext('alice', 'profile-alice', 'Alice', 'real-bearer')
     app = make_app(monkeypatch, identity)

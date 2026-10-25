@@ -7,10 +7,10 @@ from pathlib import Path
 from typing import Annotated, Literal
 
 import httpx
-from fastapi import APIRouter, Depends, Header, HTTPException, Query
+from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request
 from pydantic import Field
 
-from ..identity import UserContext, require_user_context
+from ..identity import BROWSER_PROFILE_COOKIE, UserContext, require_user_context
 from .store import Missing, Conflict
 from .chat_store import ChatStore as CompanionStore
 from .intent import classify
@@ -95,15 +95,25 @@ class OpenTalkingReleaseRequest(Strict):
 
 
 @router.post('/opentalking/bind')
-def opentalking_bind(body: OpenTalkingBindRequest, identity: Owner):
-    """Bind only a verified bearer identity; browser fingerprints are rejected."""
-    if not identity.access_token:
+def opentalking_bind(body: OpenTalkingBindRequest, request: Request, identity: Owner):
+    """Bind a bearer identity, or an explicitly enabled demo browser workspace."""
+    demo_mode = os.getenv('IFRAME_OPENTALKING_ALLOW_DEMO_IDENTITY', '').strip() == '1'
+    identity_headers: dict[str, str] = {}
+    if identity.access_token:
+        identity_headers['Authorization'] = f'Bearer {identity.access_token}'
+    elif demo_mode:
+        browser_profile = request.cookies.get(BROWSER_PROFILE_COOKIE)
+        if browser_profile:
+            identity_headers['Cookie'] = f'{BROWSER_PROFILE_COOKIE}={browser_profile}'
+        elif identity.owner_profile_id.startswith('apikey-'):
+            identity_headers['X-iFrame-API-Key-Identity'] = identity.owner_profile_id.removeprefix('apikey-')
+    if not identity_headers:
         raise HTTPException(401, 'OpenTalking context requires a verified login session')
     try:
         expires = time.time() + body.ttl_seconds
         _opentalking_bindings.bind(body.session_id, owner=identity.owner_profile_id,
-            actor=identity.user_id, identity_headers={'Authorization': f'Bearer {identity.access_token}'},
-            expires_at=expires)
+            actor=identity.user_id, identity_headers=identity_headers,
+            expires_at=expires, allow_demo_identity=demo_mode and not identity.access_token)
         token = _opentalking_bindings.issue_gateway_token(body.session_id,
             owner=identity.owner_profile_id, actor=identity.user_id)
         return {'context_token': token, 'expires_at': expires}

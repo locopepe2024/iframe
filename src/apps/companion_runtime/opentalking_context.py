@@ -25,7 +25,7 @@ class IframeContextReader:
                  knowledge_base: str, identity_headers: Mapping[str, str]):
         # Reject an accidental anonymous browser workspace. Credentials must be
         # chosen by the authenticated integration server, never by model output.
-        allowed = {'authorization', 'x-iframe-api-key-identity'}
+        allowed = {'authorization', 'cookie', 'x-iframe-api-key-identity'}
         headers = {k: v for k, v in identity_headers.items() if k.lower() in allowed and v.strip()}
         if not headers:
             raise ValueError('Explicit iframe identity is required')
