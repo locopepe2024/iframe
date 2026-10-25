@@ -55,3 +55,5 @@ OpenTalking 只持有不透明 token，不接收或记录 iframe Bearer、owner�
 OpenTalking runner 仅在 URL 和 token 同时存在时包装一次 LLM 调用；每轮以用户本轮文本查询 iframe gateway，再把限量片段作为不可信参考资料注入本轮消息。未携带配置时保持现有 LLM、TTS、WebRTC 行为。session 删除时调用 iframe `release`，失败只记录可观测状态，不阻塞媒体销毁；token 本身仍由 iframe 过期机制兜底。
 
 需要在 OpenTalking 可写分支增加并测试：`CreateSessionRequest.session_id`、可选 gateway 字段、Redis task 透传、runner 的 `IframeGatewayReader` 包装、close 时 release，以及无 token 的回归测试。当前远端 `/opt/opentalking` 为 `root:root`，`ubuntu` 仅有读取权限，因此本切片尚未写入或部署。
+
+iframe 侧已新增 `OpenTalkingSessionClient` 作为握手实现：只向 iframe bind/release 发送 Bearer；向 OpenTalking 仅发送 session id、gateway URL 和不透明 token；OpenTalking 创建失败会自动 release；关闭时先请求 OpenTalking 删除，再释放 iframe token。27 项客户端、网关、绑定和 reader 测试通过。
