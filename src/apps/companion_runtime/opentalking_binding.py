@@ -66,6 +66,16 @@ class SessionBindings:
             raise BindingUnavailable('Context gateway token expired')
         return session_id, entry
 
+    def release_gateway_token(self, token: str) -> str:
+        """Revoke a gateway token and its session binding idempotently only on success."""
+        self.sweep()
+        session_id = self._gateway_tokens.pop(token, None)
+        if not session_id:
+            raise BindingUnavailable('Context gateway token unavailable')
+        if session_id in self._bindings:
+            del self._bindings[session_id]
+        return session_id
+
     def sweep(self):
         expired = [sid for sid, entry in self._bindings.items() if entry.expires_at <= self._clock()]
         for sid in expired:

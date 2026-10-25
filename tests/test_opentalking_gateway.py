@@ -81,6 +81,24 @@ def test_context_token_expires_and_release_revokes(monkeypatch):
             revoked = await client.post('/companion-runtime/opentalking/context',
                 headers={'X-OpenTalking-Context-Token': token}, json={'query': '记忆'})
             assert revoked.status_code == 401
+
+
+def test_release_endpoint_revokes_token_without_bearer(monkeypatch):
+    app = make_app(monkeypatch, UserContext('alice', 'profile-alice', 'Alice', 'bearer'))
+
+    async def run():
+        async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url='http://test') as client:
+            bound = await client.post('/companion-runtime/opentalking/bind',
+                json={'session_id': 's', 'ttl_seconds': 60})
+            token = bound.json()['context_token']
+            released = await client.post('/companion-runtime/opentalking/release',
+                json={'context_token': token})
+            assert released.status_code == 200
+            assert released.json() == {'session_id': 's', 'status': 'released'}
+            again = await client.post('/companion-runtime/opentalking/release',
+                json={'context_token': token})
+            assert again.status_code == 401
+    asyncio.run(run())
     asyncio.run(run())
 
 

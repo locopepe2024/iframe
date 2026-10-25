@@ -90,6 +90,10 @@ class OpenTalkingContextRequest(Strict):
     limit: int = Field(default=4, ge=1, le=8)
 
 
+class OpenTalkingReleaseRequest(Strict):
+    context_token: str = Field(min_length=1, max_length=200)
+
+
 @router.post('/opentalking/bind')
 def opentalking_bind(body: OpenTalkingBindRequest, identity: Owner):
     """Bind only a verified bearer identity; browser fingerprints are rejected."""
@@ -128,6 +132,15 @@ async def opentalking_context(body: OpenTalkingContextRequest,
         except (ContextUnavailable, httpx.HTTPError, ValueError) as exc:
             raise HTTPException(503, 'Context retrieval unavailable') from exc
     return {'fragments': [item.__dict__ for item in fragments]}
+
+
+@router.post('/opentalking/release')
+def opentalking_release(body: OpenTalkingReleaseRequest):
+    try:
+        session_id = _opentalking_bindings.release_gateway_token(body.context_token)
+    except BindingUnavailable as exc:
+        raise HTTPException(401, str(exc)) from exc
+    return {'session_id': session_id, 'status': 'released'}
 
 
 @router.get('/diaries')

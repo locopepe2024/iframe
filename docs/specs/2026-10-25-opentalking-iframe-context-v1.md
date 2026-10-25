@@ -36,9 +36,10 @@ BoundLLM每轮先调用 iframe `/auth/me`，核对owner与actor，再检索；�
 
 - `POST /companion-runtime/opentalking/bind`：仅接受 `require_user_context` 返回的非空 Bearer 身份，为已创建的 OpenTalking session 生成短期绑定和不透明 `context_token`。
 - `POST /companion-runtime/opentalking/context`：仅接受 `X-OpenTalking-Context-Token`，在 iframe 服务端解析绑定并使用绑定内的 Bearer 查询记忆与知识。
+- `POST /companion-runtime/opentalking/release`：仅接受不透明 token，在 OpenTalking session 删除时撤销关联绑定；重复释放返回 401，不泄露绑定状态。
 
 OpenTalking 只持有不透明 token，不接收或记录 iframe Bearer、owner、actor；token 也不编码这些字段。浏览器 cookie、API-key fingerprint 及匿名 demo workspace 没有 `access_token`，不能调用 bind。绑定释放、撤销或过期时，关联 token 同步失效；未配置上下游地址时，context 路由显式返回 503。
 
-验证：gateway 路由、Bearer 要求、token 不泄露身份、context 转发身份、释放撤销、缺少配置共4项新增测试；与适配器、绑定、记忆、知识测试合计35项通过。验证仍是本地 ASGI/MockTransport，尚未声称公开测试站已接入真实个人数据。
+验证：gateway 路由、Bearer 要求、token 不泄露身份、context 转发身份、显式 release、过期撤销、缺少配置共5项新增测试；与适配器、绑定、记忆、知识测试合计37项通过。验证仍是本地 ASGI/MockTransport，尚未声称公开测试站已接入真实个人数据。
 
 下一切片：将 token 绑定到真实 OpenTalking session 的创建/删除生命周期，并在 runner 的单次 LLM 调用前使用 `IframeGatewayReader`；保持现有 CPU Mock TTS、WebRTC、UDP TURN 配置不变。未完成该切片前，不部署 gateway 到公开 demo。
