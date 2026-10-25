@@ -176,8 +176,8 @@
       "name": "MiniMax H3 分段导演",
       "category": "导演规划",
       "targets": ["MiniMax H3"],
-      "version": "1.7.0",
-      "description": "先解析分镜板、素材用途与人物外观语义，再编写关键帧三段或全参考六段提示词；统一 iFrame 附件引用。",
+      "version": "1.8.0",
+      "description": "先解析分镜板、素材用途与人物外观语义，再按六字段职责去重，编写关键帧三段或全参考六段提示词；统一 iFrame 附件引用。",
       "instructions_file": "h3-prompt-writing.md",
       "reference_sources": [
         "https://github.com/MiniMax-AI/MiniMax-H3/blob/d21241f0a4b3acbb34c97dae47fa417b7065e438/skills/h3-prompt-writing/SKILL.md",
