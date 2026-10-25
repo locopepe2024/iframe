@@ -19,7 +19,7 @@
       "media_type": "video",
       "uses": ["action_choreography", "rhythm", "impact_timing", "weapon_trajectory", "camera_movement"],
       "observed_metadata": {"duration_seconds": 69.327483, "fps": 30, "width": 1280, "height": 720},
-      "evidence_limits": ["高密度采样可见普通剑路、兵器交错和镜头跟随，但未确认手腕刹停、剑身浅C形侧弯和剑尖回直的完整柔性形变链。", "不得把运动模糊、剑光残影或剪辑切换当作剑身弹性证据。"]
+      "evidence_limits": ["高密度采样可见普通剑路、兵器交错和镜头跟随，但未确认手腕持续横向发力、接触负载导致的剑身浅C形侧弯和形变回弹的完整柔性形变链。", "不得把运动模糊、剑光残影或剪辑切换当作剑身弹性证据。"]
     },
     {
       "path": "/Users/owen/Developer/codex/wuda/独孤九剑_徐克版_超燃混剪.mp4",
@@ -42,7 +42,7 @@
       "uses": ["action_choreography", "rhythm", "impact_timing", "weapon_trajectory", "camera_movement"],
       "observed_metadata": {"duration_seconds": 37.940998, "fps": 60, "width": 4320, "height": 2160},
       "observed_content": "横屏高帧率电影动作混剪；包含近景兵器交错、多人攻防、身体闪避、腾挪与击退，剪辑在近身接触、武器轨迹和受击反应处频繁切换，能提供动作节拍、接触后的位移和镜头跟随方向参考。",
-      "evidence_limits": ["这是混剪，不能把采样帧当作连续单镜头或精确切点。", "采样中未确认手腕刹停、剑身浅C形侧弯和剑尖回直的完整柔性形变链。", "未将影片人物、服装、场景、对白、字幕或音乐转移到生成提示词。"]
+      "evidence_limits": ["这是混剪，不能把采样帧当作连续单镜头或精确切点。", "采样中未确认手腕持续横向发力、接触负载导致的剑身浅C形侧弯和形变回弹的完整柔性形变链。", "未将影片人物、服装、场景、对白、字幕或音乐转移到生成提示词。"]
     },
     {
       "path": "/Users/owen/Developer/codex/wuda/缠身剑花.mp4",

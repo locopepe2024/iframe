@@ -29,7 +29,8 @@ it("compiles the selected character move into a generation prompt", () => {
     expect(result).toContain("动作词：抽击、剑鞭、Whiplash");
     expect(result).toContain("面对数名匪寇的连续拨械");
     expect(result).toContain("剑尖先向目标腕部或前臂前伸并到达其附近");
-    expect(result).toContain("剑身中段因惯性滞后形成浅C形侧弯");
+    expect(result).toContain("剑身中段在横向发力并接触目标的负载下形成浅C形侧弯");
+    expect(result).not.toContain("握柄和手腕突然刹停后");
     expect(result).toContain("一次可读的柔韧剑身接触");
     expect(result).toContain("剑尖先向目标腕部或前臂前伸并到达其附近");
     expect(result).toContain("不改为拍刃的剑身对剑身碰撞");
