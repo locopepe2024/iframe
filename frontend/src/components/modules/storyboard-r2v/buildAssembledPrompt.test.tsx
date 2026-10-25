@@ -28,12 +28,12 @@ it("compiles the selected character move into a generation prompt", () => {
     expect(result).toContain("拍刃·破势拨械");
     expect(result).toContain("动作词：拍刃、Beat、Attack au Fer");
     expect(result).toContain("面对数名匪寇的连续拨械");
-    expect(result).toContain("主动攻击对方剑身或刀剑");
+    expect(result).toContain("主动攻击对方剑身、刀剑或持械手腕");
     expect(result).toContain("定格或冻结3-5帧");
     expect(result).toContain("强烈垂直方向抖动");
     expect(result).toContain("不改为抽击绕剑");
     expect(result).toContain("强力碰撞");
-    expect(result).toContain("己方中后段");
+    expect(result).toContain("己方前段");
     expect(result).not.toContain("抖动长竹竿");
     expect(result).not.toContain("剑身横向扫过");
     expect(result).toContain("受击武器或演员瞬间飞出");
