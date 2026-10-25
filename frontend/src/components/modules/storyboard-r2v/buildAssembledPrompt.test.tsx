@@ -38,6 +38,24 @@ it("compiles the selected character move into a generation prompt", () => {
     expect(result).toContain("受击手臂或武器沿受力方向偏移");
 });
 
+it("keeps flat-face sword control separate from flexible whiplash and blade-line sweep", () => {
+    const shot = {
+        id: "shot-flat-face-control",
+        prompt: "苏砚以立刃扫剑拨开匪寇的持械手。",
+        tabMode: "direct_r2v" as const,
+        moveRef: "suyan.sword.flat_face_control.v1",
+        moveVariant: "立刃扫剑·剑面拨械",
+    };
+    const result = buildGenerationPrompt(shot, false, "uniart/minimax-h3-vip");
+    expect(result).toContain("非刃接触剑法·控械");
+    expect(result).toContain("立刃扫剑·剑面拨械");
+    expect(result).toContain("剑面而非锋刃接触");
+    expect(result).toContain("不改为锋刃切割或直线刺入");
+    expect(result).not.toContain("剑身中段因惯性滞后形成浅C形侧弯");
+    expect(result).not.toContain("剑尖向侧方弹出完成一次受控抽击");
+    expect(result).not.toContain("不改为剑身侧面拍刃");
+});
+
 it("removes the move text when an optimized prompt has no selected move", () => {
     const shot = {
         id: "shot-15",

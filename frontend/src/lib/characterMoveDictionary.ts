@@ -19,6 +19,22 @@ export type CharacterMoveEntry = {
  * then expands only that move into the current model prompt. */
 export const CHARACTER_MOVE_DICTIONARY: CharacterMoveEntry[] = [
     {
+        move_ref: "suyan.sword.flat_face_control.v1",
+        character_name: "苏砚（雪痕客）",
+        label: "非刃接触剑法·控械",
+        aliases: ["刺剑·剑面控腕", "点剑·剑面敲击", "立刃扫剑·剑面拨械"],
+        category: "剑法·非刃接触控械",
+        starting_state: "中距，右手持剑，剑身与手腕保持可控的平直关系，目标为对方持械手腕、前臂或兵器",
+        body_mechanics: ["前脚切入并保持面向目标", "以刺剑或点剑路径将剑尖送到目标附近", "在接触前调整剑身朝向，使剑面或剑身侧面朝向目标", "手腕和前臂短促发力完成一次受控点触、侧向拍击或扫击", "接触后受击手、前臂或兵器沿受力方向偏移", "手腕回收并保持剑尖或剑面受控，进入收势"],
+        weapon_trajectory: "剑尖或剑身先沿清楚的刺、点或扫剑路径接近目标；接触前剑刃立起或转开，使剑面而非锋刃接触手腕、前臂、持械手或兵器；完成一次受控拨械后收剑，不形成剑花或剑鞭式弹性抽击",
+        target_relation: "针对对方持械手腕、前臂、持械手或兵器，以控制、拨开、打断握持和卸械为目的；不以切割、刺入或造成伤口为目的",
+        contact_result: "一次可读的非刃接触，剑面或剑身侧面使目标沿受力方向偏移，兵器可按当前镜头授权发生偏转或脱手；不自动造成伤口",
+        recovery_state: "接触后保持身体朝向和站位关系，剑身回到受控收势或衔接下一动作",
+        visible_cues: ["刺剑、点剑或扫剑路径清楚", "接触前剑刃立起或剑面朝向目标", "接触点表现为剑面或剑身侧面的钝性控制，不出现锋刃切入", "目标手腕、前臂或兵器沿受力方向偏移", "一次接触后明确收势"],
+        forbidden_interpretations: ["不改为锋刃切割或直线刺入", "不改为剑花或绕身回环", "不改为剑鞭抽击或浅C形剑身弯曲", "不改为拍刃的剑身对剑身碰撞", "不改为Coupé绕剑变线", "不自动造成伤口或飞溅血液"],
+        variants: ["刺剑·剑面控腕", "点剑·剑面敲击", "立刃扫剑·剑面拨械", "对数名持械者按目标顺序连续控械"],
+    },
+    {
         move_ref: "suyan.sword.disarm_sweep.v1",
         character_name: "苏砚（雪痕客）",
         label: "抽击·剑鞭拨械",
