@@ -65,7 +65,8 @@ export default function DiaryCard({ day, text, sourceTurn, saved, onSaved, onOpe
     {!loaded && !error && <p role="status">正在核对日记…</p>}
     {error && !editing && <p role="alert">{error}{!loaded && <button type="button" onClick={()=>setReload(value=>value+1)}>重试核对日记</button>}</p>}
     {editing && <FeatureDialog title="日记编辑器" onClose={()=>{if(!busy)setEditing(false);}}>
-      <p className={styles.muted}>修改只保留在编辑器中，点击“保存日记”后才会更新这一天的日记。</p>
+      <section aria-label="日记编辑工作域" data-diary-editor="true">
+      <p className={styles.muted}>这里是日记编辑区。内容只会保存到这一天的日记，不会发送给聊天助手，也不会触发图片、视频或上传指令。</p>
       {(context.length > 0 || media.length > 0) && <details className={styles.diaryContext} open>
         <summary>这篇日记的依据</summary>
         <p className={styles.muted}>这里只显示本次对话里已经出现的内容，编辑时不会自动加入新的事实。</p>
@@ -80,6 +81,7 @@ export default function DiaryCard({ day, text, sourceTurn, saved, onSaved, onOpe
       {error && <p role="alert">{error}</p>}
       <button type="button" disabled={busy || !draft.trim()} onClick={()=>void save(draft)}>{busy ? "正在保存…" : "保存日记"}</button>
       <button type="button" disabled={busy} onClick={()=>setEditing(false)}>取消编辑</button>
+      </section>
     </FeatureDialog>}
   </article>;
 }

@@ -30,7 +30,8 @@ it("edits explicitly, preserves failed content and retries the same save without
   expect(screen.getByRole("dialog",{name:"日记编辑器"})).toBeInTheDocument();
   expect(screen.getByText("女儿今天来看我了。")).toBeInTheDocument();
   expect(screen.getByText("照片 · 客厅照片")).toBeInTheDocument();
-  expect(screen.getByText("修改只保留在编辑器中，点击“保存日记”后才会更新这一天的日记。")).toBeInTheDocument();
+  expect(screen.getByText(/不会发送给聊天助手/)).toBeInTheDocument();
+  expect(screen.getByRole("region",{name:"日记编辑工作域"})).toHaveAttribute("data-diary-editor", "true");
   fireEvent.change(screen.getByLabelText("日记内容"),{target:{value:"取消的内容"}});
   fireEvent.click(screen.getByRole("button",{name:"取消编辑"}));expect(api.saveDiary).not.toHaveBeenCalled();
   fireEvent.click(screen.getByRole("button",{name:"继续写日记"}));
