@@ -26,7 +26,7 @@
       "uses": ["action_choreography", "rhythm", "weapon_trajectory"],
       "observed_metadata": {"duration_seconds": 19.410000, "fps": 30, "width": 576, "height": 1024},
       "observed_content": "竖屏夜间教学；画面文字分段示范平落、内旋、体前画立圆、身后画立圆、内腕花、内外腕花与外腕花。可见单人持剑，以腕部和前臂带动剑身连续画圆，剑尖沿圆弧运行，剑身与末端挂件出现明显滞后、摆动和回弹。",
-      "evidence_limits": ["教学段没有对手、拨械接触或受击反应；不能单独证明抽击的命中时机。", "画面为固定教学机位，不能作为复杂运镜参考。"]
+      "evidence_limits": ["这是剑花教学，不是抽击·剑鞭拨械；教学段没有对手、拨械接触或受击反应，不能证明抽击的命中时机或拨械结果。", "画面为固定教学机位，不能作为复杂运镜参考。"]
     },
     {
       "path": "/Users/owen/Developer/codex/wuda/独孤九剑_2.mp4",
@@ -42,7 +42,7 @@
       "uses": ["action_choreography", "rhythm", "weapon_trajectory"],
       "observed_metadata": {"duration_seconds": 47.933333, "fps": 30, "width": 576, "height": 1024},
       "observed_content": "竖屏户外教学；先示范背剑转身、外腕花、转身接续和多段剑花连接，再把动作连续串联并提高速度。剑身围绕身体前侧、侧后方和上方改变方向，手腕翻转与身体转向同步，剑尖画出连续圆弧与回环。",
-      "evidence_limits": ["主体为单人教学，没有对手、命中或拨械结果；不能直接作为受击时机参考。", "教学字幕和示范节奏属于原视频内容，生成时只提取动作机制。"]
+      "evidence_limits": ["这是缠身剑花教学，不是抽击·剑鞭拨械；主体为单人教学，没有对手、命中或拨械结果，不能直接作为受击时机参考。", "教学字幕和示范节奏属于原视频内容，生成时只提取动作机制。"]
     }
   ],
   "action_contract": {
@@ -68,5 +68,5 @@
   "prompt_cn": "生成一条4秒、16:9的中性武术动作参考视频，只展示一名成年剑术表演者使用高韧性剑或鞭剑完成‘抽击·剑鞭拨械’。中景、简洁无特征训练空间、固定或轻微跟随镜头，不继承任何参考视频的人物、服装、场景、字幕、音乐或对白。0.00-0.60秒保持正常速度或略微加速，前脚切入并探身；0.60-1.10秒手腕和前臂短促爆发，剑身中段先行、剑尖因惯性滞后；1.10-1.60秒剑身明显抖动、弯曲并回弹，沿波浪、S形或鞭状轨迹完成可读接触；1.60-2.40秒出现蛇形残影、细小空气撕裂线和多段线性火花，受击训练武器或演员沿受力方向移动；2.40-4.00秒控制剑身回弹并面向目标收势。动作保持实时速度，不使用慢动作；抽击不是拍刃，不是剑身对剑身碰撞，不是Coupé绕剑刺击。",
   "prompt_en": "Generate a 4-second 16:9 neutral martial-arts action reference video showing one adult sword performer using a highly flexible sword or whip-sword for elastic sword whiplash striking. Medium shot in a simple featureless training space, fixed or lightly following camera. Do not transfer any actor, face, costume, location, subtitle, music, or dialogue from the reference videos. 0.00-0.60s: real-time or slightly accelerated entry, front foot steps in and the torso leans forward. 0.60-1.10s: a short wrist-and-forearm snap drives the motion; the middle of the blade leads while the tip lags from inertia. 1.10-1.60s: the blade visibly vibrates, bends, and rebounds through a readable wave, S-curve, or whip-like path. 1.60-2.40s: serpentine ghost trails, fine air-rip lines, and several linear impact sparks appear as the training weapon or performer moves along the force direction. 2.40-4.00s: the performer controls the blade recoil and faces the target in a ready recovery. Keep real-time motion, no slow motion. This is elastic sword whiplash, not blade-to-blade Beat / Attack au Fer and not Coupé cutover thrusting.",
   "source_refs": ["local_video:独孤九剑_徐克_2.mp4", "local_video:独孤九剑_徐克版_超燃混剪.mp4", "local_video:剑花基础教学.mp4", "local_video:独孤九剑_2.mp4", "local_video:缠身剑花.mp4"],
-  "uncertainties": ["The source videos are montage or instructional references; exact source cut times and technical sword labels were not measured.", "The instructional sword-flower videos demonstrate circular wrist-led trajectories and blade lag/rebound, but do not show a confirmed disarm contact.", "The generated reference is an authored neutral demonstration, not a reconstruction of a specific film performer."]
+  "uncertainties": ["The source videos are montage or instructional references; exact source cut times and technical sword labels were not measured.", "Sword-flower instruction and elastic sword whiplash disarm are separate actions. The instructional sword-flower videos only contribute circular wrist-led trajectories and blade lag/rebound; they do not show a confirmed disarm contact.", "The generated reference is an authored neutral demonstration, not a reconstruction of a specific film performer."]
 }
