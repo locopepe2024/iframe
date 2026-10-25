@@ -30,7 +30,7 @@ class ChatRequest(UserMessage):
 
 class DiarySave(Operation):
     text: str = Field(min_length=1, max_length=12000)
-    source_turn_id: str = Field(min_length=1, max_length=120)
+    source_turn_id: str = Field(max_length=120)
     expected_revision: int = Field(ge=0)
 
 

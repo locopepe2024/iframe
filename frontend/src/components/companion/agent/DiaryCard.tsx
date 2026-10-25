@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { companionApi, type Diary } from "@/lib/companionApi";
 import FeatureDialog from "./FeatureDialog";
+import DiaryEditor from "./DiaryEditor";
 import styles from "./chat.module.css";
 
 export const diaryPrompt = (day: string) => `请把 ${day} 我们聊的内容整理成一篇回忆日记。只使用已经讲过的事实，缺少内容时先询问，不要编造。`;
@@ -24,14 +25,16 @@ export function today() { const now=new Date();return `${now.getFullYear()}-${St
 export interface DiaryContextItem { id: string; role: "user" | "assistant"; text: string }
 export interface DiaryContextMedia { id: string; kind: "photo" | "video"; name: string }
 
-export default function DiaryCard({ day, text, sourceTurn, saved, onSaved, onOpenDiary, context = [], media = [] }: {
+export default function DiaryCard({ day, text, sourceTurn, saved, onSaved, onOpenDiary, startEditing = false, onExitEditor, context = [], media = [] }: {
   day: string; text: string; sourceTurn: string; saved?: Diary; onSaved?: (diary: Diary) => void;
   onOpenDiary?: () => void;
+  startEditing?: boolean;
+  onExitEditor?: () => void;
     context?: DiaryContextItem[]; media?: DiaryContextMedia[];
 }) {
   const [entry,setEntry] = useState(saved);
   const [previous,setPrevious] = useState<Diary>();
-  const [editing,setEditing] = useState(false), [draft,setDraft] = useState(saved?.text ?? text);
+  const [editing,setEditing] = useState(startEditing), [draft,setDraft] = useState(saved?.text ?? text);
   const [busy,setBusy] = useState(false), [error,setError] = useState(""), [dismissed,setDismissed] = useState(false);
   const [loaded,setLoaded] = useState(!!saved), [reload,setReload] = useState(0);
   useEffect(()=>{
@@ -64,7 +67,7 @@ export default function DiaryCard({ day, text, sourceTurn, saved, onSaved, onOpe
     {onOpenDiary && <button type="button" disabled={busy} onClick={onOpenDiary}>查看已保存日记</button>}
     {!loaded && !error && <p role="status">正在核对日记…</p>}
     {error && !editing && <p role="alert">{error}{!loaded && <button type="button" onClick={()=>setReload(value=>value+1)}>重试核对日记</button>}</p>}
-    {editing && <FeatureDialog title="日记编辑器" onClose={()=>{if(!busy)setEditing(false);}}>
+    {editing && <FeatureDialog title="日记编辑器" onClose={()=>{if(!busy){setEditing(false);onExitEditor?.();}}}>
       <section aria-label="日记编辑工作域" data-diary-editor="true">
       <p className={styles.muted}>这里是日记编辑区。内容只会保存到这一天的日记，不会发送给聊天助手，也不会触发图片、视频或上传指令。</p>
       {(context.length > 0 || media.length > 0) && <details className={styles.diaryContext} open>
@@ -77,10 +80,7 @@ export default function DiaryCard({ day, text, sourceTurn, saved, onSaved, onOpe
           {media.map(item => <span key={item.id} className={styles.diaryMediaChip}>{item.kind === "photo" ? "照片" : "视频"} · {item.name}</span>)}
         </div>}
       </details>}
-      <label>日记内容<textarea rows={12} maxLength={12000} value={draft} disabled={busy} onChange={event=>setDraft(event.target.value)}/></label>
-      {error && <p role="alert">{error}</p>}
-      <button type="button" disabled={busy || !draft.trim()} onClick={()=>void save(draft)}>{busy ? "正在保存…" : "保存日记"}</button>
-      <button type="button" disabled={busy} onClick={()=>setEditing(false)}>取消编辑</button>
+      <DiaryEditor initialText={draft} busy={busy || !loaded} error={error} onSave={value=>void save(value)} onCancel={()=>{setEditing(false);onExitEditor?.();}}/>
       </section>
     </FeatureDialog>}
   </article>;

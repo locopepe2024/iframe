@@ -51,3 +51,14 @@ it("saves unedited text only with the explicit button and restores saved content
   render(<DiaryCard day={today()} text="今天的日记" sourceTurn="t"/>);
   await screen.findByRole("article",{name:"已保存日记"});expect(screen.queryByRole("button",{name:"保存日记"})).not.toBeInTheDocument();
 });
+it("starts a diary directly without a model reply and saves typed media words as content",async()=>{
+ const day=today(),text="今天要把语音图片和视频设计开发完成。";
+ api.saveDiary.mockResolvedValue({day,text,source_turn_id:"",revision:1});
+ render(<DiaryCalendar onClose={()=>{}} onCreate={()=>{throw new Error("must not route to chat");}}/>);
+ fireEvent.click(await screen.findByRole("button",{name:"开始记录日记"}));
+ await waitFor(()=>expect(screen.getByLabelText("日记内容")).not.toBeDisabled());
+ fireEvent.change(screen.getByLabelText("日记内容"),{target:{value:text}});
+ fireEvent.click(within(screen.getByRole("dialog",{name:"日记编辑器"})).getByRole("button",{name:"保存日记"}));
+ await screen.findByRole("button",{name:day+"，已有日记"});
+ expect(api.saveDiary).toHaveBeenCalledWith(day,expect.objectContaining({text,source_turn_id:"",expected_revision:0}));
+});

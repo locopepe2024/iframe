@@ -38,3 +38,25 @@ def test_diary_save_retry_revision_isolation_and_calendar(tmp_path):
         assert client.put(base+'/2026-10-23',json=body).status_code==404
     reopened=ChatStore(store.path)
     assert reopened.diaries('owner','actor','2026-10')['diaries'][0]['revision']==2
+
+
+def test_direct_diary_without_model_turn(tmp_path):
+    store = ChatStore(tmp_path / 'direct.db', initialize=True)
+    body = dict(operation_id='direct', text='今天开发语音图片和视频功能。', source_turn_id='', expected_revision=0)
+    result = store.save_diary('owner', 'actor', '2026-10-25', **body)
+    assert result['source_turn_id'] == ''
+    assert store.save_diary('owner', 'actor', '2026-10-25', **body) == result
+    assert store.diaries('owner', 'actor', '2026-10')['diaries'] == [result]
+    assert store.diaries('owner', 'other', '2026-10')['diaries'] == []
+
+
+def test_direct_diary_api_accepts_explicit_empty_source(tmp_path):
+    store = ChatStore(tmp_path / 'direct-api.db', initialize=True)
+    app = FastAPI(); app.include_router(router)
+    app.dependency_overrides[get_store] = lambda: store
+    app.dependency_overrides[require_user_context] = lambda: UserContext('actor', 'owner', '', '')
+    with TestClient(app) as client:
+        response = client.put('/companion-runtime/diaries/2026-10-25', json=dict(
+            operation_id='voice', text='今天继续记录。', source_turn_id='', expected_revision=0))
+        assert response.status_code == 200, response.text
+        assert response.json()['revision'] == 1

@@ -25,11 +25,13 @@ class DiaryStore:
                 if receipt['payload'] != payload:
                     raise Conflict('Diary operation changed')
                 return json.loads(receipt['result'])
-            source = db.execute('SELECT status,result FROM companion_turns WHERE owner=? AND actor=? AND id=?', (owner,actor,source_turn_id)).fetchone()
-            if not source:
-                raise Missing('Diary source unavailable')
-            if source['status'] != 'completed' or json.loads(source['result'] or '{}').get('kind') != 'text':
-                raise ValueError('Diary requires a completed text reply')
+            # Empty source explicitly denotes a diary written directly by the user.
+            if source_turn_id:
+                source = db.execute('SELECT status,result FROM companion_turns WHERE owner=? AND actor=? AND id=?', (owner,actor,source_turn_id)).fetchone()
+                if not source:
+                    raise Missing('Diary source unavailable')
+                if source['status'] != 'completed' or json.loads(source['result'] or '{}').get('kind') != 'text':
+                    raise ValueError('Diary requires a completed text reply')
             existing = db.execute('SELECT revision FROM companion_diaries WHERE owner=? AND actor=? AND day=?', (owner,actor,day)).fetchone()
             if (existing['revision'] if existing else 0) != expected_revision:
                 raise Conflict('Diary has changed')
