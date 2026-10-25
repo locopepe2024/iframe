@@ -4,7 +4,7 @@ import pytest
 
 from src.apps.comic_gen.models import (
     GlobalAssetLibrary, ImageAsset, ImageVariant, Scene, Script, Series,
-    StoryboardFrame, StoryboardReferencePackage,
+    StoryboardFrame, StoryboardReferencePackage, StoryboardReferenceProjectionSnapshot,
 )
 from src.apps.comic_gen.pipeline import ComicGenPipeline
 
@@ -63,6 +63,30 @@ def test_asset_revisions_survive_reload_and_shot_pin_does_not_drift(tmp_path):
     assert len(restored.scenes[0].asset_revisions) == 2
     assert restored.frames[0].reference_package.asset_revision_pins == [pinned]
     assert restored.video_tasks[0].asset_revision_pins == [pinned]
+
+
+def test_deleting_variant_clears_live_shot_references_but_keeps_video_snapshot(tmp_path):
+    pipeline, script, scene, frame = make_pipeline(tmp_path)
+    frame.reference_package = StoryboardReferencePackage(
+        confirmed=True,
+        references=[{"kind": "scene", "url": "assets/first.png", "source_asset_id": "cinema", "source_variant_id": "first"}],
+        asset_revision_pins=[{"asset_type": "scene", "asset_id": "cinema", "variant_id": "first", "revision": 1, "media_id": "media-first", "storage_key": "assets/first.png", "source_scope": "project"}],
+    )
+    frame.reference_visual_projection = StoryboardReferenceProjectionSnapshot(
+        source_asset_id="cinema", source_variant_id="first", target_frame_id="frame", target_scene_id="cinema",
+        selected_fields=["lighting"], visual_design={"lighting": {"color": "#fff"}},
+    )
+    pipeline.get_script = lambda script_id: pipeline.scripts.get(script_id)
+    _, task_id = pipeline.create_video_task("project", "", "Prompt", frame_id="frame", model="wan2.7-i2v")
+    task = next(item for item in script.video_tasks if item.id == task_id)
+
+    pipeline.delete_asset_variant("project", "cinema", "scene", "first")
+
+    assert frame.reference_package.confirmed is False
+    assert frame.reference_package.references == []
+    assert frame.reference_package.asset_revision_pins == []
+    assert frame.reference_visual_projection is None
+    assert task.asset_revision_pins[0].variant_id == "first"
 
 
 def test_confirm_membership_is_atomic_and_preserves_historical_material(tmp_path):

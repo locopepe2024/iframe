@@ -10276,21 +10276,52 @@ class ComicGenPipeline(StudioOwnerMixin):
             commit_asset_revision(target_asset, "user_confirmed")
 
         cleaned_frame_selection = False
-        for frame in script.frames:
-            selection = frame.workbench_reference_variant_ids
-            if not selection:
-                continue
-            next_ids = [item for item in selection.get(asset_id, []) if item != variant_id]
-            if next_ids == selection.get(asset_id, []):
-                continue
-            if next_ids:
-                selection[asset_id] = next_ids
-            else:
-                selection.pop(asset_id, None)
-            cleaned_frame_selection = True
+        cleaned_cross_project_references = False
+        # A deleted variant must not remain a live Shot Design input.  VideoTask
+        # keeps its own immutable asset/media snapshot, so clearing frame-owned
+        # references does not alter an already generated or locked video.
+        for owner_script in self.scripts.values():
+            for frame in owner_script.frames:
+                package = frame.reference_package
+                package_refs = [item for item in package.references
+                                if not (item.source_asset_id == asset_id
+                                        and item.source_variant_id == variant_id)]
+                package_pins = [item for item in package.asset_revision_pins
+                                if not (item.asset_id == asset_id and item.variant_id == variant_id)]
+                package_changed = len(package_refs) != len(package.references) or len(package_pins) != len(package.asset_revision_pins)
+                if package_changed:
+                    package.references = package_refs
+                    package.asset_revision_pins = package_pins
+                    package.confirmed = False
+                    package.revision += 1
+                    package.updated_at = time.time()
+                    cleaned_cross_project_references = True
+                projection = frame.reference_visual_projection
+                if (projection and projection.source_asset_id == asset_id
+                        and projection.source_variant_id == variant_id):
+                    frame.reference_visual_projection = None
+                    cleaned_cross_project_references = True
+                visual_design = frame.shot_visual_design
+                if (visual_design and visual_design.source_asset_id == asset_id
+                        and visual_design.source_variant_id == variant_id):
+                    frame.shot_visual_design = None
+                    cleaned_cross_project_references = True
+                selection = frame.workbench_reference_variant_ids
+                if not selection:
+                    continue
+                next_ids = [item for item in selection.get(asset_id, []) if item != variant_id]
+                if next_ids == selection.get(asset_id, []):
+                    continue
+                if next_ids:
+                    selection[asset_id] = next_ids
+                else:
+                    selection.pop(asset_id, None)
+                cleaned_frame_selection = True
 
         self._save_after_asset_mutation(source)
-        if source != "script" and cleaned_frame_selection:
+        if source != "script" and (cleaned_frame_selection or cleaned_cross_project_references):
+            self._save_data()
+        elif source == "script" and cleaned_cross_project_references:
             self._save_data()
         return script
 
