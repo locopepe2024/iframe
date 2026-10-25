@@ -36,6 +36,7 @@ class Generate(Strict):
 
 class Speech(Strict):
     text: str = Field(min_length=1, max_length=3000)
+    voice: Literal['longanhuan_v3.6', 'longanyang_v3.6'] = 'longanhuan_v3.6'
     allow_external_text: Literal[True]
 
 
@@ -173,7 +174,7 @@ def speech(body: Speech, identity: Owner):
     try:
         with requests.post(config['base_url'].rstrip('/')+'/audio/speech',
                            headers={'Authorization': 'Bearer '+config['api_key']},
-                           json=dict(model='qwen-audio-3.0-tts-flash', input=body.text, voice='longanhuan_v3.6', response_format='wav', speed=1),
+                           json=dict(model='qwen-audio-3.0-tts-flash', input=body.text, voice=body.voice, response_format='wav', speed=1),
                            stream=True, timeout=(10,90)) as response:
             response.raise_for_status()
             chunks=[]; size=0

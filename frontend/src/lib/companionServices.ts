@@ -16,5 +16,5 @@ export const companionServices={
   generate:async(body:object):Promise<GenerationJob> => (await request("/generations",body)).json(),
   job:async(id:string):Promise<GenerationJob> => (await request(`/generations/${encodeURIComponent(id)}`)).json(),
   media:async(id:string) => (await request(`/generations/${encodeURIComponent(id)}/media`)).blob(),
-  speech:async(text:string) => (await request("/speech",{text,allow_external_text:true})).blob(),
+  speech:async(text:string,voice?:string) => (await request("/speech",{text,voice,allow_external_text:true})).blob(),
 };

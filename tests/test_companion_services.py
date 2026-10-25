@@ -55,6 +55,9 @@ def test_speech_contract_and_binary_validation(client,monkeypatch):
     assert result.status_code==200 and result.content==b'RIFF1234WAVEdata'
     assert post.call_args.kwargs['json']['model']=='qwen-audio-3.0-tts-flash'
     assert post.call_args.kwargs['json']['voice']=='longanhuan_v3.6'
+    result=c.post('/companion-runtime/speech',json=dict(text='你好',voice='longanyang_v3.6',allow_external_text=True))
+    assert result.status_code==200
+    assert post.call_args.kwargs['json']['voice']=='longanyang_v3.6'
     response.iter_content.return_value=[b'{"error":"private"}']
     assert c.post('/companion-runtime/speech',json=dict(text='你好',allow_external_text=True)).status_code==502
 

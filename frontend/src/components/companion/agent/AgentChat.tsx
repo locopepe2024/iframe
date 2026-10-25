@@ -15,6 +15,7 @@ import CompanionFeatureSheet, { type CompanionFeature } from "./CompanionFeature
 import DiaryCalendar from "./DiaryCalendar";
 import DiaryCard, { diaryDay, diaryPrompt, formatDiaryDay, today, type DiaryContextItem, type DiaryContextMedia } from "./DiaryCard";
 import UniArtSettings from "./UniArtSettings";
+import CompanionIdentitySettings, { defaultCompanionIdentity, readCompanionIdentity, type CompanionIdentity } from "./CompanionIdentitySettings";
 import SpeechPlayback from "./SpeechPlayback";
 import UploadGuideCard from "./UploadGuideCard";
 import { isOpenAlbumCommand } from "./localCommands";
@@ -31,6 +32,7 @@ export default function AgentChat() {
   const [menu, setMenu] = useState(false);
   const [messages, setMessages] = useState<UserMessage[]>([]), [after, setAfter] = useState<number | null>(null);
   const [allowed, setAllowed] = useState(false);
+  const [identity, setIdentity] = useState<CompanionIdentity>(defaultCompanionIdentity);
   const [mode, setMode] = useState<ComposerMode>("chat");
   const [drafts, setDrafts] = useState<Record<ComposerMode, string>>({ chat: "", image: "", video: "" });
   const [guides, setGuides] = useState<Record<MediaMode, GenerationDraft | null>>({ image: null, video: null });
@@ -85,6 +87,7 @@ export default function AgentChat() {
     if (alive.current) { setMessages(old => cursor ? [...old, ...result.messages] : result.messages); setAfter(result.next_after); }
   }
   useEffect(() => {
+    setIdentity(readCompanionIdentity());
     alive.current = true;
     void run(async () => {
       if (localStorage.getItem(consentKey) === "true") setAllowed(true);
@@ -197,7 +200,7 @@ export default function AgentChat() {
     setDraft(null); setPreview({ status: "preview_closed", preview_token: activePreview.preview_token }); setNotice("已关闭预览，未执行新的保存或删除。");
   }
   return <main className={`${styles.shell} ${chatStyles.shell}`} data-agent-build="upload-preview-20261024-v3">
-    <header className={chatStyles.header}><h1>聊天</h1><button type="button" aria-expanded={menu} onClick={() => setMenu(!menu)}>更多</button></header>
+    <header className={chatStyles.header}><h1><span aria-hidden="true">{identity.avatar}</span> {identity.name}</h1><button type="button" aria-expanded={menu} onClick={() => setMenu(!menu)}>更多</button></header>
     {menu && <aside className={styles.panel} aria-label="聊天管理">
       <a href={`${prefix}/companion/photos`}>生活相册</a>
       <button disabled={inputDisabled || pending} onClick={() => void run(newSession)}>新建会话</button>
@@ -208,6 +211,7 @@ export default function AgentChat() {
           const value = event.target.checked; setAllowed(value); localStorage.setItem(consentKey, String(value));
         }} />允许发送文字，开始聊天</label>
       </section>
+      <CompanionIdentitySettings onChange={setIdentity} />
       <UniArtSettings />
       <p className={styles.note}>聊天内容会保留，可继续查看历史消息。</p>
     </aside>}
@@ -216,7 +220,7 @@ export default function AgentChat() {
       if (!drafts.chat.trim()) startDiaryPrompt();
       else { setNotice("输入框里还有未发送的话，先聊完这段，再一起记录今天。"); inputRef.current?.focus(); }
     }} /></div>
-    <article className={chatStyles.assistant}><span>陪伴助手</span><p>您好，我在。想聊聊今天，还是一起看看照片？</p></article>
+    <article className={chatStyles.assistant}><span>{identity.avatar} {identity.name}</span><p>您好，我在。想聊聊今天，还是一起看看照片？</p></article>
     {mode === "chat" && !messages.length && <section className={styles.guide} aria-labelledby="chat-guide-title">
       <h2 id="chat-guide-title">想从哪里聊起？</h2>
       <div className={styles.guideGrid}>
@@ -244,13 +248,13 @@ export default function AgentChat() {
             return items;
           })}
           media={attached.filter(item => item.anchor === index + 1).map(item => ({ id: item.id, kind: item.kind, name: item.name })) as DiaryContextMedia[]}
-        /> : <article className={chatStyles.assistant}><span>陪伴助手</span><p>{message.turn.result.text}</p><SpeechPlayback text={message.turn.result.text}/></article>)}
+        /> : <article className={chatStyles.assistant}><span>{identity.avatar} {identity.name}</span><p>{message.turn.result.text}</p><SpeechPlayback text={message.turn.result.text} voice={identity.voice}/></article>)}
         {message.turn?.result?.kind === "upload_guide" && !dismissedUploadGuides.includes(message.turn.turn_id) && <UploadGuideCard {...uploadGuideActions(message.turn.turn_id)} />}
       </div>{renderAttached(index+1)}</Fragment>;
       })}
       {after !== null && <button disabled={busy} onClick={() => void run(() => history(session, after))}>更多历史消息</button>}
     </section>
-    {turn?.result?.kind === "text" && !messages.some(m => m.turn?.turn_id === turn.turn_id) && (diaryDay(lastSubmittedText) ? <DiaryCard day={diaryDay(lastSubmittedText)!} text={turn.result.text} sourceTurn={turn.turn_id} onOpenDiary={() => setFeature("diary")} /> : <article className={chatStyles.assistant}><span>陪伴助手</span><p>{turn.result.text}</p><SpeechPlayback text={turn.result.text}/></article>)}
+    {turn?.result?.kind === "text" && !messages.some(m => m.turn?.turn_id === turn.turn_id) && (diaryDay(lastSubmittedText) ? <DiaryCard day={diaryDay(lastSubmittedText)!} text={turn.result.text} sourceTurn={turn.turn_id} onOpenDiary={() => setFeature("diary")} /> : <article className={chatStyles.assistant}><span>{identity.avatar} {identity.name}</span><p>{turn.result.text}</p><SpeechPlayback text={turn.result.text} voice={identity.voice}/></article>)}
     {turn?.result?.kind === "upload_guide" && !messages.some(m => m.turn?.turn_id === turn.turn_id) && !dismissedUploadGuides.includes(turn.turn_id) && <UploadGuideCard {...uploadGuideActions(turn.turn_id)} />}
     {uploadFiles.length > 0 && <MediaUpload files={uploadFiles} disabled={inputDisabled || pending} onUploaded={attach} onBusyChange={setUploading} onClose={() => setUploadFiles([])} />}
     {albumOpen && <AlbumPicker disabled={inputDisabled || pending} onClose={() => setAlbumOpen(false)} onPhoto={photo => {
