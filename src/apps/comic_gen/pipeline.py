@@ -30,6 +30,7 @@ from .models import (
     StoryboardReference,
     ShotVisualPreset,
     ShotVisualDesignSnapshot,
+    StoryboardConsistencyManifest,
     StoryboardReferenceProjectionSnapshot,
     DialogueStructured,
     LightingData,
@@ -5606,6 +5607,48 @@ class ComicGenPipeline(StudioOwnerMixin):
                 ))
         return pins
 
+    def _build_consistency_manifest(
+        self, script: Script, frame: StoryboardFrame, *, prompt: Optional[str] = None,
+    ) -> StoryboardConsistencyManifest:
+        """Build the single structured consistency layer consumed by a shot."""
+        package = frame.reference_package
+        pins = (
+            [item.model_copy(deep=True) for item in package.asset_revision_pins]
+            if package.confirmed and package.asset_revision_pins
+            else self._pin_frame_assets(script, frame, package)
+        )
+        visual_projection = frame.reference_visual_projection.model_copy(deep=True) if frame.reference_visual_projection else None
+        visual_design = frame.shot_visual_design
+        if isinstance(visual_design, dict):
+            visual_design = ShotVisualDesignSnapshot.model_validate(visual_design)
+        elif visual_design:
+            visual_design = visual_design.model_copy(deep=True)
+        fields = {
+            key: getattr(frame, key)
+            for key in (
+                "shot_size", "camera_angle", "camera_movement", "composition",
+                "lighting", "blocking", "duration", "shot_structure",
+                "style_prompt_override", "lighting_override", "negative_prompt_override",
+            )
+            if getattr(frame, key, None) is not None
+        }
+        prompt_hash = hashlib.sha256(prompt.encode("utf-8")).hexdigest() if prompt else None
+        previous = frame.consistency_manifest
+        return StoryboardConsistencyManifest(
+            revision=(previous.revision + 1) if previous else 1,
+            confirmed=package.confirmed,
+            scene_id=frame.scene_id,
+            character_ids=list(frame.character_ids),
+            prop_ids=list(frame.prop_ids),
+            asset_revision_pins=pins,
+            reference_package_revision=package.revision,
+            reference_visual_projection=visual_projection,
+            shot_visual_design=visual_design,
+            structured_shot_fields=fields,
+            prompt=prompt,
+            prompt_hash=prompt_hash,
+        )
+
     @staticmethod
     def _episode_asset_context_prompt(script: Script, asset_type: str, asset_id: str) -> str:
         context = script.episode_visual_context
@@ -6977,6 +7020,16 @@ class ComicGenPipeline(StudioOwnerMixin):
             or (kwargs.get("character_ids") is not None
                 and kwargs["character_ids"] != frame.character_ids)
         )
+        consistency_fields_changed = asset_refs_changed or any(
+            key in kwargs for key in (
+                "prop_ids", "action_description", "camera_angle", "camera_movement_description",
+                "shot_size", "duration", "shot_structure", "lighting", "blocking",
+                "style_prompt_override", "lighting_override", "negative_prompt_override",
+                "reference_package", "workbench_reference_variant_ids",
+            )
+        )
+        if frame.consistency_manifest and consistency_fields_changed:
+            frame.consistency_manifest = None
         
         from .shot_prompt_settings import sync_prompt_settings
         old_style, old_light = frame.style_prompt_override, frame.lighting_override
@@ -8095,6 +8148,13 @@ class ComicGenPipeline(StudioOwnerMixin):
         else:
             asset_revision_pins = []
 
+        consistency_manifest = (
+            self._build_consistency_manifest(script, source_frame, prompt=prompt)
+            if source_frame else None
+        )
+        if source_frame and consistency_manifest:
+            source_frame.consistency_manifest = consistency_manifest.model_copy(deep=True)
+
         task = VideoTask(
             id=task_id,
             project_id=script_id,
@@ -8131,6 +8191,7 @@ class ComicGenPipeline(StudioOwnerMixin):
             reference_video_urls=reference_video_urls or [],
             reference_media_ids=list(dict.fromkeys(reference_media_ids)),
             asset_revision_pins=[item.model_copy(deep=True) for item in asset_revision_pins],
+            consistency_manifest=consistency_manifest.model_copy(deep=True) if consistency_manifest else None,
             storyboard_reference_revision=storyboard_reference_revision,
             reference_image_urls=reference_image_urls or [],
             ratio=ratio,
@@ -10305,6 +10366,13 @@ class ComicGenPipeline(StudioOwnerMixin):
                 if (visual_design and visual_design.source_asset_id == asset_id
                         and visual_design.source_variant_id == variant_id):
                     frame.shot_visual_design = None
+                    cleaned_cross_project_references = True
+                manifest = frame.consistency_manifest
+                if manifest and any(
+                    pin.asset_id == asset_id and pin.variant_id == variant_id
+                    for pin in manifest.asset_revision_pins
+                ):
+                    frame.consistency_manifest = None
                     cleaned_cross_project_references = True
                 selection = frame.workbench_reference_variant_ids
                 if not selection:

@@ -79,6 +79,8 @@ def test_deleting_variant_clears_live_shot_references_but_keeps_video_snapshot(t
     pipeline.get_script = lambda script_id: pipeline.scripts.get(script_id)
     _, task_id = pipeline.create_video_task("project", "", "Prompt", frame_id="frame", model="wan2.7-i2v")
     task = next(item for item in script.video_tasks if item.id == task_id)
+    assert task.consistency_manifest is not None
+    assert task.consistency_manifest.asset_revision_pins[0].variant_id == "first"
 
     pipeline.delete_asset_variant("project", "cinema", "scene", "first")
 
@@ -86,7 +88,9 @@ def test_deleting_variant_clears_live_shot_references_but_keeps_video_snapshot(t
     assert frame.reference_package.references == []
     assert frame.reference_package.asset_revision_pins == []
     assert frame.reference_visual_projection is None
+    assert frame.consistency_manifest is None
     assert task.asset_revision_pins[0].variant_id == "first"
+    assert task.consistency_manifest.asset_revision_pins[0].variant_id == "first"
 
 
 def test_confirm_membership_is_atomic_and_preserves_historical_material(tmp_path):

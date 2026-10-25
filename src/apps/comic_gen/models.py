@@ -485,6 +485,10 @@ class VideoTask(BaseModel):
     reference_video_urls: List[str] = Field(default_factory=list, description="Reference video URLs for R2V generation (max 3)")
     reference_media_ids: List[str] = Field(default_factory=list, description="Stable media identities consumed by this shot")
     asset_revision_pins: List[AssetRevisionPin] = Field(default_factory=list)
+    consistency_manifest: Optional["StoryboardConsistencyManifest"] = Field(
+        None,
+        description="Immutable consistency snapshot consumed by this video task",
+    )
     storyboard_reference_revision: Optional[int] = Field(None, description="Storyboard reference package revision consumed by this shot")
     # Kling params
     mode: Optional[str] = Field(None, description="Kling mode: std/pro")
@@ -872,6 +876,25 @@ class ShotVisualDesignSnapshot(BaseModel):
     updated_at: float = Field(default_factory=time.time)
 
 
+class StoryboardConsistencyManifest(BaseModel):
+    """Single frame-owned consistency snapshot shared by all asset types."""
+
+    schema_version: Literal[1] = 1
+    revision: int = Field(1, ge=1)
+    confirmed: bool = False
+    scene_id: Optional[str] = None
+    character_ids: List[str] = Field(default_factory=list)
+    prop_ids: List[str] = Field(default_factory=list)
+    asset_revision_pins: List[AssetRevisionPin] = Field(default_factory=list)
+    reference_package_revision: Optional[int] = Field(None, ge=1)
+    reference_visual_projection: Optional[StoryboardReferenceProjectionSnapshot] = None
+    shot_visual_design: Optional[ShotVisualDesignSnapshot] = None
+    structured_shot_fields: Dict[str, Any] = Field(default_factory=dict)
+    prompt: Optional[str] = None
+    prompt_hash: Optional[str] = None
+    created_at: float = Field(default_factory=time.time)
+
+
 class StoryboardFrame(BaseModel):
     id: str = Field(..., description="Unique identifier for the frame")
     owner_user_id: Optional[str] = Field(None, description="Authenticated user owner")
@@ -924,6 +947,10 @@ class StoryboardFrame(BaseModel):
     shot_visual_design: Optional[ShotVisualDesignSnapshot] = Field(
         None,
         description="Frame-owned structured visual design snapshot and preset provenance",
+    )
+    consistency_manifest: Optional[StoryboardConsistencyManifest] = Field(
+        None,
+        description="Canonical frame-owned structured consistency layer for assets and shot design",
     )
 
     # === Storyboard Schema v2: Rich frame fields ===
@@ -3280,3 +3307,8 @@ class GlobalAssetLibrary(BaseModel):
     characters: List[Character] = Field(default_factory=list, description="Shared global character assets")
     scenes: List[Scene] = Field(default_factory=list, description="Shared global scene assets")
     props: List[Prop] = Field(default_factory=list, description="Shared global prop assets")
+
+
+# VideoTask is declared before the frame-owned manifest for legacy model
+# ordering; resolve its forward reference after all models are defined.
+VideoTask.model_rebuild()
