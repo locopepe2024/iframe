@@ -194,6 +194,7 @@ def test_professional_martial_terms_attach_choreography_and_physics_baselines():
     system = preview['messages']['system']
     assert '[shot-action-physics · 分镜动作与受力连续性' in system
     assert '[shot-martial-choreography · 专业武术与动作编排' in system
+    assert '不让角色停住等待下一个目标' in system
 
 
 @pytest.mark.parametrize('reference_mode', [False, True])
