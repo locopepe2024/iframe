@@ -7,14 +7,30 @@ import uuid
 
 import httpx
 import numpy as np
+from aioice.ice import TransportPolicy
 from aiortc import RTCPeerConnection, RTCSessionDescription, RTCConfiguration, RTCIceServer
 
 
 async def main():
     base = os.environ.get("MOCK_TEST_BASE", "http://127.0.0.1:18083")
     public = base.startswith("https:")
-    pc = RTCPeerConnection(RTCConfiguration(iceServers=[
-        RTCIceServer(urls="stun:stun.cloudflare.com:3478")] if public else []))
+    relay = os.environ.get("MOCK_TEST_RELAY") == "1"
+    servers = [RTCIceServer(urls="stun:stun.cloudflare.com:3478")] if public else []
+    if relay:
+        async with httpx.AsyncClient(timeout=20) as config_client:
+            config_response = await config_client.get(base.rstrip('/') + '/sessions/webrtc/ice-config')
+            config_response.raise_for_status()
+            servers = [RTCIceServer(**entry) for entry in config_response.json()['iceServers']
+                       if any(url.startswith('turn:') for url in
+                              (entry['urls'] if isinstance(entry['urls'], list) else [entry['urls']]))]
+            assert servers, 'TURN missing in runtime config'
+            transport = os.environ.get('MOCK_TEST_TURN_TRANSPORT', 'tcp')
+            for server in servers:
+                urls = server.urls if isinstance(server.urls, list) else [server.urls]
+                server.urls = [url for url in urls if f'transport={transport}' in url]
+            servers = [server for server in servers if server.urls]
+            assert servers, 'requested TURN transport missing'
+    pc = RTCPeerConnection(RTCConfiguration(iceServers=servers))
     counts = {"video": 0, "audio": 0, "audible": 0}
     samples = []
     tasks = []
@@ -49,7 +65,17 @@ async def main():
             await post(f"/sessions/{sid}/start")
             pc.addTransceiver("video", direction="recvonly")
             pc.addTransceiver("audio", direction="recvonly")
+            if relay:
+                # aiortc lacks browser iceTransportPolicy; force aioice gathering
+                # to relay-only and assert the SDP contains no direct candidates.
+                for transceiver in pc.getTransceivers():
+                    connection = transceiver.sender.transport.transport.iceGatherer._connection
+                    connection._transport_policy = TransportPolicy.RELAY
             await pc.setLocalDescription(await pc.createOffer())
+            if relay:
+                candidates = [line for line in pc.localDescription.sdp.splitlines()
+                              if line.startswith('a=candidate:')]
+                assert candidates and all(' typ relay' in line for line in candidates), 'not relay-only'
             answer = await post(f"/sessions/{sid}/webrtc/offer", {
                 "sdp": pc.localDescription.sdp, "type": "offer"})
             await pc.setRemoteDescription(RTCSessionDescription(**answer))
@@ -75,7 +101,8 @@ async def main():
             print(json.dumps({"decoded_frames": counts, "interrupt_tail_peak": max(tail, default=0),
                 "interrupt_tail_frames": len(tail),
                 "destroy_http": state.status_code, "destroy_state": payload.get("state"),
-                "scope": "public WebRTC" if public else "same-host WebRTC"}))
+                "scope": "public relay-only WebRTC " + transport if relay else
+                         "public WebRTC" if public else "same-host WebRTC"}))
         finally:
             if sid:
                 await request("DELETE", f"/sessions/{sid}")

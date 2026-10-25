@@ -78,4 +78,12 @@ Nginx 独立站参考 tools/opentalking-mock/nginx.conf；443 路径由 install-
 
 浏览器自动化范围授权与端口可达性处理仍待用户答复。当前仍不满足这一浏览器的播放验收，不连接 GPU。
 
+### 安全组放行后的中继验收
+
+用户确认已放行 TCP/UDP 3478 和 UDP 49160–49200 后，外网 TCP 3478 连接成功。执行 tools/opentalking-mock/apply-turn.py，将 staged TURN 配置应用到 mode-600 .env 并重启 Mock；原配置备份为 `.env.before-turn`。浏览器策略现为 relay，包含 TCP/UDP TURN URL；服务端保持 STUN 配置，媒体从同机 TURN 转发给服务端。未改动其他服务或云防火墙。
+
+外部探针设置 `MOCK_TEST_RELAY=1`，读取测试站 ICE 配置，选择 TURN/TCP，在 aioice 层强制 relay-only，断言 offer 所有候选均为 relay。结果：解码视频 204 帧、音频 54 帧，其中非静音 49 帧；interrupt 后 1.5 秒起没有旧音频帧；DELETE 后 state=closed。支持这次公网 TURN/TCP 的播放、打断和销毁；不是 UDP TURN 或用户浏览器的验收。探针途中出现一次 aioice CHANNEL_BIND 400（相同 peer 使用不同 channel），测试仍完成；未证明此告警的普遍影响，不隐藏该限制。
+
+当前可请用户刷新后创建新会话复验。旧会话不自动切换 ICE 配置；本次重启会关闭旧会话。仍不接 GPU，等待实际浏览器播放确认。
+
 先人工确认角色能显示、声音能播放、点击打断后停止、结束后能重新创建会话；若有失败，定位具体媒体或 UI 边界。通过后另行确认 GPU 资源与模型服务契约，再连接 QuickTalk，沿用同样的生命周期探针。当前没有部署或连接 GPU backend。
