@@ -43,3 +43,15 @@ OpenTalking 只持有不透明 token，不接收或记录 iframe Bearer、owner�
 验证：gateway 路由、Bearer 要求、token 不泄露身份、context 转发身份、显式 release、过期撤销、缺少配置共5项新增测试；与适配器、绑定、记忆、知识测试合计37项通过。验证仍是本地 ASGI/MockTransport，尚未声称公开测试站已接入真实个人数据。
 
 下一切片：将 token 绑定到真实 OpenTalking session 的创建/删除生命周期，并在 runner 的单次 LLM 调用前使用 `IframeGatewayReader`；保持现有 CPU Mock TTS、WebRTC、UDP TURN 配置不变。未完成该切片前，不部署 gateway 到公开 demo。
+
+## Session 握手契约（待 OpenTalking 可写 worktree）
+
+由于 iframe 的绑定需要 session id，而 OpenTalking 默认在服务端生成 session id，接入不能把 token 临时塞进首次创建请求后再假定 runner 已经读取。建议采用预分配 id 的三步握手：
+
+1. 客户端生成符合 OpenTalking 约束的短期 session id。
+2. 客户端用已验证 Bearer 调用 iframe `bind`，得到 `context_token`。
+3. 客户端创建 OpenTalking session，同时传入该 session id、iframe gateway URL 和不透明 token。
+
+OpenTalking runner 仅在 URL 和 token 同时存在时包装一次 LLM 调用；每轮以用户本轮文本查询 iframe gateway，再把限量片段作为不可信参考资料注入本轮消息。未携带配置时保持现有 LLM、TTS、WebRTC 行为。session 删除时调用 iframe `release`，失败只记录可观测状态，不阻塞媒体销毁；token 本身仍由 iframe 过期机制兜底。
+
+需要在 OpenTalking 可写分支增加并测试：`CreateSessionRequest.session_id`、可选 gateway 字段、Redis task 透传、runner 的 `IframeGatewayReader` 包装、close 时 release，以及无 token 的回归测试。当前远端 `/opt/opentalking` 为 `root:root`，`ubuntu` 仅有读取权限，因此本切片尚未写入或部署。
