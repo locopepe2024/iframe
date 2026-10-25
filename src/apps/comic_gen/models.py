@@ -928,6 +928,9 @@ class StoryboardFrame(BaseModel):
 
     # === Storyboard Schema v2: Rich frame fields ===
     duration: Optional[int] = Field(None, description="建议时长（秒）")
+    shot_structure: Literal["auto", "single", "multi"] = Field(
+        "auto", description="视频镜头结构：自动判断、单一连续镜头或同一任务内多镜头"
+    )
     visual_description: Optional[str] = Field(None, description="画面描述：环境氛围 + 角色表演 + 物理动作的综合自然语言描述")
     dialogue_structured: Optional[DialogueStructured] = Field(None, description="结构化对白（speaker + line + emotion + delivery）")
     camera_movement_structured: Optional[CameraMovementData] = Field(None, description="结构化运镜（primary + secondary + speed + description）")

@@ -7802,6 +7802,8 @@ class PolishVideoPromptRequest(BaseModel):
     optimization_skills: Optional[List[str]] = Field(default=None, max_length=12)
     target_ratio: str = Field("16:9", max_length=20)
     target_video_model: str = ""
+    # Editor-level camera structure; independent of provider-specific shot_type.
+    shot_structure: Literal["auto", "single", "multi"] = "auto"
     generation_mode: Literal["t2v", "i2v", "first_last_frame", "r2v"] = "i2v"
     dialogue_speaker: str = Field("", max_length=200)
     dialogue_line: str = Field("", max_length=2000)
@@ -7994,15 +7996,22 @@ one contact followed by its immediate force reaction, displacement, any
 explicitly authorized collision and visible prop response, then the end state.
 Do not invent unseen objects or make a subject cross an occluding barrier.
 Fast action stays real-time unless the creator requests slow motion. Preserve
-user-authored timing windows. Align sound cues with the corresponding visual
-events; discard stale sound timestamps in the draft. Silent mode has no sound.
+user-authored timing intent, but if the draft timing does not fit the requested
+duration, retime the beats while preserving their causal order. For a single
+continuous shot, keep all beats inside one [Shot 1] body. When multi-shot
+structure is allowed, provider-native shot labels may be used. The visual
+process must contain explicit timestamped
+motion nodes or contiguous time ranges from 0.00s through the requested end
+time; the final range must end exactly at that duration. Align sound cues with
+the corresponding visual events; discard stale sound timestamps in the draft.
+Silent mode has no sound.
 """
 
 
 _MINIMAX_IR_TEXT_LIMIT = 7000
 
 
-def _storyboard_polish_contract(model_id: str, custom: str, default: str, generate_audio=None, target_duration=None, dialogue_speaker="", dialogue_line="", optimization_skills: Optional[List[str]] = None, reference_mode: bool = False, generation_mode: str = "i2v") -> str:
+def _storyboard_polish_contract(model_id: str, custom: str, default: str, generate_audio=None, target_duration=None, dialogue_speaker="", dialogue_line="", optimization_skills: Optional[List[str]] = None, reference_mode: bool = False, generation_mode: str = "i2v", shot_structure: str = "auto") -> str:
     guidance = _selected_skill_guidance(optimization_skills, model_id) if optimization_skills is not None else _target_model_guidance(model_id)
     is_h3 = "h3" in (model_id or "").lower()
     if not guidance and not is_h3 and generation_mode != "first_last_frame":
@@ -8019,12 +8028,14 @@ def _storyboard_polish_contract(model_id: str, custom: str, default: str, genera
             constraints += f"\nEXPLICIT DIALOGUE (verbatim, do not translate, omit, or rewrite): {speaker}: {dialogue_line.strip()}"
     if target_duration is not None:
         constraints += f"\nTarget duration: {target_duration} seconds. All action must fit within this duration; no invented exact source cut times."
+        constraints += "\nSHOT STRUCTURE: the system may choose single-shot or multi-shot coverage. User-authored shot labels remain editable; do not hard-reject a valid shot structure. Preserve the continuous total timeline."
         if is_h3 and target_duration <= 6:
             constraints += f"""
 SHORT H3 ACTION TIMELINE: For a causal action shot, write 3-6 contiguous,
-explicit time ranges inside the existing visual description, starting at
-0.00s and ending at {target_duration:.2f}s. Use the form 0.00-0.60s in BOTH
-prompt_cn and prompt_en. Each range must advance a visible action beat:
+explicit time ranges or timestamped motion nodes inside the existing visual
+description, starting at 0.00s and ending at {target_duration:.2f}s. Use either
+the form 0.00-0.60s or the H3 node form [00:00.000] ... [00:00.600] ... in
+BOTH prompt_cn and prompt_en. Each range or node must advance a visible action beat:
 initiation, single contact, immediate force reaction, authorized collision,
 and final state as applicable. These are authored action timings, not measured
 source cut points or extra [Shot] labels. A fast impact and fall remain real
@@ -8104,22 +8115,39 @@ def _has_short_action_timeline(text: str, duration: float, reference_mode: bool)
         r"(?im)^\s*detailed_description\s*[:：]", text
     ) else "integrated_multimodal_description"
     visual = re.search(rf"(?is){heading}\s*[:：](.*?)(?:overall_soundscape\s*[:：]|$)", text)
-    if not visual:
-        return False
+    # Context-IR may return provider-native H3 prose without the editor's
+    # local field heading.  The official H3 examples use the visual text
+    # directly, so validate the whole returned prompt in that case.
+    visual_text = visual.group(1) if visual else text
     ranges = [
         (float(match.group(1)), float(match.group(2)))
-        for match in re.finditer(r"(?<!\d)(\d{1,2}(?:\.\d{1,2})?)\s*[-–—~至]\s*(\d{1,2}(?:\.\d{1,2})?)\s*(?:s|秒)", visual.group(1), re.I)
+        for match in re.finditer(r"(?<!\d)(\d{1,2}(?:\.\d{1,2})?)\s*[-–—~至]\s*(\d{1,2}(?:\.\d{1,2})?)\s*(?:s|秒)", visual_text, re.I)
     ]
-    return (
+    if (
         3 <= len(ranges) <= 6
         and abs(ranges[0][0]) <= 0.05
         and abs(ranges[-1][1] - duration) <= 0.05
         and all(start < end for start, end in ranges)
         and all(abs(left[1] - right[0]) <= 0.05 for left, right in zip(ranges, ranges[1:]))
+    ):
+        return True
+    # MiniMax H3 also accepts explicit event nodes. Require a visible opening
+    # node, a small number of progressing nodes, and an explicit final state
+    # at the requested end time so the provider cannot stretch an underspecified
+    # timeline across a longer rendered clip.
+    timestamps = [
+        float(minutes) * 60 + float(seconds)
+        for minutes, seconds in re.findall(r"\[(\d{1,2}):(\d{2}(?:\.\d{1,3})?)\]", visual_text)
+    ]
+    return (
+        3 <= len(timestamps) <= 6
+        and abs(timestamps[0]) <= 0.05
+        and abs(timestamps[-1] - duration) <= 0.05
+        and all(left < right for left, right in zip(timestamps, timestamps[1:]))
     )
 
 
-def _validate_storyboard_polish_result(model_id: str, result: Dict[str, Any], reference_mode: bool, generate_audio=None, dialogue_line="", generation_mode: str = "i2v", short_action_duration: Optional[float] = None) -> None:
+def _validate_storyboard_polish_result(model_id: str, result: Dict[str, Any], reference_mode: bool, generate_audio=None, dialogue_line="", generation_mode: str = "i2v", short_action_duration: Optional[float] = None, shot_structure: str = "auto") -> None:
     """Reject responses that ignore the selected provider's prompt contract."""
     if generation_mode == "first_last_frame":
         first = re.compile(r"(?i)first[\s_-]*(?:frame|image)|opening[\s_-]*(?:frame|image)|picture\s*1\b|首帧|起始帧")
@@ -8213,7 +8241,9 @@ def _validate_storyboard_polish_result(model_id: str, result: Dict[str, Any], re
 
 def _validate_context_ir_polish_result(result: Dict[str, str], *, reference_mode: bool = False,
                                        generation_mode: str = "i2v", generate_audio=None,
-                                       dialogue_line: str = "") -> None:
+                                       dialogue_line: str = "",
+                                       short_action_duration: Optional[float] = None,
+                                       shot_structure: str = "auto") -> None:
     """Validate observable content without imposing local chat-model headings on IR."""
     from .llm import PolishError
 
@@ -8239,6 +8269,14 @@ def _validate_context_ir_polish_result(result: Dict[str, str], *, reference_mode
                 message_zh="润色结果没有同时说明首帧与尾帧，本次结果未应用。",
                 message_en="Polished result omitted the first or last frame; it was not applied.",
             )
+    if short_action_duration is not None:
+        prompt = result.get("prompt_en", "")
+        if not _has_short_action_timeline(prompt, short_action_duration, reference_mode):
+            raise PolishError(
+                reason="model_contract_mismatch",
+                message_zh="润色结果的时间轴未从 0.00 秒连续覆盖到目标时长，请重试。",
+                message_en="The polished result does not provide a contiguous timeline from 0.00s to the target duration; retry.",
+            )
     exact_dialogue = dialogue_line.strip()
     if generate_audio is True and exact_dialogue and exact_dialogue not in prompt:
         raise PolishError(
@@ -8251,6 +8289,7 @@ def _validate_context_ir_polish_result(result: Dict[str, str], *, reference_mode
 def _compile_ir_polish_text(request, custom_prompt: str) -> str:
     instruction = custom_prompt.strip()
     instruction += "\n" + _IR_SHOT_GUIDANCE
+    instruction += f"\nSHOT STRUCTURE MODE: {request.shot_structure}. This is planning metadata only; the system may choose one or multiple provider-native [Shot N] sections, and the user may edit them. Do not hard-reject shot count; keep one continuous total timeline."
     if _needs_short_action_timeline(request.target_video_model, request.target_duration, request.draft_prompt):
         instruction += (f"\nUse 3-6 contiguous authored time ranges from 0.00s to {request.target_duration:.2f}s "
                         "inside the H3 visual description in both language outputs. "
@@ -8715,9 +8754,11 @@ def polish_video_prompt(request: PolishVideoPromptRequest):
             # freeform instruction path and validate only observable IR invariants.
             result = _complete_minimax_ir_polish(request, custom or DEFAULT_VIDEO_POLISH_PROMPT, reviewed["user"])
             _validate_context_ir_polish_result(result, generation_mode=request.generation_mode,
-                                               generate_audio=request.generate_audio, dialogue_line=request.dialogue_line)
+                                               generate_audio=request.generate_audio, dialogue_line=request.dialogue_line,
+                                               short_action_duration=short_action_duration,
+                                               shot_structure=request.shot_structure)
             return result
-        custom_prompt = _storyboard_polish_contract(request.target_video_model, custom, DEFAULT_VIDEO_POLISH_PROMPT, request.generate_audio, request.target_duration, request.dialogue_speaker, request.dialogue_line, selected_skills, reference_mode=False, generation_mode=request.generation_mode)
+        custom_prompt = _storyboard_polish_contract(request.target_video_model, custom, DEFAULT_VIDEO_POLISH_PROMPT, request.generate_audio, request.target_duration, request.dialogue_speaker, request.dialogue_line, selected_skills, reference_mode=False, generation_mode=request.generation_mode, shot_structure=request.shot_structure)
         # Polish model: request override → project/series PromptConfig → ""
         polish_model = request.polish_model or _OPTIMIZER_MODEL_IDS.get(request.optimizer_provider) or _get_polish_model_for_project(request.script_id)
         processor = ScriptProcessor()
@@ -8731,7 +8772,7 @@ def polish_video_prompt(request: PolishVideoPromptRequest):
             generation_mode=request.generation_mode,
             reviewed_messages=reviewed,
         )
-        _validate_storyboard_polish_result(request.target_video_model, result, reference_mode=False, generate_audio=request.generate_audio, dialogue_line=request.dialogue_line, generation_mode=request.generation_mode, short_action_duration=short_action_duration)
+        _validate_storyboard_polish_result(request.target_video_model, result, reference_mode=False, generate_audio=request.generate_audio, dialogue_line=request.dialogue_line, generation_mode=request.generation_mode, short_action_duration=short_action_duration, shot_structure=request.shot_structure)
         return {
             "prompt_cn": result.get("prompt_cn", ""),
             "prompt_en": result.get("prompt_en", "")
@@ -8775,6 +8816,7 @@ class PolishR2VPromptRequest(BaseModel):
     optimization_skills: Optional[List[str]] = Field(default=None, max_length=12)
     target_ratio: str = Field("16:9", max_length=20)
     target_video_model: str = ""
+    shot_structure: Literal["auto", "single", "multi"] = "auto"
     dialogue_speaker: str = Field("", max_length=200)
     dialogue_line: str = Field("", max_length=2000)
     reviewed_messages: Optional[Dict[Literal["system", "user"], str]] = None
@@ -8806,9 +8848,10 @@ def polish_r2v_prompt(request: PolishR2VPromptRequest):
         if request.optimizer_provider == "minimax_context_ir":
             result = _complete_minimax_ir_polish(request, custom or DEFAULT_R2V_POLISH_PROMPT, reviewed["user"])
             _validate_context_ir_polish_result(result, reference_mode=True, generate_audio=request.generate_audio,
-                                               dialogue_line=request.dialogue_line)
+                                               dialogue_line=request.dialogue_line, short_action_duration=short_action_duration,
+                                               shot_structure=request.shot_structure)
             return result
-        custom_prompt = _storyboard_polish_contract(request.target_video_model, custom, DEFAULT_R2V_POLISH_PROMPT, request.generate_audio, request.target_duration, request.dialogue_speaker, request.dialogue_line, selected_skills, reference_mode=True)
+        custom_prompt = _storyboard_polish_contract(request.target_video_model, custom, DEFAULT_R2V_POLISH_PROMPT, request.generate_audio, request.target_duration, request.dialogue_speaker, request.dialogue_line, selected_skills, reference_mode=True, shot_structure=request.shot_structure)
         polish_model = request.polish_model or _OPTIMIZER_MODEL_IDS.get(request.optimizer_provider) or _get_polish_model_for_project(request.script_id)
         processor = ScriptProcessor()
         slot_info = [{"description": s.description} for s in request.slots]
@@ -8822,7 +8865,7 @@ def polish_r2v_prompt(request: PolishR2VPromptRequest):
             polish_model=polish_model,
             reviewed_messages=reviewed,
         )
-        _validate_storyboard_polish_result(request.target_video_model, result, reference_mode=True, generate_audio=request.generate_audio, dialogue_line=request.dialogue_line, short_action_duration=short_action_duration)
+        _validate_storyboard_polish_result(request.target_video_model, result, reference_mode=True, generate_audio=request.generate_audio, dialogue_line=request.dialogue_line, short_action_duration=short_action_duration, shot_structure=request.shot_structure)
         return {
             "prompt_cn": result.get("prompt_cn", ""),
             "prompt_en": result.get("prompt_en", "")

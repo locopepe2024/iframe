@@ -6460,6 +6460,7 @@ class ComicGenPipeline(StudioOwnerMixin):
                     line=str(planned_dialogue_lines[0]["line"]),
                 ) if len(planned_dialogue_lines) == 1 and not split_plan_shot else None),
                 duration=(context_shot_value(plan_shot, "duration_seconds") or frame_data.get("duration")) if plan_shot and not split_plan_shot else frame_data.get("duration"),
+                shot_structure=frame_data.get("shot_structure", "auto"),
                 director_profile_revision=(
                     generated_lineage.director_profile_revision
                 ),
@@ -6541,6 +6542,7 @@ class ComicGenPipeline(StudioOwnerMixin):
             "dialogue": frame.dialogue,
             "speaker": frame.speaker,
             "duration": frame.duration,
+            "shot_structure": frame.shot_structure,
             "character_names": [c.name for c in all_characters if c.id in frame.character_ids],
             "scene_name": next((s.name for s in all_scenes if s.id == frame.scene_id), None),
         }

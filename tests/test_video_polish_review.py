@@ -177,7 +177,7 @@ def test_minimax_ir_uses_reviewed_text(monkeypatch):
 
 def test_minimax_ir_accepts_native_prompt_without_local_h3_headings(monkeypatch):
     from src.models import uniart
-    native_prompt = "镜头连续推进。0.00-0.40s 匪首踢中掌柜；掌柜撞到木桌，桌面物品滑落，随后倒地。"
+    native_prompt = "镜头连续推进。0.00-0.80s 匪首抬腿；0.80-1.20s 踢中掌柜；1.20-4.00s 掌柜撞到木桌，桌面物品滑落，随后倒地。"
     request = api.PolishVideoPromptRequest(
         draft_prompt="匪首踢中掌柜，掌柜撞桌倒地", optimizer_provider="minimax_context_ir",
         target_video_model="uniart/minimax-h3-vip", target_duration=4,
@@ -205,6 +205,34 @@ def test_minimax_ir_native_prompt_keeps_mode_and_dialogue_checks():
         api._validate_context_ir_polish_result(
             {"prompt_en": "人物走出门口。"}, generate_audio=True, dialogue_line="让开！",
         )
+
+
+def test_minimax_ir_keeps_shot_count_editable_but_requires_contiguous_timeline():
+    from src.apps.comic_gen.llm import PolishError
+
+    api._validate_context_ir_polish_result(
+        {"prompt_en": "[Shot 1] 0.00-1.20s 动作。 [Shot 2] 1.20-2.40s 继续。 [Shot 3] 2.40-4.00s 收势。"},
+        short_action_duration=4, shot_structure="single",
+    )
+    with pytest.raises(PolishError, match="contiguous timeline"):
+        api._validate_context_ir_polish_result(
+            {"prompt_en": "0.00-1.00s 开始；1.10-4.00s 结束。"},
+            short_action_duration=4,
+        )
+
+
+def test_minimax_ir_accepts_explicit_h3_timestamp_nodes():
+    api._validate_context_ir_polish_result(
+        {"prompt_en": "[00:00.000] 起始；[00:00.800] 抬腿；[00:01.200] 接触；[00:04.000] 倒地终止。"},
+        short_action_duration=4,
+    )
+
+
+def test_minimax_ir_allows_multi_shot_timeline_when_selected():
+    api._validate_context_ir_polish_result(
+        {"prompt_en": "[Shot 1] 0.00-1.20s 接近并出拳。 [Shot 2] 1.20-2.40s 命中。 [Shot 3] 2.40-4.00s 反应收势。"},
+        short_action_duration=4, shot_structure="multi",
+    )
 
 
 def test_minimax_ir_preview_keeps_long_draft_under_provider_limit():
