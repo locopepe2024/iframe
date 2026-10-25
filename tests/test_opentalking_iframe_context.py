@@ -5,7 +5,8 @@ import httpx
 import pytest
 
 from src.apps.companion_runtime.opentalking_context import (
-    ContextFragment, ContextUnavailable, IframeContextReader, IframeGroundedLLM, messages_for_turn,
+    ContextFragment, ContextUnavailable, IframeContextReader, IframeGatewayReader,
+    IframeGroundedLLM, messages_for_turn,
 )
 
 
@@ -121,3 +122,23 @@ def test_timeout_does_not_invoke_llm_with_false_empty_context():
                 _ = [chunk async for chunk in IframeGroundedLLM(LLM(), reader).chat_stream(
                     [{'role': 'user', 'content': '我喜欢什么'}])]
     asyncio.run(run())
+
+
+def test_gateway_reader_forwards_only_opaque_token_and_bounds_fragments():
+    seen = []
+    def handler(request):
+        seen.append(request)
+        assert request.headers['x-opentalking-context-token'] == 'opaque-token'
+        return httpx.Response(200, json={'fragments': [
+            {'source_type': 'memory', 'source_id': 'm1', 'text': '事实'},
+            {'source_type': 'knowledge', 'source_id': 'k1', 'text': '知识'},
+        ]})
+    async def run():
+        async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+            reader = IframeGatewayReader(client, gateway_url='https://iframe/companion-runtime/opentalking',
+                token='opaque-token')
+            result = await reader.search('今天', limit=1)
+            assert result == (ContextFragment('memory', 'm1', '事实'),
+                              ContextFragment('knowledge', 'k1', '知识'))
+    asyncio.run(run())
+    assert str(seen[0].url) == 'https://iframe/companion-runtime/opentalking/context'

@@ -82,6 +82,40 @@ class IframeContextReader:
             raise ContextUnavailable('iframe context response is invalid') from None
 
 
+class IframeGatewayReader:
+    """Reader for the opaque-token gateway exposed by the iframe service."""
+    def __init__(self, client: httpx.AsyncClient, *, gateway_url: str, token: str):
+        if not token or len(token) > 200:
+            raise ValueError('Context gateway token is required')
+        self.client = client
+        self.gateway_url = gateway_url.rstrip('/')
+        self.token = token
+
+    async def search(self, query: str, *, limit: int = 4) -> tuple[ContextFragment, ...]:
+        if not 2 <= len(query.strip()) <= 100 or not 1 <= limit <= 8:
+            raise ValueError('Query must contain 2–100 characters and limit must be 1–8')
+        try:
+            response = await self.client.post(self.gateway_url + '/context',
+                headers={'X-OpenTalking-Context-Token': self.token},
+                json={'query': query.strip(), 'limit': limit}, timeout=3.0,
+                follow_redirects=False)
+            response.raise_for_status()
+            payload = response.json()
+            rows = payload['fragments']
+            if not isinstance(rows, list):
+                raise ValueError()
+            result = []
+            for row in rows:
+                if not isinstance(row, dict) or row.get('source_type') not in {'memory', 'knowledge'}:
+                    raise ValueError()
+                if not isinstance(row.get('source_id'), str) or not isinstance(row.get('text'), str):
+                    raise ValueError()
+                result.append(ContextFragment(row['source_type'], row['source_id'][:100], row['text'][:1200]))
+            return tuple(result[:limit * 2])
+        except (httpx.HTTPError, ValueError, KeyError, TypeError):
+            raise ContextUnavailable('iframe context gateway unavailable') from None
+
+
 def reference_message(fragments: tuple[ContextFragment, ...]) -> dict[str, str]:
     """Separate reference data from the unchanged user utterance."""
     import json

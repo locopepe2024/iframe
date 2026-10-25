@@ -1,11 +1,13 @@
 """Opt-in routes for companion tools; no model provider or default app mount."""
 import os
 import sqlite3
+import time
 from contextlib import contextmanager
 from pathlib import Path
 from typing import Annotated, Literal
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+import httpx
+from fastapi import APIRouter, Depends, Header, HTTPException, Query
 from pydantic import Field
 
 from ..identity import UserContext, require_user_context
@@ -14,6 +16,8 @@ from .chat_store import ChatStore as CompanionStore
 from .intent import classify
 from .model import propose, propose_diary, ModelUnavailable
 from .tools import Strict, dispatch, tool_schemas
+from .opentalking_binding import BindingUnavailable, SessionBindings
+from .opentalking_context import ContextUnavailable, IframeContextReader
 
 
 class Operation(Strict):
@@ -73,6 +77,57 @@ def errors():
 Owner = Annotated[UserContext, Depends(require_user_context)]
 Store = Annotated[CompanionStore, Depends(get_store)]
 router = APIRouter(prefix='/companion-runtime', tags=['companion-runtime'])
+_opentalking_bindings = SessionBindings()
+
+
+class OpenTalkingBindRequest(Strict):
+    session_id: str = Field(min_length=1, max_length=100)
+    ttl_seconds: int = Field(default=900, ge=60, le=3600)
+
+
+class OpenTalkingContextRequest(Strict):
+    query: str = Field(min_length=2, max_length=100)
+    limit: int = Field(default=4, ge=1, le=8)
+
+
+@router.post('/opentalking/bind')
+def opentalking_bind(body: OpenTalkingBindRequest, identity: Owner):
+    """Bind only a verified bearer identity; browser fingerprints are rejected."""
+    if not identity.access_token:
+        raise HTTPException(401, 'OpenTalking context requires a verified login session')
+    try:
+        expires = time.time() + body.ttl_seconds
+        _opentalking_bindings.bind(body.session_id, owner=identity.owner_profile_id,
+            actor=identity.user_id, identity_headers={'Authorization': f'Bearer {identity.access_token}'},
+            expires_at=expires)
+        token = _opentalking_bindings.issue_gateway_token(body.session_id,
+            owner=identity.owner_profile_id, actor=identity.user_id)
+        return {'context_token': token, 'expires_at': expires}
+    except (BindingUnavailable, ValueError) as exc:
+        raise HTTPException(409, str(exc)) from exc
+
+
+@router.post('/opentalking/context')
+async def opentalking_context(body: OpenTalkingContextRequest,
+                              context_token: str | None = Header(default=None, alias='X-OpenTalking-Context-Token')):
+    if not context_token:
+        raise HTTPException(401, 'Context token is required')
+    try:
+        _, binding = _opentalking_bindings.resolve_gateway_token(context_token)
+    except BindingUnavailable as exc:
+        raise HTTPException(401, str(exc)) from exc
+    companion_base = os.getenv('IFRAME_OPENTALKING_COMPANION_BASE', '').strip()
+    knowledge_base = os.getenv('IFRAME_OPENTALKING_KNOWLEDGE_BASE', '').strip()
+    if not companion_base or not knowledge_base:
+        raise HTTPException(503, 'OpenTalking context gateway is not configured')
+    async with httpx.AsyncClient() as client:
+        reader = IframeContextReader(client, companion_base=companion_base,
+            knowledge_base=knowledge_base, identity_headers=binding.headers)
+        try:
+            fragments = await reader.search(body.query, limit=body.limit)
+        except (ContextUnavailable, httpx.HTTPError, ValueError) as exc:
+            raise HTTPException(503, 'Context retrieval unavailable') from exc
+    return {'fragments': [item.__dict__ for item in fragments]}
 
 
 @router.get('/diaries')

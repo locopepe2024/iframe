@@ -30,6 +30,7 @@ class SessionBindings:
     def __init__(self, *, clock: Callable[[], float] = time.time):
         self._clock = clock
         self._bindings: dict[str, _Binding] = {}
+        self._gateway_tokens: dict[str, str] = {}
 
     def bind(self, session_id: str, *, owner: str, actor: str,
              identity_headers: dict[str, str], expires_at: float):
@@ -48,10 +49,32 @@ class SessionBindings:
         self._bindings[session_id] = _Binding(owner, actor, expires_at,
             {'Authorization': header}, secrets.token_hex(16))
 
+    def issue_gateway_token(self, session_id: str, *, owner: str, actor: str) -> str:
+        self._require(session_id, owner, actor)
+        token = secrets.token_urlsafe(32)
+        self._gateway_tokens[token] = session_id
+        return token
+
+    def resolve_gateway_token(self, token: str) -> tuple[str, _Binding]:
+        self.sweep()
+        session_id = self._gateway_tokens.get(token)
+        if not session_id:
+            raise BindingUnavailable('Context gateway token unavailable')
+        entry = self._bindings.get(session_id)
+        if entry is None:
+            self._gateway_tokens.pop(token, None)
+            raise BindingUnavailable('Context gateway token expired')
+        return session_id, entry
+
     def sweep(self):
         expired = [sid for sid, entry in self._bindings.items() if entry.expires_at <= self._clock()]
         for sid in expired:
             del self._bindings[sid]
+        if expired:
+            expired_sessions = set(expired)
+            for token, session_id in list(self._gateway_tokens.items()):
+                if session_id in expired_sessions:
+                    del self._gateway_tokens[token]
 
     def _require(self, session_id: str, owner: str, actor: str) -> _Binding:
         self.sweep()
@@ -63,10 +86,13 @@ class SessionBindings:
     def release(self, session_id: str, *, owner: str, actor: str):
         self._require(session_id, owner, actor)
         del self._bindings[session_id]
+        for token, bound_session in list(self._gateway_tokens.items()):
+            if bound_session == session_id:
+                del self._gateway_tokens[token]
 
     def revoke_owner(self, owner: str):
         for sid in [sid for sid, entry in self._bindings.items() if entry.owner == owner]:
-            del self._bindings[sid]
+            self.release(sid, owner=owner, actor=self._bindings[sid].actor)
 
     async def grounded_llm(self, session_id: str, *, owner: str, actor: str,
                            client: httpx.AsyncClient, companion_base: str,
