@@ -110,9 +110,10 @@ class IframeGroundedLLM:
     Construct only after the integration server binds the iframe identity to
     this session. It intentionally has no global/default identity configuration.
     """
-    def __init__(self, upstream, reader: IframeContextReader):
+    def __init__(self, upstream, reader: IframeContextReader, *, before_llm=None):
         self.upstream = upstream
         self.reader = reader
+        self.before_llm = before_llm
 
     async def chat_stream(self, messages: list[dict[str, str]]):
         last_user = next((message.get('content', '') for message in reversed(messages)
@@ -122,5 +123,7 @@ class IframeGroundedLLM:
             prepared = await messages_for_turn(self.reader, messages, query=query)
         else:
             prepared = [dict(message) for message in messages]
+        if self.before_llm is not None:
+            self.before_llm()
         async for chunk in self.upstream.chat_stream(prepared):
             yield chunk
