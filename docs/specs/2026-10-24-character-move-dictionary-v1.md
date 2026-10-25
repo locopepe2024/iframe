@@ -30,22 +30,22 @@
 {
   "move_id": "suyan.sword.disarm_sweep.v1",
   "character_id": "suyan",
-  "label": "拍刃·破势拨械",
-  "aliases": ["拍刃", "Beat", "Attack au Fer"],
-  "category": "sword_disarm",
+  "label": "抽击·剑鞭拨械",
+  "aliases": ["抽击", "剑鞭", "Whiplash"],
+  "category": "sword_flexible_strike",
   "combat_profile_ref": "suyan.swordfighter.v1",
   "starting_state": {
     "distance": "中距",
     "weapon_hand": "右手",
     "guard": "剑身位于身体前侧"
   },
-  "body_mechanics": ["击中前保持正常速度或略微加速", "前脚切入", "探身", "手腕和前臂短促爆发，类似甩手腕发力", "以己方剑身或剑尖主动敲击对方剑身或者手腕", "常用己方前段控制对方前中段，但不限定唯一接触段", "击中后受击武器或演员沿受力方向瞬间飞出"],
-  "weapon_trajectory": "己方剑身或剑尖沿直线或小角度侧向短促、有力地敲击对方剑身或者手腕，不抡大臂；常见配置是己方前段控制对方前中段",
-  "target_relation": "对手剑身、刀剑或持械手腕，不默认攻击身体其他部位",
-  "contact_result": "剑身对剑身发生强力碰撞，荡开对方刀剑并破坏其进攻构势；是否脱手由当前镜头授权",
+  "body_mechanics": ["击中前保持正常速度或略微加速", "前脚切入", "探身", "手腕和前臂短促爆发，类似甩手腕发力", "剑身中段先行、剑尖因惯性滞后", "击中后受击武器或演员沿受力方向瞬间飞出"],
+  "weapon_trajectory": "剑身沿波浪、S形或鞭状轨迹高速抽打，剑身出现明显抖动和弯曲回弹，不形成笔直刃线",
+  "target_relation": "以高速度和韧性抽打对方剑身、刀剑或持械手腕，不默认攻击身体其他部位",
+  "contact_result": "剑身产生鞭挞式冲击和多段连续接触，受击点连续炸开火花；是否击飞或造成伤口由当前镜头授权",
   "recovery_state": "拍击后保持面向对手，进入收势、追击或下一招",
-  "visible_cues": ["击中瞬间定格或冻结3-5帧", "剑身碰撞点清楚", "圆形或扇形震荡波扩散", "星状钝击火花", "击中后强烈垂直方向抖动", "受击武器或演员瞬间飞出"],
-  "forbidden_interpretations": ["不改为抽击绕剑", "不改为锋刃切割身体", "不自动增加第二次斩击"],
+  "visible_cues": ["蛇形残影和波浪状轨迹", "细小空气撕裂或真空带", "多段线性火花", "击中瞬间短促停顿", "受击武器或演员沿受力方向飞出"],
+  "forbidden_interpretations": ["不改为拍刃的剑身对剑身碰撞", "不改为绕剑变线Coupé", "不自动造成身体伤口"],
   "source_refs": [],
   "status": "draft"
 }
