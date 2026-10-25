@@ -16,7 +16,7 @@
 - 单进程 unified 模式，内存 broker，无外置 Redis、torch 或 GPU 模型下载。已验证容器重启后健康检查恢复。
 - 测试素材：上游 `office-woman`。Mock 输出静态角色帧，不产生真实口型或 3D 骨骼动画。
 - LLM：UniArt `qwen3.8-flash`；TTS：`qwen-audio-3.0-tts-flash` / `longanhuan_v3.6`，OpenAI-compatible `audio/speech`，wav。
-- 上游创建文字会话也检查 STT 配置，因此配置目录中存在的 `asr-1.0`，但未验证语音识别。当前代理仅开放文字会话动作，不开放音频上传/流式语音入口。
+- 上游创建文字会话也检查 STT 配置，因此配置目录中存在的 `asr-1.0`。现已开放会话的 `transcribe`、`speak_audio`、`speak_audio_stream`，其余管理写入仍关闭。
 
 ## 实测证据
 
@@ -35,6 +35,12 @@
 远端 TTS 首段 PCM 曾分别约 35 秒和 9.3 秒返回；这是请求等待时间，不应归因于本地缓冲。尚未做延迟分布或稳定性统计，不保证实时响应。
 
 浏览器自动化尚未执行，等待该工具范围的用户授权；人工可直接访问测试入口验证。尚未完成移动浏览器、自动播放限制、切后台和断网重连验收。
+
+### 语音入口修复
+
+首次人工测试 `speak_audio` 返回 Nginx 403。访问日志确认请求被部署白名单拦截，未到后端；这是代理配置遗漏，不能归因于 ASR 渠道。扩展上述三个语音端点白名单后，nginx -t/reload 通过。
+
+使用系统合成的英文短音频，经公网 multipart POST `speak_audio`，实际返回 `status=queued` 和准确识别文本 `Hello, this is a speech recognition test.`，证明本次上传、远端 ASR、识别文本进入回复队列成功。测试会话随后 DELETE 关闭。`transcribe` 无文件请求返回后端 422（不再为 Nginx 403）；`runtime-config/apply` 仍为 403。WebSocket 语音入口已放行但尚未实测，中文口音/浏览器录音仍需人工复验。
 
 ## 部署与复验
 
