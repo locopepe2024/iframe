@@ -7,6 +7,12 @@
   "duration_seconds": 4.0,
   "aspect_ratio": "16:9",
   "subject_policy": "neutral performer; do not transfer identity, face, costume, scene, dialogue, or original sound from references",
+  "storyboard_alignment": [
+    {"cell": 1, "stage": "starting_pose_and_initiation", "description": "Grip the sword with the wrist and sword approximately level; begin a fast forward entry."},
+    {"cell": 2, "stage": "tip_approach", "description": "Bring the sword tip close to the partner's wrist or forearm before the lateral whip action."},
+    {"cell": 3, "stage": "wrist_snap_and_blade_flex", "description": "Show a clear sideways wrist snap; the blade bends laterally under load with visible elastic deformation."},
+    {"cell": 4, "stage": "controlled_contact_reaction_recovery", "description": "Make one controlled contact, show force-direction displacement, then let the blade rebound into recovery."}
+  ],
   "reference_media": [
     {
       "path": "/Users/owen/Developer/codex/wuda/独孤九剑_徐克_2.mp4",
