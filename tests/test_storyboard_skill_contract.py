@@ -172,6 +172,18 @@ def test_rapid_impact_and_explicit_table_collision_preserve_real_time_causality(
     assert 'When silent, do not invent sound cues' in system
 
 
+def test_visible_eyes_get_action_bound_gaze_targets_instead_of_default_camera_stare():
+    request = api.PolishVideoPromptRequest(
+        draft_prompt='人物看向右侧持刀手，拔剑拨械后短暂追踪落刀，再回看对手。',
+        target_video_model='uniart/minimax-h3-vip',
+        optimizer_provider='qwen',
+    )
+    preview = api.preview_video_polish_prompt(request)
+    system = preview['messages']['system']
+    assert '面部或眼睛可见时' in system
+    assert '不默认看镜头' in system
+
+
 def test_professional_martial_terms_attach_choreography_and_physics_baselines():
     request = api.PolishVideoPromptRequest(
         draft_prompt='设计咏春近身攻防和兵器招式，明确起势、接触、反击与收势。',
