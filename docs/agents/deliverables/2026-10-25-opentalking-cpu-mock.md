@@ -68,4 +68,14 @@ Nginx 独立站参考 tools/opentalking-mock/nginx.conf；443 路径由 install-
 
 ## 下一阶段门槛
 
+### 人工反馈：文字返回但看不到角色
+
+运行观察：用户这次会话的 STT、LLM、TTS 均返回成功，但 WebRTC 所有候选对失败，最终 `ICE failed` 并自动关闭会话。服务端生成帧不能证明该浏览器收到帧；此前外部 aiortc 成功仅覆盖当时测试客户端的网络，不能推广到这次浏览器。
+
+代码事实：上游 startPlayback 在 SDP answer 应用后即返回，App 随即显示 live，未等待 RTCPeerConnection connected。已新增可复用前端 overlay（tools/opentalking-mock/patch-web.py），等待媒体 transport connected，失败/超时关闭 peer 并显示错误，不再把 SDP 完成当作已连接。4 项状态行为测试、前端 typecheck 和 build 通过。没有据此声称当前用户媒体问题已解决。
+
+中继准备：iframe 新建隔离 `iframe-opentalking-turn`（coturn 4.6.3），TCP/UDP 3478，UDP relay 49160–49200，认证、配额与资源限制；配置位于独立服务目录的 mode-600 文件。外部 TCP 3478 实测超时，主机过滤链未见这些端口的阻断；云安全组是否阻断尚未证明，需要用户核对/放行或提供已有可用 TURN。设置仅写入 turn-env.json，**未应用到运行中 Mock**，避免强制切入不可达中继。未改变防火墙规则。设置包含客户端必需的临时 demo TURN 凭据，不能输出日志或提交；长期部署需短期凭据签发与访问控制。setup-turn.py 是一次性初始化脚本，不能重复运行覆盖现有凭据。
+
+浏览器自动化范围授权与端口可达性处理仍待用户答复。当前仍不满足这一浏览器的播放验收，不连接 GPU。
+
 先人工确认角色能显示、声音能播放、点击打断后停止、结束后能重新创建会话；若有失败，定位具体媒体或 UI 边界。通过后另行确认 GPU 资源与模型服务契约，再连接 QuickTalk，沿用同样的生命周期探针。当前没有部署或连接 GPU backend。
