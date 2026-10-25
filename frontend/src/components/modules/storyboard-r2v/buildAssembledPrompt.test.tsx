@@ -28,14 +28,14 @@ it("compiles the selected character move into a generation prompt", () => {
     expect(result).toContain("抽击·剑鞭拨械");
     expect(result).toContain("动作词：抽击、剑鞭、Whiplash");
     expect(result).toContain("面对数名匪寇的连续拨械");
-    expect(result).toContain("以高速度和韧性抽打对方剑身、刀剑或持械手腕");
-    expect(result).toContain("蛇形残影和波浪状轨迹");
-    expect(result).toContain("细小空气撕裂或真空带");
-    expect(result).toContain("多段线性火花");
+    expect(result).toContain("剑尖先向目标腕部或前臂前伸并到达其附近");
+    expect(result).toContain("剑身在手中产生横向弹性弯曲");
+    expect(result).toContain("一次可读的柔韧剑身接触");
+    expect(result).toContain("剑尖先到达腕部或前臂附近");
     expect(result).toContain("不改为拍刃的剑身对剑身碰撞");
-    expect(result).toContain("剑身中段先行");
+    expect(result).toContain("不改为剑花或绕身回环");
     expect(result).not.toContain("剑身横向扫过");
-    expect(result).toContain("受击武器或演员沿受力方向飞出");
+    expect(result).toContain("受击手臂或武器沿受力方向偏移");
 });
 
 it("removes the move text when an optimized prompt has no selected move", () => {
@@ -77,7 +77,7 @@ it("compiles multiple character performance moves independently", () => {
     const result = buildGenerationPrompt(shot, false, "uniart/minimax-h3-vip");
     expect(result).toContain("角色suyan");
     expect(result).toContain("角色bandit-leader");
-    expect(result).toContain("剑身产生鞭挞式冲击");
+    expect(result).toContain("一次可读的柔韧剑身接触");
     expect(result).toContain("明确横向刃线");
 });
 import { resolveStoryboardStyle, resolveStoryboardStyleForRender } from "@/lib/storyboardStyle";
