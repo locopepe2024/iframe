@@ -157,6 +157,37 @@ it("applies only the selected director field to the shot", () => {
     expect(onUpdatePrompt).not.toHaveBeenCalled();
 });
 
+it("restores the original storyboard text after prompt optimization", () => {
+    const onUpdatePrompt = vi.fn();
+    render(<ShotCard
+        shot={{ ...shot, prompt: "优化后的提示词", promptIsOptimized: true,
+            visualDescription: "原始剧本文本" }}
+        index={0} totalShots={1} characters={[]} scenes={[]} props={[]}
+        onUpdatePrompt={onUpdatePrompt} onUpdateField={vi.fn()}
+        onGenerateT2I={vi.fn()} onGenerateVideo={vi.fn()} onDelete={vi.fn()}
+        onMoveUp={vi.fn()} onMoveDown={vi.fn()} onDuplicate={vi.fn()}
+        onSetVideoMode={vi.fn()} onOpenDrawer={vi.fn()} onInsertAsset={vi.fn()}
+        expanded={false} onToggleExpanded={vi.fn()}
+    />);
+
+    fireEvent.click(screen.getByRole("button", { name: "恢复分镜" }));
+    expect(onUpdatePrompt).toHaveBeenCalledExactlyOnceWith("原始剧本文本", false);
+});
+
+it("does not show restore when the shot is not optimized", () => {
+    render(<ShotCard
+        shot={{ ...shot, visualDescription: "原始剧本文本" }}
+        index={0} totalShots={1} characters={[]} scenes={[]} props={[]}
+        onUpdatePrompt={vi.fn()} onUpdateField={vi.fn()}
+        onGenerateT2I={vi.fn()} onGenerateVideo={vi.fn()} onDelete={vi.fn()}
+        onMoveUp={vi.fn()} onMoveDown={vi.fn()} onDuplicate={vi.fn()}
+        onSetVideoMode={vi.fn()} onOpenDrawer={vi.fn()} onInsertAsset={vi.fn()}
+        expanded={false} onToggleExpanded={vi.fn()}
+    />);
+
+    expect(screen.queryByRole("button", { name: "恢复分镜" })).toBeNull();
+});
+
 it("reviews rich-frame fields without applying any by default", () => {
     const onApplyRichRefinement = vi.fn();
     render(<ShotCard

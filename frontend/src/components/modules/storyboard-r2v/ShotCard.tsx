@@ -711,6 +711,17 @@ export default function ShotCard({
                         </div>
                     </div>
                     <div className="flex min-w-0 flex-wrap items-center gap-2">
+                        {shot.promptIsOptimized && shot.visualDescription?.trim() ? (
+                            <button
+                                type="button"
+                                onClick={() => onUpdatePrompt(shot.visualDescription!.trim(), false)}
+                                aria-label="恢复分镜"
+                                title="恢复到原始剧本"
+                                className="rounded-full border border-glass-border bg-surface-inset px-2.5 py-1 font-mono text-[0.625rem] font-semibold tracking-[0.04em] text-text-secondary transition-colors hover:border-primary/45 hover:bg-hover-bg hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/55"
+                            >
+                                恢复分镜
+                            </button>
+                        ) : null}
                         <ShotStatusBadge shot={shot} t={t} />
                         <div role="tablist" aria-label={t("videoModeTabsLabel")} className="inline-flex flex-wrap items-center gap-0.5 rounded-full bg-surface-inset p-[3px]">
                             {(["t2v", "i2v", "first_last_frame", "r2v"] as const).map((mode) => (
