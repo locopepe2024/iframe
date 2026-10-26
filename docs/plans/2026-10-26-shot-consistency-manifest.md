@@ -9,10 +9,11 @@ shot is confirmed; video generation receives an immutable copy.
 ## Ownership
 
 `StoryboardFrame.consistency_manifest` is the only shot-level consistency
-snapshot owner. Asset records remain the source of current variants. Legacy
-fields (`character_ids`, `prop_ids`, workbench selections, and reference
-package fields) remain editable inputs for compatibility, but are not the
-generation truth after a manifest is built.
+snapshot owner. Asset records remain the source of current variants while a
+shot is being edited. Frame/editor fields (`character_ids`, `prop_ids`,
+workbench selections, and reference-package controls) are projections used to
+build or invalidate the manifest; they are never the generation truth after a
+manifest is built and are not alternative consistency owners.
 
 ## Lifecycle
 
@@ -30,11 +31,11 @@ generation truth after a manifest is built.
 - A generated task contains one complete, serializable consistency snapshot.
 - Variant deletion clears live frame state but preserves task history.
 - Character, scene, and prop pins are resolved through the same structure.
-- Existing clients can still read legacy fields during migration.
+- Generation code reads the manifest rather than parallel consistency fields.
 - Tests cover construction, persistence, deletion invalidation, and task copy.
 
 ## Non-goals
 
-- Removing legacy fields in v1.
+- Removing editor-facing fields that are still needed to construct a shot.
 - Changing provider routing or prompt wording.
 - Making an asset revision immutable before the user confirms the shot.
