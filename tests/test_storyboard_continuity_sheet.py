@@ -4,7 +4,7 @@ import pytest
 
 from src.apps.comic_gen.models import (
     AssetImageSubmissionSnapshot, Character, EpisodeCharacterUse, GlobalAssetLibrary, ImageVariant,
-    Scene, Script, StoryboardFrame,
+    Scene, Script, Series, StoryboardFrame, ExtraRosterEntry, ExtraShotInstance,
     StoryboardReferenceProjectionSnapshot,
 )
 from src.apps.comic_gen.pipeline import ComicGenPipeline
@@ -16,6 +16,7 @@ def make_pipeline(tmp_path, frames, scenes):
     pipeline = ComicGenPipeline.__new__(ComicGenPipeline)
     pipeline._save_lock = RLock()
     pipeline.data_file = str(tmp_path / "projects.json")
+    pipeline.series_data_file = str(tmp_path / "series.json")
     pipeline.scripts = {script.id: script}
     pipeline.series_store = {}
     pipeline.library_store = GlobalAssetLibrary()
@@ -215,6 +216,59 @@ def test_confirmed_dimensions_enter_shot_context_and_manifest(tmp_path):
     }
     assert "身高约180厘米" in row["asset_visual_context"]
     assert "全长：105厘米" in row["asset_visual_context"]
+
+
+def test_extra_roster_instances_keep_fixed_and_template_references_separate():
+    fixed = ExtraRosterEntry(extra_id="extra-01", label="粮铺常客", kind="fixed_extra", height="约170厘米")
+    template = ExtraRosterEntry(extra_id="street-template", label="远景路人模板", kind="extra_template")
+    assert ExtraShotInstance(extra_id=fixed.extra_id, layer="near", face_readable=True).extra_id == "extra-01"
+    assert ExtraShotInstance(template_id=template.extra_id, layer="far").template_id == "street-template"
+    with pytest.raises(ValueError, match="exactly one"):
+        ExtraShotInstance(layer="mid")
+    with pytest.raises(ValueError, match="exactly one"):
+        ExtraShotInstance(extra_id="extra-01", template_id="street-template")
+
+
+def test_series_extra_roster_and_shot_instance_snapshot(tmp_path):
+    shot = frame("shot", "street")
+    pipeline, script = make_pipeline(tmp_path, [shot], [Scene(id="street", name="长街", description="")])
+    script.series_id = "series"
+    pipeline.series_store["series"] = Series(
+        id="series", title="青溪镇", episode_ids=[script.id], created_at=1, updated_at=1,
+    )
+    fixed = ExtraRosterEntry(extra_id="extra-01", label="粮铺常客", height="约170厘米")
+    template = ExtraRosterEntry(extra_id="street-template", label="街道人群", kind="extra_template")
+    pipeline.update_series("series", {"extra_roster": [fixed, template]})
+    instances = [
+        ExtraShotInstance(extra_id="extra-01", layer="near", region="粮铺门前", face_readable=True),
+        ExtraShotInstance(template_id="street-template", layer="far", region="街道尽头"),
+    ]
+    pipeline.update_frame(script.id, shot.id, crowd_instances=instances)
+    manifest = pipeline._build_consistency_manifest(script, shot)
+    assert [item.extra_id for item in manifest.crowd_roster_snapshot] == ["extra-01", "street-template"]
+    assert manifest.crowd_instances[0].region == "粮铺门前"
+    assert "群演：粮铺常客；near层；粮铺门前；约170厘米" in pipeline.storyboard_continuity_sheet(script.id)["rows"][0]["asset_visual_context"]
+    with pytest.raises(ValueError, match="invalidate a shot reference"):
+        pipeline.update_series("series", {"extra_roster": [template]})
+    shot.consistency_manifest = manifest
+    with pytest.raises(ValueError, match="fixed extra asset"):
+        pipeline.update_frame(script.id, shot.id, crowd_instances=[
+            ExtraShotInstance(template_id="street-template", layer="near", face_readable=True),
+        ])
+    assert shot.consistency_manifest is manifest
+
+
+def test_extra_roster_proposals_are_review_only(tmp_path):
+    pipeline, script = make_pipeline(tmp_path, [], [])
+    series = Series(id="series", title="青溪镇", episode_ids=[], created_at=1, updated_at=1)
+    pipeline.series_store["series"] = series
+    pipeline.script_processor = type("Processor", (), {
+        "is_configured": True,
+        "llm": type("LLM", (), {"chat": lambda self, **kwargs: '[{"extra_id":"extra-vendor","label":"卖粮商贩","kind":"fixed_extra","height":"约170厘米","body_build":"瘦高","wardrobe":"灰褐短褐","palette":"灰褐","props":["竹篮"]}]'})(),
+    })()
+    proposals = pipeline.generate_extra_roster_proposals("series", "古代粮铺黄昏，需要近景商贩", 1)
+    assert proposals[0]["extra_id"] == "extra-vendor"
+    assert series.extra_roster == []
 
 
 def test_image_and_video_use_design_revision_of_selected_character_variant(tmp_path):

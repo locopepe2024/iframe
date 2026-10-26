@@ -77,6 +77,8 @@ from .models import (
     Script,
     Series,
     StoryboardFrame,
+    ExtraRosterEntry,
+    ExtraShotInstance,
     StoryboardReferencePackage,
     ShotVisualPreset,
     VideoTask,
@@ -1403,6 +1405,7 @@ class UpdateSeriesRequest(BaseModel):
     workflow_mode: Optional[str] = None
     content_mode: Optional[str] = None
     default_generation_mode: Optional[str] = None
+    extra_roster: Optional[List[ExtraRosterEntry]] = None
     # R2V v2: series-level art_direction baseline (Phase 2). Inherits +
     # override flows at the episode level read this as the source of truth.
     art_direction: Optional[ArtDirection] = None
@@ -1553,6 +1556,19 @@ def update_series(series_id: str, request: UpdateSeriesRequest):
         return signed_response(series)
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
+
+
+class ExtraRosterProposalRequest(BaseModel):
+    brief: str = Field(..., min_length=1, max_length=4000)
+    count: int = Field(6, ge=1, le=20)
+
+
+@app.post("/series/{series_id}/extra-roster/proposals")
+def generate_extra_roster_proposals(series_id: str, request: ExtraRosterProposalRequest):
+    try:
+        return {"proposals": pipeline.generate_extra_roster_proposals(series_id, request.brief, request.count)}
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
 
 
 @app.delete("/series/{series_id}")
@@ -5934,6 +5950,7 @@ class UpdateFrameRequest(BaseModel):
     camera_angle: Optional[str] = None
     scene_id: Optional[str] = None
     character_ids: Optional[List[str]] = None
+    crowd_instances: Optional[List[ExtraShotInstance]] = None
     duration: Optional[int] = None
     shot_size: Optional[str] = None
     camera_movement_description: Optional[str] = None
@@ -5960,6 +5977,7 @@ def update_frame(script_id: str, request: UpdateFrameRequest):
             camera_angle=request.camera_angle,
             scene_id=request.scene_id,
             character_ids=request.character_ids,
+            crowd_instances=request.crowd_instances,
             duration=request.duration,
             shot_size=request.shot_size,
             camera_movement_description=request.camera_movement_description,
@@ -8041,7 +8059,8 @@ def _storyboard_polish_contract(model_id: str, custom: str, default: str, genera
 SHORT H3 ACTION TIMELINE: For a causal action shot, write 3-6 contiguous,
 explicit time ranges or timestamped motion nodes inside the existing visual
 description, starting at 0.00s and ending at {target_duration:.2f}s. Use either
-the form 0.00-0.60s or the H3 node form [00:00.000] ... [00:00.600] ... in
+            the form 0.00-0.60s, the bracketed node form [00:00.000] ... [00:00.600],
+            or the official-style node form At 00:00.000 ... At 00:00.600 in
 BOTH prompt_cn and prompt_en. Each range or node must advance a visible action beat:
 initiation, single contact, immediate force reaction, authorized collision,
 and final state as applicable. These are authored action timings, not measured
@@ -8146,6 +8165,13 @@ def _has_short_action_timeline(text: str, duration: float, reference_mode: bool)
         float(minutes) * 60 + float(seconds)
         for minutes, seconds in re.findall(r"\[(\d{1,2}):(\d{2}(?:\.\d{1,3})?)\]", visual_text)
     ]
+    if not timestamps:
+        timestamps = [
+            float(minutes) * 60 + float(seconds)
+            for minutes, seconds in re.findall(
+                r"(?i)\bAt\s+(\d{1,2}):(\d{2}(?:\.\d{1,3})?)\b", visual_text
+            )
+        ]
     return (
         3 <= len(timestamps) <= 6
         and abs(timestamps[0]) <= 0.05

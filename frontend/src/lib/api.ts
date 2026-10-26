@@ -2768,6 +2768,10 @@ export const api = {
         const response = await axios.put(`${API_URL}/series/${seriesId}`, data);
         return response.data;
     },
+    generateExtraRosterProposals: async (seriesId: string, brief: string, count = 6) => {
+        const response = await axios.post(API_URL + "/series/" + seriesId + "/extra-roster/proposals", { brief, count });
+        return response.data as { proposals: import("@/store/projectStore").ExtraRosterEntry[] };
+    },
 
     /** R2V v2 Phase 3 — fetch previous episode raw snippet + AI summary cache state.
      *  P2-a extended response with last_frames for Storyboard cross-step rail. */

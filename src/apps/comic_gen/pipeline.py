@@ -24,6 +24,8 @@ from .models import (
     CharacterAssetPack,
     CharacterAssetPackRevision,
     EpisodeCharacterUse,
+    ExtraRosterEntry,
+    ExtraShotInstance,
     Scene,
     Prop,
     StoryboardFrame,
@@ -889,6 +891,19 @@ class ComicGenPipeline(StudioOwnerMixin):
                 if description:
                     label = "角色" if asset_type == "character" else "道具"
                     parts.append(f"{label}{asset.name}：{description}")
+        if frame.crowd_instances:
+            self._validate_crowd_instances(script, frame.crowd_instances)
+            series = self.series_store[script.series_id]
+            roster = {item.extra_id: item for item in series.extra_roster}
+            for instance in frame.crowd_instances:
+                entry = roster[instance.extra_id or instance.template_id]
+                details = [entry.label, f"{instance.layer}层", instance.region]
+                if entry.kind == "fixed_extra":
+                    details.extend([entry.height, entry.body_build, entry.wardrobe])
+                else:
+                    details.extend([entry.body_build, entry.wardrobe, entry.palette])
+                details.extend([instance.facing, instance.motion])
+                parts.append("群演：" + "；".join(value for value in details if value))
         return "\n".join(parts), issues
 
     def _workbench_visual_source_hash(self, script: Script, frame: StoryboardFrame,
@@ -938,6 +953,7 @@ class ComicGenPipeline(StudioOwnerMixin):
             "asset_dimensions": row.get("asset_dimensions", {}),
             "asset_visual_issues": row.get("asset_visual_issues", []),
             "selected_variants": frame.workbench_reference_variant_ids,
+            "crowd_instances": [item.model_dump(mode="json") for item in frame.crowd_instances],
             "reviewed_looks": reviewed_looks,
             "camera_movement_structured": frame.camera_movement_structured.model_dump(mode="json")
             if hasattr(frame.camera_movement_structured, "model_dump") else frame.camera_movement_structured,
@@ -5833,6 +5849,11 @@ class ComicGenPipeline(StudioOwnerMixin):
         self, script: Script, frame: StoryboardFrame, *, prompt: Optional[str] = None,
     ) -> StoryboardConsistencyManifest:
         """Build the single structured consistency layer consumed by a shot."""
+        self._validate_crowd_instances(script, frame.crowd_instances)
+        series = self.series_store.get(script.series_id) if script.series_id else None
+        roster = {item.extra_id: item for item in series.extra_roster} if series else {}
+        selected_extras = [roster[item.extra_id or item.template_id].model_copy(deep=True)
+                           for item in frame.crowd_instances]
         package = frame.reference_package
         pins = (
             [item.model_copy(deep=True) for item in package.asset_revision_pins]
@@ -5868,6 +5889,8 @@ class ComicGenPipeline(StudioOwnerMixin):
             prop_ids=list(frame.prop_ids),
             asset_revision_pins=pins,
             asset_dimensions=asset_dimensions,
+            crowd_instances=[item.model_copy(deep=True) for item in frame.crowd_instances],
+            crowd_roster_snapshot=selected_extras,
             reference_package_revision=package.revision,
             reference_visual_projection=visual_projection,
             shot_visual_design=visual_design,
@@ -5875,6 +5898,19 @@ class ComicGenPipeline(StudioOwnerMixin):
             prompt=prompt,
             prompt_hash=prompt_hash,
         )
+
+    def _validate_crowd_instances(self, script: Script, instances: List[Any]) -> None:
+        series = self.series_store.get(script.series_id) if script.series_id else None
+        roster = {item.extra_id: item for item in series.extra_roster} if series else {}
+        for item in instances:
+            entry = roster.get(item.extra_id or item.template_id)
+            if entry is None:
+                raise ValueError("Crowd instance references a missing series extra")
+            expected = "fixed_extra" if item.extra_id else "extra_template"
+            if entry.kind != expected:
+                raise ValueError("Crowd instance reference kind does not match series extra")
+            if item.face_readable and entry.kind != "fixed_extra":
+                raise ValueError("Readable extra face requires a fixed extra asset")
 
     @staticmethod
     def _episode_asset_context_prompt(script: Script, asset_type: str, asset_id: str) -> str:
@@ -7306,11 +7342,16 @@ class ComicGenPipeline(StudioOwnerMixin):
         frame = next((f for f in script.frames if f.id == frame_id), None)
         if not frame:
             raise ValueError(f"Frame {frame_id} not found")
+        if kwargs.get("crowd_instances") is not None:
+            kwargs["crowd_instances"] = [ExtraShotInstance.model_validate(item)
+                                         for item in kwargs["crowd_instances"]]
 
         asset_refs_changed = (
             (kwargs.get("scene_id") is not None and kwargs["scene_id"] != frame.scene_id)
             or (kwargs.get("character_ids") is not None
                 and kwargs["character_ids"] != frame.character_ids)
+            or (kwargs.get("crowd_instances") is not None
+                and kwargs["crowd_instances"] != frame.crowd_instances)
         )
         consistency_fields_changed = asset_refs_changed or any(
             key in kwargs for key in (
@@ -7320,6 +7361,8 @@ class ComicGenPipeline(StudioOwnerMixin):
                 "reference_package", "workbench_reference_variant_ids",
             )
         )
+        if kwargs.get("crowd_instances") is not None:
+            self._validate_crowd_instances(script, kwargs["crowd_instances"])
         if frame.consistency_manifest and consistency_fields_changed:
             frame.consistency_manifest = None
         
@@ -7382,6 +7425,8 @@ class ComicGenPipeline(StudioOwnerMixin):
                     frame.character_use_ids.pop(project_character_id, None)
                     if use:
                         frame.workbench_reference_variant_ids.pop(use.selected_asset_id, None)
+        if kwargs.get("crowd_instances") is not None:
+            frame.crowd_instances = [item.model_copy(deep=True) for item in kwargs["crowd_instances"]]
         if kwargs.get('duration') is not None:
             frame.duration = kwargs['duration']
         if kwargs.get('shot_size') is not None:
@@ -11860,6 +11905,24 @@ class ComicGenPipeline(StudioOwnerMixin):
                     key: value for key, value in settings.model_dump().items()
                     if value != previous_settings[key]
                 }
+            if "extra_roster" in updates:
+                if updates["extra_roster"] is None:
+                    raise ValueError("Series extra roster must be a list")
+                roster = [ExtraRosterEntry.model_validate(item) for item in updates["extra_roster"]]
+                if len(roster) > 100 or len({item.extra_id for item in roster}) != len(roster):
+                    raise ValueError("Series extra roster has duplicate IDs or exceeds 100 entries")
+                roster_by_id = {item.extra_id: item for item in roster}
+                for episode_id in series.episode_ids:
+                    episode = self.scripts.get(episode_id)
+                    if episode is None or episode.series_id != series_id:
+                        continue
+                    for frame in episode.frames:
+                        for instance in frame.crowd_instances:
+                            entry = roster_by_id.get(instance.extra_id or instance.template_id)
+                            expected = "fixed_extra" if instance.extra_id else "extra_template"
+                            if entry is None or entry.kind != expected:
+                                raise ValueError("Series extra roster change would invalidate a shot reference")
+                updates["extra_roster"] = roster
             for key, value in updates.items():
                 if hasattr(series, key) and key not in ("id", "created_at", "episode_ids"):
                     if key == "art_direction" and isinstance(value, dict):
@@ -11897,6 +11960,43 @@ class ComicGenPipeline(StudioOwnerMixin):
             if projects_changed:
                 self._save_data()
             return series
+
+    def generate_extra_roster_proposals(self, series_id: str, brief: str, count: int = 6) -> List[Dict[str, Any]]:
+        """Generate review-only extra candidates; never mutates the series roster."""
+        series = self.get_series(series_id)
+        if not series:
+            raise ValueError("Series not found")
+        if not brief.strip():
+            raise ValueError("群演需求不能为空")
+        count = max(1, min(int(count), 20))
+        if not self.script_processor.is_configured:
+            raise ValueError("LLM API Key 未配置。请在 API 配置中设置对应的 API Key 后重试。")
+        context = {
+            "series_title": series.title,
+            "scenes": [{"name": scene.name, "description": scene.description} for scene in series.scenes[:20]],
+            "existing_roster": [item.model_dump(mode="json") for item in series.extra_roster],
+        }
+        prompt = (
+            f"你是AI短剧的群演资产设计师。根据需求生成{count}个可审核的群演候选。\\n"
+            "候选只描述可观察的身份锚点、体型尺度、服装族和有限配件；不要写剧情、动作、镜头或随机抽卡保证。\\n"
+            "区分 fixed_extra（近景可辨认的固定群演）和 extra_template（中远景人群模板）。\\n"
+            "固定群演要有可比较的身高和体态；模板只写范围，不假装固定脸。\\n"
+            "不得复用已有 extra_id。只返回 JSON 数组，每项字段：extra_id、label、kind、height、body_build、wardrobe、palette、props。\\n"
+            f"项目上下文：{json.dumps(context, ensure_ascii=False)}\\n本次需求：{brief}"
+        )
+        content = self.script_processor.llm.chat(messages=[{"role": "user", "content": prompt}])
+        from .llm import _strip_markdown_json
+        data = json.loads(_strip_markdown_json(content))
+        if not isinstance(data, list):
+            raise ValueError("群演候选格式错误")
+        existing = {item.extra_id for item in series.extra_roster}
+        proposals = []
+        for item in data[:count]:
+            candidate = ExtraRosterEntry.model_validate(item)
+            if candidate.extra_id in existing or any(row["extra_id"] == candidate.extra_id for row in proposals):
+                continue
+            proposals.append(candidate.model_dump(mode="json"))
+        return proposals
 
     def delete_series(self, series_id: str) -> None:
         """Delete a Series and disassociate its episodes."""

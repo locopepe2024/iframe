@@ -292,14 +292,45 @@ export default function SeriesDetailPage({ seriesId }: SeriesDetailPageProps) {
 function ExtraRosterPanel({ series, seriesId, onSaved }: { series: Series; seriesId: string; onSaved: () => Promise<void> }) {
   const [entries, setEntries] = useState<ExtraRosterEntry[]>(series.extra_roster ?? []);
   const [saving, setSaving] = useState(false);
+  const [brief, setBrief] = useState("");
+  const [proposals, setProposals] = useState<ExtraRosterEntry[]>([]);
+  const [generating, setGenerating] = useState(false);
+  const [selectedProposals, setSelectedProposals] = useState<string[]>([]);
   useEffect(() => setEntries(series.extra_roster ?? []), [series.extra_roster]);
   const add = (kind: ExtraRosterEntry["kind"]) => setEntries(items => [...items, {
     extra_id: "extra-" + Date.now(), label: kind === "fixed_extra" ? "新固定群演" : "新人群模板", kind,
   }]);
   const save = async () => { setSaving(true); try { await api.updateSeries(seriesId, { extra_roster: entries }); await onSaved(); } finally { setSaving(false); } };
+  const generate = async () => {
+    if (!brief.trim()) return;
+    setGenerating(true);
+    try {
+      const result = await api.generateExtraRosterProposals(seriesId, brief.trim(), 6);
+      setProposals(result.proposals);
+      setSelectedProposals(result.proposals.map(item => item.extra_id));
+    } finally { setGenerating(false); }
+  };
+  const adopt = () => {
+    const existing = new Set(entries.map(item => item.extra_id));
+    setEntries(items => [...items, ...proposals.filter(item => selectedProposals.includes(item.extra_id) && !existing.has(item.extra_id))]);
+    setProposals([]);
+    setSelectedProposals([]);
+  };
   return <div className="flex-1 overflow-auto p-8">
     <h2 className="text-xl font-display font-bold text-foreground">群演资产库</h2>
     <p className="mt-1 text-xs text-text-muted">先确认固定群演或人群模板，再在分镜中明确绑定。这里不会自动生成图片。</p>
+    <div className="mt-5 max-w-3xl rounded border border-primary/30 bg-primary/5 p-4">
+      <h3 className="text-sm font-medium text-foreground">AI 生成候选</h3>
+      <textarea value={brief} onChange={e => setBrief(e.target.value)} placeholder="例如：古代长街黄昏，近景需要两名可辨认商贩，中远景使用退让百姓模板" className="mt-2 min-h-20 w-full bg-input-bg border border-glass-border p-2 text-sm" />
+      <button type="button" disabled={generating || !brief.trim()} onClick={generate} className="mt-2 rounded bg-primary px-3 py-2 text-xs text-white">{generating ? "生成中…" : "生成候选群演"}</button>
+      {proposals.length > 0 && <div className="mt-4 space-y-2">
+        {proposals.map(item => <label key={item.extra_id} className="flex gap-2 rounded border border-glass-border p-2 text-xs">
+          <input type="checkbox" checked={selectedProposals.includes(item.extra_id)} onChange={() => setSelectedProposals(items => items.includes(item.extra_id) ? items.filter(id => id !== item.extra_id) : [...items, item.extra_id])} />
+          <span><strong className="text-foreground">{item.label}</strong> · {item.kind === "fixed_extra" ? "固定群演" : "人群模板"}<br />{item.wardrobe || item.body_build || item.palette || "待补外观描述"}</span>
+        </label>)}
+        <button type="button" disabled={!selectedProposals.length} onClick={adopt} className="rounded border border-primary px-3 py-2 text-xs text-primary">采用选中候选</button>
+      </div>}
+    </div>
     <div className="mt-5 max-w-3xl space-y-3">
       {entries.map((entry, index) => <div key={entry.extra_id} className="grid grid-cols-[1fr_1fr_2fr_auto] gap-2 rounded border border-glass-border p-3">
         <input aria-label="群演名称" value={entry.label} onChange={e => setEntries(items => items.map((item, i) => i === index ? { ...item, label: e.target.value } : item))} className="bg-input-bg border border-glass-border p-2 text-sm" />
