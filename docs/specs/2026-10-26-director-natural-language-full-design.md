@@ -151,13 +151,37 @@ The proposed handoff API should therefore be interpreted as:
 POST /director3d/reference-generation-requests
 GET  /director3d/reference-generation-results/{request_id}
 PATCH /director3d/reference-generation-results/{request_id}/review
-POST /director3d/reference-snapshots
+POST /assets/director-references
 ```
 
-The final POST is a director review commit that creates a reusable,
-asset-library-backed snapshot. It is not a direct storyboard write. The
-snapshot response must expose the stable library asset/variant/media IDs that
-storyboard consumers bind read-only.
+The final POST is an asset-library admission request issued only after the
+director review is approved. It is not a direct storyboard write and must not
+be owned by the director scene. The response must expose stable
+`assetId`, `assetRevision`, `variantId` and `mediaId` values that storyboard
+consumers bind read-only.
+
+The identity levels are distinct:
+
+```text
+assetId
+  stable reusable identity for the director reference package
+
+assetRevision
+  immutable structural and review version of that package
+
+variantId
+  one intentional output or usage variant within a revision
+
+mediaId
+  one concrete PNG, depth artifact or video file
+```
+
+Use a new `assetRevision` when the reviewed blocking, depth, camera, spatial
+relations or package contract changes. Use a new `variantId` when the same
+approved revision intentionally has another output for the same purpose or
+delivery route. A `mediaId` is never overwritten. A later director correction
+keeps the same `assetId`, creates a new revision, and leaves all revisions
+already referenced by shots readable.
 
 ## Desktop reference: numbered blocking sketch workflow
 
