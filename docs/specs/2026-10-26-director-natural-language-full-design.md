@@ -116,27 +116,29 @@ understanding, skeletal posing, contact solving or clothes generation.
 
 ## Reference output ownership and reuse
 
-The 3D director is the review gate, while the asset library is the durable
-reuse owner. A natural-language generation request remains director-scoped and
-must not enter storyboard state. After the director reviews, adjusts or rejects
-the generated depth, blocking image, camera-motion reference video and action
-reference video, an approved result is saved as a versioned asset-library
-record. Later shots and storyboards read the approved asset-library revision by
-stable asset/variant/media IDs; they do not read the transient generation
-request or mutate the director scene through that reference.
+The 3D director is the review gate, while the existing asset library is the
+durable reuse owner. A natural-language generation request remains
+director-scoped and must not enter storyboard state. After the director
+reviews, adjusts or rejects the generated depth, blocking image, camera-motion
+reference video and action reference video, an approved result is saved through
+the normal asset admission path. Later shots and storyboards read ordinary
+asset variants by stable asset/variant/media IDs; they do not read the
+transient generation request or mutate the director scene through that
+reference.
 
 This separates three meanings that must not be conflated:
 
 - the director scene is the editable spatial source;
-- the reviewed asset-library revision is the reusable reference artifact;
+- the reviewed ordinary asset variant is the reusable reference artifact;
 - a storyboard shot is a read-only consumer binding.
 
-An approved director result therefore creates an immutable reference asset
-revision or variant with source director revision, package checksum, frame,
+An approved director result therefore creates an ordinary asset variant with
+the existing asset-library identity and media lifecycle. Optional provenance
+metadata may record the source director revision, package checksum, frame,
 camera, purpose, media status and source hashes. A later director correction
-creates a new revision or variant; it never rewrites a library revision already
-used by a shot. Deleting or replacing the current director scene does not
-silently change an existing library reference.
+uses the existing normal asset revision/variant flow; it never rewrites a
+library variant already used by a shot. Deleting or replacing the current
+director scene does not silently change an existing library reference.
 
 The four output classes remain separate in the library record. `depth` records
 world-depth/occlusion purpose and submission status; `blockingImage` records
@@ -151,37 +153,32 @@ The proposed handoff API should therefore be interpreted as:
 POST /director3d/reference-generation-requests
 GET  /director3d/reference-generation-results/{request_id}
 PATCH /director3d/reference-generation-results/{request_id}/review
-POST /assets/director-references
+POST /projects/{project_id}/assets/{asset_type}/{asset_id}/upload
 ```
 
-The final POST is an asset-library admission request issued only after the
-director review is approved. It is not a direct storyboard write and must not
-be owned by the director scene. The response must expose stable
-`assetId`, `assetRevision`, `variantId` and `mediaId` values that storyboard
-consumers bind read-only.
+The final POST uses the existing asset-library admission path and is allowed
+only after director review is approved. It is not a direct storyboard write
+and must not be owned by the director scene. The response exposes the normal
+`asset_id`, `variant_id` and `media_id` values that storyboard consumers bind
+read-only.
 
 The identity levels are distinct:
 
 ```text
-assetId
-  stable reusable identity for the director reference package
+asset_id
+  existing asset-library identity
 
-assetRevision
-  immutable structural and review version of that package
+variant_id
+  existing approved output variant
 
-variantId
-  one intentional output or usage variant within a revision
-
-mediaId
-  one concrete PNG, depth artifact or video file
+media_id
+  existing concrete PNG, depth artifact or video file identity
 ```
 
-Use a new `assetRevision` when the reviewed blocking, depth, camera, spatial
-relations or package contract changes. Use a new `variantId` when the same
-approved revision intentionally has another output for the same purpose or
-delivery route. A `mediaId` is never overwritten. A later director correction
-keeps the same `assetId`, creates a new revision, and leaves all revisions
-already referenced by shots readable.
+Use the existing asset revision and variant rules. A director correction must
+create a new ordinary variant or revision according to those rules; a
+`media_id` is never overwritten. No director-specific asset hierarchy is
+introduced.
 
 ## Desktop reference: numbered blocking sketch workflow
 
