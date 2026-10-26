@@ -107,10 +107,10 @@
 
 - `pending`：生成结果待审；
 - `needs_revision`：导演台发现位置、深度、媒体或引用问题；
-- `approved`：允许冻结 snapshot；
+- `approved`：允许写入资产库并生成 asset revision；
 - `rejected`：本次结果不得进入分镜。
 
-只有 `approved` 可以调用 snapshot 接口。分镜不能直接把 `generated` 或 `pending` 结果标记为已确认。
+只有 `approved` 可以调用资产库入库接口。分镜不能直接把 `generated` 或 `pending` 结果标记为已确认。
 
 ### 4. 占位槽 `blocking_slot`
 
