@@ -74,10 +74,10 @@
     {
       "id": "shot-field-continuity",
       "name": "分镜字段与一致性",
-      "category": "分镜设计",
+      "category": "跨域字段审核",
       "targets": ["Storyboard camera"],
       "version": "1.0.0",
-      "description": "为现有单镜摄影、时长、转场和本镜风格光线字段提出有来源的候选。",
+      "description": "跨图片起幅、分镜时间与一致性字段提出有来源的逐字段候选，不代替各字段 owner。",
       "source": "https://github.com/locopepe2024/iframe/tree/0b0f1a6fe830ab71e7393462f132ff728e3b969b/config/agent_skills/shot-field-continuity.md",
       "source_revision": "0b0f1a6fe830ab71e7393462f132ff728e3b969b",
       "license": "MIT（iFrame 原创工作流）",

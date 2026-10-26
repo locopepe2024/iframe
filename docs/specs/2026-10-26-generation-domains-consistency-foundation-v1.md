@@ -22,6 +22,14 @@ The structured consistency layer is a cross-domain resolver and checker, not an 
 
 Martial choreography, contact physics and expression timing are time-based Shot Design methods. Space structure, viewpoint and composition for the first frame or a timestamped key frame belong to image design. The existing `shot-static-framing` endpoint currently edits only the 0.00-second start frame; its presence does not establish a key-frame design workflow. Reusable location geometry belongs to scene assets, while one frame's composition belongs to that frame.
 
+### Static frame and motion handoff
+
+The image deliverable is a state at a named time, not a description of the intervening motion. A first frame uses `t=0.00`; a future key frame needs its own timestamp, confirmed state and media identity. For each static state, resolve location/asset IDs and approved revisions, selected reference media, visible subjects and props, blocking/depth, pose and gaze at that instant, viewpoint, shot size, composition and effective light with sources. A scene asset supplies stable geometry; it does not decide which part of the scene is in the image. A planned frame and an actually selected/generated image must retain distinct statuses.
+
+The motion deliverable reads the accepted starting state and optional confirmed key states. It specifies ordered visible changes: action and martial technique, contact/force and prop response, expression/gaze transitions, effects, camera trajectory, timing, end state and transition. A fight Skill can request a view in which wrist action or impact is readable, but only image/camera design selects the frame or camera path. A key frame can constrain the result at its timestamp; it cannot by itself establish how the sword or body moved between frames. Model adapters compile these contracts for H3/Seedance without becoming their owners.
+
+`shot-field-continuity` is currently a mixed-field review endpoint. Its single JSON result is not a new shared owner: static shot size/angle are image candidates, duration/camera movement are temporal candidates, style/light overrides require consistency resolution, and transition is inter-shot. Each candidate needs separate acceptance and lineage. The existing editor has no independent timestamped key-frame persistence, so this is a target contract rather than a claim of implementation.
+
 ## Script-to-asset handoff
 
 The script Skill identifies places before visual design. It keeps separate narrative scenes and physical locations, checks all appearances including nonadjacent ones, and records adjacency, connection and visibility with evidence status. User-confirmed reciprocal visibility between the grain-shop entrance and loft eave belongs to both location candidates. This is not a demand to show the eave in every shop shot. Exact distance, height, facing and occlusion remain unknown until confirmed by source or design.
@@ -35,7 +43,8 @@ Entity extraction places the location candidate in `scenes` and the bounded reus
 | `scene-asset-extraction` | Reusable scene baseline and temporary-content separation | Previously also decided location identity/merges; move that judgment to script analysis |
 | `character-identity-design`, `character-style-routes` | Character identity/look candidates | Does not own script facts or transient shot expression |
 | Scene/prop design prompts and workbenches | Structured visual fields, references, revisions | Verify each confirms a revision and records the exact image snapshot; no single catalog Skill covers both |
-| `shot-static-framing`, `shot-field-continuity` | First/key-frame static fields | Frame ownership must remain distinct from reusable scene geometry |
+| `shot-static-framing` | 0.00-second first-frame size, angle and composition candidates | No saved timestamped key-frame design yet; frame ownership differs from scene geometry |
+| `shot-field-continuity` | Mixed-field review of image, temporal and consistency candidates | One review response does not confer common ownership or acceptance |
 | `shot-action-physics`, `shot-martial-choreography`, `micro-expression-timing` | Timed action, fight and expression methods | Belong to Shot Design; should not be injected into asset images or script analysis |
 | H3/Seedance instructions | Model-specific compilation | Do not become a second owner of action, composition or asset identity |
 
@@ -51,6 +60,7 @@ Entity extraction places the location candidate in `scenes` and the bounded reus
 - A reviewed location relation must have stable source/target location identities, relation type, evidence status and source/user confirmation. Test the two street corners and reciprocal shop/loft sightline before asset design.
 - Asset and frame reference resolution must show exact approved revision, variant/media identity and source scope. Missing variants produce a visible conflict, not a fallback. Test live unlocked edits and locked generation snapshots.
 - Capture actual image and video provider payloads for the same shot. Confirm they use the same accepted visual baseline while applying their own static or timed fields; stale preview tokens must reject changed inputs.
+- Verify a 0.00-second image preview cannot acquire a later martial contact or facial change; verify an accepted key-frame state, once supported, stays timestamped and does not replace the first frame. Verify the video request receives the accepted start state plus motion contract and does not interpret a fight Skill's camera visibility request as an unreviewed camera change.
 - Script-mode storyboard draft lineage includes a hash of its approved asset/variant context; changing that context after preview rejects application. The plan-mode transformation retains its confirmed plan contract. The hash covers a bounded planning projection, not the complete visual source or actual attached media; image/video generation pinning remains a separate boundary.
 - Only after request-level checks, run fixed-reference image/video comparisons. Prompt and schema tests cannot establish visual or motion quality.
 
