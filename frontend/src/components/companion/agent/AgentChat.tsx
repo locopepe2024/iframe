@@ -20,7 +20,7 @@ import SpeechPlayback from "./SpeechPlayback";
 import UploadGuideCard from "./UploadGuideCard";
 import { isOpenAlbumCommand } from "./localCommands";
 import { BookOpen, Images, UserRound, Compass, Mic } from "lucide-react";
-import OpenTalkingPanel from "./OpenTalkingPanel";
+import DigitalCompanionPanel from "./DigitalCompanionPanel";
 
 const prefix = process.env.NEXT_PUBLIC_API_URL === "/companion-demo" ? "/companion-demo" : "";
 const sessionKey = "iframe-companion-agent-session-v1";
@@ -306,7 +306,7 @@ export default function AgentChat() {
       {page?.next_cursor && <button disabled={busy || pending} onClick={() => void run(() => memories(appliedQuery, page.next_cursor!))}>更多个人记忆</button>}
     </section>
     </details>}
-    {openTalking && <OpenTalkingPanel onClose={() => setOpenTalking(false)} />}
+    {openTalking && <DigitalCompanionPanel identity={identity} onClose={() => setOpenTalking(false)} />}
     <input ref={fileRef} type="file" hidden accept="image/jpeg,image/png,image/webp,video/mp4,video/quicktime,video/webm,.mov" multiple aria-label="选择要上传的照片或视频" onChange={event => {
       const files=Array.from(event.target.files ?? []);event.target.value="";
       if(files.length>20){setNotice("每次最多选择 20 个文件，请重新选择。");return;}
