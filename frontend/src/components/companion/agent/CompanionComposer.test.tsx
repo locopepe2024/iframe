@@ -72,3 +72,13 @@ it("sends new voice sentences alone and allows stopping while busy",async()=>{
  expect(screen.getByRole("button",{name:"停止"})).not.toBeDisabled();
  fireEvent.click(screen.getByRole("button",{name:"停止"}));expect(recognition.stop).toHaveBeenCalledOnce();
 });
+
+it("offers explicitly disclosed continuous SenseVoice capture in the demo and keeps browser recognition selectable",()=>{
+ vi.stubEnv("NEXT_PUBLIC_API_URL","/companion-demo");
+ try{
+  render(<CompanionComposer mode="chat" value="" disabled={false} busy={false} allowed inputRef={createRef()} onMode={()=>{}} onChange={()=>{}} onSend={()=>{}} onUpload={()=>{}} onAllow={()=>{}} onRequestConsent={()=>{}} retry={null}/>);
+  fireEvent.click(screen.getByRole("button",{name:"语音输入"}));
+  expect(screen.getByLabelText("识别方式")).toHaveValue("local");expect(screen.getByText(/本站 SenseVoice 测试服务/)).toBeInTheDocument();
+  fireEvent.change(screen.getByLabelText("识别方式"),{target:{value:"browser"}});expect(screen.getByText(/交给浏览器识别/)).toBeInTheDocument();
+ }finally{vi.unstubAllEnvs();}
+});

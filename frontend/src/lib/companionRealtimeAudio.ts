@@ -31,16 +31,20 @@ const captureProcessor = `class CompanionCapture extends AudioWorkletProcessor {
   process(inputs){const input=inputs[0]?.[0];if(input)for(const value of input){this.buffer[this.used++]=value;if(this.used===this.buffer.length){this.port.postMessage(this.buffer);this.used=0;}}return true;}
 } registerProcessor("companion-capture",CompanionCapture);`;
 
-export async function captureMicrophone(context: AudioContext, stream: MediaStream, onAudio: (audio: string) => void) {
+export async function captureMicrophonePcm(context: AudioContext, stream: MediaStream, onAudio: (audio: Float32Array) => void) {
   const module = URL.createObjectURL(new Blob([captureProcessor], { type: "text/javascript" }));
   try { await context.audioWorklet.addModule(module); } finally { URL.revokeObjectURL(module); }
-  const encoder = new PcmEncoder(context.sampleRate);
   const source = context.createMediaStreamSource(stream);
   const node = new AudioWorkletNode(context, "companion-capture");
   const silent = context.createGain(); silent.gain.value = 0;
-  node.port.onmessage = event => { const pcm = encoder.encode(event.data); if (pcm) onAudio(pcm); };
+  node.port.onmessage = event => onAudio(event.data);
   source.connect(node); node.connect(silent); silent.connect(context.destination);
   return () => { node.port.onmessage = null; node.port.close(); source.disconnect(); node.disconnect(); silent.disconnect(); };
+}
+
+export async function captureMicrophone(context: AudioContext, stream: MediaStream, onAudio: (audio: string) => void) {
+  const encoder = new PcmEncoder(context.sampleRate);
+  return captureMicrophonePcm(context, stream, chunk => { const pcm = encoder.encode(chunk); if (pcm) onAudio(pcm); });
 }
 
 export class PcmPlayer {

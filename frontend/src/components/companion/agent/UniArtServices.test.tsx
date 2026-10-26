@@ -37,5 +37,5 @@ it("only synthesizes after an explicit request and releases the audio resource o
  const view=render(<SpeechPlayback text="你好"/>);expect(api.speech).not.toHaveBeenCalled();
  fireEvent.click(screen.getByRole("button",{name:"用 UniArt 朗读（可能计费）"}));
  const audio=await screen.findByLabelText("助手回复朗读");expect(audio).toHaveAttribute("controls");expect(audio).not.toHaveAttribute("autoplay");
- expect(api.speech).toHaveBeenCalledWith("你好");view.unmount();expect(URL.revokeObjectURL).toHaveBeenCalledWith("blob:audio");
+ expect(api.speech).toHaveBeenCalledWith("你好",undefined);view.unmount();expect(URL.revokeObjectURL).toHaveBeenCalledWith("blob:audio");
 });

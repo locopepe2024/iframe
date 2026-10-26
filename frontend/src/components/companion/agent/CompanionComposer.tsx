@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState, type ReactNode, type RefObject } from "react";
 import { ArrowUp, ChevronDown, Image, MessageCircle, Mic, Plus, Square, Video } from "lucide-react";
 import { useCompanionVoice } from "../useCompanionVoice";
+import { useContinuousCapture } from "./useContinuousCapture";
 import { isOpenAlbumCommand } from "./localCommands";
 import styles from "./chat.module.css";
 
@@ -25,13 +26,17 @@ export default function CompanionComposer({ mode, value, disabled, busy, allowed
   const [menu, setMenu] = useState(false);
   const [voiceConsent, setVoiceConsent] = useState(false), [voicePrompt, setVoicePrompt] = useState(false);
   const picker = useRef<HTMLDivElement>(null), trigger = useRef<HTMLButtonElement>(null);
-  const voice = useCompanionVoice(text => {
+  const [engine,setEngine] = useState<"browser"|"local">(process.env.NEXT_PUBLIC_API_URL === "/companion-demo" ? "local" : "browser");
+  const capture=useContinuousCapture(text=>onVoiceFinal?.(text.slice(0,4000)));
+  const browserVoice = useCompanionVoice(text => {
     if (mode === "chat" && onVoiceFinal) return;
     const next = `${value}${value ? " " : ""}${text}`.slice(0, 4000);
     onChange(next);
   }, { continuous: mode === "chat", onFinalTranscript: mode === "chat" ? text => {
     onVoiceFinal?.(text.slice(0, 4000));
   } : undefined });
+  const localCapture=mode === "chat" && engine === "local";
+  const voice=localCapture?capture:browserVoice;
   const recording = voice.listening || voice.finishing;
   const localCommand = isOpenAlbumCommand(value);
   const selected = modes.find(item => item.value === mode)!;
@@ -69,7 +74,7 @@ export default function CompanionComposer({ mode, value, disabled, busy, allowed
         </div>
         <button type="button" className={styles.albumButton} aria-label="上传" disabled={disabled || recording} onClick={onUpload}><Plus size={24} aria-hidden="true" /><span>上传</span></button>
         <div className={styles.composerActions}>
-          <button type="button" className={styles.voiceButton} disabled={(!recording && disabled) || voice.finishing} onClick={() => {
+          <button type="button" className={styles.voiceButton} disabled={(!recording && (disabled || (localCapture && capture.failed))) || voice.finishing} onClick={() => {
             if (voiceConsent) voice.toggleListening(); else setVoicePrompt(true);
           }}>
             {recording ? <Square size={28} aria-hidden="true" /> : <Mic size={28} aria-hidden="true" />}<span>{voice.finishing ? "正在整理" : recording ? "停止" : "语音输入"}</span>
@@ -81,13 +86,16 @@ export default function CompanionComposer({ mode, value, disabled, busy, allowed
         </div>
       </div>
     </div>
+    {localCapture && capture.playing && recording && <button type="button" onClick={capture.interrupt}>打断并说话</button>}
+    {localCapture && capture.failed && <div><button type="button" onClick={capture.retry}>重试语音识别</button><button type="button" onClick={capture.stopAll}>结束并清空待识别语音</button></div>}
     {voicePrompt && <section className={styles.voiceConsent} aria-label="语音输入说明">
-      <p>{mode === "chat" ? "语音会交给浏览器识别，并连续加入聊天。您可以随时点停止。" : "语音会交给浏览器的语音服务识别，文字先放入输入框，您检查后再发送。"}</p>
+      {mode === "chat" && process.env.NEXT_PUBLIC_API_URL === "/companion-demo" && <label>识别方式<select aria-label="识别方式" value={engine} onChange={event=>setEngine(event.target.value as "local"|"browser")}><option value="local">持续收音（测试）</option><option value="browser">浏览器识别</option></select></label>}
+      <p>{localCapture ? "持续采集麦克风，停顿后分段交给本站 SenseVoice 测试服务识别并加入聊天。播放回复时暂停识别，点击打断即可继续说；不会保存录音文件。" : mode === "chat" ? "语音会交给浏览器识别，并连续加入聊天。您可以随时点停止。" : "语音会交给浏览器的语音服务识别，文字先放入输入框，您检查后再发送。"}</p>
       <button type="button" disabled={disabled} onClick={() => { setVoiceConsent(true); setVoicePrompt(false); voice.toggleListening(); }}>{mode === "chat" ? "同意并开始聊天" : "同意并开始听写"}</button>
       <button type="button" onClick={() => setVoicePrompt(false)}>先用文字</button>
     </section>}
     {voice.notice && !recording && <p role="status" className={styles.voiceStatus}>{voice.notice}</p>}
-    {voice.listening || voice.finishing ? <p role="status" className={styles.voiceStatus}>{voice.finishing ? "正在整理语音，请稍等…" : "正在听，点停止结束。"}</p> : null}
+    {voice.listening || voice.finishing ? <p role="status" className={styles.voiceStatus}>{voice.finishing ? "正在整理语音，请稍等…" : localCapture ? capture.playing ? "正在播放回复，点击打断后说话。" : voice.notice : "正在听，点停止结束。"}</p> : null}
     {retry && <button disabled={busy || !allowed} onClick={retry}>重试原请求</button>}
   </footer>;
 }
