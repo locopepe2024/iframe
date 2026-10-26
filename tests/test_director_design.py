@@ -128,3 +128,26 @@ def test_supported_pose_and_seating_schema(operation):
 def test_unsupported_pose_or_chair_schema_is_rejected(operation):
     with pytest.raises(ValueError):
         design.ModelProposal.model_validate({**response(), "operations": [operation]})
+
+
+def test_timed_half_meter_proposal_retains_duration_and_distance(client, monkeypatch):
+    c, _ = client
+    operation = dict(kind="camera_motion", cameraId="camera-main", presetId="push_in", durationSeconds=4, easing="ease_in_out", distanceM=0.5)
+    def generate(self, messages, **kwargs):
+        assert "durationSeconds=4, distanceM=0.5" in messages[0]["content"]
+        return json.dumps({**response(), "operations": [operation]})
+    monkeypatch.setattr(design.LLMAdapter, "chat", generate)
+    result = c.post("/director3d/design-proposals", json={**request(), "prompt": "四秒缓慢推进半米"})
+    assert result.status_code == 200
+    assert result.json()["operations"] == [operation]
+
+
+@pytest.mark.parametrize("distance", [0, -0.5, 21, float("nan"), float("inf"), "0.5", True])
+def test_invalid_camera_motion_distance_is_rejected(distance):
+    with pytest.raises(ValueError):
+        design.CameraMotion(kind="camera_motion", cameraId="camera-main", presetId="push_in", durationSeconds=4, easing="linear", distanceM=distance)
+
+
+def test_camera_motion_distance_cannot_be_misread_as_orbit_radius():
+    with pytest.raises(ValueError):
+        design.CameraMotion(kind="camera_motion", cameraId="camera-main", presetId="orbit", durationSeconds=4, easing="linear", distanceM=0.5)

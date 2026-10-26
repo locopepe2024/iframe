@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, expect, it } from "vitest";
 import { useWorkbenchStore } from "../state/workbench-store";
 import { compileDesignProposal, designContext, designRevision, parseDesignProposal, type DesignOperation, type DesignProposal } from "./design-proposal";
-import { cameraRuntime } from "../timeline/timeline-evaluation";
+import { cameraRuntime, evaluatePathPosition } from "../timeline/timeline-evaluation";
 
 const initial = useWorkbenchStore.getState();
 beforeEach(() => {
@@ -41,7 +41,7 @@ it("compiles a pair and prop with deterministic facing and a 35mm camera without
 
 it("applies once and undo/redo restores the complete scene", () => {
   const { state, proposal } = fixture();
-  state.applyDesignProposal(proposal);
+  state.applyDesignProposal(parseDesignProposal(proposal));
   const applied = useWorkbenchStore.getState();
   expect(applied.undoStack.length).toBe(state.undoStack.length + 1);
   expect(applied.sceneObjects["design-box-table"]).toBeDefined();
@@ -82,12 +82,86 @@ it("previews and atomically applies a timed camera path while preserving the aut
   expect(preview.dialogueTimeline.durationSeconds).toBeGreaterThanOrEqual(4);
   expect(preview.dialogueTimeline.tracks.some((track) => track.trackKind === "camera_path_progress" && track.target.targetId === path.pathId)).toBe(true);
   expect(useWorkbenchStore.getState().cameraPaths).toEqual(state.cameraPaths);
-  state.applyDesignProposal(proposal);
+  state.applyDesignProposal(parseDesignProposal(proposal));
   const applied = useWorkbenchStore.getState();
   expect(applied.undoStack.length).toBe(state.undoStack.length + 1);
   expect(applied.cameraPaths[path.pathId]).toEqual(path);
   applied.undo();
   expect(useWorkbenchStore.getState().cameraPaths).toEqual(state.cameraPaths);
+});
+
+it("moves exactly half a meter over four seconds without changing the authored shot", () => {
+  const { state } = fixture();
+  const cameraId = state.selectedCameraId;
+  // Raw provider JSON must be accepted independently of the TS operation type.
+  const proposal = { ...plan([]), operations: [{ kind: "camera_motion", cameraId, presetId: "push_in", durationSeconds: 4, easing: "ease_in_out", distanceM: .5 }] };
+  const preview = compileDesignProposal(state, proposal);
+  const path = preview.cameraPaths[`path-${cameraId}-motion`];
+  const start = state.cameras[cameraId].transform.position;
+  const displacement = (time: number) => Math.hypot(...evaluatePathPosition(path, time).map((v, axis) => v - start[axis]));
+  expect(displacement(0)).toBeCloseTo(0);
+  expect(displacement(2)).toBeCloseTo(.25);
+  expect(displacement(4)).toBeCloseTo(.5);
+  expect(displacement(8)).toBeCloseTo(.5);
+  expect(preview.cameras).toEqual(state.cameras);
+  expect(preview.characters).toEqual(state.characters);
+  expect(preview.sceneObjects).toEqual(state.sceneObjects);
+  state.applyDesignProposal(parseDesignProposal(proposal));
+  const applied = useWorkbenchStore.getState();
+  expect(applied.undoStack).toHaveLength(state.undoStack.length + 1);
+  applied.undo();
+  expect(useWorkbenchStore.getState().cameraPaths).toEqual(state.cameraPaths);
+  expect(useWorkbenchStore.getState().dialogueTimeline).toEqual(state.dialogueTimeline);
+  useWorkbenchStore.getState().redo();
+  expect(useWorkbenchStore.getState().cameraPaths).toEqual(preview.cameraPaths);
+});
+
+it.each(["pull_out", "lift", "drop", "lateral"] as const)("retains a requested distance for %s", (presetId) => {
+  const { state } = fixture();
+  const cameraId = state.selectedCameraId;
+  const preview = compileDesignProposal(state, plan([{ kind: "camera_motion", cameraId, presetId, durationSeconds: 4, easing: "linear", distanceM: .25 }]));
+  const path = preview.cameraPaths[`path-${cameraId}-motion`];
+  expect(Math.hypot(...evaluatePathPosition(path, 4).map((v, axis) => v - state.cameras[cameraId].transform.position[axis]))).toBeCloseTo(.25);
+});
+
+it("preserves follow bindings while moving toward the world target", () => {
+  const { state, ids } = fixture();
+  const cameraId = state.selectedCameraId;
+  const character = structuredClone(state.characters[ids[0]]);
+  character.transform.position = [10, 5, 0];
+  useWorkbenchStore.setState({ characters: { ...state.characters, [ids[0]]: character }, cameras: { ...state.cameras, [cameraId]: {
+    ...state.cameras[cameraId], transform: { ...state.cameras[cameraId].transform, position: [0, -4, 1] },
+    subjectTargetIds: [ids[0]], lookAt: null, follow: { targetType: "character", targetId: ids[0] },
+  } } });
+  const current = useWorkbenchStore.getState();
+  const preview = compileDesignProposal(current, plan([{ kind: "camera_motion", cameraId, presetId: "push_in", durationSeconds: 4, easing: "linear", distanceM: .5 }]));
+  const position = evaluatePathPosition(preview.cameraPaths[`path-${cameraId}-motion`], 4);
+  const runtime = cameraRuntime(current.cameras[cameraId], current.characters, current.sceneObjects);
+  const direction = runtime.targetM.map((v, axis) => v - runtime.positionM[axis]);
+  const length = Math.hypot(...direction);
+  position.forEach((value, axis) => expect(value).toBeCloseTo(current.cameras[cameraId].transform.position[axis] + .5 * direction[axis] / length));
+  expect(preview.cameras).toEqual(current.cameras);
+});
+
+it.each([0, -.5, 21, NaN, Infinity, "0.5", true])("rejects invalid travel distance %s without mutating state", (distanceM) => {
+  const { state } = fixture();
+  expect(() => compileDesignProposal(state, { ...plan([]), operations: [{ kind: "camera_motion", cameraId: state.selectedCameraId, presetId: "push_in", durationSeconds: 4, easing: "linear", distanceM }] })).toThrow("数值");
+  expect(useWorkbenchStore.getState()).toBe(state);
+});
+
+it("rejects crossing the target, underground motion and arc-distance ambiguity atomically", () => {
+  const { state } = fixture();
+  for (const [presetId, distanceM, error] of [["push_in", 20, "过近"], ["drop", 20, "地面"], ["orbit", .5, "直线运镜"]] as const) {
+    expect(() => state.applyDesignProposal(plan([{ kind: "camera_motion", cameraId: state.selectedCameraId, presetId, durationSeconds: 4, easing: "linear", distanceM }]))).toThrow(error);
+    expect(useWorkbenchStore.getState()).toBe(state);
+  }
+});
+
+it("accepts a provider's null distance as the legacy preset default", () => {
+  const { state } = fixture();
+  const op = { kind: "camera_motion" as const, cameraId: state.selectedCameraId, presetId: "pull_out" as const, durationSeconds: 4, easing: "linear" as const };
+  const original = compileDesignProposal(state, plan([op]));
+  expect(compileDesignProposal(state, plan([{ ...op, distanceM: null }])).cameraPaths).toEqual(original.cameraPaths);
 });
 
 it("compiles a numbered multi-actor blocking plan with explicit poses", () => {

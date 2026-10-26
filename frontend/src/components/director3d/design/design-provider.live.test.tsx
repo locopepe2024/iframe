@@ -1,7 +1,7 @@
 // @vitest-environment node
 import { expect, it } from "vitest";
 import { useWorkbenchStore } from "../state/workbench-store";
-import { cameraRuntime } from "../timeline/timeline-evaluation";
+import { cameraRuntime, evaluatePathPosition } from "../timeline/timeline-evaluation";
 import { compileDesignProposal, designContext, designRevision, parseDesignProposal } from "./design-proposal";
 
 // Explicit opt-in: ordinary CI must never consume model calls or user credentials.
@@ -103,11 +103,15 @@ it.skipIf(!origin)("accepts real-model designs through the actual compiler and a
     expect(motion.clarification).toBeNull();
     expect(motion.operations).toHaveLength(1);
     expect(motion.operations[0].kind).toBe("camera_motion");
+    if (motion.operations[0].kind === "camera_motion") expect(motion.operations[0].distanceM).toBe(.5);
     const motionPreview = compileDesignProposal(useWorkbenchStore.getState(), motion);
     expect(motionPreview.characters).toEqual(finalScene.characters);
     expect(motionPreview.sceneObjects).toEqual(finalScene.sceneObjects);
     expect(motionPreview.cameras[cameraId]).toEqual(finalScene.cameras[cameraId]);
     expect(motionPreview.cameraPaths[`path-${cameraId}-motion`].durationSeconds).toBe(4);
+    const path = motionPreview.cameraPaths[`path-${cameraId}-motion`];
+    const start = finalScene.cameras[cameraId].transform.position;
+    expect(Math.hypot(...evaluatePathPosition(path, 4).map((value, axis) => value - start[axis]))).toBeCloseTo(.5);
     useWorkbenchStore.getState().applyDesignProposal(motion);
     expect(useWorkbenchStore.getState().undoStack).toHaveLength(3);
     console.info("Configured endpoint acceptance passed; provider authenticity, WebGL visuals and media rendering require separate evidence.");

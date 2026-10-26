@@ -94,8 +94,15 @@ class CameraMotion(StrictModel):
     kind: Literal["camera_motion"]
     cameraId: Identifier
     presetId: Literal["orbit", "half_arc", "push_in", "pull_out", "lift", "drop", "lateral", "spiral_rise"]
-    durationSeconds: float = Field(gt=0.1, le=600)
+    durationSeconds: float = Field(ge=0.1, le=600)
     easing: Literal["linear", "bezier", "ease_in", "ease_out", "ease_in_out"]
+    distanceM: Annotated[float, Field(strict=True, ge=0.01, le=20)] | None = None
+
+    @model_validator(mode="after")
+    def linear_distance(self):
+        if self.distanceM is not None and self.presetId in {"orbit", "half_arc", "spiral_rise"}:
+            raise ValueError("distanceM is supported only for linear camera motion")
+        return self
 
 
 Operation = Annotated[Place | Pair | Group | Box | FrameCamera | Dolly | SetPose | SeatActor | CameraMotion, Field(discriminator="kind")]
@@ -172,6 +179,13 @@ Timed camera motion is supported with one new camera_motion operation on the sel
 If any essential request needs unsupported timed actor motion, unsupported poses/contact, lights, new characters,
 asset identity/appearance, image generation, unavailable tools, unclear identity,
 or uncertain screen-left constraints, return no operations and a helpful clarification.
+For camera_motion, distanceM is the positive requested travel distance in meters
+for push_in, pull_out, lift, drop or lateral. For 四秒缓慢推进半米 return
+durationSeconds=4, distanceM=0.5, presetId=push_in, easing=ease_in_out, with no
+other operations. Do not silently substitute the preset default for a requested
+distance. Omit distanceM or use null only when no distance was requested; disclose
+the preset default in assumptions. Orbit/half_arc/spiral_rise do not accept
+distanceM; requests for a specific radius or arc length need clarification.
 Do not partially perform an unsupported request. First slice only supports static
 unanimated scenes. For camera distances, leave enough room for all subject centers
 in frame. A request to change only the camera must not place or arrange entities.

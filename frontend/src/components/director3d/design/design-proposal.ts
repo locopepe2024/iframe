@@ -14,7 +14,7 @@ export type DesignOperation =
   | { kind: "add_box"; entityId: string; label: string; positionM: Vec; dimensionsM: Vec }
   | { kind: "set_pose"; actorId: string; presetId: DesignPoseId }
   | { kind: "seat_actor"; actorId: string; chairId: string }
-  | { kind: "camera_motion"; cameraId: string; presetId: CameraPathPresetId; durationSeconds: number; easing: ActorPathEasing }
+  | { kind: "camera_motion"; cameraId: string; presetId: CameraPathPresetId; durationSeconds: number; easing: ActorPathEasing; distanceM?: number | null }
   | { kind: "frame_camera"; cameraId: string; targetIds: string[]; azimuthDeg: number; elevationDeg: number; distanceM: number; focalLengthMm: number }
   | { kind: "dolly_camera"; cameraId: string; towardM: number };
 export interface DesignProposal {
@@ -114,8 +114,12 @@ export function parseDesignProposal(raw: unknown): DesignProposal {
       keys(op, ["kind", "actorId", "chairId"]); text(op.actorId); text(op.chairId, 80);
       if (!/^design-chair-[A-Za-z0-9_-]+$/.test(op.chairId as string)) throw new Error("椅子参考 ID 无效。");
     } else if (op.kind === "camera_motion") {
-      keys(op, ["kind", "cameraId", "presetId", "durationSeconds", "easing"]); text(op.cameraId);
+      keys(op, ["kind", "cameraId", "presetId", "durationSeconds", "easing", ...("distanceM" in op ? ["distanceM"] : [])]); text(op.cameraId);
       if (!["orbit", "half_arc", "push_in", "pull_out", "lift", "drop", "lateral", "spiral_rise"].includes(op.presetId as string)) throw new Error("运镜预设不受支持。");
+      if (op.distanceM != null) {
+        number(op.distanceM, .01, 20);
+        if (["orbit", "half_arc", "spiral_rise"].includes(op.presetId as string)) throw new Error("位移距离仅支持直线运镜，环绕预设不接受距离参数。");
+      }
       number(op.durationSeconds, .1, 600);
       if (!["linear", "bezier", "ease_in", "ease_out", "ease_in_out"].includes(op.easing as string)) throw new Error("运镜缓动不受支持。");
     } else throw new Error("提案包含不支持的操作。");
@@ -220,8 +224,24 @@ export function compileDesignProposal(state: WorkbenchState, raw: unknown): Desi
         if (cameraPaths[`path-${op.cameraId}-motion`]) throw new Error("当前机位已有运镜路径，请先在机位路径工具中编辑。");
         const runtime = cameraRuntime(camera, characters, sceneObjects);
         const pathId = `path-${op.cameraId}-motion`;
-        const controlPoints = createCameraPathPresetControlPoints({ cameraId: op.cameraId, presetId: op.presetId, sequence: 1, startPositionM: [...camera.transform.position] as Vec, targetPositionM: [...runtime.targetM] as Vec });
+        // Follow cameras store a target-relative position. Generate in that
+        // authored space while measuring movement toward the world target.
+        const followOffset = runtime.positionM.map((v, axis) => v - camera.transform.position[axis]) as Vec;
+        const targetPositionM = runtime.targetM.map((v, axis) => v - followOffset[axis]) as Vec;
+        const controlPoints = createCameraPathPresetControlPoints({ cameraId: op.cameraId, presetId: op.presetId, sequence: 1, startPositionM: [...camera.transform.position] as Vec, targetPositionM, distanceM: op.distanceM ?? undefined });
         if (controlPoints.length < 2) throw new Error("无法生成有效运镜路径。");
+        if (op.presetId === "push_in") {
+          const start = new Vector3(...camera.transform.position);
+          const travel = start.distanceTo(new Vector3(...controlPoints.at(-1)!.positionM));
+          if (start.distanceTo(new Vector3(...targetPositionM)) - travel < .5) throw new Error("相机推进后距目标过近，请减小推进距离。");
+        }
+        // Cubic paths stay inside the convex hull of their handles. Checking
+        // every handle bounds ground/coordinate excursions along the path.
+        for (const point of controlPoints) for (const position of [point.positionM, point.handleInM, point.handleOutM]) {
+          const world = position.map((v, axis) => v + followOffset[axis]) as Vec;
+          vector(world);
+          if (world[2] < state.renderScene.ground.heightM) throw new Error("运镜路径不能低于地面，请减小位移距离。");
+        }
         const path: CameraPathState = { pathId, targetType: "camera", targetId: op.cameraId, durationSeconds: op.durationSeconds, easing: op.easing, presetIds: [op.presetId], controlPoints, revision: 1, locked: false, visible: true };
         cameraPaths[pathId] = path;
         const nextTrack = dialogueTimeline.tracks.reduce((maximum, track) => Math.max(maximum, Number(track.trackId.match(/(\d+)$/)?.[1]) || 0), 0) + 1;

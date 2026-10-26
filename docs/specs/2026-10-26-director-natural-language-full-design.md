@@ -116,6 +116,26 @@ understanding, skeletal posing, contact solving or clothes generation.
 
 ## Reference output ownership and reuse
 
+### 2026-10-27 implementation slice
+
+Natural-language design takes priority over asset integration. Timed linear
+camera motion must retain an explicit requested distance (0.5 m over 4 seconds
+is the regression case), preserve the lens and target bindings, reject moves
+through the target or below ground, and retain atomic apply/undo. Distance is
+optional for older proposals and preset defaults; it is not a radius or arc
+length for orbit/half-arc/spiral presets. Verify first, midpoint and last frames.
+
+Code inspection: DirectorShotPackage is an evaluated-frame export projection.
+It contains one active camera and timeline track IDs, but not every authored
+camera, full track/keyframe data or actor mappings. Browser local-draft export
+also clears proxy/calibration/media dependencies. Neither format alone is a
+lossless editable library asset. A reusable design bundle must retain authored
+characters, actor mappings, objects, all cameras, full timeline, actor/camera
+paths, environment and admitted dependency IDs alongside the evaluated
+DirectorShotPackage and its checksum. Import must validate these dependencies
+and create a new editing instance. This is the next asset contract, not an
+implemented asset-library import/export feature.
+
 The 3D director is the generation and editing tool. Its outputs are process
 reference assets, not automatically final character, scene or prop assets. A
 natural-language generation request and its generated media remain in the
