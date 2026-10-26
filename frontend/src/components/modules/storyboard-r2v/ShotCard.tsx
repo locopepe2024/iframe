@@ -31,6 +31,7 @@ import PolishPanel from "./PolishPanel";
 import MicroExpressionPanel from "./MicroExpressionPanel";
 import CameraMovementPanel from "./CameraMovementPanel";
 import ShotFieldPanel from "./ShotFieldPanel";
+import type { ExtraRosterEntry, ExtraShotInstance } from "@/store/projectStore";
 import FieldTagChip, { AddFieldButton, type FieldType } from "./FieldTagChip";
 import { buildGenerationPrompt, directorShotSuggestions } from "./buildAssembledPrompt";
 import { CHARACTER_MOVE_DICTIONARY, findCharacterMove } from "@/lib/characterMoveDictionary";
@@ -157,6 +158,7 @@ export interface ShotNode {
     moveRef?: string | null;
     moveVariant?: string | null;
     performanceMoves?: Array<{ characterId: string; moveRef: string; moveVariant?: string | null }>;
+    crowdInstances?: ExtraShotInstance[];
     richRefinementCandidate?: {
         id: string;
         source: string;
@@ -212,6 +214,8 @@ interface ShotCardProps {
     characters: any[];
     scenes: any[];
     props: any[];
+    extraRoster?: ExtraRosterEntry[];
+    onUpdateCrowdInstances?: (instances: ExtraShotInstance[]) => void;
     assetIndex?: AssetReferenceIndexEntry[];
     onUpdatePrompt: (prompt: string, optimized?: boolean) => void;
     onUpdateField: (field: string, value: string | number | null | PerformanceMoveValue) => void;
@@ -280,6 +284,8 @@ export default function ShotCard({
     characters,
     scenes,
     props,
+    extraRoster = [],
+    onUpdateCrowdInstances,
     assetIndex,
     onUpdatePrompt,
     onUpdateField,
@@ -1114,6 +1120,37 @@ export default function ShotCard({
                             onBeforePreview={onMicroExpressionBeforePreview}
                             onApplied={onMicroExpressionApplied}
                         />}
+
+                        {onUpdateCrowdInstances && <details className="border-t border-glass-border pt-3 text-xs text-text-secondary">
+                            <summary className="cursor-pointer text-foreground">群演与背景人群</summary>
+                            <div className="mt-3 space-y-2">
+                                {(shot.crowdInstances ?? []).map((instance, index) => {
+                                    const id = instance.extra_id || instance.template_id || "";
+                                    const entry = extraRoster.find(item => item.extra_id === id);
+                                    return <div key={index} className="grid grid-cols-2 gap-2 border-b border-glass-border pb-2">
+                                        <span className="col-span-2 text-foreground">{entry?.label || ("已失效：" + id)}</span>
+                                        <select aria-label="群演可见层" value={instance.layer} onChange={event => onUpdateCrowdInstances((shot.crowdInstances ?? []).map((item, i) => i === index ? { ...item, layer: event.target.value as ExtraShotInstance["layer"] } : item))} className="bg-input-bg border border-glass-border p-1">
+                                            <option value="near">近景</option><option value="mid">中景</option><option value="far">远景</option>
+                                        </select>
+                                        <input aria-label="群演位置" value={instance.region} placeholder="空间位置" onChange={event => onUpdateCrowdInstances((shot.crowdInstances ?? []).map((item, i) => i === index ? { ...item, region: event.target.value } : item))} className="min-w-0 bg-input-bg border border-glass-border p-1" />
+                                        {entry?.kind === "fixed_extra" && <label className="col-span-2 flex items-center gap-2"><input type="checkbox" checked={instance.face_readable} onChange={event => onUpdateCrowdInstances((shot.crowdInstances ?? []).map((item, i) => i === index ? { ...item, face_readable: event.target.checked } : item))} />面孔需要可辨认</label>}
+                                        <button type="button" className="col-span-2 justify-self-start text-danger" onClick={() => onUpdateCrowdInstances((shot.crowdInstances ?? []).filter((_, i) => i !== index))}>移除</button>
+                                    </div>;
+                                })}
+                                <select aria-label="添加群演" value="" onChange={event => {
+                                    const entry = extraRoster.find(item => item.extra_id === event.target.value);
+                                    if (!entry) return;
+                                    onUpdateCrowdInstances([...(shot.crowdInstances ?? []), {
+                                        ...(entry.kind === "fixed_extra" ? { extra_id: entry.extra_id } : { template_id: entry.extra_id }),
+                                        layer: entry.kind === "fixed_extra" ? "near" : "far",
+                                        region: "", face_readable: false, text_readable: false,
+                                    }]);
+                                }} className="w-full bg-input-bg border border-glass-border p-1">
+                                    <option value="">添加已确认群演或模板</option>
+                                    {extraRoster.map(entry => <option key={entry.extra_id} value={entry.extra_id}>{entry.label}</option>)}
+                                </select>
+                            </div>
+                        </details>}
 
                         <details className="border-t border-glass-border pt-3 text-xs text-text-secondary">
                             <summary className="cursor-pointer text-foreground">角色动作引用</summary>

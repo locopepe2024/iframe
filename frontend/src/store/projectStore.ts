@@ -194,7 +194,33 @@ export interface StoryboardFrame {
     workbench_reference_variant_ids?: Record<string, string[]>;
     workbench_pose_reference_variant_ids?: Record<string, string[]>;
     workbench_director_snapshot_media_id?: string | null;
+    crowd_instances?: ExtraShotInstance[];
     // ... other fields
+}
+
+export interface ExtraRosterEntry {
+    extra_id: string;
+    label: string;
+    kind: "fixed_extra" | "extra_template";
+    height?: string | null;
+    body_build?: string | null;
+    wardrobe?: string | null;
+    palette?: string | null;
+    props?: string[];
+    reference_variant_id?: string | null;
+    reference_media_id?: string | null;
+}
+
+export interface ExtraShotInstance {
+    extra_id?: string | null;
+    template_id?: string | null;
+    layer: "near" | "mid" | "far";
+    region: string;
+    relative_scale?: string | null;
+    facing?: string | null;
+    motion?: string | null;
+    face_readable: boolean;
+    text_readable: boolean;
 }
 
 export interface StylePresetCategory {
@@ -464,6 +490,7 @@ export interface Series {
     characters: Character[];
     scenes: Scene[];
     props: Prop[];
+    extra_roster?: ExtraRosterEntry[];
     art_direction?: ArtDirection;
     director_review_required?: boolean;
     prompt_config?: PromptConfig;

@@ -15,6 +15,7 @@ import StoryboardContinuitySheet from "./StoryboardContinuitySheet";
 import { effectiveShotVisual, type ContinuityRow } from "./storyboard-r2v/effectiveShotVisual";
 import { useTranslations } from "next-intl";
 import { useProjectStore } from "@/store/projectStore";
+import type { ExtraRosterEntry, ExtraShotInstance } from "@/store/projectStore";
 import { api, crudApi, type VideoTask, type AssetReferenceIndexEntry, type EpisodeCharacterUse } from "@/lib/api";
 import { resolveMediaDelivery, resolveVideoTaskDelivery } from "@/lib/mediaDelivery";
 import { resolveStoryboardStyle, resolveStoryboardStyleForRender } from "@/lib/storyboardStyle";
@@ -87,6 +88,7 @@ export default function StoryboardR2V() {
     const currentProject = useProjectStore((state) => state.currentProject);
     const currentSeries = useProjectStore((state) => state.currentSeries);
     const updateProject = useProjectStore((state) => state.updateProject);
+    const extraRoster = (currentSeries?.extra_roster ?? []) as ExtraRosterEntry[];
     const t = useTranslations("storyboardR2V");
     const tStep = useTranslations("stepHeader");
     const [indexedProject, setIndexedProject] = useState<{
@@ -986,6 +988,13 @@ export default function StoryboardR2V() {
             : [];
         persistFrameEdit(shotId, backendField);
     }, [shots, persistFrameEdit, displayedStyle.positivePrompt, continuityRows]);
+
+    const handleUpdateCrowdInstances = useCallback((index: number, instances: ExtraShotInstance[]) => {
+        const shot = shots[index];
+        if (!shot) return;
+        setShots(prev => prev.map((item, i) => i === index ? { ...item, crowdInstances: instances } : item));
+        persistFrameEdit(shot.id, { crowd_instances: instances });
+    }, [shots, persistFrameEdit]);
 
     // Duration editor config — derived from active R2V model's catalog entry
     const durationEditorCfg = useMemo(() => {
@@ -2288,6 +2297,8 @@ export default function StoryboardR2V() {
                             assetIndex={assetIndex}
                             onUpdatePrompt={(prompt, optimized) => updatePrompt(index, prompt, optimized)}
                             onUpdateField={(field, value) => handleUpdateField(index, field, value)}
+                            extraRoster={extraRoster}
+                            onUpdateCrowdInstances={(instances) => handleUpdateCrowdInstances(index, instances)}
                             durationEditorConfig={durationEditorCfg}
                             onGenerateT2I={() => generateT2I(index)}
                             onGenerateVideo={() => generateVideoBatch(index, 1, paramsState)}

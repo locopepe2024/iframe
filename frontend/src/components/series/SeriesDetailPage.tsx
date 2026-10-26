@@ -5,7 +5,7 @@ import dynamic from "next/dynamic";
 import { motion, AnimatePresence } from "framer-motion";
 import { AlertTriangle, Download, Film, Image as ImageIcon, Loader2, Play, ChevronRight, Trash2 } from "lucide-react";
 import { api } from "@/lib/api";
-import type { Series, Character, Scene, Prop, Project } from "@/store/projectStore";
+import type { Series, Character, Scene, Prop, Project, ExtraRosterEntry } from "@/store/projectStore";
 import AssetCard from "@/components/common/AssetCard";
 import { useTranslations } from "next-intl";
 import SeriesSidebar, { type SidebarItem } from "./SeriesSidebar";
@@ -238,6 +238,8 @@ export default function SeriesDetailPage({ seriesId }: SeriesDetailPageProps) {
               plan={assemblyPlan}
               onChange={setAssemblyPlan}
             />
+          ) : activeItem.kind === "extras" ? (
+            <ExtraRosterPanel series={series} seriesId={seriesId} onSaved={refreshSeriesData} />
           ) : activeItem.kind === "asset" ? (
             <AssetContentPanel
               key={`asset-${activeItem.tab}`}
@@ -285,6 +287,35 @@ export default function SeriesDetailPage({ seriesId }: SeriesDetailPageProps) {
       />
     </main>
   );
+}
+
+function ExtraRosterPanel({ series, seriesId, onSaved }: { series: Series; seriesId: string; onSaved: () => Promise<void> }) {
+  const [entries, setEntries] = useState<ExtraRosterEntry[]>(series.extra_roster ?? []);
+  const [saving, setSaving] = useState(false);
+  useEffect(() => setEntries(series.extra_roster ?? []), [series.extra_roster]);
+  const add = (kind: ExtraRosterEntry["kind"]) => setEntries(items => [...items, {
+    extra_id: "extra-" + Date.now(), label: kind === "fixed_extra" ? "新固定群演" : "新人群模板", kind,
+  }]);
+  const save = async () => { setSaving(true); try { await api.updateSeries(seriesId, { extra_roster: entries }); await onSaved(); } finally { setSaving(false); } };
+  return <div className="flex-1 overflow-auto p-8">
+    <h2 className="text-xl font-display font-bold text-foreground">群演资产库</h2>
+    <p className="mt-1 text-xs text-text-muted">先确认固定群演或人群模板，再在分镜中明确绑定。这里不会自动生成图片。</p>
+    <div className="mt-5 max-w-3xl space-y-3">
+      {entries.map((entry, index) => <div key={entry.extra_id} className="grid grid-cols-[1fr_1fr_2fr_auto] gap-2 rounded border border-glass-border p-3">
+        <input aria-label="群演名称" value={entry.label} onChange={e => setEntries(items => items.map((item, i) => i === index ? { ...item, label: e.target.value } : item))} className="bg-input-bg border border-glass-border p-2 text-sm" />
+        <select aria-label="群演类型" value={entry.kind} onChange={e => setEntries(items => items.map((item, i) => i === index ? { ...item, kind: e.target.value as ExtraRosterEntry["kind"] } : item))} className="bg-input-bg border border-glass-border p-2 text-sm">
+          <option value="fixed_extra">固定群演</option><option value="extra_template">人群模板</option>
+        </select>
+        <input aria-label="群演外观" value={entry.wardrobe ?? ""} placeholder="服装、体态、色彩与识别锚点" onChange={e => setEntries(items => items.map((item, i) => i === index ? { ...item, wardrobe: e.target.value } : item))} className="bg-input-bg border border-glass-border p-2 text-sm" />
+        <button type="button" className="text-danger" onClick={() => setEntries(items => items.filter((_, i) => i !== index))}>删除</button>
+      </div>)}
+      <div className="flex gap-2">
+        <button type="button" onClick={() => add("fixed_extra")} className="rounded border border-glass-border px-3 py-2 text-xs">添加固定群演</button>
+        <button type="button" onClick={() => add("extra_template")} className="rounded border border-glass-border px-3 py-2 text-xs">添加人群模板</button>
+        <button type="button" disabled={saving} onClick={save} className="rounded bg-primary px-3 py-2 text-xs text-white">{saving ? "保存中…" : "保存群演库"}</button>
+      </div>
+    </div>
+  </div>;
 }
 
 function SeriesAssemblyPanel({

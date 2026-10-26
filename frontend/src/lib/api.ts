@@ -1965,6 +1965,7 @@ export const api = {
         camera_angle?: string;
         scene_id?: string;
         character_ids?: string[];
+        crowd_instances?: import("@/store/projectStore").ExtraShotInstance[];
         duration?: number;
         shot_size?: string;
         camera_movement_description?: string;
@@ -2762,7 +2763,7 @@ export const api = {
     },
     updateSeries: async (
         seriesId: string,
-        data: { title?: string; description?: string; art_direction?: any },
+        data: { title?: string; description?: string; art_direction?: any; extra_roster?: import("@/store/projectStore").ExtraRosterEntry[] },
     ) => {
         const response = await axios.put(`${API_URL}/series/${seriesId}`, data);
         return response.data;

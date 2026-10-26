@@ -253,6 +253,7 @@ export function frameToShotNode(
             moveRef: String(item.move_ref ?? item.moveRef ?? ""),
             moveVariant: item.move_variant ?? item.moveVariant ?? null,
         })).filter((item: any) => item.characterId && item.moveRef) : [],
+        crowdInstances: Array.isArray(frame.crowd_instances) ? frame.crowd_instances : [],
         richRefinementCandidate: frame.rich_refinement_candidate ?? null,
         microExpressionCandidate: frame.micro_expression_candidate ?? null,
         cameraMovementCandidate: frame.camera_movement_candidate ?? null,
