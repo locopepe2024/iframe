@@ -1,0 +1,16 @@
+{
+  "source": "synthetic",
+  "description": "Injected upstream messages for transport and persistence checks only; not model evaluation results.",
+  "messages": {
+    "P01": {"content": "好，我听着，你慢慢说。"},
+    "P03": {"content": "我现在没有收到画面，看不到你。"},
+    "D04": {"content": "今天上午，我和邻居去买菜，中午在家吃了面。"},
+    "M01": {"content": "你还没有告诉我她的名字，我现在不知道。"},
+    "M02": {
+      "tool_calls": [{"type": "function", "function": {
+        "name": "memory_save",
+        "arguments": "{\"source_message_id\":\"{{current_message_id}}\",\"quote\":\"我喜欢慢一点的语速\",\"content\":\"喜欢慢一点的语速\",\"type\":\"preference\",\"importance\":3}"
+      }}]
+    }
+  }
+}
