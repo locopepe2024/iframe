@@ -17,6 +17,7 @@ import DiaryCard, { diaryDay, diaryPrompt, formatDiaryDay, today, type DiaryCont
 import UniArtSettings from "./UniArtSettings";
 import CompanionIdentitySettings, { defaultCompanionIdentity, readCompanionIdentity, type CompanionIdentity } from "./CompanionIdentitySettings";
 import SpeechPlayback from "./SpeechPlayback";
+import OpenTalkingReply from "./OpenTalkingReply";
 import UploadGuideCard from "./UploadGuideCard";
 import { isOpenAlbumCommand } from "./localCommands";
 import { BookOpen, Images, UserRound, Compass, Mic } from "lucide-react";
@@ -278,7 +279,7 @@ export default function AgentChat() {
       })}
       {after !== null && <button disabled={busy} onClick={() => void run(() => history(session, after))}>更多历史消息</button>}
     </section>
-    {turn?.result?.kind === "text" && !messages.some(m => m.turn?.turn_id === turn.turn_id) && (diaryDay(lastSubmittedText) ? <DiaryCard day={diaryDay(lastSubmittedText)!} text={turn.result.text} sourceTurn={turn.turn_id} onOpenDiary={() => setFeature("diary")} /> : <article className={chatStyles.assistant}><span>{identity.avatar} {identity.name}</span><p>{turn.result.text}</p><SpeechPlayback text={turn.result.text} voice={identity.voice} autoPlay={responseMode === "audio"}/></article>)}
+    {turn?.result?.kind === "text" && !messages.some(m => m.turn?.turn_id === turn.turn_id) && (diaryDay(lastSubmittedText) ? <DiaryCard day={diaryDay(lastSubmittedText)!} text={turn.result.text} sourceTurn={turn.turn_id} onOpenDiary={() => setFeature("diary")} /> : <article className={chatStyles.assistant}><span>{identity.avatar} {identity.name}</span><p>{turn.result.text}</p>{responseMode === "audio" ? <OpenTalkingReply text={turn.result.text} voice={identity.voice}/> : <SpeechPlayback text={turn.result.text} voice={identity.voice}/>}</article>)}
     {turn?.result?.kind === "upload_guide" && !messages.some(m => m.turn?.turn_id === turn.turn_id) && !dismissedUploadGuides.includes(turn.turn_id) && <UploadGuideCard {...uploadGuideActions(turn.turn_id)} />}
     {uploadFiles.length > 0 && <MediaUpload files={uploadFiles} disabled={inputDisabled || pending} onUploaded={attach} onBusyChange={setUploading} onClose={() => setUploadFiles([])} />}
     {albumOpen && <AlbumPicker disabled={inputDisabled || pending} onClose={() => setAlbumOpen(false)} onPhoto={photo => {

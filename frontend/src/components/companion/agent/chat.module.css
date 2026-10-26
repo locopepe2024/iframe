@@ -166,3 +166,6 @@
 .realtimeTranscript p { margin: .4rem 0; }
 .realtimeCall { padding: .75rem; background: var(--surface); border-radius: .8rem; margin-bottom: .5rem; }
 .shell .realtimeCall button { min-height: 52px; margin: .35rem .5rem .35rem 0; }
+
+.openTalkingReply { display:flex; flex-direction:column; gap:6px; margin-top:8px; font-size:12px; color:var(--muted,#8b8c9e); }
+.openTalkingReply video { width:100%; max-height:180px; border-radius:12px; background:#101116; object-fit:cover; }
