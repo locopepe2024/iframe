@@ -305,6 +305,16 @@ def test_api_returns_before_worker_and_resumes_persisted_preview(tmp_path, monke
                 assert client.get(path + '/' + job_id).status_code == 200
                 assert pipeline._extraction_cache[source.id][1].original_text == 'text'
                 assert client.get('/projects/not-owned/extraction-jobs/' + job_id).status_code == 404
+                monkeypatch.setattr(api, 'entity_extraction_prompt_revision', lambda: 'updated-skill')
+                revised = client.post(path, json={'text': 'text'}).json()
+                assert revised['id'] != job_id
+                deadline = time.monotonic() + 3
+                while time.monotonic() < deadline:
+                    if client.get(path + '/' + revised['id']).json()['status'] == 'completed':
+                        break
+                    time.sleep(.01)
+                else:
+                    pytest.fail('Updated extraction Skill did not run a new job')
         finally:
             api.app.dependency_overrides.pop(require_studio_user, None)
             gate.set()
@@ -368,4 +378,5 @@ def test_refinement_prompt_contains_source_draft_and_all_user_constraints():
     assert '原始剧本' in prompt
     assert '"name": "路人"' in prompt
     assert '1. 删除路人' in prompt and '2. 增加产品别名穿心莲' in prompt
+    assert '用户明确确认的地点身份与空间关系' in prompt
     assert result.characters == []

@@ -698,6 +698,11 @@ DEFAULT_ENTITY_EXTRACTION_PROMPT = """
 """
 
 
+def entity_extraction_prompt_revision() -> str:
+    skill_path = Path(__file__).resolve().parents[3] / "config/agent_skills/scene-asset-extraction/SKILL.md"
+    return hashlib.sha256((DEFAULT_ENTITY_EXTRACTION_PROMPT + skill_path.read_text(encoding="utf-8")).encode()).hexdigest()
+
+
 DEFAULT_STYLE_ANALYSIS_PROMPT = """你是一个专业的电影美术指导和视觉风格顾问。
 请根据提供的剧本内容，分析其题材、情绪和氛围，推荐3种截然不同但都适合的视觉风格。
 
@@ -921,6 +926,7 @@ class ScriptProcessor:
 </revision_instructions>
 
 请基于原始剧本修订 current_draft。保留未被要求改变的正确内容，不要把修订要求当作剧本事实。
+用户明确确认的地点身份与空间关系是本次设计输入；不要把与其相反的合并疑问继续放入 uncertainties。
 仍然只返回合法 JSON，顶层只能包含 characters、scenes、props；不要返回解释、Markdown 或其他字段。"""
         try:
             content = self.llm.chat(messages=[{"role": "user", "content": prompt}])
@@ -1587,7 +1593,9 @@ class ScriptProcessor:
                 "场景强制合同：每个 scenes 条目必须提供 asset_baseline、shot_only_content、uncertainties。"
                 "asset_baseline 恰含 scene_identity、location_type、fixed_geometry、fixed_landmarks、materials、"
                 "environment、time_baseline、lighting_baseline、composition_tendency、reusable_constraints、basis；"
-                "basis 仅用 observed/inferred/authored。description 只概述可复用地点。"
+                "basis 仅用 observed/inferred/authored。description 和 scene_identity 只概述可复用地点，"
+                "不得包含潜伏、围堵等当前事件。输出前逐一核对独立地点是否都有 scenes 条目；"
+                "不要把另一处地点仅放入长街的 shot_only_content。已确认的跨地点视线写入双方 environment。"
                 "只返回 characters、scenes、props 三个顶层字段的合法 JSON。")
 
     def analyze_script_for_styles(self, script_text: str, custom_style_prompt: str = "") -> List[Dict[str, Any]]:

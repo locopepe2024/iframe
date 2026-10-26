@@ -1250,6 +1250,7 @@ async def reparse_project(script_id: str, request: ReparseProjectRequest):
 
 # New clients use short requests so an interrupted browser cannot cancel extraction.
 from .extraction_jobs import ExtractionJobs
+from .llm import entity_extraction_prompt_revision
 extraction_jobs = ExtractionJobs()
 
 
@@ -1282,7 +1283,9 @@ def start_extraction(script_id: str, request: ReparseProjectRequest,
         raise HTTPException(404, 'Script not found')
     llm = pipeline.script_processor.llm
     prompt = getattr(getattr(script, 'prompt_config', None), 'entity_extraction', '')
-    fingerprint = hashlib.sha256(json.dumps([request.text, prompt, llm.provider, llm._get_default_model()], ensure_ascii=False).encode()).hexdigest()
+    fingerprint = hashlib.sha256(json.dumps([
+        request.text, prompt, llm.provider, llm._get_default_model(), entity_extraction_prompt_revision(),
+    ], ensure_ascii=False).encode()).hexdigest()
     job = extraction_jobs.start(user.owner_profile_id, script_id, fingerprint,
                                 lambda: pipeline.script_processor.parse_novel(script.title, request.text, prompt).dict())
     return extraction_response(job, script_id)
@@ -1311,6 +1314,7 @@ def start_extraction_refinement(
         prompt,
         llm.provider,
         llm._get_default_model(),
+        entity_extraction_prompt_revision(),
     ], ensure_ascii=False, sort_keys=True).encode()).hexdigest()
     job = extraction_jobs.start(
         user.owner_profile_id,
