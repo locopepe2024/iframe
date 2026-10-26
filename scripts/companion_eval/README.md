@@ -52,3 +52,22 @@ python3 scripts/companion_eval/diary.py --output /private/tmp/companion-diary-ru
 - D04：前端提交前将自然日记指令转换为日期明确的请求。这与绕过前端直接请求后端的边界不同。
 
 这些观察来自组件模拟，不证明实际语音识别准确性。日记听写采用整句匹配的有限命令集合，否定、条件句和叙述不触发操作。未覆盖的自然说法仍可能被当作正文；这不是通用语义理解的准确率结论。
+
+## 真实浏览器采集与识别诊断
+
+macOS 示例（仓库根目录）：
+
+```bash
+python3 scripts/companion_eval/make_speech_fixtures.py --output /private/tmp/companion-speech-fixtures-001
+node frontend/scripts/companion-microphone-probe.mjs \
+  --wav /private/tmp/companion-speech-fixtures-001/stop.wav --expect-command stop \
+  --output /private/tmp/companion-microphone-run-001
+```
+
+依赖已有 Chrome、Node/esbuild/ws、macOS Tingting 语音和 ffmpeg。脚本用临时浏览器 profile、虚拟麦克风与本地页面，真实调用 getUserMedia / WebAudio / SpeechRecognition；不 mock 识别结果，不写生产日记。原生识别由浏览器实际配置的服务处理，日志会保存收到的事件。
+
+另一个通道将实际采集 PCM 发给现有 SenseVoice 测试服务，仅用合成素材。它不是产品供应商切换。每次三轮采集，每轮 6.5 秒，串行发请求；不同脚本同时运行可能触发 CPU 服务的 429，此结果必须保留，不自动重试掩盖。原生识别窗口为 15 秒，无非空 final 文本不算成功。
+
+如 Chrome 日志明确出现 `Failed to read ... as input to the fake device`，本地隔离夹具实验可显式加 `--fixture-no-sandbox`，结果中记录该设置。这不是日常浏览器或生产部署配置；默认不启用。物理麦克风未测试，不以虚拟采集证明蓝牙、回声、老人说话或长时稳定。
+
+产物包括阶段记录、最终 `summary.json` 和 Chrome 日志。`result` 事件含空字符串时不算识别成功；整体命令退出 2 表示采集、独立识别或原生识别至少一项未满足。静音不记为有效转写；API 失败不分类成普通正文。
