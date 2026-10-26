@@ -6,7 +6,7 @@ import { useTranslations } from "next-intl";
 
 export interface ExtractionPreview {
     characters: { name: string; description?: string }[];
-    crowd_groups?: { label: string; extra_id?: string; wardrobe?: string; body_build?: string }[];
+    crowd_groups?: { label: string; extra_id?: string; wardrobe?: string; body_build?: string; role_tags?: string[] }[];
     scenes: { name: string; description?: string; asset_design?: {
         design_draft?: { asset_baseline?: { scene_identity?: string }; shot_only_content?: string[]; unresolved?: string[] };
     } }[];
@@ -49,7 +49,7 @@ export default function EntityConfirmModal({
 
     const sections = [
         { key: "characters" as const, label: t("entityKind_characters"), icon: Users, items: preview.characters.map(item => ({ name: item.name, description: item.description })), prev: currentCounts.characters },
-        { key: "crowd_groups" as const, label: "背景群演", icon: Users, items: (preview.crowd_groups ?? []).map(item => ({ name: item.label, description: [item.body_build, item.wardrobe].filter(Boolean).join("；") })), prev: currentCounts.crowd_groups ?? 0 },
+        { key: "crowd_groups" as const, label: "背景群演", icon: Users, items: (preview.crowd_groups ?? []).map(item => ({ name: item.label, description: [item.body_build, item.wardrobe, item.role_tags?.length ? `标签：${item.role_tags.join("、")}` : ""].filter(Boolean).join("；") })), prev: currentCounts.crowd_groups ?? 0 },
         { key: "scenes" as const, label: t("entityKind_scenes"), icon: MapPin, items: preview.scenes, prev: currentCounts.scenes },
         { key: "props" as const, label: t("entityKind_props"), icon: Box, items: preview.props, prev: currentCounts.props },
     ];

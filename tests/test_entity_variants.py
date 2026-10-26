@@ -124,7 +124,8 @@ def test_entity_extraction_preserves_crowd_group_candidates():
     }
     script = processor._create_script_from_data(
         "测试", "长街上百姓避让",
-        {"characters": [], "crowd_groups": [{"extra_id": "crowd-town", "label": "青溪镇市井百姓"}], "scenes": [scene], "props": []},
+        {"characters": [], "crowd_groups": [{"extra_id": "crowd-town", "label": "青溪镇市井百姓", "role_tags": ["普通路人", "围观避让", "商贩"]}], "scenes": [scene], "props": []},
     )
     assert [item.label for item in script.crowd_group_candidates] == ["青溪镇市井百姓"]
     assert script.crowd_group_candidates[0].kind == "extra_template"
+    assert script.crowd_group_candidates[0].role_tags == ["普通路人", "围观避让", "商贩"]

@@ -647,6 +647,7 @@ class ExtraRosterEntry(BaseModel):
     wardrobe: Optional[str] = Field(None, max_length=500)
     palette: Optional[str] = Field(None, max_length=240)
     props: List[str] = Field(default_factory=list, max_length=20)
+    role_tags: List[str] = Field(default_factory=list, max_length=12)
     reference_variant_id: Optional[str] = None
     reference_media_id: Optional[str] = None
     reference_variant_ids: List[str] = Field(default_factory=list, max_length=20)

@@ -709,7 +709,8 @@ DEFAULT_ENTITY_EXTRACTION_PROMPT = """
             "body_build": "可见体态范围",
             "wardrobe": "服装族与色彩范围",
             "palette": "群体色彩范围",
-            "props": []
+            "props": [],
+            "role_tags": ["普通路人", "围观避让", "商贩"]
         }
     ],
     "scenes": [

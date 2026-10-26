@@ -207,6 +207,7 @@ export interface ExtraRosterEntry {
     wardrobe?: string | null;
     palette?: string | null;
     props?: string[];
+    role_tags?: string[];
     reference_variant_id?: string | null;
     reference_media_id?: string | null;
     reference_variant_ids?: string[];
