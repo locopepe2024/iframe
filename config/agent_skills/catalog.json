@@ -261,6 +261,21 @@
       "license": "MIT（LumenX 原创工作流）",
       "license_file": "lumenx-MIT.txt",
       "adaptation": "LumenX 独立编写的应用工作流，遵循本仓库 MIT 许可。source 指格式参考依据，不是本文件上游原文；官方资料仍受 MiniMax H3 Community License 约束，未复制官方 skill 全文或模型。生成效果待实测。"
+    },
+    {
+      "id": "street-conflict-crowd-direction",
+      "name": "街道冲突与群像动作",
+      "category": "分镜群像动作",
+      "targets": ["Script analysis", "Scene design", "Storyboard", "Shot Design", "Seedance", "MiniMax H3"],
+      "version": "1.0.0",
+      "description": "设计街道抢劫、斗殴、追逐和救援中的空间轴线、近中远景人群反应与信息差。",
+      "source": "https://github.com/locopepe2024/iframe",
+      "source_revision": "working-tree",
+      "license": "MIT（iFrame 原创适配）",
+      "license_file": "lumenx-MIT.txt",
+      "adaptation": "参考 ScreenWeaver 公开战争片设计方法提炼；不复制第三方运行时或素材。",
+      "auto_load": false,
+      "instructions_file": "street-conflict-crowd-direction.md"
     }
   ]
 }
