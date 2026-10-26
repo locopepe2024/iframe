@@ -135,3 +135,5 @@
 
 - 2026-10-23目标 rig 脚链/网格只读解析：GLB含77 nodes、3 meshes、73 joints；两侧脚链为 ankle→foot→DEF_foot→toe→toe_attachment。主体 mesh primitive 0 每侧381个强脚链权重点，primitive 1仅每侧2个强脚链点；左右静止包围盒近似镜像。按GLB局部Y取最低点可定义“脚链影响网格最低点代理”，但轴语义、鞋底材质归属、renderer矩阵闭环和源帧接触尚未证明；未执行IK、未改主链路。[rig鞋底代理报告](../agents/deliverables/2026-10-23-recreation2-rig-sole-proxy-v1.md)
 - 2026-10-23 media Blender 闭环：在 pinned rig（Blender 4.5.9，rig SHA `95eeb19c…`）上读取源1/17/23/29/41/55对应 bundle 姿态。脚链蒙皮后的最低带相对 foot head 偏移随姿态变化，不能用固定世界偏移替代；旧探针每帧重选最低带，数量14–53，不能直接测滑移。固定静止态48顶点 patch 后，跨六姿态数量恒定，但世界最低高度仍随脚部旋转变化；这验证了“固定顶点集合再测滑移”的诊断边界，尚未验证鞋底材质、地面或IK收益。[media rig鞋底报告](../agents/deliverables/2026-10-23-recreation2-rig-sole-proxy-v1.md)
+
+- 2026-10-26 media Blender 接触目标隔离：恢复哈希核对的图像观测及未做IK的raw_root_yaw基线；六事件基线复现，18组几何/保持/重导入通过。固定鞋底patch组29帧18.46→17.99px，23帧12.25→12.96px；23/41触0.04units限幅且仍有平面残差。ankle/toe直接贴平面仅负对照，测试平面非源地面，连续接触未过。首次错误输入运行已标无效。用户报告H3上游延迟已解决，本轮未独立测H3；主链路未改。[报告](../agents/deliverables/2026-10-26-recreation2-contact-target-ablation-v1.md)

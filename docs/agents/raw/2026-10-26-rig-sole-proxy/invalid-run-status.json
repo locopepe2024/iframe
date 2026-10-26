@@ -1,0 +1,10 @@
+{
+  "artifact": "ik-report-media.json",
+  "status": "INVALID_FOR_SOURCE_IMAGE_SCORING",
+  "reasons": [
+    "direction-only world-target-track.json was passed as normalized image observations",
+    "selected-bundle.json was assembled from previously corrected IK outputs, not original baseline"
+  ],
+  "superseded_by": "contact-target-report.json",
+  "do_not_use_for_pose_or_contact_acceptance": true
+}

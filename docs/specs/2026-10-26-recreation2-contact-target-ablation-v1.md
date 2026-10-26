@@ -1,0 +1,7 @@
+# Contact target isolation on media Blender
+
+Only diagnostic copies are changed. H3 delay is resolved according to the user's upstream update; this experiment does not independently test H3.
+
+Use hash-verified image-track observations (`0fed823bf39bd206ebeafec922a29394ee87a942b1bcc0395610a603d598550a`) and the original `raw_root_yaw` bundle, not already corrected IK outputs. Compare ankle head, toe head and fixed sole patch against the same synthetic plane, applying vertical-only displacement capped at 0.04 Blender units. Ankle/toe cases deliberately omit sole offsets as negative controls; they are not calibrated contact algorithms. Preserve source PTS from existing anchors. Use left support candidates at source17/23/29 and right at41/55; first frame is a calibration control. Support labels remain visual hypotheses, not force truth.
+
+Acceptance: baseline source errors reproduce the existing root/yaw report within 0.02 px; zero-displacement, unchanged other leg/upper body and bundle roundtrip <0.01 px; bone length and endpoint checks from existing analytic solver pass. Report requested and actual displacement, cap hits, patch height, horizontal displacement and per-joint image residuals. Sparse events do not verify continuous sliding. The first-frame left patch centroid defines a synthetic plane, not source floor truth. No production change or H3 acceptance follows from geometric success.
