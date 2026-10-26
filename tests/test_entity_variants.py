@@ -1,4 +1,7 @@
 from src.apps.comic_gen.llm import DEFAULT_ENTITY_EXTRACTION_PROMPT, ScriptProcessor
+from unittest.mock import Mock
+import json
+import pytest
 
 
 def test_temporal_character_variants_share_persona_with_full_width_parentheses():
@@ -29,3 +32,42 @@ def test_temporal_character_variants_share_persona_with_full_width_parentheses()
 def test_entity_prompt_requires_separate_visual_variants_for_temporal_states():
     assert "周涵（大学时期）" in DEFAULT_ENTITY_EXTRACTION_PROMPT
     assert "分别生成和绑定不同的角色设计" in DEFAULT_ENTITY_EXTRACTION_PROMPT
+
+
+def test_scene_extraction_skill_applies_to_custom_prompt_and_persists_draft():
+    processor = ScriptProcessor.__new__(ScriptProcessor)
+    processor.llm = Mock(is_configured=True)
+    baseline = {
+        "scene_identity": "青溪镇长街中段粮铺", "location_type": "粮铺",
+        "fixed_geometry": ["临街木质铺面", "柜台"], "fixed_landmarks": ["粮袋", "竹筐"],
+        "materials": ["旧木", "石板"], "environment": ["长街纵深"],
+        "time_baseline": "黄昏", "lighting_baseline": "与青溪镇长街一致的光影",
+        "composition_tendency": "", "reusable_constraints": [], "basis": ["observed"],
+    }
+    scene = {"name": "粮铺", "description": "流民匪寇正在劫掠，百姓退后",
+             "asset_baseline": baseline,
+             "shot_only_content": ["流民匪寇劫掠", "百姓退让", "近中远景人物分配"],
+             "uncertainties": []}
+    processor.llm.chat.return_value = json.dumps({"characters": [], "scenes": [scene], "props": []}, ensure_ascii=False)
+
+    script = processor.parse_novel("测试", "长街中段粮铺，匪寇劫掠，百姓退让，黄昏", "请提取：{text}")
+    prompt = processor.llm.chat.call_args.kwargs["messages"][0]["content"]
+    assert "scene-asset-extraction" in prompt
+    assert "shot_only_content" in prompt
+    assert "匪寇劫掠" not in script.scenes[0].description
+    assert script.scenes[0].asset_design["design_draft"]["asset_baseline"] == baseline
+    assert script.scenes[0].asset_design["design_draft"]["shot_only_content"] == scene["shot_only_content"]
+    assert script.scenes[0].asset_design["design_revisions"] == []
+
+    reviewed = script.scenes[0].model_dump()
+    applied = processor._create_script_from_data("测试", "原文", {"characters": [], "scenes": [reviewed], "props": []})
+    assert applied.scenes[0].asset_design["design_draft"]["asset_baseline"] == baseline
+    assert applied.scenes[0].asset_design["design_revisions"] == []
+
+
+def test_live_scene_extraction_rejects_missing_baseline():
+    processor = ScriptProcessor.__new__(ScriptProcessor)
+    processor.llm = Mock(is_configured=True)
+    processor.llm.chat.return_value = json.dumps({"characters": [], "scenes": [{"name": "粮铺", "description": "匪寇劫掠"}], "props": []}, ensure_ascii=False)
+    with pytest.raises(ValueError, match="缺少可复用资产基线"):
+        processor.parse_novel("测试", "匪寇劫掠粮铺")

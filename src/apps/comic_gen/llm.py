@@ -677,7 +677,10 @@ DEFAULT_ENTITY_EXTRACTION_PROMPT = """
         {
             "id": "scene_001",
             "name": "地点名（如 '咖啡店'、'古代遗迹'）",
-            "description": "外观描述（光线、氛围、关键元素）",
+            "description": "仅描述可复用地点，不含当前事件、人物和站位",
+            "asset_baseline": {"scene_identity": "地点身份", "location_type": "地点类型", "fixed_geometry": [], "fixed_landmarks": [], "materials": [], "environment": [], "time_baseline": "", "lighting_baseline": "", "composition_tendency": "", "reusable_constraints": [], "basis": ["observed"]},
+            "shot_only_content": ["仅属于当前镜头的事件、人物或构图"],
+            "uncertainties": [],
             "visual_weight": 3
         }
     ],
@@ -884,6 +887,7 @@ class ScriptProcessor:
 
             content = _strip_markdown_json(content)
             data = json.loads(content)
+            self._require_scene_baselines(data)
             return self._create_script_from_data(title, text, data)
                 
         except json.JSONDecodeError as e:
@@ -923,6 +927,7 @@ class ScriptProcessor:
             data = json.loads(_strip_markdown_json(content))
             if not isinstance(data, dict) or not all(key in data for key in ("characters", "scenes", "props")):
                 raise ValueError("修订结果缺少 characters、scenes 或 props")
+            self._require_scene_baselines(data)
             return self._create_script_from_data(title, text, data)
         except json.JSONDecodeError as exc:
             raise RuntimeError(f"LLM 返回的数据格式错误，无法解析 JSON: {exc}") from exc
@@ -937,6 +942,18 @@ class ScriptProcessor:
             error_msg = f"剧本解析失败: {str(e)}"
             logger.error(error_msg, exc_info=True)
             raise RuntimeError(error_msg)
+
+    @staticmethod
+    def _require_scene_baselines(data: Dict[str, Any]) -> None:
+        if not isinstance(data, dict) or not isinstance(data.get("scenes"), list):
+            raise ValueError("实体提取结果缺少场景列表")
+        if any(not isinstance(scene, dict) or not (
+            "asset_baseline" in scene or
+            isinstance(scene.get("asset_design"), dict) and
+            isinstance(scene["asset_design"].get("design_draft"), dict) and
+            "asset_baseline" in scene["asset_design"]["design_draft"]
+        ) for scene in data["scenes"]):
+            raise ValueError("场景提取缺少可复用资产基线，请重新提取")
 
     def _create_script_from_data(self, title: str, original_text: str, data: Dict[str, Any]) -> Script:
         script_id = str(uuid.uuid4())
@@ -989,10 +1006,46 @@ class ScriptProcessor:
             if llm_id:
                 llm_id_to_uuid[llm_id] = scene_uuid
 
+            reviewed_draft = (scene_data.get("asset_design") or {}).get("design_draft") or {}
+            baseline = scene_data.get("asset_baseline", reviewed_draft.get("asset_baseline"))
+            asset_design = {"design_draft": {}, "design_revisions": []}
+            description = scene_data.get("description", "")
+            if baseline is not None:
+                required = {"scene_identity", "location_type", "fixed_geometry", "fixed_landmarks",
+                            "materials", "environment", "time_baseline", "lighting_baseline",
+                            "composition_tendency", "reusable_constraints", "basis"}
+                if not isinstance(baseline, dict) or set(baseline) != required:
+                    raise ValueError("Scene asset_baseline fields are invalid")
+                for key in ("scene_identity", "location_type", "time_baseline", "lighting_baseline", "composition_tendency"):
+                    if not isinstance(baseline[key], str):
+                        raise ValueError(f"Scene asset_baseline {key} must be text")
+                for key in ("fixed_geometry", "fixed_landmarks", "materials", "environment", "reusable_constraints", "basis"):
+                    if not isinstance(baseline[key], list) or any(not isinstance(item, str) for item in baseline[key]):
+                        raise ValueError(f"Scene asset_baseline {key} must be text items")
+                if any(item not in {"observed", "inferred", "authored"} for item in baseline["basis"]):
+                    raise ValueError("Scene asset_baseline basis is invalid")
+                shot_only = scene_data.get("shot_only_content", reviewed_draft.get("shot_only_content", []))
+                uncertainties = scene_data.get("uncertainties", reviewed_draft.get("unresolved", []))
+                if any(not isinstance(value, list) or any(not isinstance(item, str) for item in value)
+                       for value in (shot_only, uncertainties)):
+                    raise ValueError("Scene shot-only content or uncertainties are invalid")
+                description = "；".join(part for part in (
+                    baseline["scene_identity"], "、".join(baseline["fixed_geometry"]),
+                    "、".join(baseline["fixed_landmarks"]), "、".join(baseline["materials"]),
+                    "、".join(baseline["environment"]), baseline["time_baseline"],
+                    baseline["lighting_baseline"],
+                ) if part)
+                asset_design["design_draft"] = {
+                    "asset_baseline": baseline,
+                    "shot_only_content": shot_only,
+                    "visual_notes": description,
+                    "unresolved": uncertainties,
+                }
             scenes.append(Scene(
                 id=scene_uuid,
                 name=scene_data.get("name", "Unknown"),
-                description=scene_data.get("description", ""),
+                description=description,
+                asset_design=asset_design,
                 time_of_day=scene_data.get("time_of_day"),
                 lighting_mood=scene_data.get("lighting_mood"),
                 visual_weight=scene_data.get("visual_weight", 3),
@@ -1523,9 +1576,19 @@ class ScriptProcessor:
         """
         if custom_prompt and custom_prompt.strip():
             if "{text}" in custom_prompt:
-                return custom_prompt.replace("{text}", text)
-            return f"{custom_prompt}\n\nText:\n{text}"
-        return DEFAULT_ENTITY_EXTRACTION_PROMPT.replace("{text}", text)
+                prompt = custom_prompt.replace("{text}", text)
+            else:
+                prompt = f"{custom_prompt}\n\nText:\n{text}"
+        else:
+            prompt = DEFAULT_ENTITY_EXTRACTION_PROMPT.replace("{text}", text)
+        skill_path = Path(__file__).resolve().parents[3] / "config/agent_skills/scene-asset-extraction/SKILL.md"
+        skill = skill_path.read_text(encoding="utf-8")
+        return (f"{prompt}\n\n<scene_asset_extraction_skill>\n{skill}\n</scene_asset_extraction_skill>\n"
+                "场景强制合同：每个 scenes 条目必须提供 asset_baseline、shot_only_content、uncertainties。"
+                "asset_baseline 恰含 scene_identity、location_type、fixed_geometry、fixed_landmarks、materials、"
+                "environment、time_baseline、lighting_baseline、composition_tendency、reusable_constraints、basis；"
+                "basis 仅用 observed/inferred/authored。description 只概述可复用地点。"
+                "只返回 characters、scenes、props 三个顶层字段的合法 JSON。")
 
     def analyze_script_for_styles(self, script_text: str, custom_style_prompt: str = "") -> List[Dict[str, Any]]:
         """使用 LLM 分析剧本并推荐视觉风格

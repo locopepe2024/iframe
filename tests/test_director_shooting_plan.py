@@ -422,9 +422,13 @@ def test_confirmed_plan_projects_scene_shot_character_and_prop_context():
     assert context.shots[0].performance_action == plan.scenes[0].beats[0].shots[0].performance_action
     assert context.shots[0].action_physics == plan.scenes[0].beats[0].shots[0].action_physics
     assert context.shots[0].ambient_sound == plan.scenes[0].beats[0].shots[0].ambient_sound
+    scene_design = {"design_draft": {"visual_notes": "电影院入口", "shot_only_content": ["两人牵手"]},
+                    "design_revisions": []}
+    script.scenes[0].asset_design = scene_design
     result = pipeline.sync_episode_assets_from_shooting_plan("film")
     assert len(result["new_bindings"]) == 3
     assert script.episode_visual_context is not None
+    assert script.scenes[0].asset_design == scene_design
 
 
 def test_unbound_plan_scene_id_does_not_resolve_as_scene_asset():

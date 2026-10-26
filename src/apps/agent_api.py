@@ -843,16 +843,11 @@ def get_character_design_draft_job(job_id: str, ctx: UserContext = Depends(requi
 def _compile_asset_design_draft_input(body: AssetDesignRequest, ctx: UserContext) -> dict:
     subject = "场景环境" if body.asset_type == "scene" else "道具物件"
     if body.asset_type == "scene":
+        scene_skill = (Path(__file__).resolve().parents[2] /
+                       "config/agent_skills/scene-asset-extraction/SKILL.md").read_text(encoding="utf-8")
         system = (
-            "你是场景资产提取助手，不是分镜导演。你的任务是从资产档案、用户要求和当前草稿中，"
-            "提取可跨多个镜头复用的地点基线，并把当前分镜专属内容单独隔离。"
-            "场景资产只允许包含地点身份、固定空间结构、固定地标和物件、材质、环境纵深、"
-            "可确认的默认时间、世界光影基线、可复用构图倾向和场景级禁止项。"
-            "当前事件、角色名或角色ID、人物数量、近中远景分配、临时站位、动作、受力、对白、"
-            "临时道具状态和当前镜头运镜必须放入 shot_only_content，不得写入 asset_baseline。"
-            "如果用户把分镜内容混在场景描述中，必须拆分而不是把它保存为地点事实。"
-            "区分 observed（输入明确给出）、inferred（由结构合理推断）和 authored（为可复用设计补充）；"
-            "inferred 和 authored 不得伪装成 observed。不要补造未提供的具体人物或剧情。"
+            "你是场景资产提取助手。遵守以下场景 Skill：\n"
+            f"{scene_skill}\n"
             "只返回一个 JSON，不要 Markdown："
             '{"asset_baseline":{"scene_identity":"", "location_type":"", "fixed_geometry":[], '
             '"fixed_landmarks":[], "materials":[], "environment":[], "time_baseline":"", '

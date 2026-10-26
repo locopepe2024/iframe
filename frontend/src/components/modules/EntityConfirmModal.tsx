@@ -6,7 +6,9 @@ import { useTranslations } from "next-intl";
 
 export interface ExtractionPreview {
     characters: { name: string; description?: string }[];
-    scenes: { name: string; description?: string }[];
+    scenes: { name: string; description?: string; asset_design?: {
+        design_draft?: { asset_baseline?: { scene_identity?: string }; shot_only_content?: string[]; unresolved?: string[] };
+    } }[];
     props: { name: string; description?: string }[];
 }
 
@@ -109,6 +111,16 @@ export default function EntityConfirmModal({
                                                 ))}
                                             </div>
                                         ) : <p className="text-xs italic text-text-tertiary">{t("noEntities")}</p>}
+                                        {key === "scenes" && preview.scenes.map((scene, index) => {
+                                            const draft = scene.asset_design?.design_draft;
+                                            if (!draft?.asset_baseline) return null;
+                                            return <div key={`${scene.name}:${index}`} className="border-l-2 border-glass-border pl-3 text-xs leading-5 text-text-secondary">
+                                                <div className="font-medium text-foreground">{scene.name}</div>
+                                                <div>{t("sceneReusableLocation")}: {scene.description || draft.asset_baseline.scene_identity}</div>
+                                                {!!draft.shot_only_content?.length && <div>{t("sceneShotOnly")}: {draft.shot_only_content.join("；")}</div>}
+                                                {!!draft.unresolved?.length && <div>{t("sceneUncertainties")}: {draft.unresolved.join("；")}</div>}
+                                            </div>;
+                                        })}
                                     </div>
                                 ))}
                             </div>
