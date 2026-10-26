@@ -1132,6 +1132,7 @@ export default function ShotCard({
                                         ...(entry?.reference_variant_id ? [entry.reference_variant_id] : []),
                                     ]));
                                     const selectedVariants = instance.variant_ids ?? [];
+                                    const missingVariants = selectedVariants.filter(variantId => !availableVariants.includes(variantId));
                                     return <div key={index} className="grid grid-cols-2 gap-2 border-b border-glass-border pb-2">
                                         <span className="col-span-2 text-foreground">{entry?.label || ("已失效：" + id)}</span>
                                         <select aria-label="群演可见层" value={instance.layer} onChange={event => onUpdateCrowdInstances((shot.crowdInstances ?? []).map((item, i) => i === index ? { ...item, layer: event.target.value as ExtraShotInstance["layer"] } : item))} className="bg-input-bg border border-glass-border p-1">
@@ -1145,6 +1146,7 @@ export default function ShotCard({
                                                 : selectedVariants.filter(value => value !== variantId);
                                             return { ...item, variant_ids: next };
                                         }))} />{variantId}</label>)}</div></fieldset>}
+                                        {missingVariants.length > 0 && <p className="col-span-2 text-danger">缺失变体：{missingVariants.join(", ")}。请重新选择已保存变体，系统不会自动替换。</p>}
                                         {entry?.kind === "fixed_extra" && <label className="col-span-2 flex items-center gap-2"><input type="checkbox" checked={instance.face_readable} onChange={event => onUpdateCrowdInstances((shot.crowdInstances ?? []).map((item, i) => i === index ? { ...item, face_readable: event.target.checked } : item))} />面孔需要可辨认</label>}
                                         <button type="button" className="col-span-2 justify-self-start text-danger" onClick={() => onUpdateCrowdInstances((shot.crowdInstances ?? []).filter((_, i) => i !== index))}>移除</button>
                                     </div>;
