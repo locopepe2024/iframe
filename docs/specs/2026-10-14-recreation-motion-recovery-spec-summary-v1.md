@@ -137,3 +137,5 @@
 - 2026-10-23 media Blender 闭环：在 pinned rig（Blender 4.5.9，rig SHA `95eeb19c…`）上读取源1/17/23/29/41/55对应 bundle 姿态。脚链蒙皮后的最低带相对 foot head 偏移随姿态变化，不能用固定世界偏移替代；旧探针每帧重选最低带，数量14–53，不能直接测滑移。固定静止态48顶点 patch 后，跨六姿态数量恒定，但世界最低高度仍随脚部旋转变化；这验证了“固定顶点集合再测滑移”的诊断边界，尚未验证鞋底材质、地面或IK收益。[media rig鞋底报告](../agents/deliverables/2026-10-23-recreation2-rig-sole-proxy-v1.md)
 
 - 2026-10-26 media Blender 接触目标隔离：恢复哈希核对的图像观测及未做IK的raw_root_yaw基线；六事件基线复现，18组几何/保持/重导入通过。固定鞋底patch组29帧18.46→17.99px，23帧12.25→12.96px；23/41触0.04units限幅且仍有平面残差。ankle/toe直接贴平面仅负对照，测试平面非源地面，连续接触未过。首次错误输入运行已标无效。用户报告H3上游延迟已解决，本轮未独立测H3；主链路未改。[报告](../agents/deliverables/2026-10-26-recreation2-contact-target-ablation-v1.md)
+
+- 2026-10-26连续支持候选脚底分段：media Blender按源PTS读取28个独立样本，静止48点patch前/后各取16点，六事件patch基线复现0。left17–37与right43–55前后位移差比中位5.31%/4.42%，多数共同移动，不足以由最低接触点切换解释。root/局部余项速度幅值中位分别0.247/0.744和1.169/1.334 units/s；向量可抵消，不能转成因果占比。目标脚部运动存在，源真实滑移/地面/滚动仍未知；未锁脚、未改IK/主链路。[分段报告](../agents/deliverables/2026-10-26-recreation2-sole-segment-motion-v1.md)
