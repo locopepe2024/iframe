@@ -114,6 +114,51 @@ Holodeck, Blender MCP or CLI-Anything runtime is installed into the product.
 The inspected CLI-Anything Blender core does not itself prove natural-language
 understanding, skeletal posing, contact solving or clothes generation.
 
+## Reference output ownership and reuse
+
+The 3D director is the review gate, while the asset library is the durable
+reuse owner. A natural-language generation request remains director-scoped and
+must not enter storyboard state. After the director reviews, adjusts or rejects
+the generated depth, blocking image, camera-motion reference video and action
+reference video, an approved result is saved as a versioned asset-library
+record. Later shots and storyboards read the approved asset-library revision by
+stable asset/variant/media IDs; they do not read the transient generation
+request or mutate the director scene through that reference.
+
+This separates three meanings that must not be conflated:
+
+- the director scene is the editable spatial source;
+- the reviewed asset-library revision is the reusable reference artifact;
+- a storyboard shot is a read-only consumer binding.
+
+An approved director result therefore creates an immutable reference asset
+revision or variant with source director revision, package checksum, frame,
+camera, purpose, media status and source hashes. A later director correction
+creates a new revision or variant; it never rewrites a library revision already
+used by a shot. Deleting or replacing the current director scene does not
+silently change an existing library reference.
+
+The four output classes remain separate in the library record. `depth` records
+world-depth/occlusion purpose and submission status; `blockingImage` records
+numbered layout and composition purpose; `cameraMotionVideo` records camera
+path and timing; `actionMotionVideo` records body-motion and rhythm. None is
+implicitly a final character, scene or prop asset, and metric depth is still
+produced by the depth tool/media pipeline rather than inferred from an image.
+
+The proposed handoff API should therefore be interpreted as:
+
+```text
+POST /director3d/reference-generation-requests
+GET  /director3d/reference-generation-results/{request_id}
+PATCH /director3d/reference-generation-results/{request_id}/review
+POST /director3d/reference-snapshots
+```
+
+The final POST is a director review commit that creates a reusable,
+asset-library-backed snapshot. It is not a direct storyboard write. The
+snapshot response must expose the stable library asset/variant/media IDs that
+storyboard consumers bind read-only.
+
 ## Desktop reference: numbered blocking sketch workflow
 
 The reviewed `/Users/owen/Desktop/ai多人占位.docx` describes a three-step
