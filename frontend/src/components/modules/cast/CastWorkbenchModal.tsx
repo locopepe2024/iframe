@@ -342,6 +342,10 @@ export default function CastWorkbenchModal({ isOpen, kind, entityId, onClose }: 
     const [assetDesignNotes, setAssetDesignNotes] = useState("");
     const [assetDesignRequirements, setAssetDesignRequirements] = useState("");
     const [assetDesignUnresolved, setAssetDesignUnresolved] = useState<string[]>([]);
+    const [sceneAssetExtraction, setSceneAssetExtraction] = useState<{
+        asset_baseline: Record<string, string | string[]>;
+        shot_only_content: string[];
+    } | null>(null);
     const [assetDesigning, setAssetDesigning] = useState(false);
     const [assetDesignReview, setAssetDesignReview] = useState<{
         source: string; request: Record<string, unknown>; messages: VideoPolishMessages;
@@ -412,6 +416,7 @@ export default function CastWorkbenchModal({ isOpen, kind, entityId, onClose }: 
         setAssetDesignNotes("");
         setAssetDesignRequirements("");
         setAssetDesignUnresolved([]);
+        setSceneAssetExtraction(null);
         setSceneNegativePrompt(getTemplateNegative("scene"));
     }, [entityId, kind]);
 
@@ -496,6 +501,9 @@ export default function CastWorkbenchModal({ isOpen, kind, entityId, onClose }: 
             setAssetDesignNotes(typeof saved.visual_notes === "string" ? saved.visual_notes : "");
             setAssetDesignRequirements(typeof saved.user_requirements === "string" ? saved.user_requirements : "");
             setAssetDesignUnresolved(Array.isArray(saved.unresolved) ? saved.unresolved : []);
+            setSceneAssetExtraction(kind === "scene" && saved.asset_baseline
+                ? { asset_baseline: saved.asset_baseline, shot_only_content: saved.shot_only_content || [] }
+                : null);
             setPromptDirty(false);
             lastSeededEntityId.current = entity.id;
         }
@@ -570,7 +578,8 @@ export default function CastWorkbenchModal({ isOpen, kind, entityId, onClose }: 
         }
         setAssetDesigning(true);
         try {
-            const result = await agentRequest<{ visual_notes: string; unresolved?: string[] }>("/asset-design/draft", "POST", {
+            const result = await agentRequest<{ visual_notes: string; unresolved?: string[]; uncertainties?: string[];
+                asset_baseline?: Record<string, string | string[]>; shot_only_content?: string[] }>("/asset-design/draft", "POST", {
                 ...review.request, reviewed_messages: review.messages, review_token: review.reviewToken,
             });
             setAssetDesignReview(null);
@@ -578,7 +587,11 @@ export default function CastWorkbenchModal({ isOpen, kind, entityId, onClose }: 
             const notes = String(result?.visual_notes || "").trim();
             if (!notes) throw new Error("设计模型未返回视觉方案");
             setAssetDesignNotes(notes);
-            setAssetDesignUnresolved(Array.isArray(result?.unresolved) ? result.unresolved : []);
+            setAssetDesignUnresolved(Array.isArray(result?.uncertainties) ? result.uncertainties
+                : Array.isArray(result?.unresolved) ? result.unresolved : []);
+            setSceneAssetExtraction(kind === "scene" && result.asset_baseline
+                ? { asset_baseline: result.asset_baseline, shot_only_content: result.shot_only_content || [] }
+                : null);
             setPrompt(`${entity.name}：${notes}\n\n${kind === "scene"
                 ? "场景参考图：根据已确认的空间设定及本次画面要求安排构图、人物和光影。"
                 : "构图：产品摄影式单体展示，突出轮廓、材质、比例和关键结构。"}`);
@@ -597,6 +610,7 @@ export default function CastWorkbenchModal({ isOpen, kind, entityId, onClose }: 
             const updated = await api.updateAssetAttributes(currentProject.id, entity.id, kind, {
                 asset_design: {
                     visual_notes: assetDesignNotes.trim(),
+                    ...(kind === "scene" && sceneAssetExtraction ? sceneAssetExtraction : {}),
                     user_requirements: assetDesignRequirements.trim(),
                     unresolved: confirmed ? [] : assetDesignUnresolved,
                     confirmed,
@@ -1173,7 +1187,8 @@ export default function CastWorkbenchModal({ isOpen, kind, entityId, onClose }: 
                                     {assetDesignNotes && (
                                         <div className="mt-2 rounded-md border border-glass-border bg-surface/70 p-2.5">
                                             <label className="text-[0.625rem] uppercase tracking-[0.14em] text-text-muted">视觉设计草稿</label>
-                                            <textarea value={assetDesignNotes} onChange={(event) => setAssetDesignNotes(event.target.value)} disabled={generationBusy} rows={4} className="mt-1 w-full resize-y bg-transparent text-xs leading-5 text-foreground focus-visible:outline-none" aria-label="视觉设计草稿" />
+                                            <textarea value={assetDesignNotes} onChange={(event) => { setAssetDesignNotes(event.target.value); setSceneAssetExtraction(null); }} disabled={generationBusy} rows={4} className="mt-1 w-full resize-y bg-transparent text-xs leading-5 text-foreground focus-visible:outline-none" aria-label="视觉设计草稿" />
+                                            {kind === "scene" && sceneAssetExtraction && sceneAssetExtraction.shot_only_content.length > 0 && <p className="mt-1 text-[0.6875rem] text-text-secondary">仅用于当前分镜：{sceneAssetExtraction.shot_only_content.join("；")}</p>}
                                             {assetDesignUnresolved.length > 0 && <p className="mt-1 text-[0.6875rem] text-amber-300">待核对：{assetDesignUnresolved.join("；")}</p>}
                                             <div className="mt-2 flex gap-2">
                                                 <button type="button" onClick={() => void handleSaveAssetDesign(false)} disabled={assetDesignSaving || !assetDesignNotes.trim()} className="min-h-8 rounded-md border border-glass-border px-2.5 text-xs text-text-secondary hover:bg-hover-bg disabled:opacity-40">保存草稿</button>
