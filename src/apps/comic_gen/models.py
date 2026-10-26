@@ -3074,8 +3074,3 @@ class GlobalAssetLibrary(BaseModel):
     characters: List[Character] = Field(default_factory=list, description="Shared global character assets")
     scenes: List[Scene] = Field(default_factory=list, description="Shared global scene assets")
     props: List[Prop] = Field(default_factory=list, description="Shared global prop assets")
-    # Director reference outputs are reusable library records, kept separate
-    # from semantic character/scene/prop assets and addressed by stable IDs.
-    director_reference_requests: List[Dict[str, Any]] = Field(default_factory=list)
-    director_reference_results: List[Dict[str, Any]] = Field(default_factory=list)
-    director_reference_assets: List[Dict[str, Any]] = Field(default_factory=list)
