@@ -86,4 +86,6 @@ def test_scene_extraction_guidance_keeps_distinct_street_corners():
     assert "不编造建筑或摊位" in prompt
     assert "方才街角另有一伙" in prompt
     assert "粮铺门前的交手区域" in prompt
+    assert "从粮铺门前朝阁楼方向可见屋檐" in prompt
+    assert "从屋檐可望见粮铺门前" in prompt
     assert "潜伏、围堵等当前事件" in prompt
