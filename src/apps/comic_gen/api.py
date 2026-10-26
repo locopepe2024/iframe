@@ -80,6 +80,7 @@ from .models import (
     StoryboardReferencePackage,
     ShotVisualPreset,
     VideoTask,
+    VideoReferenceIdentity,
     AssemblyEditPlan,
     AssetLibraryReference,
     image_variant_storage_key,
@@ -4606,6 +4607,7 @@ class CreateVideoTaskRequest(BaseModel):
     shot_type: str = "single"  # 'single' or 'multi' (only for wan2.6-i2v)
     generation_mode: str = "i2v"  # 't2v' | 'i2v' | 'first_last_frame' | 'r2v'
     reference_video_urls: List[str] = []  # Reference video URLs for R2V (max 3)
+    reference_asset_inputs: Optional[List[VideoReferenceIdentity]] = None
     # Kling params
     mode: Optional[str] = None
     sound: Optional[str] = None
@@ -4879,6 +4881,7 @@ def create_video_task(script_id: str, request: CreateVideoTaskRequest, backgroun
                 generation_mode=request.generation_mode,
                 reference_video_urls=request.reference_video_urls,
                 reference_image_urls=request.reference_image_urls,
+                reference_asset_inputs=request.reference_asset_inputs,
                 pose_reference_variant_ids=request.pose_reference_variant_ids,
                 director_snapshot_media_id=request.director_snapshot_media_id,
                 ratio=request.ratio,

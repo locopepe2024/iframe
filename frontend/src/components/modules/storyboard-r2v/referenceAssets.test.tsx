@@ -54,6 +54,9 @@ describe("storyboard multi-reference assets", () => {
             assets,
         );
         expect(result.urls).toEqual(["host.jpg", "front.jpg"]);
+        expect(result.assetInputs.map((item) => [item.asset_type, item.asset_id, item.variant_id])).toEqual([
+            ["character", "host", "host-front"], ["prop", "product", "product-front"],
+        ]);
     });
 
     it("combines explicit slots and semantic asset tags without collisions", () => {

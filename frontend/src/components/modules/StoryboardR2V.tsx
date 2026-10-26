@@ -1301,6 +1301,7 @@ export default function StoryboardR2V() {
                         undefined,
                         undefined,
                         visualSourceHash,
+                        imageBased ? referenceSubmission.assetInputs : undefined,
                     );
                     const task = Array.isArray(tasks) ? tasks[0] : tasks;
                     return task?.id ? { id: task.id, warning: task.warning } : null;

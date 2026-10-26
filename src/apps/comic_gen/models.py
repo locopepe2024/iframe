@@ -211,6 +211,11 @@ class AssetImageReferenceIdentity(BaseModel):
     variant_id: str
 
 
+class VideoReferenceIdentity(AssetImageReferenceIdentity):
+    media_id: Optional[str] = None
+    storage_key: Optional[str] = None
+
+
 class AssetImageSubmissionSnapshot(BaseModel):
     """Immutable user-reviewed request captured before an image task is queued."""
     schema_version: Literal[1] = 1
@@ -484,6 +489,9 @@ class VideoTask(BaseModel):
     generation_mode: str = Field("i2v", description="Generation mode: 'i2v' (image-to-video) or 'r2v' (reference-to-video)")
     reference_video_urls: List[str] = Field(default_factory=list, description="Reference video URLs for R2V generation (max 3)")
     reference_media_ids: List[str] = Field(default_factory=list, description="Stable media identities consumed by this shot")
+    reference_asset_inputs: List[VideoReferenceIdentity] = Field(
+        default_factory=list, description="Ordered validated asset variants used as R2V image references"
+    )
     consistency_manifest: Optional["StoryboardConsistencyManifest"] = Field(
         None,
         description="Immutable consistency snapshot consumed by this video task",

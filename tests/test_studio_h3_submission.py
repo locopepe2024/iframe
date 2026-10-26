@@ -3,7 +3,7 @@ from unittest.mock import Mock
 
 import pytest
 
-from src.apps.comic_gen.models import Script, VideoTask
+from src.apps.comic_gen.models import ImageAsset, ImageVariant, Scene, Script, VideoReferenceIdentity, VideoTask
 from src.apps.comic_gen.pipeline import ComicGenPipeline
 from src.models import uniart
 from src.apps.studio_access import resolve_studio_reference, studio_owner_dir, studio_media_url
@@ -153,6 +153,48 @@ def owned_file(owner, name="product.jpg"):
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_bytes(b"fixture")
     return path
+
+
+def test_r2v_asset_inputs_match_ordered_current_media(studio, monkeypatch):
+    pipeline, script = studio
+    first = owned_file(script.owner_profile_id, "front.jpg")
+    second = owned_file(script.owner_profile_id, "side.jpg")
+    keys = [path.relative_to("output").as_posix() for path in (first, second)]
+    script.scenes = [Scene(id="shop", name="Shop", description="Grain shop", image_asset=ImageAsset(
+        selected_id="front", variants=[
+            ImageVariant(id="front", url=keys[0], media_id="media-front"),
+            ImageVariant(id="side", url=keys[1], media_id="media-side"),
+        ],
+    ))]
+    pipeline.output_root = "output"
+    inputs = [
+        VideoReferenceIdentity(asset_type="scene", asset_id="shop", variant_id="front", media_id="media-front"),
+        VideoReferenceIdentity(asset_type="scene", asset_id="shop", variant_id="side", media_id="media-side"),
+    ]
+    kwargs = dict(model="uniart/minimax-h3-vip", generation_mode="r2v",
+                  reference_image_urls=keys, reference_asset_inputs=inputs)
+
+    for changes in (
+        {"reference_image_urls": keys[::-1]},
+        {"reference_asset_inputs": [inputs[0]]},
+        {"reference_asset_inputs": [inputs[0], inputs[1].model_copy(update={"media_id": "replaced"})]},
+    ):
+        with pytest.raises(ValueError, match="Reference asset"):
+            pipeline.create_video_task(script.id, "", "shop", **(kwargs | changes))
+        assert not script.video_tasks
+
+    script.scenes[0].image_asset.variants.pop()
+    with pytest.raises(ValueError, match="variant changed"):
+        pipeline.create_video_task(script.id, "", "shop", **kwargs)
+    script.scenes[0].image_asset.variants.append(ImageVariant(id="side", url=keys[1], media_id="media-side"))
+
+    monkeypatch.setenv("LUMENX_MEDIA_SIGNING_KEY", "test-only")
+    signed = [studio_media_url(script.owner_profile_id, key) for key in keys]
+    pipeline.create_video_task(script.id, "", "shop", **(kwargs | {"reference_image_urls": signed}))
+    task = script.video_tasks[0]
+    assert [item.variant_id for item in task.reference_asset_inputs] == ["front", "side"]
+    assert [item.storage_key for item in task.reference_asset_inputs] == keys
+    assert task.reference_media_ids == ["media-front", "media-side"]
 
 
 def test_signed_reference_becomes_stable_owned_path(studio, monkeypatch):

@@ -962,6 +962,7 @@ export const api = {
         lastFrameUrl?: string,
         lastFrameMediaId?: string,
         visualSourceHash?: string,
+        referenceAssetInputs?: Array<{ asset_type: "character" | "scene" | "prop"; asset_id: string; variant_id: string; media_id?: string | null }>,
     ) => {
         const res = await axios.post(`${API_URL}/projects/${id}/video_tasks`, {
             image_url,
@@ -996,6 +997,7 @@ export const api = {
             last_frame_url: lastFrameUrl,
             last_frame_media_id: lastFrameMediaId,
             visual_source_hash: visualSourceHash,
+            reference_asset_inputs: referenceAssetInputs,
         });
         return res.data;
     },

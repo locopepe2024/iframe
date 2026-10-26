@@ -68,6 +68,7 @@ from .models import (
     ScenePromptWorkspace,
     AssetImageSubmissionSnapshot,
     AssetImageReferenceIdentity,
+    VideoReferenceIdentity,
     AssetReferenceIndex,
     AssetReferenceIndexEntry,
     image_variant_storage_key,
@@ -8203,7 +8204,7 @@ class ComicGenPipeline(StudioOwnerMixin):
         self._save_data()
         return script
 
-    def create_video_task(self, script_id: str, image_url: str, prompt: str, duration: int = 5, seed: int = None, resolution: str = "720p", generate_audio: bool = False, audio_url: str = None, prompt_extend: bool = True, negative_prompt: str = None, model: str = "wan2.7-i2v", frame_id: str = None, shot_type: str = "single", generation_mode: str = "i2v", reference_video_urls: list = None, reference_image_urls: list = None, ratio: str = None, watermark: Optional[bool] = None, mode: str = None, sound: str = None, cfg_scale: float = None, vidu_audio: bool = None, movement_amplitude: str = None, workbench_tab: Optional[str] = None, pose_reference_variant_ids: Optional[Dict[str, List[str]]] = None, director_snapshot_media_id: Optional[str] = None, last_frame_url: Optional[str] = None, last_frame_media_id: Optional[str] = None) -> Tuple[Script, str]:
+    def create_video_task(self, script_id: str, image_url: str, prompt: str, duration: int = 5, seed: int = None, resolution: str = "720p", generate_audio: bool = False, audio_url: str = None, prompt_extend: bool = True, negative_prompt: str = None, model: str = "wan2.7-i2v", frame_id: str = None, shot_type: str = "single", generation_mode: str = "i2v", reference_video_urls: list = None, reference_image_urls: list = None, ratio: str = None, watermark: Optional[bool] = None, mode: str = None, sound: str = None, cfg_scale: float = None, vidu_audio: bool = None, movement_amplitude: str = None, workbench_tab: Optional[str] = None, pose_reference_variant_ids: Optional[Dict[str, List[str]]] = None, director_snapshot_media_id: Optional[str] = None, last_frame_url: Optional[str] = None, last_frame_media_id: Optional[str] = None, reference_asset_inputs: Optional[List[VideoReferenceIdentity]] = None) -> Tuple[Script, str]:
         """Creates a new video generation task."""
         script = self.get_script(script_id)
         if not script:
@@ -8213,6 +8214,39 @@ class ComicGenPipeline(StudioOwnerMixin):
             _, visual_issues = self._shot_asset_visual_context(script, frame, self.resolve_project_assets(script))
             if visual_issues:
                 raise ValueError("Shot asset visual source changed; review references: " + ", ".join(visual_issues))
+        validated_reference_inputs: List[VideoReferenceIdentity] = []
+        if reference_asset_inputs is not None:
+            submitted_urls = reference_image_urls or []
+            if generation_mode != "r2v" or len(reference_asset_inputs) != len(submitted_urls):
+                raise ValueError("Reference asset identities must match the ordered R2V image list")
+            available = {
+                (entry.asset_type, entry.asset_id): entry
+                for entry in self.get_asset_reference_index(script_id, scope="project").assets
+            }
+            for identity, submitted_url in zip(reference_asset_inputs, submitted_urls):
+                entry = available.get((identity.asset_type, identity.asset_id))
+                variant = next((item for item in entry.variants if item.id == identity.variant_id), None) if entry else None
+                if variant is None:
+                    raise ValueError("Reference asset variant changed; review references")
+                stored_key = image_variant_storage_key(variant)
+                if not stored_key or (identity.media_id is not None and identity.media_id != variant.media_id):
+                    raise ValueError("Reference asset media changed; review references")
+                try:
+                    submitted_key = resolve_studio_reference(
+                        submitted_url, script.owner_profile_id, output_root=self.output_root,
+                    )
+                    expected_key = resolve_studio_reference(
+                        stored_key, script.owner_profile_id, output_root=self.output_root,
+                    )
+                except ValueError as exc:
+                    raise ValueError("Reference asset media unavailable; review references") from exc
+                if submitted_key != expected_key:
+                    raise ValueError("Reference asset media changed; review references")
+                validated_reference_inputs.append(VideoReferenceIdentity(
+                    asset_type=identity.asset_type, asset_id=identity.asset_id,
+                    variant_id=identity.variant_id, media_id=variant.media_id,
+                    storage_key=stored_key,
+                ))
         prompt_warning = None
         if (frame and frame.workbench_prompt_is_optimized and frame.workbench_visual_source_hash
                 and frame.workbench_visual_source_hash != self._workbench_visual_source_hash(script, frame)):
@@ -8404,6 +8438,10 @@ class ComicGenPipeline(StudioOwnerMixin):
         else:
             asset_revision_pins = []
 
+        reference_media_ids.extend(
+            item.media_id for item in validated_reference_inputs if item.media_id
+        )
+
         consistency_manifest = (
             self._build_consistency_manifest(script, source_frame, prompt=prompt)
             if source_frame else None
@@ -8446,6 +8484,7 @@ class ComicGenPipeline(StudioOwnerMixin):
             generation_mode=generation_mode,
             reference_video_urls=reference_video_urls or [],
             reference_media_ids=list(dict.fromkeys(reference_media_ids)),
+            reference_asset_inputs=validated_reference_inputs,
             consistency_manifest=consistency_manifest.model_copy(deep=True) if consistency_manifest else None,
             storyboard_reference_revision=storyboard_reference_revision,
             reference_image_urls=reference_image_urls or [],

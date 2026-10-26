@@ -4,6 +4,7 @@ import { projectReferenceIndex } from "@/lib/assetReferenceIndex";
 export interface ReferenceVariant {
     id: string;
     url: string;
+    media_id?: string | null;
     display_name?: string | null;
     reference_view_role?: string;
     reference_distance?: string;
@@ -51,6 +52,7 @@ export interface ResolvedReferenceGroup {
 
 export interface ReferenceSubmission {
     urls: string[];
+    assetInputs: Array<{ asset_type: ReferenceAsset["kind"]; asset_id: string; variant_id: string; media_id?: string | null }>;
     groups: ResolvedReferenceGroup[];
     invalidVariantIds: string[];
     unresolvedNames: string[];
@@ -90,6 +92,7 @@ export function resolveReferenceSubmission(
     }
 
     const urls: string[] = [];
+    const assetInputs: ReferenceSubmission["assetInputs"] = [];
     const groups: ResolvedReferenceGroup[] = [];
     const invalidVariantIds: string[] = [];
     const unresolvedNames = new Set<string>();
@@ -135,6 +138,9 @@ export function resolveReferenceSubmission(
         }
         const firstPicture = urls.length + 1;
         urls.push(...variants.map((variant) => variant.url));
+        assetInputs.push(...variants.map((variant) => ({
+            asset_type: asset.kind, asset_id: asset.id, variant_id: variant.id, media_id: variant.media_id,
+        })));
         groups.push({
             slot,
             assetId: asset.id,
@@ -144,7 +150,7 @@ export function resolveReferenceSubmission(
             pictureNumbers: variants.map((_, index) => firstPicture + index),
         });
     }
-    return { urls, groups, invalidVariantIds, unresolvedNames: Array.from(unresolvedNames) };
+    return { urls, assetInputs, groups, invalidVariantIds, unresolvedNames: Array.from(unresolvedNames) };
 }
 
 function pictureList(group: ResolvedReferenceGroup): string {
