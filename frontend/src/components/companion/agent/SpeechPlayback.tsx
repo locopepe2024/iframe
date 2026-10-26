@@ -2,10 +2,10 @@
 import { useEffect, useRef, useState } from "react";
 import { companionPlayback } from "@/lib/companionPlaybackQueue";
 import { companionServices } from "@/lib/companionServices";
-export default function SpeechPlayback({text,voice}:{text:string;voice?:string}) {
+export default function SpeechPlayback({text,voice,autoPlay=false}:{text:string;voice?:string;autoPlay?:boolean}) {
   const [busy,setBusy]=useState(false),[error,setError]=useState(""),[url,setUrl]=useState("");
   const owner=useRef(Symbol("reply-playback")),queued=useRef(false);
-  const current=useRef(""); const alive=useRef(true); const audio=useRef<HTMLAudioElement>(null);
+  const current=useRef(""); const alive=useRef(true); const audio=useRef<HTMLAudioElement>(null); const autoPlayed=useRef("");
   useEffect(()=>{alive.current=true;return()=>{alive.current=false;companionPlayback.cancel(owner.current);if(current.current)URL.revokeObjectURL(current.current);};},[]);
   function play(cached=false) {
     if (queued.current || text.length>3000) return;
@@ -34,6 +34,11 @@ export default function SpeechPlayback({text,voice}:{text:string;voice?:string})
       finally{queued.current=false;if(alive.current)setBusy(false);}
     },()=>{queued.current=false;if(alive.current)setBusy(false);});
   }
+  useEffect(()=>{
+    if(!autoPlay || !text.trim() || autoPlayed.current===text) return;
+    autoPlayed.current=text;
+    void play();
+  },[autoPlay,text,voice]);
   return <div><button disabled={busy || text.length>3000} onClick={() => void play()}>{busy?"正在准备朗读…":"用 UniArt 朗读（可能计费）"}</button>
   {url&&<audio ref={audio} controls onPlay={()=>{if(!queued.current){audio.current?.pause();play(true);}}} src={url} aria-label="助手回复朗读"/>}{error&&<p role="alert">{error}</p>}</div>;
 }

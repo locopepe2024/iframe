@@ -26,6 +26,8 @@ const prefix = process.env.NEXT_PUBLIC_API_URL === "/companion-demo" ? "/compani
 const sessionKey = "iframe-companion-agent-session-v1";
 const turnKey = "iframe-companion-agent-turn-v1";
 const consentKey = "iframe-companion-agent-text-consent-v1";
+const responseModeKey = "iframe-companion-agent-response-mode-v1";
+type ResponseMode = "audio" | "text";
 const dismissedUploadGuideKey = "iframe-companion-agent-dismissed-upload-guides-v1";
 
 export default function AgentChat() {
@@ -34,6 +36,7 @@ export default function AgentChat() {
   const [openTalking, setOpenTalking] = useState(false);
   const [messages, setMessages] = useState<UserMessage[]>([]), [after, setAfter] = useState<number | null>(null);
   const [allowed, setAllowed] = useState(false);
+  const [responseMode, setResponseMode] = useState<ResponseMode>("text");
   const [identity, setIdentity] = useState<CompanionIdentity>(defaultCompanionIdentity);
   const [mode, setMode] = useState<ComposerMode>("chat");
   const [drafts, setDrafts] = useState<Record<ComposerMode, string>>({ chat: "", image: "", video: "" });
@@ -103,6 +106,8 @@ export default function AgentChat() {
     alive.current = true;
     void run(async () => {
       if (localStorage.getItem(consentKey) === "true") setAllowed(true);
+      const savedResponseMode = localStorage.getItem(responseModeKey);
+      if (savedResponseMode === "audio" || savedResponseMode === "text") setResponseMode(savedResponseMode);
       const id = localStorage.getItem(sessionKey);
       if (id) { await history(id); if (alive.current) setSession(id); }
       const savedTurn = localStorage.getItem(turnKey);
@@ -224,6 +229,11 @@ export default function AgentChat() {
         <label className={styles.check}><input type="checkbox" checked={allowed} disabled={busy} onChange={event => {
           const value = event.target.checked; setAllowed(value); localStorage.setItem(consentKey, String(value));
         }} />允许发送文字，开始聊天</label>
+        <fieldset className={styles.choice}><legend>小安回复方式</legend>
+          <label className={styles.check}><input type="radio" name="companion-response-mode" value="audio" checked={responseMode === "audio"} disabled={busy} onChange={() => { setResponseMode("audio"); localStorage.setItem(responseModeKey, "audio"); }} />方案 1：语音回复（可能计费）</label>
+          <label className={styles.check}><input type="radio" name="companion-response-mode" value="text" checked={responseMode === "text"} disabled={busy} onChange={() => { setResponseMode("text"); localStorage.setItem(responseModeKey, "text"); }} />方案 2：只回复文字</label>
+        </fieldset>
+        <p className={styles.note}>方案 1 会自动请求 UniArt 朗读并保留文字记录；浏览器拦截自动播放时，可点击回复下方的播放控件。</p>
       </section>
       <CompanionIdentitySettings onChange={setIdentity} />
       <UniArtSettings />
@@ -268,7 +278,7 @@ export default function AgentChat() {
       })}
       {after !== null && <button disabled={busy} onClick={() => void run(() => history(session, after))}>更多历史消息</button>}
     </section>
-    {turn?.result?.kind === "text" && !messages.some(m => m.turn?.turn_id === turn.turn_id) && (diaryDay(lastSubmittedText) ? <DiaryCard day={diaryDay(lastSubmittedText)!} text={turn.result.text} sourceTurn={turn.turn_id} onOpenDiary={() => setFeature("diary")} /> : <article className={chatStyles.assistant}><span>{identity.avatar} {identity.name}</span><p>{turn.result.text}</p><SpeechPlayback text={turn.result.text} voice={identity.voice}/></article>)}
+    {turn?.result?.kind === "text" && !messages.some(m => m.turn?.turn_id === turn.turn_id) && (diaryDay(lastSubmittedText) ? <DiaryCard day={diaryDay(lastSubmittedText)!} text={turn.result.text} sourceTurn={turn.turn_id} onOpenDiary={() => setFeature("diary")} /> : <article className={chatStyles.assistant}><span>{identity.avatar} {identity.name}</span><p>{turn.result.text}</p><SpeechPlayback text={turn.result.text} voice={identity.voice} autoPlay={responseMode === "audio"}/></article>)}
     {turn?.result?.kind === "upload_guide" && !messages.some(m => m.turn?.turn_id === turn.turn_id) && !dismissedUploadGuides.includes(turn.turn_id) && <UploadGuideCard {...uploadGuideActions(turn.turn_id)} />}
     {uploadFiles.length > 0 && <MediaUpload files={uploadFiles} disabled={inputDisabled || pending} onUploaded={attach} onBusyChange={setUploading} onClose={() => setUploadFiles([])} />}
     {albumOpen && <AlbumPicker disabled={inputDisabled || pending} onClose={() => setAlbumOpen(false)} onPhoto={photo => {

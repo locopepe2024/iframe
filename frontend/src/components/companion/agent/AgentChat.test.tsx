@@ -321,3 +321,10 @@ it("queues voice sentences while sending and preserves a failed request until re
    expect(api.chat.mock.calls[0][1].operation_id).toBe(api.chat.mock.calls[1][1].operation_id);
  } finally {delete (window as Window & {SpeechRecognition?:unknown}).SpeechRecognition;}
 });
+
+it("persists the preferred reply mode and exposes automatic audio playback setting",async()=>{
+ await start();
+ const more=screen.getByRole("button",{name:"更多"});if(more.getAttribute("aria-expanded")!=="true")fireEvent.click(more);
+ const audio=screen.getByRole("radio",{name:/方案 1/});fireEvent.click(audio);expect(audio).toBeChecked();expect(localStorage.getItem("iframe-companion-agent-response-mode-v1")).toBe("audio");
+ const text=screen.getByRole("radio",{name:/方案 2/});fireEvent.click(text);expect(text).toBeChecked();expect(localStorage.getItem("iframe-companion-agent-response-mode-v1")).toBe("text");
+});
