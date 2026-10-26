@@ -129,3 +129,13 @@ def test_entity_extraction_preserves_crowd_group_candidates():
     assert [item.label for item in script.crowd_group_candidates] == ["青溪镇市井百姓"]
     assert script.crowd_group_candidates[0].kind == "extra_template"
     assert script.crowd_group_candidates[0].role_tags == ["普通路人", "围观避让", "商贩"]
+
+
+def test_entity_extraction_prompt_separates_distinct_crowd_identities():
+    from src.apps.comic_gen.llm import ScriptProcessor
+
+    processor = ScriptProcessor.__new__(ScriptProcessor)
+    prompt = processor._construct_prompt("长街有百姓、行人和江湖人物经过。")
+    assert "青溪镇市井百姓" in prompt
+    assert "江湖人物/江湖客" in prompt or "江湖人物" in prompt
+    assert "不得仅因同一地点而合并百姓与江湖人物" in prompt
