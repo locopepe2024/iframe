@@ -902,6 +902,8 @@ class ComicGenPipeline(StudioOwnerMixin):
                     details.extend([entry.height, entry.body_build, entry.wardrobe])
                 else:
                     details.extend([entry.body_build, entry.wardrobe, entry.palette])
+                if instance.variant_ids:
+                    details.append("变体：" + ",".join(instance.variant_ids))
                 details.extend([instance.facing, instance.motion])
                 parts.append("群演：" + "；".join(value for value in details if value))
         return "\n".join(parts), issues
@@ -5911,6 +5913,14 @@ class ComicGenPipeline(StudioOwnerMixin):
                 raise ValueError("Crowd instance reference kind does not match series extra")
             if item.face_readable and entry.kind != "fixed_extra":
                 raise ValueError("Readable extra face requires a fixed extra asset")
+            available = set(entry.reference_variant_ids)
+            if entry.reference_variant_id:
+                available.add(entry.reference_variant_id)
+            if item.variant_ids and not available:
+                raise ValueError("Crowd instance references variants but the extra has no saved variants")
+            missing = [variant_id for variant_id in item.variant_ids if variant_id not in available]
+            if missing:
+                raise ValueError("Crowd instance references a missing extra variant")
 
     @staticmethod
     def _episode_asset_context_prompt(script: Script, asset_type: str, asset_id: str) -> str:

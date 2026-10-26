@@ -209,6 +209,8 @@ export interface ExtraRosterEntry {
     props?: string[];
     reference_variant_id?: string | null;
     reference_media_id?: string | null;
+    reference_variant_ids?: string[];
+    reference_media_ids?: Record<string, string>;
 }
 
 export interface ExtraShotInstance {
@@ -221,6 +223,7 @@ export interface ExtraShotInstance {
     motion?: string | null;
     face_readable: boolean;
     text_readable: boolean;
+    variant_ids?: string[];
 }
 
 export interface StylePresetCategory {

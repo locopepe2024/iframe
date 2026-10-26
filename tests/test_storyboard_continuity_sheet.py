@@ -219,14 +219,16 @@ def test_confirmed_dimensions_enter_shot_context_and_manifest(tmp_path):
 
 
 def test_extra_roster_instances_keep_fixed_and_template_references_separate():
-    fixed = ExtraRosterEntry(extra_id="extra-01", label="粮铺常客", kind="fixed_extra", height="约170厘米")
-    template = ExtraRosterEntry(extra_id="street-template", label="远景路人模板", kind="extra_template")
-    assert ExtraShotInstance(extra_id=fixed.extra_id, layer="near", face_readable=True).extra_id == "extra-01"
-    assert ExtraShotInstance(template_id=template.extra_id, layer="far").template_id == "street-template"
+    fixed = ExtraRosterEntry(extra_id="extra-01", label="粮铺常客", kind="fixed_extra", height="约170厘米", reference_variant_ids=["v1", "v2"])
+    template = ExtraRosterEntry(extra_id="street-template", label="远景路人模板", kind="extra_template", reference_variant_ids=["crowd-v1"])
+    assert ExtraShotInstance(extra_id=fixed.extra_id, layer="near", face_readable=True, variant_ids=["v1"]).extra_id == "extra-01"
+    assert ExtraShotInstance(template_id=template.extra_id, layer="far", variant_ids=["crowd-v1"]).template_id == "street-template"
     with pytest.raises(ValueError, match="exactly one"):
         ExtraShotInstance(layer="mid")
     with pytest.raises(ValueError, match="exactly one"):
         ExtraShotInstance(extra_id="extra-01", template_id="street-template")
+    with pytest.raises(ValueError, match="unique"):
+        ExtraShotInstance(extra_id="extra-01", variant_ids=["v1", "v1"])
 
 
 def test_series_extra_roster_and_shot_instance_snapshot(tmp_path):
@@ -236,17 +238,18 @@ def test_series_extra_roster_and_shot_instance_snapshot(tmp_path):
     pipeline.series_store["series"] = Series(
         id="series", title="青溪镇", episode_ids=[script.id], created_at=1, updated_at=1,
     )
-    fixed = ExtraRosterEntry(extra_id="extra-01", label="粮铺常客", height="约170厘米")
-    template = ExtraRosterEntry(extra_id="street-template", label="街道人群", kind="extra_template")
+    fixed = ExtraRosterEntry(extra_id="extra-01", label="粮铺常客", height="约170厘米", reference_variant_ids=["v1"])
+    template = ExtraRosterEntry(extra_id="street-template", label="街道人群", kind="extra_template", reference_variant_ids=["crowd-v1"])
     pipeline.update_series("series", {"extra_roster": [fixed, template]})
     instances = [
-        ExtraShotInstance(extra_id="extra-01", layer="near", region="粮铺门前", face_readable=True),
-        ExtraShotInstance(template_id="street-template", layer="far", region="街道尽头"),
+        ExtraShotInstance(extra_id="extra-01", layer="near", region="粮铺门前", face_readable=True, variant_ids=["v1"]),
+        ExtraShotInstance(template_id="street-template", layer="far", region="街道尽头", variant_ids=["crowd-v1"]),
     ]
     pipeline.update_frame(script.id, shot.id, crowd_instances=instances)
     manifest = pipeline._build_consistency_manifest(script, shot)
     assert [item.extra_id for item in manifest.crowd_roster_snapshot] == ["extra-01", "street-template"]
     assert manifest.crowd_instances[0].region == "粮铺门前"
+    assert manifest.crowd_instances[0].variant_ids == ["v1"]
     assert "群演：粮铺常客；near层；粮铺门前；约170厘米" in pipeline.storyboard_continuity_sheet(script.id)["rows"][0]["asset_visual_context"]
     with pytest.raises(ValueError, match="invalidate a shot reference"):
         pipeline.update_series("series", {"extra_roster": [template]})
@@ -256,6 +259,10 @@ def test_series_extra_roster_and_shot_instance_snapshot(tmp_path):
             ExtraShotInstance(template_id="street-template", layer="near", face_readable=True),
         ])
     assert shot.consistency_manifest is manifest
+    with pytest.raises(ValueError, match="missing extra variant"):
+        pipeline.update_frame(script.id, shot.id, crowd_instances=[
+            ExtraShotInstance(extra_id="extra-01", layer="near", variant_ids=["missing"]),
+        ])
 
 
 def test_extra_roster_proposals_are_review_only(tmp_path):

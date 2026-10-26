@@ -1127,12 +1127,24 @@ export default function ShotCard({
                                 {(shot.crowdInstances ?? []).map((instance, index) => {
                                     const id = instance.extra_id || instance.template_id || "";
                                     const entry = extraRoster.find(item => item.extra_id === id);
+                                    const availableVariants = Array.from(new Set([
+                                        ...(entry?.reference_variant_ids ?? []),
+                                        ...(entry?.reference_variant_id ? [entry.reference_variant_id] : []),
+                                    ]));
+                                    const selectedVariants = instance.variant_ids ?? [];
                                     return <div key={index} className="grid grid-cols-2 gap-2 border-b border-glass-border pb-2">
                                         <span className="col-span-2 text-foreground">{entry?.label || ("已失效：" + id)}</span>
                                         <select aria-label="群演可见层" value={instance.layer} onChange={event => onUpdateCrowdInstances((shot.crowdInstances ?? []).map((item, i) => i === index ? { ...item, layer: event.target.value as ExtraShotInstance["layer"] } : item))} className="bg-input-bg border border-glass-border p-1">
                                             <option value="near">近景</option><option value="mid">中景</option><option value="far">远景</option>
                                         </select>
                                         <input aria-label="群演位置" value={instance.region} placeholder="空间位置" onChange={event => onUpdateCrowdInstances((shot.crowdInstances ?? []).map((item, i) => i === index ? { ...item, region: event.target.value } : item))} className="min-w-0 bg-input-bg border border-glass-border p-1" />
+                                        {availableVariants.length > 0 && <fieldset className="col-span-2 space-y-1"><legend className="text-text-muted">群演变体</legend><div className="flex flex-wrap gap-x-3 gap-y-1">{availableVariants.map(variantId => <label key={variantId} className="inline-flex items-center gap-1"><input type="checkbox" checked={selectedVariants.includes(variantId)} onChange={event => onUpdateCrowdInstances((shot.crowdInstances ?? []).map((item, i) => {
+                                            if (i !== index) return item;
+                                            const next = event.target.checked
+                                                ? Array.from(new Set([...selectedVariants, variantId]))
+                                                : selectedVariants.filter(value => value !== variantId);
+                                            return { ...item, variant_ids: next };
+                                        }))} />{variantId}</label>)}</div></fieldset>}
                                         {entry?.kind === "fixed_extra" && <label className="col-span-2 flex items-center gap-2"><input type="checkbox" checked={instance.face_readable} onChange={event => onUpdateCrowdInstances((shot.crowdInstances ?? []).map((item, i) => i === index ? { ...item, face_readable: event.target.checked } : item))} />面孔需要可辨认</label>}
                                         <button type="button" className="col-span-2 justify-self-start text-danger" onClick={() => onUpdateCrowdInstances((shot.crowdInstances ?? []).filter((_, i) => i !== index))}>移除</button>
                                     </div>;
@@ -1143,7 +1155,7 @@ export default function ShotCard({
                                     onUpdateCrowdInstances([...(shot.crowdInstances ?? []), {
                                         ...(entry.kind === "fixed_extra" ? { extra_id: entry.extra_id } : { template_id: entry.extra_id }),
                                         layer: entry.kind === "fixed_extra" ? "near" : "far",
-                                        region: "", face_readable: false, text_readable: false,
+                                        region: "", face_readable: false, text_readable: false, variant_ids: [],
                                     }]);
                                 }} className="w-full bg-input-bg border border-glass-border p-1">
                                     <option value="">添加已确认群演或模板</option>

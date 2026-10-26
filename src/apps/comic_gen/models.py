@@ -649,6 +649,8 @@ class ExtraRosterEntry(BaseModel):
     props: List[str] = Field(default_factory=list, max_length=20)
     reference_variant_id: Optional[str] = None
     reference_media_id: Optional[str] = None
+    reference_variant_ids: List[str] = Field(default_factory=list, max_length=20)
+    reference_media_ids: Dict[str, str] = Field(default_factory=dict, max_length=20)
 
 
 class ExtraShotInstance(BaseModel):
@@ -663,11 +665,16 @@ class ExtraShotInstance(BaseModel):
     motion: Optional[str] = Field(None, max_length=500)
     face_readable: bool = False
     text_readable: bool = False
+    variant_ids: List[str] = Field(default_factory=list, max_length=20)
 
     @model_validator(mode="after")
     def require_reference(self):
         if bool(self.extra_id) == bool(self.template_id):
             raise ValueError("Extra shot instance requires exactly one extra_id or template_id")
+        if len(set(self.variant_ids)) != len(self.variant_ids):
+            raise ValueError("Crowd instance variant_ids must be unique")
+        if any(not isinstance(value, str) or not value.strip() for value in self.variant_ids):
+            raise ValueError("Crowd instance variant_ids must be non-empty strings")
         return self
 
 
