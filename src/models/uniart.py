@@ -641,10 +641,11 @@ class UniArtVideoModel(VideoGenModel):
                 raise ValueError("H3 V2 text-to-video does not accept attachments")
         else:
             raise ValueError("Unsupported H3 V2 mode")
-        # Keep the user's explicit ratio for I2V, including a fixed 16:9
-        # selection.  A single first frame does not imply adaptive output;
-        # adaptive is a separate user-visible ratio choice.
-        ratio = kwargs.get("ratio") or kwargs.get("aspect_ratio") or "16:9"
+        # The two supplied frames determine the default geometry. Preserve a
+        # fixed ratio when the caller explicitly selects one.
+        ratio = kwargs.get("ratio") or kwargs.get("aspect_ratio") or (
+            "adaptive" if mode == "first_last_frame" else "16:9"
+        )
         if ratio not in {"21:9", "16:9", "4:3", "1:1", "3:4", "9:16", "auto", "adaptive"} or (mode == "text_to_video" and ratio in {"auto", "adaptive"}):
             raise ValueError("Unsupported H3 V2 aspect ratio for this mode")
         content = [{"type": "text", "text": prompt}]

@@ -9705,7 +9705,11 @@ class ComicGenPipeline(StudioOwnerMixin):
                     img_path=img_path if task.generation_mode != "first_last_frame" else None,
                     first_frame=task.image_url if task.generation_mode == "first_last_frame" else None,
                     last_frame=task.last_frame_url if task.generation_mode == "first_last_frame" else None,
-                    duration=provider_duration, resolution=task.resolution, aspect_ratio=task.ratio or "16:9",
+                    duration=provider_duration, resolution=task.resolution,
+                    aspect_ratio=task.ratio or (
+                        "adaptive" if "minimax-h3" in model_name_lower
+                        and task.generation_mode == "first_last_frame" else "16:9"
+                    ),
                     model=task.model,
                     mode={"r2v": "reference2video", "i2v": "image2video", "first_last_frame": "frames2video", "t2v": "text2video"}[task.generation_mode],
                     ref_image_urls=reference_images if task.generation_mode == "r2v" else [],

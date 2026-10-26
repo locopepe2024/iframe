@@ -323,6 +323,19 @@ def test_studio_creates_first_last_frame_task(studio):
     assert body["generate_audio"] is False
 
 
+def test_studio_keeps_explicit_first_last_frame_ratio(studio):
+    pipeline, script = studio
+    pipeline.create_video_task(
+        script.id, "https://cdn.example/first.jpg", "Transition",
+        model="uniart/minimax-h3-vip", generation_mode="f2v",
+        last_frame_url="https://cdn.example/last.jpg", ratio="9:16",
+    )
+    current = script.video_tasks[0]
+    pipeline._download_temp_image = Mock(return_value=None)
+    pipeline.process_video_task(script.id, current.id)
+    assert uniart._post.call_args.args[2]["ratio"] == "9:16"
+
+
 @pytest.mark.parametrize("image,tail,extra", [
     ("", "https://cdn.example/last.jpg", {}),
     ("https://cdn.example/first.jpg", None, {}),
