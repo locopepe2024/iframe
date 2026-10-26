@@ -11,7 +11,7 @@ export default function OpenTalkingReply({text,voice}:{text:string;voice?:string
  const [state,setState]=useState<"opening"|"speaking"|"ready"|"error">("opening"),[error,setError]=useState("");
  useEffect(()=>{let alive=true;
   async function open(){try{
-   const created=await json<Session>("/sessions",{method:"POST",body:JSON.stringify({model:"wav2lip",agent_enabled:false,tts_voice:voice||undefined})});if(!alive)return;session.current=created.session_id;
+   const created=await json<Session>("/sessions",{method:"POST",body:JSON.stringify({avatar_id:"office-woman",model:"mock",agent_enabled:false,tts_voice:voice||undefined})});if(!alive)return;session.current=created.session_id;
    const ice=await json<{iceServers?:RTCIceServer[];iceTransportPolicy?:RTCIceTransportPolicy}>("/sessions/webrtc/ice-config");
    const connection=new RTCPeerConnection({iceServers:ice.iceServers||[],iceTransportPolicy:ice.iceTransportPolicy});pc.current=connection;
    const stream=new MediaStream();if(video.current)video.current.srcObject=stream;connection.ontrack=e=>{if(!stream.getTracks().some(t=>t.id===e.track.id))stream.addTrack(e.track);void video.current?.play().catch(()=>{});};
