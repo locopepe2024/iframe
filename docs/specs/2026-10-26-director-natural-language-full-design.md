@@ -1,0 +1,98 @@
+# Director natural-language design expansion
+
+## Product requirement
+
+All five requested areas are required: poses/contact; additional characters and
+real model assets; lighting/materials/clothing/appearance; timed camera motion;
+complete editable scenes and generated scene imagery. The earlier static slice
+is an initial implementation boundary, not the final product scope.
+
+Default workflow: natural-language request → structured proposal → editable
+preview → apply → one undo transaction. Generation jobs retain their existing
+owner, cost disclosure, review and artifact provenance. The director authoring
+store owns scene truth; DirectorShotPackage remains its export projection.
+
+## Observed starting point
+
+On GitHub main 659d264b the director has seated.sit and other pose presets,
+camera paths and admitted model asset structures. A seated pose explicitly
+requires further matching to the seat. These code facts do not establish
+contact correctness or natural-language accessibility. This main revision lacks
+src/apps/director_design.py, while earlier feature work and deployed API had it.
+Reconcile deployment source and the static proposal implementation before
+editing contracts; do not replace current main with the old feature tree.
+
+## Delivery sequence and acceptance
+
+1. Seated pair, current camera: resolve the two actors and chair assets, apply
+   seated poses and seat anchors, preserve all camera fields. If no chair asset
+   is available, offer an explicitly labelled proxy candidate or asset selection;
+   a proxy must never be reported as a real chair. Verify pelvis/seat and foot
+   support in the admitted rig, preview without mutation, atomic undo/redo,
+   stale and locked-object rejection. Use the exact reported Chinese request
+   as the live-model regression scenario.
+2. Poses and contact: expose existing admitted pose presets and bounded joint
+   edits, then add lying poses and support/contact anchors for chair, bed, floor,
+   hand and prop. Resolve rig joints and transforms deterministically. Distinguish
+   verified contacts from approximations; reject unsupported rigs explicitly.
+   Verify evaluated geometry and visible result, not preset names alone.
+3. Actors and real assets: resolve existing library/catalog IDs; import via
+   existing admission pipeline; create actor mappings and instances atomically.
+   Validate asset type, rig, dimensions, pivot, loading and rendering capability.
+   Show missing assets and loading failures before apply. Source preference is
+   pending user input; default to existing assets and configured services.
+4. Lighting and appearance: add authored light entities and material bindings
+   using renderer-supported fields, then outfit/appearance asset changes.
+   Keep physical scene edits distinct from generated appearance images, which
+   require existing generation services and review. Verify both browser and
+   export support before claiming the same lighting/appearance in results.
+5. Timed camera motion: compile duration, start state, displacement/path,
+   target binding and easing into existing camera paths/timeline. Example:
+   advance 0.5m over four seconds while keeping the target and 35mm lens.
+   Candidate preview must evaluate time without changing authored playhead or
+   recording state. Apply timeline/path and scene changes in a single transaction.
+   Check first/last and intermediate frames, collisions, targets, undo/redo,
+   frame range and video/package checksum binding. Preserve unrelated tracks.
+6. Full scene and image: plan objects, actors, supports, lights and cameras as
+   one validated scene proposal. Missing/generating assets remain explicit pending
+   dependencies, not silently applied placeholders. Submit scene-image requests
+   through the existing generation job owner with package checksum and frame/
+   camera identity. A generated scene image is an image artifact; metric depth
+   still comes from media Blender and must not be inferred from image styling.
+
+These increments deliver the five required areas; steps 1 and 2 split the
+contact work so the reported seated-pair case can be validated first.
+
+## Shared contracts
+
+Extend a versioned operation union with admitted IDs and bounded numeric fields.
+No model-generated scripts or arbitrary external URLs are executable operations.
+Proposal dependencies, unsupported capabilities and required clarifications must
+be displayed. Do not partially apply a compound request with missing dependencies.
+Revalidate revision, owner/asset admission, locks and references at apply time.
+Snapshots/undo/export packages must include every new authored field. Generated
+jobs are not reversible by scene undo; disclose them separately before submission.
+
+## Verification and affected boundaries
+
+Read and update the source spec before each implementation slice. Expected paths:
+director design API/schema and tests; director design parser/compiler/panel;
+workbench store; pose/contact and rig evaluation; scene asset admission; render
+scene types and viewport; timeline evaluator/paths; shared package projection;
+existing asset/image generation APIs. Introduce lights/contact schema only in
+their owning modules and keep serialization/backward loading explicit.
+
+Per slice run focused frontend behavior tests, backend schema/API tests and
+frontend typecheck, then a real-model synthetic scenario. Add render/runtime
+checks where geometry or media changes. Use media Blender, never local Blender.
+Browser acceptance requires the separately scoped browser authorization from
+root AGENTS.md. Code tests, live-model observations and visual/metric results
+must be reported separately; do not claim broad reliability from one run.
+
+## Completion criteria
+
+Users can describe each of the five design areas, review a concrete result,
+edit/apply/revert the authored change, and export artifacts bound to its current
+package. Exact seated-pair regression works with unchanged camera. Each required
+capability has code, meaningful tests, real-provider observations and appropriate
+visual/render acceptance; a roadmap or schema addition alone is not completion.
