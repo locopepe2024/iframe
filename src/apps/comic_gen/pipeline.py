@@ -7930,13 +7930,30 @@ class ComicGenPipeline(StudioOwnerMixin):
         scene = self._storyboard_scene_asset(script, frame)
         revision, design = self._confirmed_scene_design(scene)
         scene_parts = []
+        baseline = design.get("asset_baseline") if isinstance(design, dict) else None
         if scene:
-            scene_parts.append(f"场景：{scene.name}。{scene.description}")
+            scene_parts.append(f"场景：{scene.name}" if isinstance(baseline, dict) and baseline.get("scene_identity")
+                               else f"场景：{scene.name}。{scene.description}")
         if revision is not None:
+            if isinstance(baseline, dict) and baseline.get("scene_identity"):
+                for key, label in (("scene_identity", "场景资产基线"), ("location_type", "地点类型"),
+                                   ("fixed_geometry", "固定结构"), ("fixed_landmarks", "固定地标"),
+                                   ("materials", "材质"), ("environment", "环境"),
+                                   ("time_baseline", "默认时间"), ("lighting_baseline", "世界光影"),
+                                   ("composition_tendency", "构图倾向"),
+                                   ("reusable_constraints", "复用约束")):
+                    value = baseline.get(key)
+                    if isinstance(value, list):
+                        value = "、".join(item for item in value if isinstance(item, str) and item.strip())
+                    if isinstance(value, str) and value.strip():
+                        scene_parts.append(f"{label}：{value.strip()}")
             for key, label in (
-                ("visual_notes", "空间与内容"), ("style", "场景风格"),
-                ("ambient_lighting", "环境光"), ("reference_viewpoint", "基础视角"),
-                ("reference_framing", "占位与深度"),
+                (("style", "场景风格"), ("ambient_lighting", "环境光"),
+                 ("reference_viewpoint", "基础视角"), ("reference_framing", "占位与深度"))
+                if isinstance(baseline, dict) and baseline.get("scene_identity") else
+                (("visual_notes", "空间与内容"), ("style", "场景风格"),
+                 ("ambient_lighting", "环境光"), ("reference_viewpoint", "基础视角"),
+                 ("reference_framing", "占位与深度"))
             ):
                 value = design.get(key)
                 if isinstance(value, str) and value.strip():
@@ -7948,9 +7965,6 @@ class ComicGenPipeline(StudioOwnerMixin):
                 direction = constraints.get("key_light_direction")
                 if direction in light_names:
                     scene_parts.append(f"主光方向：{light_names[direction]}")
-                face_limit = constraints.get("visible_face_limit")
-                if isinstance(face_limit, int) and not isinstance(face_limit, bool):
-                    scene_parts.append(f"可见人脸上限：{face_limit} 张")
         reference_clauses = reference_projection_prompt_clauses(frame.reference_visual_projection, frame, scene)
         additions = [item for item in [*scene_parts, *reference_clauses] if item and item not in prompt]
         if static_states:

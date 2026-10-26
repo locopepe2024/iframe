@@ -1115,8 +1115,6 @@ function CharacterDetailModal({ asset, type, onClose, onUpdateDescription, onUpd
         visual_constraints: {
             key_light_direction: String(savedSceneDesign.visual_constraints?.key_light_direction || "unspecified"),
             forbidden_light_directions: Array.isArray(savedSceneDesign.visual_constraints?.forbidden_light_directions) ? savedSceneDesign.visual_constraints.forbidden_light_directions : [],
-            visible_face_limit: savedSceneDesign.visual_constraints?.visible_face_limit ?? "",
-            secondary_people_view: String(savedSceneDesign.visual_constraints?.secondary_people_view || ""),
         },
     }));
     const [sceneDesignNeedsApply, setSceneDesignNeedsApply] = useState(() =>
@@ -1128,8 +1126,7 @@ function CharacterDetailModal({ asset, type, onClose, onUpdateDescription, onUpd
             || savedSceneDesign.reference_framing
             || compileScenePromptLayers(savedSceneDesign.prompt_layers || {})
             || savedSceneDesign.visual_constraints?.key_light_direction
-            || savedSceneDesign.visual_constraints?.forbidden_light_directions?.length
-            || savedSceneDesign.visual_constraints?.visible_face_limit !== undefined,
+            || savedSceneDesign.visual_constraints?.forbidden_light_directions?.length,
         ));
     const [sceneDesignSaving, setSceneDesignSaving] = useState(false);
     const [promptModels, setPromptModels] = useState<ChatModel[]>([]);
@@ -1354,8 +1351,6 @@ function CharacterDetailModal({ asset, type, onClose, onUpdateDescription, onUpd
             sceneDesign.reference_framing && `参考图构图：${sceneDesign.reference_framing}`,
             visualConstraints.key_light_direction !== "unspecified" && `主光方向：${({ front: "正面", back: "背面", side: "侧面", top: "顶部", bottom: "底部", mixed: "混合" } as Record<string, string>)[visualConstraints.key_light_direction]}`,
             visualConstraints.forbidden_light_directions.length > 0 && `禁止光线方向：${visualConstraints.forbidden_light_directions.map((item: string) => ({ front: "正面光", back: "背光", side: "侧面光", top: "顶部光", bottom: "底部光", mixed: "混合光" } as Record<string, string>)[item] || item).join("、")}`,
-            visualConstraints.visible_face_limit !== "" && `可见人脸上限：${visualConstraints.visible_face_limit} 张。`,
-            visualConstraints.secondary_people_view && `其他人物呈现：${visualConstraints.secondary_people_view}`,
         ].filter(Boolean).join("\n");
     };
 
@@ -1522,8 +1517,6 @@ function CharacterDetailModal({ asset, type, onClose, onUpdateDescription, onUpd
                 visual_constraints: {
                     key_light_direction: sceneDesign.visual_constraints.key_light_direction,
                     forbidden_light_directions: sceneDesign.visual_constraints.forbidden_light_directions,
-                    visible_face_limit: sceneDesign.visual_constraints.visible_face_limit === "" ? null : Number(sceneDesign.visual_constraints.visible_face_limit),
-                    secondary_people_view: sceneDesign.visual_constraints.secondary_people_view.trim(),
                 },
                 prompt_workspace: {
                     active_source: source,
@@ -1694,16 +1687,10 @@ function CharacterDetailModal({ asset, type, onClose, onUpdateDescription, onUpd
                                                 <option value="unspecified">未指定</option><option value="front">正面光</option><option value="back">背面光</option><option value="side">侧面光</option><option value="top">顶部光</option><option value="bottom">底部光</option><option value="mixed">混合光</option>
                                             </select>
                                         </label>}
-                                        <label className="block text-xs text-text-secondary">可见人脸上限
-                                            <input aria-label="可见人脸上限" type="number" min={0} max={50} value={sceneDesign.visual_constraints.visible_face_limit} onChange={event => updateVisualConstraint("visible_face_limit", event.target.value === "" ? "" : Number(event.target.value))} className="mt-1 w-full rounded border border-glass-border bg-input-bg p-2 text-sm text-foreground" placeholder="例如：3" />
-                                        </label>
                                     </div>
                                     <div className="flex flex-wrap gap-3 text-xs text-text-secondary">
                                         {[["front", "禁止正面光"], ["back", "禁止背光"], ["top", "禁止顶部光"], ["bottom", "禁止底部光"]].map(([value, label]) => <label key={value} className="inline-flex items-center gap-1"><input type="checkbox" checked={sceneDesign.visual_constraints.forbidden_light_directions.includes(value)} onChange={event => updateVisualConstraint("forbidden_light_directions", event.target.checked ? [...sceneDesign.visual_constraints.forbidden_light_directions, value] : sceneDesign.visual_constraints.forbidden_light_directions.filter((item: string) => item !== value))} />{label}</label>)}
                                     </div>
-                                    <label className="block text-xs text-text-secondary">其他人物呈现方式
-                                        <input aria-label="其他人物呈现方式" value={sceneDesign.visual_constraints.secondary_people_view} onChange={event => updateVisualConstraint("secondary_people_view", event.target.value)} className="mt-1 w-full rounded border border-glass-border bg-input-bg p-2 text-sm text-foreground" placeholder="例如：其他人物保持侧身或远景" />
-                                    </label>
                                 </div>
                                 <div className="flex flex-wrap items-center gap-2">
                                     <button type="button" onClick={applySceneDesign} className="min-h-11 rounded bg-primary px-3 text-sm text-white">应用到图片提示词</button>
