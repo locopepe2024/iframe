@@ -3145,6 +3145,10 @@ class Script(BaseModel):
     fact_ledger_draft_updated_at: Optional[float] = None
     
     characters: List[Character] = Field(default_factory=list)
+    crowd_group_candidates: List[ExtraRosterEntry] = Field(
+        default_factory=list,
+        description="Script-extracted crowd/group candidates awaiting explicit roster adoption",
+    )
     scenes: List[Scene] = Field(default_factory=list)
     props: List[Prop] = Field(default_factory=list)
     frames: List[StoryboardFrame] = Field(default_factory=list)

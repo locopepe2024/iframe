@@ -107,3 +107,24 @@ def test_performer_skill_changes_entity_extraction_revision(monkeypatch):
     current = entity_extraction_prompt_revision()
     monkeypatch.setattr(llm, "_load_performer_tier_skill", lambda: "updated performer tiers")
     assert entity_extraction_prompt_revision() != current
+
+
+def test_entity_extraction_preserves_crowd_group_candidates():
+    from src.apps.comic_gen.llm import ScriptProcessor
+
+    processor = ScriptProcessor.__new__(ScriptProcessor)
+    scene = {
+        "id": "scene-1", "name": "长街", "description": "青石板长街",
+        "asset_baseline": {
+            "scene_identity": "长街", "location_type": "街道", "fixed_geometry": [],
+            "fixed_landmarks": [], "materials": [], "environment": [], "time_baseline": "黄昏",
+            "lighting_baseline": "", "composition_tendency": "", "reusable_constraints": [],
+            "basis": ["observed"],
+        },
+    }
+    script = processor._create_script_from_data(
+        "测试", "长街上百姓避让",
+        {"characters": [], "crowd_groups": [{"extra_id": "crowd-town", "label": "青溪镇市井百姓"}], "scenes": [scene], "props": []},
+    )
+    assert [item.label for item in script.crowd_group_candidates] == ["青溪镇市井百姓"]
+    assert script.crowd_group_candidates[0].kind == "extra_template"

@@ -1350,6 +1350,7 @@ async def extract_preview(script_id: str, request: ReparseProjectRequest):
         )
         return {
             "characters": [c.dict() for c in result.characters],
+            "crowd_groups": [c.dict() for c in result.crowd_group_candidates],
             "scenes": [s.dict() for s in result.scenes],
             "props": [p.dict() for p in result.props],
         }

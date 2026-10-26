@@ -17,6 +17,7 @@ from typing import List, Dict, Any, Optional, Tuple
 from .models import (
     Script,
     Character,
+    ExtraRosterEntry,
     Scene,
     Prop,
     StoryboardFrame,
@@ -700,6 +701,17 @@ DEFAULT_ENTITY_EXTRACTION_PROMPT = """
             "visual_weight": 5
         }
     ],
+    "crowd_groups": [
+        {
+            "extra_id": "crowd_001",
+            "label": "青溪镇市井百姓",
+            "kind": "extra_template",
+            "body_build": "可见体态范围",
+            "wardrobe": "服装族与色彩范围",
+            "palette": "群体色彩范围",
+            "props": []
+        }
+    ],
     "scenes": [
         {
             "id": "scene_001",
@@ -956,7 +968,7 @@ class ScriptProcessor:
 
 请基于原始剧本修订 current_draft。保留未被要求改变的正确内容，不要把修订要求当作剧本事实。
 用户明确确认的地点身份与空间关系是本次设计输入；不要把与其相反的合并疑问继续放入 uncertainties。
-仍然只返回合法 JSON，顶层只能包含 characters、scenes、props；不要返回解释、Markdown 或其他字段。"""
+仍然只返回合法 JSON，顶层只能包含 characters、crowd_groups、scenes、props；不要返回解释、Markdown 或其他字段。"""
         try:
             content = self.llm.chat(messages=[{"role": "user", "content": prompt}])
             data = json.loads(_strip_markdown_json(content))
@@ -994,6 +1006,11 @@ class ScriptProcessor:
         script_id = str(uuid.uuid4())
         
         characters = []
+        crowd_group_candidates = []
+        for group_data in data.get("crowd_groups", []):
+            candidate = dict(group_data)
+            candidate["kind"] = "extra_template"
+            crowd_group_candidates.append(ExtraRosterEntry.model_validate(candidate))
         name_to_char = {} # For variant linking
         llm_id_to_uuid = {} # For ID resolution
 
@@ -1155,6 +1172,7 @@ class ScriptProcessor:
             title=title,
             original_text=original_text,
             characters=characters,
+            crowd_group_candidates=crowd_group_candidates,
             scenes=scenes,
             props=props,
             frames=frames,
@@ -1637,7 +1655,7 @@ class ScriptProcessor:
                 "basis 仅用 observed/inferred/authored。description 和 scene_identity 只概述可复用地点，"
                 "不得包含潜伏、围堵等当前事件。输出前逐一核对独立地点是否都有 scenes 条目；"
                 "不要把另一处地点仅放入长街的 shot_only_content。已确认的跨地点视线写入双方 environment。"
-                "只返回 characters、scenes、props 三个顶层字段的合法 JSON。")
+                "只返回 characters、crowd_groups、scenes、props 四个顶层字段的合法 JSON。")
 
     def analyze_script_for_styles(self, script_text: str, custom_style_prompt: str = "") -> List[Dict[str, Any]]:
         """使用 LLM 分析剧本并推荐视觉风格

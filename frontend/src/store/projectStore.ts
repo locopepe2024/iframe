@@ -515,6 +515,7 @@ export interface Project {
     originalText: string;
     source_revision?: number;
     characters: Character[];
+    crowd_group_candidates?: ExtraRosterEntry[];
     scenes: Scene[];
     props: Prop[];
     frames: any[]; // Keeping as any for now to avoid breaking too much, but ideally StoryboardFrame[]
