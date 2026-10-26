@@ -3,6 +3,8 @@ import type { AuthoringSnapshot, WorkbenchState } from "../state/workbench-store
 import { cameraProjection, cameraRuntime, stateTargetPosition } from "../timeline/timeline-evaluation";
 import { currentDirectorShotPackage } from "../reference/current-shot-package";
 import { applyDesignPose, DESIGN_POSES, SEATED_FIT, type DesignPoseId } from "./design-poses";
+import { createCameraPathPresetControlPoints } from "../camera/camera-path-presets";
+import type { ActorPathEasing, CameraPathPresetId, CameraPathState, DialogueTimelineState, TimelineTrackState } from "../types";
 
 type Vec = [number, number, number];
 export type DesignOperation =
@@ -11,6 +13,7 @@ export type DesignOperation =
   | { kind: "add_box"; entityId: string; label: string; positionM: Vec; dimensionsM: Vec }
   | { kind: "set_pose"; actorId: string; presetId: DesignPoseId }
   | { kind: "seat_actor"; actorId: string; chairId: string }
+  | { kind: "camera_motion"; cameraId: string; presetId: CameraPathPresetId; durationSeconds: number; easing: ActorPathEasing }
   | { kind: "frame_camera"; cameraId: string; targetIds: string[]; azimuthDeg: number; elevationDeg: number; distanceM: number; focalLengthMm: number }
   | { kind: "dolly_camera"; cameraId: string; towardM: number };
 export interface DesignProposal {
@@ -21,7 +24,7 @@ export interface DesignProposal {
   clarification: string | null;
   operations: DesignOperation[];
 }
-export type DesignPreview = Pick<AuthoringSnapshot, "characters" | "sceneObjects" | "cameras"> & { cameraId: string; baseRevision: string };
+export type DesignPreview = Pick<AuthoringSnapshot, "characters" | "sceneObjects" | "cameras" | "cameraPaths" | "dialogueTimeline"> & { cameraId: string; baseRevision: string };
 
 export function designRevision(state: WorkbenchState): string {
   const source = JSON.stringify({ characters: state.characters, objects: state.sceneObjects, cameras: state.cameras,
@@ -42,7 +45,7 @@ export function designContext(state: WorkbenchState): string {
     selectedCharacterId: state.selectedCharacterId, selectedObjectId: state.selectedSceneObjectId,
     selectedCameraId: state.selectedCameraId, groundHeightM: state.renderScene.ground.heightM,
     animated: state.dialogueTimeline.tracks.length > 0 || Object.keys(state.actorPaths).length > 0 || Object.keys(state.cameraPaths).length > 0,
-    supported: ["static placement", "pair facing", "box proxy", "static camera", "static dolly", "pose preset", "seated procedural chair reference"],
+    supported: ["static placement", "pair facing", "box proxy", "static camera", "static dolly", "timed camera path", "pose preset", "seated procedural chair reference"],
     posePresets: DESIGN_POSES,
     seating: { representation: "procedural_reference", calibratedRig: "canonical_white_model", seatHeightM: SEATED_FIT.supportHeightM + SEATED_FIT.groundLiftM, preservesCamera: true },
   });
@@ -100,6 +103,11 @@ export function parseDesignProposal(raw: unknown): DesignProposal {
     } else if (op.kind === "seat_actor") {
       keys(op, ["kind", "actorId", "chairId"]); text(op.actorId); text(op.chairId, 80);
       if (!/^design-chair-[A-Za-z0-9_-]+$/.test(op.chairId as string)) throw new Error("椅子参考 ID 无效。");
+    } else if (op.kind === "camera_motion") {
+      keys(op, ["kind", "cameraId", "presetId", "durationSeconds", "easing"]); text(op.cameraId);
+      if (!["orbit", "half_arc", "push_in", "pull_out", "lift", "drop", "lateral", "spiral_rise"].includes(op.presetId as string)) throw new Error("运镜预设不受支持。");
+      number(op.durationSeconds, .1, 600);
+      if (!["linear", "bezier", "ease_in", "ease_out", "ease_in_out"].includes(op.easing as string)) throw new Error("运镜缓动不受支持。");
     } else throw new Error("提案包含不支持的操作。");
   }
   return structuredClone(p) as unknown as DesignProposal;
@@ -112,7 +120,9 @@ export function compileDesignProposal(state: WorkbenchState, raw: unknown): Desi
   const plan = parseDesignProposal(raw);
   if (plan.baseRevision !== designRevision(state)) throw new Error("场景已变化，请基于当前场景重新生成设计。");
   if (plan.clarification) throw new Error(plan.clarification);
-  if (state.playheadFrame !== 1 || state.dialogueTimeline.tracks.length || Object.keys(state.actorPaths).length || Object.keys(state.cameraPaths).length) throw new Error("首版仅支持无动画场景的第 1 帧；请先保留草稿并使用静态场景。");
+  const hasCameraMotion = plan.operations.some((operation) => operation.kind === "camera_motion");
+  if (hasCameraMotion && Object.keys(state.cameraPaths).length) throw new Error("当前机位已有运镜路径，请先在机位路径工具中编辑。");
+  if (state.playheadFrame !== 1 || state.dialogueTimeline.tracks.length || Object.keys(state.actorPaths).length || (!hasCameraMotion && Object.keys(state.cameraPaths).length)) throw new Error("自然语言设计仅支持第 1 帧；已有动画或机位路径时请先保留草稿。");
   const root = state.renderScene.sceneRootTransform;
   if ([...root.position, ...root.rotationDeg].some((v) => v !== 0) || root.scale.some((v) => v !== 1)) throw new Error("当前场景根变换尚不支持自然语言设计。");
   const characters = structuredClone(state.characters);
@@ -121,6 +131,8 @@ export function compileDesignProposal(state: WorkbenchState, raw: unknown): Desi
   let cameraId = state.selectedCameraId;
   const moved = new Set<string>();
   const changedCameras = new Set<string>();
+  let cameraPaths = structuredClone(state.cameraPaths);
+  let dialogueTimeline: DialogueTimelineState = structuredClone(state.dialogueTimeline);
   const chairOwners = new Map<string, string>();
   const posed = new Set<string>();
   const editableActor = (id: string) => {
@@ -189,7 +201,19 @@ export function compileDesignProposal(state: WorkbenchState, raw: unknown): Desi
       const camera = cameras[op.cameraId];
       if (op.cameraId !== state.selectedCameraId) throw new Error("请先选择需要设计的机位。首版仅修改当前机位。");
       if (!camera || camera.locked || !camera.visible) throw new Error("机位不存在、已锁定或隐藏。");
-      if (op.kind === "frame_camera") {
+      if (op.kind === "camera_motion") {
+        if (cameraPaths[`path-${op.cameraId}-motion`]) throw new Error("当前机位已有运镜路径，请先在机位路径工具中编辑。");
+        const runtime = cameraRuntime(camera, characters, sceneObjects);
+        const pathId = `path-${op.cameraId}-motion`;
+        const controlPoints = createCameraPathPresetControlPoints({ cameraId: op.cameraId, presetId: op.presetId, sequence: 1, startPositionM: [...camera.transform.position] as Vec, targetPositionM: [...runtime.targetM] as Vec });
+        if (controlPoints.length < 2) throw new Error("无法生成有效运镜路径。");
+        const path: CameraPathState = { pathId, targetType: "camera", targetId: op.cameraId, durationSeconds: op.durationSeconds, easing: op.easing, presetIds: [op.presetId], controlPoints, revision: 1, locked: false, visible: true };
+        cameraPaths[pathId] = path;
+        const nextTrack = dialogueTimeline.tracks.reduce((maximum, track) => Math.max(maximum, Number(track.trackId.match(/(\d+)$/)?.[1]) || 0), 0) + 1;
+        const track: TimelineTrackState = { trackId: `track-${String(nextTrack).padStart(4, "0")}`, trackKind: "camera_path_progress", target: { targetType: "path", targetId: pathId }, propertyKey: "path.progress", keyframes: [] };
+        dialogueTimeline = { ...dialogueTimeline, durationSeconds: Math.max(dialogueTimeline.durationSeconds, op.durationSeconds), tracks: [...dialogueTimeline.tracks, track] };
+        cameraId = op.cameraId;
+      } else if (op.kind === "frame_camera") {
         const points = op.targetIds.map((id) => {
           if (!(characters[id] ?? sceneObjects[id])?.visible) throw new Error("机位目标不存在或隐藏。");
           return stateTargetPosition(id, characters, sceneObjects)!;
@@ -273,5 +297,5 @@ export function compileDesignProposal(state: WorkbenchState, raw: unknown): Desi
       if (depth < .1 || Math.abs(delta.dot(right) * projection.projectionScaleX / depth) > .95 || Math.abs(delta.dot(up) * projection.projectionScaleY / depth) > .95) throw new Error("主体中心超出机位画幅，请增加距离或调整焦距。");
     }
   }
-  return { characters, sceneObjects, cameras, cameraId, baseRevision: plan.baseRevision };
+  return { characters, sceneObjects, cameras, cameraPaths, dialogueTimeline, cameraId, baseRevision: plan.baseRevision };
 }

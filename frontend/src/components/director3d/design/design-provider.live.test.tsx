@@ -99,10 +99,17 @@ it.skipIf(!origin)("accepts real-model designs through the actual compiler and a
     useWorkbenchStore.setState({ playheadFrame: 1 });
     useWorkbenchStore.getState().applyDesignProposal(dolly);
     const finalScene = snapshot();
-    const unsupported = await ask("unsupported-timed-motion", "让当前相机在四秒内缓慢推进半米，生成运镜动画。");
-    expect(unsupported.operations).toEqual([]);
-    expect(unsupported.clarification).toBeTruthy();
-    expect(snapshot()).toEqual(finalScene);
+    const motion = await ask("timed-camera-motion", "让当前相机在四秒内缓慢推进半米，生成运镜动画；保留人物、道具、焦距和目标绑定。");
+    expect(motion.clarification).toBeNull();
+    expect(motion.operations).toHaveLength(1);
+    expect(motion.operations[0].kind).toBe("camera_motion");
+    const motionPreview = compileDesignProposal(useWorkbenchStore.getState(), motion);
+    expect(motionPreview.characters).toEqual(finalScene.characters);
+    expect(motionPreview.sceneObjects).toEqual(finalScene.sceneObjects);
+    expect(motionPreview.cameras[cameraId]).toEqual(finalScene.cameras[cameraId]);
+    expect(motionPreview.cameraPaths[`path-${cameraId}-motion`].durationSeconds).toBe(4);
+    useWorkbenchStore.getState().applyDesignProposal(motion);
+    expect(useWorkbenchStore.getState().undoStack).toHaveLength(3);
     console.info("Configured endpoint acceptance passed; provider authenticity, WebGL visuals and media rendering require separate evidence.");
   } finally {
     useWorkbenchStore.setState(initial, true);

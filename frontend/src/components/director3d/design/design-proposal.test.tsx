@@ -69,6 +69,36 @@ it("incrementally dollies only the camera and preserves target bindings, lens an
   expect(Math.hypot(...after.transform.position.map((v, i) => v - beforeCamera.transform.position[i]))).toBeCloseTo(.5);
 });
 
+it("previews and atomically applies a timed camera path while preserving the authored shot", () => {
+  const { state } = fixture();
+  const cameraId = state.selectedCameraId;
+  const before = state.cameras[cameraId];
+  const proposal = plan([{ kind: "camera_motion", cameraId, presetId: "push_in", durationSeconds: 4, easing: "ease_in_out" }]);
+  const preview = compileDesignProposal(state, proposal);
+  const path = preview.cameraPaths[`path-${cameraId}-motion`];
+  expect(path.durationSeconds).toBe(4);
+  expect(path.controlPoints[0].positionM).toEqual(before.transform.position);
+  expect(preview.cameras[cameraId]).toEqual(before);
+  expect(preview.dialogueTimeline.durationSeconds).toBeGreaterThanOrEqual(4);
+  expect(preview.dialogueTimeline.tracks.some((track) => track.trackKind === "camera_path_progress" && track.target.targetId === path.pathId)).toBe(true);
+  expect(useWorkbenchStore.getState().cameraPaths).toEqual(state.cameraPaths);
+  state.applyDesignProposal(proposal);
+  const applied = useWorkbenchStore.getState();
+  expect(applied.undoStack.length).toBe(state.undoStack.length + 1);
+  expect(applied.cameraPaths[path.pathId]).toEqual(path);
+  applied.undo();
+  expect(useWorkbenchStore.getState().cameraPaths).toEqual(state.cameraPaths);
+});
+
+it("rejects a second natural-language camera path when one already exists", () => {
+  const { state } = fixture();
+  const cameraId = state.selectedCameraId;
+  state.applyCameraPathPreset(cameraId, "push_in", "replace", 2, "ease_in_out");
+  const current = useWorkbenchStore.getState();
+  const proposal = { ...plan([{ kind: "camera_motion", cameraId, presetId: "pull_out", durationSeconds: 3, easing: "ease_in_out" }]), baseRevision: designRevision(current) };
+  expect(() => compileDesignProposal(current, proposal)).toThrow("已有运镜路径");
+});
+
 it("rejects stale and newly locked proposals without a partial apply or undo entry", () => {
   const { state, ids, proposal } = fixture();
   state.toggleCharacterLocked(ids[1]);

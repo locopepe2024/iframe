@@ -58,7 +58,7 @@ export function DesignAssistantPanel({ onPreview, previewing, disabled = false }
   };
   return <section className="design-assistant" aria-labelledby="design-assistant-title">
     <div className="dialogue-heading"><h2 id="design-assistant-title">自然语言设计</h2><span className="revision-badge">静态场景</span></div>
-    <p>描述人物摆位、姿态、坐椅子或当前机位，也可以接着说“只把相机拉近半米”。先预览，再应用。</p>
+    <p>描述人物摆位、姿态、坐椅子、当前机位或带时长的运镜，也可以说“四秒缓慢推进”。先预览，再应用。</p>
     <form onSubmit={(event) => { event.preventDefault(); void generate(); }}>
       <label htmlFor="director-design-prompt">设计要求</label>
       <textarea id="director-design-prompt" value={prompt} maxLength={2000} rows={3} disabled={busy || disabled} onChange={(event) => setPrompt(event.target.value)} placeholder="例如：让两个人相对站立，间隔三米；用当前机位、35mm 镜头拍摄两人。" />
@@ -71,13 +71,13 @@ export function DesignAssistantPanel({ onPreview, previewing, disabled = false }
       {proposal.assumptions.length > 0 && <details open><summary>设计假设</summary><ul>{proposal.assumptions.map((item, index) => <li key={index}>{item}</li>)}</ul></details>}
       {proposal.clarification ? <p role="status">{proposal.clarification}</p> : <>
         <p>{proposal.operations.length} 项操作。预览不会保存；应用后可拖动或输入数值继续编辑。</p>
-        <ol>{proposal.operations.map((op, index) => <li key={index}>{{place_entity: "调整对象位置与朝向", arrange_pair: "双人相对摆位", add_box: "添加道具占位", frame_camera: "设计静态机位", dolly_camera: "调整机位距离", set_pose: "设置人物姿态", seat_actor: "坐在程序化椅子参考上"}[op.kind]} · {"cameraId" in op ? op.cameraId : "entityId" in op ? op.entityId : "actorId" in op ? op.actorId : op.actorIds.join(" / ")}</li>)}</ol>
+        <ol>{proposal.operations.map((op, index) => <li key={index}>{{place_entity: "调整对象位置与朝向", arrange_pair: "双人相对摆位", add_box: "添加道具占位", frame_camera: "设计静态机位", dolly_camera: "调整机位距离", camera_motion: "创建带时长的运镜路径", set_pose: "设置人物姿态", seat_actor: "坐在程序化椅子参考上"}[op.kind]} · {"cameraId" in op ? op.cameraId : "entityId" in op ? op.entityId : "actorId" in op ? op.actorId : op.actorIds.join(" / ")}</li>)}</ol>
         {proposal.operations.some((op) => op.kind === "seat_actor") && <p role="status">椅子是可编辑的程序化占位，不是真实家具资产。坐姿仅适配标准白模；手动移动后需重新检查接触。</p>}
         <div className="blocking-reference-actions"><button type="button" disabled={stale || busy || disabled} onClick={preview}>预览设计</button><button type="button" disabled={stale || busy || disabled || !previewing} onClick={apply}>应用设计</button>{previewing && <button type="button" onClick={() => onPreview(null)}>退出预览</button>}<button type="button" disabled={busy} onClick={() => { setProposal(null); onPreview(null); setError(""); }}>放弃提案</button></div>
       </>}
       {stale && <p role="status">场景已变化，此提案已过期；请重新生成。</p>}
     </div>}
-    <small>支持无动画场景第 1 帧的标准白模摆位、挥手、抱臂、思考、叉腰和坐姿椅子参考。道具为几何占位；通用接触、完整遮挡和真实家具适配尚未支持。带时长运镜请使用机位路径工具。</small>
+    <small>支持无动画场景第 1 帧的标准白模摆位、挥手、抱臂、思考、叉腰、坐姿椅子参考和一条新的带时长机位路径。道具为几何占位；通用接触、完整遮挡和真实家具适配尚未支持。</small>
     {message && <p role="status">{message}</p>}{error && <p role="alert">{error}</p>}
   </section>;
 }

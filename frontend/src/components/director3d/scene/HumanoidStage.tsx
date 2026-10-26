@@ -576,8 +576,10 @@ export function HumanoidStage({ recordingVideo: videoRecording = false, preview 
   const baseSceneObjects = preview?.sceneObjects ?? authoredObjects;
   const baseCameras = preview?.cameras ?? authoredCameras;
   const actorPaths = useWorkbenchStore((state) => state.actorPaths);
-  const cameraPaths = useWorkbenchStore((state) => state.cameraPaths);
-  const timeline = useWorkbenchStore((state) => state.dialogueTimeline);
+  const authoredCameraPaths = useWorkbenchStore((state) => state.cameraPaths);
+  const authoredTimeline = useWorkbenchStore((state) => state.dialogueTimeline);
+  const cameraPaths = preview?.cameraPaths ?? authoredCameraPaths;
+  const timeline = preview?.dialogueTimeline ?? authoredTimeline;
   const playheadFrame = useWorkbenchStore((state) => state.playheadFrame);
   const evaluated = useMemo(() => evaluateDirectorFrame({ frame: playheadFrame, durationSeconds: timeline.durationSeconds, fps: timeline.fps, tracks: timeline.tracks, activeCameraTrackId: timeline.activeCameraTrackId, selectedCameraId, characters: baseCharacters, cameras: baseCameras, sceneObjects: baseSceneObjects, actorPaths, cameraPaths }), [actorPaths, baseCameras, baseCharacters, baseSceneObjects, cameraPaths, playheadFrame, selectedCameraId, timeline]);
   const charactersRecord = evaluated.characters;

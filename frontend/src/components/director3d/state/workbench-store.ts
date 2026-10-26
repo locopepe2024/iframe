@@ -1221,7 +1221,7 @@ export const useWorkbenchStore = create<WorkbenchState>((set, get) => ({
   commandHistory: [],
   applyDesignProposal: (proposal) => set((state) => {
     const preview = compileDesignProposal(state, proposal);
-    return mutateScene(state, "design.proposal.apply", { characters: preview.characters, sceneObjects: preview.sceneObjects, cameras: preview.cameras });
+    return mutateScene(state, "design.proposal.apply", { characters: preview.characters, sceneObjects: preview.sceneObjects, cameras: preview.cameras, cameraPaths: preview.cameraPaths, dialogueTimeline: preview.dialogueTimeline });
   }),
   undoStack: [],
   redoStack: [],

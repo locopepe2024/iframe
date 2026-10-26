@@ -72,7 +72,15 @@ class SeatActor(StrictModel):
     chairId: str = Field(pattern=r"^design-chair-[A-Za-z0-9_-]+$", max_length=80)
 
 
-Operation = Annotated[Place | Pair | Box | FrameCamera | Dolly | SetPose | SeatActor, Field(discriminator="kind")]
+class CameraMotion(StrictModel):
+    kind: Literal["camera_motion"]
+    cameraId: Identifier
+    presetId: Literal["orbit", "half_arc", "push_in", "pull_out", "lift", "drop", "lateral", "spiral_rise"]
+    durationSeconds: float = Field(gt=0.1, le=600)
+    easing: Literal["linear", "bezier", "ease_in", "ease_out", "ease_in_out"]
+
+
+Operation = Annotated[Place | Pair | Box | FrameCamera | Dolly | SetPose | SeatActor | CameraMotion, Field(discriminator="kind")]
 
 
 class ModelProposal(StrictModel):
@@ -139,7 +147,8 @@ If more than two visible actors exist and the requested pair is not clear from
 selection/context, ask which pair. Never act on hidden actors. Only use these
 new operations when scene.supported declares them. Other rigs require clarification.
 Do not claim physics, arbitrary contact, real furniture or foot-flat validation.
-If any essential request needs timed motion, unsupported poses/contact, lights, new characters,
+Timed camera motion is supported with one new camera_motion operation on the selected camera when there is no existing animation or camera path. Map 推进/靠近 to push_in, 拉远 to pull_out, 环绕 to orbit or half_arc, 横移 to lateral, 升起 to lift and 下降 to drop. Preserve the current camera transform, lens, targets, actors and props; use the requested duration and ease_in_out unless another easing is explicit. A camera_motion operation stages a timeline path and does not change actor or prop transforms. If a camera path already exists, return clarification.
+If any essential request needs unsupported timed actor motion, unsupported poses/contact, lights, new characters,
 asset identity/appearance, image generation, unavailable tools, unclear identity,
 or uncertain screen-left constraints, return no operations and a helpful clarification.
 Do not partially perform an unsupported request. First slice only supports static
