@@ -19,7 +19,7 @@ export interface DirectorShotPackage {
   durationSeconds: number;
   activeCameraId: string;
   aspectRatio: CameraCompositionState["aspectRatio"];
-  characters: Array<Pick<CharacterAuthoringState, "characterId" | "actorMappingId" | "proxyAssetId" | "label" | "transform" | "jointRotations" | "visible">>;
+  characters: Array<Pick<CharacterAuthoringState, "characterId" | "actorMappingId" | "proxyAssetId" | "label" | "transform" | "jointRotations" | "poseRootOffsetM" | "visible">>;
   objects: SceneObjectAuthoringState[];
   environment: { renderScene: RenderSceneState; panoramaSource: Pick<EnvironmentInputEntry, "inputId" | "checksum" | "admissionChecksum" | "environmentAllowed"> | null };
   camera: Pick<CameraCompositionState, "cameraId" | "label" | "transform" | "fovDeg" | "focalLengthMm" | "depthOfField" | "aspectRatio" | "lookAt" | "subjectTargetIds" | "visible">;
@@ -73,7 +73,7 @@ export function projectDirectorShotPackage(input: DirectorShotPackageInput): Dir
     durationSeconds: input.durationSeconds,
     activeCameraId: evaluated.activeCameraId,
     aspectRatio: camera.aspectRatio,
-    characters: Object.values(evaluated.characters).map(({ characterId, actorMappingId, proxyAssetId, label, transform, jointRotations, visible }) => ({ characterId, actorMappingId, proxyAssetId, label, transform, jointRotations, visible })),
+    characters: Object.values(evaluated.characters).map(({ characterId, actorMappingId, proxyAssetId, label, transform, jointRotations, poseRootOffsetM, visible }) => ({ characterId, actorMappingId, proxyAssetId, label, transform, jointRotations, poseRootOffsetM, visible })),
     objects: Object.values(evaluated.sceneObjects).map((object) => structuredClone(object)),
     environment: {
       renderScene: structuredClone(input.renderScene),

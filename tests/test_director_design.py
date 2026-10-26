@@ -89,3 +89,38 @@ def test_unconfigured_provider_and_clarification(client, monkeypatch):
 def test_invalid_requests(client, change):
     c, _ = client
     assert c.post("/director3d/design-proposals", json={**request(), **change}).status_code == 422
+
+
+def test_seated_pair_proposal_uses_typed_actor_operations_and_keeps_camera(client, monkeypatch):
+    c, _ = client
+    result = {**response(), "summary": "两人坐在程序化椅子参考上，保留当前机位",
+              "assumptions": ["椅子是程序化参考，不是真实家具资产"],
+              "operations": [dict(kind="seat_actor", actorId=actor, chairId=f"design-chair-{i}") for i, actor in enumerate(["a", "b"])]}
+    def generate(self, messages, **kwargs):
+        assert "two seat_actor operations" in messages[0]["content"]
+        assert "NO camera operations" in messages[0]["content"]
+        return json.dumps(result)
+    monkeypatch.setattr(design.LLMAdapter, "chat", generate)
+    reply = c.post("/director3d/design-proposals", json=request())
+    assert reply.status_code == 200
+    assert reply.json()["operations"] == result["operations"]
+    assert current_studio_user() is None
+
+
+@pytest.mark.parametrize("operation", [
+    dict(kind="set_pose", actorId="a", presetId="gesture.wave"),
+    dict(kind="seat_actor", actorId="a", chairId="design-chair-a"),
+])
+def test_supported_pose_and_seating_schema(operation):
+    design.ModelProposal.model_validate({**response(), "operations": [operation]})
+
+
+@pytest.mark.parametrize("operation", [
+    dict(kind="set_pose", actorId="a", presetId="seated.sit"),
+    dict(kind="set_pose", actorId="a", presetId="unknown"),
+    dict(kind="seat_actor", actorId="a", chairId="../../chair"),
+    dict(kind="seat_actor", actorId="a", chairId="design-chair-a", code="bad"),
+])
+def test_unsupported_pose_or_chair_schema_is_rejected(operation):
+    with pytest.raises(ValueError):
+        design.ModelProposal.model_validate({**response(), "operations": [operation]})

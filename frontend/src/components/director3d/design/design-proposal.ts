@@ -2,12 +2,15 @@ import { Vector3 } from "three";
 import type { AuthoringSnapshot, WorkbenchState } from "../state/workbench-store";
 import { cameraProjection, cameraRuntime, stateTargetPosition } from "../timeline/timeline-evaluation";
 import { currentDirectorShotPackage } from "../reference/current-shot-package";
+import { applyDesignPose, DESIGN_POSES, SEATED_FIT, type DesignPoseId } from "./design-poses";
 
 type Vec = [number, number, number];
 export type DesignOperation =
   | { kind: "place_entity"; entityId: string; positionM: Vec; yawDeg: number }
   | { kind: "arrange_pair"; actorIds: [string, string]; centerM: Vec; separationM: number; axisDeg: number }
   | { kind: "add_box"; entityId: string; label: string; positionM: Vec; dimensionsM: Vec }
+  | { kind: "set_pose"; actorId: string; presetId: DesignPoseId }
+  | { kind: "seat_actor"; actorId: string; chairId: string }
   | { kind: "frame_camera"; cameraId: string; targetIds: string[]; azimuthDeg: number; elevationDeg: number; distanceM: number; focalLengthMm: number }
   | { kind: "dolly_camera"; cameraId: string; towardM: number };
 export interface DesignProposal {
@@ -35,11 +38,13 @@ export function designRevision(state: WorkbenchState): string {
 export function designContext(state: WorkbenchState): string {
   const shot = currentDirectorShotPackage(state);
   return JSON.stringify({ package: shot, cameras: state.cameras,
-    actors: Object.values(state.characters).map(({ characterId, label, locked }) => ({ characterId, label, locked })),
+    actors: Object.values(state.characters).map(({ characterId, label, locked, visible, proxyAssetId, activePresetId }) => ({ characterId, label, locked, visible, proxyAssetId, activePresetId })),
     selectedCharacterId: state.selectedCharacterId, selectedObjectId: state.selectedSceneObjectId,
     selectedCameraId: state.selectedCameraId, groundHeightM: state.renderScene.ground.heightM,
     animated: state.dialogueTimeline.tracks.length > 0 || Object.keys(state.actorPaths).length > 0 || Object.keys(state.cameraPaths).length > 0,
-    supported: ["static placement", "pair facing", "box proxy", "static camera", "static dolly"],
+    supported: ["static placement", "pair facing", "box proxy", "static camera", "static dolly", "pose preset", "seated procedural chair reference"],
+    posePresets: DESIGN_POSES,
+    seating: { representation: "procedural_reference", calibratedRig: "canonical_white_model", seatHeightM: SEATED_FIT.supportHeightM + SEATED_FIT.groundLiftM, preservesCamera: true },
   });
 }
 
@@ -89,6 +94,12 @@ export function parseDesignProposal(raw: unknown): DesignProposal {
       number(op.azimuthDeg, -360, 360); number(op.elevationDeg, -60, 80); number(op.distanceM, .5, 50); number(op.focalLengthMm, 12, 200);
     } else if (op.kind === "dolly_camera") {
       keys(op, ["kind", "cameraId", "towardM"]); text(op.cameraId); number(op.towardM, -20, 20);
+    } else if (op.kind === "set_pose") {
+      keys(op, ["kind", "actorId", "presetId"]); text(op.actorId);
+      if (!DESIGN_POSES.includes(op.presetId as DesignPoseId)) throw new Error("姿态预设不受支持。");
+    } else if (op.kind === "seat_actor") {
+      keys(op, ["kind", "actorId", "chairId"]); text(op.actorId); text(op.chairId, 80);
+      if (!/^design-chair-[A-Za-z0-9_-]+$/.test(op.chairId as string)) throw new Error("椅子参考 ID 无效。");
     } else throw new Error("提案包含不支持的操作。");
   }
   return structuredClone(p) as unknown as DesignProposal;
@@ -110,6 +121,17 @@ export function compileDesignProposal(state: WorkbenchState, raw: unknown): Desi
   let cameraId = state.selectedCameraId;
   const moved = new Set<string>();
   const changedCameras = new Set<string>();
+  const chairOwners = new Map<string, string>();
+  const posed = new Set<string>();
+  const editableActor = (id: string) => {
+    const actor = characters[id];
+    if (!actor || actor.locked || !actor.visible || actor.calibratedPlacement) throw new Error("人物不存在、已锁定、隐藏或已校准。");
+    if (actor.proxyAssetId || actor.transform.rotationDeg.slice(0, 2).some((v) => v !== 0) || actor.transform.scale.some((v) => v !== 1)) throw new Error("姿态设计当前仅支持未缩放、未倾斜的标准白模人物。");
+    if (state.rigAdmissionStatus !== "passed") throw new Error("当前骨架尚未通过准入检查，请等待白模加载完成。");
+    if (posed.has(id)) throw new Error("同一提案不能重复设置同一人物的姿态。");
+    posed.add(id);
+    return actor;
+  };
   const place = (id: string, position: Vec, yaw: number) => {
     const entity = characters[id] ?? sceneObjects[id];
     if (!entity || entity.locked || !entity.visible || entity.calibratedPlacement) throw new Error(`对象 ${id} 不存在、已锁定、隐藏或已校准。`);
@@ -120,7 +142,35 @@ export function compileDesignProposal(state: WorkbenchState, raw: unknown): Desi
     moved.add(id);
   };
   for (const op of plan.operations) {
-    if (op.kind === "place_entity") place(op.entityId, op.positionM, op.yawDeg);
+    if (op.kind === "set_pose") {
+      applyDesignPose(editableActor(op.actorId), op.presetId);
+    } else if (op.kind === "seat_actor") {
+      const actor = editableActor(op.actorId);
+      if (Math.abs(actor.transform.position[2] - state.renderScene.ground.heightM) > .001) throw new Error("坐姿椅子参考需要人物位于当前地面。");
+      applyDesignPose(actor, "seated.sit");
+      actor.poseRootOffsetM[2] += SEATED_FIT.groundLiftM;
+      const height = SEATED_FIT.supportHeightM + SEATED_FIT.groundLiftM;
+      const legHeight = height - .06;
+      const parts: { suffix: string; label: string; position: Vec; size: Vec }[] = [
+        { suffix: "seat", label: "座面", position: [0, -.06, legHeight], size: [.58, .52, .06] },
+        { suffix: "back", label: "靠背", position: [0, .23, height], size: [.58, .06, .5] },
+        ...[-.23, .23].flatMap((x, i) => [-.27, .15].map((y, j) => ({ suffix: `leg-${i}-${j}`, label: "椅腿", position: [x, y, 0] as Vec, size: [.05, .05, legHeight] as Vec }))),
+      ];
+      const yaw = actor.transform.rotationDeg[2], cos = Math.cos(radians(yaw)), sin = Math.sin(radians(yaw));
+      for (const part of parts) {
+        const id = `${op.chairId}-${part.suffix}`;
+        if (characters[id] || sceneObjects[id] || cameras[id]) throw new Error("椅子参考 ID 与已有对象重复。");
+        const [w, d, h] = part.size, [x, y, z] = part.position;
+        sceneObjects[id] = { sceneObjectId: id, revision: 1, label: `椅子参考·${part.label}（程序化占位）`, objectKind: "primitive", primitiveKind: "cube",
+          proxyRepresentationType: null, proxyAssetId: null, modelAssetId: null, inputId: null,
+          transform: { position: [actor.transform.position[0] + x * cos - y * sin, actor.transform.position[1] + x * sin + y * cos, state.renderScene.ground.heightM + z], rotationDeg: [0, 0, yaw], scale: [1, 1, 1], groundSnap: false },
+          dimensionsM: [w, d, h], pivotM: [0, 0, -h / 2], boundingBoxM: { minimum: [-w / 2, -d / 2, 0], maximum: [w / 2, d / 2, h] }, scaleBasis: "declared_dimension",
+          materialHint: { color: "#64748b", roughness: .8 }, visible: true, locked: false, browserCapabilityState: "available", compilerCapabilityState: "available",
+          capabilityIds: [], limitations: ["标准白模坐姿的程序化椅子参考，不是真实模型资产。", "仅校验静态支撑区域与地面，不提供物理约束；手动移动后需重新检查接触。"], calibratedPlacement: null };
+        chairOwners.set(id, actor.characterId); moved.add(id);
+      }
+      moved.add(actor.characterId);
+    } else if (op.kind === "place_entity") place(op.entityId, op.positionM, op.yawDeg);
     else if (op.kind === "arrange_pair") {
       if (op.actorIds.some((id) => !characters[id])) throw new Error("双人摆位必须引用两个现有人物。");
       const offset = [Math.cos(radians(op.axisDeg)) * op.separationM / 2, Math.sin(radians(op.axisDeg)) * op.separationM / 2, 0];
@@ -164,6 +214,30 @@ export function compileDesignProposal(state: WorkbenchState, raw: unknown): Desi
       changedCameras.add(cameraId);
     }
   }
+  // A fitted chair can intersect its owner only. Check other furniture as
+  // oriented rectangles with vertical overlap, not just actor center spacing.
+  for (const id of Array.from(chairOwners.keys())) {
+    const chair = sceneObjects[id];
+    for (const other of Object.values(sceneObjects)) {
+      if (id === other.sceneObjectId || !other.visible || chairOwners.has(other.sceneObjectId) && chairOwners.get(id) === chairOwners.get(other.sceneObjectId)) continue;
+      if (other.primitiveKind !== "cube" || other.transform.rotationDeg.slice(0, 2).some((v) => v !== 0) || other.transform.scale.some((v) => v !== 1)) throw new Error("场景含尚不支持座椅间距校验的物体，请先隔离待设计人物。");
+      const bounds = (box: typeof chair) => {
+        const yaw = radians(box.transform.rotationDeg[2]);
+        const localCenter = box.boundingBoxM.minimum.map((v, axis) => (v + box.boundingBoxM.maximum[axis]) / 2);
+        return { center: [box.transform.position[0] + localCenter[0] * Math.cos(yaw) - localCenter[1] * Math.sin(yaw), box.transform.position[1] + localCenter[0] * Math.sin(yaw) + localCenter[1] * Math.cos(yaw)],
+          axes: [[Math.cos(yaw), Math.sin(yaw)], [-Math.sin(yaw), Math.cos(yaw)]],
+          half: box.boundingBoxM.maximum.slice(0, 2).map((v, axis) => (v - box.boundingBoxM.minimum[axis]) / 2),
+          low: box.transform.position[2] + box.boundingBoxM.minimum[2], high: box.transform.position[2] + box.boundingBoxM.maximum[2] };
+      };
+      const a = bounds(chair), b = bounds(other);
+      if (a.high <= b.low + .001 || b.high <= a.low + .001) continue;
+      const overlaps = [...a.axes, ...b.axes].every((axis) => {
+        const radius = (box: typeof a) => box.axes.reduce((r, unit, i) => r + box.half[i] * Math.abs(unit[0] * axis[0] + unit[1] * axis[1]), 0);
+        return Math.abs((a.center[0] - b.center[0]) * axis[0] + (a.center[1] - b.center[1]) * axis[1]) < radius(a) + radius(b) - .001;
+      });
+      if (overlaps) throw new Error("椅子参考与场景物体重叠，请调整摆位。");
+    }
+  }
   // Conservative blocking checks use actor centers and axis-aligned box proxies only.
   for (const actor of Object.values(characters).filter((a) => a.visible)) {
     for (const other of Object.values(characters).filter((a) => a.visible && a.characterId !== actor.characterId)) {
@@ -171,6 +245,13 @@ export function compileDesignProposal(state: WorkbenchState, raw: unknown): Desi
     }
     for (const box of Object.values(sceneObjects).filter((o) => o.visible && o.primitiveKind === "cube")) {
       if (!(moved.has(actor.characterId) || moved.has(box.sceneObjectId))) continue;
+      if (chairOwners.get(box.sceneObjectId) === actor.characterId) continue;
+      if (chairOwners.has(box.sceneObjectId)) {
+        const angle = -radians(box.transform.rotationDeg[2]);
+        const dx = actor.transform.position[0] - box.transform.position[0], dy = actor.transform.position[1] - box.transform.position[1];
+        if (Math.abs(dx * Math.cos(angle) - dy * Math.sin(angle)) < box.dimensionsM[0] / 2 + .3 && Math.abs(dx * Math.sin(angle) + dy * Math.cos(angle)) < box.dimensionsM[1] / 2 + .3) throw new Error("椅子参考与其他人物重叠，请先调整人物间距。");
+        continue;
+      }
       if (box.transform.rotationDeg.some((v) => v !== 0) || box.transform.scale.some((v) => v !== 1)) throw new Error("旋转或缩放的占位道具暂不支持自动间距校验。");
       const [x, y, z] = actor.transform.position, [bx, by, bz] = box.transform.position;
       if (z < bz + box.dimensionsM[2] && z + 1.8 > bz && Math.abs(x - bx) < box.dimensionsM[0] / 2 + .3 && Math.abs(y - by) < box.dimensionsM[1] / 2 + .3) throw new Error("人物与占位道具重叠，请调整间距。");

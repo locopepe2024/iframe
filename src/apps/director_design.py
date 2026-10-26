@@ -60,7 +60,19 @@ class Dolly(StrictModel):
     towardM: float = Field(ge=-20, le=20)
 
 
-Operation = Annotated[Place | Pair | Box | FrameCamera | Dolly, Field(discriminator="kind")]
+class SetPose(StrictModel):
+    kind: Literal["set_pose"]
+    actorId: Identifier
+    presetId: Literal["pose.neutral", "standing.relaxed", "standing.hands_on_hips", "gesture.wave", "gesture.arms_crossed", "gesture.thinking"]
+
+
+class SeatActor(StrictModel):
+    kind: Literal["seat_actor"]
+    actorId: Identifier
+    chairId: str = Field(pattern=r"^design-chair-[A-Za-z0-9_-]+$", max_length=80)
+
+
+Operation = Annotated[Place | Pair | Box | FrameCamera | Dolly | SetPose | SeatActor, Field(discriminator="kind")]
 
 
 class ModelProposal(StrictModel):
@@ -115,7 +127,19 @@ lens and bindings. Use context and history for references like 'closer' or 'the 
 person'. Current context wins over older turns. State chosen distances and other
 unspecified values in assumptions. Do not claim collision/visibility verification.
 Supported: positions, facing, pair spacing, box props, static cameras and dolly.
-If any essential request needs timed motion, poses/seating, lights, new characters,
+Also supported: set_pose with an ID from scene.posePresets; seat_actor with one
+existing visible actorId and a unique new chairId starting design-chair-.
+seat_actor applies the calibrated seated pose and creates a fitted six-part
+PROCEDURAL CHAIR REFERENCE, not a real/library chair asset. It keeps actor XY/yaw
+and all camera settings unchanged. Do not add boxes or alter positions to imitate
+seating. Use one seat_actor per requested actor, not set_pose(seated.sit).
+For '两个人坐在椅子上，当前的镜头机位', use two seat_actor operations for the two
+visible actors and NO camera operations; disclose procedural chairs in assumptions.
+If more than two visible actors exist and the requested pair is not clear from
+selection/context, ask which pair. Never act on hidden actors. Only use these
+new operations when scene.supported declares them. Other rigs require clarification.
+Do not claim physics, arbitrary contact, real furniture or foot-flat validation.
+If any essential request needs timed motion, unsupported poses/contact, lights, new characters,
 asset identity/appearance, image generation, unavailable tools, unclear identity,
 or uncertain screen-left constraints, return no operations and a helpful clarification.
 Do not partially perform an unsupported request. First slice only supports static

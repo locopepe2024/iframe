@@ -96,3 +96,47 @@ edit/apply/revert the authored change, and export artifacts bound to its current
 package. Exact seated-pair regression works with unchanged camera. Each required
 capability has code, meaningful tests, real-provider observations and appropriate
 visual/render acceptance; a roadmap or schema addition alone is not completion.
+
+## Capability inventory and first implementation contract
+
+| Capability | Evidence / existing owner | Planned natural-language support |
+| --- | --- | --- |
+| Object layout / transforms | CLI-Anything core/objects.py add/transform; director authoring store | Existing placement and pair compiler |
+| Pose and seating | Director pose-presets.ts has seated.sit; no contact solver in CLI-Anything inspected core | Preset operation; fitted procedural chair for canonical rig first |
+| Materials | CLI-Anything core/materials.py; director materialHint on primitives | Bound material parameters, then admitted appearance assets |
+| Lights and cameras | CLI-Anything core/lighting.py; director cameras / renderScene | Static cameras now; authored light entities later |
+| Timed animation | CLI-Anything core/animation.py add_keyframe; director cameraPaths/evaluator | Compile timed motion into existing timeline owner |
+| Real characters / furniture | Director admitted assets and actor mappings | Library selection / import / explicit dependencies |
+| Full layout / generated image | Prior Holodeck research informed constraint separation; no new local runtime verification | Compose scene operations and existing image jobs |
+
+This inventory records code presence, not integrated runtime coverage. No
+Holodeck, Blender MCP or CLI-Anything runtime is installed into the product.
+The inspected CLI-Anything Blender core does not itself prove natural-language
+understanding, skeletal posing, contact solving or clothes generation.
+
+First slice adds `set_pose(actorId,presetId)` for an explicit safe preset list and
+`seat_actor(actorId,chairId)` for the currently shipped canonical white model.
+Seating retains actor XY/yaw and every camera field, uses the existing seated.sit
+joint rotations, and creates six editable primitive parts (seat, back, four legs)
+labelled as a procedural chair reference. It is not a library/photoreal chair.
+No identity/outfit/real-asset claim is allowed. Other rigs, tilt, scaling,
+calibration, hidden/locked actors, ID conflicts and overlapping actors/props fail
+without mutation. Multiple seat operations cannot target the same actor.
+
+Fit constants come from evaluating the pinned shipped GLB with the exact viewer
+rest-quaternion × pose-delta transform and +90° X conversion. Lift the seated
+rig to put its lowest skin vertex on the ground. Fit the seat top to the lowest
+skin vertex in a defined pelvis support region. This verifies support-region
+alignment and whole-mesh ground clearance for that one canonical pose; it does
+not prove general contact, physics, arbitrary rig fit or foot sole flatness.
+Verify the calibration against actual skinned vertices in a Node test and record
+the GLB SHA-256. Generated chair bounds use yaw-aware conservative checks against
+other actors and existing objects; only the owning seated actor's fitted chair
+parts are exempt from the old standing-cylinder overlap rule.
+
+DirectorShotPackage must include poseRootOffsetM as well as joint rotations,
+otherwise the same pose at different root height hashes identically. Test the
+checksum and one-step undo/redo with this slice. UI must show proxy limitations,
+supported pose choices and clarification/failure before any apply. A live-model
+acceptance uses actual generated designContext with two actors, then compiles
+the real response and checks both actors seated and cameras byte-for-byte equal.
