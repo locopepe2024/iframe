@@ -1120,6 +1120,11 @@ function CharacterDetailModal({ asset, type, onClose, onUpdateDescription, onUpd
             key_light_direction: String(savedSceneDesign.visual_constraints?.key_light_direction || "unspecified"),
             forbidden_light_directions: Array.isArray(savedSceneDesign.visual_constraints?.forbidden_light_directions) ? savedSceneDesign.visual_constraints.forbidden_light_directions : [],
         },
+        crowd_design: savedSceneDesign.crowd_design || {
+            near: { identity_policy: "asset_required", density: "", subjects: [], text_elements: [], motion: "" },
+            mid: { identity_policy: "template_allowed", density: "", subjects: [], text_elements: [], motion: "" },
+            far: { identity_policy: "unidentified", density: "", subjects: [], text_elements: [], motion: "" },
+        },
     }));
     const [sceneDesignNeedsApply, setSceneDesignNeedsApply] = useState(() =>
         savedWorkspace ? Boolean(savedWorkspace.settings_pending) : type === "scene" && !String(asset.image_prompt || "").includes("【场景结构化设置】") && Boolean(
@@ -1530,6 +1535,7 @@ function CharacterDetailModal({ asset, type, onClose, onUpdateDescription, onUpd
                 local_lighting: { target: sceneDesign.local_target.trim(), effect: sceneDesign.local_effect.trim() },
                 reference_viewpoint: sceneDesign.reference_viewpoint.trim(),
                 reference_framing: sceneDesign.reference_framing.trim(),
+                crowd_design: sceneDesign.crowd_design,
                 prompt_layers: sceneDesign.prompt_layers,
                 visual_constraints: {
                     key_light_direction: sceneDesign.visual_constraints.key_light_direction,
@@ -1698,6 +1704,25 @@ function CharacterDetailModal({ asset, type, onClose, onUpdateDescription, onUpd
                                     }));
                                     setSceneDesignNeedsApply(true);
                                 }} />
+                                <div className="space-y-2 rounded border border-glass-border p-3">
+                                    <p className="text-xs font-semibold text-foreground">近景 / 中景 / 远景人群</p>
+                                    {(["near", "mid", "far"] as const).map(layer => {
+                                        const labels = { near: "近景", mid: "中景", far: "远景" };
+                                        const value = sceneDesign.crowd_design[layer] || {};
+                                        return <div key={layer} className="grid gap-2 md:grid-cols-5">
+                                            <span className="pt-2 text-xs text-text-secondary">{labels[layer]}</span>
+                                            <select aria-label={`${labels[layer]}身份策略`} value={value.identity_policy || "unidentified"}
+                                                onChange={event => setSceneDesign(current => ({ ...current, crowd_design: { ...current.crowd_design, [layer]: { ...value, identity_policy: event.target.value } } }))}
+                                                className="rounded border border-glass-border bg-input-bg p-2 text-xs text-foreground">
+                                                <option value="asset_required">需绑定资产</option><option value="template_allowed">允许群演模板</option><option value="unidentified">匿名背景</option>
+                                            </select>
+                                            <input aria-label={`${labels[layer]}密度`} placeholder="密度" value={value.density || ""} onChange={event => setSceneDesign(current => ({ ...current, crowd_design: { ...current.crowd_design, [layer]: { ...value, density: event.target.value } } }))} className="rounded border border-glass-border bg-input-bg p-2 text-xs text-foreground" />
+                                            <input aria-label={`${labels[layer]}对象`} placeholder="对象，用逗号分隔" value={(value.subjects || []).join("、")} onChange={event => setSceneDesign(current => ({ ...current, crowd_design: { ...current.crowd_design, [layer]: { ...value, subjects: event.target.value.split(/[、,，]/).map(item => item.trim()).filter(Boolean) } } }))} className="rounded border border-glass-border bg-input-bg p-2 text-xs text-foreground" />
+                                            <input aria-label={`${labels[layer]}固定文字`} placeholder="固定招牌/文字" value={(value.text_elements || []).join("、")} onChange={event => setSceneDesign(current => ({ ...current, crowd_design: { ...current.crowd_design, [layer]: { ...value, text_elements: event.target.value.split(/[、,，]/).map(item => item.trim()).filter(Boolean) } } }))} className="rounded border border-glass-border bg-input-bg p-2 text-xs text-foreground" />
+                                        </div>;
+                                    })}
+                                    <p className="text-[11px] text-text-muted">近景出现可辨脸部或固定文字时绑定资产；中景可使用群演模板；远景只锁定密度、方向和区域。</p>
+                                </div>
                                 <details className="rounded border border-glass-border p-2">
                                     <summary className="min-h-11 cursor-pointer text-xs text-text-secondary">补充描述与旧版设置</summary>
                                     <label className="block text-xs text-text-secondary">环境光补充

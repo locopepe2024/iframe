@@ -3228,7 +3228,7 @@ class ComicGenPipeline(StudioOwnerMixin):
             design = attributes["asset_design"]
             if not isinstance(design, dict):
                 raise ValueError("Asset design must be an object")
-            scene_fields = {"style", "ambient_lighting", "local_lighting", "reference_viewpoint", "reference_framing", "visual_constraints", "prompt_workspace", "prompt_layers", "asset_baseline", "shot_only_content"} if asset_type == "scene" else {"dimensions"}
+            scene_fields = {"style", "ambient_lighting", "local_lighting", "reference_viewpoint", "reference_framing", "visual_constraints", "prompt_workspace", "prompt_layers", "asset_baseline", "shot_only_content", "crowd_design"} if asset_type == "scene" else {"dimensions"}
             if set(design) - {"visual_notes", "user_requirements", "unresolved", "confirmed"} - scene_fields:
                 raise ValueError("Asset design contains unknown fields")
             notes = design.get("visual_notes")
@@ -3267,6 +3267,24 @@ class ComicGenPipeline(StudioOwnerMixin):
                 length = measure.get("length_cm")
                 if length is not None and (isinstance(length, bool) or not isinstance(length, (int, float)) or not 0 < length <= 10000):
                     raise ValueError("Prop length_cm must be a positive bounded number")
+            if asset_type == "scene" and "crowd_design" in design:
+                crowd = design["crowd_design"]
+                if not isinstance(crowd, dict) or set(crowd) - {"near", "mid", "far"}:
+                    raise ValueError("Scene crowd_design must contain near, mid, and far layers")
+                for layer_name in ("near", "mid", "far"):
+                    layer = crowd.get(layer_name, {})
+                    if not isinstance(layer, dict) or set(layer) - {"identity_policy", "density", "subjects", "text_elements", "motion"}:
+                        raise ValueError(f"Scene crowd_design {layer_name} is invalid")
+                    policy = layer.get("identity_policy", "unidentified")
+                    if policy not in {"asset_required", "template_allowed", "unidentified"}:
+                        raise ValueError(f"Scene crowd_design {layer_name} identity_policy is invalid")
+                    for key in ("density", "motion"):
+                        if not isinstance(layer.get(key, ""), str) or len(layer.get(key, "")) > 500:
+                            raise ValueError(f"Scene crowd_design {layer_name} {key} must be bounded text")
+                    for key in ("subjects", "text_elements"):
+                        values = layer.get(key, [])
+                        if not isinstance(values, list) or len(values) > 50 or any(not isinstance(item, str) or len(item) > 300 for item in values):
+                            raise ValueError(f"Scene crowd_design {layer_name} {key} is invalid")
             if "prompt_workspace" in design:
                 # Validate before mutating the asset. This is editor state, never
                 # an implicit replacement for the reviewed generation prompt.
@@ -3291,7 +3309,7 @@ class ComicGenPipeline(StudioOwnerMixin):
                     direction = {"正面来光": "front", "背面来光": "back", "左侧来光": "side", "右侧来光": "side", "顶部来光": "top", "底部来光": "bottom"}.get(layers.lighting.direction)
                 if isinstance(forbidden, list) and direction and direction in forbidden:
                     raise ValueError("Scene light direction conflicts with a forbidden direction")
-            for field in scene_fields - {"local_lighting", "visual_constraints", "prompt_workspace", "prompt_layers", "asset_baseline", "shot_only_content", "dimensions"}:
+            for field in scene_fields - {"local_lighting", "visual_constraints", "prompt_workspace", "prompt_layers", "asset_baseline", "shot_only_content", "crowd_design", "dimensions"}:
                 value = design.get(field, "")
                 if not isinstance(value, str) or len(value) > 2000:
                     raise ValueError(f"Asset design {field} must be bounded text")
@@ -3773,6 +3791,24 @@ class ComicGenPipeline(StudioOwnerMixin):
                 value = scene_design.get(key)
                 if isinstance(value, str) and value.strip():
                     scene_design_parts.append(f"{label}：{value.strip()}")
+            crowd = scene_design.get("crowd_design")
+            if isinstance(crowd, dict):
+                layer_labels = {"near": "近景人群", "mid": "中景人群", "far": "远景人群"}
+                for layer_name, label in layer_labels.items():
+                    layer = crowd.get(layer_name)
+                    if not isinstance(layer, dict):
+                        continue
+                    policy = layer.get("identity_policy")
+                    density = layer.get("density")
+                    motion = layer.get("motion")
+                    subjects = "、".join(item for item in layer.get("subjects", []) if isinstance(item, str))
+                    texts = "、".join(item for item in layer.get("text_elements", []) if isinstance(item, str))
+                    details = [f"身份策略：{policy}"] if policy else []
+                    if density: details.append(f"密度：{density}")
+                    if subjects: details.append(f"对象：{subjects}")
+                    if texts: details.append(f"固定文字：{texts}")
+                    if motion: details.append(f"运动：{motion}")
+                    if details: scene_design_parts.append(f"{label}：" + "；".join(details))
             constraints = scene_design.get("visual_constraints")
             if isinstance(constraints, dict):
                 light_names = {"front": "正面光", "back": "背面光", "side": "侧面光",
@@ -8185,6 +8221,18 @@ class ComicGenPipeline(StudioOwnerMixin):
                         value = "、".join(item for item in value if isinstance(item, str) and item.strip())
                     if isinstance(value, str) and value.strip():
                         scene_parts.append(f"{label}：{value.strip()}")
+            crowd = design.get("crowd_design")
+            if isinstance(crowd, dict):
+                for layer_name, label in (("near", "近景人群"), ("mid", "中景人群"), ("far", "远景人群")):
+                    layer = crowd.get(layer_name)
+                    if not isinstance(layer, dict):
+                        continue
+                    values = [f"身份策略：{layer.get('identity_policy', 'unidentified')}"]
+                    if layer.get("density"): values.append(f"密度：{layer['density']}")
+                    if layer.get("subjects"): values.append("对象：" + "、".join(layer["subjects"]))
+                    if layer.get("text_elements"): values.append("固定文字：" + "、".join(layer["text_elements"]))
+                    if layer.get("motion"): values.append(f"运动：{layer['motion']}")
+                    scene_parts.append(f"{label}：" + "；".join(values))
             for key, label in (
                 (("style", "场景风格"), ("ambient_lighting", "环境光"),
                  ("reference_viewpoint", "基础视角"), ("reference_framing", "占位与深度"))

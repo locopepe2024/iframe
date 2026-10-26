@@ -197,6 +197,23 @@ def test_prop_dimensions_are_confirmed_and_bounded(tmp_path):
         })
 
 
+def test_scene_crowd_layers_are_confirmed_and_validated(tmp_path):
+    pipeline, scene, _ = make_pipeline(tmp_path)
+    crowd = {
+        "near": {"identity_policy": "asset_required", "density": "2人", "subjects": ["卖艺少女"], "text_elements": ["粮铺"], "motion": "避让"},
+        "mid": {"identity_policy": "template_allowed", "density": "稀疏", "subjects": ["流民"], "text_elements": [], "motion": "沿街后退"},
+        "far": {"identity_policy": "unidentified", "density": "密集", "subjects": ["路人"], "text_elements": [], "motion": "远离冲突"},
+    }
+    pipeline.update_asset_attributes("project", "street", "scene", {"asset_design": {
+        "visual_notes": "长街", "crowd_design": crowd, "confirmed": True,
+    }})
+    assert scene.asset_design["design_revisions"][0]["design"]["crowd_design"] == crowd
+    with pytest.raises(ValueError, match="identity_policy"):
+        pipeline.update_asset_attributes("project", "street", "scene", {"asset_design": {
+            "visual_notes": "长街", "crowd_design": {"near": {"identity_policy": "random"}, "mid": {}, "far": {}},
+        }})
+
+
 def test_scene_visual_constraints_are_saved_and_versioned(tmp_path):
     pipeline, scene, _ = make_pipeline(tmp_path)
     design = {
