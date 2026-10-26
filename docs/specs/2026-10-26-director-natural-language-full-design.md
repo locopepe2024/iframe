@@ -116,12 +116,12 @@ understanding, skeletal posing, contact solving or clothes generation.
 
 ## Reference output ownership and reuse
 
-The 3D director is the generation and editing tool, while the existing asset
-library is the durable reuse owner. A natural-language generation request
-remains director-scoped and must not enter storyboard state. Once a requested
-depth, blocking image, camera-motion reference video or action reference video
-is generated successfully, it can be saved through the normal asset admission
-path without a separate approval gate. Later shots and storyboards read
+The 3D director is the generation and editing tool. Its outputs are process
+reference assets, not automatically final character, scene or prop assets. A
+natural-language generation request and its generated media remain in the
+director workspace until the user explicitly saves a selected result to the
+ordinary asset library. The user then explicitly selects that saved process
+asset when preparing a storyboard shot. Later shots and storyboards read
 ordinary asset variants by stable asset/variant/media IDs; they do not read the
 transient generation request or mutate the director scene through that
 reference.
@@ -129,16 +129,17 @@ reference.
 This separates three meanings that must not be conflated:
 
 - the director scene is the editable spatial source;
-- the saved ordinary asset variant is the reusable reference artifact;
+- the manually saved ordinary process asset is the reusable reference artifact;
 - a storyboard shot is a read-only consumer binding.
 
-Each successfully generated director result can create an ordinary asset variant with
-the existing asset-library identity and media lifecycle. Optional provenance
-metadata may record the source director revision, package checksum, frame,
-camera, purpose, media status and source hashes. A later director correction
-uses the existing normal asset revision/variant flow; it never rewrites a
-library variant already used by a shot. Deleting or replacing the current
-director scene does not silently change an existing library reference.
+When the user chooses Save to Asset Library, the selected director result
+creates an ordinary process-asset variant with the existing asset-library
+identity and media lifecycle. Optional provenance metadata may record the
+source director revision, package checksum, frame, camera, purpose, media
+status and source hashes. A later director correction creates another saved
+variant only when the user saves it; it never rewrites a library variant
+already used by a shot. Deleting or replacing the current director scene does
+not silently change an existing library reference.
 
 The four output classes remain separate in the library record. `depth` records
 world-depth/occlusion purpose and submission status; `blockingImage` records
@@ -156,10 +157,11 @@ PATCH /director3d/reference-generation-results/{request_id}/adjust
 existing project asset admission route for the selected asset type
 ```
 
-The final admission uses the existing asset-library path for the selected
-asset type (image, depth artifact or video) once the media is ready. It is not
-a direct storyboard write and must not be owned by the director scene. The
-response exposes the normal `asset_id`,
+The final admission is an explicit user action through the existing
+asset-library path for the selected asset type (image, depth artifact or
+video). It is not automatic and is not a direct storyboard write. The saved
+record must be marked as a process/reference asset rather than a final
+character, scene or prop asset. The response exposes the normal `asset_id`,
 `variant_id` and `media_id` values that storyboard consumers bind read-only.
 
 The identity levels are distinct:
@@ -176,8 +178,8 @@ media_id
 ```
 
 Use the existing asset revision and variant rules. A director correction must
-create a new ordinary variant or revision according to those rules; a
-`media_id` is never overwritten. No director-specific asset hierarchy is
+create a new ordinary variant or revision only after the user explicitly saves
+it; a `media_id` is never overwritten. No director-specific asset hierarchy is
 introduced.
 
 ## Desktop reference: numbered blocking sketch workflow
