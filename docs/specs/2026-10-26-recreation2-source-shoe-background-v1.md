@@ -1,0 +1,5 @@
+# Source shoe/background evidence
+
+Read-only source video, hash 6614a5f7afdc5dd7342058e99027f2f42eee19594dcfd90c46017ddcfce114c0. Decode native first61 frames to half-resolution grayscale with passthrough and preserve ffprobe PTS. Inspect source17–37 screen-right and43–55 screen-left visible shoe-front patches. Fixed reference NCC translation search ±30/±12 half pixels, two template sizes for sensitivity; background three previously identified stage lights via original frame1 templates and ±100/±24 search.
+
+Report every match score and boundary hit. Fit only 2D similarity to light displacements as image-motion proxy; subtract predicted motion at shoe-front location, never call that true camera/world compensation. Anatomical heel is occluded in these frontal support views: do not claim front patch equals heel/toe/contact truth. No floor, IK, production or H3 changes. Success: correct hash, frame count, all PTS and reproducible matching/JSON; inspect overlays for gross matching failure and report uncertainty.
