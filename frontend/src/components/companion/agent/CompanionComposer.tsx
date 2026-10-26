@@ -26,11 +26,11 @@ export default function CompanionComposer({ mode, value, disabled, busy, allowed
   const [voiceConsent, setVoiceConsent] = useState(false), [voicePrompt, setVoicePrompt] = useState(false);
   const picker = useRef<HTMLDivElement>(null), trigger = useRef<HTMLButtonElement>(null);
   const voice = useCompanionVoice(text => {
+    if (mode === "chat" && onVoiceFinal) return;
     const next = `${value}${value ? " " : ""}${text}`.slice(0, 4000);
     onChange(next);
   }, { continuous: mode === "chat", onFinalTranscript: mode === "chat" ? text => {
-    const next = `${value}${value ? " " : ""}${text}`.slice(0, 4000);
-    onVoiceFinal?.(next);
+    onVoiceFinal?.(text.slice(0, 4000));
   } : undefined });
   const recording = voice.listening || voice.finishing;
   const localCommand = isOpenAlbumCommand(value);
@@ -69,7 +69,7 @@ export default function CompanionComposer({ mode, value, disabled, busy, allowed
         </div>
         <button type="button" className={styles.albumButton} aria-label="上传" disabled={disabled || recording} onClick={onUpload}><Plus size={24} aria-hidden="true" /><span>上传</span></button>
         <div className={styles.composerActions}>
-          <button type="button" className={styles.voiceButton} disabled={disabled || voice.finishing} onClick={() => {
+          <button type="button" className={styles.voiceButton} disabled={(!recording && disabled) || voice.finishing} onClick={() => {
             if (voiceConsent) voice.toggleListening(); else setVoicePrompt(true);
           }}>
             {recording ? <Square size={28} aria-hidden="true" /> : <Mic size={28} aria-hidden="true" />}<span>{voice.finishing ? "正在整理" : recording ? "停止" : "语音输入"}</span>

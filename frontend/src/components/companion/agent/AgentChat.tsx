@@ -45,6 +45,8 @@ export default function AgentChat() {
   const [page, setPage] = useState<MemoryPage | null>(null), [query, setQuery] = useState(""), [appliedQuery, setAppliedQuery] = useState("");
   const [busy, setBusy] = useState(false), [error, setError] = useState(""), [notice, setNotice] = useState("");
   const locked = useRef(false), alive = useRef(true);
+  const voiceQueue = useRef<string[]>([]);
+  const [voiceRevision, setVoiceRevision] = useState(0);
   const sessionOperation = useRef("");
   const sendOperation = useRef<{ operation_id: string; text: string; allow_external_text: true } | null>(null);
   const confirmOperation = useRef<{ token: string; id: string } | null>(null);
@@ -84,6 +86,14 @@ export default function AgentChat() {
     catch (failure) { if (alive.current) setError(failure instanceof Error ? failure.message : "操作未完成，请重试。"); }
     finally { locked.current = false; if (alive.current) setBusy(false); }
   }
+  useEffect(() => {
+    if (!allowed || locked.current || hasRetry || uploading || preview?.status === "pending_confirmation" || !voiceQueue.current.length) return;
+    if ((preview ?? (turn?.result?.kind === "confirmation" ? turn.result : null))?.status === "pending_confirmation") return;
+    const next = voiceQueue.current.shift()!;
+    void run(() => send(false, next));
+    // Use the current render's session and settings after each completed operation.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [voiceRevision, busy, hasRetry, uploading, preview, turn, allowed]);
   async function history(id: string, cursor = 0) {
     const result = await companionApi.messages(id, cursor);
     if (alive.current) { setMessages(old => cursor ? [...old, ...result.messages] : result.messages); setAfter(result.next_after); }
@@ -98,7 +108,7 @@ export default function AgentChat() {
       const savedTurn = localStorage.getItem(turnKey);
       if (id && savedTurn) { const result = await companionApi.turn(savedTurn); if (alive.current) setTurn(result); }
     });
-    return () => { alive.current = false; };
+    return () => { alive.current = false; voiceQueue.current = []; };
     // The browser stores identifiers only; the server checks current ownership.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -109,6 +119,7 @@ export default function AgentChat() {
     } catch { /* ignore malformed browser state */ }
   }, []);
   async function newSession() {
+    voiceQueue.current = [];
     if (!sessionOperation.current) sessionOperation.current = crypto.randomUUID();
     const result = await companionApi.session(sessionOperation.current);
     localStorage.setItem(sessionKey, result.session_id); localStorage.removeItem(turnKey);
@@ -318,7 +329,8 @@ export default function AgentChat() {
       hasAttachments={pendingMedia[mode].length > 0} mediaAcknowledged={mediaAcknowledged} onMediaAcknowledged={setMediaAcknowledged}
       onMode={next => {setMode(next);setAlbumOpen(false);setMediaAcknowledged(false);}} onChange={updateDraft} onSend={submit} onVoiceFinal={voiceText => {
         if (!allowed) { setMenu(true); setNotice("请先在“更多 → 聊天设置”中允许发送文字。"); return; }
-        void run(() => send(false, voiceText));
+        voiceQueue.current.push(voiceText);
+        setVoiceRevision(value => value + 1);
       }} onAllow={setAllowed}
       onUpload={() => { if (uploadFiles.length) setNotice("请先完成或关闭当前上传。"); else fileRef.current?.click(); }}
       onRequestConsent={() => { setMenu(true); setNotice("请在“更多 → 聊天设置”中允许发送文字。"); }}

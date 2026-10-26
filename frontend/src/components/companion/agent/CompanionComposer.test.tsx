@@ -58,3 +58,17 @@ it("offers continuous voice consent in chat mode while retaining text drafts",()
  fireEvent.click(screen.getByRole("button",{name:"先用文字"}));
  expect(screen.getByLabelText("和我聊聊天")).toHaveValue("保留的文字");
 });
+
+it("sends new voice sentences alone and allows stopping while busy",async()=>{
+ const {act}=await import("@testing-library/react");
+ const final=vi.fn(),change=vi.fn();
+ const props={mode:"chat" as const,value:"未发送的草稿",disabled:false,busy:false,allowed:true,inputRef:createRef<HTMLTextAreaElement>(),onMode:()=>{},onChange:change,onSend:()=>{},onUpload:()=>{},onAllow:()=>{},onRequestConsent:()=>{},retry:null,onVoiceFinal:final};
+ const view=render(<CompanionComposer {...props}/>);
+ fireEvent.click(screen.getByRole("button",{name:"语音输入"}));fireEvent.click(screen.getByRole("button",{name:"同意并开始聊天"}));
+ act(()=>recognition.onresult?.({results:[[{transcript:"第一句话"}]]}));
+ view.rerender(<CompanionComposer {...props} disabled busy/>);
+ act(()=>recognition.onresult?.({results:[[{transcript:"第一句话"}],[{transcript:"第二句话"}]]}));
+ expect(final.mock.calls).toEqual([["第一句话"],["第二句话"]]);expect(change).not.toHaveBeenCalled();
+ expect(screen.getByRole("button",{name:"停止"})).not.toBeDisabled();
+ fireEvent.click(screen.getByRole("button",{name:"停止"}));expect(recognition.stop).toHaveBeenCalledOnce();
+});

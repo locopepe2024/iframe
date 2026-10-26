@@ -295,3 +295,29 @@ it("restores save actions for a historical natural diary reply with a dated head
  const card=await screen.findByRole("article",{name:"日记草稿"});
  expect(card).toHaveTextContent("2026-10-24");
 });
+
+it("queues voice sentences while sending and preserves a failed request until retry",async()=>{
+ const {act}=await import("@testing-library/react");
+ let recognition: {onresult:((event:unknown)=>void)|null};
+ class Recognition {
+   onresult=null;onerror=null;onend=null;lang="";continuous=false;interimResults=false;
+   constructor(){recognition=this;} start(){} stop(){} abort(){}
+ }
+ Object.defineProperty(window,"SpeechRecognition",{configurable:true,value:Recognition});
+ try {
+   let rejectFirst!:(error:Error)=>void;
+   api.chat.mockImplementationOnce(()=>new Promise((_resolve,reject)=>{rejectFirst=reject;})).mockResolvedValue({turn_id:"voice-turn",status:"completed",result:{kind:"text",text:"收到"}});
+   await start();allowText();
+   fireEvent.click(screen.getByRole("button",{name:"语音输入"}));fireEvent.click(screen.getByRole("button",{name:"同意并开始聊天"}));
+   act(()=>recognition.onresult?.({results:[[{transcript:"第一句"}]]}));
+   await waitFor(()=>expect(api.chat).toHaveBeenCalledTimes(1));
+   act(()=>recognition.onresult?.({results:[[{transcript:"第一句"}],[{transcript:"第二句"}],[{transcript:"第三句"}]]}));
+   expect(api.chat).toHaveBeenCalledTimes(1);
+   await act(async()=>rejectFirst(new Error("连接中断")));
+   expect(api.chat).toHaveBeenCalledTimes(1);
+   fireEvent.click(screen.getByRole("button",{name:"重试原请求"}));
+   await waitFor(()=>expect(api.chat).toHaveBeenCalledTimes(4));
+   expect(api.chat.mock.calls.map(call=>call[1].text)).toEqual(["第一句","第一句","第二句","第三句"]);
+   expect(api.chat.mock.calls[0][1].operation_id).toBe(api.chat.mock.calls[1][1].operation_id);
+ } finally {delete (window as Window & {SpeechRecognition?:unknown}).SpeechRecognition;}
+});
