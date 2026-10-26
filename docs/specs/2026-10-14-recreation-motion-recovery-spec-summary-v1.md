@@ -143,3 +143,5 @@
 - 2026-10-26源鞋部/背景核对：34帧固定鞋前部NCC匹配（两尺寸差≤2px、无搜索触边），17→37与43→55原图位移(−8,+8)/(+14,+6)px。支持鞋近正面，后跟不可见，不能给前后patch分别提供独立源接触点。三灯背景similarity相减残差约20/9px，但去一灯预测差最大26.67/5.00px；前段补偿敏感性同阶更大，不能宣称世界滑步或强制锁脚。下一步使用可见鞋缘二维容差与更分散地面背景证据，主链路未改。[源鞋背景报告](../agents/deliverables/2026-10-26-recreation2-source-shoe-background-v1.md)
 
 - 2026-10-26脚部附近地面图块可识别性：8个预选图块以NCC、峰值差、正反循环、模板敏感性、边界门槛检查；随机纹理/水平条纹合成验证通过。非参考帧仅0–3/8点通过，未满足4点两行覆盖，未生成可接受similarity/affine地面模型。高NCC图块可能沿重复地面线漂移，不得用于世界脚锁定、root修正或焦距估计；主链路未改。[报告](../agents/deliverables/2026-10-26-recreation2-floor-patch-identifiability-v1.md)
+
+- 2026-10-26二维鞋底代理投影对照：media Blender将目标 ankle/foot/toe/固定patch投影到640×360，与源 heel/foot-index中点缩放代理比较。支持侧patch误差源17/23/29为25.98/20.80/37.13px，源41/55为30.46/37.43px；支持入口吸收初始平移后，left段剩余偏差中位/最大6.54/11.33px，right段15.75/31.51px。源二维代理不与固定mesh patch稳定同点对应；不能用静态鞋底偏移或单一IK目标修复，主链路未改。[报告](../agents/deliverables/2026-10-26-recreation2-patch-projection-vs-source-sole-v1.md)
