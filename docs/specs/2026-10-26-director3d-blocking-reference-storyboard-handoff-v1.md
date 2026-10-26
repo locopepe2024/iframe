@@ -2,13 +2,13 @@
 
 ## 目标
 
-将 3D 导演台自然语言生成的空间设计，转换为可审核、可版本化、可传递到分镜的结构化参考。规范覆盖多人占位、前中后景、世界深度、屏幕关系、镜头和可见性；不把自然语言提案直接写入分镜，也不把占位结果当成角色身份或视频动作。
+将 3D 导演台自然语言生成的导演参考，转换为可审核、可版本化、可传递到分镜的结构化参考。参考产物包括结构化深度、多人占位参考图、运镜参考视频和动作参考视频。规范覆盖多人占位、前中后景、世界深度、屏幕关系、镜头、可见性和参考媒体用途；不把自然语言提案直接写入分镜，也不把任何参考产物当成最终角色图或最终生成视频。
 
 ## 证据与边界
 
-**代码事实：** 当前导演台设计提案支持稳定实体 ID、米制位置、朝向、成对排布、盒体道具和静态摄影机；浏览器占位图可以导出，但当前浏览器草稿与剧集分镜仍是独立状态。
+**代码事实：** 当前导演台设计提案支持稳定实体 ID、米制位置、朝向、成对排布、盒体道具和静态摄影机；浏览器占位图可以导出，导演台也已有本地时间轴、动作和视频参考相关工作区；当前浏览器草稿与剧集分镜仍是独立状态，尚未形成统一的四类参考媒体交接合同。
 
-**直接含义：** 3D 导演台可以作为多人空间设计来源，但必须通过显式采纳和 snapshot 才能成为分镜输入。
+**直接含义：** 3D 导演台可以作为多人空间、摄影机和动作预演的参考来源，但每类参考必须标明用途，并通过显式采纳和 snapshot 才能成为分镜输入。
 
 **未证明：** 生成模型一定遵守占位图、深度或编号关系。结构化交接只证明输入意图和来源，最终图像/视频仍需逐帧审核。
 
@@ -19,21 +19,24 @@
 | 角色身份、外观、身高 | 角色资产 | 只读引用 | 只读引用 | 编译引用 |
 | 场景固定几何 | 场景资产 | 只读引用或临时代理 | 只读引用 | 编译引用 |
 | 多人位置、深度、朝向 | 导演台占位设计 | 生成和编辑 | 读取快照 | 编译为参考 |
-| 首帧构图和镜头 | 分镜首帧/摄影字段 | 提供候选 | 采纳和覆盖 | 编译 |
-| 动作时间轴和受力 | 分镜动效 Skill | 可提供预演参考 | 唯一 owner | 编译 |
+| 占位参考图 | 导演台参考媒体 | 生成和导出 | 选择用途并锁定 | 作为图像参考 |
+| 深度参考 | 导演台空间/深度设计 | 生成结构化深度或深度媒体 | 选择用途并锁定 | 仅在模型契约支持时发送 |
+| 首帧构图和静态镜头 | 分镜首帧/摄影字段 | 提供候选 | 采纳和覆盖 | 编译 |
+| 运镜参考视频 | 导演台摄影预演 | 生成和导出 | 选择用途并锁定 | 仅作为运镜参考 |
+| 动作参考视频 | 分镜动效/动作预演 | 提供占位动作预演 | 选择用途并锁定 | 仅作为动作节奏参考 |
 | 人群反应和信息差 | 街道冲突与群像 Skill | 提供空间槽位 | 生成时间行为 | 编译 |
 
 导演台不得修改角色、场景或道具永久资产；分镜不得反向修改导演台占位源。
 
 ## 规范对象
 
-### 1. 草稿提案 `blocking_reference_proposal`
+### 1. 自然语言导演提案 `director_reference_proposal`
 
-自然语言生成只能返回提案，状态为 `draft`，不可直接进入分镜。
+自然语言生成先返回导演参考提案，状态为 `draft`，不可直接进入分镜。提案可以同时规划空间、深度、占位图、运镜视频和动作视频的生成，但每种产物必须单独标记状态和用途。
 
 ```json
 {
-  "schemaVersion": "iframe.director3d.blocking-reference-proposal.v1",
+  "schemaVersion": "iframe.director3d.director-reference-proposal.v1",
   "proposalId": "proposal-...",
   "baseRevision": "design-fnv1a32:1234abcd",
   "status": "draft",
@@ -47,6 +50,12 @@
   "cameraRef": {"cameraId": "camera-main", "revision": "camera-rev-2"},
   "slots": [],
   "visibilityRelations": [],
+  "referencePlan": {
+    "depth": {"requested": true, "status": "planned"},
+    "blockingImage": {"requested": true, "status": "planned"},
+    "cameraMotionVideo": {"requested": true, "status": "planned"},
+    "actionMotionVideo": {"requested": true, "status": "planned"}
+  },
   "assumptions": [],
   "uncertainties": []
 }
@@ -106,13 +115,58 @@
 
 `unaware_of_event` 是叙事信息状态，不等于物理不可见；需要与 `visibility` 分开记录。
 
-### 4. 交接快照 `blocking_reference_snapshot`
+### 4. 参考媒体计划与用途
+
+四类参考必须分开记录，不允许用一个 `referenceMedia` 字段混合：
+
+```json
+{
+  "referencePlan": {
+    "depth": {
+      "kind": "structured_depth",
+      "purpose": "world_depth_and_occlusion",
+      "status": "generated",
+      "structuredData": {"coordinateSystem": "z_up_meters", "depthRangeM": [0, 12]},
+      "mediaId": "depth-media-..."
+    },
+    "blockingImage": {
+      "kind": "blocking_reference_image",
+      "purpose": "numbered_multi_subject_layout",
+      "status": "generated",
+      "mediaId": "blocking-media-..."
+    },
+    "cameraMotionVideo": {
+      "kind": "camera_motion_reference_video",
+      "purpose": "camera_path_and_timing",
+      "status": "generated",
+      "mediaId": "camera-video-..."
+    },
+    "actionMotionVideo": {
+      "kind": "action_reference_video",
+      "purpose": "body_motion_and_action_rhythm",
+      "status": "generated",
+      "mediaId": "action-video-..."
+    }
+  }
+}
+```
+
+字段用途边界：
+
+- `depth`：表达世界坐标、层次、遮挡和空间距离；不等于最终视频模型已消费的深度控制输入。
+- `blockingImage`：表达编号、站位、前中后景、朝向和构图；不赋予角色新身份。
+- `cameraMotionVideo`：只转移摄影机轨迹、景别变化和运镜节奏；不转移人物身份、动作或场景内容。
+- `actionMotionVideo`：只转移动作路径、身体节奏和受力参考；不转移参考视频中的角色外观、场景或故事事件。
+
+如果某个模型不支持对应媒体类型，适配器必须标记 `unsupported` 或 `not_submitted`，不能把它伪装成已生效的控制输入。
+
+### 5. 交接快照 `blocking_reference_snapshot`
 
 用户确认后，将提案冻结为不可变快照：
 
 ```json
 {
-  "schemaVersion": "iframe.director3d.blocking-reference-snapshot.v1",
+  "schemaVersion": "iframe.director3d.director-reference-snapshot.v1",
   "snapshotId": "blocking-snapshot-...",
   "sourceProposalId": "proposal-...",
   "sourceRevision": "design-fnv1a32:1234abcd",
@@ -121,11 +175,8 @@
   "capturedAt": "2026-10-26T15:00:00Z",
   "slots": [],
   "visibilityRelations": [],
-  "referenceMedia": {
-    "blockingPngMediaId": "media-...",
-    "depthMediaId": null,
-    "sourceSha256": "..."
-  }
+  "referencePlan": {},
+  "sourceMediaHashes": {}
 }
 ```
 
@@ -133,7 +184,7 @@
 
 ## 分镜接收结构
 
-分镜只接收 `blocking_reference_snapshot`，不接收自然语言提案。建议挂载在 `StoryboardConsistencyManifest`：
+分镜只接收 `director_reference_snapshot`，不接收自然语言提案。建议挂载在 `StoryboardConsistencyManifest`：
 
 ```json
 {
@@ -154,7 +205,10 @@
       }
     ],
     "visibilityRelations": [],
-    "referenceMediaIds": ["media-..."]
+    "referenceMediaIds": ["blocking-media-..."],
+    "depthReferenceMediaIds": ["depth-media-..."],
+    "cameraMotionReferenceMediaIds": ["camera-video-..."],
+    "actionReferenceMediaIds": ["action-video-..."]
   }
 }
 ```
@@ -163,7 +217,7 @@
 
 ## 与街道冲突 Skill 的交接
 
-3D 导演台提供空间事实：
+3D 导演台提供空间事实和参考预演：
 
 - 谁在近景、中景、远景；
 - 谁位于冲突区域；
@@ -171,6 +225,10 @@
 - 谁被柜台、屋檐或人群遮挡；
 - 相机在哪一侧；
 - 角色和群体的初始位置。
+- 可选的结构化深度和深度参考媒体；
+- 可选的占位参考图；
+- 可选的运镜参考视频；
+- 可选的动作参考视频。
 
 街道冲突 Skill 提供时间行为：
 
@@ -201,7 +259,7 @@
 - 分镜能引用不可变占位快照；
 - 粮铺、阁楼、苏砚/江灼和卖艺少女案例可以复用同一交接格式；
 - 角色、场景、道具或群演 Variant 删除时不会静默替换；
-- 分镜生成能区分空间快照和群像时间行为；
+- 分镜生成能区分空间快照、摄影机参考、动作参考和群像时间行为；
 - 实际图像/视频结果仍作为独立验证，不把结构化输入当作生成质量证明。
 
 ## 本阶段不做
