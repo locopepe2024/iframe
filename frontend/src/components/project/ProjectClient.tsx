@@ -360,6 +360,7 @@ function EntityExtractionConfirm() {
             preview={pendingExtraction}
             currentCounts={{
                 characters: currentProject?.characters?.length ?? 0,
+                crowd_groups: 0,
                 scenes: currentProject?.scenes?.length ?? 0,
                 props: currentProject?.props?.length ?? 0,
             }}

@@ -560,7 +560,7 @@ interface ProjectStore {
     isAnalyzingArtStyle: boolean;
 
     // Entity extraction confirmation (persists across step switches)
-    pendingExtraction: { characters: any[]; scenes: any[]; props: any[] } | null;
+    pendingExtraction: { characters: any[]; crowd_groups?: any[]; scenes: any[]; props: any[] } | null;
     pendingExtractionScript: string | null;
     pendingExtractionFeedback: string[];
     refineExtraction: (instruction: string) => Promise<void>;

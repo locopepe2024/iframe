@@ -888,7 +888,7 @@ export const api = {
     reparseProject: async (
         scriptId: string,
         text: string,
-        draft?: { characters: any[]; scenes: any[]; props: any[] },
+        draft?: { characters: any[]; crowd_groups?: any[]; scenes: any[]; props: any[] },
     ) => {
         const res = await axios.put(`${API_URL}/projects/${scriptId}/reparse`, { text, ...(draft ? { draft } : {}) });
         return { ...res.data, originalText: res.data.original_text };
@@ -901,7 +901,7 @@ export const api = {
     refineExtraction: async (
         scriptId: string,
         text: string,
-        draft: { characters: any[]; scenes: any[]; props: any[] },
+        draft: { characters: any[]; crowd_groups?: any[]; scenes: any[]; props: any[] },
         instructions: string[],
     ) => refineScriptPreview(API_URL, scriptId, text, draft, instructions),
 

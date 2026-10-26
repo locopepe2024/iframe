@@ -6,6 +6,7 @@ import { useTranslations } from "next-intl";
 
 export interface ExtractionPreview {
     characters: { name: string; description?: string }[];
+    crowd_groups?: { label: string; extra_id?: string; wardrobe?: string; body_build?: string }[];
     scenes: { name: string; description?: string; asset_design?: {
         design_draft?: { asset_baseline?: { scene_identity?: string }; shot_only_content?: string[]; unresolved?: string[] };
     } }[];
@@ -15,7 +16,7 @@ export interface ExtractionPreview {
 interface EntityConfirmModalProps {
     isOpen: boolean;
     preview: ExtractionPreview | null;
-    currentCounts: { characters: number; scenes: number; props: number };
+    currentCounts: { characters: number; crowd_groups?: number; scenes: number; props: number };
     onConfirm: () => void;
     onDiscard: () => void;
     onRefine: (instruction: string) => Promise<void>;
@@ -47,9 +48,10 @@ export default function EntityConfirmModal({
     if (!preview) return null;
 
     const sections = [
-        { key: "characters" as const, icon: Users, items: preview.characters, prev: currentCounts.characters },
-        { key: "scenes" as const, icon: MapPin, items: preview.scenes, prev: currentCounts.scenes },
-        { key: "props" as const, icon: Box, items: preview.props, prev: currentCounts.props },
+        { key: "characters" as const, label: t("entityKind_characters"), icon: Users, items: preview.characters.map(item => ({ name: item.name, description: item.description })), prev: currentCounts.characters },
+        { key: "crowd_groups" as const, label: "背景群演", icon: Users, items: (preview.crowd_groups ?? []).map(item => ({ name: item.label, description: [item.body_build, item.wardrobe].filter(Boolean).join("；") })), prev: currentCounts.crowd_groups ?? 0 },
+        { key: "scenes" as const, label: t("entityKind_scenes"), icon: MapPin, items: preview.scenes, prev: currentCounts.scenes },
+        { key: "props" as const, label: t("entityKind_props"), icon: Box, items: preview.props, prev: currentCounts.props },
     ];
 
     const submitRefinement = async () => {
@@ -95,11 +97,11 @@ export default function EntityConfirmModal({
                         {/* Body */}
                         <div className="grid min-h-0 flex-1 grid-cols-1 overflow-y-auto md:grid-cols-[minmax(0,1fr)_minmax(280px,0.8fr)] md:overflow-hidden">
                             <div className="space-y-4 overflow-y-auto px-5 py-4 md:px-6">
-                                {sections.map(({ key, icon: Icon, items, prev }) => (
+                                {sections.map(({ key, label, icon: Icon, items, prev }) => (
                                     <div key={key} className="space-y-2">
                                         <div className="flex items-center gap-2 text-sm text-text-secondary">
                                             <Icon size={14} />
-                                            <span className="font-medium">{t(`entityKind_${key}`)}</span>
+                                            <span className="font-medium">{label}</span>
                                             <span className="ml-auto text-xs opacity-70">{prev} → {items.length}</span>
                                         </div>
                                         {items.length > 0 ? (
