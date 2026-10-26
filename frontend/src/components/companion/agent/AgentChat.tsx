@@ -115,9 +115,10 @@ export default function AgentChat() {
     sessionOperation.current = ""; sendOperation.current = null; setHasRetry(false);
     setMenu(false); setAlbumOpen(false); setUploadFiles([]); setAttached([]); setPendingMedia({chat:[],image:[],video:[]}); setMediaAcknowledged(false); setSession(result.session_id); setMessages([]); setAfter(null); setTurn(null); setPreview(null); setDraft(null); setDrafts({ chat: "", image: "", video: "" }); setGuides({ image: null, video: null }); setMode("chat"); setNotice("已开始新的聊天。");
   }
-  async function send(retry = false) {
-    const requestedDay = diaryDay(text, "", today());
-    const submittedText = requestedDay ? diaryPrompt(requestedDay) : text;
+  async function send(retry = false, voiceText?: string) {
+    const requestedText = voiceText ?? text;
+    const requestedDay = diaryDay(requestedText, "", today());
+    const submittedText = requestedDay ? diaryPrompt(requestedDay) : requestedText;
     if (!sendOperation.current || !retry) sendOperation.current = { operation_id: crypto.randomUUID(), text: submittedText, allow_external_text: true };
     if (!retry) setLastSubmittedText(submittedText);
     setHasRetry(true); setPreview(null);
@@ -315,7 +316,10 @@ export default function AgentChat() {
     <CompanionComposer mode={mode} value={text} disabled={inputDisabled || pending} busy={busy} allowed={allowed} inputRef={inputRef}
       attachments={<AttachmentDraft items={pendingMedia[mode]} disabled={inputDisabled || pending} onRemove={id => {setPendingMedia(old => ({...old,[mode]:old[mode].filter(item=>item.id!==id)}));setMediaAcknowledged(false);}} />}
       hasAttachments={pendingMedia[mode].length > 0} mediaAcknowledged={mediaAcknowledged} onMediaAcknowledged={setMediaAcknowledged}
-      onMode={next => {setMode(next);setAlbumOpen(false);setMediaAcknowledged(false);}} onChange={updateDraft} onSend={submit} onAllow={setAllowed}
+      onMode={next => {setMode(next);setAlbumOpen(false);setMediaAcknowledged(false);}} onChange={updateDraft} onSend={submit} onVoiceFinal={voiceText => {
+        if (!allowed) { setMenu(true); setNotice("请先在“更多 → 聊天设置”中允许发送文字。"); return; }
+        void run(() => send(false, voiceText));
+      }} onAllow={setAllowed}
       onUpload={() => { if (uploadFiles.length) setNotice("请先完成或关闭当前上传。"); else fileRef.current?.click(); }}
       onRequestConsent={() => { setMenu(true); setNotice("请在“更多 → 聊天设置”中允许发送文字。"); }}
       retry={hasRetry ? () => void run(() => send(true)) : null} />

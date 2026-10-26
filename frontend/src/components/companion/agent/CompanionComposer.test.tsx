@@ -51,11 +51,10 @@ it("uses the chat invitation inside the input instead of spending a separate row
   expect(screen.getByText("和我聊聊天", {selector:"span"}).className).toMatch(/visuallyHidden/);
 });
 
-it("offers dictation consent in chat mode while retaining text drafts",()=>{
+it("offers continuous voice consent in chat mode while retaining text drafts",()=>{
  render(<CompanionComposer mode="chat" value="保留的文字" disabled={false} busy={false} allowed inputRef={createRef()} onMode={()=>{}} onChange={()=>{}} onSend={()=>{}} onUpload={()=>{}} onAllow={()=>{}} onRequestConsent={()=>{}} retry={null}/>);
  fireEvent.click(screen.getByRole("button",{name:"语音输入"}));
- expect(screen.queryByRole("button",{name:"同意并开始语音聊天"})).not.toBeInTheDocument();
- expect(screen.getByRole("button",{name:"同意并开始听写"})).toBeInTheDocument();
+ expect(screen.getByRole("button",{name:"同意并开始聊天"})).toBeInTheDocument();
  fireEvent.click(screen.getByRole("button",{name:"先用文字"}));
  expect(screen.getByLabelText("和我聊聊天")).toHaveValue("保留的文字");
 });

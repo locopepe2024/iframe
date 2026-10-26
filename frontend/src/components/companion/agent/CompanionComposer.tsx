@@ -13,11 +13,11 @@ const modes = [
   { value: "video", label: "视频", icon: Video },
 ] as const;
 
-export default function CompanionComposer({ mode, value, disabled, busy, allowed, inputRef, onMode, onChange, onSend, onUpload, onAllow, onRequestConsent, retry, attachments, hasAttachments = false, mediaAcknowledged = false, onMediaAcknowledged }: {
+export default function CompanionComposer({ mode, value, disabled, busy, allowed, inputRef, onMode, onChange, onSend, onVoiceFinal, onUpload, onAllow, onRequestConsent, retry, attachments, hasAttachments = false, mediaAcknowledged = false, onMediaAcknowledged }: {
   mode: ComposerMode; value: string; disabled: boolean; busy: boolean; allowed: boolean;
   inputRef: RefObject<HTMLTextAreaElement>;
   onMode: (mode: ComposerMode) => void; onChange: (text: string) => void;
-  onSend: () => void; onUpload: () => void; onAllow: (allowed: boolean) => void; onRequestConsent: () => void;
+  onSend: () => void; onVoiceFinal?: (text: string) => void; onUpload: () => void; onAllow: (allowed: boolean) => void; onRequestConsent: () => void;
   retry: (() => void) | null;
   attachments?: ReactNode; hasAttachments?: boolean;
   mediaAcknowledged?: boolean; onMediaAcknowledged?: (value: boolean) => void;
@@ -25,7 +25,13 @@ export default function CompanionComposer({ mode, value, disabled, busy, allowed
   const [menu, setMenu] = useState(false);
   const [voiceConsent, setVoiceConsent] = useState(false), [voicePrompt, setVoicePrompt] = useState(false);
   const picker = useRef<HTMLDivElement>(null), trigger = useRef<HTMLButtonElement>(null);
-  const voice = useCompanionVoice(text => onChange(`${value}${value ? " " : ""}${text}`.slice(0, 4000)));
+  const voice = useCompanionVoice(text => {
+    const next = `${value}${value ? " " : ""}${text}`.slice(0, 4000);
+    onChange(next);
+  }, { continuous: mode === "chat", onFinalTranscript: mode === "chat" ? text => {
+    const next = `${value}${value ? " " : ""}${text}`.slice(0, 4000);
+    onVoiceFinal?.(next);
+  } : undefined });
   const recording = voice.listening || voice.finishing;
   const localCommand = isOpenAlbumCommand(value);
   const selected = modes.find(item => item.value === mode)!;
@@ -76,8 +82,8 @@ export default function CompanionComposer({ mode, value, disabled, busy, allowed
       </div>
     </div>
     {voicePrompt && <section className={styles.voiceConsent} aria-label="语音输入说明">
-      <p>语音会交给浏览器的语音服务识别，文字先放入输入框，您检查后再发送。</p>
-      <button type="button" disabled={disabled} onClick={() => { setVoiceConsent(true); setVoicePrompt(false); voice.toggleListening(); }}>同意并开始听写</button>
+      <p>{mode === "chat" ? "语音会交给浏览器识别，并连续加入聊天。您可以随时点停止。" : "语音会交给浏览器的语音服务识别，文字先放入输入框，您检查后再发送。"}</p>
+      <button type="button" disabled={disabled} onClick={() => { setVoiceConsent(true); setVoicePrompt(false); voice.toggleListening(); }}>{mode === "chat" ? "同意并开始聊天" : "同意并开始听写"}</button>
       <button type="button" onClick={() => setVoicePrompt(false)}>先用文字</button>
     </section>}
     {voice.notice && !recording && <p role="status" className={styles.voiceStatus}>{voice.notice}</p>}

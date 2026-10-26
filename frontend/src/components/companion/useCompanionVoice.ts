@@ -13,13 +13,14 @@ type Recognition = {
   stop(): void;
   abort(): void;
 };
+type VoiceOptions = { continuous?: boolean; onFinalTranscript?: (text: string) => void };
 type VoiceWindow = Window & {
   SpeechRecognition?: new () => Recognition;
   webkitSpeechRecognition?: new () => Recognition;
 };
 let activeVoice: { id: symbol; stop: () => void } | null = null;
 
-export function useCompanionVoice(onTranscript: (text: string) => void) {
+export function useCompanionVoice(onTranscript: (text: string) => void, options: VoiceOptions = {}) {
   const owner = useRef(Symbol("companion-voice"));
   const [listening, setListening] = useState(false);
   const [finishing, setFinishing] = useState(false);
@@ -29,7 +30,10 @@ export function useCompanionVoice(onTranscript: (text: string) => void) {
   const utteranceRef = useRef<SpeechSynthesisUtterance | null>(null);
   const timer = useRef<ReturnType<typeof setTimeout>>();
   const transcriptCallback = useRef(onTranscript);
+  const finalCallback = useRef(options.onFinalTranscript);
+  const continuous = options.continuous ?? false;
   transcriptCallback.current = onTranscript;
+  finalCallback.current = options.onFinalTranscript;
 
   function dispose() {
     clearTimeout(timer.current);
@@ -88,12 +92,16 @@ export function useCompanionVoice(onTranscript: (text: string) => void) {
     const current = new Constructor();
     recognition.current = current;
     current.lang = "zh-CN";
-    current.continuous = false;
+    current.continuous = continuous;
     current.interimResults = false;
     current.onresult = (event) => {
-      const text = Array.from(event.results).map(result => result[0]?.transcript ?? "").join("");
+      const text = continuous
+        ? (event.results[event.results.length - 1]?.[0]?.transcript ?? "")
+        : Array.from(event.results).map(result => result[0]?.transcript ?? "").join("");
+      if (!text.trim()) return;
       transcriptCallback.current(text);
-      setNotice("听写文字已放入输入框，请检查后继续。");
+      finalCallback.current?.(text);
+      setNotice(continuous ? "已听到，您可以继续说。" : "听写文字已放入输入框，请检查后继续。");
     };
     current.onerror = () => {
       dispose();
@@ -109,7 +117,7 @@ export function useCompanionVoice(onTranscript: (text: string) => void) {
     try {
       current.start();
       setListening(true);
-      setNotice("正在听，结束后可修改文字。再点一次可停止。");
+      setNotice(continuous ? "正在连续听，点停止结束聊天。" : "正在听，结束后可修改文字。再点一次可停止。");
       timer.current = setTimeout(() => {
         dispose();
         setListening(false);
