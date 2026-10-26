@@ -88,7 +88,7 @@
     {
       "id": "shot-action-physics",
       "name": "分镜动作与受力连续性",
-      "category": "分镜动作",
+      "category": "分镜动效",
       "targets": ["Storyboard", "Shot Design", "Seedance", "MiniMax H3"],
       "version": "1.1.0",
       "description": "将接触、受击、踉跄、跌倒、物体碰撞和可见主体的视线目标组织为模型无关的动作合同。",
@@ -103,7 +103,7 @@
     {
       "id": "shot-martial-choreography",
       "name": "专业武术与动作编排",
-      "category": "分镜动作",
+      "category": "分镜动效",
       "targets": ["Storyboard", "Shot Design", "Seedance", "MiniMax H3"],
       "version": "1.1.0",
       "description": "为明确的武术体系、招式、兵器和连续攻防建立动作编排与参考职责，保持多目标连招的连续重心与剑路。",
@@ -118,7 +118,7 @@
     {
       "id": "shot-static-framing",
       "name": "分镜静态起幅设计",
-      "category": "分镜摄影",
+      "category": "图片起幅",
       "targets": ["Storyboard camera"],
       "version": "1.0.0",
       "description": "为当前镜头提出景别、机位和构图字段候选，逐字段审核。",
@@ -160,7 +160,7 @@
     {
       "id": "micro-expression-timing",
       "name": "微表情时序设计",
-      "category": "分镜表演",
+      "category": "分镜动效",
       "targets": ["Storyboard performance"],
       "version": "1.0.0",
       "description": "按角色和可见性设计 trigger、change、hold、release 表情阶段；首帧只取起始状态。",

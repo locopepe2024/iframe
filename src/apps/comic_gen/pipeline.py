@@ -3791,6 +3791,12 @@ class ComicGenPipeline(StudioOwnerMixin):
         if resolved == "plan" and skill_snapshot:
             raise ValueError("按导演计划生成不重新执行创作 Skills")
         lineage.storyboard_mode = resolved
+        if resolved == "script":
+            assets = self.resolve_project_assets(script)
+            context = self._storyboard_asset_library_context(assets)
+            lineage.storyboard_asset_context_hash = hashlib.sha256(json.dumps(
+                context, ensure_ascii=False, sort_keys=True, separators=(",", ":"),
+            ).encode()).hexdigest()
         if resolved == "plan" and script.director_shooting_plan_revisions:
             revision = script.director_shooting_plan_revisions[-1]
             self._validate_director_shooting_plan(script, revision.plan)
@@ -3835,7 +3841,9 @@ class ComicGenPipeline(StudioOwnerMixin):
                 workflow = self.storyboard_workflow_lineage(script_id, text, lineage.storyboard_mode)
             except ValueError as exc:
                 raise StaleStoryboardDraftError(str(exc)) from exc
-            changed.extend(field for field in ("shooting_plan_revision", "shooting_plan_hash")
+            changed.extend(field for field in (
+                "shooting_plan_revision", "shooting_plan_hash", "storyboard_asset_context_hash",
+            )
                            if getattr(lineage, field) != getattr(workflow, field))
         if changed:
             raise StaleStoryboardDraftError(
@@ -6072,6 +6080,7 @@ class ComicGenPipeline(StudioOwnerMixin):
             "scenes": [{"id": s.id, "name": s.name, "description": s.description} for s in resolved["scenes"]],
             "props": [{"id": p.id, "name": p.name, "description": p.description} for p in resolved["props"]],
         }
+        entities_json["asset_library_context"] = self._storyboard_asset_library_context(resolved)
         if include_plan and script.director_shooting_plan_revisions:
             episode_context = self.project_episode_visual_context(script_id)
             entities_json["episode_visual_context"] = episode_context.model_dump()
@@ -6080,6 +6089,70 @@ class ComicGenPipeline(StudioOwnerMixin):
         series = self.get_series(script.series_id) if getattr(script, "series_id", None) else None
         prompt = self.get_effective_prompt("storyboard_extraction", script, series)
         return script, entities_json, prompt
+
+    @classmethod
+    def _storyboard_asset_library_context(cls, resolved: Dict[str, List[Any]]) -> List[Dict[str, Any]]:
+        """Read-only, bounded design summaries and active variant identities."""
+        def short(value: Any, limit: int = 180) -> str:
+            return value.strip()[:limit] if isinstance(value, str) else ""
+
+        result: List[Dict[str, Any]] = []
+        for asset_type, collection in (("character", "characters"), ("scene", "scenes"), ("prop", "props")):
+            for asset in resolved[collection]:
+                design_owner = asset.character_design if asset_type == "character" else asset.asset_design
+                revisions = design_owner.get("design_revisions") if isinstance(design_owner, dict) else None
+                latest = revisions[-1] if isinstance(revisions, list) and revisions else None
+                design = latest.get("design") if isinstance(latest, dict) else None
+                selected_id = cls._selected_asset_variant_id(asset, asset_type)
+                variants = {item.id: item for item in cls._asset_image_variants(asset, asset_type)}
+                selected = variants.get(selected_id) if selected_id else None
+                if not isinstance(design, dict) and not selected_id:
+                    continue
+                item: Dict[str, Any] = {"asset_type": asset_type, "asset_id": asset.id}
+                if isinstance(design, dict):
+                    item["design_revision"] = latest.get("revision")
+                    if asset_type == "scene":
+                        baseline = design.get("asset_baseline")
+                        if isinstance(baseline, dict):
+                            compact = {}
+                            for key in ("scene_identity", "fixed_geometry", "fixed_landmarks",
+                                        "materials", "environment", "lighting_baseline"):
+                                value = baseline.get(key)
+                                if isinstance(value, list):
+                                    values = [short(part) for part in value[:4] if short(part)]
+                                    if values:
+                                        compact[key] = values
+                                elif short(value):
+                                    compact[key] = short(value)
+                            if compact:
+                                item["visual_baseline"] = compact
+                    elif asset_type == "character":
+                        compact = {}
+                        for section, keys in (
+                            ("identity", ("face", "eyes", "hair", "skin", "build", "recognition_marks")),
+                            ("look", ("clothing", "palette", "weapon", "accessories")),
+                        ):
+                            source = design.get(section)
+                            if not isinstance(source, dict):
+                                continue
+                            features = source.get("features")
+                            if isinstance(features, dict):
+                                selected = {key: short(features.get(key)) for key in keys if short(features.get(key))}
+                                if selected:
+                                    compact[section] = selected
+                            elif short(source.get("visual_notes"), 350):
+                                compact[section] = {"visual_notes": short(source["visual_notes"], 350)}
+                        if compact:
+                            item["visual_baseline"] = compact
+                    else:
+                        notes = design.get("visual_notes")
+                        if isinstance(notes, str) and notes.strip():
+                            item["visual_baseline"] = {"visual_notes": short(notes, 450)}
+                if selected_id:
+                    item["selected_variant"] = ({"variant_id": selected_id, "media_id": selected.media_id}
+                                                if selected else {"variant_id": selected_id, "status": "missing"})
+                result.append(item)
+        return result
 
     def preview_storyboard_analysis(self, script_id: str, text: str,
                                     load_batches=None, save_batch=None,

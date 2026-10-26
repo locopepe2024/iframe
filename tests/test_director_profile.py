@@ -89,10 +89,21 @@ def test_director_prompt_marks_series_scope_separately_from_episode_scope():
     )
     episode_prompt = processor.llm.chat.call_args.kwargs["messages"][0]["content"]
     assert "Episode 分集导演理解" in episode_prompt
+    assert "从粮铺门前朝阁楼方向可见屋檐" in episode_prompt
     assert "剧情发生顺序和剧本呈现顺序" in episode_prompt
     assert "相邻及非相邻场景的地点" in episode_prompt
     assert "同名地点或同一时间词不足以证明" in episode_prompt
     assert "state_out 与下一场相关的 state_in 应能对应" in episode_prompt
+
+
+def test_script_skill_changes_director_preset_identity(monkeypatch):
+    import src.apps.comic_gen.llm as llm
+
+    current = llm.director_preset_identity("director-interpretation")
+    unchanged_intent = llm.director_preset_identity("director-intent")
+    monkeypatch.setattr(llm, "_load_script_analysis_skill", lambda: "updated script analysis")
+    assert llm.director_preset_identity("director-interpretation") != current
+    assert llm.director_preset_identity("director-intent") == unchanged_intent
 
 
 def test_series_director_failure_retains_model_response_evidence():

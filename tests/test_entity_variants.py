@@ -1,4 +1,4 @@
-from src.apps.comic_gen.llm import DEFAULT_ENTITY_EXTRACTION_PROMPT, ScriptProcessor
+from src.apps.comic_gen.llm import DEFAULT_ENTITY_EXTRACTION_PROMPT, ScriptProcessor, entity_extraction_prompt_revision
 from unittest.mock import Mock
 import json
 import pytest
@@ -78,14 +78,22 @@ def test_scene_extraction_guidance_keeps_distinct_street_corners():
     prompt = processor._construct_prompt(
         "苏砚在梧桐树街角；另一处街角，江灼惩戒欺凌卖艺少女的打手。"
     )
-    assert "同叫“街角”" in prompt
-    assert "人物是否重复出现" in prompt
-    assert "人物交集只是线索" in prompt
-    assert "青溪镇梧桐树街角" in prompt
-    assert "青溪镇另一处街角" in prompt
+    assert "<script_analysis_skill>" in prompt
+    assert "两个同名地点不能仅凭名称合并" in prompt
+    assert "人物交集只是证据线索" in prompt
+    assert "梧桐树街角" in prompt
+    assert "另一处街角" in prompt
     assert "不编造建筑或摊位" in prompt
-    assert "方才街角另有一伙" in prompt
-    assert "粮铺门前的交手区域" in prompt
+    assert "<scene_asset_extraction_skill>" in prompt
+    assert "本 Skill 只记录可确认的固定结构" in prompt
     assert "从粮铺门前朝阁楼方向可见屋檐" in prompt
-    assert "从屋檐可望见粮铺门前" in prompt
+    assert "从阁楼望见粮铺门前" in prompt
     assert "潜伏、围堵等当前事件" in prompt
+
+
+def test_script_skill_changes_entity_extraction_revision(monkeypatch):
+    import src.apps.comic_gen.llm as llm
+
+    current = entity_extraction_prompt_revision()
+    monkeypatch.setattr(llm, "_load_script_analysis_skill", lambda: "updated script analysis")
+    assert entity_extraction_prompt_revision() != current
