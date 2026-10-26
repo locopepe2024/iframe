@@ -254,3 +254,9 @@ Recognition retains failed segments for explicit retry and pauses acquisition on
 Evidence: all 48 focused tests passed from the committed frontend archive; static export passed; working-directory frontend typecheck passed. Earlier archive-wide unrelated type errors remain documented above. A real Chrome 155 virtual microphone using synthetic Mandarin produced three separate nonempty transcriptions on one stream (all HTTP 200, 977–2014 ms round trips); after 30 seconds capture remained live, and stop/unmount ended its track. No physical microphone, mobile noise, real acoustic playback/echo or older-adult usability claim is made. Diagnostic evidence: `docs/agents/deliverables/2026-10-26-continuous-capture-real/summary.json`.
 
 Public entry SHA256 matches local build: `1891cbdb1dd6c3bfd4b4c37b4eb580914c1ecc86aae70d47dc44a0b60f24a76c`. All 11 entry script URLs, Companion health and SenseVoice health returned 200. Previous entry/manifest backed up under `/srv/lumenx/companion-demo/backups/before-7652a24c`; old chunks retained. No backend/model/data changes, push or merge.
+
+## 2026-10-26 — Persisted automatic reply audio setting
+
+Frontend revision `2b51569a` deployed to the isolated Companion demo. “更多 → 聊天设置” now persists “方案 1：语音回复（可能计费）” or “方案 2：只回复文字”. Selecting audio automatically sends each new text reply to the existing UniArt speech endpoint and keeps the text plus a visible audio control when autoplay is blocked. The current OpenTalking WebRTC panel remains a separate voice surface; this change does not claim ordinary chat replies are already returned by OpenTalking.
+
+Evidence: 27 focused Agent/UniArt UI tests passed; static export passed; public entry matches local output with all scripts and health 200. No backend/provider/model/data changes, push or merge. Backup: `/srv/lumenx/companion-demo/backups/before-2b51569a`.
