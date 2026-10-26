@@ -6,7 +6,7 @@ it("resamples across chunk boundaries identically and produces little endian bou
  const split=[samples.slice(0,127),samples.slice(127,911),samples.slice(911)].map(chunk=>atob(stream.encode(chunk))).join("");
  expect(split).toBe(atob(whole));expect(split.length).toBe(3200);
  const clipped=atob(new PcmEncoder(16000).encode(new Float32Array([2,-2,0])));
- expect([...clipped].map(c=>c.charCodeAt(0))).toEqual([255,127,0,128]);
+ expect(Array.from(clipped).map(c=>c.charCodeAt(0))).toEqual([255,127,0,128]);
 });
 it("decodes signed 24kHz audio and cancels all queued playback on interruption",()=>{
  const channel=new Float32Array(2);const source={buffer:null,connect:vi.fn(),disconnect:vi.fn(),start:vi.fn(),stop:vi.fn(),onended:null};
