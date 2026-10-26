@@ -14,7 +14,7 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 from scripts.companion_eval.check_cases import DEFAULT, validate
 
-UI_FILES = ["DiaryEvaluation.test.tsx", "DiaryEditor.test.tsx", "DiaryCalendar.test.tsx", "diaryIntent.test.tsx"]
+UI_FILES = ["DiaryEvaluation.test.tsx", "DiaryEditor.test.tsx", "DiaryCalendar.test.tsx", "diaryIntent.test.tsx", "diaryVoiceCommand.test.tsx"]
 
 
 def execute(command, cwd, env, log):
@@ -89,7 +89,7 @@ def collect(output):
     paths = [Path(__file__), DEFAULT, ROOT / "tests/test_companion_diary.py"]
     paths += [ROOT / "frontend/src/components/companion/agent" / name for name in UI_FILES]
     paths += [ROOT / "frontend/src/components/companion/agent" / name for name in
-              ("DiaryCard.tsx", "DiaryEditor.tsx", "useDiaryDictation.ts", "DiaryCalendar.tsx")]
+              ("DiaryCard.tsx", "DiaryEditor.tsx", "useDiaryDictation.ts", "diaryVoiceCommand.ts", "DiaryCalendar.tsx")]
     summary = {"started_at_utc": started, "finished_at_utc": datetime.now(timezone.utc).isoformat(),
                "code_revision": revision, "sources_sha256": {str(p.relative_to(ROOT)): hashlib.sha256(p.read_bytes()).hexdigest() for p in paths},
                "scope": "React components with mocked ASR/API, plus separate SQLite backend tests; NOT full E2E",

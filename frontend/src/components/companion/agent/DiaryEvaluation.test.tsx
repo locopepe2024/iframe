@@ -57,42 +57,35 @@ it("D01: appends media-related plans as diary content without chat routing or au
   evidence("D01", [{ name: "content_stays_in_editor", passed: true, observed: "Verbatim plan appended; editor and listening stay active; no chat or save API called" }]);
 });
 
-it("D02: records the natural-stop mismatch and verifies the implemented exact stop boundary", async () => {
+it("D02: natural stop pauses without appending or saving", async () => {
   const input = scenario("D02");
-  await editor(input.initial_state.draft); startVoice();
-  // The exact sentence in this seed is not an exact stop command in the current implementation.
-  say(input.user_text);
-  expect(screen.getByRole("status")).toHaveTextContent("麦克风已开启");
-  expect(screen.getByLabelText("日记内容")).toHaveValue(input.initial_state.draft + "\n" + input.user_text);
-  // Also record the implemented exact command boundary without treating it as seed success.
-  say("停止");
+  await editor(input.initial_state.draft); startVoice(); say(input.user_text);
   expect(screen.getByRole("status")).toHaveTextContent("麦克风已关闭");
+  expect(screen.getByLabelText("日记内容")).toHaveValue(input.initial_state.draft);
   expect(recognition.abort).toHaveBeenCalledOnce();
   expect(api.saveDiary).not.toHaveBeenCalled(); expect(api.chat).not.toHaveBeenCalled();
   expect(screen.getByRole("dialog", { name: "日记编辑器" })).toBeInTheDocument();
-  evidence("D02", [
-    { name: "seed_stop_pauses_without_append", passed: false, observed: "Seed sentence appended as content; microphone state stayed active" },
-    { name: "exact_stop_keeps_unsaved_draft", passed: true, observed: "Exact 停止 then aborted recognition without save" },
-  ]);
+  evidence("D02", [{ name: "seed_stop_pauses_without_append", passed: true, observed: "Natural stop aborted recognition; draft unchanged; no save" }]);
 });
 
-it("D03: a non-exact save request stays draft; explicit save retries the same content and operation", async () => {
+it("D03: natural save asks for confirmation and retries unchanged content after failure", async () => {
   const input = scenario("D03"), draft = input.initial_state.draft;
   api.saveDiary.mockRejectedValueOnce(new Error("测试网络断开")).mockImplementationOnce(async (day, body) => ({ day, ...body, revision: 1 }));
-  const dialog = await editor(draft); startVoice(); say(input.user_text);
+  await editor(draft); startVoice(); say(input.user_text);
   expect(api.saveDiary).not.toHaveBeenCalled();
-  expect(screen.getByLabelText("日记内容")).toHaveValue(draft + "\n" + input.user_text);
-  fireEvent.click(dialog.getByRole("button", { name: "保存日记" }));
+  expect(screen.getByLabelText("日记内容")).toHaveValue(draft);
+  expect(screen.getByRole("status")).toHaveTextContent("麦克风已关闭");
+  fireEvent.click(screen.getByRole("button", { name: "确认保存日记" }));
   await screen.findByRole("alert");
-  expect(screen.getByLabelText("日记内容")).toHaveValue(draft + "\n" + input.user_text);
+  expect(screen.getByLabelText("日记内容")).toHaveValue(draft);
   expect(api.saveDiary).toHaveBeenCalledTimes(1);
-  fireEvent.click(dialog.getByRole("button", { name: "保存日记" }));
+  fireEvent.click(screen.getByRole("button", { name: "确认保存日记" }));
   await screen.findByRole("article", { name: "已保存日记" });
   expect(api.saveDiary).toHaveBeenCalledTimes(2);
   expect(api.saveDiary.mock.calls[0]).toEqual(api.saveDiary.mock.calls[1]);
   expect(api.chat).not.toHaveBeenCalled();
   evidence("D03", [
-    { name: "seed_save_request_shows_confirmation_without_append", passed: false, observed: "Natural save request appended as content; no new confirmation appeared" },
-    { name: "button_save_failure_preserves_draft_and_retry_id", passed: true, observed: "Save button retries identical content and operation; no chat call" },
+    { name: "seed_save_request_shows_confirmation_without_append", passed: true, observed: "Natural save paused recognition and showed confirmation without save" },
+    { name: "button_save_failure_preserves_draft_and_retry_id", passed: true, observed: "Confirmation retries identical draft and operation; no chat call" },
   ]);
 });

@@ -1,5 +1,6 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
+import { diaryVoiceCommand } from "./diaryVoiceCommand";
 
 type Result = ArrayLike<{ transcript: string }> & { isFinal: boolean };
 type Recognition = {
@@ -31,14 +32,15 @@ export function useDiaryDictation(onAppend: (text: string) => void, onSave: () =
       const current=new Constructor!(); recognition.current=current;
       current.lang="zh-CN";current.continuous=true;current.interimResults=false;
       current.onresult=event=>{
+        if(!active.current || recognition.current!==current)return;
         for(let i=event.resultIndex;i<event.results.length;i++){
           const result=event.results[i];if(!result.isFinal)continue;
           const text=result[0]?.transcript?.trim();if(!text)continue;
-          const command=text.replace(/[\s，。！？、,.!?]/g,"");
-          if(/^(?:保存日记|停止并保存|停止保存|保存)$/.test(command)){
-            stop();setNotice("正在保存日记。");callbacks.current.onSave();return;
+          const command=diaryVoiceCommand(text);
+          if(command==="save"){
+            stop();setNotice("已暂停听写，请确认是否保存日记。");callbacks.current.onSave();return;
           }
-          if(/^(?:停止|停止记录|暂停|暂停记录)$/.test(command)){
+          if(command==="stop"){
             stop();setNotice("已停止听写，草稿仍在，可以继续记录或保存。");return;
           }
           callbacks.current.onAppend(text);
