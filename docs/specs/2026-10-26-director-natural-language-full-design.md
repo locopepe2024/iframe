@@ -153,14 +153,14 @@ The proposed handoff API should therefore be interpreted as:
 POST /director3d/reference-generation-requests
 GET  /director3d/reference-generation-results/{request_id}
 PATCH /director3d/reference-generation-results/{request_id}/review
-POST /projects/{project_id}/assets/{asset_type}/{asset_id}/upload
+existing project asset admission route for the selected asset type
 ```
 
-The final POST uses the existing asset-library admission path and is allowed
-only after director review is approved. It is not a direct storyboard write
-and must not be owned by the director scene. The response exposes the normal
-`asset_id`, `variant_id` and `media_id` values that storyboard consumers bind
-read-only.
+The final admission uses the existing asset-library path for the selected
+asset type (image, depth artifact or video). It is allowed only after director
+review is approved. It is not a direct storyboard write and must not be owned
+by the director scene. The response exposes the normal `asset_id`,
+`variant_id` and `media_id` values that storyboard consumers bind read-only.
 
 The identity levels are distinct:
 
