@@ -168,6 +168,7 @@ export function buildGenerationPrompt(
     modelId: string,
     globalStylePrompt = "",
     inheritedLighting = "",
+    confirmedScene = "",
 ): string {
     if (shot.promptIsOptimized) {
         const base = shot.prompt.trim();
@@ -184,6 +185,9 @@ export function buildGenerationPrompt(
     }
     // An accepted optimizer result is already a complete provider prompt.
     let prompt = buildAssembledPrompt(shot, true, globalStylePrompt, inheritedLighting);
+    if (confirmedScene && !prompt.includes(confirmedScene)) {
+        prompt = [prompt, `场景视觉基线：${confirmedScene}`].filter(Boolean).join("\n");
+    }
     const line = shot.dialogueStructured?.line?.trim();
     if (!generateAudio || !line) return prompt;
     const speaker = shot.dialogueStructured?.speaker?.trim() || "Speaker";

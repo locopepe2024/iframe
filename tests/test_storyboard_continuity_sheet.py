@@ -131,3 +131,27 @@ def test_different_confirmed_scene_styles_are_not_project_conflicts(tmp_path):
     })
     pipeline, script = make_pipeline(tmp_path, [frame("a", "street"), frame("b", "dream")], [first, second])
     assert not [issue for issue in pipeline.storyboard_continuity_sheet(script.id)["issues"] if issue["field"] == "style"]
+
+
+def test_confirmed_scene_geometry_enters_video_source_hash(tmp_path):
+    scene = Scene(id="shop", name="粮铺", description="")
+    scene.asset_design = {
+        "design_draft": {"asset_baseline": {"fixed_geometry": ["未确认阁楼"]}},
+        "design_revisions": [{"revision": 1, "design": {"asset_baseline": {
+            "scene_identity": "长街中段粮铺", "fixed_geometry": ["临街门廊", "木柜台"],
+            "fixed_landmarks": ["粮袋"], "materials": ["旧木材"],
+            "time_baseline": "黄昏", "lighting_baseline": "侧光",
+        }}}],
+    }
+    pipeline, script = make_pipeline(tmp_path, [frame("a", "shop")], [scene])
+    before = pipeline.storyboard_continuity_sheet(script.id)["rows"][0]
+    assert before["scene_baseline"] == {
+        "scene_identity": "长街中段粮铺", "fixed_geometry": ["临街门廊", "木柜台"],
+        "fixed_landmarks": ["粮袋"], "materials": ["旧木材"],
+    }
+    scene.asset_design["design_revisions"].append({"revision": 2, "design": {"asset_baseline": {
+        "scene_identity": "长街中段粮铺", "fixed_geometry": ["临街门廊", "木柜台", "侧门"],
+    }}})
+    after = pipeline.storyboard_continuity_sheet(script.id)["rows"][0]
+    assert after["scene_baseline"]["fixed_geometry"][-1] == "侧门"
+    assert after["visual_source_hash"] != before["visual_source_hash"]

@@ -1081,6 +1081,7 @@ export const api = {
                 scene_design_revision: number | null; plan_revision: number | null;
                 style_hash: string; model: string;
                 visual_source_hash: string;
+                scene_baseline: Record<string, string | string[]>;
                 fields: Record<string, { value: unknown; source_kind: string; source_id: string | null; source_revision: number | null; status: string }>;
                 reference: { source_variant_id: string | null; source_design_revision: number | null; selected_fields: string[] } | null;
             }>;

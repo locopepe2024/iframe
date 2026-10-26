@@ -18,8 +18,9 @@ function text(value: unknown): string {
 export function effectiveShotVisual(row: ContinuityRow | undefined, globalStylePrompt: string): {
     style: string;
     lighting: string;
+    scene: string;
 } {
-    if (!row) return { style: globalStylePrompt, lighting: "" };
+    if (!row) return { style: globalStylePrompt, lighting: "", scene: "" };
     const styleField = row.fields.style;
     const style = styleField?.source_kind === "scene_design" || styleField?.source_kind === "frame"
         ? text(styleField.value) : globalStylePrompt;
@@ -28,5 +29,15 @@ export function effectiveShotVisual(row: ContinuityRow | undefined, globalStyleP
         const value = text(row.fields[key]?.value);
         return value ? [`${label}：${value}`] : [];
     }).join("；");
-    return { style: style || globalStylePrompt, lighting };
+    const baseline = row.scene_baseline ?? {};
+    const scene = ([
+        ["scene_identity", "场景"], ["location_type", "地点类型"],
+        ["fixed_geometry", "固定结构"], ["fixed_landmarks", "固定地标"],
+        ["materials", "材质"], ["environment", "环境"],
+        ["reusable_constraints", "复用约束"],
+    ] as const).flatMap(([key, label]) => {
+        const value = text(baseline[key]);
+        return value ? [`${label}：${value}`] : [];
+    }).join("；");
+    return { style: style || globalStylePrompt, lighting, scene };
 }

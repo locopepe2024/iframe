@@ -53,6 +53,13 @@ def build_continuity_sheet(script: Script, scenes: Iterable[Any], *, model_name:
         place_id = shot_context.get("place_continuity_id") or scene_context.get("place_continuity_id")
         time_id = shot_context.get("time_continuity_id") or scene_context.get("time_continuity_id")
         design_revision, design = _confirmed_design(scene)
+        asset_baseline = _as_dict(design.get("asset_baseline"))
+        scene_baseline = {
+            key: asset_baseline[key] for key in (
+                "scene_identity", "location_type", "fixed_geometry", "fixed_landmarks",
+                "materials", "environment", "reusable_constraints",
+            ) if _nonempty(asset_baseline.get(key))
+        }
         fields: Dict[str, Dict[str, Any]] = {}
         scene_id = getattr(scene, "id", None)
         if scene is not None:
@@ -118,6 +125,7 @@ def build_continuity_sheet(script: Script, scenes: Iterable[Any], *, model_name:
             "continuity_status": "confirmed" if place_id and time_id else "unresolved",
             "plan_revision": raw.get("shooting_plan_revision"), "plan_hash": raw.get("shooting_plan_hash"),
             "scene_design_revision": design_revision, "style_hash": style_hash,
+            "scene_baseline": scene_baseline,
             "model": model_name, "fields": fields,
             "reference": ({"source_asset_id": snapshot.source_asset_id,
                            "source_frame_id": snapshot.source_frame_id,

@@ -67,3 +67,9 @@ Entity extraction places the location candidate in `scenes` and the bounded reus
 ## Verification note
 
 The focused extraction, Director, storyboard and prompt tests pass. Two existing agent-skill tests that install every catalog item fail in an isolated temporary database: total catalog instruction text is about 25,548 characters, above the product's 24,000-character enabled-Skill budget. This budget was not widened; those tests need a selected-Skill fixture or a separate budget test. The failure does not establish a regression in this slice because the new script Skill is loaded by the script/Director pipeline and is not an installable catalog item. No provider image or video output was produced in this slice.
+
+## Request projection slice
+
+Code fact: the image preview already includes confirmed scene `asset_baseline` fields. The video draft previously read only the continuity row's effective style and light; its manifest and source hash recorded provenance but did not insert fixed scene geometry into the submitted text. The continuity row now carries the confirmed scene identity, location type, fixed geometry, landmarks, materials, environment and reusable constraints. Its visual source hash includes that projection. The unoptimized video draft appends this scene baseline, and the submission preview uses the same assembled text. Unconfirmed scene drafts are excluded. An accepted complete model prompt remains user-authored text and is not silently amended; its existing stale-source warning remains the review path.
+
+This is a text-input boundary check, not proof of provider visual consistency. The video reference image selection and actual provider media mapping remain separate from the new scene-text projection. Character/prop visual descriptions, reference-selected spatial fields, and an independent timestamped key-frame contract still need request-level acceptance tests before claiming a fully shared frozen image/video visual baseline.

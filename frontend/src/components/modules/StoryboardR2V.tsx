@@ -1251,7 +1251,7 @@ export default function StoryboardR2V() {
                 continuitySheet.rows.find(row => row.frame_id === shot.id), style.positivePrompt,
             );
             const basePromptText = buildGenerationPrompt(
-                shot, generateAudio, requestedModelId, effectiveVisual.style, effectiveVisual.lighting,
+                shot, generateAudio, requestedModelId, effectiveVisual.style, effectiveVisual.lighting, effectiveVisual.scene,
             );
             const effectiveNegativePrompt = resolveNegativePrompt(
                 style.negativePrompt,

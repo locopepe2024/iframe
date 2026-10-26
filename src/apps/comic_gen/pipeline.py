@@ -799,6 +799,7 @@ class ComicGenPipeline(StudioOwnerMixin):
                        if item["frame_id"] == frame.id)
         payload = {
             "fields": row["fields"], "scene_design_revision": row["scene_design_revision"],
+            "scene_baseline": row.get("scene_baseline", {}),
             "style_hash": row["style_hash"], "reference": row["reference"],
             "camera_movement_structured": frame.camera_movement_structured.model_dump(mode="json")
             if hasattr(frame.camera_movement_structured, "model_dump") else frame.camera_movement_structured,
