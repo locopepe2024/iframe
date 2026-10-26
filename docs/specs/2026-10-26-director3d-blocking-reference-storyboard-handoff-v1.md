@@ -2,13 +2,13 @@
 
 ## 目标
 
-将 3D 导演台自然语言生成的导演参考，转换为可审核、可版本化、可传递到分镜的结构化参考。参考产物包括结构化深度、多人占位参考图、运镜参考视频和动作参考视频。规范覆盖多人占位、前中后景、世界深度、屏幕关系、镜头、可见性和参考媒体用途；不把自然语言提案直接写入分镜，也不把任何参考产物当成最终角色图或最终生成视频。
+将用户在 3D 导演台输入的自然语言，转换为可审核、可版本化、可传递到分镜的导演参考产物。3D 导演台直接生成结构化深度、多人占位参考图、运镜参考视频和动作参考视频。规范覆盖多人占位、前中后景、世界深度、屏幕关系、镜头、可见性和参考媒体用途；自然语言只作为导演台生成输入，不进入分镜，也不把任何参考产物当成最终角色图或最终生成视频。
 
 ## 证据与边界
 
 **代码事实：** 当前导演台设计提案支持稳定实体 ID、米制位置、朝向、成对排布、盒体道具和静态摄影机；浏览器占位图可以导出，导演台也已有本地时间轴、动作和视频参考相关工作区；当前浏览器草稿与剧集分镜仍是独立状态，尚未形成统一的四类参考媒体交接合同。
 
-**直接含义：** 3D 导演台可以作为多人空间、摄影机和动作预演的参考来源，但每类参考必须标明用途，并通过显式采纳和 snapshot 才能成为分镜输入。
+**直接含义：** 3D 导演台可以作为多人空间、摄影机和动作预演的参考来源，但每类参考必须标明用途，并通过显式确认和 snapshot 才能成为分镜输入。
 
 **未证明：** 生成模型一定遵守占位图、深度或编号关系。结构化交接只证明输入意图和来源，最终图像/视频仍需逐帧审核。
 
@@ -30,14 +30,14 @@
 
 ## 规范对象
 
-### 1. 自然语言导演提案 `director_reference_proposal`
+### 1. 自然语言生成请求 `director_reference_generation_request`
 
-自然语言生成先返回导演参考提案，状态为 `draft`，不可直接进入分镜。提案可以同时规划空间、深度、占位图、运镜视频和动作视频的生成，但每种产物必须单独标记状态和用途。
+自然语言是 3D 导演台的生成指令。请求可以同时要求空间、深度、占位图、运镜视频和动作视频，但每种产物必须单独标记状态和用途。请求本身不进入分镜。
 
 ```json
 {
-  "schemaVersion": "iframe.director3d.director-reference-proposal.v1",
-  "proposalId": "proposal-...",
+  "schemaVersion": "iframe.director3d.director-reference-generation-request.v1",
+  "requestId": "request-...",
   "baseRevision": "design-fnv1a32:1234abcd",
   "status": "draft",
   "coordinateSystem": {
@@ -50,7 +50,7 @@
   "cameraRef": {"cameraId": "camera-main", "revision": "camera-rev-2"},
   "slots": [],
   "visibilityRelations": [],
-  "referencePlan": {
+  "requestedOutputs": {
     "depth": {"requested": true, "status": "planned"},
     "blockingImage": {"requested": true, "status": "planned"},
     "cameraMotionVideo": {"requested": true, "status": "planned"},
@@ -61,7 +61,26 @@
 }
 ```
 
-### 2. 占位槽 `blocking_slot`
+### 2. 生成结果 `director_reference_generation_result`
+
+3D 导演台根据自然语言请求生成参考产物。生成结果可以部分成功；每类产物必须记录自己的状态、来源和媒体身份。
+
+```json
+{
+  "schemaVersion": "iframe.director3d.director-reference-generation-result.v1",
+  "requestId": "request-...",
+  "baseRevision": "design-fnv1a32:1234abcd",
+  "outputs": {
+    "depth": {"status": "generated", "mediaId": "depth-media-..."},
+    "blockingImage": {"status": "generated", "mediaId": "blocking-media-..."},
+    "cameraMotionVideo": {"status": "generated", "mediaId": "camera-video-..."},
+    "actionMotionVideo": {"status": "generated", "mediaId": "action-video-..."}
+  },
+  "warnings": []
+}
+```
+
+### 3. 占位槽 `blocking_slot`
 
 每个可识别人物、固定群演、匿名群体或关键道具占一个槽位。编号是当前参考图中的空间锚点，不是新的角色身份。
 
@@ -90,7 +109,7 @@
 
 `crowd_template` 可以表达一组匿名人群，但不能伪装成稳定面孔；`scene_proxy` 只用于空间代理，不得进入角色引用。
 
-### 3. 可见关系 `visibility_relation`
+### 4. 可见关系 `visibility_relation`
 
 用于表达阁楼能看见粮铺、人物被柜台遮挡、远景人物未获得冲突信息等关系。
 
@@ -115,7 +134,7 @@
 
 `unaware_of_event` 是叙事信息状态，不等于物理不可见；需要与 `visibility` 分开记录。
 
-### 4. 参考媒体计划与用途
+### 5. 参考媒体计划与用途
 
 四类参考必须分开记录，不允许用一个 `referenceMedia` 字段混合：
 
@@ -160,7 +179,7 @@
 
 如果某个模型不支持对应媒体类型，适配器必须标记 `unsupported` 或 `not_submitted`，不能把它伪装成已生效的控制输入。
 
-### 5. 交接快照 `blocking_reference_snapshot`
+### 6. 用户确认快照 `director_reference_snapshot`
 
 用户确认后，将提案冻结为不可变快照：
 
@@ -168,7 +187,7 @@
 {
   "schemaVersion": "iframe.director3d.director-reference-snapshot.v1",
   "snapshotId": "blocking-snapshot-...",
-  "sourceProposalId": "proposal-...",
+  "sourceRequestId": "request-...",
   "sourceRevision": "design-fnv1a32:1234abcd",
   "sceneRevision": "scene-rev-3",
   "cameraRevision": "camera-rev-2",
@@ -184,7 +203,7 @@
 
 ## 分镜接收结构
 
-分镜只接收 `director_reference_snapshot`，不接收自然语言提案。建议挂载在 `StoryboardConsistencyManifest`：
+分镜只接收用户确认后的 `director_reference_snapshot`，不接收自然语言、生成请求或未确认的生成结果。建议挂载在 `StoryboardConsistencyManifest`：
 
 ```json
 {
@@ -280,4 +299,4 @@
 - `tests/test_director_design.py`
 - `tests/test_director_shooting_plan.py`
 
-本 spec 先定义交接合同；实现应拆为提案 schema、导演台 snapshot、分镜读取和提交校验四个独立切片。
+本 spec 先定义交接合同；实现应拆为自然语言生成请求、四类参考产物结果、导演台确认快照、分镜读取和提交校验五个独立切片。
