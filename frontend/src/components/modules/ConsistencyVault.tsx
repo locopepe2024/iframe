@@ -1103,6 +1103,8 @@ function CharacterDetailModal({ asset, type, onClose, onUpdateDescription, onUpd
     const inheritedSceneLighting = [asset.time_of_day, asset.lighting_mood].filter(Boolean).join("；");
     const [sceneDesign, setSceneDesign] = useState(() => ({
         visual_notes: String(savedSceneDesign.visual_notes || asset.description || ""),
+        asset_baseline: savedSceneDesign.asset_baseline || null,
+        shot_only_content: Array.isArray(savedSceneDesign.shot_only_content) ? savedSceneDesign.shot_only_content : [],
         style: typeof savedSceneDesign.style === "string" ? savedSceneDesign.style : stylePrompt,
         ambient_lighting: typeof savedSceneDesign.ambient_lighting === "string" ? savedSceneDesign.ambient_lighting : inheritedSceneLighting,
         local_target: String(savedSceneDesign.local_lighting?.target || ""),
@@ -1300,7 +1302,7 @@ function CharacterDetailModal({ asset, type, onClose, onUpdateDescription, onUpd
         await onUpdateDescription(description);
         setDescriptionSaved(true);
         if (type === "scene") {
-            setSceneDesign(current => ({ ...current, visual_notes: description }));
+            setSceneDesign(current => ({ ...current, visual_notes: description, asset_baseline: null, shot_only_content: [] }));
             setSceneDesignNeedsApply(true);
         }
         setIsEditing(false);
@@ -1465,7 +1467,8 @@ function CharacterDetailModal({ asset, type, onClose, onUpdateDescription, onUpd
     };
 
     const updateSceneDesign = (key: keyof typeof sceneDesign, value: string) => {
-        setSceneDesign(current => ({ ...current, [key]: value }));
+        setSceneDesign(current => ({ ...current, [key]: value,
+            ...(key === "visual_notes" ? { asset_baseline: null, shot_only_content: [] } : {}) }));
         setSceneDesignNeedsApply(true);
     };
 
@@ -1506,6 +1509,10 @@ function CharacterDetailModal({ asset, type, onClose, onUpdateDescription, onUpd
         try {
             await onUpdateAttributes({ asset_design: {
                 visual_notes: sceneDesign.visual_notes.trim(),
+                ...(sceneDesign.asset_baseline ? {
+                    asset_baseline: sceneDesign.asset_baseline,
+                    shot_only_content: sceneDesign.shot_only_content,
+                } : {}),
                 style: sceneDesign.style.trim(),
                 ambient_lighting: sceneDesign.ambient_lighting.trim(),
                 local_lighting: { target: sceneDesign.local_target.trim(), effect: sceneDesign.local_effect.trim() },

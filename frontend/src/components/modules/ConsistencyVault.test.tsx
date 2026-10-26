@@ -756,6 +756,33 @@ it("applies, saves and restores selected scene layers without rewriting the AI s
     expect(screen.getByRole("textbox", { name: "图像提示词" })).toHaveValue(prompt);
 });
 
+it("keeps a scene baseline during lighting edits and clears it when the location text changes", async () => {
+    const baseline = { scene_identity: "青溪镇粮铺", location_type: "粮铺", fixed_geometry: ["木柜台"] };
+    const asset = { id: "shop", name: "青溪镇粮铺", description: "旧描述", source: "episode",
+        asset_design: { design_draft: { visual_notes: "木质粮铺", asset_baseline: baseline,
+            shot_only_content: ["流民匪寇劫掠"], prompt_workspace: {
+                active_source: "design", settings_pending: false,
+                design: { prompt: "木质粮铺", mode: "text", references: [] },
+                ai: { prompt: "", mode: "text", references: [] },
+            } } } };
+    const project = { id: "episode-1", characters: [], scenes: [asset], props: [] };
+    useProjectStore.setState({ currentProject: project as any });
+    mocks.getEpisodeVisualContext.mockResolvedValue({ context: null, bindings: [] });
+    mocks.updateAssetAttributes.mockResolvedValue(project);
+    render(<ConsistencyVault />);
+    fireEvent.click(screen.getByRole("button", { name: /Scenes/ }));
+    fireEvent.click(screen.getByText(asset.name));
+    fireEvent.click(screen.getByRole("button", { name: /基础面板 ·/ }));
+    fireEvent.change(screen.getByRole("textbox", { name: "场景风格" }), { target: { value: "写实" } });
+    fireEvent.click(screen.getByRole("button", { name: "保存并使用场景设计" }));
+    await waitFor(() => expect(mocks.updateAssetAttributes).toHaveBeenCalled());
+    expect(mocks.updateAssetAttributes.mock.calls.at(-1)?.[3].asset_design.asset_baseline).toEqual(baseline);
+    fireEvent.change(screen.getByRole("textbox", { name: "场景空间与固定外观" }), { target: { value: "新粮铺空间" } });
+    fireEvent.click(screen.getByRole("button", { name: "保存并使用场景设计" }));
+    await waitFor(() => expect(mocks.updateAssetAttributes).toHaveBeenCalledTimes(2));
+    expect(mocks.updateAssetAttributes.mock.calls.at(-1)?.[3].asset_design.asset_baseline).toBeUndefined();
+});
+
 it("blocks applying a scene light direction forbidden by the same design", async () => {
     const asset = { id: "street", name: "方向冲突场景", description: "街道" };
     useProjectStore.setState({ currentProject: { id: "episode-1", characters: [], scenes: [asset], props: [] } as any });

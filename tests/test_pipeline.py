@@ -231,6 +231,31 @@ def test_storyboard_prompt_projection_is_per_frame_and_includes_visual_baseline(
     assert "Alex enters from the left" not in second_prompt
 
 
+def test_storyboard_projection_uses_scene_baseline_without_old_shot_content(pipeline, project):
+    scene = project.scenes[0]
+    scene.name = "青溪镇粮铺"
+    scene.description = "木质粮铺门前，流民匪寇正在劫掠，近景三名百姓退后"
+    scene.asset_design = {"design_revisions": [{"revision": 1, "design": {
+        "visual_notes": scene.description,
+        "asset_baseline": {
+            "scene_identity": "青溪镇粮铺", "location_type": "长街粮铺",
+            "fixed_geometry": ["木质铺面", "柜台"], "fixed_landmarks": ["粮袋"],
+            "materials": ["旧木材"], "environment": ["青石板长街"],
+            "time_baseline": "黄昏", "lighting_baseline": "右侧斜光",
+            "composition_tendency": "沿街纵深", "reusable_constraints": [], "basis": ["observed"],
+        },
+        "shot_only_content": ["流民匪寇正在劫掠", "近景三名百姓退后"],
+    }}]}
+    project.frames[0].action_description = "粮铺空镜"
+
+    prompt = pipeline.storyboard_frame_prompt_projection(project, project.frames[0])
+
+    assert "青溪镇粮铺" in prompt
+    assert "木质铺面" in prompt
+    assert "流民匪寇" not in prompt
+    assert "百姓退后" not in prompt
+
+
 def test_storyboard_image_projection_excludes_video_movement_and_transition(pipeline, project):
     frame = project.frames[0]
     frame.visual_description = "Alex stands in the ruins"

@@ -3639,12 +3639,6 @@ class ComicGenPipeline(StudioOwnerMixin):
                     names = [light_names[item] for item in forbidden if item in light_names]
                     if names:
                         scene_design_parts.append("禁止光线方向：" + "、".join(names))
-                face_limit = constraints.get("visible_face_limit")
-                if isinstance(face_limit, int) and not isinstance(face_limit, bool):
-                    scene_design_parts.append(f"可见人脸上限：{face_limit} 张")
-                people_view = constraints.get("secondary_people_view")
-                if isinstance(people_view, str) and people_view.strip():
-                    scene_design_parts.append("其他人物呈现：" + people_view.strip())
 
         lighting_parts: List[str] = []
         if frame.lighting:
@@ -3663,7 +3657,9 @@ class ComicGenPipeline(StudioOwnerMixin):
 
         parts = [
             str(frame.visual_description or frame.action_description or "").strip(),
-            f"Location: {scene.name}. {scene.description}" if scene else "",
+            (f"Location: {scene.name}" if isinstance(scene_design.get("asset_baseline"), dict)
+             and scene_design["asset_baseline"].get("scene_identity") else
+             f"Location: {scene.name}. {scene.description}") if scene else "",
             "场景视觉基线：" + "；".join(scene_design_parts)
             if scene_design_parts and scene_revision is not None else "",
             f"Visual style: {style_text}" if style_text else "",
