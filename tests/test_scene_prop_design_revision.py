@@ -42,6 +42,33 @@ def test_scene_prop_design_draft_and_confirmation_survive_reload(tmp_path, kind,
     assert loaded.asset_design == asset.asset_design
 
 
+def test_scene_asset_extraction_baseline_and_shot_only_content_survive_reload(tmp_path):
+    pipeline, scene, _ = make_pipeline(tmp_path)
+    baseline = {
+        "scene_identity": "青溪镇长街中段粮铺",
+        "location_type": "古代街市粮铺",
+        "fixed_geometry": ["沿街木质铺面", "木柜台"],
+        "fixed_landmarks": ["粮袋", "竹筐"],
+        "materials": ["旧木材", "粗麻布", "青石板"],
+        "environment": ["长街纵深"],
+        "time_baseline": "黄昏",
+        "lighting_baseline": "右后方斜射暖光",
+        "composition_tendency": "保留门前调度空间",
+        "reusable_constraints": ["固定结构保持一致"],
+        "basis": ["observed"],
+    }
+    design = {"visual_notes": "青溪镇长街中段粮铺", "asset_baseline": baseline,
+              "shot_only_content": ["流民匪寇劫掠", "当前人物近中远景分配"],
+              "unresolved": [], "confirmed": True}
+    pipeline.update_asset_attributes("project", "street", "scene", {"asset_design": design})
+    loaded = ComicGenPipeline.__new__(ComicGenPipeline)
+    loaded.data_file = pipeline.data_file
+    restored = loaded._load_data()["project"].scenes[0]
+    saved = restored.asset_design["design_revisions"][0]["design"]
+    assert saved["asset_baseline"]["scene_identity"] == "青溪镇长街中段粮铺"
+    assert saved["shot_only_content"] == ["流民匪寇劫掠", "当前人物近中远景分配"]
+
+
 def test_scene_prop_design_rejects_blank_confirmation_without_mutation(tmp_path):
     pipeline, scene, _ = make_pipeline(tmp_path)
     with pytest.raises(ValueError, match="concrete visual design"):

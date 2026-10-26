@@ -842,14 +842,33 @@ def get_character_design_draft_job(job_id: str, ctx: UserContext = Depends(requi
 
 def _compile_asset_design_draft_input(body: AssetDesignRequest, ctx: UserContext) -> dict:
     subject = "场景环境" if body.asset_type == "scene" else "道具物件"
-    system = (
-        f"你是影视美术设计助手，负责设计{subject}。根据资产档案、用户要求和当前草稿，"
-        "生成可直接用于图片生成的、具体可观察的视觉设计。保持资产身份，不新增剧情事实。"
-        "优先采用用户要求；模型补充只能作为 creative_choice。避免空泛的电影感、杰作、高质量等词。"
-        "只返回一个 JSON，不要 Markdown："
-        '{"visual_notes":"可直接用于出图的主体视觉设计",'
-        '"unresolved":["仅列出会阻碍设计的关键歧义"]}'
-    )
+    if body.asset_type == "scene":
+        system = (
+            "你是场景资产提取助手，不是分镜导演。你的任务是从资产档案、用户要求和当前草稿中，"
+            "提取可跨多个镜头复用的地点基线，并把当前分镜专属内容单独隔离。"
+            "场景资产只允许包含地点身份、固定空间结构、固定地标和物件、材质、环境纵深、"
+            "可确认的默认时间、世界光影基线、可复用构图倾向和场景级禁止项。"
+            "当前事件、角色名或角色ID、人物数量、近中远景分配、临时站位、动作、受力、对白、"
+            "临时道具状态和当前镜头运镜必须放入 shot_only_content，不得写入 asset_baseline。"
+            "如果用户把分镜内容混在场景描述中，必须拆分而不是把它保存为地点事实。"
+            "区分 observed（输入明确给出）、inferred（由结构合理推断）和 authored（为可复用设计补充）；"
+            "inferred 和 authored 不得伪装成 observed。不要补造未提供的具体人物或剧情。"
+            "只返回一个 JSON，不要 Markdown："
+            '{"asset_baseline":{"scene_identity":"", "location_type":"", "fixed_geometry":[], '
+            '"fixed_landmarks":[], "materials":[], "environment":[], "time_baseline":"", '
+            '"lighting_baseline":"", "composition_tendency":"", "reusable_constraints":[], '
+            '"basis":[]}, "shot_only_content":[], "visual_notes":"仅为兼容展示的场景基线摘要", '
+            '"uncertainties":[], "unresolved":[]}'
+        )
+    else:
+        system = (
+            f"你是影视美术设计助手，负责设计{subject}。根据资产档案、用户要求和当前草稿，"
+            "生成可直接用于图片生成的、具体可观察的视觉设计。保持资产身份，不新增剧情事实。"
+            "优先采用用户要求；模型补充只能作为 creative_choice。避免空泛的电影感、杰作、高质量等词。"
+            "只返回一个 JSON，不要 Markdown："
+            '{"visual_notes":"可直接用于出图的主体视觉设计",'
+            '"unresolved":["仅列出会阻碍设计的关键歧义"]}'
+        )
     source = body.model_dump(exclude={"reviewed_messages", "review_token"})
     asset_snapshot = None
     if bool(body.project_id) != bool(body.asset_id):
@@ -871,7 +890,8 @@ def _compile_asset_design_draft_input(body: AssetDesignRequest, ctx: UserContext
                                       "asset": asset_snapshot, "compiled": messages},
                                      ensure_ascii=False, sort_keys=True, default=str).encode()).hexdigest()
     return {"messages": messages, "media": [], "review_token": token,
-            "format_note": "模型只返回含 visual_notes 和 unresolved 的 JSON；结构冲突会在调用前拒绝。"}
+            "format_note": ("场景模型返回 asset_baseline、shot_only_content、visual_notes 和 uncertainties；"
+                             "道具模型返回 visual_notes 和 unresolved。结构冲突会在调用前拒绝。")}
 
 
 @router.post("/asset-design/draft/preview")
@@ -911,11 +931,39 @@ def asset_design_draft(body: AssetDesignRequest, ctx: UserContext = Depends(requ
                 break
         if not result or not result["visual_notes"].strip():
             raise ValueError("missing_visual_notes")
-        unresolved = result.get("unresolved") or []
-        if not isinstance(unresolved, list) or not all(isinstance(item, str) for item in unresolved):
-            raise ValueError("invalid_unresolved")
+        if body.asset_type == "scene":
+            baseline = result.get("asset_baseline")
+            shot_only = result.get("shot_only_content") or []
+            uncertainties = result.get("uncertainties") or []
+            if not isinstance(baseline, dict) or not isinstance(shot_only, list) or not isinstance(uncertainties, list):
+                raise ValueError("invalid_scene_asset_extraction")
+            if not all(isinstance(item, str) for item in shot_only + uncertainties):
+                raise ValueError("invalid_scene_asset_extraction_items")
+            required = {"scene_identity", "location_type", "fixed_geometry", "fixed_landmarks",
+                        "materials", "environment", "time_baseline", "lighting_baseline",
+                        "composition_tendency", "reusable_constraints", "basis"}
+            if set(baseline) - required or not required.issubset(baseline):
+                raise ValueError("invalid_scene_asset_baseline_fields")
+            for key in ("fixed_geometry", "fixed_landmarks", "materials", "environment", "reusable_constraints", "basis"):
+                if not isinstance(baseline[key], list) or not all(isinstance(item, str) for item in baseline[key]):
+                    raise ValueError("invalid_scene_asset_baseline_items")
+            if not all(isinstance(baseline.get(key), str) for key in (
+                "scene_identity", "location_type", "time_baseline", "lighting_baseline", "composition_tendency")):
+                raise ValueError("invalid_scene_asset_baseline_values")
+            result["unresolved"] = uncertainties
+        else:
+            unresolved = result.get("unresolved") or []
+            if not isinstance(unresolved, list) or not all(isinstance(item, str) for item in unresolved):
+                raise ValueError("invalid_unresolved")
     except (ValueError, TypeError):
         raise HTTPException(502, "场景/道具设计模型未返回可编辑草稿，请重试") from None
+    if body.asset_type == "scene":
+        return {
+            "asset_baseline": result["asset_baseline"],
+            "shot_only_content": result["shot_only_content"][:24],
+            "visual_notes": result["visual_notes"].strip(),
+            "uncertainties": result["unresolved"][:12],
+        }
     return {"visual_notes": result["visual_notes"].strip(), "unresolved": unresolved[:12]}
 
 

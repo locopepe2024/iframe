@@ -3089,7 +3089,7 @@ class ComicGenPipeline(StudioOwnerMixin):
             design = attributes["asset_design"]
             if not isinstance(design, dict):
                 raise ValueError("Asset design must be an object")
-            scene_fields = {"style", "ambient_lighting", "local_lighting", "reference_viewpoint", "reference_framing", "visual_constraints", "prompt_workspace", "prompt_layers"} if asset_type == "scene" else set()
+            scene_fields = {"style", "ambient_lighting", "local_lighting", "reference_viewpoint", "reference_framing", "visual_constraints", "prompt_workspace", "prompt_layers", "asset_baseline", "shot_only_content"} if asset_type == "scene" else set()
             if set(design) - {"visual_notes", "user_requirements", "unresolved", "confirmed"} - scene_fields:
                 raise ValueError("Asset design contains unknown fields")
             notes = design.get("visual_notes")
@@ -3100,6 +3100,25 @@ class ComicGenPipeline(StudioOwnerMixin):
             unresolved = design.get("unresolved", [])
             if not isinstance(unresolved, list) or any(not isinstance(item, str) for item in unresolved):
                 raise ValueError("Asset design unresolved items must be text")
+            if asset_type == "scene":
+                baseline = design.get("asset_baseline", {})
+                if baseline:
+                    if not isinstance(baseline, dict):
+                        raise ValueError("Scene asset baseline must be an object")
+                    required = {"scene_identity", "location_type", "fixed_geometry", "fixed_landmarks",
+                                "materials", "environment", "time_baseline", "lighting_baseline",
+                                "composition_tendency", "reusable_constraints", "basis"}
+                    if set(baseline) - required or not required.issubset(baseline):
+                        raise ValueError("Scene asset baseline fields are incomplete")
+                    for key in ("scene_identity", "location_type", "time_baseline", "lighting_baseline", "composition_tendency"):
+                        if not isinstance(baseline[key], str):
+                            raise ValueError("Scene asset baseline text fields must be text")
+                    for key in ("fixed_geometry", "fixed_landmarks", "materials", "environment", "reusable_constraints", "basis"):
+                        if not isinstance(baseline[key], list) or any(not isinstance(item, str) for item in baseline[key]):
+                            raise ValueError("Scene asset baseline list fields must contain text")
+                shot_only = design.get("shot_only_content", [])
+                if not isinstance(shot_only, list) or any(not isinstance(item, str) for item in shot_only):
+                    raise ValueError("Scene shot-only content must be text")
             if not isinstance(design.get("confirmed", False), bool):
                 raise ValueError("Asset design confirmation must be boolean")
             if "prompt_workspace" in design:
@@ -3126,7 +3145,7 @@ class ComicGenPipeline(StudioOwnerMixin):
                     direction = {"正面来光": "front", "背面来光": "back", "左侧来光": "side", "右侧来光": "side", "顶部来光": "top", "底部来光": "bottom"}.get(layers.lighting.direction)
                 if isinstance(forbidden, list) and direction and direction in forbidden:
                     raise ValueError("Scene light direction conflicts with a forbidden direction")
-            for field in scene_fields - {"local_lighting", "visual_constraints", "prompt_workspace", "prompt_layers"}:
+            for field in scene_fields - {"local_lighting", "visual_constraints", "prompt_workspace", "prompt_layers", "asset_baseline", "shot_only_content"}:
                 value = design.get(field, "")
                 if not isinstance(value, str) or len(value) > 2000:
                     raise ValueError(f"Asset design {field} must be bounded text")
@@ -3582,9 +3601,24 @@ class ComicGenPipeline(StudioOwnerMixin):
 
         scene_design_parts: List[str] = []
         if scene_design:
-            notes = str(scene_design.get("visual_notes") or "").strip()
-            if notes and (scene is None or notes not in scene.description):
-                scene_design_parts.append("空间与内容：" + notes)
+            baseline = scene_design.get("asset_baseline")
+            if isinstance(baseline, dict) and baseline.get("scene_identity"):
+                scene_design_parts.append("场景资产基线：" + str(baseline["scene_identity"]).strip())
+                for key, label in (("location_type", "地点类型"), ("fixed_geometry", "固定结构"),
+                                   ("fixed_landmarks", "固定地标"), ("materials", "材质"),
+                                   ("environment", "环境"), ("time_baseline", "默认时间"),
+                                   ("lighting_baseline", "世界光影"),
+                                   ("composition_tendency", "构图倾向"),
+                                   ("reusable_constraints", "复用约束")):
+                    value = baseline.get(key)
+                    if isinstance(value, list):
+                        value = "、".join(str(item).strip() for item in value if str(item).strip())
+                    if isinstance(value, str) and value.strip():
+                        scene_design_parts.append(f"{label}：{value.strip()}")
+            else:
+                notes = str(scene_design.get("visual_notes") or "").strip()
+                if notes and (scene is None or notes not in scene.description):
+                    scene_design_parts.append("空间与内容：" + notes)
             for key, label in (
                 ("ambient_lighting", "环境光"),
                 ("reference_viewpoint", "基础视角"),

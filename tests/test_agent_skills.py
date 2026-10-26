@@ -274,7 +274,7 @@ def test_character_design_draft_sends_only_reviewed_text_and_rejects_stale_sourc
 
 def test_asset_design_draft_returns_editable_scene_or_prop_visual_notes(ctx, monkeypatch):
     monkeypatch.setattr(agent, 'validate_model', lambda *_: None)
-    complete = Mock(return_value='```json\n{"visual_notes":"青石板长街，灰青木构粮铺，暮秋残阳从右后方斜照，空间开阔，保留人物动作区域","unresolved":[]}\n```')
+    complete = Mock(return_value='```json\n{"asset_baseline":{"scene_identity":"青溪镇长街中段粮铺","location_type":"古代街市粮铺","fixed_geometry":["沿街木质铺面","门廊","木柜台"],"fixed_landmarks":["粮袋","竹筐"],"materials":["旧木材","粗麻布","青石板"],"environment":["长街纵深","远处屋顶"],"time_baseline":"黄昏","lighting_baseline":"右后方斜射暖光","composition_tendency":"保留沿街纵深和门前调度空间","reusable_constraints":["固定结构和地标保持一致"],"basis":["observed","inferred"]},"shot_only_content":["流民匪寇正在劫掠","人物近中远景分配"],"visual_notes":"青溪镇长街中段粮铺，旧木结构与青石板街，黄昏斜光","uncertainties":[]}\n```')
     monkeypatch.setattr(agent, 'complete', complete)
     body = agent.AssetDesignRequest(
         model='qwen', asset_type='scene', asset_name='粮铺门前',
@@ -283,14 +283,16 @@ def test_asset_design_draft_returns_editable_scene_or_prop_visual_notes(ctx, mon
     preview = agent.preview_asset_design_draft(body, ctx)
     reviewed = body.model_copy(update={'reviewed_messages': preview['messages'], 'review_token': preview['review_token']})
     result = agent.asset_design_draft(reviewed, ctx)
-    assert '青石板长街' in result['visual_notes']
-    assert result['unresolved'] == []
+    assert '青石板街' in result['visual_notes']
+    assert result['uncertainties'] == []
+    assert '流民匪寇正在劫掠' in result['shot_only_content']
+    assert '当前事件' in preview['messages']['system']
     assert '南北要道' in complete.call_args.args[2][1]['content']
 
 
 def test_asset_design_draft_requires_review_and_sends_only_reviewed_text(ctx, monkeypatch):
     monkeypatch.setattr(agent, 'validate_model', lambda *_: None)
-    complete = Mock(return_value='{"visual_notes":"蓝灰长街","unresolved":[]}')
+    complete = Mock(return_value='{"asset_baseline":{"scene_identity":"蓝灰长街","location_type":"街道","fixed_geometry":[],"fixed_landmarks":[],"materials":[],"environment":[],"time_baseline":"","lighting_baseline":"","composition_tendency":"","reusable_constraints":[],"basis":["observed"]},"shot_only_content":[],"visual_notes":"蓝灰长街","uncertainties":[],"unresolved":[]}')
     monkeypatch.setattr(agent, 'complete', complete)
     body = agent.AssetDesignRequest(model='qwen', asset_type='scene', asset_name='长街',
                                     description='残阳如血', user_requirements='不要全画面染红')
