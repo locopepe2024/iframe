@@ -786,21 +786,56 @@ class ComicGenPipeline(StudioOwnerMixin):
             raise ValueError("Script not found")
         series = self.series_store.get(script.series_id) if script.series_id else None
         model_name = series.model_settings.i2i_model if series else script.model_settings.i2i_model
-        sheet = build_continuity_sheet(script, self.resolve_project_assets(script)["scenes"], model_name=model_name)
+        resolved = self.resolve_project_assets(script)
+        sheet = build_continuity_sheet(script, resolved["scenes"], model_name=model_name)
         frames = {frame.id: frame for frame in script.frames}
         for row in sheet["rows"]:
-            row["visual_source_hash"] = self._workbench_visual_source_hash(script, frames[row["frame_id"]], row)
+            row["visual_source_hash"] = self._workbench_visual_source_hash(
+                script, frames[row["frame_id"]], row, resolved,
+            )
         return sheet
 
     def _workbench_visual_source_hash(self, script: Script, frame: StoryboardFrame,
-                                      row: Optional[Dict[str, Any]] = None) -> str:
+                                      row: Optional[Dict[str, Any]] = None,
+                                      resolved: Optional[Dict[str, List[Any]]] = None) -> str:
         if row is None:
             row = next(item for item in self.storyboard_continuity_sheet(script.id)["rows"]
                        if item["frame_id"] == frame.id)
+        resolved = resolved or self.resolve_project_assets(script)
+        asset_sources = []
+        for asset_type, ids in (
+            ("scene", [frame.scene_id]), ("character", frame.character_ids), ("prop", frame.prop_ids),
+        ):
+            assets = {item.id: item for item in resolved.get(f"{asset_type}s", [])}
+            for asset_id in ids:
+                asset = assets.get(asset_id)
+                if asset is None:
+                    asset_sources.append([asset_type, asset_id, "missing"])
+                    continue
+                record = asset.character_design if asset_type == "character" else asset.asset_design
+                revisions = record.get("design_revisions") if isinstance(record, dict) else None
+                latest = revisions[-1] if isinstance(revisions, list) and revisions else None
+                variants = {item.id: item for item in self._asset_image_variants(asset, asset_type)}
+                selected_ids = frame.workbench_reference_variant_ids.get(asset_id)
+                if not selected_ids:
+                    selected_id = self._selected_asset_variant_id(asset, asset_type)
+                    selected_ids = [selected_id] if selected_id else []
+                selected = [[variant_id, getattr(variants.get(variant_id), "media_id", None),
+                             variant_id in variants] for variant_id in selected_ids]
+                asset_sources.append([asset_type, asset_id, latest, selected])
+        reviewed_looks = [
+            [use.project_character_id, use.selected_asset_id, use.selected_asset_revision,
+             use.selected_variant_id, use.selected_media_id]
+            for use in script.episode_character_uses
+            if frame.character_use_ids.get(use.project_character_id) == use.use_id
+        ]
         payload = {
             "fields": row["fields"], "scene_design_revision": row["scene_design_revision"],
             "scene_baseline": row.get("scene_baseline", {}),
             "style_hash": row["style_hash"], "reference": row["reference"],
+            "asset_sources": asset_sources,
+            "selected_variants": frame.workbench_reference_variant_ids,
+            "reviewed_looks": reviewed_looks,
             "camera_movement_structured": frame.camera_movement_structured.model_dump(mode="json")
             if hasattr(frame.camera_movement_structured, "model_dump") else frame.camera_movement_structured,
             "negative_prompt_override": frame.negative_prompt_override,

@@ -1,7 +1,8 @@
 from threading import RLock
 
 from src.apps.comic_gen.models import (
-    GlobalAssetLibrary, Scene, Script, StoryboardFrame, StoryboardReferenceProjectionSnapshot,
+    Character, GlobalAssetLibrary, ImageVariant, Scene, Script, StoryboardFrame,
+    StoryboardReferenceProjectionSnapshot,
 )
 from src.apps.comic_gen.pipeline import ComicGenPipeline
 
@@ -155,3 +156,34 @@ def test_confirmed_scene_geometry_enters_video_source_hash(tmp_path):
     after = pipeline.storyboard_continuity_sheet(script.id)["rows"][0]
     assert after["scene_baseline"]["fixed_geometry"][-1] == "侧门"
     assert after["visual_source_hash"] != before["visual_source_hash"]
+
+
+def test_video_source_hash_tracks_selected_character_media_and_design(tmp_path):
+    character = Character(id="keeper", name="老掌柜", description="")
+    character.character_design = {"design_revisions": [{"revision": 1, "design": {
+        "identity": {"visual_notes": "灰白发髻"},
+    }}]}
+    character.reference_sheet.image_variants = [
+        ImageVariant(id="a", url="a.png", media_id="media-a"),
+        ImageVariant(id="b", url="b.png", media_id="media-b"),
+    ]
+    character.reference_sheet.selected_image_id = "a"
+    shot = frame("shot", "shop")
+    shot.character_ids = ["keeper"]
+    pipeline, script = make_pipeline(tmp_path, [shot], [Scene(id="shop", name="粮铺", description="")])
+    script.characters = [character]
+
+    def source_hash():
+        return pipeline.storyboard_continuity_sheet(script.id)["rows"][0]["visual_source_hash"]
+
+    original = source_hash()
+    shot.workbench_reference_variant_ids = {"keeper": ["b"]}
+    selected = source_hash()
+    assert selected != original
+    character.reference_sheet.image_variants[1].media_id = "media-replaced"
+    replaced = source_hash()
+    assert replaced != selected
+    character.character_design["design_revisions"].append({"revision": 2, "design": {
+        "identity": {"visual_notes": "新增身份特征"},
+    }})
+    assert source_hash() != replaced

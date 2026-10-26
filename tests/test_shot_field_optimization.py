@@ -158,6 +158,22 @@ def test_video_submission_rejects_visual_change_after_preview(monkeypatch):
     assert not script.video_tasks
 
 
+def test_video_submission_rejects_changed_reference_selection_after_preview(monkeypatch):
+    from fastapi import BackgroundTasks
+
+    pipeline, script, _, frame = fixture_pipeline(monkeypatch)
+    preview_hash = pipeline.storyboard_continuity_sheet(script.id)["rows"][0]["visual_source_hash"]
+    frame.workbench_reference_variant_ids = {"street": ["new-scene-variant"]}
+    request = api.CreateVideoTaskRequest(
+        image_url="", prompt="旧预览", frame_id=frame.id,
+        visual_source_hash=preview_hash,
+    )
+    with pytest.raises(HTTPException) as exc:
+        api.create_video_task(script.id, request, BackgroundTasks())
+    assert exc.value.status_code == 409
+    assert not script.video_tasks
+
+
 def test_new_full_prompt_warns_but_allows_changed_camera_field_before_video_task(monkeypatch):
     pipeline, script, _, frame = fixture_pipeline(monkeypatch)
     pipeline.update_frame(script.id, frame.id, action_description="H3 完整稿", workbench_prompt_is_optimized=True)
