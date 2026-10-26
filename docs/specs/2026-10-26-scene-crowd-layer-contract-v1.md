@@ -34,6 +34,23 @@ Readable signage is an asset concern. If exact text matters, the text belongs in
 `text_elements` and should be supplied as a controlled image/vector or postproduction layer.
 Prompt-only text is treated as unverified provider output.
 
+## Series extra roster
+
+A production may maintain a reusable roster of roughly 10–20 extra assets, sized by the
+script rather than hard-coded. A roster entry is either a fixed extra (`extra_id`) with
+approved face, height, body build, wardrobe and recurring props, or an extra template
+(`extra_template_id`) with bounded age range, body-type range, palette and wardrobe family.
+
+Shots reference roster entries through shot-scoped instances. An instance records the
+selected layer, screen region, relative scale, facing, path or motion, and whether the face
+or carried text must be readable. The roster is reusable across locations; the instance is
+where a character enters a particular street, shop, or battle formation. Anonymous far
+background agents do not require roster entries.
+
+The roster must remain separate from principal character identity. Promoting an extra to a
+principal character is an explicit asset decision, not an automatic side effect of a close
+camera or repeated appearance.
+
 ## Evidence boundary
 
 This contract guarantees structured intent and provenance, not that a video provider will
