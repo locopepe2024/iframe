@@ -792,9 +792,9 @@ class ComicGenPipeline(StudioOwnerMixin):
         frames = {frame.id: frame for frame in script.frames}
         for row in sheet["rows"]:
             frame = frames[row["frame_id"]]
-            row["asset_visual_context"], row["asset_visual_issues"] = self._shot_asset_visual_context(
-                script, frame, resolved,
-            )
+            dimensions: Dict[str, Dict[str, Any]] = {}
+            row["asset_visual_context"], row["asset_visual_issues"] = self._shot_asset_visual_context(script, frame, resolved, dimensions)
+            row["asset_dimensions"] = dimensions
             row["visual_source_hash"] = self._workbench_visual_source_hash(
                 script, frame, row, resolved,
             )
@@ -807,7 +807,8 @@ class ComicGenPipeline(StudioOwnerMixin):
                      and asset_id in (use.project_character_id, use.selected_asset_id)), None)
 
     def _shot_asset_visual_context(self, script: Script, frame: StoryboardFrame,
-                                   resolved: Dict[str, List[Any]]) -> Tuple[str, List[str]]:
+                                   resolved: Dict[str, List[Any]],
+                                   dimensions: Optional[Dict[str, Dict[str, Any]]] = None) -> Tuple[str, List[str]]:
         parts: List[str] = []
         issues: List[str] = []
         for asset_type, ids in (("character", frame.character_ids), ("prop", frame.prop_ids)):
@@ -851,6 +852,14 @@ class ComicGenPipeline(StudioOwnerMixin):
                     continue
                 design = selected_revision["design"]
                 if asset_type == "character":
+                    identity = design.get("identity") if isinstance(design.get("identity"), dict) else {}
+                    features = identity.get("features") if isinstance(identity.get("features"), dict) else {}
+                    height = features.get("height")
+                    if isinstance(height, str) and height.strip():
+                        if dimensions is not None:
+                            dimensions[f"character:{effective_asset_id}"] = {
+                                "height": height.strip(), "design_revision": revision_id,
+                            }
                     descriptions = []
                     for key in ("identity", "look"):
                         section = design.get(key)
@@ -864,9 +873,19 @@ class ComicGenPipeline(StudioOwnerMixin):
                         if notes:
                             descriptions.append(notes.strip()[:240])
                     description = "；".join(descriptions)
+                    if isinstance(height, str) and height.strip() and height.strip() not in description:
+                        description = "；".join(filter(None, [description, f"身高：{height.strip()}"]))
                 else:
                     notes = design.get("visual_notes")
                     description = notes.strip()[:240] if isinstance(notes, str) else ""
+                    measure = design.get("dimensions")
+                    length = measure.get("length_cm") if isinstance(measure, dict) else None
+                    if isinstance(length, (int, float)) and not isinstance(length, bool) and length > 0:
+                        if dimensions is not None:
+                            dimensions[f"prop:{effective_asset_id}"] = {
+                                "length_cm": length, "design_revision": revision_id,
+                            }
+                        description = "；".join(filter(None, [description, f"全长：{length:g}厘米"]))
                 if description:
                     label = "角色" if asset_type == "character" else "道具"
                     parts.append(f"{label}{asset.name}：{description}")
@@ -916,6 +935,7 @@ class ComicGenPipeline(StudioOwnerMixin):
             "style_hash": row["style_hash"], "reference": row["reference"],
             "asset_sources": asset_sources,
             "asset_visual_context": row.get("asset_visual_context", ""),
+            "asset_dimensions": row.get("asset_dimensions", {}),
             "asset_visual_issues": row.get("asset_visual_issues", []),
             "selected_variants": frame.workbench_reference_variant_ids,
             "reviewed_looks": reviewed_looks,
@@ -3208,7 +3228,7 @@ class ComicGenPipeline(StudioOwnerMixin):
             design = attributes["asset_design"]
             if not isinstance(design, dict):
                 raise ValueError("Asset design must be an object")
-            scene_fields = {"style", "ambient_lighting", "local_lighting", "reference_viewpoint", "reference_framing", "visual_constraints", "prompt_workspace", "prompt_layers", "asset_baseline", "shot_only_content"} if asset_type == "scene" else set()
+            scene_fields = {"style", "ambient_lighting", "local_lighting", "reference_viewpoint", "reference_framing", "visual_constraints", "prompt_workspace", "prompt_layers", "asset_baseline", "shot_only_content"} if asset_type == "scene" else {"dimensions"}
             if set(design) - {"visual_notes", "user_requirements", "unresolved", "confirmed"} - scene_fields:
                 raise ValueError("Asset design contains unknown fields")
             notes = design.get("visual_notes")
@@ -3240,6 +3260,13 @@ class ComicGenPipeline(StudioOwnerMixin):
                     raise ValueError("Scene shot-only content must be text")
             if not isinstance(design.get("confirmed", False), bool):
                 raise ValueError("Asset design confirmation must be boolean")
+            if asset_type == "prop" and "dimensions" in design:
+                measure = design["dimensions"]
+                if not isinstance(measure, dict) or set(measure) - {"length_cm"}:
+                    raise ValueError("Prop dimensions must contain only length_cm")
+                length = measure.get("length_cm")
+                if length is not None and (isinstance(length, bool) or not isinstance(length, (int, float)) or not 0 < length <= 10000):
+                    raise ValueError("Prop length_cm must be a positive bounded number")
             if "prompt_workspace" in design:
                 # Validate before mutating the asset. This is editor state, never
                 # an implicit replacement for the reviewed generation prompt.
@@ -3264,7 +3291,7 @@ class ComicGenPipeline(StudioOwnerMixin):
                     direction = {"正面来光": "front", "背面来光": "back", "左侧来光": "side", "右侧来光": "side", "顶部来光": "top", "底部来光": "bottom"}.get(layers.lighting.direction)
                 if isinstance(forbidden, list) and direction and direction in forbidden:
                     raise ValueError("Scene light direction conflicts with a forbidden direction")
-            for field in scene_fields - {"local_lighting", "visual_constraints", "prompt_workspace", "prompt_layers", "asset_baseline", "shot_only_content"}:
+            for field in scene_fields - {"local_lighting", "visual_constraints", "prompt_workspace", "prompt_layers", "asset_baseline", "shot_only_content", "dimensions"}:
                 value = design.get(field, "")
                 if not isinstance(value, str) or len(value) > 2000:
                     raise ValueError(f"Asset design {field} must be bounded text")
@@ -5791,6 +5818,10 @@ class ComicGenPipeline(StudioOwnerMixin):
             )
             if getattr(frame, key, None) is not None
         }
+        asset_dimensions: Dict[str, Dict[str, Any]] = {}
+        self._shot_asset_visual_context(
+            script, frame, self.resolve_project_assets(script), asset_dimensions,
+        )
         prompt_hash = hashlib.sha256(prompt.encode("utf-8")).hexdigest() if prompt else None
         previous = frame.consistency_manifest
         return StoryboardConsistencyManifest(
@@ -5800,6 +5831,7 @@ class ComicGenPipeline(StudioOwnerMixin):
             character_ids=list(frame.character_ids),
             prop_ids=list(frame.prop_ids),
             asset_revision_pins=pins,
+            asset_dimensions=asset_dimensions,
             reference_package_revision=package.revision,
             reference_visual_projection=visual_projection,
             shot_visual_design=visual_design,

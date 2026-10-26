@@ -894,6 +894,7 @@ class StoryboardConsistencyManifest(BaseModel):
     character_ids: List[str] = Field(default_factory=list)
     prop_ids: List[str] = Field(default_factory=list)
     asset_revision_pins: List[AssetRevisionPin] = Field(default_factory=list)
+    asset_dimensions: Dict[str, Dict[str, Any]] = Field(default_factory=dict)
     reference_package_revision: Optional[int] = Field(None, ge=1)
     reference_visual_projection: Optional[StoryboardReferenceProjectionSnapshot] = None
     shot_visual_design: Optional[ShotVisualDesignSnapshot] = None

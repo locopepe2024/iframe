@@ -192,6 +192,31 @@ def test_video_source_hash_tracks_selected_character_media_and_design(tmp_path):
     assert source_hash() != replaced
 
 
+def test_confirmed_dimensions_enter_shot_context_and_manifest(tmp_path):
+    character = Character(id="suyan", name="苏砚", description="")
+    character.character_design = {"design_revisions": [{"revision": 1, "design": {
+        "identity": {"features": {"height": "身高约180厘米"}},
+    }}]}
+    from src.apps.comic_gen.models import Prop
+    sword = Prop(id="sword", name="长剑", description="")
+    sword.asset_design = {"design_revisions": [{"revision": 1, "design": {
+        "visual_notes": "素面长剑", "dimensions": {"length_cm": 105},
+    }}]}
+    shot = frame("shot", "street")
+    shot.character_ids = ["suyan"]
+    shot.prop_ids = ["sword"]
+    pipeline, script = make_pipeline(tmp_path, [shot], [Scene(id="street", name="长街", description="")])
+    script.characters = [character]
+    script.props = [sword]
+    row = pipeline.storyboard_continuity_sheet(script.id)["rows"][0]
+    assert row["asset_dimensions"] == {
+        "character:suyan": {"height": "身高约180厘米", "design_revision": 1},
+        "prop:sword": {"length_cm": 105, "design_revision": 1},
+    }
+    assert "身高约180厘米" in row["asset_visual_context"]
+    assert "全长：105厘米" in row["asset_visual_context"]
+
+
 def test_image_and_video_use_design_revision_of_selected_character_variant(tmp_path):
     character = Character(id="keeper", name="老掌柜", description="旧自由描述")
     character.character_design = {

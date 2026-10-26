@@ -186,6 +186,17 @@ def test_scene_local_light_requires_a_target_and_prop_rejects_scene_fields(tmp_p
     assert prop.asset_design["design_revisions"] == []
 
 
+def test_prop_dimensions_are_confirmed_and_bounded(tmp_path):
+    pipeline, _, prop = make_pipeline(tmp_path)
+    design = {"visual_notes": "Plain sword", "dimensions": {"length_cm": 105}, "confirmed": True}
+    pipeline.update_asset_attributes("project", "sword", "prop", {"asset_design": design})
+    assert prop.asset_design["design_revisions"][0]["design"]["dimensions"] == {"length_cm": 105}
+    with pytest.raises(ValueError, match="length_cm"):
+        pipeline.update_asset_attributes("project", "sword", "prop", {
+            "asset_design": {"visual_notes": "Plain sword", "dimensions": {"length_cm": 0}, "confirmed": False},
+        })
+
+
 def test_scene_visual_constraints_are_saved_and_versioned(tmp_path):
     pipeline, scene, _ = make_pipeline(tmp_path)
     design = {

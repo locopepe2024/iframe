@@ -1091,6 +1091,10 @@ function CharacterDetailModal({ asset, type, onClose, onUpdateDescription, onUpd
     const [description, setDescription] = useState(asset.description);
     const [isEditing, setIsEditing] = useState(false);
     const [descriptionSaved, setDescriptionSaved] = useState(true);
+    const savedPropLength = asset.asset_design?.design_draft?.dimensions?.length_cm;
+    const [propLengthCm, setPropLengthCm] = useState<string>(
+        type === "prop" && typeof savedPropLength === "number" ? String(savedPropLength) : "",
+    );
     const currentProject = useProjectStore((state) => state.currentProject);
     const updateProject = useProjectStore((state) => state.updateProject);
     const selectionQueue = useRef<Promise<void>>(Promise.resolve());
@@ -1297,12 +1301,25 @@ function CharacterDetailModal({ asset, type, onClose, onUpdateDescription, onUpd
 
     const handleSave = async () => {
         await onUpdateDescription(description);
+        if (type === "prop") await savePropDimensions();
         setDescriptionSaved(true);
         if (type === "scene") {
             setSceneDesign(current => ({ ...current, visual_notes: description, asset_baseline: null, shot_only_content: [] }));
             setSceneDesignNeedsApply(true);
         }
         setIsEditing(false);
+    };
+
+    const savePropDimensions = async () => {
+        if (type !== "prop") return;
+        const raw = propLengthCm.trim();
+        const length = raw ? Number(raw) : null;
+        if (length !== null && (!Number.isFinite(length) || length <= 0)) return;
+        await onUpdateAttributes({ asset_design: {
+            ...(asset.asset_design?.design_draft || {}),
+            visual_notes: asset.asset_design?.design_draft?.visual_notes || asset.description,
+            dimensions: length === null ? {} : { length_cm: length },
+        }});
     };
 
     const handleSelectVariant = (variantId: string) => {
@@ -1619,6 +1636,22 @@ function CharacterDetailModal({ asset, type, onClose, onUpdateDescription, onUpd
                                 </p>
                             )}
                         </div>
+
+                        {type === "prop" && (
+                            <label className="block space-y-1 text-sm text-text-secondary">
+                                <span className="font-bold uppercase">道具长度（厘米）</span>
+                                <input aria-label="道具长度（厘米）" inputMode="decimal" type="number" min="0.1" step="0.1"
+                                    value={propLengthCm} onChange={event => setPropLengthCm(event.target.value)}
+                                    className="w-full rounded-lg border border-glass-border bg-input-bg p-2 text-sm text-foreground"
+                                    placeholder="例如：95"
+                                />
+                                <span className="block text-xs text-text-muted">用于跨分镜保持道具实际长度；画面中的近大远小仍由镜头透视决定。</span>
+                                <button type="button" onClick={() => void savePropDimensions()}
+                                    className="rounded border border-glass-border px-3 py-1.5 text-xs text-primary hover:bg-primary/10">
+                                    保存道具尺寸
+                                </button>
+                            </label>
+                        )}
 
                         {type === "scene" && activeTab === "image" && <div className="flex items-center gap-2 border-b border-glass-border">
                             <div className="flex flex-1" role="tablist" aria-label="场景提示词来源">
