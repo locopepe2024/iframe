@@ -242,7 +242,7 @@ class StoryboardGenerator:
             prompt += "."
         else:
             # If prompt is provided by user/LLM, ensure character descriptions are still present for I2I consistency
-            if not preserve_prompt:
+            if not preserve_prompt and "已确认资产外观：" not in prompt:
                 prompt = append_storyboard_character_descriptions(prompt, frame.character_ids, characters)
         
         # Store the optimized prompt

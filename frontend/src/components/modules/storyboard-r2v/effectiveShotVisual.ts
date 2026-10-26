@@ -19,8 +19,9 @@ export function effectiveShotVisual(row: ContinuityRow | undefined, globalStyleP
     style: string;
     lighting: string;
     scene: string;
+    assets: string;
 } {
-    if (!row) return { style: globalStylePrompt, lighting: "", scene: "" };
+    if (!row) return { style: globalStylePrompt, lighting: "", scene: "", assets: "" };
     const styleField = row.fields.style;
     const style = styleField?.source_kind === "scene_design" || styleField?.source_kind === "frame"
         ? text(styleField.value) : globalStylePrompt;
@@ -39,5 +40,6 @@ export function effectiveShotVisual(row: ContinuityRow | undefined, globalStyleP
         const value = text(baseline[key]);
         return value ? [`${label}：${value}`] : [];
     }).join("；");
-    return { style: style || globalStylePrompt, lighting, scene };
+    return { style: style || globalStylePrompt, lighting, scene,
+        assets: row.asset_visual_context ?? "" };
 }

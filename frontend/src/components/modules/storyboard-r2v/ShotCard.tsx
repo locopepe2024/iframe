@@ -216,7 +216,7 @@ interface ShotCardProps {
     onUpdatePrompt: (prompt: string, optimized?: boolean) => void;
     onUpdateField: (field: string, value: string | number | null | PerformanceMoveValue) => void;
     globalStylePrompt?: string;
-    effectiveVisual?: { style: string; lighting: string; scene: string };
+    effectiveVisual?: { style: string; lighting: string; scene: string; assets: string };
     effectiveFields?: Record<string, { value: unknown; source_kind: string; source_revision: number | null }>;
     onGenerateT2I: () => void;
     onGenerateVideo: () => void;
@@ -404,11 +404,11 @@ export default function ShotCard({
     }, [shot.prompt, characters])();
 
     const assembledPromptPreview = useMemo(() => buildGenerationPrompt(
-        shot, generateAudio ?? false, videoModel ?? "", effectiveVisual?.style ?? globalStylePrompt, effectiveVisual?.lighting ?? "", effectiveVisual?.scene ?? "",
+        shot, generateAudio ?? false, videoModel ?? "", effectiveVisual?.style ?? globalStylePrompt, effectiveVisual?.lighting ?? "", effectiveVisual?.scene ?? "", effectiveVisual?.assets ?? "",
     ), [
         shot.prompt, shot.shotSize, shot.cameraAngle, shot.cameraMovementStructured, shot.transitionHint,
         shot.stylePromptOverride, shot.lightingOverride, shot.directorShotContext, globalStylePrompt,
-        effectiveVisual?.style, effectiveVisual?.lighting, effectiveVisual?.scene, shot.promptIsOptimized, generateAudio, videoModel,
+        effectiveVisual?.style, effectiveVisual?.lighting, effectiveVisual?.scene, effectiveVisual?.assets, shot.promptIsOptimized, generateAudio, videoModel,
     ]);
     const planSuggestions = useMemo(() => directorShotSuggestions(shot), [shot]);
     const planFieldProposals = useMemo(() => directorFieldProposals(shot, durationEditorConfig ?? { min: 3, max: 15 }), [shot, durationEditorConfig]);
@@ -950,7 +950,7 @@ export default function ShotCard({
                             videoModel={videoModel}
                             prompt={shot.prompt}
                             optimizationDraft={buildGenerationPrompt(shot, generateAudio ?? false, videoModel ?? "",
-                                effectiveVisual?.style ?? globalStylePrompt, effectiveVisual?.lighting ?? "", effectiveVisual?.scene ?? "")}
+                                effectiveVisual?.style ?? globalStylePrompt, effectiveVisual?.lighting ?? "", effectiveVisual?.scene ?? "", effectiveVisual?.assets ?? "")}
                             tabMode={shot.tabMode}
                             videoMode={shot.videoMode}
                             scriptId={currentProjectId ?? ""}

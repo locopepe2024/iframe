@@ -1,7 +1,9 @@
 from threading import RLock
 
+import pytest
+
 from src.apps.comic_gen.models import (
-    Character, GlobalAssetLibrary, ImageVariant, Scene, Script, StoryboardFrame,
+    AssetImageSubmissionSnapshot, Character, GlobalAssetLibrary, ImageVariant, Scene, Script, StoryboardFrame,
     StoryboardReferenceProjectionSnapshot,
 )
 from src.apps.comic_gen.pipeline import ComicGenPipeline
@@ -187,3 +189,46 @@ def test_video_source_hash_tracks_selected_character_media_and_design(tmp_path):
         "identity": {"visual_notes": "新增身份特征"},
     }})
     assert source_hash() != replaced
+
+
+def test_image_and_video_use_design_revision_of_selected_character_variant(tmp_path):
+    character = Character(id="keeper", name="老掌柜", description="旧自由描述")
+    character.character_design = {
+        "design_draft": {"identity": {"visual_notes": "未确认红发"}},
+        "design_revisions": [
+            {"revision": 1, "design": {"identity": {"visual_notes": "灰白发髻"},
+                                       "look": {"visual_notes": "深褐长衣"},
+                                       "field_answers": {"action": "踉跄倒地"}}},
+            {"revision": 2, "design": {"identity": {"visual_notes": "全新黑发"}}},
+        ],
+    }
+    character.reference_sheet.image_variants = [ImageVariant(
+        id="old", url="old.png", media_id="old-media",
+        submission_snapshot=AssetImageSubmissionSnapshot(
+            positive_prompt="旧版角色", selected_model_id="image-model", aspect_ratio="16:9",
+            generation_type="all", image_generation_mode="text", design_revision_at_submission=1,
+        ),
+    )]
+    character.reference_sheet.selected_image_id = "old"
+    shot = frame("shot", "shop")
+    shot.character_ids = ["keeper"]
+    pipeline, script = make_pipeline(tmp_path, [shot], [Scene(id="shop", name="粮铺", description="")])
+    script.characters = [character]
+
+    row = pipeline.storyboard_continuity_sheet(script.id)["rows"][0]
+    preview = pipeline.preview_storyboard_render_prompt(script.id, shot.id, "老掌柜站在柜台前")
+    assert row["asset_visual_context"] == "角色老掌柜：灰白发髻；深褐长衣"
+    assert row["asset_visual_issues"] == []
+    assert row["asset_visual_context"] in preview
+    assert "全新黑发" not in preview
+    assert "未确认红发" not in preview
+    assert "踉跄倒地" not in preview
+    assert "旧自由描述" not in preview
+
+    character.character_design["design_revisions"] = character.character_design["design_revisions"][1:]
+    changed = pipeline.storyboard_continuity_sheet(script.id)["rows"][0]
+    assert changed["asset_visual_context"] == ""
+    assert changed["asset_visual_issues"] == ["character:keeper:missing_design_revision"]
+    assert changed["visual_source_hash"] != row["visual_source_hash"]
+    with pytest.raises(ValueError, match="missing_design_revision"):
+        pipeline.preview_storyboard_render_prompt(script.id, shot.id, "老掌柜站在柜台前")

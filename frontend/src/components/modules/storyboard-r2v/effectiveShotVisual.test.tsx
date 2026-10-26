@@ -13,6 +13,7 @@ function row(fields: ContinuityRow["fields"], scene_baseline: ContinuityRow["sce
         place_continuity_id: "street", time_continuity_id: "dusk", continuity_status: "confirmed",
         scene_design_revision: 2, plan_revision: 1, style_hash: "style", model: "h3",
         visual_source_hash: "visual-source", fields, scene_baseline,
+        asset_visual_context: "", asset_visual_issues: [],
         reference: null };
 }
 
@@ -41,12 +42,12 @@ describe("effective shot visual", () => {
             ambient_lighting: field("暮秋残阳", "scene_design"),
             lighting_override: field("室内烛光", "frame"),
         }), "项目默认风格");
-        expect(visual).toEqual({ style: "项目默认风格", lighting: "室内烛光", scene: "" });
+        expect(visual).toEqual({ style: "项目默认风格", lighting: "室内烛光", scene: "", assets: "" });
     });
 
     it("does not infer reference light when the image has no selected fields", () => {
         expect(effectiveShotVisual(row({ style: field("realistic", "project") }), "项目风格"))
-            .toEqual({ style: "项目风格", lighting: "", scene: "" });
+            .toEqual({ style: "项目风格", lighting: "", scene: "", assets: "" });
     });
 
     it("sends confirmed scene geometry with the video draft but keeps accepted text intact", () => {
@@ -64,5 +65,18 @@ describe("effective shot visual", () => {
         expect(draft).not.toContain("未确认阁楼");
         expect(buildGenerationPrompt({ ...shot, promptIsOptimized: true }, false,
             "uniart/minimax-h3-vip", visual.style, visual.lighting, visual.scene)).toBe(shot.prompt);
+    });
+
+    it("submits approved character and prop appearance with an unoptimized draft", () => {
+        const visual = effectiveShotVisual({ ...row({}),
+            asset_visual_context: "角色老掌柜：灰白发髻；深褐长衣\n道具粮袋：粗麻布袋",
+        }, "项目风格");
+        const shot = { prompt: "掌柜挡在粮铺前", tabMode: "direct_r2v" } as ShotNode;
+        const draft = buildGenerationPrompt(shot, false, "uniart/minimax-h3-vip",
+            visual.style, visual.lighting, visual.scene, visual.assets);
+        expect(draft).toContain("角色老掌柜：灰白发髻；深褐长衣");
+        expect(draft).toContain("道具粮袋：粗麻布袋");
+        expect(buildGenerationPrompt({ ...shot, promptIsOptimized: true }, false,
+            "uniart/minimax-h3-vip", visual.style, visual.lighting, visual.scene, visual.assets)).toBe(shot.prompt);
     });
 });

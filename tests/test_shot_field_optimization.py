@@ -174,6 +174,14 @@ def test_video_submission_rejects_changed_reference_selection_after_preview(monk
     assert not script.video_tasks
 
 
+def test_video_task_rejects_unavailable_asset_design_revision(monkeypatch):
+    pipeline, script, _, frame = fixture_pipeline(monkeypatch)
+    pipeline._shot_asset_visual_context = Mock(return_value=("", ["character:keeper:missing_design_revision"]))
+    with pytest.raises(ValueError, match="missing_design_revision"):
+        pipeline.create_video_task(script.id, "", "不能提交的正文", frame_id=frame.id)
+    assert not script.video_tasks
+
+
 def test_new_full_prompt_warns_but_allows_changed_camera_field_before_video_task(monkeypatch):
     pipeline, script, _, frame = fixture_pipeline(monkeypatch)
     pipeline.update_frame(script.id, frame.id, action_description="H3 完整稿", workbench_prompt_is_optimized=True)
