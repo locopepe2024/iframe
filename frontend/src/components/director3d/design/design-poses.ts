@@ -1,7 +1,7 @@
 import { posePresetById, type PosePresetId } from "../pose/pose-presets";
 import type { CharacterAuthoringState } from "../state/workbench-store";
 
-export const DESIGN_POSES = ["pose.neutral", "standing.relaxed", "standing.hands_on_hips", "gesture.wave", "gesture.arms_crossed", "gesture.thinking"] as const satisfies readonly PosePresetId[];
+export const DESIGN_POSES = ["pose.neutral", "standing.relaxed", "standing.hands_on_hips", "gesture.wave", "gesture.arms_crossed", "gesture.thinking", "kneeling.single_knee"] as const satisfies readonly PosePresetId[];
 export type DesignPoseId = typeof DESIGN_POSES[number];
 
 // Calibrated from the shipped GLB's evaluated seated skin. See geometry test.

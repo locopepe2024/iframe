@@ -90,6 +90,20 @@ it("previews and atomically applies a timed camera path while preserving the aut
   expect(useWorkbenchStore.getState().cameraPaths).toEqual(state.cameraPaths);
 });
 
+it("compiles a numbered multi-actor blocking plan with explicit poses", () => {
+  const { state, ids } = fixture();
+  const third = state.addWhiteModelCharacter();
+  useWorkbenchStore.setState({ rigAdmissionStatus: "passed" });
+  const admitted = useWorkbenchStore.getState();
+  const actorIds = [...ids, Object.keys(admitted.characters).at(-1)!];
+  const proposal = plan([{ kind: "arrange_group", members: actorIds.map((actorId, index) => ({ actorId, positionM: [index - 1, 0, 0] as [number, number, number], yawDeg: index === 1 ? 180 : 0, ...(index === 2 ? { presetId: "kneeling.single_knee" as const } : {}) })) }]);
+  const preview = compileDesignProposal(admitted, { ...proposal, baseRevision: designRevision(admitted) });
+  expect(preview.characters[actorIds[0]].transform.position).toEqual([-1, 0, 0]);
+  expect(preview.characters[actorIds[2]].activePresetId).toBe("kneeling.single_knee");
+  expect(useWorkbenchStore.getState().characters[actorIds[2]].activePresetId).not.toBe("kneeling.single_knee");
+  void third;
+});
+
 it("rejects a second natural-language camera path when one already exists", () => {
   const { state } = fixture();
   const cameraId = state.selectedCameraId;

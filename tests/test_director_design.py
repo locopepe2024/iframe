@@ -110,6 +110,10 @@ def test_seated_pair_proposal_uses_typed_actor_operations_and_keeps_camera(clien
 @pytest.mark.parametrize("operation", [
     dict(kind="set_pose", actorId="a", presetId="gesture.wave"),
     dict(kind="seat_actor", actorId="a", chairId="design-chair-a"),
+    dict(kind="arrange_group", members=[
+        dict(actorId="a", positionM=[-1, 0, 0], yawDeg=0),
+        dict(actorId="b", positionM=[1, 0, 0], yawDeg=180, presetId="kneeling.single_knee"),
+    ]),
 ])
 def test_supported_pose_and_seating_schema(operation):
     design.ModelProposal.model_validate({**response(), "operations": [operation]})

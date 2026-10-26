@@ -36,6 +36,24 @@ class Pair(StrictModel):
     axisDeg: float = Field(ge=-360, le=360)
 
 
+class GroupMember(StrictModel):
+    actorId: Identifier
+    positionM: Vector
+    yawDeg: float = Field(ge=-360, le=360)
+    presetId: Literal["pose.neutral", "standing.relaxed", "standing.hands_on_hips", "gesture.wave", "gesture.arms_crossed", "gesture.thinking", "kneeling.single_knee"] | None = None
+
+
+class Group(StrictModel):
+    kind: Literal["arrange_group"]
+    members: list[GroupMember] = Field(min_length=2, max_length=10)
+
+    @model_validator(mode="after")
+    def unique_members(self):
+        if len({member.actorId for member in self.members}) != len(self.members):
+            raise ValueError("Group members must be unique")
+        return self
+
+
 class Box(StrictModel):
     kind: Literal["add_box"]
     entityId: Identifier
@@ -80,7 +98,7 @@ class CameraMotion(StrictModel):
     easing: Literal["linear", "bezier", "ease_in", "ease_out", "ease_in_out"]
 
 
-Operation = Annotated[Place | Pair | Box | FrameCamera | Dolly | SetPose | SeatActor | CameraMotion, Field(discriminator="kind")]
+Operation = Annotated[Place | Pair | Group | Box | FrameCamera | Dolly | SetPose | SeatActor | CameraMotion, Field(discriminator="kind")]
 
 
 class ModelProposal(StrictModel):
@@ -135,6 +153,9 @@ lens and bindings. Use context and history for references like 'closer' or 'the 
 person'. Current context wins over older turns. State chosen distances and other
 unspecified values in assumptions. Do not claim collision/visibility verification.
 Supported: positions, facing, pair spacing, box props, static cameras and dolly.
+arrange_group places 2-10 existing visible actors at explicit numbered positions,
+preserves the supplied identities and applies only listed supported pose presets.
+Use it when the user supplies a numbered blocking plan; never invent missing actor IDs.
 Also supported: set_pose with an ID from scene.posePresets; seat_actor with one
 existing visible actorId and a unique new chairId starting design-chair-.
 seat_actor applies the calibrated seated pose and creates a fitted six-part

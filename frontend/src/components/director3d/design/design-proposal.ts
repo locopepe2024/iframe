@@ -10,6 +10,7 @@ type Vec = [number, number, number];
 export type DesignOperation =
   | { kind: "place_entity"; entityId: string; positionM: Vec; yawDeg: number }
   | { kind: "arrange_pair"; actorIds: [string, string]; centerM: Vec; separationM: number; axisDeg: number }
+  | { kind: "arrange_group"; members: Array<{ actorId: string; positionM: Vec; yawDeg: number; presetId?: DesignPoseId }> }
   | { kind: "add_box"; entityId: string; label: string; positionM: Vec; dimensionsM: Vec }
   | { kind: "set_pose"; actorId: string; presetId: DesignPoseId }
   | { kind: "seat_actor"; actorId: string; chairId: string }
@@ -45,7 +46,7 @@ export function designContext(state: WorkbenchState): string {
     selectedCharacterId: state.selectedCharacterId, selectedObjectId: state.selectedSceneObjectId,
     selectedCameraId: state.selectedCameraId, groundHeightM: state.renderScene.ground.heightM,
     animated: state.dialogueTimeline.tracks.length > 0 || Object.keys(state.actorPaths).length > 0 || Object.keys(state.cameraPaths).length > 0,
-    supported: ["static placement", "pair facing", "box proxy", "static camera", "static dolly", "timed camera path", "pose preset", "seated procedural chair reference"],
+    supported: ["static placement", "pair facing", "numbered group blocking", "box proxy", "static camera", "static dolly", "timed camera path", "pose preset", "seated procedural chair reference"],
     posePresets: DESIGN_POSES,
     seating: { representation: "procedural_reference", calibratedRig: "canonical_white_model", seatHeightM: SEATED_FIT.supportHeightM + SEATED_FIT.groundLiftM, preservesCamera: true },
   });
@@ -89,6 +90,15 @@ export function parseDesignProposal(raw: unknown): DesignProposal {
       keys(op, ["kind", "entityId", "positionM", "yawDeg"]); text(op.entityId); vector(op.positionM); number(op.yawDeg, -360, 360);
     } else if (op.kind === "arrange_pair") {
       keys(op, ["kind", "actorIds", "centerM", "separationM", "axisDeg"]); ids(op.actorIds, 2, 2); vector(op.centerM); number(op.separationM, .8, 20); number(op.axisDeg, -360, 360);
+    } else if (op.kind === "arrange_group") {
+      keys(op, ["kind", "members"]);
+      if (!Array.isArray(op.members) || op.members.length < 2 || op.members.length > 10) throw new Error("多人编排数量须在 2 到 10 人之间。");
+      const memberIds = new Set<string>();
+      op.members.forEach((member) => {
+        const item = object(member); keys(item, ["actorId", "positionM", "yawDeg", ...(item.presetId === undefined ? [] : ["presetId"])]);
+        text(item.actorId); if (memberIds.has(item.actorId as string)) throw new Error("多人编排人物不能重复。"); memberIds.add(item.actorId as string);
+        vector(item.positionM); number(item.yawDeg, -360, 360); if (item.presetId !== undefined && !DESIGN_POSES.includes(item.presetId as DesignPoseId)) throw new Error("多人编排姿态不受支持。");
+      });
     } else if (op.kind === "add_box") {
       keys(op, ["kind", "entityId", "label", "positionM", "dimensionsM"]); text(op.entityId); text(op.label, 80); vector(op.positionM); vector(op.dimensionsM, .050001, 20);
       if (!(op.entityId as string).startsWith("design-box-")) throw new Error("新占位物体 ID 无效。");
@@ -156,6 +166,11 @@ export function compileDesignProposal(state: WorkbenchState, raw: unknown): Desi
   for (const op of plan.operations) {
     if (op.kind === "set_pose") {
       applyDesignPose(editableActor(op.actorId), op.presetId);
+    } else if (op.kind === "arrange_group") {
+      for (const member of op.members) {
+        if (member.presetId) applyDesignPose(editableActor(member.actorId), member.presetId);
+        place(member.actorId, member.positionM, member.yawDeg);
+      }
     } else if (op.kind === "seat_actor") {
       const actor = editableActor(op.actorId);
       if (Math.abs(actor.transform.position[2] - state.renderScene.ground.heightM) > .001) throw new Error("坐姿椅子参考需要人物位于当前地面。");

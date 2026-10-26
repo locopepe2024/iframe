@@ -114,6 +114,26 @@ Holodeck, Blender MCP or CLI-Anything runtime is installed into the product.
 The inspected CLI-Anything Blender core does not itself prove natural-language
 understanding, skeletal posing, contact solving or clothes generation.
 
+## Desktop reference: numbered blocking sketch workflow
+
+The reviewed `/Users/owen/Desktop/ai多人占位.docx` describes a three-step
+workflow: draw a numbered blocking sketch, translate the numbered spatial
+relationships into anchored instructions, then iterate with local replacement
+commands. The direct product implication is that actor identity and relative
+position should be represented as explicit structured members rather than left
+inside one free-form paragraph. The current implementation adds
+`arrange_group` for 2–10 existing actors, explicit positions and yaw, and an
+optional admitted pose preset per member. This is a code fact verified by the
+compiler and tests; it does not yet prove sketch-image parsing or image-model
+spatial fidelity.
+
+The document's lying poses, arbitrary contact, negative-prompt enforcement,
+scene-image generation and multi-reference image workflow remain hypotheses or
+future integrations until their owning asset, pose, contact and generation
+boundaries exist in the director runtime. A sketch upload should later become a
+reviewable spatial-anchor artifact with numbered identities and confidence,
+rather than an opaque prompt attachment.
+
 First slice adds `set_pose(actorId,presetId)` for an explicit safe preset list and
 `seat_actor(actorId,chairId)` for the currently shipped canonical white model.
 Seating retains actor XY/yaw and every camera field, uses the existing seated.sit
