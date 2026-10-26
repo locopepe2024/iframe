@@ -11,17 +11,17 @@ export default function OpenTalkingReply({text,voice}:{text:string;voice?:string
  const [state,setState]=useState<"opening"|"speaking"|"ready"|"error">("opening"),[error,setError]=useState("");
  useEffect(()=>{let alive=true;
   async function open(){try{
-   const created=await json<Session>("/sessions",{method:"POST",body:JSON.stringify({avatar_id:"office-woman",model:"mock",agent_enabled:false,tts_voice:voice||undefined})});if(!alive)return;session.current=created.session_id;
+   const created=await json<Session>("/sessions",{method:"POST",body:JSON.stringify({avatar_id:"office-woman",model:"mock",agent_enabled:false,memory_enabled:false,knowledge_enabled:false,tts_voice:voice||undefined})});if(!alive)return;session.current=created.session_id;
    const ice=await json<{iceServers?:RTCIceServer[];iceTransportPolicy?:RTCIceTransportPolicy}>("/sessions/webrtc/ice-config");
    const connection=new RTCPeerConnection({iceServers:ice.iceServers||[],iceTransportPolicy:ice.iceTransportPolicy});pc.current=connection;
-   const stream=new MediaStream();if(video.current)video.current.srcObject=stream;connection.ontrack=e=>{if(!stream.getTracks().some(t=>t.id===e.track.id))stream.addTrack(e.track);void video.current?.play().catch(()=>{});};
+   const stream=new MediaStream();if(video.current)video.current.srcObject=stream;connection.ontrack=e=>{if(alive)setState("speaking");if(!stream.getTracks().some(t=>t.id===e.track.id))stream.addTrack(e.track);void video.current?.play().catch(()=>{});};
    connection.addTransceiver("video",{direction:"recvonly"});connection.addTransceiver("audio",{direction:"recvonly"});
    const offer=await connection.createOffer();await connection.setLocalDescription(offer);
    await new Promise<void>(resolve=>{if(connection.iceGatheringState==="complete")return resolve();const timeout=setTimeout(resolve,8000);connection.onicegatheringstatechange=()=>{if(connection.iceGatheringState==="complete"){clearTimeout(timeout);resolve();}}});
    const answer=await json<{sdp:string;type:RTCSdpType}>(`/sessions/${encodeURIComponent(session.current)}/webrtc/offer`,{method:"POST",body:JSON.stringify({sdp:connection.localDescription?.sdp,type:connection.localDescription?.type})});
    await connection.setRemoteDescription(answer);
    await json(`/sessions/${encodeURIComponent(session.current)}/speak`,{method:"POST",headers:{"Idempotency-Key":`iframe-${crypto.randomUUID()}`},body:JSON.stringify({text,mode:"replace",voice:voice||undefined})});
-   if(alive)setState("speaking");
+   if(alive && state !== "speaking")setState("ready");
   }catch(e){if(alive){setState("error");setError(e instanceof Error?e.message:"OpenTalking 无法连接");}}
  }
  open();return()=>{alive=false;pc.current?.close();pc.current=null;if(session.current)void fetch(`${base}/sessions/${encodeURIComponent(session.current)}`,{method:"DELETE"}).catch(()=>{});};
