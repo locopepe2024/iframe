@@ -71,3 +71,16 @@ def test_live_scene_extraction_rejects_missing_baseline():
     processor.llm.chat.return_value = json.dumps({"characters": [], "scenes": [{"name": "粮铺", "description": "匪寇劫掠"}], "props": []}, ensure_ascii=False)
     with pytest.raises(ValueError, match="缺少可复用资产基线"):
         processor.parse_novel("测试", "匪寇劫掠粮铺")
+
+
+def test_scene_extraction_guidance_keeps_distinct_street_corners():
+    processor = ScriptProcessor.__new__(ScriptProcessor)
+    prompt = processor._construct_prompt(
+        "苏砚在梧桐树街角；另一处街角，江灼惩戒欺凌卖艺少女的打手。"
+    )
+    assert "同叫“街角”" in prompt
+    assert "人物是否重复出现" in prompt
+    assert "人物交集只是线索" in prompt
+    assert "青溪镇梧桐树街角" in prompt
+    assert "青溪镇另一处街角" in prompt
+    assert "不编造建筑或摊位" in prompt
