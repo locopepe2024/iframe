@@ -1,0 +1,2166 @@
+{
+  "schema": "recreation2-floor-patch-identifiability.v1",
+  "source_sha256": "6614a5f7afdc5dd7342058e99027f2f42eee19594dcfd90c46017ddcfce114c0",
+  "gate": {
+    "ncc_min": 0.85,
+    "peak_gap_min": 0.02,
+    "cycle_max_full_px": 2,
+    "template_sensitivity_max_full_px": 4,
+    "require_no_boundary": true
+  },
+  "rows": [
+    {
+      "source_frame": 17,
+      "source_pts_s": 0.783655,
+      "reference_frame": 17,
+      "patches": [
+        {
+          "reference_center_half": [
+            120,
+            337
+          ],
+          "match": {
+            "center": [
+              120,
+              337
+            ],
+            "ncc": 0.9999999999999981,
+            "alternative_ncc": 0.9918606111559254,
+            "peak_gap": 0.008139388844072726,
+            "template_std": 11.715464462893213,
+            "boundary": false
+          },
+          "second_template": {
+            "center": [
+              120,
+              337
+            ],
+            "ncc": 0.9999999999999994,
+            "alternative_ncc": 0.9910361910936728,
+            "peak_gap": 0.008963808906326642,
+            "template_std": 14.15036207711945,
+            "boundary": false
+          },
+          "cycle_full_px": 0.0,
+          "template_sensitivity_full_px": 0.0,
+          "accepted": false
+        },
+        {
+          "reference_center_half": [
+            120,
+            352
+          ],
+          "match": {
+            "center": [
+              120,
+              352
+            ],
+            "ncc": 1.0000000000000082,
+            "alternative_ncc": 0.9286608951406,
+            "peak_gap": 0.0713391048594082,
+            "template_std": 1.8500842420836199,
+            "boundary": false
+          },
+          "second_template": {
+            "center": [
+              120,
+              352
+            ],
+            "ncc": 1.0000000000000004,
+            "alternative_ncc": 0.9671472500135457,
+            "peak_gap": 0.03285274998645471,
+            "template_std": 2.743088607395811,
+            "boundary": false
+          },
+          "cycle_full_px": 0.0,
+          "template_sensitivity_full_px": 0.0,
+          "accepted": true
+        },
+        {
+          "reference_center_half": [
+            220,
+            337
+          ],
+          "match": {
+            "center": [
+              220,
+              337
+            ],
+            "ncc": 1.0000000000000004,
+            "alternative_ncc": 0.95509725395036,
+            "peak_gap": 0.044902746049640396,
+            "template_std": 18.5362743289929,
+            "boundary": false
+          },
+          "second_template": {
+            "center": [
+              220,
+              337
+            ],
+            "ncc": 0.9999999999999993,
+            "alternative_ncc": 0.9663015339941226,
+            "peak_gap": 0.03369846600587678,
+            "template_std": 21.309910055875555,
+            "boundary": false
+          },
+          "cycle_full_px": 0.0,
+          "template_sensitivity_full_px": 0.0,
+          "accepted": true
+        },
+        {
+          "reference_center_half": [
+            220,
+            352
+          ],
+          "match": {
+            "center": [
+              220,
+              352
+            ],
+            "ncc": 1.0,
+            "alternative_ncc": 0.9590664211558545,
+            "peak_gap": 0.0409335788441455,
+            "template_std": 7.233539533897401,
+            "boundary": false
+          },
+          "second_template": {
+            "center": [
+              220,
+              352
+            ],
+            "ncc": 0.999999999999998,
+            "alternative_ncc": 0.9641613908698532,
+            "peak_gap": 0.035838609130144805,
+            "template_std": 9.101027512028045,
+            "boundary": false
+          },
+          "cycle_full_px": 0.0,
+          "template_sensitivity_full_px": 0.0,
+          "accepted": true
+        },
+        {
+          "reference_center_half": [
+            480,
+            337
+          ],
+          "match": {
+            "center": [
+              480,
+              337
+            ],
+            "ncc": 0.999999999999999,
+            "alternative_ncc": 0.9880644826420039,
+            "peak_gap": 0.01193551735799514,
+            "template_std": 22.489100494760937,
+            "boundary": false
+          },
+          "second_template": {
+            "center": [
+              480,
+              337
+            ],
+            "ncc": 1.0000000000000002,
+            "alternative_ncc": 0.9910044072507773,
+            "peak_gap": 0.008995592749222903,
+            "template_std": 23.49673108174364,
+            "boundary": false
+          },
+          "cycle_full_px": 0.0,
+          "template_sensitivity_full_px": 0.0,
+          "accepted": false
+        },
+        {
+          "reference_center_half": [
+            480,
+            352
+          ],
+          "match": {
+            "center": [
+              480,
+              352
+            ],
+            "ncc": 1.000000000000011,
+            "alternative_ncc": 0.8827937900565901,
+            "peak_gap": 0.11720620994342101,
+            "template_std": 1.1262194885615397,
+            "boundary": false
+          },
+          "second_template": {
+            "center": [
+              480,
+              352
+            ],
+            "ncc": 0.9999999999999897,
+            "alternative_ncc": 0.9662293666510825,
+            "peak_gap": 0.033770633348907175,
+            "template_std": 3.823971811698756,
+            "boundary": false
+          },
+          "cycle_full_px": 0.0,
+          "template_sensitivity_full_px": 0.0,
+          "accepted": true
+        },
+        {
+          "reference_center_half": [
+            580,
+            337
+          ],
+          "match": {
+            "center": [
+              580,
+              337
+            ],
+            "ncc": 1.000000000000005,
+            "alternative_ncc": 0.9930447113510581,
+            "peak_gap": 0.006955288648947011,
+            "template_std": 6.1794676882718145,
+            "boundary": false
+          },
+          "second_template": {
+            "center": [
+              580,
+              337
+            ],
+            "ncc": 1.0000000000000044,
+            "alternative_ncc": 0.9951080369499609,
+            "peak_gap": 0.0048919630500435796,
+            "template_std": 8.829809635232486,
+            "boundary": false
+          },
+          "cycle_full_px": 0.0,
+          "template_sensitivity_full_px": 0.0,
+          "accepted": false
+        },
+        {
+          "reference_center_half": [
+            580,
+            352
+          ],
+          "match": {
+            "center": [
+              580,
+              352
+            ],
+            "ncc": 0.999999999999999,
+            "alternative_ncc": 0.8149289468406008,
+            "peak_gap": 0.1850710531593982,
+            "template_std": 0.3733421581178065,
+            "boundary": false
+          },
+          "second_template": {
+            "center": [
+              580,
+              352
+            ],
+            "ncc": 1.0000000000000049,
+            "alternative_ncc": 0.7820459503887112,
+            "peak_gap": 0.21795404961129372,
+            "template_std": 0.5120462459824223,
+            "boundary": false
+          },
+          "cycle_full_px": 0.0,
+          "template_sensitivity_full_px": 0.0,
+          "accepted": true
+        }
+      ],
+      "accepted_count": 5,
+      "models": {
+        "similarity": {
+          "prediction_half": [
+            395.00000000000034,
+            333.0000000000003
+          ],
+          "rank": 4,
+          "singular_values": [
+            1134.543698813113,
+            1134.5436988131128,
+            0.7716757478273638,
+            0.77167574782729
+          ],
+          "train_rmse_full_px": 6.09842732368013e-13,
+          "loo_rank_degenerate_count": 0,
+          "loo_prediction_spread_full_px": 1.0725194820289065e-12,
+          "loo_held_out_errors_full_px": [
+            3.06111178766429e-13,
+            6.629024818318272e-13,
+            5.084229945850415e-13,
+            4.0990372275064023e-13,
+            2.2737367544323206e-13
+          ]
+        },
+        "affine": {
+          "prediction_half": [
+            395.0000000000001,
+            333.00000000000017
+          ],
+          "rank": 3,
+          "singular_values": [
+            1100.7180798842708,
+            274.97219358396296,
+            0.03703386896170882
+          ],
+          "train_rmse_full_px": 3.062430948159767e-13,
+          "loo_rank_degenerate_count": 1,
+          "loo_prediction_spread_full_px": 0.0003066865750724901,
+          "loo_held_out_errors_full_px": [
+            5.684341886080802e-14,
+            0.00024212097991949122,
+            5.684341886080801e-13,
+            4.0990372275064023e-13,
+            1.048140854583481e-12
+          ]
+        }
+      }
+    },
+    {
+      "source_frame": 23,
+      "source_pts_s": 0.964499,
+      "reference_frame": 17,
+      "patches": [
+        {
+          "reference_center_half": [
+            120,
+            337
+          ],
+          "match": {
+            "center": [
+              127,
+              337
+            ],
+            "ncc": 0.994699934474814,
+            "alternative_ncc": 0.992551337903552,
+            "peak_gap": 0.0021485965712619848,
+            "template_std": 11.715464462893213,
+            "boundary": false
+          },
+          "second_template": {
+            "center": [
+              126,
+              337
+            ],
+            "ncc": 0.9965098126075702,
+            "alternative_ncc": 0.9924309862347419,
+            "peak_gap": 0.004078826372828304,
+            "template_std": 14.15036207711945,
+            "boundary": false
+          },
+          "cycle_full_px": 0.0,
+          "template_sensitivity_full_px": 2.0,
+          "accepted": false
+        },
+        {
+          "reference_center_half": [
+            120,
+            352
+          ],
+          "match": {
+            "center": [
+              124,
+              353
+            ],
+            "ncc": 0.9611627086327049,
+            "alternative_ncc": 0.9301001218929318,
+            "peak_gap": 0.031062586739773135,
+            "template_std": 1.8500842420836199,
+            "boundary": false
+          },
+          "second_template": {
+            "center": [
+              125,
+              352
+            ],
+            "ncc": 0.982648912008181,
+            "alternative_ncc": 0.9707584694925846,
+            "peak_gap": 0.011890442515596455,
+            "template_std": 2.743088607395811,
+            "boundary": false
+          },
+          "cycle_full_px": 2.0,
+          "template_sensitivity_full_px": 2.8284271247461903,
+          "accepted": true
+        },
+        {
+          "reference_center_half": [
+            220,
+            337
+          ],
+          "match": {
+            "center": [
+              224,
+              339
+            ],
+            "ncc": 0.9740042761208277,
+            "alternative_ncc": 0.9406712026926392,
+            "peak_gap": 0.03333307342818859,
+            "template_std": 18.5362743289929,
+            "boundary": false
+          },
+          "second_template": {
+            "center": [
+              224,
+              339
+            ],
+            "ncc": 0.9831887929653709,
+            "alternative_ncc": 0.9562521635786679,
+            "peak_gap": 0.026936629386702937,
+            "template_std": 21.309910055875555,
+            "boundary": false
+          },
+          "cycle_full_px": 0.0,
+          "template_sensitivity_full_px": 0.0,
+          "accepted": true
+        },
+        {
+          "reference_center_half": [
+            220,
+            352
+          ],
+          "match": {
+            "center": [
+              224,
+              353
+            ],
+            "ncc": 0.9863869088477839,
+            "alternative_ncc": 0.9533102046328523,
+            "peak_gap": 0.033076704214931585,
+            "template_std": 7.233539533897401,
+            "boundary": false
+          },
+          "second_template": {
+            "center": [
+              224,
+              354
+            ],
+            "ncc": 0.9845150087398133,
+            "alternative_ncc": 0.9583062492464756,
+            "peak_gap": 0.026208759493337785,
+            "template_std": 9.101027512028045,
+            "boundary": false
+          },
+          "cycle_full_px": 2.0,
+          "template_sensitivity_full_px": 2.0,
+          "accepted": true
+        },
+        {
+          "reference_center_half": [
+            480,
+            337
+          ],
+          "match": {
+            "center": [
+              501,
+              339
+            ],
+            "ncc": 0.955319484752489,
+            "alternative_ncc": 0.9530429688960721,
+            "peak_gap": 0.002276515856416861,
+            "template_std": 22.489100494760937,
+            "boundary": false
+          },
+          "second_template": {
+            "center": [
+              490,
+              338
+            ],
+            "ncc": 0.9580761067637863,
+            "alternative_ncc": 0.9538798613277555,
+            "peak_gap": 0.00419624543603081,
+            "template_std": 23.49673108174364,
+            "boundary": false
+          },
+          "cycle_full_px": 32.0624390837628,
+          "template_sensitivity_full_px": 22.090722034374522,
+          "accepted": false
+        },
+        {
+          "reference_center_half": [
+            480,
+            352
+          ],
+          "match": {
+            "center": [
+              472,
+              351
+            ],
+            "ncc": 0.8814229528956702,
+            "alternative_ncc": 0.8786116264370649,
+            "peak_gap": 0.0028113264586052678,
+            "template_std": 1.1262194885615397,
+            "boundary": false
+          },
+          "second_template": {
+            "center": [
+              453,
+              355
+            ],
+            "ncc": 0.9691959718103843,
+            "alternative_ncc": 0.967173726247462,
+            "peak_gap": 0.002022245562922298,
+            "template_std": 3.823971811698756,
+            "boundary": false
+          },
+          "cycle_full_px": 40.44749683231337,
+          "template_sensitivity_full_px": 38.8329756778952,
+          "accepted": false
+        },
+        {
+          "reference_center_half": [
+            580,
+            337
+          ],
+          "match": {
+            "center": [
+              582,
+              338
+            ],
+            "ncc": 0.9906335028437178,
+            "alternative_ncc": 0.9874577588896676,
+            "peak_gap": 0.003175743954050181,
+            "template_std": 6.1794676882718145,
+            "boundary": false
+          },
+          "second_template": {
+            "center": [
+              585,
+              338
+            ],
+            "ncc": 0.9911665147411212,
+            "alternative_ncc": 0.9887292762594957,
+            "peak_gap": 0.00243723848162547,
+            "template_std": 8.829809635232486,
+            "boundary": false
+          },
+          "cycle_full_px": 4.0,
+          "template_sensitivity_full_px": 6.0,
+          "accepted": false
+        },
+        {
+          "reference_center_half": [
+            580,
+            352
+          ],
+          "match": {
+            "center": [
+              584,
+              353
+            ],
+            "ncc": 0.7808607817372136,
+            "alternative_ncc": 0.6962189897867248,
+            "peak_gap": 0.08464179195048882,
+            "template_std": 0.3733421581178065,
+            "boundary": false
+          },
+          "second_template": {
+            "center": [
+              581,
+              353
+            ],
+            "ncc": 0.8059315325898702,
+            "alternative_ncc": 0.7641240415892989,
+            "peak_gap": 0.04180749100057124,
+            "template_std": 0.5120462459824223,
+            "boundary": false
+          },
+          "cycle_full_px": 20.0,
+          "template_sensitivity_full_px": 6.0,
+          "accepted": false
+        }
+      ],
+      "accepted_count": 3,
+      "models": {}
+    },
+    {
+      "source_frame": 29,
+      "source_pts_s": 1.145343,
+      "reference_frame": 17,
+      "patches": [
+        {
+          "reference_center_half": [
+            120,
+            337
+          ],
+          "match": {
+            "center": [
+              133,
+              337
+            ],
+            "ncc": 0.9956689441479586,
+            "alternative_ncc": 0.9939618343698108,
+            "peak_gap": 0.0017071097781478084,
+            "template_std": 11.715464462893213,
+            "boundary": false
+          },
+          "second_template": {
+            "center": [
+              132,
+              338
+            ],
+            "ncc": 0.9964369805193883,
+            "alternative_ncc": 0.9915227564811483,
+            "peak_gap": 0.004914224038240045,
+            "template_std": 14.15036207711945,
+            "boundary": false
+          },
+          "cycle_full_px": 2.0,
+          "template_sensitivity_full_px": 2.8284271247461903,
+          "accepted": false
+        },
+        {
+          "reference_center_half": [
+            120,
+            352
+          ],
+          "match": {
+            "center": [
+              128,
+              355
+            ],
+            "ncc": 0.9265637155719995,
+            "alternative_ncc": 0.9023757556951623,
+            "peak_gap": 0.024187959876837195,
+            "template_std": 1.8500842420836199,
+            "boundary": false
+          },
+          "second_template": {
+            "center": [
+              129,
+              354
+            ],
+            "ncc": 0.9643366031708812,
+            "alternative_ncc": 0.9543583495274329,
+            "peak_gap": 0.009978253643448287,
+            "template_std": 2.743088607395811,
+            "boundary": false
+          },
+          "cycle_full_px": 28.284271247461902,
+          "template_sensitivity_full_px": 2.8284271247461903,
+          "accepted": false
+        },
+        {
+          "reference_center_half": [
+            220,
+            337
+          ],
+          "match": {
+            "center": [
+              227,
+              341
+            ],
+            "ncc": 0.9682895618777848,
+            "alternative_ncc": 0.930120480104864,
+            "peak_gap": 0.038169081772920777,
+            "template_std": 18.5362743289929,
+            "boundary": false
+          },
+          "second_template": {
+            "center": [
+              227,
+              341
+            ],
+            "ncc": 0.979528820970501,
+            "alternative_ncc": 0.9496589453853652,
+            "peak_gap": 0.029869875585135763,
+            "template_std": 21.309910055875555,
+            "boundary": false
+          },
+          "cycle_full_px": 0.0,
+          "template_sensitivity_full_px": 0.0,
+          "accepted": true
+        },
+        {
+          "reference_center_half": [
+            220,
+            352
+          ],
+          "match": {
+            "center": [
+              226,
+              362
+            ],
+            "ncc": 0.9536400829679187,
+            "alternative_ncc": 0.9450510365565489,
+            "peak_gap": 0.008589046411369816,
+            "template_std": 7.233539533897401,
+            "boundary": false
+          },
+          "second_template": {
+            "center": [
+              226,
+              357
+            ],
+            "ncc": 0.9593298948412494,
+            "alternative_ncc": 0.9512162848457462,
+            "peak_gap": 0.008113609995503257,
+            "template_std": 9.101027512028045,
+            "boundary": false
+          },
+          "cycle_full_px": 22.090722034374522,
+          "template_sensitivity_full_px": 10.0,
+          "accepted": false
+        },
+        {
+          "reference_center_half": [
+            480,
+            337
+          ],
+          "match": {
+            "center": [
+              499,
+              340
+            ],
+            "ncc": 0.9530570983788618,
+            "alternative_ncc": 0.943931695476557,
+            "peak_gap": 0.009125402902304791,
+            "template_std": 22.489100494760937,
+            "boundary": false
+          },
+          "second_template": {
+            "center": [
+              497,
+              340
+            ],
+            "ncc": 0.9517524574099672,
+            "alternative_ncc": 0.9422950424723638,
+            "peak_gap": 0.009457414937603326,
+            "template_std": 23.49673108174364,
+            "boundary": false
+          },
+          "cycle_full_px": 6.0,
+          "template_sensitivity_full_px": 4.0,
+          "accepted": false
+        },
+        {
+          "reference_center_half": [
+            480,
+            352
+          ],
+          "match": {
+            "center": [
+              470,
+              354
+            ],
+            "ncc": 0.8788039846268136,
+            "alternative_ncc": 0.8749473031896876,
+            "peak_gap": 0.0038566814371260305,
+            "template_std": 1.1262194885615397,
+            "boundary": false
+          },
+          "second_template": {
+            "center": [
+              483,
+              356
+            ],
+            "ncc": 0.9668166592112346,
+            "alternative_ncc": 0.9641931988700472,
+            "peak_gap": 0.0026234603411874335,
+            "template_std": 3.823971811698756,
+            "boundary": false
+          },
+          "cycle_full_px": 56.32051136131489,
+          "template_sensitivity_full_px": 26.30589287593181,
+          "accepted": false
+        },
+        {
+          "reference_center_half": [
+            580,
+            337
+          ],
+          "match": {
+            "center": [
+              586,
+              338
+            ],
+            "ncc": 0.9787890173628382,
+            "alternative_ncc": 0.9747407755305871,
+            "peak_gap": 0.004048241832251054,
+            "template_std": 6.1794676882718145,
+            "boundary": false
+          },
+          "second_template": {
+            "center": [
+              589,
+              338
+            ],
+            "ncc": 0.9790021742849234,
+            "alternative_ncc": 0.9756752867229184,
+            "peak_gap": 0.003326887562005054,
+            "template_std": 8.829809635232486,
+            "boundary": false
+          },
+          "cycle_full_px": 16.1245154965971,
+          "template_sensitivity_full_px": 6.0,
+          "accepted": false
+        },
+        {
+          "reference_center_half": [
+            580,
+            352
+          ],
+          "match": {
+            "center": [
+              620,
+              340
+            ],
+            "ncc": 0.7268787548384759,
+            "alternative_ncc": 0.7120851470267657,
+            "peak_gap": 0.01479360781171013,
+            "template_std": 0.3733421581178065,
+            "boundary": true
+          },
+          "second_template": {
+            "center": [
+              582,
+              340
+            ],
+            "ncc": 0.7751938008990495,
+            "alternative_ncc": 0.7637976038256421,
+            "peak_gap": 0.011396197073407444,
+            "template_std": 0.5120462459824223,
+            "boundary": true
+          },
+          "cycle_full_px": 123.2233744059949,
+          "template_sensitivity_full_px": 76.0,
+          "accepted": false
+        }
+      ],
+      "accepted_count": 1,
+      "models": {}
+    },
+    {
+      "source_frame": 37,
+      "source_pts_s": 1.386467,
+      "reference_frame": 17,
+      "patches": [
+        {
+          "reference_center_half": [
+            120,
+            337
+          ],
+          "match": {
+            "center": [
+              136,
+              338
+            ],
+            "ncc": 0.9934378241713138,
+            "alternative_ncc": 0.9852829921616569,
+            "peak_gap": 0.008154832009656832,
+            "template_std": 11.715464462893213,
+            "boundary": false
+          },
+          "second_template": {
+            "center": [
+              136,
+              339
+            ],
+            "ncc": 0.9896351568893753,
+            "alternative_ncc": 0.9805943251000481,
+            "peak_gap": 0.009040831789327242,
+            "template_std": 14.15036207711945,
+            "boundary": false
+          },
+          "cycle_full_px": 2.8284271247461903,
+          "template_sensitivity_full_px": 2.0,
+          "accepted": false
+        },
+        {
+          "reference_center_half": [
+            120,
+            352
+          ],
+          "match": {
+            "center": [
+              134,
+              356
+            ],
+            "ncc": 0.9339077431001264,
+            "alternative_ncc": 0.9121089901437606,
+            "peak_gap": 0.021798752956365797,
+            "template_std": 1.8500842420836199,
+            "boundary": false
+          },
+          "second_template": {
+            "center": [
+              134,
+              356
+            ],
+            "ncc": 0.9683591104209878,
+            "alternative_ncc": 0.956180400484925,
+            "peak_gap": 0.012178709936062737,
+            "template_std": 2.743088607395811,
+            "boundary": false
+          },
+          "cycle_full_px": 12.0,
+          "template_sensitivity_full_px": 0.0,
+          "accepted": false
+        },
+        {
+          "reference_center_half": [
+            220,
+            337
+          ],
+          "match": {
+            "center": [
+              231,
+              343
+            ],
+            "ncc": 0.8552000725665687,
+            "alternative_ncc": 0.8497575436757322,
+            "peak_gap": 0.005442528890836518,
+            "template_std": 18.5362743289929,
+            "boundary": false
+          },
+          "second_template": {
+            "center": [
+              231,
+              344
+            ],
+            "ncc": 0.8784212731251798,
+            "alternative_ncc": 0.8594269834758564,
+            "peak_gap": 0.01899428964932337,
+            "template_std": 21.309910055875555,
+            "boundary": false
+          },
+          "cycle_full_px": 98.02040603874276,
+          "template_sensitivity_full_px": 2.0,
+          "accepted": false
+        },
+        {
+          "reference_center_half": [
+            220,
+            352
+          ],
+          "match": {
+            "center": [
+              233,
+              364
+            ],
+            "ncc": 0.9580356842269285,
+            "alternative_ncc": 0.9535389296912206,
+            "peak_gap": 0.00449675453570797,
+            "template_std": 7.233539533897401,
+            "boundary": true
+          },
+          "second_template": {
+            "center": [
+              233,
+              362
+            ],
+            "ncc": 0.9645481243301716,
+            "alternative_ncc": 0.9015879153322255,
+            "peak_gap": 0.06296020899794608,
+            "template_std": 9.101027512028045,
+            "boundary": false
+          },
+          "cycle_full_px": 16.0,
+          "template_sensitivity_full_px": 4.0,
+          "accepted": false
+        },
+        {
+          "reference_center_half": [
+            480,
+            337
+          ],
+          "match": {
+            "center": [
+              504,
+              343
+            ],
+            "ncc": 0.9175068684697711,
+            "alternative_ncc": 0.9062480446294043,
+            "peak_gap": 0.011258823840366805,
+            "template_std": 22.489100494760937,
+            "boundary": false
+          },
+          "second_template": {
+            "center": [
+              499,
+              343
+            ],
+            "ncc": 0.9205277143968615,
+            "alternative_ncc": 0.9071813004256665,
+            "peak_gap": 0.01334641397119507,
+            "template_std": 23.49673108174364,
+            "boundary": false
+          },
+          "cycle_full_px": 12.0,
+          "template_sensitivity_full_px": 10.0,
+          "accepted": false
+        },
+        {
+          "reference_center_half": [
+            480,
+            352
+          ],
+          "match": {
+            "center": [
+              474,
+              359
+            ],
+            "ncc": 0.8785577557930334,
+            "alternative_ncc": 0.8730806076498926,
+            "peak_gap": 0.00547714814314082,
+            "template_std": 1.1262194885615397,
+            "boundary": false
+          },
+          "second_template": {
+            "center": [
+              467,
+              360
+            ],
+            "ncc": 0.9718529147193706,
+            "alternative_ncc": 0.9668225852265812,
+            "peak_gap": 0.005030329492789476,
+            "template_std": 3.823971811698756,
+            "boundary": false
+          },
+          "cycle_full_px": 68.11754546370561,
+          "template_sensitivity_full_px": 14.142135623730951,
+          "accepted": false
+        },
+        {
+          "reference_center_half": [
+            580,
+            337
+          ],
+          "match": {
+            "center": [
+              587,
+              339
+            ],
+            "ncc": 0.9753908356670147,
+            "alternative_ncc": 0.9737019452981245,
+            "peak_gap": 0.0016888903688901946,
+            "template_std": 6.1794676882718145,
+            "boundary": false
+          },
+          "second_template": {
+            "center": [
+              591,
+              340
+            ],
+            "ncc": 0.9764879491856143,
+            "alternative_ncc": 0.9761569756152759,
+            "peak_gap": 0.0003309735703383998,
+            "template_std": 8.829809635232486,
+            "boundary": false
+          },
+          "cycle_full_px": 16.1245154965971,
+          "template_sensitivity_full_px": 8.246211251235321,
+          "accepted": false
+        },
+        {
+          "reference_center_half": [
+            580,
+            352
+          ],
+          "match": {
+            "center": [
+              620,
+              340
+            ],
+            "ncc": 0.7769784892459455,
+            "alternative_ncc": 0.7583094800857283,
+            "peak_gap": 0.018669009160217187,
+            "template_std": 0.3733421581178065,
+            "boundary": true
+          },
+          "second_template": {
+            "center": [
+              609,
+              340
+            ],
+            "ncc": 0.7966946705874276,
+            "alternative_ncc": 0.789635658658908,
+            "peak_gap": 0.007059011928519654,
+            "template_std": 0.5120462459824223,
+            "boundary": true
+          },
+          "cycle_full_px": 115.94826432508596,
+          "template_sensitivity_full_px": 22.0,
+          "accepted": false
+        }
+      ],
+      "accepted_count": 0,
+      "models": {}
+    },
+    {
+      "source_frame": 43,
+      "source_pts_s": 1.567311,
+      "reference_frame": 43,
+      "patches": [
+        {
+          "reference_center_half": [
+            120,
+            337
+          ],
+          "match": {
+            "center": [
+              120,
+              337
+            ],
+            "ncc": 1.0000000000000002,
+            "alternative_ncc": 0.9420766165589846,
+            "peak_gap": 0.05792338344101566,
+            "template_std": 26.845467484881393,
+            "boundary": false
+          },
+          "second_template": {
+            "center": [
+              120,
+              337
+            ],
+            "ncc": 1.0000000000000013,
+            "alternative_ncc": 0.9451354671441186,
+            "peak_gap": 0.054864532855882775,
+            "template_std": 28.440822760700076,
+            "boundary": false
+          },
+          "cycle_full_px": 0.0,
+          "template_sensitivity_full_px": 0.0,
+          "accepted": true
+        },
+        {
+          "reference_center_half": [
+            120,
+            352
+          ],
+          "match": {
+            "center": [
+              120,
+              352
+            ],
+            "ncc": 1.0000000000000018,
+            "alternative_ncc": 0.9356066793706638,
+            "peak_gap": 0.064393320629338,
+            "template_std": 8.518361348883543,
+            "boundary": false
+          },
+          "second_template": {
+            "center": [
+              120,
+              352
+            ],
+            "ncc": 0.9999999999999992,
+            "alternative_ncc": 0.9021912634497594,
+            "peak_gap": 0.0978087365502398,
+            "template_std": 10.081565118914503,
+            "boundary": false
+          },
+          "cycle_full_px": 0.0,
+          "template_sensitivity_full_px": 0.0,
+          "accepted": true
+        },
+        {
+          "reference_center_half": [
+            220,
+            337
+          ],
+          "match": {
+            "center": [
+              220,
+              337
+            ],
+            "ncc": 0.9999999999999992,
+            "alternative_ncc": 0.9707875125756021,
+            "peak_gap": 0.029212487424397082,
+            "template_std": 19.935329590255844,
+            "boundary": false
+          },
+          "second_template": {
+            "center": [
+              220,
+              337
+            ],
+            "ncc": 0.9999999999999967,
+            "alternative_ncc": 0.9619241175485348,
+            "peak_gap": 0.03807588245146187,
+            "template_std": 27.19708160944824,
+            "boundary": false
+          },
+          "cycle_full_px": 0.0,
+          "template_sensitivity_full_px": 0.0,
+          "accepted": true
+        },
+        {
+          "reference_center_half": [
+            220,
+            352
+          ],
+          "match": {
+            "center": [
+              220,
+              352
+            ],
+            "ncc": 1.0000000000000009,
+            "alternative_ncc": 0.9940401039913961,
+            "peak_gap": 0.005959896008604804,
+            "template_std": 24.11784556979028,
+            "boundary": false
+          },
+          "second_template": {
+            "center": [
+              220,
+              352
+            ],
+            "ncc": 0.9999999999999993,
+            "alternative_ncc": 0.9938998976368526,
+            "peak_gap": 0.006100102363146731,
+            "template_std": 27.462165015348788,
+            "boundary": false
+          },
+          "cycle_full_px": 0.0,
+          "template_sensitivity_full_px": 0.0,
+          "accepted": false
+        },
+        {
+          "reference_center_half": [
+            480,
+            337
+          ],
+          "match": {
+            "center": [
+              480,
+              337
+            ],
+            "ncc": 1.0,
+            "alternative_ncc": 0.9772595212760916,
+            "peak_gap": 0.022740478723908386,
+            "template_std": 11.762936042566833,
+            "boundary": false
+          },
+          "second_template": {
+            "center": [
+              480,
+              337
+            ],
+            "ncc": 1.0000000000000004,
+            "alternative_ncc": 0.9846981469917673,
+            "peak_gap": 0.015301853008233168,
+            "template_std": 17.270936871422656,
+            "boundary": false
+          },
+          "cycle_full_px": 0.0,
+          "template_sensitivity_full_px": 0.0,
+          "accepted": true
+        },
+        {
+          "reference_center_half": [
+            480,
+            352
+          ],
+          "match": {
+            "center": [
+              480,
+              352
+            ],
+            "ncc": 0.9999999999999986,
+            "alternative_ncc": 0.9937149820277775,
+            "peak_gap": 0.00628501797222103,
+            "template_std": 26.767739411581132,
+            "boundary": false
+          },
+          "second_template": {
+            "center": [
+              480,
+              352
+            ],
+            "ncc": 1.0000000000000069,
+            "alternative_ncc": 0.9939399584745868,
+            "peak_gap": 0.006060041525420057,
+            "template_std": 27.930276395090914,
+            "boundary": false
+          },
+          "cycle_full_px": 0.0,
+          "template_sensitivity_full_px": 0.0,
+          "accepted": false
+        },
+        {
+          "reference_center_half": [
+            580,
+            337
+          ],
+          "match": {
+            "center": [
+              580,
+              337
+            ],
+            "ncc": 0.999999999999998,
+            "alternative_ncc": 0.9928860502009355,
+            "peak_gap": 0.007113949799062547,
+            "template_std": 12.759711906124522,
+            "boundary": false
+          },
+          "second_template": {
+            "center": [
+              580,
+              337
+            ],
+            "ncc": 1.0000000000000013,
+            "alternative_ncc": 0.9940765542625347,
+            "peak_gap": 0.005923445737466615,
+            "template_std": 13.630898244792107,
+            "boundary": false
+          },
+          "cycle_full_px": 0.0,
+          "template_sensitivity_full_px": 0.0,
+          "accepted": false
+        },
+        {
+          "reference_center_half": [
+            580,
+            352
+          ],
+          "match": {
+            "center": [
+              580,
+              352
+            ],
+            "ncc": 0.999999999999999,
+            "alternative_ncc": 0.954476755855372,
+            "peak_gap": 0.04552324414462705,
+            "template_std": 1.615695250219432,
+            "boundary": false
+          },
+          "second_template": {
+            "center": [
+              580,
+              352
+            ],
+            "ncc": 1.0000000000000038,
+            "alternative_ncc": 0.9688242101309145,
+            "peak_gap": 0.03117578986908931,
+            "template_std": 2.1529977486183203,
+            "boundary": false
+          },
+          "cycle_full_px": 0.0,
+          "template_sensitivity_full_px": 0.0,
+          "accepted": true
+        }
+      ],
+      "accepted_count": 5,
+      "models": {
+        "similarity": {
+          "prediction_half": [
+            300.00000000000006,
+            340.00000000000006
+          ],
+          "rank": 4,
+          "singular_values": [
+            1110.1888401997405,
+            1110.1888401997396,
+            0.8597069005439077,
+            0.8597069005438923
+          ],
+          "train_rmse_full_px": 2.0730320248742908e-13,
+          "loo_rank_degenerate_count": 0,
+          "loo_prediction_spread_full_px": 5.084229945850415e-13,
+          "loo_held_out_errors_full_px": [
+            3.3266757983254893e-13,
+            4.3383856571136184e-13,
+            0.0,
+            2.5421149729252077e-13,
+            2.2737367544323206e-13
+          ]
+        },
+        "affine": {
+          "prediction_half": [
+            299.99999999999994,
+            339.99999999999994
+          ],
+          "rank": 3,
+          "singular_values": [
+            1067.584994775809,
+            304.60183304954325,
+            0.04724821724228202
+          ],
+          "train_rmse_full_px": 2.2843700318628767e-13,
+          "loo_rank_degenerate_count": 0,
+          "loo_prediction_spread_full_px": 7.279509460923746e-13,
+          "loo_held_out_errors_full_px": [
+            6.967667714054223e-13,
+            1.1718571004216928e-13,
+            1.6077746776921858e-13,
+            1.1368683772161603e-13,
+            7.279509460923746e-13
+          ]
+        }
+      }
+    },
+    {
+      "source_frame": 47,
+      "source_pts_s": 1.718014,
+      "reference_frame": 43,
+      "patches": [
+        {
+          "reference_center_half": [
+            120,
+            337
+          ],
+          "match": {
+            "center": [
+              124,
+              338
+            ],
+            "ncc": 0.9969841459858549,
+            "alternative_ncc": 0.9192770686292124,
+            "peak_gap": 0.0777070773566425,
+            "template_std": 26.845467484881393,
+            "boundary": false
+          },
+          "second_template": {
+            "center": [
+              124,
+              338
+            ],
+            "ncc": 0.9955566439211896,
+            "alternative_ncc": 0.8831141497228292,
+            "peak_gap": 0.11244249419836039,
+            "template_std": 28.440822760700076,
+            "boundary": false
+          },
+          "cycle_full_px": 0.0,
+          "template_sensitivity_full_px": 0.0,
+          "accepted": true
+        },
+        {
+          "reference_center_half": [
+            120,
+            352
+          ],
+          "match": {
+            "center": [
+              122,
+              364
+            ],
+            "ncc": 0.9186435146183801,
+            "alternative_ncc": 0.9159336830662598,
+            "peak_gap": 0.0027098315521203453,
+            "template_std": 8.518361348883543,
+            "boundary": true
+          },
+          "second_template": {
+            "center": [
+              123,
+              364
+            ],
+            "ncc": 0.8863677418862295,
+            "alternative_ncc": 0.8549881971185079,
+            "peak_gap": 0.031379544767721534,
+            "template_std": 10.081565118914503,
+            "boundary": true
+          },
+          "cycle_full_px": 22.360679774997898,
+          "template_sensitivity_full_px": 2.0,
+          "accepted": false
+        },
+        {
+          "reference_center_half": [
+            220,
+            337
+          ],
+          "match": {
+            "center": [
+              224,
+              338
+            ],
+            "ncc": 0.9871908918910463,
+            "alternative_ncc": 0.9719536021885928,
+            "peak_gap": 0.015237289702453416,
+            "template_std": 19.935329590255844,
+            "boundary": false
+          },
+          "second_template": {
+            "center": [
+              223,
+              338
+            ],
+            "ncc": 0.9909434884541577,
+            "alternative_ncc": 0.965020005797107,
+            "peak_gap": 0.02592348265705069,
+            "template_std": 27.19708160944824,
+            "boundary": false
+          },
+          "cycle_full_px": 2.0,
+          "template_sensitivity_full_px": 2.0,
+          "accepted": false
+        },
+        {
+          "reference_center_half": [
+            220,
+            352
+          ],
+          "match": {
+            "center": [
+              224,
+              353
+            ],
+            "ncc": 0.9961371226599384,
+            "alternative_ncc": 0.9919358754207018,
+            "peak_gap": 0.0042012472392365385,
+            "template_std": 24.11784556979028,
+            "boundary": false
+          },
+          "second_template": {
+            "center": [
+              222,
+              353
+            ],
+            "ncc": 0.9952851836432923,
+            "alternative_ncc": 0.9904512640300713,
+            "peak_gap": 0.004833919613220994,
+            "template_std": 27.462165015348788,
+            "boundary": false
+          },
+          "cycle_full_px": 2.0,
+          "template_sensitivity_full_px": 4.0,
+          "accepted": false
+        },
+        {
+          "reference_center_half": [
+            480,
+            337
+          ],
+          "match": {
+            "center": [
+              481,
+              338
+            ],
+            "ncc": 0.9917347254498147,
+            "alternative_ncc": 0.9766042802609013,
+            "peak_gap": 0.015130445188913377,
+            "template_std": 11.762936042566833,
+            "boundary": false
+          },
+          "second_template": {
+            "center": [
+              481,
+              338
+            ],
+            "ncc": 0.9938412384009003,
+            "alternative_ncc": 0.9868474769110287,
+            "peak_gap": 0.0069937614898716305,
+            "template_std": 17.270936871422656,
+            "boundary": false
+          },
+          "cycle_full_px": 2.0,
+          "template_sensitivity_full_px": 0.0,
+          "accepted": false
+        },
+        {
+          "reference_center_half": [
+            480,
+            352
+          ],
+          "match": {
+            "center": [
+              457,
+              353
+            ],
+            "ncc": 0.9833618538817694,
+            "alternative_ncc": 0.9808068832790551,
+            "peak_gap": 0.002554970602714368,
+            "template_std": 26.767739411581132,
+            "boundary": false
+          },
+          "second_template": {
+            "center": [
+              460,
+              353
+            ],
+            "ncc": 0.9819452811829997,
+            "alternative_ncc": 0.9800698925794421,
+            "peak_gap": 0.0018753886035576262,
+            "template_std": 27.930276395090914,
+            "boundary": false
+          },
+          "cycle_full_px": 4.0,
+          "template_sensitivity_full_px": 6.0,
+          "accepted": false
+        },
+        {
+          "reference_center_half": [
+            580,
+            337
+          ],
+          "match": {
+            "center": [
+              579,
+              338
+            ],
+            "ncc": 0.9971515969183431,
+            "alternative_ncc": 0.9922239072044577,
+            "peak_gap": 0.004927689713885353,
+            "template_std": 12.759711906124522,
+            "boundary": false
+          },
+          "second_template": {
+            "center": [
+              579,
+              338
+            ],
+            "ncc": 0.9974262412495232,
+            "alternative_ncc": 0.9932028203842934,
+            "peak_gap": 0.0042234208652297545,
+            "template_std": 13.630898244792107,
+            "boundary": false
+          },
+          "cycle_full_px": 0.0,
+          "template_sensitivity_full_px": 0.0,
+          "accepted": false
+        },
+        {
+          "reference_center_half": [
+            580,
+            352
+          ],
+          "match": {
+            "center": [
+              574,
+              353
+            ],
+            "ncc": 0.9268964466788687,
+            "alternative_ncc": 0.9243758264855096,
+            "peak_gap": 0.00252062019335908,
+            "template_std": 1.615695250219432,
+            "boundary": false
+          },
+          "second_template": {
+            "center": [
+              574,
+              353
+            ],
+            "ncc": 0.9580344385338899,
+            "alternative_ncc": 0.9479804648113376,
+            "peak_gap": 0.010053973722552345,
+            "template_std": 2.1529977486183203,
+            "boundary": false
+          },
+          "cycle_full_px": 24.0,
+          "template_sensitivity_full_px": 0.0,
+          "accepted": false
+        }
+      ],
+      "accepted_count": 1,
+      "models": {}
+    },
+    {
+      "source_frame": 51,
+      "source_pts_s": 1.838576,
+      "reference_frame": 43,
+      "patches": [
+        {
+          "reference_center_half": [
+            120,
+            337
+          ],
+          "match": {
+            "center": [
+              132,
+              339
+            ],
+            "ncc": 0.9935191735244823,
+            "alternative_ncc": 0.8885319756151768,
+            "peak_gap": 0.10498719790930544,
+            "template_std": 26.845467484881393,
+            "boundary": false
+          },
+          "second_template": {
+            "center": [
+              132,
+              339
+            ],
+            "ncc": 0.991325550335497,
+            "alternative_ncc": 0.8825835581651396,
+            "peak_gap": 0.1087419921703574,
+            "template_std": 28.440822760700076,
+            "boundary": false
+          },
+          "cycle_full_px": 0.0,
+          "template_sensitivity_full_px": 0.0,
+          "accepted": true
+        },
+        {
+          "reference_center_half": [
+            120,
+            352
+          ],
+          "match": {
+            "center": [
+              130,
+              364
+            ],
+            "ncc": 0.9221732605835306,
+            "alternative_ncc": 0.8664465779858125,
+            "peak_gap": 0.05572668259771807,
+            "template_std": 8.518361348883543,
+            "boundary": true
+          },
+          "second_template": {
+            "center": [
+              130,
+              364
+            ],
+            "ncc": 0.8659935697543616,
+            "alternative_ncc": 0.8489034047893124,
+            "peak_gap": 0.017090164965049226,
+            "template_std": 10.081565118914503,
+            "boundary": true
+          },
+          "cycle_full_px": 20.09975124224178,
+          "template_sensitivity_full_px": 0.0,
+          "accepted": false
+        },
+        {
+          "reference_center_half": [
+            220,
+            337
+          ],
+          "match": {
+            "center": [
+              230,
+              339
+            ],
+            "ncc": 0.9889632725901267,
+            "alternative_ncc": 0.9726105460519169,
+            "peak_gap": 0.01635272653820985,
+            "template_std": 19.935329590255844,
+            "boundary": false
+          },
+          "second_template": {
+            "center": [
+              229,
+              339
+            ],
+            "ncc": 0.992931884576589,
+            "alternative_ncc": 0.9645855523783498,
+            "peak_gap": 0.028346332198239232,
+            "template_std": 27.19708160944824,
+            "boundary": false
+          },
+          "cycle_full_px": 2.0,
+          "template_sensitivity_full_px": 2.0,
+          "accepted": false
+        },
+        {
+          "reference_center_half": [
+            220,
+            352
+          ],
+          "match": {
+            "center": [
+              226,
+              354
+            ],
+            "ncc": 0.9903552630588182,
+            "alternative_ncc": 0.9872180181064167,
+            "peak_gap": 0.003137244952401419,
+            "template_std": 24.11784556979028,
+            "boundary": false
+          },
+          "second_template": {
+            "center": [
+              224,
+              354
+            ],
+            "ncc": 0.990412511557505,
+            "alternative_ncc": 0.9874037125059144,
+            "peak_gap": 0.0030087990515905716,
+            "template_std": 27.462165015348788,
+            "boundary": false
+          },
+          "cycle_full_px": 6.0,
+          "template_sensitivity_full_px": 4.0,
+          "accepted": false
+        },
+        {
+          "reference_center_half": [
+            480,
+            337
+          ],
+          "match": {
+            "center": [
+              463,
+              339
+            ],
+            "ncc": 0.9585691753311936,
+            "alternative_ncc": 0.9519652359128697,
+            "peak_gap": 0.006603939418323823,
+            "template_std": 11.762936042566833,
+            "boundary": false
+          },
+          "second_template": {
+            "center": [
+              467,
+              339
+            ],
+            "ncc": 0.9650694247778594,
+            "alternative_ncc": 0.9642722841901465,
+            "peak_gap": 0.0007971405877128523,
+            "template_std": 17.270936871422656,
+            "boundary": false
+          },
+          "cycle_full_px": 12.0,
+          "template_sensitivity_full_px": 8.0,
+          "accepted": false
+        },
+        {
+          "reference_center_half": [
+            480,
+            352
+          ],
+          "match": {
+            "center": [
+              457,
+              354
+            ],
+            "ncc": 0.9580135452255129,
+            "alternative_ncc": 0.9575486753597778,
+            "peak_gap": 0.0004648698657350181,
+            "template_std": 26.767739411581132,
+            "boundary": false
+          },
+          "second_template": {
+            "center": [
+              456,
+              354
+            ],
+            "ncc": 0.9701650160265213,
+            "alternative_ncc": 0.9683468641191316,
+            "peak_gap": 0.0018181519073896535,
+            "template_std": 27.930276395090914,
+            "boundary": false
+          },
+          "cycle_full_px": 34.23448553724738,
+          "template_sensitivity_full_px": 2.0,
+          "accepted": false
+        },
+        {
+          "reference_center_half": [
+            580,
+            337
+          ],
+          "match": {
+            "center": [
+              578,
+              339
+            ],
+            "ncc": 0.9961240672921738,
+            "alternative_ncc": 0.9932964754926973,
+            "peak_gap": 0.0028275917994765587,
+            "template_std": 12.759711906124522,
+            "boundary": false
+          },
+          "second_template": {
+            "center": [
+              578,
+              339
+            ],
+            "ncc": 0.996737400018419,
+            "alternative_ncc": 0.9941822062717,
+            "peak_gap": 0.0025551937467190866,
+            "template_std": 13.630898244792107,
+            "boundary": false
+          },
+          "cycle_full_px": 0.0,
+          "template_sensitivity_full_px": 0.0,
+          "accepted": false
+        },
+        {
+          "reference_center_half": [
+            580,
+            352
+          ],
+          "match": {
+            "center": [
+              572,
+              353
+            ],
+            "ncc": 0.9288664280193639,
+            "alternative_ncc": 0.9189039459719287,
+            "peak_gap": 0.009962482047435217,
+            "template_std": 1.615695250219432,
+            "boundary": false
+          },
+          "second_template": {
+            "center": [
+              568,
+              353
+            ],
+            "ncc": 0.9390153022032508,
+            "alternative_ncc": 0.9363741694248516,
+            "peak_gap": 0.002641132778399169,
+            "template_std": 2.1529977486183203,
+            "boundary": false
+          },
+          "cycle_full_px": 32.0,
+          "template_sensitivity_full_px": 8.0,
+          "accepted": false
+        }
+      ],
+      "accepted_count": 1,
+      "models": {}
+    },
+    {
+      "source_frame": 55,
+      "source_pts_s": 1.959139,
+      "reference_frame": 43,
+      "patches": [
+        {
+          "reference_center_half": [
+            120,
+            337
+          ],
+          "match": {
+            "center": [
+              139,
+              340
+            ],
+            "ncc": 0.9936153151553727,
+            "alternative_ncc": 0.8719225383467734,
+            "peak_gap": 0.12169277680859936,
+            "template_std": 26.845467484881393,
+            "boundary": false
+          },
+          "second_template": {
+            "center": [
+              139,
+              340
+            ],
+            "ncc": 0.9831811444508483,
+            "alternative_ncc": 0.8698780009568396,
+            "peak_gap": 0.1133031434940086,
+            "template_std": 28.440822760700076,
+            "boundary": false
+          },
+          "cycle_full_px": 0.0,
+          "template_sensitivity_full_px": 0.0,
+          "accepted": true
+        },
+        {
+          "reference_center_half": [
+            120,
+            352
+          ],
+          "match": {
+            "center": [
+              136,
+              364
+            ],
+            "ncc": 0.9230926905827469,
+            "alternative_ncc": 0.85286039282247,
+            "peak_gap": 0.07023229776027695,
+            "template_std": 8.518361348883543,
+            "boundary": true
+          },
+          "second_template": {
+            "center": [
+              136,
+              364
+            ],
+            "ncc": 0.8812863945945119,
+            "alternative_ncc": 0.8559616204425977,
+            "peak_gap": 0.025324774151914142,
+            "template_std": 10.081565118914503,
+            "boundary": true
+          },
+          "cycle_full_px": 20.396078054371138,
+          "template_sensitivity_full_px": 0.0,
+          "accepted": false
+        },
+        {
+          "reference_center_half": [
+            220,
+            337
+          ],
+          "match": {
+            "center": [
+              232,
+              339
+            ],
+            "ncc": 0.9872312362536128,
+            "alternative_ncc": 0.958909621152792,
+            "peak_gap": 0.028321615100820763,
+            "template_std": 19.935329590255844,
+            "boundary": false
+          },
+          "second_template": {
+            "center": [
+              233,
+              339
+            ],
+            "ncc": 0.9874946388387713,
+            "alternative_ncc": 0.9522165426528956,
+            "peak_gap": 0.03527809618587574,
+            "template_std": 27.19708160944824,
+            "boundary": false
+          },
+          "cycle_full_px": 2.0,
+          "template_sensitivity_full_px": 2.0,
+          "accepted": true
+        },
+        {
+          "reference_center_half": [
+            220,
+            352
+          ],
+          "match": {
+            "center": [
+              240,
+              353
+            ],
+            "ncc": 0.9838803245685295,
+            "alternative_ncc": 0.9821844000666599,
+            "peak_gap": 0.0016959245018696167,
+            "template_std": 24.11784556979028,
+            "boundary": false
+          },
+          "second_template": {
+            "center": [
+              231,
+              354
+            ],
+            "ncc": 0.9882549241849,
+            "alternative_ncc": 0.9844695805075333,
+            "peak_gap": 0.003785343677366715,
+            "template_std": 27.462165015348788,
+            "boundary": false
+          },
+          "cycle_full_px": 4.0,
+          "template_sensitivity_full_px": 18.110770276274835,
+          "accepted": false
+        },
+        {
+          "reference_center_half": [
+            480,
+            337
+          ],
+          "match": {
+            "center": [
+              464,
+              340
+            ],
+            "ncc": 0.9552923085004132,
+            "alternative_ncc": 0.9508309579949986,
+            "peak_gap": 0.00446135050541463,
+            "template_std": 11.762936042566833,
+            "boundary": false
+          },
+          "second_template": {
+            "center": [
+              465,
+              340
+            ],
+            "ncc": 0.9594148770738495,
+            "alternative_ncc": 0.9563700504971422,
+            "peak_gap": 0.003044826576707349,
+            "template_std": 17.270936871422656,
+            "boundary": false
+          },
+          "cycle_full_px": 2.0,
+          "template_sensitivity_full_px": 2.0,
+          "accepted": false
+        },
+        {
+          "reference_center_half": [
+            480,
+            352
+          ],
+          "match": {
+            "center": [
+              449,
+              354
+            ],
+            "ncc": 0.9515889347605643,
+            "alternative_ncc": 0.9496390508733434,
+            "peak_gap": 0.001949883887220838,
+            "template_std": 26.767739411581132,
+            "boundary": false
+          },
+          "second_template": {
+            "center": [
+              447,
+              354
+            ],
+            "ncc": 0.9588369208599217,
+            "alternative_ncc": 0.9549121580101969,
+            "peak_gap": 0.003924762849724761,
+            "template_std": 27.930276395090914,
+            "boundary": false
+          },
+          "cycle_full_px": 74.24284477308234,
+          "template_sensitivity_full_px": 4.0,
+          "accepted": false
+        },
+        {
+          "reference_center_half": [
+            580,
+            337
+          ],
+          "match": {
+            "center": [
+              574,
+              340
+            ],
+            "ncc": 0.9959416050958853,
+            "alternative_ncc": 0.9936907312118517,
+            "peak_gap": 0.002250873884033555,
+            "template_std": 12.759711906124522,
+            "boundary": false
+          },
+          "second_template": {
+            "center": [
+              574,
+              340
+            ],
+            "ncc": 0.9964733241778135,
+            "alternative_ncc": 0.9930897844284627,
+            "peak_gap": 0.0033835397493507946,
+            "template_std": 13.630898244792107,
+            "boundary": false
+          },
+          "cycle_full_px": 0.0,
+          "template_sensitivity_full_px": 0.0,
+          "accepted": false
+        },
+        {
+          "reference_center_half": [
+            580,
+            352
+          ],
+          "match": {
+            "center": [
+              573,
+              354
+            ],
+            "ncc": 0.9063370860510875,
+            "alternative_ncc": 0.9040201973161598,
+            "peak_gap": 0.0023168887349277467,
+            "template_std": 1.615695250219432,
+            "boundary": false
+          },
+          "second_template": {
+            "center": [
+              572,
+              354
+            ],
+            "ncc": 0.9171770341069874,
+            "alternative_ncc": 0.8945109589069663,
+            "peak_gap": 0.022666075200021063,
+            "template_std": 2.1529977486183203,
+            "boundary": false
+          },
+          "cycle_full_px": 28.0,
+          "template_sensitivity_full_px": 2.0,
+          "accepted": false
+        }
+      ],
+      "accepted_count": 2,
+      "models": {}
+    }
+  ],
+  "limits": [
+    "Floor-near image regions not certified physical plane",
+    "Gate is engineering heuristic, not statistical confidence",
+    "No camera/ground/world contact recovery"
+  ]
+}

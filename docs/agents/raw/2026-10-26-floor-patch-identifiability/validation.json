@@ -1,0 +1,16 @@
+{
+  "random_texture_known_shift_half_px": [
+    7,
+    3
+  ],
+  "matched_center_half": [
+    227,
+    340
+  ],
+  "random_texture_peak_gap": 0.8474228652294145,
+  "horizontal_stripes_peak_gap": 0.0,
+  "ambiguous_stripes_rejected": true,
+  "nonidentity_frame_count": 6,
+  "nonidentity_model_fit_count": 0,
+  "identity_frames_are_self_controls_not_motion_validation": true
+}
