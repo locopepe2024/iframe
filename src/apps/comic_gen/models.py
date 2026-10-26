@@ -636,6 +636,41 @@ class EpisodeCharacterUse(BaseModel):
     confirmed_at: float = Field(default_factory=time.time)
 
 
+class ExtraRosterEntry(BaseModel):
+    """Reusable series-level crowd performer or bounded performer template."""
+
+    extra_id: str = Field(..., min_length=1, max_length=120)
+    label: str = Field(..., min_length=1, max_length=160)
+    kind: Literal["fixed_extra", "extra_template"] = "fixed_extra"
+    height: Optional[str] = Field(None, max_length=120)
+    body_build: Optional[str] = Field(None, max_length=240)
+    wardrobe: Optional[str] = Field(None, max_length=500)
+    palette: Optional[str] = Field(None, max_length=240)
+    props: List[str] = Field(default_factory=list, max_length=20)
+    reference_variant_id: Optional[str] = None
+    reference_media_id: Optional[str] = None
+
+
+class ExtraShotInstance(BaseModel):
+    """Shot-scoped placement of a reusable extra or anonymous crowd template."""
+
+    extra_id: Optional[str] = Field(None, max_length=120)
+    template_id: Optional[str] = Field(None, max_length=120)
+    layer: Literal["near", "mid", "far"] = "mid"
+    region: str = Field("", max_length=240)
+    relative_scale: Optional[str] = Field(None, max_length=120)
+    facing: Optional[str] = Field(None, max_length=120)
+    motion: Optional[str] = Field(None, max_length=500)
+    face_readable: bool = False
+    text_readable: bool = False
+
+    @model_validator(mode="after")
+    def require_reference(self):
+        if bool(self.extra_id) == bool(self.template_id):
+            raise ValueError("Extra shot instance requires exactly one extra_id or template_id")
+        return self
+
+
 class Character(BaseModel):
     id: str = Field(..., description="Unique identifier for the character")
     asset_revision: int = Field(0, ge=0)
@@ -895,6 +930,8 @@ class StoryboardConsistencyManifest(BaseModel):
     prop_ids: List[str] = Field(default_factory=list)
     asset_revision_pins: List[AssetRevisionPin] = Field(default_factory=list)
     asset_dimensions: Dict[str, Dict[str, Any]] = Field(default_factory=dict)
+    crowd_instances: List[ExtraShotInstance] = Field(default_factory=list)
+    crowd_roster_snapshot: List[ExtraRosterEntry] = Field(default_factory=list)
     reference_package_revision: Optional[int] = Field(None, ge=1)
     reference_visual_projection: Optional[StoryboardReferenceProjectionSnapshot] = None
     shot_visual_design: Optional[ShotVisualDesignSnapshot] = None
@@ -928,6 +965,9 @@ class StoryboardFrame(BaseModel):
         description="Explicit project-character ID to confirmed episode use ID for this shot",
     )
     prop_ids: List[str] = Field(default_factory=list, description="List of Prop IDs present in the frame")
+    crowd_instances: List[ExtraShotInstance] = Field(
+        default_factory=list, description="Shot-scoped references to reusable extras or crowd templates"
+    )
     
     # Legacy fields (kept for compatibility)
     action_description: str = Field("", description="What is happening in this frame (Legacy, use character_acting)")
@@ -3254,6 +3294,9 @@ class Series(BaseModel):
     characters: List[Character] = Field(default_factory=list, description="Shared character assets")
     scenes: List[Scene] = Field(default_factory=list, description="Shared scene assets")
     props: List[Prop] = Field(default_factory=list, description="Shared prop assets")
+    extra_roster: List[ExtraRosterEntry] = Field(
+        default_factory=list, description="Reusable fixed extras and crowd templates for this series"
+    )
 
     # Unified visual style
     art_direction: Optional[ArtDirection] = Field(None, description="Series-level art direction")
