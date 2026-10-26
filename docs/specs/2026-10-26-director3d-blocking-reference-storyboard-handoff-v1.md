@@ -2,13 +2,13 @@
 
 ## 目标
 
-将用户在 3D 导演台输入的自然语言，转换为可审核、可版本化、可传递到分镜的导演参考产物。3D 导演台直接生成结构化深度、多人占位参考图、运镜参考视频和动作参考视频。规范覆盖多人占位、前中后景、世界深度、屏幕关系、镜头、可见性和参考媒体用途；自然语言只作为导演台生成输入，不进入分镜，也不把任何参考产物当成最终角色图或最终生成视频。
+将用户在 3D 导演台输入的自然语言，转换为可审核、可版本化、可保存到资产库的导演参考产物。3D 导演台直接生成结构化深度、多人占位参考图、运镜参考视频和动作参考视频。规范覆盖多人占位、前中后景、世界深度、屏幕关系、镜头、可见性和参考媒体用途；自然语言只作为导演台生成输入，不进入资产库或分镜，也不把任何参考产物当成最终角色图或最终生成视频。
 
 ## 证据与边界
 
 **代码事实：** 当前导演台设计提案支持稳定实体 ID、米制位置、朝向、成对排布、盒体道具和静态摄影机；浏览器占位图可以导出，导演台也已有本地时间轴、动作和视频参考相关工作区；当前浏览器草稿与剧集分镜仍是独立状态，尚未形成统一的四类参考媒体交接合同。
 
-**直接含义：** 3D 导演台是空间和参考媒体交接的唯一审核入口。自然语言生成结果必须回到导演台，由导演台审核或调整后确认；只有导演台确认生成的 snapshot 才能成为分镜输入。
+**直接含义：** 3D 导演台是空间和参考媒体入库的唯一审核入口。自然语言生成结果必须回到导演台，由导演台审核或调整后确认；只有审核通过的结果才能保存为资产库中的导演参考资产。分镜只能引用资产库中的已确认资产版本。
 
 **未证明：** 生成模型一定遵守占位图、深度或编号关系。结构化交接只证明输入意图和来源，最终图像/视频仍需逐帧审核。
 
@@ -18,12 +18,12 @@
 |---|---|---|---|---|
 | 角色身份、外观、身高 | 角色资产 | 只读引用 | 只读引用 | 编译引用 |
 | 场景固定几何 | 场景资产 | 只读引用或临时代理 | 只读引用 | 编译引用 |
-| 多人位置、深度、朝向 | 导演台占位设计 | 生成、编辑和审核 | 读取快照 | 编译为参考 |
-| 占位参考图 | 导演台参考媒体 | 生成、审核和锁定 | 读取快照 | 作为图像参考 |
-| 深度参考 | 导演台空间/深度设计 | 生成、审核和锁定 | 读取快照 | 仅在模型契约支持时发送 |
+| 多人位置、深度、朝向 | 导演台占位设计 | 生成、编辑和审核 | 读取资产版本 | 编译为参考 |
+| 占位参考图 | 导演台参考媒体 | 生成、审核和锁定 | 读取资产版本 | 作为图像参考 |
+| 深度参考 | 导演台空间/深度设计 | 生成、审核和锁定 | 读取资产版本 | 仅在模型契约支持时发送 |
 | 首帧构图和静态镜头 | 分镜首帧/摄影字段 | 读取导演台参考并提出镜头覆盖 | 采纳和覆盖 | 编译 |
-| 运镜参考视频 | 导演台摄影预演 | 生成、审核和锁定 | 读取快照 | 仅作为运镜参考 |
-| 动作参考视频 | 分镜动效/动作预演 | 生成、审核和锁定 | 读取快照 | 仅作为动作节奏参考 |
+| 运镜参考视频 | 导演台摄影预演 | 生成、审核和锁定 | 读取资产版本 | 仅作为运镜参考 |
+| 动作参考视频 | 分镜动效/动作预演 | 生成、审核和锁定 | 读取资产版本 | 仅作为动作节奏参考 |
 | 人群反应和信息差 | 街道冲突与群像 Skill | 提供空间槽位 | 生成时间行为 | 编译 |
 
 导演台不得修改角色、场景或道具永久资产；分镜不得反向修改导演台占位源。
@@ -211,14 +211,15 @@
 
 如果某个模型不支持对应媒体类型，适配器必须标记 `unsupported` 或 `not_submitted`，不能把它伪装成已生效的控制输入。
 
-### 7. 导演台确认快照 `director_reference_snapshot`
+### 7. 导演台确认资产包 `director_reference_asset`
 
-3D 导演台审核通过后，将审核后的空间和参考媒体冻结为不可变快照：
+3D 导演台审核通过后，将审核后的空间和参考媒体保存为资产库中的导演参考资产包。资产包内部保留不可变 revision，分镜引用资产包和具体 revision：
 
 ```json
 {
-  "schemaVersion": "iframe.director3d.director-reference-snapshot.v1",
-  "snapshotId": "blocking-snapshot-...",
+  "schemaVersion": "iframe.asset.director-reference.v1",
+  "assetId": "director-reference-grain-shop-...",
+  "assetRevision": "director-reference-rev-1",
   "sourceRequestId": "request-...",
   "sourceRevision": "design-fnv1a32:1234abcd",
   "sceneRevision": "scene-rev-3",
@@ -243,31 +244,32 @@ GET /director3d/reference-generation-results/{request_id}
 PATCH /director3d/reference-generation-results/{request_id}/review
   3D 导演台审核、调整或拒绝
         ↓
-POST /director3d/reference-snapshots
-  仅允许 reviewStatus=approved
+POST /assets/director-references
+  仅允许 reviewStatus=approved，写入资产库并生成 assetRevision
         ↓
-Storyboard 读取 director_reference_snapshot
+Storyboard 读取资产库中的 director_reference_asset revision
 ```
 
 接口约束：
 
 1. 每个请求带 `baseRevision`；导演台状态变化后，旧请求不能覆盖新状态。
 2. 生成结果可以部分成功，不能把缺失媒体静默替换成旧媒体。
-3. 审核调整必须形成新的导演台 revision；不能原地修改已确认 snapshot。
-4. snapshot 保存结构化槽位、深度、摄影机、参考媒体 ID、哈希和审核记录。
-5. 分镜只能读取 snapshot，不能调用自然语言生成接口修改导演台设计。
+3. 审核调整必须形成新的导演台 revision；不能原地修改已入库资产 revision。
+4. 资产包保存结构化槽位、深度、摄影机、参考媒体 ID、哈希和审核记录。
+5. 分镜只能读取资产库 revision，不能调用自然语言生成接口修改导演台设计。
 6. 模型适配器是否提交深度、占位图、运镜视频或动作视频，必须由能力契约决定并记录 `submitted`、`unsupported` 或 `not_submitted`。
 
-删除角色、群演、场景或 Variant 后，已锁定分镜仍读取快照；未锁定分镜显示缺失引用，不自动换成当前版本。
+删除角色、群演、场景或 Variant 后，已锁定分镜仍读取其引用的资产 revision；未锁定分镜显示缺失引用，不自动换成当前版本。
 
 ## 分镜接收结构
 
-分镜只接收用户确认后的 `director_reference_snapshot`，不接收自然语言、生成请求或未确认的生成结果。建议挂载在 `StoryboardConsistencyManifest`：
+分镜只接收资产库中已确认的 `director_reference_asset` revision，不接收自然语言、生成请求或未审核的生成结果。建议挂载在 `StoryboardConsistencyManifest`：
 
 ```json
 {
   "director3dBlocking": {
-    "snapshotId": "blocking-snapshot-...",
+    "directorReferenceAssetId": "director-reference-grain-shop-...",
+    "directorReferenceAssetRevision": "director-reference-rev-1",
     "sourceRevision": "design-fnv1a32:1234abcd",
     "cameraId": "camera-main",
     "actionAxis": {"from": "苏砚", "to": "江灼", "axisDeg": 90},
@@ -295,7 +297,7 @@ Storyboard 读取 director_reference_snapshot
 
 ## 与街道冲突 Skill 的交接
 
-3D 导演台提供空间事实和参考预演：
+3D 导演台提供空间事实和参考预演，并将审核结果保存为可复用资产：
 
 - 谁在近景、中景、远景；
 - 谁位于冲突区域；
@@ -327,15 +329,16 @@ Storyboard 读取 director_reference_snapshot
 4. 深度层与相机关系不矛盾；
 5. 近中远景槽位数量和可见性符合当前镜头；
 6. 场景固定几何没有被临时人物动作污染；
-7. 用户确认后才生成 snapshot；
-8. 分镜提交时重新检查 snapshot 是否仍可解析。
+7. 3D 导演台审核通过后才写入资产库并生成 asset revision；
+8. 分镜提交时重新检查资产 revision 是否仍可解析。
 
 ## 成功标准
 
 - 3D 导演台可由自然语言生成结构化空间和四类参考产物；
 - 3D 导演台可以审核、调整和拒绝生成结果；
 - 用户可以在 3D 导演台中审核并修改位置、朝向、深度和摄影机；
-- 分镜能引用不可变占位快照；
+- 审核通过的结果能保存为可复用导演参考资产及不可变 revision；
+- 分镜能引用资产库中的导演参考资产 revision；
 - 粮铺、阁楼、苏砚/江灼和卖艺少女案例可以复用同一交接格式；
 - 角色、场景、道具或群演 Variant 删除时不会静默替换；
 - 分镜生成能区分空间快照、摄影机参考、动作参考和群像时间行为；
@@ -359,4 +362,4 @@ Storyboard 读取 director_reference_snapshot
 - `tests/test_director_design.py`
 - `tests/test_director_shooting_plan.py`
 
-本 spec 先定义交接合同；实现应拆为自然语言生成请求、四类参考产物结果、3D 导演台审核、确认快照、分镜读取和提交校验六个独立切片。
+本 spec 先定义交接合同；实现应拆为自然语言生成请求、四类参考产物结果、3D 导演台审核、资产库入库、分镜读取和提交校验六个独立切片。
