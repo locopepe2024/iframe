@@ -484,7 +484,6 @@ class VideoTask(BaseModel):
     generation_mode: str = Field("i2v", description="Generation mode: 'i2v' (image-to-video) or 'r2v' (reference-to-video)")
     reference_video_urls: List[str] = Field(default_factory=list, description="Reference video URLs for R2V generation (max 3)")
     reference_media_ids: List[str] = Field(default_factory=list, description="Stable media identities consumed by this shot")
-    asset_revision_pins: List[AssetRevisionPin] = Field(default_factory=list)
     consistency_manifest: Optional["StoryboardConsistencyManifest"] = Field(
         None,
         description="Immutable consistency snapshot consumed by this video task",

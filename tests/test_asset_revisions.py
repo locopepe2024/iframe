@@ -54,7 +54,7 @@ def test_asset_revisions_survive_reload_and_shot_pin_does_not_drift(tmp_path):
     _, task_id = pipeline.create_video_task(
         "project", "", "Prompt", frame_id="frame", model="wan2.7-i2v")
     task = next(item for item in script.video_tasks if item.id == task_id)
-    assert task.asset_revision_pins == [pinned]
+    assert task.consistency_manifest.asset_revision_pins == [pinned]
 
     reloaded = ComicGenPipeline.__new__(ComicGenPipeline)
     reloaded.data_file = pipeline.data_file
@@ -62,7 +62,7 @@ def test_asset_revisions_survive_reload_and_shot_pin_does_not_drift(tmp_path):
     assert restored.scenes[0].asset_revision == 2
     assert len(restored.scenes[0].asset_revisions) == 2
     assert restored.frames[0].reference_package.asset_revision_pins == [pinned]
-    assert restored.video_tasks[0].asset_revision_pins == [pinned]
+    assert restored.video_tasks[0].consistency_manifest.asset_revision_pins == [pinned]
 
 
 def test_deleting_variant_clears_live_shot_references_but_keeps_video_snapshot(tmp_path):
@@ -89,7 +89,6 @@ def test_deleting_variant_clears_live_shot_references_but_keeps_video_snapshot(t
     assert frame.reference_package.asset_revision_pins == []
     assert frame.reference_visual_projection is None
     assert frame.consistency_manifest is None
-    assert task.asset_revision_pins[0].variant_id == "first"
     assert task.consistency_manifest.asset_revision_pins[0].variant_id == "first"
 
 
@@ -149,7 +148,7 @@ def test_changing_shot_reference_variant_invalidates_confirmed_pins(tmp_path):
     _, task_id = pipeline.create_video_task(
         "project", "", "Prompt", frame_id="frame", model="wan2.7-i2v")
     task = next(item for item in pipeline.scripts["project"].video_tasks if item.id == task_id)
-    assert task.asset_revision_pins[0].variant_id == "second"
+    assert task.consistency_manifest.asset_revision_pins[0].variant_id == "second"
 
 
 def test_confirmed_pin_survives_current_asset_removal(tmp_path):

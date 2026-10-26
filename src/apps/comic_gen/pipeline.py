@@ -8190,7 +8190,6 @@ class ComicGenPipeline(StudioOwnerMixin):
             generation_mode=generation_mode,
             reference_video_urls=reference_video_urls or [],
             reference_media_ids=list(dict.fromkeys(reference_media_ids)),
-            asset_revision_pins=[item.model_copy(deep=True) for item in asset_revision_pins],
             consistency_manifest=consistency_manifest.model_copy(deep=True) if consistency_manifest else None,
             storyboard_reference_revision=storyboard_reference_revision,
             reference_image_urls=reference_image_urls or [],
