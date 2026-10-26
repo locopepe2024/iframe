@@ -81,7 +81,7 @@ class Dolly(StrictModel):
 class SetPose(StrictModel):
     kind: Literal["set_pose"]
     actorId: Identifier
-    presetId: Literal["pose.neutral", "standing.relaxed", "standing.hands_on_hips", "gesture.wave", "gesture.arms_crossed", "gesture.thinking"]
+    presetId: Literal["pose.neutral", "standing.relaxed", "standing.hands_on_hips", "gesture.wave", "gesture.arms_crossed", "gesture.thinking", "kneeling.single_knee"]
 
 
 class SeatActor(StrictModel):

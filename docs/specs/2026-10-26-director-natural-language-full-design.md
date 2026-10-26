@@ -118,6 +118,22 @@ understanding, skeletal posing, contact solving or clothes generation.
 
 ### 2026-10-27 implementation slice
 
+Closeout before storyboard trials: add a preview-only time scrubber that never
+changes the authored playhead/revision; accept nullable optional group poses
+serialized by Pydantic and reject prop IDs as group actors. Export/import a
+portable JSON design bundle for the current natural-language authoring subset:
+canonical white models, primitive props, all cameras, pose values, actor/camera
+paths, and camera-path timeline tracks. Preserve their authored fields and the
+evaluated shot projection. External assets, calibration, dialogue/contact/focus
+tracks and arbitrary animation tracks require dependency admission not yet
+available in this bundle version, so reject them explicitly rather than drop
+them. The portable JSON is a file interchange surface; asset-library admission
+remains an independent integration, not an approval gate or a new asset store.
+Import validates the entire file before a single undoable replacement, checks
+the current revision at apply time, and never executes data. Verify round-trip
+seated pairs and timed camera paths, malformed/referenced-missing input,
+stale imports, and undo/redo. Run focused UI/backend tests, typecheck and build.
+
 Natural-language design takes priority over asset integration. Timed linear
 camera motion must retain an explicit requested distance (0.5 m over 4 seconds
 is the regression case), preserve the lens and target bindings, reject moves

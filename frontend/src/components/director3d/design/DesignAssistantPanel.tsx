@@ -57,7 +57,7 @@ export function DesignAssistantPanel({ onPreview, previewing, disabled = false }
     pending.current?.abort(); pending.current = null; setBusy(false); setMessage("已停止生成，当前场景未修改。");
   };
   return <section className="design-assistant" aria-labelledby="design-assistant-title">
-    <div className="dialogue-heading"><h2 id="design-assistant-title">自然语言设计</h2><span className="revision-badge">静态场景</span></div>
+    <div className="dialogue-heading"><h2 id="design-assistant-title">自然语言设计</h2><span className="revision-badge">场景与机位</span></div>
     <p>描述人物摆位、姿态、坐椅子、当前机位或带时长的运镜，也可以说“四秒缓慢推进”。先预览，再应用。</p>
     <form onSubmit={(event) => { event.preventDefault(); void generate(); }}>
       <label htmlFor="director-design-prompt">设计要求</label>
@@ -67,7 +67,7 @@ export function DesignAssistantPanel({ onPreview, previewing, disabled = false }
     {disabled && <p role="status">录制期间暂不可设计场景。</p>}
     {busy && <p role="status">正在根据当前场景生成提案，尚未修改舞台…</p>}
     {proposal && <div className="design-proposal">
-      <h3>待评审设计</h3><p>{proposal.summary}</p>
+      <h3>设计提案</h3><p>{proposal.summary}</p>
       {proposal.assumptions.length > 0 && <details open><summary>设计假设</summary><ul>{proposal.assumptions.map((item, index) => <li key={index}>{item}</li>)}</ul></details>}
       {proposal.clarification ? <p role="status">{proposal.clarification}</p> : <>
         <p>{proposal.operations.length} 项操作。预览不会保存；应用后可拖动或输入数值继续编辑。</p>

@@ -187,6 +187,12 @@ it("rejects a second natural-language camera path when one already exists", () =
   expect(() => compileDesignProposal(current, proposal)).toThrow("已有运镜路径");
 });
 
+it("accepts omitted group poses serialized as null by the provider schema", () => {
+  const { state, ids } = fixture();
+  const preview = compileDesignProposal(state, plan([{ kind: "arrange_group", members: ids.map((actorId, i) => ({ actorId, positionM: [i * 2, 0, 0], yawDeg: 0, presetId: null })) }]));
+  expect(preview.characters[ids[1]].transform.position).toEqual([2, 0, 0]);
+});
+
 it("rejects stale and newly locked proposals without a partial apply or undo entry", () => {
   const { state, ids, proposal } = fixture();
   state.toggleCharacterLocked(ids[1]);

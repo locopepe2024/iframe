@@ -10,7 +10,7 @@ type Vec = [number, number, number];
 export type DesignOperation =
   | { kind: "place_entity"; entityId: string; positionM: Vec; yawDeg: number }
   | { kind: "arrange_pair"; actorIds: [string, string]; centerM: Vec; separationM: number; axisDeg: number }
-  | { kind: "arrange_group"; members: Array<{ actorId: string; positionM: Vec; yawDeg: number; presetId?: DesignPoseId }> }
+  | { kind: "arrange_group"; members: Array<{ actorId: string; positionM: Vec; yawDeg: number; presetId?: DesignPoseId | null }> }
   | { kind: "add_box"; entityId: string; label: string; positionM: Vec; dimensionsM: Vec }
   | { kind: "set_pose"; actorId: string; presetId: DesignPoseId }
   | { kind: "seat_actor"; actorId: string; chairId: string }
@@ -97,7 +97,7 @@ export function parseDesignProposal(raw: unknown): DesignProposal {
       op.members.forEach((member) => {
         const item = object(member); keys(item, ["actorId", "positionM", "yawDeg", ...(item.presetId === undefined ? [] : ["presetId"])]);
         text(item.actorId); if (memberIds.has(item.actorId as string)) throw new Error("多人编排人物不能重复。"); memberIds.add(item.actorId as string);
-        vector(item.positionM); number(item.yawDeg, -360, 360); if (item.presetId !== undefined && !DESIGN_POSES.includes(item.presetId as DesignPoseId)) throw new Error("多人编排姿态不受支持。");
+        vector(item.positionM); number(item.yawDeg, -360, 360); if (item.presetId != null && !DESIGN_POSES.includes(item.presetId as DesignPoseId)) throw new Error("多人编排姿态不受支持。");
       });
     } else if (op.kind === "add_box") {
       keys(op, ["kind", "entityId", "label", "positionM", "dimensionsM"]); text(op.entityId); text(op.label, 80); vector(op.positionM); vector(op.dimensionsM, .050001, 20);
@@ -172,6 +172,7 @@ export function compileDesignProposal(state: WorkbenchState, raw: unknown): Desi
       applyDesignPose(editableActor(op.actorId), op.presetId);
     } else if (op.kind === "arrange_group") {
       for (const member of op.members) {
+        if (!characters[member.actorId]) throw new Error("多人编排必须引用现有人物，不能引用道具。");
         if (member.presetId) applyDesignPose(editableActor(member.actorId), member.presetId);
         place(member.actorId, member.positionM, member.yawDeg);
       }

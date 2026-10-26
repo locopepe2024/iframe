@@ -1,6 +1,6 @@
 import { DesignAssistantPanel } from "./design/DesignAssistantPanel";
 import { designRevision, type DesignPreview } from "./design/design-proposal";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
 import { resolveViewTabKey, resolveWorkbenchShortcut } from "./accessibility/workbench-accessibility";
 import { rigProfile } from "./data/humanoid";
@@ -55,6 +55,8 @@ export function App({ restoredSavedAt = null }: DirectorAppProps = {}) {
   const [inspectorExpanded, setInspectorExpanded] = useState(true);
   const [recordingVideo, setRecordingVideo] = useState(false);
   const [designPreview, setDesignPreview] = useState<DesignPreview | null>(null);
+  const [previewFrame, setPreviewFrame] = useState(1);
+  const showDesignPreview = useCallback((next: DesignPreview | null) => { setDesignPreview(next); setPreviewFrame(1); }, []);
   const currentDesignRevision = useWorkbenchStore(designRevision);
   const activeDesignPreview = !recordingVideo && designPreview?.baseRevision === currentDesignRevision ? designPreview : null;
   const [saveState, setSaveState] = useState<{ status: "idle" | "saving" | "saved" | "error"; message: string }>(() => restoredSavedAt
@@ -164,7 +166,11 @@ export function App({ restoredSavedAt = null }: DirectorAppProps = {}) {
               <button className={`toggle-button ${fullscreenActive ? "active" : ""}`} type="button" aria-pressed={fullscreenActive} onClick={toggleFullscreen}>{fullscreenActive ? "退出全屏" : "全屏"}</button>
             </div>
             {activeDesignPreview && <p className="design-preview-banner" role="status">设计预览 · 尚未应用，退出预览可恢复原场景。</p>}
-            <div className={activeDesignPreview ? "design-preview-stage" : undefined}><HumanoidStage recordingVideo={recordingVideo} preview={activeDesignPreview} /></div>
+            {activeDesignPreview && Object.keys(activeDesignPreview.cameraPaths).length > 0 && <label>运镜预览时间
+              <input type="range" aria-label="运镜预览时间" min={1} max={Math.round(activeDesignPreview.dialogueTimeline.durationSeconds * activeDesignPreview.dialogueTimeline.fps) + 1} step={1} value={previewFrame} onChange={(event) => setPreviewFrame(Number(event.target.value))} />
+              <output>{((previewFrame - 1) / activeDesignPreview.dialogueTimeline.fps).toFixed(2)} 秒</output>
+            </label>}
+            <div className={activeDesignPreview ? "design-preview-stage" : undefined}><HumanoidStage recordingVideo={recordingVideo} preview={activeDesignPreview} previewFrame={previewFrame} /></div>
             <p className="sr-only" role="status" aria-live="polite" aria-atomic="true">
               {selectedSceneObject ? `当前选择物体 ${selectedSceneObject.label}；${selectedSceneObject.visible ? "可见" : "已隐藏"}，${selectedSceneObject.locked ? "已锁定" : "可编辑"}。` : selectedCharacter ? `已选择 ${selectedCharacterIds.length} 个人物，当前为 ${selectedCharacter.label}；${selectedCharacter.visible ? "可见" : "已隐藏"}，${selectedCharacter.locked ? "已锁定，编辑不可用" : "未锁定，可编辑"}。` : "当前场景没有人物，可从添加对象开始。"}撤销 {undoDepth > 0 ? "可用" : "不可用"}，重做 {redoDepth > 0 ? "可用" : "不可用"}。
             </p>
@@ -175,7 +181,7 @@ export function App({ restoredSavedAt = null }: DirectorAppProps = {}) {
               <span><strong>单位：</strong>米 / 度</span>
             </div>
             </section>
-            <DesignAssistantPanel onPreview={setDesignPreview} previewing={activeDesignPreview !== null} disabled={recordingVideo} />
+            <DesignAssistantPanel onPreview={showDesignPreview} previewing={activeDesignPreview !== null} disabled={recordingVideo} />
             {activeDesignPreview && <p role="status">设计预览期间暂不可导出参考图或提交深度；请先应用或退出预览。</p>}
             <div hidden={activeDesignPreview !== null}><TemporalToolsInspector /></div>
           </div>

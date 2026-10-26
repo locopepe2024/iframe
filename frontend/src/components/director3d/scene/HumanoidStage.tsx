@@ -558,7 +558,7 @@ function StageSceneObject({ sceneObject, recordingVideo }: { sceneObject: SceneO
   );
 }
 
-export function HumanoidStage({ recordingVideo: videoRecording = false, preview = null }: { recordingVideo?: boolean; preview?: DesignPreview | null }) {
+export function HumanoidStage({ recordingVideo: videoRecording = false, preview = null, previewFrame = 1 }: { recordingVideo?: boolean; preview?: DesignPreview | null; previewFrame?: number }) {
   const recordingVideo = videoRecording || preview !== null;
   const authoredViewMode = useWorkbenchStore((state) => state.viewMode);
   const viewMode = preview ? "camera" : authoredViewMode;
@@ -580,7 +580,8 @@ export function HumanoidStage({ recordingVideo: videoRecording = false, preview 
   const authoredTimeline = useWorkbenchStore((state) => state.dialogueTimeline);
   const cameraPaths = preview?.cameraPaths ?? authoredCameraPaths;
   const timeline = preview?.dialogueTimeline ?? authoredTimeline;
-  const playheadFrame = useWorkbenchStore((state) => state.playheadFrame);
+  const authoredPlayheadFrame = useWorkbenchStore((state) => state.playheadFrame);
+  const playheadFrame = preview ? previewFrame : authoredPlayheadFrame;
   const evaluated = useMemo(() => evaluateDirectorFrame({ frame: playheadFrame, durationSeconds: timeline.durationSeconds, fps: timeline.fps, tracks: timeline.tracks, activeCameraTrackId: timeline.activeCameraTrackId, selectedCameraId, characters: baseCharacters, cameras: baseCameras, sceneObjects: baseSceneObjects, actorPaths, cameraPaths }), [actorPaths, baseCameras, baseCharacters, baseSceneObjects, cameraPaths, playheadFrame, selectedCameraId, timeline]);
   const charactersRecord = evaluated.characters;
   const characters = Object.values(charactersRecord);

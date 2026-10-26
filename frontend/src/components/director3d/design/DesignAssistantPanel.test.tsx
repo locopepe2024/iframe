@@ -7,7 +7,7 @@ import { designRevision, type DesignPreview, type DesignProposal } from "./desig
 
 vi.mock("@/lib/directorDesign", () => ({ directorDesignApi: { propose: vi.fn() } }));
 vi.mock("@/lib/panoramaAssets", () => ({ panoramaAssetApi: { list: vi.fn().mockResolvedValue([]) } }));
-vi.mock("../scene/HumanoidStage", () => ({ HumanoidStage: ({ preview }: { preview?: DesignPreview | null }) => <div data-testid="stage-design-state">{preview ? JSON.stringify(preview.cameras[preview.cameraId].transform.position) : "authored"}</div> }));
+vi.mock("../scene/HumanoidStage", () => ({ HumanoidStage: ({ preview, previewFrame }: { preview?: DesignPreview | null; previewFrame?: number }) => <div data-testid="stage-design-state" data-preview-frame={previewFrame}>{preview ? JSON.stringify(preview.cameras[preview.cameraId].transform.position) : "authored"}</div> }));
 
 const initial = useWorkbenchStore.getState();
 beforeEach(() => {
@@ -60,6 +60,23 @@ it("cancels the visual override and removes it immediately when editing invalida
   expect(screen.getByTestId("stage-design-state")).toHaveTextContent("authored");
   expect(screen.getByRole("button", { name: "应用设计" })).toBeDisabled();
   expect(screen.getByText(/此提案已过期/)).toBeInTheDocument();
+});
+
+it("scrubs a motion candidate without changing authored time or invalidating apply", async () => {
+  const before = useWorkbenchStore.getState();
+  vi.mocked(directorDesignApi.propose).mockResolvedValue({ ...proposal(), operations: [{ kind: "camera_motion", cameraId: before.selectedCameraId, presetId: "push_in", durationSeconds: 4, easing: "ease_in_out", distanceM: .5 }] });
+  render(<App />);
+  await generate("四秒推进半米");
+  fireEvent.click(screen.getByRole("button", { name: "预览设计" }));
+  const frame = before.dialogueTimeline.fps * 2 + 1;
+  fireEvent.change(screen.getByRole("slider", { name: "运镜预览时间" }), { target: { value: String(frame) } });
+  expect(screen.getByTestId("stage-design-state")).toHaveAttribute("data-preview-frame", String(frame));
+  expect(useWorkbenchStore.getState().playheadFrame).toBe(1);
+  expect(useWorkbenchStore.getState().cameraPaths).toEqual({});
+  expect(screen.getByRole("button", { name: "应用设计" })).toBeEnabled();
+  fireEvent.click(screen.getByRole("button", { name: "退出预览" }));
+  fireEvent.click(screen.getByRole("button", { name: "预览设计" }));
+  expect(screen.getByRole("slider", { name: "运镜预览时间" })).toHaveValue("1");
 });
 
 it("sends current context and conversation on subsequent edits and keeps the proposal on provider failure", async () => {
