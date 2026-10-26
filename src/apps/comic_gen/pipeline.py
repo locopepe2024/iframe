@@ -799,6 +799,12 @@ class ComicGenPipeline(StudioOwnerMixin):
             )
         return sheet
 
+    @staticmethod
+    def _shot_character_use(script: Script, frame: StoryboardFrame, asset_id: str) -> Optional[Any]:
+        return next((use for use in script.episode_character_uses
+                     if frame.character_use_ids.get(use.project_character_id) == use.use_id
+                     and asset_id in (use.project_character_id, use.selected_asset_id)), None)
+
     def _shot_asset_visual_context(self, script: Script, frame: StoryboardFrame,
                                    resolved: Dict[str, List[Any]]) -> Tuple[str, List[str]]:
         parts: List[str] = []
@@ -806,22 +812,21 @@ class ComicGenPipeline(StudioOwnerMixin):
         for asset_type, ids in (("character", frame.character_ids), ("prop", frame.prop_ids)):
             assets = {item.id: item for item in resolved.get(f"{asset_type}s", [])}
             for asset_id in ids:
-                asset = assets.get(asset_id)
+                selected_use = self._shot_character_use(script, frame, asset_id) if asset_type == "character" else None
+                effective_asset_id = selected_use.selected_asset_id if selected_use else asset_id
+                asset = assets.get(effective_asset_id)
                 if asset is None:
-                    issues.append(f"{asset_type}:{asset_id}:missing_asset")
+                    issues.append(f"{asset_type}:{effective_asset_id}:missing_asset")
                     continue
                 variants = {item.id: item for item in self._asset_image_variants(asset, asset_type)}
-                selected_ids = frame.workbench_reference_variant_ids.get(asset_id, [])
-                selected_use = next((use for use in script.episode_character_uses
-                                     if asset_type == "character" and use.selected_asset_id == asset_id
-                                     and frame.character_use_ids.get(use.project_character_id) == use.use_id), None)
+                selected_ids = frame.workbench_reference_variant_ids.get(effective_asset_id, [])
                 if selected_use:
                     selected_ids = [selected_use.selected_variant_id]
                 if not selected_ids:
                     selected_id = self._selected_asset_variant_id(asset, asset_type)
                     selected_ids = [selected_id] if selected_id else []
                 if any(variant_id not in variants for variant_id in selected_ids):
-                    issues.append(f"{asset_type}:{asset_id}:missing_variant")
+                    issues.append(f"{asset_type}:{effective_asset_id}:missing_variant")
                     continue
                 record = asset.character_design if asset_type == "character" else asset.asset_design
                 revisions = record.get("design_revisions") if isinstance(record, dict) else None
@@ -835,13 +840,13 @@ class ComicGenPipeline(StudioOwnerMixin):
                 }
                 revision_ids.discard(None)
                 if len(revision_ids) > 1:
-                    issues.append(f"{asset_type}:{asset_id}:mixed_design_revisions")
+                    issues.append(f"{asset_type}:{effective_asset_id}:mixed_design_revisions")
                     continue
                 revision_id = next(iter(revision_ids)) if revision_ids else revisions[-1].get("revision")
                 selected_revision = next((item for item in revisions
                                           if isinstance(item, dict) and item.get("revision") == revision_id), None)
                 if not selected_revision or not isinstance(selected_revision.get("design"), dict):
-                    issues.append(f"{asset_type}:{asset_id}:missing_design_revision")
+                    issues.append(f"{asset_type}:{effective_asset_id}:missing_design_revision")
                     continue
                 design = selected_revision["design"]
                 if asset_type == "character":
@@ -879,21 +884,25 @@ class ComicGenPipeline(StudioOwnerMixin):
         ):
             assets = {item.id: item for item in resolved.get(f"{asset_type}s", [])}
             for asset_id in ids:
-                asset = assets.get(asset_id)
+                selected_use = self._shot_character_use(script, frame, asset_id) if asset_type == "character" else None
+                effective_asset_id = selected_use.selected_asset_id if selected_use else asset_id
+                asset = assets.get(effective_asset_id)
                 if asset is None:
-                    asset_sources.append([asset_type, asset_id, "missing"])
+                    asset_sources.append([asset_type, effective_asset_id, "missing"])
                     continue
                 record = asset.character_design if asset_type == "character" else asset.asset_design
                 revisions = record.get("design_revisions") if isinstance(record, dict) else None
                 latest = revisions[-1] if isinstance(revisions, list) and revisions else None
                 variants = {item.id: item for item in self._asset_image_variants(asset, asset_type)}
-                selected_ids = frame.workbench_reference_variant_ids.get(asset_id)
+                selected_ids = frame.workbench_reference_variant_ids.get(effective_asset_id)
+                if selected_use:
+                    selected_ids = [selected_use.selected_variant_id]
                 if not selected_ids:
                     selected_id = self._selected_asset_variant_id(asset, asset_type)
                     selected_ids = [selected_id] if selected_id else []
                 selected = [[variant_id, getattr(variants.get(variant_id), "media_id", None),
                              variant_id in variants] for variant_id in selected_ids]
-                asset_sources.append([asset_type, asset_id, latest, selected])
+                asset_sources.append([asset_type, effective_asset_id, latest, selected])
         reviewed_looks = [
             [use.project_character_id, use.selected_asset_id, use.selected_asset_revision,
              use.selected_variant_id, use.selected_media_id]

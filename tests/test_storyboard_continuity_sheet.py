@@ -3,7 +3,8 @@ from threading import RLock
 import pytest
 
 from src.apps.comic_gen.models import (
-    AssetImageSubmissionSnapshot, Character, GlobalAssetLibrary, ImageVariant, Scene, Script, StoryboardFrame,
+    AssetImageSubmissionSnapshot, Character, EpisodeCharacterUse, GlobalAssetLibrary, ImageVariant,
+    Scene, Script, StoryboardFrame,
     StoryboardReferenceProjectionSnapshot,
 )
 from src.apps.comic_gen.pipeline import ComicGenPipeline
@@ -232,3 +233,33 @@ def test_image_and_video_use_design_revision_of_selected_character_variant(tmp_p
     assert changed["visual_source_hash"] != row["visual_source_hash"]
     with pytest.raises(ValueError, match="missing_design_revision"):
         pipeline.preview_storyboard_render_prompt(script.id, shot.id, "老掌柜站在柜台前")
+
+
+def test_reviewed_episode_look_uses_selected_asset_instead_of_project_character(tmp_path):
+    project_character = Character(id="keeper", name="老掌柜", description="")
+    project_character.character_design = {"design_revisions": [{"revision": 1, "design": {
+        "identity": {"visual_notes": "母版黑发"},
+    }}]}
+    selected_look = Character(id="keeper-old", name="老掌柜暮年造型", description="")
+    selected_look.character_design = {"design_revisions": [{"revision": 1, "design": {
+        "identity": {"visual_notes": "灰白发髻"},
+    }}]}
+    selected_look.reference_sheet.image_variants = [
+        ImageVariant(id="old-look", url="old.png", media_id="old-media"),
+    ]
+    shot = frame("shot", "shop")
+    shot.character_ids = ["keeper"]
+    shot.character_use_ids = {"keeper": "look-use"}
+    pipeline, script = make_pipeline(tmp_path, [shot], [Scene(id="shop", name="粮铺", description="")])
+    script.characters = [project_character, selected_look]
+    script.episode_character_uses = [EpisodeCharacterUse(
+        use_id="look-use", project_character_id="keeper", label="暮年", source_pack_id="pack",
+        source_pack_revision=1, source_design_revision=1, source_anchor_variant_id="old-look",
+        selected_asset_id="keeper-old", selected_asset_revision=1,
+        selected_variant_id="old-look", selected_media_id="old-media",
+        selected_source_scope="project", selected_source_container_id=script.id,
+    )]
+    row = pipeline.storyboard_continuity_sheet(script.id)["rows"][0]
+    assert row["asset_visual_context"] == "角色老掌柜暮年造型：灰白发髻"
+    assert "母版黑发" not in row["asset_visual_context"]
+    assert row["asset_visual_issues"] == []
