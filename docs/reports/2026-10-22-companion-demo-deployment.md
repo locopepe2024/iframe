@@ -1,5 +1,13 @@
 # Companion photo demo deployment — 2026-10-22
 
+## 2026-10-26 — Natural diary voice commands test deployment
+
+User authorized deployment for natural-speech testing. Frontend built from committed revision `ad35aeb7` in an isolated archive with `/companion-demo` base path; includes diary command fix `8ad4f627`. Existing unrelated working-tree changes were excluded. New `_next` resources uploaded first without deleting older chunks; actual served `web/companion/agent.html` replaced after backup to `/srv/lumenx/companion-demo/backups/before-ad35aeb7/agent.html`. Backend, database, model/channel configuration and services were not changed.
+
+Public agent HTML returned 200 and matched the local built HTML SHA256 exactly. All 11 script URLs referenced by the entry returned 200; demo health returned 200/ok. Runtime does not expose `/companion-demo/build-manifest.json` (404); manifest is stored on the remote release filesystem, not a public verification endpoint. Build succeeded; diary component/backend tests and typecheck were completed before deployment as documented in the evaluation spec. HTTP resource checks do not prove browser hydration or actual microphone/recognition stability.
+
+Natural speech test: open bottom 日记 → 开始记录日记 (or 编辑日记 for an existing entry) → 开始或继续语音记录 and allow microphone. Speak ordinary content, then “就先说到这里，停止”: listening should pause without saving. Resume, say “保存这篇日记”: listening should pause and show explicit save confirmation; click confirmation to persist. Browser SpeechRecognition remains the actual dictation provider; SenseVoice has not been substituted. Real-user microphone test is pending. No push or merge.
+
 User authorized an independent test deployment on the iFrame host; no branch push or merge was performed.
 
 - Public entry: https://garage.uniart.fun/companion-demo/companion/photos
