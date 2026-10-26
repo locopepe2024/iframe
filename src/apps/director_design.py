@@ -2,6 +2,8 @@
 from __future__ import annotations
 
 import json
+import time
+import uuid
 from typing import Annotated, Literal
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -130,6 +132,129 @@ class DesignRequest(StrictModel):
         if not self.prompt.strip() or not isinstance(json.loads(self.context), dict):
             raise ValueError("Expected nonempty prompt and JSON scene object")
         return self
+
+
+OutputKind = Literal["depth", "blockingImage", "cameraMotionVideo", "actionMotionVideo"]
+ReviewStatus = Literal["pending", "needs_revision", "approved", "rejected"]
+
+
+class ReferenceGenerationRequest(StrictModel):
+    prompt: str = Field(min_length=1, max_length=2000)
+    baseRevision: str = Field(pattern=r"^design-fnv1a32:[0-9a-f]{8}$")
+    context: str = Field(min_length=2, max_length=100000)
+    requestedOutputs: dict[OutputKind, bool] = Field(default_factory=lambda: {"depth": True, "blockingImage": True, "cameraMotionVideo": True, "actionMotionVideo": True})
+
+    @model_validator(mode="after")
+    def context_json(self):
+        if not isinstance(json.loads(self.context), dict):
+            raise ValueError("Expected JSON director context")
+        if not any(self.requestedOutputs.values()):
+            raise ValueError("At least one reference output must be requested")
+        return self
+
+
+class ReferenceReview(StrictModel):
+    reviewStatus: ReviewStatus
+    acceptedChanges: dict[str, object] = Field(default_factory=dict)
+    rejectedOutputs: list[OutputKind] = Field(default_factory=list)
+    reviewNotes: list[str] = Field(default_factory=list, max_length=20)
+    blockingIssues: list[str] = Field(default_factory=list, max_length=20)
+
+
+class ReferenceSnapshotRequest(StrictModel):
+    requestId: Identifier
+
+
+def _reference_library():
+    """Use the existing persisted global asset library as the durable owner."""
+    from .comic_gen.api import pipeline
+    return pipeline
+
+
+def _owner_records(user: UserContext):
+    pipeline = _reference_library()
+    library = pipeline.library_store
+    owner = user.owner_profile_id
+    for name in ("director_reference_requests", "director_reference_results", "director_reference_assets"):
+        if not hasattr(library, name):
+            setattr(library, name, [])
+    return pipeline, library, owner
+
+
+def _save_reference_library(pipeline):
+    pipeline._save_library_data()
+
+
+@router.post("/reference-generation-requests")
+def create_reference_generation_request(request: ReferenceGenerationRequest, user: UserContext = Depends(require_user_context)):
+    pipeline, library, owner = _owner_records(user)
+    request_id = f"director-reference-request-{uuid.uuid4().hex}"
+    now = time.time()
+    record = {"requestId": request_id, "ownerProfileId": owner, "prompt": request.prompt, "baseRevision": request.baseRevision,
+              "context": request.context, "requestedOutputs": request.requestedOutputs, "status": "pending", "createdAt": now, "updatedAt": now}
+    outputs = {kind: {"status": "pending" if requested else "not_requested", "mediaId": None, "purpose": kind} for kind, requested in request.requestedOutputs.items()}
+    result = {"requestId": request_id, "ownerProfileId": owner, "baseRevision": request.baseRevision, "outputs": outputs, "reviewStatus": "pending", "reviewRevision": 0, "review": None, "updatedAt": now}
+    with pipeline._save_lock:
+        library.director_reference_requests.append(record)
+        library.director_reference_results.append(result)
+        pipeline._save_library_data_unlocked()
+    return {"schemaVersion": "iframe.director3d.director-reference-generation-request.v1", **record}
+
+
+@router.get("/reference-generation-results/{request_id}")
+def get_reference_generation_result(request_id: str, user: UserContext = Depends(require_user_context)):
+    pipeline, library, owner = _owner_records(user)
+    result = next((item for item in library.director_reference_results if item.get("requestId") == request_id and item.get("ownerProfileId") == owner), None)
+    if result is None:
+        raise HTTPException(404, "reference generation result not found")
+    return {"schemaVersion": "iframe.director3d.director-reference-generation-result.v1", **result}
+
+
+@router.patch("/reference-generation-results/{request_id}/review")
+def review_reference_generation_result(request_id: str, review: ReferenceReview, user: UserContext = Depends(require_user_context)):
+    pipeline, library, owner = _owner_records(user)
+    with pipeline._save_lock:
+        result = next((item for item in library.director_reference_results if item.get("requestId") == request_id and item.get("ownerProfileId") == owner), None)
+        if result is None:
+            raise HTTPException(404, "reference generation result not found")
+        if result.get("reviewStatus") == "approved":
+            raise HTTPException(409, "approved reference result is immutable; create a new director revision")
+        output_updates = review.acceptedChanges.get("outputs", {}) if isinstance(review.acceptedChanges, dict) else {}
+        if output_updates:
+            for kind, update in output_updates.items():
+                if kind not in result["outputs"] or not isinstance(update, dict) or update.get("status") not in {"generated", "unsupported", "not_submitted", "rejected"}:
+                    raise HTTPException(422, "invalid director reference output update")
+                result["outputs"][kind] = {**result["outputs"][kind], **update}
+        if review.reviewStatus == "approved":
+            pending = [kind for kind, output in result["outputs"].items() if output.get("status") == "pending"]
+            if pending or review.blockingIssues:
+                raise HTTPException(409, "all requested outputs must be resolved and blocking issues cleared before approval")
+        result.update({"reviewStatus": review.reviewStatus, "reviewRevision": int(result.get("reviewRevision", 0)) + 1,
+                       "review": review.model_dump(), "updatedAt": time.time()})
+        pipeline._save_library_data_unlocked()
+    return {"schemaVersion": "iframe.director3d.director-reference-review.v1", "requestId": request_id, "baseRevision": result["baseRevision"], **review.model_dump(), "reviewRevision": result["reviewRevision"]}
+
+
+@router.post("/reference-snapshots")
+def create_reference_snapshot(request: ReferenceSnapshotRequest, user: UserContext = Depends(require_user_context)):
+    pipeline, library, owner = _owner_records(user)
+    request_id = request.requestId
+    with pipeline._save_lock:
+        result = next((item for item in library.director_reference_results if item.get("requestId") == request_id and item.get("ownerProfileId") == owner), None)
+        if result is None:
+            raise HTTPException(404, "reference generation result not found")
+        if result.get("reviewStatus") != "approved":
+            raise HTTPException(409, "only an approved director result can create a snapshot")
+        existing = next((item for item in library.director_reference_assets if item.get("sourceRequestId") == request_id and item.get("ownerProfileId") == owner), None)
+        if existing is not None:
+            return {"schemaVersion": "iframe.director3d.director-reference-snapshot.v1", **existing}
+        snapshot_id = f"director-reference-snapshot-{uuid.uuid4().hex}"
+        asset = {"snapshotId": snapshot_id, "assetId": snapshot_id, "variantId": f"{snapshot_id}-r1", "ownerProfileId": owner,
+                 "sourceRequestId": request_id, "sourceRevision": result["baseRevision"], "capturedAt": time.time(),
+                 "outputs": result["outputs"], "review": result["review"], "immutable": True}
+        library.director_reference_assets.append(asset)
+        pipeline._save_library_data_unlocked()
+    return {"schemaVersion": "iframe.director3d.director-reference-snapshot.v1", **asset}
 
 
 SYSTEM = """You design editable static 3D blocking and camera proposals for iframe.
