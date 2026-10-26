@@ -116,23 +116,23 @@ understanding, skeletal posing, contact solving or clothes generation.
 
 ## Reference output ownership and reuse
 
-The 3D director is the review gate, while the existing asset library is the
-durable reuse owner. A natural-language generation request remains
-director-scoped and must not enter storyboard state. After the director
-reviews, adjusts or rejects the generated depth, blocking image, camera-motion
-reference video and action reference video, an approved result is saved through
-the normal asset admission path. Later shots and storyboards read ordinary
-asset variants by stable asset/variant/media IDs; they do not read the
+The 3D director is the generation and editing tool, while the existing asset
+library is the durable reuse owner. A natural-language generation request
+remains director-scoped and must not enter storyboard state. Once a requested
+depth, blocking image, camera-motion reference video or action reference video
+is generated successfully, it can be saved through the normal asset admission
+path without a separate approval gate. Later shots and storyboards read
+ordinary asset variants by stable asset/variant/media IDs; they do not read the
 transient generation request or mutate the director scene through that
 reference.
 
 This separates three meanings that must not be conflated:
 
 - the director scene is the editable spatial source;
-- the reviewed ordinary asset variant is the reusable reference artifact;
+- the saved ordinary asset variant is the reusable reference artifact;
 - a storyboard shot is a read-only consumer binding.
 
-An approved director result therefore creates an ordinary asset variant with
+Each successfully generated director result can create an ordinary asset variant with
 the existing asset-library identity and media lifecycle. Optional provenance
 metadata may record the source director revision, package checksum, frame,
 camera, purpose, media status and source hashes. A later director correction
@@ -152,14 +152,14 @@ The proposed handoff API should therefore be interpreted as:
 ```text
 POST /director3d/reference-generation-requests
 GET  /director3d/reference-generation-results/{request_id}
-PATCH /director3d/reference-generation-results/{request_id}/review
+PATCH /director3d/reference-generation-results/{request_id}/adjust
 existing project asset admission route for the selected asset type
 ```
 
 The final admission uses the existing asset-library path for the selected
-asset type (image, depth artifact or video). It is allowed only after director
-review is approved. It is not a direct storyboard write and must not be owned
-by the director scene. The response exposes the normal `asset_id`,
+asset type (image, depth artifact or video) once the media is ready. It is not
+a direct storyboard write and must not be owned by the director scene. The
+response exposes the normal `asset_id`,
 `variant_id` and `media_id` values that storyboard consumers bind read-only.
 
 The identity levels are distinct:
@@ -169,7 +169,7 @@ asset_id
   existing asset-library identity
 
 variant_id
-  existing approved output variant
+  existing saved output variant
 
 media_id
   existing concrete PNG, depth artifact or video file identity
