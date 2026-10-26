@@ -53,6 +53,8 @@ def test_scene_extraction_skill_applies_to_custom_prompt_and_persists_draft():
     script = processor.parse_novel("测试", "长街中段粮铺，匪寇劫掠，百姓退让，黄昏", "请提取：{text}")
     prompt = processor.llm.chat.call_args.kwargs["messages"][0]["content"]
     assert "scene-asset-extraction" in prompt
+    assert "<performer_tier_skill>" in prompt
+    assert "固定群演" in prompt
     assert "shot_only_content" in prompt
     assert "匪寇劫掠" not in script.scenes[0].description
     assert script.scenes[0].asset_design["design_draft"]["asset_baseline"] == baseline
@@ -96,4 +98,12 @@ def test_script_skill_changes_entity_extraction_revision(monkeypatch):
 
     current = entity_extraction_prompt_revision()
     monkeypatch.setattr(llm, "_load_script_analysis_skill", lambda: "updated script analysis")
+    assert entity_extraction_prompt_revision() != current
+
+
+def test_performer_skill_changes_entity_extraction_revision(monkeypatch):
+    import src.apps.comic_gen.llm as llm
+
+    current = entity_extraction_prompt_revision()
+    monkeypatch.setattr(llm, "_load_performer_tier_skill", lambda: "updated performer tiers")
     assert entity_extraction_prompt_revision() != current

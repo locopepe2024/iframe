@@ -111,6 +111,8 @@ def test_selected_method_is_in_actual_model_prompt():
     messages = processor.llm.chat.call_args.kwargs["messages"]
     prompt = str(messages)
     assert selected[0]['instructions'] in prompt
+    assert '<performer_tier_skill>' in prompt
+    assert '跨镜出现的固定群演沿用同一 ID' in prompt
     assert '[storyboard-suspense ' in prompt
     assert '[storyboard-action ' not in prompt
 

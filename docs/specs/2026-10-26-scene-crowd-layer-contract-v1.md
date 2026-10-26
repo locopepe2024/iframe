@@ -9,7 +9,11 @@ uncontrolled background detail.
 
 ## Layer ownership
 
-Each confirmed scene design may contain `crowd_design` with `near`, `mid`, and `far`.
+The current implementation allows `crowd_design` with `near`, `mid`, and `far`.
+These are camera-relative visibility layers, not permanent scene geography.
+Reusable scene geography owns physical crowd zones and routes; each shot projects
+those zones into near/mid/far according to its camera. Migrating the current
+scene-level fields to that ownership is pending.
 Each layer records:
 
 - `identity_policy`: `asset_required`, `template_allowed`, or `unidentified`
@@ -36,8 +40,10 @@ Prompt-only text is treated as unverified provider output.
 
 ## Series extra roster
 
-A production may maintain a reusable roster of roughly 10–20 extra assets, sized by the
-script rather than hard-coded. A roster entry is either a fixed extra (`extra_id`) with
+A production may maintain a reusable roster sized by script coverage and repeated
+appearances. The Skill may propose a reviewable batch of candidates; a batch size
+is not a required count and candidates are not confirmed assets. A roster entry is
+either a fixed extra (`extra_id`) with
 approved face, height, body build, wardrobe and recurring props, or an extra template
 (`extra_template_id`) with bounded age range, body-type range, palette and wardrobe family.
 
@@ -47,9 +53,22 @@ or carried text must be readable. The roster is reusable across locations; the i
 where a character enters a particular street, shop, or battle formation. Anonymous far
 background agents do not require roster entries.
 
-The roster must remain separate from principal character identity. Promoting an extra to a
-principal character is an explicit asset decision, not an automatic side effect of a close
-camera or repeated appearance.
+Principal, supporting, fixed extra, and anonymous group are production tiers,
+not incompatible identity systems. A fixed extra promoted to a supporting role
+keeps its confirmed identity ID and receives any missing character detail through
+an explicit reviewed asset decision. A close camera creates a need for a readable
+identity reference; it does not silently create one. A template is not a fixed face.
+Shot assignments must be explicit and stable rather than newly randomized on each
+prompt build. This stage contract is in
+`config/agent_skills/performer-tier-continuity/SKILL.md`.
+
+## Implementation status
+
+The asset extraction and storyboard LLM prompt paths load the shared performer
+tier Skill. Current `Series.extra_roster` and `StoryboardFrame.crowd_instances`
+work is in progress and is not an image-generation or face-locking pipeline.
+There is no reviewed batch proposal UI or automatic assignment UI yet. The
+current roster API accepts confirmed records directly; callers own review.
 
 ## Evidence boundary
 

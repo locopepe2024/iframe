@@ -217,6 +217,11 @@ def _load_script_analysis_skill() -> str:
     return skill_path.read_text(encoding="utf-8").strip()
 
 
+def _load_performer_tier_skill() -> str:
+    skill_path = Path(__file__).resolve().parents[3] / "config/agent_skills/performer-tier-continuity/SKILL.md"
+    return skill_path.read_text(encoding="utf-8").strip()
+
+
 def director_preset_identity(name: str) -> Dict[str, str]:
     """Return stable metadata used to bind jobs to the exact stage preset."""
     content = _load_director_preset(name)
@@ -709,7 +714,8 @@ DEFAULT_ENTITY_EXTRACTION_PROMPT = """
 def entity_extraction_prompt_revision() -> str:
     skill_path = Path(__file__).resolve().parents[3] / "config/agent_skills/scene-asset-extraction/SKILL.md"
     return hashlib.sha256((DEFAULT_ENTITY_EXTRACTION_PROMPT + _load_script_analysis_skill()
-                           + skill_path.read_text(encoding="utf-8")).encode()).hexdigest()
+                           + skill_path.read_text(encoding="utf-8")
+                           + _load_performer_tier_skill()).encode()).hexdigest()
 
 
 DEFAULT_STYLE_ANALYSIS_PROMPT = """你是一个专业的电影美术指导和视觉风格顾问。
@@ -1600,6 +1606,7 @@ class ScriptProcessor:
         skill = skill_path.read_text(encoding="utf-8")
         return (f"{prompt}\n\n<script_analysis_skill>\n{_load_script_analysis_skill()}\n</script_analysis_skill>\n"
                 f"<scene_asset_extraction_skill>\n{skill}\n</scene_asset_extraction_skill>\n"
+                f"<performer_tier_skill>\n{_load_performer_tier_skill()}\n</performer_tier_skill>\n"
                 "场景强制合同：每个 scenes 条目必须提供 asset_baseline、shot_only_content、uncertainties。"
                 "asset_baseline 恰含 scene_identity、location_type、fixed_geometry、fixed_landmarks、materials、"
                 "environment、time_baseline、lighting_baseline、composition_tendency、reusable_constraints、basis；"
@@ -2363,6 +2370,7 @@ fact_id，事实变化时保留 source_refs，并用 status/supersedes_fact_id �
             else DEFAULT_STORYBOARD_EXTRACTION_PROMPT
         )
         system_prompt = template.replace("{entities_str}", entities_str).replace("{text}", text)
+        system_prompt += "\n<performer_tier_skill>\n" + _load_performer_tier_skill() + "\n</performer_tier_skill>\n"
         system_prompt += director_skill_guidance(entities_json.get("selected_creative_methods", []))
         if entities_json.get("asset_library_context"):
             system_prompt += ("\n<approved_asset_library_context>\n"
