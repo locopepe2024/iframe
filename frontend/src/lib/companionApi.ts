@@ -28,4 +28,6 @@ export const companionApi = {
   tool: <T>(name: string, args: object) => request<T>("/tools", "POST", { name, arguments: args }),
   confirm: (preview_token: string, operation_id: string) => request<{ action: string; memory_id: string }>("/confirmations", "POST", { preview_token, operation_id, method: "button" }),
   cancel: (preview_token: string) => request<{ status: string }>("/cancel", "POST", { preview_token }),
+  opentalkingBind: (session_id: string, ttl_seconds = 900) => request<{ context_token: string; expires_at: number }>("/opentalking/bind", "POST", { session_id, ttl_seconds }),
+  opentalkingRelease: (context_token: string) => request<{ session_id: string; status: string }>("/opentalking/release", "POST", { context_token }),
 };

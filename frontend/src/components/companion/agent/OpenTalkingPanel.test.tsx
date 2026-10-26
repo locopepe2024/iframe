@@ -1,6 +1,7 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import { expect, it, vi } from "vitest";
 import OpenTalkingPanel from "./OpenTalkingPanel";
+vi.mock("@/lib/companionApi", () => ({ companionApi: { opentalkingBind: vi.fn(), opentalkingRelease: vi.fn() } }));
 
 it("renders the mobile voice panel and closes it", () => {
   const onClose = vi.fn();
