@@ -10,8 +10,8 @@ const voiceNames: Record<string, string> = {
   "longanyang_v3.6": "沉稳男声",
 };
 
-export default function DigitalCompanionPanel({ identity, onClose }: { identity: CompanionIdentity; onClose: () => void }) {
-  const voice = useRealtimeVoice();
+export default function DigitalCompanionPanel({ identity, sessionId, onClose }: { identity: CompanionIdentity; sessionId?: string; onClose: () => void }) {
+  const voice = useRealtimeVoice(sessionId);
   const label = voice.state === "listening" ? "我在听" : voice.state === "thinking" ? "正在想" : voice.state === "speaking" ? "正在说话" : "准备好了";
   return <div className={styles.sheetBackdrop} role="presentation" onMouseDown={event => {
     if (event.target === event.currentTarget) onClose();

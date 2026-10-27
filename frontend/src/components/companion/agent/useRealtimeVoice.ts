@@ -4,7 +4,7 @@ import { companionServices } from "@/lib/companionServices";
 import { captureMicrophone, PcmPlayer } from "@/lib/companionRealtimeAudio";
 
 export type VoiceLine = { id: string; role: "我" | "陪伴助手"; text: string };
-export function useRealtimeVoice() {
+export function useRealtimeVoice(sessionId?: string) {
   const [state, setState] = useState<"idle" | "connecting" | "listening" | "thinking" | "speaking">("idle");
   const [notice, setNotice] = useState("");
   const [lines, setLines] = useState<VoiceLine[]>([]);
@@ -68,7 +68,7 @@ export function useRealtimeVoice() {
       const audio = new AudioContext(); context.current = audio;
       await audio.resume(); if (!current()) return;
       setupTimeout.current = setTimeout(() => fail("连接超时，请检查网络后重新开始。"), 30000);
-      const ticket = await companionServices.realtimeTicket(); if (!current()) return;
+      const ticket = await companionServices.realtimeTicket(sessionId); if (!current()) return;
       const microphone = await navigator.mediaDevices.getUserMedia({ audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true, autoGainControl: true } });
       if (!current()) { microphone.getTracks().forEach(track => track.stop()); return; }
       stream.current = microphone; player.current = new PcmPlayer(audio, () => {
