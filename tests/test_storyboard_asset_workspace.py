@@ -147,10 +147,8 @@ def test_render_preview_does_not_append_global_only_character_description(worksp
     pipeline, script = workspace
     frame = StoryboardFrame(id="frame", action_description="A quiet room.", scene_id="global-room", character_ids=["global-person"])
     script.frames = [frame]
-    result = pipeline.preview_storyboard_render_prompt(script.id, frame.id, "A quiet room.")
-    assert "A quiet room" in result
-    assert "Library person" not in result
-    assert "GLOBAL PERSON" not in result
+    with pytest.raises(ValueError, match="character:global-person:missing_asset"):
+        pipeline.preview_storyboard_render_prompt(script.id, frame.id, "A quiet room.")
 
 
 def test_batch_render_receives_project_assets_only(workspace):
@@ -200,6 +198,11 @@ def test_single_render_keeps_complete_prompt_and_project_assets(workspace):
     pipeline._save_data = Mock()
     pipeline._register_storyboard_frame_media = Mock()
     pipeline.storyboard_generator = Mock()
+    with pytest.raises(ValueError, match="character:global-person:missing_asset"):
+        pipeline.generate_storyboard_render(script.id, "frame", None, "Visible final prompt", prompt_is_complete=True)
+    assert not pipeline.storyboard_generator.generate_frame.called
+    script.frames[0].character_ids = []
+    script.frames[0].scene_id = ""
     pipeline.generate_storyboard_render(script.id, "frame", None, "Visible final prompt", prompt_is_complete=True)
     args, kwargs = pipeline.storyboard_generator.generate_frame.call_args
     assert args[1:3] == ([], None)

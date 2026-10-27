@@ -176,7 +176,7 @@ def test_asset_refine_rejects_changed_saved_asset_and_foreign_project(ctx, monke
 
 def test_catalog_is_self_contained_and_attributed():
     packages = skills.catalog()
-    assert len(packages) == len({p['id'] for p in packages}) == 18
+    assert len(packages) == len({p['id'] for p in packages}) == 19
     for p in packages:
         assert len(p['revision']) == 64
         assert len(p['source_revision']) == 40
@@ -633,7 +633,8 @@ def test_file_backed_skill_revision_and_installed_snapshot(ctx, monkeypatch, tmp
 def test_explicit_h3_request_selects_only_h3_and_continue_retains_target(ctx, monkeypatch):
     packages = skills.catalog()
     for package in packages:
-        skills.install(package['id'], skills.InstallRequest(revision=package['revision']), ctx)
+        if package['id'] in {'minimax-h3-director', 'h3-product-recreation', 'shot-action-physics'}:
+            skills.install(package['id'], skills.InstallRequest(revision=package['revision']), ctx)
     monkeypatch.setattr(agent, 'catalog', lambda ctx: [{'api_model_id': 'qwen'}])
     call = Mock(return_value='H3 prompt')
     monkeypatch.setattr(agent, 'complete', call)
@@ -654,7 +655,8 @@ def test_explicit_h3_request_selects_only_h3_and_continue_retains_target(ctx, mo
 
 def test_h3_clarification_keeps_skill_without_overriding_explicit_new_target(ctx):
     for package in skills.catalog():
-        skills.install(package['id'], skills.InstallRequest(revision=package['revision']), ctx)
+        if package['id'] == 'minimax-h3-director':
+            skills.install(package['id'], skills.InstallRequest(revision=package['revision']), ctx)
     history = [
         {'role': 'user', 'content': '将仙侠侧踢优化适合minima H3'},
         {'role': 'assistant', 'content': '为了按 MiniMax H3 编排，请补充视频总时长和是否允许切镜。'},

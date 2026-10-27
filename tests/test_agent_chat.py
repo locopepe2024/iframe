@@ -848,9 +848,9 @@ def test_image_variant_promotes_legacy_url_to_storage_key():
 
     assert variant.storage_key == 'output/assets/character.png'
     variant.url = 'lumenx/assets/character.png'
-    assert variant.storage_key == 'lumenx/assets/character.png'
+    assert variant.storage_key == 'output/assets/character.png'
     variant.url = 'https://cdn.example/character.png'
-    assert variant.storage_key == 'lumenx/assets/character.png'
+    assert variant.storage_key == 'output/assets/character.png'
 
 
 def test_chat_mixed_materials_and_names_survive_followup(setup, tmp_path, monkeypatch):

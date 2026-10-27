@@ -86,7 +86,7 @@ def test_two_reviewed_looks_select_distinct_shot_media_and_pins():
     with pytest.raises(ValueError, match="confirmed episode look"):
         pipeline.update_frame_workbench(
             "episode", "after", workbench_reference_variant_ids={"hero-injured": ["other"]})
-    with pytest.raises(ValueError, match="confirmed episode look"):
+    with pytest.raises(ValueError, match="已确认的剧集造型"):
         pipeline.delete_asset_variant("episode", "hero-injured", "character", "injured")
     with pytest.raises(ValueError, match="confirmed episode look"):
         pipeline.confirm_asset_revision(

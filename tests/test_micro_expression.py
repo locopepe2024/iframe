@@ -47,7 +47,7 @@ def test_static_frame_projection_uses_only_selected_boundary():
 
 def test_frame_candidate_preview_binds_accepted_timing_and_slot():
     from unittest.mock import Mock
-    from src.apps.comic_gen.models import Script, StoryboardFrame
+    from src.apps.comic_gen.models import Character, Script, StoryboardFrame
     from src.apps.comic_gen.pipeline import ComicGenPipeline
 
     frame = StoryboardFrame(id="frame", scene_id="", character_ids=["hero"])
@@ -55,7 +55,7 @@ def test_frame_candidate_preview_binds_accepted_timing_and_slot():
     pipeline = ComicGenPipeline.__new__(ComicGenPipeline)
     pipeline.scripts = {script.id: script}
     pipeline.series_store = {}
-    pipeline.resolve_project_assets = Mock(return_value={"characters": [], "scenes": [], "props": []})
+    pipeline.resolve_project_assets = Mock(return_value={"characters": [Character(id="hero", name="玄宸", description="克制")], "scenes": [], "props": []})
 
     before = pipeline.storyboard_candidate_preview_token("film", "frame", "草稿", None)
     frame.micro_expression_timing = [{**payload(character_id="hero")["candidates"][0], "character_name": "玄宸"}]
