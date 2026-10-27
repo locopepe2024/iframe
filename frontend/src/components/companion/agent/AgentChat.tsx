@@ -159,7 +159,7 @@ export default function AgentChat() {
     localStorage.setItem(turnKey, result.turn_id);
     if (alive.current) {
       if (responseMode === "audio") {
-        const replyText = result.result?.kind === "text" ? result.result.text : result.result?.kind === "photo_task" ? result.result.spoken_text : undefined;
+        const replyText = result.result?.kind === "text" ? result.result.text : (result.result?.kind === "photo_task" || result.result?.kind === "diary_read") ? result.result.spoken_text : undefined;
         if (replyText) setSpokenReply({ id: result.turn_id, text: replyText });
       }
       setDraft(null); setTurn(result); setPreview(result.result?.kind === "confirmation" ? result.result : null); setDrafts(old => ({ ...old, chat: "" })); sendOperation.current = null; setHasRetry(false);
@@ -315,6 +315,11 @@ export default function AgentChat() {
           })}
           media={attached.filter(item => item.anchor === index + 1).map(item => ({ id: item.id, kind: item.kind, name: item.name })) as DiaryContextMedia[]}
         /> : <article className={chatStyles.assistant}><p>{message.turn.result.text}</p><SpeechPlayback text={message.turn.result.text} voice={identity.voice}/></article>)}
+        {message.turn?.result?.kind === "diary_read" && <section className={styles.panel} aria-label="日记查询结果">
+          <p>{message.turn.result.spoken_text}</p>
+          {message.turn.result.diaries.map(entry => <DiaryCard key={`${entry.day}-${entry.revision}`} day={entry.day} text={entry.text} sourceTurn={entry.source_turn_id} saved={entry} onOpenDiary={() => setFeature("diary")} />)}
+          <button type="button" onClick={() => setFeature("diary")}>打开日记月历</button>
+        </section>}
         {message.turn?.result?.kind === "photo_task" && !messages.slice(index + 1).some(later => later.turn?.result?.kind === "photo_task" && later.turn.result.task_id === (message.turn?.result?.kind === "photo_task" ? message.turn.result.task_id : "")) && <PhotoTaskCard key={`${message.turn.turn_id}-${message.turn.result.revision}`} task={message.turn.result} />}
         {message.turn?.result?.kind === "photo_read" && <PhotoToolResult key={message.turn.turn_id} result={message.turn.result} />}
         {message.turn?.result?.kind === "upload_guide" && !dismissedUploadGuides.includes(message.turn.turn_id) && <UploadGuideCard {...uploadGuideActions(message.turn.turn_id)} />}

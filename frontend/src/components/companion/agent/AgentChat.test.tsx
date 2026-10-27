@@ -368,3 +368,11 @@ it("keeps text mode silent when a workflow responds",async()=>{
   await waitFor(()=>expect(screen.getByLabelText("和我聊聊天")).toHaveValue(""));
   expect(playback).not.toHaveBeenCalled();
 });
+it("shows the registered diary capability and opens its calendar",async()=>{
+  api.messages.mockResolvedValue({messages:[{id:"diary-msg",sequence:1,text:"打开日记",turn:{turn_id:"diary-turn",status:"completed",result:{kind:"diary_read",name:"diary.open",diaries:[],open_calendar:true,spoken_text:"日记入口已经打开，可以查看日历或选择一天写日记。"}}}],next_after:null});
+  localStorage.setItem("iframe-companion-agent-session-v1","s");
+  render(<AgentChat/>);
+  fireEvent.click(await screen.findByRole("button",{name:"打开日记月历"}));
+  await screen.findByRole("dialog");
+  expect(screen.queryByText("实际记忆查询结果")).not.toBeInTheDocument();
+});
