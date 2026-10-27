@@ -1,4 +1,4 @@
-import {act,render,screen,waitFor} from "@testing-library/react";
+import {act,fireEvent,render,screen,waitFor} from "@testing-library/react";
 import {afterEach,beforeEach,expect,it,vi} from "vitest";
 import OpenTalkingReply from "./OpenTalkingReply";
 import {companionPlayback} from "@/lib/companionPlaybackQueue";
@@ -48,4 +48,16 @@ it("releases media on pagehide",async()=>{
  act(()=>window.dispatchEvent(new Event("pagehide")));
  expect(peer.close).toHaveBeenCalledOnce();expect(events.close).toHaveBeenCalledOnce();
  view.unmount();expect(peer.close).toHaveBeenCalledOnce();
+});
+
+it("waits for explicit playback permission before sending speech, then reuses the session",async()=>{
+ const play=vi.spyOn(HTMLMediaElement.prototype,"play").mockRejectedValue(new DOMException("blocked","NotAllowedError"));
+ const view=render(<OpenTalkingReply reply={{id:"one",text:"你好"}}/>);
+ const button=await screen.findByRole("button",{name:"播放声音"});
+ expect(speaks()).toHaveLength(0);
+ expect(screen.getByLabelText("数字人回复")).toHaveAttribute("controls");
+ play.mockResolvedValue();fireEvent.click(button);
+ await waitFor(()=>expect(speaks()).toHaveLength(1));
+ expect(calls.filter(c=>c.url.endsWith("/sessions"))).toHaveLength(1);
+ view.unmount();play.mockRestore();
 });

@@ -45,6 +45,7 @@ export default function OpenTalkingReply({ reply, voice }: { reply: SpokenReply 
   const failed = useRef<SpokenReply | null>(null);
   const interrupt = useRef<(() => void) | null>(null);
   const audible = useRef(false);
+  const resumeAudio = useRef<(() => void) | null>(null);
 
   useEffect(() => {
     const lifetime = new AbortController(), owner = Symbol("opentalking-page");
@@ -53,7 +54,9 @@ export default function OpenTalkingReply({ reply, voice }: { reply: SpokenReply 
     let analyser: AnalyserNode | null = null, animation = 0;
     let opening: Promise<void> | null = null;
     let active: { command: string; done: () => void; fail: (e: Error) => void; playing: () => void } | null = null;
+    let playbackBlocked = false;
     const live = () => !lifetime.signal.aborted;
+    resumeAudio.current = () => { void audio?.resume().catch(() => {}); };
     const deleteSession = (id: string) => fetch(`${base}/sessions/${encodeURIComponent(id)}`, { method: "DELETE", credentials: "omit", keepalive: true }).catch(() => {});
     const update = (next: State) => { if (live()) setState(next); };
     const mediaFailure = (message: string) => {
@@ -88,12 +91,12 @@ export default function OpenTalkingReply({ reply, voice }: { reply: SpokenReply 
             if (!live() || !analyser) return;
             analyser.getFloatTimeDomainData(samples);
             const rms = Math.sqrt(samples.reduce((sum, sample) => sum + sample * sample, 0) / samples.length);
-            if (active && rms > .003) { audible.current = true; active.playing(); update("audio"); }
+            if (active && rms > .003) { audible.current = true; active.playing(); if (!playbackBlocked && video.current && !video.current.paused && !video.current.muted) update("audio"); }
             animation = requestAnimationFrame(inspect);
           };
           inspect();
         }
-        void video.current?.play().catch(() => update("blocked"));
+        void video.current?.play().catch(() => { playbackBlocked = true; update("blocked"); });
       };
       peer.onconnectionstatechange = () => {
         if (peer && ["failed", "disconnected"].includes(peer.connectionState)) mediaFailure("WebRTC 音频连接已中断，请重试。");
@@ -131,6 +134,14 @@ export default function OpenTalkingReply({ reply, voice }: { reply: SpokenReply 
         try {
           opening ??= open(); await opening;
           if (signal.aborted || !live()) return;
+          // Do not consume a live WebRTC utterance while the browser blocks output.
+          try {
+            if (!video.current) throw new Error("播放器未就绪。");
+            await video.current.play();
+            playbackBlocked = false;
+          } catch {
+            playbackBlocked = true; failed.current = item; update("blocked"); return;
+          }
           const command = `iframe-${crypto.randomUUID()}`;
           audible.current = false; update("waiting");
           const complete = new Promise<void>((resolve, reject) => {
@@ -170,7 +181,7 @@ export default function OpenTalkingReply({ reply, voice }: { reply: SpokenReply 
     const dispose = () => {
       if (disposed) return;
       disposed = true;
-      lifetime.abort(); enqueue.current = null; interrupt.current = null;
+      lifetime.abort(); enqueue.current = null; interrupt.current = null; resumeAudio.current = null;
       companionPlayback.cancel(owner);
       active?.done(); events?.close(); peer?.close(); cancelAnimationFrame(animation);
       source?.disconnect(); void audio?.close().catch(() => {});
@@ -187,11 +198,12 @@ export default function OpenTalkingReply({ reply, voice }: { reply: SpokenReply 
     if (enqueue.current) enqueue.current(reply); else pending.current.push(reply);
   }, [reply]);
   return <section className={styles.openTalkingReply} aria-label="OpenTalking 语音回复">
-    <video ref={video} autoPlay playsInline aria-label="数字人回复" />
+    <video ref={video} autoPlay playsInline controls aria-label="数字人回复" />
     <p role="status">{state === "idle" ? "语音回复已开启" : state === "opening" ? "正在连接语音…" : state === "waiting" ? "正在准备回复声音…" : state === "audio" ? "已收到回复音频" : state === "ready" ? "语音已就绪" : state === "blocked" ? "请点击播放声音" : `文字已保留：${error}`}</p>
     {state === "blocked" && <button type="button" onClick={() => {
+      resumeAudio.current?.();
       void video.current?.play().then(() => {
-        if (failed.current) { pending.current.unshift(failed.current); failed.current = null; setRetry(value => value + 1); }
+        if (failed.current) { const item = failed.current; failed.current = null; enqueue.current?.(item); }
         else setState("waiting");
       }).catch(() => { setError("浏览器仍未允许播放，请检查媒体权限。"); });
     }}>播放声音</button>}
