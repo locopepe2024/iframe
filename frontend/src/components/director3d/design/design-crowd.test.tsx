@@ -59,12 +59,13 @@ it("rejects invalid groups, observers moving, duplicate membership/cuts, hidden 
     expect(useWorkbenchStore.getState()).toBe(before);
   }
 });
-it("rejects crossing actors and swept paths through boxes, including collisions between key times", () => {
+it("rejects unschedulable opposing flows and routes around a counter", () => {
   const before = useWorkbenchStore.getState();
   const first = {...member("a", -5, 2), destinationM: [5, 2, 0] as [number, number, number]};
   const second = {...member("b", 5, 2), destinationM: [-5, 2, 0] as [number, number, number]};
-  expect(() => compileDesignProposal(before, proposal([group("cross", [first, second])]))).toThrow("路径");
-  expect(() => compileDesignProposal(before, proposal([{kind: "add_box", entityId: "design-box-counter", label: "柜台", positionM: [0, 2, 0], dimensionsM: [1, 1, 1]}, group("near", [first])]))).toThrow("道具");
+  expect(() => compileDesignProposal(before, proposal([group("cross", [first, second])]))).toThrow("拥堵");
+  const routed = compileDesignProposal(before, proposal([{kind: "add_box", entityId: "design-box-counter", label: "柜台", positionM: [0, 2, 0], dimensionsM: [1, 1, 1]}, group("near", [first])]));
+  expect(routed.dialogueTimeline.tracks.find((track) => track.propertyKey === "transform.position_m")!.keyframes.length).toBeGreaterThan(2);
 });
 
 it("rejects hidden or locked existing actors and conflicting edits to a crowd member", () => {

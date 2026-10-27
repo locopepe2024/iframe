@@ -297,3 +297,24 @@ reaction and cuts. Verify atomic rejection, undo/redo, bundle round-trip,
 frontend/server schema parity and preview scrubber availability. Export video
 through the existing browser reference recorder (10-second limit); a rendered
 video and real-model interpretation still need runtime acceptance.
+
+### Locomotion and navigation slice
+
+Compile crowd members through deterministic 2D visibility-graph navigation
+around expanded axis-aligned box bounds and stationary actor bounds. Preserve
+start/destination and explicit movement duration, distributing time by route
+length. Moving actors are coordinated with priority scheduling: later actors
+may wait in 0.25-second increments up to 8 seconds; reject unschedulable
+conflicts. Continuous segment distance checks include waiting and final holds.
+No physics, full-body contact or general navmesh is claimed. Reject unsupported
+obstacles, occupied goals, routes outside +/-100 m, excessive speed (>3 m/s),
+and oversized navigation graphs instead of hiding failure. Save any added wait
+in the compiled transform keys and report it in the proposal UI.
+
+Bake procedural white-model gait from traveled distance into existing pose
+tracks; standing and waiting have neutral pose. Orient motion toward each
+segment (turn in place at corners, no claim of smooth turn/contact IK). This is
+an approximate stepping reference, not motion capture or foot-contact solving.
+Verify routing around counters, blocked goals, crossing flows/wait timing,
+continuous clearance, gait phase vs travel, neutral holds, atomic undo and
+bundle round trips. Browser skin appearance remains a separate runtime check.

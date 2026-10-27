@@ -1,6 +1,7 @@
+import { navigateCrowd, crowdGait } from "./crowd-navigation";
 import { Vector3 } from "three";
 import type { AuthoringSnapshot, WorkbenchState } from "../state/workbench-store";
-import { evaluateKeyframes, cameraProjection, cameraRuntime, stateTargetPosition } from "../timeline/timeline-evaluation";
+import { cameraProjection, cameraRuntime, stateTargetPosition } from "../timeline/timeline-evaluation";
 import { currentDirectorShotPackage } from "../reference/current-shot-package";
 import { applyDesignPose, DESIGN_POSES, SEATED_FIT, type DesignPoseId } from "./design-poses";
 import { createCameraPathPresetControlPoints } from "../camera/camera-path-presets";
@@ -397,41 +398,11 @@ export function compileDesignProposal(state: WorkbenchState, raw: unknown): Desi
     }
   }
   if (animated.size) {
-    // Linear tracks: minimum pair distance is exact between every key time.
-    const tracks = dialogueTimeline.tracks.filter((track) => animated.has(track.target.targetId));
-    const times = Array.from(new Set([0, dialogueTimeline.durationSeconds, ...tracks.flatMap((track) => track.keyframes.map((key) => key.timeSeconds))])).sort((a, b) => a - b);
-    const positionAt = (id: string, time: number): Vec => {
-      const track = tracks.find((item) => item.target.targetId === id);
-      return track ? evaluateKeyframes(track.keyframes, time) as Vec : characters[id].transform.position;
-    };
-    const actors = Object.values(characters).filter((actor) => actor.visible);
-    for (let i = 0; i < times.length - 1; i++) {
-      for (let a = 0; a < actors.length; a++) for (let b = a + 1; b < actors.length; b++) {
-        const aid = actors[a].characterId, bid = actors[b].characterId;
-        if (!animated.has(aid) && !animated.has(bid)) continue;
-        const startA = positionAt(aid, times[i]), endA = positionAt(aid, times[i + 1]);
-        const startB = positionAt(bid, times[i]), endB = positionAt(bid, times[i + 1]);
-        const dx = startA[0] - startB[0], dy = startA[1] - startB[1];
-        const vx = endA[0] - endB[0] - dx, vy = endA[1] - endB[1] - dy;
-        const t = Math.max(0, Math.min(1, -(dx * vx + dy * vy) / (vx * vx + vy * vy || 1)));
-        if (Math.hypot(dx + t * vx, dy + t * vy) < .6) throw new Error("群演移动路径与人物相交，请调整路径或反应时间。");
-      }
-      for (const id of Array.from(animated)) for (const box of Object.values(sceneObjects).filter((object) => object.visible && object.objectKind !== "empty")) {
-        if (box.primitiveKind !== "cube" || box.transform.rotationDeg.some((v) => v !== 0) || box.transform.scale.some((v) => v !== 1)) throw new Error("群演路径目前只支持轴对齐方盒障碍检查。");
-        const from = positionAt(id, times[i]), to = positionAt(id, times[i + 1]);
-        const lowZ = box.transform.position[2] + box.boundingBoxM.minimum[2], highZ = box.transform.position[2] + box.boundingBoxM.maximum[2];
-        if (from[2] >= highZ || from[2] + 1.8 <= lowZ) continue;
-        let enter = 0, leave = 1;
-        for (const axis of [0, 1]) {
-          const low = box.transform.position[axis] + box.boundingBoxM.minimum[axis] - .3;
-          const high = box.transform.position[axis] + box.boundingBoxM.maximum[axis] + .3;
-          const delta = to[axis] - from[axis];
-          if (Math.abs(delta) < 1e-9) { if (from[axis] <= low || from[axis] >= high) { enter = 2; break; } }
-          else { const first = (low - from[axis]) / delta, last = (high - from[axis]) / delta; enter = Math.max(enter, Math.min(first, last)); leave = Math.min(leave, Math.max(first, last)); }
-        }
-        if (enter < leave) throw new Error("群演移动路径穿过占位道具，请调整路径。");
-      }
-    }
+    const tracks = dialogueTimeline.tracks.filter((track) => track.trackKind === "character_transform" && animated.has(track.target.targetId));
+    const routed = navigateCrowd(tracks, characters, sceneObjects);
+    dialogueTimeline.tracks = [...dialogueTimeline.tracks.filter((track) => !tracks.includes(track)), ...routed,
+      ...routed.flatMap((track) => crowdGait(track, characters[track.target.targetId]))];
+    dialogueTimeline.durationSeconds = Math.max(dialogueTimeline.durationSeconds, ...routed.map((track) => track.keyframes.at(-1)!.timeSeconds));
   }
   if (cuts.length) {
     cuts.sort((a, b) => a.timeSeconds - b.timeSeconds);

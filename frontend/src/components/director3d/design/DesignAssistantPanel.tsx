@@ -43,7 +43,17 @@ export function DesignAssistantPanel({ onPreview, previewing, disabled = false }
   };
   const preview = () => {
     if (!proposal || disabled || busy) return;
-    try { onPreview(compileDesignProposal(useWorkbenchStore.getState(), proposal)); setError(""); setMessage(""); }
+    try {
+      const candidate = compileDesignProposal(useWorkbenchStore.getState(), proposal);
+      onPreview(candidate); setError("");
+      const waits = proposal.operations.flatMap((op) => op.kind === "crowd_motion" ? op.members.flatMap((member) => {
+        const track = candidate.dialogueTimeline.tracks.find((item) => item.target.targetId === member.actorId && item.propertyKey === "transform.position_m");
+        const firstMove = track?.keyframes.findIndex((key) => JSON.stringify(key.value) !== JSON.stringify(member.positionM)) ?? -1;
+        const actualStart = firstMove > 0 ? track!.keyframes[firstMove - 1].timeSeconds : member.startSeconds;
+        return actualStart > member.startSeconds ? [`${candidate.characters[member.actorId].label}等待 ${(actualStart - member.startSeconds).toFixed(2)} 秒`] : [];
+      }) : []);
+      setMessage(waits.length ? `通行避让：${waits.join("；")}。实际时间线 ${candidate.dialogueTimeline.durationSeconds.toFixed(2)} 秒。` : "");
+    }
     catch (caught) { setError(caught instanceof Error ? caught.message : "设计无法预览。"); }
   };
   const apply = () => {
@@ -92,12 +102,13 @@ export function DesignAssistantPanel({ onPreview, previewing, disabled = false }
       {proposal.clarification ? <p role="status">{proposal.clarification}</p> : <>
         <p>{proposal.operations.length} 项操作。预览不会保存；应用后可拖动或输入数值继续编辑。</p>
         <ol>{proposal.operations.map((op, index) => <li key={index}>{{crowd_motion: "群演分组与分时移动", add_camera: "新增构图机位", camera_cut: "时间线切镜", place_entity: "调整对象位置与朝向", arrange_pair: "双人相对摆位", arrange_group: "多人编号占位编排", add_box: "添加道具占位", frame_camera: "设计静态机位", dolly_camera: "调整机位距离", camera_motion: "创建带时长的运镜路径", set_pose: "设置人物姿态", seat_actor: "坐在程序化椅子参考上"}[op.kind]} · {"cameraId" in op ? op.cameraId : "entityId" in op ? op.entityId : "actorId" in op ? op.actorId : "actorIds" in op ? op.actorIds.join(" / ") : op.members.map((member) => member.actorId).join(" / ")}{op.kind === "camera_motion" && ` · ${op.durationSeconds} 秒 · ${op.distanceM == null ? "预设距离" : `${op.distanceM} 米`}`}</li>)}</ol>
+        {proposal.operations.some((op) => op.kind === "crowd_motion") && <p role="status">群演将自动绕开方盒障碍并按顺序避让，必要时增加最多 8 秒等待；请拖动预览时间检查实际反应与通行节奏。步态为程序化参考。</p>}
         {proposal.operations.some((op) => op.kind === "seat_actor") && <p role="status">椅子是可编辑的程序化占位，不是真实家具资产。坐姿仅适配标准白模；手动移动后需重新检查接触。</p>}
         <div className="blocking-reference-actions"><button type="button" disabled={stale || busy || disabled} onClick={preview}>预览设计</button><button type="button" disabled={stale || busy || disabled || !previewing} onClick={apply}>应用设计</button>{previewing && <button type="button" onClick={() => onPreview(null)}>退出预览</button>}<button type="button" disabled={busy} onClick={() => { setProposal(null); onPreview(null); setError(""); }}>放弃提案</button></div>
       </>}
       {stale && <p role="status">场景已变化，此提案已过期；请重新生成。</p>}
     </div>}
-    <small>支持无动画场景第 1 帧创建群演分组、分时直线移动、观察停留和多机位切镜，以及标准白模摆位、2–10 人编号占位编排、挥手、抱臂、思考、单膝跪姿、坐姿椅子参考和一条新的带时长机位路径。道具为几何占位；群演位移是白模根运动，不含步态、自动寻路或碰撞求解；草图解析、躺姿、通用接触和真实家具适配尚未支持。</small>
+    <small>支持无动画场景第 1 帧创建群演分组、分时直线移动、观察停留和多机位切镜，以及标准白模摆位、2–10 人编号占位编排、挥手、抱臂、思考、单膝跪姿、坐姿椅子参考和一条新的带时长机位路径。道具为几何占位；群演支持方盒绕行、人物等待避让与近似步态，不含接触 IK、物理推搡或任意模型寻路；草图解析、躺姿、通用接触和真实家具适配尚未支持。</small>
     {message && <p role="status">{message}</p>}{error && <p role="alert">{error}</p>}
   </section>;
 }

@@ -225,7 +225,7 @@ Each group contains 1-20 members; the complete visible scene limit is 40.
 Disclose assumed counts/times/positions. Near/middle/far are camera-relative
 composition, not automatically measured scene depth. Near may react at 0,
 middle later, far pass from 0; observers keep identical initial/destination positions.
-This is linear root motion, not a walking gait, physics, combat or automatic pathfinding.
+The compiler routes around axis-aligned box props and stationary actors, may add up to 8 seconds of waiting to avoid moving actors, and adds approximate procedural gait. These are reference motions, not physics, contact IK or combat. Choose durations allowing route speed <=3 m/s.
 add_camera creates a new composed camera with design-camera- ID, label and the
 same fields as frame_camera; camera_cut selects a camera at timeSeconds.
 Cuts are discrete edits on one timeline, distinct from continuous camera_motion.
