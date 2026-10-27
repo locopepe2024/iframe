@@ -92,6 +92,14 @@ it("keeps retry actionable when consent was turned off",async()=>{
  expect(screen.getAllByRole("status").some(node => /允许发送文字/.test(node.textContent || ""))).toBe(true);
  expect(screen.getByRole("button",{name:"重试原请求"})).not.toBeDisabled();
 });
+it("opens channel settings instead of retrying when the personal channel is missing",async()=>{
+ api.chat.mockRejectedValueOnce(new Error("请先在创作台配置当前用户的 UniArt 渠道。"));
+ await start();allowText();fireEvent.click(screen.getByRole("button",{name:"发送"}));
+ await screen.findByRole("alert");
+ fireEvent.click(screen.getByRole("button",{name:"重试原请求"}));
+ expect(screen.getByText(/配置当前移动端身份/)).toBeInTheDocument();
+ expect(api.chat).toHaveBeenCalledOnce();
+});
 it("restores server history and latest result from identifiers only",async()=>{
   localStorage.setItem("iframe-companion-agent-session-v1","s");localStorage.setItem("iframe-companion-agent-turn-v1","t");
   api.messages.mockResolvedValueOnce({messages:[{id:"m",sequence:1,text:"历史用户原话"}],next_after:1}).mockResolvedValueOnce({messages:[{id:"m2",sequence:2,text:"下一页"}],next_after:null});

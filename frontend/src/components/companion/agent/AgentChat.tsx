@@ -170,6 +170,11 @@ export default function AgentChat() {
       setNotice("请先在“更多 → 聊天设置”中允许发送文字，再重试原请求。");
       return;
     }
+    if (/UniArt|渠道|API Key|API 密钥/.test(error)) {
+      setMenu(true);
+      setNotice("请先在“更多 → UniArt 渠道”中配置当前移动端身份，再重试原请求。");
+      return;
+    }
     void run(() => send(true));
   }
   async function memories(search: string, cursor = "") {

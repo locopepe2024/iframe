@@ -12,10 +12,18 @@ const base = `${API_URL}/companion-agent-api/companion-runtime`;
 async function request<T>(path: string, method = "GET", body?: unknown): Promise<T> {
   const response = await authenticatedFetch(base + path, { method, credentials: "include", cache: "no-store",
     ...(body === undefined ? {} : { headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }) });
-  if (!response.ok) throw new Error(response.status === 409 ? "资料已变化、请求仍在处理或达到容量上限。请保留当前请求稍后重试，或重新核对。"
+  if (!response.ok) {
+    let detail = "";
+    try {
+      const payload = await response.clone().json() as { detail?: unknown };
+      if (typeof payload.detail === "string") detail = payload.detail;
+    } catch { /* use the stable fallback below */ }
+    if (response.status === 409 && detail) throw new Error(detail);
+    throw new Error(response.status === 409 ? "资料已变化、请求仍在处理或达到容量上限。请保留当前请求稍后重试，或重新核对。"
     : response.status === 404 ? "这条资料或确认预览已关闭，请重新查看。"
     : response.status === 422 ? "请求未通过核对，请调整文字或在记忆列表选择具体条目。"
-    : "服务暂不可用。原话可能已经保存，请用原请求重试；也请检查当前用户的 UniArt 渠道。");
+    : detail || "服务暂不可用。原话可能已经保存，请用原请求重试；也请检查当前用户的 UniArt 渠道。");
+  }
   return response.json();
 }
 export const companionApi = {
