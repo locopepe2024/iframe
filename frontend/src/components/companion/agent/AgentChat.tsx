@@ -161,7 +161,10 @@ export default function AgentChat() {
           const reply = message.turn?.result?.kind === "text" ? `\n陪伴助手：${message.turn.result.text}` : "";
           return `我：${message.text}${reply}`;
         }).join("\n");
-        const decision = await coordinateOnDevice(submittedText, context);
+        const decision = await Promise.race([
+          coordinateOnDevice(submittedText, context),
+          new Promise<never>((_, reject) => setTimeout(() => reject(new Error("edge coordinator timeout")), 8000)),
+        ]);
         if (decision.need_clarification) {
           setNotice(decision.question || "请先告诉我，您想继续聊天、写日记，还是整理照片？");
           return;
