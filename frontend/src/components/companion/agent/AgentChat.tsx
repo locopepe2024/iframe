@@ -281,7 +281,7 @@ export default function AgentChat() {
       if (!drafts.chat.trim()) startDiaryPrompt();
       else { setNotice("输入框里还有未发送的话，先聊完这段，再一起记录今天。"); inputRef.current?.focus(); }
     }} /></div>
-    <article className={chatStyles.assistant}><span>{identity.avatar} {identity.name}</span><p>您好，我在。想聊聊今天，还是一起看看照片？</p></article>
+    <article className={chatStyles.assistant}><p>您好，我在。想聊聊今天，还是一起看看照片？</p></article>
     {mode === "chat" && !messages.length && <section className={styles.guide} aria-labelledby="chat-guide-title">
       <h2 id="chat-guide-title">想从哪里聊起？</h2>
       <div className={styles.guideGrid}>
@@ -309,13 +309,13 @@ export default function AgentChat() {
             return items;
           })}
           media={attached.filter(item => item.anchor === index + 1).map(item => ({ id: item.id, kind: item.kind, name: item.name })) as DiaryContextMedia[]}
-        /> : <article className={chatStyles.assistant}><span>{identity.avatar} {identity.name}</span><p>{message.turn.result.text}</p><SpeechPlayback text={message.turn.result.text} voice={identity.voice}/></article>)}
+        /> : <article className={chatStyles.assistant}><p>{message.turn.result.text}</p><SpeechPlayback text={message.turn.result.text} voice={identity.voice}/></article>)}
         {message.turn?.result?.kind === "upload_guide" && !dismissedUploadGuides.includes(message.turn.turn_id) && <UploadGuideCard {...uploadGuideActions(message.turn.turn_id)} />}
       </div>{renderAttached(index+1)}</Fragment>;
       })}
       {after !== null && <button disabled={busy} onClick={() => void run(() => history(session, after))}>更多历史消息</button>}
     </section>
-    {turn?.result?.kind === "text" && !messages.some(m => m.turn?.turn_id === turn.turn_id) && (diaryDay(lastSubmittedText) ? <DiaryCard day={diaryDay(lastSubmittedText)!} text={turn.result.text} sourceTurn={turn.turn_id} onOpenDiary={() => setFeature("diary")} /> : <article className={chatStyles.assistant}><span>{identity.avatar} {identity.name}</span><p>{turn.result.text}</p>{responseMode === "text" && <SpeechPlayback text={turn.result.text} voice={identity.voice}/>}</article>)}
+    {turn?.result?.kind === "text" && !messages.some(m => m.turn?.turn_id === turn.turn_id) && (diaryDay(lastSubmittedText) ? <DiaryCard day={diaryDay(lastSubmittedText)!} text={turn.result.text} sourceTurn={turn.turn_id} onOpenDiary={() => setFeature("diary")} /> : <article className={chatStyles.assistant}><p>{turn.result.text}</p>{responseMode === "text" && <SpeechPlayback text={turn.result.text} voice={identity.voice}/>}</article>)}
     {turn?.result?.kind === "upload_guide" && !messages.some(m => m.turn?.turn_id === turn.turn_id) && !dismissedUploadGuides.includes(turn.turn_id) && <UploadGuideCard {...uploadGuideActions(turn.turn_id)} />}
     {uploadFiles.length > 0 && <MediaUpload files={uploadFiles} disabled={inputDisabled || pending} onUploaded={attach} onBusyChange={setUploading} onClose={() => setUploadFiles([])} />}
     {albumOpen && <AlbumPicker disabled={inputDisabled || pending} onClose={() => setAlbumOpen(false)} onPhoto={photo => {
