@@ -175,6 +175,7 @@
 .settingsHeader button { width: 44px; height: 44px; min-height: 44px; padding: 0; border: 0; border-radius: 50%; font-size: 1.6rem; line-height: 1; }
 @media (max-width: 36rem) {
   .shell .toolbar { flex-wrap: nowrap; gap: .25rem; }
+  .shell .toolbar button > span { display: none; }
   .shell .toolbar > .modePicker { flex: 0 1 auto; min-width: 0; }
   .shell .toolbar > .modePicker > button { min-width: 3.7rem; padding-inline: .3rem; font-size: .78rem; }
   .shell .toolbar > .modePicker > button svg { width: 18px; height: 18px; }
