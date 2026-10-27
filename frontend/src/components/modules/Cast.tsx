@@ -58,6 +58,7 @@ export default function Cast() {
     const tStep = useTranslations("stepHeader");
     const t = useTranslations("cast");
     const currentProject = useProjectStore((state) => state.currentProject);
+    const currentSeries = useProjectStore((state) => state.currentSeries);
 
     // R2V v2 Phase 5 — add new asset modal (placeholder for full
     // generation flow which lands in a follow-up patch). For now this
@@ -147,7 +148,12 @@ export default function Cast() {
         return { characters, scenes, props };
     }, [currentProject?.frames, currentProject?.characters, currentProject?.scenes, currentProject?.props]);
 
-    const totalCast = characters.length + scenes.length + props.length;
+    const crowdGroups = useMemo(() => {
+        const seriesGroups = currentSeries && currentSeries.id === currentProject?.series_id ? currentSeries.extra_roster ?? [] : [];
+        const groups = [...seriesGroups, ...(currentProject?.crowd_group_candidates ?? [])];
+        return Array.from(new Map(groups.map(group => [group.extra_id, group])).values());
+    }, [currentSeries, currentProject?.series_id, currentProject?.crowd_group_candidates]);
+    const totalCast = characters.length + crowdGroups.length + scenes.length + props.length;
 
     return (
         <div className="flex h-full w-full flex-col overflow-hidden">
@@ -190,7 +196,7 @@ export default function Cast() {
                     <div className="shrink-0 flex items-center gap-1 px-6 pt-3 border-b border-glass-border bg-surface">
                         {([
                             { id: "all" as const, label: t("tabAll"), icon: <Layers size={11} />, count: totalCast },
-                            { id: "character" as const, label: t("tabCharacters"), icon: <Users size={11} />, count: characters.length },
+                            { id: "character" as const, label: t("tabCharacters"), icon: <Users size={11} />, count: characters.length + crowdGroups.length },
                             { id: "scene" as const, label: t("tabScenes"), icon: <MapPin size={11} />, count: scenes.length },
                             { id: "prop" as const, label: t("tabProps"), icon: <Box size={11} />, count: props.length },
                         ]).map((tab) => (
@@ -229,6 +235,26 @@ export default function Cast() {
                                 onOpenWorkbench={(id) => setWorkbench({ kind: "character", entityId: id })}
                                 hideHeader={activeTab === "character"}
                             />
+                        )}
+                        {(activeTab === "all" || activeTab === "character") && crowdGroups.length > 0 && (
+                            <section aria-label={t("sectionCrowdGroups")}>
+                                <header className="mb-3 flex items-center gap-2 text-text-secondary">
+                                    <Users size={14} />
+                                    <h3 className="font-mono text-[0.6875rem] font-medium uppercase">{t("sectionCrowdGroups")}</h3>
+                                    <span className="font-mono text-[0.625rem] text-text-muted">({crowdGroups.length})</span>
+                                    <div aria-hidden="true" className="ml-3 h-px flex-1 bg-glass-border" />
+                                </header>
+                                <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                                    {crowdGroups.map(group => (
+                                        <div key={group.extra_id} className="min-w-0 rounded border border-glass-border bg-glass px-3 py-2.5">
+                                            <div className="truncate text-sm font-medium text-foreground" title={group.label}>{group.label}</div>
+                                            {group.role_tags?.length ? (
+                                                <div className="mt-1 truncate text-xs text-text-muted" title={group.role_tags.join("、")}>{group.role_tags.join("、")}</div>
+                                            ) : null}
+                                        </div>
+                                    ))}
+                                </div>
+                            </section>
                         )}
                         {(activeTab === "all" || activeTab === "scene") && (
                             <CastSection
