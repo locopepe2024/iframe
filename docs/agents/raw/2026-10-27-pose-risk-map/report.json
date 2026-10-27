@@ -2150,5 +2150,11 @@
     "RTMPose disagreement is not truth",
     "Frame197 should not be generalized",
     "No production changes"
-  ]
+  ],
+  "scope_clarification_2026_10_28": {
+    "target": "640x360 pixels; 28 old raw_root_yaw anchor observations",
+    "independent": "1394x792 native pixels; six early event samples; 197 discussed separately outside target coverage",
+    "old_p95": "sorted floor((n-1)*0.95), not interpolated",
+    "comparison": "Do not compare columns directly; see 2026-10-28-knee-coordinate-audit/report.json"
+  }
 }

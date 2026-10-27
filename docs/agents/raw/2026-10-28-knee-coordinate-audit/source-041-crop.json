@@ -1,0 +1,10 @@
+{
+  "source": "docs/agents/raw/2026-10-22-independent-pose/frames/source-05.png",
+  "sha256": "3ec070a840a8a403ed6d20b2a95f00242361986bae8ffdb8e354214e12a916c2",
+  "crop_xyxy": [
+    533,
+    433,
+    833,
+    663
+  ]
+}
