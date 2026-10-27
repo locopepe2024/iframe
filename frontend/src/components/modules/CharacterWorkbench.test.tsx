@@ -1022,7 +1022,7 @@ it("does not carry retired hidden style controls into a new completion or its sa
 
 it("edits, confirms and reloads independent facial fields without an AI call", async () => {
     const { onUpdateAttributes } = mountSimpleDesign();
-    fireEvent.click(screen.getByRole("button", { name: "面板编辑" }));
+    fireEvent.click(screen.getByRole("button", { name: "角色编辑" }));
     for (const [label, value] of [["眉形", "柳叶眉"], ["眼周细节", "表情放松时仍可见浅细纹"], ["肤色", "中等中性肤色"], ["肤质", "面颊略干，保留细微干燥纹理"]]) {
         fireEvent.change(screen.getByRole("textbox", { name: `设计字段 · ${label}` }), { target: { value } });
     }
@@ -1036,14 +1036,14 @@ it("edits, confirms and reloads independent facial fields without an AI call", a
     expect(imagePromptInput()).toHaveTextContent("眉形：柳叶眉");
     cleanup();
     mountSimpleDesign({ character_design: { design_draft: design } });
-    fireEvent.click(screen.getByRole("button", { name: "面板编辑" }));
+    fireEvent.click(screen.getByRole("button", { name: "角色编辑" }));
     expect(screen.getByRole("textbox", { name: "设计字段 · 肤质" })).toHaveValue("面颊略干，保留细微干燥纹理");
     expect(apiMocks.agentRequest.mock.calls.filter(([path]) => path.startsWith("/character-design/"))).toHaveLength(0);
 });
 
 it("saves dictionary face choices as fields and keeps the remaining clothing text", async () => {
     const { onUpdateAttributes } = mountSimpleDesign();
-    fireEvent.click(screen.getByRole("button", { name: "面板编辑" }));
+    fireEvent.click(screen.getByRole("button", { name: "角色编辑" }));
     act(() => designDetailsEditor().chain().selectAll().insertContent({ type: "text", text: "靛蓝外衣，素面布靴。 /面容" }).run());
     fireEvent.click(await screen.findByRole("option", { name: /^面容$/ }));
     fireEvent.change(screen.getByRole("combobox", { name: "肤质" }), { target: { value: "轻微干燥肤质" } });
@@ -1104,7 +1104,7 @@ it("warns before an older outfit panel overwrites a later footwear edit", async 
     cleanup();
     apiMocks.getAssetReferenceIndex.mockResolvedValueOnce({ assets: [] });
     mountSimpleDesign({ character_design: { design_draft: design } });
-    fireEvent.click(screen.getByRole("button", { name: "面板编辑" }));
+    fireEvent.click(screen.getByRole("button", { name: "角色编辑" }));
     expect(screen.getByRole("textbox", { name: "设计字段 · 鞋履" })).toHaveValue(design.look.features.footwear);
 });
 
@@ -1129,9 +1129,9 @@ it("does not turn the previous panel preview into supplemental prose when applyi
     fireEvent.click(await screen.findByRole("option", { name: /^面容$/ }));
     fireEvent.change(screen.getByRole("combobox", { name: "肤色" }), { target: { value: "暖小麦肤色" } });
     fireEvent.click(screen.getByRole("button", { name: "应用配置" }));
-    fireEvent.click(screen.getByRole("button", { name: "面板编辑" }));
+    fireEvent.click(screen.getByRole("button", { name: "角色编辑" }));
     expect(screen.getByRole("textbox", { name: "设计字段 · 肤色" })).toHaveValue("暖小麦肤色");
-    fireEvent.click(screen.getByRole("button", { name: "关闭面板编辑" }));
+    fireEvent.click(screen.getByRole("button", { name: "关闭角色编辑" }));
     act(() => designDetailsEditor().chain().insertContentAt(designDetailsEditor().state.doc.content.size, " /肤色").run());
     fireEvent.click(await screen.findByRole("option", { name: /^肤色与肤质$/ }));
     fireEvent.change(screen.getByRole("combobox", { name: "肤质" }), { target: { value: "轻微干燥肤质" } });
@@ -1150,7 +1150,7 @@ it("does not turn the previous panel preview into supplemental prose when applyi
     expect(imagePromptInput().textContent?.match(/靛蓝外衣。/g)).toHaveLength(1);
     cleanup();
     mountSimpleDesign({ character_design: { design_draft: design } });
-    fireEvent.click(screen.getByRole("button", { name: "面板编辑" }));
+    fireEvent.click(screen.getByRole("button", { name: "角色编辑" }));
     expect(screen.getByRole("textbox", { name: "设计字段 · 肤色" })).toHaveValue("暖小麦肤色");
     expect(screen.getByRole("textbox", { name: "设计字段 · 肤质" })).toHaveValue("面颊皮肤略显干燥，保留细微干燥纹理");
     expect(screen.getByRole("textbox", { name: "其他已输入细节" })).toHaveValue("靛蓝外衣。");
@@ -1158,9 +1158,9 @@ it("does not turn the previous panel preview into supplemental prose when applyi
 
 it("keeps stable facial fields when an expression panel adds a temporary performance cue", async () => {
     const { onUpdateAttributes } = mountSimpleDesign();
-    fireEvent.click(screen.getByRole("button", { name: "面板编辑" }));
+    fireEvent.click(screen.getByRole("button", { name: "角色编辑" }));
     fireEvent.change(screen.getByRole("textbox", { name: "设计字段 · 唇形" }), { target: { value: "上唇略薄、下唇自然饱满" } });
-    fireEvent.click(screen.getByRole("button", { name: "关闭面板编辑" }));
+    fireEvent.click(screen.getByRole("button", { name: "关闭角色编辑" }));
     fireEvent.click(screen.getByRole("button", { name: "快捷面板" }));
     fireEvent.click(await screen.findByRole("option", { name: /^表情$/ }));
     fireEvent.change(screen.getByRole("combobox", { name: "表情" }), { target: { value: "忍不住笑" } });
@@ -1218,7 +1218,7 @@ it("replaces a saved legacy expression template when applying the expression pan
 
 it('preserves authored negative prompt arrays through AI, confirmation and reload', async () => {
     const { onUpdateAttributes } = mountSimpleDesign();
-    fireEvent.click(screen.getByRole('button', { name: '面板编辑' }));
+    fireEvent.click(screen.getByRole('button', { name: '角色编辑' }));
     fireEvent.change(screen.getByRole('textbox', { name: '设计约束 · 必须保留' }), { target: { value: '自然皮肤纹理' } });
     fireEvent.change(screen.getByRole('textbox', { name: '设计约束 · 负面提示词' }), { target: { value: '额外披风\ncartoon' } });
     await submitSimpleDesign();
@@ -1234,7 +1234,7 @@ it('preserves authored negative prompt arrays through AI, confirmation and reloa
     cleanup();
     mountSimpleDesign({ character_design: { design_draft: design } });
     fireEvent.click(screen.getByRole('tab', { name: '角色设计' }));
-    fireEvent.click(screen.getByRole('button', { name: '面板编辑' }));
+    fireEvent.click(screen.getByRole('button', { name: '角色编辑' }));
     expect(screen.getByRole('textbox', { name: '设计约束 · 负面提示词' })).toHaveValue('额外披风\ncartoon');
     const result = aiResult() as HTMLTextAreaElement;
     expect(result.value).not.toContain('负面提示词：');
@@ -1245,7 +1245,7 @@ it('preserves authored negative prompt arrays through AI, confirmation and reloa
 
 it('saves clothing panel sections and negative arrays without an AI call', async () => {
     const { onUpdateAttributes } = mountSimpleDesign();
-    fireEvent.click(screen.getByRole('button', { name: '面板编辑' }));
+    fireEvent.click(screen.getByRole('button', { name: '角色编辑' }));
     act(() => designDetailsEditor().chain().selectAll().insertContent({ type: 'text', text: '/服装' }).run());
     fireEvent.click(await screen.findByRole('option', { name: /^古装外套$/ }));
     fireEvent.click(screen.getByRole('button', { name: '应用配置' }));
@@ -1278,9 +1278,9 @@ it('keeps structured editors collapsed and opens discovery in the main workspace
     expect(within(workspace).getByRole('combobox', { name: '鞋履图案' })).toBeInTheDocument();
     fireEvent.click(within(dialog).getByRole('button', { name: '关闭面板' }));
     expect(screen.queryByRole('dialog', { name: '基础面板、词典和 Prompt 模板' })).not.toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: '面板编辑' }));
+    fireEvent.click(screen.getByRole('button', { name: '角色编辑' }));
     expect(screen.getByRole('textbox', { name: '设计字段 · 肤质' })).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: '关闭面板编辑' }));
+    fireEvent.click(screen.getByRole('button', { name: '关闭角色编辑' }));
     expect(screen.queryByRole('textbox', { name: '设计字段 · 肤质' })).not.toBeInTheDocument();
 });
 
@@ -1299,7 +1299,7 @@ it('names design constraints and output settings clearly and hides unavailable s
     openImagePrompt();
     expect(screen.getByRole('textbox', { name: '出图负面提示词' })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'copyStyleToPrompt' })).not.toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: '面板编辑' }));
+    fireEvent.click(screen.getByRole('button', { name: '角色编辑' }));
     expect(screen.getByRole('textbox', { name: '设计约束 · 负面提示词' })).toBeInTheDocument();
     expect(screen.getByRole('textbox', { name: '出图负面提示词' })).toBeInTheDocument();
 });
@@ -1370,16 +1370,16 @@ it('reads legacy confirmed designs as an input prompt plus a separate result on 
 
 it('keeps authored panel fields intact when AI returns and saves them separately', async () => {
     const { onUpdateAttributes } = mountSimpleDesign();
-    fireEvent.click(screen.getByRole('button', { name: '面板编辑' }));
+    fireEvent.click(screen.getByRole('button', { name: '角色编辑' }));
     fireEvent.change(screen.getByRole('textbox', { name: '设计字段 · 脸型' }), { target: { value: '圆脸' } });
     fireEvent.click(screen.getByRole('tab', { name: '角色设计' }));
-    fireEvent.click(screen.getByRole('button', { name: '关闭面板编辑' }));
+    fireEvent.click(screen.getByRole('button', { name: '关闭角色编辑' }));
     await submitSimpleDesign();
     expect(screen.getByRole('tab', { name: 'AI 优化' })).toHaveAttribute('aria-selected', 'true');
     fireEvent.click(screen.getByRole('tab', { name: '角色设计' }));
-    fireEvent.click(screen.getByRole('button', { name: '面板编辑' }));
+    fireEvent.click(screen.getByRole('button', { name: '角色编辑' }));
     expect(screen.getByRole('textbox', { name: '设计字段 · 脸型' })).toHaveValue('圆脸');
-    fireEvent.click(screen.getByRole('button', { name: '关闭面板编辑' }));
+    fireEvent.click(screen.getByRole('button', { name: '关闭角色编辑' }));
     fireEvent.click(screen.getByRole('tab', { name: 'AI 优化' }));
     fireEvent.click(screen.getByRole('button', { name: /^保存并使用/ }));
     await waitFor(() => expect(onUpdateAttributes).toHaveBeenCalled());
@@ -1414,7 +1414,7 @@ it('restores saved structured fields and constraints when reopening a design', a
     const { onUpdateAttributes } = mountSimpleDesign({ character_design: { design_draft: saved } });
     await submitSimpleDesign();
     fireEvent.click(screen.getByRole('button', { name: '编辑已保存设计' }));
-    fireEvent.click(screen.getByRole('button', { name: '面板编辑' }));
+    fireEvent.click(screen.getByRole('button', { name: '角色编辑' }));
     expect(screen.getByRole('textbox', { name: '设计字段 · 脸型' })).toHaveValue('圆脸');
     expect(screen.getByRole('textbox', { name: '设计约束 · 负面提示词' })).toHaveValue('额外披风');
     fireEvent.click(screen.getByRole('button', { name: /^保存并使用/ }));
@@ -1428,7 +1428,7 @@ it('restores saved structured fields and constraints when reopening a design', a
 
 it('separates manual panel editing from quick presets in the character design view', async () => {
     const { onGenerate, onUpdateAttributes } = mountSimpleDesign();
-    expect(screen.getByRole('button', { name: '面板编辑' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '角色编辑' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '快捷面板' })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: '设计面板' })).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: '快捷面板' }));
@@ -1437,14 +1437,14 @@ it('separates manual panel editing from quick presets in the character design vi
     expect(screen.queryByRole('button', { name: '查看出图提示词' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: '查看结构化字段与约束' })).not.toBeInTheDocument();
     expect(screen.queryByRole('textbox', { name: '出图负面提示词' })).not.toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: '面板编辑' }));
-    const panel = screen.getByRole('dialog', { name: '角色面板编辑' });
+    fireEvent.click(screen.getByRole('button', { name: '角色编辑' }));
+    const panel = screen.getByRole('dialog', { name: '角色编辑' });
     expect(screen.getByTestId('character-main-workspace')).toContainElement(panel);
     fireEvent.change(within(panel).getByRole('textbox', { name: '设计字段 · 肤质' }), { target: { value: '保留自然皮肤纹理' } });
     fireEvent.change(within(panel).getByRole('textbox', { name: '设计约束 · 负面提示词' }), { target: { value: '过度磨皮' } });
     fireEvent.keyDown(panel, { key: 'Escape' });
-    expect(screen.queryByRole('dialog', { name: '角色面板编辑' })).not.toBeInTheDocument();
-    expect(screen.getByRole('button', { name: '面板编辑' })).toHaveFocus();
+    expect(screen.queryByRole('dialog', { name: '角色编辑' })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '角色编辑' })).toHaveFocus();
     fireEvent.click(screen.getByRole('button', { name: /^保存并使用/ }));
     await waitFor(() => expect(onUpdateAttributes).toHaveBeenCalled());
     const saved = onUpdateAttributes.mock.calls.at(-1)![0].character_design;
@@ -1481,7 +1481,7 @@ it('saves human gender and dictionary age and restores them in design and genera
     fireEvent.click(await screen.findByRole('option', { name: /^基础特征$/ }));
     fireEvent.change(screen.getByRole('combobox', { name: '年龄阶段' }), { target: { value: '老年' } });
     fireEvent.click(screen.getByRole('button', { name: '应用配置' }));
-    fireEvent.click(screen.getByRole('button', { name: '面板编辑' }));
+    fireEvent.click(screen.getByRole('button', { name: '角色编辑' }));
     expect(screen.getByRole('textbox', { name: '设计字段 · 年龄' })).toHaveValue('人物年龄阶段为老年');
     fireEvent.change(screen.getByRole('textbox', { name: '设计字段 · 性别' }), { target: { value: '女性' } });
     fireEvent.change(screen.getByRole('textbox', { name: '设计字段 · 年龄' }), { target: { value: '约72岁' } });
@@ -1496,7 +1496,7 @@ it('saves human gender and dictionary age and restores them in design and genera
     cleanup();
     mountSimpleDesign({ character_design: { design_draft: design } });
     fireEvent.click(screen.getByRole('tab', { name: '角色设计' }));
-    fireEvent.click(screen.getByRole('button', { name: '面板编辑' }));
+    fireEvent.click(screen.getByRole('button', { name: '角色编辑' }));
     expect(screen.getByRole('textbox', { name: '设计字段 · 年龄' })).toHaveValue('约72岁');
     expect(screen.getByRole('textbox', { name: '设计字段 · 性别' })).toHaveValue('女性');
 });

@@ -41,12 +41,12 @@ export default function CharacterDesignPanel({ description, details, onDetailsCh
     const [openSlashRequest, setOpenSlashRequest] = useState(0);
     const keyHandler = useRef<((event: KeyboardEvent) => boolean) | null>(null);
     const fieldsPanel = <div className={`${host ? 'absolute' : 'fixed'} inset-0 z-[70] flex flex-col rounded-xl border border-glass-border bg-surface p-4 shadow-2xl`}
-        role="dialog" aria-modal={!host} aria-label="角色面板编辑" onKeyDown={event => {
+        role="dialog" aria-modal={!host} aria-label="角色编辑" onKeyDown={event => {
             if (event.key === 'Escape') { event.stopPropagation(); setShowFields(false); }
         }}>
         <div className="mb-3 flex shrink-0 items-center justify-between gap-3">
-            <h3 className="text-sm font-medium">面板编辑</h3>
-            <button ref={closeFieldsRef} type="button" aria-label="关闭面板编辑" onClick={() => setShowFields(false)}
+            <h3 className="text-sm font-medium">角色编辑</h3>
+            <button ref={closeFieldsRef} type="button" aria-label="关闭角色编辑" onClick={() => setShowFields(false)}
                 className="flex min-h-11 min-w-11 items-center justify-center rounded hover:bg-hover-bg focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary"><X size={18} /></button>
         </div>
         <div className="min-h-0 flex-1 space-y-3 overflow-y-auto">
@@ -103,7 +103,7 @@ export default function CharacterDesignPanel({ description, details, onDetailsCh
                 <span className="text-xs text-text-secondary">角色设计</span>
                 <div className="flex gap-2">
                 <button type="button" ref={openFieldsRef} disabled={saving || busy} onClick={() => setShowFields(true)} aria-haspopup="dialog"
-                    className="min-h-11 rounded border border-glass-border px-3 text-xs hover:bg-hover-bg focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary">面板编辑</button>
+                    className="min-h-11 rounded border border-glass-border px-3 text-xs hover:bg-hover-bg focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary">角色编辑</button>
                 <button type="button" disabled={saving} onMouseDown={event => event.preventDefault()} onClick={() => setOpenSlashRequest(value => value + 1)} className="min-h-11 rounded border border-glass-border px-3 text-xs hover:bg-hover-bg focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary">快捷面板</button>
                 </div>
             </div>
