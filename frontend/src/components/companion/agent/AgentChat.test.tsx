@@ -327,4 +327,6 @@ it("persists the preferred reply mode and exposes automatic audio playback setti
  const more=screen.getByRole("button",{name:"更多"});if(more.getAttribute("aria-expanded")!=="true")fireEvent.click(more);
  const audio=screen.getByRole("radio",{name:/方案 1/});fireEvent.click(audio);expect(audio).toBeChecked();expect(localStorage.getItem("iframe-companion-agent-response-mode-v1")).toBe("audio");
  const text=screen.getByRole("radio",{name:/方案 2/});fireEvent.click(text);expect(text).toBeChecked();expect(localStorage.getItem("iframe-companion-agent-response-mode-v1")).toBe("text");
+ fireEvent.click(screen.getByRole("button",{name:"保存设置"}));
+ expect(screen.getByText("✓ 设置已保存")).toBeInTheDocument();
 });

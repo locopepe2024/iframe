@@ -9,6 +9,14 @@ export type SpokenReply = { id: string; text: string };
 const base = (process.env.NEXT_PUBLIC_OPENTALKING_URL || "/opentalking-mock/api").replace(/\/$/, "");
 
 type State = "idle" | "opening" | "ready" | "waiting" | "audio" | "blocked" | "error";
+export function formatOpenTalkingError(failure: unknown): string {
+  const value = failure as { message?: unknown; name?: unknown } | null | undefined;
+  const message = typeof value?.message === "string" ? value.message : String(failure ?? "");
+  const name = typeof value?.name === "string" ? value.name : "";
+  if (/signal timed out|timed out|timeouterror/i.test(message) || /timeouterror/i.test(name)) return "语音连接超时，请稍后重试。";
+  if (/aborterror/i.test(name) || /operation was aborted/i.test(message)) return "语音连接已取消，请重试。";
+  return message || "语音播放失败，请重试。";
+}
 async function request<T>(path: string, signal?: AbortSignal, body?: object, method = body ? "POST" : "GET"): Promise<T> {
   const response = await fetch(base + path, {
     method, signal, credentials: "omit", headers: { "Content-Type": "application/json" },
@@ -169,7 +177,7 @@ export default function OpenTalkingReply({ reply, voice }: { reply: SpokenReply 
           }
         } catch (failure) {
           if (live() && !signal.aborted) {
-            failed.current = item; setError(failure instanceof Error ? failure.message : "语音播放失败。"); update("error");
+            failed.current = item; setError(formatOpenTalkingError(failure)); update("error");
           }
         } finally {
           clearTimeout(timeout); if (abort) signal.removeEventListener("abort", abort); active = null;

@@ -49,6 +49,7 @@ export default function AgentChat() {
   const [lastSubmittedText, setLastSubmittedText] = useState("");
   const [page, setPage] = useState<MemoryPage | null>(null), [query, setQuery] = useState(""), [appliedQuery, setAppliedQuery] = useState("");
   const [busy, setBusy] = useState(false), [error, setError] = useState(""), [notice, setNotice] = useState("");
+  const [settingsSaved, setSettingsSaved] = useState(false);
   const locked = useRef(false), alive = useRef(true);
   const voiceQueue = useRef<string[]>([]);
   const [voiceRevision, setVoiceRevision] = useState(0);
@@ -74,6 +75,11 @@ export default function AgentChat() {
   };
   const inputDisabled = busy || hasRetry || uploading;
   function fillChat(value: string) { setMode("chat"); setDrafts(old => ({ ...old, chat: value })); inputRef.current?.focus(); }
+  function saveChatSettings() {
+    localStorage.setItem(consentKey, String(allowed));
+    localStorage.setItem(responseModeKey, responseMode);
+    setSettingsSaved(true);
+  }
   function startDiaryPrompt(day = today()) {
     if (drafts.chat.trim()) { setNotice("输入框里还有未发送的话，请先发送或清空，再整理日记。"); return; }
     fillChat(diaryPrompt(day));
@@ -240,6 +246,10 @@ export default function AgentChat() {
           <label className={styles.check}><input type="radio" name="companion-response-mode" value="text" checked={responseMode === "text"} disabled={busy} onChange={() => { setResponseMode("text"); localStorage.setItem(responseModeKey, "text"); }} />方案 2：只回复文字</label>
         </fieldset>
         <p className={styles.note}>语音回复由 OpenTalking 播放，并保留文字记录；播放受阻时可点击“播放声音”。</p>
+        <div className={chatStyles.settingsSaveRow}>
+          <button type="button" className={chatStyles.settingsSaveButton} disabled={busy} onClick={saveChatSettings}>保存设置</button>
+          {settingsSaved && <span className={chatStyles.settingsSaved} role="status">✓ 设置已保存</span>}
+        </div>
       </section>
       <CompanionIdentitySettings onChange={setIdentity} />
       <UniArtSettings />

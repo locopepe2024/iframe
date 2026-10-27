@@ -1,6 +1,6 @@
 import {act,fireEvent,render,screen,waitFor} from "@testing-library/react";
 import {afterEach,beforeEach,expect,it,vi} from "vitest";
-import OpenTalkingReply from "./OpenTalkingReply";
+import OpenTalkingReply, { formatOpenTalkingError } from "./OpenTalkingReply";
 import {companionPlayback} from "@/lib/companionPlaybackQueue";
 let calls:{url:string;init:RequestInit}[],peer:PC,events:ES;
 class PC extends EventTarget {
@@ -21,6 +21,10 @@ beforeEach(()=>{
 });
 afterEach(()=>{companionPlayback.cancel();vi.unstubAllGlobals();});
 const speaks=()=>calls.filter(c=>c.url.endsWith("/speak"));
+it("maps browser timeout errors to a clear Chinese recovery message",()=>{
+ expect(formatOpenTalkingError(new DOMException("signal timed out","TimeoutError"))).toBe("语音连接超时，请稍后重试。");
+ expect(formatOpenTalkingError(new Error("signal timed out"))).toBe("语音连接超时，请稍后重试。");
+});
 it("keeps one media session across two replies and ignores duplicate history rerenders",async()=>{
  const view=render(<OpenTalkingReply reply={{id:"one",text:"今天开心"}}/>);
  await waitFor(()=>expect(speaks()).toHaveLength(1));

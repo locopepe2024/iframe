@@ -173,6 +173,9 @@
 .settingsHeader { display: flex; align-items: center; justify-content: space-between; gap: .75rem; margin-bottom: .5rem; }
 .settingsHeader h2 { margin: 0; font-size: 1.15rem; }
 .settingsHeader button { width: 44px; height: 44px; min-height: 44px; padding: 0; border: 0; border-radius: 50%; font-size: 1.6rem; line-height: 1; }
+.settingsSaveRow { display: flex; align-items: center; flex-wrap: wrap; gap: .75rem; margin-top: 1rem; }
+.settingsSaveButton { min-height: 44px; padding: .55rem 1.1rem; border: 0; border-radius: 999px; background: var(--accent); color: var(--color-on-accent, #0c0b0e); font-weight: 600; }
+.settingsSaved { color: var(--muted); font-size: .95rem; }
 @media (max-width: 36rem) {
   .shell .toolbar { flex-wrap: nowrap; gap: .25rem; }
   .shell .toolbar button > span { display: none; }
