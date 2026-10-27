@@ -9474,7 +9474,7 @@ class ComicGenPipeline(StudioOwnerMixin):
     ) -> Any:
         """Compile a saved Assembly timeline with source audio into one local MP4.
 
-        This compiler preserves source audio; separate audio lanes remain unsupported.
+        This compiler mixes source audio with local project audio; subtitles export separately.
         Saving an edit plan never calls this method, and this method never submits a
         provider generation task.
         """
@@ -9498,18 +9498,9 @@ class ComicGenPipeline(StudioOwnerMixin):
         self._validate_assembly_plan_references(scope, resource_id, plan)
         plan_revision = plan.revision
 
-        unsupported = [
-            lane.kind
-            for lane in plan.lanes
-            if lane.kind in ("dialogue", "bgm", "sfx", "subtitle")
-            and not lane.muted
-            and any(clip.enabled for clip in lane.clips)
-        ]
-        if unsupported:
-            kinds = ", ".join(sorted(set(unsupported)))
-            raise AssemblyPlanValidationError(
-                f"Assembly {'subtitle' if 'subtitle' in unsupported else 'audio'} lanes are not supported by render v1: {kinds}"
-            )
+        audio_clips = [(lane.kind, clip) for lane in plan.lanes
+                       if lane.kind in ("dialogue", "bgm", "sfx") and not lane.muted
+                       for clip in lane.clips if clip.enabled]
 
         clips = sorted(
             [
@@ -9559,6 +9550,27 @@ class ComicGenPipeline(StudioOwnerMixin):
             source_paths.append(
                 self._resolve_assembly_video_source(clip, source_project)
             )
+
+        audio_paths = []
+        for kind, clip in audio_clips:
+            project_id = clip.source_project_id or clip.source_episode_id
+            source_project = projects.get(project_id)
+            if source_project is None:
+                raise AssemblyPlanValidationError(f"audio clip {clip.id} requires a valid source project")
+            frame = next((item for item in source_project.frames if item.id == clip.source_frame_id), None)
+            source_ref = (source_project.bgm_url if kind == "bgm" else
+                          getattr(frame, "audio_url" if kind == "dialogue" else "sfx_url", None))
+            if not source_ref or source_ref.startswith(("http://", "https://")):
+                raise AssemblyPlanValidationError(f"audio clip {clip.id} requires local project audio")
+            try:
+                relative = (resolve_studio_reference(source_ref, source_project.owner_profile_id,
+                            output_root=self.output_root) if source_project.owner_profile_id else source_ref)
+                path = self._local_output_path(relative)
+            except (OSError, ValueError) as exc:
+                raise AssemblyPlanValidationError(f"audio clip {clip.id} is outside managed output") from exc
+            if not os.path.isfile(path):
+                raise AssemblyPlanValidationError(f"audio clip {clip.id} source media is missing")
+            audio_paths.append(path)
 
         ffmpeg_path = get_ffmpeg_path()
         if not ffmpeg_path:
@@ -9631,6 +9643,25 @@ class ComicGenPipeline(StudioOwnerMixin):
             "".join(f"[v{index}][a{index}]" for index in range(len(clips)))
             + f"concat=n={len(clips)}:v=1:a=1[outv][outa]"
         )
+        for offset, (_, clip) in enumerate(audio_clips):
+            index = len(source_paths) + offset
+            duration = (clip.timeline_end_ms - clip.timeline_start_ms) / 1000
+            start = clip.source_start_ms / 1000
+            end = (clip.source_end_ms / 1000 if clip.source_end_ms is not None else start + duration)
+            if abs(end - start - duration) > 0.001:
+                raise AssemblyPlanValidationError(f"audio clip {clip.id} must use original speed")
+            filter_steps.append(
+                f"[{index}:a:0]atrim=start={start:.6f}:end={end:.6f},asetpts=PTS-STARTPTS,"
+                "aresample=48000,aformat=sample_fmts=fltp:channel_layouts=stereo,"
+                f"volume={clip.gain if clip.gain is not None else 1},"
+                f"adelay={clip.timeline_start_ms}|{clip.timeline_start_ms}[mix{offset}]"
+            )
+        if audio_clips:
+            filter_steps.append("[outa]" + "".join(f"[mix{i}]" for i in range(len(audio_clips))) +
+                f"amix=inputs={len(audio_clips) + 1}:duration=first:normalize=0,"
+                f"alimiter=limit=0.95:latency=1,atrim=duration={plan.target_duration_ms / 1000:.6f}[mixed]")
+        source_paths.extend(audio_paths)
+
         output_dir = self._owner_output_dir(resource, "video")
         os.makedirs(output_dir, exist_ok=True)
         output_path = _safe_resolve_path(
@@ -9646,7 +9677,7 @@ class ComicGenPipeline(StudioOwnerMixin):
             "-map",
             "[outv]",
             "-map",
-            "[outa]",
+            "[mixed]" if audio_clips else "[outa]",
             "-c:a",
             "aac",
             "-b:a",
