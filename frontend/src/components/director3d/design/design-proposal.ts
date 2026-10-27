@@ -104,7 +104,7 @@ export function parseDesignProposal(raw: unknown): DesignProposal {
       }
       for (const raw of op.buildings) {
         const b = object(raw); keys(b,["id","label","centerM","dimensionsM","doorWidthM","frontSide"]); text(b.label,80); vector(b.centerM); vector(b.dimensionsM,3,20); number(b.doorWidthM,.8,8);
-        if (!["negative_y","positive_y"].includes(b.frontSide as string)) throw new Error("建筑门朝向无效。");
+        if (!["negative_x","positive_x","negative_y","positive_y"].includes(b.frontSide as string)) throw new Error("建筑门朝向无效。");
       }
       for (const raw of op.trees) { const t = object(raw); keys(t,["id","positionM","heightM","trunkWidthM"]); vector(t.positionM); number(t.heightM,3,12); number(t.trunkWidthM,.2,1.5); }
     } else if (op.kind === "crowd_motion") {

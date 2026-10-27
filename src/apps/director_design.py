@@ -151,7 +151,7 @@ class StreetBuilding(StrictModel):
     centerM: Vector
     dimensionsM: tuple[Annotated[float, Field(ge=3, le=20)], Annotated[float, Field(ge=3, le=20)], Annotated[float, Field(ge=3, le=20)]]
     doorWidthM: float = Field(ge=0.8, le=8)
-    frontSide: Literal["negative_y", "positive_y"]
+    frontSide: Literal["negative_x", "positive_x", "negative_y", "positive_y"]
 
 
 class StreetTree(StrictModel):
@@ -175,7 +175,7 @@ class StreetLayout(StrictModel):
         ids = [item.id for item in [*self.buildings, *self.trees]]
         if len(ids) != len(set(ids)):
             raise ValueError("Street object IDs must be unique")
-        if any(b.doorWidthM > b.dimensionsM[0] - 0.6 for b in self.buildings):
+        if any(b.doorWidthM > (b.dimensionsM[1] if b.frontSide.endswith("x") else b.dimensionsM[0]) - 0.6 for b in self.buildings):
             raise ValueError("Door exceeds building frontage")
         return self
 
@@ -254,10 +254,11 @@ Timed camera motion is supported with one new camera_motion operation on the sel
 When scene.supported includes street layout, street_layout creates editable white-model
 roads, open-door building shells and box tree references. Road runs along Y,
 widthM is X, lengthM is Y. Buildings have centerM, dimensionsM [width,depth,height],
-doorWidthM and frontSide negative_y/positive_y (front wall faces -Y/+Y).
-Place a shop at a road END for a door facing along Y, never overlap road and
-building footprints. This slice does not support doors facing +/-X or rotated
-streets. Ask clarification for essential unsupported orientation. Trees specify
+doorWidthM and frontSide negative_x/positive_x/negative_y/positive_y. A
+negative/positive X front opens the side wall and a negative/positive Y front
+opens the end wall. Side-facing doors allow a shop along the middle of a road;
+never overlap road and building footprints. Rotated streets remain unsupported.
+Trees specify
 positionM, heightM, trunkWidthM. Layout ID starts design-street-. Member IDs
 must be unique ASCII alphanumeric/hyphen/underscore. Declare assumed dimensions.
 Compile street_layout before crowd_motion. Geometry is a proxy, not a reconstruction

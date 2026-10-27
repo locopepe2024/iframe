@@ -52,3 +52,16 @@ it("rejects overlapping footprints, oversized doors, duplicate IDs and below-gro
     expect(() => before.applyDesignProposal(plan([value]))).toThrow(); expect(useWorkbenchStore.getState()).toBe(before);
   }
 });
+it("supports a side-facing storefront door in the middle of the Y-axis road", () => {
+  const side: StreetLayout = {...street(), buildings: [{id: "shop-side", label: "街边粮铺", centerM: [7,0,0], dimensionsM: [6,6,4], doorWidthM: 2, frontSide: "negative_x"}]};
+  const objects = compileStreetLayout(side, 0);
+  expect(objects).toHaveLength(10);
+  const piers = objects.filter((o) => o.sceneObjectId.includes("-pier-"));
+  expect(piers.map((o) => o.dimensionsM[1])).toEqual([2,2]);
+  expect(objects.find((o) => o.sceneObjectId.endsWith("-lintel"))!.dimensionsM).toEqual([.15,2,expect.closeTo(1.8)]);
+  const actor = Object.values(initial.characters)[0];
+  const track: TimelineTrackState = {trackId: "side-entry", trackKind: "character_transform", target: {targetType: "character", targetId: actor.characterId}, propertyKey: "transform.position_m",
+    keyframes: [{keyframeId: "a", timeSeconds: 0, value: [3,0,0], interpolation: "linear"}, {keyframeId: "b", timeSeconds: 4, value: [7,0,0], interpolation: "linear"}]};
+  const routed = navigateCrowd([track], {[actor.characterId]: actor}, Object.fromEntries(objects.map((o) => [o.sceneObjectId,o])))[0];
+  expect(evaluateKeyframes(routed.keyframes, 4)).toEqual([7,0,0]);
+});
