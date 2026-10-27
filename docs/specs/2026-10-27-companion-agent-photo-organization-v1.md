@@ -128,3 +128,48 @@ Agent 不应直接修改照片。它需要调用一个受限的 photo tool regis
 ### 当前实现差距
 
 现有相册任务已有 task_id/revision，但 diary 仍主要由日期意图直接进入写作通道，focused_task 和其他任务摘要尚未统一持久化。下一切片应先实现 `workflow_context` 只读快照和 focused_task 切换，再把语音转写接入文字 Agent；不再向 OpenTalking 内置模型注入聊天历史或任务工具。
+
+## 小安需要持有的相册工作流状态
+
+相册交互必须向 Companion Agent 提供一个只读、可恢复的 workflow snapshot。模型不能从聊天文本猜测当前照片或修改结果。
+
+```json
+{
+  "task_id": "...",
+  "kind": "album",
+  "status": "waiting_input|waiting_confirmation|running|completed|failed|cancelled",
+  "focused": true,
+  "workspace": "album",
+  "selected_photo": {
+    "photo_id": "...",
+    "position": 2,
+    "revision": 3
+  },
+  "operation": {
+    "kind": "description|story|date|person|organize",
+    "draft": "...",
+    "expected_revision": 3,
+    "operation_id": "..."
+  },
+  "last_outcome": {
+    "status": "succeeded|failed|conflict|none",
+    "message": "...",
+    "revision": 4
+  },
+  "next_input": "选择照片|补充描述|确认保存|重新核对"
+}
+```
+
+状态推进由后端事件完成，而不是由模型自行宣称：
+
+- `album.opened`：相册工作域已打开。
+- `photo.selected`：用户选定明确的 photo_id。
+- `operation.drafted`：形成日期、结构化备注、人物或讲述草稿。
+- `operation.confirmation_requested`：等待用户确认，不能写入。
+- `operation.started`：确认后开始调用已有照片接口。
+- `operation.succeeded` / `operation.failed` / `operation.conflict`：写入、失败或版本冲突的真实结果。
+- `album.closed`：关闭工作域，不等于任务完成。
+
+小安每轮只做三件事：说明当前状态、询问 `next_input`、把用户回答交给工作流。成功或失败播报必须读取 `last_outcome`，不能根据“我已经改好了”等模型文本判定。
+
+页面刷新时由 `task_id` 恢复 snapshot；切换到日记或普通聊天只暂停焦点，不清除相册状态。再次回到相册时仍能知道当前照片、草稿和待确认操作。任何照片写入都必须由工作流携带 `expected_revision` 和 `operation_id`，结果回写 snapshot 后才允许进入 `succeeded`。
