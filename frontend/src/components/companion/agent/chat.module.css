@@ -195,3 +195,10 @@
 .composerStatus { margin: 0; font-size: .85rem; line-height: 1.4; color: var(--muted); overflow-wrap: anywhere; }
 .openTalkingReply { flex-shrink: 0; }
 .openTalkingReply video { max-height: 64px; width: 64px; }
+
+/* Native top-layer dialog stays outside the composer's scrolling bounds. */
+.shell .voiceConsentDialog { inset: 0; margin: auto; width: min(28rem, calc(100% - 2rem)); max-height: calc(100dvh - 2rem); border-radius: 1.25rem; padding: 1rem; box-sizing: border-box; font-size: 1rem; }
+.voiceConsentDialog > div:first-child { display: none; }
+.voiceConsentActions { display: flex; flex-wrap: wrap; gap: .5rem; margin-top: 1rem; }
+.shell .voiceConsentActions button { min-height: 44px; margin: 0; padding: .65rem 1rem; }
+.shell .voiceConsentActions button:first-child { background: var(--accent); color: var(--color-on-accent, #0c0b0e); }

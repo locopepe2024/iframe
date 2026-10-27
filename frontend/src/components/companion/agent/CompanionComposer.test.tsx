@@ -20,7 +20,7 @@ afterEach(()=>{delete (window as Window & {SpeechRecognition?:unknown}).SpeechRe
 it("explains browser dictation first, locks switching while listening, and only appends a draft",()=>{
   render(<Harness/>);
   fireEvent.click(screen.getByRole("button",{name:"语音输入"}));
-  expect(screen.getByRole("region",{name:"语音输入说明"})).toBeInTheDocument();
+  expect(screen.getByRole("dialog",{name:"语音输入说明"})).toBeInTheDocument();
   fireEvent.click(screen.getByRole("button",{name:"同意并开始听写"}));
   expect(screen.getByRole("button",{name:"创作类型：图片"})).toBeDisabled();
   expect(screen.getByRole("button",{name:"发送"})).toBeDisabled();
@@ -103,4 +103,17 @@ it("keeps voice feedback inside the input panel without changing the draft and r
  expect(start).toHaveBeenCalledOnce();
  fireEvent.click(screen.getByRole("button",{name:"停止"}));
  expect(start).toHaveBeenCalledOnce();
+});
+
+it("shows voice consent in a modal with an explicit close action without starting capture",()=>{
+ render(<Harness/>);
+ const mic=screen.getByRole("button",{name:"语音输入"});
+ fireEvent.click(mic);
+ const dialog=screen.getByRole("dialog",{name:"语音输入说明"});
+ expect(dialog.tagName).toBe("DIALOG");
+ expect(dialog).toHaveAttribute("open");
+ fireEvent.click(screen.getByRole("button",{name:"关闭语音输入说明"}));
+ expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+ expect(screen.getByLabelText("想生成的图片")).toHaveValue("原有草稿");
+ expect(screen.getByRole("button",{name:"语音输入"})).toBeEnabled();
 });

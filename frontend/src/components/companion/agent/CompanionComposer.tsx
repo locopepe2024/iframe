@@ -6,6 +6,7 @@ import { useCompanionVoice } from "../useCompanionVoice";
 import { useContinuousCapture } from "./useContinuousCapture";
 import { isOpenAlbumCommand } from "./localCommands";
 import styles from "./chat.module.css";
+import FeatureDialog from "./FeatureDialog";
 import { companionPlayback } from "@/lib/companionPlaybackQueue";
 
 export type ComposerMode = "chat" | "image" | "video";
@@ -100,12 +101,12 @@ export default function CompanionComposer({ mode, value, disabled, busy, allowed
       </div>
     </div>
     {localCapture && capture.failed && <div><button type="button" onClick={capture.retry}>重试语音识别</button><button type="button" onClick={capture.stopAll}>结束并清空待识别语音</button></div>}
-    {voicePrompt && <section className={styles.voiceConsent} aria-label="语音输入说明">
+    {voicePrompt && <FeatureDialog title="语音输入说明" className={styles.voiceConsentDialog} onClose={() => setVoicePrompt(false)}>
       {mode === "chat" && process.env.NEXT_PUBLIC_API_URL === "/companion-demo" && <label>识别方式<select aria-label="识别方式" value={engine} onChange={event=>setEngine(event.target.value as "local"|"browser")}><option value="local">持续收音（测试）</option><option value="browser">浏览器识别</option></select></label>}
-      <p>{localCapture ? "持续采集麦克风，停顿后分段交给本站 SenseVoice 测试服务识别并加入聊天。播放回复时暂停识别，点击打断即可继续说；不会保存录音文件。" : mode === "chat" ? "语音会交给浏览器识别，并连续加入聊天。您可以随时点停止。" : "语音会交给浏览器的语音服务识别，文字先放入输入框，您检查后再发送。"}</p>
-      <button type="button" disabled={disabled} onClick={() => { setVoiceConsent(true); setVoicePrompt(false); toggleVoice(); }}>{mode === "chat" ? "同意并开始聊天" : "同意并开始听写"}</button>
-      <button type="button" onClick={() => setVoicePrompt(false)}>先用文字</button>
-    </section>}
+      <p>{localCapture ? "持续采集麦克风，停顿后分段交给本站 SenseVoice 测试服务识别并加入聊天。播放回复时暂停识别，点击停止播报即可继续说；不会保存录音文件。" : mode === "chat" ? "语音会交给浏览器识别，并连续加入聊天。您可以随时点停止。" : "语音会交给浏览器的语音服务识别，文字先放入输入框，您检查后再发送。"}</p>
+      <div className={styles.voiceConsentActions}><button type="button" disabled={disabled && !busy} onClick={() => { setVoiceConsent(true); setVoicePrompt(false); toggleVoice(); }}>{mode === "chat" ? "同意并开始聊天" : "同意并开始听写"}</button>
+      <button type="button" onClick={() => setVoicePrompt(false)}>先用文字</button></div>
+    </FeatureDialog>}
     {retry && <button type="button" disabled={busy} onClick={retry}>重试原请求</button>}
   </footer>;
 }
