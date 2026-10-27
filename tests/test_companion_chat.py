@@ -141,6 +141,7 @@ def test_personal_channel_wire_strict_tools_and_safe_failure(monkeypatch):
     # The previous regular proposal still carried the four memory tools.
     regular_body=post.call_args_list[0].kwargs['json']
     assert {t['function']['name'] for t in regular_body['tools']}=={'memory_save','memory_search','memory_list','memory_delete'}
+    assert regular_body['max_tokens'] < body['max_tokens']
     assert 'confirm' not in str(regular_body['tools'])
     response.json.return_value={'choices':[{'message':{'tool_calls':[dict(type='function',function=dict(name='memory_confirm',arguments='{}'))]}}]}
     with pytest.raises(model.ModelUnavailable):model.propose(identity,[],'m')

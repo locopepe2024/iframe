@@ -44,7 +44,9 @@ def _propose(identity, messages, current_message_id, *, diary=False):
             '如果事实不足，只提出一个最需要补充的问题。绝对不要查询、保存或删除个人记忆，也不要输出工具调用。')
         response = requests.post(configured['base_url'].rstrip('/')+'/chat/completions',
             headers={'Authorization': 'Bearer '+configured['api_key']},
-            json=dict(model=model, max_tokens=1600, parallel_tool_calls=False,
+            # Keep ordinary spoken/chat turns compact. Diary writing is an explicit
+            # long-form task and retains the larger budget.
+            json=dict(model=model, max_tokens=1600 if diary else 480, parallel_tool_calls=False,
                       messages=[dict(role='system',content=system_prompt(profile)+instruction),dict(role='user',content=json.dumps(dict(current_message_id=current_message_id,user_messages=messages),ensure_ascii=False)),
                                 ],
                       **({'tools': tools} if tools else {})), timeout=(10,60))
