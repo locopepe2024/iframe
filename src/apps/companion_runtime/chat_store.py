@@ -136,7 +136,7 @@ class ChatStore(PhotoTasks, DiaryStore, CompanionStore):
             elif result['kind']=='confirmation':
                 output['result']=dict(kind='confirmation',**self.preview(owner,actor,result['preview_token']))
             elif result['kind']=='read':
-                output['result']=dict(kind='photo_read' if result['name'].startswith('photo.') else 'read',name=result['name'],arguments=result['arguments'],**dispatch(self,owner,actor,result['name'],result['arguments']))
+                output['result']=dict(kind='diary_read' if result['name'].startswith('diary.') else 'photo_read' if result['name'].startswith('photo.') else 'read',name=result['name'],arguments=result['arguments'],**dispatch(self,owner,actor,result['name'],result['arguments']))
             else:
                 output['result']=result
         return output

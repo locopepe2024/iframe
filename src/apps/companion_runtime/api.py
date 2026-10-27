@@ -15,7 +15,7 @@ from .store import Missing, Conflict
 from .chat_store import ChatStore as CompanionStore
 from .intent import classify
 from .model import propose, propose_diary, ModelUnavailable
-from .tools import Strict, dispatch, tool_schemas
+from .tools import Strict, dispatch, tool_schemas, CAPABILITIES
 from .opentalking_binding import BindingUnavailable, SessionBindings
 from .opentalking_context import ContextUnavailable, IframeContextReader
 
@@ -45,7 +45,7 @@ class PhotoTaskInput(Operation):
 
 
 class ToolRequest(Strict):
-    name: Literal['memory.save', 'memory.search', 'memory.list', 'memory.delete', 'photo.album.list', 'photo.item.read']
+    name: Literal['diary.open', 'diary.list', 'diary.read', 'memory.save', 'memory.search', 'memory.list', 'memory.delete', 'photo.album.list', 'photo.item.read']
     arguments: dict
 
 
@@ -197,7 +197,7 @@ def conversation(session_id: str, identity: Owner, store: Store, after: int = Qu
 
 @router.get('/tools')
 def schemas(identity: Owner):
-    return dict(tools=tool_schemas())
+    return dict(tools=tool_schemas(), capabilities=CAPABILITIES)
 
 
 @router.post('/tools')

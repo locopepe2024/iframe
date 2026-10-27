@@ -8,7 +8,7 @@ from fastapi import HTTPException
 
 from ..user_config import UserConfigStore
 from .personality import get_profile, system_prompt
-from .tools import tool_schemas, MODELS, DESCRIPTIONS
+from .tools import tool_schemas, MODELS, DESCRIPTIONS, CAPABILITIES
 
 
 class ModelUnavailable(RuntimeError):
@@ -42,12 +42,15 @@ def _propose(identity, messages, current_message_id, *, diary=False):
         profile = get_profile(os.getenv('IFRAME_COMPANION_PERSONALITY'))
         instruction = ('\n用户要求整理照片时用 photo_organize_start 委派工作流；只查找照片用 photo_album_list。workflow_tasks 是服务端提供的当前任务状态；用户继续选择、结束或取消时用 photo_organize_input，不重复发起。有多项任务或照片选择不明确时只问一个澄清问题。不要声称已完成分析或保存。') if not diary else ('\n这是回忆日记写作任务。只根据 user_messages 中已经说过的事实写一篇简短日记；'
             '如果事实不足，只提出一个最需要补充的问题。绝对不要查询、保存或删除个人记忆，也不要输出工具调用。')
+        prompt = system_prompt(profile) + instruction
+        if not diary:
+            prompt += '\n你已注册以下站内能力，应按需求调用工具，不要声称无法打开站内相册或日记。外部手机相册仍需用户上传。\n' + json.dumps(CAPABILITIES, ensure_ascii=False)
         response = requests.post(configured['base_url'].rstrip('/')+'/chat/completions',
             headers={'Authorization': 'Bearer '+configured['api_key']},
             # Keep ordinary spoken/chat turns compact. Diary writing is an explicit
             # long-form task and retains the larger budget.
             json=dict(model=model, max_tokens=1600 if diary else 480, parallel_tool_calls=False,
-                      messages=[dict(role='system',content=system_prompt(profile)+instruction),dict(role='user',content=json.dumps(dict(current_message_id=current_message_id,user_messages=messages),ensure_ascii=False)),
+                      messages=[dict(role='system',content=prompt),dict(role='user',content=json.dumps(dict(current_message_id=current_message_id,user_messages=messages),ensure_ascii=False)),
                                 ],
                       **({'tools': tools} if tools else {})), timeout=(10,60))
         response.raise_for_status()
