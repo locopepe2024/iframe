@@ -1,12 +1,16 @@
 "use client";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { companionPlayback } from "@/lib/companionPlaybackQueue";
 import { companionServices } from "@/lib/companionServices";
 export default function SpeechPlayback({text,voice,autoPlay=false}:{text:string;voice?:string;autoPlay?:boolean}) {
   const [busy,setBusy]=useState(false),[error,setError]=useState(""),[url,setUrl]=useState("");
   const owner=useRef(Symbol("reply-playback")),queued=useRef(false);
   const current=useRef(""); const alive=useRef(true); const audio=useRef<HTMLAudioElement>(null); const autoPlayed=useRef("");
-  useEffect(()=>{alive.current=true;return()=>{alive.current=false;companionPlayback.cancel(owner.current);if(current.current)URL.revokeObjectURL(current.current);};},[]);
+  useLayoutEffect(()=>{alive.current=true;return()=>{
+    alive.current=false;companionPlayback.cancel(owner.current);
+    const node=audio.current;if(node){node.pause();node.removeAttribute("src");node.load();}
+    if(current.current)URL.revokeObjectURL(current.current);
+  };},[]);
   function play(cached=false) {
     if (queued.current || text.length>3000) return;
     queued.current=true;setBusy(true);setError("");

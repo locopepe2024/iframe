@@ -1,0 +1,36 @@
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { afterEach, expect, it, vi } from "vitest";
+import SpeechPlayback from "./SpeechPlayback";
+import { companionPlayback } from "@/lib/companionPlaybackQueue";
+const service = vi.hoisted(() => ({ speech: vi.fn() }));
+vi.mock("@/lib/companionServices", () => ({ companionServices: service }));
+afterEach(() => { companionPlayback.cancel(); vi.restoreAllMocks(); });
+it("history mounting is inert and cannot acquire the playback queue", async () => {
+ const view = render(<SpeechPlayback text="历史回复" />);
+ await act(async () => {});
+ expect(service.speech).not.toHaveBeenCalled();
+ expect(screen.queryByLabelText("助手回复朗读")).not.toBeInTheDocument();
+ const next = vi.fn(async () => {});
+ companionPlayback.enqueue(Symbol("new-reply"), next);
+ await waitFor(() => expect(next).toHaveBeenCalledOnce());
+ view.unmount();
+});
+it("unmount fully detaches historical media and releases the next playback", async () => {
+ service.speech.mockResolvedValue(new Blob(["test"], { type: "audio/wav" }));
+ vi.spyOn(URL, "createObjectURL").mockReturnValue("blob:history");
+ const revoke = vi.spyOn(URL, "revokeObjectURL").mockImplementation(() => {});
+ vi.spyOn(HTMLMediaElement.prototype, "play").mockResolvedValue();
+ const pause = vi.spyOn(HTMLMediaElement.prototype, "pause");
+ const view = render(<SpeechPlayback text="历史回复" />);
+ fireEvent.click(screen.getByRole("button", { name: /用 UniArt 朗读/ }));
+ const media = await screen.findByLabelText("助手回复朗读");
+ await waitFor(() => expect(companionPlayback.isPlaying()).toBe(true));
+ const next = vi.fn(async () => {});
+ companionPlayback.enqueue(Symbol("new-reply"), next);
+ expect(next).not.toHaveBeenCalled();
+ view.unmount();
+ await waitFor(() => expect(next).toHaveBeenCalledOnce());
+ expect(pause).toHaveBeenCalled();
+ expect(media).not.toHaveAttribute("src");
+ expect(revoke).toHaveBeenCalledWith("blob:history");
+});
