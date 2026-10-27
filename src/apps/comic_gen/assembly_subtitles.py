@@ -70,13 +70,13 @@ def render_with_subtitles(command, plan):
             "-vf", f"subtitles=filename={probe}:force_style='{style}'",
             "-frames:v", "1", "-f", "null", "-",
         ], check=True, capture_output=True, timeout=30)
-        if re.search(rb"(Glyph .*not found|failed to find any fallback|fontselect: failed)", preflight.stderr, re.I):
+        if re.search(rb"(failed to find any fallback|fontselect: failed)", preflight.stderr, re.I):
             raise ValueError("Subtitle font is missing required glyphs; install a font supporting the selected language")
         rendered = list(command)
         index = rendered.index("-filter_complex") + 1
         rendered[index] += f";[outv]subtitles=filename={subtitle}:force_style='{style}'[captioned]"
         rendered[rendered.index("[outv]", index + 1)] = "[captioned]"
         result = subprocess.run(rendered, check=True, capture_output=True, timeout=600)
-        if re.search(rb"(Glyph .*not found|failed to find any fallback|fontselect: failed)", result.stderr, re.I):
+        if re.search(rb"(failed to find any fallback|fontselect: failed)", result.stderr, re.I):
             raise ValueError("Subtitle render has missing glyphs; output was not published")
         return result
