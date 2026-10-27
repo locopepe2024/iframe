@@ -3,6 +3,8 @@ import { beforeEach, expect, it, vi } from "vitest";
 import AgentChat from "./AgentChat";
 import {diaryPrompt,today} from "./DiaryCard";
 const api=vi.hoisted(()=>({session:vi.fn(),messages:vi.fn(),chat:vi.fn(),turn:vi.fn(),tool:vi.fn(),confirm:vi.fn(),cancel:vi.fn(),diaries:vi.fn(),saveDiary:vi.fn()}));
+const playback=vi.hoisted(()=>vi.fn());
+vi.mock("./OpenTalkingReply",()=>({default:(props:unknown)=>{playback(props);return null;}}));
 const photoApi=vi.hoisted(()=>({list:vi.fn()}));
 vi.mock("./UniArtSettings",()=>({default:()=> <section aria-label="UniArt 渠道设置"/>}));
 vi.mock("@/lib/companionApi",()=>({companionApi:api}));
@@ -349,4 +351,20 @@ it("persists the preferred reply mode and exposes automatic audio playback setti
  const text=screen.getByRole("radio",{name:/方案 2/});fireEvent.click(text);expect(text).toBeChecked();expect(localStorage.getItem("iframe-companion-agent-response-mode-v1")).toBe("text");
  fireEvent.click(screen.getByRole("button",{name:"保存设置"}));
  expect(screen.getByText("✓ 设置已保存")).toBeInTheDocument();
+});
+
+it("plays workflow progress through OpenTalking only in audio mode",async()=>{
+  localStorage.setItem("iframe-companion-agent-response-mode-v1","audio");
+  await start();allowText();
+  api.chat.mockResolvedValue({turn_id:"task-turn",status:"completed",result:{kind:"photo_task",task_id:"task",revision:1,status:"waiting_input",step:"select_photo",photos:[],spoken_text:"没有找到符合条件的照片。"}});
+  fireEvent.click(screen.getByRole("button",{name:"发送"}));
+  await waitFor(()=>expect(playback).toHaveBeenLastCalledWith(expect.objectContaining({reply:{id:"task-turn",text:"没有找到符合条件的照片。"}})));
+});
+it("keeps text mode silent when a workflow responds",async()=>{
+  await start();allowText();
+  api.chat.mockResolvedValue({turn_id:"task-turn",status:"completed",result:{kind:"photo_task",task_id:"task",revision:1,status:"waiting_input",step:"select_photo",photos:[],spoken_text:"没有找到符合条件的照片。"}});
+  fireEvent.click(screen.getByRole("button",{name:"发送"}));
+  await waitFor(()=>expect(api.chat).toHaveBeenCalledOnce());
+  await waitFor(()=>expect(screen.getByLabelText("和我聊聊天")).toHaveValue(""));
+  expect(playback).not.toHaveBeenCalled();
 });

@@ -158,7 +158,10 @@ export default function AgentChat() {
     const result = await companionApi.chat(activeSession, sendOperation.current);
     localStorage.setItem(turnKey, result.turn_id);
     if (alive.current) {
-      if (result.result?.kind === "text" && responseMode === "audio") setSpokenReply({ id: result.turn_id, text: result.result.text });
+      if (responseMode === "audio") {
+        const replyText = result.result?.kind === "text" ? result.result.text : result.result?.kind === "photo_task" ? result.result.spoken_text : undefined;
+        if (replyText) setSpokenReply({ id: result.turn_id, text: replyText });
+      }
       setDraft(null); setTurn(result); setPreview(result.result?.kind === "confirmation" ? result.result : null); setDrafts(old => ({ ...old, chat: "" })); sendOperation.current = null; setHasRetry(false);
       commitAttachments();
     }
@@ -312,7 +315,7 @@ export default function AgentChat() {
           })}
           media={attached.filter(item => item.anchor === index + 1).map(item => ({ id: item.id, kind: item.kind, name: item.name })) as DiaryContextMedia[]}
         /> : <article className={chatStyles.assistant}><p>{message.turn.result.text}</p><SpeechPlayback text={message.turn.result.text} voice={identity.voice}/></article>)}
-        {message.turn?.result?.kind === "photo_task" && <PhotoTaskCard key={message.turn.turn_id} task={message.turn.result} />}
+        {message.turn?.result?.kind === "photo_task" && !messages.slice(index + 1).some(later => later.turn?.result?.kind === "photo_task" && later.turn.result.task_id === (message.turn?.result?.kind === "photo_task" ? message.turn.result.task_id : "")) && <PhotoTaskCard key={`${message.turn.turn_id}-${message.turn.result.revision}`} task={message.turn.result} />}
         {message.turn?.result?.kind === "photo_read" && <PhotoToolResult key={message.turn.turn_id} result={message.turn.result} />}
         {message.turn?.result?.kind === "upload_guide" && !dismissedUploadGuides.includes(message.turn.turn_id) && <UploadGuideCard {...uploadGuideActions(message.turn.turn_id)} />}
       </div>{renderAttached(index+1)}</Fragment>;

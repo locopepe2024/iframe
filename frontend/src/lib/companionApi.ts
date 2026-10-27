@@ -6,7 +6,7 @@ export interface Preview {
   preview?: { content?: string; quote?: string; source_text?: string; source_message_id?: string; type?: string; importance?: number; memory?: Memory; notice?: string };
 }
 export interface PhotoRead { kind: "photo_read"; name: string; arguments: Record<string, unknown>; photos: { photo_id: string; date: import("./photoApi").PhotoDateAnnotation; description?: import("./photoApi").DescriptionReview | null; story?: { text: string } | null; analysis?: import("./photoApi").PhotoAnalysis | null }[]; next_after_id: string | null }
-export interface PhotoTask { kind: "photo_task"; task_id: string; status: "waiting_input" | "completed" | "cancelled"; step: "select_photo" | "review_photo" | "closed" | "cancelled"; revision: number; photos: PhotoRead["photos"] }
+export interface PhotoTask { kind: "photo_task"; task_id: string; spoken_text?: string; status: "waiting_input" | "completed" | "cancelled"; step: "select_photo" | "review_photo" | "closed" | "cancelled"; revision: number; photos: PhotoRead["photos"] }
 export interface Turn { turn_id: string; status: string; result?: (PhotoTask | PhotoRead | { kind: "text"; text: string } | { kind: "upload_guide" } | ({ kind: "confirmation" } & Preview) | { kind: "read"; name: string; memories: Memory[]; next_cursor: string | null }) }
 export interface MemoryPage { memories: Memory[]; next_cursor: string | null }
 export interface Diary { day: string; text: string; source_turn_id: string; revision: number; updated_at: number }
