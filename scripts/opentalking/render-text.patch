@@ -1,0 +1,158 @@
+--- a/apps/api/schemas/session.py
++++ b/apps/api/schemas/session.py
+@@ -63,6 +63,7 @@
+ 
+ class SpeakRequest(BaseModel):
+     text: str
++    render_text: bool = False
+     mode: str = Field(default="replace", description="首版仅支持 replace")
+     command_id: str | None = Field(default=None, description="幂等命令 ID")
+     voice: str | None = Field(
+--- a/apps/api/routes/sessions.py
++++ b/apps/api/routes/sessions.py
+@@ -990,6 +990,7 @@
+             tts_model=tm,
+             command_id=command_id,
+             owner_epoch=getattr(request.app.state, "worker_boot_id", None),
++            render_text=body.render_text,
+         )
+     except ValueError as exc:
+         raise HTTPException(status_code=409, detail=str(exc)) from exc
+--- a/apps/api/services/session_service.py
++++ b/apps/api/services/session_service.py
+@@ -277,6 +277,7 @@
+     tts_model: str | None = None,
+     command_id: str | None = None,
+     owner_epoch: str | None = None,
++    render_text: bool = False,
+ ) -> dict[str, str | bool]:
+     command_id = (command_id or "").strip() if command_id else ""
+     if not command_id:
+@@ -290,6 +291,8 @@
+         "tts_model": tts_model or "",
+         "mode": "replace",
+     }
++    if render_text:
++        payload["render_text"] = True
+     payload_hash = hashlib.sha256(
+         json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8")
+     ).hexdigest()
+@@ -337,6 +340,8 @@
+             "enqueue_unix": time.time(),
+             "command_id": command_id,
+         }
++        if render_text:
++            task["render_text"] = True
+         if voice:
+             task["voice"] = voice
+             task["tts_voice"] = voice
+--- a/opentalking/runtime/task_consumer.py
++++ b/opentalking/runtime/task_consumer.py
+@@ -916,6 +916,9 @@
+             float(enqueue_unix) if isinstance(enqueue_unix, (int, float)) else None
+         )
+         create_chat_task = getattr(runner, "create_chat_task", None)
++        from opentalking.pipeline.speak.synthesis_runner import FlashTalkRunner
++        if task.get("render_text") and not isinstance(runner, FlashTalkRunner):
++            raise ValueError("render_text requires synthesis runner")
+         if callable(create_chat_task):
+             speech_task = create_chat_task(
+                 text,
+@@ -931,6 +934,7 @@
+                 tts_provider=tts_provider or None,
+                 tts_model=tts_model or None,
+                 enqueue_unix=enqueue_value,
++                **({"render_text": True} if task.get("render_text") else {}),
+             )
+         if command_id and isinstance(speech_task, asyncio.Task):
+             speech_task.add_done_callback(
+--- a/opentalking/pipeline/speak/synthesis_runner.py
++++ b/opentalking/pipeline/speak/synthesis_runner.py
+@@ -1914,9 +1914,10 @@
+         tts_provider: str | None = None,
+         tts_model: str | None = None,
+         enqueue_unix: float | None = None,
++        render_text: bool = False,
+     ) -> asyncio.Task[None]:
+         task = asyncio.create_task(
+-            self._run_speak_task(text, tts_voice, tts_provider, tts_model, enqueue_unix)
++            self._run_speak_task(text, tts_voice, tts_provider, tts_model, enqueue_unix, render_text)
+         )
+         self.speech_tasks.add(task)
+         task.add_done_callback(self.speech_tasks.discard)
+@@ -1983,6 +1984,7 @@
+         tts_provider: str | None = None,
+         tts_model: str | None = None,
+         enqueue_unix: float | None = None,
++        render_text: bool = False,
+     ) -> None:
+         log.info("speak start: %s (session=%s)", text[:30], self.session_id)
+         try:
+@@ -1992,6 +1994,7 @@
+                 tts_provider=tts_provider,
+                 tts_model=tts_model,
+                 enqueue_unix=enqueue_unix,
++                render_text=render_text,
+             )
+             log.info("speak done: session=%s", self.session_id)
+         except asyncio.CancelledError:
+@@ -2026,6 +2029,7 @@
+         tts_provider: str | None = None,
+         tts_model: str | None = None,
+         enqueue_unix: float | None = None,
++        render_text: bool = False,
+     ) -> None:
+         """Full pipeline: user text → LLM → TTS → FlashTalk → WebRTC.
+ 
+@@ -2064,14 +2068,14 @@
+             )
+             self._speech_started = True
+ 
+-            memory_prompt = await self._memory.retrieve_prompt(text) if self._memory else ""
++            memory_prompt = await self._memory.retrieve_prompt(text) if self._memory and not render_text else ""
+             llm_user_text = (
+                 f"{memory_prompt}\n\nCurrent user message:\n{text}"
+                 if memory_prompt
+                 else text
+             )
+             self.conversation.add_user(text)
+-            agent_context = await self._build_agent_context(text)
++            agent_context = None if render_text else await self._build_agent_context(text)
+ 
+             full_response = ""
+             spoken_prefix = ""
+@@ -2378,8 +2382,13 @@
+                     t_llm0 = time.perf_counter()
+                     t_first_token: float | None = None
+                     try:
+-                        log.info("LLM streaming started for: %s", text[:50])
+-                        async for delta in self.llm.chat_stream(_llm_request_messages()):
++                        async def reply_source():
++                            if render_text:
++                                yield text
++                            else:
++                                async for piece in self.llm.chat_stream(_llm_request_messages()):
++                                    yield piece
++                        async for delta in reply_source():
+                             if self._interrupt.is_set():
+                                 break
+                             piece = strip_emoji(delta)
+@@ -2430,7 +2439,8 @@
+ 
+                 try:
+                     t_opener0 = time.perf_counter()
+-                    await _emit_cached_opener()
++                    if not render_text:
++                        await _emit_cached_opener()
+                     timing["opener_ms"] = (time.perf_counter() - t_opener0) * 1000.0
+                     # Run LLM feeder and TTS worker concurrently within
+                     # the producer; the TTS worker processes sentences as
+@@ -2730,7 +2740,7 @@
+             )
+ 
+             stored_response = _merge_spoken_reply(spoken_prefix, full_response)
+-            if stored_response:
++            if stored_response and not render_text:
+                 self.conversation.add_assistant(stored_response)
+                 await self._save_agent_turn(user_text=text, assistant_text=stored_response)
+                 if self._memory is not None:
