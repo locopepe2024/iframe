@@ -50,6 +50,7 @@ def ticket(body: VoiceConsent, identity: Owner):
         raise HTTPException(422, '请先同意发送语音。')
     # Resolve now to report configuration errors before acquiring the microphone.
     channel.runtime(identity)
+    logger.info("Companion realtime ticket accepted: model=%s", MODEL)
     now = time.monotonic()
     with _lock:
         for key in list(_tickets):
@@ -107,6 +108,9 @@ async def relay(client, upstream, diagnostics=None):
                 if not pcm or len(pcm) % 2 or len(pcm) > 16000 or total > 12 * 1024 * 1024:
                     raise ValueError('audio limit')
                 diagnostics['input_frames'] += 1
+                if diagnostics['input_frames'] == 1:
+                    diagnostics['first_input_at'] = time.monotonic()
+                    logger.info("Companion realtime first audio frame received: owner=%s", diagnostics.get('owner', 'unknown'))
                 await upstream.send(json.dumps(dict(type=kind, audio=audio)))
             elif kind == 'interrupt':
                 if responding:
@@ -137,11 +141,16 @@ async def relay(client, upstream, diagnostics=None):
             kind = event.get('type')
             diagnostics['last_event'] = kind if kind in {'session.created', 'session.updated', 'response.created', 'response.done', 'error', 'response.audio.delta', 'input_audio_buffer.speech_started', 'input_audio_buffer.speech_stopped'} else 'other'
             if kind == 'error':
+                logger.warning("Companion realtime upstream error: owner=%s input_frames=%s", diagnostics.get('owner', 'unknown'), diagnostics['input_frames'])
                 await client.send_json(dict(type='error', message='语音服务暂不可用，请检查渠道或余额后重新开始。'))
                 return
             if kind == 'session.updated':
+                diagnostics['upstream_ready_at'] = received_at
+                logger.info("Companion realtime upstream ready: owner=%s", diagnostics.get('owner', 'unknown'))
                 await client.send_json(dict(type='ready'))
             elif kind == 'response.created':
+                diagnostics['response_created_at'] = received_at
+                logger.info("Companion realtime response created: owner=%s input_frames=%s", diagnostics.get('owner', 'unknown'), diagnostics['input_frames'])
                 responding = True
                 audio_bytes = chunks = vad_during_response = 0
                 last_audio = None
@@ -155,6 +164,7 @@ async def relay(client, upstream, diagnostics=None):
                             round(max_arrival_gap * 1000), round(max_send_delay * 1000), vad_during_response)
                 await client.send_json(dict(type=kind))
             elif kind in {'input_audio_buffer.speech_started', 'input_audio_buffer.speech_stopped'}:
+                logger.info("Companion realtime VAD event: owner=%s event=%s input_frames=%s", diagnostics.get('owner', 'unknown'), kind, diagnostics['input_frames'])
                 if kind == 'input_audio_buffer.speech_started' and responding:
                     vad_during_response += 1
                 await client.send_json(dict(type=kind))
@@ -210,6 +220,7 @@ async def realtime(socket: WebSocket):
     await socket.accept()
     owner = None
     diagnostics = {}
+    diagnostics['owner'] = 'bound'
     started = time.monotonic()
     try:
         raw = await asyncio.wait_for(socket.receive_text(), timeout=10)
