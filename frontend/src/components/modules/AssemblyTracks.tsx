@@ -1,9 +1,9 @@
 "use client";
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, type PointerEvent } from "react";
 import { useLocale } from "next-intl";
 import { api, type AssemblyEditPlan } from "@/lib/api";
 import type { Project } from "@/store/projectStore";
-import { removeAssemblyClip, splitAssemblyClip, trimAssemblyClip } from "./assemblyEditing";
+import { moveAssemblyClipInTimeline, removeAssemblyClip, splitAssemblyClip, trimAssemblyClip } from "./assemblyEditing";
 import { extractErrorDetail, getAssetUrl, getVideoPosterUrl } from "@/lib/utils";
 
 export function AssemblyTracks({ plan, resourceId, onChange, saved, project }: {
@@ -21,6 +21,7 @@ export function AssemblyTracks({ plan, resourceId, onChange, saved, project }: {
     const videoRef = useRef<HTMLVideoElement>(null);
     const [playing, setPlaying] = useState(false);
     const [mediaError, setMediaError] = useState<string | null>(null);
+    const dragRef = useRef<{ laneId: string; clipId: string; startX: number; origin: number } | null>(null);
     const laneName = (kind: string) => ({ video: t("视频", "Video"), subtitle: t("字幕", "Subtitles"), dialogue: t("对白", "Dialogue"), bgm: t("音乐", "Music"), sfx: t("音效", "SFX"), markers: t("标记", "Markers") }[kind] || kind);
     const videos = plan.lanes.filter(l => l.kind === "video" && !l.muted).flatMap(l => l.clips.filter(c => c.enabled)).sort((a,b) => a.timeline_start_ms - b.timeline_start_ms);
     const currentVideo = videos.find(c => c.timeline_start_ms <= position && position < c.timeline_end_ms);
@@ -48,6 +49,22 @@ export function AssemblyTracks({ plan, resourceId, onChange, saved, project }: {
     useEffect(() => { setPlaying(false); setPosition(0); setSelected(null); setMediaError(null); }, [project.id]);
     useEffect(() => { setMediaError(null); }, [currentMedia?.url]);
     const seek = (value: number) => { setMediaError(null); setPosition(value); };
+    const beginDrag = (event: PointerEvent, laneId: string, clipId: string, origin: number) => {
+        const lane = plan.lanes.find(item => item.id === laneId);
+        if (!lane || lane.kind === "video") return;
+        dragRef.current = { laneId, clipId, startX: event.clientX, origin };
+        event.currentTarget.setPointerCapture(event.pointerId);
+    };
+    const updateDrag = (event: PointerEvent) => {
+        const drag = dragRef.current;
+        if (!drag) return;
+        const timeline = event.currentTarget.closest("[data-timeline-width]") as HTMLElement | null;
+        const width = timeline?.clientWidth || 0;
+        if (!width) return;
+        const delta = Math.round((event.clientX - drag.startX) / width * plan.target_duration_ms / 10) * 10;
+        try { onChange(moveAssemblyClipInTimeline(plan, drag.laneId, drag.clipId, drag.origin + delta)); setError(null); } catch (e) { setError(e instanceof Error ? e.message : String(e)); }
+    };
+    const endDrag = () => { dragRef.current = null; };
     const selectedLane = plan.lanes.find(l => l.id === selected?.laneId);
     const selectedClip = selectedLane?.clips.find(c => c.id === selected?.clipId);
     const applyEdit = (edit: () => AssemblyEditPlan) => {
@@ -133,8 +150,8 @@ export function AssemblyTracks({ plan, resourceId, onChange, saved, project }: {
                     setError(null); onChange({ ...plan, lanes: plan.lanes.map(l => l.id === lane.id ? { ...l, clips: [...l.clips, { id: crypto.randomUUID(), timeline_start_ms: start, timeline_end_ms: end, source_start_ms: 0, text: t("新字幕", "New caption"), enabled: true, source_refs: [] }] } : l) });
                 }}>{t("添加字幕", "Add caption")}</button><button type="button" className={control} disabled={!saved || busy || lane.muted} onClick={() => download(lane.id)}>{t("下载 SRT", "Download SRT")}</button></>}
             </div>
-            <div className={`relative overflow-hidden rounded bg-elevated ${lane.kind === "video" ? "h-24" : "h-10"}`} aria-label={`${lane.kind} timeline`}>
-                {lane.clips.map(c => <button key={c.id} type="button" aria-label={c.text || c.label || c.id} title={c.text || c.label || c.id} onClick={() => {
+            <div className={`relative overflow-hidden rounded bg-elevated ${lane.kind === "video" ? "h-24" : "h-10"}`} aria-label={`${lane.kind} timeline`} onPointerMove={updateDrag} onPointerUp={endDrag}>
+                {lane.clips.map(c => <button key={c.id} type="button" aria-label={c.text || c.label || c.id} title={c.text || c.label || c.id} onPointerDown={e => beginDrag(e, lane.id, c.id, c.timeline_start_ms)} onClick={() => {
                     setSelected({ laneId: lane.id, clipId: c.id });
                     setSourceIn(c.source_start_ms ?? 0);
                     setSourceOut(c.source_end_ms ?? (c.source_start_ms ?? 0) + c.timeline_end_ms - c.timeline_start_ms);
