@@ -143,7 +143,7 @@ def test_successful_burn_maps_captioned_video_and_cleans_files(monkeypatch):
             assert path.exists()
             assert command[command.index('-map') + 1] == '[captioned]'
             assert '第二句' in path.read_text()
-        return subprocess.CompletedProcess(command, 0, stdout=b'', stderr=b'')
+        return subprocess.CompletedProcess(command, 0, stdout=b'', stderr=b'Glyph 0x4E2D not found, selecting one more font\nfontselect: NotoSansCJK-Regular')
     monkeypatch.setattr(subprocess, 'run', run)
     render_with_subtitles(['ffmpeg', '-filter_complex', '[0:v]null[outv]', '-map', '[outv]', 'out.mp4'], value)
     assert len(commands) == 3
