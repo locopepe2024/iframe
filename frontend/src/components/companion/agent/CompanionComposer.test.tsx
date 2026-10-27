@@ -51,6 +51,15 @@ it("uses the chat invitation inside the input instead of spending a separate row
   expect(screen.getByText("和我聊聊天", {selector:"span"}).className).toMatch(/visuallyHidden/);
 });
 
+it("keeps voice input clickable while a text request is busy",()=>{
+ const final=vi.fn();
+ render(<CompanionComposer mode="chat" value="" disabled busy allowed inputRef={createRef()} onMode={()=>{}} onChange={()=>{}} onSend={()=>{}} onUpload={()=>{}} onAllow={()=>{}} onRequestConsent={()=>{}} retry={null} onVoiceFinal={final}/>);
+ const button=screen.getByRole("button",{name:"语音输入"});
+ expect(button).not.toBeDisabled();
+ fireEvent.click(button);
+ expect(screen.getByRole("button",{name:"同意并开始聊天"})).toBeInTheDocument();
+});
+
 it("offers continuous voice consent in chat mode while retaining text drafts",()=>{
  render(<CompanionComposer mode="chat" value="保留的文字" disabled={false} busy={false} allowed inputRef={createRef()} onMode={()=>{}} onChange={()=>{}} onSend={()=>{}} onUpload={()=>{}} onAllow={()=>{}} onRequestConsent={()=>{}} retry={null}/>);
  fireEvent.click(screen.getByRole("button",{name:"语音输入"}));
