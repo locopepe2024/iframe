@@ -31,8 +31,8 @@ const CreativeCanvas = dynamic(() => import("@/components/canvas/CreativeCanvas"
 //   - Voice  → Cast voice binding + Storyboard DialogueAudioRow (PR-3g-3j)
 //   - Mix    → Assembly Mix phase tab (PR-3k)
 //   - Export → Assembly Export phase tab (PR-3k)
-// Both generation modes keep the same Director, Assets, Storyboard, Shot Design,
-// and Assembly components. Episodes in a series additionally expose Cast.
+// Both context modes keep the same Director, Assets, Storyboard, Shot Design,
+// and Assembly components. Current series projects additionally expose Cast.
 const LEGACY_STEPS = [
     { id: "script", label: "1. Script", icon: BookOpen },
     { id: "art_direction", label: "2. Director", icon: Palette },
@@ -53,22 +53,6 @@ const UNIFIED_STEPS = [
     { id: "shot_design", label: "6. Shot Design", icon: Video },
     { id: "assembly", label: "7. Assembly", icon: Film },
 ];
-
-export function selectProjectSteps(
-    workflowMode: string | undefined,
-    seriesId: string | null | undefined,
-    seriesContentMode: "scripted" | "freeform",
-) {
-    if (workflowMode !== "r2v") {
-        return seriesId ? UNIFIED_STEPS : LEGACY_STEPS;
-    }
-    if (seriesContentMode === "freeform") {
-        return UNIFIED_STEPS
-            .filter(s => s.id !== "script")
-            .map((s, i) => ({ ...s, label: s.label.replace(/^\d+\./, `${i + 1}.`) }));
-    }
-    return UNIFIED_STEPS;
-}
 
 export default function ProjectClient({ id, breadcrumbSegments, standaloneDirectorMindMap = false }: { id: string; breadcrumbSegments?: BreadcrumbSegment[]; standaloneDirectorMindMap?: boolean }) {
     const [activeStep, setActiveStep] = useState("script");
@@ -99,9 +83,25 @@ export default function ProjectClient({ id, breadcrumbSegments, standaloneDirect
     }, [currentProject?.series_id]);
 
     const steps = useMemo(() => {
-        // Cast belongs to series membership, independent of the episode's
-        // video generation mode. Standalone projects keep the shorter rail.
-        const base = selectProjectSteps(currentProject?.workflow_mode, currentProject?.series_id, seriesContentMode);
+        // PR-3f routing: backend enum "r2v" → unified workbench (5 steps).
+        // Anything else (i2v_legacy, missing) → legacy 9-step path. Old
+        // projects without workflow_mode default to legacy for backward
+        // compat (spec §3.2).
+        let base;
+        if (currentProject?.workflow_mode !== "r2v") {
+            base = LEGACY_STEPS;
+        } else if (seriesContentMode === "freeform") {
+            // Phase 6 — freeform mode: skip Script step, episodes start at
+            // Style. Re-number labels accordingly.
+            base = UNIFIED_STEPS
+                .filter(s => s.id !== "script")
+                .map((s, i) => ({ ...s, label: s.label.replace(/^\d+\./, `${i + 1}.`) }));
+        } else {
+            // Scripted unified flow: Cast is always present (per-episode view
+            // of frame-referenced assets). Series-level shared assets are
+            // managed in SeriesDetailPage.
+            base = UNIFIED_STEPS;
+        }
 
         // Per-step stage status (conservative signals from project state —
         // NOT wizard done-checks; see storyboard-r2v-unified mock). Script
