@@ -9501,20 +9501,21 @@ class ComicGenPipeline(StudioOwnerMixin):
         unsupported = [
             lane.kind
             for lane in plan.lanes
-            if lane.kind in ("dialogue", "bgm", "sfx")
+            if lane.kind in ("dialogue", "bgm", "sfx", "subtitle")
+            and not lane.muted
             and any(clip.enabled for clip in lane.clips)
         ]
         if unsupported:
             kinds = ", ".join(sorted(set(unsupported)))
             raise AssemblyPlanValidationError(
-                f"Assembly audio lanes are not supported by render v1: {kinds}"
+                f"Assembly {'subtitle' if 'subtitle' in unsupported else 'audio'} lanes are not supported by render v1: {kinds}"
             )
 
         clips = sorted(
             [
                 clip
                 for lane in plan.lanes
-                if lane.kind == "video"
+                if lane.kind == "video" and not lane.muted
                 for clip in lane.clips
                 if clip.enabled
             ],

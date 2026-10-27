@@ -477,7 +477,7 @@ export interface BgmPreset {
 // Assembly v1 — stable, URL-free editorial plan.  The backend owns the
 // reference/overlap checks; the client only edits bounded millisecond ranges.
 export type AssemblyScope = "project" | "series";
-export type AssemblyLaneKind = "video" | "dialogue" | "bgm" | "sfx" | "markers";
+export type AssemblyLaneKind = "video" | "dialogue" | "bgm" | "sfx" | "subtitle" | "markers";
 export type AssemblyMarkerType = "episode" | "memory" | "story_node" | "note";
 
 export interface AssemblyClip {
@@ -494,11 +494,13 @@ export interface AssemblyClip {
     label?: string | null;
     enabled: boolean;
     gain?: number | null;
+    text?: string | null;
 }
 
 export interface AssemblyLane {
     id: string;
     kind: AssemblyLaneKind;
+    muted?: boolean;
     clips: AssemblyClip[];
     allow_overlap: boolean;
     label?: string | null;
