@@ -26,3 +26,11 @@ def test_prompt_contains_internal_expression_contract_without_control_tags():
     assert "无法确定时按平静处理" in prompt
     assert "不输出情绪控制标记" in prompt
     assert "用户说结束、休息或不想聊" in prompt
+
+
+def test_prompt_limits_chat_length_and_repetition_without_blocking_writing():
+    prompt = system_prompt()
+    assert "1—3 句、约 30—80 个汉字" in prompt
+    assert "不回顾整段历史" in prompt
+    assert "用更简单的新说法回答" in prompt
+    assert "明确要求的写作任务可以超过普通长度" in prompt
