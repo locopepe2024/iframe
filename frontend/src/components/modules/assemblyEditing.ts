@@ -77,3 +77,25 @@ export function moveAssemblyClipInTimeline(plan: AssemblyEditPlan, laneId: strin
     }
     return { ...plan, lanes: plan.lanes.map(l => l.id === laneId ? { ...l, clips } : l) };
 }
+
+/** Resize one timeline edge, preserving source mapping for media clips. */
+export function resizeAssemblyClipInTimeline(plan: AssemblyEditPlan, laneId: string, clipId: string, edge: "start" | "end", time: number): AssemblyEditPlan {
+    if (!Number.isInteger(time)) throw new Error("Clip edge must be an integer millisecond");
+    const lane = plan.lanes.find(l => l.id === laneId);
+    const clip = lane?.clips.find(c => c.id === clipId);
+    if (!lane || !clip) throw new Error("Clip not found");
+    if (lane.kind === "video") {
+        const sourceStart = clip.source_start_ms ?? 0;
+        const sourceEnd = clip.source_end_ms ?? sourceStart + clip.timeline_end_ms - clip.timeline_start_ms;
+        const duration = clip.timeline_end_ms - clip.timeline_start_ms;
+        const mapped = sourceStart + Math.round((time - clip.timeline_start_ms) / duration * (sourceEnd - sourceStart));
+        return trimAssemblyClip(plan, laneId, clipId, edge === "start" ? mapped : sourceStart, edge === "end" ? mapped : sourceEnd);
+    }
+    const nextStart = edge === "start" ? time : clip.timeline_start_ms;
+    const nextEnd = edge === "end" ? time : clip.timeline_end_ms;
+    if (nextEnd - nextStart < 10) throw new Error("Clip must keep at least 10 milliseconds");
+    if (nextStart < 0 || nextEnd > plan.target_duration_ms) throw new Error("Clip exceeds the timeline duration");
+    const clips = lane.clips.map(c => c.id === clipId ? { ...c, timeline_start_ms: nextStart, timeline_end_ms: nextEnd } : c);
+    if (!lane.allow_overlap && clips.some((a, i) => clips.some((b, j) => i !== j && a.timeline_start_ms < b.timeline_end_ms && b.timeline_start_ms < a.timeline_end_ms))) throw new Error("Clip would overlap another clip");
+    return { ...plan, lanes: plan.lanes.map(l => l.id === laneId ? { ...l, clips } : l) };
+}

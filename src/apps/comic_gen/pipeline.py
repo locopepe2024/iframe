@@ -108,7 +108,7 @@ from ..studio_access import (
     studio_media_dir,
     resolve_studio_reference,
 )
-from ..media_registry import register_media
+from ..media_registry import get_media, register_media
 
 logger = get_logger(__name__)
 
@@ -11042,6 +11042,12 @@ class ComicGenPipeline(StudioOwnerMixin):
                         raise AssemblyPlanValidationError(
                             f"clip {clip.id} frame is not owned by source episode"
                         )
+                if clip.source_media_id:
+                    if source_project is None or not source_project.owner_profile_id:
+                        raise AssemblyPlanValidationError(f"clip {clip.id} media has no valid owner")
+                    media = get_media(source_project.owner_profile_id, clip.source_media_id, output_root=self.output_root)
+                    if media is None:
+                        raise AssemblyPlanValidationError(f"clip {clip.id} references unknown media {clip.source_media_id}")
 
         for marker in plan.markers:
             if marker.source_episode_id is None:
@@ -11240,7 +11246,8 @@ class ComicGenPipeline(StudioOwnerMixin):
             if source_project is None:
                 raise AssemblyPlanValidationError(f"audio clip {clip.id} requires a valid source project")
             frame = next((item for item in source_project.frames if item.id == clip.source_frame_id), None)
-            source_ref = (source_project.bgm_url if kind == "bgm" else
+            media = get_media(source_project.owner_profile_id, clip.source_media_id, output_root=self.output_root) if clip.source_media_id and source_project.owner_profile_id else None
+            source_ref = (media.get("storage_key") if media else None) or (source_project.bgm_url if kind == "bgm" else
                           getattr(frame, "audio_url" if kind == "dialogue" else "sfx_url", None))
             if not source_ref or source_ref.startswith(("http://", "https://")):
                 raise AssemblyPlanValidationError(f"audio clip {clip.id} requires local project audio")
