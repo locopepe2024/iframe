@@ -15,7 +15,7 @@ beforeEach(()=>{
  vi.stubGlobal("RTCPeerConnection",PC);vi.stubGlobal("MediaStream",class{getTracks(){return [];} });vi.stubGlobal("EventSource",ES);
  vi.stubGlobal("fetch",vi.fn(async(url:string,init:RequestInit={})=>{
   calls.push({url,init});const path=url.replace("/opentalking-mock/api","");
-  const body=path==="/sessions"?{session_id:"s1"}:path==="/sessions/s1"?{agent_enabled:"0"}:path.includes("webrtc/ice-config")?{iceServers:[]}:path.includes("webrtc/offer")?{sdp:"answer",type:"answer"}:{status:"queued"};
+  const body=path==="/sessions"?{session_id:"s1"}:path==="/sessions/s1"?{state:"worker_ready"}:path.includes("webrtc/ice-config")?{iceServers:[]}:path.includes("webrtc/offer")?{sdp:"answer",type:"answer"}:{status:"queued"};
   return {ok:true,json:async()=>body};
  }));
 });
@@ -42,8 +42,10 @@ it("deletes a session created after unmount and never starts media for it",async
  await waitFor(()=>expect(calls.some(c=>c.url.endsWith("/late")&&c.init.method==="DELETE")).toBe(true));
  expect(calls.some(c=>c.url.includes("/start"))).toBe(false);
 });
-it("rejects a session that unexpectedly enables a second agent",async()=>{
- const original=fetch;vi.stubGlobal("fetch",vi.fn(async(url:string,init?:RequestInit)=>url.endsWith("/sessions/s1")&&init?.method==="GET"?{ok:true,json:async()=>({agent_enabled:"1"})}:original(url,init)));
+it("releases media on pagehide",async()=>{
  const view=render(<OpenTalkingReply reply={{id:"one",text:"你好"}}/>);
- await screen.findByText(/未关闭额外对话模型/);expect(speaks()).toHaveLength(0);view.unmount();
+ await waitFor(()=>expect(speaks()).toHaveLength(1));
+ act(()=>window.dispatchEvent(new Event("pagehide")));
+ expect(peer.close).toHaveBeenCalledOnce();expect(events.close).toHaveBeenCalledOnce();
+ view.unmount();expect(peer.close).toHaveBeenCalledOnce();
 });

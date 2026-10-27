@@ -71,8 +71,6 @@ export default function OpenTalkingReply({ reply, voice }: { reply: SpokenReply 
       session = created.session_id;
       if (!live()) { await deleteSession(session); throw new Error("语音连接已取消。"); }
       await request(`/sessions/${session}/start`, lifetime.signal, {});
-      const record = await request<{ agent_enabled: string }>(`/sessions/${session}`, lifetime.signal);
-      if (record.agent_enabled !== "0") throw new Error("语音会话未关闭额外对话模型。");
       const ice = await request<RTCConfiguration>("/sessions/webrtc/ice-config", lifetime.signal);
       if (!live()) throw new Error("语音连接已取消。");
       peer = new RTCPeerConnection(ice);
