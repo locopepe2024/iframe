@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { companionPlayback } from "@/lib/companionPlaybackQueue";
 import styles from "./chat.module.css";
+import SoundOutputCheck from "./SoundOutputCheck";
 
 export type SpokenReply = { id: string; text: string };
 const base = (process.env.NEXT_PUBLIC_OPENTALKING_URL || "/opentalking-mock/api").replace(/\/$/, "");
@@ -38,6 +39,7 @@ function waitForPeer(pc: RTCPeerConnection, signal: AbortSignal, gathering = fal
 /** One media session per chat page, independent of message-history reconciliation. */
 export default function OpenTalkingReply({ reply, voice }: { reply: SpokenReply | null; voice?: string }) {
   const video = useRef<HTMLVideoElement>(null);
+  const latestReply = useRef<SpokenReply | null>(null);
   const [state, setState] = useState<State>("idle"), [error, setError] = useState("");
   const [retry, setRetry] = useState(0);
   const enqueue = useRef<((reply: SpokenReply) => void) | null>(null);
@@ -193,6 +195,7 @@ export default function OpenTalkingReply({ reply, voice }: { reply: SpokenReply 
   }, [voice, retry]);
 
   useEffect(() => {
+    if (reply) latestReply.current = reply;
     if (!reply || seen.current.has(reply.id)) return;
     seen.current.add(reply.id);
     if (enqueue.current) enqueue.current(reply); else pending.current.push(reply);
@@ -208,6 +211,13 @@ export default function OpenTalkingReply({ reply, voice }: { reply: SpokenReply 
       }).catch(() => { setError("浏览器仍未允许播放，请检查媒体权限。"); });
     }}>播放声音</button>}
     <button type="button" onClick={() => interrupt.current?.()}>打断语音</button>
+    <SoundOutputCheck disabled={!latestReply.current || ["opening", "waiting", "audio"].includes(state)} replay={() => {
+      if (latestReply.current) enqueue.current?.(latestReply.current);
+    }} snapshot={() => {
+      const node = video.current, stream = node?.srcObject as MediaStream | null;
+      const tracks = stream?.getAudioTracks?.() ?? [];
+      return `回复音轨 ${tracks.length} 条；${tracks.some(t => t.enabled && t.readyState === "live") ? "音轨有效" : "尚无有效音轨"}；播放器${node?.paused ? "暂停" : "运行"}；${node?.muted ? "已静音" : "未静音"}；音量 ${Math.round((node?.volume ?? 0) * 100)}%。`;
+    }} />
     {state === "error" && <button type="button" onClick={() => {
       if (failed.current) { pending.current.unshift(failed.current); failed.current = null; }
       setError(""); setRetry(value => value + 1);
