@@ -2720,6 +2720,7 @@ class AssemblyClip(BaseModel):
     label: Optional[str] = Field(None, max_length=200)
     enabled: bool = True
     gain: Optional[float] = Field(None, ge=0, le=2)
+    text: Optional[str] = Field(None, max_length=2000)
 
     @model_validator(mode="after")
     def validate_ranges(self):
@@ -2734,7 +2735,8 @@ class AssemblyLane(BaseModel):
     """An ordered video/audio/editorial lane in an Assembly plan."""
 
     id: str = Field(..., min_length=1, max_length=120)
-    kind: Literal["video", "dialogue", "bgm", "sfx", "markers"]
+    kind: Literal["video", "dialogue", "bgm", "sfx", "subtitle", "markers"]
+    muted: bool = False
     clips: List[AssemblyClip] = Field(default_factory=list, max_length=256)
     # Overlap is explicit for audio lanes.  Video overlap is never accepted;
     # markers are not rendered and are handled separately on the plan.
@@ -2762,6 +2764,7 @@ class AssemblyEditPlan(BaseModel):
         max_length=120,
     )
     scope: Literal["project", "series"]
+    burn_subtitle_lane_id: Optional[str] = Field(None, min_length=1, max_length=120)
     target_duration_ms: int = Field(
         ASSEMBLY_DEFAULT_TARGET_DURATION_MS,
         ge=1,
@@ -2795,6 +2798,11 @@ class AssemblyEditPlan(BaseModel):
                     raise ValueError(
                         f"clip {clip.id} ends after target_duration_ms"
                     )
+                if lane.kind == "subtitle":
+                    if not clip.text or not clip.text.strip():
+                        raise ValueError(f"subtitle clip {clip.id} requires text")
+                    if any(ord(c) < 32 and c not in "\n\r\t" for c in clip.text):
+                        raise ValueError("subtitle text contains control characters")
                 if lane.kind == "video" and not clip.source_refs:
                     raise ValueError(
                         f"video clip {clip.id} requires source_refs"
@@ -2808,11 +2816,16 @@ class AssemblyEditPlan(BaseModel):
                     and other.timeline_start_ms < clip.timeline_end_ms
                     for other in previous
                 )
-                if overlapping and (lane.kind == "video" or not lane.allow_overlap):
+                if overlapping and (lane.kind in ("video", "subtitle") or not lane.allow_overlap):
                     raise ValueError(
                         f"overlapping clips are not allowed in lane {lane.id}"
                     )
                 previous.append(clip)
+
+        if self.burn_subtitle_lane_id is not None:
+            selected = next((lane for lane in self.lanes if lane.id == self.burn_subtitle_lane_id), None)
+            if selected is None or selected.kind != "subtitle" or selected.muted:
+                raise ValueError("burn_subtitle_lane_id requires an enabled subtitle lane")
 
         marker_ids = [marker.id for marker in self.markers]
         if len(marker_ids) != len(set(marker_ids)):

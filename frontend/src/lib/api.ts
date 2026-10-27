@@ -477,7 +477,7 @@ export interface BgmPreset {
 // Assembly v1 — stable, URL-free editorial plan.  The backend owns the
 // reference/overlap checks; the client only edits bounded millisecond ranges.
 export type AssemblyScope = "project" | "series";
-export type AssemblyLaneKind = "video" | "dialogue" | "bgm" | "sfx" | "markers";
+export type AssemblyLaneKind = "video" | "dialogue" | "bgm" | "sfx" | "subtitle" | "markers";
 export type AssemblyMarkerType = "episode" | "memory" | "story_node" | "note";
 
 export interface AssemblyClip {
@@ -494,11 +494,13 @@ export interface AssemblyClip {
     label?: string | null;
     enabled: boolean;
     gain?: number | null;
+    text?: string | null;
 }
 
 export interface AssemblyLane {
     id: string;
     kind: AssemblyLaneKind;
+    muted?: boolean;
     clips: AssemblyClip[];
     allow_overlap: boolean;
     label?: string | null;
@@ -514,6 +516,7 @@ export interface AssemblyMarker {
 }
 
 export interface AssemblyEditPlan {
+    burn_subtitle_lane_id?: string | null;
     id: string;
     scope: AssemblyScope;
     target_duration_ms: number;
@@ -764,6 +767,12 @@ export const api = {
             : { plan, expected_revision: expectedRevision };
         const res = await axios.put<AssemblyEditPlan>(`${API_URL}/${base}/${resourceId}/assembly-plan`, body);
         return res.data;
+    },
+
+    exportAssemblySubtitles: async (scope: AssemblyScope, id: string, laneId: string): Promise<Blob> => {
+        const group = scope === "project" ? "projects" : "series";
+        const result = await axios.get(`${API_URL}/${group}/${encodeURIComponent(id)}/assembly-plan/subtitles/${encodeURIComponent(laneId)}.srt`, { responseType: "blob" });
+        return result.data;
     },
 
     renderAssemblyPlan: async (

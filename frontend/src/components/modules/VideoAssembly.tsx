@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useMemo } from "react";
-import { useTranslations } from "next-intl";
+import { useLocale, useTranslations } from "next-intl";
 import { motion, AnimatePresence } from "framer-motion";
 import { Check, Loader2, Film, AlertTriangle, Layout, Clock, FileText, Download, Music, Sliders, Package, ArrowDown, ArrowUp, Save, Plus, RefreshCw } from "lucide-react";
 import { useProjectStore, type Project } from "@/store/projectStore";
@@ -14,6 +14,8 @@ import { buildDraftAssemblyPlan, formatAssemblyTime, hasAssemblyPlanChanges, mov
 import PreviewVideo from "@/components/shared/preview/PreviewVideo";
 import PreviewImage from "@/components/shared/preview/PreviewImage";
 import { resolveMergedVideoDelivery } from "@/lib/mediaDelivery";
+
+import { AssemblyTracks } from "./AssemblyTracks";
 
 type AssemblyPhase = "timeline" | "takes" | "mix" | "export";
 
@@ -478,7 +480,7 @@ export function AssemblyPlanPhase({
     isSaving,
     error,
     onCreate,
-    onChange,
+    onChange: onPlanChange,
     onSave,
     readyCountOverride,
     onRefresh,
@@ -498,6 +500,16 @@ export function AssemblyPlanPhase({
     notice?: string | null;
 }) {
     const ta = useTranslations("assembly");
+    const zh = useLocale().startsWith("zh");
+    const [past, setPast] = useState<AssemblyEditPlan[]>([]);
+    const [future, setFuture] = useState<AssemblyEditPlan[]>([]);
+    useEffect(() => { setPast([]); setFuture([]); }, [project?.id, plan?.revision]);
+    const onChange = (next: AssemblyEditPlan | null) => {
+        if (plan) setPast(history => [...history.slice(-49), plan]);
+        setFuture([]);
+        onPlanChange(next);
+    };
+
     const readyCount = readyCountOverride ?? (project?.frames ?? []).filter((frame: any) =>
         resolveAssemblyVideo(frame, project?.video_tasks ?? []),
     ).length;
@@ -605,6 +617,20 @@ export function AssemblyPlanPhase({
                     <div className="h-full w-full rounded-full bg-primary/60" />
                 </div>
             </div>
+
+            <div className="flex gap-2">
+                <button type="button" className="min-h-11 rounded border border-glass-border px-3 text-xs text-foreground disabled:opacity-40" disabled={!past.length} onClick={() => {
+                    if (!past.length) return;
+                    setFuture(items => [plan, ...items].slice(0, 50));
+                    onPlanChange(past[past.length - 1]); setPast(items => items.slice(0, -1));
+                }}>{zh ? "撤销" : "Undo"}</button>
+                <button type="button" className="min-h-11 rounded border border-glass-border px-3 text-xs text-foreground disabled:opacity-40" disabled={!future.length} onClick={() => {
+                    if (!future.length) return;
+                    setPast(items => [...items.slice(-49), plan]);
+                    onPlanChange(future[0]); setFuture(items => items.slice(1));
+                }}>{zh ? "重做" : "Redo"}</button>
+            </div>
+            {project && <AssemblyTracks project={project} plan={plan} resourceId={project.id} onChange={onChange} saved={!hasAssemblyPlanChanges(plan, project.assembly_plan)} />}
 
             <div className="space-y-3">
                 {plan.lanes.map((lane) => (

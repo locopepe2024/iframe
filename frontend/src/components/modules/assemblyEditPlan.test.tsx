@@ -27,14 +27,14 @@ function project(): Project {
 }
 
 describe("assembly edit plan helpers", () => {
-    it("proposes three bounded 20 second segments", () => {
+    it("proposes three original speed segments", () => {
         const plan = buildDraftAssemblyPlan(project());
         const video = plan.lanes.find((lane) => lane.kind === "video");
-        expect(plan.target_duration_ms).toBe(60_000);
+        expect(plan.target_duration_ms).toBe(15_000);
         expect(video?.clips.map((clip) => [clip.timeline_start_ms, clip.timeline_end_ms])).toEqual([
-            [0, 20_000],
-            [20_000, 40_000],
-            [40_000, 60_000],
+            [0, 5_000],
+            [5_000, 10_000],
+            [10_000, 15_000],
         ]);
     });
 

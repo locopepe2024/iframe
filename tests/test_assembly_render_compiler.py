@@ -258,7 +258,7 @@ def test_render_rejects_resource_owned_by_another_profile(pipeline):
                     ],
                 ),
             ],
-            "audio lanes are not supported",
+            "requires a valid source project",
         ),
         (
             [
@@ -501,3 +501,64 @@ def test_audio_probe_failure_does_not_publish_silent_output(pipeline, failure):
         with pytest.raises(RuntimeError, match="source audio probe failed"):
             pipeline.render_assembly_plan("project", project.id)
     assert not project.merged_video_url
+
+
+def test_real_multitrack_audio_offset_and_mute(pipeline):
+    ffmpeg = shutil.which('ffmpeg')
+    if not ffmpeg or not shutil.which('ffprobe'):
+        pytest.skip('FFmpeg required')
+    root = Path(pipeline.output_root)
+    (root / 'video').mkdir(parents=True, exist_ok=True)
+    subprocess.run([ffmpeg, '-y', '-f', 'lavfi', '-i', 'color=c=black:s=160x90:d=2:r=24',
+                    '-c:v', 'libx264', str(root / 'video/silent.mp4')], check=True, capture_output=True)
+    subprocess.run([ffmpeg, '-y', '-f', 'lavfi', '-i', 'sine=frequency=660:duration=1',
+                    str(root / 'video/dialogue.wav')], check=True, capture_output=True)
+    project = _project('mix', 'video/silent.mp4')
+    project.frames[0].audio_url = 'video/dialogue.wav'
+    project.assembly_plan = _plan('project', [_clip('mix', 0, 2000)], 2000)
+    lane = AssemblyLane(id='voice', kind='dialogue', clips=[AssemblyClip(
+        id='voice', timeline_start_ms=700, timeline_end_ms=1700,
+        source_project_id='mix', source_frame_id='frame-mix', gain=0.5)])
+    project.assembly_plan.lanes.append(lane)
+    pipeline.scripts[project.id] = project
+    for muted in (False, True):
+        lane.muted = muted
+        result = pipeline.render_assembly_plan('project', 'mix')
+        levels = []
+        for start in (0.1, 0.9, 1.8):
+            pcm = subprocess.run([ffmpeg, '-v', 'error', '-ss', str(start), '-i',
+                str(root / result.merged_video_url), '-t', '0.1', '-vn', '-ac', '1', '-ar', '8000',
+                '-f', 's16le', '-'], check=True, capture_output=True).stdout
+            values = array.array('h', pcm)
+            levels.append(math.sqrt(sum(v*v for v in values) / len(values)))
+        assert levels[0] < 10 and levels[2] < 10
+        assert levels[1] < 10 if muted else levels[1] > 100
+
+
+def test_real_ffmpeg_burns_selected_captions_only_in_cue_range(pipeline):
+    ffmpeg = shutil.which('ffmpeg')
+    if not ffmpeg:
+        pytest.skip('FFmpeg required')
+    filters = subprocess.run([ffmpeg, '-hide_banner', '-filters'], capture_output=True, check=True).stdout
+    if b' subtitles ' not in filters:
+        pytest.skip('FFmpeg built without libass')
+    root = Path(pipeline.output_root)
+    (root / 'video').mkdir(parents=True, exist_ok=True)
+    subprocess.run([ffmpeg, '-y', '-f', 'lavfi', '-i', 'color=c=black:s=160x90:d=2:r=24',
+                    '-c:v', 'libx264', str(root / 'video/caption.mp4')], check=True, capture_output=True)
+    project = _project('caption', 'video/caption.mp4')
+    project.assembly_plan = _plan('project', [_clip('caption', 0, 2000)], 2000)
+    project.assembly_plan.lanes.append(AssemblyLane(id='en', kind='subtitle', clips=[AssemblyClip(
+        id='cue', timeline_start_ms=500, timeline_end_ms=1500, text='Visible caption\nSecond line')]))
+    project.assembly_plan.burn_subtitle_lane_id = 'en'
+    pipeline.scripts[project.id] = project
+    result = pipeline.render_assembly_plan('project', project.id)
+    output = str(root / result.merged_video_url)
+    samples = []
+    for timestamp in (0.2, 0.8, 1.8):
+        pixels = subprocess.run([ffmpeg, '-v', 'error', '-ss', str(timestamp), '-i', output,
+            '-frames:v', '1', '-vf', 'crop=1280:200:0:520', '-pix_fmt', 'gray', '-f', 'rawvideo', '-'],
+            check=True, capture_output=True).stdout
+        samples.append(sum(p > 100 for p in pixels))
+    assert samples[0] == 0 and samples[2] == 0
+    assert samples[1] > 100

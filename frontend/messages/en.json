@@ -2306,7 +2306,7 @@
     "framesReadyLabel": "Ready",
     "planTitle": "Assembly Edit Plan",
     "planEmpty": "Create an editable 60-second proposal from completed Motion takes. Saving the plan never submits a paid generation.",
-    "planCompileNotice": "Saved Video lanes render in timeline order. Dialogue, BGM, and SFX lanes remain unsupported and must be disabled before rendering.",
+    "planCompileNotice": "Video renders in timeline order with positioned project audio. Select a subtitle lane for burn-in or export captions separately as SRT.",
     "renderAssembly": "Render Assembly",
     "renderingAssembly": "Rendering…",
     "assemblyExportSubtitle": "Compile the saved Video lanes into the final MP4. Rendering does not submit paid generation.",
