@@ -1,3 +1,4 @@
+import type { CrowdGroupState } from "../types";
 import { compileDesignProposal, type DesignProposal } from "../design/design-proposal";
 import { create } from "zustand";
 import type { DirectorBlockingTemplateId } from "../types";
@@ -39,6 +40,7 @@ export interface CharacterAuthoringState {
 }
 
 export interface AuthoringSnapshot {
+  crowdGroups: Record<string, CrowdGroupState>;
   characters: Record<string, CharacterAuthoringState>;
   actorMappings: Record<string, ActorMappingState>;
   sceneObjects: Record<string, SceneObjectAuthoringState>;
@@ -753,6 +755,7 @@ function constrainSceneObjectPosition(
 }
 
 export interface WorkbenchState {
+  crowdGroups: Record<string, CrowdGroupState>;
   characters: Record<string, CharacterAuthoringState>;
   actorMappings: Record<string, ActorMappingState>;
   dialogueTimeline: DialogueTimelineState;
@@ -1046,6 +1049,7 @@ function mutateSceneObject(
 
 function snapshotAuthoring(state: WorkbenchState): AuthoringSnapshot {
   return {
+    crowdGroups: state.crowdGroups,
     characters: state.characters,
     actorMappings: state.actorMappings,
     sceneObjects: state.sceneObjects,
@@ -1179,6 +1183,7 @@ function revisePanoramaCalibration(
 const initialCharacters = createInitialCharacters();
 
 export const useWorkbenchStore = create<WorkbenchState>((set, get) => ({
+  crowdGroups: {},
   characters: initialCharacters,
   actorMappings: createInitialActorMappings(),
   dialogueTimeline: createInitialDialogueTimeline(),
@@ -1236,7 +1241,7 @@ export const useWorkbenchStore = create<WorkbenchState>((set, get) => ({
   commandHistory: [],
   applyDesignProposal: (proposal) => set((state) => {
     const preview = compileDesignProposal(state, proposal);
-    return mutateScene(state, "design.proposal.apply", { characters: preview.characters, sceneObjects: preview.sceneObjects, cameras: preview.cameras, cameraPaths: preview.cameraPaths, dialogueTimeline: preview.dialogueTimeline });
+    return mutateScene(state, "design.proposal.apply", { crowdGroups: preview.crowdGroups, actorMappings: preview.actorMappings, characters: preview.characters, sceneObjects: preview.sceneObjects, cameras: preview.cameras, cameraPaths: preview.cameraPaths, dialogueTimeline: preview.dialogueTimeline });
   }),
   exportDirectorDesignBundle: () => createDirectorDesignBundle(get()),
   importDirectorDesignBundle: (raw, options) => {
@@ -2488,6 +2493,7 @@ export const useWorkbenchStore = create<WorkbenchState>((set, get) => ({
       ? ["validation:indoor", "blocking:seated-trio", "camera:wide"]
       : ["validation:fight", "blocking:15s", "reference:pending"];
     const mutation = mutateScene(state, `scene.validation_preset.${presetId}`, {
+      crowdGroups: {},
       characters: preset.characters,
       actorMappings: preset.actorMappings,
       actorPaths: preset.actorPaths,
@@ -2531,6 +2537,7 @@ export const useWorkbenchStore = create<WorkbenchState>((set, get) => ({
     renderScene.labels = [`template:${templateId}`];
     return {
       ...mutateScene(state, `scene.blocking_template.${templateId}`, {
+        crowdGroups: {},
         characters: template.characters,
         actorMappings: template.actorMappings,
         actorPaths: {},

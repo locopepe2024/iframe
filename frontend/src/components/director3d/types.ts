@@ -890,3 +890,10 @@ export interface RenderSceneState {
   panoramaCalibrations: EquirectangularPanoramaCalibrationState[];
   activePanoramaCalibrationId: string | null;
 }
+
+export interface CrowdGroupState {
+  groupId: string;
+  label: string;
+  behavior: "avoid" | "observe" | "pass";
+  actorIds: string[];
+}

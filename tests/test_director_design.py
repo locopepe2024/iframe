@@ -151,3 +151,45 @@ def test_invalid_camera_motion_distance_is_rejected(distance):
 def test_camera_motion_distance_cannot_be_misread_as_orbit_radius():
     with pytest.raises(ValueError):
         design.CameraMotion(kind="camera_motion", cameraId="camera-main", presetId="orbit", durationSeconds=4, easing="linear", distanceM=0.5)
+
+
+def crowd_operation():
+    return dict(kind="crowd_motion", groupId="design-crowd-near", label="近处百姓",
+                behavior="avoid", members=[dict(actorId="design-extra-near-1",
+                positionM=[-5, 2, 0], destinationM=[-3, 2, 0], yawDeg=-90,
+                startSeconds=0, durationSeconds=4)])
+
+
+def test_crowd_camera_schema_round_trip(client, monkeypatch):
+    c, _ = client
+    result = dict(summary="群演避让与切镜", assumptions=["四秒参考"], clarification=None,
+                  operations=[crowd_operation(), dict(kind="add_camera", cameraId="design-camera-near",
+                  label="近景", targetIds=["design-extra-near-1"], azimuthDeg=0,
+                  elevationDeg=10, distanceM=6, focalLengthMm=35),
+                  dict(kind="camera_cut", cameraId="design-camera-near", timeSeconds=2)])
+    monkeypatch.setattr(design.LLMAdapter, "chat", lambda *args, **kwargs: json.dumps(result))
+    actual = c.post("/director3d/design-proposals", json=request())
+    assert actual.status_code == 200, actual.text
+    assert actual.json()["operations"] == result["operations"]
+
+
+@pytest.mark.parametrize("change", [
+    {"behavior": "unknown"},
+    {"groupId": "other"},
+    {"behavior": "observe"},
+    {"members": []},
+    {"members": [dict(actorId="a", positionM=[0, 0, 0], destinationM=[1, 0, 0],
+                      yawDeg=0, startSeconds=599, durationSeconds=4)]},
+])
+def test_invalid_crowd_response_rejected(change):
+    with pytest.raises(ValueError):
+        design.ModelProposal.model_validate(dict(summary="test", assumptions=[],
+            clarification=None, operations=[{**crowd_operation(), **change}]))
+
+
+def test_duplicate_crowd_members_rejected():
+    operation = crowd_operation()
+    operation["members"] *= 2
+    with pytest.raises(ValueError):
+        design.ModelProposal.model_validate(dict(summary="test", assumptions=[],
+            clarification=None, operations=[operation]))

@@ -16,6 +16,8 @@ function projectSerializableState(state: WorkbenchState): Partial<WorkbenchState
     Object.entries(state.sceneObjects).filter(([, object]) => object.objectKind === "primitive" || object.objectKind === "empty"),
   );
   return {
+    crowdGroups: state.crowdGroups,
+    actorMappings: state.actorMappings,
     characters: Object.fromEntries(Object.entries(state.characters).map(([id, character]) => [id, {
       ...character,
       proxyAssetId: null,
@@ -82,6 +84,7 @@ export function restoreLocalDirectorDraft(storage: Pick<Storage, "getItem"> = wi
     if (envelope.schemaVersion !== "iframe.director3d.browser-draft.v1" || !envelope.state || typeof envelope.savedAt !== "string") return null;
     useWorkbenchStore.setState({
       ...envelope.state,
+      crowdGroups: envelope.state.crowdGroups ?? {},
       cameras: Object.fromEntries(Object.entries(envelope.state.cameras ?? createInitialCameras()).map(([id, camera]) => [id, {
         ...camera,
         depthOfField: camera.depthOfField ?? { enabled: false, focusDistanceM: 5, aperture: 0.005 },

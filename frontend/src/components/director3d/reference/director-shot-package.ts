@@ -1,5 +1,6 @@
 import type { CharacterAuthoringState } from "../state/workbench-store";
 import type {
+  CrowdGroupState,
   ActorPathState,
   RenderSceneState,
   EnvironmentInputEntry,
@@ -19,6 +20,7 @@ export interface DirectorShotPackage {
   durationSeconds: number;
   activeCameraId: string;
   aspectRatio: CameraCompositionState["aspectRatio"];
+  crowdGroups: Record<string, CrowdGroupState>;
   characters: Array<Pick<CharacterAuthoringState, "characterId" | "actorMappingId" | "proxyAssetId" | "label" | "transform" | "jointRotations" | "poseRootOffsetM" | "visible">>;
   objects: SceneObjectAuthoringState[];
   environment: { renderScene: RenderSceneState; panoramaSource: Pick<EnvironmentInputEntry, "inputId" | "checksum" | "admissionChecksum" | "environmentAllowed"> | null };
@@ -45,6 +47,7 @@ function packageChecksum(value: Omit<DirectorShotPackage, "packageChecksum">): s
 }
 
 export interface DirectorShotPackageInput {
+  crowdGroups?: Record<string, CrowdGroupState>;
   renderScene: RenderSceneState;
   environmentInputs: EnvironmentInputEntry[];
   frame: number;
@@ -73,6 +76,7 @@ export function projectDirectorShotPackage(input: DirectorShotPackageInput): Dir
     durationSeconds: input.durationSeconds,
     activeCameraId: evaluated.activeCameraId,
     aspectRatio: camera.aspectRatio,
+    crowdGroups: structuredClone(input.crowdGroups ?? {}),
     characters: Object.values(evaluated.characters).map(({ characterId, actorMappingId, proxyAssetId, label, transform, jointRotations, poseRootOffsetM, visible }) => ({ characterId, actorMappingId, proxyAssetId, label, transform, jointRotations, poseRootOffsetM, visible })),
     objects: Object.values(evaluated.sceneObjects).map((object) => structuredClone(object)),
     environment: {

@@ -4,6 +4,7 @@ import { projectDirectorShotPackage } from "./director-shot-package";
 /** The same projection supplies browser references, video and metric-depth provenance. */
 export function currentDirectorShotPackage(state: ReturnType<typeof useWorkbenchStore.getState>, frame = state.playheadFrame) {
   return projectDirectorShotPackage({
+    crowdGroups: state.crowdGroups,
     frame,
     durationSeconds: state.dialogueTimeline.durationSeconds,
     fps: state.dialogueTimeline.fps,

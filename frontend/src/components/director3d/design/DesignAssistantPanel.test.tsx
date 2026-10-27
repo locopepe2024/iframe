@@ -113,3 +113,19 @@ it("displays clarification without an apply action and can cancel a pending gene
   expect(screen.queryByRole("alert")).not.toBeInTheDocument();
   view.unmount();
 });
+
+it("scrubs a crowd-only candidate and applies group membership without requiring a camera path", async () => {
+  act(() => useWorkbenchStore.setState({rigAdmissionStatus: "passed"}));
+  const before = useWorkbenchStore.getState();
+  vi.mocked(directorDesignApi.propose).mockResolvedValue({...proposal(), operations: [{kind: "crowd_motion", groupId: "design-crowd-near", label: "近处百姓", behavior: "avoid",
+    members: [{actorId: "design-extra-near", positionM: [-5, 2, 0], destinationM: [-3, 2, 0], yawDeg: -90, startSeconds: 1, durationSeconds: 4}]}]});
+  render(<App />);
+  await generate("近处一位百姓一秒后向侧面避让");
+  fireEvent.click(screen.getByRole("button", { name: "预览设计" }));
+  fireEvent.change(screen.getByRole("slider", { name: "运镜预览时间" }), {target: {value: "49"}});
+  expect(useWorkbenchStore.getState().characters).toBe(before.characters);
+  expect(useWorkbenchStore.getState().playheadFrame).toBe(1);
+  fireEvent.click(screen.getByRole("button", { name: "应用设计" }));
+  expect(useWorkbenchStore.getState().crowdGroups["design-crowd-near"].actorIds).toEqual(["design-extra-near"]);
+  expect(useWorkbenchStore.getState().dialogueTimeline.tracks[0].trackKind).toBe("character_transform");
+});

@@ -266,3 +266,34 @@ checksum and one-step undo/redo with this slice. UI must show proxy limitations,
 supported pose choices and clarification/failure before any apply. A live-model
 acceptance uses actual generated designContext with two actors, then compiles
 the real response and checks both actors seated and cameras byte-for-byte equal.
+
+## Crowd animation and camera cuts — 2026-10-27
+
+The grain-shop trial needs grouped canonical white-model extras, explicit
+reaction timing and movement, and multiple views on one timeline. Add
+`crowd_motion` with a stable group ID, label, behavior (`avoid`, `observe`,
+`pass`), and 1–20 explicit members. Each member has a stable actor ID, initial
+position/yaw, destination, start time and duration. Existing actors must be
+editable canonical white models; new actors use the `design-extra-` namespace.
+Cap the complete visible scene at 40 actors. Missing counts and times are model
+assumptions shown before application, never claims inferred from imagery.
+Persist group membership in authoring state, and compile positions into normal
+character-transform tracks. Observe members remain at their initial position;
+avoid/pass are explicit linear spatial motion, not locomotion/contact solving.
+
+Add `camera_cut` with time and an existing camera ID. Permit new composed
+cameras only through `add_camera` (clone current lens/aspect and frame explicit
+subjects); keep `frame_camera` restricted to the selected camera otherwise.
+Cuts use the existing active-camera track with step interpolation. All new
+operations preview without mutation and apply in one undo snapshot. Reject
+conflicting member assignments, invalid timing/IDs, existing animation on first
+creation, unsupported rigs, and sampled path collisions with actors/primitive
+props. The checks are conservative blocking checks, not full-body collision or
+line-of-sight validation. No automatic Storyboard request protocol is added.
+
+Verification: near actors move immediately, middle actors wait before moving,
+far actors continue traversing, observe actors stay put; evaluate before/at/after
+reaction and cuts. Verify atomic rejection, undo/redo, bundle round-trip,
+frontend/server schema parity and preview scrubber availability. Export video
+through the existing browser reference recorder (10-second limit); a rendered
+video and real-model interpretation still need runtime acceptance.

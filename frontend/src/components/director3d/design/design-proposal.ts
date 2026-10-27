@@ -1,13 +1,17 @@
 import { Vector3 } from "three";
 import type { AuthoringSnapshot, WorkbenchState } from "../state/workbench-store";
-import { cameraProjection, cameraRuntime, stateTargetPosition } from "../timeline/timeline-evaluation";
+import { evaluateKeyframes, cameraProjection, cameraRuntime, stateTargetPosition } from "../timeline/timeline-evaluation";
 import { currentDirectorShotPackage } from "../reference/current-shot-package";
 import { applyDesignPose, DESIGN_POSES, SEATED_FIT, type DesignPoseId } from "./design-poses";
 import { createCameraPathPresetControlPoints } from "../camera/camera-path-presets";
 import type { ActorPathEasing, CameraPathPresetId, CameraPathState, DialogueTimelineState, TimelineTrackState } from "../types";
 
 type Vec = [number, number, number];
+export interface CrowdMember { actorId: string; positionM: Vec; destinationM: Vec; yawDeg: number; startSeconds: number; durationSeconds: number }
 export type DesignOperation =
+  | { kind: "crowd_motion"; groupId: string; label: string; behavior: "avoid" | "observe" | "pass"; members: CrowdMember[] }
+  | { kind: "camera_cut"; cameraId: string; timeSeconds: number }
+  | { kind: "add_camera"; cameraId: string; label: string; targetIds: string[]; azimuthDeg: number; elevationDeg: number; distanceM: number; focalLengthMm: number }
   | { kind: "place_entity"; entityId: string; positionM: Vec; yawDeg: number }
   | { kind: "arrange_pair"; actorIds: [string, string]; centerM: Vec; separationM: number; axisDeg: number }
   | { kind: "arrange_group"; members: Array<{ actorId: string; positionM: Vec; yawDeg: number; presetId?: DesignPoseId | null }> }
@@ -25,10 +29,10 @@ export interface DesignProposal {
   clarification: string | null;
   operations: DesignOperation[];
 }
-export type DesignPreview = Pick<AuthoringSnapshot, "characters" | "sceneObjects" | "cameras" | "cameraPaths" | "dialogueTimeline"> & { cameraId: string; baseRevision: string };
+export type DesignPreview = Pick<AuthoringSnapshot, "crowdGroups" | "actorMappings" | "characters" | "sceneObjects" | "cameras" | "cameraPaths" | "dialogueTimeline"> & { cameraId: string; baseRevision: string };
 
 export function designRevision(state: WorkbenchState): string {
-  const source = JSON.stringify({ characters: state.characters, objects: state.sceneObjects, cameras: state.cameras,
+  const source = JSON.stringify({ crowdGroups: state.crowdGroups, actorMappings: state.actorMappings, characters: state.characters, objects: state.sceneObjects, cameras: state.cameras,
     renderScene: state.renderScene, actorPaths: state.actorPaths, cameraPaths: state.cameraPaths,
     timeline: state.dialogueTimeline, selectedCameraId: state.selectedCameraId, frame: state.playheadFrame,
     viewMode: state.viewMode, selectedCharacterIds: state.selectedCharacterIds, selectedObjectId: state.selectedSceneObjectId,
@@ -46,7 +50,8 @@ export function designContext(state: WorkbenchState): string {
     selectedCharacterId: state.selectedCharacterId, selectedObjectId: state.selectedSceneObjectId,
     selectedCameraId: state.selectedCameraId, groundHeightM: state.renderScene.ground.heightM,
     animated: state.dialogueTimeline.tracks.length > 0 || Object.keys(state.actorPaths).length > 0 || Object.keys(state.cameraPaths).length > 0,
-    supported: ["static placement", "pair facing", "numbered group blocking", "box proxy", "static camera", "static dolly", "timed camera path", "pose preset", "seated procedural chair reference"],
+    crowdGroups: state.crowdGroups,
+    supported: ["crowd motion", "camera cuts", "add composed camera", "static placement", "pair facing", "numbered group blocking", "box proxy", "static camera", "static dolly", "timed camera path", "pose preset", "seated procedural chair reference"],
     posePresets: DESIGN_POSES,
     seating: { representation: "procedural_reference", calibratedRig: "canonical_white_model", seatHeightM: SEATED_FIT.supportHeightM + SEATED_FIT.groundLiftM, preservesCamera: true },
   });
@@ -86,7 +91,23 @@ export function parseDesignProposal(raw: unknown): DesignProposal {
   if (!Array.isArray(p.operations) || p.operations.length > 16 || Boolean(p.clarification) === Boolean(p.operations.length)) throw new Error("提案须包含操作或待澄清问题。");
   for (const value of p.operations) {
     const op = object(value);
-    if (op.kind === "place_entity") {
+    if (op.kind === "crowd_motion") {
+      keys(op, ["kind", "groupId", "label", "behavior", "members"]); text(op.groupId); text(op.label, 80);
+      if (!/^design-crowd-[A-Za-z0-9_-]+$/.test(op.groupId as string)) throw new Error("群演组 ID 无效。");
+      if (!["avoid", "observe", "pass"].includes(op.behavior as string)) throw new Error("群演行为不受支持。");
+      if (!Array.isArray(op.members) || !op.members.length || op.members.length > 20) throw new Error("群演组须包含 1–20 人。");
+      const seen = new Set<string>();
+      for (const member of op.members) {
+        const m = object(member); keys(m, ["actorId", "positionM", "destinationM", "yawDeg", "startSeconds", "durationSeconds"]);
+        text(m.actorId); vector(m.positionM); vector(m.destinationM); number(m.yawDeg, -360, 360);
+        number(m.startSeconds, 0, 599.9); number(m.durationSeconds, .1, 600);
+        if ((m.startSeconds as number) + (m.durationSeconds as number) > 600) throw new Error("群演时间超出 600 秒。");
+        if (seen.has(m.actorId)) throw new Error("群演人物不能重复。"); seen.add(m.actorId);
+        if (op.behavior === "observe" && JSON.stringify(m.positionM) !== JSON.stringify(m.destinationM)) throw new Error("观察群演应保持原地。");
+      }
+    } else if (op.kind === "camera_cut") {
+      keys(op, ["kind", "cameraId", "timeSeconds"]); text(op.cameraId); number(op.timeSeconds, 0, 600);
+    } else if (op.kind === "place_entity") {
       keys(op, ["kind", "entityId", "positionM", "yawDeg"]); text(op.entityId); vector(op.positionM); number(op.yawDeg, -360, 360);
     } else if (op.kind === "arrange_pair") {
       keys(op, ["kind", "actorIds", "centerM", "separationM", "axisDeg"]); ids(op.actorIds, 2, 2); vector(op.centerM); number(op.separationM, .8, 20); number(op.axisDeg, -360, 360);
@@ -102,8 +123,9 @@ export function parseDesignProposal(raw: unknown): DesignProposal {
     } else if (op.kind === "add_box") {
       keys(op, ["kind", "entityId", "label", "positionM", "dimensionsM"]); text(op.entityId); text(op.label, 80); vector(op.positionM); vector(op.dimensionsM, .050001, 20);
       if (!(op.entityId as string).startsWith("design-box-")) throw new Error("新占位物体 ID 无效。");
-    } else if (op.kind === "frame_camera") {
-      keys(op, ["kind", "cameraId", "targetIds", "azimuthDeg", "elevationDeg", "distanceM", "focalLengthMm"]); text(op.cameraId); ids(op.targetIds, 1, 8);
+    } else if (op.kind === "frame_camera" || op.kind === "add_camera") {
+      if (op.kind === "add_camera") { text(op.label, 80); if (!/^design-camera-[A-Za-z0-9_-]+$/.test(op.cameraId as string)) throw new Error("新机位 ID 无效。"); }
+      keys(op, ["kind", "cameraId", ...(op.kind === "add_camera" ? ["label"] : []), "targetIds", "azimuthDeg", "elevationDeg", "distanceM", "focalLengthMm"]); text(op.cameraId); ids(op.targetIds, 1, 8);
       number(op.azimuthDeg, -360, 360); number(op.elevationDeg, -60, 80); number(op.distanceM, .5, 50); number(op.focalLengthMm, 12, 200);
     } else if (op.kind === "dolly_camera") {
       keys(op, ["kind", "cameraId", "towardM"]); text(op.cameraId); number(op.towardM, -20, 20);
@@ -139,6 +161,8 @@ export function compileDesignProposal(state: WorkbenchState, raw: unknown): Desi
   if (state.playheadFrame !== 1 || state.dialogueTimeline.tracks.length || Object.keys(state.actorPaths).length || (!hasCameraMotion && Object.keys(state.cameraPaths).length)) throw new Error("自然语言设计仅支持第 1 帧；已有动画或机位路径时请先保留草稿。");
   const root = state.renderScene.sceneRootTransform;
   if ([...root.position, ...root.rotationDeg].some((v) => v !== 0) || root.scale.some((v) => v !== 1)) throw new Error("当前场景根变换尚不支持自然语言设计。");
+  const crowdGroups = structuredClone(state.crowdGroups);
+  const actorMappings = structuredClone(state.actorMappings);
   const characters = structuredClone(state.characters);
   const sceneObjects = structuredClone(state.sceneObjects);
   const cameras = structuredClone(state.cameras);
@@ -149,6 +173,8 @@ export function compileDesignProposal(state: WorkbenchState, raw: unknown): Desi
   let dialogueTimeline: DialogueTimelineState = structuredClone(state.dialogueTimeline);
   const chairOwners = new Map<string, string>();
   const posed = new Set<string>();
+  const animated = new Set<string>();
+  const cuts: Array<{cameraId: string; timeSeconds: number}> = [];
   const editableActor = (id: string) => {
     const actor = characters[id];
     if (!actor || actor.locked || !actor.visible || actor.calibratedPlacement) throw new Error("人物不存在、已锁定、隐藏或已校准。");
@@ -159,6 +185,7 @@ export function compileDesignProposal(state: WorkbenchState, raw: unknown): Desi
     return actor;
   };
   const place = (id: string, position: Vec, yaw: number) => {
+    if (animated.has(id) && moved.has(id)) throw new Error("群演动作与重复摆位冲突，请使用单一初始位置。");
     const entity = characters[id] ?? sceneObjects[id];
     if (!entity || entity.locked || !entity.visible || entity.calibratedPlacement) throw new Error(`对象 ${id} 不存在、已锁定、隐藏或已校准。`);
     if (position[2] < state.renderScene.ground.heightM - .001) throw new Error("对象位置不能低于地面。");
@@ -168,7 +195,37 @@ export function compileDesignProposal(state: WorkbenchState, raw: unknown): Desi
     moved.add(id);
   };
   for (const op of plan.operations) {
-    if (op.kind === "set_pose") {
+    if (op.kind === "camera_cut") {
+      if (cuts.some((cut) => cut.timeSeconds === op.timeSeconds)) throw new Error("同一时间不能重复切镜。");
+      cuts.push(op); continue;
+    } else if (op.kind === "crowd_motion") {
+      if (crowdGroups[op.groupId]) throw new Error("群演组 ID 重复。");
+      for (const member of op.members) {
+        if (animated.has(member.actorId)) throw new Error("同一人物不能重复编排群演动作。");
+        animated.add(member.actorId);
+        if (!characters[member.actorId]) {
+          if (!/^design-extra-[A-Za-z0-9_-]+$/.test(member.actorId) || sceneObjects[member.actorId] || cameras[member.actorId]) throw new Error("新增群演 ID 无效或重复。");
+          const actorMappingId = `actor-mapping-${member.actorId}`;
+          if (actorMappings[actorMappingId]) throw new Error("群演 mapping ID 重复。");
+          characters[member.actorId] = { characterId: member.actorId, actorMappingId, proxyAssetId: null, label: `${op.label} ${op.members.indexOf(member) + 1}`,
+            transform: {position: [...member.positionM], rotationDeg: [0, 0, member.yawDeg], scale: [1, 1, 1], groundSnap: true},
+            poseRevision: 1, poseRootOffsetM: [0, 0, 0], jointRotations: {}, activePresetId: "pose.neutral", adjustedJointIds: [], visible: true, locked: false, calibratedPlacement: null };
+          actorMappings[actorMappingId] = {actorMappingId, characterId: member.actorId, subjectId: null, referenceSetId: null, proxyAssetId: null, appearanceRole: "unassigned"};
+        }
+        const actor = editableActor(member.actorId);
+        if (actor.activePresetId !== "pose.neutral" && actor.activePresetId !== "standing.relaxed") throw new Error("群演运动需要站立白模。");
+        if ([member.positionM, member.destinationM].some((position) => Math.abs(position[2] - state.renderScene.ground.heightM) > .001)) throw new Error("群演移动必须位于地面。");
+        place(member.actorId, member.positionM, member.yawDeg);
+        const end = member.startSeconds + member.durationSeconds;
+        const trackId = `crowd-${op.groupId}-${member.actorId}`;
+        const times = member.startSeconds > 0 ? [0, member.startSeconds, end] : [0, end];
+        const track: TimelineTrackState = { trackId, trackKind: "character_transform", target: {targetType: "character", targetId: member.actorId}, propertyKey: "transform.position_m",
+          keyframes: times.map((timeSeconds, i) => ({keyframeId: `${trackId}-${i}`, timeSeconds, value: [...(timeSeconds === end ? member.destinationM : member.positionM)], interpolation: "linear"})) };
+        dialogueTimeline.tracks.push(track); dialogueTimeline.durationSeconds = Math.max(dialogueTimeline.durationSeconds, end);
+      }
+      if (Object.values(characters).filter((actor) => actor.visible).length > 40) throw new Error("当前群演参考最多支持 40 个可见人物。");
+      crowdGroups[op.groupId] = {groupId: op.groupId, label: op.label, behavior: op.behavior, actorIds: op.members.map((member) => member.actorId)};
+    } else if (op.kind === "set_pose") {
       applyDesignPose(editableActor(op.actorId), op.presetId);
     } else if (op.kind === "arrange_group") {
       for (const member of op.members) {
@@ -218,8 +275,14 @@ export function compileDesignProposal(state: WorkbenchState, raw: unknown): Desi
         browserCapabilityState: "available", compilerCapabilityState: "available", capabilityIds: [], limitations: ["自然语言设计的几何占位，不是已确认资产。"], calibratedPlacement: null };
       place(op.entityId, op.positionM, 0);
     } else {
+      if (op.kind === "add_camera") {
+        if (cameras[op.cameraId] || characters[op.cameraId] || sceneObjects[op.cameraId]) throw new Error("新机位 ID 重复。");
+        const base = cameras[state.selectedCameraId];
+        if (!base) throw new Error("缺少当前机位。");
+        cameras[op.cameraId] = {...structuredClone(base), cameraId: op.cameraId, label: op.label, locked: false, visible: true, snapshotIds: []};
+      }
       const camera = cameras[op.cameraId];
-      if (op.cameraId !== state.selectedCameraId) throw new Error("请先选择需要设计的机位。首版仅修改当前机位。");
+      if (op.kind !== "add_camera" && op.cameraId !== state.selectedCameraId) throw new Error("请先选择需要设计的机位。首版仅修改当前机位。");
       if (!camera || camera.locked || !camera.visible) throw new Error("机位不存在、已锁定或隐藏。");
       if (op.kind === "camera_motion") {
         if (cameraPaths[`path-${op.cameraId}-motion`]) throw new Error("当前机位已有运镜路径，请先在机位路径工具中编辑。");
@@ -249,7 +312,7 @@ export function compileDesignProposal(state: WorkbenchState, raw: unknown): Desi
         const track: TimelineTrackState = { trackId: `track-${String(nextTrack).padStart(4, "0")}`, trackKind: "camera_path_progress", target: { targetType: "path", targetId: pathId }, propertyKey: "path.progress", keyframes: [] };
         dialogueTimeline = { ...dialogueTimeline, durationSeconds: Math.max(dialogueTimeline.durationSeconds, op.durationSeconds), tracks: [...dialogueTimeline.tracks, track] };
         cameraId = op.cameraId;
-      } else if (op.kind === "frame_camera") {
+      } else if (op.kind === "frame_camera" || op.kind === "add_camera") {
         const points = op.targetIds.map((id) => {
           if (!(characters[id] ?? sceneObjects[id])?.visible) throw new Error("机位目标不存在或隐藏。");
           return stateTargetPosition(id, characters, sceneObjects)!;
@@ -333,5 +396,53 @@ export function compileDesignProposal(state: WorkbenchState, raw: unknown): Desi
       if (depth < .1 || Math.abs(delta.dot(right) * projection.projectionScaleX / depth) > .95 || Math.abs(delta.dot(up) * projection.projectionScaleY / depth) > .95) throw new Error("主体中心超出机位画幅，请增加距离或调整焦距。");
     }
   }
-  return { characters, sceneObjects, cameras, cameraPaths, dialogueTimeline, cameraId, baseRevision: plan.baseRevision };
+  if (animated.size) {
+    // Linear tracks: minimum pair distance is exact between every key time.
+    const tracks = dialogueTimeline.tracks.filter((track) => animated.has(track.target.targetId));
+    const times = Array.from(new Set([0, dialogueTimeline.durationSeconds, ...tracks.flatMap((track) => track.keyframes.map((key) => key.timeSeconds))])).sort((a, b) => a - b);
+    const positionAt = (id: string, time: number): Vec => {
+      const track = tracks.find((item) => item.target.targetId === id);
+      return track ? evaluateKeyframes(track.keyframes, time) as Vec : characters[id].transform.position;
+    };
+    const actors = Object.values(characters).filter((actor) => actor.visible);
+    for (let i = 0; i < times.length - 1; i++) {
+      for (let a = 0; a < actors.length; a++) for (let b = a + 1; b < actors.length; b++) {
+        const aid = actors[a].characterId, bid = actors[b].characterId;
+        if (!animated.has(aid) && !animated.has(bid)) continue;
+        const startA = positionAt(aid, times[i]), endA = positionAt(aid, times[i + 1]);
+        const startB = positionAt(bid, times[i]), endB = positionAt(bid, times[i + 1]);
+        const dx = startA[0] - startB[0], dy = startA[1] - startB[1];
+        const vx = endA[0] - endB[0] - dx, vy = endA[1] - endB[1] - dy;
+        const t = Math.max(0, Math.min(1, -(dx * vx + dy * vy) / (vx * vx + vy * vy || 1)));
+        if (Math.hypot(dx + t * vx, dy + t * vy) < .6) throw new Error("群演移动路径与人物相交，请调整路径或反应时间。");
+      }
+      for (const id of Array.from(animated)) for (const box of Object.values(sceneObjects).filter((object) => object.visible && object.objectKind !== "empty")) {
+        if (box.primitiveKind !== "cube" || box.transform.rotationDeg.some((v) => v !== 0) || box.transform.scale.some((v) => v !== 1)) throw new Error("群演路径目前只支持轴对齐方盒障碍检查。");
+        const from = positionAt(id, times[i]), to = positionAt(id, times[i + 1]);
+        const lowZ = box.transform.position[2] + box.boundingBoxM.minimum[2], highZ = box.transform.position[2] + box.boundingBoxM.maximum[2];
+        if (from[2] >= highZ || from[2] + 1.8 <= lowZ) continue;
+        let enter = 0, leave = 1;
+        for (const axis of [0, 1]) {
+          const low = box.transform.position[axis] + box.boundingBoxM.minimum[axis] - .3;
+          const high = box.transform.position[axis] + box.boundingBoxM.maximum[axis] + .3;
+          const delta = to[axis] - from[axis];
+          if (Math.abs(delta) < 1e-9) { if (from[axis] <= low || from[axis] >= high) { enter = 2; break; } }
+          else { const first = (low - from[axis]) / delta, last = (high - from[axis]) / delta; enter = Math.max(enter, Math.min(first, last)); leave = Math.min(leave, Math.max(first, last)); }
+        }
+        if (enter < leave) throw new Error("群演移动路径穿过占位道具，请调整路径。");
+      }
+    }
+  }
+  if (cuts.length) {
+    cuts.sort((a, b) => a.timeSeconds - b.timeSeconds);
+    if (cuts[0].timeSeconds !== 0) cuts.unshift({cameraId: state.selectedCameraId, timeSeconds: 0});
+    for (const cut of cuts) if (!cameras[cut.cameraId]?.visible || cameras[cut.cameraId].locked) throw new Error("切镜机位不存在、隐藏或锁定。");
+    const trackId = "design-camera-cuts";
+    dialogueTimeline.tracks.push({trackId, trackKind: "active_camera", target: {targetType: "timeline", targetId: dialogueTimeline.timelineId}, propertyKey: "camera.active_id",
+      keyframes: cuts.map((cut, i) => ({keyframeId: `${trackId}-${i}`, timeSeconds: cut.timeSeconds, value: cut.cameraId, interpolation: "step"}))});
+    dialogueTimeline.activeCameraTrackId = trackId;
+    dialogueTimeline.durationSeconds = Math.max(dialogueTimeline.durationSeconds, cuts.at(-1)!.timeSeconds);
+    cameraId = cuts[0].cameraId;
+  }
+  return { crowdGroups, actorMappings, characters, sceneObjects, cameras, cameraPaths, dialogueTimeline, cameraId, baseRevision: plan.baseRevision };
 }

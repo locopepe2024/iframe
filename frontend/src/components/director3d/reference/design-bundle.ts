@@ -59,6 +59,9 @@ function validateDependencies(authoring: CoreAuthoring, pkg: DirectorShotPackage
   const cameras = new Set(Object.keys(authoring.cameras));
   const objects = new Set(Object.keys(authoring.sceneObjects));
   if (!cameras.has(pkg.activeCameraId)) throw new Error("设计包引用了不存在的活动机位。");
+  for (const group of Object.values(authoring.crowdGroups)) {
+    if (group.actorIds.some((id) => !characters.has(id))) throw new Error("群演组缺少人物依赖。");
+  }
   for (const character of Object.values(authoring.characters)) {
     if (!authoring.actorMappings[character.actorMappingId]) throw new Error(`人物 ${character.characterId} 缺少 actor mapping。`);
   }
@@ -90,6 +93,7 @@ function validateDependencies(authoring: CoreAuthoring, pkg: DirectorShotPackage
 export function createDirectorDesignBundle(state: WorkbenchState): DirectorDesignBundleV1 {
   const pkg = currentDirectorShotPackage(state);
   const authoring: CoreAuthoring = {
+    crowdGroups: structuredClone(state.crowdGroups),
     characters: structuredClone(state.characters), actorMappings: structuredClone(state.actorMappings), sceneObjects: structuredClone(state.sceneObjects),
     renderScene: structuredClone(state.renderScene), panoramaScenePackage: structuredClone(state.panoramaScenePackage), dialogueTimeline: structuredClone(state.dialogueTimeline),
     cameras: structuredClone(state.cameras), actorPaths: structuredClone(state.actorPaths), cameraPaths: structuredClone(state.cameraPaths),
@@ -124,7 +128,7 @@ export function parseDirectorDesignBundle(raw: unknown): DirectorDesignBundleV1 
   if (pkg.schemaVersion !== "iframe.director3d.shot-package.v1") throw new Error("shot package 版本不受支持。");
   if (pkg.packageChecksum !== sourceChecksum) throw new Error("设计包 checksum 与 shot package 不一致。");
   const a = record(root.authoring, "authoring");
-  exactKeys(a, ["characters", "actorMappings", "sceneObjects", "renderScene", "panoramaScenePackage", "dialogueTimeline", "cameras", "actorPaths", "cameraPaths", "externalCameraMotionProposals", "pathEvents", "cameraSnapshots", "dialogueReferenceInputs", "subjectReferenceSets", "subjectProxies", "environmentInputCatalog", "objectAssetCatalog"], "authoring");
+  exactKeys(a, ["crowdGroups", "characters", "actorMappings", "sceneObjects", "renderScene", "panoramaScenePackage", "dialogueTimeline", "cameras", "actorPaths", "cameraPaths", "externalCameraMotionProposals", "pathEvents", "cameraSnapshots", "dialogueReferenceInputs", "subjectReferenceSets", "subjectProxies", "environmentInputCatalog", "objectAssetCatalog"], "authoring");
   for (const [key, value] of Object.entries(a)) if (key.endsWith("Catalog") || ["characters", "actorMappings", "sceneObjects", "cameras", "actorPaths", "cameraPaths", "subjectReferenceSets", "subjectProxies"].includes(key)) map(value, `authoring.${key}`);
   for (const key of ["externalCameraMotionProposals", "pathEvents", "cameraSnapshots", "dialogueReferenceInputs"]) array(a[key], `authoring.${key}`);
   const d = record(root.dependencies, "dependencies");

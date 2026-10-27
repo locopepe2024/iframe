@@ -166,7 +166,7 @@ export function App({ restoredSavedAt = null }: DirectorAppProps = {}) {
               <button className={`toggle-button ${fullscreenActive ? "active" : ""}`} type="button" aria-pressed={fullscreenActive} onClick={toggleFullscreen}>{fullscreenActive ? "退出全屏" : "全屏"}</button>
             </div>
             {activeDesignPreview && <p className="design-preview-banner" role="status">设计预览 · 尚未应用，退出预览可恢复原场景。</p>}
-            {activeDesignPreview && Object.keys(activeDesignPreview.cameraPaths).length > 0 && <label>运镜预览时间
+            {activeDesignPreview && (Object.keys(activeDesignPreview.cameraPaths).length > 0 || activeDesignPreview.dialogueTimeline.tracks.length > 0) && <label>运镜预览时间
               <input type="range" aria-label="运镜预览时间" min={1} max={Math.round(activeDesignPreview.dialogueTimeline.durationSeconds * activeDesignPreview.dialogueTimeline.fps) + 1} step={1} value={previewFrame} onChange={(event) => setPreviewFrame(Number(event.target.value))} />
               <output>{((previewFrame - 1) / activeDesignPreview.dialogueTimeline.fps).toFixed(2)} 秒</output>
             </label>}
