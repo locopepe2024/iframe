@@ -39,7 +39,7 @@ function waitForPeer(pc: RTCPeerConnection, signal: AbortSignal, gathering = fal
       else if (gathering ? pc.iceGatheringState === "complete" : pc.connectionState === "connected") finish();
       else if (["failed", "closed"].includes(pc.connectionState)) finish(new Error("WebRTC 连接失败。"));
     };
-    const timeout = setTimeout(() => finish(new Error(gathering ? "媒体地址协商超时。" : "WebRTC 连接超时。")), gathering ? 12000 : 25000);
+    const timeout = setTimeout(() => finish(new Error(gathering ? "媒体地址协商超时。" : "WebRTC 连接超时。")), gathering ? 30000 : 25000);
     signal.addEventListener("abort", abort, { once: true }); pc.addEventListener(event, check); check();
   });
 }
