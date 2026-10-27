@@ -190,6 +190,9 @@ export default function ImageEditor({ source, title, emptyState, headerActions, 
           </button>}
           {projectionType === 'equirectangular' && onSavePanoramaSource && <button type="button" disabled={saving} onClick={() => void savePanoramaSource()} className="inline-flex min-h-9 items-center gap-2 rounded border border-glass-border px-3 hover:bg-hover-bg"><Save size={16}/>{t('savePanoramaSource')}</button>}
         </div>}
+        {!source && <div className="flex shrink-0 items-center gap-1 border-b border-glass-border bg-surface px-4 py-2 text-xs text-text-muted" aria-label={t('tools')}>
+          {['Adjust', 'Finetune', 'Filters', 'Annotate', 'Watermark', 'Resize'].map(tool => <span key={tool} className="rounded px-3 py-1.5 opacity-50">{tool}</span>)}
+        </div>}
         {error && <p role="alert" className="px-4 py-2 text-status-failed-fg">{error}</p>}
         {saving && <p role="status" className="px-4 py-2 text-sm">{t('saving')}</p>}
         <div className="flex min-h-0 flex-1 flex-col overflow-auto md:flex-row">
