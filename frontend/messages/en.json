@@ -3432,6 +3432,7 @@
     "hint": "Save creates a new image and appends it to current references. The original is preserved.",
     "choose": "Import a PNG, JPEG or WebP original, or continue editing a saved copy.",
     "upload": "Import image",
+    "librarySource": "Choose from asset library",
     "loading": "Loading original…",
     "loadFailed": "Could not load the image. Import again or reopen from the result card.",
     "historyFailed": "Could not load saved copies. Close and retry.",
