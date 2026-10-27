@@ -83,3 +83,51 @@
 2. 如果本地测试音可听而 OpenTalking 回复不可听，优先检查 WebRTC audio track 到 media element 的绑定、track mute/ended 和浏览器输出设备，不改实时架构。
 3. 如果两者都可听，再单独设计 Web Audio 输出切换实验；实验代码不直接进入稳定链路。
 4. 输出链路稳定后，再评估把 OpenTalking 改成流式文本/句子播报，以及把听、思考、说拆成独立队列。
+
+## 2026-10-27 追加：三条链路正式拆分
+
+OpenTalking 输出已经通过用户自然语音测试确认可听，因此不再把输出问题与 SenseVoice 混为一谈。
+
+```text
+A. 文字聊天
+用户文字
+  → CompanionAgent/Qwen
+  → 完整回复文字
+  → 聊天流显示
+
+B. 语音回复
+同一份完整回复文字
+  → OpenTalking /speak(render_text=true)
+  → OpenTalking TTS + WebRTC
+  → 浏览器播放
+
+C. 语音输入
+麦克风
+  → AudioContext + AudioWorklet
+  → SilenceSegments 按停顿切段
+  → PCM WAV POST /companion-demo/sensevoice-test/analyze
+  → SenseVoice 返回文字
+  → 加入 AgentChat voiceQueue
+  → 复用 A，再按设置进入 B
+```
+
+### SenseVoice 如何启用
+
+在测试站中，进入聊天底部的“语音输入”：
+
+1. 第一次点击后，在语音说明卡片中选择“持续收音（测试）”。
+2. 点击“同意并开始聊天”。浏览器请求麦克风权限。
+3. `useContinuousCapture` 创建 `AudioContext`，通过 AudioWorklet 持续读取 PCM。
+4. `SilenceSegments` 检测约 900ms 停顿，将至少约 300ms 的语音段转成 PCM WAV。
+5. 每段发送到同源 `/companion-demo/sensevoice-test/analyze`；服务端 CPU SenseVoice 返回识别文本。
+6. 文本进入 `voiceQueue`，按顺序调用普通 `/sessions/{id}/chat`。识别不会直接调用 OpenTalking。
+7. 若“更多 → 聊天设置”选择“语音回复”，该轮完整文字回复再进入 OpenTalking；选择“只回复文字”则只显示文字。
+
+选择“浏览器识别”时，绕过 SenseVoice，使用浏览器 SpeechRecognition；这是另一条输入实现。SenseVoice 当前是 demo 测试服务，健康信息明确标记不保存录音、不连接聊天数据库。
+
+### 队列边界
+
+- SenseVoice 有自己的“待识别段队列”，避免网络请求并发破坏顺序。
+- Agent chat 有自己的发送锁和 operation id，避免重复提交。
+- OpenTalking 有自己的回复播放队列和 command id，保证一条 WebRTC session 内串行播报。
+- `companionPlayback` 在播放时通知收音链路暂缓采集，当前策略是半双工：先听完回复，再继续说话；这不是 WebRTC 上行语音。
