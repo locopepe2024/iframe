@@ -225,3 +225,14 @@ it("carries actual scene IDs, locks and the latest camera context for follow-up 
   expect(context.cameras).toEqual(state.cameras);
   expect(context.package.packageChecksum).toMatch(/^fnv1a32:/);
 });
+it("applies static street layout while preserving existing actor animation paths", () => {
+  const state = useWorkbenchStore.getState();
+  const actorId = Object.keys(state.characters)[0];
+  const actorPaths = {existing: {pathId: "existing", targetType: "character" as const, targetId: actorId, durationSeconds: 6, easing: "linear" as const, controlPoints: [{controlPointId: "a", positionM: [0,0,0] as [number,number,number], handleInM: [0,0,0] as [number,number,number], handleOutM: [0,0,0] as [number,number,number], order: 0}, {controlPointId: "b", positionM: [1,0,0] as [number,number,number], handleInM: [1,0,0] as [number,number,number], handleOutM: [1,0,0] as [number,number,number], order: 1}], revision: 1, locked: false, visible: true}};
+  const withPath = {...state, actorPaths};
+  const proposal = {...plan([{kind: "street_layout", layoutId: "design-street-side-door", centerM: [0,0,0], widthM: 8, lengthM: 30, buildings: [{id: "shop", label: "粮铺", centerM: [6.5,0,0], dimensionsM: [5,6,4], doorWidthM: 2, frontSide: "negative_x"}], trees: []}]), baseRevision: designRevision(withPath)};
+  const preview = compileDesignProposal(withPath, proposal);
+  expect(preview.sceneObjects).toHaveProperty("design-street-side-door-shop-pier--1");
+  expect(preview.characters[actorId]).toEqual(state.characters[actorId]);
+  expect(withPath.actorPaths).toEqual(actorPaths);
+});

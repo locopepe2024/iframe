@@ -173,8 +173,11 @@ export function compileDesignProposal(state: WorkbenchState, raw: unknown, navig
   if (plan.baseRevision !== designRevision(state)) throw new Error("场景已变化，请基于当前场景重新生成设计。");
   if (plan.clarification) throw new Error(plan.clarification);
   const hasCameraMotion = plan.operations.some((operation) => operation.kind === "camera_motion");
+  const changesTimeline = plan.operations.some((operation) => operation.kind === "crowd_motion" || operation.kind === "camera_motion" || operation.kind === "camera_cut");
   if (hasCameraMotion && Object.keys(state.cameraPaths).length) throw new Error("当前机位已有运镜路径，请先在机位路径工具中编辑。");
-  if (state.playheadFrame !== 1 || state.dialogueTimeline.tracks.length || Object.keys(state.actorPaths).length || (!hasCameraMotion && Object.keys(state.cameraPaths).length)) throw new Error("自然语言设计仅支持第 1 帧；已有动画或机位路径时请先保留草稿。");
+  // Static layout, prop and pose edits can safely preserve authored animation.
+  // Only operations that write timeline/path state require a clean frame-1 draft.
+  if (state.playheadFrame !== 1 || (changesTimeline && (state.dialogueTimeline.tracks.length || Object.keys(state.actorPaths).length || (!hasCameraMotion && Object.keys(state.cameraPaths).length)))) throw new Error("自然语言设计的动画操作需要第 1 帧且不能已有动画或机位路径，请先保留草稿。");
   const root = state.renderScene.sceneRootTransform;
   if ([...root.position, ...root.rotationDeg].some((v) => v !== 0) || root.scale.some((v) => v !== 1)) throw new Error("当前场景根变换尚不支持自然语言设计。");
   const crowdGroups = structuredClone(state.crowdGroups);
