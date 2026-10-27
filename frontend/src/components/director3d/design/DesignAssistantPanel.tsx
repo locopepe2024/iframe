@@ -1,3 +1,4 @@
+import { initializeNavigation } from "./navmesh-routing";
 import { useEffect, useRef, useState } from "react";
 import axios from "axios";
 import { directorDesignApi, type DesignTurn } from "@/lib/directorDesign";
@@ -7,6 +8,8 @@ import { compileDesignProposal, designContext, designRevision, type DesignPrevie
 export function DesignAssistantPanel({ onPreview, previewing, disabled = false }: {
   onPreview: (preview: DesignPreview | null) => void; previewing: boolean; disabled?: boolean;
 }) {
+  const [navigation, setNavigation] = useState<"boxes" | "navmesh">("boxes");
+  const [navigationLoading, setNavigationLoading] = useState(false);
   const [prompt, setPrompt] = useState("");
   const [proposal, setProposal] = useState<DesignProposal | null>(null);
   const [history, setHistory] = useState<DesignTurn[]>([]);
@@ -44,7 +47,7 @@ export function DesignAssistantPanel({ onPreview, previewing, disabled = false }
   const preview = () => {
     if (!proposal || disabled || busy) return;
     try {
-      const candidate = compileDesignProposal(useWorkbenchStore.getState(), proposal);
+      const candidate = compileDesignProposal(useWorkbenchStore.getState(), proposal, navigation);
       onPreview(candidate); setError("");
       const waits = proposal.operations.flatMap((op) => op.kind === "crowd_motion" ? op.members.flatMap((member) => {
         const track = candidate.dialogueTimeline.tracks.find((item) => item.target.targetId === member.actorId && item.propertyKey === "transform.position_m");
@@ -59,7 +62,7 @@ export function DesignAssistantPanel({ onPreview, previewing, disabled = false }
   const apply = () => {
     if (!proposal || !previewing || disabled || busy) return;
     try {
-      useWorkbenchStore.getState().applyDesignProposal(proposal);
+      useWorkbenchStore.getState().applyDesignProposal(proposal, navigation);
       onPreview(null); setProposal(null); setError(""); setMessage("设计已应用，可继续输入修改，也可一步撤销。");
     } catch (caught) { onPreview(null); setError(caught instanceof Error ? caught.message : "应用失败。"); }
   };
@@ -88,6 +91,17 @@ export function DesignAssistantPanel({ onPreview, previewing, disabled = false }
   return <section className="design-assistant" aria-labelledby="design-assistant-title">
     <div className="dialogue-heading"><h2 id="design-assistant-title">自然语言设计</h2><span className="revision-badge">场景与机位</span></div>
     <div className="blocking-reference-actions"><button type="button" onClick={exportBundle} disabled={disabled}>导出设计包</button><label className="button-like">导入设计包<input type="file" accept="application/json,.json" hidden disabled={disabled} onChange={(event) => { importBundle(event.target.files?.[0]); event.currentTarget.value = ""; }} /></label></div>
+    <label>群演寻路模式<select aria-label="群演寻路模式" value={navigation} disabled={busy || navigationLoading || disabled} onChange={async (event) => {
+      const mode = event.target.value as "boxes" | "navmesh";
+      onPreview(null); setMessage(""); setError("");
+      if (mode === "navmesh") {
+        setNavigationLoading(true);
+        try { await initializeNavigation(); setNavigation(mode); }
+        catch { setError("导航网格初始化失败，请重新选择；尚未使用导航网格。"); }
+        finally { setNavigationLoading(false); }
+      } else setNavigation(mode);
+    }}><option value="boxes">方盒绕行</option><option value="navmesh">导航网格（旋转方盒代理）</option></select></label>
+    {navigationLoading && <p role="status">正在加载导航网格引擎…</p>}
     <p>描述人物摆位、姿态、坐椅子、当前机位或带时长的运镜，也可以说“四秒缓慢推进”。先预览，再应用。</p>
     <form onSubmit={(event) => { event.preventDefault(); void generate(); }}>
       <label htmlFor="director-design-prompt">设计要求</label>
@@ -104,7 +118,7 @@ export function DesignAssistantPanel({ onPreview, previewing, disabled = false }
         <ol>{proposal.operations.map((op, index) => <li key={index}>{{street_layout: "街区建筑与通道布局", crowd_motion: "群演分组与分时移动", add_camera: "新增构图机位", camera_cut: "时间线切镜", place_entity: "调整对象位置与朝向", arrange_pair: "双人相对摆位", arrange_group: "多人编号占位编排", add_box: "添加道具占位", frame_camera: "设计静态机位", dolly_camera: "调整机位距离", camera_motion: "创建带时长的运镜路径", set_pose: "设置人物姿态", seat_actor: "坐在程序化椅子参考上"}[op.kind]} · {"layoutId" in op ? op.layoutId : "cameraId" in op ? op.cameraId : "entityId" in op ? op.entityId : "actorId" in op ? op.actorId : "actorIds" in op ? op.actorIds.join(" / ") : op.members.map((member) => member.actorId).join(" / ")}{op.kind === "camera_motion" && ` · ${op.durationSeconds} 秒 · ${op.distanceM == null ? "预设距离" : `${op.distanceM} 米`}`}</li>)}</ol>
         {proposal.operations.some((op) => op.kind === "crowd_motion") && <p role="status">群演将自动绕开方盒障碍并按顺序避让，必要时增加最多 8 秒等待；请拖动预览时间检查实际反应与通行节奏。步态为程序化参考。</p>}
         {proposal.operations.some((op) => op.kind === "seat_actor") && <p role="status">椅子是可编辑的程序化占位，不是真实家具资产。坐姿仅适配标准白模；手动移动后需重新检查接触。</p>}
-        <div className="blocking-reference-actions"><button type="button" disabled={stale || busy || disabled} onClick={preview}>预览设计</button><button type="button" disabled={stale || busy || disabled || !previewing} onClick={apply}>应用设计</button>{previewing && <button type="button" onClick={() => onPreview(null)}>退出预览</button>}<button type="button" disabled={busy} onClick={() => { setProposal(null); onPreview(null); setError(""); }}>放弃提案</button></div>
+        <div className="blocking-reference-actions"><button type="button" disabled={stale || busy || navigationLoading || disabled} onClick={preview}>预览设计</button><button type="button" disabled={stale || busy || navigationLoading || disabled || !previewing} onClick={apply}>应用设计</button>{previewing && <button type="button" onClick={() => onPreview(null)}>退出预览</button>}<button type="button" disabled={busy} onClick={() => { setProposal(null); onPreview(null); setError(""); }}>放弃提案</button></div>
       </>}
       {stale && <p role="status">场景已变化，此提案已过期；请重新生成。</p>}
     </div>}

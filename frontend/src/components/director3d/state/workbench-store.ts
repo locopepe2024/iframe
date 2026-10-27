@@ -814,7 +814,7 @@ export interface WorkbenchState {
   undoStack: AuthoringSnapshot[];
   redoStack: AuthoringSnapshot[];
   unsavedChanges: boolean;
-  applyDesignProposal: (proposal: DesignProposal) => void;
+  applyDesignProposal: (proposal: DesignProposal, navigation?: "boxes" | "navmesh") => void;
   exportDirectorDesignBundle: () => ReturnType<typeof createDirectorDesignBundle>;
   importDirectorDesignBundle: (raw: unknown, options?: { expectedCurrentPackageChecksum?: string }) => { ok: true } | { ok: false; errors: string[] };
   markExplicitlySaved: () => void;
@@ -1239,8 +1239,8 @@ export const useWorkbenchStore = create<WorkbenchState>((set, get) => ({
   fullscreenActive: false,
   playheadFrame: 1,
   commandHistory: [],
-  applyDesignProposal: (proposal) => set((state) => {
-    const preview = compileDesignProposal(state, proposal);
+  applyDesignProposal: (proposal, navigation) => set((state) => {
+    const preview = compileDesignProposal(state, proposal, navigation);
     return mutateScene(state, "design.proposal.apply", { crowdGroups: preview.crowdGroups, actorMappings: preview.actorMappings, characters: preview.characters, sceneObjects: preview.sceneObjects, cameras: preview.cameras, cameraPaths: preview.cameraPaths, dialogueTimeline: preview.dialogueTimeline });
   }),
   exportDirectorDesignBundle: () => createDirectorDesignBundle(get()),

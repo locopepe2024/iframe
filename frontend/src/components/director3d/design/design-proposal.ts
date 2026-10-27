@@ -168,7 +168,7 @@ export function parseDesignProposal(raw: unknown): DesignProposal {
 const radians = (deg: number) => deg * Math.PI / 180;
 
 /** Pure risk-bounded compiler; never invokes store actions or executes model code. */
-export function compileDesignProposal(state: WorkbenchState, raw: unknown): DesignPreview {
+export function compileDesignProposal(state: WorkbenchState, raw: unknown, navigation: "boxes" | "navmesh" = "boxes"): DesignPreview {
   const plan = parseDesignProposal(raw);
   if (plan.baseRevision !== designRevision(state)) throw new Error("场景已变化，请基于当前场景重新生成设计。");
   if (plan.clarification) throw new Error(plan.clarification);
@@ -397,6 +397,7 @@ export function compileDesignProposal(state: WorkbenchState, raw: unknown): Desi
         if (Math.abs(dx * Math.cos(angle) - dy * Math.sin(angle)) < box.dimensionsM[0] / 2 + .3 && Math.abs(dx * Math.sin(angle) + dy * Math.cos(angle)) < box.dimensionsM[1] / 2 + .3) throw new Error("椅子参考与其他人物重叠，请先调整人物间距。");
         continue;
       }
+      if (navigation === "navmesh" && animated.has(actor.characterId)) continue; // Navmesh validates crowd start/end against transformed geometry.
       if (box.transform.rotationDeg.some((v) => v !== 0) || box.transform.scale.some((v) => v !== 1)) throw new Error("旋转或缩放的占位道具暂不支持自动间距校验。");
       const [x, y, z] = actor.transform.position, [bx, by, bz] = box.transform.position;
       if (z < bz + box.dimensionsM[2] && z + 1.8 > bz && Math.abs(x - bx) < box.dimensionsM[0] / 2 + .3 && Math.abs(y - by) < box.dimensionsM[1] / 2 + .3) throw new Error("人物与占位道具重叠，请调整间距。");
@@ -420,7 +421,7 @@ export function compileDesignProposal(state: WorkbenchState, raw: unknown): Desi
   }
   if (animated.size) {
     const tracks = dialogueTimeline.tracks.filter((track) => track.trackKind === "character_transform" && animated.has(track.target.targetId));
-    const routed = navigateCrowd(tracks, characters, sceneObjects);
+    const routed = navigateCrowd(tracks, characters, sceneObjects, navigation);
     dialogueTimeline.tracks = [...dialogueTimeline.tracks.filter((track) => !tracks.includes(track)), ...routed,
       ...routed.flatMap((track) => crowdGait(track, characters[track.target.targetId]))];
     dialogueTimeline.durationSeconds = Math.max(dialogueTimeline.durationSeconds, ...routed.map((track) => track.keyframes.at(-1)!.timeSeconds));

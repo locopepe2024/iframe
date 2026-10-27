@@ -335,3 +335,23 @@ reference images. Save/reuse through existing sceneObjects and design bundle.
 Verify door gap, connected street entry, navigation through door, pure preview,
 atomic apply/undo and schema parity. General rotated streets, roof/detail
 modeling, navmesh integration and foot IK remain subsequent slices.
+
+### Recast proxy navmesh integration
+
+Use pinned recast-navigation 0.43.1 (MIT) via lazy WASM initialization, selected
+explicitly in the design panel. Existing box mode is retained as an explicit
+compatibility choice, never a fallback after navmesh failure. Official README
+and installed type declarations confirm generateSoloNavMesh, NavMeshQuery,
+findClosestPoint and computePath; invoke real WASM in integration tests.
+
+Initial admission is flat-ground navigation over transformed cube proxy
+geometry (positive scales and Z-axis rotations), not arbitrary imported meshes.
+Convert director Z-up into right-handed Y-up (x,z,-y). Ground is a bounded
+synthetic plane; geometry does not yet declare walkable street-only regions.
+Reject occupied endpoints, height mismatch, unsupported geometry, excessive
+rasterization bounds and partial paths. Bake accepted route into existing
+transform/gait tracks and retain priority scheduling for actor avoidance.
+Destroy native query/navmesh after each bounded build. No DetourCrowd physics,
+foot IK, stairs or imported-model admission is claimed. Validate rotated/scaled
+obstacles, shop doorway connectivity, disconnected endpoints, atomic apply,
+undo and JSON round trips; browser WASM loading remains runtime acceptance.

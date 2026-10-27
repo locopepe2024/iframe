@@ -1,3 +1,4 @@
+import { navmeshRoute } from "./navmesh-routing";
 import type { CharacterAuthoringState } from "../state/workbench-store";
 import type { SceneObjectAuthoringState, TimelineTrackState, TimelineKeyframeState } from "../types";
 import { evaluateKeyframes } from "../timeline/timeline-evaluation";
@@ -54,7 +55,7 @@ function conflicts(a: TimelineTrackState, b: TimelineTrackState): boolean {
   return false;
 }
 /** Deterministic reference planning; never mutates authored state. */
-export function navigateCrowd(tracks: TimelineTrackState[], characters: Record<string, CharacterAuthoringState>, objects: Record<string, SceneObjectAuthoringState>): TimelineTrackState[] {
+export function navigateCrowd(tracks: TimelineTrackState[], characters: Record<string, CharacterAuthoringState>, objects: Record<string, SceneObjectAuthoringState>, navigation: "boxes" | "navmesh" = "boxes"): TimelineTrackState[] {
   const moving = tracks.filter((track) => distance(positionAt(track, 0), positionAt(track, 600)) > 1e-6);
   const movingIds = new Set(moving.map((track) => track.target.targetId));
   const stationary = Object.values(characters).filter((actor) => actor.visible && !movingIds.has(actor.characterId));
@@ -63,7 +64,7 @@ export function navigateCrowd(tracks: TimelineTrackState[], characters: Record<s
   for (const track of moving) {
     const from = positionAt(track, 0), to = positionAt(track, 600);
     const obstacles: Rect[] = [];
-    for (const object of Object.values(objects).filter((item) => item.visible && item.objectKind !== "empty")) {
+    for (const object of (navigation === "boxes" ? Object.values(objects) : []).filter((item) => item.visible && item.objectKind !== "empty")) {
       if (object.primitiveKind !== "cube" || object.transform.rotationDeg.some((v) => v !== 0) || object.transform.scale.some((v) => v !== 1)) throw new Error("群演寻路目前只支持轴对齐方盒障碍。");
       const low = object.boundingBoxM.minimum.map((v, axis) => v + object.transform.position[axis]) as Vec;
       const high = object.boundingBoxM.maximum.map((v, axis) => v + object.transform.position[axis]) as Vec;
@@ -74,7 +75,7 @@ export function navigateCrowd(tracks: TimelineTrackState[], characters: Record<s
       const p = actor.transform.position;
       obstacles.push({low: [p[0] - .61, p[1] - .61, p[2]], high: [p[0] + .61, p[1] + .61, p[2] + 1.8]});
     }
-    const points = route(from, to, obstacles);
+    const points = navigation === "navmesh" ? navmeshRoute(from,to,objects,stationary) : route(from, to, obstacles);
     const requestedStart = track.keyframes.length > 2 ? track.keyframes[1].timeSeconds : 0;
     const duration = track.keyframes.at(-1)!.timeSeconds - requestedStart;
     const length = points.slice(1).reduce((sum, point, i) => sum + distance(points[i], point), 0);
