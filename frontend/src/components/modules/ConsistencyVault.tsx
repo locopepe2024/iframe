@@ -675,6 +675,10 @@ export default function ConsistencyVault() {
     const assets = activeTab === "character" ? currentProject?.characters :
         activeTab === "scene" ? currentProject?.scenes :
             activeTab === "prop" ? currentProject?.props : [];
+    const crowdGroups = Array.from(new Map([
+        ...(currentProject?.crowd_groups ?? []),
+        ...(currentProject?.crowd_group_candidates ?? []),
+    ].map(group => [group.extra_id, group])).values());
     const selectedPlanEntries = selectedAssetId && selectedAssetType
         ? getAssetPlanEntries(episodeAssetState.context, selectedAssetType as "character" | "scene" | "prop", selectedAssetId)
         : [];
@@ -697,7 +701,7 @@ export default function ConsistencyVault() {
                         onClick={() => setActiveTab("character")}
                         icon={<User size={14} />}
                         label="Characters"
-                        count={currentProject?.characters?.length || 0}
+                        count={(currentProject?.characters?.length || 0) + crowdGroups.length}
                     />
                     <TabButton
                         active={activeTab === "scene"}
@@ -776,7 +780,7 @@ export default function ConsistencyVault() {
                     <div className="flex items-center justify-center h-full text-text-muted">
                         Loading project...
                     </div>
-                ) : assets?.length === 0 ? (
+                ) : assets?.length === 0 && (activeTab !== "character" || crowdGroups.length === 0) ? (
                     <div className="flex flex-col items-center justify-center h-full text-text-muted gap-4">
                         <div className="w-16 h-16 rounded-full bg-glass flex items-center justify-center">
                             {activeTab === "character" ? <User size={32} /> : activeTab === "scene" ? <MapPin size={32} /> : <Box size={32} />}
@@ -784,7 +788,8 @@ export default function ConsistencyVault() {
                         <p>No {activeTab}s found</p>
                     </div>
                 ) : (
-                    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-6">
+                    <div className="space-y-8">
+                        {!!assets?.length && <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-6">
                         {assets?.map((asset: any) => (
                             <AssetCard
                                 key={asset.id}
@@ -819,6 +824,22 @@ export default function ConsistencyVault() {
                                 <span className="text-sm font-medium">Add {activeTab}</span>
                             </div>
                         </motion.div>
+                        </div>}
+                        {activeTab === "character" && crowdGroups.length > 0 && (
+                            <section aria-label="背景群演">
+                                <h3 className="mb-3 flex items-center gap-2 text-sm font-medium text-foreground">
+                                    <Users size={16} />背景群演 <span className="text-xs text-text-muted">({crowdGroups.length})</span>
+                                </h3>
+                                <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                                    {crowdGroups.map(group => (
+                                        <div key={group.extra_id} className="min-w-0 rounded border border-glass-border bg-glass px-4 py-3">
+                                            <div className="text-sm font-medium text-foreground">{group.label}</div>
+                                            {(group.wardrobe || group.body_build) && <p className="mt-1 text-xs text-text-muted">{[group.body_build, group.wardrobe].filter(Boolean).join(" · ")}</p>}
+                                        </div>
+                                    ))}
+                                </div>
+                            </section>
+                        )}
                     </div>
                 )}
             </div>

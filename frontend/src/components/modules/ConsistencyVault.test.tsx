@@ -71,6 +71,28 @@ beforeEach(() => {
     vi.spyOn(window, "alert").mockImplementation(() => {});
 });
 
+it("shows all merged crowd templates in Assets without treating them as character assets", () => {
+    useProjectStore.setState({ currentProject: {
+        id: "episode-1", characters: [], scenes: [], props: [],
+        crowd_groups: [
+            { extra_id: "crowd_001", label: "流民匪寇", kind: "extra_template" },
+            { extra_id: "crowd_002", label: "江湖打手", kind: "extra_template" },
+            { extra_id: "crowd_003", label: "玄宸阁随行探子", kind: "extra_template" },
+            { extra_id: "crowd_004", label: "青溪镇市井百姓", kind: "extra_template" },
+            { extra_id: "crowd_005", label: "往来江湖客", kind: "extra_template" },
+        ],
+    } as any });
+    mocks.getEpisodeVisualContext.mockResolvedValue({ context: null, bindings: [] });
+
+    render(<ConsistencyVault />);
+
+    const crowdSection = screen.getByRole("region", { name: "背景群演" });
+    expect(within(crowdSection).getByText("玄宸阁随行探子")).toBeInTheDocument();
+    expect(within(crowdSection).getByText("往来江湖客")).toBeInTheDocument();
+    expect(within(crowdSection).getAllByText(/流民匪寇|江湖打手|青溪镇市井百姓/)).toHaveLength(3);
+    expect(screen.queryByText("No characters found")).not.toBeInTheDocument();
+});
+
 it("saves only character design and retains current assets without refetching the project", async () => {
     const character = { id: "hero", name: "Hero", cover_url: "/cover.webp", source: "series" };
     const project = { id: "episode-1", characters: [character], scenes: [{ id: "scene-1" }], props: [] };
