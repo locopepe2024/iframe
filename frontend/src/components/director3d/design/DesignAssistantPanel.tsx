@@ -56,8 +56,28 @@ export function DesignAssistantPanel({ onPreview, previewing, disabled = false }
   const cancelRequest = () => {
     pending.current?.abort(); pending.current = null; setBusy(false); setMessage("已停止生成，当前场景未修改。");
   };
+  const exportBundle = () => {
+    const bundle = useWorkbenchStore.getState().exportDirectorDesignBundle();
+    const blob = new Blob([JSON.stringify(bundle, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement("a"); anchor.href = url; anchor.download = `director3d-design-${bundle.sourcePackageChecksum.replace(/[^a-z0-9_-]/gi, "-")}.json`; anchor.click();
+    URL.revokeObjectURL(url); setMessage("设计包已导出；保存到资产库仍需用户显式操作。");
+  };
+  const importBundle = (file: File | undefined) => {
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      try {
+        const result = useWorkbenchStore.getState().importDirectorDesignBundle(JSON.parse(String(reader.result)));
+        if (!result.ok) setError(result.errors.join("；"));
+        else { onPreview(null); setProposal(null); setMessage("设计包已导入，可继续调整；如需复用请再显式保存到资产库。"); setError(""); }
+      } catch (caught) { setError(caught instanceof Error ? caught.message : "设计包文件无效。"); }
+    };
+    reader.readAsText(file);
+  };
   return <section className="design-assistant" aria-labelledby="design-assistant-title">
     <div className="dialogue-heading"><h2 id="design-assistant-title">自然语言设计</h2><span className="revision-badge">场景与机位</span></div>
+    <div className="blocking-reference-actions"><button type="button" onClick={exportBundle} disabled={disabled}>导出设计包</button><label className="button-like">导入设计包<input type="file" accept="application/json,.json" hidden disabled={disabled} onChange={(event) => { importBundle(event.target.files?.[0]); event.currentTarget.value = ""; }} /></label></div>
     <p>描述人物摆位、姿态、坐椅子、当前机位或带时长的运镜，也可以说“四秒缓慢推进”。先预览，再应用。</p>
     <form onSubmit={(event) => { event.preventDefault(); void generate(); }}>
       <label htmlFor="director-design-prompt">设计要求</label>

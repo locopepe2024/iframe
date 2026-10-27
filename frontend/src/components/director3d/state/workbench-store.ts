@@ -17,6 +17,7 @@ import { compileReviewedMotionTrack as compileReviewedMotionTrackPure, createIdl
 import { ACTION_STRUCTURES, validateActionStructure } from "../action/action-structures";
 import { DEFAULT_ORIENTATION_GIZMO, DEFAULT_VIEWPORT_NAVIGATION, navigationEqual, sanitizeViewportNavigation } from "./viewport-navigation";
 import { createManualPanoramaScenePackage, parsePanoramaScenePackage, type PanoramaScenePackage } from "./panorama-scene-package";
+import { createDirectorDesignBundle, parseDirectorDesignBundle } from "../reference/design-bundle";
 
 const ZERO_ROTATION: Rotation = { x: 0, y: 0, z: 0 };
 const jointById = new Map(rigProfile.joints.map((joint) => [joint.joint_id, joint]));
@@ -49,6 +50,12 @@ export interface AuthoringSnapshot {
   cameraPaths: Record<string, CameraPathState>;
   externalCameraMotionProposals: ExternalCameraMotionProposalState[];
   pathEvents: PathEventState[];
+  cameraSnapshots: CameraSnapshotState[];
+  dialogueReferenceInputs: DialogueReferenceInputState[];
+  subjectReferenceSets: Record<string, SubjectReferenceSetState>;
+  subjectProxies: Record<string, SubjectProxyAssetState>;
+  environmentInputCatalog: EnvironmentInputCatalogState;
+  objectAssetCatalog: ObjectAssetCatalogState;
 }
 
 export type ActorPathVectorField = keyof Pick<ActorPathControlPointState, "positionM" | "handleInM" | "handleOutM">;
@@ -805,6 +812,8 @@ export interface WorkbenchState {
   redoStack: AuthoringSnapshot[];
   unsavedChanges: boolean;
   applyDesignProposal: (proposal: DesignProposal) => void;
+  exportDirectorDesignBundle: () => ReturnType<typeof createDirectorDesignBundle>;
+  importDirectorDesignBundle: (raw: unknown, options?: { expectedCurrentPackageChecksum?: string }) => { ok: true } | { ok: false; errors: string[] };
   markExplicitlySaved: () => void;
   showJointHandles: boolean;
   showInternalBones: boolean;
@@ -1048,6 +1057,12 @@ function snapshotAuthoring(state: WorkbenchState): AuthoringSnapshot {
     cameraPaths: state.cameraPaths,
     externalCameraMotionProposals: state.externalCameraMotionProposals,
     pathEvents: state.pathEvents,
+    cameraSnapshots: state.cameraSnapshots,
+    dialogueReferenceInputs: state.dialogueReferenceInputs,
+    subjectReferenceSets: state.subjectReferenceSets,
+    subjectProxies: state.subjectProxies,
+    environmentInputCatalog: state.environmentInputCatalog,
+    objectAssetCatalog: state.objectAssetCatalog,
   };
 }
 
@@ -1223,6 +1238,34 @@ export const useWorkbenchStore = create<WorkbenchState>((set, get) => ({
     const preview = compileDesignProposal(state, proposal);
     return mutateScene(state, "design.proposal.apply", { characters: preview.characters, sceneObjects: preview.sceneObjects, cameras: preview.cameras, cameraPaths: preview.cameraPaths, dialogueTimeline: preview.dialogueTimeline });
   }),
+  exportDirectorDesignBundle: () => createDirectorDesignBundle(get()),
+  importDirectorDesignBundle: (raw, options) => {
+    try {
+      const bundle = parseDirectorDesignBundle(raw);
+      const state = get();
+      if (options?.expectedCurrentPackageChecksum) {
+        const current = createDirectorDesignBundle(state).sourcePackageChecksum;
+        if (current !== options.expectedCurrentPackageChecksum) return { ok: false, errors: ["当前导演台已变化，导入请求已过期，请重新导出或确认最新场景。"] };
+      }
+      const authoring = bundle.authoring;
+      const cameras = preserveImmutableSnapshotLinks(structuredClone(authoring.cameras), structuredClone(authoring.cameraSnapshots));
+      set({
+        ...authoring,
+        cameras,
+        selectedCameraId: cameras[bundle.package.activeCameraId] ? bundle.package.activeCameraId : Object.keys(cameras)[0] ?? state.selectedCameraId,
+        selectedCharacterId: Object.keys(authoring.characters)[0] ?? state.selectedCharacterId,
+        selectedCharacterIds: Object.keys(authoring.characters).slice(0, 1),
+        selectedSceneObjectId: null,
+        undoStack: [...state.undoStack, snapshotAuthoring(state)].slice(-100),
+        redoStack: [],
+        commandHistory: [...state.commandHistory, "design.bundle.import"].slice(-100),
+        unsavedChanges: true,
+      });
+      return { ok: true };
+    } catch (error) {
+      return { ok: false, errors: [error instanceof Error ? error.message : "设计包无效。"] };
+    }
+  },
   undoStack: [],
   redoStack: [],
   unsavedChanges: false,

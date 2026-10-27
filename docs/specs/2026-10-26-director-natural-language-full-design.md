@@ -124,15 +124,17 @@ serialized by Pydantic and reject prop IDs as group actors. Export/import a
 portable JSON design bundle for the current natural-language authoring subset:
 canonical white models, primitive props, all cameras, pose values, actor/camera
 paths, and camera-path timeline tracks. Preserve their authored fields and the
-evaluated shot projection. External assets, calibration, dialogue/contact/focus
-tracks and arbitrary animation tracks require dependency admission not yet
-available in this bundle version, so reject them explicitly rather than drop
-them. The portable JSON is a file interchange surface; asset-library admission
-remains an independent integration, not an approval gate or a new asset store.
-Import validates the entire file before a single undoable replacement, checks
-the current revision at apply time, and never executes data. Verify round-trip
-seated pairs and timed camera paths, malformed/referenced-missing input,
-stale imports, and undo/redo. Run focused UI/backend tests, typecheck and build.
+evaluated shot projection. Asset-library references are carried as stable
+asset/variant/media IDs and capability metadata; unresolved actor, camera,
+path, subject, object or environment references are rejected rather than
+silently dropped. The portable JSON is the layout-reference payload that a
+user may explicitly save through the ordinary asset-library path. It is not an
+approval gate or a new asset store. Import validates the entire file before a
+single undoable replacement; callers performing an async apply may pass the
+package checksum they read to reject a stale import. The importer never
+executes data. Verify round-trip seated pairs and timed camera paths,
+malformed/referenced-missing input, stale imports, and undo/redo. Run focused
+UI/backend tests, typecheck and build.
 
 Natural-language design takes priority over asset integration. Timed linear
 camera motion must retain an explicit requested distance (0.5 m over 4 seconds
@@ -149,18 +151,18 @@ lossless editable library asset. A reusable design bundle must retain authored
 characters, actor mappings, objects, all cameras, full timeline, actor/camera
 paths, environment and admitted dependency IDs alongside the evaluated
 DirectorShotPackage and its checksum. Import must validate these dependencies
-and create a new editing instance. This is the next asset contract, not an
-implemented asset-library import/export feature.
+and create a new editing instance. The local JSON export/import is implemented;
+saving it to the asset library remains an explicit user action through the
+ordinary asset/variant/media path.
 
-The 3D director is the generation and editing tool. Its outputs are process
-reference assets, not automatically final character, scene or prop assets. A
-natural-language generation request and its generated media remain in the
-director workspace until the user explicitly saves a selected result to the
-ordinary asset library. The user then explicitly selects that saved process
-asset when preparing a storyboard shot. Later shots and storyboards read
-ordinary asset variants by stable asset/variant/media IDs; they do not read the
-transient generation request or mutate the director scene through that
-reference.
+The 3D director reads scene, character, prop and crowd assets from the ordinary
+asset library. The user lays them out, composes the camera, and explicitly
+saves the resulting 3D layout snapshot as a normal reference asset. A
+storyboard then selects the saved scene/character/prop/crowd assets plus the
+layout reference; it does not send an automatic context request back to the
+director. Optional blocking image, depth, camera-motion and action-motion
+outputs remain attached references, while the structured layout is the
+minimum reusable record.
 
 This separates three meanings that must not be conflated:
 
