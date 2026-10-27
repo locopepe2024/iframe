@@ -36,3 +36,27 @@ export function trimAssemblyClip(plan: AssemblyEditPlan, laneId: string, clipId:
     if (!updated.allow_overlap && updated.clips.some((a, i) => updated.clips.some((b, j) => i !== j && a.timeline_start_ms < b.timeline_end_ms && b.timeline_start_ms < a.timeline_end_ms))) throw new Error("Trim would overlap another clip");
     return next;
 }
+
+/** Remove a clip. Video removal ripples the remaining video sequence only. */
+export function removeAssemblyClip(plan: AssemblyEditPlan, laneId: string, clipId: string): AssemblyEditPlan {
+    const lane = plan.lanes.find(l => l.id === laneId);
+    if (!lane || !lane.clips.some(c => c.id === clipId)) throw new Error("Clip not found");
+    const next: AssemblyEditPlan = { ...plan, lanes: plan.lanes.map(l => l.id === laneId ? { ...l, clips: l.clips.filter(c => c.id !== clipId) } : l) };
+    if (lane.kind !== "video") return next;
+    const ordered = next.lanes.filter(l => l.kind === "video").flatMap(l => l.clips)
+        .sort((a, b) => a.timeline_start_ms - b.timeline_start_ms || a.id.localeCompare(b.id));
+    let cursor = 0;
+    const ranges = new Map<string, [number, number]>();
+    for (const item of ordered) {
+        const duration = item.timeline_end_ms - item.timeline_start_ms;
+        if (duration <= 0) throw new Error("Video clips must have positive duration");
+        ranges.set(item.id, [cursor, cursor + duration]);
+        cursor += duration;
+    }
+    if (next.lanes.some(l => l.kind !== "video" && l.clips.some(c => c.timeline_end_ms > cursor)) || next.markers.some(m => m.time_ms > cursor)) {
+        throw new Error("Delete would leave audio, captions or markers past the video end; adjust those first");
+    }
+    return { ...next, target_duration_ms: Math.max(1, cursor), lanes: next.lanes.map(l => l.kind !== "video" ? l : {
+        ...l, clips: l.clips.map(c => { const [start, end] = ranges.get(c.id)!; return { ...c, timeline_start_ms: start, timeline_end_ms: end }; }),
+    }) };
+}

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { AssemblyEditPlan } from "@/lib/api";
-import { splitAssemblyClip, trimAssemblyClip } from "./assemblyEditing";
+import { removeAssemblyClip, splitAssemblyClip, trimAssemblyClip } from "./assemblyEditing";
 function plan(): AssemblyEditPlan { return { id: "p", scope: "project", revision: 1, target_duration_ms: 6000, provenance: {}, markers: [], lanes: [{ id: "v", kind: "video", allow_overlap: false, clips: [
     { id: "a", timeline_start_ms: 0, timeline_end_ms: 4000, source_start_ms: 1000, source_end_ms: 5000, source_refs: ["frame:a"], enabled: true },
     { id: "b", timeline_start_ms: 4000, timeline_end_ms: 6000, source_start_ms: 0, source_end_ms: 2000, source_refs: ["frame:b"], enabled: true },
@@ -28,5 +28,14 @@ describe("Assembly editing", () => {
     it("refuses trimming that would orphan independent captions", () => {
         const source = plan(); source.lanes.push({ id: "s", kind: "subtitle", allow_overlap: false, clips: [{ id: "c", text: "hello", timeline_start_ms: 5000, timeline_end_ms: 6000, enabled: true, source_refs: [] }] });
         expect(() => trimAssemblyClip(source, "v", "a", 2000, 4000)).toThrow("adjust those first");
+    });
+    it("ripples remaining video clips after deletion", () => {
+        const removed = removeAssemblyClip(plan(), "v", "a");
+        expect(removed.target_duration_ms).toBe(2000);
+        expect(removed.lanes[0].clips[0]).toMatchObject({ id: "b", timeline_start_ms: 0, timeline_end_ms: 2000 });
+    });
+    it("refuses deletion that would orphan independent captions", () => {
+        const source = plan(); source.lanes.push({ id: "s", kind: "subtitle", allow_overlap: false, clips: [{ id: "c", text: "late", timeline_start_ms: 1500, timeline_end_ms: 2500, enabled: true, source_refs: [] }] });
+        expect(() => removeAssemblyClip(source, "v", "a")).toThrow("past the video end");
     });
 });
