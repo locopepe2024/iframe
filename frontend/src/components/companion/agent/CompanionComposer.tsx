@@ -16,8 +16,8 @@ const modes = [
   { value: "video", label: "视频", icon: Video },
 ] as const;
 
-export default function CompanionComposer({ mode, value, disabled, busy, allowed, inputRef, onMode, onChange, onSend, onVoiceFinal, onUpload, onAllow, onRequestConsent, retry, attachments, hasAttachments = false, mediaAcknowledged = false, onMediaAcknowledged, outputStatus = "", onVoiceStart }: {
-  outputStatus?: string; onVoiceStart?: () => void;
+export default function CompanionComposer({ mode, value, disabled, busy, allowed, inputRef, onMode, onChange, onSend, onVoiceFinal, onUpload, onAllow, onRequestConsent, retry, attachments, hasAttachments = false, mediaAcknowledged = false, onMediaAcknowledged, onCaptureStatus, onVoiceStart }: {
+  onCaptureStatus?: (status: string) => void; onVoiceStart?: () => void;
   mode: ComposerMode; value: string; disabled: boolean; busy: boolean; allowed: boolean;
   inputRef: RefObject<HTMLTextAreaElement>;
   onMode: (mode: ComposerMode) => void; onChange: (text: string) => void;
@@ -43,7 +43,9 @@ export default function CompanionComposer({ mode, value, disabled, busy, allowed
   const recording = voice.listening || voice.finishing;
   const [playing, setPlaying] = useState(companionPlayback.isPlaying());
   useEffect(() => companionPlayback.subscribe(() => setPlaying(companionPlayback.isPlaying())), []);
-  const status = voice.finishing ? "正在整理语音…" : outputStatus || (voice.listening ? "正在听，您可以说话…" : voice.notice);
+  const status = voice.finishing ? "正在整理语音…" : voice.listening ? "正在听…" : voice.notice;
+  useEffect(() => { onCaptureStatus?.(status); }, [status, onCaptureStatus]);
+  useEffect(() => () => { onCaptureStatus?.(""); }, [onCaptureStatus]);
   function toggleVoice() {
     if (!recording) onVoiceStart?.();
     else companionPlayback.cancel();
@@ -67,10 +69,9 @@ export default function CompanionComposer({ mode, value, disabled, busy, allowed
       {value.trim() && <label className={styles.check}><input type="checkbox" disabled={disabled || recording} checked={mediaAcknowledged} onChange={event => onMediaAcknowledged?.(event.target.checked)}/>我知道本次只发送文字给助手</label>}
     </div>}
     <div className={styles.inputPanel}>
-      <label><span className={styles.visuallyHidden}>{mode === "chat" ? "和我聊聊天" : mode === "image" ? "想生成的图片" : "想生成的视频"}</span>
-        <textarea ref={inputRef} rows={2} placeholder={mode === "chat" ? "和我聊聊天…" : "说说想做什么，再点箭头继续…"} maxLength={4000} value={value} disabled={disabled || recording} onChange={event => onChange(event.target.value)} />
+      <label>
+        <textarea aria-label={mode === "chat" ? "和我聊聊天" : mode === "image" ? "想生成的图片" : "想生成的视频"} ref={inputRef} rows={2} placeholder={mode === "chat" ? "和我聊聊天…" : "说说想做什么，再点箭头继续…"} maxLength={4000} value={value} disabled={disabled || recording} onChange={event => onChange(event.target.value)} />
       </label>
-      {status && <p role="status" className={styles.composerStatus}>{status}</p>}
       <div className={styles.toolbar}>
         <div ref={picker} className={styles.modePicker} onKeyDown={event => {
           if (event.key === "Escape") { event.preventDefault(); setMenu(false); trigger.current?.focus(); }

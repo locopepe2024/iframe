@@ -273,7 +273,7 @@ export default function OpenTalkingReply({ reply, voice, connectionEpoch = 0, on
   useEffect(() => () => { onStatus?.(""); }, [onStatus]);
   return <section className={styles.openTalkingReply} aria-label="OpenTalking 语音回复">
     <video ref={video} autoPlay playsInline controls aria-label="数字人回复" />
-    <span className={styles.visuallyHidden} role="status">{status}{state === "error" ? error : ""}</span>
+    <span className={styles.visuallyHidden}>{status}{state === "error" ? error : ""}</span>
     {state === "blocked" && <button type="button" onClick={() => {
       resumeAudio.current?.();
       if (video.current) video.current.muted = false;

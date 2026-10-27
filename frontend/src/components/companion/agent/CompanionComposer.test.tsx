@@ -48,7 +48,7 @@ it("keeps upload in the composer and leaves album navigation to the bottom bar",
 it("uses the chat invitation inside the input instead of spending a separate row",()=>{
   render(<CompanionComposer mode="chat" value="" disabled={false} busy={false} allowed inputRef={createRef()} onMode={()=>{}} onChange={()=>{}} onSend={()=>{}} onUpload={()=>{}} onAllow={()=>{}} onRequestConsent={()=>{}} retry={null}/>);
   expect(screen.getByPlaceholderText("和我聊聊天…")).toBeInTheDocument();
-  expect(screen.getByText("和我聊聊天", {selector:"span"}).className).toMatch(/visuallyHidden/);
+  expect(screen.queryByText("和我聊聊天", {selector:"span"})).not.toBeInTheDocument();
 });
 
 it("keeps voice input clickable while a text request is busy",()=>{
@@ -93,14 +93,15 @@ it("offers explicitly disclosed continuous SenseVoice capture in the demo and ke
 });
 
 it("keeps voice feedback inside the input panel without changing the draft and restarts on start only",()=>{
- const start=vi.fn();
- render(<CompanionComposer mode="chat" value="保留的草稿" outputStatus="正在连接语音…" onVoiceStart={start} disabled={false} busy={false} allowed inputRef={createRef()} onMode={()=>{}} onChange={()=>{}} onSend={()=>{}} onUpload={()=>{}} onAllow={()=>{}} onRequestConsent={()=>{}} retry={null}/>);
+ const start=vi.fn(), status=vi.fn();
+ render(<CompanionComposer mode="chat" value="保留的草稿" onCaptureStatus={status} onVoiceStart={start} disabled={false} busy={false} allowed inputRef={createRef()} onMode={()=>{}} onChange={()=>{}} onSend={()=>{}} onUpload={()=>{}} onAllow={()=>{}} onRequestConsent={()=>{}} retry={null}/>);
  const input=screen.getByLabelText("和我聊聊天");
  expect(input).toHaveValue("保留的草稿");
- expect(input.closest("label")?.parentElement).toContainElement(screen.getByRole("status"));
+ expect(screen.queryByRole("status")).not.toBeInTheDocument();
  fireEvent.click(screen.getByRole("button",{name:"语音输入"}));
  fireEvent.click(screen.getByRole("button",{name:"同意并开始聊天"}));
  expect(start).toHaveBeenCalledOnce();
+ expect(status).toHaveBeenLastCalledWith("正在听…");
  fireEvent.click(screen.getByRole("button",{name:"停止"}));
  expect(start).toHaveBeenCalledOnce();
 });

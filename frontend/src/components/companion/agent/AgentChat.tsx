@@ -38,6 +38,7 @@ export default function AgentChat() {
   const [messages, setMessages] = useState<UserMessage[]>([]), [after, setAfter] = useState<number | null>(null);
   const [allowed, setAllowed] = useState(false);
   const [voiceConnectionEpoch, setVoiceConnectionEpoch] = useState(0);
+  const [captureStatus, setCaptureStatus] = useState("");
   const [voiceOutputStatus, setVoiceOutputStatus] = useState("");
   const [spokenReply, setSpokenReply] = useState<SpokenReply | null>(null);
   const [responseMode, setResponseMode] = useState<ResponseMode>("text");
@@ -250,7 +251,7 @@ export default function AgentChat() {
     setDraft(null); setPreview({ status: "preview_closed", preview_token: activePreview.preview_token }); setNotice("已关闭预览，未执行新的保存或删除。");
   }
   return <main className={`${styles.shell} ${chatStyles.shell}`} data-agent-build="upload-preview-20261024-v3">
-    <header className={chatStyles.header}><h1><span aria-hidden="true">{identity.avatar}</span> {identity.name}</h1><div className={chatStyles.headerActions}><button type="button" className={chatStyles.headerIcon} aria-label="打开语音聊天" onClick={() => setOpenTalking(true)}><Mic size={22} aria-hidden="true" /></button><button type="button" aria-expanded={menu} onClick={() => setMenu(!menu)}>更多</button></div></header>
+    <header className={chatStyles.header}><div className={chatStyles.assistantIdentity}><h1><span aria-hidden="true">{identity.avatar}</span> {identity.name}</h1><span role="status" className={chatStyles.assistantStatus}>{voiceOutputStatus || (busy ? "正在处理…" : captureStatus || "在线")}</span></div><div className={chatStyles.headerActions}><button type="button" className={chatStyles.headerIcon} aria-label="打开语音聊天" onClick={() => setOpenTalking(true)}><Mic size={22} aria-hidden="true" /></button><button type="button" aria-expanded={menu} onClick={() => setMenu(!menu)}>更多</button></div></header>
     {menu && <aside className={`${styles.panel} ${chatStyles.settingsPanel}`} aria-label="聊天管理">
       <div className={chatStyles.settingsHeader}><h2>设置</h2><button type="button" aria-label="关闭设置" onClick={() => setMenu(false)}>×</button></div>
       <a href={`${prefix}/companion/photos`}>生活相册</a>
@@ -322,7 +323,6 @@ export default function AgentChat() {
     }} onVideo={video => {attach({kind:"video",id:video.video_id,name:video.name});setAlbumOpen(false);}} />}
     {feature === "diary" ? <DiaryCalendar onClose={()=>setFeature(null)} onCreate={day=>{setFeature(null);startDiaryPrompt(day);}}/> : feature && <CompanionFeatureSheet feature={feature} onClose={() => setFeature(null)} />}
     {mode !== "chat" && (guide ? <GenerationGuide key={mode} value={guide} disabled={inputDisabled || pending} onChange={updateGuide} onEdit={() => { updateDraft(guide.prompt); inputRef.current?.focus(); }} onCancel={() => { updateDraft(guide.prompt); setNotice("已取消创作，描述草稿仍保留。"); }} /> : <article className={chatStyles.assistant}><span>陪伴助手</span><p>{mode === "video" ? "想做一段什么视频？" : "想生成一张什么图片？"}在下面说说，点箭头后我们一步步来。</p></article>)}
-    {busy && <p role="status">正在处理…</p>}
     {notice && <p role="status">{notice}</p>}{error && <p role="alert">{error}</p>}
     {turn?.result?.kind === "read" && <section className={styles.panel} aria-label="工具读取结果"><h2>实际记忆查询结果</h2>
       {turn.result.memories.length === 0 && <p>没有匹配的记忆。</p>}{turn.result.memories.map(m => <p key={m.id}>{m.content}（原话：{m.quote}）</p>)}
@@ -371,7 +371,7 @@ export default function AgentChat() {
       if(files.length>20){setNotice("每次最多选择 20 个文件，请重新选择。");return;}
       if(files.length){setUploadFiles(files);setNotice("");}
     }} />
-    <CompanionComposer outputStatus={voiceOutputStatus} onVoiceStart={() => setVoiceConnectionEpoch(value => value + 1)} mode={mode} value={text} disabled={inputDisabled || pending} busy={busy} allowed={allowed} inputRef={inputRef}
+    <CompanionComposer onCaptureStatus={setCaptureStatus} onVoiceStart={() => setVoiceConnectionEpoch(value => value + 1)} mode={mode} value={text} disabled={inputDisabled || pending} busy={busy} allowed={allowed} inputRef={inputRef}
       attachments={<AttachmentDraft items={pendingMedia[mode]} disabled={inputDisabled || pending} onRemove={id => {setPendingMedia(old => ({...old,[mode]:old[mode].filter(item=>item.id!==id)}));setMediaAcknowledged(false);}} />}
       hasAttachments={pendingMedia[mode].length > 0} mediaAcknowledged={mediaAcknowledged} onMediaAcknowledged={setMediaAcknowledged}
       onMode={next => {setMode(next);setAlbumOpen(false);setMediaAcknowledged(false);}} onChange={updateDraft} onSend={submit} onVoiceFinal={voiceText => {
