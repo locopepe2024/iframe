@@ -1301,6 +1301,38 @@ def get_series(series_id: str, user: UserContext = Depends(require_studio_user))
     return signed_response(result)
 
 
+@app.get("/projects/{resource_id}/assembly-plan/subtitles/{lane_id}.srt")
+def export_project_assembly_subtitles(
+    resource_id: str, lane_id: str,
+    user: UserContext = Depends(require_studio_user),
+):
+    return _export_assembly_subtitles("project", resource_id, lane_id, user)
+
+
+@app.get("/series/{resource_id}/assembly-plan/subtitles/{lane_id}.srt")
+def export_series_assembly_subtitles(
+    resource_id: str, lane_id: str,
+    user: UserContext = Depends(require_studio_user),
+):
+    return _export_assembly_subtitles("series", resource_id, lane_id, user)
+
+
+def _export_assembly_subtitles(scope, resource_id, lane_id, user):
+    from .assembly_subtitles import export_srt
+    resource = (pipeline.get_script(resource_id, user.owner_profile_id)
+                if scope == "project" else pipeline.get_series(resource_id, user.owner_profile_id))
+    if not resource or not resource.assembly_plan:
+        raise HTTPException(status_code=404, detail="Assembly plan not found")
+    try:
+        content = export_srt(resource.assembly_plan, lane_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
+    return Response(content, media_type="application/x-subrip; charset=utf-8", headers={
+        "Content-Disposition": 'attachment; filename="subtitles.srt"',
+        "Cache-Control": "private, no-store",
+    })
+
+
 @app.get("/series/{series_id}/assembly-plan")
 def get_series_assembly_plan(
     series_id: str,

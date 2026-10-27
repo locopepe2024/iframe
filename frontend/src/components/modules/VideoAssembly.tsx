@@ -15,6 +15,8 @@ import PreviewVideo from "@/components/shared/preview/PreviewVideo";
 import PreviewImage from "@/components/shared/preview/PreviewImage";
 import { resolveMergedVideoDelivery } from "@/lib/mediaDelivery";
 
+import { AssemblyTracks } from "./AssemblyTracks";
+
 type AssemblyPhase = "timeline" | "takes" | "mix" | "export";
 
 export default function VideoAssembly() {
@@ -605,6 +607,8 @@ export function AssemblyPlanPhase({
                     <div className="h-full w-full rounded-full bg-primary/60" />
                 </div>
             </div>
+
+            {project && <AssemblyTracks project={project} plan={plan} resourceId={project.id} onChange={onChange} saved={!hasAssemblyPlanChanges(plan, project.assembly_plan)} />}
 
             <div className="space-y-3">
                 {plan.lanes.map((lane) => (
