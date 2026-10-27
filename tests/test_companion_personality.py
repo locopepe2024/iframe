@@ -11,3 +11,10 @@ def test_prompt_carries_behavior_rules_without_claiming_real_feelings():
     assert "沉稳照料" in prompt
     assert "每轮最多一个问题" in prompt
     assert "不代表你有真实感受" in prompt
+
+
+def test_prompt_distinguishes_product_voice_from_model_text_and_playback_evidence():
+    prompt = system_prompt()
+    assert "通过 OpenTalking 语音渠道播报回复" in prompt
+    assert "无法观测扬声器或实际播放结果" in prompt
+    assert "不要因为自己输出文本就声称产品只能输出文字" in prompt
