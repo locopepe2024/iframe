@@ -152,7 +152,13 @@ export default function Cast() {
         const seriesGroups = currentSeries && currentSeries.id === currentProject?.series_id ? currentSeries.extra_roster ?? [] : [];
         const groups = [...(currentProject?.crowd_groups ?? []), ...seriesGroups, ...(currentProject?.crowd_group_candidates ?? [])];
         return Array.from(new Map(groups.map(group => [group.extra_id, group])).values());
-    }, [currentSeries, currentProject?.series_id, currentProject?.crowd_group_candidates]);
+    }, [
+        currentSeries,
+        currentSeries?.extra_roster,
+        currentProject?.series_id,
+        currentProject?.crowd_groups,
+        currentProject?.crowd_group_candidates,
+    ]);
     const totalCast = characters.length + crowdGroups.length + scenes.length + props.length;
 
     return (
