@@ -138,4 +138,6 @@ def test_entity_extraction_prompt_separates_distinct_crowd_identities():
     prompt = processor._construct_prompt("长街有百姓、行人和江湖人物经过。")
     assert "青溪镇市井百姓" in prompt
     assert "江湖人物/江湖客" in prompt or "江湖人物" in prompt
-    assert "不得仅因同一地点而合并百姓与江湖人物" in prompt
+    assert "江湖人物与百姓等不同属性群体即使同处一个地点也必须分组" in prompt
+    assert "士兵与百姓" in prompt
+    assert "社会身份、服装体系、典型道具、行为目的和视觉功能" in prompt

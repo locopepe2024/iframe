@@ -1656,7 +1656,7 @@ class ScriptProcessor:
                 "basis 仅用 observed/inferred/authored。description 和 scene_identity 只概述可复用地点，"
                 "不得包含潜伏、围堵等当前事件。输出前逐一核对独立地点是否都有 scenes 条目；"
                 "不要把另一处地点仅放入长街的 shot_only_content。已确认的跨地点视线写入双方 environment。"
-                "群体合并必须依据社会身份、服装族、道具和视觉功能；不得仅因同一地点而合并百姓与江湖人物。只返回 characters、crowd_groups、scenes、props 四个顶层字段的合法 JSON。")
+                "群体合并必须同时依据社会身份、服装体系、典型道具、行为目的和视觉功能；士兵与百姓、江湖人物与百姓等不同属性群体即使同处一个地点也必须分组，不得仅因同一地点而合并。只返回 characters、crowd_groups、scenes、props 四个顶层字段的合法 JSON。")
 
     def analyze_script_for_styles(self, script_text: str, custom_style_prompt: str = "") -> List[Dict[str, Any]]:
         """使用 LLM 分析剧本并推荐视觉风格
