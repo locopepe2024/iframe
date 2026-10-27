@@ -3005,6 +3005,7 @@ class AssemblyClip(BaseModel):
     source_episode_id: Optional[str] = Field(None, min_length=1, max_length=120)
     source_frame_id: Optional[str] = Field(None, min_length=1, max_length=120)
     source_task_id: Optional[str] = Field(None, min_length=1, max_length=120)
+    source_media_id: Optional[str] = Field(None, min_length=1, max_length=120)
     source_refs: List[str] = Field(default_factory=list, max_length=12)
 
     label: Optional[str] = Field(None, max_length=200)

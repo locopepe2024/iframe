@@ -545,6 +545,7 @@ export interface AssemblyClip {
     source_episode_id?: string | null;
     source_frame_id?: string | null;
     source_task_id?: string | null;
+    source_media_id?: string | null;
     source_refs: string[];
     label?: string | null;
     enabled: boolean;
