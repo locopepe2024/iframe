@@ -2638,6 +2638,8 @@ def get_project(script_id: str, user: UserContext = Depends(require_studio_user)
         raise HTTPException(status_code=404, detail="Project not found")
 
     payload = _script_response_dump(script)
+    local_crowd_groups = list(payload.get("crowd_group_candidates", []))
+    payload["crowd_groups"] = local_crowd_groups
     local_director = script.art_direction.director_profile if script.art_direction else None
     effective_style = pipeline.effective_art_direction(script)
     payload["director_style_review_required"] = bool(
@@ -2689,6 +2691,11 @@ def get_project(script_id: str, user: UserContext = Depends(require_studio_user)
                     d = pr.model_dump(exclude={"asset_revisions"})
                     d["source"] = "series"
                     payload["props"].append(d)
+            known_crowd_ids = {item.get("extra_id") for item in local_crowd_groups}
+            payload["crowd_groups"].extend(
+                item.model_dump() for item in series.extra_roster
+                if item.extra_id not in known_crowd_ids
+            )
 
     # Global assets are intentionally opt-in. They enter a series only through
     # the explicit /series/{id}/assets/import-from-library action; merely

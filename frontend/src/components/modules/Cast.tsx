@@ -150,7 +150,7 @@ export default function Cast() {
 
     const crowdGroups = useMemo(() => {
         const seriesGroups = currentSeries && currentSeries.id === currentProject?.series_id ? currentSeries.extra_roster ?? [] : [];
-        const groups = [...seriesGroups, ...(currentProject?.crowd_group_candidates ?? [])];
+        const groups = [...(currentProject?.crowd_groups ?? []), ...seriesGroups, ...(currentProject?.crowd_group_candidates ?? [])];
         return Array.from(new Map(groups.map(group => [group.extra_id, group])).values());
     }, [currentSeries, currentProject?.series_id, currentProject?.crowd_group_candidates]);
     const totalCast = characters.length + crowdGroups.length + scenes.length + props.length;
