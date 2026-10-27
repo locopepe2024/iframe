@@ -652,6 +652,10 @@ class ExtraRosterEntry(BaseModel):
     reference_media_id: Optional[str] = None
     reference_variant_ids: List[str] = Field(default_factory=list, max_length=20)
     reference_media_ids: Dict[str, str] = Field(default_factory=dict, max_length=20)
+    visual_asset_id: Optional[str] = Field(
+        None,
+        description="Optional series Character asset linked to a fixed extra's visual design",
+    )
 
 
 class ExtraShotInstance(BaseModel):

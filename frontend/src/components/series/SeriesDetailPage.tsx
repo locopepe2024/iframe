@@ -296,6 +296,7 @@ function ExtraRosterPanel({ series, seriesId, onSaved }: { series: Series; serie
   const [proposals, setProposals] = useState<ExtraRosterEntry[]>([]);
   const [generating, setGenerating] = useState(false);
   const [selectedProposals, setSelectedProposals] = useState<string[]>([]);
+  const [creatingVisualAsset, setCreatingVisualAsset] = useState<string | null>(null);
   useEffect(() => setEntries(series.extra_roster ?? []), [series.extra_roster]);
   const add = (kind: ExtraRosterEntry["kind"]) => setEntries(items => [...items, {
     extra_id: "extra-" + Date.now(), label: kind === "fixed_extra" ? "新固定群演" : "新人群模板", kind,
@@ -315,6 +316,21 @@ function ExtraRosterPanel({ series, seriesId, onSaved }: { series: Series; serie
     setEntries(items => [...items, ...proposals.filter(item => selectedProposals.includes(item.extra_id) && !existing.has(item.extra_id))]);
     setProposals([]);
     setSelectedProposals([]);
+  };
+  const createVisualAsset = async (entry: ExtraRosterEntry) => {
+    if (entry.kind !== "fixed_extra" || entry.visual_asset_id) return;
+    setCreatingVisualAsset(entry.extra_id);
+    try {
+      const character = await api.createSeriesCharacter(seriesId, {
+        name: entry.label,
+        persona: entry.label,
+        description: [entry.height, entry.body_build, entry.wardrobe, entry.palette, ...(entry.props ?? [])]
+          .filter(Boolean).join("；"),
+      });
+      setEntries(items => items.map(item => item.extra_id === entry.extra_id
+        ? { ...item, visual_asset_id: character.id }
+        : item));
+    } finally { setCreatingVisualAsset(null); }
   };
   return <div className="flex-1 overflow-auto p-8">
     <h2 className="text-xl font-display font-bold text-foreground">群演资产库</h2>
@@ -338,7 +354,16 @@ function ExtraRosterPanel({ series, seriesId, onSaved }: { series: Series; serie
           <option value="fixed_extra">固定群演</option><option value="extra_template">人群模板</option>
         </select>
         <input aria-label="群演外观" value={entry.wardrobe ?? ""} placeholder="服装、体态、色彩与识别锚点" onChange={e => setEntries(items => items.map((item, i) => i === index ? { ...item, wardrobe: e.target.value } : item))} className="bg-input-bg border border-glass-border p-2 text-sm" />
-        <button type="button" className="text-danger" onClick={() => setEntries(items => items.filter((_, i) => i !== index))}>删除</button>
+        <div className="flex flex-col items-end gap-2">
+          {entry.kind === "fixed_extra" && (
+            <button type="button" disabled={Boolean(entry.visual_asset_id) || creatingVisualAsset === entry.extra_id}
+              onClick={() => void createVisualAsset(entry)}
+              className="whitespace-nowrap rounded border border-primary px-2 py-1 text-[11px] text-primary">
+              {entry.visual_asset_id ? "已关联视觉资产" : creatingVisualAsset === entry.extra_id ? "创建中…" : "创建视觉角色资产"}
+            </button>
+          )}
+          <button type="button" className="text-danger" onClick={() => setEntries(items => items.filter((_, i) => i !== index))}>删除</button>
+        </div>
       </div>)}
       <div className="flex gap-2">
         <button type="button" onClick={() => add("fixed_extra")} className="rounded border border-glass-border px-3 py-2 text-xs">添加固定群演</button>

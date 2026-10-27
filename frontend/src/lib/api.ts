@@ -2777,6 +2777,14 @@ export const api = {
         const response = await axios.put(`${API_URL}/series/${seriesId}`, data);
         return response.data;
     },
+    createSeriesCharacter: async (seriesId: string, data: {
+        name: string;
+        description?: string;
+        persona?: string;
+    }) => {
+        const response = await axios.post(`${API_URL}/series/${seriesId}/characters`, data);
+        return response.data;
+    },
     generateExtraRosterProposals: async (seriesId: string, brief: string, count = 6) => {
         const response = await axios.post(API_URL + "/series/" + seriesId + "/extra-roster/proposals", { brief, count });
         return response.data as { proposals: import("@/store/projectStore").ExtraRosterEntry[] };
