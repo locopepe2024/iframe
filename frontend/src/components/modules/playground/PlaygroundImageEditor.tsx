@@ -107,7 +107,12 @@ function EditorSession({ reference, title, sessionId, onClose }: { reference?: s
     const saved = await imageEditorApi.save(loaded.source, file, retry.current.key, projection ?? projectionType);
     append(saved); toast.success(t('saved')); onClose();
   };
+  const chooseAnotherSource = () => {
+    if (hasUnsavedEdit && !window.confirm(t('discard'))) return;
+    setLoaded(null); setSelected(undefined); setReferences([]); setHasUnsavedEdit(false); setError('');
+  };
   return <ImageEditor key={selected || 'empty'} source={loaded?.url} title={name} onClose={onClose} projectionType={projectionType}
+    headerActions={loaded && <button type="button" onClick={chooseAnotherSource} className="min-h-9 rounded border border-glass-border px-3 text-xs hover:bg-hover-bg">{t('changeSource')}</button>}
     onModified={() => setHasUnsavedEdit(true)}
     panoramaEligible={Boolean(loaded && loaded.source.width === 2 * loaded.source.height)} onProjectionChange={setProjectionType}
     onSavePanoramaSource={loaded && !hasUnsavedEdit && loaded.source.width === 2 * loaded.source.height ? async () => {
@@ -116,9 +121,10 @@ function EditorSession({ reference, title, sessionId, onClose }: { reference?: s
     } : undefined}
     toolPanel={loaded && referenceTools}
     onSave={saveFile}
-    emptyState={<div className="mx-auto flex max-w-2xl flex-col gap-4 p-5">
-      <p className="text-text-secondary">{t('choose')}</p>
-      <div className="flex flex-wrap gap-2">
+    emptyState={<div data-testid="image-editor-empty-canvas" className="flex h-full min-h-[520px] items-center justify-center bg-[linear-gradient(45deg,rgba(127,127,127,0.05)_25%,transparent_25%,transparent_75%,rgba(127,127,127,0.05)_75%),linear-gradient(45deg,rgba(127,127,127,0.05)_25%,transparent_25%,transparent_75%,rgba(127,127,127,0.05)_75%)] bg-[length:28px_28px] bg-[position:0_0,14px_14px] p-6">
+      <div className="w-full max-w-2xl rounded-xl border border-dashed border-glass-border bg-surface/95 p-6 text-center shadow-sm">
+      <p className="text-sm text-text-secondary">{t('choose')}</p>
+      <div className="mt-4 flex flex-wrap justify-center gap-2">
         <label className="inline-flex min-h-11 cursor-pointer items-center gap-3 rounded-lg border border-glass-border px-3 py-2 hover:bg-hover-bg"><ImagePlus size={18}/>{t('upload')}
           <input type="file" accept="image/png,image/jpeg,image/webp" disabled={busy} className="sr-only" onChange={async event => {
             const file = event.target.files?.[0]; if (!file) return;
@@ -153,6 +159,7 @@ function EditorSession({ reference, title, sessionId, onClose }: { reference?: s
         <button type="button" disabled={busy} className="min-h-11 rounded px-3 hover:bg-hover-bg" onClick={() => { setName(copy.title); setSelected(copy.path); }}>{t('edit')}</button>
         <button type="button" className="min-h-11 rounded px-3 hover:bg-hover-bg" onClick={() => { const added = append(copy); toast.success(t(added ? 'added' : 'saved')); onClose(); }}>{t('use')}</button>
       </div>)}
+      </div>
     </div>} />;
 }
 
