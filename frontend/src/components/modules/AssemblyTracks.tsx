@@ -72,6 +72,11 @@ export function AssemblyTracks({ plan, resourceId, onChange, saved, project }: {
     const endDrag = () => { dragRef.current = null; };
     const selectedLane = plan.lanes.find(l => l.id === selected?.laneId);
     const selectedClip = selectedLane?.clips.find(c => c.id === selected?.clipId);
+    const selectedAudioUrl = selectedLane && selectedClip && selectedLane.kind !== "video" && selectedLane.kind !== "subtitle"
+        ? getAssetUrl(selectedLane.kind === "bgm"
+            ? project.bgm_url
+            : project.frames.find(f => f.id === selectedClip.source_frame_id)?.[selectedLane.kind === "dialogue" ? "audio_url" : "sfx_url"])
+        : "";
     const applyEdit = (edit: () => AssemblyEditPlan) => {
         try { onChange(edit()); setError(null); } catch (e) { setError(e instanceof Error ? e.message : String(e)); }
     };
@@ -120,6 +125,9 @@ export function AssemblyTracks({ plan, resourceId, onChange, saved, project }: {
         <p className="text-xs text-text-muted">{t("修改后先保存再导出。烧录字幕会永久进入画面；其他字幕轨仍可单独下载 SRT。", "Save changes before export. Burned captions become part of the picture; other tracks remain available as SRT.")}</p>
         {selected && selectedClip && <div className="flex flex-wrap items-end gap-2 rounded border border-glass-border p-2">
             <span className="text-xs text-text-secondary">{selectedClip.label || selectedClip.id}</span>
+            {selectedAudioUrl && <label className="w-full text-xs text-text-secondary">{t("试听素材", "Preview source")}
+                <audio controls preload="metadata" src={selectedAudioUrl} aria-label={t("选中音频试听", "Selected audio preview")} className="mt-1 h-9 w-full" />
+            </label>}
             <button type="button" className={control} disabled={position <= selectedClip.timeline_start_ms || position >= selectedClip.timeline_end_ms} onClick={() => applyEdit(() => splitAssemblyClip(plan, selected.laneId, selected.clipId, position, crypto.randomUUID()))}>{t("在播放头分割", "Split at playhead")}</button>
             {selectedLane?.kind !== "subtitle" && <>
                 <label className="text-xs text-text-secondary">{t("源入点（毫秒）", "Source in (ms)")}<input className={`${control} block w-32`} type="number" min={0} step={1} value={sourceIn} onChange={e => setSourceIn(Number(e.target.value))} /></label>

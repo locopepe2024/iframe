@@ -77,3 +77,14 @@ it("does not replace an unavailable saved take with the frame's newer video", ()
     expect(screen.queryByLabelText("Timeline video preview")).toBeNull();
     expect(screen.getByRole("button", { name: "Play" })).toBeDisabled();
 });
+
+it("previews the selected dialogue source without changing its timeline bounds", () => {
+    const audioProject = { id: "p", frames: [{ id: "f", audio_url: "dialogue.wav" }], video_tasks: [] } as unknown as Project;
+    const audioPlan: AssemblyEditPlan = { ...plan, lanes: [{ id: "d", kind: "dialogue", allow_overlap: true, clips: [{ id: "cue", source_frame_id: "f", timeline_start_ms: 1200, timeline_end_ms: 3400, source_refs: [], enabled: true }] }] };
+    const onChange = vi.fn();
+    render(<AssemblyTracks plan={audioPlan} project={audioProject} resourceId="p" saved onChange={onChange} />);
+    fireEvent.click(screen.getByRole("button", { name: "cue" }));
+    expect(screen.getByLabelText("Selected audio preview").getAttribute("src")).toContain("dialogue.wav");
+    expect(screen.getAllByRole("spinbutton").at(-1)).toHaveValue(1);
+    expect(onChange).not.toHaveBeenCalled();
+});
