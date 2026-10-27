@@ -212,6 +212,7 @@ export interface ExtraRosterEntry {
     reference_media_id?: string | null;
     reference_variant_ids?: string[];
     reference_media_ids?: Record<string, string>;
+    visual_asset_id?: string | null;
 }
 
 export interface ExtraShotInstance {
