@@ -229,6 +229,7 @@ async def realtime(socket: WebSocket):
         auth = json.loads(raw)
         identity = consume_ticket(auth.get('ticket', '')) if auth.get('type') == 'authenticate' else None
         if identity is None:
+            logger.warning("Companion realtime browser authentication rejected")
             await socket.close(code=1008)
             return
         owner = identity.owner_profile_id
@@ -237,12 +238,16 @@ async def realtime(socket: WebSocket):
                 owner = None
                 raise ValueError('already active')
             _active.add(owner)
+        logger.warning("Companion realtime resolving UniArt channel")
         config = await asyncio.to_thread(channel.runtime, identity)
         parsed = urlsplit(config['base_url'])
         url = urlunsplit(('wss', parsed.netloc, parsed.path.rstrip('/') + '/realtime', 'model=' + MODEL, ''))
+        logger.warning("Companion realtime opening upstream: host=%s path=%s model=%s", parsed.netloc, parsed.path, MODEL)
         async with connect(url, extra_headers={'Authorization': 'Bearer ' + config['api_key']},
                            open_timeout=15, close_timeout=3, max_size=4*1024*1024, max_queue=16) as upstream:
+            logger.warning("Companion realtime upstream websocket opened: model=%s", MODEL)
             await upstream.send(json.dumps(session_update(), ensure_ascii=False))
+            logger.warning("Companion realtime session update sent")
             await relay(socket, upstream, diagnostics)
     except WebSocketDisconnect:
         pass
