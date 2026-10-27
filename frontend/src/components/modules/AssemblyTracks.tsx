@@ -3,7 +3,7 @@ import { useState, useRef, useEffect } from "react";
 import { useLocale } from "next-intl";
 import { api, type AssemblyEditPlan } from "@/lib/api";
 import type { Project } from "@/store/projectStore";
-import { splitAssemblyClip, trimAssemblyClip } from "./assemblyEditing";
+import { removeAssemblyClip, splitAssemblyClip, trimAssemblyClip } from "./assemblyEditing";
 import { extractErrorDetail, getAssetUrl, getVideoPosterUrl } from "@/lib/utils";
 
 export function AssemblyTracks({ plan, resourceId, onChange, saved, project }: {
@@ -104,6 +104,7 @@ export function AssemblyTracks({ plan, resourceId, onChange, saved, project }: {
                 <label className="text-xs text-text-secondary">{t("源出点（毫秒）", "Source out (ms)")}<input className={`${control} block w-32`} type="number" min={1} step={1} value={sourceOut} onChange={e => setSourceOut(Number(e.target.value))} /></label>
                 <button type="button" className={control} onClick={() => applyEdit(() => trimAssemblyClip(plan, selected.laneId, selected.clipId, sourceIn, sourceOut))}>{t("应用原速裁切", "Apply trim at original speed")}</button>
             </>}
+            <button type="button" className={`${control} border-red-500/40 text-red-200`} onClick={() => applyEdit(() => removeAssemblyClip(plan, selected.laneId, selected.clipId))}>{t("删除片段", "Delete clip")}</button>
         </div>}
         {error && <p role="alert" className="text-xs text-red-300">{error}</p>}
         <div className="overflow-x-auto" aria-label={t("可横向滚动的时间线", "Scrollable timeline")}><div style={{ minWidth: Math.max(640, videos.length * 72) }}>
