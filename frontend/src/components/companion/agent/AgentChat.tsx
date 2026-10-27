@@ -24,6 +24,7 @@ import UploadGuideCard from "./UploadGuideCard";
 import { isOpenAlbumCommand } from "./localCommands";
 import { BookOpen, Images, UserRound, Compass, Mic } from "lucide-react";
 import DigitalCompanionPanel from "./DigitalCompanionPanel";
+import { detectCompanionRuntimeCapability, type CompanionRuntimeCapability } from "./companionRuntimeCapability";
 
 const prefix = process.env.NEXT_PUBLIC_API_URL === "/companion-demo" ? "/companion-demo" : "";
 const sessionKey = "iframe-companion-agent-session-v1";
@@ -55,6 +56,7 @@ export default function AgentChat() {
   const [page, setPage] = useState<MemoryPage | null>(null), [query, setQuery] = useState(""), [appliedQuery, setAppliedQuery] = useState("");
   const [busy, setBusy] = useState(false), [error, setError] = useState(""), [notice, setNotice] = useState("");
   const [settingsSaved, setSettingsSaved] = useState(false);
+  const [runtimeCapability, setRuntimeCapability] = useState<CompanionRuntimeCapability>({ status: "checking", reason: "正在检查设备能力…", memoryGb: null });
   const locked = useRef(false), alive = useRef(true);
   const voiceQueue = useRef<string[]>([]);
   const [voiceRevision, setVoiceRevision] = useState(0);
@@ -110,6 +112,7 @@ export default function AgentChat() {
     // Use the current render's session and settings after each completed operation.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [voiceRevision, busy, hasRetry, uploading, preview, turn, allowed]);
+  useEffect(() => { void detectCompanionRuntimeCapability().then(setRuntimeCapability); }, []);
   async function history(id: string, cursor = 0) {
     const result = await companionApi.messages(id, cursor);
     if (alive.current) { setMessages(old => cursor ? [...old, ...result.messages] : result.messages); setAfter(result.next_after); }
@@ -279,6 +282,10 @@ export default function AgentChat() {
       </section>
       <CompanionIdentitySettings onChange={setIdentity} />
       <UniArtSettings />
+      <section aria-label="端侧协调器状态">
+        <h2>设备能力</h2>
+        <p className={styles.note}>{runtimeCapability.status === "edge_ready" ? "端侧协调器可用。" : runtimeCapability.status === "checking" ? "正在检查端侧协调器…" : "使用服务端协调器。"} {runtimeCapability.reason}</p>
+      </section>
       <p className={styles.note}>聊天内容会保留，可继续查看历史消息。</p>
     </aside>}
     <div ref={streamRef} className={chatStyles.stream} role="region" aria-label="聊天内容">
