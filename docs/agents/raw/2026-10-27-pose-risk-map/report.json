@@ -1,0 +1,2154 @@
+{
+  "schema": "recreation2-pose-extraction-risk-map.v1",
+  "event_frames": [
+    1,
+    17,
+    23,
+    29,
+    41,
+    55,
+    197
+  ],
+  "joint_summary": {
+    "left_ankle": {
+      "target_median_px": 17.213919803372022,
+      "target_p95_px": 23.229710349549507,
+      "target_max_px": 24.50966580944453,
+      "independent_disagreement_median_px": 8.886549865894686,
+      "independent_disagreement_max_px": 12.660736165981252
+    },
+    "left_elbow": {
+      "target_median_px": 8.495301424306207,
+      "target_p95_px": 35.34649209063687,
+      "target_max_px": 39.36245319097716,
+      "independent_disagreement_median_px": 6.92497184233819,
+      "independent_disagreement_max_px": 11.715654169045225
+    },
+    "left_hip": {
+      "target_median_px": 7.57047652825037,
+      "target_p95_px": 17.587949951424086,
+      "target_max_px": 18.041005917044377,
+      "independent_disagreement_median_px": 8.664985581607873,
+      "independent_disagreement_max_px": 23.816959397520844
+    },
+    "left_knee": {
+      "target_median_px": 26.525873112355747,
+      "target_p95_px": 35.753663874096354,
+      "target_max_px": 38.13455057813631,
+      "independent_disagreement_median_px": 7.273267155048236,
+      "independent_disagreement_max_px": 16.288816618940345
+    },
+    "left_shoulder": {
+      "target_median_px": 12.536446409017154,
+      "target_p95_px": 31.2505229001628,
+      "target_max_px": 32.9497925375589,
+      "independent_disagreement_median_px": 7.8435103335121035,
+      "independent_disagreement_max_px": 14.424328684345692
+    },
+    "left_wrist": {
+      "target_median_px": 19.01042901983925,
+      "target_p95_px": 44.790886744984505,
+      "target_max_px": 45.48730389141494,
+      "independent_disagreement_median_px": 6.594705671407726,
+      "independent_disagreement_max_px": 6.962782027129122
+    },
+    "right_ankle": {
+      "target_median_px": 16.227275550541997,
+      "target_p95_px": 37.5011710998692,
+      "target_max_px": 38.188722607769776,
+      "independent_disagreement_median_px": 4.526013120963256,
+      "independent_disagreement_max_px": 14.829699329396714
+    },
+    "right_elbow": {
+      "target_median_px": 17.136222870193798,
+      "target_p95_px": 37.26912508544878,
+      "target_max_px": 40.92024645799042,
+      "independent_disagreement_median_px": 3.1404167257993887,
+      "independent_disagreement_max_px": 10.343946900394846
+    },
+    "right_hip": {
+      "target_median_px": 10.621582086042736,
+      "target_p95_px": 22.264545749843,
+      "target_max_px": 23.478009704396104,
+      "independent_disagreement_median_px": 10.640725505693222,
+      "independent_disagreement_max_px": 21.043148951316304
+    },
+    "right_knee": {
+      "target_median_px": 23.97484391485618,
+      "target_p95_px": 37.16798350024814,
+      "target_max_px": 39.54386985653652,
+      "independent_disagreement_median_px": 8.596135301790317,
+      "independent_disagreement_max_px": 20.11314158991794
+    },
+    "right_shoulder": {
+      "target_median_px": 9.424750376675764,
+      "target_p95_px": 24.431963384701284,
+      "target_max_px": 25.381824692342597,
+      "independent_disagreement_median_px": 6.013263075801175,
+      "independent_disagreement_max_px": 12.471684825461113
+    },
+    "right_wrist": {
+      "target_median_px": 19.675743076321005,
+      "target_p95_px": 51.008137376007035,
+      "target_max_px": 52.514929841579836,
+      "independent_disagreement_median_px": 3.909325135576217,
+      "independent_disagreement_max_px": 9.393947649221142
+    },
+    "groups": {
+      "knees": {
+        "target_median_px": 26.121527112860782,
+        "target_p95_px": 37.47194302539266,
+        "independent_disagreement_median_px": 7.564517919978982
+      },
+      "wrists": {
+        "target_median_px": 19.01042901983925,
+        "target_p95_px": 48.86174512263483,
+        "independent_disagreement_median_px": 6.423587577709149
+      },
+      "ankles": {
+        "target_median_px": 17.213919803372022,
+        "target_p95_px": 35.996345346086514,
+        "independent_disagreement_median_px": 6.687434749844305
+      },
+      "shoulders": {
+        "target_median_px": 11.021796707159329,
+        "target_p95_px": 30.356187782283676,
+        "independent_disagreement_median_px": 7.8435103335121035
+      },
+      "elbows": {
+        "target_median_px": 11.85908381206314,
+        "target_p95_px": 37.70702242632728,
+        "independent_disagreement_median_px": 5.300251767507698
+      },
+      "hips": {
+        "target_median_px": 8.797971772747289,
+        "target_p95_px": 20.763787267453523,
+        "independent_disagreement_median_px": 8.909871839954949
+      }
+    }
+  },
+  "rows": [
+    {
+      "source_frame": 1,
+      "joint": "left_shoulder",
+      "target_error_px": 12.605479390364044,
+      "independent_model_disagreement_px": 8.133742814862888
+    },
+    {
+      "source_frame": 1,
+      "joint": "left_elbow",
+      "target_error_px": 8.2627026104107,
+      "independent_model_disagreement_px": 2.745770786334907
+    },
+    {
+      "source_frame": 1,
+      "joint": "left_wrist",
+      "target_error_px": 3.919492831905327,
+      "independent_model_disagreement_px": 6.656978710109635
+    },
+    {
+      "source_frame": 1,
+      "joint": "left_hip",
+      "target_error_px": 7.84325796510707,
+      "independent_model_disagreement_px": 7.906204062968439
+    },
+    {
+      "source_frame": 1,
+      "joint": "left_knee",
+      "target_error_px": 25.873830761956736,
+      "independent_model_disagreement_px": 9.663434939955653
+    },
+    {
+      "source_frame": 1,
+      "joint": "left_ankle",
+      "target_error_px": 17.38358779355269,
+      "independent_model_disagreement_px": 12.660736165981252
+    },
+    {
+      "source_frame": 1,
+      "joint": "right_shoulder",
+      "target_error_px": 7.01188937380127,
+      "independent_model_disagreement_px": 3.122886742013771
+    },
+    {
+      "source_frame": 1,
+      "joint": "right_elbow",
+      "target_error_px": 19.3708612828728,
+      "independent_model_disagreement_px": 1.6121761093106257
+    },
+    {
+      "source_frame": 1,
+      "joint": "right_wrist",
+      "target_error_px": 18.58403595514432,
+      "independent_model_disagreement_px": 3.147637567042606
+    },
+    {
+      "source_frame": 1,
+      "joint": "right_hip",
+      "target_error_px": 8.69305840654572,
+      "independent_model_disagreement_px": 8.395976579662594
+    },
+    {
+      "source_frame": 1,
+      "joint": "right_knee",
+      "target_error_px": 21.06982990785753,
+      "independent_model_disagreement_px": 6.560624053935498
+    },
+    {
+      "source_frame": 1,
+      "joint": "right_ankle",
+      "target_error_px": 2.5041346820711836,
+      "independent_model_disagreement_px": 3.9378013740115905
+    },
+    {
+      "source_frame": 3,
+      "joint": "left_shoulder",
+      "target_error_px": 12.55131024581803,
+      "independent_model_disagreement_px": null
+    },
+    {
+      "source_frame": 3,
+      "joint": "left_elbow",
+      "target_error_px": 8.21367862030895,
+      "independent_model_disagreement_px": null
+    },
+    {
+      "source_frame": 3,
+      "joint": "left_wrist",
+      "target_error_px": 4.079561915551991,
+      "independent_model_disagreement_px": null
+    },
+    {
+      "source_frame": 3,
+      "joint": "left_hip",
+      "target_error_px": 8.049639320994821,
+      "independent_model_disagreement_px": null
+    },
+    {
+      "source_frame": 3,
+      "joint": "left_knee",
+      "target_error_px": 26.429670700627412,
+      "independent_model_disagreement_px": null
+    },
+    {
+      "source_frame": 3,
+      "joint": "left_ankle",
+      "target_error_px": 18.106831493571118,
+      "independent_model_disagreement_px": null
+    },
+    {
+      "source_frame": 3,
+      "joint": "right_shoulder",
+      "target_error_px": 7.145265590211006,
+      "independent_model_disagreement_px": null
+    },
+    {
+      "source_frame": 3,
+      "joint": "right_elbow",
+      "target_error_px": 19.192096260866442,
+      "independent_model_disagreement_px": null
+    },
+    {
+      "source_frame": 3,
+      "joint": "right_wrist",
+      "target_error_px": 18.432374967742433,
+      "independent_model_disagreement_px": null
+    },
+    {
+      "source_frame": 3,
+      "joint": "right_hip",
+      "target_error_px": 8.573511880836792,
+      "independent_model_disagreement_px": null
+    },
+    {
+      "source_frame": 3,
+      "joint": "right_knee",
+      "target_error_px": 21.273561230860167,
+      "independent_model_disagreement_px": null
+    },
+    {
+      "source_frame": 3,
+      "joint": "right_ankle",
+      "target_error_px": 2.762641304892044,
+      "independent_model_disagreement_px": null
+    },
+    {
+      "source_frame": 5,
+      "joint": "left_shoulder",
+      "target_error_px": 12.521582572216278,
+      "independent_model_disagreement_px": null
+    },
+    {
+      "source_frame": 5,
+      "joint": "left_elbow",
+      "target_error_px": 8.324739162633804,
+      "independent_model_disagreement_px": null
+    },
+    {
+      "source_frame": 5,
+      "joint": "left_wrist",
+      "target_error_px": 4.775767895683478,
+      "independent_model_disagreement_px": null
+    },
+    {
+      "source_frame": 5,
+      "joint": "left_hip",
+      "target_error_px": 8.445073045801172,
+      "independent_model_disagreement_px": null
+    },
+    {
+      "source_frame": 5,
+      "joint": "left_knee",
+      "target_error_px": 27.58706156147914,
+      "independent_model_disagreement_px": null
+    },
+    {
+      "source_frame": 5,
+      "joint": "left_ankle",
+      "target_error_px": 18.853121555206375,
+      "independent_model_disagreement_px": null
+    },
+    {
+      "source_frame": 5,
+      "joint": "right_shoulder",
+      "target_error_px": 7.388422514426975,
+      "independent_model_disagreement_px": null
+    },
+    {
+      "source_frame": 5,
+      "joint": "right_elbow",
+      "target_error_px": 19.45356703138894,
+      "independent_model_disagreement_px": null
+    },
+    {
+      "source_frame": 5,
+      "joint": "right_wrist",
+      "target_error_px": 18.42768567993299,
+      "independent_model_disagreement_px": null
+    },
+    {
+      "source_frame": 5,
+      "joint": "right_hip",
+      "target_error_px": 8.33114037702434,
+      "independent_model_disagreement_px": null
+    },
+    {
+      "source_frame": 5,
+      "joint": "right_knee",
+      "target_error_px": 22.24611867220484,
+      "independent_model_disagreement_px": null
+    },
+    {
+      "source_frame": 5,
+      "joint": "right_ankle",
+      "target_error_px": 3.848383183811876,
+      "independent_model_disagreement_px": null
+    },
+    {
+      "source_frame": 7,
+      "joint": "left_shoulder",
+      "target_error_px": 12.705395161442675,
+      "independent_model_disagreement_px": null
+    },
+    {
+      "source_frame": 7,
+      "joint": "left_elbow",
+      "target_error_px": 8.088807122724498,
+      "independent_model_disagreement_px": null
+    },
+    {
+      "source_frame": 7,
+      "joint": "left_wrist",
+      "target_error_px": 4.257413365523433,
+      "independent_model_disagreement_px": null
+    },
+    {
+      "source_frame": 7,
+      "joint": "left_hip",
+      "target_error_px": 8.128551273468789,
+      "independent_model_disagreement_px": null
+    },
+    {
+      "source_frame": 7,
+      "joint": "left_knee",
+      "target_error_px": 27.03730617409188,
+      "independent_model_disagreement_px": null
+    },
+    {
+      "source_frame": 7,
+      "joint": "left_ankle",
+      "target_error_px": 18.558057778643533,
+      "independent_model_disagreement_px": null
+    },
+    {
+      "source_frame": 7,
+      "joint": "right_shoulder",
+      "target_error_px": 7.2861287874109095,
+      "independent_model_disagreement_px": null
+    },
+    {
+      "source_frame": 7,
+      "joint": "right_elbow",
+      "target_error_px": 18.82071062132064,
+      "independent_model_disagreement_px": null
+    },
+    {
+      "source_frame": 7,
+      "joint": "right_wrist",
+      "target_error_px": 18.70782677572256,
+      "independent_model_disagreement_px": null
+    },
+    {
+      "source_frame": 7,
+      "joint": "right_hip",
+      "target_error_px": 8.720696708611474,
+      "independent_model_disagreement_px": null
+    },
+    {
+      "source_frame": 7,
+      "joint": "right_knee",
+      "target_error_px": 22.216005911596742,
+      "independent_model_disagreement_px": null
+    },
+    {
+      "source_frame": 7,
+      "joint": "right_ankle",
+      "target_error_px": 4.061422329834039,
+      "independent_model_disagreement_px": null
+    },
+    {
+      "source_frame": 9,
+      "joint": "left_shoulder",
+      "target_error_px": 13.13300868425286,
+      "independent_model_disagreement_px": null
+    },
+    {
+      "source_frame": 9,
+      "joint": "left_elbow",
+      "target_error_px": 8.86968986893965,
+      "independent_model_disagreement_px": null
+    },
+    {
+      "source_frame": 9,
+      "joint": "left_wrist",
+      "target_error_px": 3.904773548750911,
+      "independent_model_disagreement_px": null
+    },
+    {
+      "source_frame": 9,
+      "joint": "left_hip",
+      "target_error_px": 7.3296019060388495,
+      "independent_model_disagreement_px": null
+    },
+    {
+      "source_frame": 9,
+      "joint": "left_knee",
+      "target_error_px": 25.754740292232874,
+      "independent_model_disagreement_px": null
+    },
+    {
+      "source_frame": 9,
+      "joint": "left_ankle",
+      "target_error_px": 17.04425181319136,
+      "independent_model_disagreement_px": null
+    },
+    {
+      "source_frame": 9,
+      "joint": "right_shoulder",
+      "target_error_px": 7.079466703390417,
+      "independent_model_disagreement_px": null
+    },
+    {
+      "source_frame": 9,
+      "joint": "right_elbow",
+      "target_error_px": 19.266317681390184,
+      "independent_model_disagreement_px": null
+    },
+    {
+      "source_frame": 9,
+      "joint": "right_wrist",
+      "target_error_px": 18.531233466656815,
+      "independent_model_disagreement_px": null
+    },
+    {
+      "source_frame": 9,
+      "joint": "right_hip",
+      "target_error_px": 9.49820176213899,
+      "independent_model_disagreement_px": null
+    },
+    {
+      "source_frame": 9,
+      "joint": "right_knee",
+      "target_error_px": 22.104624723423974,
+      "independent_model_disagreement_px": null
+    },
+    {
+      "source_frame": 9,
+      "joint": "right_ankle",
+      "target_error_px": 4.408264331383279,
+      "independent_model_disagreement_px": null
+    },
+    {
+      "source_frame": 11,
+      "joint": "left_shoulder",
+      "target_error_px": 13.340583347813546,
+      "independent_model_disagreement_px": null
+    },
+    {
+      "source_frame": 11,
+      "joint": "left_elbow",
+      "target_error_px": 9.097367264492561,
+      "independent_model_disagreement_px": null
+    },
+    {
+      "source_frame": 11,
+      "joint": "left_wrist",
+      "target_error_px": 3.652453614836191,
+      "independent_model_disagreement_px": null
+    },
+    {
+      "source_frame": 11,
+      "joint": "left_hip",
+      "target_error_px": 6.878070360216102,
+      "independent_model_disagreement_px": null
+    },
+    {
+      "source_frame": 11,
+      "joint": "left_knee",
+      "target_error_px": 25.840366374161295,
+      "independent_model_disagreement_px": null
+    },
+    {
+      "source_frame": 11,
+      "joint": "left_ankle",
+      "target_error_px": 17.384209872912447,
+      "independent_model_disagreement_px": null
+    },
+    {
+      "source_frame": 11,
+      "joint": "right_shoulder",
+      "target_error_px": 6.919886271594041,
+      "independent_model_disagreement_px": null
+    },
+    {
+      "source_frame": 11,
+      "joint": "right_elbow",
+      "target_error_px": 18.753721119468494,
+      "independent_model_disagreement_px": null
+    },
+    {
+      "source_frame": 11,
+      "joint": "right_wrist",
+      "target_error_px": 18.666258972132535,
+      "independent_model_disagreement_px": null
+    },
+    {
+      "source_frame": 11,
+      "joint": "right_hip",
+      "target_error_px": 9.736730231492452,
+      "independent_model_disagreement_px": null
+    },
+    {
+      "source_frame": 11,
+      "joint": "right_knee",
+      "target_error_px": 22.858146347126873,
+      "independent_model_disagreement_px": null
+    },
+    {
+      "source_frame": 11,
+      "joint": "right_ankle",
+      "target_error_px": 6.130384604054964,
+      "independent_model_disagreement_px": null
+    },
+    {
+      "source_frame": 13,
+      "joint": "left_shoulder",
+      "target_error_px": 13.112507382673293,
+      "independent_model_disagreement_px": null
+    },
+    {
+      "source_frame": 13,
+      "joint": "left_elbow",
+      "target_error_px": 8.5839929151933,
+      "independent_model_disagreement_px": null
+    },
+    {
+      "source_frame": 13,
+      "joint": "left_wrist",
+      "target_error_px": 3.630625596562957,
+      "independent_model_disagreement_px": null
+    },
+    {
+      "source_frame": 13,
+      "joint": "left_hip",
+      "target_error_px": 7.945744603970486,
+      "independent_model_disagreement_px": null
+    },
+    {
+      "source_frame": 13,
+      "joint": "left_knee",
+      "target_error_px": 26.900047303246502,
+      "independent_model_disagreement_px": null
+    },
+    {
+      "source_frame": 13,
+      "joint": "left_ankle",
+      "target_error_px": 20.48437433447414,
+      "independent_model_disagreement_px": null
+    },
+    {
+      "source_frame": 13,
+      "joint": "right_shoulder",
+      "target_error_px": 7.56835184705918,
+      "independent_model_disagreement_px": null
+    },
+    {
+      "source_frame": 13,
+      "joint": "right_elbow",
+      "target_error_px": 19.464337362561885,
+      "independent_model_disagreement_px": null
+    },
+    {
+      "source_frame": 13,
+      "joint": "right_wrist",
+      "target_error_px": 18.296127501603948,
+      "independent_model_disagreement_px": null
+    },
+    {
+      "source_frame": 13,
+      "joint": "right_hip",
+      "target_error_px": 8.822810732788216,
+      "independent_model_disagreement_px": null
+    },
+    {
+      "source_frame": 13,
+      "joint": "right_knee",
+      "target_error_px": 22.49600899787707,
+      "independent_model_disagreement_px": null
+    },
+    {
+      "source_frame": 13,
+      "joint": "right_ankle",
+      "target_error_px": 7.0871151152576095,
+      "independent_model_disagreement_px": null
+    },
+    {
+      "source_frame": 15,
+      "joint": "left_shoulder",
+      "target_error_px": 13.028533848270794,
+      "independent_model_disagreement_px": null
+    },
+    {
+      "source_frame": 15,
+      "joint": "left_elbow",
+      "target_error_px": 8.406609933419116,
+      "independent_model_disagreement_px": null
+    },
+    {
+      "source_frame": 15,
+      "joint": "left_wrist",
+      "target_error_px": 3.6444536294513195,
+      "independent_model_disagreement_px": null
+    },
+    {
+      "source_frame": 15,
+      "joint": "left_hip",
+      "target_error_px": 7.936777578707446,
+      "independent_model_disagreement_px": null
+    },
+    {
+      "source_frame": 15,
+      "joint": "left_knee",
+      "target_error_px": 26.622075524084078,
+      "independent_model_disagreement_px": null
+    },
+    {
+      "source_frame": 15,
+      "joint": "left_ankle",
+      "target_error_px": 19.417464199510604,
+      "independent_model_disagreement_px": null
+    },
+    {
+      "source_frame": 15,
+      "joint": "right_shoulder",
+      "target_error_px": 7.428599568346289,
+      "independent_model_disagreement_px": null
+    },
+    {
+      "source_frame": 15,
+      "joint": "right_elbow",
+      "target_error_px": 19.58827131592779,
+      "independent_model_disagreement_px": null
+    },
+    {
+      "source_frame": 15,
+      "joint": "right_wrist",
+      "target_error_px": 18.318952796852162,
+      "independent_model_disagreement_px": null
+    },
+    {
+      "source_frame": 15,
+      "joint": "right_hip",
+      "target_error_px": 8.773132812706361,
+      "independent_model_disagreement_px": null
+    },
+    {
+      "source_frame": 15,
+      "joint": "right_knee",
+      "target_error_px": 22.293608429495993,
+      "independent_model_disagreement_px": null
+    },
+    {
+      "source_frame": 15,
+      "joint": "right_ankle",
+      "target_error_px": 5.686753034440034,
+      "independent_model_disagreement_px": null
+    },
+    {
+      "source_frame": 17,
+      "joint": "left_shoulder",
+      "target_error_px": 7.029925680918411,
+      "independent_model_disagreement_px": 2.2790640438045218
+    },
+    {
+      "source_frame": 17,
+      "joint": "left_elbow",
+      "target_error_px": 5.5381259291428835,
+      "independent_model_disagreement_px": 6.538001375564891
+    },
+    {
+      "source_frame": 17,
+      "joint": "left_wrist",
+      "target_error_px": 17.799986727513506,
+      "independent_model_disagreement_px": 6.619820373155751
+    },
+    {
+      "source_frame": 17,
+      "joint": "left_hip",
+      "target_error_px": 6.587936983687948,
+      "independent_model_disagreement_px": 6.862395521901348
+    },
+    {
+      "source_frame": 17,
+      "joint": "left_knee",
+      "target_error_px": 26.20048259394197,
+      "independent_model_disagreement_px": 5.576220691527403
+    },
+    {
+      "source_frame": 17,
+      "joint": "left_ankle",
+      "target_error_px": 16.06279402377174,
+      "independent_model_disagreement_px": 10.104287144891682
+    },
+    {
+      "source_frame": 17,
+      "joint": "right_shoulder",
+      "target_error_px": 7.768389129329216,
+      "independent_model_disagreement_px": 3.8777061148077934
+    },
+    {
+      "source_frame": 17,
+      "joint": "right_elbow",
+      "target_error_px": 20.772048582319147,
+      "independent_model_disagreement_px": 2.800567495438969
+    },
+    {
+      "source_frame": 17,
+      "joint": "right_wrist",
+      "target_error_px": 35.662466615839975,
+      "independent_model_disagreement_px": 3.1249988759601255
+    },
+    {
+      "source_frame": 17,
+      "joint": "right_hip",
+      "target_error_px": 10.616191579949838,
+      "independent_model_disagreement_px": 6.944291801257121
+    },
+    {
+      "source_frame": 17,
+      "joint": "right_knee",
+      "target_error_px": 23.916275220336026,
+      "independent_model_disagreement_px": 20.11314158991794
+    },
+    {
+      "source_frame": 17,
+      "joint": "right_ankle",
+      "target_error_px": 10.934635320679805,
+      "independent_model_disagreement_px": 14.829699329396714
+    },
+    {
+      "source_frame": 19,
+      "joint": "left_shoulder",
+      "target_error_px": 10.201496168359132,
+      "independent_model_disagreement_px": null
+    },
+    {
+      "source_frame": 19,
+      "joint": "left_elbow",
+      "target_error_px": 5.46585018388878,
+      "independent_model_disagreement_px": null
+    },
+    {
+      "source_frame": 19,
+      "joint": "left_wrist",
+      "target_error_px": 18.778913761482873,
+      "independent_model_disagreement_px": null
+    },
+    {
+      "source_frame": 19,
+      "joint": "left_hip",
+      "target_error_px": 6.735277874838838,
+      "independent_model_disagreement_px": null
+    },
+    {
+      "source_frame": 19,
+      "joint": "left_knee",
+      "target_error_px": 18.04500943471435,
+      "independent_model_disagreement_px": null
+    },
+    {
+      "source_frame": 19,
+      "joint": "left_ankle",
+      "target_error_px": 4.306136839558542,
+      "independent_model_disagreement_px": null
+    },
+    {
+      "source_frame": 19,
+      "joint": "right_shoulder",
+      "target_error_px": 6.483684438974758,
+      "independent_model_disagreement_px": null
+    },
+    {
+      "source_frame": 19,
+      "joint": "right_elbow",
+      "target_error_px": 17.049560499046656,
+      "independent_model_disagreement_px": null
+    },
+    {
+      "source_frame": 19,
+      "joint": "right_wrist",
+      "target_error_px": 34.55639998827366,
+      "independent_model_disagreement_px": null
+    },
+    {
+      "source_frame": 19,
+      "joint": "right_hip",
+      "target_error_px": 10.954263302242115,
+      "independent_model_disagreement_px": null
+    },
+    {
+      "source_frame": 19,
+      "joint": "right_knee",
+      "target_error_px": 17.745292300099134,
+      "independent_model_disagreement_px": null
+    },
+    {
+      "source_frame": 19,
+      "joint": "right_ankle",
+      "target_error_px": 6.24972149278049,
+      "independent_model_disagreement_px": null
+    },
+    {
+      "source_frame": 21,
+      "joint": "left_shoulder",
+      "target_error_px": 9.956932647345932,
+      "independent_model_disagreement_px": null
+    },
+    {
+      "source_frame": 21,
+      "joint": "left_elbow",
+      "target_error_px": 5.692267040875888,
+      "independent_model_disagreement_px": null
+    },
+    {
+      "source_frame": 21,
+      "joint": "left_wrist",
+      "target_error_px": 19.557982324822568,
+      "independent_model_disagreement_px": null
+    },
+    {
+      "source_frame": 21,
+      "joint": "left_hip",
+      "target_error_px": 6.74534491342671,
+      "independent_model_disagreement_px": null
+    },
+    {
+      "source_frame": 21,
+      "joint": "left_knee",
+      "target_error_px": 17.886385986064926,
+      "independent_model_disagreement_px": null
+    },
+    {
+      "source_frame": 21,
+      "joint": "left_ankle",
+      "target_error_px": 4.422789209202767,
+      "independent_model_disagreement_px": null
+    },
+    {
+      "source_frame": 21,
+      "joint": "right_shoulder",
+      "target_error_px": 6.504190193400965,
+      "independent_model_disagreement_px": null
+    },
+    {
+      "source_frame": 21,
+      "joint": "right_elbow",
+      "target_error_px": 17.00053725654369,
+      "independent_model_disagreement_px": null
+    },
+    {
+      "source_frame": 21,
+      "joint": "right_wrist",
+      "target_error_px": 34.35627838974616,
+      "independent_model_disagreement_px": null
+    },
+    {
+      "source_frame": 21,
+      "joint": "right_hip",
+      "target_error_px": 10.771591595128822,
+      "independent_model_disagreement_px": null
+    },
+    {
+      "source_frame": 21,
+      "joint": "right_knee",
+      "target_error_px": 17.605820850698294,
+      "independent_model_disagreement_px": null
+    },
+    {
+      "source_frame": 21,
+      "joint": "right_ankle",
+      "target_error_px": 6.085429293402451,
+      "independent_model_disagreement_px": null
+    },
+    {
+      "source_frame": 23,
+      "joint": "left_shoulder",
+      "target_error_px": 11.360849464056972,
+      "independent_model_disagreement_px": 7.737913811190412
+    },
+    {
+      "source_frame": 23,
+      "joint": "left_elbow",
+      "target_error_px": 5.1766982250326885,
+      "independent_model_disagreement_px": 6.76569919680754
+    },
+    {
+      "source_frame": 23,
+      "joint": "left_wrist",
+      "target_error_px": 19.24194427819563,
+      "independent_model_disagreement_px": 6.277584185758598
+    },
+    {
+      "source_frame": 23,
+      "joint": "left_hip",
+      "target_error_px": 6.305455925272877,
+      "independent_model_disagreement_px": 18.452243649315978
+    },
+    {
+      "source_frame": 23,
+      "joint": "left_knee",
+      "target_error_px": 21.677768657448496,
+      "independent_model_disagreement_px": 3.674372382674085
+    },
+    {
+      "source_frame": 23,
+      "joint": "left_ankle",
+      "target_error_px": 7.374722846346123,
+      "independent_model_disagreement_px": 8.77069864373547
+    },
+    {
+      "source_frame": 23,
+      "joint": "right_shoulder",
+      "target_error_px": 9.959312068119663,
+      "independent_model_disagreement_px": 8.148820036794557
+    },
+    {
+      "source_frame": 23,
+      "joint": "right_elbow",
+      "target_error_px": 11.82057160781185,
+      "independent_model_disagreement_px": 3.2254594608111766
+    },
+    {
+      "source_frame": 23,
+      "joint": "right_wrist",
+      "target_error_px": 20.69083151693986,
+      "independent_model_disagreement_px": 4.134039404108519
+    },
+    {
+      "source_frame": 23,
+      "joint": "right_hip",
+      "target_error_px": 11.191066508810358,
+      "independent_model_disagreement_px": 20.97905086523708
+    },
+    {
+      "source_frame": 23,
+      "joint": "right_knee",
+      "target_error_px": 21.720174879772568,
+      "independent_model_disagreement_px": 4.592132899571764
+    },
+    {
+      "source_frame": 23,
+      "joint": "right_ankle",
+      "target_error_px": 0.5380932053367874,
+      "independent_model_disagreement_px": 4.604170855953141
+    },
+    {
+      "source_frame": 25,
+      "joint": "left_shoulder",
+      "target_error_px": 10.370941649044987,
+      "independent_model_disagreement_px": null
+    },
+    {
+      "source_frame": 25,
+      "joint": "left_elbow",
+      "target_error_px": 4.55671774308935,
+      "independent_model_disagreement_px": null
+    },
+    {
+      "source_frame": 25,
+      "joint": "left_wrist",
+      "target_error_px": 20.4755110808812,
+      "independent_model_disagreement_px": null
+    },
+    {
+      "source_frame": 25,
+      "joint": "left_hip",
+      "target_error_px": 6.245303615496994,
+      "independent_model_disagreement_px": null
+    },
+    {
+      "source_frame": 25,
+      "joint": "left_knee",
+      "target_error_px": 21.86532023299349,
+      "independent_model_disagreement_px": null
+    },
+    {
+      "source_frame": 25,
+      "joint": "left_ankle",
+      "target_error_px": 8.436860870319602,
+      "independent_model_disagreement_px": null
+    },
+    {
+      "source_frame": 25,
+      "joint": "right_shoulder",
+      "target_error_px": 9.139507047786068,
+      "independent_model_disagreement_px": null
+    },
+    {
+      "source_frame": 25,
+      "joint": "right_elbow",
+      "target_error_px": 15.081832998701664,
+      "independent_model_disagreement_px": null
+    },
+    {
+      "source_frame": 25,
+      "joint": "right_wrist",
+      "target_error_px": 28.442033493598608,
+      "independent_model_disagreement_px": null
+    },
+    {
+      "source_frame": 25,
+      "joint": "right_hip",
+      "target_error_px": 11.578263418749454,
+      "independent_model_disagreement_px": null
+    },
+    {
+      "source_frame": 25,
+      "joint": "right_knee",
+      "target_error_px": 22.0734163663314,
+      "independent_model_disagreement_px": null
+    },
+    {
+      "source_frame": 25,
+      "joint": "right_ankle",
+      "target_error_px": 4.384701697733314,
+      "independent_model_disagreement_px": null
+    },
+    {
+      "source_frame": 27,
+      "joint": "left_shoulder",
+      "target_error_px": 10.902081361487838,
+      "independent_model_disagreement_px": null
+    },
+    {
+      "source_frame": 27,
+      "joint": "left_elbow",
+      "target_error_px": 5.064215775800431,
+      "independent_model_disagreement_px": null
+    },
+    {
+      "source_frame": 27,
+      "joint": "left_wrist",
+      "target_error_px": 20.114938901870033,
+      "independent_model_disagreement_px": null
+    },
+    {
+      "source_frame": 27,
+      "joint": "left_hip",
+      "target_error_px": 6.699563836931632,
+      "independent_model_disagreement_px": null
+    },
+    {
+      "source_frame": 27,
+      "joint": "left_knee",
+      "target_error_px": 21.355827000158275,
+      "independent_model_disagreement_px": null
+    },
+    {
+      "source_frame": 27,
+      "joint": "left_ankle",
+      "target_error_px": 11.086631942549316,
+      "independent_model_disagreement_px": null
+    },
+    {
+      "source_frame": 27,
+      "joint": "right_shoulder",
+      "target_error_px": 9.72545404594347,
+      "independent_model_disagreement_px": null
+    },
+    {
+      "source_frame": 27,
+      "joint": "right_elbow",
+      "target_error_px": 12.320385497105852,
+      "independent_model_disagreement_px": null
+    },
+    {
+      "source_frame": 27,
+      "joint": "right_wrist",
+      "target_error_px": 23.786659257799705,
+      "independent_model_disagreement_px": null
+    },
+    {
+      "source_frame": 27,
+      "joint": "right_hip",
+      "target_error_px": 10.617906777470305,
+      "independent_model_disagreement_px": null
+    },
+    {
+      "source_frame": 27,
+      "joint": "right_knee",
+      "target_error_px": 21.9403760613596,
+      "independent_model_disagreement_px": null
+    },
+    {
+      "source_frame": 27,
+      "joint": "right_ankle",
+      "target_error_px": 3.9169994978550537,
+      "independent_model_disagreement_px": null
+    },
+    {
+      "source_frame": 29,
+      "joint": "left_shoulder",
+      "target_error_px": 11.866097387660359,
+      "independent_model_disagreement_px": 7.949106855833794
+    },
+    {
+      "source_frame": 29,
+      "joint": "left_elbow",
+      "target_error_px": 2.7405877656125734,
+      "independent_model_disagreement_px": 8.11370982155461
+    },
+    {
+      "source_frame": 29,
+      "joint": "left_wrist",
+      "target_error_px": 17.5479972258138,
+      "independent_model_disagreement_px": 5.263776851648708
+    },
+    {
+      "source_frame": 29,
+      "joint": "left_hip",
+      "target_error_px": 8.12001187153864,
+      "independent_model_disagreement_px": 7.271702670284946
+    },
+    {
+      "source_frame": 29,
+      "joint": "left_knee",
+      "target_error_px": 30.663369455536277,
+      "independent_model_disagreement_px": 5.9781225240740055
+    },
+    {
+      "source_frame": 29,
+      "joint": "left_ankle",
+      "target_error_px": 23.69676539662478,
+      "independent_model_disagreement_px": 3.926556156332992
+    },
+    {
+      "source_frame": 29,
+      "joint": "right_shoulder",
+      "target_error_px": 10.67438831026981,
+      "independent_model_disagreement_px": 12.471684825461113
+    },
+    {
+      "source_frame": 29,
+      "joint": "right_elbow",
+      "target_error_px": 17.222885241340936,
+      "independent_model_disagreement_px": 10.343946900394846
+    },
+    {
+      "source_frame": 29,
+      "joint": "right_wrist",
+      "target_error_px": 38.30140472560131,
+      "independent_model_disagreement_px": 9.393947649221142
+    },
+    {
+      "source_frame": 29,
+      "joint": "right_hip",
+      "target_error_px": 9.903556520811382,
+      "independent_model_disagreement_px": 8.38867003349819
+    },
+    {
+      "source_frame": 29,
+      "joint": "right_knee",
+      "target_error_px": 24.033412609376335,
+      "independent_model_disagreement_px": 10.631646549645136
+    },
+    {
+      "source_frame": 29,
+      "joint": "right_ankle",
+      "target_error_px": 26.76187557362816,
+      "independent_model_disagreement_px": 2.510451248402923
+    },
+    {
+      "source_frame": 31,
+      "joint": "left_shoulder",
+      "target_error_px": 9.051349241273257,
+      "independent_model_disagreement_px": null
+    },
+    {
+      "source_frame": 31,
+      "joint": "left_elbow",
+      "target_error_px": 12.513242410958087,
+      "independent_model_disagreement_px": null
+    },
+    {
+      "source_frame": 31,
+      "joint": "left_wrist",
+      "target_error_px": 21.89879599619844,
+      "independent_model_disagreement_px": null
+    },
+    {
+      "source_frame": 31,
+      "joint": "left_hip",
+      "target_error_px": 7.773158655081408,
+      "independent_model_disagreement_px": null
+    },
+    {
+      "source_frame": 31,
+      "joint": "left_knee",
+      "target_error_px": 28.751218552520665,
+      "independent_model_disagreement_px": null
+    },
+    {
+      "source_frame": 31,
+      "joint": "left_ankle",
+      "target_error_px": 23.229710349549507,
+      "independent_model_disagreement_px": null
+    },
+    {
+      "source_frame": 31,
+      "joint": "right_shoulder",
+      "target_error_px": 9.327321506355405,
+      "independent_model_disagreement_px": null
+    },
+    {
+      "source_frame": 31,
+      "joint": "right_elbow",
+      "target_error_px": 11.897596016314433,
+      "independent_model_disagreement_px": null
+    },
+    {
+      "source_frame": 31,
+      "joint": "right_wrist",
+      "target_error_px": 23.08268015435771,
+      "independent_model_disagreement_px": null
+    },
+    {
+      "source_frame": 31,
+      "joint": "right_hip",
+      "target_error_px": 10.65507002184315,
+      "independent_model_disagreement_px": null
+    },
+    {
+      "source_frame": 31,
+      "joint": "right_knee",
+      "target_error_px": 24.78946479272384,
+      "independent_model_disagreement_px": null
+    },
+    {
+      "source_frame": 31,
+      "joint": "right_ankle",
+      "target_error_px": 27.420528203602984,
+      "independent_model_disagreement_px": null
+    },
+    {
+      "source_frame": 33,
+      "joint": "left_shoulder",
+      "target_error_px": 11.14151205283082,
+      "independent_model_disagreement_px": null
+    },
+    {
+      "source_frame": 33,
+      "joint": "left_elbow",
+      "target_error_px": 11.084886605430086,
+      "independent_model_disagreement_px": null
+    },
+    {
+      "source_frame": 33,
+      "joint": "left_wrist",
+      "target_error_px": 19.87180680336558,
+      "independent_model_disagreement_px": null
+    },
+    {
+      "source_frame": 33,
+      "joint": "left_hip",
+      "target_error_px": 7.3677944014193315,
+      "independent_model_disagreement_px": null
+    },
+    {
+      "source_frame": 33,
+      "joint": "left_knee",
+      "target_error_px": 27.98717988384248,
+      "independent_model_disagreement_px": null
+    },
+    {
+      "source_frame": 33,
+      "joint": "left_ankle",
+      "target_error_px": 24.50966580944453,
+      "independent_model_disagreement_px": null
+    },
+    {
+      "source_frame": 33,
+      "joint": "right_shoulder",
+      "target_error_px": 9.522179246996124,
+      "independent_model_disagreement_px": null
+    },
+    {
+      "source_frame": 33,
+      "joint": "right_elbow",
+      "target_error_px": 10.143556819957345,
+      "independent_model_disagreement_px": null
+    },
+    {
+      "source_frame": 33,
+      "joint": "right_wrist",
+      "target_error_px": 20.64365937691945,
+      "independent_model_disagreement_px": null
+    },
+    {
+      "source_frame": 33,
+      "joint": "right_hip",
+      "target_error_px": 11.607646354664034,
+      "independent_model_disagreement_px": null
+    },
+    {
+      "source_frame": 33,
+      "joint": "right_knee",
+      "target_error_px": 27.421485817985396,
+      "independent_model_disagreement_px": null
+    },
+    {
+      "source_frame": 33,
+      "joint": "right_ankle",
+      "target_error_px": 28.40786048356751,
+      "independent_model_disagreement_px": null
+    },
+    {
+      "source_frame": 35,
+      "joint": "left_shoulder",
+      "target_error_px": 6.390394009061597,
+      "independent_model_disagreement_px": null
+    },
+    {
+      "source_frame": 35,
+      "joint": "left_elbow",
+      "target_error_px": 7.547185169722187,
+      "independent_model_disagreement_px": null
+    },
+    {
+      "source_frame": 35,
+      "joint": "left_wrist",
+      "target_error_px": 26.493147152921473,
+      "independent_model_disagreement_px": null
+    },
+    {
+      "source_frame": 35,
+      "joint": "left_hip",
+      "target_error_px": 6.250178192015624,
+      "independent_model_disagreement_px": null
+    },
+    {
+      "source_frame": 35,
+      "joint": "left_knee",
+      "target_error_px": 30.253073997942465,
+      "independent_model_disagreement_px": null
+    },
+    {
+      "source_frame": 35,
+      "joint": "left_ankle",
+      "target_error_px": 16.144197376548572,
+      "independent_model_disagreement_px": null
+    },
+    {
+      "source_frame": 35,
+      "joint": "right_shoulder",
+      "target_error_px": 10.318998739723611,
+      "independent_model_disagreement_px": null
+    },
+    {
+      "source_frame": 35,
+      "joint": "right_elbow",
+      "target_error_px": 10.63576206496072,
+      "independent_model_disagreement_px": null
+    },
+    {
+      "source_frame": 35,
+      "joint": "right_wrist",
+      "target_error_px": 3.5820998934885493,
+      "independent_model_disagreement_px": null
+    },
+    {
+      "source_frame": 35,
+      "joint": "right_hip",
+      "target_error_px": 10.144778365325418,
+      "independent_model_disagreement_px": null
+    },
+    {
+      "source_frame": 35,
+      "joint": "right_knee",
+      "target_error_px": 30.969071907614858,
+      "independent_model_disagreement_px": null
+    },
+    {
+      "source_frame": 35,
+      "joint": "right_ankle",
+      "target_error_px": 23.848955720015574,
+      "independent_model_disagreement_px": null
+    },
+    {
+      "source_frame": 37,
+      "joint": "left_shoulder",
+      "target_error_px": 12.228454545558069,
+      "independent_model_disagreement_px": null
+    },
+    {
+      "source_frame": 37,
+      "joint": "left_elbow",
+      "target_error_px": 4.210121446401828,
+      "independent_model_disagreement_px": null
+    },
+    {
+      "source_frame": 37,
+      "joint": "left_wrist",
+      "target_error_px": 16.005291170991235,
+      "independent_model_disagreement_px": null
+    },
+    {
+      "source_frame": 37,
+      "joint": "left_hip",
+      "target_error_px": 3.3761805885694187,
+      "independent_model_disagreement_px": null
+    },
+    {
+      "source_frame": 37,
+      "joint": "left_knee",
+      "target_error_px": 19.814339495512538,
+      "independent_model_disagreement_px": null
+    },
+    {
+      "source_frame": 37,
+      "joint": "left_ankle",
+      "target_error_px": 6.36401524531745,
+      "independent_model_disagreement_px": null
+    },
+    {
+      "source_frame": 37,
+      "joint": "right_shoulder",
+      "target_error_px": 12.274627576745965,
+      "independent_model_disagreement_px": null
+    },
+    {
+      "source_frame": 37,
+      "joint": "right_elbow",
+      "target_error_px": 10.571679593454643,
+      "independent_model_disagreement_px": null
+    },
+    {
+      "source_frame": 37,
+      "joint": "right_wrist",
+      "target_error_px": 6.705278726746805,
+      "independent_model_disagreement_px": null
+    },
+    {
+      "source_frame": 37,
+      "joint": "right_hip",
+      "target_error_px": 14.091232077451147,
+      "independent_model_disagreement_px": null
+    },
+    {
+      "source_frame": 37,
+      "joint": "right_knee",
+      "target_error_px": 31.633843994038802,
+      "independent_model_disagreement_px": null
+    },
+    {
+      "source_frame": 37,
+      "joint": "right_ankle",
+      "target_error_px": 24.159044198704006,
+      "independent_model_disagreement_px": null
+    },
+    {
+      "source_frame": 39,
+      "joint": "left_shoulder",
+      "target_error_px": 6.264521199135484,
+      "independent_model_disagreement_px": null
+    },
+    {
+      "source_frame": 39,
+      "joint": "left_elbow",
+      "target_error_px": 10.971366146226007,
+      "independent_model_disagreement_px": null
+    },
+    {
+      "source_frame": 39,
+      "joint": "left_wrist",
+      "target_error_px": 9.046274578074684,
+      "independent_model_disagreement_px": null
+    },
+    {
+      "source_frame": 39,
+      "joint": "left_hip",
+      "target_error_px": 7.293238928708028,
+      "independent_model_disagreement_px": null
+    },
+    {
+      "source_frame": 39,
+      "joint": "left_knee",
+      "target_error_px": 23.0160449490363,
+      "independent_model_disagreement_px": null
+    },
+    {
+      "source_frame": 39,
+      "joint": "left_ankle",
+      "target_error_px": 12.107045964296985,
+      "independent_model_disagreement_px": null
+    },
+    {
+      "source_frame": 39,
+      "joint": "right_shoulder",
+      "target_error_px": 11.681050003611714,
+      "independent_model_disagreement_px": null
+    },
+    {
+      "source_frame": 39,
+      "joint": "right_elbow",
+      "target_error_px": 6.137518164345435,
+      "independent_model_disagreement_px": null
+    },
+    {
+      "source_frame": 39,
+      "joint": "right_wrist",
+      "target_error_px": 12.800720898394358,
+      "independent_model_disagreement_px": null
+    },
+    {
+      "source_frame": 39,
+      "joint": "right_hip",
+      "target_error_px": 8.721712342197094,
+      "independent_model_disagreement_px": null
+    },
+    {
+      "source_frame": 39,
+      "joint": "right_knee",
+      "target_error_px": 29.134363316845157,
+      "independent_model_disagreement_px": null
+    },
+    {
+      "source_frame": 39,
+      "joint": "right_ankle",
+      "target_error_px": 21.519915780404187,
+      "independent_model_disagreement_px": null
+    },
+    {
+      "source_frame": 41,
+      "joint": "left_shoulder",
+      "target_error_px": 9.989467412892123,
+      "independent_model_disagreement_px": 2.5102874076677963
+    },
+    {
+      "source_frame": 41,
+      "joint": "left_elbow",
+      "target_error_px": 15.734739749838948,
+      "independent_model_disagreement_px": 7.084244487868839
+    },
+    {
+      "source_frame": 41,
+      "joint": "left_wrist",
+      "target_error_px": 12.667491055608487,
+      "independent_model_disagreement_px": 6.569590969659702
+    },
+    {
+      "source_frame": 41,
+      "joint": "left_hip",
+      "target_error_px": 4.390629075303196,
+      "independent_model_disagreement_px": 9.423767100247305
+    },
+    {
+      "source_frame": 41,
+      "joint": "left_knee",
+      "target_error_px": 24.887893045683914,
+      "independent_model_disagreement_px": 8.568411786022468
+    },
+    {
+      "source_frame": 41,
+      "joint": "left_ankle",
+      "target_error_px": 18.331920794827273,
+      "independent_model_disagreement_px": 9.002401088053904
+    },
+    {
+      "source_frame": 41,
+      "joint": "right_shoulder",
+      "target_error_px": 11.642383925134537,
+      "independent_model_disagreement_px": 9.838701961061325
+    },
+    {
+      "source_frame": 41,
+      "joint": "right_elbow",
+      "target_error_px": 6.656310632926013,
+      "independent_model_disagreement_px": 3.055373990787601
+    },
+    {
+      "source_frame": 41,
+      "joint": "right_wrist",
+      "target_error_px": 12.912896731574648,
+      "independent_model_disagreement_px": 3.684610867043915
+    },
+    {
+      "source_frame": 41,
+      "joint": "right_hip",
+      "target_error_px": 9.64808852229415,
+      "independent_model_disagreement_px": 12.885474431723852
+    },
+    {
+      "source_frame": 41,
+      "joint": "right_knee",
+      "target_error_px": 29.608722008539214,
+      "independent_model_disagreement_px": 11.557498363299732
+    },
+    {
+      "source_frame": 41,
+      "joint": "right_ankle",
+      "target_error_px": 25.264856443241584,
+      "independent_model_disagreement_px": 13.873038597913556
+    },
+    {
+      "source_frame": 43,
+      "joint": "left_shoulder",
+      "target_error_px": 17.505902287810564,
+      "independent_model_disagreement_px": null
+    },
+    {
+      "source_frame": 43,
+      "joint": "left_elbow",
+      "target_error_px": 13.324393774071483,
+      "independent_model_disagreement_px": null
+    },
+    {
+      "source_frame": 43,
+      "joint": "left_wrist",
+      "target_error_px": 22.09979400463897,
+      "independent_model_disagreement_px": null
+    },
+    {
+      "source_frame": 43,
+      "joint": "left_hip",
+      "target_error_px": 1.0889604666849593,
+      "independent_model_disagreement_px": null
+    },
+    {
+      "source_frame": 43,
+      "joint": "left_knee",
+      "target_error_px": 26.04257163177959,
+      "independent_model_disagreement_px": null
+    },
+    {
+      "source_frame": 43,
+      "joint": "left_ankle",
+      "target_error_px": 13.660963407741189,
+      "independent_model_disagreement_px": null
+    },
+    {
+      "source_frame": 43,
+      "joint": "right_shoulder",
+      "target_error_px": 4.929596214923342,
+      "independent_model_disagreement_px": null
+    },
+    {
+      "source_frame": 43,
+      "joint": "right_elbow",
+      "target_error_px": 9.121733858096231,
+      "independent_model_disagreement_px": null
+    },
+    {
+      "source_frame": 43,
+      "joint": "right_wrist",
+      "target_error_px": 7.6175421466698525,
+      "independent_model_disagreement_px": null
+    },
+    {
+      "source_frame": 43,
+      "joint": "right_hip",
+      "target_error_px": 10.625257394615167,
+      "independent_model_disagreement_px": null
+    },
+    {
+      "source_frame": 43,
+      "joint": "right_knee",
+      "target_error_px": 28.23887909454267,
+      "independent_model_disagreement_px": null
+    },
+    {
+      "source_frame": 43,
+      "joint": "right_ankle",
+      "target_error_px": 27.702163622788976,
+      "independent_model_disagreement_px": null
+    },
+    {
+      "source_frame": 45,
+      "joint": "left_shoulder",
+      "target_error_px": 27.116164483354524,
+      "independent_model_disagreement_px": null
+    },
+    {
+      "source_frame": 45,
+      "joint": "left_elbow",
+      "target_error_px": 17.516536777549224,
+      "independent_model_disagreement_px": null
+    },
+    {
+      "source_frame": 45,
+      "joint": "left_wrist",
+      "target_error_px": 20.567728251383,
+      "independent_model_disagreement_px": null
+    },
+    {
+      "source_frame": 45,
+      "joint": "left_hip",
+      "target_error_px": 13.523783862352749,
+      "independent_model_disagreement_px": null
+    },
+    {
+      "source_frame": 45,
+      "joint": "left_knee",
+      "target_error_px": 28.11037885276669,
+      "independent_model_disagreement_px": null
+    },
+    {
+      "source_frame": 45,
+      "joint": "left_ankle",
+      "target_error_px": 20.892513060013524,
+      "independent_model_disagreement_px": null
+    },
+    {
+      "source_frame": 45,
+      "joint": "right_shoulder",
+      "target_error_px": 15.66464775590263,
+      "independent_model_disagreement_px": null
+    },
+    {
+      "source_frame": 45,
+      "joint": "right_elbow",
+      "target_error_px": 6.978895056161392,
+      "independent_model_disagreement_px": null
+    },
+    {
+      "source_frame": 45,
+      "joint": "right_wrist",
+      "target_error_px": 12.42992293369212,
+      "independent_model_disagreement_px": null
+    },
+    {
+      "source_frame": 45,
+      "joint": "right_hip",
+      "target_error_px": 17.157102987573722,
+      "independent_model_disagreement_px": null
+    },
+    {
+      "source_frame": 45,
+      "joint": "right_knee",
+      "target_error_px": 39.54386985653652,
+      "independent_model_disagreement_px": null
+    },
+    {
+      "source_frame": 45,
+      "joint": "right_ankle",
+      "target_error_px": 35.51759160351189,
+      "independent_model_disagreement_px": null
+    },
+    {
+      "source_frame": 47,
+      "joint": "left_shoulder",
+      "target_error_px": 25.897663466136,
+      "independent_model_disagreement_px": null
+    },
+    {
+      "source_frame": 47,
+      "joint": "left_elbow",
+      "target_error_px": 22.60116440595002,
+      "independent_model_disagreement_px": null
+    },
+    {
+      "source_frame": 47,
+      "joint": "left_wrist",
+      "target_error_px": 29.986978935908727,
+      "independent_model_disagreement_px": null
+    },
+    {
+      "source_frame": 47,
+      "joint": "left_hip",
+      "target_error_px": 12.38049220677597,
+      "independent_model_disagreement_px": null
+    },
+    {
+      "source_frame": 47,
+      "joint": "left_knee",
+      "target_error_px": 31.148830667888536,
+      "independent_model_disagreement_px": null
+    },
+    {
+      "source_frame": 47,
+      "joint": "left_ankle",
+      "target_error_px": 21.292096511921578,
+      "independent_model_disagreement_px": null
+    },
+    {
+      "source_frame": 47,
+      "joint": "right_shoulder",
+      "target_error_px": 14.319483345842658,
+      "independent_model_disagreement_px": null
+    },
+    {
+      "source_frame": 47,
+      "joint": "right_elbow",
+      "target_error_px": 9.78490845622987,
+      "independent_model_disagreement_px": null
+    },
+    {
+      "source_frame": 47,
+      "joint": "right_wrist",
+      "target_error_px": 21.408057165541585,
+      "independent_model_disagreement_px": null
+    },
+    {
+      "source_frame": 47,
+      "joint": "right_hip",
+      "target_error_px": 16.82968302135345,
+      "independent_model_disagreement_px": null
+    },
+    {
+      "source_frame": 47,
+      "joint": "right_knee",
+      "target_error_px": 35.81320791710177,
+      "independent_model_disagreement_px": null
+    },
+    {
+      "source_frame": 47,
+      "joint": "right_ankle",
+      "target_error_px": 38.188722607769776,
+      "independent_model_disagreement_px": null
+    },
+    {
+      "source_frame": 49,
+      "joint": "left_shoulder",
+      "target_error_px": 32.9497925375589,
+      "independent_model_disagreement_px": null
+    },
+    {
+      "source_frame": 49,
+      "joint": "left_elbow",
+      "target_error_px": 39.36245319097716,
+      "independent_model_disagreement_px": null
+    },
+    {
+      "source_frame": 49,
+      "joint": "left_wrist",
+      "target_error_px": 44.790886744984505,
+      "independent_model_disagreement_px": null
+    },
+    {
+      "source_frame": 49,
+      "joint": "left_hip",
+      "target_error_px": 17.771769340784193,
+      "independent_model_disagreement_px": null
+    },
+    {
+      "source_frame": 49,
+      "joint": "left_knee",
+      "target_error_px": 35.25187950058182,
+      "independent_model_disagreement_px": null
+    },
+    {
+      "source_frame": 49,
+      "joint": "left_ankle",
+      "target_error_px": 12.513197414712605,
+      "independent_model_disagreement_px": null
+    },
+    {
+      "source_frame": 49,
+      "joint": "right_shoulder",
+      "target_error_px": 25.381824692342597,
+      "independent_model_disagreement_px": null
+    },
+    {
+      "source_frame": 49,
+      "joint": "right_elbow",
+      "target_error_px": 40.92024645799042,
+      "independent_model_disagreement_px": null
+    },
+    {
+      "source_frame": 49,
+      "joint": "right_wrist",
+      "target_error_px": 51.863776462669314,
+      "independent_model_disagreement_px": null
+    },
+    {
+      "source_frame": 49,
+      "joint": "right_hip",
+      "target_error_px": 23.478009704396104,
+      "independent_model_disagreement_px": null
+    },
+    {
+      "source_frame": 49,
+      "joint": "right_knee",
+      "target_error_px": 35.60388214755937,
+      "independent_model_disagreement_px": null
+    },
+    {
+      "source_frame": 49,
+      "joint": "right_ankle",
+      "target_error_px": 37.934535988864006,
+      "independent_model_disagreement_px": null
+    },
+    {
+      "source_frame": 51,
+      "joint": "left_shoulder",
+      "target_error_px": 31.2505229001628,
+      "independent_model_disagreement_px": null
+    },
+    {
+      "source_frame": 51,
+      "joint": "left_elbow",
+      "target_error_px": 38.161178280613655,
+      "independent_model_disagreement_px": null
+    },
+    {
+      "source_frame": 51,
+      "joint": "left_wrist",
+      "target_error_px": 45.48730389141494,
+      "independent_model_disagreement_px": null
+    },
+    {
+      "source_frame": 51,
+      "joint": "left_hip",
+      "target_error_px": 14.806103249453892,
+      "independent_model_disagreement_px": null
+    },
+    {
+      "source_frame": 51,
+      "joint": "left_knee",
+      "target_error_px": 35.753663874096354,
+      "independent_model_disagreement_px": null
+    },
+    {
+      "source_frame": 51,
+      "joint": "left_ankle",
+      "target_error_px": 13.077766568445234,
+      "independent_model_disagreement_px": null
+    },
+    {
+      "source_frame": 51,
+      "joint": "right_shoulder",
+      "target_error_px": 22.364958324894605,
+      "independent_model_disagreement_px": null
+    },
+    {
+      "source_frame": 51,
+      "joint": "right_elbow",
+      "target_error_px": 37.26912508544878,
+      "independent_model_disagreement_px": null
+    },
+    {
+      "source_frame": 51,
+      "joint": "right_wrist",
+      "target_error_px": 52.514929841579836,
+      "independent_model_disagreement_px": null
+    },
+    {
+      "source_frame": 51,
+      "joint": "right_hip",
+      "target_error_px": 20.763787267453523,
+      "independent_model_disagreement_px": null
+    },
+    {
+      "source_frame": 51,
+      "joint": "right_knee",
+      "target_error_px": 31.457980463672296,
+      "independent_model_disagreement_px": null
+    },
+    {
+      "source_frame": 51,
+      "joint": "right_ankle",
+      "target_error_px": 34.06159298589464,
+      "independent_model_disagreement_px": null
+    },
+    {
+      "source_frame": 53,
+      "joint": "left_shoulder",
+      "target_error_px": 32.16125317749179,
+      "independent_model_disagreement_px": null
+    },
+    {
+      "source_frame": 53,
+      "joint": "left_elbow",
+      "target_error_px": 35.34649209063687,
+      "independent_model_disagreement_px": null
+    },
+    {
+      "source_frame": 53,
+      "joint": "left_wrist",
+      "target_error_px": 45.43019625496288,
+      "independent_model_disagreement_px": null
+    },
+    {
+      "source_frame": 53,
+      "joint": "left_hip",
+      "target_error_px": 18.041005917044377,
+      "independent_model_disagreement_px": null
+    },
+    {
+      "source_frame": 53,
+      "joint": "left_knee",
+      "target_error_px": 38.13455057813631,
+      "independent_model_disagreement_px": null
+    },
+    {
+      "source_frame": 53,
+      "joint": "left_ankle",
+      "target_error_px": 15.284853665016398,
+      "independent_model_disagreement_px": null
+    },
+    {
+      "source_frame": 53,
+      "joint": "right_shoulder",
+      "target_error_px": 25.24771087743336,
+      "independent_model_disagreement_px": null
+    },
+    {
+      "source_frame": 53,
+      "joint": "right_elbow",
+      "target_error_px": 37.70702242632728,
+      "independent_model_disagreement_px": null
+    },
+    {
+      "source_frame": 53,
+      "joint": "right_wrist",
+      "target_error_px": 51.008137376007035,
+      "independent_model_disagreement_px": null
+    },
+    {
+      "source_frame": 53,
+      "joint": "right_hip",
+      "target_error_px": 23.140152131303033,
+      "independent_model_disagreement_px": null
+    },
+    {
+      "source_frame": 53,
+      "joint": "right_knee",
+      "target_error_px": 37.16798350024814,
+      "independent_model_disagreement_px": null
+    },
+    {
+      "source_frame": 53,
+      "joint": "right_ankle",
+      "target_error_px": 37.5011710998692,
+      "independent_model_disagreement_px": null
+    },
+    {
+      "source_frame": 55,
+      "joint": "left_shoulder",
+      "target_error_px": 30.356187782283676,
+      "independent_model_disagreement_px": 14.424328684345692
+    },
+    {
+      "source_frame": 55,
+      "joint": "left_elbow",
+      "target_error_px": 30.85672751797985,
+      "independent_model_disagreement_px": 11.715654169045225
+    },
+    {
+      "source_frame": 55,
+      "joint": "left_wrist",
+      "target_error_px": 38.43815098438683,
+      "independent_model_disagreement_px": 6.962782027129122
+    },
+    {
+      "source_frame": 55,
+      "joint": "left_hip",
+      "target_error_px": 17.587949951424086,
+      "independent_model_disagreement_px": 23.816959397520844
+    },
+    {
+      "source_frame": 55,
+      "joint": "left_knee",
+      "target_error_px": 37.47194302539266,
+      "independent_model_disagreement_px": 16.288816618940345
+    },
+    {
+      "source_frame": 55,
+      "joint": "left_ankle",
+      "target_error_px": 17.89622894624113,
+      "independent_model_disagreement_px": 1.6260271617405013
+    },
+    {
+      "source_frame": 55,
+      "joint": "right_shoulder",
+      "target_error_px": 24.431963384701284,
+      "independent_model_disagreement_px": 2.855848109558247
+    },
+    {
+      "source_frame": 55,
+      "joint": "right_elbow",
+      "target_error_px": 35.9731319793441,
+      "independent_model_disagreement_px": 4.0625021594505055
+    },
+    {
+      "source_frame": 55,
+      "joint": "right_wrist",
+      "target_error_px": 48.86174512263483,
+      "independent_model_disagreement_px": 7.258403821088547
+    },
+    {
+      "source_frame": 55,
+      "joint": "right_hip",
+      "target_error_px": 22.264545749843,
+      "independent_model_disagreement_px": 21.043148951316304
+    },
+    {
+      "source_frame": 55,
+      "joint": "right_knee",
+      "target_error_px": 37.869224555493155,
+      "independent_model_disagreement_px": 5.608506039822121
+    },
+    {
+      "source_frame": 55,
+      "joint": "right_ankle",
+      "target_error_px": 35.996345346086514,
+      "independent_model_disagreement_px": 4.447855385973371
+    }
+  ],
+  "limits": [
+    "Target errors compare MediaPipe estimates to target projection",
+    "RTMPose disagreement is not truth",
+    "Frame197 should not be generalized",
+    "No production changes"
+  ]
+}

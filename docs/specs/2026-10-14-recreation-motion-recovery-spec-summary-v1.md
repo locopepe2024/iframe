@@ -147,3 +147,5 @@
 - 2026-10-26二维鞋底代理投影对照：media Blender将目标 ankle/foot/toe/固定patch投影到640×360，与源 heel/foot-index中点缩放代理比较。支持侧patch误差源17/23/29为25.98/20.80/37.13px，源41/55为30.46/37.43px；支持入口吸收初始平移后，left段剩余偏差中位/最大6.54/11.33px，right段15.75/31.51px。源二维代理不与固定mesh patch稳定同点对应；不能用静态鞋底偏移或单一IK目标修复，主链路未改。[报告](../agents/deliverables/2026-10-26-recreation2-patch-projection-vs-source-sole-v1.md)
 
 - 2026-10-26源可见鞋下缘阈值敏感性：对事件帧鞋部ROI测试四个亮度阈值，最低候选y范围在不同脚/帧为3–57px；反射、地面亮线和鞋体连通关系会改变最低点。亮度分割不能稳定生成源接触容差带，未升级为二维锁脚证据；主链路未改。[报告](../agents/deliverables/2026-10-26-recreation2-source-shoe-edge-candidate-v1.md)
+
+- 2026-10-27姿势提取风险图：汇总root/yaw目标投影与RTMPose-M独立对照，双膝目标误差中位/P95 26.12/37.47px，为稳定最大组；双腕19.01/48.86px、双踝17.21/36.00px。第197帧为独立局部崩溃（模型整体分歧91.90px，膝130.49/99.99、腕102.85/131.91px），不可推广全段。下一步应做膝部可见区域标注与固定骨长/pole/深度专项对照，不再只调鞋底；主链路未改。[风险图](../agents/deliverables/2026-10-27-recreation2-pose-extraction-risk-map-v1.md)
