@@ -1,0 +1,82 @@
+{
+  "schema_version": 1,
+  "package_type": "action_reference_generation",
+  "status": "draft",
+  "move_ref": "suyan.sword.disarm_sweep.v1",
+  "label": "抽击·剑鞭拨械",
+  "duration_seconds": 4.0,
+  "aspect_ratio": "16:9",
+  "subject_policy": "neutral performer; do not transfer identity, face, costume, scene, dialogue, or original sound from references",
+  "storyboard_alignment": [
+    {"cell": 1, "stage": "starting_pose_and_initiation", "description": "Grip the sword with the wrist and sword approximately level; begin a fast forward entry."},
+    {"cell": 2, "stage": "tip_approach", "description": "Bring the sword tip close to the partner's wrist or forearm before the lateral whip action."},
+    {"cell": 3, "stage": "wrist_snap_and_blade_flex", "description": "Show a clear sideways wrist snap; the blade bends laterally under load with visible elastic deformation."},
+    {"cell": 4, "stage": "controlled_contact_reaction_recovery", "description": "Make one controlled contact, show force-direction displacement, then let the blade rebound into recovery."}
+  ],
+  "reference_media": [
+    {
+      "path": "/Users/owen/Developer/codex/wuda/独孤九剑_徐克_2.mp4",
+      "media_type": "video",
+      "uses": ["action_choreography", "rhythm", "impact_timing", "weapon_trajectory", "camera_movement"],
+      "observed_metadata": {"duration_seconds": 69.327483, "fps": 30, "width": 1280, "height": 720},
+      "evidence_limits": ["高密度采样可见普通剑路、兵器交错和镜头跟随，但未确认手腕持续横向发力、接触负载导致的剑身浅C形侧弯和形变回弹的完整柔性形变链。", "不得把运动模糊、剑光残影或剪辑切换当作剑身弹性证据。"]
+    },
+    {
+      "path": "/Users/owen/Developer/codex/wuda/独孤九剑_徐克版_超燃混剪.mp4",
+      "media_type": "video",
+      "uses": ["action_choreography", "rhythm", "weapon_trajectory", "camera_movement"],
+      "observed_metadata": {"duration_seconds": 94.133061, "fps": 30, "width": 1280, "height": 720},
+      "evidence_limits": ["混剪包含大量切镜、运动模糊和视觉特效；可用于节奏、攻防关系和镜头路径，不能作为柔性剑身形变的直接证据。"]
+    },
+    {
+      "path": "/Users/owen/Developer/codex/wuda/剑花基础教学.mp4",
+      "media_type": "video",
+      "uses": ["action_choreography", "rhythm", "weapon_trajectory"],
+      "observed_metadata": {"duration_seconds": 19.410000, "fps": 30, "width": 576, "height": 1024},
+      "observed_content": "竖屏夜间教学；画面文字分段示范平落、内旋、体前画立圆、身后画立圆、内腕花、内外腕花与外腕花。可见单人持剑，以腕部和前臂带动剑身连续画圆，剑尖沿圆弧运行，剑身与末端挂件出现明显滞后、摆动和回弹。",
+      "evidence_limits": ["这是剑花教学，不是抽击·剑鞭拨械；教学段没有对手、拨械接触或受击反应，不能证明抽击的命中时机或拨械结果。", "画面为固定教学机位，不能作为复杂运镜参考。"]
+    },
+    {
+      "path": "/Users/owen/Developer/codex/wuda/独孤九剑_2.mp4",
+      "media_type": "video",
+      "uses": ["action_choreography", "rhythm", "impact_timing", "weapon_trajectory", "camera_movement"],
+      "observed_metadata": {"duration_seconds": 37.940998, "fps": 60, "width": 4320, "height": 2160},
+      "observed_content": "横屏高帧率电影动作混剪；包含近景兵器交错、多人攻防、身体闪避、腾挪与击退，剪辑在近身接触、武器轨迹和受击反应处频繁切换，能提供动作节拍、接触后的位移和镜头跟随方向参考。",
+      "evidence_limits": ["这是混剪，不能把采样帧当作连续单镜头或精确切点。", "采样中未确认手腕持续横向发力、接触负载导致的剑身浅C形侧弯和形变回弹的完整柔性形变链。", "未将影片人物、服装、场景、对白、字幕或音乐转移到生成提示词。"]
+    },
+    {
+      "path": "/Users/owen/Developer/codex/wuda/缠身剑花.mp4",
+      "media_type": "video",
+      "uses": ["action_choreography", "rhythm", "weapon_trajectory"],
+      "observed_metadata": {"duration_seconds": 47.933333, "fps": 30, "width": 576, "height": 1024},
+      "observed_content": "竖屏户外教学；先示范背剑转身、外腕花、转身接续和多段剑花连接，再把动作连续串联并提高速度。剑身围绕身体前侧、侧后方和上方改变方向，手腕翻转与身体转向同步，剑尖画出连续圆弧与回环。",
+      "evidence_limits": ["这是缠身剑花教学，不是抽击·剑鞭拨械；主体为单人教学，没有对手、命中或拨械结果，不能直接作为受击时机参考。", "教学字幕和示范节奏属于原视频内容，生成时只提取动作机制。"]
+    }
+  ],
+  "action_contract": {
+    "actor": "one neutral adult sword performer",
+    "target": "one neutral training partner with a padded wrist/forearm target or a controlled weapon hand",
+    "weapon": "high-flex sword or whip-sword with visible blade-body flexibility",
+    "starting_state": "medium distance, sword held in front, the partner's wrist or forearm visible across the center line",
+    "beats": [
+      {"id": "approach", "window": [0.0, 0.7], "description": "normal speed or slight acceleration; front foot enters and the performer sends the sword tip toward the partner's wrist or forearm"},
+      {"id": "tip_alignment", "window": [0.7, 1.2], "description": "the sword tip reaches the controlled contact area without becoming a straight thrust; the target remains readable"},
+      {"id": "wrist_snap", "window": [1.2, 1.7], "description": "the wrist and forearm snap sideways like a whip, producing visible lateral elastic deformation through the flexible blade"},
+      {"id": "controlled_contact", "window": [1.7, 2.2], "description": "the bending blade makes one controlled contact on the padded wrist/forearm or weapon hand; the arm or weapon shifts along the force direction"},
+      {"id": "recovery", "window": [2.2, 4.0], "description": "the blade rebounds and is controlled; the performer faces the target in a ready recovery without adding a second strike"}
+    ],
+    "audio": "sharp whoosh followed by a short whip crack and metallic vibration tail",
+    "forbidden_interpretations": [
+      "do not turn this into sword flower or a body-wrapping circular flourish",
+      "do not turn this into blade-to-blade Beat / Attack au Fer",
+      "do not turn this into Coupé or a straight thrust",
+      "do not add blood, wounds, or harmful injury; this is controlled disarming contact",
+      "do not add extra characters or a new scene",
+      "do not import the source videos' actors, costumes, locations, subtitles, or music"
+    ]
+  },
+  "prompt_cn": "生成一条4秒、16:9的中性武术动作参考视频，展示一名成年剑术表演者使用高韧性剑，对训练伙伴的持械手腕或前臂完成一次受控的‘抽击·剑鞭拨械’。中景、简洁无特征训练空间、固定或轻微跟随镜头，不继承任何参考视频的人物、服装、场景、字幕、音乐或对白。0.00-0.70秒，手腕与剑身基本持平，动作以快速前刺启动，保持实时速度或略微加速；0.70-1.20秒剑尖接近目标腕部或前臂的可控接触区，但不演成直线刺击；1.20-1.70秒手腕和前臂像甩鞭一样短促横向发力，剑身出现明显的横向弹性弯曲，弯曲波沿剑身传播；1.70-2.20秒剑身以一次受控接触抽击护具覆盖的手腕、前臂或持械手，手臂或训练武器沿受力方向短促偏移，必要时出现少量钝击火花；2.20-4.00秒剑身回弹并被控制，表演者面向目标收势，不追加第二次抽击。动作保持实时速度，不使用慢动作；这不是剑花、不是绕身回环、不是拍刃、不是剑身对剑身碰撞、不是Coupé绕剑刺击，不造成伤口。",
+  "prompt_en": "Generate a 4-second 16:9 neutral martial-arts action reference video showing one adult sword performer using a highly flexible sword for one controlled elastic whiplash strike against a training partner's padded wrist, forearm, or weapon hand. Medium shot in a simple featureless training space, fixed or lightly following camera. Do not transfer any actor, face, costume, location, subtitle, music, or dialogue from the reference videos. 0.00-0.70s: the wrist and sword are approximately level, and the action starts with a fast forward entry at real-time or slightly accelerated speed. 0.70-1.20s: the sword tip approaches the partner's wrist or forearm without becoming a straight thrust. 1.20-1.70s: the wrist and forearm snap sideways like a whip; the flexible blade bends laterally and a visible elastic wave travels through it. 1.70-2.20s: the bending blade makes one controlled contact on the padded wrist, forearm, or weapon hand; the arm or training weapon shifts briefly along the force direction, with restrained blunt-impact sparks if visible. 2.20-4.00s: the blade rebounds under control and the performer faces the target in recovery, with no second strike. Keep real-time motion, no slow motion. This is not sword flower, not a body-wrapping flourish, not blade-to-blade Beat / Attack au Fer, not Coupé cutover thrusting, and not an injuring attack.",
+  "source_refs": ["local_video:独孤九剑_徐克_2.mp4", "local_video:独孤九剑_徐克版_超燃混剪.mp4", "local_video:剑花基础教学.mp4", "local_video:独孤九剑_2.mp4", "local_video:缠身剑花.mp4"],
+  "uncertainties": ["The source videos are montage or instructional references; exact source cut times and technical sword labels were not measured.", "Sword-flower instruction and elastic sword whiplash disarm are separate actions. The instructional sword-flower videos only contribute circular wrist-led trajectories and blade lag/rebound; they do not show a confirmed disarm contact.", "The generated reference is an authored neutral demonstration, not a reconstruction of a specific film performer."]
+}

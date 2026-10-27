@@ -106,3 +106,9 @@ export async function waitForAssetTask(
   }
   return null;
 }
+
+/** A missing task record is distinct from a temporary transport failure. */
+export function isMissingAssetTask(error: unknown): boolean {
+  const response = (error as { response?: { status?: number; data?: { detail?: string } } } | null)?.response;
+  return response?.status === 404 && response.data?.detail === 'Task not found';
+}

@@ -108,9 +108,10 @@ export function analyzeDirectorProfile(
     baseUrl: string,
     projectId: string,
     onStatus?: DirectorProfileJobStatusListener,
+    skills: import("./directorSkills").CreativeSkillSelection[] = [],
 ) {
     const base = `${baseUrl}/projects/${projectId}/director-profile-jobs`;
-    return runJob(base, base, undefined, onStatus);
+    return runJob(base, base, { skills }, onStatus);
 }
 
 export function refineDirectorProfile(

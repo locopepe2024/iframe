@@ -3,7 +3,7 @@ import axios from 'axios';
 interface ExtractionJob {
   id: string;
   status: 'running' | 'completed' | 'failed';
-  result: { characters: any[]; scenes: any[]; props: any[] } | null;
+  result: { characters: any[]; crowd_groups?: any[]; scenes: any[]; props: any[] } | null;
   error?: string;
 }
 const pause = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));

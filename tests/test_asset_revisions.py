@@ -4,7 +4,7 @@ import pytest
 
 from src.apps.comic_gen.models import (
     GlobalAssetLibrary, ImageAsset, ImageVariant, Scene, Script, Series,
-    StoryboardFrame, StoryboardReferencePackage,
+    StoryboardFrame, StoryboardReferencePackage, StoryboardReferenceProjectionSnapshot,
 )
 from src.apps.comic_gen.pipeline import ComicGenPipeline
 
@@ -54,7 +54,7 @@ def test_asset_revisions_survive_reload_and_shot_pin_does_not_drift(tmp_path):
     _, task_id = pipeline.create_video_task(
         "project", "", "Prompt", frame_id="frame", model="wan2.7-i2v")
     task = next(item for item in script.video_tasks if item.id == task_id)
-    assert task.asset_revision_pins == [pinned]
+    assert task.consistency_manifest.asset_revision_pins == [pinned]
 
     reloaded = ComicGenPipeline.__new__(ComicGenPipeline)
     reloaded.data_file = pipeline.data_file
@@ -62,7 +62,34 @@ def test_asset_revisions_survive_reload_and_shot_pin_does_not_drift(tmp_path):
     assert restored.scenes[0].asset_revision == 2
     assert len(restored.scenes[0].asset_revisions) == 2
     assert restored.frames[0].reference_package.asset_revision_pins == [pinned]
-    assert restored.video_tasks[0].asset_revision_pins == [pinned]
+    assert restored.video_tasks[0].consistency_manifest.asset_revision_pins == [pinned]
+
+
+def test_deleting_variant_clears_live_shot_references_but_keeps_video_snapshot(tmp_path):
+    pipeline, script, scene, frame = make_pipeline(tmp_path)
+    frame.reference_package = StoryboardReferencePackage(
+        confirmed=True,
+        references=[{"kind": "scene", "url": "assets/first.png", "source_asset_id": "cinema", "source_variant_id": "first"}],
+        asset_revision_pins=[{"asset_type": "scene", "asset_id": "cinema", "variant_id": "first", "revision": 1, "media_id": "media-first", "storage_key": "assets/first.png", "source_scope": "project"}],
+    )
+    frame.reference_visual_projection = StoryboardReferenceProjectionSnapshot(
+        source_asset_id="cinema", source_variant_id="first", target_frame_id="frame", target_scene_id="cinema",
+        selected_fields=["lighting"], visual_design={"lighting": {"color": "#fff"}},
+    )
+    pipeline.get_script = lambda script_id: pipeline.scripts.get(script_id)
+    _, task_id = pipeline.create_video_task("project", "", "Prompt", frame_id="frame", model="wan2.7-i2v")
+    task = next(item for item in script.video_tasks if item.id == task_id)
+    assert task.consistency_manifest is not None
+    assert task.consistency_manifest.asset_revision_pins[0].variant_id == "first"
+
+    pipeline.delete_asset_variant("project", "cinema", "scene", "first")
+
+    assert frame.reference_package.confirmed is False
+    assert frame.reference_package.references == []
+    assert frame.reference_package.asset_revision_pins == []
+    assert frame.reference_visual_projection is None
+    assert frame.consistency_manifest is None
+    assert task.consistency_manifest.asset_revision_pins[0].variant_id == "first"
 
 
 def test_confirm_membership_is_atomic_and_preserves_historical_material(tmp_path):
@@ -98,6 +125,30 @@ def test_changing_frame_asset_reference_invalidates_confirmation(tmp_path):
     assert frame.reference_package.confirmed is False
     assert frame.reference_package.asset_revision_pins == []
     assert frame.reference_package.revision == 3
+
+
+def test_changing_shot_reference_variant_invalidates_confirmed_pins(tmp_path):
+    pipeline, _, _, frame = make_pipeline(tmp_path)
+    pipeline.update_frame("project", "frame", reference_package=StoryboardReferencePackage(
+        first_frame_url="storyboard/frame.png", confirmed=True))
+    assert frame.reference_package.asset_revision_pins[0].variant_id == "first"
+    previous_revision = frame.reference_package.revision
+
+    pipeline.update_frame_workbench(
+        "project", "frame", workbench_reference_variant_ids={"cinema": ["second"]})
+
+    assert frame.reference_package.confirmed is False
+    assert frame.reference_package.asset_revision_pins == []
+    assert frame.reference_package.revision == previous_revision + 1
+    selection = pipeline.resolve_storyboard_asset_selection("project", "frame")
+    assert [(item["variant_id"], item["source"]) for item in selection["assets"]] == [
+        ("second", "shot_variant_selection")]
+    assert pipeline._pin_frame_assets(pipeline.scripts["project"], frame)[0].variant_id == "second"
+    pipeline.get_script = lambda script_id: pipeline.scripts.get(script_id)
+    _, task_id = pipeline.create_video_task(
+        "project", "", "Prompt", frame_id="frame", model="wan2.7-i2v")
+    task = next(item for item in pipeline.scripts["project"].video_tasks if item.id == task_id)
+    assert task.consistency_manifest.asset_revision_pins[0].variant_id == "second"
 
 
 def test_confirmed_pin_survives_current_asset_removal(tmp_path):

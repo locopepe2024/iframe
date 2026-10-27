@@ -54,8 +54,10 @@ function arcPoints(cameraId: string, presetId: CameraPathPresetId, sequence: num
   });
 }
 
-export function createCameraPathPresetControlPoints(input: { cameraId: string; presetId: CameraPathPresetId; sequence: number; startPositionM: Vector3; targetPositionM: Vector3 }): ActorPathControlPointState[] {
+export function createCameraPathPresetControlPoints(input: { cameraId: string; presetId: CameraPathPresetId; sequence: number; startPositionM: Vector3; targetPositionM: Vector3; distanceM?: number }): ActorPathControlPointState[] {
   const { cameraId, presetId, sequence, startPositionM: start, targetPositionM: target } = input;
+  const distanceM = input.distanceM;
+  if (distanceM !== undefined && (!Number.isFinite(distanceM) || distanceM < .01 || distanceM > 20 || ["orbit", "half_arc", "spiral_rise"].includes(presetId))) throw new Error("位移距离仅支持 0.01–20 米的直线运镜。");
   const towardTarget = normalized(subtract(target, start), [0, 1, 0]);
   const horizontalToward = normalized([towardTarget[0], towardTarget[1], 0], [0, 1, 0]);
   if (presetId === "orbit") return arcPoints(cameraId, presetId, sequence, start, target, 4, 1, 0);
@@ -63,11 +65,11 @@ export function createCameraPathPresetControlPoints(input: { cameraId: string; p
   if (presetId === "spiral_rise") return arcPoints(cameraId, presetId, sequence, start, target, 6, 1.5, 2.5);
   if (presetId === "push_in") {
     const distance = length(subtract(target, start));
-    return linePoints(cameraId, presetId, sequence, start, add(start, scale(towardTarget, Math.min(Math.max(distance - 0.75, 0.5), 2.5))));
+    return linePoints(cameraId, presetId, sequence, start, add(start, scale(towardTarget, distanceM ?? Math.min(Math.max(distance - 0.75, 0.5), 2.5))));
   }
-  if (presetId === "pull_out") return linePoints(cameraId, presetId, sequence, start, add(start, scale(towardTarget, -2.5)));
-  if (presetId === "lift") return linePoints(cameraId, presetId, sequence, start, add(start, [0, 0, 2.5]));
-  if (presetId === "drop") return linePoints(cameraId, presetId, sequence, start, add(start, [0, 0, -2.5]));
+  if (presetId === "pull_out") return linePoints(cameraId, presetId, sequence, start, add(start, scale(towardTarget, -(distanceM ?? 2.5))));
+  if (presetId === "lift") return linePoints(cameraId, presetId, sequence, start, add(start, [0, 0, distanceM ?? 2.5]));
+  if (presetId === "drop") return linePoints(cameraId, presetId, sequence, start, add(start, [0, 0, -(distanceM ?? 2.5)]));
   const right: Vector3 = [horizontalToward[1], -horizontalToward[0], 0];
-  return linePoints(cameraId, presetId, sequence, start, add(start, scale(right, 2.5)));
+  return linePoints(cameraId, presetId, sequence, start, add(start, scale(right, distanceM ?? 2.5)));
 }

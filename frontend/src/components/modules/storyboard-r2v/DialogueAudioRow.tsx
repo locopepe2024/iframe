@@ -5,6 +5,7 @@ import { useTranslations } from "next-intl";
 import { AnimatePresence, motion } from "framer-motion";
 import { api } from "@/lib/api";
 import { getAssetUrl } from "@/lib/utils";
+import { isUniArtVoiceBinding } from "@/lib/voiceBinding";
 
 interface DialogueAudioRowProps {
     scriptId: string;
@@ -118,7 +119,7 @@ export default function DialogueAudioRow({
                 scriptId={scriptId}
                 frameId={frameId}
                 dialogue={dialogue}
-                voiceId={voiceId}
+                voiceId={isUniArtVoiceBinding(voiceId) ? voiceId : undefined}
                 audioUrl={audioUrl}
                 audioError={audioError}
                 snapshotInstructions={snapshotInstructions}

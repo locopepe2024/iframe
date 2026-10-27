@@ -170,6 +170,25 @@ def test_resolve_folds_global_without_parent_series():
 # --------------------------------------------------------------------------
 # (b) _find_asset_with_source -> "global" + _save_after_asset_mutation routing
 # --------------------------------------------------------------------------
+@pytest.mark.parametrize('scope', ['script', 'series', 'global'])
+def test_character_workbench_voice_binding_updates_the_asset_owner(scope):
+    from unittest.mock import Mock
+    character = _char('voice-character')
+    episode = _script(sid='ep1', series_id='S', characters=[character] if scope == 'script' else [])
+    series = _series(characters=[character] if scope == 'series' else [])
+    library = GlobalAssetLibrary(characters=[character] if scope == 'global' else [])
+    p = _bare_pipeline(library=library, series_store={'S': series})
+    p.scripts = {'ep1': episode}
+    p._save_after_asset_mutation = Mock()
+    result = p.update_asset_attributes('ep1', character.id, 'character', {'voice_id': 'voice-a', 'voice_name': '清朗男声'})
+    owner, resolved_scope = p._find_asset_with_source(episode, character.id, 'character')
+    assert result is episode
+    assert resolved_scope == scope
+    assert Character.model_validate(owner.model_dump()).voice_id == 'voice-a'
+    assert owner.voice_name == '清朗男声'
+    p._save_after_asset_mutation.assert_called_once_with(scope)
+
+
 def test_find_asset_with_source_returns_global():
     library = GlobalAssetLibrary(
         characters=[_char("g_char", "glob-char")],

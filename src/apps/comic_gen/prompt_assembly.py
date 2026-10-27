@@ -70,7 +70,10 @@ def _get_character_appearance_keywords(
     return "；".join(parts)
 
 
-def _director_shot_context_parts(context: Optional[Dict[str, Any]]) -> List[str]:
+def _director_shot_context_parts(
+    context: Optional[Dict[str, Any]], *, include_camera_movement: bool = True,
+    include_composition: bool = True,
+) -> List[str]:
     """Convert the server-projected plan context into concise prompt clauses.
 
     The plan context is read-only runtime data. Keep IDs out of the natural
@@ -111,9 +114,19 @@ def _director_shot_context_parts(context: Optional[Dict[str, Any]]) -> List[str]
         ("ambient_sound", "环境音"),
     )
     for key, label in labels:
+        if key == "camera_movement" and not include_camera_movement:
+            continue
+        if key == "composition" and not include_composition:
+            continue
         value = shot.get(key)
         if isinstance(value, str) and value.strip():
             parts.append(f"{label}：{value.strip()}")
+    information = shot.get("information_design")
+    if isinstance(information, dict):
+        for key, label in (("audience_question", "观众问题"), ("audience_knows", "观众已知"), ("character_knows", "人物已知"), ("withhold", "当前镜头不得提前展示"), ("presentation", "信息呈现")):
+            value = information.get(key)
+            if isinstance(value, str) and value.strip():
+                parts.append(f"{label}：{value.strip()}")
     lighting = shot.get("lighting")
     if isinstance(lighting, dict):
         lighting_parts: List[str] = []
@@ -146,10 +159,10 @@ def append_projected_shot_context(prompt: str, context: Optional[Dict[str, Any]]
     base = (prompt or "").strip()
     parts = [base] if base else []
     normalized = re.sub(r"[\s，。；：、,.!?！？:;]+", "", base).casefold()
-    for clause in _director_shot_context_parts(context):
+    for clause in _director_shot_context_parts(context, include_camera_movement=False):
         value = clause.split("：", 1)[-1]
         compact = re.sub(r"[\s，。；：、,.!?！？:;]+", "", value).casefold()
-        if not compact or compact in normalized:
+        if not compact or (compact in normalized and not clause.startswith("当前镜头不得提前展示：")):
             continue
         parts.append(clause)
         normalized += compact
@@ -251,7 +264,11 @@ def assemble_prompt(
     # not repeat them in the visual description. Compare clause values without
     # punctuation so the plan does not restate text already present in a frame.
     normalized_existing = re.sub(r"[\s，。；：、,.!?！？:;]+", "", " ".join(parts)).casefold()
-    for clause in _director_shot_context_parts(frame.director_shot_context):
+    for clause in _director_shot_context_parts(
+        frame.director_shot_context,
+        include_camera_movement=frame.camera_movement_structured is None,
+        include_composition=not bool(frame.composition),
+    ):
         value = clause.split("：", 1)[-1]
         normalized_value = re.sub(r"[\s，。；：、,.!?！？:;]+", "", value).casefold()
         if not normalized_value or normalized_value in normalized_existing:
@@ -268,6 +285,8 @@ def assemble_prompt(
         angle_shot.append(frame.camera_angle)
     if angle_shot:
         parts.append("，".join(angle_shot))
+    if frame.composition and frame.composition not in " ".join(parts):
+        parts.append(f"构图：{frame.composition}")
 
     # 5. Character appearance keywords
     char_desc = _get_character_appearance_keywords(frame.character_ids, characters)

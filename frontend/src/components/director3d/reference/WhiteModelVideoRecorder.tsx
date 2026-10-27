@@ -3,10 +3,10 @@ import { Download, Film, Square, X } from "lucide-react";
 
 import { useWorkbenchStore } from "../state/workbench-store";
 import { activeCameraAtFrame } from "../timeline/timeline-evaluation";
-import { projectDirectorShotPackage } from "./director-shot-package";
+import { currentDirectorShotPackage } from "./current-shot-package";
 import { recordWhiteModelVideo } from "./record-white-model-video";
 
-interface VideoResult { url: string; extension: "webm" | "mp4"; signature: string; snapshotId: string; }
+interface VideoResult { url: string; extension: "webm" | "mp4"; signature: string; snapshotId: string; packageChecksum: string; }
 
 function recordingSignature(state: ReturnType<typeof useWorkbenchStore.getState>): string {
   return JSON.stringify({
@@ -63,12 +63,7 @@ export function WhiteModelVideoRecorder({ recording, setRecording, stopPlayback 
       setError("单次录制最长 10 秒；请先缩短时间轴时长。");
       return;
     }
-    const first = projectDirectorShotPackage({
-      frame: 1, durationSeconds: state.dialogueTimeline.durationSeconds, fps: state.dialogueTimeline.fps,
-      tracks: state.dialogueTimeline.tracks, activeCameraTrackId: state.dialogueTimeline.activeCameraTrackId,
-      selectedCameraId: state.selectedCameraId, characters: state.characters, cameras: state.cameras,
-      sceneObjects: state.sceneObjects, actorPaths: state.actorPaths, cameraPaths: state.cameraPaths,
-    });
+    const first = currentDirectorShotPackage(state, 1);
     const aspect = aspectValue(first.aspectRatio);
     const authoredFrameCount = Math.round(state.dialogueTimeline.durationSeconds * state.dialogueTimeline.fps) + 1;
     for (let frame = 2; frame <= authoredFrameCount; frame += 1) {
@@ -102,7 +97,7 @@ export function WhiteModelVideoRecorder({ recording, setRecording, stopPlayback 
       const url = URL.createObjectURL(video.blob);
       if (resultRef.current) URL.revokeObjectURL(resultRef.current);
       resultRef.current = url;
-      setResult({ url, extension: video.extension, signature, snapshotId: recordingSnapshotId(signature) });
+      setResult({ url, extension: video.extension, signature, snapshotId: recordingSnapshotId(signature), packageChecksum: first.packageChecksum });
       setReviewOpen(true);
     } catch (caught) {
       if (!controller.signal.aborted) setError(caught instanceof Error ? caught.message : "录制失败。");
@@ -121,7 +116,7 @@ export function WhiteModelVideoRecorder({ recording, setRecording, stopPlayback 
         : <button type="button" onClick={() => void start()}><Film size={16} aria-hidden="true"/>录制白模视频</button>}
       {result && <a href={result.url} download={`director-reference.${result.extension}`} title="下载白模参考视频"><Download size={16} aria-hidden="true"/>下载</a>}
       {result && <button type="button" onClick={() => setReviewOpen(true)}>查看视频</button>}
-      {result && <span>录制快照 {result.snapshotId}</span>}
+      {result && <span>录制快照 {result.snapshotId} · package {result.packageChecksum}</span>}
       {stale && <span role="status">当前导演设置已变化，视频为旧版本；请重新录制。</span>}
       {recording && <span role="status">录制中 · {progress} 帧</span>}
       {error && <span role="alert">{error}</span>}

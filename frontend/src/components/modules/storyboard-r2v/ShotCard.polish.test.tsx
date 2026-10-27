@@ -136,3 +136,99 @@ it("uses one four-mode tab control for video input selection", () => {
     fireEvent.click(screen.getByRole("tab", { name: "tabTextVideo" }));
     expect(onSetVideoMode).toHaveBeenCalledWith("t2v");
 });
+
+it("applies only the selected director field to the shot", () => {
+    const onUpdateField = vi.fn();
+    const onUpdatePrompt = vi.fn();
+    render(<ShotCard
+        shot={{ ...shot, cameraAngle: "平视", directorShotContext: { shot: {
+            camera_angle: "低角度", camera_movement: "缓慢推进", performance_action: "前镜动作",
+        } } }}
+        index={0} totalShots={1} characters={[]} scenes={[]} props={[]}
+        onUpdatePrompt={onUpdatePrompt} onUpdateField={onUpdateField}
+        onGenerateT2I={vi.fn()} onGenerateVideo={vi.fn()} onDelete={vi.fn()}
+        onMoveUp={vi.fn()} onMoveDown={vi.fn()} onDuplicate={vi.fn()}
+        onSetVideoMode={vi.fn()} onOpenDrawer={vi.fn()} onInsertAsset={vi.fn()}
+        expanded={false} onToggleExpanded={vi.fn()}
+    />);
+    fireEvent.click(screen.getByText(/拍摄计划字段/));
+    fireEvent.click(screen.getByRole("button", { name: "采用机位" }));
+    expect(onUpdateField).toHaveBeenCalledExactlyOnceWith("cameraAngle", "低角度");
+    expect(onUpdatePrompt).not.toHaveBeenCalled();
+});
+
+it("restores the original storyboard text after prompt optimization", () => {
+    const onUpdatePrompt = vi.fn();
+    render(<ShotCard
+        shot={{ ...shot, prompt: "优化后的提示词", promptIsOptimized: true,
+            visualDescription: "原始剧本文本" }}
+        index={0} totalShots={1} characters={[]} scenes={[]} props={[]}
+        onUpdatePrompt={onUpdatePrompt} onUpdateField={vi.fn()}
+        onGenerateT2I={vi.fn()} onGenerateVideo={vi.fn()} onDelete={vi.fn()}
+        onMoveUp={vi.fn()} onMoveDown={vi.fn()} onDuplicate={vi.fn()}
+        onSetVideoMode={vi.fn()} onOpenDrawer={vi.fn()} onInsertAsset={vi.fn()}
+        expanded={false} onToggleExpanded={vi.fn()}
+    />);
+
+    fireEvent.click(screen.getByRole("button", { name: "恢复分镜" }));
+    expect(onUpdatePrompt).toHaveBeenCalledExactlyOnceWith("原始剧本文本", false);
+});
+
+it("does not show restore when the shot is not optimized", () => {
+    render(<ShotCard
+        shot={{ ...shot, visualDescription: "原始剧本文本" }}
+        index={0} totalShots={1} characters={[]} scenes={[]} props={[]}
+        onUpdatePrompt={vi.fn()} onUpdateField={vi.fn()}
+        onGenerateT2I={vi.fn()} onGenerateVideo={vi.fn()} onDelete={vi.fn()}
+        onMoveUp={vi.fn()} onMoveDown={vi.fn()} onDuplicate={vi.fn()}
+        onSetVideoMode={vi.fn()} onOpenDrawer={vi.fn()} onInsertAsset={vi.fn()}
+        expanded={false} onToggleExpanded={vi.fn()}
+    />);
+
+    expect(screen.queryByRole("button", { name: "恢复分镜" })).toBeNull();
+});
+
+it("reviews rich-frame fields without applying any by default", () => {
+    const onApplyRichRefinement = vi.fn();
+    render(<ShotCard
+        shot={{ ...shot, cameraAngle: "平视", richRefinementCandidate: {
+            id: "candidate-1", source: "AI 分镜细化",
+            fields: { camera_angle: "低角度", visual_description: "人物抬眼" },
+            current_fields: { camera_angle: "平视", visual_description: "人物站立" },
+            rationale: { camera_angle: "突出人物视线", visual_description: "延续当前动作" },
+        } }}
+        index={0} totalShots={1} characters={[]} scenes={[]} props={[]}
+        onUpdatePrompt={vi.fn()} onUpdateField={vi.fn()}
+        onGenerateT2I={vi.fn()} onGenerateVideo={vi.fn()} onDelete={vi.fn()}
+        onMoveUp={vi.fn()} onMoveDown={vi.fn()} onDuplicate={vi.fn()}
+        onSetVideoMode={vi.fn()} onOpenDrawer={vi.fn()} onInsertAsset={vi.fn()}
+        onApplyRichRefinement={onApplyRichRefinement}
+        expanded={false} onToggleExpanded={vi.fn()}
+    />);
+    expect(screen.getByRole("button", { name: "应用所选" })).toBeDisabled();
+    expect(screen.getByText("理由：突出人物视线")).toBeInTheDocument();
+    expect(screen.getByRole("checkbox", { name: /机位/ })).toBeDisabled();
+    expect(screen.getByText("此字段已移至静态起幅或运镜设计，请在对应入口重新生成")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("checkbox", { name: /画面描述/ }));
+    fireEvent.click(screen.getByRole("button", { name: "应用所选" }));
+    expect(onApplyRichRefinement).toHaveBeenCalledExactlyOnceWith("candidate-1", ["visual_description"]);
+});
+
+it("shows the current initialization proposal as pending review", () => {
+    render(<ShotCard
+        shot={{ ...shot, richRefinementCandidate: {
+            id: "old-init", mode: "initialization", source: "初始化补全",
+            fields: { visual_description: "重复的场景描述" },
+            current_fields: { visual_description: null }, rationale: {},
+        } }}
+        index={0} totalShots={1} characters={[]} scenes={[]} props={[]}
+        onUpdatePrompt={vi.fn()} onUpdateField={vi.fn()}
+        onGenerateT2I={vi.fn()} onGenerateVideo={vi.fn()} onDelete={vi.fn()}
+        onMoveUp={vi.fn()} onMoveDown={vi.fn()} onDuplicate={vi.fn()}
+        onSetVideoMode={vi.fn()} onOpenDrawer={vi.fn()} onInsertAsset={vi.fn()}
+        expanded={true} onToggleExpanded={vi.fn()}
+    />);
+    expect(screen.getByText(/初始化补全/)).toBeInTheDocument();
+    expect(screen.getByText(/尚未应用，不会进入生成提示词/)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "应用所选" })).toBeInTheDocument();
+});

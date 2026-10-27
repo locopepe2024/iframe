@@ -7,6 +7,7 @@ from fastapi import HTTPException
 
 from src.apps.comic_gen import api
 from src.apps.comic_gen.llm import ScriptProcessor
+from src.apps.comic_gen.models import Blocking, StoryboardFrame
 
 
 def _confirmed(request, reference_mode=False):
@@ -75,6 +76,9 @@ def test_saved_shot_edit_invalidates_review_even_with_same_submitted_overrides(m
     frame = SimpleNamespace(id="shot", lighting_override="old")
     monkeypatch.setattr(api, "current_studio_user", lambda: SimpleNamespace(owner_profile_id="owner"))
     monkeypatch.setattr(api.pipeline, "get_script", lambda script_id, owner: SimpleNamespace(frames=[frame]))
+    monkeypatch.setattr(api.pipeline, "storyboard_continuity_sheet", lambda script_id: {
+        "rows": [{"frame_id": "shot", "fields": {}}],
+    })
     monkeypatch.setattr(api, "_get_custom_prompt", lambda *args: "")
     monkeypatch.setattr(api, "_get_director_prompt_context", lambda *args: "")
     request = api.PolishVideoPromptRequest(script_id="project", frame_id="shot", draft_prompt="长街",
@@ -83,6 +87,26 @@ def test_saved_shot_edit_invalidates_review_even_with_same_submitted_overrides(m
     frame.lighting_override = "changed by another editor"
     with pytest.raises(HTTPException) as rejected:
         api._require_video_polish_review(confirmed, False)
+    assert rejected.value.status_code == 409
+
+
+def test_blocking_change_invalidates_reviewed_r2v_input(monkeypatch):
+    frame = StoryboardFrame(id="shot", scene_id="shop", blocking=Blocking(
+        description="掌柜在店内柜台后，匪寇在街上柜台前，柜台挡住掌柜双脚",
+        camera_relation="街道平视的连续单镜头",
+    ))
+    monkeypatch.setattr(api, "current_studio_user", lambda: SimpleNamespace(owner_profile_id="owner"))
+    monkeypatch.setattr(api.pipeline, "get_script", lambda *_args: SimpleNamespace(frames=[frame]))
+    monkeypatch.setattr(api.pipeline, "storyboard_continuity_sheet", lambda _script_id: {
+        "rows": [{"frame_id": "shot", "fields": {}}],
+    })
+    monkeypatch.setattr(api, "_get_custom_prompt", lambda *_args: "")
+    request = api.PolishR2VPromptRequest(script_id="project", frame_id="shot", draft_prompt="匪寇抢粮", slots=[])
+    reviewed, preview = _confirmed(request, True)
+    assert "柜台挡住掌柜双脚" in preview["messages"]["system"]
+    frame.blocking.description = "掌柜走到街上"
+    with pytest.raises(HTTPException) as rejected:
+        api._require_video_polish_review(reviewed, True)
     assert rejected.value.status_code == 409
 
 
@@ -149,3 +173,134 @@ def test_minimax_ir_uses_reviewed_text(monkeypatch):
     monkeypatch.setattr(uniart, "complete_context_ir", complete)
     api._complete_minimax_ir_polish(confirmed, "unused", confirmed.reviewed_messages["user"])
     assert complete.call_args.args[1][0]["text"] == "冷灰蓝长街。"
+
+
+def test_minimax_ir_accepts_native_prompt_without_local_h3_headings(monkeypatch):
+    from src.models import uniart
+    native_prompt = "镜头连续推进。0.00-0.80s 匪首抬腿；0.80-1.20s 踢中掌柜；1.20-4.00s 掌柜撞到木桌，桌面物品滑落，随后倒地。"
+    request = api.PolishVideoPromptRequest(
+        draft_prompt="匪首踢中掌柜，掌柜撞桌倒地", optimizer_provider="minimax_context_ir",
+        target_video_model="uniart/minimax-h3-vip", target_duration=4,
+    )
+    confirmed, _ = _confirmed(request)
+    monkeypatch.setattr(api, "current_studio_user", lambda: SimpleNamespace(user_id="u", owner_profile_id="o"))
+    monkeypatch.setattr("src.apps.studio_access.runtime_uniart_for_owner", lambda *args: object())
+    monkeypatch.setattr(uniart, "complete_context_ir", Mock(return_value=native_prompt))
+
+    assert api.polish_video_prompt(confirmed) == {"prompt_cn": native_prompt, "prompt_en": native_prompt}
+
+
+def test_minimax_ir_native_prompt_keeps_mode_and_dialogue_checks():
+    from src.apps.comic_gen.llm import PolishError
+
+    with pytest.raises(PolishError, match="first or last frame"):
+        api._validate_context_ir_polish_result(
+            {"prompt_en": "首帧开始，人物走出门口。"}, generation_mode="first_last_frame",
+        )
+    with pytest.raises(PolishError, match="mislabeled as T2VA"):
+        api._validate_context_ir_polish_result(
+            {"prompt_en": "[T2VA] 人物走出门口。"}, reference_mode=True,
+        )
+    with pytest.raises(PolishError, match="omitted the shot dialogue"):
+        api._validate_context_ir_polish_result(
+            {"prompt_en": "人物走出门口。"}, generate_audio=True, dialogue_line="让开！",
+        )
+
+
+def test_minimax_ir_keeps_shot_count_editable_but_requires_contiguous_timeline():
+    from src.apps.comic_gen.llm import PolishError
+
+    api._validate_context_ir_polish_result(
+        {"prompt_en": "[Shot 1] 0.00-1.20s 动作。 [Shot 2] 1.20-2.40s 继续。 [Shot 3] 2.40-4.00s 收势。"},
+        short_action_duration=4, shot_structure="single",
+    )
+    with pytest.raises(PolishError, match="contiguous timeline"):
+        api._validate_context_ir_polish_result(
+            {"prompt_en": "0.00-1.00s 开始；1.10-4.00s 结束。"},
+            short_action_duration=4,
+        )
+
+
+def test_minimax_ir_accepts_explicit_h3_timestamp_nodes():
+    api._validate_context_ir_polish_result(
+        {"prompt_en": "[00:00.000] 起始；[00:00.800] 抬腿；[00:01.200] 接触；[00:04.000] 倒地终止。"},
+        short_action_duration=4,
+    )
+
+
+def test_minimax_ir_allows_multi_shot_timeline_when_selected():
+    api._validate_context_ir_polish_result(
+        {"prompt_en": "[Shot 1] 0.00-1.20s 接近并出拳。 [Shot 2] 1.20-2.40s 命中。 [Shot 3] 2.40-4.00s 反应收势。"},
+        short_action_duration=4, shot_structure="multi",
+    )
+
+
+def test_minimax_ir_preview_keeps_long_draft_under_provider_limit():
+    draft = "0.00-0.50s: 匪首踢击；0.50-1.00s: 掌柜撞桌。" + "保持首帧人物和光影。" * 330
+    request = api.PolishVideoPromptRequest(
+        draft_prompt=draft, optimizer_provider="minimax_context_ir",
+        target_video_model="uniart/minimax-h3-vip", target_duration=4,
+    )
+    preview = api.preview_video_polish_prompt(request)
+    text = preview["messages"]["user"]
+    assert draft in text
+    assert "Preserve explicit visual timings" in text
+    assert len(text) < api._MINIMAX_IR_TEXT_LIMIT
+
+
+def test_minimax_ir_rejects_oversized_review_before_provider_call(monkeypatch):
+    from src.models import uniart
+    from src.apps.comic_gen.llm import PolishError
+    request = api.PolishVideoPromptRequest(
+        draft_prompt="动作", optimizer_provider="minimax_context_ir",
+        target_video_model="uniart/minimax-h3-vip",
+    )
+    monkeypatch.setattr(api, "current_studio_user", lambda: SimpleNamespace(user_id="u", owner_profile_id="o"))
+    monkeypatch.setattr("src.apps.studio_access.runtime_uniart_for_owner", lambda *args: object())
+    complete = Mock()
+    monkeypatch.setattr(uniart, "complete_context_ir", complete)
+
+    with pytest.raises(PolishError, match="7000-character limit"):
+        api._complete_minimax_ir_polish(request, "rules", "x" * 7001)
+    complete.assert_not_called()
+
+
+def test_minimax_ir_resolves_studio_media_before_provider_submission(monkeypatch):
+    from src.models import uniart
+    request = api.PolishVideoPromptRequest(
+        draft_prompt="踢击", optimizer_provider="minimax_context_ir",
+        target_video_model="uniart/minimax-h3-vip", image_urls=["/studio/media/owned/first.png"],
+    )
+    monkeypatch.setattr(api, "current_studio_user", lambda: SimpleNamespace(user_id="u", owner_profile_id="o"))
+    monkeypatch.setattr("src.apps.studio_access.runtime_uniart_for_owner", lambda *args: object())
+    resolved = Mock(return_value=["/app/output/users/owned/studio/first.png"])
+    signed = Mock(return_value="https://media.example/first.png")
+    complete = Mock(return_value="optimized prompt")
+    monkeypatch.setattr(api, "_polish_image_urls", resolved)
+    monkeypatch.setattr(uniart, "_image_reference_url", signed)
+    monkeypatch.setattr(uniart, "complete_context_ir", complete)
+
+    result = api._complete_minimax_ir_polish(request, "rules", "reviewed input")
+
+    resolved.assert_called_once_with(request.image_urls)
+    signed.assert_called_once_with("/app/output/users/owned/studio/first.png")
+    assert complete.call_args.args[1][-1]["image_url"]["url"] == "https://media.example/first.png"
+    assert result["prompt_en"] == "optimized prompt"
+
+
+def test_minimax_ir_reports_invalid_studio_media_without_provider_call(monkeypatch):
+    from src.models import uniart
+    from src.apps.comic_gen.llm import PolishError
+    request = api.PolishVideoPromptRequest(
+        draft_prompt="踢击", optimizer_provider="minimax_context_ir",
+        target_video_model="uniart/minimax-h3-vip", image_urls=["/studio/media/invalid/first.png"],
+    )
+    monkeypatch.setattr(api, "current_studio_user", lambda: SimpleNamespace(user_id="u", owner_profile_id="o"))
+    monkeypatch.setattr("src.apps.studio_access.runtime_uniart_for_owner", lambda *args: object())
+    monkeypatch.setattr(api, "resolve_studio_reference", Mock(side_effect=ValueError("invalid reference")))
+    complete = Mock()
+    monkeypatch.setattr(uniart, "complete_context_ir", complete)
+
+    with pytest.raises(PolishError, match="Reference image could not be read"):
+        api._complete_minimax_ir_polish(request, "rules", "reviewed input")
+    complete.assert_not_called()

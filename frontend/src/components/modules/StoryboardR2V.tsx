@@ -10,12 +10,17 @@ import { motion } from "framer-motion";
 import { Plus, Loader2, Sparkles, PanelBottomOpen, PanelBottomClose } from "lucide-react";
 import StepPageHeader, { StepPill } from "@/components/shared/StepPageHeader";
 import RenderPromptPreviewDialog, { type FrameRenderPreview } from "./RenderPromptPreviewDialog";
+import VideoSubmissionPreviewDialog, { type VideoSubmissionPreview } from "./storyboard-r2v/VideoSubmissionPreviewDialog";
+import StoryboardContinuitySheet from "./StoryboardContinuitySheet";
+import { effectiveShotVisual, type ContinuityRow } from "./storyboard-r2v/effectiveShotVisual";
 import { useTranslations } from "next-intl";
 import { useProjectStore } from "@/store/projectStore";
-import { api, crudApi, type VideoTask, type RefineSSEEvent, type AssetReferenceIndexEntry } from "@/lib/api";
+import type { ExtraRosterEntry, ExtraShotInstance } from "@/store/projectStore";
+import { api, crudApi, type VideoTask, type AssetReferenceIndexEntry, type EpisodeCharacterUse } from "@/lib/api";
 import { resolveMediaDelivery, resolveVideoTaskDelivery } from "@/lib/mediaDelivery";
 import { resolveStoryboardStyle, resolveStoryboardStyleForRender } from "@/lib/storyboardStyle";
 import { getAssetUrl } from "@/lib/utils";
+import { isUniArtVoiceBinding } from "@/lib/voiceBinding";
 import { debugLog } from "@/lib/debugLog";
 import type { BatchSummary } from "./storyboard-r2v/shot-panel/CandidatesSection";
 import { getR2vRouteModelId, isR2vImageBased, videoModelSupportsMode, VIDEO_I2V_MODELS, VIDEO_R2V_MODELS, DEFAULT_I2V_MODEL_ID, DEFAULT_R2V_MODEL_ID } from "@/lib/modelCatalog";
@@ -26,6 +31,7 @@ import ShotCard, { type ShotNode } from "./storyboard-r2v/ShotCard";
 import {
     buildGenerationPrompt,
     resolveNegativePrompt,
+    resolveStylePrompt,
 } from "./storyboard-r2v/buildAssembledPrompt";
 import DialogueAudioRow from "./storyboard-r2v/DialogueAudioRow";
 import StoryboardGenerateDialog from "./storyboard-r2v/StoryboardGenerateDialog";
@@ -37,6 +43,8 @@ import type {
 import { toast } from "@/store/toastStore";
 import { Wand2 } from "lucide-react";
 import AssetDrawer from "./storyboard-r2v/AssetDrawer";
+import ShotCharacterUsePicker from "./storyboard-r2v/ShotCharacterUsePicker";
+import { characterUseReferenceError } from "./storyboard-r2v/shotCharacterUseSubmission";
 import { type VideoConfig, DEFAULT_VIDEO_CONFIG } from "./storyboard-r2v/VideoConfigModal";
 import {
     migrateShotNode,
@@ -46,6 +54,7 @@ import {
     getActiveT2IImageUrl,
     frameToShotNode,
 } from "./storyboard-r2v/shotNodeHelpers";
+import { lockedPreviousTake } from "./storyboard-r2v/lockedPreviousTake";
 import { overridePanelSectionState } from "./storyboard-r2v/shot-panel/usePanelSectionState";
 import ParamsSection, { type ParamsState } from "./storyboard-r2v/shot-panel/ParamsSection";
 import T2ISubsection from "./storyboard-r2v/shot-panel/T2ISubsection";
@@ -64,14 +73,22 @@ import {
 } from "./storyboard-r2v/referenceAssets";
 
 export default function StoryboardR2V() {
+    const [showContinuitySheet, setShowContinuitySheet] = useState(false);
+    const [continuityRows, setContinuityRows] = useState<Record<string, ContinuityRow>>({});
     const candidateRenderBusyRef = useRef(false);
     const [pendingCandidate, setPendingCandidate] = useState<{
         projectId: string; frameId: string; slot: "first" | "last";
         preview: FrameRenderPreview;
     } | null>(null);
+    const [pendingVideoSubmission, setPendingVideoSubmission] = useState<{
+        shotId: string;
+        preview: VideoSubmissionPreview;
+        submit: () => Promise<void>;
+    } | null>(null);
     const currentProject = useProjectStore((state) => state.currentProject);
     const currentSeries = useProjectStore((state) => state.currentSeries);
     const updateProject = useProjectStore((state) => state.updateProject);
+    const extraRoster = (currentSeries?.extra_roster ?? []) as ExtraRosterEntry[];
     const t = useTranslations("storyboardR2V");
     const tStep = useTranslations("stepHeader");
     const [indexedProject, setIndexedProject] = useState<{
@@ -88,6 +105,15 @@ export default function StoryboardR2V() {
     }, [currentProject, currentSeries]);
 
     useEffect(() => {
+        if (!currentProject?.id) return;
+        let active = true;
+        api.getStoryboardContinuitySheet(currentProject.id).then(sheet => {
+            if (active) setContinuityRows(Object.fromEntries(sheet.rows.map(row => [row.frame_id, row])));
+        }).catch(() => { if (active) setContinuityRows({}); });
+        return () => { active = false; };
+    }, [currentProject]);
+
+    useEffect(() => {
         const projectId = currentProject?.id;
         if (!projectId || typeof api.getProjectAssetReferenceIndex !== "function") return;
         let active = true;
@@ -101,6 +127,21 @@ export default function StoryboardR2V() {
             });
         return () => { active = false; };
     }, [currentProject?.id, currentProject?.characters, currentProject?.scenes, currentProject?.props]);
+
+    // Episode looks are a live, user-confirmed index. Refresh them when the
+    // shot workbench opens so a look confirmed in Character Workbench or
+    // another tab is searchable without a full page reload.
+    useEffect(() => {
+        const projectId = currentProject?.id;
+        if (!projectId || typeof api.listEpisodeCharacterUses !== "function") return;
+        let active = true;
+        void api.listEpisodeCharacterUses(projectId)
+            .then((uses) => {
+                if (active) updateProject(projectId, { episode_character_uses: uses });
+            })
+            .catch(() => { /* project snapshot remains usable while refreshing */ });
+        return () => { active = false; };
+    }, [currentProject?.id, updateProject]);
 
     // Derive shots from project frames. Workbench state (T2I 抽卡
     // history, last-active tab, batch count) now comes from backend-
@@ -225,6 +266,7 @@ export default function StoryboardR2V() {
     // backend, so the user gets immediate feedback instead of a
     // task that queues, fails, and shows up only in the diagnose log.
     const [shotErrors, setShotErrors] = useState<Record<string, string>>({});
+    const [lookBusyFrameId, setLookBusyFrameId] = useState<string | null>(null);
     const [extractingPreviousEndFrameId, setExtractingPreviousEndFrameId] = useState<string | null>(null);
     const missingRefsMessage = useCallback(
         (modelLabel: string) =>
@@ -360,13 +402,11 @@ export default function StoryboardR2V() {
         const frameIndex = frames.findIndex((frame: any) => frame.id === shot?.id);
         if (!currentProject || !shot || frameIndex <= 0 || extractingPreviousEndFrameId) return;
         const previousFrame = frames[frameIndex - 1];
-        const selectedTask = (currentProject.video_tasks ?? []).find((task: any) =>
-            task.id === previousFrame.selected_video_id
-            && task.frame_id === previousFrame.id
-            && task.status === "completed"
-            && task.video_url,
-        );
-        if (!selectedTask) return;
+        const selectedTask = lockedPreviousTake(previousFrame, currentProject.video_tasks ?? []);
+        if (!selectedTask) {
+            toast.warning(t("lockPreviousTakeFirst"));
+            return;
+        }
 
         setExtractingPreviousEndFrameId(shot.id);
         let pendingPatch: Parameters<typeof api.updateFrameWorkbench>[2] | null = null;
@@ -413,7 +453,7 @@ export default function StoryboardR2V() {
         } finally {
             setExtractingPreviousEndFrameId(null);
         }
-    }, [shots, currentProject, extractingPreviousEndFrameId, updateProject, persistWorkbench]);
+    }, [shots, currentProject, extractingPreviousEndFrameId, updateProject, persistWorkbench, t]);
 
     // Adopted text, its flag and editable direction share one ordered writer.
     const frameEdits = useMemo(() => createFrameEditQueue(
@@ -473,6 +513,31 @@ export default function StoryboardR2V() {
     const characters = currentProject?.characters || [];
     const scenes = currentProject?.scenes || [];
     const props = currentProject?.props || [];
+
+    const selectShotCharacterUse = useCallback(async (frameId: string, use: EpisodeCharacterUse) => {
+        if (!currentProject || lookBusyFrameId) return;
+        const frame = currentProject.frames.find((item: any) => item.id === frameId);
+        if (!frame) return;
+        setLookBusyFrameId(frameId);
+        try {
+            const updated = await api.selectFrameCharacterUse(currentProject.id, frameId, {
+                project_character_id: use.project_character_id,
+                use_id: use.use_id,
+                expected_reference_revision: frame.reference_package?.revision ?? 1,
+            });
+            if (useProjectStore.getState().currentProject?.id !== currentProject.id) return;
+            updateProject(currentProject.id, updated);
+            const saved = updated.frames?.find((item: any) => item.id === frameId);
+            if (saved) setShots((previous) => previous.map((item) => item.id === frameId
+                ? { ...item, referenceVariantIds: saved.workbench_reference_variant_ids || {} }
+                : item));
+            toast.success(`已选择本镜头造型：${use.label}。请核对首帧和提示词引用。`);
+        } catch (error: any) {
+            toast.error(String(error?.response?.data?.detail || error?.message || "镜头造型选择失败"));
+        } finally {
+            setLookBusyFrameId(null);
+        }
+    }, [currentProject, lookBusyFrameId, updateProject]);
 
     // ────────────────────────────────────────────────────────────────────
     // Shot mutations — Optimistic UI + 异步同步后端 + store 更新
@@ -544,6 +609,7 @@ export default function StoryboardR2V() {
     const [storyboardDraftText, setStoryboardDraftText] = useState("");
     const [storyboardFeedback, setStoryboardFeedback] = useState<string[]>([]);
     const [storyboardDraftBusy, setStoryboardDraftBusy] = useState(false);
+    const [richRefinementBusyFrameId, setRichRefinementBusyFrameId] = useState<string | null>(null);
     const [bannerState, setBannerState] = useState<BannerState>(
         () => (currentProject?.frames?.length ?? 0) > 0 ? "summary" : "idle"
     );
@@ -567,10 +633,10 @@ export default function StoryboardR2V() {
             f.dialogue_structured?.line || f.dialogue
         );
         const charsWithVoice = new Set(
-            (currentProject as any).characters?.filter((c: any) => c.voice_id).map((c: any) => c.id) ?? []
+            (currentProject as any).characters?.filter((c: any) => isUniArtVoiceBinding(c.voice_id)).map((c: any) => c.id) ?? []
         );
         const charNameToVoice = new Map<string, boolean>(
-            (currentProject as any).characters?.filter((c: any) => c.voice_id).map((c: any) => [c.name?.toLowerCase(), true]) ?? []
+            (currentProject as any).characters?.filter((c: any) => isUniArtVoiceBinding(c.voice_id)).map((c: any) => [c.name?.toLowerCase(), true]) ?? []
         );
         const hasVoiceBinding = (f: any): boolean => {
             if (f.character_ids?.[0] && charsWithVoice.has(f.character_ids[0])) return true;
@@ -616,7 +682,28 @@ export default function StoryboardR2V() {
         }
     }, [currentProject, updateProject]);
 
-    const handleSmartGenerate = useCallback(async () => {
+    const applyStoryboardFrames = useCallback(async (
+        projectId: string, scriptText: string, frames: StoryboardDraftFrame[],
+        lineage: StoryboardAnalysisLineage, defaultMode: "t2i_i2v" | "direct_r2v",
+    ) => {
+        try {
+            const updated = await api.applyStoryboardDraft(
+                projectId, scriptText, frames, lineage,
+            );
+            const newFrameCount = Array.isArray(updated?.frames) ? updated.frames.length : 0;
+            updateProject(projectId, updated);
+            if (Array.isArray(updated?.frames) && useProjectStore.getState().currentProject?.id === projectId) {
+                const videoTasks: any[] = updated.video_tasks ?? [];
+                setShots(updated.frames.map((frame: any) => frameToShotNode(frame, videoTasks, defaultMode)));
+            }
+            if (useProjectStore.getState().currentProject?.id === projectId) setBannerState("summary");
+            toast.success(t(lineage.storyboard_mode === "plan" ? "planApplied" : "genToastDone", { count: newFrameCount }));
+        } finally {
+            setRefineProgress(null);
+        }
+    }, [updateProject, t]);
+
+    const handleSmartGenerate = useCallback(async (options?: import("@/lib/storyboardAnalysis").StoryboardGenerationOptions) => {
         if (!currentProject?.id) return;
         const projectId = currentProject.id;
         const scriptText = (currentProject as any).originalText || (currentProject as any).original_text || "";
@@ -630,13 +717,21 @@ export default function StoryboardR2V() {
         try {
             const result = await api.analyzeStoryboardPreview(projectId, scriptText, (completed, total) => {
                 setAnalysisProgress({ completed, total });
-            });
+            }, options);
             if (useProjectStore.getState().currentProject?.id !== projectId) return;
-            setStoryboardDraft(result.frames);
-            setStoryboardDraftLineage(result.lineage);
-            setStoryboardDraftText(scriptText);
-            setStoryboardFeedback([]);
-            setBannerState((currentProject.frames?.length ?? 0) > 0 ? "summary" : "idle");
+            if (options?.mode === "plan" && result.lineage.storyboard_mode !== "plan") {
+                throw new Error("Director plan conversion returned the wrong storyboard mode");
+            }
+            if (options?.mode === "plan") {
+                await applyStoryboardFrames(projectId, scriptText, result.frames, result.lineage,
+                    currentProject.default_generation_mode === "i2v" ? "t2i_i2v" : "direct_r2v");
+            } else {
+                setStoryboardDraft(result.frames);
+                setStoryboardDraftLineage(result.lineage);
+                setStoryboardDraftText(scriptText);
+                setStoryboardFeedback([]);
+                setBannerState((currentProject.frames?.length ?? 0) > 0 ? "summary" : "idle");
+            }
         } catch (err: any) {
             const detail = err?.response?.data?.detail || err?.message || t("genToastErrUnknown");
             toast.error(`${t("genToastErr")}: ${String(detail).slice(0, 200)}`);
@@ -645,7 +740,7 @@ export default function StoryboardR2V() {
             setGenerating(false);
             setAnalysisProgress(null);
         }
-    }, [currentProject, t]);
+    }, [currentProject, applyStoryboardFrames, t]);
 
     const handleRefineStoryboardDraft = useCallback(async (instruction: string) => {
         if (!currentProject?.id || !storyboardDraft || !storyboardDraftText || !storyboardDraftLineage) return;
@@ -667,52 +762,18 @@ export default function StoryboardR2V() {
 
     const handleApplyStoryboardDraft = useCallback(async () => {
         if (!currentProject?.id || !storyboardDraft || !storyboardDraftText || !storyboardDraftLineage) return;
-        const projectId = currentProject.id;
         setStoryboardDraftBusy(true);
         try {
-            const updated = await api.applyStoryboardDraft(
-                projectId, storyboardDraftText, storyboardDraft, storyboardDraftLineage,
-            );
-            const newFrameCount = Array.isArray(updated?.frames) ? updated.frames.length : 0;
-            updateProject(projectId, updated);
-            if (Array.isArray(updated?.frames)) {
-                const defaultMode = currentProject.default_generation_mode === "i2v" ? "t2i_i2v" : "direct_r2v";
-                const videoTasks: any[] = updated.video_tasks ?? [];
-                setShots(updated.frames.map((frame: any) => frameToShotNode(frame, videoTasks, defaultMode)));
-            }
+            await applyStoryboardFrames(currentProject.id, storyboardDraftText, storyboardDraft, storyboardDraftLineage,
+                currentProject.default_generation_mode === "i2v" ? "t2i_i2v" : "direct_r2v");
             setStoryboardDraft(null);
             setStoryboardDraftLineage(null);
             setStoryboardDraftText("");
             setStoryboardFeedback([]);
-
-            if (newFrameCount > 0) {
-                setBannerState("phase2");
-                setRefineProgress({ current: 0, total: newFrameCount });
-                try {
-                    await api.refineBatchFrames(projectId, (event: RefineSSEEvent) => {
-                        if (event.type === "frame_refine_start") {
-                            setRefineProgress({ current: (event.frame_index ?? 0) + 1, total: event.total ?? newFrameCount });
-                        }
-                    });
-                    const refreshed = await api.getProject(projectId);
-                    if (refreshed?.frames && useProjectStore.getState().currentProject?.id === projectId) {
-                        updateProject(projectId, { frames: refreshed.frames });
-                        const defaultMode = currentProject.default_generation_mode === "i2v" ? "t2i_i2v" : "direct_r2v";
-                        const videoTasks: any[] = refreshed.video_tasks ?? [];
-                        setShots(refreshed.frames.map((frame: any) => frameToShotNode(frame, videoTasks, defaultMode)));
-                    }
-                } catch (error: any) {
-                    const detail = error?.response?.data?.detail || error?.message || t("genToastErrUnknown");
-                    toast.error(`${t("genToastErr")}: ${String(detail).slice(0, 200)}`);
-                }
-            }
-            setBannerState("summary");
-            toast.success(t("genToastDone", { count: newFrameCount }));
         } finally {
-            setRefineProgress(null);
             setStoryboardDraftBusy(false);
         }
-    }, [currentProject, storyboardDraft, storyboardDraftText, storyboardDraftLineage, updateProject, t]);
+    }, [currentProject, storyboardDraft, storyboardDraftText, storyboardDraftLineage, applyStoryboardFrames]);
 
     const handleDiscardStoryboardDraft = useCallback(() => {
         if (storyboardDraftBusy) return;
@@ -722,23 +783,27 @@ export default function StoryboardR2V() {
         setStoryboardFeedback([]);
     }, [storyboardDraftBusy]);
 
-    const handleRefineFrame = useCallback(async (frameId: string) => {
-        if (!currentProject?.id) return;
+    const handleRichRefinement = useCallback(async (frameId: string, candidateId: string, selectedFields?: string[]) => {
+        if (!currentProject?.id || richRefinementBusyFrameId) return;
+        const projectId = currentProject.id;
+        setRichRefinementBusyFrameId(frameId);
         try {
-            await api.refineSingleFrame(currentProject.id, frameId);
-            const updated = await api.getProject(currentProject.id);
-            if (updated?.frames) {
-                updateProject(currentProject.id, { frames: updated.frames });
-                const defaultMode = currentProject.default_generation_mode === "i2v" ? "t2i_i2v" : "direct_r2v";
-                const videoTasks: any[] = (updated as any).video_tasks ?? [];
-                setShots(updated.frames.map((frame: any) => frameToShotNode(frame, videoTasks, defaultMode)));
-            }
-            toast.success(t("refineDoneToast"));
-        } catch (err) {
-            toast.error(t("refineFailedToast"));
-            debugLog.warn("Studio", "single frame refine failed", err);
+            await frameEdits.flush();
+            const updated = selectedFields
+                ? await api.applyRichRefinement(projectId, frameId, candidateId, selectedFields)
+                : await api.discardRichRefinement(projectId, frameId, candidateId);
+            if (useProjectStore.getState().currentProject?.id !== projectId) return;
+            updateProject(projectId, updated);
+            const defaultMode = updated.default_generation_mode === "i2v" ? "t2i_i2v" : "direct_r2v";
+            setShots(updated.frames.map((frame: any) => frameToShotNode(frame, updated.video_tasks ?? [], defaultMode)));
+            toast.success(selectedFields ? "已应用所选分镜字段" : "已丢弃分镜细化建议");
+        } catch (error) {
+            debugLog.warn("Studio", "Rich refinement review failed", error);
+            toast.error("操作失败，请重试；若镜头或素材已变化，请重新细化");
+        } finally {
+            setRichRefinementBusyFrameId(null);
         }
-    }, [currentProject, updateProject]);
+    }, [currentProject?.id, frameEdits, richRefinementBusyFrameId, updateProject]);
 
     // Delete a shot
     const deleteShot = useCallback(async (index: number) => {
@@ -856,7 +921,7 @@ export default function StoryboardR2V() {
     }, [persistWorkbench]);
 
     // Structured edits update the visible body and join the ordered frame save.
-    const handleUpdateField = useCallback((index: number, field: string, value: string | number | null) => {
+    const handleUpdateField = useCallback((index: number, field: string, value: string | number | null | Array<{ characterId: string; moveRef: string; moveVariant?: string | null }>) => {
         setShots(prev => prev.map((s, i) => {
             if (i !== index) return s;
             if (field === "duration") return { ...s, duration: typeof value === "number" ? value : null };
@@ -865,19 +930,37 @@ export default function StoryboardR2V() {
             if (field === "cameraAngle") return { ...s, cameraAngle: typeof value === "string" ? value : null };
             if (field === "cameraMovement") {
                 const desc = typeof value === "string" ? value : "固定镜头";
+                const presets: Record<string, { primary: string; speed: string }> = {
+                    "固定镜头": { primary: "static", speed: "normal" },
+                    "缓慢推进": { primary: "push_in", speed: "slow" },
+                    "跟随平移": { primary: "follow", speed: "normal" },
+                    "环绕旋转": { primary: "orbit", speed: "normal" },
+                    "快速拉远": { primary: "pull_out", speed: "fast" },
+                    "缓慢上升": { primary: "crane_up", speed: "slow" },
+                };
                 return {
                     ...s,
                     cameraMovementStructured: {
-                        primary: desc,
-                        speed: s.cameraMovementStructured?.speed ?? "normal",
+                        primary: presets[desc]?.primary ?? "custom",
+                        speed: presets[desc]?.speed ?? "normal",
                         description: desc,
-                        secondary: s.cameraMovementStructured?.secondary ?? null,
+                        secondary: null,
                     },
                 };
             }
             if (field === "transitionHint") return { ...s, transitionHint: typeof value === "string" ? value : null };
+            if (field === "move_ref") {
+                const moveRef = typeof value === "string" && value.trim() ? value : null;
+                return { ...s, moveRef, moveVariant: moveRef ? s.moveVariant : null };
+            }
+            if (field === "move_variant") return { ...s, moveVariant: typeof value === "string" && value.trim() ? value : null };
+            if (field === "performance_moves") {
+                return { ...s, performanceMoves: Array.isArray(value) ? value : [] };
+            }
             if (field === "stylePromptOverride" || field === "lightingOverride") {
-                const next = editShotSettings(s, field, typeof value === "string" ? value : null, displayedStyle.positivePrompt);
+                const visual = effectiveShotVisual(continuityRows[s.id], displayedStyle.positivePrompt);
+                const next = editShotSettings(s, field, typeof value === "string" ? value : null,
+                    visual.style, visual.lighting);
                 persistFrameEdit(s.id, {
                     style_prompt_override: next.stylePromptOverride ?? "",
                     lighting_override: next.lightingOverride ?? "",
@@ -898,8 +981,20 @@ export default function StoryboardR2V() {
         if (field === "cameraMovement") backendField.camera_movement_description = typeof value === "string" ? value : undefined;
         if (field === "transitionHint") backendField.transition_hint = typeof value === "string" ? value : undefined;
         if (field === "negativePromptOverride") backendField.negative_prompt_override = typeof value === "string" ? value : undefined;
+        if (field === "move_ref") backendField.move_ref = typeof value === "string" && value.trim() ? value : "";
+        if (field === "move_variant") backendField.move_variant = typeof value === "string" && value.trim() ? value : "";
+        if (field === "performance_moves") backendField.performance_moves = Array.isArray(value)
+            ? value.map((item) => ({ character_id: item.characterId, move_ref: item.moveRef, move_variant: item.moveVariant ?? null })).filter((item) => item.character_id && item.move_ref)
+            : [];
         persistFrameEdit(shotId, backendField);
-    }, [shots, persistFrameEdit, displayedStyle.positivePrompt]);
+    }, [shots, persistFrameEdit, displayedStyle.positivePrompt, continuityRows]);
+
+    const handleUpdateCrowdInstances = useCallback((index: number, instances: ExtraShotInstance[]) => {
+        const shot = shots[index];
+        if (!shot) return;
+        setShots(prev => prev.map((item, i) => i === index ? { ...item, crowdInstances: instances } : item));
+        persistFrameEdit(shot.id, { crowd_instances: instances });
+    }, [shots, persistFrameEdit]);
 
     // Duration editor config — derived from active R2V model's catalog entry
     const durationEditorCfg = useMemo(() => {
@@ -951,12 +1046,15 @@ export default function StoryboardR2V() {
         if (!currentProject || !shot.prompt.trim()) return;
         try {
             const style = await loadGenerationStyle();
-            const t2iPrompt = buildGenerationPrompt(
-                shot,
-                false,
-                videoConfig.model,
+            const frame = currentProject.frames?.find((item: any) => item.id === shot.id);
+            const reviewedImagePrompt = frame?.image_prompt_en?.trim();
+            const imageDraft = reviewedImagePrompt || frame?.image_prompt || frame?.visual_description || frame?.action_description || shot.prompt;
+            const draftStyle = reviewedImagePrompt ? "" : resolveStylePrompt(
                 style.positivePrompt,
-            )
+                shot.stylePromptOverride,
+                shot.lightingOverride,
+            );
+            const cleanedPrompt = [draftStyle, imageDraft].filter(Boolean).join("\n")
                 .replace(/\[(?:character\d+|character|scene|prop):[^\]]+\]/g, "")
                 .replace(/\s+/g, " ")
                 .trim();
@@ -965,15 +1063,16 @@ export default function StoryboardR2V() {
                 "",
                 shot.negativePromptOverride,
             );
-            const projected = await api.previewFrameCandidate(currentProject.id, shot.id, t2iPrompt, negativePrompt);
+            const projected = await api.previewFrameCandidate(currentProject.id, shot.id, cleanedPrompt, negativePrompt, slot);
             setPendingCandidate({
                 projectId: currentProject.id, frameId: shot.id, slot,
                 preview: {
                     prompt: projected.prompt, negativePrompt: projected.negative_prompt,
                     contextToken: projected.context_token, batchSize: 1, referenceCount: null,
                     model: projected.model, aspectRatio: projected.aspect_ratio,
-                    sourceLabel: slot === "first" ? "STEP 1 首帧" : "STEP 2 尾帧",
+                    sourceLabel: [slot === "first" ? "首帧" : "尾帧", projected.source_label].filter(Boolean).join(" · "),
                     referenceLabels: projected.reference_asset_labels,
+                    polishReview: projected.polish_review ?? undefined,
                 },
             });
         } catch (error) {
@@ -1067,6 +1166,18 @@ export default function StoryboardR2V() {
         const referenceSubmission = tabMode === "direct_r2v"
             ? await loadShotReferences(shot) : resolveShotReferences(shot);
         if (!referenceSubmission) return;
+        if (tabMode === "direct_r2v") {
+            const frame = currentProject.frames.find((item: any) => item.id === shot.id);
+            const message = characterUseReferenceError(
+                (frame?.character_use_ids || {}) as Record<string, string>,
+                currentProject.episode_character_uses || [], referenceSubmission.groups,
+            );
+            if (message) {
+                setShotErrors((previous) => ({ ...previous, [shot.id]: message }));
+                toast.warning(message);
+                return;
+            }
+        }
         const requestedDuration = params?.duration ?? videoConfig.duration;
         const durationConfig = [...VIDEO_I2V_MODELS, ...VIDEO_R2V_MODELS]
             .find(model => model.id === requestedModelId)?.duration;
@@ -1139,46 +1250,38 @@ export default function StoryboardR2V() {
             return;
         }
         submittingShotsRef.current.add(shot.id);
-        window.setTimeout(() => submittingShotsRef.current.delete(shot.id), 500);
-        // Clear any prior error once this attempt is valid; success
-        // path or backend-side rejection will overwrite if needed.
-        setShotErrors(prev => {
-            if (!prev[shot.id]) return prev;
-            const next = { ...prev };
-            delete next[shot.id];
-            return next;
-        });
-
-        setShots(prev => prev.map((s, i) =>
-            i === index ? { ...s, videoStatus: "pending" } : s
-        ));
 
         try {
+            await frameEdits.flush();
             const style = await loadGenerationStyle();
+            const continuitySheet = await api.getStoryboardContinuitySheet(currentProject.id);
+            const visualSourceHash = continuitySheet.rows.find(row => row.frame_id === shot.id)?.visual_source_hash;
+            const effectiveVisual = effectiveShotVisual(
+                continuitySheet.rows.find(row => row.frame_id === shot.id), style.positivePrompt,
+            );
             const basePromptText = buildGenerationPrompt(
-                shot, generateAudio, requestedModelId, style.positivePrompt,
+                shot, generateAudio, requestedModelId, effectiveVisual.style, effectiveVisual.lighting, effectiveVisual.scene, effectiveVisual.assets,
             );
             const effectiveNegativePrompt = resolveNegativePrompt(
                 style.negativePrompt,
                 params?.negativePrompt ?? videoConfig.negativePrompt,
                 shot.negativePromptOverride,
             );
+            const explicitR2v = params?.model ?? videoConfig.r2vModel;
+            const routeModelId = tabMode === "direct_r2v"
+                ? (VIDEO_R2V_MODELS.some(m => m.id === explicitR2v) ? explicitR2v : getR2vRouteModelId(videoConfig.model))
+                : params?.model ?? videoConfig.model;
+            const imageBased = isR2vImageBased(routeModelId);
+            const promptText = tabMode === "direct_r2v" && routeModelId.toLowerCase().includes("minimax-h3")
+                ? bindH3MultiReferencePrompt(basePromptText, referenceSubmission.groups)
+                : basePromptText;
             // Build a per-call factory so the batch fires N parallel
             // requests through Promise.all — fail-fast on any one
             // failure leaves the others untouched on the backend (the
             // BG-task wrapper handles their lifecycle independently).
-            const createOne = async (): Promise<string | null> => {
+            const createOne = async (): Promise<{ id: string; warning?: string | null } | null> => {
                 if (tabMode === "direct_r2v") {
                     const referenceUrls = referenceSubmission.urls;
-                    const explicitR2v = params?.model ?? videoConfig.r2vModel;
-                    const explicitOk = VIDEO_R2V_MODELS.some(m => m.id === explicitR2v);
-                    const routeModelId = explicitOk
-                        ? explicitR2v
-                        : getR2vRouteModelId(videoConfig.model);
-                    const imageBased = isR2vImageBased(routeModelId);
-                    const promptText = routeModelId.toLowerCase().includes("minimax-h3")
-                        ? bindH3MultiReferencePrompt(basePromptText, referenceSubmission.groups)
-                        : basePromptText;
                     const tasks = await api.createVideoTask(
                         currentProject.id,
                         "",
@@ -1204,12 +1307,16 @@ export default function StoryboardR2V() {
                         params?.watermark,
                         shot.poseReferenceVariantIds,
                         shot.directorSnapshotMediaId ?? undefined,
+                        undefined,
+                        undefined,
+                        visualSourceHash,
+                        imageBased ? referenceSubmission.assetInputs : undefined,
                     );
                     const task = Array.isArray(tasks) ? tasks[0] : tasks;
-                    return task?.id ?? null;
+                    return task?.id ? { id: task.id, warning: task.warning } : null;
                 }
                 // I2V branch — same defensive check on the model.
-                const i2vModelId = params?.model ?? videoConfig.model;
+                const i2vModelId = routeModelId;
                 const i2vModelOk = VIDEO_I2V_MODELS.some(m => m.id === i2vModelId);
                 if (!i2vModelOk) {
                     debugLog.warn("Studio", `Refusing I2V submission with non-I2V model "${i2vModelId}".`);
@@ -1219,7 +1326,7 @@ export default function StoryboardR2V() {
                 const tasks = await api.createVideoTask(
                     currentProject.id,
                     imageUrl,
-                    basePromptText,
+                    promptText,
                     generationDuration,
                     params?.seed,
                     params?.resolution ?? videoConfig.resolution,
@@ -1246,43 +1353,88 @@ export default function StoryboardR2V() {
                     shot.directorSnapshotMediaId ?? undefined,
                     videoInput.mode === "first_last_frame" ? videoInput.lastFrameUrl : undefined,
                     videoInput.mode === "first_last_frame" ? shot.lastFrameMediaId : undefined,
+                    visualSourceHash,
                 );
                 const task = Array.isArray(tasks) ? tasks[0] : tasks;
-                return task?.id ?? null;
+                return task?.id ? { id: task.id, warning: task.warning } : null;
             };
 
-            const taskIds = (await Promise.all(
-                Array.from({ length: effectiveCount }, createOne),
-            )).filter((id): id is string => !!id);
-
-            if (taskIds.length > 0) {
-                setShotErrors(prev => {
-                    if (!prev[shot.id]) return prev;
-                    const next = { ...prev };
-                    delete next[shot.id];
-                    return next;
-                });
-                setShots(prev => prev.map((s, i) => {
-                    if (i !== index) return s;
-                    // Mirror the latest task id on the legacy single
-                    // field so the ShotCard preview spinner / cancel
-                    // CTA keep working. The candidates panel reads
-                    // from project.video_tasks (filtered by
-                    // frame_id + workbench_tab), so the per-tab id
-                    // bucket on the shot is no longer needed.
-                    return {
-                        ...s,
-                        videoTaskId: taskIds[taskIds.length - 1],
-                        videoStatus: "processing" as const,
-                    };
-                }));
-            } else {
-                toast.error(t("videoGenSubmitFailedToast"));
-                setShots(prev => prev.map((s, i) =>
-                    i === index ? { ...s, videoStatus: "failed" as const } : s
-                ));
-            }
+            setPendingVideoSubmission({
+                shotId: shot.id,
+                preview: {
+                    prompt: promptText,
+                    negativePrompt: effectiveNegativePrompt,
+                    model: routeModelId,
+                    mode: videoInput.mode,
+                    duration: generationDuration,
+                    resolution: params?.resolution ?? videoConfig.resolution,
+                    count: effectiveCount,
+                    generateAudio,
+                    references: tabMode === "direct_r2v" ? [...referenceSubmission.urls] : [],
+                    settings: [
+                        ...(tabMode === "direct_r2v" ? [{ label: "画幅", value: String(params?.ratio ?? "模型默认") }] : []),
+                        { label: "随机种子", value: params?.seed == null ? "模型默认" : String(params.seed) },
+                        { label: "提示词扩展", value: (params?.promptExtend ?? videoConfig.promptExtend) ? "开启" : "关闭" },
+                        { label: "水印", value: params?.watermark == null ? "模型默认" : params.watermark ? "开启" : "关闭" },
+                        { label: "姿态参考", value: `${Object.values(shot.poseReferenceVariantIds ?? {}).reduce((sum, ids) => sum + ids.length, 0)} 张` },
+                        { label: "导演定格", value: shot.directorSnapshotMediaId ? "已附" : "无" },
+                        ...(tabMode === "direct_r2v" ? [
+                            { label: "镜头类型", value: params?.shotType ?? "multi" },
+                        ] : [
+                            { label: "生成模式", value: String(params?.mode ?? videoConfig.mode ?? "模型默认") },
+                            { label: "声音模式", value: String(params?.sound ?? videoConfig.sound ?? "模型默认") },
+                            { label: "引导强度", value: params?.cfgScale == null && videoConfig.cfgScale == null ? "模型默认" : String(params?.cfgScale ?? videoConfig.cfgScale) },
+                            { label: "运动幅度", value: String(params?.movementAmplitude ?? videoConfig.movementAmplitude ?? "模型默认") },
+                        ]),
+                    ],
+                    firstFrame: videoInput.mode === "i2v" || videoInput.mode === "first_last_frame" ? videoInput.firstFrameUrl : undefined,
+                    lastFrame: videoInput.mode === "first_last_frame" ? videoInput.lastFrameUrl : undefined,
+                },
+                submit: async () => {
+                    if (useProjectStore.getState().currentProject?.id !== currentProject.id) {
+                        submittingShotsRef.current.delete(shot.id);
+                        toast.warning("项目已切换，请重新检查视频输入。");
+                        return;
+                    }
+                    setShotErrors(prev => {
+                        if (!prev[shot.id]) return prev;
+                        const next = { ...prev };
+                        delete next[shot.id];
+                        return next;
+                    });
+                    setShots(prev => prev.map(s => s.id === shot.id ? { ...s, videoStatus: "pending" } : s));
+                    try {
+                        const createdTasks = (await Promise.all(
+                            Array.from({ length: effectiveCount }, createOne),
+                        )).filter((task): task is { id: string; warning?: string | null } => !!task);
+                        const taskIds = createdTasks.map(task => task.id);
+                        const warnings = Array.from(new Set(
+                            createdTasks.map(task => task.warning).filter((warning): warning is string => !!warning),
+                        ));
+                        warnings.forEach((warning) => toast.warning(warning));
+                        if (taskIds.length > 0) {
+                            setShots(prev => prev.map(s => s.id === shot.id ? {
+                                ...s, videoTaskId: taskIds[taskIds.length - 1], videoStatus: "processing" as const,
+                            } : s));
+                        } else {
+                            toast.error(t("videoGenSubmitFailedToast"));
+                            setShots(prev => prev.map(s => s.id === shot.id ? { ...s, videoStatus: "failed" as const } : s));
+                        }
+                    } catch (error: any) {
+                        debugLog.error("Studio", "Batch generate failed for shot:", error);
+                        const detail = error?.response?.data?.detail || error?.message || t("unknownErrorFallback");
+                        if (error?.response?.status === 400 && typeof detail === "string") {
+                            setShotErrors(prev => ({ ...prev, [shot.id]: detail }));
+                        }
+                        toast.error(t("videoGenFailedToast", { detail: String(detail).slice(0, 150) }));
+                        setShots(prev => prev.map(s => s.id === shot.id ? { ...s, videoStatus: "failed" as const } : s));
+                    } finally {
+                        window.setTimeout(() => submittingShotsRef.current.delete(shot.id), 500);
+                    }
+                },
+            });
         } catch (error: any) {
+            submittingShotsRef.current.delete(shot.id);
             debugLog.error("Studio", "Batch generate failed for shot:", error);
             const status = error?.response?.status;
             const detail = error?.response?.data?.detail || error?.message || t("unknownErrorFallback");
@@ -1290,9 +1442,6 @@ export default function StoryboardR2V() {
                 setShotErrors(prev => ({ ...prev, [shot.id]: detail }));
             }
             toast.error(t("videoGenFailedToast", { detail: String(detail).slice(0, 150) }));
-            setShots(prev => prev.map((s, i) =>
-                i === index ? { ...s, videoStatus: "failed" as const } : s
-            ));
         }
     }, [shots, currentProject, videoConfig, resolveShotReferences, loadShotReferences, missingRefsMessage, t, loadGenerationStyle]);
 
@@ -1912,6 +2061,18 @@ export default function StoryboardR2V() {
             onConfirm={confirmT2I}
             onClose={() => setPendingCandidate(null)}
         />}
+        {pendingVideoSubmission && <VideoSubmissionPreviewDialog
+            preview={pendingVideoSubmission.preview}
+            onConfirm={() => {
+                const prepared = pendingVideoSubmission;
+                setPendingVideoSubmission(null);
+                void prepared.submit();
+            }}
+            onClose={() => {
+                submittingShotsRef.current.delete(pendingVideoSubmission.shotId);
+                setPendingVideoSubmission(null);
+            }}
+        />}
         {/* Main column — pushed (compressed) when the queue panel opens
             so the queue doesn't overlay content. Bloom/grain now global in
             ProjectClient so the whole pipeline shares one atmosphere. */}
@@ -1927,8 +2088,8 @@ export default function StoryboardR2V() {
                         {currentProject?.art_direction?.style_config?.name ? (
                             <StepPill label={t("artStyleLabel")} value={currentProject.art_direction.style_config.name} />
                         ) : null}
-                        <span className="inline-flex items-center gap-1.5 rounded-full border border-glass-border bg-surface-inset px-2.5 py-1 font-mono text-[0.59375rem] text-text-secondary">
-                            <span className="text-text-muted">{t("currentModel")}</span>
+                        <span className="inline-flex max-w-full min-w-0 items-center gap-1.5 rounded-full border border-glass-border bg-surface-inset px-2.5 py-1 font-mono text-[0.59375rem] text-text-secondary">
+                            <span className="shrink-0 text-text-muted">{t("currentModel")}</span>
                             <select
                                 aria-label={t("currentModel")}
                                 value={isR2VWorkflow ? videoConfig.r2vModel : videoConfig.model}
@@ -2018,6 +2179,15 @@ export default function StoryboardR2V() {
             />
 
             <div className="flex-1 overflow-y-auto px-5 pt-1.5 pb-10 space-y-5 sm:px-7">
+                {currentProject?.id && shots.length > 0 && <div className="border-b border-border-subtle pb-2">
+                    <button type="button" aria-expanded={showContinuitySheet} onClick={() => setShowContinuitySheet(value => !value)} className="text-xs text-primary hover:underline">结构化一致性与来源</button>
+                    {showContinuitySheet && <StoryboardContinuitySheet
+                        projectId={currentProject.id}
+                        revisionKey={JSON.stringify((currentProject.frames || []).map((frame: any) => [frame.id, frame.updated_at, frame.reference_visual_projection?.revision]))}
+                        onOpenFrame={handleJumpToShot}
+                        openFrameLabel="定位镜头设计"
+                    />}
+                </div>}
                 {shots.length === 0 && (
                     <div className="h-full min-h-[300px] flex flex-col items-center justify-center text-center px-6">
                         <div className="rounded-2xl border border-glass-border bg-glass p-8 max-w-lg">
@@ -2062,12 +2232,7 @@ export default function StoryboardR2V() {
                     const projectFrames = currentProject?.frames ?? [];
                     const projectFrameIndex = projectFrames.findIndex((frame: any) => frame.id === shot.id);
                     const previousFrame = projectFrameIndex > 0 ? projectFrames[projectFrameIndex - 1] : null;
-                    const previousSelectedVideo = previousFrame && (currentProject?.video_tasks ?? []).find((task: any) =>
-                        task.id === previousFrame.selected_video_id
-                        && task.frame_id === previousFrame.id
-                        && task.status === "completed"
-                        && task.video_url,
-                    );
+                    const previousSelectedVideo = lockedPreviousTake(previousFrame, currentProject?.video_tasks ?? []);
                     const modelList = (shot.tabMode === "direct_r2v" ? VIDEO_R2V_MODELS : VIDEO_I2V_MODELS)
                         .filter(model => videoModelSupportsMode(model.id, resolveShotVideoInput(shot).mode));
                     return (
@@ -2080,16 +2245,50 @@ export default function StoryboardR2V() {
                         key={shot.id}
                         ref={(el) => { shotWrapperRefs.current.set(shot.id, el); }}
                     >
+                        {projectFrameIndex >= 0 && <ShotCharacterUsePicker
+                            frame={projectFrames[projectFrameIndex]}
+                            uses={currentProject?.episode_character_uses || []}
+                            assetIndex={assetIndex}
+                            busy={lookBusyFrameId === shot.id}
+                            onSelect={(use) => void selectShotCharacterUse(shot.id, use)}
+                            onInsertReference={(_use, name) => {
+                                const tag = `[character:${name}]`;
+                                if (!shot.prompt.includes(tag)) updatePrompt(index, `${shot.prompt} ${tag}`.trim());
+                            }}
+                        />}
                         <ShotCard
                             projectId={currentProject?.id}
                             activeVideoTaskId={currentProject?.frames?.find((frame) => frame.id === shot.id)?.selected_video_id || shot.videoTaskId}
                             referenceImageUrls={isR2vImageBased(paramsState.model)
                                 ? parseAssetTags(shot.prompt, shot.referenceVariantIds)
                                 : []}
+                            onResolvePolishReferences={async () => {
+                                const fresh = await loadShotReferences(shot);
+                                if (!fresh) throw new Error("参考素材读取失败，请重试。");
+                                if (fresh.invalidVariantIds.length) {
+                                    throw new Error("部分参考图版本已失效，请重新选择。");
+                                }
+                                if (fresh.unresolvedNames.length) {
+                                    throw new Error(`参考素材未找到：${fresh.unresolvedNames.join("、")}`);
+                                }
+                                return {
+                                    urls: fresh.urls,
+                                    slots: fresh.groups.map((group) => ({
+                                        slot: group.slot,
+                                        asset_id: group.assetId,
+                                        asset_type: group.kind,
+                                        name: group.name,
+                                        variant_ids: group.variants.map((variant) => variant.id),
+                                        description: group.name,
+                                    })),
+                                };
+                            }}
                             generateAudio={storyboardGeneratedAudio(paramsState.model, paramsState.audio)}
                             targetDuration={paramsState.duration}
                             shot={shot}
                             globalStylePrompt={displayedStyle.positivePrompt}
+                            effectiveVisual={effectiveShotVisual(continuityRows[shot.id], displayedStyle.positivePrompt)}
+                            effectiveFields={continuityRows[shot.id]?.fields}
                             index={index}
                             totalShots={shots.length}
                             characters={characters}
@@ -2098,6 +2297,8 @@ export default function StoryboardR2V() {
                             assetIndex={assetIndex}
                             onUpdatePrompt={(prompt, optimized) => updatePrompt(index, prompt, optimized)}
                             onUpdateField={(field, value) => handleUpdateField(index, field, value)}
+                            extraRoster={extraRoster}
+                            onUpdateCrowdInstances={(instances) => handleUpdateCrowdInstances(index, instances)}
                             durationEditorConfig={durationEditorCfg}
                             onGenerateT2I={() => generateT2I(index)}
                             onGenerateVideo={() => generateVideoBatch(index, 1, paramsState)}
@@ -2153,7 +2354,17 @@ export default function StoryboardR2V() {
                             onSetGenerateCount={(n) => handleShotParamsChange(shot, { ...paramsState, count: n })}
                             onGenerateBatch={(n) => generateVideoBatch(index, n, paramsState)}
                             inFlightCount={shotInFlight}
-                            onRefineFrame={() => handleRefineFrame(shot.id)}
+                            onApplyRichRefinement={(candidateId, fields) => { void handleRichRefinement(shot.id, candidateId, fields); }}
+                            onDiscardRichRefinement={(candidateId) => { void handleRichRefinement(shot.id, candidateId); }}
+                            onMicroExpressionBeforePreview={async () => { await frameEdits.flush(); }}
+                            onMicroExpressionApplied={async () => {
+                                if (!currentProject?.id) return;
+                                const updated = await api.getProject(currentProject.id);
+                                updateProject(currentProject.id, updated);
+                                const defaultMode = updated.default_generation_mode === "i2v" ? "t2i_i2v" : "direct_r2v";
+                                setShots(updated.frames.map((frame: any) => frameToShotNode(frame, updated.video_tasks ?? [], defaultMode)));
+                            }}
+                            richRefinementBusy={richRefinementBusyFrameId === shot.id}
                             onUnpinVideo={() => handleUnpinVideo(shot.id)}
                             onUpdateDialogue={async (text: string) => {
                                 if (!currentProject) return;
@@ -2377,7 +2588,10 @@ export default function StoryboardR2V() {
                                         resolveUrl={resolveAssetUrl}
                                         frameLabel="首帧"
                                         firstLastFrameMode={shot.videoMode === "first_last_frame"}
-                                        onUsePreviousEndFrame={previousSelectedVideo ? () => void usePreviousVideoEndFrame(index) : undefined}
+                                        onUsePreviousEndFrame={previousFrame ? () => void usePreviousVideoEndFrame(index) : undefined}
+                                        previousEndFrameUnavailableReason={previousFrame && !previousSelectedVideo
+                                            ? t(previousFrame.is_video_pinned ? "lockedPreviousTakeUnavailable" : "lockPreviousTakeFirst")
+                                            : undefined}
                                         extractingPreviousEndFrame={extractingPreviousEndFrameId === shot.id}
                                     />
                                     {shot.videoMode === "first_last_frame" ? (
@@ -2585,6 +2799,7 @@ export default function StoryboardR2V() {
             }}
         />
         <StoryboardAnalysisModal
+                lineage={storyboardDraftLineage}
             isOpen={!!storyboardDraft}
             draft={storyboardDraft}
             feedback={storyboardFeedback}

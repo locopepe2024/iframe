@@ -229,3 +229,79 @@ def test_storyboard_prompt_projection_is_per_frame_and_includes_visual_baseline(
     assert "Alex enters from the left" in first_prompt
     assert "檐下冷阴影" in second_prompt
     assert "Alex enters from the left" not in second_prompt
+
+
+def test_storyboard_projection_uses_scene_baseline_without_old_shot_content(pipeline, project):
+    scene = project.scenes[0]
+    scene.name = "青溪镇粮铺"
+    scene.description = "木质粮铺门前，流民匪寇正在劫掠，近景三名百姓退后"
+    scene.asset_design = {"design_revisions": [{"revision": 1, "design": {
+        "visual_notes": scene.description,
+        "asset_baseline": {
+            "scene_identity": "青溪镇粮铺", "location_type": "长街粮铺",
+            "fixed_geometry": ["木质铺面", "柜台"], "fixed_landmarks": ["粮袋"],
+            "materials": ["旧木材"], "environment": ["青石板长街"],
+            "time_baseline": "黄昏", "lighting_baseline": "右侧斜光",
+            "composition_tendency": "沿街纵深", "reusable_constraints": [], "basis": ["observed"],
+        },
+        "shot_only_content": ["流民匪寇正在劫掠", "近景三名百姓退后"],
+    }}]}
+    project.frames[0].action_description = "粮铺空镜"
+
+    prompt = pipeline.storyboard_frame_prompt_projection(project, project.frames[0])
+
+    assert "青溪镇粮铺" in prompt
+    assert "木质铺面" in prompt
+    assert "流民匪寇" not in prompt
+    assert "百姓退后" not in prompt
+
+
+def test_storyboard_image_projection_excludes_video_movement_and_transition(pipeline, project):
+    frame = project.frames[0]
+    frame.visual_description = "Alex stands in the ruins"
+    frame.shot_size = "中景"
+    frame.camera_angle = "平视"
+    frame.camera_movement = "缓慢推近"
+    frame.transition_hint = "淡出到下一镜"
+    frame.director_shot_context = {"shot": {
+        "composition": "人物位于画面右侧",
+        "camera_movement": "环绕人物半周",
+    }}
+
+    projected = pipeline.storyboard_frame_prompt_projection(project, frame)
+    preview = pipeline.preview_storyboard_render_prompt(project.id, frame.id, "Alex stands in the ruins")
+
+    for prompt in (projected, preview):
+        assert "中景" in prompt
+        assert "平视" in prompt
+        assert "缓慢推近" not in prompt
+        assert "环绕人物半周" not in prompt
+        assert "淡出到下一镜" not in prompt
+    assert "人物位于画面右侧" in preview
+
+    pipeline.generate_storyboard_render(project.id, frame.id, None, preview, prompt_is_complete=True)
+    submitted = pipeline.storyboard_generator.generate_frame.call_args.kwargs["prompt"]
+    assert submitted == preview
+
+
+def test_accepted_composition_replaces_plan_composition_in_render_preview(pipeline, project):
+    frame = project.frames[0]
+    frame.director_shot_context = {"shot": {"composition": "旧计划主体居中"}}
+    before = pipeline.storyboard_render_context_token(project.id, frame.id)
+    frame.composition = "主体位于画面左侧"
+
+    preview = pipeline.preview_storyboard_render_prompt(project.id, frame.id, "当前首帧")
+
+    assert "Composition: 主体位于画面左侧" in preview
+    assert "旧计划主体居中" not in preview
+    assert pipeline.storyboard_render_context_token(project.id, frame.id) != before
+
+
+def test_storyboard_video_prompt_keeps_structured_movement(project):
+    from src.apps.comic_gen.prompt_assembly import assemble_prompt
+
+    frame = project.frames[0]
+    frame.visual_description = "Alex stands in the ruins"
+    frame.director_shot_context = {"shot": {"camera_movement": "环绕人物半周"}}
+
+    assert "环绕人物半周" in assemble_prompt(frame, [])

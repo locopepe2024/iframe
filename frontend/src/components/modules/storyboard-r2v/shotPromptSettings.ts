@@ -21,11 +21,13 @@ export function syncPromptSettings(prompt: string, oldStyle: string | null | und
     return (prompt.slice(0, start) + note + body + prompt.slice(end)).trim();
 }
 
-export function editShotSettings(shot: ShotNode, field: "stylePromptOverride" | "lightingOverride", value: string | null, inheritedStyle = ""): ShotNode {
+export function editShotSettings(shot: ShotNode, field: "stylePromptOverride" | "lightingOverride", value: string | null,
+    inheritedStyle = "", inheritedLighting = ""): ShotNode {
     const next = { ...shot, [field]: value };
     if (shot.promptIsOptimized) {
         const plan = shot.directorShotContext?.shot?.lighting;
-        const inheritedLight = [plan?.key_source, plan?.color_tone, plan?.contrast, ...(plan?.practical_sources || [])].filter(Boolean).join("；");
+        const inheritedLight = inheritedLighting || [plan?.key_source, plan?.color_tone, plan?.contrast,
+            ...(plan?.practical_sources || [])].filter(Boolean).join("；");
         next.prompt = syncPromptSettings(shot.prompt, shot.stylePromptOverride || inheritedStyle, shot.lightingOverride || inheritedLight,
             next.stylePromptOverride || inheritedStyle, next.lightingOverride || inheritedLight);
     }

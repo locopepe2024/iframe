@@ -1,4 +1,6 @@
 from typing import Dict, Any, List, Optional, Tuple
+from src.apps.director_skills import provenance as director_skill_provenance
+
 import hashlib
 import json
 import os
@@ -11,17 +13,27 @@ import threading
 import platform
 import tempfile
 import copy
+from .character_constraints import CharacterConstraints
 from urllib.parse import quote
+from .scene_prompt_layers import ScenePromptLayers
 from .models import (
     Script,
     GenerationStatus,
     VideoTask,
     Character,
+    CharacterAssetPack,
+    CharacterAssetPackRevision,
+    EpisodeCharacterUse,
+    ExtraRosterEntry,
+    ExtraShotInstance,
     Scene,
     Prop,
     StoryboardFrame,
+    StoryboardReference,
     ShotVisualPreset,
     ShotVisualDesignSnapshot,
+    StoryboardConsistencyManifest,
+    StoryboardReferenceProjectionSnapshot,
     DialogueStructured,
     LightingData,
     Series,
@@ -55,8 +67,10 @@ from .models import (
     build_episode_readable_summary,
     GlobalAssetLibrary,
     AssetLibraryReference,
+    ScenePromptWorkspace,
     AssetImageSubmissionSnapshot,
     AssetImageReferenceIdentity,
+    VideoReferenceIdentity,
     AssetReferenceIndex,
     AssetReferenceIndexEntry,
     image_variant_storage_key,
@@ -64,11 +78,17 @@ from .models import (
     normalize_director_profile_draft,
 )
 from .asset_revisions import commit_asset_revision
-from .llm import ScriptProcessor
+from .llm import DirectorShootingChunkError, ScriptProcessor, numbered_episode_headings
 from .structured_evidence import source_version
 from .assets import AssetGenerator
 from .storyboard import StoryboardGenerator
 from .prompt_assembly import append_projected_shot_context, append_storyboard_character_descriptions
+from .visual_continuity import (
+    build_reference_projection,
+    reference_projection_prompt_clauses,
+    select_projection_fields,
+)
+from .continuity_sheet import build_continuity_sheet
 from .video import VideoGenerator
 from .audio import AudioGenerator
 from .export import ExportManager
@@ -534,6 +554,22 @@ class ComicGenPipeline(StudioOwnerMixin):
                             unique_ids.append(variant_id)
                     if unique_ids:
                         cleaned_selections[asset_id] = unique_ids
+                reviewed_uses = {item.use_id: item for item in script.episode_character_uses}
+                for use_id in frame.character_use_ids.values():
+                    use = reviewed_uses.get(use_id)
+                    if (use and cleaned_selections.get(use.selected_asset_id)
+                            != [use.selected_variant_id]):
+                        raise ValueError("Change the confirmed episode look through the shot look selector")
+                if frame.reference_package.confirmed and cleaned_selections != frame.workbench_reference_variant_ids:
+                    pinned_ids = {pin.asset_id for pin in frame.reference_package.asset_revision_pins}
+                    changed_ids = {asset_id for asset_id in
+                                   set(cleaned_selections) | set(frame.workbench_reference_variant_ids)
+                                   if cleaned_selections.get(asset_id) != frame.workbench_reference_variant_ids.get(asset_id)}
+                    if changed_ids & pinned_ids:
+                        frame.reference_package.confirmed = False
+                        frame.reference_package.asset_revision_pins = []
+                        frame.reference_package.revision += 1
+                        frame.reference_package.updated_at = time.time()
                 frame.workbench_reference_variant_ids = cleaned_selections
             if workbench_pose_reference_variant_ids is not None:
                 cleaned_pose_selections: Dict[str, List[str]] = {}
@@ -563,28 +599,369 @@ class ComicGenPipeline(StudioOwnerMixin):
         if not script:
             return []
         presets = list(getattr(script, "shot_visual_presets", []) or [])
-        scenes = [scene for scene in (script.scenes or []) if not scene_id or scene.id == scene_id]
+        resolved = self.resolve_project_assets(script)
+        scenes = [scene for scene in resolved["scenes"] if not scene_id or scene.id == scene_id]
         for scene in scenes:
-            for variant in (scene.image_asset.variants or []):
+            image_asset = getattr(scene, "image_asset", None)
+            for variant_index, variant in enumerate((getattr(image_asset, "variants", None) or []), start=1):
                 snapshot = variant.submission_snapshot
-                if not snapshot or not snapshot.visual_design:
-                    continue
                 derived_id = f"asset_variant_visual_{scene.id}_{variant.id}"
                 if any(item.id == derived_id for item in presets):
                     continue
+                _, source = self._find_asset_with_source(script, scene.id, "scene")
                 presets.append(ShotVisualPreset(
                     id=derived_id,
-                    name=f"{scene.name} · {variant.display_name or variant.id[:8]}",
+                    name=f"{scene.name} · {variant.display_name or f'变体 {variant_index}'}",
                     scene_id=scene.id,
                     source_asset_id=scene.id,
                     source_variant_id=variant.id,
-                    source_scene_revision=snapshot.design_revision_at_submission,
-                    visual_design=copy.deepcopy(snapshot.visual_design),
-                    compiled_prompt=snapshot.positive_prompt,
+                    source_media_id=variant.media_id,
+                    source_asset_revision=getattr(scene, "asset_revision", None) or None,
+                    source_scope={"script": "project", "series": "series", "global": "global"}.get(source),
+                    source_scene_revision=snapshot.design_revision_at_submission if snapshot else None,
+                    visual_design=copy.deepcopy(snapshot.visual_design or {}) if snapshot else {},
+                    # The complete source prompt may contain subjects, actions,
+                    # and dialogue. Reference projection reads only structured
+                    # design fields from the selected source variant.
+                    compiled_prompt="",
                 ))
         if scene_id:
             presets = [preset for preset in presets if preset.scene_id == scene_id]
-        return presets
+        # Existing user-saved presets can predate bounded projection. Do not
+        # send their complete prompt to the reference picker.
+        return [item.model_copy(update={"compiled_prompt": ""}) for item in presets]
+
+    def _visual_reference_context_for_scene_asset(self, script: Script, scene_asset: Any) -> Dict[str, Any]:
+        """Resolve continuity IDs only when the selected scene asset maps to
+        one confirmed place/time identity in this episode's visual context."""
+        context = script.episode_visual_context
+        location = getattr(scene_asset, "name", "")
+        if not context:
+            return {"scene": {"location": location}}
+        matches = [item for item in context.scenes if scene_asset.id in {
+            item.scene_asset_id, item.plan_scene_asset_id,
+        }]
+        pairs = {
+            (item.place_continuity_id, item.time_continuity_id)
+            for item in matches
+            if item.place_continuity_id and item.time_continuity_id
+        }
+        scene_context: Dict[str, Any] = {"location": location}
+        result: Dict[str, Any] = {"scene": scene_context}
+        if len(pairs) != 1:
+            return result
+        place_id, time_id = next(iter(pairs))
+        matching = next((item for item in matches
+                         if (item.place_continuity_id, item.time_continuity_id) == (place_id, time_id)), None)
+        if not matching:
+            return result
+        scene_context.update({
+            "scene_id": matching.scene_id,
+            "location": matching.location or location,
+            "time_anchor": matching.time_anchor,
+            "place_continuity_id": place_id,
+            "time_continuity_id": time_id,
+            "time_of_day": matching.time_of_day,
+            "season": matching.season,
+            "weather": matching.weather,
+        })
+        result.update({
+            "shooting_plan_revision": context.shooting_plan_revision,
+            "shooting_plan_hash": context.shooting_plan_hash,
+        })
+        baseline = next((item for item in context.lighting_baselines
+                         if item.place_continuity_id == place_id and item.time_continuity_id == time_id), None)
+        if baseline:
+            result["lighting_baseline"] = baseline.model_dump(exclude_none=True)
+        return result
+
+    def _visual_reference_source(
+        self, script: Script, preset: ShotVisualPreset,
+    ) -> Tuple[Optional[StoryboardFrame], Any, Any, Any, Dict[str, Any]]:
+        source_frame = next((item for item in script.frames if item.id == preset.source_frame_id), None)
+        source_asset = None
+        source_variant = None
+        source_scene = None
+        source_context: Dict[str, Any] = {}
+        if preset.source_asset_id:
+            source_asset, _ = self._find_asset_with_source(script, preset.source_asset_id, "scene")
+            if source_asset is not None:
+                source_scene = source_asset
+                source_variant = next((item for item in (source_asset.image_asset.variants or [])
+                                       if item.id == preset.source_variant_id), None)
+                source_context = self._visual_reference_context_for_scene_asset(script, source_asset)
+        elif source_frame is not None:
+            source_scene = self._storyboard_scene_asset(script, source_frame)
+            source_asset = source_scene
+            asset = source_frame.rendered_image_asset or source_frame.image_asset
+            source_variant = next((item for item in (asset.variants or [])
+                                   if item.id == preset.source_variant_id), None)
+            source_context = {}
+        return source_frame, source_asset, source_variant, source_scene, source_context
+
+    def _visual_reference_projection_candidate(
+        self, script: Script, frame: StoryboardFrame, preset_id: str,
+    ) -> Tuple[ShotVisualPreset, StoryboardReferenceProjectionSnapshot, Any, Any, Any, Optional[str]]:
+        preset = next((item for item in self.list_shot_visual_presets(script.id)
+                       if item.id == preset_id), None)
+        if preset is None:
+            raise ValueError("visual preset not found")
+        source_frame, source_asset, source_variant, source_scene, source_context = self._visual_reference_source(script, preset)
+        if preset.source_variant_id and source_variant is None:
+            raise ValueError("visual preset reference variant is unavailable")
+        target_scene = self._storyboard_scene_asset(script, frame)
+        assets = self.resolve_project_assets(script)
+        target_refs: set[str] = set()
+        for asset_type, ids in (("character", frame.character_ids), ("prop", frame.prop_ids)):
+            for asset_id in ids:
+                target_refs.add(asset_id)
+                asset = next((item for item in assets.get(f"{asset_type}s", []) if item.id == asset_id), None)
+                if asset is not None and getattr(asset, "name", None):
+                    target_refs.add(asset.name)
+        snapshot = build_reference_projection(
+            frame,
+            source_frame=source_frame,
+            source_asset=source_asset,
+            source_variant=source_variant,
+            source_scene=source_scene,
+            target_scene=target_scene,
+            source_context=source_context or None,
+            source_asset_id=preset.source_asset_id,
+            source_variant_id=preset.source_variant_id,
+            source_media_id=getattr(source_variant, "media_id", None),
+            source_asset_revision=getattr(source_asset, "asset_revision", None),
+            target_entity_refs=target_refs,
+        ).model_copy(update={"source_preset_id": preset.id})
+        source_projection_hash = self._reference_projection_hash(snapshot)
+        snapshot = snapshot.model_copy(update={"source_projection_hash": source_projection_hash})
+        _, source_scope = self._find_asset_with_source(script, source_asset.id, "scene") if source_asset and source_asset.id else (None, None)
+        scope = {"script": "project", "series": "series", "global": "global"}.get(source_scope)
+        return preset, snapshot, source_frame, source_asset, source_variant, scope
+
+    @staticmethod
+    def _reference_projection_hash(snapshot: StoryboardReferenceProjectionSnapshot) -> str:
+        payload = {
+            "source_frame_id": snapshot.source_frame_id,
+            "source_shot_id": snapshot.source_shot_id,
+            "source_scene_id": snapshot.source_scene_id,
+            "source_asset_id": snapshot.source_asset_id,
+            "source_variant_id": snapshot.source_variant_id,
+            "source_media_id": snapshot.source_media_id,
+            "source_scene_design_revision": snapshot.source_scene_design_revision,
+            "source_plan_revision": snapshot.source_plan_revision,
+            "source_plan_hash": snapshot.source_plan_hash,
+            "scope": snapshot.scope,
+            "eligible_fields": snapshot.eligible_fields,
+            "visual_design": snapshot.visual_design,
+        }
+        encoded = json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+        return hashlib.sha256(encoded.encode("utf-8")).hexdigest()
+
+    def preview_shot_visual_preset(
+        self, script_id: str, frame_id: str, preset_id: str,
+    ) -> Dict[str, Any]:
+        script = self.scripts.get(script_id)
+        if not script:
+            raise ValueError("Script not found")
+        frame = next((item for item in script.frames if item.id == frame_id), None)
+        if not frame:
+            raise ValueError("Frame not found")
+        preset, snapshot, _source_frame, _source_asset, source_variant, _scope = self._visual_reference_projection_candidate(
+            script, frame, preset_id,
+        )
+        source_url = image_variant_storage_key(source_variant) if source_variant else None
+        return {
+            "preset": {
+                "id": preset.id,
+                "name": preset.name,
+                "source_frame_id": preset.source_frame_id,
+                "source_asset_id": preset.source_asset_id,
+                "source_variant_id": preset.source_variant_id,
+            },
+            "reference_image_available": bool(source_url),
+            "source_label": preset.name,
+            "projection": snapshot.model_dump(mode="json"),
+        }
+
+    def storyboard_continuity_sheet(self, script_id: str) -> Dict[str, Any]:
+        script = self.scripts.get(script_id)
+        if not script:
+            raise ValueError("Script not found")
+        series = self.series_store.get(script.series_id) if script.series_id else None
+        model_name = series.model_settings.i2i_model if series else script.model_settings.i2i_model
+        resolved = self.resolve_project_assets(script)
+        sheet = build_continuity_sheet(script, resolved["scenes"], model_name=model_name)
+        frames = {frame.id: frame for frame in script.frames}
+        for row in sheet["rows"]:
+            frame = frames[row["frame_id"]]
+            dimensions: Dict[str, Dict[str, Any]] = {}
+            row["asset_visual_context"], row["asset_visual_issues"] = self._shot_asset_visual_context(script, frame, resolved, dimensions)
+            row["asset_dimensions"] = dimensions
+            row["visual_source_hash"] = self._workbench_visual_source_hash(
+                script, frame, row, resolved,
+            )
+        return sheet
+
+    @staticmethod
+    def _shot_character_use(script: Script, frame: StoryboardFrame, asset_id: str) -> Optional[Any]:
+        return next((use for use in script.episode_character_uses
+                     if frame.character_use_ids.get(use.project_character_id) == use.use_id
+                     and asset_id in (use.project_character_id, use.selected_asset_id)), None)
+
+    def _shot_asset_visual_context(self, script: Script, frame: StoryboardFrame,
+                                   resolved: Dict[str, List[Any]],
+                                   dimensions: Optional[Dict[str, Dict[str, Any]]] = None) -> Tuple[str, List[str]]:
+        parts: List[str] = []
+        issues: List[str] = []
+        for asset_type, ids in (("character", frame.character_ids), ("prop", frame.prop_ids)):
+            assets = {item.id: item for item in resolved.get(f"{asset_type}s", [])}
+            for asset_id in ids:
+                selected_use = self._shot_character_use(script, frame, asset_id) if asset_type == "character" else None
+                effective_asset_id = selected_use.selected_asset_id if selected_use else asset_id
+                asset = assets.get(effective_asset_id)
+                if asset is None:
+                    issues.append(f"{asset_type}:{effective_asset_id}:missing_asset")
+                    continue
+                variants = {item.id: item for item in self._asset_image_variants(asset, asset_type)}
+                selected_ids = frame.workbench_reference_variant_ids.get(effective_asset_id, [])
+                if selected_use:
+                    selected_ids = [selected_use.selected_variant_id]
+                if not selected_ids:
+                    selected_id = self._selected_asset_variant_id(asset, asset_type)
+                    selected_ids = [selected_id] if selected_id else []
+                if any(variant_id not in variants for variant_id in selected_ids):
+                    issues.append(f"{asset_type}:{effective_asset_id}:missing_variant")
+                    continue
+                record = asset.character_design if asset_type == "character" else asset.asset_design
+                revisions = record.get("design_revisions") if isinstance(record, dict) else None
+                revisions = revisions if isinstance(revisions, list) else []
+                if not revisions:
+                    continue
+                revision_ids = {
+                    getattr(getattr(variants[variant_id], "submission_snapshot", None),
+                            "design_revision_at_submission", None)
+                    for variant_id in selected_ids
+                }
+                revision_ids.discard(None)
+                if len(revision_ids) > 1:
+                    issues.append(f"{asset_type}:{effective_asset_id}:mixed_design_revisions")
+                    continue
+                revision_id = next(iter(revision_ids)) if revision_ids else revisions[-1].get("revision")
+                selected_revision = next((item for item in revisions
+                                          if isinstance(item, dict) and item.get("revision") == revision_id), None)
+                if not selected_revision or not isinstance(selected_revision.get("design"), dict):
+                    issues.append(f"{asset_type}:{effective_asset_id}:missing_design_revision")
+                    continue
+                design = selected_revision["design"]
+                if asset_type == "character":
+                    identity = design.get("identity") if isinstance(design.get("identity"), dict) else {}
+                    features = identity.get("features") if isinstance(identity.get("features"), dict) else {}
+                    height = features.get("height")
+                    if isinstance(height, str) and height.strip():
+                        if dimensions is not None:
+                            dimensions[f"character:{effective_asset_id}"] = {
+                                "height": height.strip(), "design_revision": revision_id,
+                            }
+                    descriptions = []
+                    for key in ("identity", "look"):
+                        section = design.get(key)
+                        if not isinstance(section, dict):
+                            continue
+                        notes = section.get("visual_notes")
+                        if not isinstance(notes, str) or not notes.strip():
+                            features = section.get("features")
+                            notes = "、".join(str(value).strip() for value in features.values()
+                                             if isinstance(value, str) and value.strip()) if isinstance(features, dict) else ""
+                        if notes:
+                            descriptions.append(notes.strip()[:240])
+                    description = "；".join(descriptions)
+                    if isinstance(height, str) and height.strip() and height.strip() not in description:
+                        description = "；".join(filter(None, [description, f"身高：{height.strip()}"]))
+                else:
+                    notes = design.get("visual_notes")
+                    description = notes.strip()[:240] if isinstance(notes, str) else ""
+                    measure = design.get("dimensions")
+                    length = measure.get("length_cm") if isinstance(measure, dict) else None
+                    if isinstance(length, (int, float)) and not isinstance(length, bool) and length > 0:
+                        if dimensions is not None:
+                            dimensions[f"prop:{effective_asset_id}"] = {
+                                "length_cm": length, "design_revision": revision_id,
+                            }
+                        description = "；".join(filter(None, [description, f"全长：{length:g}厘米"]))
+                if description:
+                    label = "角色" if asset_type == "character" else "道具"
+                    parts.append(f"{label}{asset.name}：{description}")
+        if frame.crowd_instances:
+            self._validate_crowd_instances(script, frame.crowd_instances)
+            series = self.series_store[script.series_id]
+            roster = {item.extra_id: item for item in series.extra_roster}
+            for instance in frame.crowd_instances:
+                entry = roster[instance.extra_id or instance.template_id]
+                details = [entry.label, f"{instance.layer}层", instance.region]
+                if entry.kind == "fixed_extra":
+                    details.extend([entry.height, entry.body_build, entry.wardrobe])
+                else:
+                    details.extend([entry.body_build, entry.wardrobe, entry.palette])
+                if instance.variant_ids:
+                    details.append("变体：" + ",".join(instance.variant_ids))
+                details.extend([instance.facing, instance.motion])
+                parts.append("群演：" + "；".join(value for value in details if value))
+        return "\n".join(parts), issues
+
+    def _workbench_visual_source_hash(self, script: Script, frame: StoryboardFrame,
+                                      row: Optional[Dict[str, Any]] = None,
+                                      resolved: Optional[Dict[str, List[Any]]] = None) -> str:
+        if row is None:
+            row = next(item for item in self.storyboard_continuity_sheet(script.id)["rows"]
+                       if item["frame_id"] == frame.id)
+        resolved = resolved or self.resolve_project_assets(script)
+        asset_sources = []
+        for asset_type, ids in (
+            ("scene", [frame.scene_id]), ("character", frame.character_ids), ("prop", frame.prop_ids),
+        ):
+            assets = {item.id: item for item in resolved.get(f"{asset_type}s", [])}
+            for asset_id in ids:
+                selected_use = self._shot_character_use(script, frame, asset_id) if asset_type == "character" else None
+                effective_asset_id = selected_use.selected_asset_id if selected_use else asset_id
+                asset = assets.get(effective_asset_id)
+                if asset is None:
+                    asset_sources.append([asset_type, effective_asset_id, "missing"])
+                    continue
+                record = asset.character_design if asset_type == "character" else asset.asset_design
+                revisions = record.get("design_revisions") if isinstance(record, dict) else None
+                latest = revisions[-1] if isinstance(revisions, list) and revisions else None
+                variants = {item.id: item for item in self._asset_image_variants(asset, asset_type)}
+                selected_ids = frame.workbench_reference_variant_ids.get(effective_asset_id)
+                if selected_use:
+                    selected_ids = [selected_use.selected_variant_id]
+                if not selected_ids:
+                    selected_id = self._selected_asset_variant_id(asset, asset_type)
+                    selected_ids = [selected_id] if selected_id else []
+                selected = [[variant_id, getattr(variants.get(variant_id), "media_id", None),
+                             variant_id in variants] for variant_id in selected_ids]
+                asset_sources.append([asset_type, effective_asset_id, latest, selected])
+        reviewed_looks = [
+            [use.project_character_id, use.selected_asset_id, use.selected_asset_revision,
+             use.selected_variant_id, use.selected_media_id]
+            for use in script.episode_character_uses
+            if frame.character_use_ids.get(use.project_character_id) == use.use_id
+        ]
+        payload = {
+            "fields": row["fields"], "scene_design_revision": row["scene_design_revision"],
+            "scene_baseline": row.get("scene_baseline", {}),
+            "style_hash": row["style_hash"], "reference": row["reference"],
+            "asset_sources": asset_sources,
+            "asset_visual_context": row.get("asset_visual_context", ""),
+            "asset_dimensions": row.get("asset_dimensions", {}),
+            "asset_visual_issues": row.get("asset_visual_issues", []),
+            "selected_variants": frame.workbench_reference_variant_ids,
+            "crowd_instances": [item.model_dump(mode="json") for item in frame.crowd_instances],
+            "reviewed_looks": reviewed_looks,
+            "camera_movement_structured": frame.camera_movement_structured.model_dump(mode="json")
+            if hasattr(frame.camera_movement_structured, "model_dump") else frame.camera_movement_structured,
+            "negative_prompt_override": frame.negative_prompt_override,
+        }
+        return hashlib.sha256(json.dumps(payload, sort_keys=True, ensure_ascii=False, default=str).encode()).hexdigest()
 
     def save_shot_visual_preset(
         self,
@@ -635,41 +1012,96 @@ class ComicGenPipeline(StudioOwnerMixin):
         frame_id: str,
         preset_id: str,
         apply_mode: str = "parameters_only",
+        selected_fields: Optional[List[str]] = None,
     ) -> Optional[StoryboardFrame]:
-        """Copy a preset into the current frame; never create a live link."""
-        if apply_mode not in ("parameters_only", "parameters_with_reference"):
+        """Apply an explicitly selected reference as an immutable snapshot.
+
+        ``image_only`` and ``image_and_context`` are the new reviewable modes.
+        The two ``parameters_*`` modes remain for old saved projects.
+        """
+        valid_modes = {
+            "parameters_only", "parameters_with_reference", "image_only", "image_and_context",
+        }
+        if apply_mode not in valid_modes:
             raise ValueError("invalid visual preset apply_mode")
         with self._save_lock:
             script = self.scripts.get(script_id)
             if not script:
                 return None
             frame = next((item for item in (script.frames or []) if item.id == frame_id), None)
-            preset = next((item for item in (getattr(script, "shot_visual_presets", []) or []) if item.id == preset_id), None)
-            if not frame or not preset:
+            if not frame:
                 return None
-            if frame.scene_id != preset.scene_id:
-                raise ValueError("visual preset belongs to another scene")
-            source_frame = next((item for item in (script.frames or []) if item.id == preset.source_frame_id), None)
-            source_variant = None
-            if preset.source_asset_id and preset.source_variant_id:
-                source_asset = next((item for item in (script.scenes or []) if item.id == preset.source_asset_id), None)
-                source_variant = next((item for item in ((source_asset.image_asset.variants if source_asset else []) or []) if item.id == preset.source_variant_id), None)
-            elif source_frame and preset.source_variant_id:
-                source_asset = source_frame.rendered_image_asset or source_frame.image_asset
-                source_variant = next((item for item in (source_asset.variants or []) if item.id == preset.source_variant_id), None)
-            if apply_mode == "parameters_with_reference":
+            preset, candidate, source_frame, source_asset, source_variant, source_scope = self._visual_reference_projection_candidate(
+                script, frame, preset_id,
+            )
+            include_image = apply_mode in ("parameters_with_reference", "image_only", "image_and_context")
+            include_context = apply_mode in ("parameters_only", "image_and_context") or (
+                apply_mode == "parameters_with_reference" and selected_fields is not None
+            )
+            projection: Optional[StoryboardReferenceProjectionSnapshot] = None
+            if include_context and selected_fields is not None:
+                projection = select_projection_fields(candidate, selected_fields)
+                projection = projection.model_copy(update={
+                    "include_reference_image": include_image,
+                })
+            elif apply_mode == "image_only":
+                projection = select_projection_fields(candidate, [])
+            if include_image:
                 if not source_variant:
                     raise ValueError("visual preset reference variant is unavailable")
                 source_key = image_variant_storage_key(source_variant)
                 frame.t2i_image_urls = [*([u for u in (frame.t2i_image_urls or []) if u != source_key]), source_key][-self._T2I_HISTORY_LIMIT:]
                 frame.t2i_selected_index = len(frame.t2i_image_urls) - 1
+                source_asset_id = preset.source_asset_id if preset.source_asset_id else None
+                reference = StoryboardReference(
+                    kind="scene" if source_asset_id else "upload",
+                    url=source_key or source_variant.url,
+                    media_id=source_variant.media_id,
+                    label=preset.name,
+                    source_asset_id=source_asset_id,
+                    source_variant_id=source_variant.id,
+                )
+                previous_projection = frame.reference_visual_projection
+                old_refs = [item for item in frame.reference_package.references
+                            if not (
+                                (item.source_asset_id == reference.source_asset_id
+                                 and item.source_variant_id == reference.source_variant_id)
+                                or (previous_projection and item.source_asset_id == previous_projection.source_asset_id
+                                    and item.source_variant_id == previous_projection.source_variant_id)
+                            )]
+                frame.reference_package.references = [*old_refs, reference]
+                frame.reference_package.confirmed = True
+                frame.reference_package.revision += 1
+                frame.reference_package.updated_at = time.time()
+                # Pin only library assets. A frame-rendered variant has no
+                # asset-library revision and remains identified by frame ID.
+                if source_asset_id:
+                    frame.reference_package.asset_revision_pins = self._pin_frame_assets(
+                        script, frame, frame.reference_package,
+                    )
+            if projection is not None:
+                frame.reference_visual_projection = projection
+            # Keep the older snapshot surface readable for existing clients,
+            # but it contains only the selected structured categories.
+            visual_design = projection.visual_design if projection else (
+                copy.deepcopy(preset.visual_design) if apply_mode in ("parameters_only", "parameters_with_reference") else {}
+            )
+            compiled_prompt = "\n".join(reference_projection_prompt_clauses(
+                projection, frame, self._storyboard_scene_asset(script, frame),
+            )) if projection else ""
             frame.shot_visual_design = ShotVisualDesignSnapshot(
-                visual_design=copy.deepcopy(preset.visual_design),
-                compiled_prompt=preset.compiled_prompt,
+                visual_design=copy.deepcopy(visual_design),
+                compiled_prompt=compiled_prompt,
                 source_preset_id=preset.id,
-                source_variant_id=preset.source_variant_id if apply_mode == "parameters_with_reference" else None,
+                source_asset_id=preset.source_asset_id if include_image else None,
+                source_frame_id=preset.source_frame_id if include_image else None,
+                source_variant_id=preset.source_variant_id if include_image else None,
+                source_media_id=getattr(source_variant, "media_id", None) if include_image else None,
+                source_asset_revision=getattr(source_asset, "asset_revision", None) or None if include_image else None,
+                source_scope=source_scope if include_image else None,
+                selected_fields=list(projection.selected_fields) if projection else [],
                 source_scene_revision=preset.source_scene_revision,
-                apply_mode=apply_mode,
+                apply_mode=("parameters_with_reference" if include_image else "parameters_only"),
                 revision=(frame.shot_visual_design.revision + 1) if frame.shot_visual_design else 1,
             )
             frame.updated_at = time.time()
@@ -1027,7 +1459,7 @@ class ComicGenPipeline(StudioOwnerMixin):
         # even when the short-lived preview cache has expired.
         cached = self._extraction_cache.pop(script_id, None)
         if draft is not None:
-            normalized = {key: list(draft.get(key, [])) for key in ("characters", "scenes", "props")}
+            normalized = {key: list(draft.get(key, [])) for key in ("characters", "crowd_groups", "scenes", "props")}
             new_script = self.script_processor._create_script_from_data(
                 existing_script.title, text, normalized
             )
@@ -1243,7 +1675,7 @@ class ComicGenPipeline(StudioOwnerMixin):
                 raise InvalidAssetReference("scene tool requires its source scene variant first and at most one lighting reference")
             if prompt != scene_tool_prompt(parsed, len(normalized_references) == 2):
                 raise InvalidAssetReference("scene tool prompt must match the reviewed compiled prompt")
-            normalized_scene_tool = parsed.model_dump()
+            normalized_scene_tool = parsed.model_dump(exclude_none=True)
             expected_mode = "scene_lighting" if parsed.kind == "lighting" else "scene_camera"
             edit_mode = edit_mode or expected_mode
             if edit_mode != expected_mode:
@@ -2004,6 +2436,9 @@ class ComicGenPipeline(StudioOwnerMixin):
         script = self.scripts.get(script_id)
         if not script:
             raise ValueError("Script not found")
+        if any(item.selected_asset_id == char_id or item.project_character_id == char_id
+               for item in script.episode_character_uses):
+            raise ValueError("Cannot delete a character used by a confirmed episode look")
         
         self.retire_episode_plan_asset(script, "character", char_id)
         script.characters = [c for c in script.characters if c.id != char_id]
@@ -2223,6 +2658,9 @@ class ComicGenPipeline(StudioOwnerMixin):
     @staticmethod
     def _selected_asset_variant_id(asset: Any, asset_type: str) -> Optional[str]:
         if asset_type == "character":
+            cover_id = ComicGenPipeline._explicit_asset_cover_variant_id(asset, asset_type)
+            if cover_id:
+                return cover_id
             selected = getattr(getattr(asset, "reference_sheet", None), "selected_image_id", None)
             if selected:
                 return selected
@@ -2323,6 +2761,28 @@ class ComicGenPipeline(StudioOwnerMixin):
                 frame_changed = False
                 for variant in image_asset.variants:
                     old_key = image_variant_storage_key(variant)
+                    # Older last-frame extracts stored the OSS projection as
+                    # storage_key even though the owner-local file was retained.
+                    if (variant.prompt_used == "Extracted last frame from video"
+                            and old_key and not old_key.startswith("users/")):
+                        filename = os.path.basename(old_key)
+                        if filename.startswith(f"frame_{frame.id}_lastframe_") and filename.endswith(".jpg"):
+                            destination = os.path.join(owner_dir, filename)
+                            if os.path.isfile(destination):
+                                new_key = os.path.relpath(destination, self.output_root)
+                                variant.url = new_key
+                                variant.storage_key = new_key
+                                variant.media_id = None
+                                frame.t2i_image_urls = [
+                                    new_key if value == old_key else value
+                                    for value in frame.t2i_image_urls
+                                ]
+                                if image_asset.selected_id == variant.id:
+                                    frame.image_url = new_key
+                                    frame.rendered_image_url = new_key
+                                changed = True
+                                frame_changed = True
+                                continue
                     if not old_key or not old_key.startswith("storyboard/"):
                         continue
                     try:
@@ -2647,6 +3107,13 @@ class ComicGenPipeline(StudioOwnerMixin):
         target_asset, source = self._find_asset_with_source(script, asset_id, asset_type)
         if not target_asset:
             raise ValueError(f"Asset {asset_id} of type {asset_type} not found")
+        if asset_type == "character" and (
+            "asset_pack" in attributes or
+            (getattr(target_asset, "asset_pack", None) and set(attributes) & {
+                "reference_sheet", "full_body_asset", "asset_revision", "asset_revisions",
+            })
+        ):
+            raise ValueError("Confirmed character asset pack can only change through reviewed anchor operations")
 
         if "name" in attributes:
             attributes = {**attributes, "name": self._validated_asset_name(attributes["name"])}
@@ -2657,21 +3124,110 @@ class ComicGenPipeline(StudioOwnerMixin):
             design = attributes["character_design"]
             if not isinstance(design, dict):
                 raise ValueError("Character design must be an object")
+            if "active_design_source" in design and design["active_design_source"] not in ("panel", "ai"):
+                raise ValueError("Character active design source is invalid")
+            # Validate before mutating either draft or confirmed revisions.
+            if "constraints" in design:
+                design = {**design, "constraints": CharacterConstraints.model_validate(design["constraints"]).model_dump()}
+            configs = design.get("dictionary_configurations", [])
+            if not isinstance(configs, list) or len(configs) > 50 or any(not isinstance(item, dict) for item in configs):
+                raise ValueError("Character dictionary configuration is invalid")
+            if len(json.dumps(configs, ensure_ascii=False)) > 60000:
+                raise ValueError("Character dictionary configuration is too large")
+            if not isinstance(design.get("supplemental_prompt", ""), str) or len(design.get("supplemental_prompt", "")) > 8000:
+                raise ValueError("Character design supplemental prompt is invalid")
+            if design.get("schema_version") not in (None, "iframe.character-fields.v1"):
+                raise ValueError("Character design schema version is invalid")
             identity = design.get("identity", {})
             look = design.get("look", {})
             if not isinstance(identity, dict) or not isinstance(look, dict):
                 raise ValueError("Character design identity and look must be objects")
-            for section, allowed in ((identity, {"face", "hair", "skin", "build", "recognition_marks"}),
-                                     (look, {"clothing", "palette", "accessories", "weapon"})):
+            for section, allowed in ((identity, {"gender", "age", "face", "face_shape", "forehead", "cheekbones", "jaw", "chin", "eyebrows", "eyes", "eye_detail", "nose", "lips", "makeup", "hair", "skin", "skin_tone", "skin_texture", "height", "build", "recognition_marks"}),
+                                     (look, {"clothing", "palette", "footwear", "jewelry", "decoration", "condition", "garment_condition", "jewelry_condition", "accessories", "weapon"})):
+                if section.get("editor_mode") not in (None, "notes", "fields"):
+                    raise ValueError("Character design editor mode is invalid")
                 features = section.get("features", {})
                 if not isinstance(features, dict) or set(features) - allowed or any(
                     not isinstance(value, str) or len(value) > 500 for value in features.values()
                 ):
                     raise ValueError("Character design features are invalid")
+            section_fields = {
+                "identity": {"gender", "age", "face", "face_shape", "forehead", "cheekbones", "jaw", "chin", "eyebrows", "eyes", "eye_detail", "nose", "lips", "makeup", "hair", "skin", "skin_tone", "skin_texture", "height", "build", "recognition_marks"},
+                "look": {"clothing", "palette", "footwear", "jewelry", "decoration", "condition", "garment_condition", "jewelry_condition", "accessories", "weapon"},
+            }
+            valid_basis = {"script_fact", "user_specified", "confirmed_design", "verified_reference", "creative_choice"}
+
+            def validate_design_snapshot(snapshot_key: str, *, is_result: bool) -> None:
+                if snapshot_key not in design:
+                    return
+                snapshot = design.get(snapshot_key)
+                allowed_snapshot_keys = {"schema_version", "prompt", "identity", "look"}
+                if is_result:
+                    allowed_snapshot_keys |= {"source", "skill_revision"}
+                else:
+                    allowed_snapshot_keys |= {
+                        "supplemental_prompt", "dictionary_configurations", "constraints", "route",
+                        "age_stage", "style_notes", "preset_selections",
+                    }
+                if not isinstance(snapshot, dict) or set(snapshot) - allowed_snapshot_keys:
+                    raise ValueError(f"Character {snapshot_key} is invalid")
+                expected_snapshot_version = "iframe.character-design-result.v1" if is_result else "iframe.character-design-input.v1"
+                if snapshot.get("schema_version") != expected_snapshot_version:
+                    raise ValueError(f"Character {snapshot_key} schema version is invalid")
+                prompt = snapshot.get("prompt")
+                max_prompt_length = 20000 if is_result else 8000
+                if not isinstance(prompt, str) or len(prompt) > max_prompt_length:
+                    raise ValueError(f"Character {snapshot_key} prompt is invalid")
+                if is_result:
+                    if snapshot.get("source") not in {"panel", "ai", "user-edited", "legacy"}:
+                        raise ValueError("Character design result source is invalid")
+                    skill_revision = snapshot.get("skill_revision")
+                    if skill_revision is not None and (not isinstance(skill_revision, str) or len(skill_revision) > 200):
+                        raise ValueError("Character design result skill revision is invalid")
+                else:
+                    supplemental = snapshot.get("supplemental_prompt", "")
+                    if not isinstance(supplemental, str) or len(supplemental) > 8000:
+                        raise ValueError("Character design input supplemental prompt is invalid")
+                    input_configs = snapshot.get("dictionary_configurations", [])
+                    if not isinstance(input_configs, list) or len(input_configs) > 50 or any(not isinstance(item, dict) for item in input_configs):
+                        raise ValueError("Character design input dictionary configuration is invalid")
+                    if len(json.dumps(input_configs, ensure_ascii=False)) > 60000:
+                        raise ValueError("Character design input dictionary configuration is too large")
+                    if "constraints" in snapshot:
+                        snapshot["constraints"] = CharacterConstraints.model_validate(snapshot["constraints"]).model_dump()
+                    for field in ("route", "age_stage", "style_notes"):
+                        value = snapshot.get(field)
+                        if value is not None and (not isinstance(value, str) or len(value) > 1000):
+                            raise ValueError(f"Character design input {field} is invalid")
+                    preset_selections = snapshot.get("preset_selections", [])
+                    if not isinstance(preset_selections, list) or len(preset_selections) > 100 or any(not isinstance(item, dict) for item in preset_selections):
+                        raise ValueError("Character design input preset selections are invalid")
+                for section_name in ("identity", "look"):
+                    section = snapshot.get(section_name)
+                    if not isinstance(section, dict) or set(section) - {"visual_notes", "features", "editor_mode", "basis"}:
+                        raise ValueError(f"Character {snapshot_key} {section_name} is invalid")
+                    notes = section.get("visual_notes")
+                    if notes is not None and (not isinstance(notes, str) or len(notes) > 8000):
+                        raise ValueError(f"Character {snapshot_key} {section_name} notes are invalid")
+                    if section.get("editor_mode") not in (None, "notes", "fields"):
+                        raise ValueError(f"Character {snapshot_key} {section_name} editor mode is invalid")
+                    features = section.get("features", {})
+                    if not isinstance(features, dict) or set(features) - section_fields[section_name] or any(
+                        not isinstance(value, str) or len(value) > 500 for value in features.values()
+                    ):
+                        raise ValueError(f"Character {snapshot_key} {section_name} features are invalid")
+                    basis = section.get("basis", [])
+                    if not isinstance(basis, list) or len(basis) > 10 or any(item not in valid_basis for item in basis):
+                        raise ValueError(f"Character {snapshot_key} {section_name} basis is invalid")
+
+            validate_design_snapshot("design_input", is_result=False)
+            validate_design_snapshot("design_result", is_result=True)
+            if len(json.dumps({key: design[key] for key in ("design_input", "design_result") if key in design}, ensure_ascii=False)) > 120000:
+                raise ValueError("Character design input and result snapshots are too large")
             notes = identity.get("visual_notes")
-            visible_identity = isinstance(notes, str) and bool(notes.strip()) or any(
-                value.strip() for value in identity.get("features", {}).values()
-            )
+            visible_notes = isinstance(notes, str) and bool(notes.strip())
+            visible_features = any(value.strip() for value in identity.get("features", {}).values())
+            visible_identity = visible_notes if identity.get("editor_mode") == "notes" else visible_features or visible_notes
             if design.get("confirmed") and not visible_identity:
                 raise ValueError("Confirm a concrete visual design before saving a revision")
             character_design = dict(target_asset.character_design or {})
@@ -2690,7 +3246,7 @@ class ComicGenPipeline(StudioOwnerMixin):
             design = attributes["asset_design"]
             if not isinstance(design, dict):
                 raise ValueError("Asset design must be an object")
-            scene_fields = {"style", "ambient_lighting", "local_lighting", "reference_viewpoint", "reference_framing", "visual_constraints"} if asset_type == "scene" else set()
+            scene_fields = {"style", "ambient_lighting", "local_lighting", "reference_viewpoint", "reference_framing", "visual_constraints", "prompt_workspace", "prompt_layers", "asset_baseline", "shot_only_content", "crowd_design"} if asset_type == "scene" else {"dimensions"}
             if set(design) - {"visual_notes", "user_requirements", "unresolved", "confirmed"} - scene_fields:
                 raise ValueError("Asset design contains unknown fields")
             notes = design.get("visual_notes")
@@ -2701,9 +3257,77 @@ class ComicGenPipeline(StudioOwnerMixin):
             unresolved = design.get("unresolved", [])
             if not isinstance(unresolved, list) or any(not isinstance(item, str) for item in unresolved):
                 raise ValueError("Asset design unresolved items must be text")
+            if asset_type == "scene":
+                baseline = design.get("asset_baseline", {})
+                if baseline:
+                    if not isinstance(baseline, dict):
+                        raise ValueError("Scene asset baseline must be an object")
+                    required = {"scene_identity", "location_type", "fixed_geometry", "fixed_landmarks",
+                                "materials", "environment", "time_baseline", "lighting_baseline",
+                                "composition_tendency", "reusable_constraints", "basis"}
+                    if set(baseline) - required or not required.issubset(baseline):
+                        raise ValueError("Scene asset baseline fields are incomplete")
+                    for key in ("scene_identity", "location_type", "time_baseline", "lighting_baseline", "composition_tendency"):
+                        if not isinstance(baseline[key], str):
+                            raise ValueError("Scene asset baseline text fields must be text")
+                    for key in ("fixed_geometry", "fixed_landmarks", "materials", "environment", "reusable_constraints", "basis"):
+                        if not isinstance(baseline[key], list) or any(not isinstance(item, str) for item in baseline[key]):
+                            raise ValueError("Scene asset baseline list fields must contain text")
+                shot_only = design.get("shot_only_content", [])
+                if not isinstance(shot_only, list) or any(not isinstance(item, str) for item in shot_only):
+                    raise ValueError("Scene shot-only content must be text")
             if not isinstance(design.get("confirmed", False), bool):
                 raise ValueError("Asset design confirmation must be boolean")
-            for field in scene_fields - {"local_lighting", "visual_constraints"}:
+            if asset_type == "prop" and "dimensions" in design:
+                measure = design["dimensions"]
+                if not isinstance(measure, dict) or set(measure) - {"length_cm"}:
+                    raise ValueError("Prop dimensions must contain only length_cm")
+                length = measure.get("length_cm")
+                if length is not None and (isinstance(length, bool) or not isinstance(length, (int, float)) or not 0 < length <= 10000):
+                    raise ValueError("Prop length_cm must be a positive bounded number")
+            if asset_type == "scene" and "crowd_design" in design:
+                crowd = design["crowd_design"]
+                if not isinstance(crowd, dict) or set(crowd) - {"near", "mid", "far"}:
+                    raise ValueError("Scene crowd_design must contain near, mid, and far layers")
+                for layer_name in ("near", "mid", "far"):
+                    layer = crowd.get(layer_name, {})
+                    if not isinstance(layer, dict) or set(layer) - {"identity_policy", "density", "subjects", "text_elements", "motion"}:
+                        raise ValueError(f"Scene crowd_design {layer_name} is invalid")
+                    policy = layer.get("identity_policy", "unidentified")
+                    if policy not in {"asset_required", "template_allowed", "unidentified"}:
+                        raise ValueError(f"Scene crowd_design {layer_name} identity_policy is invalid")
+                    for key in ("density", "motion"):
+                        if not isinstance(layer.get(key, ""), str) or len(layer.get(key, "")) > 500:
+                            raise ValueError(f"Scene crowd_design {layer_name} {key} must be bounded text")
+                    for key in ("subjects", "text_elements"):
+                        values = layer.get(key, [])
+                        if not isinstance(values, list) or len(values) > 50 or any(not isinstance(item, str) or len(item) > 300 for item in values):
+                            raise ValueError(f"Scene crowd_design {layer_name} {key} is invalid")
+            if "prompt_workspace" in design:
+                # Validate before mutating the asset. This is editor state, never
+                # an implicit replacement for the reviewed generation prompt.
+                workspace = ScenePromptWorkspace.model_validate(design["prompt_workspace"])
+                if design.get("confirmed") and workspace.active_source is not None:
+                    if not getattr(workspace, workspace.active_source).prompt.strip():
+                        raise ValueError("Selected scene design source must contain a prompt")
+                design = {**design, "prompt_workspace": workspace.model_dump(exclude_unset=True)}
+            if "prompt_layers" in design:
+                layers = ScenePromptLayers.model_validate(design["prompt_layers"])
+                design = {**design, "prompt_layers": layers.model_dump(exclude_unset=True)}
+                constraints = design.get("visual_constraints") or {}
+                if not isinstance(constraints, dict):
+                    raise ValueError("Asset design visual_constraints must be an object")
+                if (layers.lighting.direction.strip() or layers.lighting.angles is not None) and constraints.get("key_light_direction", "unspecified") != "unspecified":
+                    raise ValueError("Select one scene light direction source")
+                forbidden = constraints.get("forbidden_light_directions", [])
+                if layers.lighting.angles is not None:
+                    a, e = layers.lighting.angles.azimuth, layers.lighting.angles.elevation
+                    direction = "top" if e >= 60 else "bottom" if e <= -60 else "front" if abs(a) <= 22.5 else "back" if abs(a) >= 157.5 else "side"
+                else:
+                    direction = {"正面来光": "front", "背面来光": "back", "左侧来光": "side", "右侧来光": "side", "顶部来光": "top", "底部来光": "bottom"}.get(layers.lighting.direction)
+                if isinstance(forbidden, list) and direction and direction in forbidden:
+                    raise ValueError("Scene light direction conflicts with a forbidden direction")
+            for field in scene_fields - {"local_lighting", "visual_constraints", "prompt_workspace", "prompt_layers", "asset_baseline", "shot_only_content", "crowd_design", "dimensions"}:
                 value = design.get(field, "")
                 if not isinstance(value, str) or len(value) > 2000:
                     raise ValueError(f"Asset design {field} must be bounded text")
@@ -2738,9 +3362,14 @@ class ComicGenPipeline(StudioOwnerMixin):
             record["design_draft"] = design
             revisions = list(record.get("design_revisions") or [])
             if design.get("confirmed"):
+                confirmed_design = {key: value for key, value in design.items() if key not in {"confirmed", "prompt_workspace"}}
+                prompt_workspace = design.get("prompt_workspace", {})
+                active_source = prompt_workspace.get("active_source")
+                if active_source:
+                    confirmed_design["visual_notes"] = prompt_workspace[active_source]["prompt"].strip()
                 revisions.append({
                     "revision": len(revisions) + 1,
-                    "design": {key: value for key, value in design.items() if key != "confirmed"},
+                    "design": confirmed_design,
                 })
             record["design_revisions"] = revisions
             target_asset.asset_design = record
@@ -2972,7 +3601,7 @@ class ComicGenPipeline(StudioOwnerMixin):
             return series.director_profile_revisions[-1].profile
         return series.art_direction.director_profile if series.art_direction else None
 
-    def preview_series_director_profile(self, series_id: str) -> Dict[str, Any]:
+    def preview_series_director_profile(self, series_id: str, *, skill_snapshot=None) -> Dict[str, Any]:
         series = self.series_store.get(series_id)
         if not series:
             raise ValueError("Series not found")
@@ -2995,6 +3624,8 @@ class ComicGenPipeline(StudioOwnerMixin):
                     entities[kind].append({field: getattr(item, field, None) for field in fields})
                     known.add(item.id)
         entities["scope"] = "series"
+        if skill_snapshot:
+            entities["selected_creative_methods"] = skill_snapshot
         style = series.art_direction.style_config if series.art_direction else {}
         try:
             analyzed = self.script_processor.analyze_director_profile_with_audit(
@@ -3016,6 +3647,7 @@ class ComicGenPipeline(StudioOwnerMixin):
             raise
         normalized = normalize_director_profile_draft(analyzed["profile"])
         # A Series profile is global context, not an Episode source ledger.
+        normalized["creative_skill_run"] = director_skill_provenance(skill_snapshot or [])
         normalized["story_map"] = None
         normalized["source_revision"] = None
         normalized["source_revision_id"] = ""
@@ -3151,9 +3783,24 @@ class ComicGenPipeline(StudioOwnerMixin):
 
         scene_design_parts: List[str] = []
         if scene_design:
-            notes = str(scene_design.get("visual_notes") or "").strip()
-            if notes and (scene is None or notes not in scene.description):
-                scene_design_parts.append("空间与内容：" + notes)
+            baseline = scene_design.get("asset_baseline")
+            if isinstance(baseline, dict) and baseline.get("scene_identity"):
+                scene_design_parts.append("场景资产基线：" + str(baseline["scene_identity"]).strip())
+                for key, label in (("location_type", "地点类型"), ("fixed_geometry", "固定结构"),
+                                   ("fixed_landmarks", "固定地标"), ("materials", "材质"),
+                                   ("environment", "环境"), ("time_baseline", "默认时间"),
+                                   ("lighting_baseline", "世界光影"),
+                                   ("composition_tendency", "构图倾向"),
+                                   ("reusable_constraints", "复用约束")):
+                    value = baseline.get(key)
+                    if isinstance(value, list):
+                        value = "、".join(str(item).strip() for item in value if str(item).strip())
+                    if isinstance(value, str) and value.strip():
+                        scene_design_parts.append(f"{label}：{value.strip()}")
+            else:
+                notes = str(scene_design.get("visual_notes") or "").strip()
+                if notes and (scene is None or notes not in scene.description):
+                    scene_design_parts.append("空间与内容：" + notes)
             for key, label in (
                 ("ambient_lighting", "环境光"),
                 ("reference_viewpoint", "基础视角"),
@@ -3162,6 +3809,24 @@ class ComicGenPipeline(StudioOwnerMixin):
                 value = scene_design.get(key)
                 if isinstance(value, str) and value.strip():
                     scene_design_parts.append(f"{label}：{value.strip()}")
+            crowd = scene_design.get("crowd_design")
+            if isinstance(crowd, dict):
+                layer_labels = {"near": "近景人群", "mid": "中景人群", "far": "远景人群"}
+                for layer_name, label in layer_labels.items():
+                    layer = crowd.get(layer_name)
+                    if not isinstance(layer, dict):
+                        continue
+                    policy = layer.get("identity_policy")
+                    density = layer.get("density")
+                    motion = layer.get("motion")
+                    subjects = "、".join(item for item in layer.get("subjects", []) if isinstance(item, str))
+                    texts = "、".join(item for item in layer.get("text_elements", []) if isinstance(item, str))
+                    details = [f"身份策略：{policy}"] if policy else []
+                    if density: details.append(f"密度：{density}")
+                    if subjects: details.append(f"对象：{subjects}")
+                    if texts: details.append(f"固定文字：{texts}")
+                    if motion: details.append(f"运动：{motion}")
+                    if details: scene_design_parts.append(f"{label}：" + "；".join(details))
             constraints = scene_design.get("visual_constraints")
             if isinstance(constraints, dict):
                 light_names = {"front": "正面光", "back": "背面光", "side": "侧面光",
@@ -3174,12 +3839,6 @@ class ComicGenPipeline(StudioOwnerMixin):
                     names = [light_names[item] for item in forbidden if item in light_names]
                     if names:
                         scene_design_parts.append("禁止光线方向：" + "、".join(names))
-                face_limit = constraints.get("visible_face_limit")
-                if isinstance(face_limit, int) and not isinstance(face_limit, bool):
-                    scene_design_parts.append(f"可见人脸上限：{face_limit} 张")
-                people_view = constraints.get("secondary_people_view")
-                if isinstance(people_view, str) and people_view.strip():
-                    scene_design_parts.append("其他人物呈现：" + people_view.strip())
 
         lighting_parts: List[str] = []
         if frame.lighting:
@@ -3198,21 +3857,27 @@ class ComicGenPipeline(StudioOwnerMixin):
 
         parts = [
             str(frame.visual_description or frame.action_description or "").strip(),
-            f"Location: {scene.name}. {scene.description}" if scene else "",
+            (f"Location: {scene.name}" if isinstance(scene_design.get("asset_baseline"), dict)
+             and scene_design["asset_baseline"].get("scene_identity") else
+             f"Location: {scene.name}. {scene.description}") if scene else "",
             "场景视觉基线：" + "；".join(scene_design_parts)
             if scene_design_parts and scene_revision is not None else "",
             f"Visual style: {style_text}" if style_text else "",
             f"Lighting: {'; '.join(lighting_parts)}" if lighting_parts else "",
             f"Shot size: {frame.shot_size}" if frame.shot_size else "",
             f"Camera angle: {frame.camera_angle}" if frame.camera_angle else "",
-            f"Camera movement: {frame.camera_movement}" if frame.camera_movement else "",
-            f"Transition: {frame.transition_hint}" if frame.transition_hint else "",
+            f"Composition: {frame.composition}" if frame.composition else "",
         ]
         return "\n".join(item for item in parts if item)
 
     def storyboard_render_prompt_projection(self, script: Script, frame: StoryboardFrame, prompt: str) -> str:
         """Compose a draft render prompt with only this frame's constraints."""
+        self._validate_reference_visual_projection(script, frame)
         context = frame.director_shot_context
+        if frame.composition and isinstance(context, dict):
+            context = {**context}
+            if isinstance(context.get("shot"), dict):
+                context["shot"] = {key: value for key, value in context["shot"].items() if key != "composition"}
         _, scene_design = self._confirmed_scene_design(self._storyboard_scene_asset(script, frame))
         if self._scene_design_has_light(scene_design) and isinstance(context, dict):
             # A confirmed scene baseline supersedes older plan lighting. The
@@ -3224,9 +3889,18 @@ class ComicGenPipeline(StudioOwnerMixin):
                 context.pop("lighting", None)
         projected_context = append_projected_shot_context(prompt.strip(), context)
         frame_projection = self.storyboard_frame_prompt_projection(script, frame)
-        if not frame_projection:
-            return projected_context
-        return "\n\n".join(filter(None, [projected_context, "CURRENT SHOT VISUAL CONSTRAINTS:\n" + frame_projection]))
+        asset_visual_context, _ = self._shot_asset_visual_context(script, frame, self.resolve_project_assets(script))
+        reference_clauses = reference_projection_prompt_clauses(
+            frame.reference_visual_projection,
+            frame,
+            self._storyboard_scene_asset(script, frame),
+        )
+        return "\n\n".join(filter(None, [
+            projected_context,
+            "CURRENT SHOT VISUAL CONSTRAINTS:\n" + frame_projection if frame_projection else "",
+            "已确认资产外观：\n" + asset_visual_context if asset_visual_context else "",
+            "EXPLICIT REFERENCE VISUAL CONTEXT:\n" + "\n".join(reference_clauses) if reference_clauses else "",
+        ]))
 
     def director_prompt_context(
         self,
@@ -3310,6 +3984,41 @@ class ComicGenPipeline(StudioOwnerMixin):
             script, profile, execution_context, source_range,
         )
 
+    def storyboard_workflow_lineage(self, script_id, text, mode="auto", skill_snapshot=None):
+        lineage = self.storyboard_analysis_lineage(script_id, text)
+        script = self.scripts[script_id]
+        resolved = ("plan" if script.director_shooting_plan_revisions else "script") if mode == "auto" else mode
+        if resolved not in ("plan", "script"):
+            raise ValueError("Unknown storyboard mode")
+        if resolved == "plan" and skill_snapshot:
+            raise ValueError("按导演计划生成不重新执行创作 Skills")
+        lineage.storyboard_mode = resolved
+        if resolved == "script":
+            assets = self.resolve_project_assets(script)
+            context = self._storyboard_asset_library_context(assets)
+            lineage.storyboard_asset_context_hash = hashlib.sha256(json.dumps(
+                context, ensure_ascii=False, sort_keys=True, separators=(",", ":"),
+            ).encode()).hexdigest()
+        if resolved == "plan" and script.director_shooting_plan_revisions:
+            revision = script.director_shooting_plan_revisions[-1]
+            self._validate_director_shooting_plan(script, revision.plan)
+            context = self.project_episode_visual_context(script_id)
+            lineage.shooting_plan_revision = context.shooting_plan_revision
+            lineage.shooting_plan_hash = context.shooting_plan_hash
+        if resolved == "plan":
+            if not lineage.shooting_plan_revision:
+                raise ValueError("请先确认导演拍摄计划")
+            if text.strip() != script.original_text.strip():
+                raise ValueError("按导演计划生成目前需使用完整本集剧本")
+        lineage.creative_skill_run = director_skill_provenance(skill_snapshot or [])
+        return lineage
+
+    def validate_storyboard_coverage(self, script_id, frames, lineage):
+        if lineage and lineage.storyboard_mode == "plan":
+            from .storyboard_workflow import validate_plan_coverage
+            context = self.project_episode_visual_context(script_id).model_dump()
+            validate_plan_coverage(context["shots"], frames)
+
     def validate_storyboard_lineage(
         self,
         script_id: str,
@@ -3329,6 +4038,15 @@ class ComicGenPipeline(StudioOwnerMixin):
             field for field in pinned_fields
             if getattr(lineage, field) != getattr(current, field)
         ]
+        if lineage.storyboard_mode:
+            try:
+                workflow = self.storyboard_workflow_lineage(script_id, text, lineage.storyboard_mode)
+            except ValueError as exc:
+                raise StaleStoryboardDraftError(str(exc)) from exc
+            changed.extend(field for field in (
+                "shooting_plan_revision", "shooting_plan_hash", "storyboard_asset_context_hash",
+            )
+                           if getattr(lineage, field) != getattr(workflow, field))
         if changed:
             raise StaleStoryboardDraftError(
                 "Storyboard draft lineage is stale; upstream revisions changed: "
@@ -3459,13 +4177,15 @@ class ComicGenPipeline(StudioOwnerMixin):
         """Only entities extracted into this script can bind Director facts."""
         return {"characters": script.characters, "scenes": script.scenes, "props": script.props}
 
-    def preview_director_profile(self, script_id: str) -> Dict[str, Any]:
-        analyzed = self.preview_director_profile_with_audit(script_id)
+    def preview_director_profile(self, script_id: str, *, skill_snapshot=None) -> Dict[str, Any]:
+        analyzed = self.preview_director_profile_with_audit(script_id, skill_snapshot=skill_snapshot)
         self._last_director_analysis_audit = analyzed.get("source_audit", {})
         return analyzed["profile"]
 
-    def preview_director_profile_with_audit(self, script_id: str, source_mode: str = "auto") -> Dict[str, Any]:
+    def preview_director_profile_with_audit(self, script_id: str, source_mode: str = "auto", *, skill_snapshot=None) -> Dict[str, Any]:
         script, entities, style = self.director_analysis_context(script_id)
+        if skill_snapshot:
+            entities["selected_creative_methods"] = skill_snapshot
         source_audit = {}
         analyzer = getattr(self.script_processor, "analyze_director_profile_with_audit", None)
         try:
@@ -3486,9 +4206,12 @@ class ComicGenPipeline(StudioOwnerMixin):
                 draft = self.script_processor.analyze_director_profile(script.original_text, entities, style)
                 source_audit = getattr(self.script_processor, "_last_director_source_audit", {})
             normalized = normalize_director_profile_draft(draft)
+            normalized["creative_skill_run"] = director_skill_provenance(skill_snapshot or [])
             self._bind_director_story_map(script, entities, normalized)
-            DirectorProfile(**normalized)
+            validated = DirectorProfile(**normalized)
             self._validate_director_story_map(script, normalized.get("story_map"))
+            if validated.story_map is not None:
+                normalized["story_map"] = validated.story_map.model_dump()
             if isinstance(source_audit, dict):
                 source_audit["normalization_status"] = "normalized"
                 source_audit["admission_status"] = "confirmable"
@@ -3522,8 +4245,10 @@ class ComicGenPipeline(StudioOwnerMixin):
         )
         normalized_result = merge_director_profile_patch(normalized_draft, revised_patch)
         self._bind_director_story_map(script, entities, normalized_result)
-        DirectorProfile(**normalized_result)
+        validated = DirectorProfile(**normalized_result)
         self._validate_director_story_map(script, normalized_result.get("story_map"))
+        if validated.story_map is not None:
+            normalized_result["story_map"] = validated.story_map.model_dump()
         return normalized_result
 
     @staticmethod
@@ -3920,6 +4645,12 @@ class ComicGenPipeline(StudioOwnerMixin):
         requested_event_ids = {
             event_id for scene in plan.scenes for beat in scene.beats for event_id in beat.story_event_ids
         }
+        for scene in plan.scenes:
+            for beat in scene.beats:
+                for shot in beat.shots:
+                    if shot.information_design:
+                        design = shot.information_design
+                        requested_event_ids.update(design.source_event_ids + design.reveal_event_ids + design.payoff_event_ids)
         missing_events = requested_event_ids - valid_event_ids
         if missing_events:
             raise ValueError("Shooting plan references unknown Director story events: " + ", ".join(sorted(missing_events)))
@@ -3987,6 +4718,7 @@ class ComicGenPipeline(StudioOwnerMixin):
         save_batch=None,
         expected_lineage: Optional[Dict[str, Any]] = None,
         model: Optional[str] = None,
+        skill_snapshot=None,
     ) -> DirectorShootingPlan:
         script = self.scripts.get(script_id)
         if not script:
@@ -4067,15 +4799,22 @@ class ComicGenPipeline(StudioOwnerMixin):
                         "recent_prop_ids": recent_prop_ids[:40],
                         "unresolved_questions": last.get("unresolved_questions", [])[:20],
                     }
-                chunk_result = self.script_processor.plan_director_shooting_chunk(
-                    chunk["text"],
-                    entities,
-                    director_execution_payload(profile),
-                    self.storyboard_visual_style(script),
-                    previous_scene,
-                    source_ref=chunk["source_ref"],
-                    **({"model": model} if model else {}),
-                )
+                if skill_snapshot:
+                    entities["selected_creative_methods"] = skill_snapshot
+                try:
+                    chunk_result = self.script_processor.plan_director_shooting_chunk(
+                        chunk["text"],
+                        entities,
+                        director_execution_payload(profile),
+                        self.storyboard_visual_style(script),
+                        previous_scene,
+                        source_ref=chunk["source_ref"],
+                        **({"model": model} if model else {}),
+                    )
+                except DirectorShootingChunkError as exc:
+                    raise DirectorShootingChunkError(
+                        exc.category, f"第 {index + 1}/{len(chunks)} 段：{exc.public_reason}"
+                    ) from exc
                 chunk_error = ScriptProcessor._validate_director_shooting_chunk(chunk_result)
                 if chunk_error:
                     raise RuntimeError(
@@ -4230,6 +4969,7 @@ class ComicGenPipeline(StudioOwnerMixin):
                             "title": str(raw_shot.get("title", ""))[:180],
                             "visual_intent": str(raw_shot.get("visual_intent", ""))[:2400],
                             "director_effect": str(raw_shot.get("director_effect", ""))[:2400],
+                            "information_design": raw_shot.get("information_design"),
                             "performance_action": str(raw_shot.get("performance_action", ""))[:2400],
                             "action_physics": str(raw_shot.get("action_physics", ""))[:1800],
                             "shot_size": str(raw_shot.get("shot_size", ""))[:64],
@@ -4288,6 +5028,7 @@ class ComicGenPipeline(StudioOwnerMixin):
                         shot["lighting"] = {}
         plan = DirectorShootingPlan(
             **lineage,
+            creative_skill_run=director_skill_provenance(skill_snapshot or []),
             scenes=scenes,
             lighting_baselines=lighting_baselines,
             unresolved_questions=list(dict.fromkeys(unresolved_questions))[:80],
@@ -4496,12 +5237,15 @@ class ComicGenPipeline(StudioOwnerMixin):
                 if ids:
                     character_ids_by_person[person.person_id] = ids
         def matching_character_assets(person_id: str, era_variant_id: Optional[str] = None) -> List[str]:
+            candidates = character_ids_by_person.get(person_id, [])
+            # era_variant_id also carries semantic era labels in older plans.
+            # Only treat it as an asset selection when it resolves to a
+            # character asset belonging to this person.
+            if era_variant_id in candidates:
+                return [era_variant_id]
             explicit_id = script.episode_person_asset_bindings.get(person_id)
             if explicit_id:
                 return [explicit_id] if any(item.id == explicit_id for item in resolved_assets["characters"]) else []
-            candidates = character_ids_by_person.get(person_id, [])
-            if era_variant_id in candidates:
-                return [era_variant_id]
             return candidates if len(candidates) == 1 else []
         scenes: List[EpisodeVisualSceneContext] = []
         characters: Dict[tuple, EpisodeVisualCharacterContext] = {}
@@ -4556,13 +5300,29 @@ class ComicGenPipeline(StudioOwnerMixin):
                     prop_items = [DirectorPlanPropBinding.model_validate(item) if isinstance(item, dict) else item for item in shot.prop_bindings]
                     known_people = {cast.person_id for cast in cast_items}
                     known_people.update(script.episode_person_asset_bindings)
+                    cast_character_ids: Dict[str, List[str]] = {}
+                    for cast in cast_items:
+                        candidates = character_ids_by_person.get(cast.person_id, [])
+                        selected_in_shot = list(dict.fromkeys(
+                            item for item in shot.character_ids if item in candidates
+                        ))
+                        if cast.era_variant_id in candidates:
+                            selected = [cast.era_variant_id]
+                        elif len(selected_in_shot) == 1:
+                            selected = selected_in_shot
+                        elif selected_in_shot:
+                            selected = []  # Ambiguous plan: do not mix looks.
+                        else:
+                            selected = matching_character_assets(cast.person_id, cast.era_variant_id)
+                        cast_character_ids[cast.person_id] = selected
                     legacy_char_ids = [asset_id for item in shot.character_ids
+                                       if not any(item == cast.person_id or item in character_ids_by_person.get(cast.person_id, [])
+                                                  for cast in cast_items)
                                        for asset_id in (matching_character_assets(item)
                                                         if item in known_people else [item])]
                     shot_char_ids = list(dict.fromkeys(
                         legacy_char_ids + [asset_id for cast in cast_items
-                                              for asset_id in matching_character_assets(
-                                                  cast.person_id, cast.era_variant_id)]))
+                                              for asset_id in cast_character_ids[cast.person_id]]))
                     shot_prop_ids = list(dict.fromkeys(
                         current_asset_id("prop", item) for item in
                         shot.prop_ids + [b.prop_id for b in prop_items]))
@@ -4585,6 +5345,7 @@ class ComicGenPipeline(StudioOwnerMixin):
                         person_ids=list(dict.fromkeys(cast.person_id for cast in cast_items)),
                         prop_ids=shot_prop_ids,
                         visual_intent=shot.visual_intent, director_effect=shot.director_effect,
+                        information_design=shot.information_design,
                         performance_action=shot.performance_action, action_physics=shot.action_physics,
                         shot_size=shot.shot_size, camera_angle=shot.camera_angle,
                         composition=shot.composition, camera_movement=shot.camera_movement,
@@ -4602,7 +5363,7 @@ class ComicGenPipeline(StudioOwnerMixin):
                         item = characters.setdefault(key, EpisodeVisualCharacterContext(
                             person_id=cast.person_id,
                             person_label=person_labels.get(cast.person_id),
-                            character_asset_ids=matching_character_assets(cast.person_id, cast.era_variant_id),
+                            character_asset_ids=cast_character_ids[cast.person_id],
                             era_variant_id=cast.era_variant_id,
                             scene_look_id=cast.scene_look_id, continuity_state=cast.continuity_state,
                             scene_ids=[scene.scene_id],
@@ -4961,12 +5722,40 @@ class ComicGenPipeline(StudioOwnerMixin):
                 continue
             binding = bindings.get((asset_type, asset_id))
             asset = by_type[asset_type].get(asset_id)
-            if binding and binding.selected_variant_id:
+            selected_use = next((use for use in script.episode_character_uses
+                                 if asset_type == "character" and use.selected_asset_id == asset_id
+                                 and frame.character_use_ids.get(use.project_character_id) == use.use_id), None)
+            selected_for_shot = frame.workbench_reference_variant_ids.get(asset_id, [])
+            if selected_use:
+                variants = {item.id: item for item in self._asset_image_variants(asset, asset_type)} if asset else {}
+                variant = variants.get(selected_use.selected_variant_id)
+                result.append({
+                    "asset_type": asset_type, "asset_id": asset_id,
+                    "revision": selected_use.selected_asset_revision,
+                    "variant_id": selected_use.selected_variant_id,
+                    "media_id": selected_use.selected_media_id,
+                    "storage_key": image_variant_storage_key(variant) if variant else None,
+                    "source_scope": selected_use.selected_source_scope,
+                    "source": "episode_character_use",
+                    "use_id": selected_use.use_id,
+                    "missing": variant is None or variant.media_id != selected_use.selected_media_id,
+                })
+            elif asset is not None and selected_for_shot:
+                variants = {item.id: item for item in self._asset_image_variants(asset, asset_type)}
+                result.extend({
+                    "asset_type": asset_type, "asset_id": asset_id,
+                    "variant_id": variant_id,
+                    "media_id": variants[variant_id].media_id if variant_id in variants else None,
+                    "storage_key": image_variant_storage_key(variants[variant_id]) if variant_id in variants else None,
+                    "source": "shot_variant_selection", "missing": variant_id not in variants,
+                } for variant_id in selected_for_shot)
+            elif binding and binding.selected_variant_id:
                 source = "episode_scene_variant" if asset_type == "scene" else "episode_variant"
                 result.append({"asset_type": asset_type, "asset_id": asset_id, "variant_id": binding.selected_variant_id, "source": source})
             elif asset is not None:
                 unit = getattr(asset, "reference_sheet", None) if asset_type == "character" else getattr(asset, "image_asset", None)
-                selected = getattr(unit, "selected_image_id", None) if unit else None
+                selected = (self._selected_asset_variant_id(asset, asset_type) if asset_type == "character"
+                            else getattr(unit, "selected_image_id", None) if unit else None)
                 selected = selected or getattr(asset, "cover_variant_id", None)
                 result.append({"asset_type": asset_type, "asset_id": asset_id, "variant_id": selected,
                                "source": "episode_look_baseline" if asset_type != "scene" else "episode_scene_baseline"})
@@ -5003,6 +5792,13 @@ class ComicGenPipeline(StudioOwnerMixin):
                 scope = "global"
             variants = {item.id: item for item in self._asset_image_variants(asset, asset_type)}
             selected_ids = frame.workbench_reference_variant_ids.get(asset_id, [])
+            selected_use = next((use for use in script.episode_character_uses
+                                 if asset_type == "character" and use.selected_asset_id == asset_id
+                                 and frame.character_use_ids.get(use.project_character_id) == use.use_id), None)
+            if selected_use:
+                if selected_ids and selected_ids != [selected_use.selected_variant_id]:
+                    raise ValueError("Shot references conflict with the confirmed episode look")
+                selected_ids = [selected_use.selected_variant_id]
             package_refs = [item for item in package.references
                             if asset_type == "scene" and item.kind == "scene"
                             and item.source_asset_id == asset_id]
@@ -5037,14 +5833,94 @@ class ComicGenPipeline(StudioOwnerMixin):
                 variant = variants.get(variant_id) if variant_id else None
                 if variant_id and variant is None:
                     raise ValueError(f"Cannot pin missing variant {variant_id} on {asset_type} {asset_id}")
+                if selected_use and variant and variant.media_id != selected_use.selected_media_id:
+                    raise ValueError("Confirmed episode look media has changed")
                 pins.append(AssetRevisionPin(
-                    asset_type=asset_type, asset_id=asset_id, source_scope=scope,
-                    source_container_id=container_id, revision=revision.revision,
+                    asset_type=asset_type, asset_id=asset_id,
+                    source_scope=("project" if selected_use.selected_source_scope == "episode" else selected_use.selected_source_scope)
+                    if selected_use else scope,
+                    source_container_id=selected_use.selected_source_container_id if selected_use else container_id,
+                    revision=selected_use.selected_asset_revision if selected_use else revision.revision,
                     variant_id=variant_id, media_id=variant.media_id if variant else None,
                     storage_key=image_variant_storage_key(variant),
-                    confirmation_status=revision.confirmation_status,
+                    confirmation_status="user_confirmed" if selected_use else revision.confirmation_status,
                 ))
         return pins
+
+    def _build_consistency_manifest(
+        self, script: Script, frame: StoryboardFrame, *, prompt: Optional[str] = None,
+    ) -> StoryboardConsistencyManifest:
+        """Build the single structured consistency layer consumed by a shot."""
+        self._validate_crowd_instances(script, frame.crowd_instances)
+        series = self.series_store.get(script.series_id) if script.series_id else None
+        roster = {item.extra_id: item for item in series.extra_roster} if series else {}
+        selected_extras = [roster[item.extra_id or item.template_id].model_copy(deep=True)
+                           for item in frame.crowd_instances]
+        package = frame.reference_package
+        pins = (
+            [item.model_copy(deep=True) for item in package.asset_revision_pins]
+            if package.confirmed and package.asset_revision_pins
+            else self._pin_frame_assets(script, frame, package)
+        )
+        visual_projection = frame.reference_visual_projection.model_copy(deep=True) if frame.reference_visual_projection else None
+        visual_design = frame.shot_visual_design
+        if isinstance(visual_design, dict):
+            visual_design = ShotVisualDesignSnapshot.model_validate(visual_design)
+        elif visual_design:
+            visual_design = visual_design.model_copy(deep=True)
+        fields = {
+            key: getattr(frame, key)
+            for key in (
+                "shot_size", "camera_angle", "camera_movement", "composition",
+                "lighting", "blocking", "duration", "shot_structure",
+                "style_prompt_override", "lighting_override", "negative_prompt_override",
+            )
+            if getattr(frame, key, None) is not None
+        }
+        asset_dimensions: Dict[str, Dict[str, Any]] = {}
+        self._shot_asset_visual_context(
+            script, frame, self.resolve_project_assets(script), asset_dimensions,
+        )
+        prompt_hash = hashlib.sha256(prompt.encode("utf-8")).hexdigest() if prompt else None
+        previous = frame.consistency_manifest
+        return StoryboardConsistencyManifest(
+            revision=(previous.revision + 1) if previous else 1,
+            confirmed=package.confirmed,
+            scene_id=frame.scene_id,
+            character_ids=list(frame.character_ids),
+            prop_ids=list(frame.prop_ids),
+            asset_revision_pins=pins,
+            asset_dimensions=asset_dimensions,
+            crowd_instances=[item.model_copy(deep=True) for item in frame.crowd_instances],
+            crowd_roster_snapshot=selected_extras,
+            reference_package_revision=package.revision,
+            reference_visual_projection=visual_projection,
+            shot_visual_design=visual_design,
+            structured_shot_fields=fields,
+            prompt=prompt,
+            prompt_hash=prompt_hash,
+        )
+
+    def _validate_crowd_instances(self, script: Script, instances: List[Any]) -> None:
+        series = self.series_store.get(script.series_id) if script.series_id else None
+        roster = {item.extra_id: item for item in series.extra_roster} if series else {}
+        for item in instances:
+            entry = roster.get(item.extra_id or item.template_id)
+            if entry is None:
+                raise ValueError("Crowd instance references a missing series extra")
+            expected = "fixed_extra" if item.extra_id else "extra_template"
+            if entry.kind != expected:
+                raise ValueError("Crowd instance reference kind does not match series extra")
+            if item.face_readable and entry.kind != "fixed_extra":
+                raise ValueError("Readable extra face requires a fixed extra asset")
+            available = set(entry.reference_variant_ids)
+            if entry.reference_variant_id:
+                available.add(entry.reference_variant_id)
+            if item.variant_ids and not available:
+                raise ValueError("Crowd instance references variants but the extra has no saved variants")
+            missing = [variant_id for variant_id in item.variant_ids if variant_id not in available]
+            if missing:
+                raise ValueError("Crowd instance references a missing extra variant")
 
     @staticmethod
     def _episode_asset_context_prompt(script: Script, asset_type: str, asset_id: str) -> str:
@@ -5421,7 +6297,7 @@ class ComicGenPipeline(StudioOwnerMixin):
 
     # === STORYBOARD DRAMATIZATION v2 ===
 
-    def storyboard_analysis_context(self, script_id: str) -> Tuple[Script, Dict[str, Any], str]:
+    def storyboard_analysis_context(self, script_id: str, *, include_plan: bool = True) -> Tuple[Script, Dict[str, Any], str]:
         """Return the stable project context used by storyboard analysis jobs."""
         script = self.scripts.get(script_id)
         if not script:
@@ -5439,21 +6315,89 @@ class ComicGenPipeline(StudioOwnerMixin):
             "scenes": [{"id": s.id, "name": s.name, "description": s.description} for s in resolved["scenes"]],
             "props": [{"id": p.id, "name": p.name, "description": p.description} for p in resolved["props"]],
         }
-        if script.director_shooting_plan_revisions:
+        entities_json["asset_library_context"] = self._storyboard_asset_library_context(resolved)
+        if include_plan and script.director_shooting_plan_revisions:
             episode_context = self.project_episode_visual_context(script_id)
             entities_json["episode_visual_context"] = episode_context.model_dump()
-        elif script.episode_visual_context:
+        elif include_plan and script.episode_visual_context:
             entities_json["episode_visual_context"] = script.episode_visual_context.model_dump()
         series = self.get_series(script.series_id) if getattr(script, "series_id", None) else None
         prompt = self.get_effective_prompt("storyboard_extraction", script, series)
         return script, entities_json, prompt
 
+    @classmethod
+    def _storyboard_asset_library_context(cls, resolved: Dict[str, List[Any]]) -> List[Dict[str, Any]]:
+        """Read-only, bounded design summaries and active variant identities."""
+        def short(value: Any, limit: int = 180) -> str:
+            return value.strip()[:limit] if isinstance(value, str) else ""
+
+        result: List[Dict[str, Any]] = []
+        for asset_type, collection in (("character", "characters"), ("scene", "scenes"), ("prop", "props")):
+            for asset in resolved[collection]:
+                design_owner = asset.character_design if asset_type == "character" else asset.asset_design
+                revisions = design_owner.get("design_revisions") if isinstance(design_owner, dict) else None
+                latest = revisions[-1] if isinstance(revisions, list) and revisions else None
+                design = latest.get("design") if isinstance(latest, dict) else None
+                selected_id = cls._selected_asset_variant_id(asset, asset_type)
+                variants = {item.id: item for item in cls._asset_image_variants(asset, asset_type)}
+                selected = variants.get(selected_id) if selected_id else None
+                if not isinstance(design, dict) and not selected_id:
+                    continue
+                item: Dict[str, Any] = {"asset_type": asset_type, "asset_id": asset.id}
+                if isinstance(design, dict):
+                    item["design_revision"] = latest.get("revision")
+                    if asset_type == "scene":
+                        baseline = design.get("asset_baseline")
+                        if isinstance(baseline, dict):
+                            compact = {}
+                            for key in ("scene_identity", "fixed_geometry", "fixed_landmarks",
+                                        "materials", "environment", "lighting_baseline"):
+                                value = baseline.get(key)
+                                if isinstance(value, list):
+                                    values = [short(part) for part in value[:4] if short(part)]
+                                    if values:
+                                        compact[key] = values
+                                elif short(value):
+                                    compact[key] = short(value)
+                            if compact:
+                                item["visual_baseline"] = compact
+                    elif asset_type == "character":
+                        compact = {}
+                        for section, keys in (
+                            ("identity", ("face", "eyes", "hair", "skin", "build", "recognition_marks")),
+                            ("look", ("clothing", "palette", "weapon", "accessories")),
+                        ):
+                            source = design.get(section)
+                            if not isinstance(source, dict):
+                                continue
+                            features = source.get("features")
+                            if isinstance(features, dict):
+                                selected = {key: short(features.get(key)) for key in keys if short(features.get(key))}
+                                if selected:
+                                    compact[section] = selected
+                            elif short(source.get("visual_notes"), 350):
+                                compact[section] = {"visual_notes": short(source["visual_notes"], 350)}
+                        if compact:
+                            item["visual_baseline"] = compact
+                    else:
+                        notes = design.get("visual_notes")
+                        if isinstance(notes, str) and notes.strip():
+                            item["visual_baseline"] = {"visual_notes": short(notes, 450)}
+                if selected_id:
+                    item["selected_variant"] = ({"variant_id": selected_id, "media_id": selected.media_id}
+                                                if selected else {"variant_id": selected_id, "status": "missing"})
+                result.append(item)
+        return result
+
     def preview_storyboard_analysis(self, script_id: str, text: str,
                                     load_batches=None, save_batch=None,
                                     expected_lineage: Optional[ArtifactLineage] = None,
-                                    model: Optional[str] = None) -> List[Dict[str, Any]]:
+                                    model: Optional[str] = None,
+                                    skill_snapshot=None) -> List[Dict[str, Any]]:
         """Generate a storyboard draft without mutating persisted frames."""
-        script, entities_json, prompt = self.storyboard_analysis_context(script_id)
+        script, entities_json, prompt = self.storyboard_analysis_context(
+            script_id, include_plan=not (expected_lineage and expected_lineage.storyboard_mode == "script"),
+        )
         selected_model = model if model is not None else self.get_effective_polish_model(script)
         source_range = self._source_range_for_text(script, text)
         confirmed_director_profile = self.effective_director_profile(script)
@@ -5468,6 +6412,13 @@ class ComicGenPipeline(StudioOwnerMixin):
         if expected_lineage:
             self.validate_storyboard_lineage(script_id, text, expected_lineage)
             lineage = expected_lineage
+        if skill_snapshot:
+            entities_json["selected_creative_methods"] = skill_snapshot
+        if lineage.storyboard_mode == "plan":
+            from .storyboard_workflow import materialize_plan
+            frames = materialize_plan(entities_json["episode_visual_context"], entities_json)
+            self.validate_storyboard_lineage(script_id, text, lineage)
+            return frames
         visual_style = self.storyboard_visual_style(script)
         if len(text) <= 1800 or load_batches is None or save_batch is None:
             if lineage.status == "pinned":
@@ -5529,12 +6480,27 @@ class ComicGenPipeline(StudioOwnerMixin):
                                     draft: List[Dict[str, Any]],
                                     instructions: List[str],
                                     lineage: Optional[ArtifactLineage] = None,
-                                    model: Optional[str] = None) -> List[Dict[str, Any]]:
+                                    model: Optional[str] = None,
+                                    skill_snapshot=None) -> List[Dict[str, Any]]:
         """Revise a storyboard draft without changing the project's frames."""
-        script, entities_json, prompt = self.storyboard_analysis_context(script_id)
+        script, entities_json, prompt = self.storyboard_analysis_context(
+            script_id, include_plan=not (lineage and lineage.storyboard_mode == "script"),
+        )
         selected_model = model if model is not None else self.get_effective_polish_model(script)
         if lineage and lineage.status == "pinned":
             self.validate_storyboard_lineage(script_id, text, lineage)
+        if skill_snapshot is not None:
+            entities_json["selected_creative_methods"] = skill_snapshot
+        elif lineage and lineage.creative_skill_run:
+            from src.apps.director_skills import freeze
+            entities_json["selected_creative_methods"] = freeze("storyboard", [
+                {"id": item["id"], "revision": item["revision"]} for item in lineage.creative_skill_run
+            ])
+        self.validate_storyboard_coverage(script_id, draft, lineage)
+        if lineage and lineage.storyboard_mode == "plan":
+            entities_json["storyboard_workflow_rules"] = ("\n当前为按导演计划修订：每个计划 shot_id 必须保留且顺序不变，禁止合并不同 shot_id。"
+                       "可将一个镜头连续拆帧，每帧保留原 shot_id；同镜头拆帧时长之和必须等于计划时长。"
+                       "对白仅分配到对应帧，不重复台词；保留计划人物、道具、光影与信息意图。")
         director_profile = self.director_execution_context(
             script,
             source_range=self._source_range_for_text(script, text),
@@ -5547,6 +6513,7 @@ class ComicGenPipeline(StudioOwnerMixin):
             source_range=self._source_range_for_text(script, text),
             model=selected_model or None,
         )
+        self.validate_storyboard_coverage(script_id, frames, lineage)
         if not frames:
             raise RuntimeError("AI 分镜修订未返回任何帧数据，请重试。")
         if lineage and lineage.status == "pinned":
@@ -5560,7 +6527,9 @@ class ComicGenPipeline(StudioOwnerMixin):
         Analyzes script text and generates storyboard frames using LLM.
         Replaces existing frames with newly generated ones.
         """
-        script, entities_json, storyboard_extraction_prompt = self.storyboard_analysis_context(script_id)
+        script, entities_json, storyboard_extraction_prompt = self.storyboard_analysis_context(
+            script_id, include_plan=not (lineage and lineage.storyboard_mode == "script"),
+        )
         logger.info(f"Analyzing text to frames for project {script_id}")
 
         # Resolve assets (merge Series + Episode if applicable)
@@ -5639,6 +6608,13 @@ class ComicGenPipeline(StudioOwnerMixin):
             # Rebuild trusted provenance server-side; the browser only submits
             # revision preconditions and cannot invent fact IDs or source ranges.
             generated_lineage = self.storyboard_analysis_lineage(script_id, text)
+            if lineage.storyboard_mode:
+                generated_lineage = self.storyboard_workflow_lineage(script_id, text, lineage.storyboard_mode)
+                from src.apps.director_skills import freeze
+                snapshot = freeze("storyboard", [{"id": item["id"], "revision": item["revision"]}
+                                                for item in lineage.creative_skill_run])
+                generated_lineage.creative_skill_run = director_skill_provenance(snapshot)
+        self.validate_storyboard_coverage(script_id, draft or [], lineage)
         raw_frames = draft if draft is not None else self.script_processor.analyze_to_storyboard(
             text, entities_json, custom_extraction_prompt=storyboard_extraction_prompt,
             director_profile=director_profile,
@@ -5736,6 +6712,8 @@ class ComicGenPipeline(StudioOwnerMixin):
                         break
 
             shot_id = frame_data.get("shot_id")
+            if lineage and lineage.storyboard_mode == "plan":
+                frame_context_shots = episode_context_shots
             director_shot_context = None
             context_shot_ids = {
                 context_shot_value(item, "shot_id") for item in frame_context_shots
@@ -5757,9 +6735,9 @@ class ComicGenPipeline(StudioOwnerMixin):
             if plan_shot:
                 planned_character_ids = context_shot_value(plan_shot, "character_ids", [])
                 planned_prop_ids = context_shot_value(plan_shot, "prop_ids", [])
-                if planned_character_ids:
+                if planned_character_ids or (lineage and lineage.storyboard_mode == "plan"):
                     character_ids = planned_character_ids
-                if planned_prop_ids:
+                if planned_prop_ids or (lineage and lineage.storyboard_mode == "plan"):
                     prop_ids = planned_prop_ids
                 plan_scene = next(
                     (item for item in episode_context_scenes
@@ -5778,7 +6756,7 @@ class ComicGenPipeline(StudioOwnerMixin):
                     "time_continuity_id", "interior_exterior",
                 )
                 shot_context_keys = (
-                    "shot_id", "visual_intent", "director_effect", "performance_action",
+                    "shot_id", "visual_intent", "director_effect", "performance_action", "information_design",
                     "action_physics", "shot_size", "camera_angle", "composition",
                     "camera_movement", "duration_seconds", "dialogue", "ambient_sound", "lighting",
                 )
@@ -5808,6 +6786,8 @@ class ComicGenPipeline(StudioOwnerMixin):
                     director_shot_context["shooting_plan_revision"] = episode_context_payload.get("shooting_plan_revision")
                     director_shot_context["shooting_plan_hash"] = episode_context_payload.get("shooting_plan_hash")
 
+            split_plan_shot = bool(plan_shot and lineage and lineage.storyboard_mode == "plan"
+                                   and sum(item.get("shot_id") == shot_id for item in raw_frames) > 1)
             planned_dialogue = context_shot_value(plan_shot, "dialogue", []) if plan_shot else []
             planned_dialogue_lines = [
                 item for item in planned_dialogue
@@ -5854,13 +6834,14 @@ class ComicGenPipeline(StudioOwnerMixin):
                 shot_size=(context_shot_value(plan_shot, "shot_size") or frame_data.get("shot_size")) if plan_shot else frame_data.get("shot_size"),
                 camera_angle=(context_shot_value(plan_shot, "camera_angle") or frame_data.get("camera_angle", "平视")) if plan_shot else frame_data.get("camera_angle", "平视"),
                 camera_movement=(context_shot_value(plan_shot, "camera_movement") or frame_data.get("camera_movement")) if plan_shot else frame_data.get("camera_movement"),
-                dialogue=(planned_dialogue_lines[0]["line"] if len(planned_dialogue_lines) == 1 else frame_data.get("dialogue")),
-                speaker=(planned_dialogue_lines[0]["speaker"] if len(planned_dialogue_lines) == 1 else frame_data.get("speaker")),
+                dialogue=(planned_dialogue_lines[0]["line"] if len(planned_dialogue_lines) == 1 and not split_plan_shot else frame_data.get("dialogue")),
+                speaker=(planned_dialogue_lines[0]["speaker"] if len(planned_dialogue_lines) == 1 and not split_plan_shot else frame_data.get("speaker")),
                 dialogue_structured=(DialogueStructured(
                     speaker=str(planned_dialogue_lines[0]["speaker"]),
                     line=str(planned_dialogue_lines[0]["line"]),
-                ) if len(planned_dialogue_lines) == 1 else None),
-                duration=(context_shot_value(plan_shot, "duration_seconds") or frame_data.get("duration")) if plan_shot else frame_data.get("duration"),
+                ) if len(planned_dialogue_lines) == 1 and not split_plan_shot else None),
+                duration=(context_shot_value(plan_shot, "duration_seconds") or frame_data.get("duration")) if plan_shot and not split_plan_shot else frame_data.get("duration"),
+                shot_structure=frame_data.get("shot_structure", "auto"),
                 director_profile_revision=(
                     generated_lineage.director_profile_revision
                 ),
@@ -5885,10 +6866,30 @@ class ComicGenPipeline(StudioOwnerMixin):
         self._save_data()
         return script
 
-    def refine_frame(self, script_id: str, frame_id: str) -> Optional[StoryboardFrame]:
-        """Phase 2: Refine a single coarse frame into a rich frame."""
-        from .prompt_assembly import assemble_prompt, sync_dialogue_to_tts
-        from .models import DialogueStructured, CameraMovementData, Blocking, AudioNote, LightingData, StageSubject
+    _RICH_REFINEMENT_FIELDS = (
+        "visual_description", "duration", "transition_hint", "blocking",
+        "dialogue_structured", "audio_note", "lighting",
+    )
+
+    def _rich_refinement_source_hash(self, script: Script, frame: StoryboardFrame, *, initialization: bool = False) -> str:
+        index = script.frames.index(frame)
+        neighbors = [] if initialization else [script.frames[pos] for pos in (index - 1, index + 1) if 0 <= pos < len(script.frames)]
+        assets = self.resolve_project_assets(script)
+        characters = [item for item in assets["characters"] if not initialization or item.id in frame.character_ids]
+        scenes = [item for item in assets["scenes"] if not initialization or item.id == frame.scene_id]
+        payload = {
+            "frame": frame.model_dump(exclude={"rich_refinement_candidate", "updated_at"}, mode="json"),
+            "neighbors": [item.model_dump(exclude={"rich_refinement_candidate", "updated_at"}, mode="json") for item in neighbors],
+            "characters": [item.model_dump(mode="json") for item in characters],
+            "scenes": [item.model_dump(mode="json") for item in scenes],
+            "style": self.storyboard_visual_style(script),
+            "director": self._episode_shot_context_prompt(script, frame) if initialization else self.director_prompt_context(script),
+        }
+        return hashlib.sha256(json.dumps(payload, sort_keys=True, ensure_ascii=False, default=str).encode()).hexdigest()
+
+    def refine_frame(self, script_id: str, frame_id: str, *, initialization: bool = False) -> Optional[StoryboardFrame]:
+        """Propose reviewable fields; initialization mode only fills missing values."""
+        from .models import DialogueStructured, Blocking, AudioNote, LightingData, StageSubject
 
         script = self.scripts.get(script_id)
         if not script:
@@ -5898,6 +6899,10 @@ class ComicGenPipeline(StudioOwnerMixin):
         if not frame:
             raise ValueError(f"Frame {frame_id} not found")
 
+        source_hash = self._rich_refinement_source_hash(script, frame, initialization=initialization)
+        initialization_fields = ("visual_description", "blocking")
+        if initialization and all(getattr(frame, key) not in (None, "", [], {}) for key in initialization_fields):
+            return frame
         frame_idx = script.frames.index(frame)
         resolved = self.resolve_project_assets(script)
         all_characters = resolved["characters"]
@@ -5912,11 +6917,13 @@ class ComicGenPipeline(StudioOwnerMixin):
             "lighting": frame.lighting.model_dump() if frame.lighting else None,
             "shot_size": frame.shot_size,
             "camera_angle": frame.camera_angle,
+            "composition": frame.composition,
             "camera_movement": frame.camera_movement,
             "shot_id": frame.shot_id,
             "dialogue": frame.dialogue,
             "speaker": frame.speaker,
             "duration": frame.duration,
+            "shot_structure": frame.shot_structure,
             "character_names": [c.name for c in all_characters if c.id in frame.character_ids],
             "scene_name": next((s.name for s in all_scenes if s.id == frame.scene_id), None),
         }
@@ -5933,7 +6940,7 @@ class ComicGenPipeline(StudioOwnerMixin):
 
         # Adjacent frame context
         prev_ctx = None
-        if frame_idx > 0:
+        if not initialization and frame_idx > 0:
             pf = script.frames[frame_idx - 1]
             prev_scene = next((s.name for s in all_scenes if s.id == pf.scene_id), None)
             prev_characters = [c.name for c in all_characters if c.id in pf.character_ids]
@@ -5944,7 +6951,7 @@ class ComicGenPipeline(StudioOwnerMixin):
                 f"Shot: {pf.shot_size}, {pf.camera_angle}."
             )
         next_ctx = None
-        if frame_idx < len(script.frames) - 1:
+        if not initialization and frame_idx < len(script.frames) - 1:
             nf = script.frames[frame_idx + 1]
             next_scene = next((s.name for s in all_scenes if s.id == nf.scene_id), None)
             next_characters = [c.name for c in all_characters if c.id in nf.character_ids]
@@ -5955,41 +6962,36 @@ class ComicGenPipeline(StudioOwnerMixin):
                 f"Shot: {nf.shot_size}, {nf.camera_angle}."
             )
 
+        if self._rich_refinement_source_hash(script, frame, initialization=initialization) != source_hash:
+            raise ValueError("Shot or context changed while preparing refinement; retry this frame")
         result = self.script_processor.refine_frame_to_rich(
             coarse, char_assets, scene_assets, prev_ctx, next_ctx,
             visual_style=self.storyboard_visual_style(script),
-            director_context="\n".join(filter(None, [
-                self.director_prompt_context(script),
-                self._episode_shot_context_prompt(script, frame),
-            ])),
+            director_context=(self._episode_shot_context_prompt(script, frame) if initialization else
+                "\n".join(filter(None, [
+                    self.director_prompt_context(script),
+                    self._episode_shot_context_prompt(script, frame),
+                ]))),
+            initialization=initialization,
         )
+        if initialization and not result:
+            raise ValueError("Frame initialization returned no missing-field proposal")
         if not result:
             return frame
 
-        # Map result onto frame fields
+        if self._rich_refinement_source_hash(script, frame, initialization=initialization) != source_hash:
+            raise ValueError("Shot or context changed while refining; retry this frame")
+        proposed = frame.model_copy(deep=True)
+        # Normalize the model response through the existing frame field types.
         if result.get("visual_description"):
             from .prompt_assembly import inject_reference_tags
-            frame.visual_description = inject_reference_tags(
+            proposed.visual_description = inject_reference_tags(
                 result["visual_description"], frame, all_characters, all_scenes
             )
-        if result.get("shot_size"):
-            frame.shot_size = result["shot_size"]
-        if result.get("camera_angle"):
-            frame.camera_angle = result["camera_angle"]
         if result.get("duration"):
-            frame.duration = result["duration"]
+            proposed.duration = result["duration"]
         if result.get("transition_hint"):
-            frame.transition_hint = result["transition_hint"]
-
-        # Camera movement structured
-        cm = result.get("camera_movement")
-        if cm and isinstance(cm, dict) and cm.get("primary"):
-            frame.camera_movement_structured = CameraMovementData(
-                primary=cm["primary"],
-                secondary=cm.get("secondary"),
-                speed=cm.get("speed", "normal"),
-                description=cm.get("description"),
-            )
+            proposed.transition_hint = result["transition_hint"]
 
         # Blocking
         blk = result.get("blocking")
@@ -6007,7 +7009,7 @@ class ComicGenPipeline(StudioOwnerMixin):
                     )
                     for s in blk["stage"] if isinstance(s, dict)
                 ]
-            frame.blocking = Blocking(
+            proposed.blocking = Blocking(
                 description=blk["description"],
                 stage=stage_list,
                 camera_relation=blk.get("camera_relation"),
@@ -6016,7 +7018,7 @@ class ComicGenPipeline(StudioOwnerMixin):
         # Dialogue structured
         ds = result.get("dialogue_structured")
         if ds and isinstance(ds, dict) and ds.get("line"):
-            frame.dialogue_structured = DialogueStructured(
+            proposed.dialogue_structured = DialogueStructured(
                 speaker=ds.get("speaker", frame.speaker or ""),
                 line=ds["line"],
                 emotion=ds.get("emotion"),
@@ -6026,7 +7028,7 @@ class ComicGenPipeline(StudioOwnerMixin):
         # Audio note
         an = result.get("audio_note")
         if an and isinstance(an, dict) and (an.get("sfx") or an.get("ambience")):
-            frame.audio_note = AudioNote(
+            proposed.audio_note = AudioNote(
                 sfx=an.get("sfx"),
                 ambience=an.get("ambience"),
                 bgm_note=an.get("bgm_note"),
@@ -6035,20 +7037,93 @@ class ComicGenPipeline(StudioOwnerMixin):
         # Lighting
         lt = result.get("lighting")
         if lt and isinstance(lt, dict) and (lt.get("description") or lt.get("direction")):
-            frame.lighting = LightingData(
+            proposed.lighting = LightingData(
                 direction=lt.get("direction"),
                 quality=lt.get("quality"),
                 color_temp=lt.get("color_temp"),
                 description=lt.get("description"),
             )
 
-        # Sync dialogue → TTS instructions & compute assembled prompt
-        sync_dialogue_to_tts(frame)
-        frame.assembled_prompt = assemble_prompt(frame, all_characters)
+        validated = StoryboardFrame.model_validate(proposed.model_dump(mode="json"))
+        fields = {
+            key: getattr(validated, key).model_dump(mode="json") if hasattr(getattr(validated, key), "model_dump") else getattr(validated, key)
+            for key in self._RICH_REFINEMENT_FIELDS
+            if getattr(validated, key) != getattr(frame, key)
+            and (not initialization or key in initialization_fields and getattr(frame, key) in (None, "", [], {}))
+        }
+        if not fields:
+            if initialization:
+                raise ValueError("Frame initialization returned no valid missing-field proposal")
+            frame.rich_refinement_candidate = None
+            frame.updated_at = time.time()
+            self._save_data()
+            return frame
+        rationales = result.get("rationale") if isinstance(result.get("rationale"), dict) else {}
+        missing_rationales = [key for key in fields if not isinstance(rationales.get(key), str) or not rationales[key].strip()]
+        if missing_rationales:
+            raise ValueError(f"Frame refinement missing rationale for: {', '.join(missing_rationales)}")
+        frame.rich_refinement_candidate = {
+            "id": str(uuid.uuid4()), "source_hash": source_hash,
+            "source": "初始化补全" if initialization else "AI 分镜细化",
+            "mode": "initialization" if initialization else "legacy_refinement",
+            "fields": fields,
+            "current_fields": {
+                key: getattr(frame, key).model_dump(mode="json") if hasattr(getattr(frame, key), "model_dump") else getattr(frame, key)
+                for key in fields
+            },
+            "rationale": {key: rationales[key].strip()[:500] for key in fields},
+        }
         frame.updated_at = time.time()
 
         self._save_data()
         return frame
+
+    def apply_rich_refinement_candidate(self, script_id: str, frame_id: str,
+                                        candidate_id: str, selected_fields: List[str]) -> Script:
+        from .prompt_assembly import assemble_prompt, sync_dialogue_to_tts
+
+        script = self.scripts.get(script_id)
+        frame = next((item for item in script.frames if item.id == frame_id), None) if script else None
+        if frame is None:
+            raise ValueError("Frame not found")
+        candidate = frame.rich_refinement_candidate or {}
+        if not candidate_id or candidate.get("id") != candidate_id:
+            raise ValueError("Rich-frame candidate is no longer current")
+        if candidate.get("source_hash") != self._rich_refinement_source_hash(
+            script, frame, initialization=candidate.get("mode") == "initialization",
+        ):
+            raise ValueError("Shot or context changed; refine this frame again")
+        fields = candidate.get("fields") or {}
+        if not selected_fields or len(set(selected_fields)) != len(selected_fields) or any(
+            key not in fields or key not in self._RICH_REFINEMENT_FIELDS for key in selected_fields
+        ):
+            raise ValueError("Select valid rich-frame fields to apply")
+        if frame.workbench_prompt_is_optimized and any(key != "duration" for key in selected_fields):
+            raise ValueError("Full optimized prompt must be reviewed again before applying rich fields")
+        proposed = StoryboardFrame.model_validate({**frame.model_dump(mode="json"), **{
+            key: fields[key] for key in selected_fields
+        }})
+        for key in selected_fields:
+            setattr(frame, key, getattr(proposed, key))
+        if "dialogue_structured" in selected_fields:
+            sync_dialogue_to_tts(frame)
+        all_characters = self.resolve_project_assets(script)["characters"]
+        frame.assembled_prompt = assemble_prompt(frame, all_characters)
+        frame.rich_refinement_candidate = None
+        frame.updated_at = time.time()
+        self._save_data()
+        return script
+
+    def discard_rich_refinement_candidate(self, script_id: str, frame_id: str,
+                                          candidate_id: str) -> Script:
+        script = self.scripts.get(script_id)
+        frame = next((item for item in script.frames if item.id == frame_id), None) if script else None
+        if frame is None or not frame.rich_refinement_candidate or frame.rich_refinement_candidate.get("id") != candidate_id:
+            raise ValueError("Rich-frame candidate is no longer current")
+        frame.rich_refinement_candidate = None
+        frame.updated_at = time.time()
+        self._save_data()
+        return script
 
     def upload_last_frame(self, script_id: str, frame_id: str, file_path: str) -> Optional["StoryboardFrame"]:
         with self._save_lock:
@@ -6100,6 +7175,31 @@ class ComicGenPipeline(StudioOwnerMixin):
                 })
 
         yield ("batch_complete", {"total": total, "success": success, "failed": failed})
+
+    def initialize_batch_generator(self, script_id: str):
+        """Initialize storyboard frames by proposing only missing fields."""
+        script = self.scripts.get(script_id)
+        if not script:
+            raise ValueError("Script not found")
+        total = len(script.frames)
+        success = 0
+        failed = 0
+        for idx, frame in enumerate(script.frames):
+            yield ("frame_initialize_start", {
+                "frame_id": frame.id, "frame_index": idx, "total": total,
+                "label": frame.action_description[:40] if frame.action_description else f"Frame {idx + 1}",
+            })
+            try:
+                self.refine_frame(script_id, frame.id, initialization=True)
+                success += 1
+                yield ("frame_initialize_complete", {"frame_id": frame.id, "frame_index": idx, "total": total})
+            except Exception as exc:
+                failed += 1
+                logger.error("[initialize_batch] frame=%s error=%s", frame.id, exc)
+                yield ("frame_initialize_error", {
+                    "frame_id": frame.id, "frame_index": idx, "error": f"分镜初始化失败（{type(exc).__name__}）",
+                })
+        yield ("initialize_complete", {"total": total, "success": success, "failed": failed})
 
     def preview_frame_polish_input(self, script_id: str, frame_id: str, raw_prompt: str,
                                    assets: List[Dict[str, Any]], feedback: str = "") -> Dict[str, Any]:
@@ -6252,12 +7352,29 @@ class ComicGenPipeline(StudioOwnerMixin):
         frame = next((f for f in script.frames if f.id == frame_id), None)
         if not frame:
             raise ValueError(f"Frame {frame_id} not found")
+        if kwargs.get("crowd_instances") is not None:
+            kwargs["crowd_instances"] = [ExtraShotInstance.model_validate(item)
+                                         for item in kwargs["crowd_instances"]]
 
         asset_refs_changed = (
             (kwargs.get("scene_id") is not None and kwargs["scene_id"] != frame.scene_id)
             or (kwargs.get("character_ids") is not None
                 and kwargs["character_ids"] != frame.character_ids)
+            or (kwargs.get("crowd_instances") is not None
+                and kwargs["crowd_instances"] != frame.crowd_instances)
         )
+        consistency_fields_changed = asset_refs_changed or any(
+            key in kwargs for key in (
+                "prop_ids", "action_description", "camera_angle", "camera_movement_description",
+                "shot_size", "duration", "shot_structure", "lighting", "blocking",
+                "style_prompt_override", "lighting_override", "negative_prompt_override",
+                "reference_package", "workbench_reference_variant_ids",
+            )
+        )
+        if kwargs.get("crowd_instances") is not None:
+            self._validate_crowd_instances(script, kwargs["crowd_instances"])
+        if frame.consistency_manifest and consistency_fields_changed:
+            frame.consistency_manifest = None
         
         from .shot_prompt_settings import sync_prompt_settings
         old_style, old_light = frame.style_prompt_override, frame.lighting_override
@@ -6311,21 +7428,22 @@ class ComicGenPipeline(StudioOwnerMixin):
             frame.scene_id = kwargs['scene_id']
         if kwargs.get('character_ids') is not None:
             frame.character_ids = kwargs['character_ids']
+            uses_by_id = {item.use_id: item for item in script.episode_character_uses}
+            for project_character_id, use_id in list(frame.character_use_ids.items()):
+                use = uses_by_id.get(use_id)
+                if use is None or use.selected_asset_id not in frame.character_ids:
+                    frame.character_use_ids.pop(project_character_id, None)
+                    if use:
+                        frame.workbench_reference_variant_ids.pop(use.selected_asset_id, None)
+        if kwargs.get("crowd_instances") is not None:
+            frame.crowd_instances = [item.model_copy(deep=True) for item in kwargs["crowd_instances"]]
         if kwargs.get('duration') is not None:
             frame.duration = kwargs['duration']
         if kwargs.get('shot_size') is not None:
             frame.shot_size = kwargs['shot_size']
         if kwargs.get('camera_movement_description') is not None:
-            if frame.camera_movement_structured:
-                frame.camera_movement_structured.description = kwargs['camera_movement_description']
-                frame.camera_movement_structured.primary = kwargs['camera_movement_description']
-            else:
-                from .models import CameraMovementData
-                frame.camera_movement_structured = CameraMovementData(
-                    primary=kwargs['camera_movement_description'],
-                    speed="normal",
-                    description=kwargs['camera_movement_description'],
-                )
+            from .camera_movement_input import movement_from_editor
+            frame.camera_movement_structured = movement_from_editor(kwargs['camera_movement_description'])
         if kwargs.get('transition_hint') is not None:
             frame.transition_hint = kwargs['transition_hint']
         if kwargs.get('style_prompt_override') is not None:
@@ -6334,6 +7452,14 @@ class ComicGenPipeline(StudioOwnerMixin):
             frame.lighting_override = kwargs['lighting_override']
         if kwargs.get('negative_prompt_override') is not None:
             frame.negative_prompt_override = kwargs['negative_prompt_override']
+        if kwargs.get('move_ref') is not None:
+            frame.move_ref = kwargs['move_ref'].strip() or None
+            if not frame.move_ref:
+                frame.move_variant = None
+        if kwargs.get('move_variant') is not None:
+            frame.move_variant = kwargs['move_variant'].strip() or None
+        if kwargs.get('performance_moves') is not None:
+            frame.performance_moves = kwargs['performance_moves'] or []
         if kwargs.get('reference_package') is not None:
             package = kwargs['reference_package']
             if package.confirmed:
@@ -6346,6 +7472,13 @@ class ComicGenPipeline(StudioOwnerMixin):
             frame.reference_package.asset_revision_pins = []
             frame.reference_package.revision += 1
             frame.reference_package.updated_at = time.time()
+
+        if frame.workbench_prompt_is_optimized and (kwargs.get("action_description") is not None
+                                                  or kwargs.get("style_prompt_override") is not None
+                                                  or kwargs.get("lighting_override") is not None):
+            frame.workbench_visual_source_hash = self._workbench_visual_source_hash(script, frame)
+        elif kwargs.get("workbench_prompt_is_optimized") is False:
+            frame.workbench_visual_source_hash = None
         
         self._save_data()
         return script
@@ -6492,7 +7625,12 @@ class ComicGenPipeline(StudioOwnerMixin):
             reference_sheet = getattr(target_asset, "reference_sheet", None) if asset_type == "full_body" else None
             reference_variants = getattr(reference_sheet, "image_variants", None) or []
             reference_selected_id = getattr(reference_sheet, "selected_image_id", None)
-            if reference_selected_id and reference_variants:
+            cover_id = self._explicit_asset_cover_variant_id(target_asset, "character")
+            cover_variant = next((item for item in self._asset_image_variants(target_asset, "character")
+                                  if item.id == cover_id), None) if cover_id else None
+            if cover_variant is not None:
+                source_image_url = image_variant_storage_key(cover_variant)
+            elif reference_selected_id and reference_variants:
                 source_img = next((v for v in reference_variants if v.id == reference_selected_id), None)
                 if source_img is None or not image_variant_storage_key(source_img):
                     raise ValueError("Selected reference image is missing; select it again")
@@ -6627,11 +7765,19 @@ class ComicGenPipeline(StudioOwnerMixin):
             raise ValueError("Frame not found")
         if not prompt.strip():
             raise ValueError("Storyboard prompt cannot be empty")
+        _, visual_issues = self._shot_asset_visual_context(script, frame, self.resolve_project_assets(script))
+        if visual_issues:
+            raise ValueError("Storyboard asset visual source changed; review references: " + ", ".join(visual_issues))
         polished = (frame.image_prompt_en or "").strip()
-        if polished and polished == prompt.strip():
+        if polished and polished == prompt.strip() and not (
+            frame.reference_visual_projection and frame.reference_visual_projection.selected_fields
+        ):
             return prompt
         projected = self.storyboard_render_prompt_projection(script, frame, prompt)
         characters = self.resolve_project_assets(script)["characters"]
+        asset_visual_context, _ = self._shot_asset_visual_context(script, frame, self.resolve_project_assets(script))
+        if asset_visual_context:
+            return projected
         return append_storyboard_character_descriptions(projected, frame.character_ids, characters)
 
     def _storyboard_image_polish_source(self, script: Script, frame: StoryboardFrame) -> Dict[str, Any]:
@@ -6742,6 +7888,53 @@ class ComicGenPipeline(StudioOwnerMixin):
             return "；".join(item for item in values if item) or None
         return lighting.strip() if isinstance(lighting, str) and lighting.strip() else None
 
+    def _validate_reference_visual_projection(self, script: Script, frame: StoryboardFrame) -> None:
+        """Reject a confirmed projection after its selected source changed."""
+        snapshot = frame.reference_visual_projection
+        if snapshot is None:
+            return
+        if not snapshot.source_preset_id:
+            raise ValueError("Selected visual reference source is missing; review it again")
+        source_asset = None
+        source_variant = None
+        if snapshot.source_asset_id:
+            source_asset, _ = self._find_asset_with_source(script, snapshot.source_asset_id, "scene")
+            if source_asset is None:
+                raise ValueError("Selected visual reference asset is no longer available")
+            source_variant = next((item for item in (source_asset.image_asset.variants or [])
+                                   if item.id == snapshot.source_variant_id), None)
+        elif snapshot.source_frame_id:
+            source_frame = next((item for item in script.frames if item.id == snapshot.source_frame_id), None)
+            if source_frame is None:
+                raise ValueError("Selected visual reference frame is no longer available")
+            asset = source_frame.rendered_image_asset or source_frame.image_asset
+            source_variant = next((item for item in (asset.variants or [])
+                                   if item.id == snapshot.source_variant_id), None)
+        if snapshot.source_variant_id and source_variant is None:
+            raise ValueError("Selected visual reference variant is no longer available")
+        if source_variant is not None:
+            if snapshot.source_media_id and source_variant.media_id != snapshot.source_media_id:
+                raise ValueError("Selected visual reference media changed; review it again")
+        if source_asset is not None:
+            variant_has_design_snapshot = bool(
+                source_variant and (
+                    source_variant.storyboard_visual_snapshot is not None
+                    or (source_variant.submission_snapshot is not None
+                        and source_variant.submission_snapshot.visual_design is not None)
+                )
+            )
+            if not variant_has_design_snapshot:
+                if snapshot.source_asset_revision and source_asset.asset_revision != snapshot.source_asset_revision:
+                    raise ValueError("Selected visual reference asset changed; review it again")
+                design_revision = self._confirmed_asset_design_revision(source_asset, "scene")
+                if snapshot.source_scene_design_revision != design_revision:
+                    raise ValueError("Selected visual reference design changed; review it again")
+        _, current_projection, _, _, _, _ = self._visual_reference_projection_candidate(
+            script, frame, snapshot.source_preset_id,
+        )
+        if snapshot.source_projection_hash != self._reference_projection_hash(current_projection):
+            raise ValueError("Selected visual reference changed; review it again")
+
     def storyboard_render_context_token(self, script_id: str, frame_id: str) -> str:
         """Fingerprint inputs that can change a prepared storyboard render."""
         import hashlib
@@ -6752,6 +7945,7 @@ class ComicGenPipeline(StudioOwnerMixin):
         frame = next((item for item in script.frames if item.id == frame_id), None)
         if not frame:
             raise ValueError("Frame not found")
+        self._validate_reference_visual_projection(script, frame)
         resolved = self.resolve_project_assets(script)
         characters = {item.id: item for item in resolved["characters"]}
         scenes = {item.id: item for item in resolved["scenes"]}
@@ -6766,12 +7960,17 @@ class ComicGenPipeline(StudioOwnerMixin):
             "visual_description": frame.visual_description,
             "shot_size": frame.shot_size,
             "camera_angle": frame.camera_angle,
+            "composition": frame.composition,
             "camera_movement": frame.camera_movement,
             "camera_movement_structured": frame.camera_movement_structured.model_dump(mode="json") if frame.camera_movement_structured else None,
             "transition_hint": frame.transition_hint,
             "lighting": frame.lighting.model_dump(mode="json") if frame.lighting else None,
             "dialogue": frame.dialogue,
             "character_ids": frame.character_ids,
+            "character_use_ids": frame.character_use_ids,
+            "workbench_reference_variant_ids": frame.workbench_reference_variant_ids,
+            "reference_package": frame.reference_package.model_dump(mode="json") if frame.reference_package else None,
+            "reference_visual_projection": frame.reference_visual_projection.model_dump(mode="json") if frame.reference_visual_projection else None,
             "characters": [characters[item_id].model_dump(mode="json") if item_id in characters else None
                            for item_id in frame.character_ids],
             "scene": scenes[frame.scene_id].model_dump(mode="json") if frame.scene_id in scenes else None,
@@ -6779,6 +7978,7 @@ class ComicGenPipeline(StudioOwnerMixin):
             "props": [props[item_id].model_dump(mode="json") if item_id in props else None
                       for item_id in frame.prop_ids],
             "image_prompt_en": frame.image_prompt_en,
+            "micro_expression_timing": frame.micro_expression_timing,
             "image_polish_source": frame.image_polish_source,
             "image_polish_candidate": frame.image_polish_candidate,
             "style_prompt_override": frame.style_prompt_override,
@@ -6794,11 +7994,12 @@ class ComicGenPipeline(StudioOwnerMixin):
         return hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
     @staticmethod
-    def storyboard_render_preview_token(context_token: str, prompt: str) -> str:
+    def storyboard_render_preview_token(context_token: str, prompt: str,
+                                        negative_prompt: Optional[str] = None) -> str:
         """Bind the complete preview text to its source context."""
         import hashlib
 
-        payload = json.dumps([context_token, prompt], ensure_ascii=False, separators=(",", ":"))
+        payload = json.dumps([context_token, prompt, negative_prompt or ""], ensure_ascii=False, separators=(",", ":"))
         return hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
     def generate_storyboard_render(
@@ -6821,13 +8022,48 @@ class ComicGenPipeline(StudioOwnerMixin):
         frame = next((f for f in script.frames if f.id == frame_id), None)
         if not frame:
             raise ValueError(f"Frame {frame_id} not found")
+        _, visual_issues = self._shot_asset_visual_context(script, frame, self.resolve_project_assets(script))
+        if visual_issues:
+            raise ValueError("Storyboard asset visual source changed; review references: " + ", ".join(visual_issues))
         if prompt_is_complete and not prompt.strip():
             raise ValueError("Complete storyboard prompt cannot be empty")
         if context_token:
             current_context = self.storyboard_render_context_token(script_id, frame_id)
-            expected = self.storyboard_render_preview_token(current_context, prompt)
+            expected = self.storyboard_render_preview_token(current_context, prompt, negative_prompt)
             if not prompt_is_complete or context_token != expected:
                 raise ValueError("Storyboard render preview is outdated; preview the current frame again")
+        explicit_refs = list((composition_data or {}).get("reference_image_urls") or [])
+        single_ref = (composition_data or {}).get("reference_image_url")
+        if single_ref:
+            explicit_refs.append(single_ref)
+        if explicit_refs and frame.character_use_ids:
+            resolved_refs = {
+                resolve_studio_reference(ref, script.owner_profile_id, output_root=self.output_root)
+                if ref.startswith("/studio/") else ref
+                for ref in explicit_refs if ref
+            }
+            for project_character_id, use_id in frame.character_use_ids.items():
+                use = next((item for item in script.episode_character_uses
+                            if item.use_id == use_id and item.project_character_id == project_character_id), None)
+                if use is None:
+                    raise ValueError("Storyboard character look is no longer available")
+                asset, _ = self._find_asset_with_source(script, use.selected_asset_id, "character")
+                variant = next((item for item in self._asset_image_variants(asset, "character")
+                                if item.id == use.selected_variant_id), None) if asset else None
+                if variant is None or variant.media_id != use.selected_media_id:
+                    raise ValueError("Storyboard character look media has changed")
+                expected_refs = {value for value in (image_variant_storage_key(variant), variant.url) if value}
+                if not expected_refs.intersection(resolved_refs):
+                    raise ValueError("Storyboard references omit the selected episode character look")
+                family = [item for item in self.resolve_project_assets(script)["characters"]
+                          if item.id == project_character_id or item.base_character_id == project_character_id]
+                for relative in family:
+                    for other in self._asset_image_variants(relative, "character"):
+                        if relative.id == use.selected_asset_id and other.id == use.selected_variant_id:
+                            continue
+                        old_refs = {value for value in (image_variant_storage_key(other), other.url) if value}
+                        if old_refs.intersection(resolved_refs):
+                            raise ValueError("Storyboard references mix another look of the selected character")
             
         frame.status = GenerationStatus.PROCESSING
         if composition_data:
@@ -6843,6 +8079,22 @@ class ComicGenPipeline(StudioOwnerMixin):
             if composition_data:
                 ref_image_url = composition_data.get('reference_image_url')
                 ref_image_urls = composition_data.get('reference_image_urls', [])
+
+            # The selected reference supplements automatic shot references.
+            # Keeping this list separate means a scene reference does not
+            # suppress the frame's selected character anchors.
+            selected_source_variant_id = (
+                frame.shot_visual_design.source_variant_id
+                if frame.shot_visual_design and frame.shot_visual_design.apply_mode == "parameters_with_reference"
+                else None
+            )
+            supplemental_ref_image_paths = [
+                (resolve_studio_reference(item.url, script.owner_profile_id, output_root=self.output_root)
+                 if item.url.startswith("/studio/media/") else item.url)
+                for item in frame.reference_package.references
+                if item.url and item.kind != "reference_video"
+                and selected_source_variant_id and item.source_variant_id == selected_source_variant_id
+            ]
             
             ref_image_paths = []
             
@@ -6909,6 +8161,7 @@ class ComicGenPipeline(StudioOwnerMixin):
                 scene,
                 ref_image_path=ref_image_path,
                 ref_image_paths=ref_image_paths,
+                supplemental_ref_image_paths=supplemental_ref_image_paths,
                 prompt=final_prompt,
                 negative_prompt=negative_prompt,
                 batch_size=batch_size,
@@ -6961,10 +8214,17 @@ class ComicGenPipeline(StudioOwnerMixin):
         from .assets import ASPECT_RATIO_TO_SIZE
         series = self.series_store.get(script.series_id) if script.series_id else None
         model = series.model_settings.i2i_model if series else script.model_settings.i2i_model
+        supplemental_ref_image_paths = [
+            (resolve_studio_reference(item.url, script.owner_profile_id, output_root=self.output_root)
+             if item.url.startswith("/studio/media/") else item.url)
+            for item in candidate.reference_package.references
+            if item.url and item.kind != "reference_video"
+        ] if candidate.reference_package.confirmed else []
         self.storyboard_generator.generate_frame(
             candidate,
             resolved["characters"],
             scene,
+            supplemental_ref_image_paths=supplemental_ref_image_paths,
             prompt=prompt,
             negative_prompt=negative_prompt,
             batch_size=1,
@@ -6979,6 +8239,84 @@ class ComicGenPipeline(StudioOwnerMixin):
         if not variant:
             raise RuntimeError("Storyboard candidate render returned no image")
         return image_variant_storage_key(variant)
+
+    def preview_storyboard_candidate_prompt(self, script_id: str, frame_id: str, prompt: str,
+                                            slot: str = "first") -> str:
+        script = self.scripts.get(script_id)
+        if not script:
+            raise ValueError("Script not found")
+        frame = next((item for item in script.frames if item.id == frame_id), None)
+        if not frame:
+            raise ValueError("Frame not found")
+        if not prompt.strip():
+            raise ValueError("Storyboard prompt cannot be empty")
+        _, visual_issues = self._shot_asset_visual_context(script, frame, self.resolve_project_assets(script))
+        if visual_issues:
+            raise ValueError("Storyboard asset visual source changed; review references: " + ", ".join(visual_issues))
+        from .micro_expression import frame_static_expression_descriptions
+        static_states = frame_static_expression_descriptions(frame.micro_expression_timing, slot)
+        self._validate_reference_visual_projection(script, frame)
+        scene = self._storyboard_scene_asset(script, frame)
+        revision, design = self._confirmed_scene_design(scene)
+        scene_parts = []
+        baseline = design.get("asset_baseline") if isinstance(design, dict) else None
+        if scene:
+            scene_parts.append(f"场景：{scene.name}" if isinstance(baseline, dict) and baseline.get("scene_identity")
+                               else f"场景：{scene.name}。{scene.description}")
+        if revision is not None:
+            if isinstance(baseline, dict) and baseline.get("scene_identity"):
+                for key, label in (("scene_identity", "场景资产基线"), ("location_type", "地点类型"),
+                                   ("fixed_geometry", "固定结构"), ("fixed_landmarks", "固定地标"),
+                                   ("materials", "材质"), ("environment", "环境"),
+                                   ("time_baseline", "默认时间"), ("lighting_baseline", "世界光影"),
+                                   ("composition_tendency", "构图倾向"),
+                                   ("reusable_constraints", "复用约束")):
+                    value = baseline.get(key)
+                    if isinstance(value, list):
+                        value = "、".join(item for item in value if isinstance(item, str) and item.strip())
+                    if isinstance(value, str) and value.strip():
+                        scene_parts.append(f"{label}：{value.strip()}")
+            crowd = design.get("crowd_design")
+            if isinstance(crowd, dict):
+                for layer_name, label in (("near", "近景人群"), ("mid", "中景人群"), ("far", "远景人群")):
+                    layer = crowd.get(layer_name)
+                    if not isinstance(layer, dict):
+                        continue
+                    values = [f"身份策略：{layer.get('identity_policy', 'unidentified')}"]
+                    if layer.get("density"): values.append(f"密度：{layer['density']}")
+                    if layer.get("subjects"): values.append("对象：" + "、".join(layer["subjects"]))
+                    if layer.get("text_elements"): values.append("固定文字：" + "、".join(layer["text_elements"]))
+                    if layer.get("motion"): values.append(f"运动：{layer['motion']}")
+                    scene_parts.append(f"{label}：" + "；".join(values))
+            for key, label in (
+                (("style", "场景风格"), ("ambient_lighting", "环境光"),
+                 ("reference_viewpoint", "基础视角"), ("reference_framing", "占位与深度"))
+                if isinstance(baseline, dict) and baseline.get("scene_identity") else
+                (("visual_notes", "空间与内容"), ("style", "场景风格"),
+                 ("ambient_lighting", "环境光"), ("reference_viewpoint", "基础视角"),
+                 ("reference_framing", "占位与深度"))
+            ):
+                value = design.get(key)
+                if isinstance(value, str) and value.strip():
+                    scene_parts.append(f"{label}：{value.strip()}")
+            constraints = design.get("visual_constraints")
+            if isinstance(constraints, dict):
+                light_names = {"front": "正面光", "back": "背面光", "side": "侧面光",
+                               "top": "顶部光", "bottom": "底部光", "mixed": "混合光"}
+                direction = constraints.get("key_light_direction")
+                if direction in light_names:
+                    scene_parts.append(f"主光方向：{light_names[direction]}")
+        reference_clauses = reference_projection_prompt_clauses(frame.reference_visual_projection, frame, scene)
+        asset_visual_context, _ = self._shot_asset_visual_context(script, frame, self.resolve_project_assets(script))
+        additions = [item for item in [*scene_parts, *reference_clauses] if item and item not in prompt]
+        if asset_visual_context and asset_visual_context not in prompt:
+            additions.append("已确认资产外观：\n" + asset_visual_context)
+        if static_states:
+            label = "首帧静态表情" if slot == "first" else "尾帧静态表情"
+            clause = f"{label}：{'；'.join(static_states)}"
+            if clause not in prompt:
+                additions.append(clause)
+        return "\n".join([prompt.strip(), *additions])
 
     def storyboard_candidate_preview_token(
         self, script_id: str, frame_id: str, prompt: str, negative_prompt: Optional[str]
@@ -7001,14 +8339,73 @@ class ComicGenPipeline(StudioOwnerMixin):
         self._save_data()
         return script
 
-    def create_video_task(self, script_id: str, image_url: str, prompt: str, duration: int = 5, seed: int = None, resolution: str = "720p", generate_audio: bool = False, audio_url: str = None, prompt_extend: bool = True, negative_prompt: str = None, model: str = "wan2.7-i2v", frame_id: str = None, shot_type: str = "single", generation_mode: str = "i2v", reference_video_urls: list = None, reference_image_urls: list = None, ratio: str = None, watermark: Optional[bool] = None, mode: str = None, sound: str = None, cfg_scale: float = None, vidu_audio: bool = None, movement_amplitude: str = None, workbench_tab: Optional[str] = None, pose_reference_variant_ids: Optional[Dict[str, List[str]]] = None, director_snapshot_media_id: Optional[str] = None, last_frame_url: Optional[str] = None, last_frame_media_id: Optional[str] = None) -> Tuple[Script, str]:
+    def create_video_task(self, script_id: str, image_url: str, prompt: str, duration: int = 5, seed: int = None, resolution: str = "720p", generate_audio: bool = False, audio_url: str = None, prompt_extend: bool = True, negative_prompt: str = None, model: str = "wan2.7-i2v", frame_id: str = None, shot_type: str = "single", generation_mode: str = "i2v", reference_video_urls: list = None, reference_image_urls: list = None, ratio: str = None, watermark: Optional[bool] = None, mode: str = None, sound: str = None, cfg_scale: float = None, vidu_audio: bool = None, movement_amplitude: str = None, workbench_tab: Optional[str] = None, pose_reference_variant_ids: Optional[Dict[str, List[str]]] = None, director_snapshot_media_id: Optional[str] = None, last_frame_url: Optional[str] = None, last_frame_media_id: Optional[str] = None, reference_asset_inputs: Optional[List[VideoReferenceIdentity]] = None) -> Tuple[Script, str]:
         """Creates a new video generation task."""
         script = self.get_script(script_id)
         if not script:
             raise ValueError("Script not found")
+        frame = next((item for item in script.frames if item.id == frame_id), None) if frame_id else None
+        if frame:
+            _, visual_issues = self._shot_asset_visual_context(script, frame, self.resolve_project_assets(script))
+            if visual_issues:
+                raise ValueError("Shot asset visual source changed; review references: " + ", ".join(visual_issues))
+        validated_reference_inputs: List[VideoReferenceIdentity] = []
+        if reference_asset_inputs is not None:
+            submitted_urls = reference_image_urls or []
+            if generation_mode != "r2v" or len(reference_asset_inputs) != len(submitted_urls):
+                raise ValueError("Reference asset identities must match the ordered R2V image list")
+            available = {
+                (entry.asset_type, entry.asset_id): entry
+                for entry in self.get_asset_reference_index(script_id, scope="project").assets
+            }
+            for identity, submitted_url in zip(reference_asset_inputs, submitted_urls):
+                entry = available.get((identity.asset_type, identity.asset_id))
+                variant = next((item for item in entry.variants if item.id == identity.variant_id), None) if entry else None
+                if variant is None:
+                    raise ValueError("Reference asset variant changed; review references")
+                stored_key = image_variant_storage_key(variant)
+                if not stored_key or (identity.media_id is not None and identity.media_id != variant.media_id):
+                    raise ValueError("Reference asset media changed; review references")
+                try:
+                    submitted_key = resolve_studio_reference(
+                        submitted_url, script.owner_profile_id, output_root=self.output_root,
+                    )
+                    expected_key = resolve_studio_reference(
+                        stored_key, script.owner_profile_id, output_root=self.output_root,
+                    )
+                except ValueError as exc:
+                    raise ValueError("Reference asset media unavailable; review references") from exc
+                if submitted_key != expected_key:
+                    raise ValueError("Reference asset media changed; review references")
+                validated_reference_inputs.append(VideoReferenceIdentity(
+                    asset_type=identity.asset_type, asset_id=identity.asset_id,
+                    variant_id=identity.variant_id, media_id=variant.media_id,
+                    storage_key=stored_key,
+                ))
+        prompt_warning = None
+        if (frame and frame.workbench_prompt_is_optimized and frame.workbench_visual_source_hash
+                and frame.workbench_visual_source_hash != self._workbench_visual_source_hash(script, frame)):
+            prompt_warning = "完整优化稿基于旧版镜头字段；本次仍按当前镜头设置提交，如需完全匹配请重新优化。"
+            logger.warning(
+                "Submitting video task with stale optimized prompt: script=%s frame=%s",
+                script_id, frame_id,
+            )
         
         task_id = str(uuid.uuid4())
         
+        if model and model.startswith("uniart/minimax-h3"):
+            if seed is not None:
+                raise ValueError("H3 V2 does not support seed")
+
+        # Accept the H3 client alias at the boundary; persist the existing
+        # storyboard mode so frame history and reference identity keep one owner.
+        if generation_mode == "f2v":
+            if not (model and model.startswith("uniart/minimax-h3") and model != "uniart/minimax-h3-ir"):
+                raise ValueError("Studio f2v alias requires an H3 V2 model")
+            generation_mode = "first_last_frame"
+        if last_frame_url and generation_mode != "first_last_frame":
+            raise ValueError("Last frame requires first/last-frame mode")
+
         # If R2V mode is selected, use the appropriate R2V model
         from ...models.nsfw_new_one import WAN_IDS
         is_nsfw_wan = model in WAN_IDS
@@ -7086,7 +8483,7 @@ class ComicGenPipeline(StudioOwnerMixin):
                 raise ValueError("Image-to-video requires an input image")
             if generation_mode == "first_last_frame" and (not image_url or not last_frame_url):
                 raise ValueError("First/last-frame video requires both frame images")
-            if generation_mode == "i2v" and audio_url:
+            if generation_mode in ("i2v", "first_last_frame") and audio_url:
                 raise ValueError("Audio references require reference-to-video mode")
             if generation_mode == "t2v" and (image_url or audio_url):
                 raise ValueError("Text-to-video cannot accept media references")
@@ -7176,6 +8573,17 @@ class ComicGenPipeline(StudioOwnerMixin):
         else:
             asset_revision_pins = []
 
+        reference_media_ids.extend(
+            item.media_id for item in validated_reference_inputs if item.media_id
+        )
+
+        consistency_manifest = (
+            self._build_consistency_manifest(script, source_frame, prompt=prompt)
+            if source_frame else None
+        )
+        if source_frame and consistency_manifest:
+            source_frame.consistency_manifest = consistency_manifest.model_copy(deep=True)
+
         task = VideoTask(
             id=task_id,
             project_id=script_id,
@@ -7197,6 +8605,7 @@ class ComicGenPipeline(StudioOwnerMixin):
             last_frame_media_id=effective_last_frame_media_id,
             input_media_id=input_media_id,
             prompt=prompt,
+            warning=prompt_warning,
             status="pending",
             duration=duration,
             seed=seed,
@@ -7210,7 +8619,8 @@ class ComicGenPipeline(StudioOwnerMixin):
             generation_mode=generation_mode,
             reference_video_urls=reference_video_urls or [],
             reference_media_ids=list(dict.fromkeys(reference_media_ids)),
-            asset_revision_pins=[item.model_copy(deep=True) for item in asset_revision_pins],
+            reference_asset_inputs=validated_reference_inputs,
+            consistency_manifest=consistency_manifest.model_copy(deep=True) if consistency_manifest else None,
             storyboard_reference_revision=storyboard_reference_revision,
             reference_image_urls=reference_image_urls or [],
             ratio=ratio,
@@ -7329,7 +8739,7 @@ class ComicGenPipeline(StudioOwnerMixin):
         frame.rendered_image_asset.selected_id = variant.id
         self._register_storyboard_frame_media(frame, script.owner_profile_id)
         # Also update rendered_image_url so VideoCreator can pick it up
-        frame.rendered_image_url = image_url
+        frame.rendered_image_url = variant.storage_key
 
         script.updated_at = time.time()
         self._save_data()
@@ -8313,6 +9723,8 @@ class ComicGenPipeline(StudioOwnerMixin):
                 task.reference_video_urls = [resolve_studio_reference(ref, script.owner_profile_id, output_root=self.output_root) for ref in task.reference_video_urls]
                 if task.image_url:
                     task.image_url = resolve_studio_reference(task.image_url, script.owner_profile_id, output_root=self.output_root)
+                if task.last_frame_url:
+                    task.last_frame_url = resolve_studio_reference(task.last_frame_url, script.owner_profile_id, output_root=self.output_root)
                 if task.audio_url:
                     task.audio_url = resolve_studio_reference(task.audio_url, script.owner_profile_id, output_root=self.output_root)
             
@@ -8402,6 +9814,8 @@ class ComicGenPipeline(StudioOwnerMixin):
                 def save_provider_task(provider_task_id):
                     task.provider_name = "uniart"
                     task.provider_task_id = provider_task_id
+                    if "minimax-h3" in model_name_lower:
+                        task.provider_api_version = "v2"
                     self._save_data()
 
                 reference_images = list(task.reference_image_urls)
@@ -8409,7 +9823,11 @@ class ComicGenPipeline(StudioOwnerMixin):
                 if task.generation_mode == "r2v" and task.image_url and task.image_url not in reference_images:
                     reference_images.insert(0, task.image_url)
                 from .reference_prompt import bind_storyboard_prompt
-                submitted_prompt = bind_storyboard_prompt(task.prompt, task.model, len(reference_images))
+                image_count = 2 if task.generation_mode == "first_last_frame" else 1 if task.generation_mode == "i2v" else len(reference_images)
+                submitted_prompt = bind_storyboard_prompt(
+                    task.prompt, task.model, image_count,
+                    single_frame_anchor=task.generation_mode == "i2v",
+                )
                 # Storyboard cuts can be shorter than the provider's output
                 # window. Normalize at the submission boundary as protection
                 # for mobile clients or cached frontends that predate the UI
@@ -8417,10 +9835,16 @@ class ComicGenPipeline(StudioOwnerMixin):
                 max_duration = 15 if "minimax-h3" in model_name_lower else 30
                 provider_duration = max(4, min(max_duration, task.duration))
                 video_path, _ = uniart_model.generate(
-                    prompt=submitted_prompt, output_path=output_path, img_url=img_url, img_path=img_path,
+                    prompt=submitted_prompt, output_path=output_path,
+                    img_url=img_url if task.generation_mode != "first_last_frame" else None,
+                    img_path=img_path if task.generation_mode != "first_last_frame" else None,
                     first_frame=task.image_url if task.generation_mode == "first_last_frame" else None,
                     last_frame=task.last_frame_url if task.generation_mode == "first_last_frame" else None,
-                    duration=provider_duration, resolution=task.resolution, aspect_ratio=task.ratio or "16:9",
+                    duration=provider_duration, resolution=task.resolution,
+                    aspect_ratio=task.ratio or (
+                        "adaptive" if "minimax-h3" in model_name_lower
+                        and task.generation_mode == "first_last_frame" else "16:9"
+                    ),
                     model=task.model,
                     mode={"r2v": "reference2video", "i2v": "image2video", "first_last_frame": "frames2video", "t2v": "text2video"}[task.generation_mode],
                     ref_image_urls=reference_images if task.generation_mode == "r2v" else [],
@@ -8430,6 +9854,7 @@ class ComicGenPipeline(StudioOwnerMixin):
                     seed=task.seed,
                     on_task_submitted=save_provider_task,
                     resume_task_id=task.provider_task_id if task.provider_name == "uniart" else None,
+                    h3_api_version=(task.provider_api_version or "v1") if task.provider_task_id else "v2",
                 )
             elif use_mulerouter:
                 if self._mulerouter_video_model is None:
@@ -8804,6 +10229,203 @@ class ComicGenPipeline(StudioOwnerMixin):
                 "current_revision": asset.asset_revision,
                 "revisions": [item.model_dump() for item in asset.asset_revisions]}
 
+    def _project_character_for_pack(self, script_id: str, character_id: str):
+        """Resolve the project owner, never an inherited/global candidate."""
+        script = self.scripts.get(script_id)
+        if not script:
+            raise ValueError("Script not found")
+        if script.series_id:
+            series = self.get_series(script.series_id, script.owner_profile_id)
+            if not series:
+                raise ValueError("Series not found")
+            character = next((item for item in series.characters if item.id == character_id), None)
+            source = "series"
+        else:
+            character = next((item for item in script.characters if item.id == character_id), None)
+            source = "script"
+        if character is None:
+            raise ValueError("Project character not found")
+        return character, source
+
+    def get_project_character_asset_pack(self, script_id: str, character_id: str) -> Dict[str, Any]:
+        with self._save_lock:
+            character, source = self._project_character_for_pack(script_id, character_id)
+            asset_revision = commit_asset_revision(character)
+            script = self.scripts[script_id]
+            return {
+                "character_id": character.id,
+                "source_scope": "series" if source == "series" else "project",
+                "source_container_id": script.series_id if source == "series" else script.id,
+                "asset_revision": asset_revision.revision,
+                "pack": character.asset_pack.model_dump() if character.asset_pack else None,
+            }
+
+    def confirm_project_character_anchor(
+        self, script_id: str, character_id: str, variant_id: str,
+        expected_asset_revision: int, expected_pack_revision: int,
+        verified_front_full_body: bool,
+    ) -> Dict[str, Any]:
+        """Append a reviewed identity anchor without changing media selection."""
+        with self._save_lock:
+            character, source = self._project_character_for_pack(script_id, character_id)
+            asset_revision = commit_asset_revision(character)
+            pack = character.asset_pack
+            if (asset_revision.revision != expected_asset_revision
+                    or (pack.current_revision if pack else 0) != expected_pack_revision):
+                raise ValueError("Character asset pack revision changed; reload before confirming")
+            if not verified_front_full_body:
+                raise ValueError("Confirm that the selected image is a front full-body anchor")
+            design_revisions = (character.character_design or {}).get("design_revisions") or []
+            if not design_revisions:
+                raise ValueError("Confirm the character visual design before selecting an anchor")
+            design_revision = design_revisions[-1].get("revision")
+            if not isinstance(design_revision, int) or design_revision < 1:
+                raise ValueError("Confirmed character design revision is invalid")
+            containers = (character.reference_sheet, character.full_body_asset)
+            variants = [item for container in containers if container is not None
+                        for item in (getattr(container, "image_variants", None)
+                                     or getattr(container, "variants", None) or [])
+                        if item.id == variant_id]
+            if not variants or any((item.media_id, image_variant_storage_key(item)) !=
+                                   (variants[0].media_id, image_variant_storage_key(variants[0]))
+                                   for item in variants[1:]):
+                raise ValueError("Anchor variant must belong to the project character reference sheet")
+            variant = variants[0]
+            new_revision = expected_pack_revision + 1
+            anchor = CharacterAssetPackRevision(
+                revision=new_revision, variant_id=variant.id, media_id=variant.media_id,
+                source_asset_revision=asset_revision.revision,
+                source_design_revision=design_revision,
+            )
+            character.asset_pack = CharacterAssetPack(
+                pack_id=pack.pack_id if pack else f"character-pack-{character.id}",
+                current_revision=new_revision,
+                revisions=[*(pack.revisions if pack else []), anchor],
+            )
+            commit_asset_revision(character, "user_confirmed")
+            self._save_after_asset_mutation(source)
+            return self.get_project_character_asset_pack(script_id, character_id)
+
+    def confirm_episode_character_use(
+        self, script_id: str, project_character_id: str, use_id: str,
+        label: str, condition: str, selected_asset_id: str,
+        selected_variant_id: str, expected_pack_revision: int, reviewed: bool,
+    ) -> EpisodeCharacterUse:
+        """Confirm a look already visible to the reviewer; never copy its media."""
+        with self._save_lock:
+            script = self.scripts.get(script_id)
+            if not script:
+                raise ValueError("Script not found")
+            project_character, project_source = self._project_character_for_pack(
+                script_id, project_character_id)
+            pack = project_character.asset_pack
+            if not pack or pack.current_revision != expected_pack_revision:
+                raise ValueError("Character asset pack revision changed; reload before confirming")
+            if not reviewed:
+                raise ValueError("Review the selected episode character image before confirming")
+            if any(item.use_id == use_id for item in script.episode_character_uses):
+                raise ValueError("Episode character use ID already exists")
+            if not label.strip() or not use_id.strip():
+                raise ValueError("Episode character use ID and label are required")
+            anchor = pack.revisions[-1]
+            if selected_asset_id == project_character_id:
+                # An episode-local shadow would make the saved character ID
+                # resolve to different media in storyboard generation.
+                if project_source == "series" and any(
+                    item.id == project_character_id for item in script.characters):
+                    raise ValueError("Episode-local asset shadows the project character")
+                if selected_variant_id != anchor.variant_id:
+                    raise ValueError("Project look must use the confirmed anchor variant")
+                selected_asset = project_character
+                selected_scope = "series" if project_source == "series" else "project"
+                container_id = script.series_id if project_source == "series" else script.id
+            else:
+                selected_asset = next((item for item in script.characters
+                                       if item.id == selected_asset_id), None)
+                if not selected_asset or selected_asset.base_character_id != project_character_id:
+                    raise ValueError("Episode look must belong to the same project character")
+                selected_scope = "episode"
+                container_id = script.id
+            variants = {item.id: item for item in self._asset_image_variants(selected_asset, "character")}
+            selected_variant = variants.get(selected_variant_id)
+            if selected_variant is None:
+                raise ValueError("Selected episode look variant is not available")
+            selected_revision = commit_asset_revision(selected_asset)
+            use = EpisodeCharacterUse(
+                use_id=use_id, project_character_id=project_character_id,
+                label=label.strip(), condition=condition.strip(),
+                source_pack_id=pack.pack_id, source_pack_revision=anchor.revision,
+                source_design_revision=anchor.source_design_revision,
+                source_anchor_variant_id=anchor.variant_id,
+                source_anchor_media_id=anchor.media_id,
+                selected_asset_id=selected_asset_id,
+                selected_asset_revision=selected_revision.revision,
+                selected_variant_id=selected_variant.id,
+                selected_media_id=selected_variant.media_id,
+                selected_source_scope=selected_scope,
+                selected_source_container_id=container_id,
+            )
+            script.episode_character_uses.append(use)
+            script.updated_at = time.time()
+            self._save_data()
+            return use
+
+    def select_frame_character_use(
+        self, script_id: str, frame_id: str, project_character_id: str,
+        use_id: str, expected_reference_revision: int,
+    ) -> StoryboardFrame:
+        """Apply one reviewed look to exactly one shot and its media selection."""
+        with self._save_lock:
+            script = self.scripts.get(script_id)
+            if not script:
+                raise ValueError("Script not found")
+            frame = next((item for item in script.frames if item.id == frame_id), None)
+            if not frame:
+                raise ValueError("Frame not found")
+            if frame.reference_package.revision != expected_reference_revision:
+                raise ValueError("Storyboard reference revision changed; reload before selecting")
+            use = next((item for item in script.episode_character_uses
+                        if item.use_id == use_id and item.project_character_id == project_character_id), None)
+            if use is None:
+                raise ValueError("Character use is not available in this episode")
+            project_character, _ = self._project_character_for_pack(script_id, project_character_id)
+            asset = (project_character if use.selected_asset_id == project_character_id
+                     else next((item for item in script.characters
+                                if item.id == use.selected_asset_id
+                                and item.base_character_id == project_character_id), None))
+            if asset is None:
+                raise ValueError("Selected episode look asset is no longer available")
+            variant = next((item for item in self._asset_image_variants(asset, "character")
+                            if item.id == use.selected_variant_id), None)
+            if variant is None or variant.media_id != use.selected_media_id:
+                raise ValueError("Selected episode look media has changed")
+            family_ids = {item.id for item in self.resolve_project_assets(script)["characters"]
+                          if item.id == project_character_id
+                          or item.base_character_id == project_character_id}
+            insert_at = next((index for index, item in enumerate(frame.character_ids)
+                              if item in family_ids), len(frame.character_ids))
+            character_ids = [item for item in frame.character_ids if item not in family_ids]
+            character_ids.insert(insert_at, use.selected_asset_id)
+            selections = {key: list(value) for key, value in frame.workbench_reference_variant_ids.items()
+                          if key not in family_ids}
+            selections[use.selected_asset_id] = [use.selected_variant_id]
+            if (frame.character_use_ids.get(project_character_id) == use_id
+                    and frame.character_ids == character_ids
+                    and frame.workbench_reference_variant_ids == selections):
+                return frame
+            frame.character_ids = character_ids
+            frame.character_use_ids[project_character_id] = use_id
+            frame.workbench_reference_variant_ids = selections
+            if frame.reference_package.confirmed:
+                frame.reference_package.confirmed = False
+                frame.reference_package.asset_revision_pins = []
+            frame.reference_package.revision += 1
+            frame.reference_package.updated_at = time.time()
+            frame.updated_at = time.time()
+            script.updated_at = frame.updated_at
+            self._save_data()
+            return frame
+
     def confirm_asset_revision(
         self, script_id: str, asset_id: str, asset_type: str,
         expected_revision: int, active_variant_ids: Optional[List[str]] = None,
@@ -8827,6 +10449,16 @@ class ComicGenPipeline(StudioOwnerMixin):
                 raise ValueError("Active variants must be unique members of this asset")
             if selected_variant_id and selected_variant_id not in active:
                 raise ValueError("Selected variant must remain active on this asset")
+            if asset_type == "character" and asset.asset_pack:
+                anchors = {item.variant_id for item in asset.asset_pack.revisions
+                           if item.revision == asset.asset_pack.current_revision}
+                if not anchors.issubset(active):
+                    raise ValueError("Confirmed character anchors cannot be removed")
+            if asset_type == "character" and any(
+                item.selected_asset_id == asset_id and item.selected_variant_id not in active
+                for item in script.episode_character_uses
+            ):
+                raise ValueError("Variants used by a confirmed episode look cannot be removed")
             from .models import AssetUnit
             for container in containers:
                 variant_field = "image_variants" if isinstance(container, AssetUnit) else "variants"
@@ -8885,6 +10517,12 @@ class ComicGenPipeline(StudioOwnerMixin):
                 "asset_revision": asset.asset_revision,
                 "asset_revisions": asset.asset_revisions,
             })
+            if asset_type == "character" and asset.asset_pack:
+                if candidate.asset_pack != asset.asset_pack:
+                    raise ValueError("Cannot restore a revision that changes confirmed character anchors")
+                anchored_ids = {item.variant_id for item in asset.asset_pack.revisions}
+                if not anchored_ids.issubset({item.id for item in self._asset_image_variants(candidate, "character")}):
+                    raise ValueError("Cannot restore a revision that removes confirmed character anchors")
             for field in old.snapshot:
                 if field != "id":
                     setattr(asset, field, getattr(candidate, field))
@@ -9001,10 +10639,12 @@ class ComicGenPipeline(StudioOwnerMixin):
                         target_asset.image_url = variant.url
                 else:
                     # Legacy fallback: search all assets (for backward compatibility)
-                    variant = self._select_variant_in_asset(target_asset.full_body_asset, variant_id)
-                    if variant:
-                        target_asset.full_body_image_url = variant.url
-                        target_asset.image_url = variant.url
+                    variant = self._select_variant_in_asset(target_asset.reference_sheet, variant_id)
+                    if not variant:
+                        variant = self._select_variant_in_asset(target_asset.full_body_asset, variant_id)
+                        if variant:
+                            target_asset.full_body_image_url = variant.url
+                            target_asset.image_url = variant.url
 
                     if not variant:
                         variant = self._select_variant_in_asset(target_asset.three_view_asset, variant_id)
@@ -9047,6 +10687,9 @@ class ComicGenPipeline(StudioOwnerMixin):
         if asset_type in ("character", "scene", "prop"):
             if variant is None:
                 raise ValueError(f"Variant {variant_id} does not belong to asset {asset_id}")
+            if asset_type == "character":
+                target_asset.cover_variant_id = variant.id
+                target_asset.image_url = variant.url
             commit_asset_revision(target_asset, "user_confirmed")
         self._save_after_asset_mutation(source)
         return script
@@ -9065,6 +10708,18 @@ class ComicGenPipeline(StudioOwnerMixin):
                 raise ValueError(f"Asset {asset_id} of type {asset_type} not found")
 
         if asset_type == "character":
+            if target_asset.asset_pack and any(
+                item.variant_id == variant_id and item.revision == target_asset.asset_pack.current_revision
+                for item in target_asset.asset_pack.revisions
+            ):
+                raise ValueError("当前角色锚点不能删除，请先选择其他图片作为锚点")
+            related_scripts = [script] if source == "script" else [
+                item for item in self.scripts.values()
+                if source != "series" or item.series_id == script.series_id
+            ]
+            if any(item.selected_asset_id == asset_id and item.selected_variant_id == variant_id
+                   for project in related_scripts for item in project.episode_character_uses):
+                raise ValueError("此变体仍用于已确认的剧集造型，请先更换该造型")
             for field, legacy_url_field in (
                 ("reference_sheet", "image_url"),
                 ("full_body_asset", "image_url"),
@@ -9115,21 +10770,59 @@ class ComicGenPipeline(StudioOwnerMixin):
             commit_asset_revision(target_asset, "user_confirmed")
 
         cleaned_frame_selection = False
-        for frame in script.frames:
-            selection = frame.workbench_reference_variant_ids
-            if not selection:
-                continue
-            next_ids = [item for item in selection.get(asset_id, []) if item != variant_id]
-            if next_ids == selection.get(asset_id, []):
-                continue
-            if next_ids:
-                selection[asset_id] = next_ids
-            else:
-                selection.pop(asset_id, None)
-            cleaned_frame_selection = True
+        cleaned_cross_project_references = False
+        # A deleted variant must not remain a live Shot Design input.  VideoTask
+        # keeps its own immutable asset/media snapshot, so clearing frame-owned
+        # references does not alter an already generated or locked video.
+        for owner_script in self.scripts.values():
+            for frame in owner_script.frames:
+                package = frame.reference_package
+                package_refs = [item for item in package.references
+                                if not (item.source_asset_id == asset_id
+                                        and item.source_variant_id == variant_id)]
+                package_pins = [item for item in package.asset_revision_pins
+                                if not (item.asset_id == asset_id and item.variant_id == variant_id)]
+                package_changed = len(package_refs) != len(package.references) or len(package_pins) != len(package.asset_revision_pins)
+                if package_changed:
+                    package.references = package_refs
+                    package.asset_revision_pins = package_pins
+                    package.confirmed = False
+                    package.revision += 1
+                    package.updated_at = time.time()
+                    cleaned_cross_project_references = True
+                projection = frame.reference_visual_projection
+                if (projection and projection.source_asset_id == asset_id
+                        and projection.source_variant_id == variant_id):
+                    frame.reference_visual_projection = None
+                    cleaned_cross_project_references = True
+                visual_design = frame.shot_visual_design
+                if (visual_design and visual_design.source_asset_id == asset_id
+                        and visual_design.source_variant_id == variant_id):
+                    frame.shot_visual_design = None
+                    cleaned_cross_project_references = True
+                manifest = frame.consistency_manifest
+                if manifest and any(
+                    pin.asset_id == asset_id and pin.variant_id == variant_id
+                    for pin in manifest.asset_revision_pins
+                ):
+                    frame.consistency_manifest = None
+                    cleaned_cross_project_references = True
+                selection = frame.workbench_reference_variant_ids
+                if not selection:
+                    continue
+                next_ids = [item for item in selection.get(asset_id, []) if item != variant_id]
+                if next_ids == selection.get(asset_id, []):
+                    continue
+                if next_ids:
+                    selection[asset_id] = next_ids
+                else:
+                    selection.pop(asset_id, None)
+                cleaned_frame_selection = True
 
         self._save_after_asset_mutation(source)
-        if source != "script" and cleaned_frame_selection:
+        if source != "script" and (cleaned_frame_selection or cleaned_cross_project_references):
+            self._save_data()
+        elif source == "script" and cleaned_cross_project_references:
             self._save_data()
         return script
 
@@ -9183,43 +10876,32 @@ class ComicGenPipeline(StudioOwnerMixin):
             raise ValueError("Script not found")
         
         found = False
+        source = "script"
+        target_asset = None
+        if asset_type in ("character", "scene", "prop"):
+            target_asset, source = self._find_asset_with_source(script, asset_id, asset_type)
+            if target_asset is None:
+                raise ValueError(f"Asset {asset_id} of type {asset_type} not found")
         if asset_type == "character":
-            target_asset = next((c for c in script.characters if c.id == asset_id), None)
-            if target_asset:
-                if generation_type == "full_body":
-                    found = self._set_variant_favorite(target_asset.full_body_asset, variant_id, is_favorited)
-                elif generation_type == "reference_sheet":
-                    found = self._set_variant_favorite(target_asset.reference_sheet, variant_id, is_favorited)
-                elif generation_type == "three_view":
-                    found = self._set_variant_favorite(target_asset.three_view_asset, variant_id, is_favorited)
-                elif generation_type == "headshot":
-                    found = self._set_variant_favorite(target_asset.headshot_asset, variant_id, is_favorited)
-                else:
-                    # Try all character assets
-                    found = self._set_variant_favorite(target_asset.full_body_asset, variant_id, is_favorited) or \
-                            self._set_variant_favorite(target_asset.three_view_asset, variant_id, is_favorited) or \
-                            self._set_variant_favorite(target_asset.headshot_asset, variant_id, is_favorited)
-        
-        elif asset_type == "scene":
-            target_asset = next((s for s in script.scenes if s.id == asset_id), None)
-            if target_asset:
-                found = self._set_variant_favorite(target_asset.image_asset, variant_id, is_favorited)
-        
-        elif asset_type == "prop":
-            target_asset = next((p for p in script.props if p.id == asset_id), None)
-            if target_asset:
-                found = self._set_variant_favorite(target_asset.image_asset, variant_id, is_favorited)
-        
+            fields = {
+                "reference_sheet": "reference_sheet", "full_body": "full_body_asset",
+                "three_view": "three_view_asset", "headshot": "headshot_asset",
+            }
+            containers = [fields[generation_type]] if generation_type in fields else list(fields.values())
+            found = any(self._set_variant_favorite(getattr(target_asset, field, None), variant_id, is_favorited)
+                        for field in containers)
+        elif asset_type in ("scene", "prop"):
+            found = self._set_variant_favorite(target_asset.image_asset, variant_id, is_favorited)
         elif asset_type == "storyboard_frame":
             target_asset = next((f for f in script.frames if f.id == asset_id), None)
             if target_asset:
                 found = self._set_variant_favorite(target_asset.rendered_image_asset, variant_id, is_favorited) or \
                         self._set_variant_favorite(target_asset.image_asset, variant_id, is_favorited)
-        
+
         if not found:
             raise ValueError(f"Variant {variant_id} not found")
 
-        self._save_data()
+        self._save_after_asset_mutation(source)
         return script
 
     # ============================================================
@@ -10265,6 +11947,24 @@ class ComicGenPipeline(StudioOwnerMixin):
                     key: value for key, value in settings.model_dump().items()
                     if value != previous_settings[key]
                 }
+            if "extra_roster" in updates:
+                if updates["extra_roster"] is None:
+                    raise ValueError("Series extra roster must be a list")
+                roster = [ExtraRosterEntry.model_validate(item) for item in updates["extra_roster"]]
+                if len(roster) > 100 or len({item.extra_id for item in roster}) != len(roster):
+                    raise ValueError("Series extra roster has duplicate IDs or exceeds 100 entries")
+                roster_by_id = {item.extra_id: item for item in roster}
+                for episode_id in series.episode_ids:
+                    episode = self.scripts.get(episode_id)
+                    if episode is None or episode.series_id != series_id:
+                        continue
+                    for frame in episode.frames:
+                        for instance in frame.crowd_instances:
+                            entry = roster_by_id.get(instance.extra_id or instance.template_id)
+                            expected = "fixed_extra" if instance.extra_id else "extra_template"
+                            if entry is None or entry.kind != expected:
+                                raise ValueError("Series extra roster change would invalidate a shot reference")
+                updates["extra_roster"] = roster
             for key, value in updates.items():
                 if hasattr(series, key) and key not in ("id", "created_at", "episode_ids"):
                     if key == "art_direction" and isinstance(value, dict):
@@ -10303,6 +12003,43 @@ class ComicGenPipeline(StudioOwnerMixin):
                 self._save_data()
             return series
 
+    def generate_extra_roster_proposals(self, series_id: str, brief: str, count: int = 6) -> List[Dict[str, Any]]:
+        """Generate review-only extra candidates; never mutates the series roster."""
+        series = self.get_series(series_id)
+        if not series:
+            raise ValueError("Series not found")
+        if not brief.strip():
+            raise ValueError("群演需求不能为空")
+        count = max(1, min(int(count), 20))
+        if not self.script_processor.is_configured:
+            raise ValueError("LLM API Key 未配置。请在 API 配置中设置对应的 API Key 后重试。")
+        context = {
+            "series_title": series.title,
+            "scenes": [{"name": scene.name, "description": scene.description} for scene in series.scenes[:20]],
+            "existing_roster": [item.model_dump(mode="json") for item in series.extra_roster],
+        }
+        prompt = (
+            f"你是AI短剧的群演资产设计师。根据需求生成{count}个可审核的群演候选。\\n"
+            "候选只描述可观察的身份锚点、体型尺度、服装族和有限配件；不要写剧情、动作、镜头或随机抽卡保证。\\n"
+            "区分 fixed_extra（近景可辨认的固定群演）和 extra_template（中远景人群模板）。\\n"
+            "固定群演要有可比较的身高和体态；模板只写范围，不假装固定脸。\\n"
+            "不得复用已有 extra_id。只返回 JSON 数组，每项字段：extra_id、label、kind、height、body_build、wardrobe、palette、props。\\n"
+            f"项目上下文：{json.dumps(context, ensure_ascii=False)}\\n本次需求：{brief}"
+        )
+        content = self.script_processor.llm.chat(messages=[{"role": "user", "content": prompt}])
+        from .llm import _strip_markdown_json
+        data = json.loads(_strip_markdown_json(content))
+        if not isinstance(data, list):
+            raise ValueError("群演候选格式错误")
+        existing = {item.extra_id for item in series.extra_roster}
+        proposals = []
+        for item in data[:count]:
+            candidate = ExtraRosterEntry.model_validate(item)
+            if candidate.extra_id in existing or any(row["extra_id"] == candidate.extra_id for row in proposals):
+                continue
+            proposals.append(candidate.model_dump(mode="json"))
+        return proposals
+
     def delete_series(self, series_id: str) -> None:
         """Delete a Series and disassociate its episodes."""
         with self._save_lock:
@@ -10337,6 +12074,12 @@ class ComicGenPipeline(StudioOwnerMixin):
             collection = getattr(series, collections[asset_type])
             if not any(item.id == asset_id for item in collection):
                 raise ValueError("Series asset not found")
+            if asset_type == "character" and any(
+                item.project_character_id == asset_id or item.selected_asset_id == asset_id
+                for episode in self.scripts.values() if episode.series_id == series_id
+                for item in episode.episode_character_uses
+            ):
+                raise ValueError("Cannot delete a character used by a confirmed episode look")
 
             def cast_asset_ids(episode: Script, plan: DirectorShootingPlan,
                                cast: DirectorPlanCastBinding) -> List[str]:
@@ -10884,6 +12627,21 @@ class ComicGenPipeline(StudioOwnerMixin):
         """
         import re
 
+        episode_headings = numbered_episode_headings(text or "")
+        if episode_headings:
+            first = episode_headings[0].start()
+            if first == 0:
+                return {}, text
+            preamble = text[:first].strip()
+            if not preamble:
+                return {}, text[first:]
+            return {
+                "schema_version": 1,
+                "kind": "series_submission_context",
+                "preamble": preamble,
+                "body_char_count": len(text) - first,
+            }, text[first:]
+
         heading = re.compile(
             r"(?m)^\s*\d+\s*[、.]\s*[^\n]{1,120}?\s+(?:日|夜|晨|晚)\s+(?:内|外)(?:\s|$)"
         )
@@ -10937,19 +12695,17 @@ class ComicGenPipeline(StudioOwnerMixin):
     ) -> Dict:
         """Create a Series with Episodes from import data.
         episodes_data: list of dicts with episode_number, title, start_marker, end_marker."""
-        # Create the Series (already acquires lock internally)
+        series_context, screenplay_text = self._split_import_series_context(text)
+        # Split text into episode chunks based on markers. Markers are applied
+        # only to screenplay text, never to the submission preamble.
+        episode_texts = self._split_text_by_markers(screenplay_text, episodes_data)
         series = self.create_series(
             title,
             description,
             owner_user_id=owner_user_id,
             owner_profile_id=owner_profile_id,
         )
-
-        series_context, screenplay_text = self._split_import_series_context(text)
         series.source_context = series_context
-        # Split text into episode chunks based on markers. Markers are applied
-        # only to screenplay text, never to the submission preamble.
-        episode_texts = self._split_text_by_markers(screenplay_text, episodes_data)
 
         with self._save_lock:
             # Create Episode (Script) for each chunk
@@ -10987,6 +12743,22 @@ class ComicGenPipeline(StudioOwnerMixin):
     def _split_text_by_markers(self, text: str, episodes_data: List[Dict]) -> List[str]:
         """Split text into chunks using start/end markers from LLM.
         Searches sequentially to avoid overlapping chunks."""
+        if episodes_data and all("start_offset" in ep and "end_offset" in ep for ep in episodes_data):
+            chunks = []
+            previous_end = 0
+            for ep in episodes_data:
+                start, end = ep["start_offset"], ep["end_offset"]
+                if (not isinstance(start, int) or not isinstance(end, int)
+                        or start != previous_end or end <= start or end > len(text)):
+                    raise ValueError("分集原文位置无效；请重新预览导入")
+                chunk = text[start:end]
+                if not chunk.strip():
+                    raise ValueError("分集正文为空；请重新预览导入")
+                chunks.append(chunk)
+                previous_end = end
+            if previous_end != len(text):
+                raise ValueError("分集未覆盖完整原文；请重新预览导入")
+            return chunks
         chunks = []
         search_from = 0  # Track position to avoid overlap
 
@@ -11073,6 +12845,13 @@ class ComicGenPipeline(StudioOwnerMixin):
         """Updates arbitrary attributes of a Series asset."""
         with self._save_lock:
             series, target_asset = self._find_series_asset(series_id, asset_id, asset_type)
+            if asset_type == "character" and (
+                "asset_pack" in attributes or
+                (getattr(target_asset, "asset_pack", None) and set(attributes) & {
+                    "reference_sheet", "full_body_asset", "asset_revision", "asset_revisions",
+                })
+            ):
+                raise ValueError("Confirmed character asset pack can only change through reviewed anchor operations")
             if "name" in attributes:
                 attributes = {**attributes, "name": self._validated_asset_name(attributes["name"])}
             for key, value in attributes.items():

@@ -14,6 +14,7 @@ IDENTITIES = {
 }
 IDENTITY_LISTS = {
     "source_chunk_refs", "character_ids", "person_ids", "prop_ids",
+    "source_event_ids", "reveal_event_ids", "payoff_event_ids",
 }
 SCENE_FIELDS = (
     "scene_id", "scene_asset_id", "plan_scene_asset_id", "source_chunk_refs",
@@ -24,7 +25,7 @@ SCENE_FIELDS = (
 SHOT_FIELDS = (
     "shot_id", "scene_id", "beat_id", "source_chunk_refs", "scene_asset_id",
     "plan_scene_asset_id", "character_ids", "person_ids", "prop_ids",
-    "visual_intent", "director_effect", "performance_action", "action_physics",
+    "visual_intent", "director_effect", "performance_action", "action_physics", "information_design",
     "shot_size", "camera_angle", "composition", "camera_movement",
     "duration_seconds", "dialogue", "ambient_sound", "lighting",
     "place_continuity_id", "time_continuity_id", "lighting_override_reason",
@@ -109,6 +110,13 @@ def project_shot_context(raw, frame_shot_id, origin):
                         result[key] = _identity(item)
                     elif key in IDENTITY_LISTS:
                         result[key] = bounded_list(item, _identity)
+                    elif key == "withhold":
+                        # Disclosure boundaries must survive prose budget reduction.
+                        if not isinstance(item, str) or len(item) > 600:
+                            raise ValueError("Invalid disclosure boundary")
+                        result[key] = item
+                    elif key == "information_design":
+                        result[key] = fields(item, ("audience_question", "audience_knows", "character_knows", "withhold", "presentation", "source_event_ids", "reveal_event_ids", "payoff_event_ids", "evidence_status"))
                     elif key == "lighting":
                         result[key] = fields(item, LIGHT_FIELDS)
                     elif key == "dialogue":

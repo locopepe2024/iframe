@@ -1,6 +1,106 @@
 import { expect, it } from "vitest";
 
 import { buildGenerationPrompt, directorShotSuggestions, resolveNegativePrompt, resolveStylePrompt } from "./buildAssembledPrompt";
+
+it("adds only accepted micro-expression timing to video prompt", () => {
+    const shot = { id: "frame", prompt: "街头等待", tabMode: "t2i_i2v" as const,
+        microExpressionTiming: [{ character_id: "hero", character_name: "玄宸", timing: [
+            { phase: "trigger", relative_start: 0, relative_end: 0.2, visible_change: "视线停住" },
+            { phase: "release", relative_start: 0.8, relative_end: 1, visible_change: "恢复平静" },
+        ] }] };
+    const result = buildGenerationPrompt(shot, false, "uniart/seedance-2.5-vip");
+    expect(result).toContain("玄宸表情时序");
+    expect(result).toContain("release(0.80-1.00) 恢复平静");
+    expect(result).not.toContain("前镜对白");
+    const optimized = { ...shot, prompt: "街头等待，警觉地看向身后", promptIsOptimized: true };
+    expect(buildGenerationPrompt(optimized, false, "uniart/seedance-2.5-vip")).toContain("玄宸表情时序");
+});
+
+it("compiles the selected character move into a generation prompt", () => {
+    const shot = {
+        id: "shot-15",
+        prompt: "苏砚从人群中央掠入，拔剑扫开匪寇兵刃。",
+        tabMode: "direct_r2v" as const,
+        moveRef: "suyan.sword.disarm_sweep.v1",
+        moveVariant: "面对数名匪寇的连续拨械",
+    };
+    const result = buildGenerationPrompt(shot, false, "uniart/minimax-h3-vip");
+    expect(result).toContain("抽击·剑鞭拨械");
+    expect(result).toContain("动作词：抽击、剑鞭、Whiplash");
+    expect(result).toContain("面对数名匪寇的连续拨械");
+    expect(result).toContain("剑尖先向目标腕部或前臂前伸并到达其附近");
+    expect(result).toContain("剑身中段在横向发力并接触目标的负载下形成浅C形侧弯");
+    expect(result).toContain("剑身中段和剑尖出现短促受力颤振");
+    expect(result).toContain("不是整把剑像木棍一样刚性挥舞");
+    expect(result).not.toContain("握柄和手腕突然刹停后");
+    expect(result).toContain("一次可读的柔韧剑身接触");
+    expect(result).toContain("剑尖先向目标腕部或前臂前伸并到达其附近");
+    expect(result).toContain("不改为拍刃的剑身对剑身碰撞");
+    expect(result).toContain("不改为剑花或绕身回环");
+    expect(result).not.toContain("剑身横向扫过");
+    expect(result).toContain("受击手臂或武器沿受力方向偏移");
+});
+
+it("keeps flat-face sword control separate from flexible whiplash and blade-line sweep", () => {
+    const shot = {
+        id: "shot-flat-face-control",
+        prompt: "苏砚以立刃扫剑拨开匪寇的持械手。",
+        tabMode: "direct_r2v" as const,
+        moveRef: "suyan.sword.flat_face_control.v1",
+        moveVariant: "立刃扫剑·剑面拨械",
+    };
+    const result = buildGenerationPrompt(shot, false, "uniart/minimax-h3-vip");
+    expect(result).toContain("非刃接触剑法·控械");
+    expect(result).toContain("立刃扫剑·剑面拨械");
+    expect(result).toContain("剑面而非锋刃接触");
+    expect(result).toContain("不改为锋刃切割或直线刺入");
+    expect(result).not.toContain("剑身中段因惯性滞后形成浅C形侧弯");
+    expect(result).not.toContain("剑尖向侧方弹出完成一次受控抽击");
+    expect(result).not.toContain("不改为剑身侧面拍刃");
+});
+
+it("removes the move text when an optimized prompt has no selected move", () => {
+    const shot = {
+        id: "shot-15",
+        prompt: "integrated_multimodal_description: one continuous sword action",
+        tabMode: "direct_r2v" as const,
+        promptIsOptimized: true,
+    };
+    expect(buildGenerationPrompt(shot, false, "uniart/minimax-h3-vip"))
+        .not.toContain("抽击·剑鞭拨械");
+});
+
+it("keeps blade-line sweep as a separate move from blade-side slap", () => {
+    const shot = {
+        id: "shot-15-edge",
+        prompt: "苏砚以连续剑势拨开匪寇兵刃。",
+        tabMode: "direct_r2v" as const,
+        moveRef: "suyan.sword.edge_line_sweep.v1",
+        moveVariant: "面对数名匪寇的连续刃线横扫",
+    };
+    const result = buildGenerationPrompt(shot, false, "uniart/minimax-h3-vip");
+    expect(result).toContain("刃线横扫·拨械");
+    expect(result).toContain("剑刃沿明确横向刃线扫过");
+    expect(result).toContain("不改为剑身侧面拍刃");
+    expect(result).not.toContain("类似抖动长竹竿");
+});
+
+it("compiles multiple character performance moves independently", () => {
+    const shot = {
+        id: "shot-multi",
+        prompt: "两名角色在粮铺门前同时交锋。",
+        tabMode: "direct_r2v" as const,
+        performanceMoves: [
+            { characterId: "suyan", moveRef: "suyan.sword.disarm_sweep.v1", moveVariant: "面对数名匪寇的连续拨械" },
+            { characterId: "bandit-leader", moveRef: "suyan.sword.edge_line_sweep.v1", moveVariant: null },
+        ],
+    };
+    const result = buildGenerationPrompt(shot, false, "uniart/minimax-h3-vip");
+    expect(result).toContain("角色suyan");
+    expect(result).toContain("角色bandit-leader");
+    expect(result).toContain("一次可读的柔韧剑身接触");
+    expect(result).toContain("明确横向刃线");
+});
 import { resolveStoryboardStyle, resolveStoryboardStyleForRender } from "@/lib/storyboardStyle";
 import type { ShotNode } from "./ShotCard";
 
@@ -41,6 +141,17 @@ it("keeps shooting-plan prose as an explicit suggestion instead of appending it"
     };
     expect(directorShotSuggestions(withPlan)).toContain("环境氛围：残阳如血");
     expect(buildGenerationPrompt(withPlan, false, "wan2.7-i2v")).not.toContain("残阳如血");
+});
+
+it("submits accepted composition instead of suggesting the old plan composition", () => {
+    const framed: ShotNode = {
+        ...shot,
+        composition: "主体位于画面左侧",
+        directorShotContext: { shot: { composition: "旧计划主体居中" } },
+    };
+    expect(buildGenerationPrompt(framed, false, "uniart/minimax-h3-vip"))
+        .toContain("构图：主体位于画面左侧");
+    expect(directorShotSuggestions(framed)).not.toContain("构图：旧计划主体居中");
 });
 
 it("does not add dialogue when generated audio is disabled", () => {

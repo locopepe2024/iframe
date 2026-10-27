@@ -1,8 +1,9 @@
 "use client";
 
 import { useEffect, useState, useMemo } from "react";
-import { Palette, Layout, Film, BookOpen, Users, Video, Settings, Key, MessageSquareCode, Clapperboard, ImagePlus } from "lucide-react";
+import { Palette, Layout, Film, BookOpen, Users, Video, Settings, Key, MessageSquareCode, Clapperboard, ImagePlus, Menu, X } from "lucide-react";
 import { useTranslations } from "next-intl";
+import clsx from "clsx";
 import { useProjectStore } from "@/store/projectStore";
 import PipelineSidebar from "@/components/layout/PipelineSidebar";
 import EpisodeMiniList from "@/components/layout/EpisodeMiniList";
@@ -58,6 +59,7 @@ export default function ProjectClient({ id, breadcrumbSegments, standaloneDirect
     const [modelSettingsOpen, setModelSettingsOpen] = useState(false);
     const [envDialogOpen, setEnvDialogOpen] = useState(false);
     const [promptConfigOpen, setPromptConfigOpen] = useState(false);
+    const [mobileNavOpen, setMobileNavOpen] = useState(false);
     const t = useTranslations("project");
     const tp = useTranslations("pipeline");
 
@@ -217,17 +219,52 @@ export default function ProjectClient({ id, breadcrumbSegments, standaloneDirect
     );
 
     return (
-        <main className="flex h-screen w-screen bg-background overflow-hidden relative">
+        <main className="flex h-screen w-screen flex-col md:flex-row bg-background overflow-hidden relative">
             {/* Background Canvas */}
             <div className="absolute inset-0 z-0 pointer-events-auto">
                 <CreativeCanvas />
             </div>
 
+            <div className="relative z-20 flex h-12 shrink-0 items-center gap-3 border-b border-glass-border bg-surface px-3 md:hidden">
+                <button
+                    type="button"
+                    onClick={() => setMobileNavOpen(true)}
+                    className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md text-text-secondary hover:bg-glass hover:text-foreground"
+                    aria-label="打开项目导航"
+                    aria-expanded={mobileNavOpen}
+                >
+                    <Menu size={20} />
+                </button>
+                <span className="min-w-0 truncate text-sm font-medium text-foreground">
+                    {steps.find((step) => step.id === activeStep)?.label}
+                </span>
+                <span className="ml-auto max-w-[40%] truncate text-xs text-text-muted">{currentProject.title}</span>
+            </div>
+
+            {mobileNavOpen && (
+                <button
+                    type="button"
+                    onClick={() => setMobileNavOpen(false)}
+                    className="fixed inset-0 z-40 bg-black/70 md:hidden"
+                    aria-label="关闭项目导航"
+                />
+            )}
             {/* Left Sidebar — unified PipelineSidebar with integrated breadcrumb */}
-            <div className="relative z-20 h-full flex flex-col overflow-hidden">
+            <div className={clsx(
+                "fixed inset-y-0 left-0 z-50 flex h-full max-w-[85vw] flex-col overflow-hidden md:relative md:z-20 md:max-w-none",
+                mobileNavOpen ? "flex" : "hidden md:flex",
+            )}>
+                <button
+                    type="button"
+                    onClick={() => setMobileNavOpen(false)}
+                    className="absolute right-2 top-2 z-10 flex h-8 w-8 items-center justify-center rounded-md bg-surface text-text-secondary hover:text-foreground md:hidden"
+                    aria-label="关闭项目导航"
+                >
+                    <X size={18} />
+                </button>
                 <PipelineSidebar
                     activeStep={activeStep}
-                    onStepChange={setActiveStep}
+                    onStepChange={(step) => { setActiveStep(step); setMobileNavOpen(false); }}
                     steps={steps}
                     projectLabel={currentProject.title}
                     projectSubLabel={currentProject.episode_number ? `EP.${String(currentProject.episode_number).padStart(2, "0")}` : undefined}
@@ -265,7 +302,7 @@ export default function ProjectClient({ id, breadcrumbSegments, standaloneDirect
             />
 
             {/* Main Content Area — no z-index to avoid trapping fixed modals in a stacking context */}
-            <div className="flex-1 flex overflow-hidden relative">
+            <div className="min-h-0 min-w-0 flex-1 flex overflow-hidden relative">
                 <div className="flex-1 overflow-hidden relative">
                     {/* Global Atelier atmosphere — shared across every step so the
                         pipeline reads as one surface (bloom + grain, pointer-events
@@ -323,6 +360,7 @@ function EntityExtractionConfirm() {
             preview={pendingExtraction}
             currentCounts={{
                 characters: currentProject?.characters?.length ?? 0,
+                crowd_groups: 0,
                 scenes: currentProject?.scenes?.length ?? 0,
                 props: currentProject?.props?.length ?? 0,
             }}

@@ -37,7 +37,7 @@ it("polls queued plan jobs until the durable plan result arrives and reports pro
 
     await expect(pending).resolves.toEqual(plan);
     expect(axios.post).toHaveBeenCalledWith(
-        "/api/projects/film/director-shooting-plan-jobs", {}, { timeout: 15000 },
+        "/api/projects/film/director-shooting-plan-jobs", { skills: [] }, { timeout: 15000 },
     );
     expect(axios.get).toHaveBeenCalledTimes(2);
     expect(listener).toHaveBeenCalledWith(expect.objectContaining({

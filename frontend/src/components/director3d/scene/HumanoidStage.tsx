@@ -1,3 +1,4 @@
+import type { DesignPreview } from "../design/design-proposal";
 import { bakeDepthMeshes, installDepthCapture } from "../state/depth-snapshot";
 import { Canvas, type ThreeEvent, useFrame, useLoader, useThree } from "@react-three/fiber";
 import { Fragment, Suspense, useEffect, useMemo, useRef, useState } from "react";
@@ -309,7 +310,7 @@ function StageCameraFrustum({ composition, selected, lookAtM, followM }: { compo
   </group>;
 }
 
-function ViewCamera({ viewMode, calibration, composition, compositionTargetM, compositionPositionM }: { viewMode: ViewMode; calibration: PerspectiveScenePlateCalibrationState | null; composition: CameraCompositionState; compositionTargetM: [number, number, number]; compositionPositionM: [number, number, number] }) {
+function ViewCamera({ readOnly = false, viewMode, calibration, composition, compositionTargetM, compositionPositionM }: { readOnly?: boolean; viewMode: ViewMode; calibration: PerspectiveScenePlateCalibrationState | null; composition: CameraCompositionState; compositionTargetM: [number, number, number]; compositionPositionM: [number, number, number] }) {
   const { camera, gl } = useThree();
   const transformDragging = useWorkbenchStore((state) => state.transformDragging);
   const setViewportNavigation = useWorkbenchStore((state) => state.setViewportNavigation);
@@ -360,7 +361,7 @@ function ViewCamera({ viewMode, calibration, composition, compositionTargetM, co
   }, [calibration, camera, composition, compositionPositionM, compositionTargetM, controls, viewMode]);
   useEffect(() => {
     const onChange = () => {
-      if (applyingNavigation.current) return;
+      if (applyingNavigation.current || readOnly) return;
       setViewportNavigation(viewMode, {
         positionM: [camera.position.x, camera.position.y, camera.position.z],
         targetM: [controls.target.x, controls.target.y, controls.target.z],
@@ -370,7 +371,7 @@ function ViewCamera({ viewMode, calibration, composition, compositionTargetM, co
     };
     controls.addEventListener("change", onChange);
     return () => controls.removeEventListener("change", onChange);
-  }, [camera, controls, setViewportNavigation, viewMode]);
+  }, [camera, controls, setViewportNavigation, viewMode, readOnly]);
   useEffect(() => { controls.enabled = !transformDragging && !calibration && viewMode !== "camera"; }, [calibration, controls, transformDragging, viewMode]);
   useFrame(() => controls.update());
   return null;
@@ -557,21 +558,30 @@ function StageSceneObject({ sceneObject, recordingVideo }: { sceneObject: SceneO
   );
 }
 
-export function HumanoidStage({ recordingVideo = false }: { recordingVideo?: boolean }) {
-  const viewMode = useWorkbenchStore((state) => state.viewMode);
+export function HumanoidStage({ recordingVideo: videoRecording = false, preview = null, previewFrame = 1 }: { recordingVideo?: boolean; preview?: DesignPreview | null; previewFrame?: number }) {
+  const recordingVideo = videoRecording || preview !== null;
+  const authoredViewMode = useWorkbenchStore((state) => state.viewMode);
+  const viewMode = preview ? "camera" : authoredViewMode;
   const transformMode = useWorkbenchStore((state) => state.transformMode);
   const selectedCharacterId = useWorkbenchStore((state) => state.selectedCharacterId);
-  const selectedCameraId = useWorkbenchStore((state) => state.selectedCameraId);
+  const authoredCameraId = useWorkbenchStore((state) => state.selectedCameraId);
+  const selectedCameraId = preview?.cameraId ?? authoredCameraId;
   const selectedActorPathControlPointId = useWorkbenchStore((state) => state.selectedActorPathControlPointId);
   const selectedCameraPathControlPointId = useWorkbenchStore((state) => state.selectedCameraPathControlPointId);
   const selectedSceneObjectId = useWorkbenchStore((state) => state.selectedSceneObjectId);
-  const baseCharacters = useWorkbenchStore((state) => state.characters);
-  const baseSceneObjects = useWorkbenchStore((state) => state.sceneObjects);
-  const baseCameras = useWorkbenchStore((state) => state.cameras);
+  const authoredCharacters = useWorkbenchStore((state) => state.characters);
+  const authoredObjects = useWorkbenchStore((state) => state.sceneObjects);
+  const authoredCameras = useWorkbenchStore((state) => state.cameras);
+  const baseCharacters = preview?.characters ?? authoredCharacters;
+  const baseSceneObjects = preview?.sceneObjects ?? authoredObjects;
+  const baseCameras = preview?.cameras ?? authoredCameras;
   const actorPaths = useWorkbenchStore((state) => state.actorPaths);
-  const cameraPaths = useWorkbenchStore((state) => state.cameraPaths);
-  const timeline = useWorkbenchStore((state) => state.dialogueTimeline);
-  const playheadFrame = useWorkbenchStore((state) => state.playheadFrame);
+  const authoredCameraPaths = useWorkbenchStore((state) => state.cameraPaths);
+  const authoredTimeline = useWorkbenchStore((state) => state.dialogueTimeline);
+  const cameraPaths = preview?.cameraPaths ?? authoredCameraPaths;
+  const timeline = preview?.dialogueTimeline ?? authoredTimeline;
+  const authoredPlayheadFrame = useWorkbenchStore((state) => state.playheadFrame);
+  const playheadFrame = preview ? previewFrame : authoredPlayheadFrame;
   const evaluated = useMemo(() => evaluateDirectorFrame({ frame: playheadFrame, durationSeconds: timeline.durationSeconds, fps: timeline.fps, tracks: timeline.tracks, activeCameraTrackId: timeline.activeCameraTrackId, selectedCameraId, characters: baseCharacters, cameras: baseCameras, sceneObjects: baseSceneObjects, actorPaths, cameraPaths }), [actorPaths, baseCameras, baseCharacters, baseSceneObjects, cameraPaths, playheadFrame, selectedCameraId, timeline]);
   const charactersRecord = evaluated.characters;
   const characters = Object.values(charactersRecord);
@@ -629,7 +639,7 @@ export function HumanoidStage({ recordingVideo = false }: { recordingVideo?: boo
             {Object.values(cameras).map((camera) => <StageCameraFrustum key={camera.cameraId} composition={camera} selected={camera.cameraId === selectedCameraId} lookAtM={cameraTargetPosition(camera.lookAt, charactersRecord, sceneObjects)} followM={cameraTargetPosition(camera.follow, charactersRecord, sceneObjects)}/>)}</>}
         </group>
         {!recordingVideo && playheadFrame === 1 && !selectedSceneObjectId && !selectedActorPathControlPointId && !selectedCameraPathControlPointId && selectedCharacter?.visible && !selectedCharacter.locked && <TransformGizmo target={targets[selectedCharacterId] ?? null} characterId={selectedCharacterId} mode={transformMode} />}
-        <ViewCamera viewMode={viewMode} calibration={null} composition={cameraComposition} compositionTargetM={compositionTargetM} compositionPositionM={compositionPositionM} />
+        <ViewCamera readOnly={preview !== null} viewMode={viewMode} calibration={null} composition={cameraComposition} compositionTargetM={compositionTargetM} compositionPositionM={compositionPositionM} />
         {viewMode === "camera" && cameraComposition.depthOfField?.enabled && <CameraDepthOfField focusDistanceM={cameraComposition.depthOfField.focusDistanceM} aperture={cameraComposition.depthOfField.aperture}/>}
       </Canvas>
       </div>

@@ -1,9 +1,10 @@
 "use client";
 
+import { createPortal } from "react-dom";
 import { useState, useEffect, useMemo, useRef, useId, useCallback } from "react";
 import { useTranslations } from "next-intl";
-import { motion, AnimatePresence } from "framer-motion";
-import { X, RefreshCw, Check, Image as ImageIcon, Lock, ChevronRight, ChevronDown, Video, PanelLeft, Sparkles, Search } from "lucide-react";
+import { motion } from "framer-motion";
+import { X, RefreshCw, Check, Image as ImageIcon, Lock, ChevronRight, ChevronDown, Video, Sparkles, Search } from "lucide-react";
 import { agentRequest, api, type AssetImageReviewRequest, type AssetLibraryReference, type AssetReferenceIndexEntry, type ChatModel } from "@/lib/api";
 
 import { VariantSelector } from "../common/VariantSelector";
@@ -18,7 +19,7 @@ import PreviewImage from "@/components/shared/preview/PreviewImage";
 import { toast } from "@/store/toastStore";
 import { resolveAssetGenerationModel } from "@/lib/modelCatalog";
 import AssetImageSubmissionReview from "@/components/shared/AssetImageSubmissionReview";
-import VideoPolishReview, { type VideoPolishMessages } from "./storyboard-r2v/VideoPolishReview";
+import { type VideoPolishMessages } from "./storyboard-r2v/VideoPolishReview";
 import {
     buildCharacterImagePrompt,
     buildCharacterMotionPrompt,
@@ -29,20 +30,72 @@ import {
 import ReferencePromptEditor, {
     type ReferenceCandidate,
     type ReferenceSuggestion,
+    type PromptSlashSuggestion,
 } from "./playground/ReferencePromptEditor";
-import { searchReferenceCandidates } from "@/lib/referenceCandidateSearch";
-import { IDENTITY_FIELDS, LOOK_FIELDS, characterSectionText, normalizeCharacterFeatures,
-    requirementNeedsReview, type IdentityFeatures, type LookFeatures } from "@/lib/characterStructuredDesign";
+import { searchReferenceCandidates, selectedReferenceCandidates } from "@/lib/referenceCandidateSearch";
+import { IDENTITY_FIELDS, LOOK_FIELDS, characterSectionText, characterStructuredText, normalizeCharacterFeatures,
+    characterConstraintsText, normalizeCharacterConstraints, type CharacterConstraints,
+    type CharacterSectionEditorMode, type IdentityFeatures, type LookFeatures } from "@/lib/characterStructuredDesign";
+import type { DictionaryConfiguration } from "@/lib/characterDictionaryPresets";
+import { type CharacterPresetTarget } from "@/lib/characterQuickActions";
+import CharacterDesignPanel from "./CharacterDesignPanel";
+import CharacterPromptDictionary, { CharacterDictionaryHost } from "./CharacterPromptDictionary";
+import AssetWorkbenchLayout from "@/components/shared/AssetWorkbenchLayout";
 
 import type { AssetPlanEntry } from "@/lib/episodeAssetPlan";
 import EpisodeAssetPlanPanel from "./EpisodeAssetPlanPanel";
 import AssetNameEditor from "@/components/common/AssetNameEditor";
+import CharacterVoiceBinding from "./cast/CharacterVoiceBinding";
 
-type DesignDraft = {
+type CharacterImagePanel = "full_body" | "three_view" | "headshot";
+type AppliedPlatformPrompt = {
+    resourceId: string;
+    revision: number;
+    title: string;
+    appliedText: string;
+    customized: boolean;
+};
+
+type DesignSectionSnapshot = {
+    visual_notes?: string;
+    features?: Record<string, string>;
+    editor_mode?: CharacterSectionEditorMode;
+    basis?: DesignBasis[];
+};
+
+type DesignInputSnapshot = {
+    schema_version: "iframe.character-design-input.v1";
+    prompt: string;
+    identity: DesignSectionSnapshot;
+    look: DesignSectionSnapshot;
+    supplemental_prompt?: string;
+    dictionary_configurations: DictionaryConfiguration[];
+    constraints: CharacterConstraints;
     route?: string;
     age_stage?: string;
-    identity?: Record<string, unknown> & { basis?: DesignBasis[]; features?: IdentityFeatures };
-    look?: Record<string, unknown> & { basis?: DesignBasis[]; features?: LookFeatures };
+    style_notes?: string;
+    preset_selections?: CharacterPresetSelection[];
+};
+
+type DesignResultSnapshot = {
+    schema_version: "iframe.character-design-result.v1";
+    prompt: string;
+    identity: DesignSectionSnapshot;
+    look: DesignSectionSnapshot;
+    source: "panel" | "ai" | "user-edited" | "legacy";
+    skill_revision?: string;
+};
+
+type DesignDraft = {
+    constraints?: CharacterConstraints;
+    dictionary_configurations?: DictionaryConfiguration[];
+    schema_version?: string;
+    supplemental_prompt?: string;
+    route?: string;
+    style_notes?: string;
+    age_stage?: string;
+    identity?: Record<string, unknown> & { basis?: DesignBasis[]; features?: IdentityFeatures; editor_mode?: CharacterSectionEditorMode };
+    look?: Record<string, unknown> & { basis?: DesignBasis[]; features?: LookFeatures; editor_mode?: CharacterSectionEditorMode };
     unresolved?: string[];
     field_answers?: Record<string, string>;
     field_suggestions?: Record<string, string>;
@@ -52,7 +105,19 @@ type DesignDraft = {
     field_status?: Record<string, "stated" | "inferred" | "default" | "creative-choice">;
     skill_id?: string;
     skill_revision?: string;
+    preset_selections?: CharacterPresetSelection[];
+    design_input?: DesignInputSnapshot;
+    design_result?: DesignResultSnapshot;
+    active_design_source?: "panel" | "ai";
     confirmed?: boolean;
+};
+
+type CharacterPresetSelection = {
+    preset_id: string;
+    revision: string;
+    applied_target: CharacterPresetTarget | "identity_notes" | "look_notes";
+    value: string;
+    source: string;
 };
 
 type DesignBasis = "script_fact" | "user_specified" | "confirmed_design" | "verified_reference" | "creative_choice";
@@ -68,11 +133,6 @@ function designPromptDescription(identity: unknown, look: unknown, answers: unkn
     return [identity, look, ...answers]
         .filter((value): value is string => typeof value === "string" && !!value.trim())
         .join("。 ");
-}
-
-function preserveVisualRequirement(proposal: string, requirement: string): string {
-    const specified = requirement.trim();
-    return specified && !proposal.includes(specified) ? designPromptDescription(specified, proposal) : proposal;
 }
 
 function designScopeDescription(route?: string, ageStage?: string): string[] {
@@ -92,17 +152,30 @@ function designScopeDescription(route?: string, ageStage?: string): string[] {
     return [route ? routeLabels[route] || route : "", ageStage ? ageLabels[ageStage] || ageStage : ""];
 }
 
-function confirmedDesignDescription(design: DesignDraft | undefined): string {
+function confirmedDesignContent(design: DesignDraft | undefined): string {
     // The question remains in the saved design draft for auditability; only
     // the user's confirmed value belongs in an image prompt.
     const answers = Object.values(design?.field_answers || {});
+    if (design?.identity?.editor_mode !== "notes" && design?.look?.editor_mode !== "notes") {
+        const identity = normalizeCharacterFeatures(design?.identity?.features, IDENTITY_FIELDS.map(([key]) => key));
+        const look = normalizeCharacterFeatures(design?.look?.features, LOOK_FIELDS.map(([key]) => key));
+        const structured = [
+            characterStructuredText(identity, {}) || String(design?.identity?.visual_notes || ""),
+            characterStructuredText({}, look) || String(design?.look?.visual_notes || ""),
+        ].filter(Boolean).join("\n");
+        if (structured) return [design?.supplemental_prompt || "", structured, ...answers, ...designScopeDescription(design?.route, design?.identity?.features?.age?.trim() ? undefined : design?.age_stage), design?.style_notes || ""].filter(Boolean).join("\n");
+    }
     return designPromptDescription(
         characterSectionText(normalizeCharacterFeatures(design?.identity?.features, IDENTITY_FIELDS.map(([key]) => key)),
-            IDENTITY_FIELDS.map(([key]) => key), design?.identity?.visual_notes),
+            IDENTITY_FIELDS.map(([key]) => key), design?.identity?.visual_notes, design?.identity?.editor_mode),
         characterSectionText(normalizeCharacterFeatures(design?.look?.features, LOOK_FIELDS.map(([key]) => key)),
-            LOOK_FIELDS.map(([key]) => key), design?.look?.visual_notes),
-        [...answers, ...designScopeDescription(design?.route, design?.age_stage)],
+            LOOK_FIELDS.map(([key]) => key), design?.look?.visual_notes, design?.look?.editor_mode),
+        [...answers, ...designScopeDescription(design?.route, design?.identity?.features?.age?.trim() ? undefined : design?.age_stage), design?.style_notes || ""],
     );
+}
+
+function confirmedDesignDescription(design: DesignDraft | undefined): string {
+    return [confirmedDesignContent(design), characterConstraintsText(normalizeCharacterConstraints(design?.constraints))].filter(Boolean).join("\n");
 }
 
 function normalizeDesignQuestions(values: unknown): string[] {
@@ -318,22 +391,28 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
     const tc = useTranslations("character");
     const [activePanel, setActivePanel] = useState<"full_body" | "three_view" | "headshot" | "video">("full_body");
     const [isPlanOpen, setIsPlanOpen] = useState(false);
-    const [showProfile, setShowProfile] = useState(false);
-    const savedDesign = (asset.character_design?.design_draft || {}) as DesignDraft;
-    const [designRoute, setDesignRoute] = useState(savedDesign.route || "realistic-modern");
-    const [designAgeStage, setDesignAgeStage] = useState(savedDesign.age_stage || "");
-    const [designNotes, setDesignNotes] = useState(String(savedDesign.identity?.visual_notes || ""));
-    const [lookNotes, setLookNotes] = useState(String(savedDesign.look?.visual_notes || ""));
+    const savedDesign = (asset.character_design?.design_draft || asset.character_design?.design_revisions?.at(-1)?.design || {}) as DesignDraft;
+    const savedInput = savedDesign.design_input;
+    const savedResult = savedDesign.design_result;
+    const [designRoute, setDesignRoute] = useState(savedInput?.route || savedDesign.route || "");
+    const [styleNotes, setStyleNotes] = useState(savedInput?.style_notes || savedDesign.style_notes || "");
+    const [designAgeStage, setDesignAgeStage] = useState(savedInput?.age_stage || savedDesign.age_stage || "");
+    const [dictionaryConfigurations, setDictionaryConfigurations] = useState<DictionaryConfiguration[]>(savedInput?.dictionary_configurations || savedDesign.dictionary_configurations || []);
+    const [supplementalPrompt, setSupplementalPrompt] = useState(savedInput?.supplemental_prompt || savedDesign.supplemental_prompt || "");
+    const [designConstraints, setDesignConstraints] = useState<CharacterConstraints>(() => normalizeCharacterConstraints(savedInput?.constraints || savedDesign.constraints));
+    const [designNotes, setDesignNotes] = useState(String(savedInput?.identity?.visual_notes ?? savedDesign.identity?.visual_notes ?? ""));
+    const [lookNotes, setLookNotes] = useState(String(savedInput?.look?.visual_notes ?? savedDesign.look?.visual_notes ?? ""));
     const [identityFeatures, setIdentityFeatures] = useState<IdentityFeatures>(
-        normalizeCharacterFeatures(savedDesign.identity?.features, IDENTITY_FIELDS.map(([key]) => key)));
+        normalizeCharacterFeatures(savedInput?.identity?.features || savedDesign.identity?.features, IDENTITY_FIELDS.map(([key]) => key)));
     const [lookFeatures, setLookFeatures] = useState<LookFeatures>(
-        normalizeCharacterFeatures(savedDesign.look?.features, LOOK_FIELDS.map(([key]) => key)));
-    const [userVisualRequirements, setUserVisualRequirements] = useState({
-        identity: savedDesign.user_visual_requirements?.identity || "",
-        look: savedDesign.user_visual_requirements?.look || "",
-    });
-    const [designIdentityBasis, setDesignIdentityBasis] = useState<DesignBasis[]>(normalizeDesignBasis(savedDesign.identity?.basis));
-    const [designLookBasis, setDesignLookBasis] = useState<DesignBasis[]>(normalizeDesignBasis(savedDesign.look?.basis));
+        normalizeCharacterFeatures(savedInput?.look?.features || savedDesign.look?.features, LOOK_FIELDS.map(([key]) => key)));
+    const [identityEditorMode, setIdentityEditorMode] = useState<CharacterSectionEditorMode>(
+        savedInput?.identity?.editor_mode || savedDesign.identity?.editor_mode || (Object.values(savedInput?.identity?.features || savedDesign.identity?.features || {}).some((value) => typeof value === "string" && value.trim()) ? "fields" : "notes"));
+    const [lookEditorMode, setLookEditorMode] = useState<CharacterSectionEditorMode>(
+        savedInput?.look?.editor_mode || savedDesign.look?.editor_mode || (Object.values(savedInput?.look?.features || savedDesign.look?.features || {}).some((value) => typeof value === "string" && value.trim()) ? "fields" : "notes"));
+    const [presetSelections, setPresetSelections] = useState<CharacterPresetSelection[]>(savedInput?.preset_selections || savedDesign.preset_selections || []);
+    const [designIdentityBasis, setDesignIdentityBasis] = useState<DesignBasis[]>(normalizeDesignBasis(savedInput?.identity?.basis || savedDesign.identity?.basis));
+    const [designLookBasis, setDesignLookBasis] = useState<DesignBasis[]>(normalizeDesignBasis(savedInput?.look?.basis || savedDesign.look?.basis));
     const [designSource, setDesignSource] = useState<"stated" | "creative-choice">(savedDesign.field_status?.visual_notes === "creative-choice" ? "creative-choice" : "stated");
     const [designUnresolved, setDesignUnresolved] = useState<string[]>(
         actionableDesignQuestions(savedDesign.unresolved, savedDesign.field_answers, savedDesign.field_suggestions),
@@ -341,7 +420,6 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
     const [designFieldAnswers, setDesignFieldAnswers] = useState<Record<string, string>>(savedDesign.field_answers || {});
     const [designFieldSuggestions, setDesignFieldSuggestions] = useState<Record<string, string>>(savedDesign.field_suggestions || {});
     const [designFieldSuggestionChoices, setDesignFieldSuggestionChoices] = useState<Record<string, { age_stage?: string; route?: string }>>(savedDesign.field_suggestion_choices || {});
-    const [designReferences, setDesignReferences] = useState<AssetLibraryReference[]>(savedDesign.reference_assets || []);
     const [designSkillRevision, setDesignSkillRevision] = useState(savedDesign.skill_revision || "");
     const [designModels, setDesignModels] = useState<ChatModel[]>([]);
     const [designModel, setDesignModel] = useState("");
@@ -350,12 +428,26 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
     const [designRevision, setDesignRevision] = useState<number>(asset.character_design?.design_revisions?.at(-1)?.revision || 0);
     const [savingDesign, setSavingDesign] = useState(false);
     const [designError, setDesignError] = useState("");
-    const [designReview, setDesignReview] = useState<{
-        source: string; request: Record<string, unknown>; messages: VideoPolishMessages;
-        media: { label: string; url: string }[]; reviewToken: string; formatNote: string;
-    } | null>(null);
+    const [designInput, setDesignInput] = useState(savedInput?.prompt ?? ([savedDesign.user_visual_requirements?.identity, savedDesign.user_visual_requirements?.look].filter(Boolean).join("\n") || confirmedDesignContent(savedDesign) || asset.full_body_prompt || ""));
+    const [designResult, setDesignResult] = useState<string | null>(savedResult?.source === "panel" ? null
+        : savedResult?.prompt || confirmedDesignContent(savedDesign) || null);
+    const [designResultSource, setDesignResultSource] = useState<DesignResultSnapshot["source"]>(savedResult?.source || (savedResult ? "ai" : "legacy"));
+    const [resultIdentityFeatures, setResultIdentityFeatures] = useState<IdentityFeatures>(
+        normalizeCharacterFeatures(savedResult?.identity?.features || savedDesign.identity?.features, IDENTITY_FIELDS.map(([key]) => key)));
+    const [resultLookFeatures, setResultLookFeatures] = useState<LookFeatures>(
+        normalizeCharacterFeatures(savedResult?.look?.features || savedDesign.look?.features, LOOK_FIELDS.map(([key]) => key)));
+    const [resultIdentityNotes, setResultIdentityNotes] = useState(String(savedResult?.identity?.visual_notes || savedDesign.identity?.visual_notes || ""));
+    const [resultLookNotes, setResultLookNotes] = useState(String(savedResult?.look?.visual_notes || savedDesign.look?.visual_notes || ""));
+    const [resultIdentityEditorMode, setResultIdentityEditorMode] = useState<CharacterSectionEditorMode>(savedResult?.identity?.editor_mode || savedDesign.identity?.editor_mode || "notes");
+    const [resultLookEditorMode, setResultLookEditorMode] = useState<CharacterSectionEditorMode>(savedResult?.look?.editor_mode || savedDesign.look?.editor_mode || "notes");
+    const [resultIdentityBasis, setResultIdentityBasis] = useState<DesignBasis[]>(normalizeDesignBasis(savedResult?.identity?.basis || savedDesign.identity?.basis));
+    const [resultLookBasis, setResultLookBasis] = useState<DesignBasis[]>(normalizeDesignBasis(savedResult?.look?.basis || savedDesign.look?.basis));
     const updateProject = useProjectStore(state => state.updateProject);
     const currentProject = useProjectStore(state => state.currentProject);
+    const currentSeries = useProjectStore(state => state.currentSeries);
+    const variantNameFallback = (index: number) => asset.name?.trim()
+        ? `${asset.name.trim()}-${index + 1}`
+        : `${currentSeries?.id === currentProject?.series_id ? currentSeries?.title || "项目" : "项目"}.${currentProject?.title || "剧集"}.view ${index + 1}`;
     const [assetIndex, setAssetIndex] = useState<AssetReferenceIndexEntry[]>([]);
     const assetIndexRequest = useRef(0);
     const assetIndexRevision = JSON.stringify(
@@ -387,6 +479,9 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
         full_body: "text",
         three_view: "text",
         headshot: "text",
+    });
+    const [platformPromptSources, setPlatformPromptSources] = useState<Record<CharacterImagePanel, AppliedPlatformPrompt | null>>({
+        full_body: null, three_view: null, headshot: null,
     });
     const [pendingImageReview, setPendingImageReview] = useState<AssetImageReviewRequest | null>(null);
 
@@ -431,6 +526,7 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
         setPromptReferences({ full_body: [], three_view: [], headshot: [] });
         setPromptPickerReferences({ full_body: [], three_view: [], headshot: [] });
         setPromptModes({ full_body: "text", three_view: "text", headshot: "text" });
+        setPlatformPromptSources({ full_body: null, three_view: null, headshot: null });
     }, [asset.id]);
 
     const referenceCandidates = useMemo<ReferenceCandidate[]>(() => {
@@ -493,13 +589,18 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
     const masterImageUrl = hasReferenceSheetVariants
         ? referenceSheetImageUrl
         : selectedVariantUrl(asset.full_body_asset, asset.full_body_image_url);
+    const characterPreviewLocator = currentProject?.id ? {
+        scope: asset.source === "series" && currentProject.series_id ? "series" : "project",
+        containerId: asset.source === "series" && currentProject.series_id ? currentProject.series_id : currentProject.id,
+        assetType: "character",
+        assetId: asset.id,
+    } : undefined;
     const masterAsset = referenceSheetImageAsset || asset.full_body_asset;
     const masterGenerationType = referenceSheetImageAsset ? "reference_sheet" : "full_body";
     const hasFullBodyImage = !!masterImageUrl;
-
     // Local state for prompts
     const getInitialPrompt = (type: string, existingPrompt: string) => {
-        const confirmedDesign = asset.character_design?.design_revisions?.at(-1)?.design;
+        const confirmedDesign = asset.character_design?.design_revisions?.at(-1)?.design || (savedDesign.confirmed ? savedDesign : undefined);
         const confirmedNotes = confirmedDesignDescription(confirmedDesign);
         if (!confirmedNotes && existingPrompt) return existingPrompt;
         const promptDescription = confirmedNotes
@@ -529,105 +630,121 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
 
     // New State for Style Control
     // User's own negative prompt (initially empty or with sensible defaults)
-    const [negativePrompt, setNegativePrompt] = useState(DEFAULT_CHARACTER_NEGATIVE_PROMPT);
+    const [negativePrompt, setNegativePrompt] = useState(() => [DEFAULT_CHARACTER_NEGATIVE_PROMPT,
+        ...normalizeCharacterConstraints((asset.character_design?.design_revisions?.at(-1)?.design as DesignDraft | undefined)?.constraints).negative_prompt,
+    ].filter(Boolean).join("\n"));
+    const appliedDesignNegative = useRef(normalizeCharacterConstraints(
+        (asset.character_design?.design_revisions?.at(-1)?.design as DesignDraft | undefined)?.constraints).negative_prompt);
 
-    const projectedIdentity = characterSectionText(identityFeatures, IDENTITY_FIELDS.map(([key]) => key), designNotes);
-    const projectedLook = characterSectionText(lookFeatures, LOOK_FIELDS.map(([key]) => key), lookNotes);
-    const requirementsToReview = ([
-        ["身份", userVisualRequirements.identity, projectedIdentity],
-        ["造型", userVisualRequirements.look, projectedLook],
-    ] as const).filter(([, requirement, projected]) => requirementNeedsReview(requirement, projected));
-    const currentDesignDescription = designPromptDescription(
+    const projectedIdentity = characterSectionText(identityFeatures, IDENTITY_FIELDS.map(([key]) => key), designNotes, identityEditorMode);
+    const projectedLook = characterSectionText(lookFeatures, LOOK_FIELDS.map(([key]) => key), lookNotes, lookEditorMode);
+    const normalizedConstraints = normalizeCharacterConstraints(designConstraints);
+    const designConstraintText = characterConstraintsText(normalizedConstraints);
+    const panelDesignPrompt = [
+        supplementalPrompt,
+        characterStructuredText(identityFeatures, lookFeatures),
+    ].filter(Boolean).join("\n") || designInput || designPromptDescription(
         projectedIdentity,
         projectedLook,
-        [...Object.values(designFieldAnswers), ...designScopeDescription(designRoute, designAgeStage)],
+        [...Object.values(designFieldAnswers), ...designScopeDescription(designRoute, identityFeatures.age?.trim() ? undefined : designAgeStage), styleNotes],
     );
+    const [designTab, setDesignTab] = useState<"design" | "ai">(savedDesign.active_design_source === "ai" ? "ai" : "design");
+    const [savedDesignSource, setSavedDesignSource] = useState<"panel" | "ai">(savedDesign.active_design_source === "ai" ? "ai" : "panel");
+    const [appliedPromptSource, setAppliedPromptSource] = useState<"panel" | "ai">(
+        savedDesign.active_design_source || (savedResult && savedResult.source !== "panel" ? "ai" : "panel"));
+    const selectedDesignPromptSource = designTab === "ai" ? "ai" : "panel";
+    const savedDesignSnapshot = useRef<DesignDraft>(savedDesign);
+    const [hasSavedDesign, setHasSavedDesign] = useState(!!asset.character_design);
 
-    const applyDesignToPrompts = () => {
-        setFullBodyPrompt(buildCharacterImagePrompt("full_body", asset.name, currentDesignDescription, hasNonFullBodyUpload));
-        setThreeViewPrompt(buildCharacterImagePrompt("three_view", asset.name, currentDesignDescription, hasFullBodyImage || hasAnyUpload));
-        setHeadshotPrompt(buildCharacterImagePrompt("headshot", asset.name, currentDesignDescription, hasFullBodyImage || hasAnyUpload));
+    const promptForSource = (source: "panel" | "ai") => source === "ai" ? designResult || "" : panelDesignPrompt;
+    const descriptionForSource = (source: "panel" | "ai") => [promptForSource(source), designConstraintText].filter(Boolean).join("\n");
+
+    const applyDesignToPrompts = (source: "panel" | "ai") => {
+        const previousNegative = appliedDesignNegative.current;
+        setNegativePrompt(current => Array.from(new Set([
+            ...current.split('\n').filter(line => line && !previousNegative.includes(line)), ...normalizedConstraints.negative_prompt,
+        ])).join('\n'));
+        appliedDesignNegative.current = normalizedConstraints.negative_prompt;
+        const description = descriptionForSource(source);
+        setFullBodyPrompt(buildCharacterImagePrompt("full_body", asset.name, description, hasNonFullBodyUpload));
+        setThreeViewPrompt(buildCharacterImagePrompt("three_view", asset.name, description, hasFullBodyImage || hasAnyUpload));
+        setHeadshotPrompt(buildCharacterImagePrompt("headshot", asset.name, description, hasFullBodyImage || hasAnyUpload));
+        setAppliedPromptSource(source);
         setPromptsNeedDesignApply(false);
     };
     const characterDesignRequest = {
         model: designModel,
         project_id: currentProject?.id,
-        reference_assets: designReferences,
+        reference_assets: [],
         character_name: asset.name,
         profile: asset.description,
-        current_draft: designPromptDescription(
-            characterSectionText(identityFeatures, IDENTITY_FIELDS.map(([key]) => key), designNotes),
-            characterSectionText(lookFeatures, LOOK_FIELDS.map(([key]) => key), lookNotes)),
-        user_visual_requirements: userVisualRequirements,
-        user_answers: Object.fromEntries(Object.entries(designFieldAnswers).filter(([, answer]) => answer.trim())),
-        route: designRoute,
-        age_stage: designAgeStage,
-        style: stylePrompt,
-        confirmed_design: confirmedDesignDescription(asset.character_design?.design_revisions?.at(-1)?.design),
+        current_draft: designInput,
+        dictionary_configurations: dictionaryConfigurations,
+        structured_identity: identityEditorMode === "fields" ? identityFeatures : {},
+        structured_look: lookEditorMode === "fields" ? lookFeatures : {},
+        constraints: normalizedConstraints,
+        route: "",
+
     };
-    const characterDesignSource = JSON.stringify(characterDesignRequest);
+    const characterDesignSource = JSON.stringify({ ...characterDesignRequest, asset_id: asset.id, result: designResult, supplemental: supplementalPrompt });
     const characterDesignSourceRef = useRef(characterDesignSource);
     characterDesignSourceRef.current = characterDesignSource;
-    useEffect(() => { setDesignReview(null); }, [characterDesignSource]);
 
     const generateDesignDraft = async () => {
-        if (!designModel || designing) return;
+        if (!designModel || designing || !asset.description.trim() || designInput.length > 8000) return;
         setDesigning(true);
         setDesignError("");
-        setDesignReview(null);
+        const source = characterDesignSource;
+        const request = characterDesignRequest;
         try {
-            const source = characterDesignSource;
-            const preview = await agentRequest<{ messages: VideoPolishMessages; media: { label: string; url: string }[];
-                review_token: string; format_note: string }>("/character-design/draft/preview", "POST", characterDesignRequest);
-            if (characterDesignSourceRef.current === source) setDesignReview({
-                source, request: characterDesignRequest, messages: preview.messages, media: preview.media,
-                reviewToken: preview.review_token, formatNote: preview.format_note,
-            });
-        } catch (error) {
-            setDesignError(error instanceof Error ? error.message : "预览角色设计输入失败，请重试。");
-        } finally {
-            setDesigning(false);
-        }
-    };
-
-    const confirmDesignDraft = async () => {
-        const review = designReview;
-        if (!review) return;
-        if (review.source !== characterDesignSourceRef.current) {
-            setDesignReview(null);
-            setDesignError("角色输入已变化，请重新预览。");
-            return;
-        }
-        setDesigning(true);
-        setDesignError("");
-        try {
-            const result = await agentRequest<{
+            const preview = await agentRequest<{ messages: VideoPolishMessages; review_token: string }>(
+                "/character-design/draft/preview", "POST", request);
+            if (characterDesignSourceRef.current !== source) return;
+            type CharacterDraft = {
                 identity: { visual_notes: string; features?: IdentityFeatures; basis?: string | string[] };
                 look: { visual_notes: string; features?: LookFeatures; basis?: string | string[] };
                 unresolved: string[];
                 field_suggestions?: Record<string, string>;
                 field_suggestion_choices?: Record<string, { age_stage?: string; route?: string }>;
                 skill_revision: string;
-            }>("/character-design/draft", "POST", {
-                ...review.request, reviewed_messages: review.messages, review_token: review.reviewToken,
+            };
+            type CharacterDraftJob = { id: string; status: string; result?: CharacterDraft | { detail: string } | null; error?: string | null };
+            const started = await agentRequest<CharacterDraftJob>("/character-design/draft/jobs", "POST", {
+                ...request, reviewed_messages: preview.messages, review_token: preview.review_token,
             });
-            setDesignReview(null);
-            if (review.source !== characterDesignSourceRef.current) return;
-            const nextIdentity = preserveVisualRequirement(result.identity.visual_notes, userVisualRequirements.identity);
-            const nextLook = preserveVisualRequirement(result.look.visual_notes, userVisualRequirements.look);
+            if (!started.id) throw new Error("角色设计任务未返回编号，请重试。");
+            let job = started;
+            const deadline = Date.now() + 12 * 60_000;
+            while (job.status === "running" || job.status === "queued") {
+                if (source !== characterDesignSourceRef.current) return;
+                if (Date.now() >= deadline) throw new Error("角色设计处理时间过长，请稍后重试。");
+                await new Promise(resolve => setTimeout(resolve, 3000));
+                job = await agentRequest<CharacterDraftJob>(`/character-design/draft/jobs/${encodeURIComponent(started.id)}`);
+            }
+            if (job.status !== "completed") throw new Error(job.error || "角色设计任务失败，请重试。");
+            if (!job.result || "detail" in job.result) throw new Error(job.result?.detail || "角色设计未返回有效结果，请重试。");
+            const result = job.result;
+            if (source !== characterDesignSourceRef.current) return;
+            const nextIdentity = result.identity.visual_notes;
+            const nextLook = result.look.visual_notes;
             const nextIdentityFeatures = normalizeCharacterFeatures(result.identity.features, IDENTITY_FIELDS.map(([key]) => key));
             const nextLookFeatures = normalizeCharacterFeatures(result.look.features, LOOK_FIELDS.map(([key]) => key));
-            setDesignNotes(nextIdentity);
-            setLookNotes(nextLook);
-            setIdentityFeatures(nextIdentityFeatures);
-            setLookFeatures(nextLookFeatures);
-            setDesignIdentityBasis(userVisualRequirements.identity.trim()
-                ? Array.from(new Set([...normalizeDesignBasis(result.identity.basis), "user_specified" as const]))
-                : normalizeDesignBasis(result.identity.basis));
-            setDesignLookBasis(userVisualRequirements.look.trim()
-                ? Array.from(new Set([...normalizeDesignBasis(result.look.basis), "user_specified" as const]))
-                : normalizeDesignBasis(result.look.basis));
-            const questions = actionableDesignQuestions(result.unresolved, designFieldAnswers, result.field_suggestions);
+            const identityText = characterSectionText(nextIdentityFeatures, IDENTITY_FIELDS.map(([key]) => key), nextIdentity);
+            const lookText = characterSectionText(nextLookFeatures, LOOK_FIELDS.map(([key]) => key), nextLook);
+            setDesignResult([
+                characterStructuredText(nextIdentityFeatures, {}) || (identityText && `身份：${identityText}`),
+                characterStructuredText({}, nextLookFeatures) || (lookText && `造型：${lookText}`),
+            ].filter(Boolean).join("\n"));
+            setDesignResultSource("ai");
+            setResultIdentityNotes(nextIdentity);
+            setResultLookNotes(nextLook);
+            setResultIdentityFeatures(nextIdentityFeatures);
+            setResultLookFeatures(nextLookFeatures);
+            setResultIdentityEditorMode(Object.values(nextIdentityFeatures).some((value) => value?.trim()) ? "fields" : "notes");
+            setResultLookEditorMode(Object.values(nextLookFeatures).some((value) => value?.trim()) ? "fields" : "notes");
+            setResultIdentityBasis(normalizeDesignBasis(result.identity.basis));
+            setResultLookBasis(normalizeDesignBasis(result.look.basis));
+            const questions = actionableDesignQuestions(result.unresolved, {}, result.field_suggestions);
             setDesignFieldSuggestions(Object.fromEntries(
                 Object.entries(result.field_suggestions || {}).filter(([question, suggestion]) => questions.includes(question) && !!suggestion.trim()),
             ));
@@ -635,65 +752,142 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
                 Object.entries(result.field_suggestion_choices || {}).filter(([question]) => questions.includes(question)),
             ));
             setDesignUnresolved(questions);
-            setDesignFieldAnswers((current) => Object.fromEntries(
-                Object.entries(current).filter(([question]) => questions.includes(question)),
-            ));
-            setDesignSource(
-                [...normalizeDesignBasis(result.identity.basis), ...normalizeDesignBasis(result.look.basis)].includes("creative_choice")
-                    ? "creative-choice"
-                    : "stated",
-            );
+            setDesignFieldAnswers({});
             setDesignSkillRevision(result.skill_revision);
             setDesignStatus("draft");
+            setDesignTab("ai");
             setPromptsNeedDesignApply(true);
         } catch (error) {
-            setDesignError(error instanceof Error ? error.message : "生成视觉草稿失败，请重试。");
+            if (source === characterDesignSourceRef.current) setDesignError(error instanceof Error ? error.message : "完善角色设计失败，请重试。");
         } finally {
             setDesigning(false);
         }
     };
 
-    const saveDesignDraft = async (confirmed: boolean) => {
+    const saveDesign = async (source: "panel" | "ai") => {
         if (!onUpdateAttributes || savingDesign) return;
-        if (confirmed && !characterSectionText(identityFeatures, IDENTITY_FIELDS.map(([key]) => key), designNotes)) {
-            setDesignError("请先填写具体的角色视觉值，再确认设计。 ");
+        if ([normalizedConstraints.must_keep, normalizedConstraints.negative_prompt].some(items => items.length > 20 || items.some(item => item.length > 500))) {
+            setDesignError("每类设计约束最多 20 项，每项最多 500 字。");
+            return;
+        }
+        if (designInput.length > 8000 || (designResult?.length || 0) > 20000) {
+            setDesignError("设计输入最多 8000 字，AI 优化结果最多 20000 字。");
+            return;
+        }
+        if (source === "ai" && !designResult?.trim()) {
+            setDesignError("请先提交并检查 AI 优化结果，再使用该版本出图。");
+            return;
+        }
+        const selectedPrompt = promptForSource(source);
+        if (!selectedPrompt.trim()) {
+            setDesignError(source === "ai" ? "AI 优化结果为空，请检查后再保存。" : "请先填写具体的角色视觉值，再保存设计。 ");
             return;
         }
         const unanswered = designUnresolved.filter((question) => !designFieldAnswers[question]?.trim());
-        const draft: DesignDraft = {
-            route: designRoute,
+        const hasAIResult = designResult !== null;
+        const useAIResult = source === "ai";
+        const inputIdentity: DesignSectionSnapshot = {
+            visual_notes: designNotes || undefined,
+            features: identityFeatures,
+            editor_mode: identityEditorMode,
+            basis: designIdentityBasis,
+        };
+        const inputLook: DesignSectionSnapshot = {
+            visual_notes: lookNotes || undefined,
+            features: lookFeatures,
+            editor_mode: lookEditorMode,
+            basis: designLookBasis,
+        };
+        const panelIdentityForConfirmation: DesignSectionSnapshot = !Object.values(identityFeatures).some(value => (value || "").trim()) && !designNotes.trim()
+            ? { ...inputIdentity, visual_notes: designInput || undefined, basis: ["user_specified"] }
+            : inputIdentity;
+        const aiIdentity: DesignSectionSnapshot = hasAIResult ? {
+            visual_notes: resultIdentityNotes || undefined,
+            features: resultIdentityFeatures,
+            editor_mode: resultIdentityEditorMode,
+            basis: resultIdentityBasis,
+        } : panelIdentityForConfirmation;
+        const aiLook: DesignSectionSnapshot = hasAIResult ? {
+            visual_notes: resultLookNotes || undefined,
+            features: resultLookFeatures,
+            editor_mode: resultLookEditorMode,
+            basis: resultLookBasis,
+        } : inputLook;
+        const storedResultIdentity = hasAIResult ? aiIdentity : panelIdentityForConfirmation;
+        const storedResultLook = hasAIResult ? aiLook : inputLook;
+        const inputSnapshot: DesignInputSnapshot = {
+            schema_version: "iframe.character-design-input.v1",
+            prompt: designInput,
+            identity: inputIdentity,
+            look: inputLook,
+            supplemental_prompt: supplementalPrompt || undefined,
+            dictionary_configurations: dictionaryConfigurations,
+            constraints: normalizedConstraints,
+            route: designRoute || undefined,
             age_stage: designAgeStage || undefined,
-            identity: { visual_notes: designNotes || undefined, features: identityFeatures, basis: designIdentityBasis },
-            look: { route: designRoute, visual_notes: lookNotes || undefined, features: lookFeatures, basis: designLookBasis },
-            unresolved: designNotes ? unanswered : [],
-            field_answers: Object.fromEntries(Object.entries(designFieldAnswers).filter(([, answer]) => answer.trim())),
-            user_visual_requirements: userVisualRequirements,
-            field_suggestions: Object.fromEntries(Object.entries(designFieldSuggestions).filter(([question]) => !designFieldAnswers[question]?.trim())),
-            field_suggestion_choices: Object.fromEntries(Object.entries(designFieldSuggestionChoices).filter(([question]) => !designFieldAnswers[question]?.trim())),
-            reference_assets: designReferences,
-            field_status: { route: "stated", age_stage: designAgeStage ? "stated" : "default", visual_notes: designNotes ? designSource : "default" },
+            style_notes: styleNotes || undefined,
+            preset_selections: presetSelections,
+        };
+        const resultSnapshot: DesignResultSnapshot = {
+            schema_version: "iframe.character-design-result.v1",
+            prompt: designResult ?? panelDesignPrompt,
+            identity: storedResultIdentity,
+            look: storedResultLook,
+            source: hasAIResult ? designResultSource : "panel",
+            skill_revision: hasAIResult ? designSkillRevision || undefined : undefined,
+        };
+        const activeIdentity = useAIResult ? aiIdentity : panelIdentityForConfirmation;
+        const activeLook = useAIResult ? aiLook : inputLook;
+        const activeIdentityFeatures = useAIResult ? resultIdentityFeatures : identityFeatures;
+        const activeLookFeatures = useAIResult ? resultLookFeatures : lookFeatures;
+        const activeIdentityNotes = useAIResult ? resultIdentityNotes : designNotes;
+        const activeIdentityBasis = useAIResult ? resultIdentityBasis : designIdentityBasis;
+        const activeLookBasis = useAIResult ? resultLookBasis : designLookBasis;
+        const activeIdentityMode = useAIResult ? resultIdentityEditorMode : identityEditorMode;
+        const activeLookMode = useAIResult ? resultLookEditorMode : lookEditorMode;
+        const unansweredOutput = useAIResult ? unanswered : [];
+        const draft: DesignDraft = {
+            constraints: normalizedConstraints,
+            dictionary_configurations: dictionaryConfigurations,
+            schema_version: "iframe.character-fields.v1",
+            supplemental_prompt: useAIResult ? "" : supplementalPrompt,
+            route: useAIResult ? "" : designRoute,
+            style_notes: useAIResult ? undefined : styleNotes || undefined,
+            age_stage: useAIResult ? undefined : designAgeStage || undefined,
+            identity: { ...activeIdentity, features: activeIdentityFeatures, editor_mode: activeIdentityMode, basis: activeIdentityBasis },
+            look: { ...activeLook, route: useAIResult ? undefined : designRoute, features: activeLookFeatures, editor_mode: activeLookMode, basis: activeLookBasis },
+            unresolved: useAIResult && activeIdentityNotes ? unansweredOutput : [],
+            field_answers: useAIResult ? Object.fromEntries(Object.entries(designFieldAnswers).filter(([, answer]) => answer.trim())) : {},
+            user_visual_requirements: { identity: designInput, look: "" },
+            field_suggestions: useAIResult ? Object.fromEntries(Object.entries(designFieldSuggestions).filter(([question]) => !designFieldAnswers[question]?.trim())) : {},
+            field_suggestion_choices: useAIResult ? Object.fromEntries(Object.entries(designFieldSuggestionChoices).filter(([question]) => !designFieldAnswers[question]?.trim())) : {},
+            reference_assets: savedDesign.reference_assets || [],
+            field_status: { route: "stated", age_stage: designAgeStage ? "stated" : "default", visual_notes: activeIdentityNotes ? (useAIResult ? (resultIdentityBasis.includes("creative_choice") ? "creative-choice" : "stated") : designSource) : "default" },
             skill_id: "character-style-routes",
-            skill_revision: designSkillRevision || undefined,
-            confirmed,
+            skill_revision: useAIResult ? designSkillRevision || undefined : undefined,
+            preset_selections: presetSelections,
+            design_input: inputSnapshot,
+            design_result: resultSnapshot,
+            active_design_source: source,
+            confirmed: true,
         };
         setSavingDesign(true);
         setDesignError("");
         try {
             await onUpdateAttributes({ character_design: draft });
-            setDesignUnresolved(draft.unresolved || []);
-            setDesignStatus(confirmed ? "confirmed" : "draft");
-            if (confirmed) {
-                setDesignRevision((revision) => revision + 1);
-            }
-            setPromptsNeedDesignApply(true);
+            if (useAIResult) setDesignUnresolved(draft.unresolved || []);
+            savedDesignSnapshot.current = draft;
+            setHasSavedDesign(true);
+            setDesignStatus("confirmed");
+            setSavedDesignSource(source);
+            setDesignRevision((revision) => revision + 1);
+            applyDesignToPrompts(source);
         } catch (error) {
             setDesignError(error instanceof Error ? error.message : "保存视觉设计失败，请重试。");
         } finally {
             setSavingDesign(false);
         }
     };
-    // Art Direction Style expanded state (collapsed by default to save space)
-    const [showStyleExpanded, setShowStyleExpanded] = useState(false);
     // Get the uploaded image URL for reverse generation reference
     const getUploadedReferenceUrl = () => {
         if (hasUploadedThreeViews) {
@@ -836,6 +1030,12 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
     }, [asset, hasAnyUpload, hasNonFullBodyUpload]);
 
     const handleGenerateClick = (type: "reference_sheet" | "full_body" | "three_view" | "headshot", batchSize: number) => {
+        // Choose the visible design explicitly; an AI response must never win merely by existing.
+        if (selectedDesignPromptSource === "ai" && !designResult?.trim()) {
+            setDesignError("请先填写 AI 优化结果，或切换到角色设计后生成。");
+            return;
+        }
+        if (promptForSource(selectedDesignPromptSource).trim() && (promptsNeedDesignApply || appliedPromptSource !== selectedDesignPromptSource)) applyDesignToPrompts(selectedDesignPromptSource);
         let prompt = "";
         if (type === "full_body" || type === "reference_sheet") prompt = fullBodyPrompt;
         else if (type === "three_view") prompt = threeViewPrompt;
@@ -845,23 +1045,7 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
         const references = [...promptReferences[promptType], ...promptPickerReferences[promptType]]
             .filter((reference, index, all) => all.findIndex((candidate) => referenceKey(candidate) === referenceKey(reference)) === index);
         const imageGenerationMode = promptModes[promptType];
-        if (imageGenerationMode === "reference" && references.length === 0) {
-            toast.warning("Add at least one explicit @ reference before generating.");
-            return;
-        }
-        if (imageGenerationMode === "text" && references.length > 0) {
-            toast.warning("This prompt contains @ references. Select Reference image mode before generating.");
-            return;
-        }
-        if ((type === "three_view" || type === "headshot") &&
-            (imageGenerationMode !== "reference" || references.length !== 1)) {
-            toast.warning("Select exactly one master image in Reference image mode for this character view.");
-            return;
-        }
-        if (!currentProject?.id || !prompt.trim()) {
-            toast.warning("Review a non-empty image prompt before generating.");
-            return;
-        }
+        if (!currentProject?.id) return;
         const isDerived = type === "three_view" || type === "headshot";
         setPendingImageReview({
             asset_id: asset.id,
@@ -890,6 +1074,32 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
     const setPanelMode = (type: "full_body" | "three_view" | "headshot", mode: "text" | "reference") => {
         setPromptModes((current) => ({ ...current, [type]: mode }));
     };
+
+    const [reviewEditorHost, setReviewEditorHost] = useState<HTMLDivElement | null>(null);
+    const imageReviewRequest = useMemo(() => {
+        if (!pendingImageReview) return null;
+        const type = pendingImageReview.generation_type === "reference_sheet" ? "full_body" : pendingImageReview.generation_type;
+        if (type !== "full_body" && type !== "three_view" && type !== "headshot") return pendingImageReview;
+        const prompt = type === "full_body" ? fullBodyPrompt : type === "three_view" ? threeViewPrompt : headshotPrompt;
+        const references = [...promptReferences[type], ...promptPickerReferences[type]]
+            .filter((reference, index, all) => all.findIndex(candidate => referenceKey(candidate) === referenceKey(reference)) === index);
+        const isDerived = type === "three_view" || type === "headshot";
+        return {
+            ...pendingImageReview, prompt, negative_prompt: negativePrompt, image_generation_mode: promptModes[type],
+            reference: isDerived ? references[0] : undefined,
+            references: isDerived ? [] : references,
+        };
+    }, [fullBodyPrompt, threeViewPrompt, headshotPrompt, negativePrompt, promptReferences, promptPickerReferences,
+        promptModes, pendingImageReview]);
+    const reviewReferences = imageReviewRequest?.reference ? [imageReviewRequest.reference] : imageReviewRequest?.references || [];
+    const reviewValidationError = !imageReviewRequest ? "" :
+        imageReviewRequest.image_generation_mode === "text" && reviewReferences.length > 0
+            ? "已选择参考素材，请切换到参考生图或移除素材。" :
+        imageReviewRequest.image_generation_mode === "reference" && reviewReferences.length === 0
+            ? "请选择至少一张参考素材。" :
+        (imageReviewRequest.generation_type === "three_view" || imageReviewRequest.generation_type === "headshot") &&
+            (imageReviewRequest.image_generation_mode !== "reference" || reviewReferences.length !== 1)
+            ? "三视图和头像需要选择一张角色主图作为参考。" : "";
 
     // Helper to check if a specific type is generating
     const getGeneratingInfo = (type: string) => {
@@ -930,12 +1140,8 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
     const handleFavoriteVariant = async (type: "reference_sheet" | "full_body" | "three_view" | "headshot", variantId: string, isFavorited: boolean) => {
         if (!currentProject) return;
 
-        try {
-            const updatedProject = await api.favoriteAssetVariant(currentProject.id, asset.id, "character", variantId, isFavorited, type);
-            updateProject(currentProject.id, updatedProject);
-        } catch (error) {
-            console.error("Failed to favorite variant:", error);
-        }
+        const updatedProject = await api.favoriteAssetVariant(currentProject.id, asset.id, "character", variantId, isFavorited, type);
+        updateProject(currentProject.id, updatedProject);
     };
 
     const handleRenameVariant = async (variantId: string, displayName: string) => {
@@ -944,23 +1150,178 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
         updateProject(currentProject.id, updatedProject);
     };
 
+    const clearAIResultForInput = () => {
+        setDesignResult(null);
+        setDesignResultSource("panel");
+        setResultIdentityFeatures({}); setResultLookFeatures({});
+        setResultIdentityNotes(""); setResultLookNotes("");
+        setResultIdentityEditorMode("notes"); setResultLookEditorMode("notes");
+        setResultIdentityBasis([]); setResultLookBasis([]);
+        setDesignSkillRevision("");
+        setDesignUnresolved([]); setDesignFieldAnswers({});
+        setDesignFieldSuggestions({}); setDesignFieldSuggestionChoices({});
+        setDesignSource("stated");
+        setDesignTab("design");
+        setDesignStatus("draft");
+    };
+
+    const recordDictionaryConfiguration = (configuration: DictionaryConfiguration) => {
+        setDictionaryConfigurations(current => [...current.filter(item => item.preset_id !== configuration.preset_id), configuration]);
+        clearAIResultForInput();
+    };
+
+    const updateStructuredDesign = (identityPatch: IdentityFeatures, lookPatch: LookFeatures, details?: string, remainingText?: string) => {
+        const nextIdentity = { ...(identityEditorMode === "fields" ? identityFeatures : {}), ...identityPatch };
+        const nextLook = { ...(lookEditorMode === "fields" ? lookFeatures : {}), ...lookPatch };
+        setIdentityFeatures(nextIdentity); setLookFeatures(nextLook);
+        setIdentityEditorMode("fields"); setLookEditorMode("fields");
+        const legacyNotes = [identityEditorMode === "notes" ? designNotes : "", lookEditorMode === "notes" ? lookNotes : ""].filter(Boolean).join("\n");
+        // Only remove exact text recorded by an applied panel; edited prose remains authored input.
+        const previousPanelTexts = [...dictionaryConfigurations].reverse()
+            .filter(configuration => configuration.preset_id !== "dictionary.panel.expression")
+            .map(configuration => configuration.rendered_text.trim())
+            .filter(rendered => rendered && remainingText?.includes(rendered));
+        const authoredRemaining = previousPanelTexts.reduce((text, rendered) => text.replace(rendered, ""), remainingText || "").trim();
+        const supplemental = remainingText !== undefined ? authoredRemaining || "" : supplementalPrompt || legacyNotes ||
+            (!Object.keys(identityFeatures).length && !Object.keys(lookFeatures).length ? designInput : "");
+        setSupplementalPrompt(supplemental);
+        clearAIResultForInput();
+        if (details !== undefined) setDesignInput(previousPanelTexts.reduce((text, rendered) => text.replace(rendered, ""), details)
+            .replace(/[ \t]+(?=\n)/g, "").trim());
+        setDesignIdentityBasis(["user_specified"]); setDesignLookBasis(["user_specified"]);
+        setDesignStatus("draft"); setPromptsNeedDesignApply(true);
+    };
+
+    const designEditor = <CharacterDesignPanel
+        description={asset.description} details={designInput}
+        onDictionaryConfiguration={recordDictionaryConfiguration}
+        configurations={dictionaryConfigurations}
+        previousExpressionText={dictionaryConfigurations.find(configuration => configuration.preset_id === "dictionary.panel.expression")?.rendered_text}
+        identityFields={identityFeatures} lookFields={lookFeatures}
+        onFieldsChange={(section, key, value) => updateStructuredDesign(section === "identity" ? { [key]: value } : {}, section === "look" ? { [key]: value } : {})}
+        onDictionaryFields={(text, fields, remaining) => {
+            updateStructuredDesign(fields.identity, fields.look, text, remaining);
+            if (fields.constraints) setDesignConstraints(current => normalizeCharacterConstraints({
+                must_keep: [...current.must_keep, ...fields.constraints!.must_keep],
+                negative_prompt: [...current.negative_prompt, ...fields.constraints!.negative_prompt],
+            }));
+        }}
+        constraints={designConstraints} onConstraintsChange={value => {
+            clearAIResultForInput();
+            setDesignConstraints(value); setDesignStatus("draft"); setPromptsNeedDesignApply(true);
+        }}
+        supplemental={supplementalPrompt} onSupplementalChange={value => {
+            setSupplementalPrompt(value);
+            clearAIResultForInput();
+            setDesignStatus("draft"); setPromptsNeedDesignApply(true);
+        }}
+        onDetailsChange={value => {
+            clearAIResultForInput();
+            setDesignInput(value); setDesignStatus("draft"); setPromptsNeedDesignApply(true);
+            const withoutSlashQuery = (text: string) => text.replace(/(^|\s)\/[^\s/]*(?=\s|$)/g, "$1").trim();
+            if (value.includes("/") && withoutSlashQuery(value) === withoutSlashQuery(designInput)) return;
+            setDesignConstraints({ must_keep: [], negative_prompt: [] });
+            setIdentityFeatures({}); setLookFeatures({}); setDesignNotes(""); setLookNotes("");
+            setIdentityEditorMode("notes"); setLookEditorMode("notes"); setSupplementalPrompt("");
+        }}
+        reviewItems={designUnresolved.map(question => [question, designFieldSuggestions[question]].filter(Boolean).join("："))}
+        result={designResult} onResultChange={value => {
+            setDesignResult(value);
+            setDesignResultSource("user-edited");
+            const sections = value.match(/^身份：[\s\S]*?\n造型：/);
+            if (sections) {
+                const boundary = value.indexOf("\n造型：");
+                setResultIdentityNotes(value.slice(3, boundary));
+                setResultLookNotes(value.slice(boundary + 4));
+            } else { setResultIdentityNotes(value); setResultLookNotes(""); }
+            setResultIdentityFeatures({}); setResultLookFeatures({});
+            setResultIdentityEditorMode("notes"); setResultLookEditorMode("notes");
+            setResultIdentityBasis(["user_specified"]); setResultLookBasis(["user_specified"]);
+            setDesignStatus("draft"); setPromptsNeedDesignApply(true);
+        }}
+        models={designModels} model={designModel} onModelChange={setDesignModel}
+        busy={designing} saving={savingDesign}
+        canSave={!!onUpdateAttributes && (designTab === "ai" ? !!designResult?.trim() : !!panelDesignPrompt.trim())}
+        canReedit={hasSavedDesign} error={designError}
+        status={designStatus === "confirmed"
+            ? `已保存 · 当前设计已生效 · 保存的来源：${savedDesignSource === "ai" ? "AI 优化" : "角色设计"}`
+            : hasSavedDesign ? `已保存的设计有修改 · 保存的来源：${savedDesignSource === "ai" ? "AI 优化" : "角色设计"}` : "尚未保存"}
+        tab={designTab} onTabChange={setDesignTab}
+        onSubmit={() => void generateDesignDraft()} onSave={(source) => void saveDesign(source)}
+        onReedit={() => {
+            const snapshot = savedDesignSnapshot.current;
+            const input = snapshot.design_input;
+            const result = snapshot.design_result;
+            const legacyPrompt = [snapshot.user_visual_requirements?.identity, snapshot.user_visual_requirements?.look].filter(Boolean).join("\n");
+            const legacyResultPrompt = confirmedDesignContent(snapshot);
+            const inputIdentity = input?.identity || snapshot.identity || {};
+            const inputLook = input?.look || snapshot.look || {};
+            const resultIdentitySection = result?.identity || snapshot.identity || {};
+            const resultLookSection = result?.look || snapshot.look || {};
+            setDesignInput(input?.prompt ?? (legacyPrompt || legacyResultPrompt));
+            setDesignResult(result?.source === "panel" ? null : result?.prompt || legacyResultPrompt || null);
+            setDesignResultSource(result?.source || "legacy");
+            setIdentityFeatures(normalizeCharacterFeatures(inputIdentity.features, IDENTITY_FIELDS.map(([key]) => key)));
+            setLookFeatures(normalizeCharacterFeatures(inputLook.features, LOOK_FIELDS.map(([key]) => key)));
+            setDesignNotes(String(inputIdentity.visual_notes || "")); setLookNotes(String(inputLook.visual_notes || ""));
+            setIdentityEditorMode(inputIdentity.editor_mode || "notes"); setLookEditorMode(inputLook.editor_mode || "notes");
+            setDesignIdentityBasis(normalizeDesignBasis(inputIdentity.basis));
+            setDesignLookBasis(normalizeDesignBasis(inputLook.basis));
+            setResultIdentityFeatures(normalizeCharacterFeatures(resultIdentitySection.features, IDENTITY_FIELDS.map(([key]) => key)));
+            setResultLookFeatures(normalizeCharacterFeatures(resultLookSection.features, LOOK_FIELDS.map(([key]) => key)));
+            setResultIdentityNotes(String(resultIdentitySection.visual_notes || ""));
+            setResultLookNotes(String(resultLookSection.visual_notes || ""));
+            setResultIdentityEditorMode(resultIdentitySection.editor_mode || "notes");
+            setResultLookEditorMode(resultLookSection.editor_mode || "notes");
+            setResultIdentityBasis(normalizeDesignBasis(resultIdentitySection.basis));
+            setResultLookBasis(normalizeDesignBasis(resultLookSection.basis));
+            setSupplementalPrompt(input?.supplemental_prompt ?? snapshot.supplemental_prompt ?? "");
+            setDesignRoute(input?.route ?? snapshot.route ?? ""); setDesignAgeStage(input?.age_stage ?? snapshot.age_stage ?? ""); setStyleNotes(input?.style_notes ?? snapshot.style_notes ?? "");
+            setDesignConstraints(normalizeCharacterConstraints(input?.constraints || snapshot.constraints));
+            setDictionaryConfigurations(input?.dictionary_configurations || snapshot.dictionary_configurations || []);
+            setPresetSelections(input?.preset_selections || snapshot.preset_selections || []);
+            setDesignFieldSuggestions(snapshot.field_suggestions || {});
+            setDesignFieldSuggestionChoices(snapshot.field_suggestion_choices || {});
+            setDesignSkillRevision(result?.skill_revision || snapshot.skill_revision || "");
+            setDesignSource(snapshot.field_status?.visual_notes === "creative-choice" ? "creative-choice" : "stated");
+            setDesignUnresolved(snapshot.unresolved || []);
+            setDesignFieldAnswers(snapshot.field_answers || {});
+            setSavedDesignSource(snapshot.active_design_source === "ai" ? "ai" : "panel");
+            setDesignTab(snapshot.active_design_source === "ai" ? "ai" : "design"); setDesignStatus("draft");
+            setPromptsNeedDesignApply(false);
+        }}
+    />;
+
+    const imageSettings = <div className="space-y-3 px-4 pb-4">
+        <label className="block text-xs text-text-secondary" htmlFor="character-image-negative">出图负面提示词</label>
+        <textarea id="character-image-negative" value={negativePrompt} onChange={event => setNegativePrompt(event.target.value)} rows={3}
+            placeholder="Enter your negative prompt (avoid unwanted elements)..."
+            className="w-full rounded border border-glass-border bg-surface p-2 text-sm text-foreground" />
+        {(stylePrompt || styleNegativePrompt) && <button type="button" onClick={() => {
+            if (activePanel === "full_body") setFullBodyPrompt(current => includeVisibleStyle(current, stylePrompt));
+            if (activePanel === "three_view") setThreeViewPrompt(current => includeVisibleStyle(current, stylePrompt));
+            if (activePanel === "headshot") setHeadshotPrompt(current => includeVisibleStyle(current, stylePrompt));
+            setNegativePrompt(current => includeVisibleStyle(current, styleNegativePrompt));
+        }} className="min-h-11 rounded border border-glass-border px-3 text-xs text-text-secondary">{tc("copyStyleToPrompt")}</button>}
+    </div>;
+
     return (
-        <div className="absolute inset-0 z-50 flex items-center justify-center bg-overlay backdrop-blur-md p-4 md:p-8">
+        <div className="absolute inset-0 z-50 flex items-center justify-center bg-overlay backdrop-blur-md">
             <motion.div
                 initial={{ opacity: 0, scale: 0.95 }}
                 animate={{ opacity: 1, scale: 1 }}
                 exit={{ opacity: 0, scale: 0.95 }}
-                className="bg-surface border border-glass-border rounded-lg w-full max-w-7xl h-[min(92dvh,920px)] flex flex-col overflow-hidden shadow-lg"
+                className="bg-surface border border-glass-border w-full h-full flex flex-col overflow-hidden shadow-lg"
             >
                 <div className="relative z-40 flex h-16 shrink-0 items-center justify-between gap-3 border-b border-glass-border bg-surface px-4 md:px-6">
                     <div className="flex min-w-0 items-center gap-3">
                         <div role="heading" aria-level={2} className="min-w-0 text-lg font-bold text-foreground md:text-xl"><AssetNameEditor key={asset.id} name={asset.name} onRename={onRename} className="font-bold" /></div>
-                        <span className="hidden shrink-0 text-sm text-text-muted sm:inline">{tc("workbench")}</span>
                         <div className="hidden shrink-0 items-center gap-2 px-3 py-1 bg-blue-500/10 border border-blue-500/20 rounded-full lg:flex">
                             <span className="text-xs text-blue-400 font-medium">{tc("tipConsistency")}</span>
                         </div>
                     </div>
                     <div className="flex shrink-0 items-center gap-2">
+                        <CharacterVoiceBinding key={asset.id} character={asset} seriesId={currentProject?.series_id} onSave={onUpdateAttributes} />
                         {planEntries.length > 0 && (
                             <button type="button" aria-expanded={isPlanOpen} aria-controls="character-plan-constraints" onClick={() => setIsPlanOpen(open => !open)} className="flex items-center gap-1 rounded border border-glass-border px-2 py-1.5 text-xs text-text-secondary hover:text-foreground" title="拍摄计划约束">
                                 拍摄计划 · {planEntries.length} 条
@@ -978,181 +1339,42 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
                     )}
                 </div>
 
-                <div className="lg:hidden border-b border-glass-border px-4 py-2">
-                    <button type="button" onClick={() => setShowProfile(current => !current)} aria-label={tc("dossier")} title={tc("dossier")} aria-expanded={showProfile} className="flex min-h-10 items-center gap-2 text-sm text-text-secondary hover:text-foreground">
-                        <PanelLeft size={18} />{tc("dossier")}
-                        {designUnresolved.length > 0 && <span className="rounded border border-amber-400/40 px-1.5 py-0.5 text-[11px] text-amber-300">{tc("pendingDesignQuestions", { count: designUnresolved.length })}</span>}
-                    </button>
-                </div>
                 <div className="min-h-0 flex-1 flex flex-col lg:flex-row overflow-hidden">
-                    <aside className={`${showProfile ? "block max-h-[45%]" : "hidden"} lg:block lg:max-h-none lg:w-80 xl:w-[340px] shrink-0 overflow-y-auto border-b lg:border-b-0 lg:border-r border-glass-border bg-surface-inset p-4`} aria-label={tc("dossier")}>
-                        <h3 className="text-sm font-semibold text-foreground">{tc("dossier")}</h3>
-                        <p className="mt-2 whitespace-pre-wrap break-words text-sm leading-6 text-text-secondary">{asset.description || tc("noDossier")}</p>
-                        <section className="mt-5 border-t border-glass-border pt-4" aria-labelledby="character-visual-design-title">
-                            <div className="flex items-center justify-between gap-2">
-                                <h3 id="character-visual-design-title" className="text-sm font-semibold text-foreground">角色视觉设计</h3>
-                                <span className={`text-[11px] ${designStatus === "confirmed" ? "text-emerald-400" : "text-text-muted"}`}>
-                                    {designStatus === "confirmed" ? `已确认 r${designRevision}` : "草稿"}
-                                </span>
-                            </div>
-                            <p className="mt-1 text-xs leading-5 text-text-muted">AI 会补全可创作的外观与造型细节，并标明创意选择；只有影响角色设定的关键歧义才需要核对。</p>
-                            <label className="mt-3 block text-xs text-text-secondary" htmlFor="character-style-route">题材 / 画风</label>
-                            <select id="character-style-route" value={designRoute} onChange={(event) => { setDesignRoute(event.target.value); setDesignStatus("draft"); setPromptsNeedDesignApply(true); }} className="mt-1 h-10 w-full rounded-md border border-glass-border bg-surface px-2 text-sm text-foreground focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary">
-                                <option value="realistic-modern">真人现代</option>
-                                <option value="historical-costume">古装 / 武侠</option>
-                                <option value="xianxia-fantasy">修仙 / 仙侠</option>
-                                <option value="anime-stylized">动漫 / 国漫</option>
-                            </select>
-                            <label className="mt-3 block text-xs text-text-secondary" htmlFor="character-age-stage">年龄阶段</label>
-                            <select id="character-age-stage" value={designAgeStage} onChange={(event) => { setDesignAgeStage(event.target.value); setDesignStatus("draft"); setPromptsNeedDesignApply(true); }} className="mt-1 h-10 w-full rounded-md border border-glass-border bg-surface px-2 text-sm text-foreground focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary">
-                                <option value="">未指定</option>
-                                <option value="child">儿童</option>
-                                <option value="teen">少年 / 少女</option>
-                                <option value="young-adult">青年</option>
-                                <option value="adult">成年人</option>
-                                <option value="older-adult">老年</option>
-                            </select>
-                            <div className="mt-4 rounded-md border border-glass-border bg-surface/60 p-3">
-                                <h4 className="text-xs font-medium text-foreground">身份外观字段</h4>
-                                <p className="mt-1 text-[11px] leading-4 text-text-muted">这些字段优先编入角色图片提示词；留空的内容不会由系统补写。</p>
-                                <div className="mt-2 space-y-2">
-                                    {IDENTITY_FIELDS.map(([key, label]) => <label key={key} className="block text-xs text-text-secondary">
-                                        {label}
-                                        <textarea aria-label={`角色${label}`} value={identityFeatures[key] || ""} maxLength={500} rows={2}
-                                            onChange={(event) => { setIdentityFeatures((current) => ({ ...current, [key]: event.target.value })); setDesignIdentityBasis(["user_specified"]); setDesignSource("stated"); setDesignStatus("draft"); setPromptsNeedDesignApply(true); }}
-                                            className="mt-1 w-full resize-y rounded border border-glass-border bg-surface px-2 py-1.5 text-xs text-foreground" />
-                                    </label>)}
-                                </div>
-                            </div>
-                            <label className="mt-3 block text-xs text-text-secondary" htmlFor="character-visual-notes">身份视觉值</label>
-                            <textarea id="character-visual-notes" value={designNotes} onChange={(event) => { setDesignNotes(event.target.value); setIdentityFeatures({}); setUserVisualRequirements(current => ({ ...current, identity: event.target.value })); setDesignIdentityBasis(["user_specified"]); setDesignSource("stated"); setDesignStatus("draft"); setPromptsNeedDesignApply(true); }} placeholder="可先写年龄感、面容、体态等要求；留空由 AI 设计。" rows={4} className="mt-1 w-full resize-y rounded-md border border-glass-border bg-surface px-3 py-2 text-sm leading-5 text-foreground placeholder:text-text-muted focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary" />
-                            {Object.values(identityFeatures).some((value) => value?.trim()) && <p className="mt-1 text-[11px] text-text-muted">当前使用上方结构化字段；编辑本段会切回整段文本并清空上方字段。</p>}
-                            {designSource === "creative-choice" && <p className="mt-1 text-xs text-amber-400">AI 创意设计选择，确认前请核对剧本与参考素材。</p>}
-                            <div className="mt-4 rounded-md border border-glass-border bg-surface/60 p-3">
-                                <h4 className="text-xs font-medium text-foreground">造型字段</h4>
-                                <p className="mt-1 text-[11px] leading-4 text-text-muted">服装、配色和配件分别确认；武器未在剧本或用户要求中出现时可留空。</p>
-                                <div className="mt-2 space-y-2">
-                                    {LOOK_FIELDS.map(([key, label]) => <label key={key} className="block text-xs text-text-secondary">
-                                        {label}
-                                        <textarea aria-label={`角色${label}`} value={lookFeatures[key] || ""} maxLength={500} rows={2}
-                                            onChange={(event) => { setLookFeatures((current) => ({ ...current, [key]: event.target.value })); setDesignLookBasis(["user_specified"]); setDesignStatus("draft"); setPromptsNeedDesignApply(true); }}
-                                            className="mt-1 w-full resize-y rounded border border-glass-border bg-surface px-2 py-1.5 text-xs text-foreground" />
-                                    </label>)}
-                                </div>
-                            </div>
-                            <label className="mt-3 block text-xs text-text-secondary" htmlFor="character-look-notes">造型视觉值</label>
-                            <textarea id="character-look-notes" value={lookNotes} onChange={(event) => { setLookNotes(event.target.value); setLookFeatures({}); setUserVisualRequirements(current => ({ ...current, look: event.target.value })); setDesignLookBasis(["user_specified"]); setDesignStatus("draft"); setPromptsNeedDesignApply(true); }} placeholder="可先写服装、鞋履、武器等要求；留空由 AI 设计。" rows={3} className="mt-1 w-full resize-y rounded-md border border-glass-border bg-surface px-3 py-2 text-sm leading-5 text-foreground placeholder:text-text-muted focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary" />
-                            {Object.values(lookFeatures).some((value) => value?.trim()) && <p className="mt-1 text-[11px] text-text-muted">当前使用上方结构化字段；编辑本段会切回整段文本并清空上方字段。</p>}
-                            <AssetReferencePicker
-                                candidates={referenceCandidates}
-                                selected={designReferences}
-                                onChange={(references) => { setDesignReferences(references); setDesignStatus("draft"); }}
-                                title="选择角色参考图"
-                                description="可搜索本集、系列或全局素材；也可在下方图片 Prompt 输入 @ 选择。"
-                            />
-                            <label className="mt-3 block text-xs text-text-secondary" htmlFor="character-design-model">设计模型</label>
-                            <div className="mt-1 flex gap-2">
-                                <select id="character-design-model" value={designModel} onChange={(event) => setDesignModel(event.target.value)} disabled={!designModels.length || designing} className="h-10 min-w-0 flex-1 rounded-md border border-glass-border bg-surface px-2 text-sm text-foreground focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary">
-                                    {!designModels.length && <option value="">暂无可用模型</option>}
-                                    {designModels.map((model) => <option key={model.api_model_id} value={model.api_model_id}>{model.display_name}</option>)}
-                                </select>
-                                <button type="button" disabled={!designModel || designing || !asset.description} onClick={() => void generateDesignDraft()} className="inline-flex min-h-10 items-center gap-1.5 rounded-md border border-glass-border px-3 text-sm text-foreground hover:bg-hover-bg disabled:opacity-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary"><Sparkles size={15} />{designing ? "设计中" : "生成草稿"}</button>
-                            </div>
-                            {designReview && <div className="mt-3"><VideoPolishReview
-                                messages={designReview.messages} media={designReview.media} formatNote={designReview.formatNote}
-                                isContextIr={false} isSubmitting={designing} error={designError}
-                                userLabel="角色档案与视觉要求" confirmLabel="确认输入并生成角色草稿"
-                                onChange={messages => setDesignReview(current => current && ({ ...current, messages }))}
-                                onCancel={() => setDesignReview(null)} onConfirm={() => void confirmDesignDraft()} /></div>}
-                            {designUnresolved.length > 0 && (
-                                <section className="mt-3 rounded-md border border-amber-400/30 bg-amber-400/5 p-3" aria-labelledby="character-design-unresolved-title">
-                                    <div className="flex items-start justify-between gap-2">
-                                        <div>
-                                            <h4 id="character-design-unresolved-title" className="text-xs font-medium text-foreground">待核对 · {designUnresolved.length}</h4>
-                                            <p className="mt-1 text-[11px] leading-4 text-text-muted">只有关键设定歧义才会列在这里。可以采用 Agent 建议，也可以改成自己的方案。</p>
-                                        </div>
-                                        <span className="text-[11px] text-amber-300">{designUnresolved.filter((item) => designFieldAnswers[item]?.trim()).length}/{designUnresolved.length} 已回答</span>
-                                    </div>
-                                    <div className="mt-2 space-y-2">
-                                        {designUnresolved.map((question, index) => {
-                                            const fieldId = `character-design-answer-${index}`;
-                                            const suggestion = designFieldSuggestions[question];
-                                            const answer = designFieldAnswers[question] || "";
-                                            return (
-                                                <label key={`${question}-${index}`} htmlFor={fieldId} className="block rounded-md border border-glass-border bg-surface/60 p-2">
-                                                    <span className="block text-xs leading-5 text-text-secondary">{question}</span>
-                                                    {suggestion && <div className="mt-1 rounded border border-primary/20 bg-primary/5 p-2">
-                                                        <span className="text-[10px] font-medium uppercase tracking-wide text-primary">Agent 建议</span>
-                                                        <p className="mt-0.5 text-xs leading-5 text-foreground">{suggestion}</p>
-                                                        <button
-                                                            type="button"
-                                                            disabled={answer === suggestion}
-                                                            onClick={() => {
-                                                                setDesignFieldAnswers((current) => ({ ...current, [question]: suggestion }));
-                                                                const choice = designFieldSuggestionChoices[question];
-                                                                if (choice?.age_stage) setDesignAgeStage(choice.age_stage);
-                                                                if (choice?.route) setDesignRoute(choice.route);
-                                                                setDesignStatus("draft");
-                                                                setPromptsNeedDesignApply(true);
-                                                            }}
-                                                            className="mt-1 inline-flex min-h-8 items-center gap-1 rounded px-2 text-[11px] font-medium text-primary hover:bg-primary/10 disabled:opacity-60 focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary"
-                                                        >
-                                                            <Check size={13} aria-hidden="true" />{answer === suggestion ? "已采用" : "采用此建议"}
-                                                        </button>
-                                                    </div>}
-                                                    <textarea
-                                                        id={fieldId}
-                                                        value={answer}
-                                                        onChange={(event) => { setDesignFieldAnswers((current) => ({ ...current, [question]: event.target.value })); setDesignStatus("draft"); setPromptsNeedDesignApply(true); }}
-                                                        placeholder={suggestion ? "可直接修改建议，或留空稍后决定" : "补充你的决定；如果暂时无法决定可留空"}
-                                                        rows={2}
-                                                        className="mt-1 w-full resize-y rounded border border-glass-border bg-surface px-2 py-1.5 text-xs leading-5 text-foreground placeholder:text-text-muted focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary"
-                                                    />
-                                                </label>
-                                            );
-                                        })}
-                                    </div>
-                                </section>
-                            )}
-                            {designError && <p role="alert" className="mt-2 text-xs text-red-400">{designError}</p>}
-                            <div className="mt-3 flex gap-2">
-                                <button type="button" disabled={savingDesign || !onUpdateAttributes} onClick={() => void saveDesignDraft(false)} className="inline-flex min-h-10 flex-1 items-center justify-center gap-2 rounded-md border border-glass-border px-3 text-sm text-text-secondary hover:bg-hover-bg disabled:opacity-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary"><Sparkles size={15} />保存草稿</button>
-                                <button type="button" disabled={savingDesign || !onUpdateAttributes} onClick={() => void saveDesignDraft(true)} className="inline-flex min-h-10 flex-1 items-center justify-center gap-2 rounded-md bg-primary px-3 text-sm font-medium text-primary-foreground hover:opacity-90 disabled:opacity-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary"><Check size={15} />确认设计</button>
-                            </div>
-                        </section>
-                    </aside>
 
                     <div className="min-h-0 min-w-0 flex-1 flex flex-col">
                         {promptsNeedDesignApply && <div className="mx-3 mt-3 flex flex-col gap-2 rounded-md border border-primary/30 bg-primary/5 p-3 sm:mx-5 sm:flex-row sm:items-center sm:justify-between">
                             <div className="min-w-0">
-                                <p className="text-xs font-medium text-foreground">角色设计草稿尚未应用到图片提示词</p>
-                                <p className="mt-0.5 text-[11px] leading-4 text-text-muted">应用会更新全身、三视图和肖像提示词，不保存角色设计或创建版本；之后仍可编辑提示词。</p>
-                                {requirementsToReview.length > 0 && <div role="status" className="mt-2 rounded border border-amber-500/40 bg-amber-500/10 p-2 text-[11px] text-amber-200">
-                                    <p>以下用户原话未逐字出现在结构化投影中。请核对上方字段与预览，必要时补回，再应用：</p>
-                                    {requirementsToReview.map(([section, requirement]) => <p key={section}>{section}：{requirement}</p>)}
-                                </div>}
+                                <p className="text-xs font-medium text-foreground">{designTab === "ai" ? "AI 优化结果" : "角色设计"}尚未应用到图片提示词</p>
+                                <p className="mt-0.5 text-[11px] leading-4 text-text-muted">将应用当前页签的版本，更新全身、三视图和肖像提示词；此操作不保存设计或创建版本，之后仍可编辑提示词。</p>
                                 <details className="mt-2 text-xs text-text-secondary">
                                     <summary className="cursor-pointer">查看将写入的三条图片提示词</summary>
                                     <div className="mt-2 space-y-2 whitespace-pre-wrap rounded border border-glass-border bg-surface-inset p-2 text-foreground">
-                                        <p>全身：{buildCharacterImagePrompt("full_body", asset.name, currentDesignDescription, hasNonFullBodyUpload)}</p>
-                                        <p>三视图：{buildCharacterImagePrompt("three_view", asset.name, currentDesignDescription, hasFullBodyImage || hasAnyUpload)}</p>
-                                        <p>肖像：{buildCharacterImagePrompt("headshot", asset.name, currentDesignDescription, hasFullBodyImage || hasAnyUpload)}</p>
+                                        <p>全身：{buildCharacterImagePrompt("full_body", asset.name, descriptionForSource(selectedDesignPromptSource), hasNonFullBodyUpload)}</p>
+                                        <p>三视图：{buildCharacterImagePrompt("three_view", asset.name, descriptionForSource(selectedDesignPromptSource), hasFullBodyImage || hasAnyUpload)}</p>
+                                        <p>肖像：{buildCharacterImagePrompt("headshot", asset.name, descriptionForSource(selectedDesignPromptSource), hasFullBodyImage || hasAnyUpload)}</p>
                                     </div>
                                 </details>
                             </div>
-                            <button type="button" onClick={() => applyDesignToPrompts()} className="inline-flex min-h-10 shrink-0 items-center justify-center gap-1.5 rounded-md bg-primary px-3 text-xs font-medium text-primary-foreground hover:opacity-90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary">
-                                <Sparkles size={14} aria-hidden="true" />应用到图片提示词
+                            <button type="button" disabled={!promptForSource(selectedDesignPromptSource).trim()} onClick={() => applyDesignToPrompts(selectedDesignPromptSource)} className="inline-flex min-h-10 shrink-0 items-center justify-center gap-1.5 rounded-md bg-primary px-3 text-xs font-medium text-primary-foreground hover:opacity-90 disabled:opacity-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary">
+                                <Sparkles size={14} aria-hidden="true" />应用{designTab === "ai" ? " AI 优化" : "角色设计"}到图片提示词
                             </button>
                         </div>}
-                        <div role="tablist" aria-label={tc("materialTypes")} className="flex shrink-0 gap-1 overflow-x-auto border-b border-glass-border px-3 sm:px-5">
-                            {([ ["full_body", tc("masterAsset")], ["three_view", tc("threeViews")], ["headshot", tc("avatar")] ] as const).map(([id, label]) => <button key={id} type="button" role="tab" aria-selected={activePanel === id} tabIndex={activePanel === id ? 0 : -1} onClick={() => setActivePanel(id)} onKeyDown={(event) => {
-                                if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
-                                event.preventDefault();
-                                const tabs = Array.from(event.currentTarget.parentElement?.querySelectorAll<HTMLElement>('[role="tab"]') || []);
-                                const next = tabs[(tabs.indexOf(event.currentTarget) + (event.key === "ArrowRight" ? 1 : tabs.length - 1)) % tabs.length];
-                                next?.click();
-                                next?.focus();
-                            }} className={`min-h-11 shrink-0 border-b-2 px-3 text-sm transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary ${activePanel === id ? "border-primary text-primary" : "border-transparent text-text-secondary hover:text-foreground"}`}>{label}</button>)}
+                        <div className="flex shrink-0 flex-wrap items-center justify-between gap-x-3 border-b border-glass-border px-3 sm:px-5" data-testid="character-asset-toolbar">
+                            <div role="tablist" aria-label={tc("materialTypes")} className="flex min-w-0 gap-1 overflow-x-auto">
+                                {([ ["full_body", tc("masterAsset")], ["three_view", tc("threeViews")], ["headshot", tc("avatar")] ] as const).map(([id, label]) => <button key={id} type="button" role="tab" aria-selected={activePanel === id} tabIndex={activePanel === id ? 0 : -1} onClick={() => setActivePanel(id)} onKeyDown={(event) => {
+                                    if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
+                                    event.preventDefault();
+                                    const tabs = Array.from(event.currentTarget.parentElement?.querySelectorAll<HTMLElement>('[role="tab"]') || []);
+                                    const next = tabs[(tabs.indexOf(event.currentTarget) + (event.key === "ArrowRight" ? 1 : tabs.length - 1)) % tabs.length];
+                                    next?.click();
+                                    next?.focus();
+                                }} className={`min-h-11 shrink-0 border-b-2 px-3 text-sm transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary ${activePanel === id ? "border-primary text-primary" : "border-transparent text-text-secondary hover:text-foreground"}`}>{label}</button>)}
+                            </div>
+                            {activePanel !== "three_view" && <CharacterPresentationSwitch
+                                mode={activePanel === "full_body" ? fullBodyMode : headshotMode}
+                                onModeChange={activePanel === "full_body" ? setFullBodyMode : setHeadshotMode}
+                                hasStaticImage={activePanel === "full_body" ? hasFullBodyImage : !!asset.headshot_image_url || !!asset.headshot_asset?.variants?.length}
+                            />}
                         </div>
                         <div className="min-h-0 flex-1 flex overflow-hidden">
 
@@ -1160,6 +1382,11 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
                     {activePanel === "full_body" &&
                     <WorkbenchPanel
                         assetScope={asset.id}
+                        previewLocator={characterPreviewLocator}
+                        hideTitle
+                        designEditor={designEditor}
+                        imageSettings={imageSettings}
+                        reviewEditorHost={reviewEditorHost}
                         title={tc("masterAsset")}
                         isActive={activePanel === "full_body"}
                         onClick={() => setActivePanel("full_body")}
@@ -1170,9 +1397,17 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
                         onDelete={(id: string) => handleDeleteVariant(masterGenerationType, id)}
                         onFavorite={(id: string, isFav: boolean) => handleFavoriteVariant(masterGenerationType, id, isFav)}
                         onRename={handleRenameVariant}
+                        markedVariantId={asset.cover_variant_id}
+                        variantNameFallback={variantNameFallback}
 
                         prompt={fullBodyPrompt}
                         setPrompt={setFullBodyPrompt}
+                        onDictionaryConfiguration={recordDictionaryConfiguration}
+                        onStructuredSelection={(text: string, fields: { identity: IdentityFeatures; look: LookFeatures }, remaining: string) => {
+                            updateStructuredDesign(fields.identity, fields.look, text, remaining);
+                        }}
+                        platformPromptSource={platformPromptSources.full_body}
+                        onPlatformPromptSourceChange={(source: AppliedPlatformPrompt | null) => setPlatformPromptSources((current) => ({ ...current, full_body: source }))}
                         referenceCandidates={referenceCandidates}
                         onRefreshReferences={refreshAssetIndex}
                         onReferencesChange={(references: AssetLibraryReference[]) => setPanelReferences("full_body", references)}
@@ -1212,6 +1447,11 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
                     {activePanel === "three_view" &&
                     <WorkbenchPanel
                         assetScope={asset.id}
+                        previewLocator={characterPreviewLocator}
+                        hideTitle
+                        designEditor={designEditor}
+                        imageSettings={imageSettings}
+                        reviewEditorHost={reviewEditorHost}
                         title={tc("threeViews")}
                         isActive={activePanel === "three_view"}
                         onClick={() => setActivePanel("three_view")}
@@ -1222,9 +1462,17 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
                         onDelete={(id: string) => handleDeleteVariant("three_view", id)}
                         onFavorite={(id: string, isFav: boolean) => handleFavoriteVariant("three_view", id, isFav)}
                         onRename={handleRenameVariant}
+                        markedVariantId={asset.cover_variant_id}
+                        variantNameFallback={(index: number) => variantNameFallback((masterAsset?.variants?.length || 0) + index)}
 
                         prompt={threeViewPrompt}
                         setPrompt={setThreeViewPrompt}
+                        onDictionaryConfiguration={recordDictionaryConfiguration}
+                        onStructuredSelection={(text: string, fields: { identity: IdentityFeatures; look: LookFeatures }, remaining: string) => {
+                            updateStructuredDesign(fields.identity, fields.look, text, remaining);
+                        }}
+                        platformPromptSource={platformPromptSources.three_view}
+                        onPlatformPromptSourceChange={(source: AppliedPlatformPrompt | null) => setPlatformPromptSources((current) => ({ ...current, three_view: source }))}
                         referenceCandidates={referenceCandidates}
                         onRefreshReferences={refreshAssetIndex}
                         onReferencesChange={(references: AssetLibraryReference[]) => setPanelReferences("three_view", references)}
@@ -1245,6 +1493,11 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
                     {activePanel === "headshot" &&
                     <WorkbenchPanel
                         assetScope={asset.id}
+                        previewLocator={characterPreviewLocator}
+                        hideTitle
+                        designEditor={designEditor}
+                        imageSettings={imageSettings}
+                        reviewEditorHost={reviewEditorHost}
                         title={tc("avatar")}
                         isActive={activePanel === "headshot"}
                         onClick={() => setActivePanel("headshot")}
@@ -1255,9 +1508,17 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
                         onDelete={(id: string) => handleDeleteVariant("headshot", id)}
                         onFavorite={(id: string, isFav: boolean) => handleFavoriteVariant("headshot", id, isFav)}
                         onRename={handleRenameVariant}
+                        markedVariantId={asset.cover_variant_id}
+                        variantNameFallback={(index: number) => variantNameFallback((masterAsset?.variants?.length || 0) + (asset.three_view_asset?.variants?.length || 0) + index)}
 
                         prompt={headshotPrompt}
                         setPrompt={setHeadshotPrompt}
+                        onDictionaryConfiguration={recordDictionaryConfiguration}
+                        onStructuredSelection={(text: string, fields: { identity: IdentityFeatures; look: LookFeatures }, remaining: string) => {
+                            updateStructuredDesign(fields.identity, fields.look, text, remaining);
+                        }}
+                        platformPromptSource={platformPromptSources.headshot}
+                        onPlatformPromptSourceChange={(source: AppliedPlatformPrompt | null) => setPlatformPromptSources((current) => ({ ...current, headshot: source }))}
                         referenceCandidates={referenceCandidates}
                         onRefreshReferences={refreshAssetIndex}
                         onReferencesChange={(references: AssetLibraryReference[]) => setPanelReferences("headshot", references)}
@@ -1293,97 +1554,19 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
                     </div>
                 </div>
 
-                <details className="shrink-0 border-t border-glass-border bg-surface">
-                    <summary className="flex min-h-11 cursor-pointer items-center px-4 text-sm font-medium text-text-secondary hover:text-foreground sm:px-6">{tc("advancedSettings")}</summary>
-                    <div className="max-h-[30vh] overflow-y-auto">
-                {/* Footer: Negative Prompt & Art Direction Settings */}
-                <div className="border-t border-glass-border bg-surface flex flex-col">
-                    {/* Top Row: User's Negative Prompt + Apply Style Toggle */}
-                    <div className="px-6 py-3 flex items-start gap-4">
-                        {/* User's Negative Prompt (Editable) */}
-                        <div className="flex-1">
-                            <label className="text-xs font-bold text-text-muted uppercase mb-2 block">{tc("workbench")}</label>
-                            <textarea
-                                value={negativePrompt}
-                                onChange={(e) => setNegativePrompt(e.target.value)}
-                                className="w-full h-16 bg-input-bg border border-glass-border rounded-lg p-3 text-xs text-text-secondary resize-none focus:outline-none focus:border-primary/50 font-mono"
-                                placeholder="Enter your negative prompt (avoid unwanted elements)..."
-                            />
-                        </div>
 
-                        {/* Copy style into the editable prompts before submitting. */}
-                        <div className="pt-6">
-                            <div className="flex items-center gap-2 bg-surface px-4 py-2 rounded-lg border border-glass-border">
-                                <button type="button" disabled={activePanel === "video" || (!stylePrompt && !styleNegativePrompt)} onClick={() => {
-                                    if (activePanel === "full_body") setFullBodyPrompt((current) => includeVisibleStyle(current, stylePrompt));
-                                    if (activePanel === "three_view") setThreeViewPrompt((current) => includeVisibleStyle(current, stylePrompt));
-                                    if (activePanel === "headshot") setHeadshotPrompt((current) => includeVisibleStyle(current, stylePrompt));
-                                    setNegativePrompt((current) => includeVisibleStyle(current, styleNegativePrompt));
-                                }} className="text-xs font-bold text-text-secondary disabled:opacity-40">
-                                    {tc("copyStyleToPrompt")}
-                                </button>
-                            </div>
-                        </div>
-                    </div>
-
-                    {/* Optional style source; generation uses only the edited prompt fields. */}
-                    {(stylePrompt || styleNegativePrompt) && (
-                        <div className="border-t border-border-subtle">
-                            <button
-                                onClick={() => setShowStyleExpanded(!showStyleExpanded)}
-                                className="w-full px-6 py-2 flex items-center justify-between hover:bg-glass transition-colors"
-                            >
-                                <div className="flex items-center gap-2">
-                                    <div className="w-2 h-2 rounded-full bg-gradient-to-r from-purple-500 to-blue-500" />
-                                    <span className="text-xs font-bold text-text-secondary uppercase">Art Direction Style (Copy to Prompt Above)</span>
-                                </div>
-                                <ChevronRight size={14} className={`text-text-muted transform transition-transform ${showStyleExpanded ? 'rotate-90' : ''}`} />
-                            </button>
-
-                            <AnimatePresence>
-                                {showStyleExpanded && (
-                                    <motion.div
-                                        initial={{ height: 0, opacity: 0 }}
-                                        animate={{ height: "auto", opacity: 1 }}
-                                        exit={{ height: 0, opacity: 0 }}
-                                        className="overflow-hidden"
-                                    >
-                                        <div className="px-6 pb-4">
-                                            <div className="bg-gradient-to-r from-purple-500/10 to-blue-500/10 border border-glass-border rounded-lg p-4">
-                                                {stylePrompt && (
-                                                    <div className="mb-3">
-                                                        <span className="text-xs font-bold text-green-400 block mb-1">+ Style Prompt:</span>
-                                                        <p className="text-xs text-text-secondary font-mono bg-surface p-2 rounded border border-border-subtle leading-relaxed">
-                                                            {stylePrompt}
-                                                        </p>
-                                                    </div>
-                                                )}
-
-                                                {styleNegativePrompt && (
-                                                    <div>
-                                                        <span className="text-xs font-bold text-red-400 block mb-1">+ Negative Prompt:</span>
-                                                        <p className="text-xs text-text-secondary font-mono bg-surface p-2 rounded border border-border-subtle leading-relaxed">
-                                                            {styleNegativePrompt}
-                                                        </p>
-                                                    </div>
-                                                )}
-                                            </div>
-                                        </div>
-                                    </motion.div>
-                                )}
-                            </AnimatePresence>
-                        </div>
-                    )}
-                </div>
-                    </div>
-                </details>
             </motion.div>
-            {pendingImageReview && currentProject?.id && <AssetImageSubmissionReview
+            {imageReviewRequest && currentProject?.id && <AssetImageSubmissionReview
                 projectId={currentProject.id}
-                request={pendingImageReview}
+                request={imageReviewRequest}
+                validationError={reviewValidationError}
+                editor={<>
+                    <p className="mt-3 text-xs text-text-secondary">提示词来源：{designTab === "ai" ? "AI 优化" : "角色设计"} · 下方内容为实际提交提示词，可继续修改。</p>
+                    <div ref={setReviewEditorHost} className="relative mt-3" />
+                </>}
                 onBack={() => setPendingImageReview(null)}
                 onConfirm={(review) => {
-                    const request = pendingImageReview;
+                    const request = imageReviewRequest;
                     setPendingImageReview(null);
                     onGenerate(request.generation_type, request.prompt, false, request.negative_prompt,
                         request.batch_size, request.reference ? [request.reference] : request.references || [],
@@ -1394,9 +1577,50 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
     );
 }
 
+function CharacterPresentationSwitch({ mode, onModeChange, hasStaticImage }: {
+    mode: "static" | "motion";
+    onModeChange?: (mode: "static" | "motion") => void;
+    hasStaticImage: boolean;
+}) {
+    const tc = useTranslations("character");
+    return (
+        <div role="group" aria-label="资产呈现方式" className="flex items-center gap-1 bg-surface p-1 rounded-lg border border-glass-border">
+            <button
+                type="button" aria-pressed={mode === 'static'}
+                onClick={(e) => { e.stopPropagation(); onModeChange?.('static'); }}
+                className={`min-h-11 flex items-center gap-1 px-3 py-1 rounded text-xs font-medium transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary ${mode === 'static'
+                    ? 'bg-primary/20 text-primary'
+                    : 'text-text-secondary hover:text-foreground'
+                    }`}
+            >
+                <PhotoIcon size={12} />
+                {tc("staticMode")}
+            </button>
+            <button type="button" aria-pressed={mode === 'motion'}
+                onClick={(e) => {
+                    e.stopPropagation();
+                    if (!hasStaticImage) {
+                        alert(tc('generateFirstStatic', { type: tc('fullBodyType') }));
+                        return;
+                    }
+                    onModeChange?.('motion');
+                }}
+                className={`min-h-11 flex items-center gap-1 px-3 py-1 rounded text-xs font-medium transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary ${mode === 'motion'
+                    ? 'bg-purple-500/20 text-purple-400'
+                    : 'text-text-secondary hover:text-foreground'
+                    }`}
+            >
+                <Video size={12} />
+                {tc("motionMode")}
+            </button>
+        </div>
+    );
+}
+
 export function WorkbenchPanel({
     title,
     assetScope,
+    previewLocator,
     isActive,
     onClick,
 
@@ -1407,9 +1631,15 @@ export function WorkbenchPanel({
     onDelete,
     onFavorite,
     onRename,
+    markedVariantId,
+    variantNameFallback,
 
     prompt,
     setPrompt,
+    platformPromptSource,
+    onPlatformPromptSourceChange,
+    onStructuredSelection,
+    onDictionaryConfiguration,
     referenceCandidates = [],
     onRefreshReferences,
     onReferencesChange,
@@ -1424,6 +1654,10 @@ export function WorkbenchPanel({
     status,
     isLocked,
     description,
+    hideTitle = false,
+    designEditor,
+    imageSettings,
+    reviewEditorHost,
     aspectRatio = "9:16",
     // Video specific
     isVideo = false,
@@ -1451,24 +1685,139 @@ export function WorkbenchPanel({
     reverseGenerationMode = false,
     reverseReferenceUrl = null
 }: any) {
+    const [dictionaryHost, setDictionaryHost] = useState<HTMLDivElement | null>(null);
     const tc = useTranslations("character");
     const ti = useTranslations("imageEditor");
-    const currentProject = useProjectStore((state) => state.currentProject);
     const [mention, setMention] = useState<ReferenceSuggestion | null>(null);
-    const mentionQuery = mention?.query.toLocaleLowerCase() ?? "";
-    const matchingReferenceCandidates = referenceCandidates.filter((candidate: ReferenceCandidate) =>
-        [candidate.label, candidate.description, candidate.sourceLabel, candidate.variantLabel]
-            .filter(Boolean)
-            .some((value) => value!.toLocaleLowerCase().includes(mentionQuery)),
-    );
+    const [promptSlash, setPromptSlash] = useState<PromptSlashSuggestion | null>(null);
+    const [openSlashRequest, setOpenSlashRequest] = useState(0);
+    const slashKeyHandler = useRef<((event: globalThis.KeyboardEvent) => boolean) | null>(null);
+    const selectedCandidates = useMemo(() => selectedReferenceCandidates(referenceCandidates, pickerReferences), [referenceCandidates, pickerReferences]);
+    const matchingReferenceCandidates = searchReferenceCandidates(selectedCandidates, mention?.query ?? "");
 
+    const imageReferenceControls = <>
+                <div className="p-2 border-b border-border-subtle flex justify-between items-center bg-surface">
+                    <span className="text-xs font-bold text-text-muted uppercase px-2">{designEditor && !reviewEditorHost ? "生成方式" : "Prompt"}</span>
+                    <div className="flex items-center gap-1 rounded-md border border-glass-border bg-black/20 p-1" role="group" aria-label={`Image generation mode: ${title}`}>
+                        {(["text", "reference"] as const).map((generationMode) => (
+                            <button
+                                key={generationMode}
+                                type="button"
+                                aria-pressed={imageGenerationMode === generationMode}
+                                onClick={(event) => { event.stopPropagation(); onImageGenerationModeChange?.(generationMode); }}
+                                className={`min-h-11 rounded px-2 py-1 text-xs ${imageGenerationMode === generationMode ? "bg-primary/15 text-primary" : "text-text-muted hover:text-foreground"}`}
+                            >
+                                {generationMode === "text" ? "Text to image" : "Reference image"}
+                            </button>
+                        ))}
+                    </div>
+                </div>
+                {showReferencePicker && <div className="px-4 pt-2">
+                    <AssetReferencePicker
+                        candidates={referenceCandidates}
+                        selected={pickerReferences}
+                        onChange={(references) => {
+                            onPickerReferencesChange?.(references);
+                            if (references.length > 0) onImageGenerationModeChange?.("reference");
+                        }}
+                        title="选择参考素材"
+                        description="不用记住 @：搜索并选择要传给图片模型的素材变体。"
+                        onOpen={onRefreshReferences}
+                    />
+                </div>}
+    </>;
+
+    const imageEditor = <div>
+                {imageReferenceControls}
+                {!isVideo && !designEditor && <div className="px-4 pt-2">
+                    <div className="flex flex-wrap items-center gap-2">
+                        <button type="button" disabled={isLocked} onMouseDown={event => event.preventDefault()} onClick={() => { setOpenSlashRequest((value) => value + 1); }}
+                            className="min-h-11 rounded border border-glass-border px-3 text-xs text-foreground hover:bg-hover-bg disabled:opacity-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary">快捷面板</button>
+                    </div>
+                    {platformPromptSource && <p className="mt-1 break-words text-[11px] text-text-muted" aria-label="平台 Prompt 来源">
+                        来源：{platformPromptSource.title} · r{platformPromptSource.revision}
+                        {platformPromptSource.customized ? " · 已由用户修改" : " · 当前草稿"}
+                    </p>}
+                </div>}
+                <div className="relative min-h-[150px] flex-1 p-4">
+                    <ReferencePromptEditor
+                        value={prompt}
+                        candidates={selectedCandidates}
+                        onChange={(text) => {
+                            setPrompt(text);
+                            if (platformPromptSource && onPlatformPromptSourceChange && text !== platformPromptSource.appliedText) {
+                                onPlatformPromptSourceChange({ ...platformPromptSource, customized: true });
+                            }
+                        }}
+                        onReferencesChange={onReferencesChange}
+                        onMentionChange={(next) => {
+                            setMention(next);
+                        }}
+                        onSlashChange={!isVideo && !designEditor ? (next) => { setPromptSlash(next); if (next) setMention(null); } : undefined}
+                        onSlashKeyDown={(event) => slashKeyHandler.current?.(event) || false}
+                        openSlashRequest={openSlashRequest}
+                        allowImplicitMentions={false}
+                        pruneUnlistedReferences
+                        expanded
+                        editable={!isLocked}
+                        placeholder={isVideo ? "输入视频 Prompt，@ 检索资产" : designEditor ? "本次出图提示词，@ 检索资产" : "输入 Prompt，/ 打开快捷面板，@ 检索资产"}
+                    />
+                    {!isVideo && !designEditor && !isLocked && promptSlash && <CharacterPromptDictionary suggestion={promptSlash} onClose={() => setPromptSlash(null)}
+                        onConfiguration={designEditor ? undefined : onDictionaryConfiguration} keyHandler={slashKeyHandler}
+                        onApply={(text, entry) => {
+                            setPrompt(text);
+                            if (!designEditor && entry.structuredFields) onStructuredSelection?.(text, entry.structuredFields, entry.remainingText);
+                            if (entry.resource) onPlatformPromptSourceChange?.({ resourceId: entry.resource.platform_resource_id,
+                                revision: entry.resource.revision, title: entry.title, appliedText: text, customized: false });
+                        }} />}
+                    {mention && (
+                        <div
+                            role="listbox"
+                            aria-label="已选参考素材"
+                            className="absolute bottom-full left-3 z-50 mb-2 max-h-64 w-[min(100%-1.5rem,24rem)] overflow-y-auto rounded-xl border border-glass-border bg-elevated p-2 shadow-2xl"
+                        >
+                            <div className="px-2 pb-1.5 pt-1 font-mono text-[0.625rem] uppercase tracking-[0.12em] text-text-muted">当前参考素材</div>
+                            {matchingReferenceCandidates.length === 0 ? (
+                                <div className="px-2 py-2 text-xs text-text-muted">
+                                    {selectedCandidates.length ? "没有匹配的参考素材" : "请先在参考素材列表中添加素材"}
+                                </div>
+                            ) : matchingReferenceCandidates.map((candidate: ReferenceCandidate) => (
+                                <button
+                                    key={`${candidate.reference?.asset_type}:${candidate.reference?.asset_id}:${candidate.reference?.variant_id}`}
+                                    type="button"
+                                    role="option"
+                                    onMouseDown={(event) => event.preventDefault()}
+                                    onClick={() => {
+                                        mention.choose(candidate);
+                                        setMention(null);
+                                    }}
+                                    className="flex min-h-11 w-full items-center gap-3 rounded-lg px-2 py-2 text-left transition-colors hover:bg-hover-bg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60"
+                                >
+                                    <span className="inline-flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-surface-inset">
+                                        {candidate.previewRef ? (
+                                            <AssetIndexPreview asset={candidate.previewRef} />
+                                        ) : <ImageIcon size={15} className="text-text-muted" />}
+                                    </span>
+                                    <span className="min-w-0 flex-1 text-xs">
+                                        <span className="block truncate text-foreground" title={candidate.label}>{candidate.label}</span>
+                                        <span className="block truncate text-text-muted">{candidate.sourceLabel || "Asset"}</span>
+                                    </span>
+                                </button>
+                            ))}
+
+                        </div>
+                    )}
+                </div>
+                {imageSettings}
+        </div>;
     return (
+        <CharacterDictionaryHost.Provider value={reviewEditorHost || dictionaryHost}>
         <div
             className={`min-w-0 min-h-0 flex-1 flex flex-col transition-colors ${isActive ? 'bg-glass' : 'bg-transparent hover:bg-hover-bg'}`}
             onClick={onClick}
         >
             {/* Panel Header */}
-            <div className="p-4 border-b border-border-subtle">
+            {hideTitle ? <h3 className="sr-only">{title}</h3> : <div className="p-4 border-b border-border-subtle">
                 <div className="flex items-center justify-between mb-1">
                     <h3 className={`font-bold text-sm uppercase tracking-wider ${isActive ? 'text-primary' : 'text-text-secondary'}`}>
                         {title}
@@ -1476,42 +1825,18 @@ export function WorkbenchPanel({
 
                     {/* Mode Switcher (Asset Activation v2) */}
                     {supportsMotion && (
-                        <div className="flex items-center gap-1 bg-surface p-1 rounded-lg border border-glass-border">
-                            <button
-                                onClick={(e) => { e.stopPropagation(); onModeChange?.('static'); }}
-                                className={`flex items-center gap-1 px-2 py-1 rounded text-xs font-medium transition-colors ${mode === 'static'
-                                    ? 'bg-primary/20 text-primary'
-                                    : 'text-text-secondary hover:text-foreground'
-                                    }`}
-                            >
-                                <PhotoIcon size={12} />
-                                Static
-                            </button>
-                            <button
-                                onClick={(e) => {
-                                    e.stopPropagation();
-                                    if (!hasStaticImage) {
-                                        alert(tc('generateFirstStatic', { type: tc('fullBodyType') }));
-                                        return;
-                                    }
-                                    onModeChange?.('motion');
-                                }}
-                                className={`flex items-center gap-1 px-2 py-1 rounded text-xs font-medium transition-colors ${mode === 'motion'
-                                    ? 'bg-purple-500/20 text-purple-400'
-                                    : 'text-text-secondary hover:text-foreground'
-                                    }`}
-                            >
-                                <Video size={12} />
-                                {tc("motionMode")}
-                            </button>
-                        </div>
+                        <CharacterPresentationSwitch mode={mode} onModeChange={onModeChange} hasStaticImage={hasStaticImage} />
                     )}
                 </div>
                 <p className="text-xs text-text-muted">{description}</p>
-            </div>
+            </div>}
 
             {/* Image Area with Variant Selector */}
-            <div className="flex-1 relative bg-surface p-4 flex flex-col overflow-y-auto group">
+            <AssetWorkbenchLayout controls={<>
+                {designEditor && !reviewEditorHost && imageReferenceControls}
+                {designEditor}
+                {designEditor ? reviewEditorHost && createPortal(imageEditor, reviewEditorHost) : imageEditor}
+            </>} preview={<div ref={setDictionaryHost} data-testid="character-main-workspace" className="flex-1 min-h-0 min-w-0 relative bg-surface p-4 flex flex-col overflow-hidden group">
 
                 {/* Locked Overlay */}
                 {isLocked && (
@@ -1688,17 +2013,16 @@ export function WorkbenchPanel({
                             onDelete={onDelete}
                             onFavorite={onFavorite}
                             onRename={onRename}
+                            markedVariantId={markedVariantId}
+                            variantNameLabel="变体名称"
+                            variantNameFallback={variantNameFallback}
                             onGenerate={onGenerate}
                             isGenerating={isGenerating}
                             generatingBatchSize={generatingBatchSize}
                             aspectRatio={aspectRatio}
                             className="h-full"
-                            previewLocator={currentProject?.id ? {
-                                scope: asset?.source === "series" && currentProject.series_id ? "series" : "project",
-                                containerId: asset?.source === "series" && currentProject.series_id ? currentProject.series_id : currentProject.id,
-                                assetType: "character",
-                                assetId: asset?.id,
-                            } : undefined}
+                            viewerClassName="max-h-[min(64dvh,760px)] min-h-[240px]"
+                            previewLocator={previewLocator}
                         />
                     )}
                 </div>
@@ -1714,92 +2038,8 @@ export function WorkbenchPanel({
                 )}
             </div>
 
-            {/* Prompt Editor (Bottom) */}
-            <div className="h-1/3 min-h-[180px] border-t border-glass-border flex flex-col bg-surface">
-                <div className="p-2 border-b border-border-subtle flex justify-between items-center bg-surface">
-                    <span className="text-xs font-bold text-text-muted uppercase px-2">Prompt</span>
-                    <div className="flex items-center gap-1 rounded-md border border-glass-border bg-black/20 p-1" role="group" aria-label={`Image generation mode: ${title}`}>
-                        {(["text", "reference"] as const).map((generationMode) => (
-                            <button
-                                key={generationMode}
-                                type="button"
-                                aria-pressed={imageGenerationMode === generationMode}
-                                onClick={(event) => { event.stopPropagation(); onImageGenerationModeChange?.(generationMode); }}
-                                className={`rounded px-2 py-1 text-[0.625rem] ${imageGenerationMode === generationMode ? "bg-primary/15 text-primary" : "text-text-muted hover:text-foreground"}`}
-                            >
-                                {generationMode === "text" ? "Text to image" : "Reference image"}
-                            </button>
-                        ))}
-                    </div>
-                </div>
-                {showReferencePicker && <div className="px-4 pt-2">
-                    <AssetReferencePicker
-                        candidates={referenceCandidates}
-                        selected={pickerReferences}
-                        onChange={(references) => {
-                            onPickerReferencesChange?.(references);
-                            if (references.length > 0) onImageGenerationModeChange?.("reference");
-                        }}
-                        title="选择参考素材"
-                        description="不用记住 @：搜索并选择要传给图片模型的素材变体。"
-                        onOpen={onRefreshReferences}
-                    />
-                </div>}
-                <div className="relative min-h-0 flex-1 overflow-visible p-4">
-                    <ReferencePromptEditor
-                        value={prompt}
-                        candidates={referenceCandidates}
-                        onChange={setPrompt}
-                        onReferencesChange={onReferencesChange}
-                        onMentionChange={(next) => {
-                            if (next && !mention) onRefreshReferences?.();
-                            setMention(next);
-                        }}
-                        allowImplicitMentions={false}
-                        pruneUnlistedReferences
-                        editable={!isLocked}
-                        placeholder="Enter prompt description..."
-                    />
-                    {mention && (
-                        <div
-                            role="listbox"
-                            aria-label="选择参考素材"
-                            className="absolute bottom-full left-3 z-50 mb-2 max-h-64 w-[min(100%-1.5rem,24rem)] overflow-y-auto rounded-xl border border-glass-border bg-elevated p-2 shadow-2xl"
-                        >
-                            <div className="px-2 pb-1.5 pt-1 font-mono text-[0.625rem] uppercase tracking-[0.12em] text-text-muted">
-                                参考索引
-                            </div>
-                            {matchingReferenceCandidates.length === 0 ? (
-                                <div className="px-2 py-2 text-xs text-text-muted">
-                                    {referenceCandidates.length ? "没有匹配的参考素材" : "暂无可用参考素材"}
-                                </div>
-                            ) : matchingReferenceCandidates.map((candidate: ReferenceCandidate) => (
-                                <button
-                                    key={`${candidate.reference?.asset_type}:${candidate.reference?.asset_id}:${candidate.reference?.variant_id}`}
-                                    type="button"
-                                    role="option"
-                                    onMouseDown={(event) => event.preventDefault()}
-                                    onClick={() => {
-                                        mention.choose(candidate);
-                                        setMention(null);
-                                    }}
-                                    className="flex min-h-11 w-full items-center gap-3 rounded-lg px-2 py-2 text-left transition-colors hover:bg-hover-bg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60"
-                                >
-                                    <span className="inline-flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-surface-inset">
-                                        {candidate.previewRef ? (
-                                            <AssetIndexPreview asset={candidate.previewRef} />
-                                        ) : <ImageIcon size={15} className="text-text-muted" />}
-                                    </span>
-                                    <span className="min-w-0 flex-1 text-xs">
-                                        <span className="block truncate text-foreground" title={candidate.label}>{candidate.label}</span>
-                                        <span className="block truncate text-text-muted">{candidate.sourceLabel || "Asset"}</span>
-                                    </span>
-                                </button>
-                            ))}
-                        </div>
-                    )}
-                </div>
-            </div>
+            } />
         </div>
+        </CharacterDictionaryHost.Provider>
     );
 }

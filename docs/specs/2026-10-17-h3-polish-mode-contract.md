@@ -28,8 +28,19 @@ Source: <https://github.com/MiniMax-AI/MiniMax-H3/blob/d21241f0a4b3acbb34c97dae4
   path so local skill formatting rules do not override its provider-native
   output contract.
 - The final H3 instruction applies only when the target model is H3.
-- Keep rejecting prose or missing fields without applying the draft. Record
+- For local chat-model polish, keep rejecting prose or missing fields without applying the draft. Record
   only mode, language and missing heading names when validation fails; never
   log model text, attached images, prompts or credentials.
 - Tests compare prompt instructions and validation for both modes, including
   the non-H3 path.
+
+## Context-IR correction (2026-10-24)
+
+Runtime logs show a completed Context-IR response rejected locally because it
+lacked the `integrated_multimodal_description` heading. The raw returned text
+was not retained, so its remaining structure and quality are unverified.
+Context-IR returns one provider-native prompt; the adapter maps it to both
+display language fields. The three/six-heading and authored timeline checks
+belong to local chat-model polish, not to this provider-native response.
+Require a nonempty provider prompt in the Context-IR adapter and preserve the
+first/last frame and explicit dialogue checks where their inputs apply.

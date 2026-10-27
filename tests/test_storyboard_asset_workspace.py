@@ -4,8 +4,9 @@ from unittest.mock import Mock
 
 import pytest
 
-from src.apps.comic_gen.models import Character, Scene, Prop, Script, Series, StoryboardFrame, GlobalAssetLibrary
-from src.apps.comic_gen.pipeline import ComicGenPipeline
+from src.apps.comic_gen.models import Character, Scene, Prop, Script, Series, StoryboardFrame, GlobalAssetLibrary, ImageVariant
+from src.apps.comic_gen.pipeline import ComicGenPipeline, StaleStoryboardDraftError
+from src.apps.comic_gen.llm import ScriptProcessor
 
 
 @pytest.fixture
@@ -53,6 +54,82 @@ def test_storyboard_analysis_keeps_local_over_series_and_imported_copies(workspa
     assert [item["id"] for item in entities["props"]] == ["series-prop"]
 
 
+def test_storyboard_asset_context_uses_confirmed_design_and_marks_missing_variant(workspace):
+    pipeline, script = workspace
+    scene = Scene(id="shop", name="Grain shop", description="Shop")
+    scene.asset_design = {
+        "design_draft": {"asset_baseline": {"scene_identity": "unconfirmed shop"}},
+        "design_revisions": [{"revision": 2, "design": {"asset_baseline": {
+            "scene_identity": "confirmed shop", "environment": ["loft eave visible from entrance"],
+        }}}],
+    }
+    scene.image_asset.variants = [ImageVariant(id="active", url="scene.png", media_id="media-shop")]
+    scene.image_asset.selected_id = "active"
+    prop = Prop(id="sword", name="Sword", description="Sword")
+    prop.asset_design = {"design_draft": {"visual_notes": "unconfirmed gold"}, "design_revisions": []}
+    prop.image_asset.selected_id = "deleted"
+    script.scenes = [scene]
+    script.props = [prop]
+
+    _, entities, _ = pipeline.storyboard_analysis_context(script.id)
+    assert entities["asset_library_context"] == [
+        {"asset_type": "scene", "asset_id": "shop", "design_revision": 2,
+         "visual_baseline": {"scene_identity": "confirmed shop", "environment": ["loft eave visible from entrance"]},
+         "selected_variant": {"variant_id": "active", "media_id": "media-shop"}},
+        {"asset_type": "prop", "asset_id": "sword",
+         "selected_variant": {"variant_id": "deleted", "status": "missing"}},
+    ]
+    assert "unconfirmed" not in str(entities["asset_library_context"])
+
+
+def test_storyboard_model_prompt_receives_asset_context_separately_from_entity_ids():
+    processor = ScriptProcessor.__new__(ScriptProcessor)
+    processor.llm = Mock(is_configured=True)
+    processor.llm.chat.return_value = ('{"frames":[{"scene_ref_name":"粮铺",'
+                                      '"action_summary":"门前停步","visual_atmosphere":"黄昏",'
+                                      '"character_acting":"回望","key_action_physics":"站定",'
+                                      '"lighting":"侧光"}]}')
+    processor.analyze_to_storyboard("店门前", {
+        "characters": [], "scenes": [{"id": "shop", "name": "粮铺", "description": "店面"}], "props": [],
+        "asset_library_context": [{"asset_type": "scene", "asset_id": "shop", "design_revision": 2,
+                                   "visual_baseline": {"environment": ["可见阁楼屋檐"]}}],
+    })
+    prompt = processor.llm.chat.call_args.kwargs["messages"][0]["content"]
+    assert "<approved_asset_library_context>" in prompt
+    assert "可见阁楼屋檐" in prompt
+    assert "不表示图片已附件提交" in prompt
+
+
+def test_script_storyboard_draft_expires_when_approved_asset_context_changes(workspace):
+    pipeline, script = workspace
+    script.scenes = [Scene(id="shop", name="Shop", description="Shop")]
+    lineage = pipeline.storyboard_workflow_lineage(script.id, script.original_text, "script")
+    pipeline.validate_storyboard_lineage(script.id, script.original_text, lineage)
+
+    script.scenes[0].asset_design = {"design_draft": {}, "design_revisions": [{
+        "revision": 1, "design": {"asset_baseline": {"scene_identity": "Grain shop"}},
+    }]}
+    with pytest.raises(StaleStoryboardDraftError, match="storyboard_asset_context_hash"):
+        pipeline.validate_storyboard_lineage(script.id, script.original_text, lineage)
+
+
+def test_script_storyboard_draft_expires_when_selected_variant_disappears(workspace):
+    pipeline, script = workspace
+    scene = Scene(id="shop", name="Shop", description="Shop")
+    scene.image_asset.variants = [ImageVariant(id="view", url="view.png", media_id="media-view")]
+    scene.image_asset.selected_id = "view"
+    script.scenes = [scene]
+    lineage = pipeline.storyboard_workflow_lineage(script.id, script.original_text, "script")
+
+    scene.image_asset.variants = []
+    with pytest.raises(StaleStoryboardDraftError, match="storyboard_asset_context_hash"):
+        pipeline.validate_storyboard_lineage(script.id, script.original_text, lineage)
+    _, entities, _ = pipeline.storyboard_analysis_context(script.id)
+    assert entities["asset_library_context"][0]["selected_variant"] == {
+        "variant_id": "view", "status": "missing",
+    }
+
+
 def test_refinement_does_not_resolve_legacy_global_only_frame_references(workspace):
     pipeline, script = workspace
     frame = StoryboardFrame(id="frame", action_description="A quiet room.",
@@ -70,10 +147,8 @@ def test_render_preview_does_not_append_global_only_character_description(worksp
     pipeline, script = workspace
     frame = StoryboardFrame(id="frame", action_description="A quiet room.", scene_id="global-room", character_ids=["global-person"])
     script.frames = [frame]
-    result = pipeline.preview_storyboard_render_prompt(script.id, frame.id, "A quiet room.")
-    assert "A quiet room" in result
-    assert "Library person" not in result
-    assert "GLOBAL PERSON" not in result
+    with pytest.raises(ValueError, match="character:global-person:missing_asset"):
+        pipeline.preview_storyboard_render_prompt(script.id, frame.id, "A quiet room.")
 
 
 def test_batch_render_receives_project_assets_only(workspace):
@@ -123,6 +198,11 @@ def test_single_render_keeps_complete_prompt_and_project_assets(workspace):
     pipeline._save_data = Mock()
     pipeline._register_storyboard_frame_media = Mock()
     pipeline.storyboard_generator = Mock()
+    with pytest.raises(ValueError, match="character:global-person:missing_asset"):
+        pipeline.generate_storyboard_render(script.id, "frame", None, "Visible final prompt", prompt_is_complete=True)
+    assert not pipeline.storyboard_generator.generate_frame.called
+    script.frames[0].character_ids = []
+    script.frames[0].scene_id = ""
     pipeline.generate_storyboard_render(script.id, "frame", None, "Visible final prompt", prompt_is_complete=True)
     args, kwargs = pipeline.storyboard_generator.generate_frame.call_args
     assert args[1:3] == ([], None)

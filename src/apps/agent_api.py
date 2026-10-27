@@ -32,10 +32,13 @@ from ..utils.reference_files import AUDIO_EXTENSIONS, DOCUMENT_EXTENSIONS, TEXT_
 from .media_reference import normalize_managed_media_reference
 from .agent_tools import search_knowledge
 from . import agent_facts
+from .comic_gen.character_constraints import CharacterConstraints
+from .comic_gen.extraction_jobs import ExtractionJobs
 
 router = APIRouter(prefix="/agent", tags=["agent"])
 router.include_router(skills_router)
 logger = logging.getLogger(__name__)
+character_design_jobs = ExtractionJobs()
 
 COMPANION_SKILL_INSTRUCTIONS = {
     "listening": "以温和、尊重、简短、接地气的中文回应，优先倾听和安抚情绪。允许用户重复讲述，不纠正无关紧要的细节。适度提出一个开放问题，邀请分享回忆或近况；不要制造依赖或劝其疏远家人朋友。",
@@ -353,9 +356,13 @@ class CharacterDesignRequest(BaseModel):
     character_name: str = Field(min_length=1, max_length=200)
     profile: str = Field(min_length=1, max_length=12000)
     current_draft: str = Field(default="", max_length=8000)
+    dictionary_configurations: list[dict] = Field(default_factory=list, max_length=50)
+    structured_identity: dict[str, str] = Field(default_factory=dict)
+    structured_look: dict[str, str] = Field(default_factory=dict)
+    constraints: CharacterConstraints = Field(default_factory=CharacterConstraints)
     user_visual_requirements: CharacterDesignVisualRequirements = Field(default_factory=CharacterDesignVisualRequirements)
     user_answers: dict[str, str] = Field(default_factory=dict, max_length=20)
-    route: str
+    route: str = ""
     age_stage: str = ""
     style: str = Field(default="", max_length=4000)
     confirmed_design: str = Field(default="", max_length=4000)
@@ -493,8 +500,8 @@ def _character_design_visual_notes(section: dict) -> str:
     return "；".join(details)
 
 
-_CHARACTER_IDENTITY_FEATURES = ("face", "hair", "skin", "build", "recognition_marks")
-_CHARACTER_LOOK_FEATURES = ("clothing", "palette", "accessories", "weapon")
+_CHARACTER_IDENTITY_FEATURES = ("gender", "age", "face", "face_shape", "forehead", "cheekbones", "jaw", "chin", "eyebrows", "eyes", "eye_detail", "nose", "lips", "makeup", "hair", "skin", "skin_tone", "skin_texture", "height", "build", "recognition_marks")
+_CHARACTER_LOOK_FEATURES = ("clothing", "palette", "footwear", "jewelry", "decoration", "condition", "garment_condition", "jewelry_condition", "accessories", "weapon")
 
 
 def _character_design_features(section: dict, allowed: tuple[str, ...]) -> dict[str, str]:
@@ -504,6 +511,29 @@ def _character_design_features(section: dict, allowed: tuple[str, ...]) -> dict[
     if any(not isinstance(value, str) or len(value) > 500 for value in raw.values()):
         raise ValueError("Invalid character design feature value")
     return {key: raw[key].strip() for key in allowed if raw.get(key, "").strip()}
+
+
+_REALISM_REWRITE_TERMS = (
+    "概念设计", "插画", "动漫", "杰作级细节", "高质量", "电影感", "过度精修",
+    "磨皮", "塑料皮肤", "发光皮肤",
+)
+
+
+def _preserve_character_realism(text: str, current_draft: str) -> str:
+    """Keep explicit natural-skin/realism constraints effective after model completion."""
+    value = text.strip()
+    if not value:
+        return value
+    has_texture = "自然皮肤纹理" in current_draft or "肤质" in current_draft or "真人写实" in current_draft
+    if not has_texture:
+        return value
+    for term in _REALISM_REWRITE_TERMS:
+        value = value.replace(term, "")
+    value = re.sub(r"[；;。]+\s*(?=[；;。])", "；", value)
+    guard = "真人写实质感，保留可见毛孔与自然皮肤纹理，不磨皮、不塑料化、不做艺术化重绘"
+    if guard not in value:
+        value = f"{value.rstrip('；;。')}；{guard}"
+    return value
 
 
 def _character_design_review_needs_revision(result: dict) -> bool:
@@ -527,8 +557,15 @@ def _character_design_review_needs_revision(result: dict) -> bool:
 
 def _compile_character_design_draft_input(body: CharacterDesignRequest, ctx: UserContext) -> dict:
     validate_model(ctx, body.model)
+    try:
+        _character_design_features({"features": body.structured_identity}, _CHARACTER_IDENTITY_FEATURES)
+        _character_design_features({"features": body.structured_look}, _CHARACTER_LOOK_FEATURES)
+    except ValueError:
+        raise HTTPException(422, "角色结构化字段名称、类型或长度无效") from None
+    if len(json.dumps(body.dictionary_configurations, ensure_ascii=False)) > 60000:
+        raise HTTPException(422, "词典配置快照过大，请减少配置数量")
     allowed_routes = {"realistic-modern", "historical-costume", "xianxia-fantasy", "anime-stylized"}
-    if body.route not in allowed_routes:
+    if body.route and body.route not in allowed_routes:
         raise HTTPException(422, "不支持的角色设计路由")
     allowed_age_stages = {"child", "teen", "young-adult", "adult", "older-adult"}
     if len(body.user_answers) > 12 or any(
@@ -540,17 +577,27 @@ def _compile_character_design_draft_input(body: CharacterDesignRequest, ctx: Use
     identity_skill = packages["character-identity-design"]
     route_skill = packages["character-style-routes"]
     system = (identity_skill["instructions"] + "\n\n" + route_skill["instructions"]
-              + "\n\n用户主动点击了生成角色设计草稿；你的任务是替用户完成可直接评审和用于出图的创意设计，不是列出待办清单。"
+              + "\n\n用户主动点击了 AI 完善角色设计；你的任务是替用户完成可直接评审和用于出图的创意设计，不是列出待办清单。"
               + "只返回 JSON 对象：identity.visual_notes、identity.features、identity.basis、look.visual_notes、look.features、look.basis、review_items（对象数组，每项含 question 和 suggestion，可选 suggested_age_stage 或 suggested_route）。"
-              + "identity.features 仅含 face、hair、skin、build、recognition_marks；look.features 仅含 clothing、palette、accessories、weapon。每项是简短、可观察的视觉值，无依据可留空，不得把性格或场景光影填入。visual_notes 是兼容旧工作台的摘要，不应增加 features 中没有的新事实。"
+              + "identity.features 仅含 gender、age、face、face_shape、forehead、cheekbones、jaw、chin、eyebrows、eyes、eye_detail、nose、lips、makeup、hair、skin、skin_tone、skin_texture、height、build、recognition_marks；look.features 仅含 clothing、palette、footwear、jewelry、decoration、condition、garment_condition、jewelry_condition、accessories、weapon。衣物与首饰的新旧状态分别放入 garment_condition、jewelry_condition；condition 仅用于读取旧版综合状态。性别、年龄、脸型、额头、颧骨、下颌、下巴、眉形、眼型、眼周、肤色、肤质必须分别放入对应字段，不合并到 face 或 skin；face/skin 仅用于无法分类的补充。每项是简短、可观察的视觉值，无依据可留空，不得把性格或场景光影填入。visual_notes 是兼容旧工作台的摘要，不应增加 features 中没有的新事实。"
+              + "一次完成当前草稿的表达整理与缺失细节提案，不要求用户再进行一次润色。保留用户已明确选择或填写的身高、肤色、服装件数、穿着关系、材质和配饰，不得为了丰富细节擅自改写。height 单独描述身高，不混入体型或姿态；未给出数值时可以提出身高感，不得由单张参考图推断精确厘米数。"
+              + '严格格式示例（只说明形状，不是默认设计）：{"identity":{"visual_notes":"面容与体态摘要","features":{"face":"具体面容","height":"用户指定的身高描述"},"basis":["user_specified"]},"look":{"visual_notes":"穿搭摘要","features":{"clothing":"具体穿着关系"},"basis":["user_specified"]},"review_items": []}。'
+              + "identity 和 look 必须为对象，features 必须为对象，其值必须为字符串；每个 features 值最多 500 个字符，不要使用对象或数组包装。未指定项可省略或用空字符串，不得将缺失字段写成 null。visual_notes 必须为字符串，review_items 必须为数组，无冲突时返回空数组 []。不要输出 Markdown 或 JSON 之外的解释。"
+              + "current_draft 是当前由用户编辑的角色细节，其中明确的视觉选择视为 user_specified；与 profile 中外观描述不同时保留用户选择，并仅对确实需要确认的冲突给出具体建议，不得直接拒绝设计或只返回问题。"
+              + "structured_identity 和 structured_look 是用户明确编辑的字段，必须逐项保留；仅补缺失项，不得用 current_draft 的旧摘要覆盖这些字段。dictionary_configurations 是之前应用词典的来源快照，可能已经被用户手动改过，不得覆盖当前显式字段和 current_draft。"
+              + "constraints.must_keep 是必须保留的用户要求；constraints.negative_prompt 是禁止出现的内容，不能作为正向描述。它们独立于身份和造型字段，不得改写或新增这些数组；遇到冲突在 review_items 提出具体核对建议。"
               + "basis 只能使用 script_fact、user_specified、confirmed_design、verified_reference、creative_choice；可用字符串数组表示混合来源。"
               + "每段视觉值必须具体、可观察、彼此协调。不得把角色性格、镜头动作或通用质量词写入视觉值。"
               + "群体角色须先给出统一主色、统一服装轮廓和一个视觉焦点，再用少量面孔或体型差异区分成员；杂色、拼凑和脏污应在受控色系内表现，不要扩展成多种抢眼颜色与层叠碎片。用户要求简化服装时，减少层数、配饰和兵器展示，不得一边保留满屏装饰一边只追加‘简化’字样。"
-              + "profile 是项目角色档案；user_visual_requirements.identity 和 .look 是用户在生成前明确填写的视觉约束，必须保留并据此补全设计。current_draft 是上一轮可编辑草稿，优先级低于用户视觉约束；user_answers 是用户明确回答。不得把 current_draft 当成剧本事实，也不得覆盖 confirmed_design 的已确认识别特征。"
+              + "profile 是项目角色档案；user_visual_requirements.identity 和 .look 是用户在生成前明确填写的视觉约束，必须保留并据此补全设计。current_draft 是用户当前编辑的角色视觉要求，优先采用其中明确的选择；user_answers 是用户明确回答。不得把 current_draft 当成剧本事实；与 confirmed_design 的已确认识别特征冲突时保留具体设计并给出冲突建议。"
+              + "AI 完善是保守编辑，不是重写或概念设计改编。current_draft 是出图约束的基线：脸型、五官、肤色、肤质、体型、身高、衣物件数、穿着关系、颜色、材质、鞋履、背景和真实感要求必须逐项保留。visual_notes 应使用原始措辞或等价的具体摄影语言表达，不得把原文压缩成抽象标签。"
+              + "若 current_draft 已明确真人写实、自然皮肤纹理或不磨皮倾向，禁止新增概念设计、插画、动漫、杰作级细节、高质量、电影感、过度精修、磨皮、塑料皮肤、发光皮肤等词。除非原文缺失，不新增发髻、发冠、发带、首饰、妆容、兵器、叠穿或衣物结构；不把‘补全’理解为增加装饰。"
+              + "输出的 visual_notes 和 features 只补充当前草稿真正缺失且有必要的可观察细节；如果没有必要补充，直接保留原文对应内容。不得用‘概念设计’作为开头，不得加入质量评价或生成参数。"
               + "对缺少描写但可创作的外貌和造型细节，结合人物档案、选定题材 / 时代 / 年龄阶段、项目画风及参考素材，给出一套明确方案并标为 creative_choice；尤其需要补齐可用于出图的服装结构、面料、鞋履、发式和配饰。少年感与 young-adult 可以兼容，请设计年轻成年人中偏少年的可见年龄表现，不要仅因此列待核对。不要把每个缺失字段变成 review_item。"
               + "不得把创意选择伪装成剧本事实；不要依据姓名、职业或族裔刻板推断肤色、阶层或其他身份事实。没有可靠史实上下文时，将服饰方案明确写成与题材相容的架空设计，而不是声称具体朝代规制。"
-              + "review_items 只用于输入中有明确相互矛盾的事实或已确认设定时的关键抉择；资料未提及年龄观感、画风、五官、体型或服饰细节不是冲突，请直接设计并标为 creative_choice。每项只写一个原子问题并提供一条可直接采纳的 suggestion；没有具体建议时不要输出 review_item。suggestion 必须是可直接加入图片 Prompt 的视觉值，不能是让用户修改表单、选择路由或回答问题的操作指令。不要把常规的造型细节放入 review_items，也不要输出旧字段 unresolved。"
+              + "review_items 只用于输入中有明确相互矛盾的事实或已确认设定时的关键抉择；资料未提及年龄观感、画风、五官、体型或服饰细节不是冲突，请直接设计并标为 creative_choice。每项只写一个原子问题，question 直接引用相互冲突的两项要求并包含“冲突”或“矛盾”，同时提供一条可直接采纳的 suggestion；没有具体建议时不要输出 review_item。suggestion 必须是可直接加入图片 Prompt 的视觉值，不能是让用户修改表单、选择路由或回答问题的操作指令。不要把常规的造型细节放入 review_items，也不要输出旧字段 unresolved。"
               + "若建议改变年龄阶段或题材画风，同时提供与 suggestion 一致的 suggested_age_stage 或 suggested_route；否则工作台选项与图片 Prompt 会冲突。"
+              + "route 为空表示用户未另外指定题材路由，依据 profile 与 current_draft 中明确给出的时代、服装和画风设计，不默认补成现代写实。current_draft 可以是用户当前编辑的图片 Prompt，应保留其中明确的角色细节；白底、构图、拍摄景别等资产出图指令不写入 identity 或 look。"
               + "参考图片是只读视觉证据，只能描述图中清晰可见的内容；不要推断图外事实。不要把图中其他人物或物品混为本角色。")
     source = body.model_dump(exclude={"reviewed_messages", "review_token"})
     user_data = body.model_dump(exclude={"model", "project_id", "reference_assets", "reviewed_messages", "review_token"})
@@ -608,6 +655,10 @@ def preview_character_design_draft(body: CharacterDesignRequest, ctx: UserContex
 @router.post("/character-design/draft")
 def character_design_draft(body: CharacterDesignRequest, ctx: UserContext = Depends(require_user_context)):
     prepared = _compile_character_design_draft_input(body, ctx)
+    return _run_character_design_draft(body, ctx, prepared)
+
+
+def _run_character_design_draft(body: CharacterDesignRequest, ctx: UserContext, prepared: dict):
     allowed_age_stages = prepared["allowed_age_stages"]
     allowed_routes = prepared["allowed_routes"]
     messages = body.reviewed_messages
@@ -633,14 +684,26 @@ def character_design_draft(body: CharacterDesignRequest, ctx: UserContext = Depe
             raise ValueError("Invalid design sections")
         identity_features = _character_design_features(identity, _CHARACTER_IDENTITY_FEATURES)
         look_features = _character_design_features(look, _CHARACTER_LOOK_FEATURES)
+        if body.current_draft and any(term in body.current_draft for term in ("自然皮肤纹理", "肤质", "真人写实")):
+            if "skin" in identity_features:
+                identity_features["skin"] = _preserve_character_realism(identity_features["skin"], body.current_draft)
+        # Explicit panel choices win over model proposals for the same field.
+        identity_features.update(_character_design_features({"features": body.structured_identity}, _CHARACTER_IDENTITY_FEATURES))
+        look_features.update(_character_design_features({"features": body.structured_look}, _CHARACTER_LOOK_FEATURES))
         identity_notes = _character_design_visual_notes(identity)
         look_notes = _character_design_visual_notes(look)
+        if body.structured_identity:
+            identity_notes = "；".join(identity_features.values())
+        if body.structured_look:
+            look_notes = "；".join(look_features.values())
         if not identity_notes and identity_features:
             identity_notes = "；".join(identity_features.values())
         if not look_notes and look_features:
             look_notes = "；".join(look_features.values())
         if not identity_notes:
             raise ValueError("Missing concrete identity design")
+        identity_notes = _preserve_character_realism(identity_notes, body.current_draft)
+        look_notes = _preserve_character_realism(look_notes, body.current_draft)
         review_items = result.get("review_items") or []
         if not isinstance(review_items, list):
             raise ValueError("Invalid review items")
@@ -712,8 +775,25 @@ def character_design_draft(body: CharacterDesignRequest, ctx: UserContext = Depe
             else:
                 raise ValueError("Invalid unresolved item")
         unresolved = list(dict.fromkeys(unresolved))
-    except (ValueError, TypeError):
-        raise HTTPException(502, "角色设计模型未返回可编辑的结构化草稿，请重试")
+    except (ValueError, TypeError) as exc:
+        # Report bounded validation reasons; never log the profile, model prose or credentials.
+        reasons = {
+            "Missing character design object": ("missing_object", "未返回包含 identity 和 look 的 JSON 对象"),
+            "Model returned review items without design suggestions": ("invalid_review", "返回了待办问题或不完整的冲突建议"),
+            "Invalid design sections": ("invalid_sections", "identity 或 look 不是对象"),
+            "Invalid character design features": ("invalid_features", "视觉字段名称或结构不符合要求"),
+            "Invalid character design feature value": ("invalid_feature_value", "视觉字段的类型或长度不符合要求"),
+            "Missing concrete identity design": ("missing_identity", "缺少具体的角色外观设计"),
+            "Invalid review items": ("invalid_review_items", "冲突建议不是数组"),
+            "Invalid review item": ("invalid_review_item", "冲突建议字段格式不符合要求"),
+            "Invalid suggested age stage": ("invalid_age_stage", "建议的年龄阶段不符合要求"),
+            "Invalid suggested route": ("invalid_route", "建议的题材路由不符合要求"),
+        }
+        reason, detail = reasons.get(str(exc), ("invalid_schema", "返回字段结构不符合要求"))
+        diagnostic_id = uuid.uuid4().hex[:12]
+        logger.warning("Character design rejected: diagnostic_id=%s model=%s reason=%s answer_chars=%s",
+                       diagnostic_id, body.model, reason, len(answer))
+        raise HTTPException(502, f"角色设计模型返回校验失败：{detail}。请重试或切换设计模型（诊断编号 {diagnostic_id}）") from None
     return {
         "identity": {"visual_notes": identity_notes.strip(), "features": identity_features, "basis": identity.get("basis", ["creative_choice"])},
         "look": {"visual_notes": look_notes.strip(), "features": look_features, "basis": look.get("basis", ["creative_choice"])},
@@ -722,19 +802,68 @@ def character_design_draft(body: CharacterDesignRequest, ctx: UserContext = Depe
         "field_suggestion_choices": suggestion_choices,
         "skill_revision": prepared["route_skill_revision"],
         "identity_skill_revision": prepared["identity_skill_revision"],
+        "constraints": body.constraints.model_dump(),
     }
+
+
+@router.post("/character-design/draft/jobs", status_code=202)
+def start_character_design_draft_job(body: CharacterDesignRequest, ctx: UserContext = Depends(require_user_context)):
+    prepared = _compile_character_design_draft_input(body, ctx)
+    # Reject stale or malformed reviewed input before creating a durable task.
+    messages = body.reviewed_messages
+    if not body.review_token or body.review_token != prepared["review_token"] or not messages:
+        raise HTTPException(409, "角色设计输入已变化，请重新预览并确认")
+    if set(messages) != {"system", "user"} or not messages["user"].strip():
+        raise HTTPException(422, "确认后的模型输入缺少用户消息")
+    if "identity" not in messages["system"] or "look" not in messages["system"]:
+        raise HTTPException(422, "角色设计输出格式已被移除，请恢复后再提交")
+
+    def work():
+        try:
+            return _run_character_design_draft(body, ctx, prepared)
+        except HTTPException as exc:
+            return {"detail": exc.detail if isinstance(exc.detail, str) else "角色设计失败，请重试。"}
+        except Exception as exc:
+            logger.error("Character design job failed (%s)", type(exc).__name__)
+            return {"detail": "角色设计任务失败，请检查模型连接后重试。"}
+
+    project = f"character-design:{body.project_id or 'personal'}:{body.character_name}"
+    return character_design_jobs.start(
+        ctx.owner_profile_id, project, f"character-design:{uuid.uuid4().hex}", work,
+    )
+
+
+@router.get("/character-design/draft/jobs/{job_id}")
+def get_character_design_draft_job(job_id: str, ctx: UserContext = Depends(require_user_context)):
+    return character_design_jobs.get_for_project_prefix(
+        ctx.owner_profile_id, "character-design", job_id, "character-design:",
+    )
 
 
 def _compile_asset_design_draft_input(body: AssetDesignRequest, ctx: UserContext) -> dict:
     subject = "场景环境" if body.asset_type == "scene" else "道具物件"
-    system = (
-        f"你是影视美术设计助手，负责设计{subject}。根据资产档案、用户要求和当前草稿，"
-        "生成可直接用于图片生成的、具体可观察的视觉设计。保持资产身份，不新增剧情事实。"
-        "优先采用用户要求；模型补充只能作为 creative_choice。避免空泛的电影感、杰作、高质量等词。"
-        "只返回一个 JSON，不要 Markdown："
-        '{"visual_notes":"可直接用于出图的主体视觉设计",'
-        '"unresolved":["仅列出会阻碍设计的关键歧义"]}'
-    )
+    if body.asset_type == "scene":
+        scene_skill = (Path(__file__).resolve().parents[2] /
+                       "config/agent_skills/scene-asset-extraction/SKILL.md").read_text(encoding="utf-8")
+        system = (
+            "你是场景资产提取助手。遵守以下场景 Skill：\n"
+            f"{scene_skill}\n"
+            "只返回一个 JSON，不要 Markdown："
+            '{"asset_baseline":{"scene_identity":"", "location_type":"", "fixed_geometry":[], '
+            '"fixed_landmarks":[], "materials":[], "environment":[], "time_baseline":"", '
+            '"lighting_baseline":"", "composition_tendency":"", "reusable_constraints":[], '
+            '"basis":[]}, "shot_only_content":[], "visual_notes":"仅为兼容展示的场景基线摘要", '
+            '"uncertainties":[], "unresolved":[]}'
+        )
+    else:
+        system = (
+            f"你是影视美术设计助手，负责设计{subject}。根据资产档案、用户要求和当前草稿，"
+            "生成可直接用于图片生成的、具体可观察的视觉设计。保持资产身份，不新增剧情事实。"
+            "优先采用用户要求；模型补充只能作为 creative_choice。避免空泛的电影感、杰作、高质量等词。"
+            "只返回一个 JSON，不要 Markdown："
+            '{"visual_notes":"可直接用于出图的主体视觉设计",'
+            '"unresolved":["仅列出会阻碍设计的关键歧义"]}'
+        )
     source = body.model_dump(exclude={"reviewed_messages", "review_token"})
     asset_snapshot = None
     if bool(body.project_id) != bool(body.asset_id):
@@ -756,7 +885,8 @@ def _compile_asset_design_draft_input(body: AssetDesignRequest, ctx: UserContext
                                       "asset": asset_snapshot, "compiled": messages},
                                      ensure_ascii=False, sort_keys=True, default=str).encode()).hexdigest()
     return {"messages": messages, "media": [], "review_token": token,
-            "format_note": "模型只返回含 visual_notes 和 unresolved 的 JSON；结构冲突会在调用前拒绝。"}
+            "format_note": ("场景模型返回 asset_baseline、shot_only_content、visual_notes 和 uncertainties；"
+                             "道具模型返回 visual_notes 和 unresolved。结构冲突会在调用前拒绝。")}
 
 
 @router.post("/asset-design/draft/preview")
@@ -796,11 +926,39 @@ def asset_design_draft(body: AssetDesignRequest, ctx: UserContext = Depends(requ
                 break
         if not result or not result["visual_notes"].strip():
             raise ValueError("missing_visual_notes")
-        unresolved = result.get("unresolved") or []
-        if not isinstance(unresolved, list) or not all(isinstance(item, str) for item in unresolved):
-            raise ValueError("invalid_unresolved")
+        if body.asset_type == "scene":
+            baseline = result.get("asset_baseline")
+            shot_only = result.get("shot_only_content") or []
+            uncertainties = result.get("uncertainties") or []
+            if not isinstance(baseline, dict) or not isinstance(shot_only, list) or not isinstance(uncertainties, list):
+                raise ValueError("invalid_scene_asset_extraction")
+            if not all(isinstance(item, str) for item in shot_only + uncertainties):
+                raise ValueError("invalid_scene_asset_extraction_items")
+            required = {"scene_identity", "location_type", "fixed_geometry", "fixed_landmarks",
+                        "materials", "environment", "time_baseline", "lighting_baseline",
+                        "composition_tendency", "reusable_constraints", "basis"}
+            if set(baseline) - required or not required.issubset(baseline):
+                raise ValueError("invalid_scene_asset_baseline_fields")
+            for key in ("fixed_geometry", "fixed_landmarks", "materials", "environment", "reusable_constraints", "basis"):
+                if not isinstance(baseline[key], list) or not all(isinstance(item, str) for item in baseline[key]):
+                    raise ValueError("invalid_scene_asset_baseline_items")
+            if not all(isinstance(baseline.get(key), str) for key in (
+                "scene_identity", "location_type", "time_baseline", "lighting_baseline", "composition_tendency")):
+                raise ValueError("invalid_scene_asset_baseline_values")
+            result["unresolved"] = uncertainties
+        else:
+            unresolved = result.get("unresolved") or []
+            if not isinstance(unresolved, list) or not all(isinstance(item, str) for item in unresolved):
+                raise ValueError("invalid_unresolved")
     except (ValueError, TypeError):
         raise HTTPException(502, "场景/道具设计模型未返回可编辑草稿，请重试") from None
+    if body.asset_type == "scene":
+        return {
+            "asset_baseline": result["asset_baseline"],
+            "shot_only_content": result["shot_only_content"][:24],
+            "visual_notes": result["visual_notes"].strip(),
+            "uncertainties": result["unresolved"][:12],
+        }
     return {"visual_notes": result["visual_notes"].strip(), "unresolved": unresolved[:12]}
 
 

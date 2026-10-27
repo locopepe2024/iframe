@@ -103,6 +103,7 @@ export interface ImageEditorProps {
   source?: string;
   title: string;
   emptyState?: ReactNode;
+  headerActions?: ReactNode;
   toolPanel?: ReactNode;
   onModified?: () => void;
   onSavePanoramaSource?: () => Promise<void>;
@@ -113,7 +114,7 @@ export interface ImageEditorProps {
   onClose: () => void;
 }
 
-export default function ImageEditor({ source, title, emptyState, toolPanel, onModified, onSavePanoramaSource, projectionType = 'perspective_plane', panoramaEligible = false, onProjectionChange, onSave, onClose }: ImageEditorProps) {
+export default function ImageEditor({ source, title, emptyState, headerActions, toolPanel, onModified, onSavePanoramaSource, projectionType = 'perspective_plane', panoramaEligible = false, onProjectionChange, onSave, onClose }: ImageEditorProps) {
   const t = useTranslations('imageEditor');
   const locale = useLocale();
   const dialog = useRef<HTMLDivElement>(null);
@@ -175,7 +176,7 @@ export default function ImageEditor({ source, title, emptyState, toolPanel, onMo
       <div className="flex h-full min-w-0 flex-col">
         <header className="flex shrink-0 items-center justify-between gap-3 border-b border-glass-border px-4 py-2">
           <div className="min-w-0"><h2 id="image-editor-title" className="font-semibold">{t('title')}</h2><p className="truncate text-sm text-text-muted">{title}</p></div>
-          <button ref={closeButton} type="button" disabled={saving} onClick={close} aria-label={t('close')} className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg hover:bg-hover-bg focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary"><X size={20} /></button>
+          <div className="flex shrink-0 items-center gap-2">{headerActions}<button ref={closeButton} type="button" disabled={saving} onClick={close} aria-label={t('close')} className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg hover:bg-hover-bg focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary"><X size={20} /></button></div>
         </header>
         {source && <div className="flex flex-wrap items-center gap-2 border-b border-glass-border px-4 py-2 text-sm">
           <label className="flex items-center gap-2">{t('projection')}
@@ -188,6 +189,9 @@ export default function ImageEditor({ source, title, emptyState, toolPanel, onMo
             {viewingPanorama ? <Pencil size={16} /> : <Rotate3D size={16} />}{viewingPanorama ? t('edit') : t('browsePanorama')}
           </button>}
           {projectionType === 'equirectangular' && onSavePanoramaSource && <button type="button" disabled={saving} onClick={() => void savePanoramaSource()} className="inline-flex min-h-9 items-center gap-2 rounded border border-glass-border px-3 hover:bg-hover-bg"><Save size={16}/>{t('savePanoramaSource')}</button>}
+        </div>}
+        {!source && <div className="flex shrink-0 items-center gap-1 border-b border-glass-border bg-surface px-4 py-2 text-xs text-text-muted" aria-label={t('tools')}>
+          {['Adjust', 'Finetune', 'Filters', 'Annotate', 'Watermark', 'Resize'].map(tool => <span key={tool} className="rounded px-3 py-1.5 opacity-50">{tool}</span>)}
         </div>}
         {error && <p role="alert" className="px-4 py-2 text-status-failed-fg">{error}</p>}
         {saving && <p role="status" className="px-4 py-2 text-sm">{t('saving')}</p>}

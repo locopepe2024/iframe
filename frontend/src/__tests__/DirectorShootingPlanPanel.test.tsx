@@ -344,7 +344,7 @@ it("regenerates a new unsaved plan from the current confirmed Director and can r
 
     expect(await screen.findByText("No confirmed shooting plan matches Director v6.")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Generate plan draft" }));
-    await waitFor(() => expect(generate).toHaveBeenCalledWith("film", expect.any(Function)));
+    await waitFor(() => expect(generate).toHaveBeenCalledWith("film", expect.any(Function), []));
     expect(await screen.findByText(/Unsaved plan draft generated from confirmed Director v6.*replace server draft r5/i)).toBeInTheDocument();
     expect(screen.queryByText(/Saved shooting-plan draft r5 is based on confirmed Director v4/i)).not.toBeInTheDocument();
     expect(save).not.toHaveBeenCalled();
@@ -484,4 +484,26 @@ it("treats generated lighting wording as inherited and asks once when an overrid
     fireEvent.click(screen.getByRole("button", { name: "Confirm shooting plan" }));
     await waitFor(() => expect(confirm).toHaveBeenCalled());
     expect(confirmPrompt).toHaveBeenCalledTimes(1);
+});
+
+vi.mock("@/lib/directorSkills", () => ({ useDirectorSkills: () => ({ catalog: [], selected: [], loading: false, saving: false, error: "", canRun: true, update: vi.fn(), retry: vi.fn() }) }));
+
+it("keeps an editable disclosure boundary in the saved plan", async () => {
+    const detailed = structuredClone(plan);
+    detailed.scenes[0].beats[0].shots[0].information_design = {
+        audience_question: "信物属于谁", audience_knows: "角色发现信物", character_knows: "角色知道归属",
+        withhold: "信物姓名", presentation: "先看反应", source_event_ids: ["event-cinema"],
+        reveal_event_ids: [], payoff_event_ids: [], evidence_status: "needs_review",
+    };
+    vi.spyOn(api, "getDirectorShootingPlan").mockResolvedValue(state(detailed, 1));
+    const save = vi.spyOn(api, "saveDirectorShootingPlanDraft").mockImplementation(async (_id, _source, revision, draft) => ({ project_id: "film", draft_revision: revision + 1, draft_updated_at: 20, draft }));
+    render(<NextIntlClientProvider locale="en" messages={messages}><DirectorShootingPlanPanel /></NextIntlClientProvider>);
+    await screen.findByText("Cinema entrance");
+    fireEvent.click(screen.getByText("Shot 1 · Follow the couple · Medium shot"));
+    const details = await screen.findByText("观众信息与揭示安排");
+    fireEvent.click(details);
+    fireEvent.change(screen.getByLabelText("当前镜头暂缓展示"), { target: { value: "不得展示信物姓名和刻字" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save draft" }));
+    await waitFor(() => expect(save).toHaveBeenCalled());
+    expect(save.mock.calls[0][3].scenes[0].beats[0].shots[0].information_design?.withhold).toBe("不得展示信物姓名和刻字");
 });

@@ -291,6 +291,9 @@ export default function ScriptProcessor() {
                 isOpen={reconcileOpen}
                 scriptId={currentProject?.id ?? null}
                 onClose={() => setReconcileOpen(false)}
+                onApplied={() => {
+                    if (currentProject?.id) void useProjectStore.getState().selectProject(currentProject.id);
+                }}
             />
 
         </div>

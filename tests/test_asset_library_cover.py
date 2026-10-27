@@ -59,13 +59,13 @@ def test_cover_selection_accepts_any_character_container_and_keeps_category_sele
     assert character.reference_sheet.selected_image_id == "reference-1"
     assert character.full_body_asset.selected_id == "body-1"
     indexed = pipeline.get_asset_reference_index("project-1").assets[0]
-    assert indexed.selected_variant_id == "reference-1"
+    assert indexed.selected_variant_id == "body-1"
     assert indexed.cover_variant_id == "body-1"
     project = pipeline.scripts["project-1"]
     pipeline.list_series = lambda *_args: []
     pipeline.list_scripts = lambda *_args: [project]
     library_index = pipeline.get_asset_library_reference_index().assets[0]
-    assert library_index.selected_variant_id == "reference-1"
+    assert library_index.selected_variant_id == "body-1"
     assert library_index.cover_variant_id == "body-1"
 
 
@@ -106,7 +106,7 @@ def test_cover_selection_rejects_variant_not_owned_by_asset():
     assert getattr(character, "cover_variant_id", None) is None
 
 
-def test_category_selection_does_not_override_explicit_library_cover():
+def test_character_selection_sets_cover_and_default_reference_together():
     character = Character(
         id="character-1",
         name="Actor",
@@ -125,10 +125,12 @@ def test_category_selection_does_not_override_explicit_library_cover():
 
     pipeline.select_asset_variant("project-1", "character-1", "character", "reference-1", "reference_sheet")
 
-    assert character.cover_variant_id == "body-1"
+    assert character.cover_variant_id == "reference-1"
     indexed = pipeline.get_asset_reference_index("project-1").assets[0]
     assert indexed.selected_variant_id == "reference-1"
-    assert indexed.cover_variant_id == "body-1"
+    assert indexed.cover_variant_id == "reference-1"
+    assert character.asset_pack is None
+    assert not character.reference_sheet.image_variants[0].is_favorited
 
 
 def test_deleting_explicit_cover_clears_pointer_and_restores_valid_fallback():
@@ -174,3 +176,25 @@ def test_cover_route_returns_compact_ack_without_loading_project(monkeypatch):
 
     assert response.headers["cache-control"] == "private, no-store"
     assert response.body == b'{"asset_type":"character","asset_id":"character-1","cover_variant_id":"body-1","variant":{"id":"body-1","url":"body.png","created_at":1}}'
+
+
+@pytest.mark.parametrize("generation_type,field", [("full_body", "full_body_asset"), ("three_view", "three_view_asset"), ("headshot", "headshot_asset")])
+def test_character_category_selection_becomes_default_reference(generation_type, field):
+    character = Character(id="actor", name="Actor", description="Actor",
+        reference_sheet=AssetUnit(selected_image_id="old", image_variants=[ImageVariant(id="old", url="old.png")]),
+        **{field: ImageAsset(variants=[ImageVariant(id="pick", url="pick.png")])})
+    pipeline, _ = make_pipeline(character, "character")
+    pipeline.select_asset_variant("project-1", "actor", "character", "pick", generation_type)
+    assert character.cover_variant_id == "pick"
+    assert pipeline._selected_asset_variant_id(character, "character") == "pick"
+    from src.apps.comic_gen.assets import AssetGenerator
+    assert AssetGenerator._selected_reference_sheet_url(character) == "pick.png"
+
+
+def test_invalid_character_selection_keeps_cover():
+    character = Character(id="actor", name="Actor", description="Actor", cover_variant_id="old",
+        full_body_asset=ImageAsset(selected_id="old", variants=[ImageVariant(id="old", url="old.png")]))
+    pipeline, _ = make_pipeline(character, "character")
+    with pytest.raises(ValueError, match="does not belong"):
+        pipeline.select_asset_variant("project-1", "actor", "character", "missing", "full_body")
+    assert character.cover_variant_id == "old"

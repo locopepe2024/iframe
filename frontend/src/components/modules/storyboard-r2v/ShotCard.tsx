@@ -28,8 +28,14 @@ import { useTranslations } from "next-intl";
 import AssetChipBar from "./AssetChipBar";
 import PromptExpandModal from "./PromptExpandModal";
 import PolishPanel from "./PolishPanel";
+import MicroExpressionPanel from "./MicroExpressionPanel";
+import CameraMovementPanel from "./CameraMovementPanel";
+import ShotFieldPanel from "./ShotFieldPanel";
+import type { ExtraRosterEntry, ExtraShotInstance } from "@/store/projectStore";
 import FieldTagChip, { AddFieldButton, type FieldType } from "./FieldTagChip";
 import { buildGenerationPrompt, directorShotSuggestions } from "./buildAssembledPrompt";
+import { CHARACTER_MOVE_DICTIONARY, findCharacterMove } from "@/lib/characterMoveDictionary";
+import { directorFieldProposals } from "./directorFieldProposals";
 import { resolveShotVideoInput } from "./shotVideoInput";
 import { PendingTaskAffordance } from "@/components/shared/PendingTaskAffordance";
 import PreviewImage from "@/components/shared/preview/PreviewImage";
@@ -144,10 +150,44 @@ export interface ShotNode {
     } | null;
     shotSize?: string | null;
     cameraAngle?: string | null;
+    composition?: string | null;
     transitionHint?: string | null;
     stylePromptOverride?: string | null;
     lightingOverride?: string | null;
     negativePromptOverride?: string | null;
+    moveRef?: string | null;
+    moveVariant?: string | null;
+    performanceMoves?: Array<{ characterId: string; moveRef: string; moveVariant?: string | null }>;
+    crowdInstances?: ExtraShotInstance[];
+    richRefinementCandidate?: {
+        id: string;
+        source: string;
+        mode?: string;
+        fields: Record<string, unknown>;
+        current_fields: Record<string, unknown>;
+        rationale: Record<string, string>;
+    } | null;
+    microExpressionCandidate?: {
+        id: string;
+        items: Array<{ character_id: string; emotion_intent: string; timing: Array<{ phase: string; visible_change: string; relative_start: number; relative_end: number }>; uncertainties?: string[]; facial_channels?: Record<string, string> }>;
+    } | null;
+    microExpressionTiming?: Array<{
+        character_id: string;
+        character_name?: string;
+        timing: Array<{ phase: string; visible_change: string; relative_start: number; relative_end: number }>;
+    }>;
+    cameraMovementCandidate?: {
+        id: string;
+        camera_movement_structured: { primary: string; secondary?: string | null; speed: string; description?: string | null };
+        rationale: string; source_refs: string[]; uncertainties: string[];
+    } | null;
+    shotFieldCandidate?: {
+        id: string;
+        fields: Record<string, unknown>;
+        rationale: Record<string, string>;
+        source_refs: Record<string, string[]>;
+        uncertainties: string[];
+    } | null;
 
     /** When true, the user has manually pinned an active take. Hero
      *  shows a "Pinned" chip; autoSelectLatestVideo skips this frame on
@@ -158,6 +198,7 @@ export interface ShotNode {
 
 /** Cap on T2I image history per shot. Older drops off FIFO when adding. */
 export const T2I_HISTORY_LIMIT = 10;
+type PerformanceMoveValue = { characterId: string; moveRef: string; moveVariant?: string | null }[];
 
 interface ShotCardProps {
     projectId?: string;
@@ -165,6 +206,7 @@ interface ShotCardProps {
     generateAudio?: boolean;
     targetDuration?: number;
     referenceImageUrls?: string[];
+    onResolvePolishReferences?: () => Promise<{ urls: string[]; slots: { slot: number; asset_id: string; asset_type: "character" | "scene" | "prop"; name: string; variant_ids: string[]; description: string }[] }>;
     videoModel?: string;
     shot: ShotNode;
     index: number;
@@ -172,10 +214,14 @@ interface ShotCardProps {
     characters: any[];
     scenes: any[];
     props: any[];
+    extraRoster?: ExtraRosterEntry[];
+    onUpdateCrowdInstances?: (instances: ExtraShotInstance[]) => void;
     assetIndex?: AssetReferenceIndexEntry[];
     onUpdatePrompt: (prompt: string, optimized?: boolean) => void;
-    onUpdateField: (field: string, value: string | number | null) => void;
+    onUpdateField: (field: string, value: string | number | null | PerformanceMoveValue) => void;
     globalStylePrompt?: string;
+    effectiveVisual?: { style: string; lighting: string; scene: string; assets: string };
+    effectiveFields?: Record<string, { value: unknown; source_kind: string; source_revision: number | null }>;
     onGenerateT2I: () => void;
     onGenerateVideo: () => void;
     onDelete: () => void;
@@ -212,7 +258,11 @@ interface ShotCardProps {
     onGenerateBatch?: (count: number) => void;
     /** Active in-flight count for label flip (生成 ×N → 生成中 · N). */
     inFlightCount?: number;
-    onRefineFrame?: () => void;
+    onApplyRichRefinement?: (candidateId: string, fields: string[]) => void;
+    onDiscardRichRefinement?: (candidateId: string) => void;
+    onMicroExpressionApplied?: () => Promise<void> | void;
+    onMicroExpressionBeforePreview?: () => Promise<void> | void;
+    richRefinementBusy?: boolean;
     onUpdateDialogue?: (text: string) => void;
     /** Active-take pin controls. When the user has manually pinned an
      *  active take (shot.isVideoPinned=true), the hero shows a "📌 Pinned"
@@ -226,6 +276,7 @@ export default function ShotCard({
     generateAudio,
     targetDuration,
     referenceImageUrls = [],
+    onResolvePolishReferences,
     videoModel,
     shot,
     index,
@@ -233,10 +284,14 @@ export default function ShotCard({
     characters,
     scenes,
     props,
+    extraRoster = [],
+    onUpdateCrowdInstances,
     assetIndex,
     onUpdatePrompt,
     onUpdateField,
     globalStylePrompt = "",
+    effectiveVisual,
+    effectiveFields,
     onGenerateT2I,
     onGenerateVideo,
     onDelete,
@@ -258,7 +313,11 @@ export default function ShotCard({
     onSetGenerateCount,
     onGenerateBatch,
     inFlightCount = 0,
-    onRefineFrame,
+    onApplyRichRefinement,
+    onDiscardRichRefinement,
+    onMicroExpressionApplied,
+    onMicroExpressionBeforePreview,
+    richRefinementBusy = false,
     onUnpinVideo,
 }: ShotCardProps) {
     const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -272,6 +331,8 @@ export default function ShotCard({
     const [styleOpen, setStyleOpen] = useState(
         Boolean(shot.stylePromptOverride || shot.lightingOverride || shot.negativePromptOverride),
     );
+    const [selectedRichFields, setSelectedRichFields] = useState<string[]>([]);
+    useEffect(() => setSelectedRichFields([]), [shot.richRefinementCandidate?.id]);
     // currentProjectId — needed by PolishPanel to look up the
     // project's PromptConfig override server-side.
     const currentProjectId = useProjectStore((state) => state.currentProject?.id);
@@ -348,11 +409,15 @@ export default function ShotCard({
         return out;
     }, [shot.prompt, characters])();
 
-    const assembledPromptPreview = useMemo(() => buildGenerationPrompt(shot, generateAudio ?? false, videoModel ?? "", globalStylePrompt), [
+    const assembledPromptPreview = useMemo(() => buildGenerationPrompt(
+        shot, generateAudio ?? false, videoModel ?? "", effectiveVisual?.style ?? globalStylePrompt, effectiveVisual?.lighting ?? "", effectiveVisual?.scene ?? "", effectiveVisual?.assets ?? "",
+    ), [
         shot.prompt, shot.shotSize, shot.cameraAngle, shot.cameraMovementStructured, shot.transitionHint,
-        shot.stylePromptOverride, shot.lightingOverride, shot.directorShotContext, globalStylePrompt, shot.promptIsOptimized, generateAudio, videoModel,
+        shot.stylePromptOverride, shot.lightingOverride, shot.directorShotContext, globalStylePrompt,
+        effectiveVisual?.style, effectiveVisual?.lighting, effectiveVisual?.scene, effectiveVisual?.assets, shot.promptIsOptimized, generateAudio, videoModel,
     ]);
     const planSuggestions = useMemo(() => directorShotSuggestions(shot), [shot]);
+    const planFieldProposals = useMemo(() => directorFieldProposals(shot, durationEditorConfig ?? { min: 3, max: 15 }), [shot, durationEditorConfig]);
 
     useEffect(() => {
         const ta = textareaRef.current;
@@ -652,6 +717,17 @@ export default function ShotCard({
                         </div>
                     </div>
                     <div className="flex min-w-0 flex-wrap items-center gap-2">
+                        {shot.promptIsOptimized && shot.visualDescription?.trim() ? (
+                            <button
+                                type="button"
+                                onClick={() => onUpdatePrompt(shot.visualDescription!.trim(), false)}
+                                aria-label="恢复分镜"
+                                title="恢复到原始剧本"
+                                className="rounded-full border border-glass-border bg-surface-inset px-2.5 py-1 font-mono text-[0.625rem] font-semibold tracking-[0.04em] text-text-secondary transition-colors hover:border-primary/45 hover:bg-hover-bg hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/55"
+                            >
+                                恢复分镜
+                            </button>
+                        ) : null}
                         <ShotStatusBadge shot={shot} t={t} />
                         <div role="tablist" aria-label={t("videoModeTabsLabel")} className="inline-flex flex-wrap items-center gap-0.5 rounded-full bg-surface-inset p-[3px]">
                             {(["t2v", "i2v", "first_last_frame", "r2v"] as const).map((mode) => (
@@ -675,9 +751,9 @@ export default function ShotCard({
                 </div>
 
                 {/* Main content: Preview + Editor */}
-                <div className="flex px-5">
+                <div className="flex flex-col gap-4 px-4 pb-4 lg:flex-row lg:gap-0 lg:px-5 lg:pb-0">
                     {/* Left: Preview */}
-                    <div className="group/preview relative w-72 shrink-0 bg-surface-inset flex flex-col items-center justify-center overflow-hidden rounded-[14px] border border-glass-border shadow-[inset_0_0_0_1px_rgba(255,255,255,0.04)]">
+                    <div className="group/preview relative w-full shrink-0 self-start bg-surface-inset flex flex-col items-center justify-center overflow-hidden rounded-[14px] border border-glass-border shadow-[inset_0_0_0_1px_rgba(255,255,255,0.04)] lg:w-72">
                         {renderPreview()}
                         {/* Selected-take amber halation */}
                         {(shot.isVideoPinned || shot.finalTakeId) && shot.videoUrl ? (
@@ -737,7 +813,7 @@ export default function ShotCard({
                     </div>
 
                     {/* Right: Prompt + Controls */}
-                    <div className="flex-1 py-0.5 pl-5 pr-0 flex flex-col gap-3">
+                    <div className="flex min-w-0 w-full flex-col gap-3 py-0.5 lg:w-auto lg:flex-1 lg:pl-5">
                         {/* Cast avatar group */}
                         {castAvatars.length > 0 ? (
                             <div className="flex items-center gap-2">
@@ -809,6 +885,55 @@ export default function ShotCard({
                                 <Maximize2 size={12} aria-hidden="true" />
                             </button>
                         </div>
+                        {planFieldProposals.length > 0 && <details className="border-t border-border-subtle py-2 text-xs text-text-secondary">
+                            <summary className="cursor-pointer text-foreground">拍摄计划字段 · {planFieldProposals.length} 项待审</summary>
+                            <ul className="mt-2 divide-y divide-border-subtle">
+                                {planFieldProposals.map(({ field, label, current, proposed, unavailableReason }) => <li key={field} className="flex flex-wrap items-center gap-x-3 gap-y-1 py-2">
+                                    <span className="w-8 shrink-0 font-medium text-foreground">{label}</span>
+                                    <span className="min-w-0 flex-1 break-words">当前：{current}　计划：{proposed}{field === "duration" ? " 秒" : ""}</span>
+                                    {unavailableReason && <span className="text-accent">{unavailableReason}</span>}
+                                    <button type="button" className="shrink-0 text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/55 disabled:cursor-not-allowed disabled:text-text-muted disabled:no-underline"
+                                        aria-label={`采用${label}`} disabled={!!unavailableReason} onClick={() => onUpdateField(field, proposed)}>采用</button>
+                                </li>)}
+                            </ul>
+                        </details>}
+                        {shot.richRefinementCandidate && <details className="border-t border-border-subtle py-2 text-xs text-text-secondary" open>
+                            <summary className="cursor-pointer font-medium text-foreground">{shot.richRefinementCandidate.source} · {Object.keys(shot.richRefinementCandidate.fields).length} 项待审</summary>
+                            {shot.richRefinementCandidate.mode === "initialization" && <p className="mt-2 text-text-muted">当前镜头的初始化建议；尚未应用，不会进入生成提示词。画面描述是起始画面候选，采纳前请检查首帧布局与光影。</p>}
+                            <div className="mt-2 divide-y divide-border-subtle">
+                                {Object.entries(shot.richRefinementCandidate.fields).map(([field, proposed]) => {
+                                    const labels: Record<string, string> = {
+                                        visual_description: "画面描述", shot_size: "景别", camera_angle: "机位", duration: "时长",
+                                        transition_hint: "转场", camera_movement_structured: "运镜", blocking: "站位",
+                                        dialogue_structured: "对白", audio_note: "声音", lighting: "光线",
+                                    };
+                                    const movedToDedicatedPanel = ["shot_size", "camera_angle", "composition", "camera_movement_structured"].includes(field);
+                                    const unavailable = movedToDedicatedPanel || (shot.promptIsOptimized && field !== "duration");
+                                    const display = (value: unknown) => value == null || value === "" ? "未设置"
+                                        : typeof value === "object" ? JSON.stringify(value, null, 2) : String(value);
+                                    return <label key={field} className="flex items-start gap-2 py-2">
+                                        <input type="checkbox" className="mt-0.5" checked={selectedRichFields.includes(field)} disabled={richRefinementBusy || unavailable}
+                                            onChange={() => setSelectedRichFields((items) => items.includes(field)
+                                                ? items.filter((item) => item !== field) : [...items, field])} />
+                                        <span className="min-w-0 flex-1">
+                                            <span className="block font-medium text-foreground">{labels[field] || field}</span>
+                                            <span className="block whitespace-pre-wrap break-words">当前：{display(shot.richRefinementCandidate?.current_fields?.[field])}</span>
+                                            <span className="block whitespace-pre-wrap break-words">建议：{display(proposed)}</span>
+                                            <span className="block text-text-muted">理由：{shot.richRefinementCandidate?.rationale?.[field] || "此候选缺少理由，请丢弃后重新生成"}</span>
+                                            {movedToDedicatedPanel && <span className="block text-accent">此字段已移至静态起幅或运镜设计，请在对应入口重新生成</span>}
+                                            {!movedToDedicatedPanel && unavailable && <span className="block text-accent">已采用完整优化稿，需重新审阅生成提示词后才能应用此项</span>}
+                                        </span>
+                                    </label>;
+                                })}
+                            </div>
+                            <div className="mt-2 flex justify-end gap-3">
+                                <button type="button" className="text-text-secondary hover:text-foreground"
+                                    disabled={richRefinementBusy} onClick={() => onDiscardRichRefinement?.(shot.richRefinementCandidate!.id)}>丢弃</button>
+                                <button type="button" className="text-primary hover:underline disabled:cursor-not-allowed disabled:text-text-muted"
+                                    disabled={richRefinementBusy || !selectedRichFields.length}
+                                    onClick={() => onApplyRichRefinement?.(shot.richRefinementCandidate!.id, selectedRichFields)}>应用所选</button>
+                            </div>
+                        </details>}
                         {planSuggestions.length > 0 && <details className="rounded-md border border-glass-border px-3 py-2 text-xs text-text-secondary">
                             <summary className="cursor-pointer text-foreground">拍摄计划参考 · {planSuggestions.length} 条（不会自动加入生成提示词）</summary>
                             <ul className="mt-2 space-y-2">
@@ -830,17 +955,40 @@ export default function ShotCard({
                             dialogue={shot.dialogueStructured}
                             videoModel={videoModel}
                             prompt={shot.prompt}
-                            optimizationDraft={buildGenerationPrompt(shot, generateAudio ?? false, videoModel ?? "", globalStylePrompt)}
+                            optimizationDraft={buildGenerationPrompt(shot, generateAudio ?? false, videoModel ?? "",
+                                effectiveVisual?.style ?? globalStylePrompt, effectiveVisual?.lighting ?? "", effectiveVisual?.scene ?? "", effectiveVisual?.assets ?? "")}
                             tabMode={shot.tabMode}
                             videoMode={shot.videoMode}
                             scriptId={currentProjectId ?? ""}
                             frameId={shot.id}
-                            shotOverrides={{ style: shot.stylePromptOverride || globalStylePrompt, lighting: shot.lightingOverride || "" }}
+                            shotOverrides={{ style: shot.stylePromptOverride || effectiveVisual?.style || globalStylePrompt,
+                                lighting: shot.lightingOverride || effectiveVisual?.lighting || "" }}
                             slots={r2vSlots}
                             imageUrls={polishImageUrls}
+                            referenceVariantIds={shot.referenceVariantIds}
+                            resolveR2VImageUrls={shot.tabMode === "direct_r2v" ? onResolvePolishReferences : undefined}
+                            onBeforePreview={onMicroExpressionBeforePreview}
                             onApply={(text) => onUpdatePrompt(text, true)}
                         />
-
+                        {currentProjectId && <MicroExpressionPanel
+                            projectId={currentProjectId}
+                            frameId={shot.id}
+                            initialCandidate={shot.microExpressionCandidate ?? null}
+                            accepted={shot.microExpressionTiming ?? []}
+                            characterNames={Object.fromEntries(characters.map((character: any) => [character.id, character.name]))}
+                            optimized={!!shot.promptIsOptimized}
+                            onBeforePreview={onMicroExpressionBeforePreview}
+                            onApplied={onMicroExpressionApplied}
+                        />}
+                        {currentProjectId && shot.cameraMovementCandidate && <CameraMovementPanel
+                            projectId={currentProjectId}
+                            frameId={shot.id}
+                            current={shot.cameraMovementStructured ?? null}
+                            initialCandidate={shot.cameraMovementCandidate ?? null}
+                            optimized={!!shot.promptIsOptimized}
+                            onBeforePreview={onMicroExpressionBeforePreview}
+                            onApplied={onMicroExpressionApplied}
+                        />}
                         {/* Structured field tags — interactive Popover editors */}
                         <div className="flex flex-wrap items-center gap-1.5 mt-0.5">
                             {/* Duration: always visible */}
@@ -927,7 +1075,7 @@ export default function ShotCard({
                                         <textarea
                                             value={shot.stylePromptOverride ?? ""}
                                             onChange={(event) => onUpdateField("stylePromptOverride", event.target.value)}
-                                            placeholder={globalStylePrompt || t("shotStylePlaceholder")}
+                                            placeholder={effectiveVisual?.style || globalStylePrompt || t("shotStylePlaceholder")}
                                             rows={2}
                                             className="w-full resize-y rounded-md border border-glass-border bg-surface-inset px-2.5 py-2 text-[0.75rem] leading-relaxed text-foreground placeholder:text-text-muted focus:border-primary/50 focus:outline-none focus:ring-1 focus:ring-primary/30"
                                         />
@@ -939,7 +1087,7 @@ export default function ShotCard({
                                         <textarea
                                             value={shot.lightingOverride ?? ""}
                                             onChange={(event) => onUpdateField("lightingOverride", event.target.value)}
-                                            placeholder={t("shotLightingPlaceholder")}
+                                            placeholder={effectiveVisual?.lighting || t("shotLightingPlaceholder")}
                                             rows={2}
                                             className="w-full resize-y rounded-md border border-glass-border bg-surface-inset px-2.5 py-2 text-[0.75rem] leading-relaxed text-foreground placeholder:text-text-muted focus:border-primary/50 focus:outline-none focus:ring-1 focus:ring-primary/30"
                                         />
@@ -962,6 +1110,130 @@ export default function ShotCard({
                                 </div>
                             ) : null}
                         </div>
+
+                        {currentProjectId && <ShotFieldPanel
+                            projectId={currentProjectId}
+                            frameId={shot.id}
+                            initialCandidate={shot.shotFieldCandidate ?? null}
+                            effectiveFields={effectiveFields}
+                            optimized={!!shot.promptIsOptimized}
+                            onBeforePreview={onMicroExpressionBeforePreview}
+                            onApplied={onMicroExpressionApplied}
+                        />}
+
+                        {onUpdateCrowdInstances && <details className="border-t border-glass-border pt-3 text-xs text-text-secondary">
+                            <summary className="cursor-pointer text-foreground">群演与背景人群</summary>
+                            <div className="mt-3 space-y-2">
+                                {(shot.crowdInstances ?? []).map((instance, index) => {
+                                    const id = instance.extra_id || instance.template_id || "";
+                                    const entry = extraRoster.find(item => item.extra_id === id);
+                                    const availableVariants = Array.from(new Set([
+                                        ...(entry?.reference_variant_ids ?? []),
+                                        ...(entry?.reference_variant_id ? [entry.reference_variant_id] : []),
+                                    ]));
+                                    const selectedVariants = instance.variant_ids ?? [];
+                                    const missingVariants = selectedVariants.filter(variantId => !availableVariants.includes(variantId));
+                                    return <div key={index} className="grid grid-cols-2 gap-2 border-b border-glass-border pb-2">
+                                        <span className="col-span-2 text-foreground">{entry?.label || ("已失效：" + id)}</span>
+                                        <select aria-label="群演可见层" value={instance.layer} onChange={event => onUpdateCrowdInstances((shot.crowdInstances ?? []).map((item, i) => i === index ? { ...item, layer: event.target.value as ExtraShotInstance["layer"] } : item))} className="bg-input-bg border border-glass-border p-1">
+                                            <option value="near">近景</option><option value="mid">中景</option><option value="far">远景</option>
+                                        </select>
+                                        <input aria-label="群演位置" value={instance.region} placeholder="空间位置" onChange={event => onUpdateCrowdInstances((shot.crowdInstances ?? []).map((item, i) => i === index ? { ...item, region: event.target.value } : item))} className="min-w-0 bg-input-bg border border-glass-border p-1" />
+                                        {availableVariants.length > 0 && <fieldset className="col-span-2 space-y-1"><legend className="text-text-muted">群演变体</legend><div className="flex flex-wrap gap-x-3 gap-y-1">{availableVariants.map(variantId => <label key={variantId} className="inline-flex items-center gap-1"><input type="checkbox" checked={selectedVariants.includes(variantId)} onChange={event => onUpdateCrowdInstances((shot.crowdInstances ?? []).map((item, i) => {
+                                            if (i !== index) return item;
+                                            const next = event.target.checked
+                                                ? Array.from(new Set([...selectedVariants, variantId]))
+                                                : selectedVariants.filter(value => value !== variantId);
+                                            return { ...item, variant_ids: next };
+                                        }))} />{variantId}</label>)}</div></fieldset>}
+                                        {missingVariants.length > 0 && <p className="col-span-2 text-danger">缺失变体：{missingVariants.join(", ")}。请重新选择已保存变体，系统不会自动替换。</p>}
+                                        {entry?.kind === "fixed_extra" && <label className="col-span-2 flex items-center gap-2"><input type="checkbox" checked={instance.face_readable} onChange={event => onUpdateCrowdInstances((shot.crowdInstances ?? []).map((item, i) => i === index ? { ...item, face_readable: event.target.checked } : item))} />面孔需要可辨认</label>}
+                                        <button type="button" className="col-span-2 justify-self-start text-danger" onClick={() => onUpdateCrowdInstances((shot.crowdInstances ?? []).filter((_, i) => i !== index))}>移除</button>
+                                    </div>;
+                                })}
+                                <select aria-label="添加群演" value="" onChange={event => {
+                                    const entry = extraRoster.find(item => item.extra_id === event.target.value);
+                                    if (!entry) return;
+                                    onUpdateCrowdInstances([...(shot.crowdInstances ?? []), {
+                                        ...(entry.kind === "fixed_extra" ? { extra_id: entry.extra_id } : { template_id: entry.extra_id }),
+                                        layer: entry.kind === "fixed_extra" ? "near" : "far",
+                                        region: "", face_readable: false, text_readable: false, variant_ids: [],
+                                    }]);
+                                }} className="w-full bg-input-bg border border-glass-border p-1">
+                                    <option value="">添加已确认群演或模板</option>
+                                    {extraRoster.map(entry => <option key={entry.extra_id} value={entry.extra_id}>{entry.label}</option>)}
+                                </select>
+                            </div>
+                        </details>}
+
+                        <details className="border-t border-glass-border pt-3 text-xs text-text-secondary">
+                            <summary className="cursor-pointer text-foreground">角色动作引用</summary>
+                            <div className="mt-3 space-y-2">
+                                {(shot.performanceMoves ?? []).map((performanceMove, moveIndex) => {
+                                    const selectedMove = findCharacterMove(performanceMove.moveRef);
+                                    return <div key={`${performanceMove.characterId}-${moveIndex}`} className="space-y-1 rounded-md border border-glass-border p-2">
+                                        <label className="block">
+                                            <span className="mb-1 block text-text-muted">表演角色</span>
+                                            <select aria-label={`表演角色 ${moveIndex + 1}`} value={performanceMove.characterId}
+                                                onChange={(event) => onUpdateField("performance_moves", (shot.performanceMoves ?? []).map((item, index) => index === moveIndex ? { ...item, characterId: event.target.value } : item))}
+                                                className="min-h-9 w-full rounded-md border border-glass-border bg-surface px-2 text-xs text-foreground">
+                                                <option value="">选择角色</option>
+                                                {characters.map((character: any) => <option key={character.id} value={character.id}>{character.name ?? character.id}</option>)}
+                                            </select>
+                                        </label>
+                                        <label className="block">
+                                            <span className="mb-1 block text-text-muted">动作词典</span>
+                                            <select aria-label={`角色动作 ${moveIndex + 1}`} value={performanceMove.moveRef}
+                                                onChange={(event) => onUpdateField("performance_moves", (shot.performanceMoves ?? []).map((item, index) => index === moveIndex ? { ...item, moveRef: event.target.value, moveVariant: "" } : item))}
+                                                className="min-h-9 w-full rounded-md border border-glass-border bg-surface px-2 text-xs text-foreground">
+                                                <option value="">不引用动作</option>
+                                                {CHARACTER_MOVE_DICTIONARY.map((move) => <option key={move.move_ref} value={move.move_ref}>{move.character_name} · {move.label}</option>)}
+                                            </select>
+                                        </label>
+                                        {selectedMove && <select aria-label={`动作变体 ${moveIndex + 1}`} value={performanceMove.moveVariant ?? ""}
+                                            onChange={(event) => onUpdateField("performance_moves", (shot.performanceMoves ?? []).map((item, index) => index === moveIndex ? { ...item, moveVariant: event.target.value } : item))}
+                                            className="min-h-9 w-full rounded-md border border-glass-border bg-surface px-2 text-xs text-foreground">
+                                            <option value="">默认动作表现</option>
+                                            {selectedMove.variants.map((variant) => <option key={variant} value={variant}>{variant}</option>)}
+                                        </select>}
+                                        <button type="button" className="text-[0.6875rem] text-danger" onClick={() => onUpdateField("performance_moves", (shot.performanceMoves ?? []).filter((_, index) => index !== moveIndex))}>移除角色动作</button>
+                                    </div>;
+                                })}
+                                <button type="button" className="min-h-8 rounded border border-glass-border px-2 text-[0.6875rem] text-text-secondary" onClick={() => onUpdateField("performance_moves", [...(shot.performanceMoves ?? []), { characterId: characters[0]?.id ?? "", moveRef: CHARACTER_MOVE_DICTIONARY[0]?.move_ref ?? "", moveVariant: null }])}>添加角色动作</button>
+                                <p className="leading-relaxed text-text-muted">每个角色独立引用动作；不会把一个角色的招式套用到其他角色。</p>
+                                {/* Legacy single-move controls remain available for older saved shots. */}
+                                <label className="block">
+                                    <span className="mb-1 block text-text-muted">旧版单角色动作</span>
+                                    <select
+                                        aria-label="主角招式词典"
+                                        value={shot.moveRef ?? ""}
+                                        onChange={(event) => {
+                                            onUpdateField("move_ref", event.target.value);
+                                            if (!event.target.value) onUpdateField("move_variant", "");
+                                        }}
+                                        className="min-h-9 w-full rounded-md border border-glass-border bg-surface px-2 text-xs text-foreground"
+                                    >
+                                        <option value="">不引用招式</option>
+                                        {CHARACTER_MOVE_DICTIONARY.map((move) => <option key={move.move_ref} value={move.move_ref}>{move.character_name} · {move.label}</option>)}
+                                    </select>
+                                </label>
+                                {findCharacterMove(shot.moveRef) && <>
+                                    <label className="block">
+                                        <span className="mb-1 block text-text-muted">本镜变体</span>
+                                        <select
+                                            aria-label="招式变体"
+                                            value={shot.moveVariant ?? ""}
+                                            onChange={(event) => onUpdateField("move_variant", event.target.value)}
+                                            className="min-h-9 w-full rounded-md border border-glass-border bg-surface px-2 text-xs text-foreground"
+                                        >
+                                            <option value="">默认招式表现</option>
+                                            {findCharacterMove(shot.moveRef)!.variants.map((variant) => <option key={variant} value={variant}>{variant}</option>)}
+                                        </select>
+                                    </label>
+                                    <p className="leading-relaxed text-text-muted">招式会进入当前镜头组装提示词；它不会自动新增受伤、击飞或其他剧情。</p>
+                                </>}
+                            </div>
+                        </details>
 
                         {/* Dialogue text display (read-only — editing via 配音工作台 modal) */}
                         {shot.dialogueStructured?.line && (
@@ -1031,7 +1303,7 @@ export default function ShotCard({
                 </div>
 
                 {/* actions row — full-width per mock (lives outside editor/card-body) */}
-                <div className="flex items-center justify-between gap-3 px-5 py-3.5 border-t border-border-subtle">
+                <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3.5 border-t border-border-subtle lg:px-5">
                             <div className="flex items-center gap-1 shrink-0">
                                 <motion.button
                                     whileHover={{ scale: 1.06 }}
@@ -1071,17 +1343,6 @@ export default function ShotCard({
                                 >
                                     <Copy size={15} strokeWidth={1.8} />
                                 </motion.button>
-                                {onRefineFrame && (
-                                    <motion.button
-                                        whileHover={{ scale: 1.06 }}
-                                        whileTap={{ scale: 0.94 }}
-                                        onClick={onRefineFrame}
-                                        className="ico-btn flex h-8 w-8 items-center justify-center rounded-[14px] text-text-muted transition-colors duration-fast ease-out-quart hover:bg-hover-bg hover:text-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/55"
-                                        title={t("refineFrame")}
-                                    >
-                                        <Sparkles size={15} strokeWidth={1.8} />
-                                    </motion.button>
-                                )}
                                 <motion.button
                                     whileHover={{ scale: 1.06 }}
                                     whileTap={{ scale: 0.94 }}
@@ -1093,7 +1354,7 @@ export default function ShotCard({
                                 </motion.button>
                             </div>
 
-                            <div className="flex items-center gap-3">
+                            <div className="flex flex-wrap items-center gap-3">
                                 {genSummary && (
                                     <span className="inline-flex items-center gap-1.5 shrink-0 font-mono text-[0.6875rem] text-text-secondary">
                                         <span className="h-1.5 w-1.5 rounded-full bg-primary shadow-[var(--glow-primary)]" />

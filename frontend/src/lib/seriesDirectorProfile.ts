@@ -37,8 +37,8 @@ export async function saveSeriesSourceContext(baseUrl: string, seriesId: string,
 export async function confirmSeriesDirectorProfile(baseUrl: string, seriesId: string) {
   return (await axios.post(`${baseUrl}/series/${seriesId}/director-profile/confirm`)).data;
 }
-export async function analyzeSeriesDirectorProfile(baseUrl: string, seriesId: string, onStatus?: (status: string) => void) {
-  const job = (await axios.post(`${baseUrl}/series/${seriesId}/director-profile-jobs`, {}, { timeout: 60000 })).data;
+export async function analyzeSeriesDirectorProfile(baseUrl: string, seriesId: string, onStatus?: (status: string) => void, skills: import("./directorSkills").CreativeSkillSelection[] = []) {
+  const job = (await axios.post(`${baseUrl}/series/${seriesId}/director-profile-jobs`, { skills }, { timeout: 60000 })).data;
   if (!job?.id) throw new Error("Invalid Series Director task response");
   onStatus?.(job.status);
   let current = job;

@@ -58,6 +58,78 @@
       "instructions": "适用：Seedance 运镜、镜头设计、机位或图生视频提示词。每个短镜头选择一个主运镜，写清起始景别、角度、运动路径、速度、与主体的相对关系及结束构图。情绪领悟可缓慢推进；人物移动可跟拍；揭示空间可后拉或升起；精细表演与产品身份可固定机位。区分机位平移与原地摇摄、物理推进与镜头变焦，避免将矛盾运动堆在同一镜头。焦距词只在帮助空间表达时使用，并说明距离和主体。图生视频默认保留原构图与身份，明确允许变化的部分。视频参考明确只借用运镜、节奏或动作，不擅自借用人物身份或环境。多镜头维持屏幕方向、视线与轴线，复杂变化拆成分镜。输出一条可直接粘贴的运镜提示词；必要时附起幅、运动和落幅，不虚构模型支持的特殊语法或时长。"
     },
     {
+      "id": "shot-camera-movement",
+      "name": "分镜运镜设计",
+      "category": "分镜摄影",
+      "targets": ["Storyboard camera"],
+      "version": "1.0.0",
+      "description": "只提出当前镜头的结构化运镜候选，供 H3 和 Seedance 共用。",
+      "source": "https://github.com/locopepe2024/iframe/tree/0b0f1a6fe830ab71e7393462f132ff728e3b969b/config/agent_skills/shot-camera-movement.md",
+      "source_revision": "0b0f1a6fe830ab71e7393462f132ff728e3b969b",
+      "license": "MIT（iFrame 原创工作流）",
+      "license_file": "lumenx-MIT.txt",
+      "adaptation": "独立字段设计方法；不进入模型专属完整提示词润色。旧 seedance-camera 保持原行为。",
+      "instructions_file": "shot-camera-movement.md"
+    },
+    {
+      "id": "shot-field-continuity",
+      "name": "分镜字段与一致性",
+      "category": "跨域字段审核",
+      "targets": ["Storyboard camera"],
+      "version": "1.0.0",
+      "description": "跨图片起幅、分镜时间与一致性字段提出有来源的逐字段候选，不代替各字段 owner。",
+      "source": "https://github.com/locopepe2024/iframe/tree/0b0f1a6fe830ab71e7393462f132ff728e3b969b/config/agent_skills/shot-field-continuity.md",
+      "source_revision": "0b0f1a6fe830ab71e7393462f132ff728e3b969b",
+      "license": "MIT（iFrame 原创工作流）",
+      "license_file": "lumenx-MIT.txt",
+      "adaptation": "模型无关的字段提案；不进入模型专属完整提示词润色。",
+      "instructions_file": "shot-field-continuity.md"
+    },
+    {
+      "id": "shot-action-physics",
+      "name": "分镜动作与受力连续性",
+      "category": "分镜动效",
+      "targets": ["Storyboard", "Shot Design", "Seedance", "MiniMax H3"],
+      "version": "1.1.0",
+      "description": "将接触、受击、踉跄、跌倒、物体碰撞和可见主体的视线目标组织为模型无关的动作合同。",
+      "source": "https://github.com/locopepe2024/iframe/tree/0b0f1a6fe830ab71e7393462f132ff728e3b969b/config/agent_skills/shot-action-physics.md",
+      "source_revision": "0b0f1a6fe830ab71e7393462f132ff728e3b969b",
+      "license": "MIT（iFrame 原创工作流）",
+      "license_file": "lumenx-MIT.txt",
+      "adaptation": "模型无关动作物理规则；不输出模型专属格式。",
+      "auto_load": true,
+      "instructions_file": "shot-action-physics.md"
+    },
+    {
+      "id": "shot-martial-choreography",
+      "name": "专业武术与动作编排",
+      "category": "分镜动效",
+      "targets": ["Storyboard", "Shot Design", "Seedance", "MiniMax H3"],
+      "version": "1.1.0",
+      "description": "为明确的武术体系、招式、兵器和连续攻防建立动作编排与参考职责，保持多目标连招的连续重心与剑路。",
+      "source": "https://github.com/locopepe2024/iframe/tree/0b0f1a6fe830ab71e7393462f132ff728e3b969b/config/agent_skills/shot-martial-choreography.md",
+      "source_revision": "0b0f1a6fe830ab71e7393462f132ff728e3b969b",
+      "license": "MIT（iFrame 原创工作流）",
+      "license_file": "lumenx-MIT.txt",
+      "adaptation": "参考公开武术指导工作流提炼；不复制第三方运行时或素材。",
+      "auto_load": false,
+      "instructions_file": "shot-martial-choreography.md"
+    },
+    {
+      "id": "shot-static-framing",
+      "name": "分镜静态起幅设计",
+      "category": "图片起幅",
+      "targets": ["Storyboard camera"],
+      "version": "1.0.0",
+      "description": "为当前镜头提出景别、机位和构图字段候选，逐字段审核。",
+      "source": "https://github.com/locopepe2024/iframe/tree/0b0f1a6fe830ab71e7393462f132ff728e3b969b/config/agent_skills/shot-static-framing.md",
+      "source_revision": "0b0f1a6fe830ab71e7393462f132ff728e3b969b",
+      "license": "MIT（iFrame 原创工作流）",
+      "license_file": "lumenx-MIT.txt",
+      "adaptation": "独立静态摄影字段方法；不负责运镜、站位或模型专属完整提示词。",
+      "instructions_file": "shot-static-framing.md"
+    },
+    {
       "id": "seedance-prompt",
       "name": "Seedance 提示词优化",
       "category": "提示词优化",
@@ -86,12 +158,26 @@
       "instructions": "适用：多镜头、续拍、长故事、广告或连贯视频方案。先明确故事目标与结局，再按时间地点分场景，为每个镜头指定叙事任务、情绪意图、开场状态、唯一主要动作、结束状态、前后衔接、保留元素和允许变化。全局记录人物身份、服装、道具、位置、光线与屏幕方向。区分已发生、当前镜头、未来镜头；输出后续规划不等于已经生成。用户提供成片或尾帧后才依据观察修订下一段，未看到结果时将衔接标为计划，不能假设成功。连续生成出现身份漂移时建议回到原参考素材重新建立镜头，不保证跨段自动连续。声音分为对白、环境音、动作声、音乐；跨段音乐统一是后期规划。输出简明分镜表与当前待制作镜头的完整提示词，后续镜头保留为计划；不替用户提交生成，不硬编码模型时长、数量或专用接口语法。"
     },
     {
+      "id": "micro-expression-timing",
+      "name": "微表情时序设计",
+      "category": "分镜动效",
+      "targets": ["Storyboard performance"],
+      "version": "1.0.0",
+      "description": "按角色和可见性设计 trigger、change、hold、release 表情阶段；首帧只取起始状态。",
+      "source": "https://github.com/locopepe2024/iframe/tree/0b0f1a6fe830ab71e7393462f132ff728e3b969b/config/agent_skills/micro-expression-timing.md",
+      "source_revision": "0b0f1a6fe830ab71e7393462f132ff728e3b969b",
+      "license": "MIT（iFrame 原创工作流）",
+      "license_file": "lumenx-MIT.txt",
+      "adaptation": "独立表演层 Skill；不进入 H3/Seedance 普通提示词润色复选框。",
+      "instructions_file": "micro-expression-timing.md"
+    },
+    {
       "id": "minimax-h3-director",
       "name": "MiniMax H3 分段导演",
       "category": "导演规划",
       "targets": ["MiniMax H3"],
-      "version": "1.7.0",
-      "description": "先解析分镜板、素材用途与人物外观语义，再编写关键帧三段或全参考六段提示词；统一 iFrame 附件引用。",
+      "version": "1.10.0",
+      "description": "先解析分镜板、素材用途、人物外观与视线目标，再按六字段职责去重并保持多目标动作连续，编写关键帧三段或全参考六段提示词；统一 iFrame 附件引用。",
       "instructions_file": "h3-prompt-writing.md",
       "reference_sources": [
         "https://github.com/MiniMax-AI/MiniMax-H3/blob/d21241f0a4b3acbb34c97dae47fa417b7065e438/skills/h3-prompt-writing/SKILL.md",
@@ -175,6 +261,21 @@
       "license": "MIT（LumenX 原创工作流）",
       "license_file": "lumenx-MIT.txt",
       "adaptation": "LumenX 独立编写的应用工作流，遵循本仓库 MIT 许可。source 指格式参考依据，不是本文件上游原文；官方资料仍受 MiniMax H3 Community License 约束，未复制官方 skill 全文或模型。生成效果待实测。"
+    },
+    {
+      "id": "street-conflict-crowd-direction",
+      "name": "街道冲突与群像动作",
+      "category": "分镜群像动作",
+      "targets": ["Script analysis", "Scene design", "Storyboard", "Shot Design", "Seedance", "MiniMax H3"],
+      "version": "1.0.0",
+      "description": "设计街道抢劫、斗殴、追逐和救援中的空间轴线、近中远景人群反应与信息差。",
+      "source": "https://github.com/locopepe2024/iframe/blob/60fed159ddec653ff9927ff2dcce25f0ef833803/config/agent_skills/street-conflict-crowd-direction.md",
+      "source_revision": "60fed159ddec653ff9927ff2dcce25f0ef833803",
+      "license": "MIT（iFrame 原创适配）",
+      "license_file": "lumenx-MIT.txt",
+      "adaptation": "参考 ScreenWeaver 公开战争片设计方法提炼；不复制第三方运行时或素材。",
+      "auto_load": false,
+      "instructions_file": "street-conflict-crowd-direction.md"
     }
   ]
 }

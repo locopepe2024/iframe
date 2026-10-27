@@ -9,6 +9,9 @@ import { agentRequest, api, API_URL, authenticatedFetch, crudApi, type AssetImag
 import { extractErrorDetail, getAssetUrl } from "@/lib/utils";
 import { includeVisibleStyle } from "@/lib/assetPromptStyle";
 import CharacterWorkbench from "./CharacterWorkbench";
+import SceneAtmosphereTemplates from "@/components/shared/SceneAtmosphereTemplates";
+import ScenePromptLayersPanel from "@/components/shared/ScenePromptLayersPanel";
+import { compileScenePromptLayers, sceneLightDirectionConflict, type ScenePromptLayers } from "@/lib/scenePromptLayers";
 import { VariantSelector } from "../common/VariantSelector";
 import { VideoVariantSelector } from "../common/VideoVariantSelector";
 import UploadAssetModal from "../modals/UploadAssetModal";
@@ -19,10 +22,11 @@ import { resolveAssetGenerationModel } from "@/lib/modelCatalog";
 import {
     createSingleFlightTaskStatusPoller,
     mergeAssetTaskResult,
+    isMissingAssetTask,
     normalizeTaskFailureDetail,
 } from "@/lib/assetTaskPolling";
 import ReferencePromptEditor, { type ReferenceCandidate, type ReferenceSuggestion } from "./playground/ReferencePromptEditor";
-import { searchReferenceCandidates } from "@/lib/referenceCandidateSearch";
+import { searchReferenceCandidates, selectedReferenceCandidates } from "@/lib/referenceCandidateSearch";
 import { toast } from "@/store/toastStore";
 import type { EpisodeAssetSyncDiff, EpisodeVisualContext, EpisodeVisualContextState } from "@/lib/directorShootingPlan";
 import { getAssetPlanEntries, getUnboundCharacterRequirements, type AssetPlanEntry } from "@/lib/episodeAssetPlan";
@@ -31,6 +35,7 @@ import { SceneImageTools, type LightingReference, type SceneImageSource, type Sc
 import AssetCoverBadges from "./AssetCoverBadges";
 import { characterImageUrl } from "@/lib/characterImage";
 import AssetNameEditor from "../common/AssetNameEditor";
+import AssetWorkbenchLayout from "@/components/shared/AssetWorkbenchLayout";
 import AssetImageSubmissionReview from "@/components/shared/AssetImageSubmissionReview";
 import VideoPolishReview, { type VideoPolishMessages } from "./storyboard-r2v/VideoPolishReview";
 
@@ -38,6 +43,7 @@ export default function ConsistencyVault() {
     const tv = useTranslations("vault");
     const tStep = useTranslations("stepHeader");
     const currentProject = useProjectStore((state) => state.currentProject);
+    const currentSeries = useProjectStore((state) => state.currentSeries);
     const updateProject = useProjectStore((state) => state.updateProject);
 
 
@@ -49,6 +55,27 @@ export default function ConsistencyVault() {
     const generatingTasks = useProjectStore((state) => state.generatingTasks || []); // Fallback to empty array if not defined yet
     const addGeneratingTask = useProjectStore((state) => state.addGeneratingTask);
     const removeGeneratingTask = useProjectStore((state) => state.removeGeneratingTask);
+
+    // A completed result can arrive through a project refresh after the polling
+    // callback has gone away (for example after switching panels or reloading).
+    // Clear only tasks whose asset now contains a genuinely new variant; this
+    // preserves the overlay while an older variant pool is still unchanged.
+    useEffect(() => {
+        if (!currentProject || generatingTasks.length === 0) return;
+        for (const task of generatingTasks) {
+            const asset = [...(currentProject.characters || []), ...(currentProject.scenes || []), ...(currentProject.props || [])]
+                .find((item: any) => item.id === task.assetId) as any;
+            if (!asset) continue;
+            const units = [asset.reference_sheet, asset.full_body_asset, asset.three_view_asset, asset.headshot_asset];
+            const variantIds = units.flatMap((unit: any) => [
+                ...(Array.isArray(unit?.variants) ? unit.variants : []),
+                ...(Array.isArray(unit?.image_variants) ? unit.image_variants : []),
+            ]).map((variant: any) => variant?.id).filter(Boolean);
+            if (variantIds.some((id: string) => !(task.initialVariantIds || []).includes(id))) {
+                removeGeneratingTask(task.assetId, task.generationType);
+            }
+        }
+    }, [currentProject, generatingTasks, removeGeneratingTask]);
 
     const taskFailureMessage = (error?: unknown) => {
         const detail = normalizeTaskFailureDetail(error);
@@ -158,6 +185,23 @@ export default function ConsistencyVault() {
     const handleUpdateAttributes = async (assetId: string, type: string, attributes: Record<string, unknown>) => {
         if (!currentProject) return;
         try {
+            if (type === "character" && Object.keys(attributes).length === 1 && "character_design" in attributes) {
+                const saved = await api.saveCharacterDesign(currentProject.id, assetId, attributes.character_design);
+                if (saved.project_id !== currentProject.id || saved.asset_id !== assetId || !saved.character_design
+                    || !Number.isInteger(saved.asset_revision) || saved.asset_revision < 0) {
+                    throw new Error("Saved character design response is invalid");
+                }
+                // Merge into the latest state: generation may finish while saving.
+                const latest = useProjectStore.getState();
+                const project = latest.currentProject?.id === currentProject.id
+                    ? latest.currentProject : latest.projects.find(item => item.id === currentProject.id);
+                if (project) updateProject(currentProject.id, {
+                    characters: project.characters.map(character => character.id === assetId
+                        ? { ...character, character_design: saved.character_design,
+                            asset_revision: Math.max(character.asset_revision || 0, saved.asset_revision) } : character),
+                });
+                return;
+            }
             const updatedProject = await api.updateAssetAttributes(currentProject.id, assetId, type, attributes);
             await applyAssetMutationProject(assetId, type, updatedProject);
         } catch (error) {
@@ -221,7 +265,14 @@ export default function ConsistencyVault() {
 
         // Add task with specific generation type and batch size
         if (addGeneratingTask) {
-            addGeneratingTask(assetId, generationType, batchSize);
+            const asset = [...(currentProject.characters || []), ...(currentProject.scenes || []), ...(currentProject.props || [])]
+                .find((item: any) => item.id === assetId) as any;
+            const initialVariantIds = [asset?.reference_sheet, asset?.full_body_asset, asset?.three_view_asset, asset?.headshot_asset]
+                .flatMap((unit: any) => [
+                    ...(Array.isArray(unit?.variants) ? unit.variants : []),
+                    ...(Array.isArray(unit?.image_variants) ? unit.image_variants : []),
+                ]).map((variant: any) => variant?.id).filter(Boolean);
+            addGeneratingTask(assetId, generationType, batchSize, initialVariantIds);
         }
 
         try {
@@ -298,6 +349,15 @@ export default function ConsistencyVault() {
                 );
                 pollInterval = setInterval(() => {
                     void pollOnce().catch((pollError) => {
+                        if (isMissingAssetTask(pollError)) {
+                            clearInterval(pollInterval);
+                            removeGeneratingTask(assetId, generationType);
+                            toast.error("iFrame 已找不到这次生成的任务记录，可能在服务重启时中断。请先核对 UniArt 任务结果，避免重复提交。");
+                            void api.getProject(currentProject.id).then((fresh) => {
+                                useProjectStore.getState().updateProject(currentProject.id, fresh);
+                            }).catch((error) => console.error("Failed to refresh missing asset task:", error));
+                            return;
+                        }
                         console.error("Polling error:", pollError);
                         // A network failure does not cancel the backend task.
                         // Keep polling so its final provider error is shown.
@@ -490,6 +550,12 @@ export default function ConsistencyVault() {
                 );
                 pollInterval = setInterval(() => {
                     void pollOnce().catch((pollError) => {
+                        if (isMissingAssetTask(pollError)) {
+                            clearInterval(pollInterval);
+                            removeGeneratingTask(assetId, generationType);
+                            toast.error("iFrame 已找不到这次动态参考任务记录。请先核对 UniArt 任务结果，避免重复提交。");
+                            return;
+                        }
                         console.error("Video polling error:", pollError);
                         // The server task remains active; retry on the next tick.
                     });
@@ -610,6 +676,11 @@ export default function ConsistencyVault() {
     const assets = activeTab === "character" ? currentProject?.characters :
         activeTab === "scene" ? currentProject?.scenes :
             activeTab === "prop" ? currentProject?.props : [];
+    const crowdGroups = Array.from(new Map([
+        ...(currentProject?.crowd_groups ?? []),
+        ...(currentSeries && currentSeries.id === currentProject?.series_id ? currentSeries.extra_roster ?? [] : []),
+        ...(currentProject?.crowd_group_candidates ?? []),
+    ].map(group => [group.extra_id, group])).values());
     const selectedPlanEntries = selectedAssetId && selectedAssetType
         ? getAssetPlanEntries(episodeAssetState.context, selectedAssetType as "character" | "scene" | "prop", selectedAssetId)
         : [];
@@ -632,7 +703,7 @@ export default function ConsistencyVault() {
                         onClick={() => setActiveTab("character")}
                         icon={<User size={14} />}
                         label="Characters"
-                        count={currentProject?.characters?.length || 0}
+                        count={(currentProject?.characters?.length || 0) + crowdGroups.length}
                     />
                     <TabButton
                         active={activeTab === "scene"}
@@ -711,7 +782,7 @@ export default function ConsistencyVault() {
                     <div className="flex items-center justify-center h-full text-text-muted">
                         Loading project...
                     </div>
-                ) : assets?.length === 0 ? (
+                ) : assets?.length === 0 && (activeTab !== "character" || crowdGroups.length === 0) ? (
                     <div className="flex flex-col items-center justify-center h-full text-text-muted gap-4">
                         <div className="w-16 h-16 rounded-full bg-glass flex items-center justify-center">
                             {activeTab === "character" ? <User size={32} /> : activeTab === "scene" ? <MapPin size={32} /> : <Box size={32} />}
@@ -719,7 +790,23 @@ export default function ConsistencyVault() {
                         <p>No {activeTab}s found</p>
                     </div>
                 ) : (
-                    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-6">
+                    <div className="space-y-8">
+                        {activeTab === "character" && crowdGroups.length > 0 && (
+                            <section aria-label="背景群演">
+                                <h3 className="mb-3 flex items-center gap-2 text-sm font-medium text-foreground">
+                                    <Users size={16} />背景群演 <span className="text-xs text-text-muted">({crowdGroups.length})</span>
+                                </h3>
+                                <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                                    {crowdGroups.map(group => (
+                                        <div key={group.extra_id} className="min-w-0 rounded border border-glass-border bg-glass px-4 py-3">
+                                            <div className="text-sm font-medium text-foreground">{group.label}</div>
+                                            {(group.wardrobe || group.body_build) && <p className="mt-1 text-xs text-text-muted">{[group.body_build, group.wardrobe].filter(Boolean).join(" · ")}</p>}
+                                        </div>
+                                    ))}
+                                </div>
+                            </section>
+                        )}
+                        {!!assets?.length && <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-6">
                         {assets?.map((asset: any) => (
                             <AssetCard
                                 key={asset.id}
@@ -754,6 +841,7 @@ export default function ConsistencyVault() {
                                 <span className="text-sm font-medium">Add {activeTab}</span>
                             </div>
                         </motion.div>
+                        </div>}
                     </div>
                 )}
             </div>
@@ -1026,51 +1114,94 @@ function CharacterDetailModal({ asset, type, onClose, onUpdateDescription, onUpd
     const [description, setDescription] = useState(asset.description);
     const [isEditing, setIsEditing] = useState(false);
     const [descriptionSaved, setDescriptionSaved] = useState(true);
+    const savedPropLength = asset.asset_design?.design_draft?.dimensions?.length_cm;
+    const [propLengthCm, setPropLengthCm] = useState<string>(
+        type === "prop" && typeof savedPropLength === "number" ? String(savedPropLength) : "",
+    );
     const currentProject = useProjectStore((state) => state.currentProject);
     const updateProject = useProjectStore((state) => state.updateProject);
     const selectionQueue = useRef<Promise<void>>(Promise.resolve());
     const selectionVersion = useRef(0);
-    const [imagePrompt, setImagePrompt] = useState(asset.image_prompt || asset.description || "");
     const savedSceneDesign = asset.asset_design?.design_draft || {};
+    const savedWorkspace = type === "scene" ? savedSceneDesign.prompt_workspace : undefined;
+    const [imagePrompt, setImagePrompt] = useState(savedWorkspace?.design?.prompt ?? (asset.image_prompt || asset.description || ""));
+    const [scenePromptTab, setScenePromptTab] = useState<"design" | "ai">(savedWorkspace?.active_source === "ai" ? "ai" : "design");
+    const [showSceneSettings, setShowSceneSettings] = useState(false);
     const inheritedSceneLighting = [asset.time_of_day, asset.lighting_mood].filter(Boolean).join("；");
     const [sceneDesign, setSceneDesign] = useState(() => ({
         visual_notes: String(savedSceneDesign.visual_notes || asset.description || ""),
+        asset_baseline: savedSceneDesign.asset_baseline || null,
+        shot_only_content: Array.isArray(savedSceneDesign.shot_only_content) ? savedSceneDesign.shot_only_content : [],
         style: typeof savedSceneDesign.style === "string" ? savedSceneDesign.style : stylePrompt,
         ambient_lighting: typeof savedSceneDesign.ambient_lighting === "string" ? savedSceneDesign.ambient_lighting : inheritedSceneLighting,
         local_target: String(savedSceneDesign.local_lighting?.target || ""),
         local_effect: String(savedSceneDesign.local_lighting?.effect || ""),
         reference_viewpoint: String(savedSceneDesign.reference_viewpoint || ""),
         reference_framing: String(savedSceneDesign.reference_framing || ""),
+        prompt_layers: (savedSceneDesign.prompt_layers || {}) as ScenePromptLayers,
         visual_constraints: {
             key_light_direction: String(savedSceneDesign.visual_constraints?.key_light_direction || "unspecified"),
             forbidden_light_directions: Array.isArray(savedSceneDesign.visual_constraints?.forbidden_light_directions) ? savedSceneDesign.visual_constraints.forbidden_light_directions : [],
-            visible_face_limit: savedSceneDesign.visual_constraints?.visible_face_limit ?? "",
-            secondary_people_view: String(savedSceneDesign.visual_constraints?.secondary_people_view || ""),
+        },
+        crowd_design: savedSceneDesign.crowd_design || {
+            near: { identity_policy: "asset_required", density: "", subjects: [], text_elements: [], motion: "" },
+            mid: { identity_policy: "template_allowed", density: "", subjects: [], text_elements: [], motion: "" },
+            far: { identity_policy: "unidentified", density: "", subjects: [], text_elements: [], motion: "" },
         },
     }));
-        const [sceneDesignNeedsApply, setSceneDesignNeedsApply] = useState(() =>
-        type === "scene" && !String(asset.image_prompt || "").includes("【场景结构化设置】") && Boolean(
+    const [sceneDesignNeedsApply, setSceneDesignNeedsApply] = useState(() =>
+        savedWorkspace ? Boolean(savedWorkspace.settings_pending) : type === "scene" && !String(asset.image_prompt || "").includes("【场景结构化设置】") && Boolean(
             (typeof savedSceneDesign.style === "string" ? savedSceneDesign.style : stylePrompt)
             || (typeof savedSceneDesign.ambient_lighting === "string" ? savedSceneDesign.ambient_lighting : inheritedSceneLighting)
             || savedSceneDesign.local_lighting?.effect
             || savedSceneDesign.reference_viewpoint
             || savedSceneDesign.reference_framing
+            || compileScenePromptLayers(savedSceneDesign.prompt_layers || {})
             || savedSceneDesign.visual_constraints?.key_light_direction
-            || savedSceneDesign.visual_constraints?.forbidden_light_directions?.length
-            || savedSceneDesign.visual_constraints?.visible_face_limit !== undefined,
+            || savedSceneDesign.visual_constraints?.forbidden_light_directions?.length,
         ));
     const [sceneDesignSaving, setSceneDesignSaving] = useState(false);
     const [promptModels, setPromptModels] = useState<ChatModel[]>([]);
     const [promptModel, setPromptModel] = useState("");
     const [optimizingPrompt, setOptimizingPrompt] = useState(false);
-    const [optimizedPrompt, setOptimizedPrompt] = useState("");
+    const [optimizedPrompt, setOptimizedPrompt] = useState(type === "scene" ? savedWorkspace?.ai?.prompt || "" : "");
     const [promptError, setPromptError] = useState("");
     const [pendingPromptReview, setPendingPromptReview] = useState<{
         source: string; request: Record<string, unknown>; messages: VideoPolishMessages;
         reviewToken: string; formatNote: string;
     } | null>(null);
-    const [imageGenerationMode, setImageGenerationMode] = useState<"text" | "reference">("text");
-    const [promptReferences, setPromptReferences] = useState<AssetLibraryReference[]>([]);
+    const [imageGenerationMode, setImageGenerationMode] = useState<"text" | "reference">(savedWorkspace?.design?.mode || "text");
+    const [promptReferences, setPromptReferences] = useState<AssetLibraryReference[]>(savedWorkspace?.design?.references || []);
+    const [aiGenerationMode, setAiGenerationMode] = useState<"text" | "reference">(savedWorkspace?.ai?.mode || "text");
+    const [aiReferences, setAiReferences] = useState<AssetLibraryReference[]>(savedWorkspace?.ai?.references || []);
+    const usingSceneAi = type === "scene" && scenePromptTab === "ai";
+    const visibleImagePrompt = usingSceneAi ? optimizedPrompt : imagePrompt;
+    const setVisibleImagePrompt = usingSceneAi ? setOptimizedPrompt : setImagePrompt;
+    const visibleReferences = usingSceneAi ? aiReferences : promptReferences;
+    const setVisibleReferences = usingSceneAi ? setAiReferences : setPromptReferences;
+    const visibleGenerationMode = usingSceneAi ? aiGenerationMode : imageGenerationMode;
+    const setVisibleGenerationMode = usingSceneAi ? setAiGenerationMode : setImageGenerationMode;
+    const currentSceneSnapshot = { sceneDesign, imagePrompt, optimizedPrompt, imageGenerationMode,
+        aiGenerationMode, promptReferences, aiReferences, sceneDesignNeedsApply };
+    const savedSceneSnapshot = useRef(currentSceneSnapshot);
+    const [hasSavedSceneDesign, setHasSavedSceneDesign] = useState(Boolean(savedWorkspace || savedSceneDesign.visual_notes));
+    const [savedSceneSource, setSavedSceneSource] = useState<"design" | "ai">(savedWorkspace?.active_source === "ai" ? "ai" : "design");
+    const sceneHasChanges = JSON.stringify(currentSceneSnapshot) !== JSON.stringify(savedSceneSnapshot.current);
+    const restoreSavedSceneDesign = () => {
+        const snapshot = savedSceneSnapshot.current;
+        setSceneDesign(snapshot.sceneDesign);
+        setImagePrompt(snapshot.imagePrompt);
+        setOptimizedPrompt(snapshot.optimizedPrompt);
+        setImageGenerationMode(snapshot.imageGenerationMode);
+        setAiGenerationMode(snapshot.aiGenerationMode);
+        setPromptReferences(snapshot.promptReferences);
+        setAiReferences(snapshot.aiReferences);
+        setSceneDesignNeedsApply(snapshot.sceneDesignNeedsApply);
+        setScenePromptTab("design");
+        setPendingPromptReview(null);
+        setMention(null);
+        setPromptError("");
+    };
     const [assetIndex, setAssetIndex] = useState<any[]>([]);
     const assetIndexRevision = JSON.stringify(
         [currentProject?.characters, currentProject?.scenes, currentProject?.props].map((items) =>
@@ -1087,10 +1218,13 @@ function CharacterDetailModal({ asset, type, onClose, onUpdateDescription, onUpd
     );
     const [mention, setMention] = useState<ReferenceSuggestion | null>(null);
     const [mentionIndex, setMentionIndex] = useState(0);
+    const [referencePickerOpen, setReferencePickerOpen] = useState(false);
+    const [referencePickerQuery, setReferencePickerQuery] = useState("");
 
     // Style Controls
     const [negativePrompt, setNegativePrompt] = useState(styleNegativePrompt || DEFAULT_CHARACTER_NEGATIVE_PROMPT);
     const [pendingImageReview, setPendingImageReview] = useState<AssetImageReviewRequest | null>(null);
+    const [pendingPromptSource, setPendingPromptSource] = useState("");
     const [showAdvanced, setShowAdvanced] = useState(false);
 
     // Video Controls
@@ -1105,8 +1239,9 @@ function CharacterDetailModal({ asset, type, onClose, onUpdateDescription, onUpd
     // Sync local state if asset changes
     useEffect(() => {
         setDescription(asset.description);
-        setPromptReferences([]);
         setMention(null);
+        setReferencePickerOpen(false);
+        setReferencePickerQuery("");
         if (asset.video_prompt) setVideoPrompt(asset.video_prompt);
         else if (!videoPrompt) {
             setVideoPrompt(buildCharacterVideoPrompt(asset.name, asset.description));
@@ -1157,13 +1292,16 @@ function CharacterDetailModal({ asset, type, onClose, onUpdateDescription, onUpd
                 variantLabel,
                 isActive,
                 reference: { asset_type: entry.asset_type, asset_id: entry.asset_id, variant_id: variant.id },
+                sceneTool: entry.asset_type === "scene" ? variant.scene_tool : undefined,
             };
         }).filter(Boolean) as ReferenceCandidate[]);
     }, [assetIndex]);
 
-    const matchingReferenceCandidates = searchReferenceCandidates(referenceCandidates, mention?.query ?? "")
+    const selectedCandidates = useMemo(() => selectedReferenceCandidates(referenceCandidates, visibleReferences), [referenceCandidates, visibleReferences]);
+    const matchingReferenceCandidates = searchReferenceCandidates(selectedCandidates, mention?.query ?? "")
         .sort((left, right) => Number(Boolean(right.isActive)) - Number(Boolean(left.isActive)));
-    const lightingReferences = useMemo<LightingReference[]>(() => referenceCandidates.flatMap((candidate) => candidate.reference && candidate.previewUrl ? [{ key: `${candidate.reference.asset_type}:${candidate.reference.asset_id}:${candidate.reference.variant_id}`, label: candidate.label, url: candidate.previewUrl, reference: candidate.reference }] : []), [referenceCandidates]);
+    const pickerCandidates = searchReferenceCandidates(referenceCandidates, referencePickerQuery);
+    const lightingReferences = useMemo<LightingReference[]>(() => referenceCandidates.flatMap((candidate) => candidate.reference && candidate.previewUrl ? [{ key: `${candidate.reference.asset_type}:${candidate.reference.asset_id}:${candidate.reference.variant_id}`, label: candidate.label, url: candidate.previewUrl, reference: candidate.reference, tool: candidate.sceneTool?.kind === "lighting" ? candidate.sceneTool : undefined }] : []), [referenceCandidates]);
 
     const handleMentionKeyDown = (event: KeyboardEvent) => {
         if (!mention) return false;
@@ -1191,12 +1329,25 @@ function CharacterDetailModal({ asset, type, onClose, onUpdateDescription, onUpd
 
     const handleSave = async () => {
         await onUpdateDescription(description);
+        if (type === "prop") await savePropDimensions();
         setDescriptionSaved(true);
         if (type === "scene") {
-            setSceneDesign(current => ({ ...current, visual_notes: description }));
+            setSceneDesign(current => ({ ...current, visual_notes: description, asset_baseline: null, shot_only_content: [] }));
             setSceneDesignNeedsApply(true);
         }
         setIsEditing(false);
+    };
+
+    const savePropDimensions = async () => {
+        if (type !== "prop") return;
+        const raw = propLengthCm.trim();
+        const length = raw ? Number(raw) : null;
+        if (length !== null && (!Number.isFinite(length) || length <= 0)) return;
+        await onUpdateAttributes({ asset_design: {
+            ...(asset.asset_design?.design_draft || {}),
+            visual_notes: asset.asset_design?.design_draft?.visual_notes || asset.description,
+            dimensions: length === null ? {} : { length_cm: length },
+        }});
     };
 
     const handleSelectVariant = (variantId: string) => {
@@ -1233,6 +1384,21 @@ function CharacterDetailModal({ asset, type, onClose, onUpdateDescription, onUpd
         updateProject(currentProject.id, updatedProject);
     };
 
+    const buildSceneDesignText = () => {
+        const visualConstraints = sceneDesign.visual_constraints;
+        return [
+            sceneDesign.visual_notes && `场景空间：${sceneDesign.visual_notes}`,
+            sceneDesign.style && `场景风格：${sceneDesign.style}`,
+            compileScenePromptLayers(sceneDesign.prompt_layers),
+            sceneDesign.local_effect && sceneDesign.local_target && `局部光照：${sceneDesign.local_target}，${sceneDesign.local_effect}`,
+            sceneDesign.ambient_lighting && `环境光：${sceneDesign.ambient_lighting}`,
+            sceneDesign.reference_viewpoint && `参考图视角：${sceneDesign.reference_viewpoint}`,
+            sceneDesign.reference_framing && `参考图构图：${sceneDesign.reference_framing}`,
+            visualConstraints.key_light_direction !== "unspecified" && `主光方向：${({ front: "正面", back: "背面", side: "侧面", top: "顶部", bottom: "底部", mixed: "混合" } as Record<string, string>)[visualConstraints.key_light_direction]}`,
+            visualConstraints.forbidden_light_directions.length > 0 && `禁止光线方向：${visualConstraints.forbidden_light_directions.map((item: string) => ({ front: "正面光", back: "背光", side: "侧面光", top: "顶部光", bottom: "底部光", mixed: "混合光" } as Record<string, string>)[item] || item).join("、")}`,
+        ].filter(Boolean).join("\n");
+    };
+
     const promptRefineRequest = {
         model: promptModel,
         project_id: currentProject?.id || "",
@@ -1241,17 +1407,7 @@ function CharacterDetailModal({ asset, type, onClose, onUpdateDescription, onUpd
         asset_name: asset.name,
         description,
         current_prompt: imagePrompt,
-        style: type === "scene" ? [
-            sceneDesign.visual_notes && `场景空间：${sceneDesign.visual_notes}`,
-            sceneDesign.style && `场景风格：${sceneDesign.style}`,
-            sceneDesign.ambient_lighting && `环境光：${sceneDesign.ambient_lighting}`,
-            sceneDesign.reference_viewpoint && `参考图视角：${sceneDesign.reference_viewpoint}`,
-            sceneDesign.reference_framing && `参考图构图：${sceneDesign.reference_framing}`,
-            sceneDesign.visual_constraints.key_light_direction !== "unspecified" && `主光方向：${sceneDesign.visual_constraints.key_light_direction}`,
-            sceneDesign.visual_constraints.forbidden_light_directions.length > 0 && `禁止光线方向：${sceneDesign.visual_constraints.forbidden_light_directions.join("、")}`,
-            sceneDesign.visual_constraints.visible_face_limit !== "" && `可见人脸上限：${sceneDesign.visual_constraints.visible_face_limit}`,
-            sceneDesign.visual_constraints.secondary_people_view && `其他人物呈现：${sceneDesign.visual_constraints.secondary_people_view}`,
-        ].filter(Boolean).join("\n") : "",
+        style: type === "scene" ? buildSceneDesignText() : "",
         plan_context: [],
     };
     const promptRefineSource = JSON.stringify(promptRefineRequest);
@@ -1259,8 +1415,8 @@ function CharacterDetailModal({ asset, type, onClose, onUpdateDescription, onUpd
     promptRefineSourceRef.current = promptRefineSource;
     useEffect(() => {
         setPendingPromptReview(null);
-        setOptimizedPrompt("");
-    }, [promptRefineSource]);
+        if (type !== "scene") setOptimizedPrompt("");
+    }, [promptRefineSource, type]);
 
     const handleOptimizePrompt = async () => {
         if (!promptModel || optimizingPrompt) return;
@@ -1270,7 +1426,7 @@ function CharacterDetailModal({ asset, type, onClose, onUpdateDescription, onUpd
         }
         setOptimizingPrompt(true);
         setPromptError("");
-        setOptimizedPrompt("");
+        if (type !== "scene") setOptimizedPrompt("");
         setPendingPromptReview(null);
         try {
             const source = promptRefineSource;
@@ -1302,7 +1458,14 @@ function CharacterDetailModal({ asset, type, onClose, onUpdateDescription, onUpd
                 ...review.request, reviewed_messages: review.messages, review_token: review.reviewToken,
             });
             setPendingPromptReview(null);
-            if (review.source === promptRefineSourceRef.current) setOptimizedPrompt(result.prompt);
+            if (review.source === promptRefineSourceRef.current) {
+                setOptimizedPrompt(result.prompt);
+                if (type === "scene") {
+                    setAiReferences([...promptReferences]);
+                    setAiGenerationMode(imageGenerationMode);
+                    setScenePromptTab("ai");
+                }
+            }
         } catch (error) {
             setPromptError(extractErrorDetail(error));
         } finally {
@@ -1311,39 +1474,41 @@ function CharacterDetailModal({ asset, type, onClose, onUpdateDescription, onUpd
     };
 
     const handleGenerateClick = (batchSize: number) => {
-        if (type === "scene" && sceneDesignNeedsApply) {
+        if (type === "scene" && !usingSceneAi && sceneDesignNeedsApply) {
             toast.warning("场景设置已修改；请先应用到可见提示词，或选择保留当前提示词。");
             return;
         }
-        if (imageGenerationMode === "reference" && promptReferences.length === 0) {
+        if (visibleGenerationMode === "reference" && visibleReferences.length === 0) {
             toast.warning(tv("referenceModeRequiresExplicit"));
             return;
         }
-        if (imageGenerationMode === "text" && promptReferences.length > 0) {
+        if (visibleGenerationMode === "text" && visibleReferences.length > 0) {
             toast.warning(tv("referenceModeSelectExplicitly"));
             return;
         }
-        if (!currentProject?.id || !imagePrompt.trim()) {
+        if (!currentProject?.id || !visibleImagePrompt.trim()) {
             toast.warning("Review a non-empty image prompt before generating.");
             return;
         }
+        setPendingPromptSource(type === "scene" ? usingSceneAi ? "AI 优化" : "场景设计" : "");
         setPendingImageReview({
             asset_id: asset.id,
             asset_type: type,
             generation_type: "all",
-            prompt: imagePrompt,
+            prompt: visibleImagePrompt,
             negative_prompt: negativePrompt,
             batch_size: batchSize,
             model_name: currentProject.series_id ? undefined : resolveAssetGenerationModel(currentProject.model_settings?.t2i_model),
-            references: promptReferences,
-            image_generation_mode: imageGenerationMode,
+            references: visibleReferences,
+            image_generation_mode: visibleGenerationMode,
             apply_style: false,
             preserve_prompt: true,
         });
     };
 
     const updateSceneDesign = (key: keyof typeof sceneDesign, value: string) => {
-        setSceneDesign(current => ({ ...current, [key]: value }));
+        setSceneDesign(current => ({ ...current, [key]: value,
+            ...(key === "visual_notes" ? { asset_baseline: null, shot_only_content: [] } : {}) }));
         setSceneDesignNeedsApply(true);
     };
 
@@ -1355,35 +1520,14 @@ function CharacterDetailModal({ asset, type, onClose, onUpdateDescription, onUpd
         setSceneDesignNeedsApply(true);
     };
 
-    const extractVisualConstraints = (text: string) => {
-        const next = { ...sceneDesign.visual_constraints };
-        if (/侧面光|侧光|侧面照明/.test(text)) next.key_light_direction = "side";
-        else if (/正面光|正面照明/.test(text)) next.key_light_direction = "front";
-        else if (/背光|逆光|背面光/.test(text)) next.key_light_direction = "back";
-        const forbidden = new Set(next.forbidden_light_directions);
-        if (/不允许[^。；\n]*(?:正面光|正面照明)/.test(text) || /禁止[^。；\n]*(?:正面光|正面照明)/.test(text)) forbidden.add("front");
-        if (/不允许[^。；\n]*(?:背光|逆光|背面光)/.test(text) || /禁止[^。；\n]*(?:背光|逆光|背面光)/.test(text)) forbidden.add("back");
-        next.forbidden_light_directions = Array.from(forbidden);
-        const faceMatch = text.match(/(?:不超过|最多|上限为?)\s*(\d+)\s*(?:个|名)?\s*(?:可见)?人脸/);
-        if (faceMatch) next.visible_face_limit = Number(faceMatch[1]);
-        if (/侧身|侧面|远景/.test(text) && /其他|其余/.test(text)) next.secondary_people_view = "其他人物保持侧身或远景";
-        return next;
-    };
-
     const applySceneDesign = () => {
-        const visualConstraints = sceneDesign.visual_constraints;
-        const lines = [
-            sceneDesign.visual_notes && `场景空间：${sceneDesign.visual_notes}`,
-            sceneDesign.style && `场景风格：${sceneDesign.style}`,
-            sceneDesign.ambient_lighting && `环境光：${sceneDesign.ambient_lighting}`,
-            sceneDesign.reference_viewpoint && `参考图视角：${sceneDesign.reference_viewpoint}`,
-            sceneDesign.reference_framing && `参考图构图：${sceneDesign.reference_framing}`,
-            visualConstraints.key_light_direction !== "unspecified" && `主光方向：${({ front: "正面", back: "背面", side: "侧面", top: "顶部", bottom: "底部", mixed: "混合" } as Record<string, string>)[visualConstraints.key_light_direction]}`,
-            visualConstraints.forbidden_light_directions.length > 0 && `禁止光线方向：${visualConstraints.forbidden_light_directions.map((item: string) => ({ front: "正面光", back: "背光", side: "侧面光", top: "顶部光", bottom: "底部光", mixed: "混合光" } as Record<string, string>)[item] || item).join("、")}`,
-            visualConstraints.visible_face_limit !== "" && `可见人脸上限：${visualConstraints.visible_face_limit} 张；其他人物保持侧身或远景。`,
-            visualConstraints.secondary_people_view && `其他人物呈现：${visualConstraints.secondary_people_view}`,
-        ].filter(Boolean);
-        const block = `【场景结构化设置】\n${lines.join("\n")}\n【/场景结构化设置】`;
+        if (sceneLightDirectionConflict(sceneDesign.prompt_layers, sceneDesign.visual_constraints.forbidden_light_directions)) {
+            setPromptError("所选光源方向与禁止方向冲突，请先调整光影设置或约束。");
+            return;
+        }
+        setPromptError("");
+        const text = buildSceneDesignText();
+        const block = text ? `【场景结构化设置】\n${text}\n【/场景结构化设置】` : "";
         setImagePrompt((current: string) => {
             const withoutPrevious = current.replace(/\n?【场景结构化设置】[\s\S]*?【\/场景结构化设置】/g, "").trim();
             const base = withoutPrevious === sceneDesign.visual_notes.trim() ? "" : withoutPrevious;
@@ -1392,38 +1536,48 @@ function CharacterDetailModal({ asset, type, onClose, onUpdateDescription, onUpd
         setSceneDesignNeedsApply(false);
     };
 
-    const parseSavedDescription = () => {
-        if (!descriptionSaved || !description.trim()) {
-            toast.warning("请先保存 Description，再解析结构化设置。");
+    const saveSceneDesign = async () => {
+        if (sceneDesignSaving || optimizingPrompt) return;
+        if (!visibleImagePrompt.trim() || !sceneDesign.visual_notes.trim()) {
+            setPromptError(usingSceneAi ? "请先提交并检查 AI 优化结果，再保存使用。" : "请先填写具体的场景设计，再保存使用。");
             return;
         }
-        const visualConstraints = extractVisualConstraints(description);
-        setSceneDesign(current => ({ ...current, visual_notes: description, visual_constraints: visualConstraints }));
-        setSceneDesignNeedsApply(true);
-        toast.success("已从已保存的 Description 解析结构化设置，请检查后再应用到提示词。");
-    };
-
-    const saveSceneDesign = async (confirmed: boolean) => {
-        if (!sceneDesign.visual_notes.trim() || sceneDesignSaving) return;
+        const snapshot = currentSceneSnapshot;
+        const source = scenePromptTab;
         setSceneDesignSaving(true);
+        setPromptError("");
         try {
             await onUpdateAttributes({ asset_design: {
                 visual_notes: sceneDesign.visual_notes.trim(),
+                ...(sceneDesign.asset_baseline ? {
+                    asset_baseline: sceneDesign.asset_baseline,
+                    shot_only_content: sceneDesign.shot_only_content,
+                } : {}),
                 style: sceneDesign.style.trim(),
                 ambient_lighting: sceneDesign.ambient_lighting.trim(),
                 local_lighting: { target: sceneDesign.local_target.trim(), effect: sceneDesign.local_effect.trim() },
                 reference_viewpoint: sceneDesign.reference_viewpoint.trim(),
                 reference_framing: sceneDesign.reference_framing.trim(),
+                crowd_design: sceneDesign.crowd_design,
+                prompt_layers: sceneDesign.prompt_layers,
                 visual_constraints: {
                     key_light_direction: sceneDesign.visual_constraints.key_light_direction,
                     forbidden_light_directions: sceneDesign.visual_constraints.forbidden_light_directions,
-                    visible_face_limit: sceneDesign.visual_constraints.visible_face_limit === "" ? null : Number(sceneDesign.visual_constraints.visible_face_limit),
-                    secondary_people_view: sceneDesign.visual_constraints.secondary_people_view.trim(),
                 },
-                confirmed,
+                prompt_workspace: {
+                    active_source: source,
+                    settings_pending: sceneDesignNeedsApply,
+                    design: { prompt: imagePrompt, mode: imageGenerationMode, references: promptReferences },
+                    ai: { prompt: optimizedPrompt, mode: aiGenerationMode, references: aiReferences },
+                },
+                confirmed: true,
             } });
-            toast.success(confirmed ? "场景设计已确认" : "场景草稿已保存");
+            savedSceneSnapshot.current = snapshot;
+            setHasSavedSceneDesign(true);
+            setSavedSceneSource(source);
+            toast.success(`已保存并使用${source === "ai" ? " AI 优化" : "场景设计"}`);
         } catch (error) {
+            setPromptError(extractErrorDetail(error));
             toast.error("场景设计保存失败", { body: extractErrorDetail(error) });
         } finally {
             setSceneDesignSaving(false);
@@ -1431,15 +1585,21 @@ function CharacterDetailModal({ asset, type, onClose, onUpdateDescription, onUpd
     };
 
     return (
-        <div className="absolute inset-0 z-50 flex items-center justify-center bg-overlay backdrop-blur-sm p-2 md:p-8">
+        <div className="absolute inset-0 z-50 flex items-center justify-center bg-overlay backdrop-blur-sm">
             <motion.div
                 initial={{ opacity: 0, scale: 0.95 }}
                 animate={{ opacity: 1, scale: 1 }}
                 exit={{ opacity: 0, scale: 0.95 }}
-                className="bg-surface border border-glass-border rounded-lg w-[min(96vw,1600px)] max-w-none h-[min(96dvh,1000px)] flex flex-col overflow-hidden shadow-lg md:flex-row"
+                className="bg-surface border border-glass-border w-full h-full flex flex-col overflow-hidden shadow-lg"
             >
-                {/* Left: Variant Selector */}
-                <div className="h-[40%] min-h-0 w-full bg-surface relative border-b border-glass-border flex flex-col overflow-hidden md:h-auto md:w-1/2 md:border-b-0 md:border-r">
+                    {/* Header */}
+                    <div className="px-4 py-3 border-b border-glass-border flex justify-between items-center bg-surface">
+                        <AssetNameEditor name={asset.name} onRename={onRename} className="text-xl font-bold" />
+                        <button aria-label="关闭工作台" onClick={onClose} className="min-h-11 min-w-11 p-2 hover:bg-hover-bg rounded-full text-text-secondary hover:text-foreground">
+                            <X size={24} />
+                        </button>
+                    </div>
+
                     {/* Tab Switcher */}
                     <div className="flex border-b border-glass-border bg-surface">
                         <button
@@ -1460,36 +1620,7 @@ function CharacterDetailModal({ asset, type, onClose, onUpdateDescription, onUpd
                         </>}
                     </div>
 
-                    <div className="flex-1 p-4 overflow-hidden">
-                        {activeTab === "image" ? (
-                            <VariantSelector
-                                key={`${type}:${asset.id}`}
-                                asset={asset.image_asset}
-                                currentImageUrl={asset.image_url}
-                                onSelect={handleSelectVariant}
-                                onDelete={handleDeleteVariant}
-                                onRename={handleRenameVariant}
-                                onGenerate={handleGenerateClick}
-                                isGenerating={isGenerating}
-                                aspectRatio="16:9"
-                                className="h-full"
-                                previewLocator={currentProject ? {
-                                    scope: asset.source === "series" && currentProject.series_id ? "series" : "project",
-                                    containerId: asset.source === "series" && currentProject.series_id ? currentProject.series_id : currentProject.id,
-                                    assetType: type,
-                                    assetId: asset.id,
-                                } : undefined}
-                            />
-                        ) : activeTab === "video" ? (
-                            <VideoVariantSelector
-                                videos={asset.video_assets || []}
-                                onDelete={onDeleteVideo}
-                                onGenerate={(duration) => onGenerateVideo(videoPrompt, duration)}
-                                isGenerating={isGeneratingVideo}
-                                aspectRatio="16:9"
-                                className="h-full"
-                            />
-                        ) : <SceneImageTools kind={activeTab} sources={sceneImageSources} sceneAssetId={asset.id} lightingReferences={lightingReferences} busy={isGenerating} onGenerate={(source, params, compiledPrompt, lightReference) => {
+                {activeTab === "lighting" || activeTab === "camera" ? <SceneImageTools kind={activeTab} sources={sceneImageSources} sceneAssetId={asset.id} lightingReferences={lightingReferences} busy={isGenerating} onGenerate={(source, params, compiledPrompt, lightReference) => {
                             const sourceReference: AssetLibraryReference = { asset_type: "scene", asset_id: asset.id, variant_id: source.variantId };
                             const references = [sourceReference];
                             if (lightReference && !(lightReference.asset_type === sourceReference.asset_type && lightReference.asset_id === sourceReference.asset_id && lightReference.variant_id === sourceReference.variant_id)) references.push(lightReference);
@@ -1501,29 +1632,16 @@ function CharacterDetailModal({ asset, type, onClose, onUpdateDescription, onUpd
                                 references, image_generation_mode: "reference",
                                 apply_style: false, preserve_prompt: true, scene_tool: params,
                             });
-                        }} />}
-                    </div>
-                </div>
-
-                {/* Right: Details */}
-                <div className="min-h-0 w-full flex-1 flex flex-col md:w-1/2">
-                    {/* Header */}
-                    <div className="p-6 border-b border-glass-border flex justify-between items-center bg-surface">
-                        <AssetNameEditor name={asset.name} onRename={onRename} className="text-2xl font-bold" />
-                        <button onClick={onClose} className="p-2 hover:bg-hover-bg rounded-full text-text-secondary hover:text-foreground">
-                            <X size={24} />
-                        </button>
-                    </div>
-
+                        }} /> : <AssetWorkbenchLayout controls={<div className="flex min-w-0 flex-col">
                     <EpisodeAssetPlanPanel entries={planEntries} onUse={(text) => setImagePrompt((previous: string) => `${previous.trim()}\n${text}`.trim())} />
 
                     {/* Content */}
-                    <div className="flex-1 p-6 overflow-y-auto space-y-6">
+                    <div className="space-y-6 p-4 sm:p-5">
                         {/* Description */}
                         <div className="space-y-2">
                             <div className="flex justify-between items-center">
-                                <label className="text-sm font-bold text-text-secondary uppercase">Description</label>
-                                {!isEditing && (
+                                <label className="text-sm font-bold text-text-secondary uppercase">{type === "scene" ? "场景描述 · 设计依据" : "Description"}</label>
+                                {type !== "scene" && !isEditing && (
                                     <button onClick={() => setIsEditing(true)} className="text-xs text-primary hover:underline">
                                         Edit
                                     </button>
@@ -1548,70 +1666,116 @@ function CharacterDetailModal({ asset, type, onClose, onUpdateDescription, onUpd
                             )}
                         </div>
 
-                        {type === "scene" && activeTab === "image" && (
+                        {type === "prop" && (
+                            <label className="block space-y-1 text-sm text-text-secondary">
+                                <span className="font-bold uppercase">道具长度（厘米）</span>
+                                <input aria-label="道具长度（厘米）" inputMode="decimal" type="number" min="0.1" step="0.1"
+                                    value={propLengthCm} onChange={event => setPropLengthCm(event.target.value)}
+                                    className="w-full rounded-lg border border-glass-border bg-input-bg p-2 text-sm text-foreground"
+                                    placeholder="例如：95"
+                                />
+                                <span className="block text-xs text-text-muted">用于跨分镜保持道具实际长度；画面中的近大远小仍由镜头透视决定。</span>
+                                <button type="button" onClick={() => void savePropDimensions()}
+                                    className="rounded border border-glass-border px-3 py-1.5 text-xs text-primary hover:bg-primary/10">
+                                    保存道具尺寸
+                                </button>
+                            </label>
+                        )}
+
+                        {type === "scene" && activeTab === "image" && <div className="flex items-center gap-2 border-b border-glass-border">
+                            <div className="flex flex-1" role="tablist" aria-label="场景提示词来源">
+                            {(["design", "ai"] as const).map(tab => <button key={tab} type="button" role="tab"
+                                id={`scene-tab-${tab}`} aria-controls={`scene-prompt-${tab}`} tabIndex={scenePromptTab === tab ? 0 : -1}
+                                disabled={sceneDesignSaving || optimizingPrompt} aria-selected={scenePromptTab === tab} onClick={() => { setScenePromptTab(tab); setMention(null); }}
+                                onKeyDown={event => {
+                                    if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
+                                    event.preventDefault();
+                                    const next = event.key === "Home" ? "design" : event.key === "End" ? "ai" : tab === "design" ? "ai" : "design";
+                                    setScenePromptTab(next);
+                                    setMention(null);
+                                    document.getElementById(`scene-tab-${next}`)?.focus();
+                                }}
+                                className={`min-h-11 flex-1 border-b-2 px-3 text-sm ${scenePromptTab === tab ? "border-primary text-primary" : "border-transparent text-text-secondary hover:text-foreground"}`}>
+                                {tab === "design" ? "场景设计" : "AI 优化"}
+                            </button>)}
+                            </div>
+                        </div>}
+                        {type === "scene" && activeTab === "image" && scenePromptTab === "design" && <button type="button"
+                            aria-expanded={showSceneSettings} onClick={() => setShowSceneSettings(value => !value)}
+                            className="min-h-11 w-full rounded-lg border border-glass-border px-3 text-left text-sm text-foreground">
+                            {showSceneSettings ? "收起基础面板" : "基础面板 · 空间、风格、光影与构图"}
+                        </button>}
+                        {type === "scene" && activeTab === "image" && scenePromptTab === "design" && showSceneSettings && (
                             <section className="space-y-3 rounded-lg border border-glass-border bg-glass p-4" aria-label="场景结构化设置">
-                                <div>
-                                    <h3 className="text-sm font-bold text-foreground">场景结构化设置</h3>
-                                    <p className="mt-1 text-xs text-text-muted">流程：先保存 Description → 开始结构化 → 检查并应用到可见提示词 → AI 优化 → 生成。占位和深度用于后续白模参考图。</p>
-                                </div>
-                                <div className="flex flex-wrap items-center gap-2 text-xs">
-                                    <span className={descriptionSaved ? "text-status-success-fg" : "text-status-warning-fg"}>{descriptionSaved ? "Description 已保存" : "Description 有未保存修改"}</span>
-                                    <button type="button" onClick={parseSavedDescription} disabled={!descriptionSaved} className="rounded border border-glass-border px-2 py-1 text-foreground disabled:opacity-40">开始结构化</button>
-                                </div>
                                 <label className="block text-xs text-text-secondary">场景描述
                                     <textarea aria-label="场景空间与固定外观" value={sceneDesign.visual_notes} onChange={event => updateSceneDesign("visual_notes", event.target.value)} className="mt-1 w-full rounded border border-glass-border bg-input-bg p-2 text-sm text-foreground" rows={3} />
                                 </label>
                                 <label className="block text-xs text-text-secondary">风格
                                     <textarea aria-label="场景风格" value={sceneDesign.style} onChange={event => updateSceneDesign("style", event.target.value)} className="mt-1 w-full rounded border border-glass-border bg-input-bg p-2 text-sm text-foreground" rows={2} />
                                 </label>
-                                <p className="text-xs text-text-muted">默认继承全局风格；后续可在这里选择风格参考图。</p>
-                                <label className="block text-xs text-text-secondary">光影
-                                    <textarea aria-label="场景环境光" value={sceneDesign.ambient_lighting} onChange={event => updateSceneDesign("ambient_lighting", event.target.value)} className="mt-1 w-full rounded border border-glass-border bg-input-bg p-2 text-sm text-foreground" rows={2} />
-                                </label>
-                                <p className="text-xs text-text-muted">初版从已保存 Description 结构化光影文字；参数化光影将在后续版本启用。</p>
-                                <div className="grid gap-2 md:grid-cols-2">
-                                    <label className="block text-xs text-text-secondary opacity-60">局部光作用区域／对象（暂未启用）
-                                        <input aria-label="局部光作用区域" disabled value={sceneDesign.local_target} onChange={event => updateSceneDesign("local_target", event.target.value)} className="mt-1 w-full rounded border border-glass-border bg-input-bg p-2 text-sm text-foreground" placeholder="需要蒙板后启用" />
-                                    </label>
-                                    <label className="block text-xs text-text-secondary opacity-60">局部光效果（暂未启用）
-                                        <input aria-label="局部光效果" disabled value={sceneDesign.local_effect} onChange={event => updateSceneDesign("local_effect", event.target.value)} className="mt-1 w-full rounded border border-glass-border bg-input-bg p-2 text-sm text-foreground" placeholder="需要蒙板后启用" />
-                                    </label>
+                                <SceneAtmosphereTemplates onApply={template => {
+                                    setSceneDesign(current => ({ ...current,
+                                        prompt_layers: { ...current.prompt_layers, ...structuredClone(template.settings) },
+                                        visual_constraints: { ...current.visual_constraints, key_light_direction: "unspecified" },
+                                    }));
+                                    setSceneDesignNeedsApply(true);
+                                }} />
+                                <ScenePromptLayersPanel value={sceneDesign.prompt_layers} onChange={layers => {
+                                    setSceneDesign(current => ({ ...current, prompt_layers: layers,
+                                        visual_constraints: { ...current.visual_constraints,
+                                            key_light_direction: layers.lighting?.direction || layers.lighting?.angles ? "unspecified" : current.visual_constraints.key_light_direction },
+                                    }));
+                                    setSceneDesignNeedsApply(true);
+                                }} />
+                                <div className="space-y-2 rounded border border-glass-border p-3">
+                                    <p className="text-xs font-semibold text-foreground">近景 / 中景 / 远景人群</p>
+                                    {(["near", "mid", "far"] as const).map(layer => {
+                                        const labels = { near: "近景", mid: "中景", far: "远景" };
+                                        const value = sceneDesign.crowd_design[layer] || {};
+                                        return <div key={layer} className="grid gap-2 md:grid-cols-5">
+                                            <span className="pt-2 text-xs text-text-secondary">{labels[layer]}</span>
+                                            <select aria-label={`${labels[layer]}身份策略`} value={value.identity_policy || "unidentified"}
+                                                onChange={event => setSceneDesign(current => ({ ...current, crowd_design: { ...current.crowd_design, [layer]: { ...value, identity_policy: event.target.value } } }))}
+                                                className="rounded border border-glass-border bg-input-bg p-2 text-xs text-foreground">
+                                                <option value="asset_required">需绑定资产</option><option value="template_allowed">允许群演模板</option><option value="unidentified">匿名背景</option>
+                                            </select>
+                                            <input aria-label={`${labels[layer]}密度`} placeholder="密度" value={value.density || ""} onChange={event => setSceneDesign(current => ({ ...current, crowd_design: { ...current.crowd_design, [layer]: { ...value, density: event.target.value } } }))} className="rounded border border-glass-border bg-input-bg p-2 text-xs text-foreground" />
+                                            <input aria-label={`${labels[layer]}对象`} placeholder="对象，用逗号分隔" value={(value.subjects || []).join("、")} onChange={event => setSceneDesign(current => ({ ...current, crowd_design: { ...current.crowd_design, [layer]: { ...value, subjects: event.target.value.split(/[、,，]/).map(item => item.trim()).filter(Boolean) } } }))} className="rounded border border-glass-border bg-input-bg p-2 text-xs text-foreground" />
+                                            <input aria-label={`${labels[layer]}固定文字`} placeholder="固定招牌/文字" value={(value.text_elements || []).join("、")} onChange={event => setSceneDesign(current => ({ ...current, crowd_design: { ...current.crowd_design, [layer]: { ...value, text_elements: event.target.value.split(/[、,，]/).map(item => item.trim()).filter(Boolean) } } }))} className="rounded border border-glass-border bg-input-bg p-2 text-xs text-foreground" />
+                                        </div>;
+                                    })}
+                                    <p className="text-[11px] text-text-muted">近景出现可辨脸部或固定文字时绑定资产；中景可使用群演模板；远景只锁定密度、方向和区域。</p>
                                 </div>
-                                <div className="grid gap-2 md:grid-cols-2">
-                                    <label className="block text-xs text-text-secondary">镜头
-                                        <input aria-label="场景参考图视角" value={sceneDesign.reference_viewpoint} onChange={event => updateSceneDesign("reference_viewpoint", event.target.value)} className="mt-1 w-full rounded border border-glass-border bg-input-bg p-2 text-sm text-foreground" />
+                                <details className="rounded border border-glass-border p-2">
+                                    <summary className="min-h-11 cursor-pointer text-xs text-text-secondary">补充描述与旧版设置</summary>
+                                    <label className="block text-xs text-text-secondary">环境光补充
+                                        <textarea aria-label="场景环境光" value={sceneDesign.ambient_lighting} onChange={event => updateSceneDesign("ambient_lighting", event.target.value)} className="mt-1 w-full rounded border border-glass-border bg-input-bg p-2 text-sm text-foreground" rows={2} />
                                     </label>
-                                    <label className="block text-xs text-text-secondary">占位和深度（白模参考图）
-                                        <input aria-label="场景参考图构图" value={sceneDesign.reference_framing} onChange={event => updateSceneDesign("reference_framing", event.target.value)} className="mt-1 w-full rounded border border-glass-border bg-input-bg p-2 text-sm text-foreground" />
-                                    </label>
-                                </div>
+                                    <div className="grid gap-2 md:grid-cols-2">
+                                        <label className="block text-xs text-text-secondary">视角
+                                            <input aria-label="场景参考图视角" value={sceneDesign.reference_viewpoint} onChange={event => updateSceneDesign("reference_viewpoint", event.target.value)} className="mt-1 w-full rounded border border-glass-border bg-input-bg p-2 text-sm text-foreground" />
+                                        </label>
+                                        <label className="block text-xs text-text-secondary">构图与空间层次
+                                            <input aria-label="场景参考图构图" value={sceneDesign.reference_framing} onChange={event => updateSceneDesign("reference_framing", event.target.value)} className="mt-1 w-full rounded border border-glass-border bg-input-bg p-2 text-sm text-foreground" />
+                                        </label>
+                                    </div>
+                                </details>
                                 <div className="rounded border border-glass-border/70 bg-input-bg/40 p-3 space-y-2">
                                     <p className="text-xs font-semibold text-foreground">可执行一致性约束</p>
                                     <div className="grid gap-2 md:grid-cols-2">
-                                        <label className="block text-xs text-text-secondary">主光方向
+                                        {sceneDesign.visual_constraints.key_light_direction !== "unspecified" && <label className="block text-xs text-text-secondary">旧版主光方向
                                             <select aria-label="主光方向" value={sceneDesign.visual_constraints.key_light_direction} onChange={event => updateVisualConstraint("key_light_direction", event.target.value)} className="mt-1 w-full rounded border border-glass-border bg-input-bg p-2 text-sm text-foreground">
                                                 <option value="unspecified">未指定</option><option value="front">正面光</option><option value="back">背面光</option><option value="side">侧面光</option><option value="top">顶部光</option><option value="bottom">底部光</option><option value="mixed">混合光</option>
                                             </select>
-                                        </label>
-                                        <label className="block text-xs text-text-secondary">可见人脸上限
-                                            <input aria-label="可见人脸上限" type="number" min={0} max={50} value={sceneDesign.visual_constraints.visible_face_limit} onChange={event => updateVisualConstraint("visible_face_limit", event.target.value === "" ? "" : Number(event.target.value))} className="mt-1 w-full rounded border border-glass-border bg-input-bg p-2 text-sm text-foreground" placeholder="例如：3" />
-                                        </label>
+                                        </label>}
                                     </div>
                                     <div className="flex flex-wrap gap-3 text-xs text-text-secondary">
                                         {[["front", "禁止正面光"], ["back", "禁止背光"], ["top", "禁止顶部光"], ["bottom", "禁止底部光"]].map(([value, label]) => <label key={value} className="inline-flex items-center gap-1"><input type="checkbox" checked={sceneDesign.visual_constraints.forbidden_light_directions.includes(value)} onChange={event => updateVisualConstraint("forbidden_light_directions", event.target.checked ? [...sceneDesign.visual_constraints.forbidden_light_directions, value] : sceneDesign.visual_constraints.forbidden_light_directions.filter((item: string) => item !== value))} />{label}</label>)}
                                     </div>
-                                    <label className="block text-xs text-text-secondary">其他人物呈现方式
-                                        <input aria-label="其他人物呈现方式" value={sceneDesign.visual_constraints.secondary_people_view} onChange={event => updateVisualConstraint("secondary_people_view", event.target.value)} className="mt-1 w-full rounded border border-glass-border bg-input-bg p-2 text-sm text-foreground" placeholder="例如：其他人物保持侧身或远景" />
-                                    </label>
-                                    <p className="text-[11px] text-text-muted">应用时会从上方描述识别“侧面光”“禁止正面光”“最多 3 个可见人脸”等明确表达；识别结果会显示在下方可见提示词中。</p>
                                 </div>
                                 <div className="flex flex-wrap items-center gap-2">
-                                    <button type="button" onClick={() => void saveSceneDesign(false)} disabled={sceneDesignSaving || !sceneDesign.visual_notes.trim()} className="rounded border border-glass-border px-2 py-1 text-xs text-foreground disabled:opacity-40">保存草稿</button>
-                                    <button type="button" onClick={() => void saveSceneDesign(true)} disabled={sceneDesignSaving || !sceneDesign.visual_notes.trim()} className="rounded border border-glass-border px-2 py-1 text-xs text-foreground disabled:opacity-40">确认场景设计</button>
-                                    <button type="button" onClick={applySceneDesign} className="rounded bg-primary px-2 py-1 text-xs text-white">应用到图片提示词</button>
+                                    <button type="button" onClick={applySceneDesign} className="min-h-11 rounded bg-primary px-3 text-sm text-white">应用到图片提示词</button>
                                 </div>
-                                {sceneDesignNeedsApply && <p role="status" className="text-xs text-primary">设置有修改。生成前请应用到可见提示词，或<button type="button" className="ml-1 underline" onClick={() => setSceneDesignNeedsApply(false)}>保留当前提示词</button>。</p>}
-                                <p className="text-xs text-text-muted">已确认版本：{asset.asset_design?.design_revisions?.at(-1)?.revision || "无"}</p>
                             </section>
                         )}
 
@@ -1619,43 +1783,56 @@ function CharacterDetailModal({ asset, type, onClose, onUpdateDescription, onUpd
                             variant only makes it available; @ in this editor
                             is the explicit binding sent to the provider. */}
                         {activeTab === "image" && (
-                            <div className="space-y-2">
-                                <div className="flex items-center justify-between">
-                                    <label className="text-sm font-bold text-text-secondary uppercase">{tv("imagePromptLabel")}</label>
+                            <div className="space-y-2" role={type === "scene" ? "tabpanel" : undefined}
+                                id={type === "scene" ? `scene-prompt-${scenePromptTab}` : undefined}
+                                aria-labelledby={type === "scene" ? `scene-tab-${scenePromptTab}` : undefined}>
+                                {type === "scene" && !usingSceneAi && sceneDesignNeedsApply && <div role="status" className="text-xs text-primary">
+                                    基础面板有未应用的设置。
+                                    <button type="button" className="min-h-11 px-2 underline" onClick={() => setShowSceneSettings(true)}>打开基础面板</button>
+                                    <button type="button" className="min-h-11 px-2 underline" onClick={() => setSceneDesignNeedsApply(false)}>保留当前提示词</button>
+                                </div>}
+                                <div className="flex flex-wrap items-center justify-between gap-2">
+                                    <label className="text-sm font-bold text-text-secondary">{type === "scene" ? `本次生成使用：${usingSceneAi ? "AI 优化" : "场景设计"}` : tv("imagePromptLabel")}</label>
                                     <div className="flex items-center gap-1 rounded-md border border-glass-border bg-black/20 p-1" role="group" aria-label="Image generation mode">
                                         {(["text", "reference"] as const).map((mode) => (
                                             <button
                                                 key={mode}
                                                 type="button"
-                                                aria-pressed={imageGenerationMode === mode}
-                                                onClick={() => setImageGenerationMode(mode)}
-                                                className={`rounded px-2 py-1 text-[0.6875rem] ${imageGenerationMode === mode ? "bg-primary/15 text-primary" : "text-text-muted hover:text-foreground"}`}
+                                                disabled={sceneDesignSaving || (usingSceneAi && optimizingPrompt)}
+                                                aria-pressed={visibleGenerationMode === mode}
+                                                onClick={() => setVisibleGenerationMode(mode)}
+                                                className={`rounded px-2 py-1 text-[0.6875rem] ${visibleGenerationMode === mode ? "bg-primary/15 text-primary" : "text-text-muted hover:text-foreground"}`}
                                             >
                                                 {mode === "text" ? tv("textGenerationMode") : tv("referenceGenerationMode")}
                                             </button>
                                         ))}
                                     </div>
                                 </div>
-                                <div className="flex flex-wrap items-center gap-2">
-                                    <select aria-label="提示词优化模型" value={promptModel}
+                                {(type !== "scene" || !usingSceneAi) && <div className="flex flex-wrap items-center gap-2">
+                                    <select aria-label={type === "scene" ? "设计模型" : "提示词优化模型"} value={promptModel}
                                         onChange={event => setPromptModel(event.target.value)}
                                         className="h-9 min-w-0 flex-1 rounded border border-glass-border bg-surface px-2 text-xs text-foreground">
                                         {promptModels.length === 0 && <option value="">暂无可用模型</option>}
                                         {promptModels.map(model => <option key={model.api_model_id} value={model.api_model_id}>{model.display_name}</option>)}
                                     </select>
                                     <button type="button" onClick={() => void handleOptimizePrompt()}
-                                        disabled={!promptModel || optimizingPrompt || !descriptionSaved || !description.trim() || (type === "scene" && sceneDesignNeedsApply)}
+                                        disabled={!promptModel || optimizingPrompt || sceneDesignSaving || !descriptionSaved || !description.trim() || (type === "scene" && sceneDesignNeedsApply)}
                                         className="inline-flex h-9 items-center gap-1.5 rounded border border-glass-border px-3 text-xs text-foreground hover:bg-hover-bg disabled:opacity-50">
-                                        <Sparkles size={14} />{optimizingPrompt ? "优化中…" : "优化提示词"}
+                                        <Sparkles size={14} />{optimizingPrompt ? "优化中…" : type === "scene" ? "提交 AI 完善" : "优化提示词"}
                                     </button>
-                                </div>
+                                </div>}
+                                {type === "scene" && usingSceneAi && <p className="text-xs text-text-muted">根据场景设计生成独立提示词，保留原设计供对比。修改场景设计后，可重新优化。</p>}
+                                {usingSceneAi && sceneDesignNeedsApply && <p role="status" className="text-xs text-primary">
+                                    基础面板有未应用的设置，请先检查。
+                                    <button type="button" className="min-h-11 px-2 underline" onClick={() => { setScenePromptTab("design"); setShowSceneSettings(true); }}>检查场景设计</button>
+                                </p>}
                                 {promptError && <p role="alert" className="text-xs text-status-failed-fg">{promptError}</p>}
                                 {pendingPromptReview && <VideoPolishReview messages={pendingPromptReview.messages}
                                     media={[]} formatNote={pendingPromptReview.formatNote} isContextIr={false}
                                     isSubmitting={optimizingPrompt} error={promptError} userLabel="资产描述与可见提示词"
                                     confirmLabel="确认输入并优化" onChange={messages => setPendingPromptReview(current => current && ({ ...current, messages }))}
                                     onCancel={() => setPendingPromptReview(null)} onConfirm={() => void confirmPromptRefine()} />}
-                                {optimizedPrompt && <div className="space-y-2 border-l-2 border-primary pl-3">
+                                {type !== "scene" && optimizedPrompt && <div className="space-y-2 border-l-2 border-primary pl-3">
                                     <p className="whitespace-pre-wrap text-xs leading-relaxed text-text-secondary">{optimizedPrompt}</p>
                                     <div className="flex gap-3">
                                         <button type="button" onClick={() => { setImagePrompt(optimizedPrompt); setOptimizedPrompt(""); setSceneDesignNeedsApply(false); }} className="text-xs text-primary hover:underline">采用建议</button>
@@ -1663,24 +1840,54 @@ function CharacterDetailModal({ asset, type, onClose, onUpdateDescription, onUpd
                                     </div>
                                 </div>}
                                 <div className="relative rounded-lg border border-glass-border bg-input-bg p-3 focus-within:border-primary/50">
+                                    <div className="mb-2 flex flex-wrap items-center gap-2" aria-label="场景参考素材列表">
+                                        {selectedCandidates.map((candidate) => <span key={`${candidate.reference?.asset_type}:${candidate.reference?.asset_id}:${candidate.reference?.variant_id}`}
+                                            className="inline-flex max-w-full items-center gap-1 rounded border border-glass-border px-1.5 py-1 text-xs text-foreground">
+                                            {candidate.previewUrl && <img src={candidate.previewUrl} alt="" className="h-7 w-7 rounded object-cover" />}
+                                            <span className="max-w-36 truncate" title={candidate.label}>{candidate.label}</span>
+                                            <button type="button" aria-label={`移除参考素材 ${candidate.label}`} onClick={() => setVisibleReferences(visibleReferences.filter((reference) =>
+                                                reference.asset_type !== candidate.reference?.asset_type || reference.asset_id !== candidate.reference?.asset_id || reference.variant_id !== candidate.reference?.variant_id))}
+                                                className="flex h-7 w-7 items-center justify-center rounded hover:bg-hover-bg"><X size={14} /></button>
+                                        </span>)}
+                                        <button type="button" onClick={() => setReferencePickerOpen((open) => !open)}
+                                            aria-expanded={referencePickerOpen} aria-label="添加场景参考素材"
+                                            className="flex min-h-9 items-center gap-1 rounded border border-glass-border px-2 text-xs hover:bg-hover-bg"><Plus size={14} />参考素材</button>
+                                    </div>
+                                    {referencePickerOpen && <div className="mb-2 rounded border border-glass-border bg-surface p-2">
+                                        <input aria-label="搜索场景参考素材" value={referencePickerQuery} onChange={(event) => setReferencePickerQuery(event.target.value)}
+                                            className="mb-2 min-h-9 w-full rounded border border-glass-border bg-input-bg px-2 text-sm" placeholder="搜索素材" />
+                                        <div className="max-h-48 overflow-y-auto" role="listbox" aria-label="可添加的场景参考素材">
+                                            {pickerCandidates.length === 0 && <p className="p-2 text-xs text-text-muted">没有可用素材</p>}
+                                            {pickerCandidates.map((candidate) => {
+                                                const reference = candidate.reference!;
+                                                const selected = visibleReferences.some((item) => item.asset_type === reference.asset_type && item.asset_id === reference.asset_id && item.variant_id === reference.variant_id);
+                                                return <button key={`${reference.asset_type}:${reference.asset_id}:${reference.variant_id}`} type="button" role="option" aria-selected={selected}
+                                                    onClick={() => setVisibleReferences(selected ? visibleReferences.filter((item) => item.asset_type !== reference.asset_type || item.asset_id !== reference.asset_id || item.variant_id !== reference.variant_id) : [...visibleReferences, reference])}
+                                                    className="flex min-h-10 w-full items-center gap-2 rounded px-2 text-left text-xs hover:bg-hover-bg">
+                                                    {candidate.previewUrl ? <img src={candidate.previewUrl} alt="" className="h-8 w-8 rounded object-cover" /> : <ImageIcon size={16} />}
+                                                    <span className="min-w-0 flex-1 truncate">{candidate.label}</span>{selected && <Check size={14} aria-label="已选" />}
+                                                </button>;
+                                            })}
+                                        </div>
+                                    </div>}
                                     <ReferencePromptEditor
-                                        value={imagePrompt}
-                                        candidates={referenceCandidates}
-                                        onChange={setImagePrompt}
-                                        onReferencesChange={setPromptReferences}
-                                        restoreSelectedReferences={promptReferences}
+                                        key={usingSceneAi ? "ai" : "design"}
+                                        value={visibleImagePrompt}
+                                        candidates={selectedCandidates}
+                                        onChange={setVisibleImagePrompt}
+                                        restoreSelectedReferences={visibleReferences}
                                         onMentionChange={(suggestion) => { setMention(suggestion); setMentionIndex(0); }}
                                         onMentionKeyDown={handleMentionKeyDown}
                                         allowImplicitMentions={false}
                                         pruneUnlistedReferences
-                                        editable={!isGenerating}
+                                        editable={!isGenerating && !sceneDesignSaving && !(usingSceneAi && optimizingPrompt)}
                                         placeholder={tv("imagePromptPlaceholder")}
                                     />
                                     {mention && (
                                         <div role="listbox" aria-label="Reference index" className="absolute bottom-full left-0 z-50 mb-2 max-h-56 w-[min(100%,24rem)] overflow-y-auto rounded-xl border border-glass-border bg-elevated p-2 shadow-2xl">
                                             <div className="px-2 pb-1.5 pt-1 font-mono text-[0.625rem] uppercase tracking-[0.12em] text-text-muted">{tv("referenceIndex")} · {tv("referenceSearchHint")}</div>
                                             {matchingReferenceCandidates.length === 0 ? (
-                                                <div className="px-2 py-2 text-xs text-text-muted">{referenceCandidates.length ? tv("noMatchingReference") : tv("noAvailableReference")}</div>
+                                                <div className="px-2 py-2 text-xs text-text-muted">{selectedCandidates.length ? tv("noMatchingReference") : "请先在参考素材列表中添加素材"}</div>
                                             ) : matchingReferenceCandidates.map((candidate, index) => (
                                                 <button
                                                     key={`${candidate.reference?.asset_type}:${candidate.reference?.asset_id}:${candidate.reference?.variant_id}`}
@@ -1698,9 +1905,22 @@ function CharacterDetailModal({ asset, type, onClose, onUpdateDescription, onUpd
                                         </div>
                                     )}
                                 </div>
-                                {promptReferences.length > 0 && (
-                                    <p className="text-[0.6875rem] text-primary">{tv("explicitReferenceCount", { count: promptReferences.length, suffix: promptReferences.length === 1 ? "" : "s" })}</p>
+                                {visibleReferences.length > 0 && (
+                                    <p className="text-[0.6875rem] text-primary">{tv("explicitReferenceCount", { count: visibleReferences.length, suffix: visibleReferences.length === 1 ? "" : "s" })}</p>
                                 )}
+                                {type === "scene" && <>
+                                    <p role="status" className="text-xs text-text-muted">{hasSavedSceneDesign
+                                        ? `${sceneHasChanges ? "已保存的设计有修改" : "已保存 · 当前设计已生效"} · 保存的来源：${savedSceneSource === "ai" ? "AI 优化" : "场景设计"}`
+                                        : "尚未保存"}</p>
+                                    <div className="sticky bottom-0 flex gap-2 bg-surface py-2">
+                                        <button type="button" disabled={sceneDesignSaving || optimizingPrompt || !visibleImagePrompt.trim() || !sceneDesign.visual_notes.trim()}
+                                            onClick={() => void saveSceneDesign()} className="min-h-11 flex-1 rounded bg-primary px-3 text-sm text-primary-foreground disabled:opacity-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary">
+                                            {sceneDesignSaving ? "保存中…" : usingSceneAi ? "保存并使用 AI 优化" : "保存并使用场景设计"}
+                                        </button>
+                                        <button type="button" disabled={sceneDesignSaving || optimizingPrompt || !hasSavedSceneDesign} onClick={restoreSavedSceneDesign}
+                                            className="min-h-11 flex-1 rounded border border-glass-border px-3 text-sm text-foreground disabled:opacity-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary">编辑已保存设计</button>
+                                    </div>
+                                </>}
                             </div>
                         )}
 
@@ -1771,21 +1991,43 @@ function CharacterDetailModal({ asset, type, onClose, onUpdateDescription, onUpd
                         )}
                     </div>
 
-                    {/* Footer Actions */}
-                    <div className="p-6 border-t border-glass-border bg-surface flex gap-4">
-                        <button
-                            onClick={onClose}
-                            className="flex-1 py-3 bg-green-600 hover:bg-green-500 text-foreground rounded-xl font-bold flex items-center justify-center gap-2 shadow-lg shadow-green-500/20"
-                        >
-                            <Check size={18} />
-                            Done
-                        </button>
-                    </div>
-                </div>
+                </div>} preview={<div className="flex min-h-[360px] flex-1 flex-col p-4 lg:min-h-0">
+
+                        {activeTab === "image" ? (
+                            <VariantSelector
+                                key={`${type}:${asset.id}`}
+                                asset={asset.image_asset}
+                                currentImageUrl={asset.image_url}
+                                onSelect={handleSelectVariant}
+                                onDelete={handleDeleteVariant}
+                                onRename={handleRenameVariant}
+                                onGenerate={handleGenerateClick}
+                                isGenerating={isGenerating}
+                                aspectRatio="16:9"
+                                className="h-full"
+                                previewLocator={currentProject ? {
+                                    scope: asset.source === "series" && currentProject.series_id ? "series" : "project",
+                                    containerId: asset.source === "series" && currentProject.series_id ? currentProject.series_id : currentProject.id,
+                                    assetType: type,
+                                    assetId: asset.id,
+                                } : undefined}
+                            />
+                        ) : activeTab === "video" ? (
+                            <VideoVariantSelector
+                                videos={asset.video_assets || []}
+                                onDelete={onDeleteVideo}
+                                onGenerate={(duration) => onGenerateVideo(videoPrompt, duration)}
+                                isGenerating={isGeneratingVideo}
+                                aspectRatio="16:9"
+                                className="h-full"
+                            />
+                        ) : null}
+                </div>} />}
             </motion.div>
             {pendingImageReview && currentProject?.id && <AssetImageSubmissionReview
                 projectId={currentProject.id}
                 request={pendingImageReview}
+                sourceLabel={pendingImageReview.scene_tool ? undefined : pendingPromptSource}
                 referenceIndex={assetIndex}
                 onBack={() => setPendingImageReview(null)}
                 onConfirm={(review) => {

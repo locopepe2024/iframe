@@ -234,6 +234,22 @@ def test_full_body_motion_reference_uses_selected_canonical_reference_sheet():
     assert pipeline.video_generator.generate_i2v.call_args.kwargs["image_url"] == "master.png"
 
 
+def test_motion_reference_uses_cover_ahead_of_category_selection():
+    from src.apps.comic_gen.models import ImageAsset, ImageVariant
+    character = Character(id="actor", name="Actor", description="Actor", cover_variant_id="cover",
+        reference_sheet=AssetUnit(selected_image_id="old", image_variants=[ImageVariant(id="old", url="old.png")]),
+        headshot_asset=ImageAsset(selected_id="cover", variants=[ImageVariant(id="cover", url="cover.png")]))
+    script = _script_with_tasks()
+    script.characters = [character]
+    pipeline = ComicGenPipeline.__new__(ComicGenPipeline)
+    pipeline.scripts = {script.id: script}
+    pipeline.video_generator = Mock()
+    pipeline.video_generator.generate_i2v.return_value = {"video_url": "video.mp4"}
+    pipeline._save_data = Mock()
+    pipeline.generate_motion_ref(script.id, character.id, "full_body", prompt="motion")
+    assert pipeline.video_generator.generate_i2v.call_args.kwargs["image_url"] == "cover.png"
+
+
 # ---------------------------------------------------------------------------
 # Orphan recovery
 # ---------------------------------------------------------------------------
@@ -707,3 +723,21 @@ def test_create_video_task_workbench_tab_defaults_to_none(pipeline):
         )
     task = next(t for t in script.video_tasks if t.id == task_id)
     assert task.workbench_tab is None
+
+
+def test_workbench_preserves_frame_mode_and_tail_across_reload(pipeline):
+    frame = StoryboardFrame(id="f1", scene_id="s1")
+    pipeline.scripts = {"p1": _script_with_frame(frame)}
+    pipeline.scripts["p1"].owner_profile_id = "profile"
+    with patch.object(pipeline, "_save_data"):
+        updated = pipeline.update_frame_workbench("p1", "f1", video_generation_mode="first_last_frame",
+            last_frame_image_urls=["https://cdn.example/tail.webp"], last_frame_selected_index=0)
+        restored = StoryboardFrame.model_validate(updated.model_dump())
+        assert restored.video_generation_mode == "first_last_frame"
+        assert restored.last_frame_image_urls == ["https://cdn.example/tail.webp"]
+        pipeline.update_frame_workbench("p1", "f1", video_generation_mode="i2v")
+        assert frame.last_frame_image_urls == ["https://cdn.example/tail.webp"]
+        pipeline.update_frame_workbench("p1", "f1", last_frame_image_urls=[])
+        assert frame.last_frame_image_urls == []
+        with pytest.raises(ValueError, match="video_generation_mode"):
+            pipeline.update_frame_workbench("p1", "f1", video_generation_mode="bad")

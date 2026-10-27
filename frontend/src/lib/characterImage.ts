@@ -42,16 +42,26 @@ export function characterVariants(c: Character): ImageVariant[] {
   return characterImageAsset(c)?.variants ?? [];
 }
 
+/** Find an owned cover across the character's image categories. */
+function characterCoverVariant(c: Character): ImageVariant | undefined {
+  return [c.reference_sheet?.image_variants, c.full_body_asset?.variants,
+    c.three_view_asset?.variants, c.headshot_asset?.variants]
+    .flatMap(variants => variants || []).find(variant => variant.id === c.cover_variant_id);
+}
+
 /** Variants for reference selection: canonical containers win over stale compatibility data. */
 export function characterReferenceVariants(c: Character): ImageVariant[] {
   const canonical = characterVariants(c);
+  const cover = characterCoverVariant(c);
+  if (cover) return [cover, ...canonical.filter(variant => variant.id !== cover.id)];
   if (canonical.length) return canonical;
   return c.full_body?.image_variants ?? [];
 }
 
 /** A character's best display image, preferring the current containers over older compatibility fields. */
 export function characterImageUrl(c: Character): string | undefined {
-  return selectedVariantUrl(characterImageAsset(c))
+  return characterCoverVariant(c)?.url
+    || selectedVariantUrl(characterImageAsset(c))
     || selectedVariantUrl(c.full_body)
     || c.image_url
     || c.full_body_image_url;

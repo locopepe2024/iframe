@@ -189,3 +189,28 @@ def test_retired_deployment_script_cannot_run():
     result = subprocess.run(["python3", str(old)], capture_output=True, text=True)
     assert result.returncode != 0
     assert "retired" in result.stderr
+
+
+def test_release_preserves_media_ssh_mount_and_rejects_writable(monkeypatch, tmp_path):
+    backend, frontend = topology()
+    mount = {'Destination': '/root/.ssh', 'Source': '/srv/lumenx/runtime/director-depth-ssh',
+             'Type': 'bind', 'RW': False}
+    backend['Mounts'].append(mount)
+    release.verify_topology(backend, frontend)
+    mount['RW'] = True
+    with pytest.raises(RuntimeError, match='Unexpected backend mounts'):
+        release.verify_topology(backend, frontend)
+    directory = tmp_path / 'ssh'
+    directory.mkdir(mode=0o700)
+    env = tmp_path / 'env'
+    env.write_text('DIRECTOR_DEPTH_MEDIA_SSH_TARGET=media\n')
+    monkeypatch.setattr(release, 'DIRECTOR_SSH', directory)
+    monkeypatch.setattr(release, 'knowledge_runtime', lambda _: False)
+    monkeypatch.setattr(release, 'REVIEW_CONFIG', tmp_path / 'missing-review')
+    calls = []
+    monkeypatch.setattr(release, 'run', lambda *args: calls.append(args))
+    release.create_backend('candidate', 'image', env, tmp_path / 'output', 17178)
+    assert f'{directory}:/root/.ssh:ro' in calls[0]
+    directory.rmdir()
+    with pytest.raises(RuntimeError, match='media SSH directory'):
+        release.create_backend('candidate', 'image', env, tmp_path / 'output', 17178)

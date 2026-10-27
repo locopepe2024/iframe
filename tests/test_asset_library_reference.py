@@ -649,3 +649,17 @@ def test_wanx_image_model_routes_reference_input_to_image_edit_path(
     )
 
     assert calls and calls[0][-1] == [str(reference_path)]
+
+
+def test_different_characters_can_queue_generation_concurrently(tmp_path):
+    pipeline, _ = _pipeline_with_assets(tmp_path)
+    characters = [Character(id=f"hero-{i}", name=f"Hero {i}", description="Hero",
+                            owner_user_id="user", owner_profile_id="owner") for i in range(2)]
+    pipeline.scripts["project"].characters = characters
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        task_ids = list(executor.map(lambda c: pipeline.create_asset_generation_task(
+            "project", c.id, "character", generation_type="full_body", prompt="full body hero"
+        )[1], characters))
+    assert len(set(task_ids)) == 2
+    assert all(c.status.value == "processing" for c in characters)
+    assert {t["asset_id"] for t in pipeline.asset_generation_tasks.values()} == {c.id for c in characters}

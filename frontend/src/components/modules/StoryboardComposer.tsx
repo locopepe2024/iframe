@@ -1,12 +1,12 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
+import { Fragment, useState, useRef, useEffect } from "react";
 import { useTranslations } from "next-intl";
 import { motion, AnimatePresence } from "framer-motion";
 import {
     Layout, Image as ImageIcon,
     Trash2, Copy, Wand2, FileText, RefreshCw, Loader2, X, Lock, Unlock,
-    Plus, ArrowUp, ArrowDown, Zap, Upload, Film
+    Plus, ArrowUp, ArrowDown, Zap, Upload, Film, ListChecks
 } from "lucide-react";
 import { useProjectStore } from "@/store/projectStore";
 import { api, crudApi } from "@/lib/api";
@@ -17,9 +17,14 @@ import { createRenderRequestId } from "@/lib/renderRequestId";
 import StepHeader from "@/components/shared/StepHeader";
 import WorkflowActionButton from "@/components/shared/WorkflowActionButton";
 
+import StoryboardGenerateDialog from "./storyboard-r2v/StoryboardGenerateDialog";
+import StoryboardAnalysisModal from "./storyboard-r2v/StoryboardAnalysisModal";
+import type { StoryboardAnalysisDraft, StoryboardGenerationOptions } from "@/lib/storyboardAnalysis";
 import StoryboardFrameEditor from "./StoryboardFrameEditor";
+import StoryboardContinuitySheet from "./StoryboardContinuitySheet";
 import RenderPromptPreviewDialog, { type FrameRenderPreview } from "./RenderPromptPreviewDialog";
 import { resolveNegativePrompt, resolveStylePrompt } from "./storyboard-r2v/buildAssembledPrompt";
+import { reviewedEpisodeLookImage } from "./storyboard-r2v/episodeLookImage";
 
 export default function StoryboardComposer() {
     const t = useTranslations("storyboard");
@@ -39,11 +44,28 @@ export default function StoryboardComposer() {
     const isAnalyzing = useProjectStore((state) => state.isAnalyzingStoryboard);
     const setIsAnalyzing = useProjectStore((state) => state.setIsAnalyzingStoryboard);
 
+    const [generateDialogOpen, setGenerateDialogOpen] = useState(false);
+    const [analysisDraft, setAnalysisDraft] = useState<StoryboardAnalysisDraft | null>(null);
+    const [analysisSource, setAnalysisSource] = useState("");
+    const [analysisProjectId, setAnalysisProjectId] = useState("");
+    const [analysisFeedback, setAnalysisFeedback] = useState<string[]>([]);
+    const [draftBusy, setDraftBusy] = useState(false);
+    useEffect(() => {
+        setGenerateDialogOpen(false);
+        setAnalysisDraft(null);
+        setAnalysisFeedback([]);
+        setShowContinuitySheet(false);
+        setContinuityFrameId(null);
+    }, [currentProject?.id]);
+
     const [editingFrameId, setEditingFrameId] = useState<string | null>(null);
     const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
     const [insertIndex, setInsertIndex] = useState<number | null>(null);
     const [extractingFrameId, setExtractingFrameId] = useState<string | null>(null);
     const [showScriptOverlay, setShowScriptOverlay] = useState(false);
+    const [showContinuitySheet, setShowContinuitySheet] = useState(false);
+    const [continuityFrameId, setContinuityFrameId] = useState<string | null>(null);
+    const [continuityFocusVersion, setContinuityFocusVersion] = useState(0);
     const [pendingRender, setPendingRender] = useState<(FrameRenderPreview & { frameId: string; compositionData: any }) | null>(null);
 
     const fileInputRef = useRef<HTMLInputElement>(null);
@@ -59,41 +81,47 @@ export default function StoryboardComposer() {
     }, [currentProject?.id]);
 
 
-    // NEW: Analyze script text to generate storyboard frames
-    const handleAnalyzeToStoryboard = async () => {
+    const handleAnalyzeToStoryboard = async (options?: StoryboardGenerationOptions) => {
         if (!currentProject) return;
-
-        const text = currentProject.originalText;
-        if (!text || !text.trim()) {
-            alert(t("enterScriptFirst"));
-            return;
-        }
-
-        if (currentProject.frames?.length > 0) {
-            if (!confirm(t("overwriteConfirm"))) return;
-        }
-
+        const projectId = currentProject.id;
+        const text = currentProject.originalText || (currentProject as any).original_text || "";
         setIsAnalyzing(true);
         try {
-            const updatedProject = await api.analyzeToStoryboard(currentProject.id, text);
-            const frameCount = updatedProject.frames?.length || 0;
-            if (frameCount > 0) {
-                updateProject(currentProject.id, updatedProject);
-                alert(t("framesGenerated", { count: frameCount }));
-            } else {
-                alert(t("aiInvalidOutput"));
-            }
-        } catch (error: any) {
-            console.error("Analyze to storyboard failed:", error);
-            const detail = extractErrorDetail(error, "");
-            if (detail.includes("JSON") || detail.includes("格式")) {
-                alert(t("aiFormatRetry"));
-            } else {
-                alert(t("genFailedDetail", { detail }));
-            }
+            const result = await api.analyzeStoryboardPreview(projectId, text, undefined, options);
+            if (useProjectStore.getState().currentProject?.id !== projectId) return;
+            setAnalysisDraft(result);
+            setAnalysisSource(text);
+            setAnalysisProjectId(projectId);
+            setAnalysisFeedback([]);
+        } catch (error) {
+            alert(t("genFailedDetail", { detail: extractErrorDetail(error, "") }));
         } finally {
             setIsAnalyzing(false);
         }
+    };
+
+    const handleRefineAnalysis = async (instruction: string) => {
+        if (!analysisDraft || currentProject?.id !== analysisProjectId) return;
+        setDraftBusy(true);
+        const instructions = [...analysisFeedback, instruction];
+        try {
+            const result = await api.refineStoryboardPreview(analysisProjectId, analysisSource,
+                analysisDraft.frames, instructions, analysisDraft.lineage);
+            if (useProjectStore.getState().currentProject?.id !== analysisProjectId) return;
+            setAnalysisDraft(result);
+            setAnalysisFeedback(instructions);
+        } finally { setDraftBusy(false); }
+    };
+
+    const handleApplyAnalysis = async () => {
+        if (!analysisDraft || currentProject?.id !== analysisProjectId) return;
+        setDraftBusy(true);
+        try {
+            const updated = await api.applyStoryboardDraft(analysisProjectId, analysisSource,
+                analysisDraft.frames, analysisDraft.lineage);
+            updateProject(analysisProjectId, updated);
+            if (useProjectStore.getState().currentProject?.id === analysisProjectId) setAnalysisDraft(null);
+        } finally { setDraftBusy(false); }
     };
 
     const handleImageClick = (frameId: string, e: React.MouseEvent) => {
@@ -245,6 +273,7 @@ export default function StoryboardComposer() {
                 scene_id: frame.scene_id,
                 reference_image_urls: []
             };
+            const referenceLabels: string[] = [];
 
             // Helper to get selected variant URL from an asset
             const getSelectedVariantUrl = (asset: any): string | null => {
@@ -266,14 +295,27 @@ export default function StoryboardComposer() {
                 const scene = currentProject.scenes?.find((s: any) => s.id === frame.scene_id);
                 if (scene) {
                     const sceneUrl = getSelectedVariantUrl(scene.image_asset) || scene.image_url;
-                    if (sceneUrl) compositionData.reference_image_urls.push(sceneUrl);
+                    if (sceneUrl) {
+                        compositionData.reference_image_urls.push(sceneUrl);
+                        referenceLabels.push(`场景：${scene.name || scene.id}`);
+                    }
                 }
             }
 
             // 2. Add Character Images - use selected variant from three_view > full_body > headshot
             if (frame.character_ids && frame.character_ids.length > 0) {
                 frame.character_ids.forEach((charId: string) => {
-                    const char = currentProject.characters?.find((c: any) => c.id === charId);
+                    const characters = [...(currentProject.characters || []),
+                        ...(currentSeries && currentSeries.id === currentProject.series_id ? currentSeries.characters || [] : [])];
+                    const reviewed = reviewedEpisodeLookImage(
+                        charId, frame.character_use_ids, currentProject.episode_character_uses || [], characters,
+                    );
+                    if (reviewed) {
+                        compositionData.reference_image_urls.push(reviewed.url);
+                        referenceLabels.push(`角色：${reviewed.label}`);
+                        return;
+                    }
+                    const char = characters.find((c: any) => c.id === charId);
                     if (char) {
                         // Priority: three_view_asset > full_body_asset > headshot_asset > legacy fields
                         const charUrl = selectedVariantUrl(char.reference_sheet)
@@ -285,7 +327,10 @@ export default function StoryboardComposer() {
                             || char.headshot_image_url
                             || char.avatar_url
                             || char.image_url;
-                        if (charUrl) compositionData.reference_image_urls.push(charUrl);
+                        if (charUrl) {
+                            compositionData.reference_image_urls.push(charUrl);
+                            referenceLabels.push(`角色：${char.name || char.id}`);
+                        }
                     }
                 });
             }
@@ -296,7 +341,10 @@ export default function StoryboardComposer() {
                     const prop = currentProject.props?.find((p: any) => p.id === propId);
                     if (prop) {
                         const propUrl = getSelectedVariantUrl(prop.image_asset) || prop.image_url;
-                        if (propUrl) compositionData.reference_image_urls.push(propUrl);
+                        if (propUrl) {
+                            compositionData.reference_image_urls.push(propUrl);
+                            referenceLabels.push(`道具：${prop.name || prop.id}`);
+                        }
                     }
                 });
             }
@@ -340,7 +388,8 @@ export default function StoryboardComposer() {
 
             const preview = await api.previewFrameRender(currentProject.id, frame.id, finalPrompt);
             setPendingRender({ frameId: frame.id, compositionData, ...preview,
-                negativePrompt: frameNegativePrompt, referenceCount: compositionData.reference_image_urls.length || null, batchSize });
+                negativePrompt: frameNegativePrompt, referenceCount: compositionData.reference_image_urls.length || null,
+                referenceLabels, batchSize });
         } catch (error) {
             alert(t("renderFailedDetail", { detail: extractErrorDetail(error, t("generateFailed")) }));
         }
@@ -434,6 +483,13 @@ export default function StoryboardComposer() {
                         <WorkflowActionButton
                             variant="ghost"
                             size="sm"
+                            leftIcon={<ListChecks />}
+                            onClick={() => { setContinuityFrameId(null); setShowContinuitySheet(value => !value); }}
+                            title="查看分镜结构化一致性"
+                        >一致性</WorkflowActionButton>
+                        <WorkflowActionButton
+                            variant="ghost"
+                            size="sm"
                             leftIcon={<FileText />}
                             onClick={() => setShowScriptOverlay(true)}
                             title={t("viewOriginalScript")}
@@ -445,7 +501,7 @@ export default function StoryboardComposer() {
                             size="sm"
                             leftIcon={isAnalyzing ? undefined : <Zap />}
                             loading={isAnalyzing}
-                            onClick={handleAnalyzeToStoryboard}
+                            onClick={() => setGenerateDialogOpen(true)}
                             disabled={isAnalyzing}
                             title={t("generateFromScript")}
                         >
@@ -454,6 +510,14 @@ export default function StoryboardComposer() {
                     </div>
                 )}
             />
+
+            {showContinuitySheet && currentProject?.id && <StoryboardContinuitySheet
+                projectId={currentProject.id}
+                revisionKey={JSON.stringify((currentProject.frames || []).map((frame: any) => [frame.id, frame.updated_at, frame.reference_visual_projection?.revision]))}
+                focusedFrameId={continuityFrameId}
+                focusVersion={continuityFocusVersion}
+                onOpenFrame={setEditingFrameId}
+            />}
 
             {/* Frame List — full width */}
             <div className="flex-1 overflow-y-auto p-8">
@@ -470,9 +534,8 @@ export default function StoryboardComposer() {
                         </div>
 
                         {currentProject?.frames?.map((frame: any, index: number) => (
-                            <>
+                            <Fragment key={frame.id}>
                                 <motion.div
-                                    key={frame.id}
                                     layoutId={frame.id}
                                     onClick={() => setSelectedFrameId(frame.id)}
                                     className={`group relative flex gap-6 p-4 rounded-xl border transition-all cursor-pointer ${selectedFrameId === frame.id
@@ -602,6 +665,15 @@ export default function StoryboardComposer() {
                                             </div>
 
                                             <button
+                                                type="button"
+                                                onClick={(e) => { e.stopPropagation(); setContinuityFrameId(frame.id); setContinuityFocusVersion(value => value + 1); setShowContinuitySheet(true); }}
+                                                className="flex items-center gap-1 rounded px-2 py-1 text-xs text-text-secondary hover:bg-hover-bg hover:text-foreground"
+                                                title={`查看分镜 ${index + 1} 的一致性`}
+                                                aria-label={`查看分镜 ${index + 1} 的一致性`}
+                                            >
+                                                <ListChecks size={14} />一致性
+                                            </button>
+                                            <button
                                                 onClick={(e) => handleCopyFrame(frame.id, e)}
                                                 className="btn-tip p-2 hover:bg-hover-bg text-text-secondary hover:text-foreground rounded-lg transition-colors"
                                                 data-tip={t("duplicateFrame")}
@@ -652,7 +724,7 @@ export default function StoryboardComposer() {
                                         <Plus size={16} />
                                     </button>
                                 </div>
-                            </>
+                            </Fragment>
                         ))}
                 </div>
             </div>
@@ -719,6 +791,28 @@ export default function StoryboardComposer() {
                 )}
             </AnimatePresence>
 
+            <StoryboardGenerateDialog
+                isOpen={generateDialogOpen}
+                onClose={() => setGenerateDialogOpen(false)}
+                project={currentProject as any}
+                existingShotCount={currentProject?.frames?.length ?? 0}
+                onConfirm={handleAnalyzeToStoryboard}
+                onJumpToScript={() => {
+                    setGenerateDialogOpen(false);
+                    window.dispatchEvent(new CustomEvent("navigateStep", { detail: "script" }));
+                }}
+            />
+            <StoryboardAnalysisModal
+                isOpen={!!analysisDraft}
+                draft={analysisDraft?.frames ?? null}
+                lineage={analysisDraft?.lineage}
+                feedback={analysisFeedback}
+                existingShotCount={currentProject?.frames?.length ?? 0}
+                isBusy={draftBusy}
+                onRefine={handleRefineAnalysis}
+                onApply={handleApplyAnalysis}
+                onDiscard={() => setAnalysisDraft(null)}
+            />
             {/* Hidden file input for frame image upload */}
             <input
                 ref={fileInputRef}

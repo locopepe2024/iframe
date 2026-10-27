@@ -25,3 +25,28 @@ it("exposes episode script text to the series overview", async () => {
   ]);
   expect(axios.get).toHaveBeenCalledWith(`${API_URL}/series/series-1/episodes`);
 });
+
+it("shares concurrent series reads but fetches fresh data after completion", async () => {
+  let finish: (value: any) => void = () => {};
+  vi.mocked(axios.get).mockReturnValueOnce(new Promise(resolve => { finish = resolve; }));
+  const first = api.getSeries("series-one");
+  const second = api.getSeries("series-one");
+  expect(axios.get).toHaveBeenCalledTimes(1);
+  finish({ data: { id: "series-one", title: "Original" } });
+  expect(await first).toEqual(await second);
+  vi.mocked(axios.get).mockResolvedValueOnce({ data: { id: "series-one", title: "Updated" } });
+  expect(await api.getSeries("series-one")).toMatchObject({ title: "Updated" });
+  expect(axios.get).toHaveBeenCalledTimes(2);
+});
+
+it("does not share different series or retain a failed request", async () => {
+  vi.mocked(axios.get).mockRejectedValueOnce(new Error("unavailable"));
+  vi.mocked(axios.get).mockResolvedValueOnce({ data: { id: "series-two" } });
+  const failed = api.getSeries("series-one");
+  const other = api.getSeries("series-two");
+  await expect(failed).rejects.toThrow("unavailable");
+  await expect(other).resolves.toMatchObject({ id: "series-two" });
+  vi.mocked(axios.get).mockResolvedValueOnce({ data: { id: "series-one" } });
+  await expect(api.getSeries("series-one")).resolves.toMatchObject({ id: "series-one" });
+  expect(axios.get).toHaveBeenCalledTimes(3);
+});

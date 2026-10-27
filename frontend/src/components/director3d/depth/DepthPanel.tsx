@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 import { directorDepthApi, type DepthTask } from '@/lib/directorDepth';
 import { captureDepthSnapshot } from '../state/depth-snapshot';
+import { useWorkbenchStore } from '../state/workbench-store';
+import { currentDirectorShotPackage } from '../reference/current-shot-package';
 
 export function DepthPanel() {
   const [near, setNear] = useState(0.5);
@@ -11,6 +13,7 @@ export function DepthPanel() {
   const [submitting, setSubmitting] = useState(false);
   const [preview, setPreview] = useState('');
   const mounted = useRef(true);
+  const currentPackageChecksum = useWorkbenchStore((state) => currentDirectorShotPackage(state).packageChecksum);
   useEffect(() => {
     mounted.current = true;
     void Promise.all([directorDepthApi.capability(), directorDepthApi.list()]).then(([capability, tasks]) => {
@@ -47,7 +50,7 @@ export function DepthPanel() {
   const submit = async () => {
     setSubmitting(true); setMessage('');
     try {
-      const result = await directorDepthApi.submit(captureDepthSnapshot(near, far));
+      const result = await directorDepthApi.submit({ ...captureDepthSnapshot(near, far), packageChecksum: currentPackageChecksum });
       if (mounted.current) setTask(result);
     } catch (error) { if (mounted.current) setMessage(error instanceof Error ? error.message : '提交失败。'); }
     finally { if (mounted.current) setSubmitting(false); }
@@ -63,9 +66,12 @@ export function DepthPanel() {
     } catch { setMessage('下载失败，请重试。'); }
   };
   const busy = submitting || task?.status === 'queued' || task?.status === 'running';
+  const stale = Boolean(task?.packageChecksum && task.packageChecksum !== currentPackageChecksum);
   return <section className="depth-panel" aria-label="场景深度">
     <h3>场景深度</h3>
     <p>提交当前帧和当前视图，生成实体场景的深度参考。</p>
+    {task?.packageChecksum && <p role="status">深度快照 {task.packageChecksum}</p>}
+    {stale && <p role="status">当前导演设置已变化，深度结果为旧版本；请重新提交。</p>}
     <div className="depth-range">
       <label>近端（米）<input type="number" min={0} max={9999} step={0.1} value={near} onChange={event => setNear(Number(event.target.value))}/></label>
       <label>远端（米）<input type="number" min={0.1} max={10000} step={0.1} value={far} onChange={event => setFar(Number(event.target.value))}/></label>

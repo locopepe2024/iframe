@@ -11,6 +11,7 @@ beforeEach(() => {
   vi.mocked(directorDepthApi.capability).mockResolvedValue({available: true, message: ''});
   vi.mocked(directorDepthApi.list).mockResolvedValue([]);
   vi.mocked(directorDepthApi.blob).mockResolvedValue(new Blob(['png']));
+  vi.mocked(captureDepthSnapshot).mockReturnValue({} as never);
   vi.stubGlobal('URL', Object.assign(URL, {createObjectURL: vi.fn(() => 'blob:preview'), revokeObjectURL: vi.fn()}));
 });
 it('submits captured current frame and previews completed result', async () => {
@@ -20,6 +21,7 @@ it('submits captured current frame and previews completed result', async () => {
   fireEvent.click(screen.getByRole('button', {name:'提交当前帧深度'}));
   await screen.findByRole('img', {name:'第 12 帧场景深度，近处黑，远处白'});
   expect(captureDepthSnapshot).toHaveBeenCalledWith(.5, 20);
+  expect(directorDepthApi.submit).toHaveBeenCalledWith(expect.objectContaining({ packageChecksum: expect.stringMatching(/^fnv1a32:[0-9a-f]{8}$/) }));
   expect(screen.getByRole('button', {name:'下载米制 EXR'})).toBeEnabled();
 });
 it('shows runtime unavailable and does not submit', async () => {

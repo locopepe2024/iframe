@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { api, API_URL, authenticatedFetch } from '@/lib/api';
-import type { AssemblyEditPlan } from '@/lib/api';
+import type { AssemblyEditPlan, EpisodeCharacterUse } from '@/lib/api';
 import type { FrontendModelSettings } from '@/lib/modelCatalog';
 export {
     I2I_MODELS,
@@ -19,6 +19,7 @@ export type {
 export interface ImageVariant {
     id: string;
     display_name?: string | null;
+    is_favorited?: boolean;
     url: string;
     created_at: number;
     prompt_used?: string;
@@ -78,6 +79,7 @@ export interface GenerationLineage {
 }
 
 export interface Character {
+    asset_revision?: number;
     id: string;
     name: string;
     description?: string;
@@ -192,7 +194,37 @@ export interface StoryboardFrame {
     workbench_reference_variant_ids?: Record<string, string[]>;
     workbench_pose_reference_variant_ids?: Record<string, string[]>;
     workbench_director_snapshot_media_id?: string | null;
+    crowd_instances?: ExtraShotInstance[];
     // ... other fields
+}
+
+export interface ExtraRosterEntry {
+    extra_id: string;
+    label: string;
+    kind: "fixed_extra" | "extra_template";
+    height?: string | null;
+    body_build?: string | null;
+    wardrobe?: string | null;
+    palette?: string | null;
+    props?: string[];
+    role_tags?: string[];
+    reference_variant_id?: string | null;
+    reference_media_id?: string | null;
+    reference_variant_ids?: string[];
+    reference_media_ids?: Record<string, string>;
+}
+
+export interface ExtraShotInstance {
+    extra_id?: string | null;
+    template_id?: string | null;
+    layer: "near" | "mid" | "far";
+    region: string;
+    relative_scale?: string | null;
+    facing?: string | null;
+    motion?: string | null;
+    face_readable: boolean;
+    text_readable: boolean;
+    variant_ids?: string[];
 }
 
 export interface StylePresetCategory {
@@ -462,6 +494,7 @@ export interface Series {
     characters: Character[];
     scenes: Scene[];
     props: Prop[];
+    extra_roster?: ExtraRosterEntry[];
     art_direction?: ArtDirection;
     director_review_required?: boolean;
     prompt_config?: PromptConfig;
@@ -483,6 +516,8 @@ export interface Project {
     originalText: string;
     source_revision?: number;
     characters: Character[];
+    crowd_group_candidates?: ExtraRosterEntry[];
+    crowd_groups?: ExtraRosterEntry[];
     scenes: Scene[];
     props: Prop[];
     frames: any[]; // Keeping as any for now to avoid breaking too much, but ideally StoryboardFrame[]
@@ -511,6 +546,7 @@ export interface Project {
     episode_number?: number;
     episode_understanding?: EpisodeUnderstandingHandoff | null;
     episode_person_asset_bindings?: Record<string, string>;
+    episode_character_uses?: EpisodeCharacterUse[];
     episode_scene_asset_replacements?: Record<string, string>;
     episode_prop_asset_replacements?: Record<string, string>;
     /** T13 — user-starred (featured) flag; drives the amber-halation card. */
@@ -526,7 +562,7 @@ interface ProjectStore {
     isAnalyzingArtStyle: boolean;
 
     // Entity extraction confirmation (persists across step switches)
-    pendingExtraction: { characters: any[]; scenes: any[]; props: any[] } | null;
+    pendingExtraction: { characters: any[]; crowd_groups?: any[]; scenes: any[]; props: any[] } | null;
     pendingExtractionScript: string | null;
     pendingExtractionFeedback: string[];
     refineExtraction: (instruction: string) => Promise<void>;
@@ -554,8 +590,8 @@ interface ProjectStore {
     setSelectedFrameId: (id: string | null) => void;
 
     // Asset Generation State
-    generatingTasks: { assetId: string; generationType: string; batchSize: number; taskId?: string }[];
-    addGeneratingTask: (assetId: string, generationType: string, batchSize: number) => void;
+    generatingTasks: { assetId: string; generationType: string; batchSize: number; taskId?: string; initialVariantIds?: string[] }[];
+    addGeneratingTask: (assetId: string, generationType: string, batchSize: number, initialVariantIds?: string[]) => void;
     removeGeneratingTask: (assetId: string, generationType: string) => void;
 
     // Storyboard Frame Rendering State
@@ -770,8 +806,7 @@ export const useProjectStore = create<ProjectStore>()(
             },
 
             loadProjects: () => {
-                // Projects are already loaded from localStorage via persist middleware
-                // This is mainly for future API sync if needed
+                // The workspace synchronizes projects from the backend.
             },
 
             selectProject: async (id: string) => {
@@ -905,8 +940,8 @@ export const useProjectStore = create<ProjectStore>()(
 
             // Asset Generation State
             generatingTasks: [],
-            addGeneratingTask: (assetId: string, generationType: string, batchSize: number) => set((state) => ({
-                generatingTasks: [...state.generatingTasks, { assetId, generationType, batchSize }]
+            addGeneratingTask: (assetId: string, generationType: string, batchSize: number, initialVariantIds: string[] = []) => set((state) => ({
+                generatingTasks: [...state.generatingTasks, { assetId, generationType, batchSize, initialVariantIds }]
             })),
             removeGeneratingTask: (assetId: string, generationType: string) => set((state) => ({
                 generatingTasks: state.generatingTasks.filter((t) => !(t.assetId === assetId && t.generationType === generationType))
@@ -1000,17 +1035,18 @@ export const useProjectStore = create<ProjectStore>()(
         }),
         {
             name: 'project-storage',
-            version: 2,
+            version: 3,
             migrate: (persistedState: any) => ({
                 ...persistedState,
+                // Project snapshots contain generated media and are restored
+                // from the backend; legacy browser copies can exceed quota.
+                projects: [],
                 // Generation markers are runtime state. Older releases
                 // persisted markers without a backend task ID, which left
                 // assets stuck after a server restart.
                 generatingTasks: [],
             }),
-            partialize: (state) => ({
-                projects: state.projects,
-            }),
+            partialize: () => ({}),
         }
     )
 );

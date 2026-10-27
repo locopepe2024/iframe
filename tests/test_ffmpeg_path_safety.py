@@ -17,7 +17,7 @@ import uuid
 import pytest
 from unittest.mock import patch
 
-from src.apps.comic_gen.models import Script, StoryboardFrame, VideoTask
+from src.apps.comic_gen.models import ImageAsset, ImageVariant, Script, StoryboardFrame, VideoTask
 from src.apps.comic_gen.pipeline import ComicGenPipeline, _safe_resolve_path
 from src.utils.system_check import get_ffmpeg_path
 
@@ -166,6 +166,63 @@ class TestExtractLastFramePathContainment:
         assert os.path.getsize(extracted) > 0
         selected = next(v for v in frame.rendered_image_asset.variants if v.id == frame.rendered_image_asset.selected_id)
         assert selected.storage_key == frame.rendered_image_url
+
+    @pytest.mark.skipif(
+        get_ffmpeg_path() is None and shutil.which("ffmpeg") is None,
+        reason="ffmpeg not available",
+    )
+    def test_oss_projection_does_not_replace_owner_local_frame_key(self, pipeline, monkeypatch, tmp_path):
+        ffmpeg = get_ffmpeg_path() or shutil.which("ffmpeg")
+        monkeypatch.chdir(tmp_path)
+        os.makedirs("output/video", exist_ok=True)
+        video_file = os.path.join("output", "video", "tiny.mp4")
+        result = subprocess.run(
+            [ffmpeg, "-y", "-f", "lavfi", "-i", "color=c=red:s=64x64:d=0.5",
+             "-pix_fmt", "yuv420p", video_file],
+            capture_output=True, timeout=60,
+        )
+        assert result.returncode == 0, result.stderr.decode()[:400]
+
+        script = _make_script_with_video_task("video/tiny.mp4")
+        script.owner_profile_id = "owner-test"
+        pipeline.scripts[script.id] = script
+        monkeypatch.setattr(
+            "src.utils.oss_utils.OSSImageUploader.upload_image",
+            lambda *args, **kwargs: "lumenx/frame-from-oss.jpg",
+        )
+
+        frame = pipeline.extract_last_frame(script.id, script.frames[1].id, script.video_tasks[0].id).frames[1]
+        selected = next(v for v in frame.rendered_image_asset.variants if v.id == frame.rendered_image_asset.selected_id)
+        assert selected.url == "lumenx/frame-from-oss.jpg"
+        assert selected.storage_key.startswith("users/")
+        assert frame.rendered_image_url == selected.storage_key
+        assert os.path.isfile(os.path.join("output", selected.storage_key))
+
+    def test_repairs_existing_last_frame_with_wrong_oss_key(self, pipeline, monkeypatch, tmp_path):
+        monkeypatch.chdir(tmp_path)
+        script = _make_script_with_video_task("video/tiny.mp4")
+        script.owner_profile_id = "owner-test"
+        frame = script.frames[1]
+        filename = f"frame_{frame.id}_lastframe_12345678.jpg"
+        old_key = f"lumenx/{filename}"
+        owner_dir = pipeline._owner_output_dir(script, "storyboard")
+        os.makedirs(owner_dir, exist_ok=True)
+        with open(os.path.join(owner_dir, filename), "wb") as output:
+            output.write(b"image")
+        variant = ImageVariant(id=str(uuid.uuid4()), url=old_key, storage_key=old_key,
+                               prompt_used="Extracted last frame from video")
+        frame.rendered_image_asset = ImageAsset(variants=[variant], selected_id=variant.id)
+        frame.rendered_image_url = old_key
+        frame.t2i_image_urls = [old_key]
+        pipeline.scripts[script.id] = script
+
+        pipeline.migrate_legacy_storyboard_media(script)
+
+        expected = os.path.relpath(os.path.join(owner_dir, filename), pipeline.output_root)
+        assert variant.storage_key == expected
+        assert frame.rendered_image_url == expected
+        assert frame.t2i_image_urls == [expected]
+        assert variant.media_id
 
     def test_only_previous_selected_video_can_be_used(self, pipeline):
         script = _make_script_with_video_task("video/tiny.mp4")

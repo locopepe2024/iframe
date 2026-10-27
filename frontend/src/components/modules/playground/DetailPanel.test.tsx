@@ -32,7 +32,7 @@ beforeEach(() => {
   usePlaygroundStore.setState({ history: [] });
 });
 
-it('imports an image material from details but does not offer video import', () => {
+it('opens the asset recording flow for image and video outputs', () => {
   const props = {
     allGenerations: [imageGeneration],
     onClose: vi.fn(),
@@ -52,5 +52,7 @@ it('imports an image material from details but does not offer video import', () 
     outputs: [{ id: 'out', media_path: '/generated.mp4', media_type: 'video', saved_to_library: false }],
   };
   render(<DetailPanel generation={videoGeneration} {...props} allGenerations={[videoGeneration]} />);
-  expect(screen.queryByRole('button', { name: 'card.importAsAsset' })).toBeNull();
+  fireEvent.click(screen.getByRole('button', { name: 'card.importAsAsset' }));
+  expect(screen.getByRole('dialog')).toHaveAttribute('data-image-url', '/generated.mp4');
+  expect(screen.getByRole('dialog')).toHaveAttribute('data-generation-id', 'detail-video');
 });

@@ -5,6 +5,7 @@ const mocked = vi.hoisted(() => ({
   getAssetLibraryIndex: vi.fn(), deleteLibraryAsset: vi.fn(), authenticatedFetch: vi.fn(), error: vi.fn(),
   updateLibraryAsset: vi.fn(), updateSeriesAssetAttributes: vi.fn(), updateAssetAttributes: vi.fn(),
   getWorkbenchTemplates: vi.fn(),
+  getPlatformReferenceLibrary: vi.fn(), getPlatformReferenceReviewer: vi.fn(),
 }));
 vi.mock('@/lib/api', () => ({ api: mocked, API_URL: '', authenticatedFetch: mocked.authenticatedFetch }));
 vi.mock('next-intl', () => ({ useTranslations: () => (key: string, values?: { name?: string }) => values?.name ? `${key} ${values.name}` : key }));
@@ -27,6 +28,38 @@ beforeEach(() => {
   mocked.updateAssetAttributes.mockResolvedValue({});
   mocked.getAssetLibraryIndex.mockResolvedValue({ schema_version: 1, project_id: 'library', assets: [{ asset_type: 'character', asset_id: 'character-1', name: 'Test character', source_scope: 'global', source_container_id: null, selected_variant_id: null, cover_variant_id: null, variants: [] }] });
   mocked.getWorkbenchTemplates.mockResolvedValue({ schema_version: 1, catalog_revision: 'test', templates: [] });
+  mocked.getPlatformReferenceReviewer.mockResolvedValue({ authorized: false });
+  mocked.getPlatformReferenceLibrary.mockResolvedValue({ scope: 'platform_shared', schema_version: 1, catalog_revision: 'test', resources: [] });
+});
+
+it('filters published platform character references by exact tag', async () => {
+  mocked.getPlatformReferenceLibrary.mockResolvedValue({ scope: 'platform_shared', schema_version: 1, catalog_revision: 'test', resources: [
+    { platform_resource_id: 'a', revision: 1, kind: 'image', title: '剑客设定稿', tags: ['角色设定稿', '转面三视图'], status: 'active', provenance: { license: 'MIT', content_sha256: 'a' } },
+    { platform_resource_id: 'b', revision: 1, kind: 'image', title: '表情案例', tags: ['表情表'], status: 'active', provenance: { license: 'MIT', content_sha256: 'b' } },
+  ] });
+  render(<AssetLibraryPage />);
+  fireEvent.click(screen.getByRole('button', { name: 'platform' }));
+  expect(await screen.findByText('剑客设定稿')).toBeInTheDocument();
+  fireEvent.change(screen.getByRole('combobox', { name: '筛选平台标签' }), { target: { value: '表情表' } });
+  expect(screen.queryByText('剑客设定稿')).not.toBeInTheDocument();
+  expect(screen.getByText('表情案例')).toBeInTheDocument();
+});
+
+it('filters published dictionary entries without treating legacy media as terms', async () => {
+  mocked.getPlatformReferenceLibrary.mockResolvedValue({ scope: 'platform_shared', schema_version: 1, catalog_revision: 'test', resources: [
+    { platform_resource_id: 'legacy', revision: 1, kind: 'prompt_preset', title: '旧提示词', status: 'active', provenance: { license: 'MIT', content_sha256: 'a' } },
+    { platform_resource_id: 'term', revision: 1, kind: 'prompt_preset', title: '窄长脸', status: 'active', dictionary: { semantic_domain: 'character.identity', entry_type: 'term' }, provenance: { license: 'MIT', content_sha256: 'b' } },
+    { platform_resource_id: 'case', revision: 1, kind: 'image', title: '造型案例', status: 'active', dictionary: { semantic_domain: 'character.look', entry_type: 'case' }, provenance: { license: 'MIT', content_sha256: 'c' } },
+  ] });
+  render(<AssetLibraryPage />);
+  fireEvent.click(screen.getByRole('button', { name: 'platform' }));
+  expect(await screen.findByText('窄长脸')).toBeInTheDocument();
+  fireEvent.change(screen.getByRole('combobox', { name: '筛选词典领域' }), { target: { value: 'character.identity' } });
+  expect(screen.getByText('窄长脸')).toBeInTheDocument();
+  expect(screen.queryByText('旧提示词')).not.toBeInTheDocument();
+  expect(screen.queryByText('造型案例')).not.toBeInTheDocument();
+  fireEvent.change(screen.getByRole('combobox', { name: '筛选词典类型' }), { target: { value: 'case' } });
+  expect(screen.getByText('没有匹配的已发布资源')).toBeInTheDocument();
 });
 
 it('searches text-only workbench templates separately from image assets', async () => {
