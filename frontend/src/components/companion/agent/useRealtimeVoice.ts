@@ -12,6 +12,8 @@ export function useRealtimeVoice() {
   const context = useRef<AudioContext | null>(null), player = useRef<PcmPlayer | null>(null);
   const capture = useRef<(() => void) | null>(null), timeout = useRef<ReturnType<typeof setTimeout> | null>(null);
   const setupTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const responseTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const inputFrames = useRef(0);
   const ignoreAudio = useRef(false);
   const replyInProgress = useRef(false);
   const diagnosticsTimer = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -34,7 +36,8 @@ export function useRealtimeVoice() {
     diagnosticsTimer.current = null;
     if (timeout.current) clearTimeout(timeout.current);
     if (setupTimeout.current) clearTimeout(setupTimeout.current);
-    timeout.current = null; setupTimeout.current = null;
+    if (responseTimeout.current) clearTimeout(responseTimeout.current);
+    timeout.current = null; setupTimeout.current = null; responseTimeout.current = null;
     capture.current?.(); capture.current = null;
     stream.current?.getTracks().forEach(track => track.stop()); stream.current = null;
     const ws = socket.current; socket.current = null;
@@ -57,7 +60,7 @@ export function useRealtimeVoice() {
   const start = useCallback(async () => {
     release(); const turn = generation.current;
     interruptions.current = { vadDuringPlayback: 0, manualInterrupts: 0 };
-    setNotice(""); setLines([]); setState("connecting"); ignoreAudio.current = false;
+    setNotice(""); setLines([]); setState("connecting"); ignoreAudio.current = false; inputFrames.current = 0;
     const current = () => generation.current === turn;
     const fail = (message: string) => { if (current()) stop(message); };
     try {
@@ -91,19 +94,23 @@ export function useRealtimeVoice() {
             const endCapture = await captureMicrophone(audio, microphone, data => {
               if (!current() || ws.readyState !== WebSocket.OPEN) return;
               if (ws.bufferedAmount > 256000) { fail("网络较慢，已停止发送语音。请重新开始。"); return; }
+              inputFrames.current++;
               ws.send(JSON.stringify({ type: "input_audio_buffer.append", audio: data }));
+              if (inputFrames.current === 1) {
+                responseTimeout.current = setTimeout(() => {
+                  if (current() && replyInProgress.current === false) fail("语音已连接，但暂时没有收到回复。请检查语音渠道后重新开始。");
+                }, 12000);
+              }
             });
             if (!current()) { endCapture(); return; }
-            capture.current = endCapture; setState("listening");
+            capture.current = endCapture; setState("listening"); setNotice("已连接，可以说话。");
             diagnosticsTimer.current = setInterval(reportStats, 10000);
+          } else if (event.type === "response.created" || event.type === "input_audio_buffer.speech_started") {
+            if (responseTimeout.current) { clearTimeout(responseTimeout.current); responseTimeout.current = null; }
+            if (event.type === "response.created") { replyInProgress.current = true; ignoreAudio.current = false; setState("thinking"); }
+            else { if (player.current?.isPlaying()) interruptions.current.vadDuringPlayback++; replyInProgress.current = false; ignoreAudio.current = true; player.current?.clear(); setState("listening"); }
           } else if (event.type === "error" || event.type === "ended") fail(event.message || "语音已结束。");
-          else if (event.type === "input_audio_buffer.speech_started") {
-            if (player.current?.isPlaying()) interruptions.current.vadDuringPlayback++;
-            replyInProgress.current = false;
-            ignoreAudio.current = true; player.current?.clear(); setState("listening");
-          }
           else if (event.type === "input_audio_buffer.speech_stopped") setState("thinking");
-          else if (event.type === "response.created") { replyInProgress.current = true; ignoreAudio.current = false; setState("thinking"); }
           else if (event.type === "response.audio.delta" && !ignoreAudio.current) { player.current?.play(event.delta); setState("speaking"); }
           else if (event.type === "response.done") {
             replyInProgress.current = false;

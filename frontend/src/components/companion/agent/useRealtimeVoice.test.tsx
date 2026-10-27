@@ -66,3 +66,13 @@ it("does not invite speech when an unfinished reply drains its playback queue",a
  await act(async()=>{await ws.onmessage?.({data:JSON.stringify({type:"response.done"})});});
  expect(mocks.finish).toHaveBeenCalledOnce();expect(result.current.state).toBe("listening");
 });
+it("reports a connected-but-silent upstream instead of staying in listening forever",async()=>{
+ vi.useFakeTimers();
+ const {result}=renderHook(()=>useRealtimeVoice());
+ await ready(result);
+ act(()=>mocks.capture.mock.calls[0][2]("AAAA"));
+ act(()=>vi.advanceTimersByTime(12001));
+ expect(result.current.active).toBe(false);
+ expect(result.current.notice).toContain("没有收到回复");
+ vi.useRealTimers();
+});
