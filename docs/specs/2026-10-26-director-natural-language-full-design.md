@@ -380,3 +380,11 @@ FK at between-key samples, support drift <= 1 cm, ankle orientation and limits.
 Corner heading changes remain discrete replants, not contact-preserving turns;
 terrain, arbitrary rigs and physics remain outside this slice. No rendered
 appearance or universal no-slip guarantee follows from numerical validation.
+
+### Corner stop reference
+
+Reserve 0.25–0.65 seconds at nontrivial route corners, within the requested
+arrival duration. Recheck walking speed and crowd clearance including these
+holds. Replant in neutral pose and interpolate heading on the shortest arc
+while stationary. This is an explicit reference pivot; no turn-step contact
+or slip-free rotation is claimed. Straight-segment foot locking is unchanged.

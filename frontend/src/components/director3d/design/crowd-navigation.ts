@@ -80,15 +80,31 @@ export function navigateCrowd(tracks: TimelineTrackState[], characters: Record<s
     const requestedStart = track.keyframes.length > 2 ? track.keyframes[1].timeSeconds : 0;
     const duration = track.keyframes.at(-1)!.timeSeconds - requestedStart;
     const length = points.slice(1).reduce((sum, point, i) => sum + distance(points[i], point), 0);
-    if (length / duration > 3) throw new Error("群演绕行速度超过 3 米/秒，请延长动作时间。");
+    const turnDurations = points.map((point, i) => {
+      if (i === 0 || i === points.length-1) return 0;
+      const before = points[i-1], after = points[i+1];
+      const incoming = Math.atan2(point[1]-before[1],point[0]-before[0]);
+      const outgoing = Math.atan2(after[1]-point[1],after[0]-point[0]);
+      const angle = Math.abs(Math.atan2(Math.sin(outgoing-incoming),Math.cos(outgoing-incoming)));
+      return angle < Math.PI/36 ? 0 : .25 + .4*angle/Math.PI;
+    });
+    const walkingDuration = duration-turnDurations.reduce((sum,v) => sum+v,0);
+    if (walkingDuration <= 0 || length / walkingDuration > 3) throw new Error("群演绕行速度超过 3 米/秒，请延长动作时间。");
     let scheduled: TimelineTrackState | null = null;
     for (let wait = 0; wait <= 8; wait += .25) {
       const start = requestedStart + wait;
       if (start + duration > 600) break;
-      let traveled = 0;
+      let elapsed = 0;
       const keyframes: TimelineKeyframeState[] = [{keyframeId: `${track.trackId}-hold`, timeSeconds: 0, value: from, interpolation: "linear"}];
       if (start > 0) keyframes.push({keyframeId: `${track.trackId}-start`, timeSeconds: start, value: from, interpolation: "linear"});
-      points.slice(1).forEach((point, i) => { traveled += distance(points[i], point); keyframes.push({keyframeId: `${track.trackId}-route-${i}`, timeSeconds: start + duration * traveled / length, value: point, interpolation: "linear"}); });
+      points.slice(1).forEach((point, i) => {
+        elapsed += walkingDuration*distance(points[i],point)/length;
+        keyframes.push({keyframeId: `${track.trackId}-route-${i}`,timeSeconds:start+elapsed,value:point,interpolation:"linear"});
+        if (turnDurations[i+1]) {
+          elapsed += turnDurations[i+1];
+          keyframes.push({keyframeId:`${track.trackId}-turn-${i}`,timeSeconds:start+elapsed,value:point,interpolation:"linear"});
+        }
+      });
       const candidate = {...track, keyframes};
       if (!accepted.some((other) => conflicts(candidate, other))) { scheduled = candidate; break; }
     }
@@ -113,8 +129,19 @@ export function crowdGait(track: TimelineTrackState, actor: CharacterAuthoringSt
     const length = distance(from, to), walking = length > 1e-6;
     const footfalls = Math.max(2, Math.ceil(length / .12 / 2) * 2);
     const steps = walking ? footfalls * Math.max(8, Math.ceil(length / footfalls / .005)) : 1;
-    const yaw = walking ? Math.atan2(-(to[0] - from[0]), to[1] - from[1]) * 180 / Math.PI : actor.transform.rotationDeg[2];
-    turnKeys.push({keyframeId: `${track.trackId}-yaw-${i}`, timeSeconds: start.timeSeconds, value: {rotation_deg: [0, 0, yaw]}, interpolation: "step"});
+    const heading = (a: Vec,b: Vec) => Math.atan2(-(b[0]-a[0]),b[1]-a[1])*180/Math.PI;
+    const previousYaw = turnKeys.length ? (turnKeys.at(-1)!.value as {rotation_deg: Vec}).rotation_deg[2] : actor.transform.rotationDeg[2];
+    const yaw = walking ? heading(from,to) : previousYaw;
+    // A route hold is an explicit stop/replant. The turn is a reference pivot,
+    // not a contact-preserving turn step. Use the shortest angular arc.
+    const nextPoint = track.keyframes[i+2]?.value as Vec | undefined;
+    const turning = !walking && i > 0 && nextPoint && distance(to,nextPoint)>1e-6;
+    if (turning) {
+      const desired = heading(to,nextPoint);
+      const delta = ((desired-yaw+540)%360)-180;
+      turnKeys.push({keyframeId:`${track.trackId}-turn-start-${i}`,timeSeconds:start.timeSeconds,value:{rotation_deg:[0,0,yaw]},interpolation:"linear"});
+      turnKeys.push({keyframeId:`${track.trackId}-turn-end-${i}`,timeSeconds:end.timeSeconds,value:{rotation_deg:[0,0,yaw+delta]},interpolation:"step"});
+    } else turnKeys.push({keyframeId: `${track.trackId}-yaw-${i}`, timeSeconds: start.timeSeconds, value: {rotation_deg: [0, 0, yaw]}, interpolation: "step"});
     for (let j = 0; j < steps; j++) {
       const amount = j / steps;
       poseKeys.push({keyframeId: `${track.trackId}-gait-${i}-${j}`, timeSeconds: start.timeSeconds + amount * (end.timeSeconds - start.timeSeconds), value: pose((traveled + length * amount) * 2 * Math.PI / 1.2, walking, length * amount, length), interpolation: walking ? "linear" : "step"});

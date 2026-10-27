@@ -56,3 +56,21 @@ it("routes around a stationary observer and preserves observation holds", () => 
   expect(routed.find((item) => item.target.targetId === "a")!.keyframes.length).toBeGreaterThan(2);
   expect(routed.find((item) => item.target.targetId === "observer")).toEqual(observer);
 });
+it("budgets corner stops into arrival time and turns while the root is stationary", () => {
+  const [routed] = navigateCrowd([track('a',[-3,0,0],[3,0,0])],actors(['a']),{counter:counter()});
+  const holds = routed.keyframes.slice(1).flatMap((end,i) => {
+    const start=routed.keyframes[i];
+    return end.timeSeconds>start.timeSeconds && JSON.stringify(start.value)===JSON.stringify(end.value) ? [[start,end]] : [];
+  });
+  expect(holds.length).toBeGreaterThan(0);
+  expect(routed.keyframes.at(-1)!.timeSeconds).toBeCloseTo(4);
+  const gait = crowdGait(routed,actor);
+  for(const [start,end] of holds) {
+    const middle=(start.timeSeconds+end.timeSeconds)/2;
+    expect(evaluateKeyframes(routed.keyframes,middle)).toEqual(start.value);
+    const before=evaluateKeyframes(gait[1].keyframes,start.timeSeconds) as {rotation_deg:number[]};
+    const during=evaluateKeyframes(gait[1].keyframes,middle) as {rotation_deg:number[]};
+    expect(Math.abs(during.rotation_deg[2]-before.rotation_deg[2])).toBeGreaterThan(1);
+    expect((evaluateKeyframes(gait[0].keyframes,middle) as Record<string,number[]>).pose_root_offset_m).toEqual([0,0,0]);
+  }
+});
