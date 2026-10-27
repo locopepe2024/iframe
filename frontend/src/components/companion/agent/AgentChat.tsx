@@ -25,6 +25,7 @@ import { isOpenAlbumCommand } from "./localCommands";
 import { BookOpen, Images, UserRound, Compass, Mic } from "lucide-react";
 import DigitalCompanionPanel from "./DigitalCompanionPanel";
 import { detectCompanionRuntimeCapability, type CompanionRuntimeCapability } from "./companionRuntimeCapability";
+import { coordinateOnDevice } from "./edgeTaskCoordinator";
 
 const prefix = process.env.NEXT_PUBLIC_API_URL === "/companion-demo" ? "/companion-demo" : "";
 const sessionKey = "iframe-companion-agent-session-v1";
@@ -57,6 +58,7 @@ export default function AgentChat() {
   const [busy, setBusy] = useState(false), [error, setError] = useState(""), [notice, setNotice] = useState("");
   const [settingsSaved, setSettingsSaved] = useState(false);
   const [runtimeCapability, setRuntimeCapability] = useState<CompanionRuntimeCapability>({ status: "checking", reason: "正在检查设备能力…", memoryGb: null });
+  const [edgeCoordinatorEnabled, setEdgeCoordinatorEnabled] = useState(false);
   const locked = useRef(false), alive = useRef(true);
   const voiceQueue = useRef<string[]>([]);
   const [voiceRevision, setVoiceRevision] = useState(0);
@@ -122,6 +124,7 @@ export default function AgentChat() {
     alive.current = true;
     void run(async () => {
       if (localStorage.getItem(consentKey) === "true") setAllowed(true);
+      if (localStorage.getItem("iframe-companion-edge-coordinator-v1") === "true") setEdgeCoordinatorEnabled(true);
       const savedResponseMode = localStorage.getItem(responseModeKey);
       if (savedResponseMode === "audio" || savedResponseMode === "text") setResponseMode(savedResponseMode);
       const id = localStorage.getItem(sessionKey);
@@ -152,6 +155,21 @@ export default function AgentChat() {
     const requestedText = voiceText ?? text;
     const requestedDay = diaryDay(requestedText, "", today());
     const submittedText = requestedDay ? diaryPrompt(requestedDay) : requestedText;
+    if (!retry && edgeCoordinatorEnabled && runtimeCapability.status === "edge_ready") {
+      try {
+        const context = messages.slice(-10).map(message => {
+          const reply = message.turn?.result?.kind === "text" ? `\n陪伴助手：${message.turn.result.text}` : "";
+          return `我：${message.text}${reply}`;
+        }).join("\n");
+        const decision = await coordinateOnDevice(submittedText, context);
+        if (decision.need_clarification) {
+          setNotice(decision.question || "请先告诉我，您想继续聊天、写日记，还是整理照片？");
+          return;
+        }
+      } catch {
+        setNotice("端侧协调器暂不可用，本轮改用服务端处理。");
+      }
+    }
     if (!sendOperation.current || !retry) sendOperation.current = { operation_id: crypto.randomUUID(), text: submittedText, allow_external_text: true };
     if (!retry) setLastSubmittedText(submittedText);
     setHasRetry(true); setPreview(null);
@@ -275,6 +293,7 @@ export default function AgentChat() {
           <label className={styles.check}><input type="radio" name="companion-response-mode" value="text" checked={responseMode === "text"} onChange={() => { setResponseMode("text"); localStorage.setItem(responseModeKey, "text"); }} />方案 2：只回复文字</label>
         </fieldset>
         <p className={styles.note}>语音回复由 OpenTalking 播放，并保留文字记录；播放受阻时可点击“播放声音”。</p>
+        <label className={styles.check}><input type="checkbox" checked={edgeCoordinatorEnabled} disabled={runtimeCapability.status !== "edge_ready"} onChange={event => { const value = event.target.checked; setEdgeCoordinatorEnabled(value); localStorage.setItem("iframe-companion-edge-coordinator-v1", String(value)); }} />启用端侧任务协调器（测试）</label>
         <div className={chatStyles.settingsSaveRow}>
           <button type="button" className={chatStyles.settingsSaveButton} onClick={saveChatSettings}>保存设置</button>
           {settingsSaved && <span className={chatStyles.settingsSaved} role="status">✓ 设置已保存</span>}
