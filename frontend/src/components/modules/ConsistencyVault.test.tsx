@@ -74,14 +74,15 @@ beforeEach(() => {
 it("shows all merged crowd templates in Assets without treating them as character assets", () => {
     useProjectStore.setState({ currentProject: {
         id: "episode-1", characters: [], scenes: [], props: [],
-        crowd_groups: [
+        series_id: "series-1", crowd_groups: [],
+    } as any, currentSeries: { id: "series-1", extra_roster: [
             { extra_id: "crowd_001", label: "流民匪寇", kind: "extra_template" },
             { extra_id: "crowd_002", label: "江湖打手", kind: "extra_template" },
             { extra_id: "crowd_003", label: "玄宸阁随行探子", kind: "extra_template" },
             { extra_id: "crowd_004", label: "青溪镇市井百姓", kind: "extra_template" },
             { extra_id: "crowd_005", label: "往来江湖客", kind: "extra_template" },
-        ],
-    } as any });
+        ] } as any });
+    mocks.getSeries.mockResolvedValue({ characters: [], scenes: [], props: [] });
     mocks.getEpisodeVisualContext.mockResolvedValue({ context: null, bindings: [] });
 
     render(<ConsistencyVault />);

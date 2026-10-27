@@ -43,6 +43,7 @@ export default function ConsistencyVault() {
     const tv = useTranslations("vault");
     const tStep = useTranslations("stepHeader");
     const currentProject = useProjectStore((state) => state.currentProject);
+    const currentSeries = useProjectStore((state) => state.currentSeries);
     const updateProject = useProjectStore((state) => state.updateProject);
 
 
@@ -677,6 +678,7 @@ export default function ConsistencyVault() {
             activeTab === "prop" ? currentProject?.props : [];
     const crowdGroups = Array.from(new Map([
         ...(currentProject?.crowd_groups ?? []),
+        ...(currentSeries && currentSeries.id === currentProject?.series_id ? currentSeries.extra_roster ?? [] : []),
         ...(currentProject?.crowd_group_candidates ?? []),
     ].map(group => [group.extra_id, group])).values());
     const selectedPlanEntries = selectedAssetId && selectedAssetType
@@ -789,6 +791,21 @@ export default function ConsistencyVault() {
                     </div>
                 ) : (
                     <div className="space-y-8">
+                        {activeTab === "character" && crowdGroups.length > 0 && (
+                            <section aria-label="背景群演">
+                                <h3 className="mb-3 flex items-center gap-2 text-sm font-medium text-foreground">
+                                    <Users size={16} />背景群演 <span className="text-xs text-text-muted">({crowdGroups.length})</span>
+                                </h3>
+                                <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                                    {crowdGroups.map(group => (
+                                        <div key={group.extra_id} className="min-w-0 rounded border border-glass-border bg-glass px-4 py-3">
+                                            <div className="text-sm font-medium text-foreground">{group.label}</div>
+                                            {(group.wardrobe || group.body_build) && <p className="mt-1 text-xs text-text-muted">{[group.body_build, group.wardrobe].filter(Boolean).join(" · ")}</p>}
+                                        </div>
+                                    ))}
+                                </div>
+                            </section>
+                        )}
                         {!!assets?.length && <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-6">
                         {assets?.map((asset: any) => (
                             <AssetCard
@@ -825,21 +842,6 @@ export default function ConsistencyVault() {
                             </div>
                         </motion.div>
                         </div>}
-                        {activeTab === "character" && crowdGroups.length > 0 && (
-                            <section aria-label="背景群演">
-                                <h3 className="mb-3 flex items-center gap-2 text-sm font-medium text-foreground">
-                                    <Users size={16} />背景群演 <span className="text-xs text-text-muted">({crowdGroups.length})</span>
-                                </h3>
-                                <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                                    {crowdGroups.map(group => (
-                                        <div key={group.extra_id} className="min-w-0 rounded border border-glass-border bg-glass px-4 py-3">
-                                            <div className="text-sm font-medium text-foreground">{group.label}</div>
-                                            {(group.wardrobe || group.body_build) && <p className="mt-1 text-xs text-text-muted">{[group.body_build, group.wardrobe].filter(Boolean).join(" · ")}</p>}
-                                        </div>
-                                    ))}
-                                </div>
-                            </section>
-                        )}
                     </div>
                 )}
             </div>
