@@ -1,3 +1,4 @@
+import { solveFlatFoot } from "./foot-contact";
 import { navmeshRoute } from "./navmesh-routing";
 import type { CharacterAuthoringState } from "../state/workbench-store";
 import type { SceneObjectAuthoringState, TimelineTrackState, TimelineKeyframeState } from "../types";
@@ -103,7 +104,7 @@ export function crowdGait(track: TimelineTrackState, actor: CharacterAuthoringSt
   const poseKeys: TimelineKeyframeState[] = [], turnKeys: TimelineKeyframeState[] = [];
   const pose = (phase: number, walking: boolean) => {
     const swing = walking ? Math.sin(phase) : 0;
-    return {upper_leg_l: [28 * swing, 0, 0], upper_leg_r: [(-28 * swing) || 0, 0, 0], lower_leg_l: [Math.max(0, -swing) * 30, 0, 0], lower_leg_r: [Math.max(0, swing) * 30, 0, 0], upper_arm_l: [(-16 * swing) || 0, 0, 0], upper_arm_r: [16 * swing, 0, 0]};
+    return {...Object.fromEntries(Object.entries(solveFlatFoot(phase, walking).rotations).map(([id, r]) => [id, [r.x,r.y,r.z]])), upper_arm_l: [(-16 * swing) || 0, 0, 0], upper_arm_r: [16 * swing, 0, 0]};
   };
   for (let i = 0; i < track.keyframes.length - 1; i++) {
     const start = track.keyframes[i], end = track.keyframes[i + 1], from = start.value as Vec, to = end.value as Vec;
@@ -113,7 +114,7 @@ export function crowdGait(track: TimelineTrackState, actor: CharacterAuthoringSt
     turnKeys.push({keyframeId: `${track.trackId}-yaw-${i}`, timeSeconds: start.timeSeconds, value: {rotation_deg: [0, 0, yaw]}, interpolation: "step"});
     for (let j = 0; j < steps; j++) {
       const amount = j / steps;
-      poseKeys.push({keyframeId: `${track.trackId}-gait-${i}-${j}`, timeSeconds: start.timeSeconds + amount * (end.timeSeconds - start.timeSeconds), value: pose((traveled + length * amount) * 2 * Math.PI / 1.2, walking), interpolation: "linear"});
+      poseKeys.push({keyframeId: `${track.trackId}-gait-${i}-${j}`, timeSeconds: start.timeSeconds + amount * (end.timeSeconds - start.timeSeconds), value: pose((traveled + length * amount) * 2 * Math.PI / 1.2, walking), interpolation: walking ? "linear" : "step"});
     }
     traveled += length;
   }

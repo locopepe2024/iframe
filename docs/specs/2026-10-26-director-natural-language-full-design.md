@@ -355,3 +355,15 @@ Destroy native query/navmesh after each bounded build. No DetourCrowd physics,
 foot IK, stairs or imported-model admission is claimed. Validate rotated/scaled
 obstacles, shop doorway connectivity, disconnected endpoints, atomic apply,
 undo and JSON round trips; browser WASM loading remains runtime acceptance.
+
+### Canonical flat-ground leg IK
+
+Bake analytic two-bone sagittal leg IK into crowd pose keys using measured
+hip/knee/ankle rest coordinates of the shipped canonical GLB. Each foot follows
+a bounded alternating support/swing target; swing lift is 6 cm and ankle
+counter-rotation preserves rest foot orientation. Reject unreachable targets.
+This slice solves flat-ground ankle height at authored samples, not world-space
+foot locking, terrain raycasts, pelvis adjustment or arbitrary rigs. Do not
+claim slip-free planted feet: the bounded foot trajectory remains approximate.
+Verify FK against actual GLB bones and ankle orientation, not only formulas;
+retain deterministic timeline bake, JSON round trip and existing contact limits.
