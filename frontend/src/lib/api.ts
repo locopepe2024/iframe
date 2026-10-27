@@ -326,6 +326,26 @@ export interface AssetRevisionHistory {
     revisions: AssetRevisionRecord[];
 }
 
+export interface CharacterAssetPackView {
+    character_id: string;
+    source_scope: "project" | "series";
+    source_container_id: string;
+    asset_revision: number;
+    pack: null | {
+        pack_id: string;
+        current_revision: number;
+        revisions: Array<{
+            revision: number;
+            kind: "front_full_body_anchor";
+            variant_id: string;
+            media_id?: string | null;
+            source_asset_revision: number;
+            source_design_revision: number;
+            confirmed_at: number;
+        }>;
+    };
+}
+
 export interface AssetReferenceIndex {
     schema_version: 1;
     project_id: string;
@@ -1268,6 +1288,25 @@ export const api = {
     getAssetRevisions: async (scriptId: string, assetType: string, assetId: string): Promise<AssetRevisionHistory> => {
         const res = await axios.get<AssetRevisionHistory>(
             `${API_URL}/projects/${encodeURIComponent(scriptId)}/assets/${encodeURIComponent(assetType)}/${encodeURIComponent(assetId)}/revisions`,
+        );
+        return res.data;
+    },
+
+    getCharacterAssetPack: async (scriptId: string, characterId: string): Promise<CharacterAssetPackView> => {
+        const res = await axios.get<CharacterAssetPackView>(
+            `${API_URL}/projects/${encodeURIComponent(scriptId)}/characters/${encodeURIComponent(characterId)}/asset-pack`,
+        );
+        return res.data;
+    },
+
+    confirmCharacterAnchor: async (
+        scriptId: string, characterId: string, variantId: string,
+        expectedAssetRevision: number, expectedPackRevision: number,
+    ): Promise<CharacterAssetPackView> => {
+        const res = await axios.post<CharacterAssetPackView>(
+            `${API_URL}/projects/${encodeURIComponent(scriptId)}/characters/${encodeURIComponent(characterId)}/asset-pack/anchor`,
+            { variant_id: variantId, expected_asset_revision: expectedAssetRevision,
+                expected_pack_revision: expectedPackRevision, verified_front_full_body: true },
         );
         return res.data;
     },

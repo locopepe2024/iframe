@@ -17,6 +17,8 @@ from .models import (
     GenerationStatus,
     VideoTask,
     Character,
+    CharacterAssetPack,
+    CharacterAssetPackRevision,
     Scene,
     Prop,
     StoryboardFrame,
@@ -2647,6 +2649,13 @@ class ComicGenPipeline(StudioOwnerMixin):
         target_asset, source = self._find_asset_with_source(script, asset_id, asset_type)
         if not target_asset:
             raise ValueError(f"Asset {asset_id} of type {asset_type} not found")
+        if asset_type == "character" and (
+            "asset_pack" in attributes or
+            (getattr(target_asset, "asset_pack", None) and set(attributes) & {
+                "reference_sheet", "full_body_asset", "asset_revision", "asset_revisions",
+            })
+        ):
+            raise ValueError("Confirmed character asset pack can only change through reviewed anchor operations")
 
         if "name" in attributes:
             attributes = {**attributes, "name": self._validated_asset_name(attributes["name"])}
@@ -8804,6 +8813,86 @@ class ComicGenPipeline(StudioOwnerMixin):
                 "current_revision": asset.asset_revision,
                 "revisions": [item.model_dump() for item in asset.asset_revisions]}
 
+    def _project_character_for_pack(self, script_id: str, character_id: str):
+        """Resolve the project owner, never an inherited/global candidate."""
+        script = self.scripts.get(script_id)
+        if not script:
+            raise ValueError("Script not found")
+        if script.series_id:
+            series = self.get_series(script.series_id, script.owner_profile_id)
+            if not series:
+                raise ValueError("Series not found")
+            character = next((item for item in series.characters if item.id == character_id), None)
+            source = "series"
+        else:
+            character = next((item for item in script.characters if item.id == character_id), None)
+            source = "script"
+        if character is None:
+            raise ValueError("Project character not found")
+        return character, source
+
+    def get_project_character_asset_pack(self, script_id: str, character_id: str) -> Dict[str, Any]:
+        with self._save_lock:
+            character, source = self._project_character_for_pack(script_id, character_id)
+            asset_revision = commit_asset_revision(character)
+            script = self.scripts[script_id]
+            return {
+                "character_id": character.id,
+                "source_scope": "series" if source == "series" else "project",
+                "source_container_id": script.series_id if source == "series" else script.id,
+                "asset_revision": asset_revision.revision,
+                "pack": character.asset_pack.model_dump() if character.asset_pack else None,
+            }
+
+    def confirm_project_character_anchor(
+        self, script_id: str, character_id: str, variant_id: str,
+        expected_asset_revision: int, expected_pack_revision: int,
+        verified_front_full_body: bool,
+    ) -> Dict[str, Any]:
+        """Append a reviewed identity anchor without changing media selection."""
+        with self._save_lock:
+            character, source = self._project_character_for_pack(script_id, character_id)
+            asset_revision = commit_asset_revision(character)
+            pack = character.asset_pack
+            if (asset_revision.revision != expected_asset_revision
+                    or (pack.current_revision if pack else 0) != expected_pack_revision):
+                raise ValueError("Character asset pack revision changed; reload before confirming")
+            if not verified_front_full_body:
+                raise ValueError("Confirm that the selected image is a front full-body anchor")
+            design_revisions = (character.character_design or {}).get("design_revisions") or []
+            if not design_revisions:
+                raise ValueError("Confirm the character visual design before selecting an anchor")
+            design_revision = design_revisions[-1].get("revision")
+            if not isinstance(design_revision, int) or design_revision < 1:
+                raise ValueError("Confirmed character design revision is invalid")
+            containers = (character.reference_sheet, character.full_body_asset)
+            variants = [item for container in containers if container is not None
+                        for item in (getattr(container, "image_variants", None)
+                                     or getattr(container, "variants", None) or [])
+                        if item.id == variant_id]
+            if not variants or any((item.media_id, image_variant_storage_key(item)) !=
+                                   (variants[0].media_id, image_variant_storage_key(variants[0]))
+                                   for item in variants[1:]):
+                raise ValueError("Anchor variant must belong to the project character reference sheet")
+            variant = variants[0]
+            new_revision = expected_pack_revision + 1
+            anchor = CharacterAssetPackRevision(
+                revision=new_revision, variant_id=variant.id, media_id=variant.media_id,
+                source_asset_revision=asset_revision.revision,
+                source_design_revision=design_revision,
+            )
+            character.asset_pack = CharacterAssetPack(
+                pack_id=pack.pack_id if pack else f"character-pack-{character.id}",
+                current_revision=new_revision,
+                revisions=[*(pack.revisions if pack else []), anchor],
+            )
+            # Generation eviction must retain every confirmed anchor revision.
+            for item in variants:
+                item.is_favorited = True
+            commit_asset_revision(character, "user_confirmed")
+            self._save_after_asset_mutation(source)
+            return self.get_project_character_asset_pack(script_id, character_id)
+
     def confirm_asset_revision(
         self, script_id: str, asset_id: str, asset_type: str,
         expected_revision: int, active_variant_ids: Optional[List[str]] = None,
@@ -8827,6 +8916,10 @@ class ComicGenPipeline(StudioOwnerMixin):
                 raise ValueError("Active variants must be unique members of this asset")
             if selected_variant_id and selected_variant_id not in active:
                 raise ValueError("Selected variant must remain active on this asset")
+            if asset_type == "character" and asset.asset_pack:
+                anchors = {item.variant_id for item in asset.asset_pack.revisions}
+                if not anchors.issubset(active):
+                    raise ValueError("Confirmed character anchors cannot be removed")
             from .models import AssetUnit
             for container in containers:
                 variant_field = "image_variants" if isinstance(container, AssetUnit) else "variants"
@@ -8885,6 +8978,12 @@ class ComicGenPipeline(StudioOwnerMixin):
                 "asset_revision": asset.asset_revision,
                 "asset_revisions": asset.asset_revisions,
             })
+            if asset_type == "character" and asset.asset_pack:
+                if candidate.asset_pack != asset.asset_pack:
+                    raise ValueError("Cannot restore a revision that changes confirmed character anchors")
+                anchored_ids = {item.variant_id for item in asset.asset_pack.revisions}
+                if not anchored_ids.issubset({item.id for item in self._asset_image_variants(candidate, "character")}):
+                    raise ValueError("Cannot restore a revision that removes confirmed character anchors")
             for field in old.snapshot:
                 if field != "id":
                     setattr(asset, field, getattr(candidate, field))
@@ -9065,6 +9164,10 @@ class ComicGenPipeline(StudioOwnerMixin):
                 raise ValueError(f"Asset {asset_id} of type {asset_type} not found")
 
         if asset_type == "character":
+            if target_asset.asset_pack and any(
+                item.variant_id == variant_id for item in target_asset.asset_pack.revisions
+            ):
+                raise ValueError("Confirmed character anchor cannot be deleted")
             for field, legacy_url_field in (
                 ("reference_sheet", "image_url"),
                 ("full_body_asset", "image_url"),
@@ -9186,6 +9289,10 @@ class ComicGenPipeline(StudioOwnerMixin):
         if asset_type == "character":
             target_asset = next((c for c in script.characters if c.id == asset_id), None)
             if target_asset:
+                if not is_favorited and target_asset.asset_pack and any(
+                    item.variant_id == variant_id for item in target_asset.asset_pack.revisions
+                ):
+                    raise ValueError("Confirmed character anchor must remain favorited")
                 if generation_type == "full_body":
                     found = self._set_variant_favorite(target_asset.full_body_asset, variant_id, is_favorited)
                 elif generation_type == "reference_sheet":
@@ -11073,6 +11180,13 @@ class ComicGenPipeline(StudioOwnerMixin):
         """Updates arbitrary attributes of a Series asset."""
         with self._save_lock:
             series, target_asset = self._find_series_asset(series_id, asset_id, asset_type)
+            if asset_type == "character" and (
+                "asset_pack" in attributes or
+                (getattr(target_asset, "asset_pack", None) and set(attributes) & {
+                    "reference_sheet", "full_body_asset", "asset_revision", "asset_revisions",
+                })
+            ):
+                raise ValueError("Confirmed character asset pack can only change through reviewed anchor operations")
             if "name" in attributes:
                 attributes = {**attributes, "name": self._validated_asset_name(attributes["name"])}
             for key, value in attributes.items():

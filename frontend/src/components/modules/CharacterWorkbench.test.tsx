@@ -10,6 +10,10 @@ import {
 
 const apiMocks = vi.hoisted(() => ({
     getAssetReferenceIndex: vi.fn(),
+    getCharacterAssetPack: vi.fn().mockResolvedValue({
+        character_id: "character", source_scope: "project", asset_revision: 1, pack: null,
+    }),
+    confirmCharacterAnchor: vi.fn(),
     previewAssetImageSubmission: vi.fn((_id: string, request: any) => Promise.resolve({
         positive_prompt: request.prompt, negative_prompt: request.negative_prompt,
         selected_model_id: "test-model", aspect_ratio: "9:16",
@@ -105,6 +109,47 @@ it("shows one task at a time and unlocks derived prompts when the reference shee
     fireEvent.click(screen.getByRole("tab", { name: "avatar" }));
     expect(container.querySelector("[contenteditable]")).toHaveAttribute("contenteditable", "true");
     expect(screen.queryByText("Generate Master Asset first")).not.toBeInTheDocument();
+});
+
+it("confirms a selected project master as an explicit versioned anchor", async () => {
+    apiMocks.getAssetReferenceIndex.mockResolvedValue({ assets: [] } as any);
+    apiMocks.getCharacterAssetPack.mockResolvedValue({
+        character_id: "hero", source_scope: "project", asset_revision: 3, pack: null,
+    });
+    apiMocks.confirmCharacterAnchor.mockResolvedValue({
+        character_id: "hero", source_scope: "project", asset_revision: 4,
+        pack: { pack_id: "character-pack-hero", current_revision: 1,
+            revisions: [{ revision: 1, variant_id: "front" }] },
+    });
+    const review = vi.spyOn(window, "confirm").mockReturnValue(true);
+    render(<CharacterWorkbench asset={{
+        id: "hero", name: "Hero", description: "Hero",
+        character_design: { design_revisions: [{ revision: 1, design: {} }] },
+        reference_sheet: { selected_image_id: "front", image_variants: [{ id: "front", url: "front.webp" }] },
+    }} onClose={vi.fn()} onUpdateDescription={vi.fn()} onGenerate={vi.fn()} generatingTypes={[]} />);
+    fireEvent.click(await screen.findByRole("button", { name: "将选中图确认为正面全身锚点" }));
+    await waitFor(() => expect(apiMocks.confirmCharacterAnchor).toHaveBeenCalledWith(
+        "project-1", "hero", "front", 3, 0,
+    ));
+    expect(await screen.findByText("项目角色锚点：r1 · front")).toBeInTheDocument();
+    review.mockRestore();
+});
+
+it("keeps the character anchor unchanged when review is cancelled", async () => {
+    apiMocks.getAssetReferenceIndex.mockResolvedValue({ assets: [] } as any);
+    apiMocks.getCharacterAssetPack.mockResolvedValue({
+        character_id: "hero", source_scope: "project", asset_revision: 3, pack: null,
+    });
+    apiMocks.confirmCharacterAnchor.mockClear();
+    const review = vi.spyOn(window, "confirm").mockReturnValue(false);
+    render(<CharacterWorkbench asset={{
+        id: "hero", name: "Hero", description: "Hero",
+        character_design: { design_revisions: [{ revision: 1, design: {} }] },
+        reference_sheet: { selected_image_id: "front", image_variants: [{ id: "front", url: "front.webp" }] },
+    }} onClose={vi.fn()} onUpdateDescription={vi.fn()} onGenerate={vi.fn()} generatingTypes={[]} />);
+    fireEvent.click(await screen.findByRole("button", { name: "将选中图确认为正面全身锚点" }));
+    expect(apiMocks.confirmCharacterAnchor).not.toHaveBeenCalled();
+    review.mockRestore();
 });
 
 it("does not offer direct image upload from the character panel", () => {
