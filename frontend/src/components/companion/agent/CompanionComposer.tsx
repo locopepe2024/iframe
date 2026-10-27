@@ -74,7 +74,7 @@ export default function CompanionComposer({ mode, value, disabled, busy, allowed
         </div>
         <button type="button" className={styles.albumButton} aria-label="上传" disabled={disabled || recording} onClick={onUpload}><Plus size={24} aria-hidden="true" /><span>上传</span></button>
         <div className={styles.composerActions}>
-          <button type="button" className={styles.voiceButton} disabled={(!recording && ((disabled && !busy) || (localCapture && capture.failed))) || voice.finishing} onClick={() => {
+          <button type="button" className={styles.voiceButton} aria-label={voice.finishing ? "正在整理" : recording ? "停止" : "语音输入"} disabled={(!recording && ((disabled && !busy) || (localCapture && capture.failed))) || voice.finishing} onClick={() => {
             if (voiceConsent) voice.toggleListening(); else setVoicePrompt(true);
           }}>
             {recording ? <Square size={28} aria-hidden="true" /> : <Mic size={28} aria-hidden="true" />}<span>{voice.finishing ? "正在整理" : recording ? "停止" : "语音输入"}</span>
