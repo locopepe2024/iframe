@@ -2306,7 +2306,7 @@
     "framesReadyLabel": "已完成",
     "planTitle": "Assembly 剪辑计划",
     "planEmpty": "先从当前已完成的 Motion 镜头生成一个可编辑的 60 秒提案。保存前不会触发付费生成。",
-    "planCompileNotice": "视频按时间线顺序渲染，项目内对白、BGM 和音效按定位混音。字幕独立导出 SRT，不烧录进视频。",
+    "planCompileNotice": "视频按时间线顺序渲染，项目内对白、BGM 和音效按定位混音。字幕可选烧录到成片，也可独立导出 SRT。",
     "renderAssembly": "渲染剪辑",
     "renderingAssembly": "渲染中…",
     "assemblyExportSubtitle": "将已保存的视频泳道编译为最终 MP4；渲染不会提交付费生成。",

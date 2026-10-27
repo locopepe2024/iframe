@@ -3,6 +3,7 @@ import { useState } from "react";
 import { useLocale } from "next-intl";
 import { api, type AssemblyEditPlan } from "@/lib/api";
 import type { Project } from "@/store/projectStore";
+import { splitAssemblyClip, trimAssemblyClip } from "./assemblyEditing";
 import { extractErrorDetail } from "@/lib/utils";
 
 export function AssemblyTracks({ plan, resourceId, onChange, saved, project }: {
@@ -14,6 +15,14 @@ export function AssemblyTracks({ plan, resourceId, onChange, saved, project }: {
     const [position, setPosition] = useState(0);
     const [error, setError] = useState<string | null>(null);
     const [busy, setBusy] = useState(false);
+    const [selected, setSelected] = useState<{ laneId: string; clipId: string } | null>(null);
+    const [sourceIn, setSourceIn] = useState(0);
+    const [sourceOut, setSourceOut] = useState(1);
+    const selectedLane = plan.lanes.find(l => l.id === selected?.laneId);
+    const selectedClip = selectedLane?.clips.find(c => c.id === selected?.clipId);
+    const applyEdit = (edit: () => AssemblyEditPlan) => {
+        try { onChange(edit()); setError(null); } catch (e) { setError(e instanceof Error ? e.message : String(e)); }
+    };
     const control = "min-h-11 rounded-md border border-glass-border bg-elevated px-3 py-2 text-xs text-foreground focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary disabled:opacity-40";
     const active = plan.lanes.filter(l => l.kind === "subtitle" && !l.muted).flatMap(l => l.clips.filter(c => c.enabled && c.timeline_start_ms <= position && position < c.timeline_end_ms));
     const download = async (id: string) => {
@@ -29,12 +38,27 @@ export function AssemblyTracks({ plan, resourceId, onChange, saved, project }: {
         <div className="flex flex-wrap gap-2">{(["subtitle", "dialogue", "bgm", "sfx"] as const).map(kind => <button key={kind} className={control} type="button" disabled={plan.lanes.length >= 8} onClick={() => onChange({ ...plan, lanes: [...plan.lanes, { id: `${kind}-${crypto.randomUUID()}`, kind, label: kind, clips: [], allow_overlap: kind !== "subtitle" }] })}>{t("添加", "Add")} {kind}</button>)}</div>
         <label className="block text-xs text-text-secondary">{t("字幕时间预览", "Subtitle time preview")} · {(position / 1000).toFixed(2)}s<input className="block w-full accent-primary" type="range" aria-label={t("字幕播放头", "Subtitle playhead")} min={0} max={plan.target_duration_ms} step={10} value={position} onChange={e => setPosition(Number(e.target.value))} /></label>
         <div className="min-h-12 whitespace-pre-wrap rounded bg-elevated p-3 text-center text-foreground">{active.map(c => c.text).join("\n") || t("当前无字幕", "No caption at this time")}</div>
-        <p className="text-xs text-text-muted">{t("字幕独立下载为 SRT，不烧录进视频。修改后先保存再下载。", "Subtitles download separately as SRT. Save changes before downloading.")}</p>
+        <label className="flex flex-wrap items-center gap-2 text-xs text-text-secondary">{t("成片字幕", "Video captions")}
+            <select className={control} value={plan.burn_subtitle_lane_id || ""} onChange={e => onChange({ ...plan, burn_subtitle_lane_id: e.target.value || null })}>
+                <option value="">{t("不烧录（仅 SRT）", "No burn-in (SRT only)")}</option>
+                {plan.lanes.filter(l => l.kind === "subtitle" && !l.muted).map(l => <option key={l.id} value={l.id}>{t("烧录", "Burn in")} · {l.label || l.id}</option>)}
+            </select>
+        </label>
+        <p className="text-xs text-text-muted">{t("修改后先保存再导出。烧录字幕会永久进入画面；其他字幕轨仍可单独下载 SRT。", "Save changes before export. Burned captions become part of the picture; other tracks remain available as SRT.")}</p>
+        {selected && selectedClip && <div className="flex flex-wrap items-end gap-2 rounded border border-glass-border p-2">
+            <span className="text-xs text-text-secondary">{selectedClip.label || selectedClip.id}</span>
+            <button type="button" className={control} disabled={position <= selectedClip.timeline_start_ms || position >= selectedClip.timeline_end_ms} onClick={() => applyEdit(() => splitAssemblyClip(plan, selected.laneId, selected.clipId, position, crypto.randomUUID()))}>{t("在播放头分割", "Split at playhead")}</button>
+            {selectedLane?.kind !== "subtitle" && <>
+                <label className="text-xs text-text-secondary">{t("源入点（毫秒）", "Source in (ms)")}<input className={`${control} block w-32`} type="number" min={0} step={1} value={sourceIn} onChange={e => setSourceIn(Number(e.target.value))} /></label>
+                <label className="text-xs text-text-secondary">{t("源出点（毫秒）", "Source out (ms)")}<input className={`${control} block w-32`} type="number" min={1} step={1} value={sourceOut} onChange={e => setSourceOut(Number(e.target.value))} /></label>
+                <button type="button" className={control} onClick={() => applyEdit(() => trimAssemblyClip(plan, selected.laneId, selected.clipId, sourceIn, sourceOut))}>{t("应用原速裁切", "Apply trim at original speed")}</button>
+            </>}
+        </div>}
         {error && <p role="alert" className="text-xs text-red-300">{error}</p>}
         {plan.lanes.map(lane => <div key={lane.id} className="space-y-2 border-t border-glass-border pt-2">
             <div className="flex flex-wrap items-center gap-2 text-xs text-text-secondary"><span>{lane.label || lane.kind}</span>
-                <label className="flex min-h-11 items-center gap-2"><input type="checkbox" checked={Boolean(lane.muted)} onChange={e => onChange({ ...plan, lanes: plan.lanes.map(l => l.id === lane.id ? { ...l, muted: e.target.checked } : l) })} />{t("静音 / 隐藏", "Mute / hide")}</label>
-                {lane.kind !== "video" && <button type="button" className={control} onClick={() => onChange({ ...plan, lanes: plan.lanes.filter(l => l.id !== lane.id) })}>{t("移除泳道", "Remove lane")}</button>}
+                <label className="flex min-h-11 items-center gap-2"><input type="checkbox" checked={Boolean(lane.muted)} onChange={e => onChange({ ...plan, burn_subtitle_lane_id: e.target.checked && plan.burn_subtitle_lane_id === lane.id ? null : plan.burn_subtitle_lane_id, lanes: plan.lanes.map(l => l.id === lane.id ? { ...l, muted: e.target.checked } : l) })} />{t("静音 / 隐藏", "Mute / hide")}</label>
+                {lane.kind !== "video" && <button type="button" className={control} onClick={() => onChange({ ...plan, burn_subtitle_lane_id: plan.burn_subtitle_lane_id === lane.id ? null : plan.burn_subtitle_lane_id, lanes: plan.lanes.filter(l => l.id !== lane.id) })}>{t("移除泳道", "Remove lane")}</button>}
                 {(["dialogue", "bgm", "sfx"] as string[]).includes(lane.kind) && <label>{t("添加项目音频", "Add project audio")}
                     <select className={control} value="" onChange={e => {
                         if (!e.target.value) return;
@@ -57,7 +81,12 @@ export function AssemblyTracks({ plan, resourceId, onChange, saved, project }: {
                 }}>{t("添加字幕", "Add caption")}</button><button type="button" className={control} disabled={!saved || busy || lane.muted} onClick={() => download(lane.id)}>{t("下载 SRT", "Download SRT")}</button></>}
             </div>
             <div className="relative h-10 overflow-hidden rounded bg-elevated" aria-label={`${lane.kind} timeline`}>
-                {lane.clips.map(c => <button key={c.id} type="button" title={c.text || c.label || c.id} onClick={() => setPosition(c.timeline_start_ms)} className="absolute inset-y-1 min-w-1 truncate rounded bg-primary/40 px-1 text-left text-xs text-foreground focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary" style={{ left: `${c.timeline_start_ms / plan.target_duration_ms * 100}%`, width: `${(c.timeline_end_ms - c.timeline_start_ms) / plan.target_duration_ms * 100}%`, opacity: c.enabled && !lane.muted ? 1 : 0.3 }}>{c.text || c.label || c.id}</button>)}
+                {lane.clips.map(c => <button key={c.id} type="button" title={c.text || c.label || c.id} onClick={() => {
+                    setSelected({ laneId: lane.id, clipId: c.id });
+                    setSourceIn(c.source_start_ms ?? 0);
+                    setSourceOut(c.source_end_ms ?? (c.source_start_ms ?? 0) + c.timeline_end_ms - c.timeline_start_ms);
+                    setPosition(c.timeline_start_ms);
+                }} className="absolute inset-y-1 min-w-1 truncate rounded bg-primary/40 px-1 text-left text-xs text-foreground focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary" style={{ left: `${c.timeline_start_ms / plan.target_duration_ms * 100}%`, width: `${(c.timeline_end_ms - c.timeline_start_ms) / plan.target_duration_ms * 100}%`, opacity: c.enabled && !lane.muted ? 1 : 0.3 }}>{c.text || c.label || c.id}</button>)}
                 <span className="pointer-events-none absolute inset-y-0 w-px bg-foreground" style={{ left: `${position / plan.target_duration_ms * 100}%` }} />
             </div>
             {lane.kind !== "subtitle" && lane.clips.map(cue => <label key={cue.id} className="flex min-h-11 items-center gap-2 text-xs text-text-secondary">{cue.label || cue.id} · {t("音量", "Gain")}

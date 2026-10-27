@@ -516,6 +516,7 @@ export interface AssemblyMarker {
 }
 
 export interface AssemblyEditPlan {
+    burn_subtitle_lane_id?: string | null;
     id: string;
     scope: AssemblyScope;
     target_duration_ms: number;
