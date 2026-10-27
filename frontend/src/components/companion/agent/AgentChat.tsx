@@ -225,7 +225,8 @@ export default function AgentChat() {
   }
   return <main className={`${styles.shell} ${chatStyles.shell}`} data-agent-build="upload-preview-20261024-v3">
     <header className={chatStyles.header}><h1><span aria-hidden="true">{identity.avatar}</span> {identity.name}</h1><div className={chatStyles.headerActions}><button type="button" className={chatStyles.headerIcon} aria-label="打开语音聊天" onClick={() => setOpenTalking(true)}><Mic size={22} aria-hidden="true" /></button><button type="button" aria-expanded={menu} onClick={() => setMenu(!menu)}>更多</button></div></header>
-    {menu && <aside className={styles.panel} aria-label="聊天管理">
+    {menu && <aside className={`${styles.panel} ${chatStyles.settingsPanel}`} aria-label="聊天管理">
+      <div className={chatStyles.settingsHeader}><h2>设置</h2><button type="button" aria-label="关闭设置" onClick={() => setMenu(false)}>×</button></div>
       <a href={`${prefix}/companion/photos`}>生活相册</a>
       <button disabled={inputDisabled || pending} onClick={() => void run(newSession)}>新建会话</button>
       <section aria-label="聊天设置">
