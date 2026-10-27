@@ -28,7 +28,7 @@ interface ReconcileModalProps {
     onApplied?: () => void;
 }
 
-type Kind = "character" | "scene" | "prop";
+type Kind = "character" | "crowd_group" | "scene" | "prop";
 
 interface Row {
     kind: Kind;
@@ -66,6 +66,7 @@ export default function ReconcileModal({ isOpen, scriptId, onClose, onApplied }:
                     }
                 };
                 seed("character", data.characters);
+                seed("crowd_group", data.crowd_groups ?? []);
                 seed("scene", data.scenes);
                 seed("prop", data.props);
                 setRows(init);
@@ -94,8 +95,8 @@ export default function ReconcileModal({ isOpen, scriptId, onClose, onApplied }:
         setRows(prev => prev?.map((r, i) => i === idx ? { ...r, action } : r) ?? null);
     };
 
-    const buildPayload = (): { characters: ReconcileAction[]; scenes: ReconcileAction[]; props: ReconcileAction[] } => {
-        const payload = { characters: [] as ReconcileAction[], scenes: [] as ReconcileAction[], props: [] as ReconcileAction[] };
+    const buildPayload = (): { characters: ReconcileAction[]; crowd_groups: ReconcileAction[]; scenes: ReconcileAction[]; props: ReconcileAction[] } => {
+        const payload = { characters: [] as ReconcileAction[], crowd_groups: [] as ReconcileAction[], scenes: [] as ReconcileAction[], props: [] as ReconcileAction[] };
         for (const r of rows ?? []) {
             const act: ReconcileAction = {
                 local_id: r.suggestion.local_id,
@@ -103,6 +104,7 @@ export default function ReconcileModal({ isOpen, scriptId, onClose, onApplied }:
                 target_series_id: r.action === "merge_into_series" ? (r.suggestion.suggested_series_id ?? undefined) : undefined,
             };
             if (r.kind === "character") payload.characters.push(act);
+            else if (r.kind === "crowd_group") payload.crowd_groups.push(act);
             else if (r.kind === "scene") payload.scenes.push(act);
             else payload.props.push(act);
         }
@@ -237,7 +239,7 @@ export default function ReconcileModal({ isOpen, scriptId, onClose, onApplied }:
 
 function ReconcileRow({ row, onActionChange }: { row: Row; onActionChange: (a: Row["action"]) => void }) {
     const t = useTranslations("reconcile");
-    const Icon = row.kind === "character" ? Users : row.kind === "scene" ? MapPin : Box;
+    const Icon = row.kind === "character" || row.kind === "crowd_group" ? Users : row.kind === "scene" ? MapPin : Box;
     const isHighConf = row.suggestion.confidence >= 75;
     const isMediumConf = row.suggestion.confidence > 0 && row.suggestion.confidence < 75;
     const conf = row.suggestion.confidence;

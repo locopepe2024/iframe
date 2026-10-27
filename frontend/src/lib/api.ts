@@ -2808,6 +2808,7 @@ export const api = {
      *  extracted entities vs the parent series's shared library. */
     getReconcileSuggestions: async (scriptId: string): Promise<{
         characters: ReconcileSuggestion[];
+        crowd_groups: ReconcileSuggestion[];
         scenes: ReconcileSuggestion[];
         props: ReconcileSuggestion[];
     }> => {
@@ -2820,6 +2821,7 @@ export const api = {
         scriptId: string,
         decisions: {
             characters?: ReconcileAction[];
+            crowd_groups?: ReconcileAction[];
             scenes?: ReconcileAction[];
             props?: ReconcileAction[];
         },

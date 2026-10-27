@@ -3070,27 +3070,28 @@ def reconcile_suggestions(script_id: str):
         raise HTTPException(status_code=404, detail="Project not found")
     if not script.series_id:
         # Standalone projects have no series library to reconcile against
-        return {"characters": [], "scenes": [], "props": []}
+        return {"characters": [], "crowd_groups": [], "scenes": [], "props": []}
     series = pipeline.get_series(script.series_id)
     if not series:
-        return {"characters": [], "scenes": [], "props": []}
+        return {"characters": [], "crowd_groups": [], "scenes": [], "props": []}
 
-    def best_match(local_name: str, pool: list, key: str = "name"):
+    def best_match(local_name: str, pool: list, key: str = "name", id_key: str = "id"):
         best_id, best_name, best_conf = None, None, 0
         for item in pool:
             sname = getattr(item, key, "") if hasattr(item, key) else item.get(key, "")
             conf = _name_match_confidence(local_name, sname)
             if conf > best_conf:
-                best_id, best_name, best_conf = item.id if hasattr(item, "id") else item.get("id"), sname, conf
+                best_id, best_name, best_conf = getattr(item, id_key) if hasattr(item, id_key) else item.get(id_key), sname, conf
         return best_id, best_name, best_conf
 
-    def build(local_pool, series_pool):
+    def build(local_pool, series_pool, name_key="name", id_key="id", match_kind=False):
         result = []
         for local in local_pool:
-            sid, sname, conf = best_match(local.name, series_pool)
+            candidates = [item for item in series_pool if item.kind == local.kind] if match_kind else series_pool
+            sid, sname, conf = best_match(getattr(local, name_key), candidates, name_key, id_key)
             result.append({
-                "local_id": local.id,
-                "local_name": local.name,
+                "local_id": getattr(local, id_key),
+                "local_name": getattr(local, name_key),
                 "suggested_series_id": sid if conf > 0 else None,
                 "suggested_series_name": sname if conf > 0 else None,
                 "confidence": conf,
@@ -3099,6 +3100,7 @@ def reconcile_suggestions(script_id: str):
 
     return {
         "characters": build(script.characters, series.characters),
+        "crowd_groups": build(script.crowd_group_candidates, series.extra_roster, "label", "extra_id", True),
         "scenes": build(script.scenes, series.scenes),
         "props": build(script.props, series.props),
     }
@@ -3112,6 +3114,7 @@ class ReconcileAction(BaseModel):
 
 class ApplyReconcileRequest(BaseModel):
     characters: List[ReconcileAction] = Field(default_factory=list)
+    crowd_groups: List[ReconcileAction] = Field(default_factory=list)
     scenes: List[ReconcileAction] = Field(default_factory=list)
     props: List[ReconcileAction] = Field(default_factory=list)
 
@@ -3132,6 +3135,23 @@ def reconcile_apply(script_id: str, request: ApplyReconcileRequest):
     series = pipeline.get_series(script.series_id)
     if not series:
         raise HTTPException(status_code=404, detail="Series not found")
+
+    local_groups = {item.extra_id: item for item in script.crowd_group_candidates}
+    series_groups = {item.extra_id: item for item in series.extra_roster}
+    for act in request.crowd_groups:
+        local = local_groups.get(act.local_id)
+        if local is None:
+            continue
+        if act.action == "merge_into_series":
+            target = series_groups.get(act.target_series_id)
+            if target is None or target.kind != local.kind:
+                raise HTTPException(status_code=400, detail="Crowd merge target is missing or has a different kind")
+        elif act.action == "create_new_in_series" and local.extra_id in series_groups:
+            raise HTTPException(status_code=400, detail="Crowd group ID already exists in series")
+    new_group_ids = {act.local_id for act in request.crowd_groups
+                     if act.action == "create_new_in_series" and act.local_id in local_groups}
+    if len(series.extra_roster) + len(new_group_ids) > 100:
+        raise HTTPException(status_code=400, detail="Series extra roster exceeds 100 entries")
 
     def apply_list(local_pool_attr: str, series_pool_attr: str, actions: list, frame_ref_attr: Optional[str] = None):
         local_pool = getattr(script, local_pool_attr)
@@ -3169,6 +3189,21 @@ def reconcile_apply(script_id: str, request: ApplyReconcileRequest):
     apply_list("characters", "characters", request.characters, "character_ids")
     apply_list("scenes", "scenes", request.scenes, "scene_id")
     apply_list("props", "props", request.props, "prop_ids")
+    for act in request.crowd_groups:
+        local = local_groups.get(act.local_id)
+        if local is None or local not in script.crowd_group_candidates:
+            continue
+        if act.action == "create_new_in_series":
+            series.extra_roster.append(local)
+            script.crowd_group_candidates.remove(local)
+        elif act.action == "merge_into_series":
+            for frame in script.frames:
+                for instance in frame.crowd_instances:
+                    if instance.extra_id == local.extra_id:
+                        instance.extra_id = act.target_series_id
+                    if instance.template_id == local.extra_id:
+                        instance.template_id = act.target_series_id
+            script.crowd_group_candidates.remove(local)
 
     script.updated_at = time.time()
     series.updated_at = time.time()
