@@ -60,3 +60,20 @@ export function removeAssemblyClip(plan: AssemblyEditPlan, laneId: string, clipI
         ...l, clips: l.clips.map(c => { const [start, end] = ranges.get(c.id)!; return { ...c, timeline_start_ms: start, timeline_end_ms: end }; }),
     }) };
 }
+
+/** Move an audio/caption clip without changing its duration or crossing its lane's clips. */
+export function moveAssemblyClipInTimeline(plan: AssemblyEditPlan, laneId: string, clipId: string, start: number): AssemblyEditPlan {
+    if (!Number.isInteger(start) || start < 0) throw new Error("Clip position must be a non-negative integer millisecond");
+    const lane = plan.lanes.find(l => l.id === laneId);
+    const clip = lane?.clips.find(c => c.id === clipId);
+    if (!lane || !clip) throw new Error("Clip not found");
+    if (lane.kind === "video") throw new Error("Video clips must remain in sequence; trim or split them instead");
+    const duration = clip.timeline_end_ms - clip.timeline_start_ms;
+    const end = start + duration;
+    if (end > plan.target_duration_ms) throw new Error("Clip exceeds the timeline duration");
+    const clips = lane.clips.map(c => c.id === clipId ? { ...c, timeline_start_ms: start, timeline_end_ms: end } : c);
+    if (!lane.allow_overlap && clips.some((a, i) => clips.some((b, j) => i !== j && a.timeline_start_ms < b.timeline_end_ms && b.timeline_start_ms < a.timeline_end_ms))) {
+        throw new Error("Clip would overlap another clip");
+    }
+    return { ...plan, lanes: plan.lanes.map(l => l.id === laneId ? { ...l, clips } : l) };
+}
