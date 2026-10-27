@@ -26,7 +26,42 @@ async function request<T>(path: string, signal?: AbortSignal, body?: object, met
   return response.json();
 }
 
-function waitForPeer(pc: RTCPeerConnection, signal: AbortSignal, gathering = false) {
+type IceDiagnostics = {
+  states: string[];
+  candidates: number;
+  candidateTypes: Record<string, number>;
+  candidateErrors: Array<{ code: number; text: string }>;
+  endOfCandidates: boolean;
+};
+
+function iceSummary(pc: RTCPeerConnection, diagnostics: IceDiagnostics): string {
+  const types = Object.entries(diagnostics.candidateTypes)
+    .map(([type, count]) => `${type} ${count}`)
+    .join(", ") || "无";
+  const errors = diagnostics.candidateErrors
+    .map(({ code, text }) => `${code}${text ? ` ${text}` : ""}`)
+    .join("；");
+  const states = diagnostics.states.join("→");
+  return `ICE 状态 ${pc.iceGatheringState}（${states}）；候选 ${diagnostics.candidates}（${types}）` +
+    `；结束标记 ${diagnostics.endOfCandidates ? "已收到" : "未收到"}` +
+    (errors ? `；候选错误 ${errors}` : "");
+}
+
+function iceServerSummary(config: RTCConfiguration): string {
+  const urls = (config.iceServers || []).flatMap(server => {
+    const value = server.urls;
+    return Array.isArray(value) ? value : value ? [value] : [];
+  });
+  const transports = urls.map(url => {
+    try {
+      const parsed = new URL(url);
+      return `${parsed.protocol.replace(":", "")}${parsed.searchParams.get("transport") ? `/${parsed.searchParams.get("transport")}` : ""}`;
+    } catch { return "invalid"; }
+  });
+  return transports.length ? transports.join(", ") : "none";
+}
+
+function waitForPeer(pc: RTCPeerConnection, signal: AbortSignal, gathering = false, diagnostics?: IceDiagnostics) {
   return new Promise<void>((resolve, reject) => {
     const event = gathering ? "icegatheringstatechange" : "connectionstatechange";
     const finish = (error?: Error) => {
@@ -39,7 +74,10 @@ function waitForPeer(pc: RTCPeerConnection, signal: AbortSignal, gathering = fal
       else if (gathering ? pc.iceGatheringState === "complete" : pc.connectionState === "connected") finish();
       else if (["failed", "closed"].includes(pc.connectionState)) finish(new Error("WebRTC 连接失败。"));
     };
-    const timeout = setTimeout(() => finish(new Error(gathering ? "媒体地址协商超时。" : "WebRTC 连接超时。")), gathering ? 30000 : 25000);
+    const timeout = setTimeout(() => {
+      const detail = gathering && diagnostics ? ` ${iceSummary(pc, diagnostics)}。` : "";
+      finish(new Error(gathering ? `媒体地址协商超时。${detail}` : "WebRTC 连接超时。"));
+    }, gathering ? 30000 : 25000);
     signal.addEventListener("abort", abort, { once: true }); pc.addEventListener(event, check); check();
   });
 }
@@ -86,7 +124,31 @@ export default function OpenTalkingReply({ reply, voice }: { reply: SpokenReply 
       await request(`/sessions/${session}/start`, lifetime.signal, {});
       const ice = await request<RTCConfiguration>("/sessions/webrtc/ice-config", lifetime.signal);
       if (!live()) throw new Error("语音连接已取消。");
+      console.debug("[OpenTalking] ICE servers", iceServerSummary(ice));
       peer = new RTCPeerConnection(ice);
+      const iceDiagnostics: IceDiagnostics = {
+        states: [peer.iceGatheringState], candidates: 0, candidateTypes: {}, candidateErrors: [], endOfCandidates: false,
+      };
+      const recordGatheringState = () => {
+        if (iceDiagnostics.states[iceDiagnostics.states.length - 1] !== peer?.iceGatheringState) {
+          iceDiagnostics.states.push(peer?.iceGatheringState || "unknown");
+        }
+        console.debug("[OpenTalking] ICE gathering", iceSummary(peer!, iceDiagnostics));
+      };
+      peer.addEventListener("icegatheringstatechange", recordGatheringState);
+      peer.addEventListener("icecandidate", event => {
+        const candidate = event.candidate;
+        if (!candidate) { iceDiagnostics.endOfCandidates = true; recordGatheringState(); return; }
+        iceDiagnostics.candidates += 1;
+        const type = /\btyp\s+(host|srflx|relay|prflx)\b/i.exec(candidate.candidate)?.[1]?.toLowerCase() || "unknown";
+        iceDiagnostics.candidateTypes[type] = (iceDiagnostics.candidateTypes[type] || 0) + 1;
+        recordGatheringState();
+      });
+      peer.addEventListener("icecandidateerror", event => {
+        const detail = event as RTCPeerConnectionIceErrorEvent;
+        iceDiagnostics.candidateErrors.push({ code: detail.errorCode, text: detail.errorText || "" });
+        recordGatheringState();
+      });
       const stream = new MediaStream();
       if (video.current) video.current.srcObject = stream;
       peer.ontrack = event => {
@@ -113,7 +175,7 @@ export default function OpenTalkingReply({ reply, voice }: { reply: SpokenReply 
       };
       peer.addTransceiver("video", { direction: "recvonly" }); peer.addTransceiver("audio", { direction: "recvonly" });
       await peer.setLocalDescription(await peer.createOffer());
-      await waitForPeer(peer, lifetime.signal, true);
+      await waitForPeer(peer, lifetime.signal, true, iceDiagnostics);
       const answer = await request<RTCSessionDescriptionInit>(`/sessions/${session}/webrtc/offer`, lifetime.signal, { sdp: peer.localDescription?.sdp, type: "offer" });
       await peer.setRemoteDescription(answer); await waitForPeer(peer, lifetime.signal);
       events = new EventSource(`${base}/sessions/${session}/events`);
