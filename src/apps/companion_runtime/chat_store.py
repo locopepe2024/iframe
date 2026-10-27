@@ -14,7 +14,10 @@ from .diary_store import DiaryStore
 from .intent import diary_day
 
 
-class ChatStore(DiaryStore, CompanionStore):
+from .photo_tasks import PhotoTasks
+
+
+class ChatStore(PhotoTasks, DiaryStore, CompanionStore):
     def conversation(self, owner, actor, session, *, after=0, limit=20):
         page = self.messages(owner, session, after=after, limit=limit)
         ids = [message['id'] for message in page['messages']]
@@ -81,8 +84,14 @@ class ChatStore(DiaryStore, CompanionStore):
                 def shared_connection(**_):
                     yield db
                 scoped=copy.copy(self);scoped.connection=shared_connection
-                output=dispatch(scoped,owner,actor,name,values)
-                if name in ('memory.save','memory.delete'):
+                if name == 'photo.organize.start':
+                    task_id = scoped.start_photo_task(owner,actor,row['session_id'],row['operation_id'],values)
+                    output = None
+                else:
+                    output=dispatch(scoped,owner,actor,name,values)
+                if name == 'photo.organize.start':
+                    result=dict(kind='photo_task',task_id=task_id)
+                elif name in ('memory.save','memory.delete'):
                     result=dict(kind='confirmation',preview_token=output['preview_token'])
                 else:
                     result=dict(kind='read',name=name,arguments=values)
@@ -110,10 +119,12 @@ class ChatStore(DiaryStore, CompanionStore):
         output=dict(turn_id=identity,status=row['status'])
         if row['status']=='completed':
             result=json.loads(row['result'])
-            if result['kind']=='confirmation':
+            if result['kind']=='photo_task':
+                output['result']=self.photo_task(owner,actor,result['task_id'])
+            elif result['kind']=='confirmation':
                 output['result']=dict(kind='confirmation',**self.preview(owner,actor,result['preview_token']))
             elif result['kind']=='read':
-                output['result']=dict(kind='read',name=result['name'],**dispatch(self,owner,actor,result['name'],result['arguments']))
+                output['result']=dict(kind='photo_read' if result['name'].startswith('photo.') else 'read',name=result['name'],arguments=result['arguments'],**dispatch(self,owner,actor,result['name'],result['arguments']))
             else:
                 output['result']=result
         return output

@@ -38,8 +38,14 @@ class DiarySave(Operation):
     expected_revision: int = Field(ge=0)
 
 
+class PhotoTaskInput(Operation):
+    expected_revision: int = Field(ge=1)
+    action: Literal['select', 'close', 'cancel']
+    photo_id: str | None = Field(default=None, max_length=120)
+
+
 class ToolRequest(Strict):
-    name: Literal['memory.save', 'memory.search', 'memory.list', 'memory.delete']
+    name: Literal['memory.save', 'memory.search', 'memory.list', 'memory.delete', 'photo.album.list', 'photo.item.read']
     arguments: dict
 
 
@@ -210,6 +216,18 @@ def memory(memory_id: str, identity: Owner, store: Store):
 def confirm(body: Confirmation, identity: Owner, store: Store):
     with errors():
         return store.confirm(identity.owner_profile_id, identity.user_id, body.preview_token, body.operation_id)
+
+
+@router.get('/photo-tasks/{task_id}')
+def photo_task(task_id: str, identity: Owner, store: Store):
+    with errors():
+        return store.photo_task(identity.owner_profile_id, identity.user_id, task_id)
+
+
+@router.post('/photo-tasks/{task_id}/input')
+def photo_task_input(task_id: str, body: PhotoTaskInput, identity: Owner, store: Store):
+    with errors():
+        return store.update_photo_task(identity.owner_profile_id, identity.user_id, task_id, body.model_dump())
 
 
 @router.post('/cancel')

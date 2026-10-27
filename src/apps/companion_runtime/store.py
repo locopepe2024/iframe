@@ -55,7 +55,8 @@ CREATE TABLE IF NOT EXISTS companion_turns (
  UNIQUE(owner,operation_id)
 );
 """
-SCHEMA += DIARY_SCHEMA
+from .photo_tasks_schema import TASK_SCHEMA
+SCHEMA += DIARY_SCHEMA + TASK_SCHEMA
 TYPES = ('preference', 'personal_fact', 'photo_recollection')
 
 

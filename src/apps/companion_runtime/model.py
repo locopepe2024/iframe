@@ -8,14 +8,14 @@ from fastapi import HTTPException
 
 from ..user_config import UserConfigStore
 from .personality import get_profile, system_prompt
-from .tools import tool_schemas
+from .tools import tool_schemas, MODELS, DESCRIPTIONS
 
 
 class ModelUnavailable(RuntimeError):
     pass
 
 
-WIRE_NAMES = {name.replace('.', '_'): name for name in ('memory.save','memory.search','memory.list','memory.delete')}
+WIRE_NAMES = {name.replace('.', '_'): name for name in MODELS}
 def _propose(identity, messages, current_message_id, *, diary=False):
     path = os.getenv('IFRAME_COMPANION_USER_CONFIG_DB') or os.getenv('IFRAME_PHOTOS_USER_CONFIG_DB') or os.getenv('LUMENX_USER_DB_PATH')
     local_path = os.getenv('IFRAME_COMPANION_DB_PATH')
@@ -36,11 +36,11 @@ def _propose(identity, messages, current_message_id, *, diary=False):
     if not configured['base_url'].startswith('https://') or not model.startswith('qwen'):
         raise ModelUnavailable('Invalid personal Qwen configuration')
     tools = [dict(type='function', function=dict(name=item['name'].replace('.', '_'),
-                  description='只提出待用户按钮确认的请求' if item['effect']=='proposal_only' else '读取当前用户实际记忆',
+                  description='只提出待用户按钮确认的请求' if item['effect']=='proposal_only' else DESCRIPTIONS.get(item['name'], '读取当前用户实际记忆'),
                   parameters=item['parameters'])) for item in tool_schemas()] if not diary else []
     try:
         profile = get_profile(os.getenv('IFRAME_COMPANION_PERSONALITY'))
-        instruction = '' if not diary else ('\n这是回忆日记写作任务。只根据 user_messages 中已经说过的事实写一篇简短日记；'
+        instruction = ('\n用户要求整理照片时用 photo_organize_start 委派工作流；只查找照片用 photo_album_list。不要声称已完成分析或保存。') if not diary else ('\n这是回忆日记写作任务。只根据 user_messages 中已经说过的事实写一篇简短日记；'
             '如果事实不足，只提出一个最需要补充的问题。绝对不要查询、保存或删除个人记忆，也不要输出工具调用。')
         response = requests.post(configured['base_url'].rstrip('/')+'/chat/completions',
             headers={'Authorization': 'Bearer '+configured['api_key']},
