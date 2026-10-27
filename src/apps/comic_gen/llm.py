@@ -1655,6 +1655,9 @@ class ScriptProcessor:
                 "environment、time_baseline、lighting_baseline、composition_tendency、reusable_constraints、basis；"
                 "basis 仅用 observed/inferred/authored。description 和 scene_identity 只概述可复用地点，"
                 "不得包含潜伏、围堵等当前事件。输出前逐一核对独立地点是否都有 scenes 条目；"
+                "宏观地点硬规则：当文本出现一个可复用的街道、街区、院落或建筑群名称，且同一范围内还出现粮铺、街角、阁楼等子地点时，必须同时输出宏观地点和每个独立子地点的 scenes 条目；"
+                "宏观地点不能只作为子地点名称前缀，也不能只写进子地点的 environment 或 shot_only_content。"
+                "例如文本同时涉及‘青溪镇长街’、‘长街中段粮铺’、‘梧桐树街角’、‘另一处卖艺街角’和‘街边阁楼’，scenes 必须分别包含这五个地点；"
                 "不要把另一处地点仅放入长街的 shot_only_content。已确认的跨地点视线写入双方 environment。"
                 "群体合并必须同时依据社会身份、服装体系、典型道具、行为目的和视觉功能；士兵与百姓、江湖人物与百姓等不同属性群体即使同处一个地点也必须分组，不得仅因同一地点而合并。只返回 characters、crowd_groups、scenes、props 四个顶层字段的合法 JSON。")
 
