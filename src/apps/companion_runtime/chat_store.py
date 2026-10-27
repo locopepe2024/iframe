@@ -52,7 +52,12 @@ class ChatStore(PhotoTasks, DiaryStore, CompanionStore):
             token=secrets.token_hex(32)
             db.execute("UPDATE companion_turns SET status='running',token=?,lease_until=?,result=NULL WHERE owner=? AND id=?",(token,self.clock()+120,owner,identity))
             rows=db.execute('SELECT id,text FROM companion_messages WHERE owner=? AND session_id=? AND sequence<=? ORDER BY sequence DESC LIMIT 20',(owner,session,message['sequence'])).fetchall()
-            return dict(id=identity,token=token,message_id=message['id'],messages=[dict(r) for r in reversed(rows)],cached=False)
+            messages = [dict(r) for r in reversed(rows)]
+            tasks = db.execute("SELECT * FROM companion_photo_tasks WHERE owner=? AND actor=? AND session_id=? AND status='waiting_input' ORDER BY rowid DESC LIMIT 3", (owner,actor,session)).fetchall()
+            if tasks:
+                messages[-1]['workflow_tasks'] = [dict(task_id=t['id'], revision=t['revision'], step=t['step'],
+                    candidate_ids=json.loads(t['payload'])['candidate_ids'], selected_id=json.loads(t['payload'])['selected_id']) for t in tasks]
+            return dict(id=identity,token=token,message_id=message['id'],messages=messages,cached=False)
 
     def fail_turn(self, owner, claim):
         with self.connection(write=True) as db:
@@ -87,9 +92,16 @@ class ChatStore(PhotoTasks, DiaryStore, CompanionStore):
                 if name == 'photo.organize.start':
                     task_id = scoped.start_photo_task(owner,actor,row['session_id'],row['operation_id'],values)
                     output = None
+                elif name == 'photo.organize.input':
+                    task_id = values.pop('task_id')
+                    task = scoped._task(db,owner,actor,task_id)
+                    if task['session_id'] != row['session_id']:
+                        raise Missing('Task unavailable in this session')
+                    scoped.update_photo_task(owner,actor,task_id,dict(values,operation_id=row['id']))
+                    output = None
                 else:
                     output=dispatch(scoped,owner,actor,name,values)
-                if name == 'photo.organize.start':
+                if name in ('photo.organize.start', 'photo.organize.input'):
                     result=dict(kind='photo_task',task_id=task_id)
                 elif name in ('memory.save','memory.delete'):
                     result=dict(kind='confirmation',preview_token=output['preview_token'])

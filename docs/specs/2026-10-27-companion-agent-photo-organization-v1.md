@@ -76,3 +76,13 @@ Agent 不应直接修改照片。它需要调用一个受限的 photo tool regis
 - 重试复用同一个 operation_id；历史会话读取当前任务状态。close 仅表示结束工作域，不代表照片备注已经保存。
 - 工作流状态独立于麦克风和播放队列；现阶段通过按钮选择/结束/取消，不声称已支持口头“第二张”“取消整理”。OpenTalking 语音链路与任务委派的集成仍需下一步验证。
 - 发布前备份 Companion DB，然后使用 `ChatStore(absolute_db_path, initialize=True)` 应用幂等建表，再启动更新后的 API；不会修改照片库表。此更新尚未部署。
+
+## 语音继续任务切片
+
+代码事实：AgentChat 的 onVoiceFinal 将识别文字加入发送队列，仍调用 companion-runtime chat；OpenTalkingReply 使用 agent_enabled=false，以 render-text 播放同一次 Agent 回复。因此本切片保持该路径，不新增第二次回复生成。
+
+- claim_turn 为本轮模型输入提供同会话、同 owner/actor 最近的活动相册任务，含 task_id、revision、候选顺序及照片 ID；这些字段独立于用户原话，不改写已存消息。
+- 新工具 photo.organize.input 只允许推进本会话任务，提供 select / close / cancel；operation_id 使用当前轮次 ID，模型不能自行指定。自然语言“第二张”由模型依据候选顺序选择明确 photo_id，不新增关键词路由。
+- 每轮结束重新读取任务状态，结构化卡片与简短播报使用同一状态。语音模式通过现有 OpenTalking render-text 播报；纯文字模式不播放。
+- 修改步骤仍由已有核对/讲述组件完成；此切片不允许模型自行写入照片事实，不表示 OpenTalking 自带 Agent 已接管规划。
+- 验收：上下文不跨会话/身份，错误任务拒绝且轮次不提交，重试不重复推进；卡片刷新反映新 revision；活动任务提示可见/可听。真实自然语言选图准确率待部署实测。

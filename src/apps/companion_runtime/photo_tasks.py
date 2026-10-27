@@ -43,7 +43,12 @@ class PhotoTasks:
             for photo_id in ids:
                 photos.extend(read_photos(owner, 'photo.item.read', dict(photo_id=photo_id))['photos'])
         return dict(kind='photo_task', task_id=task_id, status=row['status'], step=row['step'],
-                    revision=row['revision'], photos=photos)
+                    revision=row['revision'], photos=photos,
+                    spoken_text=('已取消本次整理。' if row['status'] == 'cancelled' else
+                        '本次整理已结束。' if row['status'] == 'completed' else
+                        '选好这张了，可以说说照片背后的故事，也可以在卡片里核对画面。' if row['step'] == 'review_photo' else
+                        f'找到{len(photos)}张照片，您想先整理第几张？' if photos else
+                        '没有找到符合条件的照片，换个年份或备注再找找吧。'))
 
     def update_photo_task(self, owner, actor, task_id, values):
         with self.connection(write=True) as db:

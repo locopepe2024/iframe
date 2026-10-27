@@ -64,7 +64,7 @@ def test_four_tool_schemas_proposal_cancel_confirmation_http(runtime):
     store,_,_,client=runtime
     base='/companion-runtime'
     schemas=client.get(base+'/tools').json()['tools']
-    assert {t['name'] for t in schemas}=={'memory.save','memory.search','memory.list','memory.delete','photo.album.list','photo.item.read','photo.organize.start'}
+    assert {t['name'] for t in schemas}=={'memory.save','memory.search','memory.list','memory.delete','photo.album.list','photo.item.read','photo.organize.start','photo.organize.input'}
     session=client.post(base+'/sessions',json=dict(operation_id='s')).json()['session_id']
     msg=client.post(base+f'/sessions/{session}/messages',json=dict(operation_id='m',text='我喜欢散步')).json()
     assert client.post(base+f'/sessions/{session}/messages',json=dict(operation_id='f',text='假来源',role='assistant')).status_code==422

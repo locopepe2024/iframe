@@ -135,3 +135,45 @@ def test_task_http_identity_and_revision_contract(stores):
         app.dependency_overrides[require_user_context] = lambda: UserContext('actor', 'other', '', '')
         assert client.get(base).status_code == 404
         assert client.post(base + '/input', json=task_input('cancel', 3, 'other')).status_code == 404
+
+
+def test_spoken_task_continuation_context_and_transaction(stores):
+    chat, _ = stores
+    session = chat.session('owner', 'voice-session')['session_id']
+    first = chat.claim_turn('owner', 'actor', session, 'start', '帮我整理照片')
+    task = chat.finish_turn('owner', 'actor', first,
+        dict(kind='tool', name='photo.organize.start', arguments={}))['result']
+    next_turn = chat.claim_turn('owner', 'actor', session, 'select', '先整理第一张')
+    context = next_turn['messages'][-1]['workflow_tasks'][0]
+    assert context == dict(task_id=task['task_id'], revision=1, step='select_photo',
+                           candidate_ids=['mine'], selected_id=None)
+    assert task['spoken_text'] == '找到1张照片，您想先整理第几张？'
+    # The workflow context is server data, never persisted as the user's words.
+    assert 'workflow_tasks' not in chat.messages('owner', session)['messages'][-1]
+    selected = chat.finish_turn('owner', 'actor', next_turn, dict(kind='tool', name='photo.organize.input',
+        arguments=dict(task_id=task['task_id'], expected_revision=1, action='select', photo_id='mine')))
+    assert selected['result']['step'] == 'review_photo'
+    assert selected['result']['spoken_text'].startswith('选好这张了')
+    assert chat.claim_turn('owner', 'actor', session, 'select', '先整理第一张')['cached']
+    assert chat.photo_task('owner', 'actor', task['task_id'])['revision'] == 2
+    cancel = chat.claim_turn('owner', 'actor', session, 'cancel', '取消整理')
+    result = chat.finish_turn('owner', 'actor', cancel, dict(kind='tool', name='photo.organize.input',
+        arguments=dict(task_id=task['task_id'], expected_revision=2, action='cancel')))
+    assert result['result']['spoken_text'] == '已取消本次整理。'
+    after = chat.claim_turn('owner', 'actor', session, 'after', '我们聊别的')
+    assert 'workflow_tasks' not in after['messages'][-1]
+
+
+def test_model_cannot_continue_a_different_session_task(stores):
+    chat, _ = stores
+    source = chat.session('owner', 'source')['session_id']
+    elsewhere = chat.session('owner', 'elsewhere')['session_id']
+    task_id = chat.start_photo_task('owner', 'actor', source, 'task',
+        dict(view='all', year=None, query='', after_id='', limit=6))
+    claim = chat.claim_turn('owner', 'actor', elsewhere, 'wrong', '取消整理')
+    assert 'workflow_tasks' not in claim['messages'][-1]
+    with pytest.raises(Missing):
+        chat.finish_turn('owner', 'actor', claim, dict(kind='tool', name='photo.organize.input',
+            arguments=dict(task_id=task_id, expected_revision=1, action='cancel')))
+    assert chat.photo_task('owner', 'actor', task_id)['revision'] == 1
+    assert chat.turn('owner', 'actor', claim['id'])['status'] == 'running'
