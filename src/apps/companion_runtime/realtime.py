@@ -42,7 +42,6 @@ def playback_stats(value):
 
 class VoiceConsent(BaseModel):
     allow_external_audio: bool
-    session_id: str | None = None
 
 
 @router.post('/realtime/ticket')
@@ -60,55 +59,25 @@ def ticket(body: VoiceConsent, identity: Owner):
         if len(_tickets) >= 1000:
             raise HTTPException(429, '请稍后再试。')
         value = secrets.token_urlsafe(32)
-        _tickets[value] = (now + 45, identity, body.session_id)
+        _tickets[value] = (now + 45, identity)
     return dict(ticket=value, expires_in=45, max_seconds=SESSION_SECONDS)
 
 
 def consume_ticket(value):
-    item = consume_ticket_bundle(value)
-    return item[1] if item else None
-
-
-def consume_ticket_bundle(value):
     with _lock:
         item = _tickets.pop(value, None)
-    return item if item and item[0] > time.monotonic() else None
+    return item[1] if item and item[0] > time.monotonic() else None
 
 
-def session_update(history=()):
-    context = ''
-    if history:
-        context = '\n这是当前聊天中已经发生的内容，只能据此回答，不要编造：\n' + '\n'.join(
-            f"{item['role']}：{item['text']}" for item in history[-20:])
+def session_update():
     return dict(type='session.update', session=dict(
         modalities=['text', 'audio'], voice='longanhuan_v3.1',
         input_audio_format='pcm', output_audio_format='pcm',
         input_audio_transcription=dict(language='zh'),
         turn_detection=dict(type='server_vad', threshold=0.5, silence_duration_ms=1000),
         instructions=system_prompt(get_profile(os.getenv("IFRAME_COMPANION_PERSONALITY"))) + '\n当前是实时语音聊天。用自然简短的中文回答。'
-        '本次语音会话没有外部工具；相册、日记及保存操作必须回到文字聊天卡片。' + context +
+        '本次语音会话没有外部工具，也没有相册、日记或文字聊天历史。'
         '请用户通过文字输入和卡片完成保存记忆、生成、日记及提醒，绝不声称已执行。'))
-
-
-def session_history(identity, session_id):
-    if not session_id:
-        return ()
-    try:
-        from .chat_store import ChatStore
-        path = os.getenv('IFRAME_COMPANION_DB_PATH', '')
-        if not path:
-            return ()
-        page = ChatStore(path).conversation(identity.owner_profile_id, identity.user_id, session_id, after=0, limit=20)
-        result = []
-        for message in page['messages']:
-            result.append({'role': '我', 'text': message['text'][:1000]})
-            reply = (message.get('turn') or {}).get('result') or {}
-            if reply.get('kind') == 'text' and isinstance(reply.get('text'), str):
-                result.append({'role': '陪伴助手', 'text': reply['text'][:1000]})
-        return tuple(result)
-    except Exception:
-        logger.warning('Companion realtime history unavailable')
-        return ()
 
 
 async def relay(client, upstream, diagnostics=None):
@@ -258,9 +227,8 @@ async def realtime(socket: WebSocket):
         if len(raw) > 500:
             raise ValueError('auth limit')
         auth = json.loads(raw)
-        ticket_item = consume_ticket_bundle(auth.get('ticket', '')) if auth.get('type') == 'authenticate' else None
-        identity = ticket_item[1] if ticket_item else None
-        if ticket_item is None:
+        identity = consume_ticket(auth.get('ticket', '')) if auth.get('type') == 'authenticate' else None
+        if identity is None:
             logger.warning("Companion realtime browser authentication rejected")
             await socket.close(code=1008)
             return
@@ -271,9 +239,6 @@ async def realtime(socket: WebSocket):
                 raise ValueError('already active')
             _active.add(owner)
         logger.warning("Companion realtime resolving UniArt channel")
-        session_id = ticket_item[2]
-        history = await asyncio.to_thread(session_history, identity, session_id)
-        logger.warning('Companion realtime history loaded: messages=%s', len(history))
         config = await asyncio.to_thread(channel.runtime, identity)
         parsed = urlsplit(config['base_url'])
         url = urlunsplit(('wss', parsed.netloc, parsed.path.rstrip('/') + '/realtime', 'model=' + MODEL, ''))
@@ -281,7 +246,7 @@ async def realtime(socket: WebSocket):
         async with connect(url, extra_headers={'Authorization': 'Bearer ' + config['api_key']},
                            open_timeout=15, close_timeout=3, max_size=4*1024*1024, max_queue=16) as upstream:
             logger.warning("Companion realtime upstream websocket opened: model=%s", MODEL)
-            await upstream.send(json.dumps(session_update(history), ensure_ascii=False))
+            await upstream.send(json.dumps(session_update(), ensure_ascii=False))
             logger.warning("Companion realtime session update sent")
             await relay(socket, upstream, diagnostics)
     except WebSocketDisconnect:

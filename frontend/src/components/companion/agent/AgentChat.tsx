@@ -377,7 +377,7 @@ export default function AgentChat() {
     </section>
     </details>}
     {responseMode === "audio" && <OpenTalkingReply key={session} reply={spokenReply} voice={identity.voice} connectionEpoch={voiceConnectionEpoch} onStatus={setVoiceOutputStatus} />}
-    {openTalking && <DigitalCompanionPanel identity={identity} sessionId={session} onClose={() => setOpenTalking(false)} />}
+    {openTalking && <DigitalCompanionPanel identity={identity} onClose={() => setOpenTalking(false)} />}
     <input ref={fileRef} type="file" hidden accept="image/jpeg,image/png,image/webp,video/mp4,video/quicktime,video/webm,.mov" multiple aria-label="选择要上传的照片或视频" onChange={event => {
       const files=Array.from(event.target.files ?? []);event.target.value="";
       if(files.length>20){setNotice("每次最多选择 20 个文件，请重新选择。");return;}
