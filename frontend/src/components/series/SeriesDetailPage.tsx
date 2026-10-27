@@ -317,8 +317,14 @@ function ExtraRosterPanel({ series, seriesId, onSaved }: { series: Series; serie
     setSelectedProposals([]);
   };
   return <div className="flex-1 overflow-auto p-8">
-    <h2 className="text-xl font-display font-bold text-foreground">群演资产库</h2>
-    <p className="mt-1 text-xs text-text-muted">先确认固定群演或人群模板，再在分镜中明确绑定。这里不会自动生成图片。</p>
+    <div className="flex flex-wrap items-start justify-between gap-3">
+      <div><h2 className="text-xl font-display font-bold text-foreground">群演资产库</h2>
+      <p className="mt-1 text-xs text-text-muted">先创建固定群演或人群模板，再为群演生成可复用造型。</p></div>
+      <div className="flex gap-2">
+        <button type="button" onClick={() => add("fixed_extra")} className="rounded border border-primary/50 px-3 py-2 text-xs text-primary hover:bg-primary/10">新建固定群演</button>
+        <button type="button" onClick={() => add("extra_template")} className="rounded border border-glass-border px-3 py-2 text-xs hover:bg-hover-bg">新建人群模板</button>
+      </div>
+    </div>
     <div className="mt-5 max-w-3xl rounded border border-primary/30 bg-primary/5 p-4">
       <h3 className="text-sm font-medium text-foreground">AI 生成候选</h3>
       <textarea value={brief} onChange={e => setBrief(e.target.value)} placeholder="例如：古代长街黄昏，近景需要两名可辨认商贩，中远景使用退让百姓模板" className="mt-2 min-h-20 w-full bg-input-bg border border-glass-border p-2 text-sm" />
