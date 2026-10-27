@@ -8,16 +8,23 @@ export const LEG_CONTACT = {
 };
 export function solveFlatFoot(phase: number, walking: boolean): { rotations: Record<string, Rotation>; targets: Record<string, {y: number; z: number}> } {
   const c = LEG_CONTACT;
+  return solveFootTargets(Object.fromEntries(([['l',0],['r',Math.PI]] as const).map(([side,offset]) => [side, {
+    y: c.ankleY + (walking ? .03*Math.cos(phase+offset) : 0),
+    z: c.ankleZ + (walking ? .06*Math.max(0,Math.sin(phase+offset)) : 0),
+  }])));
+}
+
+/** Targets are actor-local; pelvis displacement is applied separately by the viewer. */
+export function solveFootTargets(targets: Record<string, {y:number;z:number}>, pelvisZ = 0): {rotations: Record<string,Rotation>;targets: Record<string,{y:number;z:number}>} {
+  const c = LEG_CONTACT;
   const upper = Math.hypot(c.kneeY-c.hipY,c.kneeZ-c.hipZ);
   const lower = Math.hypot(c.ankleY-c.kneeY,c.ankleZ-c.kneeZ);
   const restUpper = Math.atan2(c.kneeY-c.hipY,c.hipZ-c.kneeZ);
   const restLower = Math.atan2(c.ankleY-c.kneeY,c.kneeZ-c.ankleZ);
-  const rotations: Record<string, Rotation> = {}, targets: Record<string,{y:number;z:number}> = {};
-  for (const [side, offset] of [["l",0],["r",Math.PI]] as const) {
-    const p = phase + offset;
-    const y = c.ankleY + (walking ? .03*Math.cos(p) : 0);
-    const z = c.ankleZ + (walking ? .06*Math.max(0,Math.sin(p)) : 0);
-    const dy=y-c.hipY, down=c.hipZ-z, reach=Math.hypot(dy,down);
+  const rotations: Record<string, Rotation> = {};
+  for (const side of ['l','r']) {
+    const {y,z} = targets[side];
+    const dy=y-c.hipY, down=c.hipZ+pelvisZ-z, reach=Math.hypot(dy,down);
     if (reach>upper+lower || reach<Math.abs(upper-lower)) throw new Error("足部目标超出标准白模腿部可达范围。");
     const bend=Math.acos(Math.max(-1,Math.min(1,(reach*reach-upper*upper-lower*lower)/(2*upper*lower))));
     const hip=Math.atan2(dy,down)-Math.atan2(lower*Math.sin(bend),upper+lower*Math.cos(bend))-restUpper;
@@ -26,7 +33,27 @@ export function solveFlatFoot(phase: number, walking: boolean): { rotations: Rec
     rotations[`upper_leg_${side}`]={x:deg(hip),y:0,z:0};
     rotations[`lower_leg_${side}`]={x:deg(knee),y:0,z:0};
     rotations[`ankle_${side}`]={x:deg(-hip-knee),y:0,z:0};
-    targets[side]={y,z};
   }
   return {rotations, targets};
+}
+
+/** Distance-domain footsteps. Each non-swing foot remains at a fixed route anchor. */
+export function plantedFootPose(distance: number, length: number) {
+  const count = Math.max(2, Math.ceil(length / .12 / 2) * 2);
+  const step = length / count;
+  const d = Math.max(0, Math.min(length, distance));
+  const index = Math.min(count-1, Math.floor(d/step));
+  const t = (d-index*step)/step;
+  const pelvisZ = (-.05 * Math.min(1,d/.04,(length-d)/.04)) || 0;
+  const targets: Record<string,{y:number;z:number}> = {};
+  for (const [side,parity] of [['l',0],['r',1]] as const) {
+    const last = index-1-((index-1-parity+2)%2);
+    const anchor = last < 0 ? 0 : Math.min(length,(last+2)*step);
+    const swing = index%2 === parity;
+    const next = Math.min(length,(index+2)*step);
+    const smooth = t*t*(3-2*t);
+    targets[side] = {y: LEG_CONTACT.ankleY+(swing ? anchor+(next-anchor)*smooth : anchor)-d,
+      z: LEG_CONTACT.ankleZ+(swing ? .06*Math.sin(Math.PI*t)**2 : 0)};
+  }
+  return {...solveFootTargets(targets,pelvisZ),pelvisZ};
 }

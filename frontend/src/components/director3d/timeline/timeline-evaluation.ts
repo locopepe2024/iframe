@@ -171,9 +171,15 @@ export function evaluateDirectorFrame(input: {
       const position = direct ?? vector3(record.position_m); const rotationDeg = vector3(record.rotation_deg); const scale = vector3(record.scale);
       target.transform = { ...target.transform, ...(position ? { position } : {}), ...(rotationDeg ? { rotationDeg } : {}), ...(scale ? { scale } : {}) };
     }
-    if (track.trackKind === "character_pose" && characters[track.target.targetId] && value && typeof value === "object" && !Array.isArray(value)) characters[track.target.targetId].jointRotations = Object.fromEntries(Object.entries(value as Record<string, unknown>).flatMap(([jointId, rotation]) => {
-      const vector = vector3(rotation); return vector ? [[jointId, { x: vector[0], y: vector[1], z: vector[2] }]] : [];
-    }));
+    if (track.trackKind === "character_pose" && characters[track.target.targetId] && value && typeof value === "object" && !Array.isArray(value)) {
+      const record = value as Record<string,unknown>;
+      const offset = vector3(record.pose_root_offset_m);
+      if (offset) characters[track.target.targetId].poseRootOffsetM = offset;
+      characters[track.target.targetId].jointRotations = Object.fromEntries(Object.entries(record).flatMap(([jointId, rotation]) => {
+        if (jointId === 'pose_root_offset_m') return [];
+        const vector = vector3(rotation); return vector ? [[jointId, { x: vector[0], y: vector[1], z: vector[2] }]] : [];
+      }));
+    }
     if (track.trackKind === "camera_transform" && cameras[track.target.targetId]) {
       const target = cameras[track.target.targetId]; const direct = vector3(value); const record = value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
       const position = direct ?? vector3(record.position_m); const rotationDeg = vector3(record.rotation_deg);

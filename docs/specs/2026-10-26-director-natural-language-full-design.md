@@ -367,3 +367,16 @@ foot locking, terrain raycasts, pelvis adjustment or arbitrary rigs. Do not
 claim slip-free planted feet: the bounded foot trajectory remains approximate.
 Verify FK against actual GLB bones and ankle orientation, not only formulas;
 retain deterministic timeline bake, JSON round trip and existing contact limits.
+
+### Straight-segment planted-foot slice
+
+Replace periodic ankle offsets with alternating fixed support anchors along
+each straight route segment. Swing feet advance to the next anchor with 6 cm
+clearance; shorten steps to land both feet at the destination. Lower the pelvis
+by up to 5 cm for reach, blending at departure/arrival. Bake pelvis offset in
+pose keys separately from joint rotations; preserve legacy pose payloads.
+Dense distance samples (<= 5 mm) bound interpolation error. Validate actual GLB
+FK at between-key samples, support drift <= 1 cm, ankle orientation and limits.
+Corner heading changes remain discrete replants, not contact-preserving turns;
+terrain, arbitrary rigs and physics remain outside this slice. No rendered
+appearance or universal no-slip guarantee follows from numerical validation.
