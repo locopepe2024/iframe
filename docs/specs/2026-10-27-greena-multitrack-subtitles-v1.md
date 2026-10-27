@@ -44,3 +44,9 @@ Observed：已有 AssemblyEditPlan、owner/revision 校验、项目/系列 API �
 通过 `gh api repos/...` 只读检查：OpenCut-app/OpenCut 的 GitHub license 字段为 MIT；remotion-dev/remotion 为 NOASSERTION；designcombo/react-video-editor 重定向到 openvideodev/react-video-editor，字段为 NOASSERTION。三个仓库均未归档。上述仅是仓库元数据，不能代替固定 SHA 的许可证正文、依赖和适配能力审查。
 
 首片进度：已实现 subtitle 泳道及纯文本合同、muted 字段、项目/系列 owner-scoped SRT 下载，旧渲染路径明确拒绝尚未支持的字幕轨。音频混音、编辑 UI 和烧录仍待实施。
+
+## 当前交付边界
+
+第二片：时间尺泳道、字幕手工添加/文本编辑/定位预览/删除、按泳道静音及移除、已保存字幕 SRT 下载；音轨引用已有项目 BGM 或帧对白/音效，支持时间偏移、gain、静音和 FFmpeg 混音。字幕不参与当前 MP4，界面明确说明独立 sidecar。源音轨保留；项目/系列默认草案改为素材时长原速拼接。音频片段默认 2 秒，时长可在既有数值编辑行调整；不自动推断素材长度。
+
+尚待：独立音频上传入口、实际源时长探测、完整拖拽/裁切/分割/撤销、视频联动预览、字幕烧录、导出持久任务。多视频泳道仍为全局连续拼接，不支持画中画。当前交付不表示完整编辑器完成。

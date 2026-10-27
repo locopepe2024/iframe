@@ -768,6 +768,12 @@ export const api = {
         return res.data;
     },
 
+    exportAssemblySubtitles: async (scope: AssemblyScope, id: string, laneId: string): Promise<Blob> => {
+        const group = scope === "project" ? "projects" : "series";
+        const result = await axios.get(`${API_URL}/${group}/${encodeURIComponent(id)}/assembly-plan/subtitles/${encodeURIComponent(laneId)}.srt`, { responseType: "blob" });
+        return result.data;
+    },
+
     renderAssemblyPlan: async (
         scope: AssemblyScope,
         resourceId: string,

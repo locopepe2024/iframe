@@ -29,23 +29,17 @@ export function buildDraftAssemblyPlan(project: Project): AssemblyEditPlan {
     const frames = (project.frames ?? []) as any[];
     const tasks = (project.video_tasks ?? []) as any[];
     const usableFrames = frames.filter((frame) => resolveAssemblyVideo(frame, tasks));
-    const segmentSize = usableFrames.length > 0
-        ? Math.floor(ASSEMBLY_DEFAULT_DURATION_MS / usableFrames.length)
-        : ASSEMBLY_DEFAULT_DURATION_MS;
-
     let cursor = 0;
     const clips: AssemblyClip[] = [];
     const markers: AssemblyMarker[] = [];
     usableFrames.forEach((frame, index) => {
         const take = resolveAssemblyVideo(frame, tasks);
         if (!take) return;
-        const end = index === usableFrames.length - 1
-            ? ASSEMBLY_DEFAULT_DURATION_MS
-            : cursor + segmentSize;
         const sourceDuration = Math.max(
             1,
             Math.round((take.duration ?? frame.duration ?? 5) * 1000),
         );
+        const end = cursor + sourceDuration;
         clips.push({
             id: `clip-${frame.id}`,
             timeline_start_ms: cursor,
@@ -81,7 +75,7 @@ export function buildDraftAssemblyPlan(project: Project): AssemblyEditPlan {
     return {
         id: `assembly-${project.id}`,
         scope: "project",
-        target_duration_ms: ASSEMBLY_DEFAULT_DURATION_MS,
+        target_duration_ms: Math.max(cursor, 1),
         revision: 1,
         provenance: {
             origin: "assembly_ui_draft",
@@ -110,17 +104,12 @@ export function buildDraftSeriesAssemblyPlan(
                 }))
                 .filter((item) => item.take);
         });
-    const segmentSize = sources.length > 0
-        ? Math.floor(ASSEMBLY_DEFAULT_DURATION_MS / sources.length)
-        : ASSEMBLY_DEFAULT_DURATION_MS;
     let cursor = 0;
     const clips: AssemblyClip[] = [];
     const markers: AssemblyMarker[] = [];
     sources.forEach(({ episode, frame, take }, index) => {
         if (!take) return;
-        const end = index === sources.length - 1
-            ? ASSEMBLY_DEFAULT_DURATION_MS
-            : cursor + segmentSize;
+        const end = cursor + Math.max(1, Math.round((take.duration ?? frame.duration ?? 5) * 1000));
         clips.push({
             id: `clip-${episode.id}-${frame.id}`,
             timeline_start_ms: cursor,
@@ -148,7 +137,7 @@ export function buildDraftSeriesAssemblyPlan(
     return {
         id: `assembly-${seriesId}`,
         scope: "series",
-        target_duration_ms: ASSEMBLY_DEFAULT_DURATION_MS,
+        target_duration_ms: Math.max(cursor, 1),
         revision: 1,
         provenance: { origin: "assembly_ui_series_draft", episode_count: episodes.length },
         lanes: [
