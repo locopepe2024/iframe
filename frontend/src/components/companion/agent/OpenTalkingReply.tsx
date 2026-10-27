@@ -1,31 +1,206 @@
 "use client";
-import {useEffect,useRef,useState} from "react";
+
+import { useEffect, useRef, useState } from "react";
+import { companionPlayback } from "@/lib/companionPlaybackQueue";
 import styles from "./chat.module.css";
 
-const base=(process.env.NEXT_PUBLIC_OPENTALKING_URL||"/opentalking-mock/api").replace(/\/$/,"");
-type Session={session_id:string};
-async function json<T>(path:string,init?:RequestInit):Promise<T>{const r=await fetch(base+path,{...init,headers:{"Content-Type":"application/json",...(init?.headers||{})}});if(!r.ok)throw new Error(`OpenTalking HTTP ${r.status}`);return r.json();}
+export type SpokenReply = { id: string; text: string };
+const base = (process.env.NEXT_PUBLIC_OPENTALKING_URL || "/opentalking-mock/api").replace(/\/$/, "");
 
-export default function OpenTalkingReply({text,voice}:{text:string;voice?:string}){
- const video=useRef<HTMLVideoElement>(null),pc=useRef<RTCPeerConnection|null>(null),session=useRef("");
- const [state,setState]=useState<"opening"|"speaking"|"ready"|"error">("opening"),[error,setError]=useState("");
- useEffect(()=>{let alive=true;
-  async function open(){try{
-   const created=await json<Session>("/sessions",{method:"POST",body:JSON.stringify({avatar_id:"office-woman",model:"mock",agent_enabled:false,memory_enabled:false,knowledge_enabled:false,tts_voice:voice||undefined})});if(!alive)return;session.current=created.session_id;
-   const ice=await json<{iceServers?:RTCIceServer[];iceTransportPolicy?:RTCIceTransportPolicy}>("/sessions/webrtc/ice-config");
-   const connection=new RTCPeerConnection({iceServers:ice.iceServers||[],iceTransportPolicy:ice.iceTransportPolicy});pc.current=connection;
-   const stream=new MediaStream();if(video.current)video.current.srcObject=stream;connection.ontrack=e=>{if(alive)setState("speaking");if(!stream.getTracks().some(t=>t.id===e.track.id))stream.addTrack(e.track);void video.current?.play().catch(()=>{});};
-   connection.addTransceiver("video",{direction:"recvonly"});connection.addTransceiver("audio",{direction:"recvonly"});
-   const offer=await connection.createOffer();await connection.setLocalDescription(offer);
-   await new Promise<void>(resolve=>{if(connection.iceGatheringState==="complete")return resolve();const timeout=setTimeout(resolve,8000);connection.onicegatheringstatechange=()=>{if(connection.iceGatheringState==="complete"){clearTimeout(timeout);resolve();}}});
-   const answer=await json<{sdp:string;type:RTCSdpType}>(`/sessions/${encodeURIComponent(session.current)}/webrtc/offer`,{method:"POST",body:JSON.stringify({sdp:connection.localDescription?.sdp,type:connection.localDescription?.type})});
-   await connection.setRemoteDescription(answer);
-   await json(`/sessions/${encodeURIComponent(session.current)}/speak`,{method:"POST",headers:{"Idempotency-Key":`iframe-${crypto.randomUUID()}`},body:JSON.stringify({text,mode:"replace",voice:voice||undefined})});
-   if(alive && state !== "speaking")setState("ready");
-  }catch(e){if(alive){setState("error");setError(e instanceof Error?e.message:"OpenTalking 无法连接");}}
- }
- open();return()=>{alive=false;pc.current?.close();pc.current=null;if(session.current)void fetch(`${base}/sessions/${encodeURIComponent(session.current)}`,{method:"DELETE"}).catch(()=>{});};
- },[voice]);
- useEffect(()=>{if(!session.current||state==="error")return;},[state]);
- return <div className={styles.openTalkingReply} aria-label="OpenTalking 语音回复"><video ref={video} autoPlay playsInline muted={false} aria-label="数字人回复"/><span>{state==="opening"?"正在连接数字人…":state==="error"?`文字已保留，语音连接失败：${error}`:"OpenTalking 已连接"}</span></div>;
+type State = "idle" | "opening" | "ready" | "waiting" | "audio" | "blocked" | "error";
+async function request<T>(path: string, signal?: AbortSignal, body?: object, method = body ? "POST" : "GET"): Promise<T> {
+  const response = await fetch(base + path, {
+    method, signal, credentials: "omit", headers: { "Content-Type": "application/json" },
+    ...(body ? { body: JSON.stringify(body) } : {}),
+  });
+  if (!response.ok) throw new Error(`OpenTalking HTTP ${response.status}`);
+  return response.json();
+}
+
+function waitForPeer(pc: RTCPeerConnection, signal: AbortSignal, gathering = false) {
+  return new Promise<void>((resolve, reject) => {
+    const event = gathering ? "icegatheringstatechange" : "connectionstatechange";
+    const finish = (error?: Error) => {
+      clearTimeout(timeout); pc.removeEventListener(event, check); signal.removeEventListener("abort", abort);
+      error ? reject(error) : resolve();
+    };
+    const abort = () => finish(new Error("语音连接已取消。"));
+    const check = () => {
+      if (signal.aborted) abort();
+      else if (gathering ? pc.iceGatheringState === "complete" : pc.connectionState === "connected") finish();
+      else if (["failed", "closed"].includes(pc.connectionState)) finish(new Error("WebRTC 连接失败。"));
+    };
+    const timeout = setTimeout(() => finish(new Error(gathering ? "媒体地址协商超时。" : "WebRTC 连接超时。")), gathering ? 12000 : 25000);
+    signal.addEventListener("abort", abort, { once: true }); pc.addEventListener(event, check); check();
+  });
+}
+
+/** One media session per chat page, independent of message-history reconciliation. */
+export default function OpenTalkingReply({ reply, voice }: { reply: SpokenReply | null; voice?: string }) {
+  const video = useRef<HTMLVideoElement>(null);
+  const [state, setState] = useState<State>("idle"), [error, setError] = useState("");
+  const [retry, setRetry] = useState(0);
+  const enqueue = useRef<((reply: SpokenReply) => void) | null>(null);
+  const pending = useRef<SpokenReply[]>([]), seen = useRef(new Set<string>());
+  const failed = useRef<SpokenReply | null>(null);
+  const interrupt = useRef<(() => void) | null>(null);
+  const audible = useRef(false);
+
+  useEffect(() => {
+    const lifetime = new AbortController(), owner = Symbol("opentalking-page");
+    let session = "", peer: RTCPeerConnection | null = null, events: EventSource | null = null;
+    let audio: AudioContext | null = null, source: MediaStreamAudioSourceNode | null = null;
+    let analyser: AnalyserNode | null = null, animation = 0;
+    let opening: Promise<void> | null = null;
+    let active: { command: string; done: () => void; fail: (e: Error) => void; playing: () => void } | null = null;
+    const live = () => !lifetime.signal.aborted;
+    const deleteSession = (id: string) => fetch(`${base}/sessions/${encodeURIComponent(id)}`, { method: "DELETE", credentials: "omit", keepalive: true }).catch(() => {});
+    const update = (next: State) => { if (live()) setState(next); };
+    const mediaFailure = (message: string) => {
+      if (!live()) return;
+      setError(message); update("error");
+      active?.fail(new Error(message)); companionPlayback.cancel(owner);
+    };
+    const open = async () => {
+      update("opening");
+      // Do not cancel the create HTTP request: even a late result must be deleted.
+      const created = await request<{ session_id: string }>("/sessions", AbortSignal.timeout(30000), {
+        avatar_id: "office-woman", model: "mock", agent_enabled: false,
+        memory_enabled: false, knowledge_enabled: false, ...(voice ? { tts_voice: voice } : {}),
+      });
+      session = created.session_id;
+      if (!live()) { await deleteSession(session); throw new Error("语音连接已取消。"); }
+      await request(`/sessions/${session}/start`, lifetime.signal, {});
+      const record = await request<{ agent_enabled: string }>(`/sessions/${session}`, lifetime.signal);
+      if (record.agent_enabled !== "0") throw new Error("语音会话未关闭额外对话模型。");
+      const ice = await request<RTCConfiguration>("/sessions/webrtc/ice-config", lifetime.signal);
+      if (!live()) throw new Error("语音连接已取消。");
+      peer = new RTCPeerConnection(ice);
+      const stream = new MediaStream();
+      if (video.current) video.current.srcObject = stream;
+      peer.ontrack = event => {
+        if (!live()) return;
+        if (!stream.getTracks().some(track => track.id === event.track.id)) stream.addTrack(event.track);
+        if (event.track.kind === "audio" && !audio) {
+          audio = new AudioContext(); void audio.resume().catch(() => {});
+          source = audio.createMediaStreamSource(new MediaStream([event.track]));
+          analyser = audio.createAnalyser(); analyser.fftSize = 1024; source.connect(analyser);
+          const samples = new Float32Array(analyser.fftSize);
+          const inspect = () => {
+            if (!live() || !analyser) return;
+            analyser.getFloatTimeDomainData(samples);
+            const rms = Math.sqrt(samples.reduce((sum, sample) => sum + sample * sample, 0) / samples.length);
+            if (active && rms > .003) { audible.current = true; active.playing(); update("audio"); }
+            animation = requestAnimationFrame(inspect);
+          };
+          inspect();
+        }
+        void video.current?.play().catch(() => update("blocked"));
+      };
+      peer.onconnectionstatechange = () => {
+        if (peer && ["failed", "disconnected"].includes(peer.connectionState)) mediaFailure("WebRTC 音频连接已中断，请重试。");
+      };
+      peer.addTransceiver("video", { direction: "recvonly" }); peer.addTransceiver("audio", { direction: "recvonly" });
+      await peer.setLocalDescription(await peer.createOffer());
+      await waitForPeer(peer, lifetime.signal, true);
+      const answer = await request<RTCSessionDescriptionInit>(`/sessions/${session}/webrtc/offer`, lifetime.signal, { sdp: peer.localDescription?.sdp, type: "offer" });
+      await peer.setRemoteDescription(answer); await waitForPeer(peer, lifetime.signal);
+      events = new EventSource(`${base}/sessions/${session}/events`);
+      await new Promise<void>((resolve, reject) => {
+        const finish = (error?: Error) => { clearTimeout(timeout); lifetime.signal.removeEventListener("abort", abort); events?.removeEventListener("open", ready); error ? reject(error) : resolve(); };
+        const ready = () => finish(), abort = () => finish(new Error("语音连接已取消。"));
+        const timeout = setTimeout(() => finish(new Error("语音状态连接超时。")), 15000);
+        lifetime.signal.addEventListener("abort", abort, { once: true });
+        events!.addEventListener("open", ready, { once: true });
+        if (!live()) abort();
+      });
+      events.addEventListener("speech.ended", event => {
+        try { const data = JSON.parse((event as MessageEvent).data); if (active && data.utterance_id === active.command) active.done(); }
+        catch { mediaFailure("语音状态无效，请重试。"); }
+      });
+      events.addEventListener("error", event => {
+        // Named server errors carry JSON; transport errors have no data.
+        const data = (event as MessageEvent).data;
+        if (data) mediaFailure("OpenTalking 生成语音失败，请检查语音渠道后重试。");
+        else mediaFailure("语音状态连接断开，请重试。");
+      });
+      update("ready");
+    };
+    const queueReply = (item: SpokenReply) => {
+      companionPlayback.enqueue(owner, async (signal, playing) => {
+        let timeout: ReturnType<typeof setTimeout> | undefined;
+        let abort: (() => void) | undefined;
+        try {
+          opening ??= open(); await opening;
+          if (signal.aborted || !live()) return;
+          const command = `iframe-${crypto.randomUUID()}`;
+          audible.current = false; update("waiting");
+          const complete = new Promise<void>((resolve, reject) => {
+            active = { command, playing, done: resolve, fail: reject };
+            abort = () => {
+              if (session) void request(`/sessions/${session}/interrupt`, undefined, {}).catch(() => {});
+              resolve();
+            };
+            signal.addEventListener("abort", abort, { once: true });
+            timeout = setTimeout(() => reject(new Error("未能确认本轮语音播放，请重试。")), 90000);
+          });
+          void complete.catch(() => {});
+          // Claim playback before TTS to avoid capturing the first response syllable.
+          playing();
+          const sent = await request<{ status: string }>(`/sessions/${session}/speak`, lifetime.signal, {
+            text: item.text, mode: "replace", render_text: true, command_id: command, ...(voice ? { voice } : {}),
+          });
+          if (!["queued", "duplicate"].includes(sent.status)) throw new Error("语音任务未入队，请重试。");
+          await complete;
+          if (!signal.aborted && live()) {
+            if (!audible.current) { failed.current = item; setError("本轮尚未检测到有效音频，请点击播放或重试。"); update("blocked"); }
+            else update("ready");
+          }
+        } catch (failure) {
+          if (live() && !signal.aborted) {
+            failed.current = item; setError(failure instanceof Error ? failure.message : "语音播放失败。"); update("error");
+          }
+        } finally {
+          clearTimeout(timeout); if (abort) signal.removeEventListener("abort", abort); active = null;
+        }
+      });
+    };
+    enqueue.current = queueReply;
+    interrupt.current = () => { companionPlayback.cancel(owner); update("ready"); };
+    pending.current.splice(0).forEach(queueReply);
+    let disposed = false;
+    const dispose = () => {
+      if (disposed) return;
+      disposed = true;
+      lifetime.abort(); enqueue.current = null; interrupt.current = null;
+      companionPlayback.cancel(owner);
+      active?.done(); events?.close(); peer?.close(); cancelAnimationFrame(animation);
+      source?.disconnect(); void audio?.close().catch(() => {});
+      if (video.current) { video.current.pause(); video.current.srcObject = null; }
+      if (session) void deleteSession(session);
+    };
+    window.addEventListener("pagehide", dispose);
+    return () => { window.removeEventListener("pagehide", dispose); dispose(); };
+  }, [voice, retry]);
+
+  useEffect(() => {
+    if (!reply || seen.current.has(reply.id)) return;
+    seen.current.add(reply.id);
+    if (enqueue.current) enqueue.current(reply); else pending.current.push(reply);
+  }, [reply]);
+  return <section className={styles.openTalkingReply} aria-label="OpenTalking 语音回复">
+    <video ref={video} autoPlay playsInline aria-label="数字人回复" />
+    <p role="status">{state === "idle" ? "语音回复已开启" : state === "opening" ? "正在连接语音…" : state === "waiting" ? "正在准备回复声音…" : state === "audio" ? "已收到回复音频" : state === "ready" ? "语音已就绪" : state === "blocked" ? "请点击播放声音" : `文字已保留：${error}`}</p>
+    {state === "blocked" && <button type="button" onClick={() => {
+      void video.current?.play().then(() => {
+        if (failed.current) { pending.current.unshift(failed.current); failed.current = null; setRetry(value => value + 1); }
+        else setState("waiting");
+      }).catch(() => { setError("浏览器仍未允许播放，请检查媒体权限。"); });
+    }}>播放声音</button>}
+    <button type="button" onClick={() => interrupt.current?.()}>打断语音</button>
+    {state === "error" && <button type="button" onClick={() => {
+      if (failed.current) { pending.current.unshift(failed.current); failed.current = null; }
+      setError(""); setRetry(value => value + 1);
+    }}>重试语音连接</button>}
+  </section>;
 }

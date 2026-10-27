@@ -17,7 +17,7 @@ import DiaryCard, { diaryDay, diaryPrompt, formatDiaryDay, today, type DiaryCont
 import UniArtSettings from "./UniArtSettings";
 import CompanionIdentitySettings, { defaultCompanionIdentity, readCompanionIdentity, type CompanionIdentity } from "./CompanionIdentitySettings";
 import SpeechPlayback from "./SpeechPlayback";
-import OpenTalkingReply from "./OpenTalkingReply";
+import OpenTalkingReply, { type SpokenReply } from "./OpenTalkingReply";
 import UploadGuideCard from "./UploadGuideCard";
 import { isOpenAlbumCommand } from "./localCommands";
 import { BookOpen, Images, UserRound, Compass, Mic } from "lucide-react";
@@ -37,6 +37,7 @@ export default function AgentChat() {
   const [openTalking, setOpenTalking] = useState(false);
   const [messages, setMessages] = useState<UserMessage[]>([]), [after, setAfter] = useState<number | null>(null);
   const [allowed, setAllowed] = useState(false);
+  const [spokenReply, setSpokenReply] = useState<SpokenReply | null>(null);
   const [responseMode, setResponseMode] = useState<ResponseMode>("text");
   const [identity, setIdentity] = useState<CompanionIdentity>(defaultCompanionIdentity);
   const [mode, setMode] = useState<ComposerMode>("chat");
@@ -126,6 +127,7 @@ export default function AgentChat() {
   }, []);
   async function newSession() {
     voiceQueue.current = [];
+    setSpokenReply(null);
     if (!sessionOperation.current) sessionOperation.current = crypto.randomUUID();
     const result = await companionApi.session(sessionOperation.current);
     localStorage.setItem(sessionKey, result.session_id); localStorage.removeItem(turnKey);
@@ -144,7 +146,9 @@ export default function AgentChat() {
     if (!session) { sessionOperation.current = ""; setSession(activeSession); localStorage.setItem(sessionKey, activeSession); }
     const result = await companionApi.chat(activeSession, sendOperation.current);
     localStorage.setItem(turnKey, result.turn_id);
-    if (alive.current) { setDraft(null); setTurn(result); setPreview(result.result?.kind === "confirmation" ? result.result : null); setDrafts(old => ({ ...old, chat: "" })); sendOperation.current = null; setHasRetry(false);
+    if (alive.current) {
+      if (result.result?.kind === "text" && responseMode === "audio") setSpokenReply({ id: result.turn_id, text: result.result.text });
+      setDraft(null); setTurn(result); setPreview(result.result?.kind === "confirmation" ? result.result : null); setDrafts(old => ({ ...old, chat: "" })); sendOperation.current = null; setHasRetry(false);
       commitAttachments();
     }
     await history(activeSession);
@@ -234,7 +238,7 @@ export default function AgentChat() {
           <label className={styles.check}><input type="radio" name="companion-response-mode" value="audio" checked={responseMode === "audio"} disabled={busy} onChange={() => { setResponseMode("audio"); localStorage.setItem(responseModeKey, "audio"); }} />方案 1：语音回复（可能计费）</label>
           <label className={styles.check}><input type="radio" name="companion-response-mode" value="text" checked={responseMode === "text"} disabled={busy} onChange={() => { setResponseMode("text"); localStorage.setItem(responseModeKey, "text"); }} />方案 2：只回复文字</label>
         </fieldset>
-        <p className={styles.note}>方案 1 会自动请求 UniArt 朗读并保留文字记录；浏览器拦截自动播放时，可点击回复下方的播放控件。</p>
+        <p className={styles.note}>语音回复由 OpenTalking 播放，并保留文字记录；播放受阻时可点击“播放声音”。</p>
       </section>
       <CompanionIdentitySettings onChange={setIdentity} />
       <UniArtSettings />
@@ -279,7 +283,7 @@ export default function AgentChat() {
       })}
       {after !== null && <button disabled={busy} onClick={() => void run(() => history(session, after))}>更多历史消息</button>}
     </section>
-    {turn?.result?.kind === "text" && !messages.some(m => m.turn?.turn_id === turn.turn_id) && (diaryDay(lastSubmittedText) ? <DiaryCard day={diaryDay(lastSubmittedText)!} text={turn.result.text} sourceTurn={turn.turn_id} onOpenDiary={() => setFeature("diary")} /> : <article className={chatStyles.assistant}><span>{identity.avatar} {identity.name}</span><p>{turn.result.text}</p>{responseMode === "audio" ? <OpenTalkingReply text={turn.result.text} voice={identity.voice}/> : <SpeechPlayback text={turn.result.text} voice={identity.voice}/>}</article>)}
+    {turn?.result?.kind === "text" && !messages.some(m => m.turn?.turn_id === turn.turn_id) && (diaryDay(lastSubmittedText) ? <DiaryCard day={diaryDay(lastSubmittedText)!} text={turn.result.text} sourceTurn={turn.turn_id} onOpenDiary={() => setFeature("diary")} /> : <article className={chatStyles.assistant}><span>{identity.avatar} {identity.name}</span><p>{turn.result.text}</p>{responseMode === "text" && <SpeechPlayback text={turn.result.text} voice={identity.voice}/>}</article>)}
     {turn?.result?.kind === "upload_guide" && !messages.some(m => m.turn?.turn_id === turn.turn_id) && !dismissedUploadGuides.includes(turn.turn_id) && <UploadGuideCard {...uploadGuideActions(turn.turn_id)} />}
     {uploadFiles.length > 0 && <MediaUpload files={uploadFiles} disabled={inputDisabled || pending} onUploaded={attach} onBusyChange={setUploading} onClose={() => setUploadFiles([])} />}
     {albumOpen && <AlbumPicker disabled={inputDisabled || pending} onClose={() => setAlbumOpen(false)} onPhoto={photo => {
@@ -329,6 +333,7 @@ export default function AgentChat() {
       {page?.next_cursor && <button disabled={busy || pending} onClick={() => void run(() => memories(appliedQuery, page.next_cursor!))}>更多个人记忆</button>}
     </section>
     </details>}
+    {responseMode === "audio" && <OpenTalkingReply key={session} reply={spokenReply} voice={identity.voice} />}
     {openTalking && <DigitalCompanionPanel identity={identity} onClose={() => setOpenTalking(false)} />}
     <input ref={fileRef} type="file" hidden accept="image/jpeg,image/png,image/webp,video/mp4,video/quicktime,video/webm,.mov" multiple aria-label="选择要上传的照片或视频" onChange={event => {
       const files=Array.from(event.target.files ?? []);event.target.value="";
