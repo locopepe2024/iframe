@@ -423,7 +423,7 @@ export default function DetailPanel({
               </button>
             )}
 
-            {!isVideo && output?.media_path && (
+            {output?.media_path && (
               <button
                 onClick={() => setImportAssetOpen(true)}
                 className="w-full inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-full text-sm font-medium transition border bg-surface-inset border-glass-border text-text-secondary hover:text-foreground hover:bg-hover-bg"
@@ -484,6 +484,8 @@ export default function DetailPanel({
           initialImageOrigin="workbench"
           initialSourceGenerationId={generation.id}
           initialSourceOutputId={output.id}
+          initialDescription={generation.prompt}
+          initialMediaType={isVideo ? "video" : "image"}
           onClose={() => setImportAssetOpen(false)}
           onCreated={() => setImportAssetOpen(false)}
         />

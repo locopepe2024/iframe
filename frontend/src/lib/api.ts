@@ -6,6 +6,7 @@ import {
     analyzeStoryboardPreview,
     applyStoryboardDraft as applyStoryboardDraftRequest,
     refineStoryboardPreview,
+    type StoryboardGenerationOptions,
     type StoryboardDraftFrame,
     type StoryboardAnalysisLineage,
 } from "./storyboardAnalysis";
@@ -88,6 +89,9 @@ const getApiUrl = (): string => {
 };
 
 export const API_URL = getApiUrl();
+
+// Coalesce overlapping navigation reads; never retain completed responses.
+const pendingSeriesReads = new Map<string, Promise<any>>();
 
 const API_KEY_IDENTITY_KEY = "lumenx-api-key-identity";
 const API_KEY_IDENTITY_HEADER = "X-iFrame-API-Key-Identity";
@@ -283,6 +287,8 @@ export interface AssetReferenceIndexVariant {
     is_favorited?: boolean;
     reference_view_role?: string;
     reference_distance?: string;
+    scene_tool?: import("@/components/modules/SceneImageTools").SceneToolParams | null;
+    scene_tool_source_variant_id?: string | null;
 }
 
 export interface AssetReferenceIndexEntry {
@@ -326,6 +332,46 @@ export interface AssetRevisionHistory {
     revisions: AssetRevisionRecord[];
 }
 
+export interface CharacterAssetPackView {
+    character_id: string;
+    source_scope: "project" | "series";
+    source_container_id: string;
+    asset_revision: number;
+    pack: null | {
+        pack_id: string;
+        current_revision: number;
+        revisions: Array<{
+            revision: number;
+            kind: "front_full_body_anchor";
+            variant_id: string;
+            media_id?: string | null;
+            source_asset_revision: number;
+            source_design_revision: number;
+            confirmed_at: number;
+        }>;
+    };
+}
+
+export interface EpisodeCharacterUse {
+    use_id: string;
+    project_character_id: string;
+    label: string;
+    condition: string;
+    source_pack_id: string;
+    source_pack_revision: number;
+    source_design_revision: number;
+    source_anchor_variant_id: string;
+    source_anchor_media_id?: string | null;
+    selected_asset_id: string;
+    selected_asset_revision: number;
+    selected_variant_id: string;
+    selected_media_id?: string | null;
+    selected_source_scope: "project" | "series" | "episode";
+    selected_source_container_id: string;
+    status: "confirmed";
+    confirmed_at: number;
+}
+
 export interface AssetReferenceIndex {
     schema_version: 1;
     project_id: string;
@@ -336,9 +382,17 @@ export interface PlatformReferenceResource {
     platform_resource_id: string;
     revision: number;
     kind: string;
+    category_path?: string;
+    dictionary?: { semantic_domain: "character.identity" | "character.look" | "character.performance" | "world.style"; entry_type: "term" | "pattern" | "case"; members?: { platform_resource_id: string; revision: number; role: string }[] };
     title: string;
     summary?: string;
     tags?: string[];
+    payload?: {
+        prompt_used?: string;
+        structured_prompt?: { content?: string };
+        media_file?: string | null;
+        [key: string]: unknown;
+    };
     status: "active" | "retired" | "candidate" | "review";
     provenance: {
         license: string;
@@ -347,6 +401,7 @@ export interface PlatformReferenceResource {
         source_url?: string;
         attribution?: string;
         notice_text?: string;
+        rights_confirmed?: boolean;
     };
     [key: string]: unknown;
 }
@@ -394,7 +449,7 @@ export interface VoiceMeta {
     name: string;
     gender: "Male" | "Female" | "Neutral" | "Unknown";
     model: string;                                            // backend model id (cosyvoice-v3-flash / qwen3-tts-flash / ...)
-    family: "cosyvoice" | "qwen3";
+    family: "cosyvoice" | "qwen3" | "minimax";
     supports_instruction: boolean;
     dialect?: string | null;                                  // 'shanghai' | 'beijing' | 'sichuan' | 'cantonese' | etc.
     lang_primary?: string | null;                             // 'es' | 'ru' | 'it' | 'ko' | 'ja' | 'de' | 'fr' for international
@@ -559,6 +614,8 @@ export interface VideoTask {
     ratio?: string;
     /** Failure reason set by pipeline / cancel / orphan recovery. */
     error?: string | null;
+    /** Non-blocking warning produced when current shot fields differ from the optimized snapshot. */
+    warning?: string | null;
     /** User-starred shortlist flag (multi-select per shot) — set via
      *  PATCH /annotate. Optional on the wire so older task records
      *  parse unchanged. */
@@ -622,10 +679,13 @@ export interface LightingData {
 }
 
 export interface RefineSSEEvent {
-    type: "frame_refine_start" | "frame_refine_complete" | "frame_refine_error" | "batch_complete";
+    type: "frame_refine_start" | "frame_refine_complete" | "frame_refine_error" | "batch_complete"
+        | "frame_initialize_start" | "frame_initialize_complete" | "frame_initialize_error" | "initialize_complete";
     frame_id?: string;
     frame_index?: number;
     total?: number;
+    success?: number;
+    failed?: number;
     error?: string;
 }
 
@@ -705,9 +765,9 @@ export const api = {
         return res.data;
     },
 
-    getPlatformReferenceLibrary: async (query = "", kind?: string): Promise<PlatformReferenceCatalog> => {
+    getPlatformReferenceLibrary: async (query = "", kind?: string, category?: string, tag?: string, semanticDomain?: string, entryType?: string): Promise<PlatformReferenceCatalog> => {
         const res = await axios.get<PlatformReferenceCatalog>(`${API_URL}/platform-reference-library`, {
-            params: { query: query || undefined, kind: kind || undefined },
+            params: { query: query || undefined, kind: kind || undefined, category: category || undefined, tag: tag || undefined, semantic_domain: semanticDomain || undefined, entry_type: entryType || undefined },
             headers: { "Cache-Control": "no-cache" },
         });
         return res.data;
@@ -727,6 +787,42 @@ export const api = {
         const res = await axios.get<PlatformReferenceReviewer>(`${API_URL}/platform-reference-library/reviewer`, {
             headers: { "Cache-Control": "no-cache" },
         });
+        return res.data;
+    },
+
+    getPlatformPublisher: async (): Promise<{ profile_id: string; authorized: boolean }> => {
+        const res = await axios.get(`${API_URL}/platform-reference-library/publisher`);
+        return res.data;
+    },
+
+    getPlatformPublisherGrants: async (): Promise<{ profile_ids: string[] }> => {
+        const res = await axios.get(`${API_URL}/platform-reference-library/publisher-grants`);
+        return res.data;
+    },
+
+    setPlatformPublisherGrant: async (profileId: string, enabled: boolean): Promise<{ profile_ids: string[] }> => {
+        const res = await axios.post(`${API_URL}/platform-reference-library/publisher-grants`, { profile_id: profileId, enabled });
+        return res.data;
+    },
+
+    getPlatformReferenceCategories: async (): Promise<{ categories: { id: string; label: string }[]; suggested_tags: string[] }> => {
+        const res = await axios.get(`${API_URL}/platform-reference-library/categories`);
+        return res.data;
+    },
+
+    submitPlatformCandidate: async (request: {
+        source_generation_id: string;
+        source_output_id?: string;
+        kind: "image" | "video" | "prompt_preset";
+        category_path: string;
+        dictionary_entry_type?: "term" | "pattern" | "case";
+        dictionary_members?: { platform_resource_id: string; revision: number; role: string }[];
+        tags: string[];
+        title: string;
+        description: string;
+        rights_confirmed: boolean;
+    }): Promise<PlatformReferenceResource> => {
+        const res = await axios.post(`${API_URL}/platform-reference-library/candidates`, request);
         return res.data;
     },
 
@@ -801,7 +897,7 @@ export const api = {
     reparseProject: async (
         scriptId: string,
         text: string,
-        draft?: { characters: any[]; scenes: any[]; props: any[] },
+        draft?: { characters: any[]; crowd_groups?: any[]; scenes: any[]; props: any[] },
     ) => {
         const res = await axios.put(`${API_URL}/projects/${scriptId}/reparse`, { text, ...(draft ? { draft } : {}) });
         return { ...res.data, originalText: res.data.original_text };
@@ -814,7 +910,7 @@ export const api = {
     refineExtraction: async (
         scriptId: string,
         text: string,
-        draft: { characters: any[]; scenes: any[]; props: any[] },
+        draft: { characters: any[]; crowd_groups?: any[]; scenes: any[]; props: any[] },
         instructions: string[],
     ) => refineScriptPreview(API_URL, scriptId, text, draft, instructions),
 
@@ -874,6 +970,8 @@ export const api = {
         directorSnapshotMediaId?: string,
         lastFrameUrl?: string,
         lastFrameMediaId?: string,
+        visualSourceHash?: string,
+        referenceAssetInputs?: Array<{ asset_type: "character" | "scene" | "prop"; asset_id: string; variant_id: string; media_id?: string | null }>,
     ) => {
         const res = await axios.post(`${API_URL}/projects/${id}/video_tasks`, {
             image_url,
@@ -907,6 +1005,8 @@ export const api = {
             director_snapshot_media_id: directorSnapshotMediaId,
             last_frame_url: lastFrameUrl,
             last_frame_media_id: lastFrameMediaId,
+            visual_source_hash: visualSourceHash,
+            reference_asset_inputs: referenceAssetInputs,
         });
         return res.data;
     },
@@ -982,12 +1082,53 @@ export const api = {
         return res.data;
     },
 
+    getStoryboardContinuitySheet: async (scriptId: string) => {
+        const res = await axios.get(`${API_URL}/projects/${scriptId}/storyboard/continuity-sheet`);
+        return res.data as {
+            rows: Array<{
+                frame_id: string; shot_id: string | null; scene_id: string; scene_name: string | null;
+                place_continuity_id: string | null; time_continuity_id: string | null;
+                continuity_status: "confirmed" | "unresolved";
+                scene_design_revision: number | null; plan_revision: number | null;
+                style_hash: string; model: string;
+                visual_source_hash: string;
+                scene_baseline: Record<string, string | string[]>;
+                asset_visual_context: string;
+                asset_visual_issues: string[];
+                fields: Record<string, { value: unknown; source_kind: string; source_id: string | null; source_revision: number | null; status: string }>;
+                reference: { source_variant_id: string | null; source_design_revision: number | null; selected_fields: string[] } | null;
+            }>;
+            issues: Array<{ scope: string; field: string; frame_ids: string[]; values: Array<{ value: unknown; source_kind: string }>; status: string }>;
+        };
+    },
+
     listShotVisualPresets: async (scriptId: string, sceneId?: string) => {
         const res = await axios.get(
             `${API_URL}/projects/${scriptId}/shot-visual-presets`,
             { params: sceneId ? { scene_id: sceneId } : undefined },
         );
         return res.data;
+    },
+
+    previewShotVisualPreset: async (scriptId: string, frameId: string, presetId: string) => {
+        const res = await axios.get(
+            `${API_URL}/projects/${scriptId}/frames/${frameId}/shot-visual-presets/${presetId}/projection`,
+        );
+        return res.data as {
+            preset: { id: string; name: string; source_frame_id?: string | null; source_asset_id?: string | null; source_variant_id?: string | null };
+            reference_image_available: boolean;
+            source_label: string;
+            projection: {
+                scope: "same_place_time" | "same_time_world_light" | "different_time" | "unresolved";
+                selected_fields: string[];
+                source_visual_version_known: boolean;
+                source_scene_design_revision?: number | null;
+                available_fields: string[];
+                eligible_fields: string[];
+                suggested_fields: string[];
+                visual_design: Record<string, Record<string, unknown>>;
+            };
+        };
     },
 
     saveShotVisualPreset: async (
@@ -1012,11 +1153,12 @@ export const api = {
         scriptId: string,
         frameId: string,
         presetId: string,
-        applyMode: "parameters_only" | "parameters_with_reference" = "parameters_only",
+        applyMode: "parameters_only" | "parameters_with_reference" | "image_only" | "image_and_context" = "parameters_only",
+        selectedFields: string[] = [],
     ) => {
         const res = await axios.post(
             `${API_URL}/projects/${scriptId}/frames/${frameId}/shot-visual-presets/${presetId}/apply`,
-            { apply_mode: applyMode },
+            { apply_mode: applyMode, selected_fields: selectedFields },
         );
         return res.data;
     },
@@ -1272,6 +1414,56 @@ export const api = {
         return res.data;
     },
 
+    getCharacterAssetPack: async (scriptId: string, characterId: string): Promise<CharacterAssetPackView> => {
+        const res = await axios.get<CharacterAssetPackView>(
+            `${API_URL}/projects/${encodeURIComponent(scriptId)}/characters/${encodeURIComponent(characterId)}/asset-pack`,
+        );
+        return res.data;
+    },
+
+    confirmCharacterAnchor: async (
+        scriptId: string, characterId: string, variantId: string,
+        expectedAssetRevision: number, expectedPackRevision: number,
+    ): Promise<CharacterAssetPackView> => {
+        const res = await axios.post<CharacterAssetPackView>(
+            `${API_URL}/projects/${encodeURIComponent(scriptId)}/characters/${encodeURIComponent(characterId)}/asset-pack/anchor`,
+            { variant_id: variantId, expected_asset_revision: expectedAssetRevision,
+                expected_pack_revision: expectedPackRevision, verified_front_full_body: true },
+        );
+        return res.data;
+    },
+
+    listEpisodeCharacterUses: async (scriptId: string): Promise<EpisodeCharacterUse[]> => {
+        const res = await axios.get<{ uses: EpisodeCharacterUse[] }>(
+            `${API_URL}/projects/${encodeURIComponent(scriptId)}/character-uses`,
+        );
+        return res.data.uses;
+    },
+
+    confirmEpisodeCharacterUse: async (
+        scriptId: string, projectCharacterId: string,
+        input: { label: string; condition: string; selected_asset_id: string;
+            selected_variant_id: string; expected_pack_revision: number; reviewed: true },
+    ): Promise<EpisodeCharacterUse> => {
+        const res = await axios.post<EpisodeCharacterUse>(
+            `${API_URL}/projects/${encodeURIComponent(scriptId)}/characters/${encodeURIComponent(projectCharacterId)}/episode-uses`,
+            input,
+        );
+        return res.data;
+    },
+
+    selectFrameCharacterUse: async (
+        scriptId: string, frameId: string, input: {
+            project_character_id: string; use_id: string; expected_reference_revision: number;
+        },
+    ) => {
+        const res = await axios.post(
+            `${API_URL}/projects/${encodeURIComponent(scriptId)}/frames/${encodeURIComponent(frameId)}/character-use`,
+            input,
+        );
+        return res.data;
+    },
+
     confirmAssetRevision: async (
         scriptId: string, assetType: string, assetId: string,
         expectedRevision: number, activeVariantIds: string[], selectedVariantId?: string,
@@ -1439,8 +1631,8 @@ export const api = {
         return res.data;
     },
 
-    analyzeDirectorProfile: (scriptId: string, onStatus?: DirectorProfileJobStatusListener) =>
-        analyzeDirectorProfile(API_URL, scriptId, onStatus),
+    analyzeDirectorProfile: (scriptId: string, onStatus?: DirectorProfileJobStatusListener, skills: import("./directorSkills").CreativeSkillSelection[] = []) =>
+        analyzeDirectorProfile(API_URL, scriptId, onStatus, skills),
 
     refineDirectorProfile: (
         scriptId: string,
@@ -1450,7 +1642,7 @@ export const api = {
     ) => refineDirectorProfile(API_URL, scriptId, draft, instructions, onStatus),
 
     getSeriesDirectorProfile: async (seriesId: string) => getSeriesDirectorProfile(API_URL, seriesId),
-    analyzeSeriesDirectorProfile: (seriesId: string, onStatus?: (status: string) => void) => analyzeSeriesDirectorProfile(API_URL, seriesId, onStatus),
+    analyzeSeriesDirectorProfile: (seriesId: string, onStatus?: (status: string) => void, skills: import("./directorSkills").CreativeSkillSelection[] = []) => analyzeSeriesDirectorProfile(API_URL, seriesId, onStatus, skills),
     saveSeriesDirectorDraft: (seriesId: string, draft: Record<string, unknown>, draftName?: string) => saveSeriesDirectorDraft(API_URL, seriesId, draft, draftName),
     saveSeriesSourceContext: (seriesId: string, text: string) => saveSeriesSourceContext(API_URL, seriesId, text),
     confirmSeriesDirectorProfile: (seriesId: string) => confirmSeriesDirectorProfile(API_URL, seriesId),
@@ -1495,8 +1687,8 @@ export const api = {
         return res.data;
     },
 
-    generateDirectorShootingPlan: (scriptId: string, onStatus?: DirectorShootingPlanJobListener) =>
-        generateDirectorShootingPlan(API_URL, scriptId, onStatus),
+    generateDirectorShootingPlan: (scriptId: string, onStatus?: DirectorShootingPlanJobListener, skills: import("./directorSkills").CreativeSkillSelection[] = []) =>
+        generateDirectorShootingPlan(API_URL, scriptId, onStatus, skills),
 
     getDirectorShootingPlan: (scriptId: string) =>
         getDirectorShootingPlan(API_URL, scriptId),
@@ -1678,7 +1870,7 @@ export const api = {
     },
     polishR2VPrompt: async (
         draftPrompt: string,
-        slots: { description: string }[],
+        slots: { description: string; slot?: number; asset_id?: string; asset_type?: "character" | "scene" | "prop"; name?: string; variant_ids?: string[] }[],
         feedback: string = "",
         scriptId: string = "",
         prevCn: string = "",
@@ -1694,6 +1886,8 @@ export const api = {
         frameId: string = "",
         shotOverrides?: { style: string; lighting: string },
         review?: { messages: { system: string; user: string }; token: string },
+        referenceLightingChoice?: "shot" | "reference",
+        referenceVariantIds?: Record<string, string[]>,
     ) => {
         const payload = {
             draft_prompt: draftPrompt,
@@ -1704,6 +1898,8 @@ export const api = {
             shot_overrides: shotOverrides,
             prev_cn: prevCn,
             image_urls: imageUrls,
+            reference_variant_ids: referenceVariantIds,
+            reference_lighting_choice: referenceLightingChoice,
             polish_model: polishModel,
             target_video_model: targetVideoModel,
             optimizer_provider: optimizerProvider,
@@ -1744,6 +1940,16 @@ export const api = {
         return res.data;
     },
 
+    saveCharacterDesign: async (scriptId: string, assetId: string, design: unknown): Promise<{
+        project_id: string; asset_id: string; asset_revision: number; character_design: Record<string, unknown>;
+    }> => {
+        const res = await axios.post(`${API_URL}/projects/${scriptId}/assets/update_attributes`, {
+            asset_id: assetId, asset_type: "character",
+            attributes: { character_design: design }, response_mode: "design",
+        });
+        return res.data;
+    },
+
     updateSeriesAssetAttributes: async (seriesId: string, assetId: string, assetType: string, attributes: Record<string, unknown>) => {
         const res = await axios.post(`${API_URL}/series/${seriesId}/assets/update_attributes`, {
             asset_id: assetId,
@@ -1768,6 +1974,7 @@ export const api = {
         camera_angle?: string;
         scene_id?: string;
         character_ids?: string[];
+        crowd_instances?: import("@/store/projectStore").ExtraShotInstance[];
         duration?: number;
         shot_size?: string;
         camera_movement_description?: string;
@@ -1775,6 +1982,9 @@ export const api = {
         style_prompt_override?: string;
         lighting_override?: string;
         negative_prompt_override?: string;
+        move_ref?: string;
+        move_variant?: string;
+        performance_moves?: Array<{ character_id: string; move_ref: string; move_variant?: string | null }>;
         reference_package?: {
             revision?: number;
             first_frame_url?: string | null;
@@ -1843,10 +2053,10 @@ export const api = {
     },
 
     previewFrameCandidate: async (
-        scriptId: string, frameId: string, prompt: string, negativePrompt?: string,
-    ): Promise<{ prompt: string; negative_prompt: string; model: string; aspect_ratio: string; size: string; reference_asset_labels: string[]; context_token: string }> => {
+        scriptId: string, frameId: string, prompt: string, negativePrompt?: string, slot: "first" | "last" = "first",
+    ): Promise<{ prompt: string; negative_prompt: string; model: string; aspect_ratio: string; size: string; reference_asset_labels: string[]; source_label?: string | null; polish_review?: string | null; context_token: string }> => {
         const res = await axios.post(`${API_URL}/projects/${scriptId}/storyboard/render-candidate-preview`, {
-            frame_id: frameId, prompt, negative_prompt: negativePrompt,
+            frame_id: frameId, prompt, negative_prompt: negativePrompt, slot,
         });
         return res.data;
     },
@@ -1896,8 +2106,9 @@ export const api = {
     },
 
     analyzeStoryboardPreview: async (scriptId: string, text: string,
-                                     onProgress?: (completed: number, total: number) => void) =>
-        analyzeStoryboardPreview(API_URL, scriptId, text, onProgress),
+                                     onProgress?: (completed: number, total: number) => void,
+                                     options?: StoryboardGenerationOptions) =>
+        analyzeStoryboardPreview(API_URL, scriptId, text, onProgress, options),
 
     refineStoryboardPreview: async (
         scriptId: string,
@@ -1959,7 +2170,10 @@ export const api = {
 
     getVoices: async (): Promise<VoiceMeta[]> => {
         const response = await authenticatedFetch(`${API_URL}/voices`);
-        if (!response.ok) throw new Error("Failed to fetch voices");
+        if (!response.ok) {
+            const error = await response.json().catch(() => null);
+            throw new Error(typeof error?.detail === "string" ? error.detail : `音色加载失败（HTTP ${response.status}）`);
+        }
         return response.json();
     },
 
@@ -2180,6 +2394,121 @@ export const api = {
         return response.json();
     },
 
+    initializeSingleFrame: async (scriptId: string, frameId: string) => {
+        const response = await authenticatedFetch(`${API_URL}/projects/${scriptId}/frames/${frameId}/initialize`, {
+            method: "POST",
+        });
+        if (!response.ok) throw new Error(`Shot initialization failed (${response.status})`);
+        return response.json();
+    },
+
+    applyRichRefinement: async (scriptId: string, frameId: string, candidateId: string, selectedFields: string[]) => {
+        const response = await authenticatedFetch(`${API_URL}/projects/${scriptId}/frames/${frameId}/rich-refinement/apply`, {
+            method: "POST", headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ candidate_id: candidateId, selected_fields: selectedFields }),
+        });
+        if (!response.ok) throw new Error(`Rich refinement apply failed (${response.status})`);
+        return response.json();
+    },
+
+    discardRichRefinement: async (scriptId: string, frameId: string, candidateId: string) => {
+        const response = await authenticatedFetch(`${API_URL}/projects/${scriptId}/frames/${frameId}/rich-refinement/discard`, {
+            method: "POST", headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ candidate_id: candidateId }),
+        });
+        if (!response.ok) throw new Error(`Rich refinement discard failed (${response.status})`);
+        return response.json();
+    },
+
+    previewMicroExpression: async (scriptId: string, frameId: string, emotionIntent: string, visibility: string) => {
+        const response = await axios.post(`${API_URL}/projects/${scriptId}/frames/${frameId}/micro-expression/preview`, {
+            frame_id: frameId, emotion_intent: emotionIntent, visibility,
+        });
+        return response.data as { messages: { system: string; user: string }; review_token: string; input: Record<string, unknown> };
+    },
+
+    generateMicroExpression: async (scriptId: string, frameId: string, emotionIntent: string, visibility: string,
+                                    review: { messages: { system: string; user: string }; review_token: string }) => {
+        const response = await axios.post(`${API_URL}/projects/${scriptId}/frames/${frameId}/micro-expression/generate`, {
+            frame_id: frameId, emotion_intent: emotionIntent, visibility,
+            reviewed_messages: review.messages, review_token: review.review_token,
+        });
+        return response.data as { id: string; items: Array<{ character_id: string; emotion_intent: string; timing: Array<{ phase: string; visible_change: string; relative_start: number; relative_end: number }>; uncertainties?: string[]; facial_channels?: Record<string, string> }> };
+    },
+
+    applyMicroExpression: async (scriptId: string, frameId: string, candidateId: string, characterIds: string[]) => {
+        const response = await axios.post(`${API_URL}/projects/${scriptId}/frames/${frameId}/micro-expression/apply`, {
+            candidate_id: candidateId, character_ids: characterIds,
+        });
+        return response.data;
+    },
+
+    previewCameraMovement: async (scriptId: string, frameId: string) => {
+        const response = await axios.post(`${API_URL}/projects/${scriptId}/frames/${frameId}/camera-movement/preview`, { frame_id: frameId });
+        return response.data as { messages: { system: string; user: string }; review_token: string };
+    },
+
+    generateCameraMovement: async (scriptId: string, frameId: string,
+        review: { messages: { system: string; user: string }; review_token: string }) => {
+        const response = await axios.post(`${API_URL}/projects/${scriptId}/frames/${frameId}/camera-movement/generate`, {
+            frame_id: frameId, reviewed_messages: review.messages, review_token: review.review_token,
+        });
+        return response.data as {
+            id: string;
+            camera_movement_structured: { primary: string; secondary?: string | null; speed: string; description?: string | null };
+            rationale: string; source_refs: string[]; uncertainties: string[];
+        };
+    },
+
+    applyCameraMovement: async (scriptId: string, frameId: string, candidateId: string) => {
+        const response = await axios.post(`${API_URL}/projects/${scriptId}/frames/${frameId}/camera-movement/apply`, { candidate_id: candidateId });
+        return response.data;
+    },
+
+    previewShotFields: async (scriptId: string, frameId: string) => {
+        const response = await axios.post(`${API_URL}/projects/${scriptId}/frames/${frameId}/shot-fields/preview`, { frame_id: frameId });
+        return response.data as { messages: { system: string; user: string }; review_token: string; input: Record<string, unknown> };
+    },
+
+    generateShotFields: async (scriptId: string, frameId: string,
+        review: { messages: { system: string; user: string }; review_token: string }) => {
+        const response = await axios.post(`${API_URL}/projects/${scriptId}/frames/${frameId}/shot-fields/generate`, {
+            frame_id: frameId, reviewed_messages: review.messages, review_token: review.review_token,
+        });
+        return response.data as { id: string; fields: Record<string, unknown>; rationale: Record<string, string>;
+            source_refs: Record<string, string[]>; uncertainties: string[] };
+    },
+
+    applyShotFields: async (scriptId: string, frameId: string, candidateId: string, selectedFields: string[]) => {
+        const response = await axios.post(`${API_URL}/projects/${scriptId}/frames/${frameId}/shot-fields/apply`, {
+            candidate_id: candidateId, selected_fields: selectedFields,
+        });
+        return response.data;
+    },
+
+    previewStaticFraming: async (scriptId: string, frameId: string) => {
+        const response = await axios.post(`${API_URL}/projects/${scriptId}/frames/${frameId}/static-framing/preview`, { frame_id: frameId });
+        return response.data as { messages: { system: string; user: string }; review_token: string };
+    },
+
+    generateStaticFraming: async (scriptId: string, frameId: string,
+        review: { messages: { system: string; user: string }; review_token: string }) => {
+        const response = await axios.post(`${API_URL}/projects/${scriptId}/frames/${frameId}/static-framing/generate`, {
+            frame_id: frameId, reviewed_messages: review.messages, review_token: review.review_token,
+        });
+        return response.data as {
+            id: string; fields: Record<string, string>; current_fields: Record<string, string | null>;
+            rationale: Record<string, string>; source_refs: Record<string, string[]>; uncertainties: string[];
+        };
+    },
+
+    applyStaticFraming: async (scriptId: string, frameId: string, candidateId: string, selectedFields: string[]) => {
+        const response = await axios.post(`${API_URL}/projects/${scriptId}/frames/${frameId}/static-framing/apply`, {
+            candidate_id: candidateId, selected_fields: selectedFields,
+        });
+        return response.data;
+    },
+
     /** Schema v2 · Batch refine all frames via SSE stream. */
     refineBatchFrames: async (
         scriptId: string,
@@ -2211,6 +2540,37 @@ export const api = {
                 }
             }
         }
+    },
+
+    initializeBatchFrames: async (scriptId: string, onEvent: (event: RefineSSEEvent) => void): Promise<{ success: number; failed: number }> => {
+        const response = await authenticatedFetch(`${API_URL}/projects/${scriptId}/storyboard/initialize`, { method: "POST" });
+        if (!response.ok) throw new Error("Failed to initialize storyboard");
+        const reader = response.body?.getReader();
+        if (!reader) throw new Error("Initialization stream is unavailable");
+        const decoder = new TextDecoder();
+        let buffer = "";
+        let eventType = "";
+        let result: { success: number; failed: number } | null = null;
+        while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            buffer += decoder.decode(value, { stream: true });
+            const lines = buffer.split("\n");
+            buffer = lines.pop() || "";
+            for (const line of lines) {
+                if (line.startsWith("event: ")) eventType = line.slice(7).trim();
+                else if (line.startsWith("data: ")) {
+                    try {
+                        const event = { type: eventType as RefineSSEEvent["type"], ...JSON.parse(line.slice(6)) };
+                        onEvent(event);
+                        if (event.type === "initialize_complete") result = { success: event.success, failed: event.failed };
+                    }
+                    catch { /* skip malformed event */ }
+                }
+            }
+        }
+        if (!result) throw new Error("Initialization did not report a completion result");
+        return result;
     },
 
     /** PR-3k · BGM preset catalog for Assembly Mix phase. */
@@ -2399,15 +2759,27 @@ export const api = {
         return res.data;
     },
     getSeries: async (seriesId: string) => {
-        const response = await axios.get(`${API_URL}/series/${seriesId}`);
-        return response.data;
+        const identity = getApiKeyIdentity() || (typeof window !== "undefined"
+            ? window.localStorage.getItem("lumenx-access-token") || "browser" : "server");
+        const key = JSON.stringify([identity, seriesId]);
+        let pending = pendingSeriesReads.get(key);
+        if (!pending) {
+            pending = axios.get(`${API_URL}/series/${seriesId}`).then(response => response.data)
+                .finally(() => { if (pendingSeriesReads.get(key) === pending) pendingSeriesReads.delete(key); });
+            pendingSeriesReads.set(key, pending);
+        }
+        return pending;
     },
     updateSeries: async (
         seriesId: string,
-        data: { title?: string; description?: string; art_direction?: any },
+        data: { title?: string; description?: string; art_direction?: any; extra_roster?: import("@/store/projectStore").ExtraRosterEntry[] },
     ) => {
         const response = await axios.put(`${API_URL}/series/${seriesId}`, data);
         return response.data;
+    },
+    generateExtraRosterProposals: async (seriesId: string, brief: string, count = 6) => {
+        const response = await axios.post(API_URL + "/series/" + seriesId + "/extra-roster/proposals", { brief, count });
+        return response.data as { proposals: import("@/store/projectStore").ExtraRosterEntry[] };
     },
 
     /** R2V v2 Phase 3 — fetch previous episode raw snippet + AI summary cache state.
@@ -2445,6 +2817,7 @@ export const api = {
      *  extracted entities vs the parent series's shared library. */
     getReconcileSuggestions: async (scriptId: string): Promise<{
         characters: ReconcileSuggestion[];
+        crowd_groups: ReconcileSuggestion[];
         scenes: ReconcileSuggestion[];
         props: ReconcileSuggestion[];
     }> => {
@@ -2457,6 +2830,7 @@ export const api = {
         scriptId: string,
         decisions: {
             characters?: ReconcileAction[];
+            crowd_groups?: ReconcileAction[];
             scenes?: ReconcileAction[];
             props?: ReconcileAction[];
         },

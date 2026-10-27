@@ -24,6 +24,7 @@ import { useTranslations } from "next-intl";
 import { useProjectStore } from "@/store/projectStore";
 import { api } from "@/lib/api";
 import { getAssetUrl } from "@/lib/utils";
+import { isUniArtVoiceBinding } from "@/lib/voiceBinding";
 import { characterImageUrl } from "@/lib/characterImage";
 import { useLightbox } from "@/components/shared/preview/LightboxProvider";
 import StepPageHeader, { StepPill } from "@/components/shared/StepPageHeader";
@@ -57,6 +58,7 @@ export default function Cast() {
     const tStep = useTranslations("stepHeader");
     const t = useTranslations("cast");
     const currentProject = useProjectStore((state) => state.currentProject);
+    const currentSeries = useProjectStore((state) => state.currentSeries);
 
     // R2V v2 Phase 5 — add new asset modal (placeholder for full
     // generation flow which lands in a follow-up patch). For now this
@@ -146,7 +148,18 @@ export default function Cast() {
         return { characters, scenes, props };
     }, [currentProject?.frames, currentProject?.characters, currentProject?.scenes, currentProject?.props]);
 
-    const totalCast = characters.length + scenes.length + props.length;
+    const crowdGroups = useMemo(() => {
+        const seriesGroups = currentSeries && currentSeries.id === currentProject?.series_id ? currentSeries.extra_roster ?? [] : [];
+        const groups = [...(currentProject?.crowd_groups ?? []), ...seriesGroups, ...(currentProject?.crowd_group_candidates ?? [])];
+        return Array.from(new Map(groups.map(group => [group.extra_id, group])).values());
+    }, [
+        currentSeries,
+        currentSeries?.extra_roster,
+        currentProject?.series_id,
+        currentProject?.crowd_groups,
+        currentProject?.crowd_group_candidates,
+    ]);
+    const totalCast = characters.length + crowdGroups.length + scenes.length + props.length;
 
     return (
         <div className="flex h-full w-full flex-col overflow-hidden">
@@ -160,7 +173,7 @@ export default function Cast() {
                         <StepPill label={t("charactersLabel")} value={characters.length} />
                         <StepPill
                             label={t("voiceBoundLabel")}
-                            value={(currentProject?.characters ?? []).filter((c: any) => c.voice_id).length}
+                            value={(currentProject?.characters ?? []).filter((c: any) => isUniArtVoiceBinding(c.voice_id)).length}
                         />
                     </>
                 ) : null}
@@ -189,7 +202,7 @@ export default function Cast() {
                     <div className="shrink-0 flex items-center gap-1 px-6 pt-3 border-b border-glass-border bg-surface">
                         {([
                             { id: "all" as const, label: t("tabAll"), icon: <Layers size={11} />, count: totalCast },
-                            { id: "character" as const, label: t("tabCharacters"), icon: <Users size={11} />, count: characters.length },
+                            { id: "character" as const, label: t("tabCharacters"), icon: <Users size={11} />, count: characters.length + crowdGroups.length },
                             { id: "scene" as const, label: t("tabScenes"), icon: <MapPin size={11} />, count: scenes.length },
                             { id: "prop" as const, label: t("tabProps"), icon: <Box size={11} />, count: props.length },
                         ]).map((tab) => (
@@ -228,6 +241,26 @@ export default function Cast() {
                                 onOpenWorkbench={(id) => setWorkbench({ kind: "character", entityId: id })}
                                 hideHeader={activeTab === "character"}
                             />
+                        )}
+                        {(activeTab === "all" || activeTab === "character") && crowdGroups.length > 0 && (
+                            <section aria-label={t("sectionCrowdGroups")}>
+                                <header className="mb-3 flex items-center gap-2 text-text-secondary">
+                                    <Users size={14} />
+                                    <h3 className="font-mono text-[0.6875rem] font-medium uppercase">{t("sectionCrowdGroups")}</h3>
+                                    <span className="font-mono text-[0.625rem] text-text-muted">({crowdGroups.length})</span>
+                                    <div aria-hidden="true" className="ml-3 h-px flex-1 bg-glass-border" />
+                                </header>
+                                <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                                    {crowdGroups.map(group => (
+                                        <div key={group.extra_id} className="min-w-0 rounded border border-glass-border bg-glass px-3 py-2.5">
+                                            <div className="truncate text-sm font-medium text-foreground" title={group.label}>{group.label}</div>
+                                            {group.role_tags?.length ? (
+                                                <div className="mt-1 truncate text-xs text-text-muted" title={group.role_tags.join("、")}>{group.role_tags.join("、")}</div>
+                                            ) : null}
+                                        </div>
+                                    ))}
+                                </div>
+                            </section>
                         )}
                         {(activeTab === "all" || activeTab === "scene") && (
                             <CastSection
@@ -311,7 +344,6 @@ function AddCastPlaceholderModal({
     const [name, setName] = useState("");
     const [persona, setPersona] = useState("");
     const [description, setDescription] = useState("");
-    const [voiceId, setVoiceId] = useState("");  // P2-c — character voice binding
     const [uploading, setUploading] = useState(false);
     const [imageUrl, setImageUrl] = useState<string>("");
     const [submitting, setSubmitting] = useState(false);
@@ -319,7 +351,7 @@ function AddCastPlaceholderModal({
 
     // Reset state when modal closes / kind changes
     const reset = () => {
-        setName(""); setPersona(""); setDescription(""); setVoiceId("");
+        setName(""); setPersona(""); setDescription("");
         setImageUrl(""); setError(null); setTab("ai");
     };
 
@@ -359,7 +391,6 @@ function AddCastPlaceholderModal({
                 name: name.trim(),
                 description: description.trim() || undefined,
                 persona: kind === "character" ? (persona.trim() || undefined) : undefined,
-                voice_id: kind === "character" ? (voiceId.trim() || undefined) : undefined,
                 image_url: imageUrl || undefined,
             });
             onCreated();
@@ -442,23 +473,7 @@ function AddCastPlaceholderModal({
                                     className="w-full bg-input-bg border border-glass-border rounded-lg px-3 py-2 text-sm text-foreground placeholder-text-muted focus:outline-none focus:border-primary"
                                 />
                             </div>
-                            <div>
-                                <label className="block text-xs font-medium text-text-secondary mb-1.5">
-                                    {t("fieldVoice")} <span className="text-text-muted">({t("fieldVoiceHint")})</span>
-                                </label>
-                                <select
-                                    value={voiceId}
-                                    onChange={(e) => setVoiceId(e.target.value)}
-                                    className="w-full bg-input-bg border border-glass-border rounded-lg px-3 py-2 text-sm text-foreground focus:outline-none focus:border-primary"
-                                >
-                                    <option value="">{t("fieldVoiceNone")}</option>
-                                    <option value="longanyang">{t("voiceLonganyang")}</option>
-                                    <option value="longshu">{t("voiceLongshu")}</option>
-                                    <option value="longtong">{t("voiceLongtong")}</option>
-                                    <option value="longfei_v2">{t("voiceLongfei")}</option>
-                                    <option value="longxiaobai_v2">{t("voiceLongxiaobai")}</option>
-                                </select>
-                            </div>
+
                         </>
                     )}
                     <div>
@@ -687,6 +702,7 @@ function CastCard({ item, onOpenWorkbench }: { item: CastItem; onOpenWorkbench?:
         : null;
     const voiceId: string | undefined = character?.voice_id;
     const voiceName: string | undefined = character?.voice_name;
+    const usableVoice = isUniArtVoiceBinding(voiceId);
 
     // PR-3g · Voice bind handler: persist via existing bindVoice API
     const handleApplyVoice = async (newVoiceId: string, newVoiceName: string) => {
@@ -697,12 +713,13 @@ function CastCard({ item, onOpenWorkbench }: { item: CastItem; onOpenWorkbench?:
             updateProject(currentProject.id, updated);
         } catch (e) {
             console.error("Failed to bind voice:", e);
+            throw e;
         }
     };
 
     // PR-3g · inline preview from CastCard (uses currently-bound voice)
     const handleInlinePreview = async () => {
-        if (!voiceId) return;
+        if (!usableVoice) return;
         if (audioRef.current) {
             audioRef.current.pause();
             audioRef.current = null;
@@ -887,13 +904,13 @@ function CastCard({ item, onOpenWorkbench }: { item: CastItem; onOpenWorkbench?:
                             className="flex-1 inline-flex items-center gap-1.5 rounded-md border border-glass-border bg-black/30 px-2 py-1 text-[0.625rem] text-text-secondary hover:border-foreground/30 hover:text-foreground transition-colors min-w-0"
                             title={voiceId ? t("voiceBindChange") : t("voiceBindAdd")}
                         >
-                            <Volume2 size={10} className={voiceId ? "text-primary" : "text-text-muted"} />
+                            <Volume2 size={10} className={usableVoice ? "text-primary" : "text-text-muted"} />
                             <span className="truncate flex-1 text-left">
-                                {voiceName || (voiceId ? voiceId : t("voiceBindNone"))}
+                                {usableVoice ? (voiceName || voiceId) : voiceId ? t("voiceLegacyStopped") : t("voiceBindNone")}
                             </span>
                             <span className="font-mono text-[0.5rem] text-text-muted shrink-0">▼</span>
                         </button>
-                        {voiceId && (
+                        {usableVoice && (
                             <button
                                 onClick={(e) => { e.stopPropagation(); handleInlinePreview(); }}
                                 aria-label={playing ? t("previewStop") : t("previewPlay")}

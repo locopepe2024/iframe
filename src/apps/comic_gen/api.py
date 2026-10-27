@@ -1,3 +1,4 @@
+from src.apps import director_skills
 # ─────────────────────────────────────────────────────────────────────────────
 # IMPORTANT — handler async/sync convention (audited 2026-05-21):
 #
@@ -76,9 +77,12 @@ from .models import (
     Script,
     Series,
     StoryboardFrame,
+    ExtraRosterEntry,
+    ExtraShotInstance,
     StoryboardReferencePackage,
     ShotVisualPreset,
     VideoTask,
+    VideoReferenceIdentity,
     AssemblyEditPlan,
     AssetLibraryReference,
     image_variant_storage_key,
@@ -90,10 +94,17 @@ from ...utils.uniart_catalog import fetch_uniart_catalog, normalize_uniart_catal
 from ...utils import setup_logging, get_user_data_dir
 from ...utils.storage_config import media_root, storage_backend
 from ..platform_reference_catalog import (
+    CHARACTER_CATEGORIES,
+    CHARACTER_TAG_SUGGESTIONS,
+    MANIFEST_PATH as PLATFORM_REFERENCE_MANIFEST,
     list_resources as list_platform_reference_resources,
     list_review_candidates as list_platform_reference_review_candidates,
+    list_publisher_grants,
+    publisher_is_authorized,
     promote_resource as promote_platform_reference_resource,
     reviewer_is_authorized,
+    set_publisher_grant,
+    submit_generation_candidate,
 )
 from ..workbench_templates import list_workbench_templates
 from fastapi.responses import FileResponse, JSONResponse, Response
@@ -174,14 +185,127 @@ app.include_router(director_design_router)
 @app.get("/platform-reference-library")
 def get_platform_reference_library(
     kind: Optional[str] = None,
+    category: Optional[str] = None,
+    tag: Optional[str] = None,
     query: str = "",
+    semantic_domain: Optional[str] = None,
+    entry_type: Optional[str] = None,
     user: UserContext = Depends(require_user_context),
 ):
     """Read active deployment-scoped resources; mutations are not exposed here."""
     try:
-        return private_no_store_signed_response(list_platform_reference_resources(kind=kind, query=query))
+        return private_no_store_signed_response(list_platform_reference_resources(
+            kind=kind, category=category, tag=tag, query=query,
+            semantic_domain=semantic_domain, entry_type=entry_type,
+        ))
     except ValueError as exc:
         raise HTTPException(status_code=500, detail=str(exc))
+
+
+@app.get("/platform-reference-library/categories")
+def get_platform_reference_categories(user: UserContext = Depends(require_user_context)):
+    return {
+        "categories": [{"id": key, "label": value} for key, value in CHARACTER_CATEGORIES.items()],
+        "suggested_tags": list(CHARACTER_TAG_SUGGESTIONS),
+    }
+
+
+@app.get("/platform-reference-library/publisher")
+def get_platform_publisher(user: UserContext = Depends(require_user_context)):
+    return {"profile_id": user.owner_profile_id, "authorized": publisher_is_authorized(user.owner_profile_id)}
+
+
+class PlatformPublisherGrantRequest(BaseModel):
+    profile_id: str
+    enabled: bool
+
+
+@app.get("/platform-reference-library/publisher-grants")
+def get_platform_publisher_grants(user: UserContext = Depends(require_user_context)):
+    if not reviewer_is_authorized(user.owner_profile_id):
+        raise HTTPException(status_code=403, detail="平台发布者授权权限不足")
+    return {"profile_ids": list_publisher_grants()}
+
+
+@app.post("/platform-reference-library/publisher-grants")
+def update_platform_publisher_grant(request: PlatformPublisherGrantRequest, user: UserContext = Depends(require_user_context)):
+    if not reviewer_is_authorized(user.owner_profile_id):
+        raise HTTPException(status_code=403, detail="平台发布者授权权限不足")
+    try:
+        return {"profile_ids": set_publisher_grant(request.profile_id, request.enabled)}
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
+
+
+class PlatformCandidateRequest(BaseModel):
+    source_generation_id: str
+    source_output_id: Optional[str] = None
+    kind: Literal["image", "video", "prompt_preset"]
+    category_path: str
+    tags: list[str] = Field(default_factory=list, max_length=12)
+    title: str = Field(min_length=1, max_length=200)
+    description: str = Field(max_length=20000)
+    rights_confirmed: bool
+    dictionary_entry_type: Optional[Literal["term", "pattern", "case"]] = None
+    dictionary_members: Optional[list[dict[str, Any]]] = None
+
+
+@app.post("/platform-reference-library/candidates")
+def submit_platform_candidate(request: PlatformCandidateRequest, user: UserContext = Depends(require_user_context)):
+    if not publisher_is_authorized(user.owner_profile_id):
+        raise HTTPException(status_code=403, detail="平台候选提交权限不足")
+    storage = playground_storage_for(user)
+    generation = storage.get_generation(request.source_generation_id)
+    if generation is None or generation.status != "completed" or generation.owner_profile_id != user.owner_profile_id:
+        raise HTTPException(status_code=404, detail="创作台已完成结果不存在")
+    output = next((item for item in generation.outputs if item.id == request.source_output_id), None) if request.source_output_id else None
+    if request.kind != "prompt_preset" and (output is None or output.media_type != request.kind):
+        raise HTTPException(status_code=422, detail="所选图像或视频结果与提交类型不符")
+    if request.kind == "prompt_preset" and request.source_output_id:
+        raise HTTPException(status_code=422, detail="提示词候选不附加媒体")
+    try:
+        resource = submit_generation_candidate(
+            creator_profile_id=user.owner_profile_id,
+            generation_id=generation.id, output_id=output.id if output else None,
+            kind=request.kind, category_path=request.category_path, tags=request.tags,
+            title=request.title, description=request.description,
+            prompt_used=generation.prompt, negative_prompt=generation.negative_prompt, model_id=generation.model_id,
+            parameters=generation.parameters,
+            media_source=Path(output.media_path) if output else None,
+            media_owner_root=Path(storage.output_dir),
+            rights_confirmed=request.rights_confirmed,
+            dictionary_entry_type=request.dictionary_entry_type,
+            dictionary_members=request.dictionary_members,
+        )
+        return private_no_store_signed_response(resource)
+    except PermissionError as exc:
+        raise HTTPException(status_code=403, detail=str(exc))
+    except (ValueError, FileNotFoundError) as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
+
+
+@app.get("/platform-reference-library/{resource_id}/media")
+def get_platform_reference_media(resource_id: str, preview: bool = False, user: UserContext = Depends(require_user_context)):
+    from ..platform_reference_catalog import _read_manifest
+    resource = next((item for item in _read_manifest().get("resources", []) if item["platform_resource_id"] == resource_id), None)
+    if resource is None or (resource.get("status") != "active" and not (
+        reviewer_is_authorized(user.owner_profile_id) or resource.get("provenance", {}).get("creator_profile_id") == user.owner_profile_id
+    )):
+        raise HTTPException(status_code=404, detail="平台媒体不存在")
+    filename = resource.get("payload", {}).get("media_file")
+    if not isinstance(filename, str) or Path(filename).name != filename:
+        raise HTTPException(status_code=404, detail="平台媒体不存在")
+    media_dir = PLATFORM_REFERENCE_MANIFEST.parent / "media"
+    source = (media_dir / filename).resolve()
+    if not source.is_relative_to(media_dir.resolve()) or not source.is_file():
+        raise HTTPException(status_code=404, detail="平台媒体不存在")
+    if preview:
+        try:
+            source = Path(create_media_thumbnail(str(source), str(media_dir), 320))
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc))
+    media_type = "image/webp" if preview else ("video/mp4" if source.suffix == ".mp4" else "image/jpeg" if source.suffix in {".jpg", ".jpeg"} else "image/png" if source.suffix == ".png" else "image/webp" if source.suffix == ".webp" else "video/quicktime" if source.suffix == ".mov" else "video/webm")
+    return FileResponse(source, media_type=media_type, headers={"Cache-Control": "private, no-store"})
 
 
 @app.get("/workbench-templates")
@@ -211,6 +335,8 @@ def get_platform_reference_reviewer(user: UserContext = Depends(require_user_con
 @app.get("/platform-reference-library/review-queue")
 def get_platform_reference_review_queue(
     kind: Optional[str] = None,
+    category: Optional[str] = None,
+    tag: Optional[str] = None,
     query: str = "",
     user: UserContext = Depends(require_user_context),
 ):
@@ -219,7 +345,7 @@ def get_platform_reference_review_queue(
         raise HTTPException(status_code=403, detail="平台参考资源审核权限不足")
     try:
         return private_no_store_signed_response(
-            list_platform_reference_review_candidates(kind=kind, query=query)
+            list_platform_reference_review_candidates(kind=kind, category=category, tag=tag, query=query)
         )
     except ValueError as exc:
         raise HTTPException(status_code=500, detail=str(exc))
@@ -324,6 +450,11 @@ async def enforce_studio_owner_boundary(request: Request, call_next):
         or path == "/upload"
         or path == "/config/models"
         or path == "/config/uniart/models"
+        # Voice catalog and preview need the same owner-scoped UniArt
+        # credentials as project audio generation.  Without this context,
+        # /voices fails even for an authenticated browser session.
+        or path == "/voices"
+        or path.startswith("/voice/")
         or path == "/studio/media-delivery"
         or path.startswith("/studio/media-records/")
         or path.startswith("/studio/owned-media/")
@@ -339,6 +470,7 @@ async def enforce_studio_owner_boundary(request: Request, call_next):
     if not protected or request.method == "OPTIONS":
         return await call_next(request)
 
+    identity_started = time.perf_counter()
     try:
         user, should_set_cookie = await asyncio.to_thread(
             _resolve_request_context,
@@ -362,7 +494,17 @@ async def enforce_studio_owner_boundary(request: Request, call_next):
 
     context_token = set_studio_user(user)
     try:
+        handler_started = time.perf_counter()
         response = await call_next(request)
+        if path.startswith("/projects/") and path.endswith("/assets/update_attributes"):
+            identity_ms = (handler_started - identity_started) * 1000
+            handler_ms = (time.perf_counter() - handler_started) * 1000
+            timing = response.headers.get("Server-Timing")
+            response.headers["Server-Timing"] = ", ".join(filter(None, [
+                timing, f"identity;dur={identity_ms:.1f}", f"handler;dur={handler_ms:.1f}",
+            ]))
+            logger.info("Asset save request status=%d identity_ms=%.1f handler_ms=%.1f",
+                        response.status_code, identity_ms, handler_ms)
         if should_set_cookie:
             _set_browser_profile_cookie(response, request, user)
         return response
@@ -425,12 +567,15 @@ def signed_response(data):
     if isinstance(data, Script):
         pipeline.migrate_legacy_storyboard_media(data)
         processed_data = _script_response_dump(data)
+    elif isinstance(data, Series):
+        processed_data = _series_response_dump(data)
     elif hasattr(data, "model_dump"):
         processed_data = data.model_dump()
     elif isinstance(data, list):
         processed_data = [
             _script_response_dump(item)
             if isinstance(item, Script)
+            else _series_response_dump(item) if isinstance(item, Series)
             else item.model_dump() if hasattr(item, "model_dump") else item
             for item in data
         ]
@@ -453,6 +598,18 @@ def signed_response(data):
     
     # Return JSONResponse directly to avoid Pydantic re-validation stripping fields
     return JSONResponse(content=processed_data)
+
+
+_ASSET_HISTORY_EXCLUDE = {
+    collection: {"__all__": {"asset_revisions"}}
+    for collection in ("characters", "scenes", "props")
+}
+
+
+def _series_response_dump(series: Series) -> Dict[str, Any]:
+    # Immutable asset snapshots have dedicated revision endpoints. Do not
+    # serialize/sign/transfer them for navigation or the live asset view.
+    return series.model_dump(exclude=_ASSET_HISTORY_EXCLUDE)
 
 
 def _script_response_dump(script: Script) -> Dict[str, Any]:
@@ -735,6 +892,7 @@ class UpdateAssetAttributesRequest(BaseModel):
     asset_id: str
     asset_type: str
     attributes: Dict[str, Any]
+    response_mode: Literal["project", "design"] = "project"
 
 
 @app.get("/health")
@@ -1095,6 +1253,7 @@ async def reparse_project(script_id: str, request: ReparseProjectRequest):
 
 # New clients use short requests so an interrupted browser cannot cancel extraction.
 from .extraction_jobs import ExtractionJobs
+from .llm import entity_extraction_prompt_revision
 extraction_jobs = ExtractionJobs()
 
 
@@ -1112,6 +1271,7 @@ def extraction_response(job, script_id):
         pipeline._extraction_cache[script_id] = (time.time(), result)
         job = {**job, 'result': {
             'characters': [c.dict() for c in result.characters],
+            'crowd_groups': [c.dict() for c in result.crowd_group_candidates],
             'scenes': [s.dict() for s in result.scenes],
             'props': [p.dict() for p in result.props],
         }}
@@ -1127,7 +1287,9 @@ def start_extraction(script_id: str, request: ReparseProjectRequest,
         raise HTTPException(404, 'Script not found')
     llm = pipeline.script_processor.llm
     prompt = getattr(getattr(script, 'prompt_config', None), 'entity_extraction', '')
-    fingerprint = hashlib.sha256(json.dumps([request.text, prompt, llm.provider, llm._get_default_model()], ensure_ascii=False).encode()).hexdigest()
+    fingerprint = hashlib.sha256(json.dumps([
+        request.text, prompt, llm.provider, llm._get_default_model(), entity_extraction_prompt_revision(),
+    ], ensure_ascii=False).encode()).hexdigest()
     job = extraction_jobs.start(user.owner_profile_id, script_id, fingerprint,
                                 lambda: pipeline.script_processor.parse_novel(script.title, request.text, prompt).dict())
     return extraction_response(job, script_id)
@@ -1146,7 +1308,7 @@ def start_extraction_refinement(
     instructions = [item.strip() for item in request.instructions if item.strip()]
     if not instructions or any(len(item) > 2000 for item in instructions):
         raise HTTPException(422, "Revision instructions must contain 1-12 non-empty items of at most 2000 characters")
-    draft = {key: list(request.draft.get(key, [])) for key in ("characters", "scenes", "props")}
+    draft = {key: list(request.draft.get(key, [])) for key in ("characters", "crowd_groups", "scenes", "props")}
     llm = pipeline.script_processor.llm
     prompt = getattr(getattr(script, "prompt_config", None), "entity_extraction", "")
     fingerprint = hashlib.sha256(json.dumps([
@@ -1156,6 +1318,7 @@ def start_extraction_refinement(
         prompt,
         llm.provider,
         llm._get_default_model(),
+        entity_extraction_prompt_revision(),
     ], ensure_ascii=False, sort_keys=True).encode()).hexdigest()
     job = extraction_jobs.start(
         user.owner_profile_id,
@@ -1188,6 +1351,7 @@ async def extract_preview(script_id: str, request: ReparseProjectRequest):
         )
         return {
             "characters": [c.dict() for c in result.characters],
+            "crowd_groups": [c.dict() for c in result.crowd_group_candidates],
             "scenes": [s.dict() for s in result.scenes],
             "props": [p.dict() for p in result.props],
         }
@@ -1243,6 +1407,7 @@ class UpdateSeriesRequest(BaseModel):
     workflow_mode: Optional[str] = None
     content_mode: Optional[str] = None
     default_generation_mode: Optional[str] = None
+    extra_roster: Optional[List[ExtraRosterEntry]] = None
     # R2V v2: series-level art_direction baseline (Phase 2). Inherits +
     # override flows at the episode level read this as the source of truth.
     art_direction: Optional[ArtDirection] = None
@@ -1288,7 +1453,7 @@ def get_series(series_id: str, user: UserContext = Depends(require_studio_user))
         raise HTTPException(status_code=404, detail="Series not found")
     # Include episode summaries
     episodes = pipeline.get_series_episodes(series_id)
-    result = series.model_dump()
+    result = _series_response_dump(series)
     _add_asset_cover_urls(result, user.owner_profile_id)
     result["episodes"] = [
         {
@@ -1425,6 +1590,19 @@ def update_series(series_id: str, request: UpdateSeriesRequest):
         return signed_response(series)
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
+
+
+class ExtraRosterProposalRequest(BaseModel):
+    brief: str = Field(..., min_length=1, max_length=4000)
+    count: int = Field(6, ge=1, le=20)
+
+
+@app.post("/series/{series_id}/extra-roster/proposals")
+def generate_extra_roster_proposals(series_id: str, request: ExtraRosterProposalRequest):
+    try:
+        return {"proposals": pipeline.generate_extra_roster_proposals(series_id, request.brief, request.count)}
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
 
 
 @app.delete("/series/{series_id}")
@@ -2068,7 +2246,7 @@ def _import_text_path(owner_profile_id: str, import_id: str) -> Path:
 def _store_import_text(owner_profile_id: str, import_id: str, text: str) -> None:
     target = _import_text_path(owner_profile_id, import_id)
     temporary = target.with_suffix(".tmp")
-    temporary.write_text(text, encoding="utf-8")
+    temporary.write_bytes(text.encode("utf-8"))
     os.replace(temporary, target)
 
 
@@ -2076,7 +2254,7 @@ def _load_import_text(owner_profile_id: str, import_id: str) -> Optional[str]:
     path = _import_text_path(owner_profile_id, import_id)
     if not path.is_file():
         return None
-    return path.read_text(encoding="utf-8")
+    return path.read_bytes().decode("utf-8")
 
 
 def _delete_import_text(owner_profile_id: str, import_id: str) -> None:
@@ -2110,8 +2288,8 @@ async def import_file_preview(
     user: UserContext = Depends(require_studio_user),
 ):
     """Upload text once and start or resume a durable episode-split job."""
-    if suggested_episodes < 1 or suggested_episodes > 50:
-        raise HTTPException(status_code=400, detail="建议集数应在 1-50 之间")
+    if suggested_episodes < 1 or suggested_episodes > 100:
+        raise HTTPException(status_code=400, detail="建议集数应在 1-100 之间")
     try:
         content_bytes = await file.read()
         if len(content_bytes) > 2 * 1024 * 1024:
@@ -2131,6 +2309,7 @@ async def import_file_preview(
         llm = pipeline.script_processor.llm
         filename = file.filename or "import.txt"
         fingerprint = hashlib.sha256(json.dumps([
+            "source-newlines-v2",
             hashlib.sha256(text.encode("utf-8")).hexdigest(),
             suggested_episodes,
             llm.provider,
@@ -2176,6 +2355,8 @@ async def import_file_confirm(
 ):
     """Confirm the episode split and create Series + Episodes."""
     try:
+        if not 1 <= len(request.episodes) <= 100:
+            raise ValueError("确认导入集数应在 1-100 之间")
         # Prefer persistent owner-scoped source, then legacy memory cache,
         # and finally direct text for compatibility with older clients.
         text = None
@@ -2489,6 +2670,8 @@ def get_project(script_id: str, user: UserContext = Depends(require_studio_user)
         raise HTTPException(status_code=404, detail="Project not found")
 
     payload = _script_response_dump(script)
+    local_crowd_groups = list(payload.get("crowd_group_candidates", []))
+    payload["crowd_groups"] = local_crowd_groups
     local_director = script.art_direction.director_profile if script.art_direction else None
     effective_style = pipeline.effective_art_direction(script)
     payload["director_style_review_required"] = bool(
@@ -2540,6 +2723,11 @@ def get_project(script_id: str, user: UserContext = Depends(require_studio_user)
                     d = pr.model_dump(exclude={"asset_revisions"})
                     d["source"] = "series"
                     payload["props"].append(d)
+            known_crowd_ids = {item.get("extra_id") for item in local_crowd_groups}
+            payload["crowd_groups"].extend(
+                item.model_dump() for item in series.extra_roster
+                if item.extra_id not in known_crowd_ids
+            )
 
     # Global assets are intentionally opt-in. They enter a series only through
     # the explicit /series/{id}/assets/import-from-library action; merely
@@ -2921,27 +3109,28 @@ def reconcile_suggestions(script_id: str):
         raise HTTPException(status_code=404, detail="Project not found")
     if not script.series_id:
         # Standalone projects have no series library to reconcile against
-        return {"characters": [], "scenes": [], "props": []}
+        return {"characters": [], "crowd_groups": [], "scenes": [], "props": []}
     series = pipeline.get_series(script.series_id)
     if not series:
-        return {"characters": [], "scenes": [], "props": []}
+        return {"characters": [], "crowd_groups": [], "scenes": [], "props": []}
 
-    def best_match(local_name: str, pool: list, key: str = "name"):
+    def best_match(local_name: str, pool: list, key: str = "name", id_key: str = "id"):
         best_id, best_name, best_conf = None, None, 0
         for item in pool:
             sname = getattr(item, key, "") if hasattr(item, key) else item.get(key, "")
             conf = _name_match_confidence(local_name, sname)
             if conf > best_conf:
-                best_id, best_name, best_conf = item.id if hasattr(item, "id") else item.get("id"), sname, conf
+                best_id, best_name, best_conf = getattr(item, id_key) if hasattr(item, id_key) else item.get(id_key), sname, conf
         return best_id, best_name, best_conf
 
-    def build(local_pool, series_pool):
+    def build(local_pool, series_pool, name_key="name", id_key="id", match_kind=False):
         result = []
         for local in local_pool:
-            sid, sname, conf = best_match(local.name, series_pool)
+            candidates = [item for item in series_pool if item.kind == local.kind] if match_kind else series_pool
+            sid, sname, conf = best_match(getattr(local, name_key), candidates, name_key, id_key)
             result.append({
-                "local_id": local.id,
-                "local_name": local.name,
+                "local_id": getattr(local, id_key),
+                "local_name": getattr(local, name_key),
                 "suggested_series_id": sid if conf > 0 else None,
                 "suggested_series_name": sname if conf > 0 else None,
                 "confidence": conf,
@@ -2950,6 +3139,7 @@ def reconcile_suggestions(script_id: str):
 
     return {
         "characters": build(script.characters, series.characters),
+        "crowd_groups": build(script.crowd_group_candidates, series.extra_roster, "label", "extra_id", True),
         "scenes": build(script.scenes, series.scenes),
         "props": build(script.props, series.props),
     }
@@ -2963,6 +3153,7 @@ class ReconcileAction(BaseModel):
 
 class ApplyReconcileRequest(BaseModel):
     characters: List[ReconcileAction] = Field(default_factory=list)
+    crowd_groups: List[ReconcileAction] = Field(default_factory=list)
     scenes: List[ReconcileAction] = Field(default_factory=list)
     props: List[ReconcileAction] = Field(default_factory=list)
 
@@ -2983,6 +3174,23 @@ def reconcile_apply(script_id: str, request: ApplyReconcileRequest):
     series = pipeline.get_series(script.series_id)
     if not series:
         raise HTTPException(status_code=404, detail="Series not found")
+
+    local_groups = {item.extra_id: item for item in script.crowd_group_candidates}
+    series_groups = {item.extra_id: item for item in series.extra_roster}
+    for act in request.crowd_groups:
+        local = local_groups.get(act.local_id)
+        if local is None:
+            continue
+        if act.action == "merge_into_series":
+            target = series_groups.get(act.target_series_id)
+            if target is None or target.kind != local.kind:
+                raise HTTPException(status_code=400, detail="Crowd merge target is missing or has a different kind")
+        elif act.action == "create_new_in_series" and local.extra_id in series_groups:
+            raise HTTPException(status_code=400, detail="Crowd group ID already exists in series")
+    new_group_ids = {act.local_id for act in request.crowd_groups
+                     if act.action == "create_new_in_series" and act.local_id in local_groups}
+    if len(series.extra_roster) + len(new_group_ids) > 100:
+        raise HTTPException(status_code=400, detail="Series extra roster exceeds 100 entries")
 
     def apply_list(local_pool_attr: str, series_pool_attr: str, actions: list, frame_ref_attr: Optional[str] = None):
         local_pool = getattr(script, local_pool_attr)
@@ -3020,6 +3228,21 @@ def reconcile_apply(script_id: str, request: ApplyReconcileRequest):
     apply_list("characters", "characters", request.characters, "character_ids")
     apply_list("scenes", "scenes", request.scenes, "scene_id")
     apply_list("props", "props", request.props, "prop_ids")
+    for act in request.crowd_groups:
+        local = local_groups.get(act.local_id)
+        if local is None or local not in script.crowd_group_candidates:
+            continue
+        if act.action == "create_new_in_series":
+            series.extra_roster.append(local)
+            script.crowd_group_candidates.remove(local)
+        elif act.action == "merge_into_series":
+            for frame in script.frames:
+                for instance in frame.crowd_instances:
+                    if instance.extra_id == local.extra_id:
+                        instance.extra_id = act.target_series_id
+                    if instance.template_id == local.extra_id:
+                        instance.template_id = act.target_series_id
+            script.crowd_group_candidates.remove(local)
 
     script.updated_at = time.time()
     series.updated_at = time.time()
@@ -3483,6 +3706,8 @@ def generate_motion_ref(script_id: str, request: GenerateMotionRefRequest, backg
 class AnalyzeToStoryboardRequest(BaseModel):
     """Request to analyze script text into storyboard frames."""
     text: str
+    mode: Literal["auto", "plan", "script"] = "auto"
+    skills: List[director_skills.SkillSelection] = Field(default_factory=list, max_length=12)
 
 
 class StoryboardAnalysisRefineRequest(BaseModel):
@@ -3501,7 +3726,9 @@ class StoryboardAnalysisApplyRequest(BaseModel):
 def _storyboard_analysis_fingerprint(script_id: str, text: str,
                                      draft=None, instructions=None,
                                      lineage: Optional[ArtifactLineage] = None) -> str:
-    script, entities, prompt = pipeline.storyboard_analysis_context(script_id)
+    script, entities, prompt = pipeline.storyboard_analysis_context(
+        script_id, include_plan=not (lineage and lineage.storyboard_mode == "script"),
+    )
     resolve_director = getattr(pipeline, "effective_director_profile", None)
     director_profile = resolve_director(script) if resolve_director else None
     visual_style = pipeline.storyboard_visual_style(script)
@@ -3531,7 +3758,11 @@ def start_storyboard_analysis(
     """Create or resume a durable storyboard draft without replacing frames."""
     if not request.text.strip():
         raise HTTPException(422, "Script text is required")
-    lineage = pipeline.storyboard_analysis_lineage(script_id, request.text)
+    try:
+        skill_snapshot = director_skills.freeze("storyboard", request.skills)
+        lineage = pipeline.storyboard_workflow_lineage(script_id, request.text, request.mode, skill_snapshot)
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from exc
     fingerprint = _storyboard_analysis_fingerprint(
         script_id, request.text, lineage=lineage,
     )
@@ -3540,7 +3771,7 @@ def start_storyboard_analysis(
     from .llm import split_director_source
     total_batches = len(split_director_source(
         request.text, direct_max_chars=1800, target_chars=1600, max_chars=1800
-    )) if len(request.text) > 1800 else 0
+    )) if lineage.storyboard_mode != "plan" and len(request.text) > 1800 else 0
     return extraction_jobs.start(
         user.owner_profile_id,
         script_id,
@@ -3557,6 +3788,7 @@ def start_storyboard_analysis(
                 ),
                 expected_lineage=lineage,
                 model=selected_model,
+                skill_snapshot=skill_snapshot,
             ),
             "lineage": lineage.model_dump(),
         },
@@ -3580,9 +3812,16 @@ def start_storyboard_analysis_refinement(
             pipeline.validate_storyboard_lineage(script_id, request.text, request.lineage)
         except StaleStoryboardDraftError as exc:
             raise HTTPException(status_code=409, detail=str(exc)) from exc
-        lineage = pipeline.storyboard_analysis_lineage(script_id, request.text)
+        lineage = request.lineage.model_copy(deep=True)
     else:
         lineage = ArtifactLineage(status="legacy_unpinned")
+    try:
+        snapshot = director_skills.freeze("storyboard", [
+            {"id": item["id"], "revision": item["revision"]} for item in lineage.creative_skill_run
+        ])
+        pipeline.validate_storyboard_coverage(script_id, request.draft, lineage)
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from exc
     fingerprint = _storyboard_analysis_fingerprint(
         script_id, request.text, request.draft, instructions, lineage,
     )
@@ -3596,6 +3835,7 @@ def start_storyboard_analysis_refinement(
                 script_id, request.text, request.draft, instructions,
                 lineage=lineage,
                 model=selected_model,
+                skill_snapshot=snapshot,
             ),
             "lineage": lineage.model_dump(),
         },
@@ -3641,7 +3881,10 @@ def analyze_to_storyboard(script_id: str, request: AnalyzeToStoryboardRequest):
     Replaces existing frames with newly generated ones.
     """
     try:
-        updated_script = pipeline.analyze_text_to_frames(script_id, request.text)
+        snapshot = director_skills.freeze("storyboard", request.skills)
+        lineage = pipeline.storyboard_workflow_lineage(script_id, request.text, request.mode, snapshot)
+        draft = pipeline.preview_storyboard_analysis(script_id, request.text, expected_lineage=lineage, skill_snapshot=snapshot)
+        updated_script = pipeline.analyze_text_to_frames(script_id, request.text, draft, lineage)
         return signed_response(updated_script)
     except StaleStoryboardDraftError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
@@ -3735,8 +3978,11 @@ def discard_frame_image_polish(script_id: str, frame_id: str, request: ApplyFram
 
 
 @app.post("/projects/{script_id}/frames/{frame_id}/refine")
-def refine_single_frame(script_id: str, frame_id: str):
-    """Phase 2: Refine a single coarse frame into a rich frame with structured fields."""
+def refine_single_frame(script_id: str, frame_id: str,
+                        user: UserContext = Depends(require_studio_user)):
+    """Phase 2: Propose rich fields for creator review."""
+    if not pipeline.get_script(script_id, user.owner_profile_id):
+        raise HTTPException(status_code=404, detail="Script not found")
     try:
         frame = pipeline.refine_frame(script_id, frame_id)
         if not frame:
@@ -3749,17 +3995,653 @@ def refine_single_frame(script_id: str, frame_id: str):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@app.post("/projects/{script_id}/frames/{frame_id}/initialize")
+def initialize_single_frame(script_id: str, frame_id: str,
+                            user: UserContext = Depends(require_studio_user)):
+    """Initialize one shot by proposing only fields that are still empty."""
+    if not pipeline.get_script(script_id, user.owner_profile_id):
+        raise HTTPException(status_code=404, detail="Script not found")
+    try:
+        frame = pipeline.refine_frame(script_id, frame_id, initialization=True)
+        if not frame:
+            raise HTTPException(status_code=500, detail="Initialization returned no result")
+        return frame.model_dump() if hasattr(frame, 'model_dump') else frame.dict()
+    except ValueError as e:
+        status_code = 502 if "initialization returned" in str(e).lower() else 404
+        raise HTTPException(status_code=status_code, detail=str(e))
+    except Exception as e:
+        logger.error(f"Error in initialize_single_frame: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+class RichFrameCandidateApplyRequest(BaseModel):
+    candidate_id: str
+    selected_fields: List[str] = Field(min_length=1, max_length=10)
+
+
+class RichFrameCandidateDiscardRequest(BaseModel):
+    candidate_id: str
+
+
+class MicroExpressionTimingRequest(BaseModel):
+    frame_id: str
+    emotion_intent: str = Field("", max_length=500)
+    visibility: Literal["unknown", "close", "medium", "wide", "occluded"] = "unknown"
+    reviewed_messages: Optional[Dict[str, str]] = None
+    review_token: Optional[str] = None
+
+
+def _micro_expression_review(script_id: str, request: MicroExpressionTimingRequest, user: UserContext) -> Dict[str, Any]:
+    from .micro_expression import CHANNELS, PHASES
+    from ..agent_skills import catalog as skill_catalog
+
+    script = pipeline.get_script(script_id, user.owner_profile_id)
+    if not script:
+        raise HTTPException(status_code=404, detail="Script not found")
+    frame = next((item for item in script.frames if item.id == request.frame_id), None)
+    if frame is None:
+        raise HTTPException(status_code=404, detail="Frame not found")
+    duration = frame.duration or 0
+    if duration <= 0 or not frame.character_ids:
+        raise HTTPException(status_code=422, detail="请先确定镜头时长和角色")
+    character_by_id = {character.id: character for character in script.characters}
+    aliases = {f"character{index + 1}": character_id for index, character_id in enumerate(frame.character_ids)}
+    characters = []
+    anchors = {}
+    for alias, character_id in aliases.items():
+        character = character_by_id.get(character_id)
+        characters.append({"ref": alias, "name": character.name if character else f"角色 {len(characters) + 1}"})
+        if character and character.asset_pack:
+            anchors[alias] = {"revision": character.asset_pack.current_revision}
+    payload = {
+        "characters": characters,
+        "duration_seconds": duration,
+        "shot_size": frame.shot_size or "",
+        "composition": frame.composition or "",
+        "visibility": request.visibility,
+        "character_anchors": anchors,
+        "current_dialogue": frame.dialogue or "",
+        "current_action": frame.action_description or "",
+        "emotion_intent": request.emotion_intent.strip(),
+        "allowed_phases": PHASES,
+        "allowed_facial_channels": CHANNELS,
+        "invariants": ["character_identity", "clothing", "scene", "lighting", "camera", "dialogue", "reference_media"],
+    }
+    skill = next(item for item in skill_catalog() if item["id"] == "micro-expression-timing")
+    messages = {
+        "system": skill["instructions"],
+        "user": json.dumps(payload, ensure_ascii=False),
+    }
+    source = {"frame": frame.model_dump(exclude={"micro_expression_candidate", "updated_at"}, mode="json"),
+              "payload": payload, "skill_revision": skill["revision"]}
+    token = hashlib.sha256(json.dumps(source, sort_keys=True, ensure_ascii=False, default=str).encode()).hexdigest()
+    return {"messages": messages, "review_token": token, "input": payload}
+
+
+@app.post("/projects/{script_id}/frames/{frame_id}/micro-expression/preview")
+def preview_micro_expression(script_id: str, frame_id: str, request: MicroExpressionTimingRequest,
+                             user: UserContext = Depends(require_studio_user)):
+    if request.frame_id != frame_id:
+        raise HTTPException(status_code=422, detail="Frame ID mismatch")
+    try:
+        return _micro_expression_review(script_id, request, user)
+    except HTTPException:
+        raise
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+@app.post("/projects/{script_id}/frames/{frame_id}/micro-expression/generate")
+def generate_micro_expression(script_id: str, frame_id: str, request: MicroExpressionTimingRequest,
+                              user: UserContext = Depends(require_studio_user)):
+    if request.frame_id != frame_id:
+        raise HTTPException(status_code=422, detail="Frame ID mismatch")
+    review = _micro_expression_review(script_id, request, user)
+    if request.review_token != review["review_token"] or request.reviewed_messages != review["messages"]:
+        raise HTTPException(status_code=409, detail="请先审核并确认完整的微表情模型输入")
+    try:
+        content = pipeline.script_processor.llm.chat(
+            messages=[{"role": "system", "content": review["messages"]["system"]},
+                      {"role": "user", "content": review["messages"]["user"]}],
+            response_format={"type": "json_object"},
+            timeout_seconds=300, max_retries=1,
+        )
+        payload = json.loads(content or "")
+        from .micro_expression import validate_micro_expression_payload
+        candidates = validate_micro_expression_payload(payload, duration_seconds=review["input"]["duration_seconds"])
+        aliases = {f"character{index + 1}": character_id for index, character_id in enumerate(
+            next(item for item in pipeline.get_script(script_id, user.owner_profile_id).frames if item.id == frame_id).character_ids
+        )}
+        allowed = set(aliases)
+        if len({item.character_id for item in candidates}) != len(candidates) or any(item.character_id not in allowed for item in candidates):
+            raise ValueError("微表情结果包含未选角色或重复角色")
+        if any(
+            (request.visibility == "unknown" or item.character_id not in review["input"]["character_anchors"])
+            and not item.uncertainties for item in candidates
+        ):
+            raise ValueError("缺少可见性或角色锚点时必须标记待确认项")
+        if _micro_expression_review(script_id, request, user)["review_token"] != review["review_token"]:
+            raise HTTPException(status_code=409, detail="镜头或锚点已变化，请重新预览")
+        script = pipeline.get_script(script_id, user.owner_profile_id)
+        frame = next(item for item in script.frames if item.id == frame_id)
+        normalized = []
+        for item in candidates:
+            value = item.model_dump(mode="json")
+            value["character_id"] = aliases[item.character_id]
+            normalized.append(value)
+        frame.micro_expression_candidate = {
+            "id": str(uuid.uuid4()), "source_hash": review["review_token"],
+            "items": normalized,
+            "emotion_intent": request.emotion_intent.strip(),
+            "visibility": request.visibility,
+        }
+        frame.updated_at = time.time()
+        pipeline._save_data()
+        return frame.micro_expression_candidate
+    except HTTPException:
+        raise
+    except (json.JSONDecodeError, ValueError) as exc:
+        logger.warning("Micro-expression result failed validation: %s", type(exc).__name__)
+        raise HTTPException(status_code=502, detail="微表情结果未通过结构校验，请重试") from exc
+
+
+class MicroExpressionApplyRequest(BaseModel):
+    candidate_id: str
+    character_ids: List[str] = Field(min_length=1)
+
+
+@app.post("/projects/{script_id}/frames/{frame_id}/micro-expression/apply", response_model=Script)
+def apply_micro_expression(script_id: str, frame_id: str, request: MicroExpressionApplyRequest,
+                           user: UserContext = Depends(require_studio_user)):
+    script = pipeline.get_script(script_id, user.owner_profile_id)
+    if not script:
+        raise HTTPException(status_code=404, detail="Script not found")
+    frame = next((item for item in script.frames if item.id == frame_id), None)
+    if not frame:
+        raise HTTPException(status_code=404, detail="Frame not found")
+    candidate = frame.micro_expression_candidate or {}
+    if candidate.get("id") != request.candidate_id:
+        raise HTTPException(status_code=409, detail="微表情候选已过期")
+    if frame.workbench_prompt_is_optimized:
+        raise HTTPException(status_code=409, detail="完整优化稿需重新审核后才能应用微表情时序")
+    refresh = MicroExpressionTimingRequest(frame_id=frame_id, emotion_intent=candidate.get("emotion_intent", ""),
+                                           visibility=candidate.get("visibility", "unknown"))
+    if candidate.get("source_hash") != _micro_expression_review(script_id, refresh, user)["review_token"]:
+        raise HTTPException(status_code=409, detail="镜头或锚点已变化，请重新生成")
+    selected = set(request.character_ids)
+    items = candidate.get("items") or []
+    if len(selected) != len(request.character_ids) or not selected.issubset({item["character_id"] for item in items}):
+        raise HTTPException(status_code=422, detail="请选择有效角色")
+    frame.micro_expression_timing = [item for item in frame.micro_expression_timing if item.get("character_id") not in selected]
+    names = {character.id: character.name for character in script.characters}
+    frame.micro_expression_timing.extend(
+        {**item, "character_name": names.get(item["character_id"], "当前角色")}
+        for item in items if item["character_id"] in selected
+    )
+    frame.micro_expression_candidate = None
+    frame.updated_at = time.time()
+    pipeline._save_data()
+    return signed_response(script)
+
+
+class CameraMovementRequest(BaseModel):
+    frame_id: str
+    reviewed_messages: Optional[Dict[str, str]] = None
+    review_token: Optional[str] = None
+
+
+def _camera_movement_review(script_id: str, frame_id: str, user: UserContext) -> Dict[str, Any]:
+    from ..agent_skills import catalog as skill_catalog
+
+    script = pipeline.get_script(script_id, user.owner_profile_id)
+    if not script:
+        raise HTTPException(status_code=404, detail="Script not found")
+    frame = next((item for item in script.frames if item.id == frame_id), None)
+    if frame is None:
+        raise HTTPException(status_code=404, detail="Frame not found")
+    skill = next(item for item in skill_catalog() if item["id"] == "shot-camera-movement")
+    projection = frame.reference_visual_projection
+    selected = set(projection.selected_fields) & {"space", "camera"} if projection else set()
+    payload = {
+        "duration_seconds": frame.duration,
+        "current_action": frame.action_description or "",
+        "shot_size": frame.shot_size or "",
+        "camera_angle": frame.camera_angle or "",
+        "composition": frame.composition or "",
+        "blocking": frame.blocking.model_dump(mode="json") if frame.blocking else None,
+        "camera_movement_structured": frame.camera_movement_structured.model_dump(mode="json") if frame.camera_movement_structured else None,
+        "continuity_constraints": {
+            "scope": projection.scope,
+            "visual_design": {key: projection.visual_design[key] for key in selected if key in projection.visual_design},
+        } if selected else None,
+    }
+    messages = {"system": skill["instructions"], "user": json.dumps(payload, ensure_ascii=False)}
+    source = {
+        "frame": frame.model_dump(exclude={"camera_movement_candidate", "updated_at", "assembled_prompt"}, mode="json"),
+        "skill_revision": skill["revision"],
+    }
+    token = hashlib.sha256(json.dumps(source, sort_keys=True, ensure_ascii=False).encode()).hexdigest()
+    return {"messages": messages, "review_token": token, "input": payload}
+
+
+@app.post("/projects/{script_id}/frames/{frame_id}/camera-movement/preview")
+def preview_camera_movement(script_id: str, frame_id: str, request: CameraMovementRequest,
+                            user: UserContext = Depends(require_studio_user)):
+    if request.frame_id != frame_id:
+        raise HTTPException(status_code=422, detail="Frame ID mismatch")
+    return _camera_movement_review(script_id, frame_id, user)
+
+
+@app.post("/projects/{script_id}/frames/{frame_id}/camera-movement/generate")
+def generate_camera_movement(script_id: str, frame_id: str, request: CameraMovementRequest,
+                             user: UserContext = Depends(require_studio_user)):
+    if request.frame_id != frame_id:
+        raise HTTPException(status_code=422, detail="Frame ID mismatch")
+    review = _camera_movement_review(script_id, frame_id, user)
+    if request.review_token != review["review_token"] or request.reviewed_messages != review["messages"]:
+        raise HTTPException(status_code=409, detail="请先审核并确认完整的运镜模型输入")
+    try:
+        content = pipeline.script_processor.llm.chat(
+            messages=[{"role": "system", "content": review["messages"]["system"]},
+                      {"role": "user", "content": review["messages"]["user"]}],
+            response_format={"type": "json_object"}, timeout_seconds=300, max_retries=1,
+        )
+        from .camera_movement import validate_movement_payload
+        proposal = validate_movement_payload(json.loads(content or ""))
+        if set(proposal.source_refs) - set(review["input"]):
+            raise ValueError("运镜来源不在当前镜头输入中")
+        if _camera_movement_review(script_id, frame_id, user)["review_token"] != review["review_token"]:
+            raise HTTPException(status_code=409, detail="镜头已变化，请重新预览")
+        script = pipeline.get_script(script_id, user.owner_profile_id)
+        frame = next(item for item in script.frames if item.id == frame_id)
+        frame.camera_movement_candidate = {
+            "id": str(uuid.uuid4()), "source_hash": review["review_token"],
+            **proposal.model_dump(mode="json"),
+        }
+        frame.updated_at = time.time()
+        pipeline._save_data()
+        return frame.camera_movement_candidate
+    except HTTPException:
+        raise
+    except (json.JSONDecodeError, ValueError) as exc:
+        logger.warning("Camera movement result failed validation: %s", type(exc).__name__)
+        raise HTTPException(status_code=502, detail="运镜候选未通过结构校验，请重试") from exc
+
+
+class CameraMovementApplyRequest(BaseModel):
+    candidate_id: str
+
+
+class ShotFieldRequest(BaseModel):
+    frame_id: str
+    reviewed_messages: Optional[Dict[str, str]] = None
+    review_token: Optional[str] = None
+
+
+class ShotFieldApplyRequest(BaseModel):
+    candidate_id: str
+    selected_fields: List[str]
+
+
+def _shot_field_review(script_id: str, frame_id: str, user: UserContext) -> Dict[str, Any]:
+    from ..agent_skills import catalog as skill_catalog
+    script = pipeline.get_script(script_id, user.owner_profile_id)
+    if not script:
+        raise HTTPException(status_code=404, detail="Script not found")
+    frame = next((item for item in script.frames if item.id == frame_id), None)
+    if frame is None:
+        raise HTTPException(status_code=404, detail="Frame not found")
+    rows = pipeline.storyboard_continuity_sheet(script_id)["rows"]
+    row_index = next(index for index, item in enumerate(rows) if item["frame_id"] == frame_id)
+    row = rows[row_index]
+    following = rows[row_index + 1] if row_index + 1 < len(rows) else None
+    relationship = "unresolved"
+    if following and row["time_continuity_id"] and following["time_continuity_id"]:
+        if row["time_continuity_id"] != following["time_continuity_id"]:
+            relationship = "different_time"
+        elif row["place_continuity_id"] and following["place_continuity_id"]:
+            relationship = ("same_place_time" if row["place_continuity_id"] == following["place_continuity_id"]
+                            else "same_time_different_place")
+    movement = frame.camera_movement_structured
+    current = {
+        "duration": frame.duration, "shot_size": frame.shot_size,
+        "camera_angle": frame.camera_angle,
+        "camera_movement_structured": movement.model_dump(mode="json") if hasattr(movement, "model_dump") else movement,
+        "transition_hint": frame.transition_hint,
+        "style_prompt_override": frame.style_prompt_override or None,
+        "lighting_override": frame.lighting_override or None,
+    }
+    visual_keys = ("style", "story_time", "daylight_phase", "weather", "shadow_direction",
+                   "key_source", "ambient_lighting", "color_tone", "contrast", "practical_sources",
+                   "direction", "quality", "color_temp", "lighting_override")
+    effective_visual = {
+        key: {"value": row["fields"][key]["value"],
+              "source": row["fields"][key]["source_kind"],
+              "revision": row["fields"][key]["source_revision"]}
+        for key in visual_keys if key in row["fields"]
+    }
+    payload = {
+        "current_action": frame.action_description or "",
+        "fields": current,
+        "effective_visual": effective_visual,
+        "scene": row["scene_name"] or "",
+        "next_shot": {"scene": following["scene_name"] or "", "relationship": relationship}
+        if following else None,
+        "continuity": {"status": row["continuity_status"],
+                       "reference_fields": row["reference"]["selected_fields"] if row["reference"] else []},
+    }
+    skill = next(item for item in skill_catalog() if item["id"] == "shot-field-continuity")
+    system = skill["instructions"]
+    messages = {"system": system, "user": json.dumps(payload, ensure_ascii=False)}
+    source = {
+        "frame": frame.model_dump(exclude={"shot_field_candidate", "updated_at", "assembled_prompt"}, mode="json"),
+        "row": row, "messages": messages, "skill_revision": skill["revision"],
+    }
+    token = hashlib.sha256(json.dumps(source, sort_keys=True, ensure_ascii=False, default=str).encode()).hexdigest()
+    return {"messages": messages, "review_token": token, "input": payload}
+
+
+@app.post("/projects/{script_id}/frames/{frame_id}/shot-fields/preview")
+def preview_shot_fields(script_id: str, frame_id: str, request: ShotFieldRequest,
+                        user: UserContext = Depends(require_studio_user)):
+    if request.frame_id != frame_id:
+        raise HTTPException(status_code=422, detail="Frame ID mismatch")
+    return _shot_field_review(script_id, frame_id, user)
+
+
+@app.post("/projects/{script_id}/frames/{frame_id}/shot-fields/generate")
+def generate_shot_fields(script_id: str, frame_id: str, request: ShotFieldRequest,
+                         user: UserContext = Depends(require_studio_user)):
+    if request.frame_id != frame_id:
+        raise HTTPException(status_code=422, detail="Frame ID mismatch")
+    review = _shot_field_review(script_id, frame_id, user)
+    if request.review_token != review["review_token"] or request.reviewed_messages != review["messages"]:
+        raise HTTPException(status_code=409, detail="请先审核并确认当前镜头字段输入")
+    try:
+        from .shot_field_optimization import validate_shot_field_payload
+        content = pipeline.script_processor.llm.chat(
+            messages=[{"role": "system", "content": review["messages"]["system"]},
+                      {"role": "user", "content": review["messages"]["user"]}],
+            response_format={"type": "json_object"}, timeout_seconds=300, max_retries=1,
+        )
+        proposal = validate_shot_field_payload(json.loads(content or ""))
+        if "transition_hint" in proposal.fields and review["input"]["next_shot"] is None:
+            raise ValueError("Last shot has no transition target")
+        def supplied_path(ref: str) -> bool:
+            value: Any = review["input"]
+            for key in ref.split("."):
+                if not isinstance(value, dict) or key not in value:
+                    return False
+                value = value[key]
+            return value is not None and value != ""
+
+        if any(not supplied_path(ref) for refs in proposal.source_refs.values() for ref in refs):
+            raise ValueError("Shot field source is not in current input")
+        if _shot_field_review(script_id, frame_id, user)["review_token"] != review["review_token"]:
+            raise HTTPException(status_code=409, detail="镜头或场景已变化，请重新预览")
+        if not proposal.fields:
+            return {"id": "", **proposal.model_dump(mode="json")}
+        frame = next(item for item in pipeline.get_script(script_id, user.owner_profile_id).frames if item.id == frame_id)
+        frame.shot_field_candidate = {"id": str(uuid.uuid4()), "source_hash": review["review_token"],
+                                      **proposal.model_dump(mode="json")}
+        frame.updated_at = time.time()
+        pipeline._save_data()
+        return frame.shot_field_candidate
+    except HTTPException:
+        raise
+    except (json.JSONDecodeError, ValueError) as exc:
+        raise HTTPException(status_code=502, detail="镜头字段候选未通过结构校验，请重试") from exc
+
+
+@app.post("/projects/{script_id}/frames/{frame_id}/shot-fields/apply", response_model=Script)
+def apply_shot_fields(script_id: str, frame_id: str, request: ShotFieldApplyRequest,
+                      user: UserContext = Depends(require_studio_user)):
+    script = pipeline.get_script(script_id, user.owner_profile_id)
+    if not script:
+        raise HTTPException(status_code=404, detail="Script not found")
+    frame = next((item for item in script.frames if item.id == frame_id), None)
+    if frame is None:
+        raise HTTPException(status_code=404, detail="Frame not found")
+    candidate = frame.shot_field_candidate or {}
+    if candidate.get("id") != request.candidate_id or candidate.get("source_hash") != _shot_field_review(script_id, frame_id, user)["review_token"]:
+        raise HTTPException(status_code=409, detail="镜头字段候选已过期")
+    if frame.workbench_prompt_is_optimized:
+        raise HTTPException(status_code=409, detail="完整优化稿需重新审核后才能应用镜头字段")
+    from .shot_field_optimization import validate_shot_field_payload
+    from .prompt_assembly import assemble_prompt
+    proposal = validate_shot_field_payload({key: candidate[key] for key in ("fields", "rationale", "source_refs", "uncertainties")})
+    selected = request.selected_fields
+    if not selected or len(set(selected)) != len(selected) or set(selected) - set(proposal.fields):
+        raise HTTPException(status_code=422, detail="请选择有效的镜头字段")
+    proposed = frame.model_copy(deep=True)
+    for key in selected:
+        setattr(proposed, key, proposal.fields[key])
+    proposed = StoryboardFrame.model_validate(proposed.model_dump(mode="json"))
+    assembled = assemble_prompt(proposed, pipeline.resolve_project_assets(script)["characters"])
+    for key in selected:
+        setattr(frame, key, getattr(proposed, key))
+    frame.assembled_prompt = assembled
+    frame.shot_field_candidate = None
+    frame.updated_at = time.time()
+    pipeline._save_data()
+    return signed_response(script)
+
+
+@app.post("/projects/{script_id}/frames/{frame_id}/camera-movement/apply", response_model=Script)
+def apply_camera_movement(script_id: str, frame_id: str, request: CameraMovementApplyRequest,
+                          user: UserContext = Depends(require_studio_user)):
+    script = pipeline.get_script(script_id, user.owner_profile_id)
+    if not script:
+        raise HTTPException(status_code=404, detail="Script not found")
+    frame = next((item for item in script.frames if item.id == frame_id), None)
+    if frame is None:
+        raise HTTPException(status_code=404, detail="Frame not found")
+    candidate = frame.camera_movement_candidate or {}
+    if candidate.get("id") != request.candidate_id:
+        raise HTTPException(status_code=409, detail="运镜候选已过期")
+    if frame.workbench_prompt_is_optimized:
+        raise HTTPException(status_code=409, detail="完整优化稿需重新审核后才能应用运镜")
+    if candidate.get("source_hash") != _camera_movement_review(script_id, frame_id, user)["review_token"]:
+        raise HTTPException(status_code=409, detail="镜头已变化，请重新生成")
+    from .camera_movement import validate_movement_payload
+    from .prompt_assembly import assemble_prompt
+    proposal = validate_movement_payload({key: candidate[key] for key in
+        ("camera_movement_structured", "rationale", "source_refs", "uncertainties")})
+    frame.camera_movement_structured = proposal.camera_movement_structured
+    frame.assembled_prompt = assemble_prompt(frame, pipeline.resolve_project_assets(script)["characters"])
+    frame.camera_movement_candidate = None
+    frame.updated_at = time.time()
+    pipeline._save_data()
+    return signed_response(script)
+
+
+class StaticFramingRequest(BaseModel):
+    frame_id: str
+    reviewed_messages: Optional[Dict[str, str]] = None
+    review_token: Optional[str] = None
+
+
+def _static_framing_review(script_id: str, frame_id: str, user: UserContext) -> Dict[str, Any]:
+    from ..agent_skills import catalog as skill_catalog
+
+    script = pipeline.get_script(script_id, user.owner_profile_id)
+    if not script:
+        raise HTTPException(status_code=404, detail="Script not found")
+    frame = next((item for item in script.frames if item.id == frame_id), None)
+    if frame is None:
+        raise HTTPException(status_code=404, detail="Frame not found")
+    skill = next(item for item in skill_catalog() if item["id"] == "shot-static-framing")
+    projection = frame.reference_visual_projection
+    selected = set(projection.selected_fields) & {"space", "camera"} if projection else set()
+    plan_shot = (frame.director_shot_context or {}).get("shot") or {}
+    payload = {
+        "duration_seconds": frame.duration,
+        "current_action": frame.action_description or "",
+        "opening_performance": frame.character_acting or "",
+        "shot_size": frame.shot_size or "",
+        "camera_angle": frame.camera_angle or "",
+        "composition": frame.composition or "",
+        "blocking": frame.blocking.model_dump(mode="json") if frame.blocking else None,
+        "current_camera_movement": frame.camera_movement_structured.model_dump(mode="json") if frame.camera_movement_structured else None,
+        "director_static_suggestion": {key: plan_shot[key] for key in
+            ("shot_size", "camera_angle", "composition", "visual_intent") if plan_shot.get(key)},
+        "continuity_constraints": {
+            "scope": projection.scope,
+            "visual_design": {key: projection.visual_design[key] for key in selected if key in projection.visual_design},
+        } if selected else None,
+    }
+    messages = {"system": skill["instructions"], "user": json.dumps(payload, ensure_ascii=False)}
+    source = {
+        "frame": frame.model_dump(exclude={"static_framing_candidate", "camera_movement_candidate",
+                                            "micro_expression_candidate", "rich_refinement_candidate",
+                                            "updated_at", "assembled_prompt"}, mode="json"),
+        "skill_revision": skill["revision"],
+    }
+    token = hashlib.sha256(json.dumps(source, sort_keys=True, ensure_ascii=False).encode()).hexdigest()
+    return {"messages": messages, "review_token": token, "input": payload}
+
+
+@app.post("/projects/{script_id}/frames/{frame_id}/static-framing/preview")
+def preview_static_framing(script_id: str, frame_id: str, request: StaticFramingRequest,
+                           user: UserContext = Depends(require_studio_user)):
+    if request.frame_id != frame_id:
+        raise HTTPException(status_code=422, detail="Frame ID mismatch")
+    return _static_framing_review(script_id, frame_id, user)
+
+
+@app.post("/projects/{script_id}/frames/{frame_id}/static-framing/generate")
+def generate_static_framing(script_id: str, frame_id: str, request: StaticFramingRequest,
+                            user: UserContext = Depends(require_studio_user)):
+    if request.frame_id != frame_id:
+        raise HTTPException(status_code=422, detail="Frame ID mismatch")
+    review = _static_framing_review(script_id, frame_id, user)
+    if request.review_token != review["review_token"] or request.reviewed_messages != review["messages"]:
+        raise HTTPException(status_code=409, detail="请先审核并确认完整的静态起幅模型输入")
+    try:
+        content = pipeline.script_processor.llm.chat(
+            messages=[{"role": "system", "content": review["messages"]["system"]},
+                      {"role": "user", "content": review["messages"]["user"]}],
+            response_format={"type": "json_object"}, timeout_seconds=300, max_retries=1,
+        )
+        from .static_framing import validate_static_framing_payload
+        proposal = validate_static_framing_payload(json.loads(content or ""))
+        if any(set(refs) - set(review["input"]) for refs in proposal.source_refs.values()):
+            raise ValueError("静态起幅来源不在当前镜头输入中")
+        if _static_framing_review(script_id, frame_id, user)["review_token"] != review["review_token"]:
+            raise HTTPException(status_code=409, detail="镜头已变化，请重新预览")
+        script = pipeline.get_script(script_id, user.owner_profile_id)
+        frame = next(item for item in script.frames if item.id == frame_id)
+        frame.static_framing_candidate = {
+            "id": str(uuid.uuid4()), "source_hash": review["review_token"],
+            "current_fields": {key: getattr(frame, key) for key in proposal.fields},
+            **proposal.model_dump(mode="json"),
+        }
+        frame.updated_at = time.time()
+        pipeline._save_data()
+        return frame.static_framing_candidate
+    except HTTPException:
+        raise
+    except (json.JSONDecodeError, ValueError) as exc:
+        logger.warning("Static framing result failed validation: %s", type(exc).__name__)
+        raise HTTPException(status_code=502, detail="静态起幅候选未通过结构校验，请重试") from exc
+
+
+class StaticFramingApplyRequest(BaseModel):
+    candidate_id: str
+    selected_fields: List[str] = Field(min_length=1, max_length=3)
+
+
+@app.post("/projects/{script_id}/frames/{frame_id}/static-framing/apply", response_model=Script)
+def apply_static_framing(script_id: str, frame_id: str, request: StaticFramingApplyRequest,
+                         user: UserContext = Depends(require_studio_user)):
+    script = pipeline.get_script(script_id, user.owner_profile_id)
+    if not script:
+        raise HTTPException(status_code=404, detail="Script not found")
+    frame = next((item for item in script.frames if item.id == frame_id), None)
+    if frame is None:
+        raise HTTPException(status_code=404, detail="Frame not found")
+    candidate = frame.static_framing_candidate or {}
+    if candidate.get("id") != request.candidate_id:
+        raise HTTPException(status_code=409, detail="静态起幅候选已过期")
+    if frame.workbench_prompt_is_optimized:
+        raise HTTPException(status_code=409, detail="完整优化稿需重新审核后才能应用静态起幅")
+    if candidate.get("source_hash") != _static_framing_review(script_id, frame_id, user)["review_token"]:
+        raise HTTPException(status_code=409, detail="镜头已变化，请重新生成")
+    from .static_framing import validate_static_framing_payload
+    from .prompt_assembly import assemble_prompt
+    proposal = validate_static_framing_payload({key: candidate[key] for key in
+        ("fields", "rationale", "source_refs", "uncertainties")})
+    selected = request.selected_fields
+    if len(set(selected)) != len(selected) or set(selected) - set(proposal.fields):
+        raise HTTPException(status_code=422, detail="请选择有效的静态起幅字段")
+    proposed_frame = frame.model_copy(deep=True)
+    for key in selected:
+        setattr(proposed_frame, key, proposal.fields[key])
+    assembled = assemble_prompt(proposed_frame, pipeline.resolve_project_assets(script)["characters"])
+    for key in selected:
+        setattr(frame, key, proposal.fields[key])
+    frame.assembled_prompt = assembled
+    frame.static_framing_candidate = None
+    frame.updated_at = time.time()
+    pipeline._save_data()
+    return signed_response(script)
+
+
+@app.post("/projects/{script_id}/frames/{frame_id}/rich-refinement/apply", response_model=Script)
+def apply_rich_refinement(script_id: str, frame_id: str, request: RichFrameCandidateApplyRequest,
+                          user: UserContext = Depends(require_studio_user)):
+    if not pipeline.get_script(script_id, user.owner_profile_id):
+        raise HTTPException(status_code=404, detail="Script not found")
+    try:
+        return signed_response(pipeline.apply_rich_refinement_candidate(
+            script_id, frame_id, request.candidate_id, request.selected_fields,
+        ))
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+
+@app.post("/projects/{script_id}/frames/{frame_id}/rich-refinement/discard", response_model=Script)
+def discard_rich_refinement(script_id: str, frame_id: str, request: RichFrameCandidateDiscardRequest,
+                            user: UserContext = Depends(require_studio_user)):
+    if not pipeline.get_script(script_id, user.owner_profile_id):
+        raise HTTPException(status_code=404, detail="Script not found")
+    try:
+        return signed_response(pipeline.discard_rich_refinement_candidate(
+            script_id, frame_id, request.candidate_id,
+        ))
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+
 @app.post("/projects/{script_id}/storyboard/refine_batch")
-def refine_storyboard_batch(script_id: str):
+def refine_storyboard_batch(script_id: str,
+                            user: UserContext = Depends(require_studio_user)):
     """Phase 2: Batch refine all coarse frames. Streams SSE events."""
     from fastapi.responses import StreamingResponse
 
-    script = pipeline.get_script(script_id)
+    script = pipeline.get_script(script_id, user.owner_profile_id)
     if not script:
         raise HTTPException(status_code=404, detail="Script not found")
 
     def event_stream():
         for event_type, data in pipeline.refine_batch_generator(script_id):
+            yield f"event: {event_type}\ndata: {json.dumps(data, ensure_ascii=False)}\n\n"
+
+    return StreamingResponse(event_stream(), media_type="text/event-stream")
+
+
+@app.post("/projects/{script_id}/storyboard/initialize")
+def initialize_storyboard_batch(script_id: str,
+                                user: UserContext = Depends(require_studio_user)):
+    """Initialize all shots, proposing only missing fields for review."""
+    from fastapi.responses import StreamingResponse
+
+    script = pipeline.get_script(script_id, user.owner_profile_id)
+    if not script:
+        raise HTTPException(status_code=404, detail="Script not found")
+
+    def event_stream():
+        for event_type, data in pipeline.initialize_batch_generator(script_id):
             yield f"event: {event_type}\ndata: {json.dumps(data, ensure_ascii=False)}\n\n"
 
     return StreamingResponse(event_stream(), media_type="text/event-stream")
@@ -3804,6 +4686,7 @@ class CreateVideoTaskRequest(BaseModel):
     last_frame_media_id: Optional[str] = None
     prompt: str
     frame_id: Optional[str] = None
+    visual_source_hash: Optional[str] = None
     duration: int = 5
     seed: Optional[int] = None
     resolution: str = "720p"
@@ -3816,6 +4699,7 @@ class CreateVideoTaskRequest(BaseModel):
     shot_type: str = "single"  # 'single' or 'multi' (only for wan2.6-i2v)
     generation_mode: str = "i2v"  # 't2v' | 'i2v' | 'first_last_frame' | 'r2v'
     reference_video_urls: List[str] = []  # Reference video URLs for R2V (max 3)
+    reference_asset_inputs: Optional[List[VideoReferenceIdentity]] = None
     # Kling params
     mode: Optional[str] = None
     sound: Optional[str] = None
@@ -3916,12 +4800,56 @@ class SaveShotVisualPresetRequest(BaseModel):
 
 
 class ApplyShotVisualPresetRequest(BaseModel):
-    apply_mode: Literal["parameters_only", "parameters_with_reference"] = "parameters_only"
+    apply_mode: Literal[
+        "parameters_only", "parameters_with_reference", "image_only", "image_and_context",
+    ] = "parameters_only"
+    selected_fields: Optional[List[Literal["lighting", "space", "camera", "continuity_state"]]] = None
 
 
-@app.get("/projects/{script_id}/shot-visual-presets", response_model=List[ShotVisualPreset])
-def list_shot_visual_presets(script_id: str, scene_id: Optional[str] = None):
-    return pipeline.list_shot_visual_presets(script_id, scene_id=scene_id)
+@app.get("/projects/{script_id}/shot-visual-presets")
+def list_shot_visual_presets(
+    script_id: str, scene_id: Optional[str] = None,
+    user: UserContext = Depends(require_studio_user),
+):
+    script = pipeline.get_script(script_id, user.owner_profile_id)
+    if not script:
+        raise HTTPException(status_code=404, detail="Script not found")
+    result = []
+    for preset in pipeline.list_shot_visual_presets(script_id, scene_id=scene_id):
+        _, _, variant, _, _ = pipeline._visual_reference_source(script, preset)
+        stored = image_variant_storage_key(variant) if variant else None
+        preview_url = None
+        if stored:
+            try:
+                preview_url = _owned_media_cover_url(stored, user.owner_profile_id, 160)
+            except HTTPException:
+                pass
+        result.append({**preset.model_dump(mode="json"), "preview_url": preview_url})
+    return private_no_store_signed_response(result)
+
+
+@app.get("/projects/{script_id}/frames/{frame_id}/shot-visual-presets/{preset_id}/projection")
+def preview_shot_visual_preset_projection(
+    script_id: str, frame_id: str, preset_id: str,
+    user: UserContext = Depends(require_studio_user),
+):
+    script = pipeline.get_script(script_id, user.owner_profile_id)
+    if not script:
+        raise HTTPException(status_code=404, detail="Script not found")
+    try:
+        return pipeline.preview_shot_visual_preset(script_id, frame_id, preset_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@app.get("/projects/{script_id}/storyboard/continuity-sheet")
+def storyboard_continuity_sheet(
+    script_id: str, user: UserContext = Depends(require_studio_user),
+):
+    script = pipeline.get_script(script_id, user.owner_profile_id)
+    if not script:
+        raise HTTPException(status_code=404, detail="Script not found")
+    return pipeline.storyboard_continuity_sheet(script_id)
 
 
 @app.post("/projects/{script_id}/frames/{frame_id}/shot-visual-presets", response_model=ShotVisualPreset)
@@ -3946,7 +4874,10 @@ def save_shot_visual_preset(script_id: str, frame_id: str, request: SaveShotVisu
 @app.post("/projects/{script_id}/frames/{frame_id}/shot-visual-presets/{preset_id}/apply", response_model=StoryboardFrame)
 def apply_shot_visual_preset(script_id: str, frame_id: str, preset_id: str, request: ApplyShotVisualPresetRequest):
     try:
-        frame = pipeline.apply_shot_visual_preset(script_id, frame_id, preset_id, request.apply_mode)
+        frame = pipeline.apply_shot_visual_preset(
+            script_id, frame_id, preset_id, request.apply_mode,
+            selected_fields=request.selected_fields,
+        )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
     if frame is None:
@@ -4012,6 +4943,14 @@ def cancel_video_task(script_id: str, task_id: str):
 @app.post("/projects/{script_id}/video_tasks", response_model=List[VideoTask])
 def create_video_task(script_id: str, request: CreateVideoTaskRequest, background_tasks: BackgroundTasks):
     """Creates new video generation tasks."""
+    if request.visual_source_hash:
+        try:
+            row = next(item for item in pipeline.storyboard_continuity_sheet(script_id)["rows"]
+                       if item["frame_id"] == request.frame_id)
+        except (ValueError, StopIteration):
+            raise HTTPException(status_code=404, detail="Shot not found")
+        if row["visual_source_hash"] != request.visual_source_hash:
+            raise HTTPException(status_code=409, detail="Shot visual sources changed; review video input again")
     try:
         tasks = []
         for _ in range(request.batch_size):
@@ -4034,6 +4973,7 @@ def create_video_task(script_id: str, request: CreateVideoTaskRequest, backgroun
                 generation_mode=request.generation_mode,
                 reference_video_urls=request.reference_video_urls,
                 reference_image_urls=request.reference_image_urls,
+                reference_asset_inputs=request.reference_asset_inputs,
                 pose_reference_variant_ids=request.pose_reference_variant_ids,
                 director_snapshot_media_id=request.director_snapshot_media_id,
                 ratio=request.ratio,
@@ -4264,14 +5204,38 @@ def update_asset_image(script_id: str, request: UpdateAssetImageRequest):
 @app.post("/projects/{script_id}/assets/update_attributes")
 def update_asset_attributes(script_id: str, request: UpdateAssetAttributesRequest):
     """Updates arbitrary attributes of an asset."""
+    if request.response_mode == "design" and (
+        request.asset_type != "character" or set(request.attributes) != {"character_design"}
+    ):
+        raise HTTPException(status_code=422, detail="Design response requires only a character design update")
+    started = time.perf_counter()
     try:
-        pipeline.update_asset_attributes(
+        script = pipeline.update_asset_attributes(
             script_id,
             request.asset_id,
             request.asset_type,
             request.attributes
         )
-        return get_project(script_id)
+        persisted = time.perf_counter()
+        if request.response_mode == "design":
+            asset, _ = pipeline._find_asset_with_source(script, request.asset_id, "character")
+            response = signed_response({
+                "project_id": script_id,
+                "asset_id": request.asset_id,
+                "asset_revision": asset.asset_revision,
+                "character_design": asset.character_design,
+            })
+        else:
+            response = get_project(script_id)
+        finished = time.perf_counter()
+        response.headers["Server-Timing"] = (
+            f"persist;dur={(persisted - started) * 1000:.1f}, "
+            f"response;dur={(finished - persisted) * 1000:.1f}"
+        )
+        logger.info("Asset save mode=%s persist_ms=%.1f response_ms=%.1f bytes=%d",
+                    request.response_mode, (persisted - started) * 1000,
+                    (finished - persisted) * 1000, len(response.body))
+        return response
     except InvalidAssetName as e:
         raise HTTPException(status_code=422, detail=str(e))
     except ValueError as e:
@@ -4324,6 +5288,108 @@ class ConfirmAssetRevisionRequest(BaseModel):
 
 class RestoreAssetRevisionRequest(BaseModel):
     expected_revision: int = Field(..., ge=1)
+
+
+class ConfirmCharacterAnchorRequest(BaseModel):
+    variant_id: str = Field(..., min_length=1)
+    expected_asset_revision: int = Field(..., ge=1)
+    expected_pack_revision: int = Field(..., ge=0)
+    verified_front_full_body: bool = False
+
+
+@app.get("/projects/{script_id}/characters/{character_id}/asset-pack")
+def get_project_character_asset_pack(
+    script_id: str, character_id: str,
+    user: UserContext = Depends(require_studio_user),
+):
+    if not pipeline.get_script(script_id, user.owner_profile_id):
+        raise HTTPException(status_code=404, detail="Project not found")
+    try:
+        return pipeline.get_project_character_asset_pack(script_id, character_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@app.post("/projects/{script_id}/characters/{character_id}/asset-pack/anchor")
+def confirm_project_character_anchor(
+    script_id: str, character_id: str, request: ConfirmCharacterAnchorRequest,
+    user: UserContext = Depends(require_studio_user),
+):
+    if not pipeline.get_script(script_id, user.owner_profile_id):
+        raise HTTPException(status_code=404, detail="Project not found")
+    try:
+        return pipeline.confirm_project_character_anchor(
+            script_id, character_id, request.variant_id,
+            request.expected_asset_revision, request.expected_pack_revision,
+            request.verified_front_full_body,
+        )
+    except ValueError as exc:
+        status = 409 if "revision changed" in str(exc) else 422
+        raise HTTPException(status_code=status, detail=str(exc)) from exc
+
+
+class ConfirmEpisodeCharacterUseRequest(BaseModel):
+    use_id: Optional[str] = Field(None, min_length=1, max_length=120)
+    label: str = Field(..., min_length=1, max_length=120)
+    condition: str = Field("", max_length=500)
+    selected_asset_id: str = Field(..., min_length=1)
+    selected_variant_id: str = Field(..., min_length=1)
+    expected_pack_revision: int = Field(..., ge=1)
+    reviewed: bool = False
+
+
+class SelectFrameCharacterUseRequest(BaseModel):
+    project_character_id: str = Field(..., min_length=1)
+    use_id: str = Field(..., min_length=1)
+    expected_reference_revision: int = Field(..., ge=1)
+
+
+@app.get("/projects/{script_id}/character-uses")
+def list_episode_character_uses(
+    script_id: str, user: UserContext = Depends(require_studio_user),
+):
+    script = pipeline.get_script(script_id, user.owner_profile_id)
+    if not script:
+        raise HTTPException(status_code=404, detail="Project not found")
+    return {"uses": [item.model_dump() for item in script.episode_character_uses]}
+
+
+@app.post("/projects/{script_id}/characters/{character_id}/episode-uses")
+def confirm_episode_character_use(
+    script_id: str, character_id: str, request: ConfirmEpisodeCharacterUseRequest,
+    user: UserContext = Depends(require_studio_user),
+):
+    if not pipeline.get_script(script_id, user.owner_profile_id):
+        raise HTTPException(status_code=404, detail="Project not found")
+    try:
+        use = pipeline.confirm_episode_character_use(
+            script_id, character_id, request.use_id or str(uuid.uuid4()),
+            request.label, request.condition, request.selected_asset_id,
+            request.selected_variant_id, request.expected_pack_revision,
+            request.reviewed,
+        )
+        return use.model_dump()
+    except ValueError as exc:
+        status = 409 if "revision changed" in str(exc) else 422
+        raise HTTPException(status_code=status, detail=str(exc)) from exc
+
+
+@app.post("/projects/{script_id}/frames/{frame_id}/character-use")
+def select_frame_character_use(
+    script_id: str, frame_id: str, request: SelectFrameCharacterUseRequest,
+    user: UserContext = Depends(require_studio_user),
+):
+    if not pipeline.get_script(script_id, user.owner_profile_id):
+        raise HTTPException(status_code=404, detail="Project not found")
+    try:
+        pipeline.select_frame_character_use(
+            script_id, frame_id, request.project_character_id,
+            request.use_id, request.expected_reference_revision,
+        )
+        return signed_response(pipeline.get_script(script_id, user.owner_profile_id))
+    except ValueError as exc:
+        status = 409 if "revision changed" in str(exc) else 422
+        raise HTTPException(status_code=status, detail=str(exc)) from exc
 
 
 @app.get("/projects/{script_id}/assets/{asset_type}/{asset_id}/revisions")
@@ -4467,7 +5533,7 @@ def toggle_variant_favorite(script_id: str, request: FavoriteVariantRequest):
             request.is_favorited,
             request.generation_type
         )
-        return signed_response(updated_script)
+        return get_project(script_id)
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
     except Exception as e:
@@ -4612,7 +5678,11 @@ def update_voice_params(script_id: str, char_id: str, request: UpdateVoiceParams
 @app.get("/voices")
 def get_voices():
     """Returns list of available voices."""
-    return pipeline.audio_generator.get_available_voices()
+    from ...audio.uniart_tts import UniArtTTSError
+    try:
+        return pipeline.audio_generator.get_available_voices()
+    except UniArtTTSError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=str(exc)) from None
 
 
 class VoicePreviewRequest(BaseModel):
@@ -4632,61 +5702,18 @@ class VoicePreviewRequest(BaseModel):
 
 @app.post("/voice/preview")
 def voice_preview(request: VoicePreviewRequest):
-    """Generate or fetch cached preview audio for a voice.
-
-    Cache key = md5(voice_id|text|speed|pitch|volume|instructions). First
-    call triggers TTSProcessor.synthesize() and writes to
-    output/cache/voice_preview/{key}.mp3. Subsequent identical calls
-    return the cached URL instantly.
-
-    PR-3h #2: handles CUSTOM voices (clones/designs) by looking up
-    series.custom_voices[] for target_model + family overrides — required
-    because cloned voice_ids aren't in static TTS_VOICE_REGISTRY.
-
-    Spec: r2v-workflow-v3-unified.md §4.2.3 (cache strategy) + Q5 b/c.
-    """
-    import hashlib
+    """Owner-scoped UniArt preview; no global SDK credentials or shared cache."""
+    from ...audio.uniart_tts import UniArtTTSError
     if not pipeline.audio_generator.tts:
-        raise HTTPException(
-            status_code=503,
-            detail="TTS service unavailable. Check DASHSCOPE_API_KEY configuration.",
-        )
-
-    # PR-3h #2: resolve custom voice → target_model/family override
-    custom = pipeline.find_custom_voice(request.voice_id)
-    model_override = custom.target_model if custom else None
-    family_override = custom.family if custom else None
-
-    cache_dir = os.path.join(pipeline.output_root, "cache", "voice_preview")
-    os.makedirs(cache_dir, exist_ok=True)
-    cache_key = hashlib.md5(
-        f"{request.voice_id}|{request.text}|{request.speed}|{request.pitch}|{request.volume}|{request.instructions or ''}".encode("utf-8")
-    ).hexdigest()
-    cache_path = os.path.join(cache_dir, f"{cache_key}.mp3")
-    cached = os.path.exists(cache_path)
-
-    if not cached:
-        try:
-            pipeline.audio_generator.tts.synthesize(
-                text=request.text,
-                output_path=cache_path,
-                voice=request.voice_id,
-                speech_rate=request.speed,
-                pitch_rate=request.pitch,
-                volume=request.volume,
-                instructions=request.instructions,
-                model_override=model_override,
-                family_override=family_override,
-            )
-        except Exception as e:
-            logger.error(f"[/voice/preview] TTS error voice={request.voice_id}: {e}")
-            raise HTTPException(status_code=500, detail=f"TTS generation failed: {e}")
-
-    # Static mount /files maps to output/, so the relative path under output/
-    # becomes the URL path frontend can hit. signed_response wraps for OSS
-    # signing when configured, no-op otherwise.
-    url = f"cache/voice_preview/{cache_key}.mp3"
-    return signed_response({"url": url, "cached": cached})
+        raise HTTPException(status_code=503, detail="UniArt 语音服务不可用。")
+    try:
+        return signed_response(pipeline.audio_generator.tts.preview(
+            output_root=pipeline.output_root, text=request.text, voice=request.voice_id,
+            speech_rate=request.speed, pitch_rate=request.pitch, volume=request.volume,
+            instructions=request.instructions,
+        ))
+    except UniArtTTSError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=str(exc)) from None
 
 
 # ─────────────────────────────────────────────────────────────
@@ -4708,23 +5735,7 @@ class VoiceCloneRequest(BaseModel):
 
 @app.post("/voice/clone")
 def voice_clone(request: VoiceCloneRequest):
-    """Create a custom voice by cloning a reference audio sample.
-
-    Per Q15.2: stored at series level so any character in the series can
-    pick from the clone via the VoicePickerModal '我的复刻' tab.
-    """
-    try:
-        custom = pipeline.create_voice_clone(
-            series_id=request.series_id,
-            audio_url=request.audio_url,
-            label=request.label,
-            target_model=request.target_model,
-        )
-        return signed_response(custom)
-    except ValueError as e:
-        raise HTTPException(status_code=404, detail=str(e))
-    except RuntimeError as e:
-        raise HTTPException(status_code=500, detail=str(e))
+    raise HTTPException(status_code=409, detail="UniArt 网关暂未接入音色复刻与音色设计，请选择系统音色。")
 
 
 @app.get("/series/{series_id}/custom_voices")
@@ -4762,20 +5773,7 @@ class VoiceDesignPreviewRequest(BaseModel):
 
 @app.post("/voice/design/preview")
 def voice_design_preview(request: VoiceDesignPreviewRequest):
-    """Mint a fresh design voice and return a preview audio URL.
-
-    The user re-calls this with a tweaked voice_prompt to iterate.
-    Returns: {voice_id, preview_url, target_model}.
-    """
-    try:
-        result = pipeline.voice_design_preview(
-            voice_prompt=request.voice_prompt,
-            preview_text=request.preview_text,
-            target_model=request.target_model,
-        )
-        return signed_response(result)
-    except RuntimeError as e:
-        raise HTTPException(status_code=500, detail=str(e))
+    raise HTTPException(status_code=409, detail="UniArt 网关暂未接入音色复刻与音色设计，请选择系统音色。")
 
 
 class VoiceDesignSaveRequest(BaseModel):
@@ -4788,20 +5786,7 @@ class VoiceDesignSaveRequest(BaseModel):
 
 @app.post("/voice/design/accept")
 def voice_design_accept(request: VoiceDesignSaveRequest):
-    """Persist a previewed design voice into series.custom_voices[]."""
-    try:
-        custom = pipeline.voice_design_save(
-            series_id=request.series_id,
-            voice_id=request.voice_id,
-            voice_prompt=request.voice_prompt,
-            label=request.label,
-            target_model=request.target_model,
-        )
-        return signed_response(custom)
-    except ValueError as e:
-        raise HTTPException(status_code=404, detail=str(e))
-    except RuntimeError as e:
-        raise HTTPException(status_code=500, detail=str(e))
+    raise HTTPException(status_code=409, detail="UniArt 网关暂未接入音色复刻与音色设计，请选择系统音色。")
 
 
 class VoiceDesignTranslateRequest(BaseModel):
@@ -4810,14 +5795,7 @@ class VoiceDesignTranslateRequest(BaseModel):
 
 @app.post("/voice/design/translate")
 def voice_design_translate(request: VoiceDesignTranslateRequest):
-    """LLM helper: character.description → CosyVoice voice_prompt."""
-    if not request.description.strip():
-        raise HTTPException(status_code=400, detail="description is empty")
-    try:
-        voice_prompt = pipeline.translate_character_to_voice_prompt(request.description)
-        return {"voice_prompt": voice_prompt}
-    except RuntimeError as e:
-        raise HTTPException(status_code=500, detail=str(e))
+    raise HTTPException(status_code=409, detail="UniArt 网关暂未接入音色复刻与音色设计，请选择系统音色。")
 
 
 class GenerateLineAudioRequest(BaseModel):
@@ -4977,8 +5955,12 @@ def generate_dialogue_audio_batch(script_id: str):
                 skipped += 1
                 continue
             try:
-                pipeline.generate_dialogue_line(script_id, frame.id)
-                generated += 1
+                updated = pipeline.generate_dialogue_line(script_id, frame.id)
+                result = next((item for item in updated.frames if item.id == frame.id), None)
+                if result and result.status == GenerationStatus.COMPLETED and result.audio_url and not result.audio_error:
+                    generated += 1
+                else:
+                    failed += 1
             except Exception as exc:
                 logger.error(f"[batch_dialogue_audio] frame={frame.id} error={exc}")
                 failed += 1
@@ -5044,6 +6026,7 @@ class UpdateFrameRequest(BaseModel):
     camera_angle: Optional[str] = None
     scene_id: Optional[str] = None
     character_ids: Optional[List[str]] = None
+    crowd_instances: Optional[List[ExtraShotInstance]] = None
     duration: Optional[int] = None
     shot_size: Optional[str] = None
     camera_movement_description: Optional[str] = None
@@ -5051,6 +6034,9 @@ class UpdateFrameRequest(BaseModel):
     style_prompt_override: Optional[str] = None
     lighting_override: Optional[str] = None
     negative_prompt_override: Optional[str] = None
+    move_ref: Optional[str] = None
+    move_variant: Optional[str] = None
+    performance_moves: Optional[List[Dict[str, Any]]] = None
     reference_package: Optional[StoryboardReferencePackage] = None
 
 @app.post("/projects/{script_id}/frames/update", response_model=Script)
@@ -5067,6 +6053,7 @@ def update_frame(script_id: str, request: UpdateFrameRequest):
             camera_angle=request.camera_angle,
             scene_id=request.scene_id,
             character_ids=request.character_ids,
+            crowd_instances=request.crowd_instances,
             duration=request.duration,
             shot_size=request.shot_size,
             camera_movement_description=request.camera_movement_description,
@@ -5074,6 +6061,9 @@ def update_frame(script_id: str, request: UpdateFrameRequest):
             style_prompt_override=request.style_prompt_override,
             lighting_override=request.lighting_override,
             negative_prompt_override=request.negative_prompt_override,
+            move_ref=request.move_ref,
+            move_variant=request.move_variant,
+            performance_moves=request.performance_moves,
             reference_package=request.reference_package,
         )
         return signed_response(updated_script)
@@ -5163,6 +6153,7 @@ class RenderFramePreviewRequest(BaseModel):
     frame_id: str
     prompt: str
     negative_prompt: Optional[str] = None
+    slot: Literal["first", "last"] = "first"
 
 class RenderFrameCandidateRequest(BaseModel):
     frame_id: str
@@ -5183,31 +6174,39 @@ def preview_frame_candidate(script_id: str, request: RenderFramePreviewRequest,
         raise HTTPException(status_code=404, detail="Frame not found")
     if not request.prompt.strip():
         raise HTTPException(status_code=422, detail="Storyboard prompt cannot be empty")
+    try:
+        before = pipeline.storyboard_render_context_token(script_id, request.frame_id)
+        candidate_prompt = pipeline.preview_storyboard_candidate_prompt(
+            script_id, request.frame_id, request.prompt, slot=request.slot,
+        )
+        if before != pipeline.storyboard_render_context_token(script_id, request.frame_id):
+            raise HTTPException(status_code=409, detail="镜头内容已变化，请重新预览首尾帧输入")
+    except HTTPException:
+        raise
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
     series = pipeline.series_store.get(script.series_id) if script.series_id else None
     assets = pipeline.resolve_project_assets(script)
     character_assets = {item.id: item for item in assets["characters"]}
     scene_assets = {item.id: item for item in assets["scenes"]}
+    selected_assets = pipeline.resolve_storyboard_asset_selection(script_id, frame.id)["assets"]
     reference_labels = []
     for item_id in frame.character_ids:
         character = character_assets.get(item_id)
         if not character:
             reference_labels.append(f"{item_id}（素材未找到）")
             continue
-        selected = next((f"{field}:{asset.selected_id}"
-                         for field in ("three_view_asset", "full_body_asset", "headshot_asset")
-                         if (asset := getattr(character, field, None)) and asset.selected_id
-                         and any(variant.id == asset.selected_id for variant in asset.variants)), None)
-        reference_labels.append(f"{character.name}（{selected or '旧版图片或无参考图'}）")
+        selected = next((item for item in selected_assets
+                         if item["asset_type"] == "character" and item["asset_id"] == item_id), None)
+        reference_labels.append(f"{character.name}（{'已选参考图' if selected and selected.get('variant_id') else '无参考图'}）")
     if frame.scene_id:
         scene_asset = scene_assets.get(frame.scene_id)
-        image_asset = scene_asset.image_asset if scene_asset else None
-        selected = image_asset.selected_id if image_asset and any(
-            variant.id == image_asset.selected_id for variant in image_asset.variants
-        ) else None
-        reference_labels.append(f"{scene_asset.name if scene_asset else frame.scene_id}（{selected or '旧版图片或无参考图'}）")
+        selected = next((item for item in selected_assets
+                         if item["asset_type"] == "scene" and item["asset_id"] == frame.scene_id), None)
+        reference_labels.append(f"{scene_asset.name if scene_asset else '场景'}（{'已选参考图' if selected and selected.get('variant_id') else '无参考图'}）")
     from .assets import ASPECT_RATIO_TO_SIZE
     return {
-        "prompt": request.prompt,
+        "prompt": candidate_prompt,
         "negative_prompt": request.negative_prompt or "",
         "model": series.model_settings.i2i_model if series else script.model_settings.i2i_model,
         "aspect_ratio": script.model_settings.storyboard_aspect_ratio,
@@ -5215,8 +6214,10 @@ def preview_frame_candidate(script_id: str, request: RenderFramePreviewRequest,
         "character_ids": frame.character_ids,
         "scene_id": frame.scene_id,
         "reference_asset_labels": reference_labels,
+        "source_label": pipeline.storyboard_render_scene_design_source(script_id, request.frame_id),
+        "polish_review": pipeline.storyboard_image_polish_review(script_id, request.frame_id, request.prompt),
         "context_token": pipeline.storyboard_candidate_preview_token(
-            script_id, request.frame_id, request.prompt, request.negative_prompt,
+            script_id, request.frame_id, candidate_prompt, request.negative_prompt,
         ),
     }
 
@@ -5260,7 +6261,7 @@ def preview_render_frame(script_id: str, request: RenderFramePreviewRequest,
             raise HTTPException(status_code=409, detail="Storyboard render preview is outdated; preview the current frame again")
         return {
             "prompt": prompt,
-            "context_token": pipeline.storyboard_render_preview_token(after, prompt),
+            "context_token": pipeline.storyboard_render_preview_token(after, prompt, request.negative_prompt),
             "source_label": source_label,
             "omitted_plan_lighting": omitted_plan_lighting,
             "polish_review": polish_review,
@@ -5287,7 +6288,7 @@ def start_render_frame_job(script_id: str, request: RenderFrameJobRequest,
             current_token = pipeline.storyboard_render_context_token(script_id, request.frame_id)
         except ValueError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
-        expected = pipeline.storyboard_render_preview_token(current_token, request.prompt)
+        expected = pipeline.storyboard_render_preview_token(current_token, request.prompt, request.negative_prompt)
         if not request.prompt_is_complete or request.context_token != expected:
             raise HTTPException(status_code=409, detail="Storyboard render preview is outdated; preview the current frame again")
     fingerprint = hashlib.sha256(json.dumps({
@@ -5680,6 +6681,53 @@ class SaveArtDirectionRequest(BaseModel):
     ai_recommendations: List[Dict[str, Any]] = []
 
 
+def _freeze_director_skills(stage, request):
+    try:
+        return director_skills.freeze(stage, request.skills)
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from exc
+
+
+@app.get("/projects/{script_id}/director-skills/{stage}")
+def get_project_director_skills(script_id: str, stage: director_skills.Stage,
+                                user: UserContext = Depends(require_studio_user)):
+    if stage == "series":
+        raise HTTPException(422, "Use the series scope for series Skills")
+    if not pipeline.get_script(script_id):
+        raise HTTPException(404, "Project not found")
+    return {"catalog": [{k: v for k, v in task.items() if k != "instructions"} for task in director_skills.catalog(stage)],
+            "skills": director_skills.preferences(user.owner_profile_id, "project:" + script_id, stage)}
+
+
+@app.put("/projects/{script_id}/director-skills/{stage}")
+def save_project_director_skills(script_id: str, stage: director_skills.Stage,
+                                 request: director_skills.DirectorSkillsRequest,
+                                 user: UserContext = Depends(require_studio_user)):
+    if stage == "series":
+        raise HTTPException(422, "Use the series scope for series Skills")
+    if not pipeline.get_script(script_id):
+        raise HTTPException(404, "Project not found")
+    _freeze_director_skills(stage, request)
+    return {"skills": director_skills.preferences(user.owner_profile_id, "project:" + script_id, stage, request.skills)}
+
+
+@app.get("/series/{series_id}/director-skills")
+def get_series_director_skills(series_id: str, user: UserContext = Depends(require_studio_user)):
+    if not pipeline.get_series(series_id):
+        raise HTTPException(404, "Series not found")
+    return {"catalog": [{k: v for k, v in task.items() if k != "instructions"} for task in director_skills.catalog("series")],
+            "skills": director_skills.preferences(user.owner_profile_id, "series:" + series_id, "series")}
+
+
+@app.put("/series/{series_id}/director-skills")
+def save_series_director_skills(series_id: str, request: director_skills.DirectorSkillsRequest,
+                                user: UserContext = Depends(require_studio_user)):
+    if not pipeline.get_series(series_id):
+        raise HTTPException(404, "Series not found")
+    _freeze_director_skills("series", request)
+    return {"skills": director_skills.preferences(user.owner_profile_id, "series:" + series_id, "series", request.skills)}
+
+
 class DirectorProfileRefineRequest(BaseModel):
     draft: Dict[str, Any]
     instructions: List[str] = Field(min_length=1, max_length=12)
@@ -5899,13 +6947,15 @@ def _director_profile_fingerprint(script_id: str, draft=None, instructions=None)
 @app.post("/projects/{script_id}/director-profile-jobs", status_code=202)
 def start_director_profile_analysis(
     script_id: str,
+    request: director_skills.DirectorSkillsRequest = director_skills.DirectorSkillsRequest(),
     user: UserContext = Depends(require_studio_user),
 ):
-    fingerprint = _director_profile_fingerprint(script_id)
+    skill_snapshot = _freeze_director_skills("episode", request)
+    fingerprint = _director_profile_fingerprint(script_id) + hashlib.sha256(json.dumps(skill_snapshot, sort_keys=True).encode()).hexdigest()
     return extraction_jobs.start(
         user.owner_profile_id, script_id, "director:" + fingerprint,
         lambda: {
-            "profile": pipeline.preview_director_profile(script_id),
+            "profile": pipeline.preview_director_profile(script_id, skill_snapshot=skill_snapshot),
             "source_audit": getattr(pipeline, "_last_director_analysis_audit", {}),
         },
         queue_group="director",
@@ -6051,19 +7101,21 @@ def get_series_director_profile(
 @app.post("/series/{series_id}/director-profile-jobs", status_code=202)
 def start_series_director_profile_analysis(
     series_id: str,
+    request: director_skills.DirectorSkillsRequest = director_skills.DirectorSkillsRequest(),
     user: UserContext = Depends(require_studio_user),
 ):
+    skill_snapshot = _freeze_director_skills("series", request)
     series = pipeline.get_series(series_id)
     if not series:
         raise HTTPException(404, "Series not found")
     fingerprint = hashlib.sha256(json.dumps([
-        series.source_context,
+        series.source_context, skill_snapshot,
         [pipeline.get_script(item).original_text for item in series.episode_ids if pipeline.get_script(item)],
         series.characters, series.scenes, series.props,
     ], ensure_ascii=False, default=str, sort_keys=True).encode()).hexdigest()
     return extraction_jobs.start(
         user.owner_profile_id, "series:" + series_id, "series-director:" + fingerprint,
-        lambda: pipeline.preview_series_director_profile(series_id),
+        lambda: pipeline.preview_series_director_profile(series_id, skill_snapshot=skill_snapshot),
         queue_group="series-director",
     )
 
@@ -6482,8 +7534,10 @@ def _director_shooting_plan_fingerprint(script_id: str, lineage: Dict[str, Any],
 @app.post("/projects/{script_id}/director-shooting-plan-jobs", status_code=202)
 def start_director_shooting_plan(
     script_id: str,
+    request: director_skills.DirectorSkillsRequest = director_skills.DirectorSkillsRequest(),
     user: UserContext = Depends(require_studio_user),
 ):
+    skill_snapshot = _freeze_director_skills("shooting_plan", request)
     script = pipeline.get_script(script_id)
     if not script:
         raise HTTPException(404, "Project not found")
@@ -6505,7 +7559,7 @@ def start_director_shooting_plan(
             raise HTTPException(502, f"uniart_models_unavailable: {exc}") from exc
         if not any(item["api_model_id"] == model and "chat" in item["capabilities"] for item in published):
             raise HTTPException(422, "Selected LLM model is not published for this user")
-    fingerprint = "director_shooting_plan:" + _director_shooting_plan_fingerprint(script_id, lineage, model)
+    fingerprint = "director_shooting_plan:" + _director_shooting_plan_fingerprint(script_id, lineage, model) + hashlib.sha256(json.dumps(skill_snapshot, sort_keys=True).encode()).hexdigest()
     return extraction_jobs.start(
         user.owner_profile_id,
         script_id,
@@ -6522,6 +7576,7 @@ def start_director_shooting_plan(
                 ),
                 expected_lineage=lineage,
                 model=model,
+                skill_snapshot=skill_snapshot,
             ).model_dump(),
         },
         pass_job_id=True,
@@ -6744,6 +7799,14 @@ def _get_director_prompt_context(script_id: str, frame_id: str = "", overrides: 
             "visual_intent", "performance_action", "composition", "camera_movement", "lighting", "ambient_sound",
         ) if shot.get(key)},
     }
+    if frame.blocking:
+        blocking = frame.blocking
+        selected["blocking"] = {
+            "description": blocking.description[:400],
+            **({"camera_relation": blocking.camera_relation[:160]} if blocking.camera_relation else {}),
+            **({"stage": [subject.model_dump(mode="json", exclude_none=True) for subject in blocking.stage[:8]]}
+               if blocking.stage else {}),
+        }
     current = overrides if overrides is not None else {
         "style": frame.style_prompt_override or "",
         "lighting": frame.lighting_override or "",
@@ -6754,7 +7817,7 @@ def _get_director_prompt_context(script_id: str, frame_id: str = "", overrides: 
     }
     if selected["shot_overrides"].get("lighting"):
         selected["shot"].pop("lighting", None)
-    if not context and not selected["shot_overrides"]:
+    if not context and not selected["shot_overrides"] and not frame.blocking:
         return ""
     baseline = context.get("lighting_baseline")
     if (isinstance(baseline, dict)
@@ -6792,6 +7855,8 @@ def _get_director_prompt_context(script_id: str, frame_id: str = "", overrides: 
         selected.get("lighting_baseline", {}).get("lighting", {}).pop(key, None)
     if len(encoded()) > 1200:
         selected["shot"].pop("lighting", None)
+    if len(encoded()) > 1200 and selected.get("blocking", {}).get("stage"):
+        selected["blocking"].pop("stage")
     return encoded()
 
 
@@ -6838,6 +7903,8 @@ class PolishVideoPromptRequest(BaseModel):
     optimization_skills: Optional[List[str]] = Field(default=None, max_length=12)
     target_ratio: str = Field("16:9", max_length=20)
     target_video_model: str = ""
+    # Editor-level camera structure; independent of provider-specific shot_type.
+    shot_structure: Literal["auto", "single", "multi"] = "auto"
     generation_mode: Literal["t2v", "i2v", "first_last_frame", "r2v"] = "i2v"
     dialogue_speaker: str = Field("", max_length=200)
     dialogue_line: str = Field("", max_length=2000)
@@ -6860,6 +7927,13 @@ def _polish_error_response(err) -> Dict[str, Any]:
     return body
 
 
+_STORYBOARD_VIDEO_POLISH_SKILLS = frozenset({
+    "minimax-h3-director", "seedance-prompt", "seedance-camera",
+    "sequence-continuity", "director-style", "shot-action-physics",
+    "shot-martial-choreography",
+})
+
+
 def _target_model_guidance(model_id: str) -> str:
     """Legacy model-to-skill mapping for callers before explicit skill selection."""
     value = (model_id or "").lower()
@@ -6867,16 +7941,18 @@ def _target_model_guidance(model_id: str) -> str:
     label = "MiniMax H3" if "h3" in value else "Seedance" if "seedance" in value else ""
     if not label:
         return ""
-    packages = [p for p in catalog() if label in p.get("targets", [])]
-    text = "\n\n".join(p["instructions"] for p in packages)
+    default_id = "minimax-h3-director" if label == "MiniMax H3" else "seedance-prompt"
+    package = next((p for p in catalog() if p["id"] == default_id), None)
+    if package is None:
+        return ""
+    text = package["instructions"]
     return f"TARGET VIDEO MODEL: {label}. Shared Agent skill guidance:\n{text}"
 
 
-def _selected_skill_guidance(skill_ids: Optional[List[str]]) -> str:
+def _selected_skill_guidance(skill_ids: Optional[List[str]], model_id: str = "") -> str:
     """Compose explicitly selected catalog skills in request order.
 
-    This is intentionally independent of the target video model.  The catalog
-    remains the source of truth, so arbitrary prompt text cannot inject a new
+    The catalog remains the source of truth, so arbitrary prompt text cannot inject a new
     instruction package or a missing skill id.
     """
     if skill_ids is None:
@@ -6886,11 +7962,59 @@ def _selected_skill_guidance(skill_ids: Optional[List[str]]) -> str:
     unknown = [skill_id for skill_id in skill_ids if skill_id not in packages]
     if unknown:
         raise HTTPException(status_code=422, detail={"reason": "unknown_optimization_skill", "skill_ids": unknown})
+    ineligible = [skill_id for skill_id in skill_ids if skill_id not in _STORYBOARD_VIDEO_POLISH_SKILLS]
+    if ineligible:
+        raise HTTPException(status_code=422, detail={"reason": "ineligible_optimization_skill", "skill_ids": ineligible})
     selected = [packages[skill_id] for skill_id in dict.fromkeys(skill_ids)]
+    model = (model_id or "").lower()
+    target = "MiniMax H3" if "h3" in model else "Seedance" if "seedance" in model else ""
+    incompatible = [package["id"] for package in selected if target and target not in package.get("targets", [])]
+    if incompatible:
+        raise HTTPException(status_code=422, detail={"reason": "incompatible_optimization_skill", "skill_ids": incompatible})
     if not selected:
         return ""
     text = "\n\n".join(f"[{package['id']} · {package['name']} v{package['version']}]\n{package.get('instructions', '')}" for package in selected)
     return "SELECTED OPTIMIZATION SKILLS (user-selected; do not infer additional skills):\n" + text
+
+
+def _automatic_motion_skill_ids(text: str) -> List[str]:
+    """Return model-independent motion baselines inferred from observable verbs.
+
+    These are separate from user-selected optimization skills: the baseline
+    protects causal movement and spatial continuity without changing the
+    user's chosen model/style packages.
+    """
+    value = text or ""
+    action = re.compile(
+        r"踢|踹|打|击|撞|推|拉扯|抓住|抓|掐|砍|刺|劈|受击|命中|踉跄|跌倒|倒伏|摔倒|击飞|追赶|追逐|搏斗|fight|impact|stagger|fall",
+        re.I,
+    )
+    martial = re.compile(
+        r"武术|武指|招式|套路|兵器|拳法|剑法|刀法|棍法|格斗编排|martial|choreograph",
+        re.I,
+    )
+    ids = ["shot-action-physics"] if action.search(value) else []
+    if martial.search(value):
+        ids.append("shot-martial-choreography")
+        if "shot-action-physics" not in ids:
+            ids.insert(0, "shot-action-physics")
+    return ids
+
+
+def _automatic_motion_skill_guidance(text: str, model_id: str = "") -> str:
+    ids = _automatic_motion_skill_ids(text)
+    if not ids:
+        return ""
+    from ..agent_skills import catalog
+    packages = {package["id"]: package for package in catalog()}
+    selected = [packages[item] for item in ids if item in packages]
+    if not selected:
+        return ""
+    text = "\n\n".join(
+        f"[{package['id']} · {package['name']} v{package['version']}]\n{package.get('instructions', '')}"
+        for package in selected
+    )
+    return "AUTOMATIC MOTION BASELINES (inferred from observable action terms; do not add new plot events):\n" + text
 
 
 def _first_last_polish_guidance(target_duration: Optional[float]) -> str:
@@ -6912,14 +8036,92 @@ Do not add a new body heading or append an afterword to the polished prompt.
 """
 
 
-def _storyboard_polish_contract(model_id: str, custom: str, default: str, generate_audio=None, target_duration=None, dialogue_speaker="", dialogue_line="", optimization_skills: Optional[List[str]] = None, reference_mode: bool = False, generation_mode: str = "i2v") -> str:
-    guidance = _selected_skill_guidance(optimization_skills) if optimization_skills is not None else _target_model_guidance(model_id)
+_ACTION_RHYTHM_GUIDANCE = """
+SHOT ACTION RHYTHM:
+When the current shot contains a causal action, organize its visible progress
+into a small number of beats: initiating movement, immediate reaction, and
+changed end state. Let related actions overlap where natural, but specify
+which action triggers the next and where the motion stops. Fit the beats into
+the requested duration; any timings are a newly designed timeline, never
+claimed as measured source cuts. Keep camera trajectory, lens changes, and
+subject/object tempo independent: a slow Push In or Zoom In does not make a
+grab, recoil, or fall slow motion. Push In moves the camera; Zoom In changes
+focal length. Do not add slow motion, prolonged posing, extra events,
+shots, or characters unless requested. For an atmospheric shot without a
+causal action, keep its intended pace and do not invent an action sequence.
+When the draft uses rapid-impact words such as "猛然", "快速", "立即", or
+"接触瞬间", preserve real-time motion: compress the reaction into the
+available beat instead of stretching it into slow motion or a gradual fall.
+Preserve explicit user-authored time windows; do not silently retime them or
+divide duration evenly by default.
+If the user explicitly names a table, wall, counter, or prop collision, include
+that collision and its visible consequences in the same causal chain. For a
+kick followed by a table collision and fall: single contact, immediate recoil
+and backward steps, body hits the table, table visibly shifts or shakes,
+objects actually visible on it slide, tip, or fall, then the person falls.
+Do not make the person turn around to reach a table behind them. If no table
+objects are visible, do not invent them. Put the collision, table response,
+and any object response in the same or immediately following time beat.
+When audio is enabled, align impact, wood movement, and falling-object sounds
+with those visible events. If visual beats are retimed, rewrite any sound
+timestamps copied from the draft to match them; do not preserve stale sound
+timings. When silent, do not invent sound cues. Do not
+apply the default prop-preservation rule to an explicitly authorized impact.
+Place the rhythm inside the existing model-specific visual description,
+without adding a new output field.
+"""
+
+
+_SHOT_SPACE_VISIBILITY_GUIDANCE = """
+SHOT SPACE AND VISIBILITY:
+Treat confirmed blocking and camera relation as the opening screen geography.
+Keep each subject on the same side of barriers and at the same depth until an
+explicit visible movement changes that position. A reference image anchors
+appearance and environment; it does not prove an unseen movement or camera cut.
+For one continuous shot, describe only actions readable from its viewpoint.
+If a counter, doorway, crowd, or frame edge hides feet, hands, or a contact point,
+describe the visible reaction or object movement instead of claiming the hidden
+detail is seen. Do not move a subject across a barrier merely to show an action.
+If a hidden action must be shown, require an explicit new shot or camera angle;
+do not silently add one. State opening positions, causal action beats, and
+changed end positions in that order. Keep camera motion separate from subject
+timing and preserve the chosen shot count.
+"""
+
+
+_IR_SHOT_GUIDANCE = """
+SHOT CONSTRAINTS: Preserve accepted shot fields, explicit visual timings,
+first-frame blocking, identities, scene lighting, and the chosen shot count.
+Keep camera motion independent of subject speed. For contact actions, show
+one contact followed by its immediate force reaction, displacement, any
+explicitly authorized collision and visible prop response, then the end state.
+Do not invent unseen objects or make a subject cross an occluding barrier.
+Fast action stays real-time unless the creator requests slow motion. Preserve
+user-authored timing intent, but if the draft timing does not fit the requested
+duration, retime the beats while preserving their causal order. For a single
+continuous shot, keep all beats inside one [Shot 1] body. When multi-shot
+structure is allowed, provider-native shot labels may be used. The visual
+process must contain explicit timestamped
+motion nodes or contiguous time ranges from 0.00s through the requested end
+time; the final range must end exactly at that duration. Align sound cues with
+the corresponding visual events; discard stale sound timestamps in the draft.
+Silent mode has no sound.
+"""
+
+
+_MINIMAX_IR_TEXT_LIMIT = 7000
+
+
+def _storyboard_polish_contract(model_id: str, custom: str, default: str, generate_audio=None, target_duration=None, dialogue_speaker="", dialogue_line="", optimization_skills: Optional[List[str]] = None, reference_mode: bool = False, generation_mode: str = "i2v", shot_structure: str = "auto") -> str:
+    guidance = _selected_skill_guidance(optimization_skills, model_id) if optimization_skills is not None else _target_model_guidance(model_id)
     is_h3 = "h3" in (model_id or "").lower()
     if not guidance and not is_h3 and generation_mode != "first_last_frame":
-        return custom or default
+        return (custom or default) + _ACTION_RHYTHM_GUIDANCE + _SHOT_SPACE_VISIBILITY_GUIDANCE
     constraints = ""
     if generate_audio is False:
-        constraints += "\nOUTPUT MUST BE SILENT: overall_soundscape and non_diegetic_music must be N/A. No spoken dialogue, vocalization or sound cues. Preserve visual actions."
+        constraints += ("\nOUTPUT MUST BE SILENT: overall_soundscape and non_diegetic_music must be N/A. "
+                        if is_h3 else "\nOUTPUT MUST BE SILENT: omit all audio and music cues. ")
+        constraints += "No spoken dialogue, vocalization or sound cues. Preserve visual actions."
     elif generate_audio is True:
         constraints += "\nAudio is enabled. Preserve specified dialogue exactly; do not invent dialogue or music without permission."
         if dialogue_line.strip():
@@ -6927,6 +8129,26 @@ def _storyboard_polish_contract(model_id: str, custom: str, default: str, genera
             constraints += f"\nEXPLICIT DIALOGUE (verbatim, do not translate, omit, or rewrite): {speaker}: {dialogue_line.strip()}"
     if target_duration is not None:
         constraints += f"\nTarget duration: {target_duration} seconds. All action must fit within this duration; no invented exact source cut times."
+        constraints += "\nSHOT STRUCTURE: the system may choose single-shot or multi-shot coverage. User-authored shot labels remain editable; do not hard-reject a valid shot structure. Preserve the continuous total timeline."
+        if is_h3 and target_duration <= 6:
+            constraints += f"""
+SHORT H3 ACTION TIMELINE: For a causal action shot, write 3-6 contiguous,
+explicit time ranges or timestamped motion nodes inside the existing visual
+description, starting at 0.00s and ending at {target_duration:.2f}s. Use either
+            the form 0.00-0.60s, the bracketed node form [00:00.000] ... [00:00.600],
+            or the official-style node form At 00:00.000 ... At 00:00.600 in
+BOTH prompt_cn and prompt_en. Each range or node must advance a visible action beat:
+initiation, single contact, immediate force reaction, authorized collision,
+and final state as applicable. These are authored action timings, not measured
+source cut points or extra [Shot] labels. A fast impact and fall remain real
+time; camera movement does not slow the subjects. For a purely atmospheric
+shot without causal action, do not invent motion just to fill ranges.
+If a person visibly collides with a table, show the table shift or shake and
+the resulting movement of objects actually visible on it, then the person's
+fall. Do not add table objects absent from the reference. Align permitted
+impact and falling-object sounds with those visual beats; silence means no
+sound cues at all.
+"""
     if generation_mode == "first_last_frame":
         constraints += _first_last_polish_guidance(target_duration)
     if is_h3:
@@ -6938,14 +8160,10 @@ requested, is audio only and must not be rendered as text. Do not describe or
 request subtitle tracks in either prompt language.
 """
     base_prompt = custom or (default if not guidance else "")
-    contract = guidance + "\n" + base_prompt + constraints + """
+    contract = guidance + "\n" + base_prompt + constraints + _ACTION_RHYTHM_GUIDANCE + _SHOT_SPACE_VISIBILITY_GUIDANCE + """
 STORYBOARD OUTPUT CONTRACT:
-Return only JSON with string fields prompt_cn and prompt_en. Each string contains
-all fields required by the selected model skill and generation mode (H3 base:
-integrated_multimodal_description, overall_soundscape, non_diegetic_music;
-H3 reference mode: subject_definitions, summary, retention_analysis,
-detailed_description, overall_soundscape, non_diegetic_music).
-Do not replace that structure with scene/action/camera headings.
+Return only JSON with string fields prompt_cn and prompt_en. Each string follows
+the selected target model's prompt format and generation mode.
 Preserve every existing [characterN:name] editor token exactly, including its
 number and name. These are stable editor references; use them as source labels
 inside the model-specific structure. Do not invent or renumber references.
@@ -6957,8 +8175,18 @@ requested. Inspect all attached images, including scene, prop and storyboard
 images. Distinguish observed image content from user requirements; sampling
 cannot establish exact cut times. Missing images must not be described as seen.
 """
+    if reference_mode and is_h3:
+        contract += """
+R2V / REF2VA MODE:
+This is reference-guided video generation, not T2VA. Never label the task
+[T2VA]. In summary, use an appropriate reference-generation task label such
+as [reference generation] when reference media is present. If no reference
+media is attached, state that no reference media is attached instead of
+claiming that character labels are visual references.
+"""
     if not is_h3:
         return contract
+    contract += "\nFor H3, preserve every required model-specific heading. Do not replace that structure with scene/action/camera headings.\n"
     headings = (
         "subject_definitions:\nsummary:\nretention_analysis:\ndetailed_description:\noverall_soundscape:\nnon_diegetic_music:"
         if reference_mode else
@@ -6975,7 +8203,60 @@ Never omit a heading. Never put subtitles or any other text overlay in the promp
 """
 
 
-def _validate_storyboard_polish_result(model_id: str, result: Dict[str, Any], reference_mode: bool, generate_audio=None, dialogue_line="", generation_mode: str = "i2v") -> None:
+def _needs_short_action_timeline(model_id: str, target_duration: Optional[float], draft_prompt: str) -> bool:
+    return (
+        "h3" in (model_id or "").lower()
+        and target_duration is not None
+        and target_duration <= 6
+        and bool(re.search(r"踢|踹|受击|命中|碰撞|撞到|跌倒|倒地|摔倒|击飞|kick|impact|collision|stagger|fall", draft_prompt or "", re.I))
+    )
+
+
+def _has_short_action_timeline(text: str, duration: float, reference_mode: bool) -> bool:
+    heading = "detailed_description" if reference_mode and re.search(
+        r"(?im)^\s*detailed_description\s*[:：]", text
+    ) else "integrated_multimodal_description"
+    visual = re.search(rf"(?is){heading}\s*[:：](.*?)(?:overall_soundscape\s*[:：]|$)", text)
+    # Context-IR may return provider-native H3 prose without the editor's
+    # local field heading.  The official H3 examples use the visual text
+    # directly, so validate the whole returned prompt in that case.
+    visual_text = visual.group(1) if visual else text
+    ranges = [
+        (float(match.group(1)), float(match.group(2)))
+        for match in re.finditer(r"(?<!\d)(\d{1,2}(?:\.\d{1,2})?)\s*[-–—~至]\s*(\d{1,2}(?:\.\d{1,2})?)\s*(?:s|秒)", visual_text, re.I)
+    ]
+    if (
+        3 <= len(ranges) <= 6
+        and abs(ranges[0][0]) <= 0.05
+        and abs(ranges[-1][1] - duration) <= 0.05
+        and all(start < end for start, end in ranges)
+        and all(abs(left[1] - right[0]) <= 0.05 for left, right in zip(ranges, ranges[1:]))
+    ):
+        return True
+    # MiniMax H3 also accepts explicit event nodes. Require a visible opening
+    # node, a small number of progressing nodes, and an explicit final state
+    # at the requested end time so the provider cannot stretch an underspecified
+    # timeline across a longer rendered clip.
+    timestamps = [
+        float(minutes) * 60 + float(seconds)
+        for minutes, seconds in re.findall(r"\[(\d{1,2}):(\d{2}(?:\.\d{1,3})?)\]", visual_text)
+    ]
+    if not timestamps:
+        timestamps = [
+            float(minutes) * 60 + float(seconds)
+            for minutes, seconds in re.findall(
+                r"(?i)\bAt\s+(\d{1,2}):(\d{2}(?:\.\d{1,3})?)\b", visual_text
+            )
+        ]
+    return (
+        3 <= len(timestamps) <= 6
+        and abs(timestamps[0]) <= 0.05
+        and abs(timestamps[-1] - duration) <= 0.05
+        and all(left < right for left, right in zip(timestamps, timestamps[1:]))
+    )
+
+
+def _validate_storyboard_polish_result(model_id: str, result: Dict[str, Any], reference_mode: bool, generate_audio=None, dialogue_line="", generation_mode: str = "i2v", short_action_duration: Optional[float] = None, shot_structure: str = "auto") -> None:
     """Reject responses that ignore the selected provider's prompt contract."""
     if generation_mode == "first_last_frame":
         first = re.compile(r"(?i)first[\s_-]*(?:frame|image)|opening[\s_-]*(?:frame|image)|picture\s*1\b|首帧|起始帧")
@@ -6990,6 +8271,16 @@ def _validate_storyboard_polish_result(model_id: str, result: Dict[str, Any], re
             )
     if "h3" not in (model_id or "").lower():
         return
+    if reference_mode and any(
+        re.search(r"(?i)\[\s*T2VA\s*\]", result.get(key, ""))
+        for key in ("prompt_cn", "prompt_en")
+    ):
+        from .llm import PolishError
+        raise PolishError(
+            reason="model_contract_mismatch",
+            message_zh="R2V 润色结果被误标为 T2VA，本次结果未应用。请检查参考素材后重试。",
+            message_en="The R2V polish was mislabeled as T2VA and was not applied. Check the references and retry.",
+        )
     reference_fields = ("subject_definitions", "summary", "retention_analysis", "detailed_description", "overall_soundscape", "non_diegetic_music")
     base_fields = ("integrated_multimodal_description", "overall_soundscape", "non_diegetic_music")
     def has_field(text: Any, field: str) -> bool:
@@ -7034,6 +8325,16 @@ def _validate_storyboard_polish_result(model_id: str, result: Dict[str, Any], re
             message_zh="润色模型未返回 MiniMax H3 所需的结构化提示词，请重试。本次结果未应用。",
             message_en="The polish model did not return the structured MiniMax H3 prompt. Retry; this result was not applied.",
         )
+    if short_action_duration is not None and any(
+        not _has_short_action_timeline(result.get(key, ""), short_action_duration, reference_mode)
+        for key in ("prompt_cn", "prompt_en")
+    ):
+        from .llm import PolishError
+        raise PolishError(
+            reason="model_contract_mismatch",
+            message_zh="润色结果缺少覆盖全片的分段动作节拍，本次结果未应用。请重试。",
+            message_en="The polished result lacks a complete timed action sequence; it was not applied. Retry.",
+        )
     exact_dialogue = dialogue_line.strip()
     if generate_audio is True and exact_dialogue and any(
         exact_dialogue not in result.get(key, "") or "<d>" not in result.get(key, "")
@@ -7047,13 +8348,70 @@ def _validate_storyboard_polish_result(model_id: str, result: Dict[str, Any], re
         )
 
 
+def _validate_context_ir_polish_result(result: Dict[str, str], *, reference_mode: bool = False,
+                                       generation_mode: str = "i2v", generate_audio=None,
+                                       dialogue_line: str = "",
+                                       short_action_duration: Optional[float] = None,
+                                       shot_structure: str = "auto") -> None:
+    """Validate observable content without imposing local chat-model headings on IR."""
+    from .llm import PolishError
+
+    prompt = result.get("prompt_en", "")
+    if not prompt.strip():
+        raise PolishError(
+            reason="model_contract_mismatch",
+            message_zh="MiniMax IR 未返回提示词，本次结果未应用。",
+            message_en="MiniMax IR returned no prompt; this result was not applied.",
+        )
+    if reference_mode and re.search(r"(?i)\[\s*T2VA\s*\]", prompt):
+        raise PolishError(
+            reason="model_contract_mismatch",
+            message_zh="R2V 润色结果被误标为 T2VA，本次结果未应用。",
+            message_en="The R2V polish was mislabeled as T2VA and was not applied.",
+        )
+    if generation_mode == "first_last_frame":
+        first = re.compile(r"(?i)first[\s_-]*(?:frame|image)|opening[\s_-]*(?:frame|image)|picture\s*1\b|首帧|起始帧")
+        last = re.compile(r"(?i)last[\s_-]*(?:frame|image)|final[\s_-]*(?:frame|image)|ending[\s_-]*(?:frame|image)|picture\s*2\b|尾帧|终帧|末帧")
+        if not first.search(prompt) or not last.search(prompt):
+            raise PolishError(
+                reason="model_contract_mismatch",
+                message_zh="润色结果没有同时说明首帧与尾帧，本次结果未应用。",
+                message_en="Polished result omitted the first or last frame; it was not applied.",
+            )
+    if short_action_duration is not None:
+        prompt = result.get("prompt_en", "")
+        if not _has_short_action_timeline(prompt, short_action_duration, reference_mode):
+            raise PolishError(
+                reason="model_contract_mismatch",
+                message_zh="润色结果的时间轴未从 0.00 秒连续覆盖到目标时长，请重试。",
+                message_en="The polished result does not provide a contiguous timeline from 0.00s to the target duration; retry.",
+            )
+    exact_dialogue = dialogue_line.strip()
+    if generate_audio is True and exact_dialogue and exact_dialogue not in prompt:
+        raise PolishError(
+            reason="model_contract_mismatch",
+            message_zh="润色结果遗漏了镜头对白，本次结果未应用。",
+            message_en="The polished prompt omitted the shot dialogue; it was not applied.",
+        )
+
+
 def _compile_ir_polish_text(request, custom_prompt: str) -> str:
     instruction = custom_prompt.strip()
+    instruction += "\n" + _IR_SHOT_GUIDANCE
+    instruction += f"\nSHOT STRUCTURE MODE: {request.shot_structure}. This is planning metadata only; the system may choose one or multiple provider-native [Shot N] sections, and the user may edit them. Do not hard-reject shot count; keep one continuous total timeline."
+    if _needs_short_action_timeline(request.target_video_model, request.target_duration, request.draft_prompt):
+        instruction += (f"\nUse 3-6 contiguous authored time ranges from 0.00s to {request.target_duration:.2f}s "
+                        "inside the H3 visual description in both language outputs. "
+                        "Preserve explicit visual timings in the draft; do not silently retime them. "
+                        "Rewrite sound timestamps to match the visual beats; do not copy stale "
+                        "sound times from the draft.")
     if getattr(request, "generation_mode", "") == "first_last_frame":
         instruction += _first_last_polish_guidance(request.target_duration)
     instruction += "\n\nH3 constraint: do not add subtitles, captions, title cards, watermarks, labels, or any burned-in on-screen text. Dialogue is audio only."
-    if request.optimization_skills:
-        instruction += "\n\nApply the selected skills above as constraints while preserving the official H3 output format."
+    selected_skills = _effective_optimization_skills(request)
+    if selected_skills:
+        instruction += "\n\n" + _selected_skill_guidance(selected_skills, request.target_video_model)
+        instruction += "\nPreserve the official H3 output format."
     text = f"{instruction}\n\n[DRAFT PROMPT]\n{request.draft_prompt.strip()}"
     if request.feedback.strip():
         text += f"\n\n[USER FEEDBACK]\n{request.feedback.strip()}"
@@ -7068,10 +8426,143 @@ def _video_polish_user_text(request) -> str:
     return request.draft_prompt
 
 
+def _r2v_scene_lighting(script, frame, draft_prompt: str,
+                        reference_variant_ids: Optional[Dict[str, List[str]]] = None) -> Optional[Dict[str, Any]]:
+    """Read lighting only from the selected scene image's frozen lineage."""
+    if frame is None:
+        return None
+    names = set(re.findall(r"\[(?:character\d+|scene):([^\]]+)\]", draft_prompt))
+    scenes = pipeline.resolve_project_assets(script)["scenes"]
+    matches = [scene for scene in scenes if scene.id == getattr(frame, "scene_id", None) and scene.name in names]
+    if len(matches) != 1 or sum(scene.name == matches[0].name for scene in scenes) != 1:
+        return None
+    scene = matches[0]
+    variants = {item.id: item for item in scene.image_asset.variants}
+    selections = reference_variant_ids if reference_variant_ids is not None else frame.workbench_reference_variant_ids
+    selected_ids = (selections or {}).get(scene.id) or []
+    if len(selected_ids) > 1:
+        return None
+    selected_id = selected_ids[0] if selected_ids else scene.image_asset.selected_id
+    variant = variants.get(selected_id)
+    if variant is None:
+        return None
+    snapshot = variant.submission_snapshot
+    design = snapshot.visual_design if snapshot and isinstance(snapshot.visual_design, dict) else {}
+    fields: Dict[str, Any] = {}
+    for key in ("ambient_lighting", "local_lighting"):
+        value = design.get(key)
+        if value and (not isinstance(value, dict) or any(str(part).strip() for part in value.values())):
+            fields[key] = value
+    constraints = design.get("visual_constraints")
+    if isinstance(constraints, dict) and constraints.get("key_light_direction") not in (None, "", "unspecified"):
+        fields["key_light_direction"] = constraints["key_light_direction"]
+
+    source_variant = variant
+    source_scene_name = scene.name
+    tool = variant.scene_tool if isinstance(variant.scene_tool, dict) else None
+    if (not tool or tool.get("kind") != "lighting") and snapshot and isinstance(snapshot.scene_tool, dict):
+        tool = snapshot.scene_tool
+    if snapshot:
+        lighting_sources = []
+        for reference in snapshot.reference_inputs:
+            if reference.asset_type != "scene":
+                continue
+            parent = next((item for item in scenes if item.id == reference.asset_id), None)
+            candidate = next((item for item in parent.image_asset.variants
+                              if item.id == reference.variant_id), None) if parent else None
+            if candidate and isinstance(candidate.scene_tool, dict) and candidate.scene_tool.get("kind") == "lighting":
+                lighting_sources.append((candidate, parent.name))
+        if (not tool or tool.get("kind") != "lighting") and len(lighting_sources) == 1:
+            source_variant, source_scene_name = lighting_sources[0]
+            tool = source_variant.scene_tool
+    if tool and tool.get("kind") == "lighting":
+        fields.update({key: tool[key] for key in ("light_side", "color", "brightness", "rim_light") if key in tool})
+    if not fields:
+        return None
+    return {
+        "scene_name": scene.name, "scene_id": scene.id, "variant_id": variant.id,
+        "source_variant_id": source_variant.id, "source_scene_name": source_scene_name,
+        "source_variant_name": source_variant.display_name if hasattr(source_variant, "display_name") else None,
+        "design_revision": snapshot.design_revision_at_submission if snapshot else None,
+        "fields": fields,
+    }
+
+
+def _r2v_reference_designs(script, request) -> List[Dict[str, Any]]:
+    """Resolve reviewed character design through the referenced asset identity."""
+    if not request.slots:
+        return []
+    assets = pipeline.resolve_project_assets(script)
+    by_id = {
+        kind: {asset.id: asset for asset in assets.get(f"{kind}s", [])}
+        for kind in ("character", "scene", "prop")
+    }
+    result: List[Dict[str, Any]] = []
+    seen_slots: set[int] = set()
+    for ordinal, slot in enumerate(request.slots, 1):
+        if not slot.asset_id:
+            continue  # Legacy text-only caller.
+        number = slot.slot or ordinal
+        if number in seen_slots or not 1 <= number <= 9:
+            raise HTTPException(422, "参考图槽位无效，请重新选择参考素材")
+        seen_slots.add(number)
+        kind = slot.asset_type
+        asset = by_id.get(kind or "", {}).get(slot.asset_id)
+        if asset is None or not slot.name or asset.name != slot.name:
+            raise HTTPException(422, "参考素材身份已变化，请重新选择参考素材")
+        tag = f"[character{number}:{slot.name}]"
+        if tag not in request.draft_prompt and f"[{kind}:{slot.name}]" not in request.draft_prompt:
+            raise HTTPException(422, "参考素材与当前镜头文字不匹配，请重新预览")
+        variants = {item.id: item for item in pipeline._asset_image_variants(asset, kind)}
+        if not slot.variant_ids or any(variant_id not in variants for variant_id in slot.variant_ids):
+            raise HTTPException(422, "参考图版本已变化，请重新选择参考素材")
+        selected = (request.reference_variant_ids or {}).get(asset.id)
+        if selected and selected != slot.variant_ids:
+            raise HTTPException(422, "参考图版本与镜头选择不一致，请重新预览")
+        if kind != "character":
+            continue
+        if len(slot.variant_ids) != 1:
+            raise HTTPException(422, "角色参考图必须对应一个已选版本")
+        variant = variants[slot.variant_ids[0]]
+        snapshot = variant.submission_snapshot
+        revision = snapshot.design_revision_at_submission if snapshot else None
+        if revision is None and asset.asset_pack:
+            anchor = next((item for item in reversed(asset.asset_pack.revisions)
+                           if item.variant_id == variant.id), None)
+            if anchor:
+                revision = anchor.source_design_revision
+        revisions = (asset.character_design or {}).get("design_revisions") or []
+        if revision is None:
+            confirmed = revisions[-1] if revisions else None
+        else:
+            confirmed = next((item for item in revisions if item.get("revision") == revision), None)
+            if confirmed is None:
+                raise HTTPException(422, "角色参考图对应的设计版本已缺失，请重新确认角色设计")
+        design = confirmed.get("design") if isinstance(confirmed, dict) else None
+        structured = {}
+        if isinstance(design, dict):
+            for section in ("identity", "look"):
+                value = design.get(section)
+                if isinstance(value, dict):
+                    selected_fields = {key: value[key] for key in ("visual_notes", "features") if value.get(key)}
+                    if selected_fields:
+                        structured[section] = selected_fields
+        if structured:
+            result.append({
+                "slot": number, "name": asset.name,
+                "design_revision": confirmed.get("revision"),
+                "design": structured,
+            })
+    return result
+
+
 def _compile_video_polish_review(request, reference_mode: bool) -> Dict[str, Any]:
     from .llm import DEFAULT_R2V_POLISH_PROMPT, DEFAULT_VIDEO_POLISH_PROMPT
     user = current_studio_user()
     frame_snapshot: Dict[str, Any] = {}
+    effective_shot_fields: Dict[str, Any] = {}
+    scene_lighting: Optional[Dict[str, Any]] = None
+    reference_designs: List[Dict[str, Any]] = []
     if user is not None and request.script_id:
         script = pipeline.get_script(request.script_id, user.owner_profile_id)
         if not script:
@@ -7080,29 +8571,85 @@ def _compile_video_polish_review(request, reference_mode: bool) -> Dict[str, Any
             frame = next((item for item in script.frames if item.id == request.frame_id), None)
             if frame is None:
                 raise HTTPException(404, "Frame not found")
+            if reference_mode and request.image_urls:
+                scene_lighting = _r2v_scene_lighting(
+                    script, frame, request.draft_prompt, request.reference_variant_ids,
+                )
+                reference_designs = _r2v_reference_designs(script, request)
             frame_snapshot = {name: getattr(frame, name, None) for name in (
                 "scene_id", "shot_id", "director_profile_revision", "director_profile_hash",
                 "director_shot_context", "action_description", "style_prompt_override",
-                "lighting_override", "shot_visual_design", "composition", "shot_size",
+                "lighting_override", "shot_visual_design", "blocking", "composition", "shot_size",
                 "camera_angle", "camera_movement", "transition_hint", "dialogue",
             )}
             frame_snapshot = {
                 key: value.model_dump() if hasattr(value, "model_dump") else value
                 for key, value in frame_snapshot.items()
             }
+            row = next((item for item in pipeline.storyboard_continuity_sheet(request.script_id)["rows"]
+                        if item["frame_id"] == request.frame_id), None)
+            if row:
+                keys = ("duration", "shot_size", "camera_angle", "camera_movement", "transition_hint",
+                        "style", "story_time", "daylight_phase", "weather", "shadow_direction",
+                        "key_source", "ambient_lighting", "color_tone", "contrast", "practical_sources",
+                        "direction", "quality", "color_temp", "lighting_override")
+                effective_shot_fields = {
+                    key: {"value": row["fields"][key]["value"],
+                          "source": row["fields"][key]["source_kind"],
+                          "revision": row["fields"][key]["source_revision"]}
+                    for key in keys if key in row["fields"]
+                }
     if not reference_mode and request.generation_mode == "first_last_frame" and (
         len(request.image_urls) != 2 or request.image_urls[0] == request.image_urls[1]
     ):
         raise HTTPException(422, "首尾帧润色需要两张不同的已选图片")
     custom = _get_custom_prompt(request.script_id, "r2v_polish" if reference_mode else "video_polish")
+    lighting_choice = getattr(request, "reference_lighting_choice", None)
+    lighting_values: Dict[str, Any] = {}
+    if scene_lighting:
+        lighting_values = {key: value for key, value in effective_shot_fields.items()
+                           if key in ("direction", "quality", "color_temp", "key_source", "ambient_lighting",
+                                      "color_tone", "contrast", "lighting_override") and value.get("value") not in (None, "")}
+        if request.shot_overrides and request.shot_overrides.get("lighting"):
+            lighting_values["shot_override"] = request.shot_overrides["lighting"]
+        if not lighting_values and lighting_choice is None:
+            lighting_choice = "reference"
+        scene_lighting = {**scene_lighting, "requires_decision": bool(lighting_values),
+                          "shot_lighting": lighting_values, "choice": lighting_choice}
+    model_shot_fields = ({key: value for key, value in effective_shot_fields.items()
+                          if key not in ("direction", "quality", "color_temp", "key_source", "ambient_lighting",
+                                         "color_tone", "contrast", "lighting_override")}
+                         if lighting_choice == "reference" and scene_lighting else effective_shot_fields)
+    if model_shot_fields:
+        custom = "\n\n".join(filter(None, [custom,
+            "ACCEPTED SHOT FIELDS AND VISUAL CONTINUITY (preserve these values; do not rewrite them):\n"
+            + json.dumps(model_shot_fields, ensure_ascii=False, sort_keys=True)]))
     director = _get_director_prompt_context(request.script_id, request.frame_id, request.shot_overrides)
     if director:
         custom = "\n\n".join(filter(None, [custom, "CURRENT SHOT CONTEXT (editable overrides replace planned shot settings; matching continuity baseline is background):\n" + director]))
+    if scene_lighting:
+        if lighting_choice == "reference":
+            instruction = "Use these frozen reference lighting fields for this shot. They supersede conflicting shot lighting values above; preserve all non-lighting shot fields."
+        elif lighting_choice == "shot":
+            instruction = "Keep this shot's lighting values. The scene image still anchors space and appearance, but do not transfer its lighting."
+        else:
+            instruction = "Scene lighting is available, but the shot also defines lighting. A creator choice is required before generation."
+        source_text = ("SELECTED SCENE IMAGE LIGHTING (frozen variant; do not copy its actions or full prompt):\n"
+                       + json.dumps({"scene_name": scene_lighting["scene_name"], "fields": scene_lighting["fields"]},
+                                    ensure_ascii=False, sort_keys=True) + "\n") if lighting_choice == "reference" else ""
+        custom = "\n\n".join(filter(None, [custom, source_text + instruction]))
+    if reference_designs:
+        model_designs = [{"slot": item["slot"], "name": item["name"], **item["design"]}
+                         for item in reference_designs]
+        custom = "\n\n".join(filter(None, [custom,
+            "CHARACTER ASSET IDENTITY AND LOOK (confirmed structured fields for the selected character references):\n"
+            + json.dumps(model_designs, ensure_ascii=False, sort_keys=True)
+            + "\nUse these fields as the character appearance constraints. Unspecified fields are unconstrained. Keep shot action, blocking and camera separate from character identity/look."]))
     default = DEFAULT_R2V_POLISH_PROMPT if reference_mode else DEFAULT_VIDEO_POLISH_PROMPT
     if request.optimizer_provider == "minimax_context_ir":
         if request.target_video_model and "h3" not in request.target_video_model.lower():
             raise HTTPException(422, "MiniMax Context-IR requires an H3 target")
-        messages = {"system": "", "user": _compile_ir_polish_text(request, custom or default)}
+        messages = {"system": "", "user": _compile_ir_polish_text(request, custom)}
     else:
         system = _storyboard_polish_contract(
             request.target_video_model, custom, default, request.generate_audio,
@@ -7110,8 +8657,14 @@ def _compile_video_polish_review(request, reference_mode: bool) -> Dict[str, Any
             _effective_optimization_skills(request), reference_mode=reference_mode,
             generation_mode=getattr(request, "generation_mode", "r2v"),
         ).strip()
+        automatic = _automatic_motion_skill_guidance(
+            "\n".join([request.draft_prompt, request.feedback, custom]),
+            request.target_video_model,
+        )
+        if automatic:
+            system += "\n\n" + automatic
         if reference_mode:
-            slots = "\n".join(f"- character{i + 1}: {slot.description}" for i, slot in enumerate(request.slots)) or "No reference videos provided."
+            slots = "\n".join(f"- character{slot.slot or i + 1}: {slot.description}" for i, slot in enumerate(request.slots)) or "No reference videos provided."
             system = system.replace("{SLOTS}", slots)
         if request.image_urls:
             if reference_mode:
@@ -7124,7 +8677,11 @@ def _compile_video_polish_review(request, reference_mode: bool) -> Dict[str, Any
     labels = (["首帧 0.00 秒", "尾帧 结束时"] if getattr(request, "generation_mode", "") == "first_last_frame" else [f"参考图 {i + 1}" for i in range(len(request.image_urls))])
     media = [{"label": labels[i], "url": url} for i, url in enumerate(request.image_urls)]
     source = request.model_dump(exclude={"reviewed_messages", "review_token"})
-    token = hashlib.sha256(json.dumps({"source": source, "frame": frame_snapshot, "compiled": messages},
+    token = hashlib.sha256(json.dumps({"source": source, "frame": frame_snapshot,
+                                      "effective_shot_fields": effective_shot_fields,
+                                      "scene_lighting": scene_lighting,
+                                      "reference_designs": reference_designs,
+                                      "compiled": messages},
                                       sort_keys=True, ensure_ascii=False, default=str).encode()).hexdigest()
     format_note = (
         "MiniMax Context IR 按所选模型的原生结构生成；这里展示送入 IR 的完整文字。"
@@ -7134,11 +8691,21 @@ def _compile_video_polish_review(request, reference_mode: bool) -> Dict[str, Any
         "模型以 JSON 返回中英双语提示词。"
     )
     return {"messages": messages, "media": media, "review_token": token,
-            "format_note": format_note}
+            "format_note": format_note,
+            "review_context": {
+                "effective_shot_fields": effective_shot_fields,
+                "selected_skills": _effective_optimization_skills(request) or [],
+                "target_duration": request.target_duration,
+                "scene_lighting": scene_lighting,
+                "reference_designs": reference_designs,
+            }}
 
 
 def _require_video_polish_review(request, reference_mode: bool) -> Dict[str, str]:
     compiled = _compile_video_polish_review(request, reference_mode)
+    lighting = compiled.get("review_context", {}).get("scene_lighting")
+    if lighting and lighting.get("requires_decision") and not lighting.get("choice"):
+        raise HTTPException(422, "参考场景光影与本镜设置并存，请先选择采用哪一方")
     messages = request.reviewed_messages
     if not request.review_token or request.review_token != compiled["review_token"] or not messages:
         raise HTTPException(409, "润色输入或来源已变化，请重新预览并确认")
@@ -7179,12 +8746,18 @@ def _complete_minimax_ir_polish(request, custom_prompt: str, reviewed_text: Opti
     from ..studio_access import runtime_uniart_for_owner
     config = runtime_uniart_for_owner(user.user_id, user.owner_profile_id)
     text = reviewed_text if reviewed_text is not None else _compile_ir_polish_text(request, custom_prompt)
-    content: List[Dict[str, Any]] = [{"type": "text", "text": text}]
-    for index, value in enumerate(request.image_urls or []):
-        label = ("Actual first frame at 0.00 seconds", "Actual last frame at the end") if getattr(request, "generation_mode", "") == "first_last_frame" else ()
-        content.append({"type": "text", "text": label[index] if label else f"Reference image {index + 1}"})
-        content.append({"type": "image_url", "role": "reference_image", "image_url": {"url": _image_reference_url(value)}})
+    if len(text) > _MINIMAX_IR_TEXT_LIMIT:
+        raise PolishError(
+            reason="api_error",
+            message_zh=f"MiniMax IR 输入 {len(text)} 字符，超过 {_MINIMAX_IR_TEXT_LIMIT} 字符上限。请在模型输入检查中缩短文字后重试。",
+            message_en=f"MiniMax IR input is {len(text)} characters, above the {_MINIMAX_IR_TEXT_LIMIT}-character limit. Shorten the reviewed text and retry.",
+        )
     try:
+        content: List[Dict[str, Any]] = [{"type": "text", "text": text}]
+        for index, value in enumerate(_polish_image_urls(request.image_urls or [])):
+            label = ("Actual first frame at 0.00 seconds", "Actual last frame at the end") if getattr(request, "generation_mode", "") == "first_last_frame" else ()
+            content.append({"type": "text", "text": label[index] if label else f"Reference image {index + 1}"})
+            content.append({"type": "image_url", "role": "reference_image", "image_url": {"url": _image_reference_url(value)}})
         prompt = complete_context_ir(
             config,
             content,
@@ -7192,6 +8765,8 @@ def _complete_minimax_ir_polish(request, custom_prompt: str, reviewed_text: Opti
             ratio=request.target_ratio or "16:9",
             idempotency_key=f"storyboard-polish:{request.script_id}:{hashlib.sha256(json.dumps([text, request.image_urls], ensure_ascii=False).encode('utf-8')).hexdigest()[:24]}",
         )
+    except PolishError:
+        raise
     except Exception as exc:
         logger.exception("MiniMax Context-IR storyboard polish failed")
         raise PolishError(reason="api_error", message_zh=f"MiniMax IR 调用失败：{exc}", message_en=f"MiniMax Context-IR failed: {exc}") from exc
@@ -7207,11 +8782,16 @@ _OPTIMIZER_MODEL_IDS = {
 
 
 def _effective_optimization_skills(request) -> Optional[List[str]]:
-    """Non-IR optimizer models use the H3 Director skill by default."""
+    """Choose legacy default guidance only for a matching video model."""
     if request.optimization_skills is not None:
         return request.optimization_skills
     if request.optimizer_provider in _OPTIMIZER_MODEL_IDS:
-        return ["minimax-h3-director"]
+        model = (request.target_video_model or "").lower()
+        if "h3" in model:
+            return ["minimax-h3-director"]
+        if "seedance" in model:
+            return ["seedance-prompt"]
+        return []
     return None
 
 
@@ -7262,6 +8842,9 @@ def polish_video_prompt(request: PolishVideoPromptRequest):
     try:
         reviewed = _require_video_polish_review(request, False)
         from .llm import DEFAULT_VIDEO_POLISH_PROMPT
+        short_action_duration = request.target_duration if _needs_short_action_timeline(
+            request.target_video_model, request.target_duration, request.draft_prompt
+        ) else None
         if request.generation_mode == "first_last_frame" and (
             len(request.image_urls) != 2 or request.image_urls[0] == request.image_urls[1]
         ):
@@ -7277,11 +8860,14 @@ def polish_video_prompt(request: PolishVideoPromptRequest):
         selected_skills = _effective_optimization_skills(request)
         if request.optimizer_provider == "minimax_context_ir":
             # Context-IR owns its provider-native structure. Keep the existing
-            # freeform instruction path; its output is still validated below.
+            # freeform instruction path and validate only observable IR invariants.
             result = _complete_minimax_ir_polish(request, custom or DEFAULT_VIDEO_POLISH_PROMPT, reviewed["user"])
-            _validate_storyboard_polish_result(request.target_video_model, result, reference_mode=False, generate_audio=request.generate_audio, dialogue_line=request.dialogue_line, generation_mode=request.generation_mode)
+            _validate_context_ir_polish_result(result, generation_mode=request.generation_mode,
+                                               generate_audio=request.generate_audio, dialogue_line=request.dialogue_line,
+                                               short_action_duration=short_action_duration,
+                                               shot_structure=request.shot_structure)
             return result
-        custom_prompt = _storyboard_polish_contract(request.target_video_model, custom, DEFAULT_VIDEO_POLISH_PROMPT, request.generate_audio, request.target_duration, request.dialogue_speaker, request.dialogue_line, selected_skills, reference_mode=False, generation_mode=request.generation_mode)
+        custom_prompt = _storyboard_polish_contract(request.target_video_model, custom, DEFAULT_VIDEO_POLISH_PROMPT, request.generate_audio, request.target_duration, request.dialogue_speaker, request.dialogue_line, selected_skills, reference_mode=False, generation_mode=request.generation_mode, shot_structure=request.shot_structure)
         # Polish model: request override → project/series PromptConfig → ""
         polish_model = request.polish_model or _OPTIMIZER_MODEL_IDS.get(request.optimizer_provider) or _get_polish_model_for_project(request.script_id)
         processor = ScriptProcessor()
@@ -7295,7 +8881,7 @@ def polish_video_prompt(request: PolishVideoPromptRequest):
             generation_mode=request.generation_mode,
             reviewed_messages=reviewed,
         )
-        _validate_storyboard_polish_result(request.target_video_model, result, reference_mode=False, generate_audio=request.generate_audio, dialogue_line=request.dialogue_line, generation_mode=request.generation_mode)
+        _validate_storyboard_polish_result(request.target_video_model, result, reference_mode=False, generate_audio=request.generate_audio, dialogue_line=request.dialogue_line, generation_mode=request.generation_mode, short_action_duration=short_action_duration, shot_structure=request.shot_structure)
         return {
             "prompt_cn": result.get("prompt_cn", ""),
             "prompt_en": result.get("prompt_en", "")
@@ -7312,6 +8898,11 @@ def polish_video_prompt(request: PolishVideoPromptRequest):
 
 class RefSlot(BaseModel):
     description: str  # Character name, e.g., "雷震", "白兔"
+    slot: Optional[int] = Field(None, ge=1, le=9)
+    asset_id: Optional[str] = None
+    asset_type: Optional[Literal["character", "scene", "prop"]] = None
+    name: Optional[str] = None
+    variant_ids: List[str] = Field(default_factory=list)
 
 
 class PolishR2VPromptRequest(BaseModel):
@@ -7327,11 +8918,14 @@ class PolishR2VPromptRequest(BaseModel):
     # R2V 模式：用户挂载的 character1/2/3 参考图 URL(s)，让 vision 模型
     # 看清各角色实际形象。空列表 = 纯文本润色（兼容旧调用方）。
     image_urls: List[str] = Field(default_factory=list, max_length=9)
+    reference_variant_ids: Optional[Dict[str, List[str]]] = None
+    reference_lighting_choice: Optional[Literal["shot", "reference"]] = None
     polish_model: str = ""
     optimizer_provider: Literal["local_llm", "minimax_context_ir", "gpt", "qwen", "deepseek", "glm"] = "local_llm"
     optimization_skills: Optional[List[str]] = Field(default=None, max_length=12)
     target_ratio: str = Field("16:9", max_length=20)
     target_video_model: str = ""
+    shot_structure: Literal["auto", "single", "multi"] = "auto"
     dialogue_speaker: str = Field("", max_length=200)
     dialogue_line: str = Field("", max_length=2000)
     reviewed_messages: Optional[Dict[Literal["system", "user"], str]] = None
@@ -7352,6 +8946,9 @@ def polish_r2v_prompt(request: PolishR2VPromptRequest):
     try:
         reviewed = _require_video_polish_review(request, True)
         from .llm import DEFAULT_R2V_POLISH_PROMPT
+        short_action_duration = request.target_duration if _needs_short_action_timeline(
+            request.target_video_model, request.target_duration, request.draft_prompt
+        ) else None
         custom = _get_custom_prompt(request.script_id, "r2v_polish")
         director = _get_director_prompt_context(request.script_id, request.frame_id, request.shot_overrides)
         if director:
@@ -7359,9 +8956,11 @@ def polish_r2v_prompt(request: PolishR2VPromptRequest):
         selected_skills = _effective_optimization_skills(request)
         if request.optimizer_provider == "minimax_context_ir":
             result = _complete_minimax_ir_polish(request, custom or DEFAULT_R2V_POLISH_PROMPT, reviewed["user"])
-            _validate_storyboard_polish_result(request.target_video_model, result, reference_mode=True, generate_audio=request.generate_audio, dialogue_line=request.dialogue_line)
+            _validate_context_ir_polish_result(result, reference_mode=True, generate_audio=request.generate_audio,
+                                               dialogue_line=request.dialogue_line, short_action_duration=short_action_duration,
+                                               shot_structure=request.shot_structure)
             return result
-        custom_prompt = _storyboard_polish_contract(request.target_video_model, custom, DEFAULT_R2V_POLISH_PROMPT, request.generate_audio, request.target_duration, request.dialogue_speaker, request.dialogue_line, selected_skills, reference_mode=True)
+        custom_prompt = _storyboard_polish_contract(request.target_video_model, custom, DEFAULT_R2V_POLISH_PROMPT, request.generate_audio, request.target_duration, request.dialogue_speaker, request.dialogue_line, selected_skills, reference_mode=True, shot_structure=request.shot_structure)
         polish_model = request.polish_model or _OPTIMIZER_MODEL_IDS.get(request.optimizer_provider) or _get_polish_model_for_project(request.script_id)
         processor = ScriptProcessor()
         slot_info = [{"description": s.description} for s in request.slots]
@@ -7375,7 +8974,7 @@ def polish_r2v_prompt(request: PolishR2VPromptRequest):
             polish_model=polish_model,
             reviewed_messages=reviewed,
         )
-        _validate_storyboard_polish_result(request.target_video_model, result, reference_mode=True, generate_audio=request.generate_audio, dialogue_line=request.dialogue_line)
+        _validate_storyboard_polish_result(request.target_video_model, result, reference_mode=True, generate_audio=request.generate_audio, dialogue_line=request.dialogue_line, short_action_duration=short_action_duration, shot_structure=request.shot_structure)
         return {
             "prompt_cn": result.get("prompt_cn", ""),
             "prompt_en": result.get("prompt_en", "")

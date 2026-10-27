@@ -117,6 +117,32 @@ def test_lighting_prompt_uses_reference_only_as_light_guide():
     assert "第二张图片仅供参考灯位" in prompt
 
 
+def test_spherical_light_direction_is_preserved_through_review_and_task(tmp_path, monkeypatch):
+    pipeline, _scene = make_pipeline(tmp_path, monkeypatch)
+    tool = {"kind": "lighting", "azimuth": 45, "elevation": 30}
+    prompt = scene_tool_prompt(parse_scene_tool(tool))
+    assert "主光从右前方上方进入" in prompt
+    assert "主光方位角 45°，仰角 30°" in prompt
+    reference = {"asset_type": "scene", "asset_id": "scene", "variant_id": "source"}
+    review = pipeline.preview_asset_image_submission("project", "scene", "scene", prompt=prompt,
+        image_generation_mode="reference", references=[reference], scene_tool=tool)
+    _, task_id = pipeline.create_asset_generation_task("project", "scene", "scene", prompt=prompt,
+        image_generation_mode="reference", references=[reference], scene_tool=tool,
+        expected_review_fingerprint=review["fingerprint"], preserve_prompt=True)
+    params = pipeline.asset_generation_tasks[task_id]["params"]["scene_tool"]
+    assert params["azimuth"] == 45 and params["elevation"] == 30
+    with pytest.raises(InvalidAssetReference, match="reviewed compiled prompt"):
+        pipeline.create_asset_generation_task("project", "scene", "scene", prompt=prompt,
+            image_generation_mode="reference", references=[reference], scene_tool={**tool, "azimuth": -45})
+
+
+@pytest.mark.parametrize("values", [{"azimuth": 181, "elevation": 0}, {"azimuth": 0, "elevation": 91},
+    {"azimuth": 30}, {"elevation": 30}, {"azimuth": 1.5, "elevation": 0}])
+def test_spherical_light_direction_rejects_invalid_or_incomplete_angles(values):
+    with pytest.raises(ValueError):
+        parse_scene_tool({"kind": "lighting", **values})
+
+
 def test_generated_tool_candidate_keeps_source_and_does_not_replace_selection(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     generator = AssetGenerator({"output_dir": str(tmp_path / "output")})
@@ -154,3 +180,41 @@ def test_scene_tool_infers_and_validates_shared_edit_mode(tmp_path, monkeypatch)
             references=[{"asset_type": "scene", "asset_id": "scene", "variant_id": "source"}],
             scene_tool=tool, edit_mode="scene_lighting",
         )
+
+
+def test_panel_settings_compile_without_legacy_preset_or_default_rim():
+    tool = parse_scene_tool({"kind": "lighting", "panel_settings": {"lighting": {
+        "source": "月光", "quality": "硬光", "mood": "清冷", "rim": "蓝色轮廓光",
+    }}})
+    prompt = scene_tool_prompt(tool)
+    assert "光影：光源：月光；软硬：硬光；轮廓光：蓝色轮廓光；氛围：清冷" in prompt
+    assert "不额外增加明显轮廓光" not in prompt
+    camera = scene_tool_prompt(parse_scene_tool({"kind": "camera", "panel_settings": {
+        "camera": {"focal_length": "鱼眼"}, "composition": {"frame_orientation": "倾斜画面"},
+    }}))
+    assert "镜头设置；水平环绕" in camera
+    assert "镜头：焦距观感：鱼眼\n构图：画面倾斜：倾斜画面" in camera
+    assert "预设视角" not in camera
+
+
+@pytest.mark.parametrize("tool", [
+    {"kind": "lighting", "panel_settings": {"lighting": {"direction": "left"}}},
+    {"kind": "lighting", "panel_settings": {"lighting": {"color": "blue"}}},
+    {"kind": "lighting", "panel_settings": {"camera": {"focal_length": "wide"}}},
+    {"kind": "camera", "panel_settings": {"camera": {"focus": {"target": "gate"}}}},
+    {"kind": "camera", "panel_settings": {"camera": {"angles": {"azimuth": 0, "elevation": 0}}}},
+    {"kind": "camera", "preset": "fisheye", "panel_settings": {}},
+    {"kind": "lighting", "preset": "golden_hour", "panel_settings": {}},
+    {"kind": "lighting", "rim_light": True, "panel_settings": {}},
+])
+def test_tool_panel_rejects_conflicting_control_sources(tool):
+    with pytest.raises(ValueError):
+        parse_scene_tool(tool)
+
+
+def test_tool_panel_survives_normalization_and_queue_reparse():
+    for kind, settings in (("lighting", {"lighting": {"mood": "quiet"}}),
+                           ("camera", {"camera": {"focal_length": "wide"}})):
+        parsed = parse_scene_tool({"kind": kind, "panel_settings": settings})
+        for normalized in (parsed.model_dump(), parsed.model_dump(exclude_none=True)):
+            assert scene_tool_prompt(parse_scene_tool(normalized)) == scene_tool_prompt(parsed)

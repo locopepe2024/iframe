@@ -1,0 +1,375 @@
+# 3D 导演台占位与深度到分镜交接规范 V1
+
+## 当前生效边界（2026-10-27）
+
+3D 导演台是 Storyboard 与 Shot Design 的工具支持层，不是独立的剧情或场景调度工作域。Storyboard 决定当前场次的人物、群演、构图和行动关系；Shot Design 决定具体镜头、动作时间轴和最终提示词。导演台只根据这两个工作域的当前需求生成占位、深度、运镜和动作参考。
+
+导演台结果不自动成为最终角色、场景或道具资产，也不设置强制的“审核通过”门槛。用户可以在导演台预览、调整并手动保存过程参考到普通资产库，再由 Storyboard 或 Shot Design 手动引用。未保存的请求、草稿和生成结果不进入分镜。
+
+场景资产基线保持中性可复用；冲突区域、行动轴线、人物调度、人群信息差等当前剧情内容属于 Storyboard，不得提前写入场景资产设计。
+
+本节优先于本文中较早版本关于“导演台审核通过后才能入库”或“导演台是唯一审核入口”的历史描述。
+
+## 目标
+
+将用户在 3D 导演台输入的自然语言，转换为可审核、可版本化、可保存到资产库的导演参考产物。3D 导演台直接生成结构化深度、多人占位参考图、运镜参考视频和动作参考视频。规范覆盖多人占位、前中后景、世界深度、屏幕关系、镜头、可见性和参考媒体用途；自然语言只作为导演台生成输入，不进入资产库或分镜，也不把任何参考产物当成最终角色图或最终生成视频。
+
+## 证据与边界
+
+**代码事实：** 当前导演台设计提案支持稳定实体 ID、米制位置、朝向、成对排布、盒体道具和静态摄影机；浏览器占位图可以导出，导演台也已有本地时间轴、动作和视频参考相关工作区；当前浏览器草稿与剧集分镜仍是独立状态，尚未形成统一的四类参考媒体交接合同。
+
+**直接含义：** 3D 导演台是空间和参考媒体入库的唯一审核入口。自然语言生成结果必须回到导演台，由导演台审核或调整后确认；只有审核通过的结果才能保存为资产库中的导演参考资产。分镜只能引用资产库中的已确认资产版本。
+
+**未证明：** 生成模型一定遵守占位图、深度或编号关系。结构化交接只证明输入意图和来源，最终图像/视频仍需逐帧审核。
+
+## Owner 边界
+
+| 字段 | 唯一 owner | 3D 导演台 | 分镜 | 模型适配器 |
+|---|---|---|---|---|
+| 角色身份、外观、身高 | 角色资产 | 只读引用 | 只读引用 | 编译引用 |
+| 场景固定几何 | 场景资产 | 只读引用或临时代理 | 只读引用 | 编译引用 |
+| 多人位置、深度、朝向 | 导演台占位设计 | 生成、编辑和审核 | 读取资产版本 | 编译为参考 |
+| 占位参考图 | 导演台参考媒体 | 生成、审核和锁定 | 读取资产版本 | 作为图像参考 |
+| 深度参考 | 导演台空间/深度设计 | 生成、审核和锁定 | 读取资产版本 | 仅在模型契约支持时发送 |
+| 首帧构图和静态镜头 | 分镜首帧/摄影字段 | 读取导演台参考并提出镜头覆盖 | 采纳和覆盖 | 编译 |
+| 运镜参考视频 | 导演台摄影预演 | 生成、审核和锁定 | 读取资产版本 | 仅作为运镜参考 |
+| 动作参考视频 | 分镜动效/动作预演 | 生成、审核和锁定 | 读取资产版本 | 仅作为动作节奏参考 |
+| 人群反应和信息差 | 街道冲突与群像 Skill | 提供空间槽位 | 生成时间行为 | 编译 |
+
+导演台不得修改角色、场景或道具永久资产；分镜不得反向修改导演台占位源。
+
+## 规范对象
+
+### 1. 自然语言生成请求 `director_reference_generation_request`
+
+自然语言是 3D 导演台的生成指令。请求可以同时要求空间、深度、占位图、运镜视频和动作视频，但每种产物必须单独标记状态和用途。请求本身不进入分镜，也不绕过导演台审核。
+
+```json
+{
+  "schemaVersion": "iframe.director3d.director-reference-generation-request.v1",
+  "requestId": "request-...",
+  "baseRevision": "design-fnv1a32:1234abcd",
+  "status": "draft",
+  "coordinateSystem": {
+    "up": "+Z",
+    "forward": "+Y",
+    "screenRightAtAzimuth0": "+X",
+    "units": "meters"
+  },
+  "sceneRef": {"sceneId": "scene-grain-shop", "revision": "scene-rev-3"},
+  "cameraRef": {"cameraId": "camera-main", "revision": "camera-rev-2"},
+  "slots": [],
+  "visibilityRelations": [],
+  "requestedOutputs": {
+    "depth": {"requested": true, "status": "planned"},
+    "blockingImage": {"requested": true, "status": "planned"},
+    "cameraMotionVideo": {"requested": true, "status": "planned"},
+    "actionMotionVideo": {"requested": true, "status": "planned"}
+  },
+  "assumptions": [],
+  "uncertainties": []
+}
+```
+
+### 2. 生成结果 `director_reference_generation_result`
+
+3D 导演台根据自然语言请求生成参考产物。生成结果可以部分成功；每类产物必须记录自己的状态、来源和媒体身份。
+
+```json
+{
+  "schemaVersion": "iframe.director3d.director-reference-generation-result.v1",
+  "requestId": "request-...",
+  "baseRevision": "design-fnv1a32:1234abcd",
+  "outputs": {
+    "depth": {"status": "generated", "mediaId": "depth-media-..."},
+    "blockingImage": {"status": "generated", "mediaId": "blocking-media-..."},
+    "cameraMotionVideo": {"status": "generated", "mediaId": "camera-video-..."},
+    "actionMotionVideo": {"status": "generated", "mediaId": "action-video-..."}
+  },
+  "warnings": []
+}
+```
+
+### 3. 导演台审核结果 `director_reference_review`
+
+审核发生在 3D 导演台内部。审核可以修改槽位、深度层、朝向、摄影机和参考媒体用途，但不能修改角色资产、场景资产或道具永久版本。
+
+```json
+{
+  "schemaVersion": "iframe.director3d.director-reference-review.v1",
+  "requestId": "request-...",
+  "baseRevision": "design-fnv1a32:1234abcd",
+  "reviewStatus": "approved",
+  "reviewedBy": "director3d",
+  "acceptedChanges": {
+    "slotUpdates": [],
+    "cameraUpdates": [],
+    "visibilityUpdates": [],
+    "outputUsageUpdates": []
+  },
+  "rejectedOutputs": [],
+  "reviewNotes": [],
+  "blockingIssues": []
+}
+```
+
+`reviewStatus` 允许：
+
+- `pending`：生成结果待审；
+- `needs_revision`：导演台发现位置、深度、媒体或引用问题；
+- `approved`：允许写入资产库并生成 asset revision；
+- `rejected`：本次结果不得进入分镜。
+
+只有 `approved` 可以调用资产库入库接口。分镜不能直接把 `generated` 或 `pending` 结果标记为已确认。
+
+### 4. 占位槽 `blocking_slot`
+
+每个可识别人物、固定群演、匿名群体或关键道具占一个槽位。编号是当前参考图中的空间锚点，不是新的角色身份。
+
+```json
+{
+  "slotId": "slot-03",
+  "label": "3号中景路人",
+  "entityRef": {"kind": "fixed_extra", "id": "extra-town-02", "revision": "extra-rev-1"},
+  "role": "midground_bystander",
+  "positionM": [1.8, 4.2, 0],
+  "yawDeg": 180,
+  "depthLayer": "mid",
+  "screenRegion": "right_mid",
+  "poseState": "standing",
+  "gazeTarget": "active_zone",
+  "visibility": "partial",
+  "factionId": "townspeople",
+  "props": [],
+  "source": "authored"
+}
+```
+
+允许的 `depthLayer`：`foreground | mid | background`。
+
+允许的 `entityRef.kind`：`lead | supporting | fixed_extra | crowd_template | prop | scene_proxy`。
+
+`crowd_template` 可以表达一组匿名人群，但不能伪装成稳定面孔；`scene_proxy` 只用于空间代理，不得进入角色引用。
+
+### 5. 可见关系 `visibility_relation`
+
+用于表达阁楼能看见粮铺、人物被柜台遮挡、远景人物未获得冲突信息等关系。
+
+```json
+{
+  "from": "camera-main",
+  "to": "slot-01",
+  "relation": "visible",
+  "occluders": ["prop-counter"],
+  "readability": "clear",
+  "source": "authored"
+}
+```
+
+关系类型：
+
+- `visible`
+- `partially_visible`
+- `occluded`
+- `outside_frame`
+- `unaware_of_event`
+
+`unaware_of_event` 是叙事信息状态，不等于物理不可见；需要与 `visibility` 分开记录。
+
+### 6. 参考媒体计划与用途
+
+四类参考必须分开记录，不允许用一个 `referenceMedia` 字段混合：
+
+```json
+{
+  "referencePlan": {
+    "depth": {
+      "kind": "structured_depth",
+      "purpose": "world_depth_and_occlusion",
+      "status": "generated",
+      "structuredData": {"coordinateSystem": "z_up_meters", "depthRangeM": [0, 12]},
+      "mediaId": "depth-media-..."
+    },
+    "blockingImage": {
+      "kind": "blocking_reference_image",
+      "purpose": "numbered_multi_subject_layout",
+      "status": "generated",
+      "mediaId": "blocking-media-..."
+    },
+    "cameraMotionVideo": {
+      "kind": "camera_motion_reference_video",
+      "purpose": "camera_path_and_timing",
+      "status": "generated",
+      "mediaId": "camera-video-..."
+    },
+    "actionMotionVideo": {
+      "kind": "action_reference_video",
+      "purpose": "body_motion_and_action_rhythm",
+      "status": "generated",
+      "mediaId": "action-video-..."
+    }
+  }
+}
+```
+
+字段用途边界：
+
+- `depth`：表达世界坐标、层次、遮挡和空间距离；不等于最终视频模型已消费的深度控制输入。
+- `blockingImage`：表达编号、站位、前中后景、朝向和构图；不赋予角色新身份。
+- `cameraMotionVideo`：只转移摄影机轨迹、景别变化和运镜节奏；不转移人物身份、动作或场景内容。
+- `actionMotionVideo`：只转移动作路径、身体节奏和受力参考；不转移参考视频中的角色外观、场景或故事事件。
+
+如果某个模型不支持对应媒体类型，适配器必须标记 `unsupported` 或 `not_submitted`，不能把它伪装成已生效的控制输入。
+
+### 7. 导演台确认资产包 `director_reference_asset`
+
+3D 导演台审核通过后，将审核后的空间和参考媒体保存为资产库中的导演参考资产包。资产包内部保留不可变 revision，分镜引用资产包和具体 revision：
+
+```json
+{
+  "schemaVersion": "iframe.asset.director-reference.v1",
+  "assetId": "director-reference-grain-shop-...",
+  "assetRevision": "director-reference-rev-1",
+  "sourceRequestId": "request-...",
+  "sourceRevision": "design-fnv1a32:1234abcd",
+  "sceneRevision": "scene-rev-3",
+  "cameraRevision": "camera-rev-2",
+  "capturedAt": "2026-10-26T15:00:00Z",
+  "slots": [],
+  "visibilityRelations": [],
+  "referencePlan": {},
+  "sourceMediaHashes": {}
+}
+```
+
+## 接口流程
+
+```text
+POST /director3d/reference-generation-requests
+  自然语言 + 当前导演台设计上下文
+        ↓
+GET /director3d/reference-generation-results/{request_id}
+  深度、占位图、运镜参考视频、动作参考视频
+        ↓
+PATCH /director3d/reference-generation-results/{request_id}/review
+  3D 导演台审核、调整或拒绝
+        ↓
+POST /assets/director-references
+  仅允许 reviewStatus=approved，写入资产库并生成 assetRevision
+        ↓
+Storyboard 读取资产库中的 director_reference_asset revision
+```
+
+接口约束：
+
+1. 每个请求带 `baseRevision`；导演台状态变化后，旧请求不能覆盖新状态。
+2. 生成结果可以部分成功，不能把缺失媒体静默替换成旧媒体。
+3. 审核调整必须形成新的导演台 revision；不能原地修改已入库资产 revision。
+4. 资产包保存结构化槽位、深度、摄影机、参考媒体 ID、哈希和审核记录。
+5. 分镜只能读取资产库 revision，不能调用自然语言生成接口修改导演台设计。
+6. 模型适配器是否提交深度、占位图、运镜视频或动作视频，必须由能力契约决定并记录 `submitted`、`unsupported` 或 `not_submitted`。
+
+删除角色、群演、场景或 Variant 后，已锁定分镜仍读取其引用的资产 revision；未锁定分镜显示缺失引用，不自动换成当前版本。
+
+## 分镜接收结构
+
+分镜只接收资产库中已确认的 `director_reference_asset` revision，不接收自然语言、生成请求或未审核的生成结果。建议挂载在 `StoryboardConsistencyManifest`：
+
+```json
+{
+  "director3dBlocking": {
+    "directorReferenceAssetId": "director-reference-grain-shop-...",
+    "directorReferenceAssetRevision": "director-reference-rev-1",
+    "sourceRevision": "design-fnv1a32:1234abcd",
+    "cameraId": "camera-main",
+    "actionAxis": {"from": "苏砚", "to": "江灼", "axisDeg": 90},
+    "slots": [
+      {
+        "slotId": "slot-suyan",
+        "entityId": "character-suyan",
+        "depthLayer": "foreground",
+        "screenRegion": "left_foreground",
+        "positionM": [-1.2, 2.0, 0],
+        "yawDeg": 90,
+        "visibility": "clear"
+      }
+    ],
+    "visibilityRelations": [],
+    "referenceMediaIds": ["blocking-media-..."],
+    "depthReferenceMediaIds": ["depth-media-..."],
+    "cameraMotionReferenceMediaIds": ["camera-video-..."],
+    "actionReferenceMediaIds": ["action-video-..."]
+  }
+}
+```
+
+分镜可以在当前镜头增加临时覆盖，例如“中景路人低头绕行”，但不得改写快照中的永久身份、场景几何或基础站位。覆盖必须带 `shotId` 和来源。
+
+## 与街道冲突 Skill 的交接
+
+3D 导演台提供空间事实和参考预演，并将审核结果保存为可复用资产：
+
+- 谁在近景、中景、远景；
+- 谁位于冲突区域；
+- 谁能看见粮铺；
+- 谁被柜台、屋檐或人群遮挡；
+- 相机在哪一侧；
+- 角色和群体的初始位置。
+- 可选的结构化深度和深度参考媒体；
+- 可选的占位参考图；
+- 可选的运镜参考视频；
+- 可选的动作参考视频。
+
+街道冲突 Skill 提供时间行为：
+
+- 哪些中景路人看见并理解冲突；
+- 谁先停步、谁后退、谁低头绕行；
+- 远景人物为何继续通行；
+- 反应如何沿可见区域传播。
+
+因此，`depthLayer` 不等于行为反应，`visibility` 不等于 `awareness`，二者不能合并成一个自然语言字段。
+
+## 采纳与校验
+
+采纳前必须检查：
+
+1. 所有 `entityRef` 能解析到有效的角色、群演、道具或场景版本；
+2. 坐标系和单位明确；
+3. `slotId` 唯一，实体重复引用有明确理由；
+4. 深度层与相机关系不矛盾；
+5. 近中远景槽位数量和可见性符合当前镜头；
+6. 场景固定几何没有被临时人物动作污染；
+7. 3D 导演台审核通过后才写入资产库并生成 asset revision；
+8. 分镜提交时重新检查资产 revision 是否仍可解析。
+
+## 成功标准
+
+- 3D 导演台可由自然语言生成结构化空间和四类参考产物；
+- 3D 导演台可以审核、调整和拒绝生成结果；
+- 用户可以在 3D 导演台中审核并修改位置、朝向、深度和摄影机；
+- 审核通过的结果能保存为可复用导演参考资产及不可变 revision；
+- 分镜能引用资产库中的导演参考资产 revision；
+- 粮铺、阁楼、苏砚/江灼和卖艺少女案例可以复用同一交接格式；
+- 角色、场景、道具或群演 Variant 删除时不会静默替换；
+- 分镜生成能区分空间快照、摄影机参考、动作参考和群像时间行为；
+- 实际图像/视频结果仍作为独立验证，不把结构化输入当作生成质量证明。
+
+## 本阶段不做
+
+- 不把 3D 白模直接当成最终角色图；
+- 不声称深度图已被视频模型消费；
+- 不自动把每个匿名群演升级为角色资产；
+- 不让自然语言生成直接覆盖已锁定分镜；
+- 不在本规范中定义具体武打招式或 H3 专用提示词。
+
+## 影响路径
+
+- `src/apps/director_design.py`
+- `frontend/src/components/director3d/design/`
+- `frontend/src/components/director3d/reference/`
+- `src/apps/comic_gen/models.py`
+- `src/apps/comic_gen/pipeline.py`
+- `tests/test_director_design.py`
+- `tests/test_director_shooting_plan.py`
+
+本 spec 先定义交接合同；实现应拆为自然语言生成请求、四类参考产物结果、3D 导演台审核、资产库入库、分镜读取和提交校验六个独立切片。

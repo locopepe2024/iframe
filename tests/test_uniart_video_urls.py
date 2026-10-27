@@ -34,7 +34,7 @@ def test_large_video_image_references_are_urls_not_inline_bytes(tmp_path, monkey
         'r2v': {'ref_image_urls': [str(image), str(image)]},
         'v2v': {'ref_video_urls': [str(image), str(image)]},
     }[mode]
-    uniart.UniArtVideoModel({}).generate('walk', str(tmp_path / 'result.mp4'), model='minimax-h3', **kwargs)
+    uniart.UniArtVideoModel({}).generate('walk', str(tmp_path / 'result.mp4'), model='minimax-h3', duration=4, resolution='720p', **kwargs)
 
 
 def test_video_material_storage_failure_prevents_submission(monkeypatch, tmp_path):
@@ -78,12 +78,13 @@ def test_h3_ref2v_emits_video_reference_content_after_ordered_images(monkeypatch
         str(tmp_path / 'result.mp4'),
         model='minimax-h3-vip',
         mode='reference2video',
+        duration=4, resolution='720p',
         ref_image_urls=[str(image)],
         ref_video_urls=[str(video)],
     )
 
     assert captured['endpoint'] == '/videos'
-    assert captured['body']['mode'] == 'reference2video'
+    assert captured['body']['mode'] == 'omni_reference'
     assert captured['body']['content'][1]['type'] == 'image_url'
     assert captured['body']['content'][1]['role'] == 'reference_image'
     assert captured['body']['content'][2]['type'] == 'video_url'
@@ -113,17 +114,23 @@ def test_playground_preserves_video_model_and_all_url_references(monkeypatch, tm
     def post(config, endpoint, body):
         assert body['model'] == model
         assert body['resolution'] == resolution
-        assert body['mode'] == {
+        expected_modes = {
             't2v': 'text2video', 'i2v': 'image2video', 'r2v': 'reference2video',
             'f2v': 'frames2video', 'v2v': 'reference2video',
-        }[mode]
+        }
+        if model.startswith('minimax-h3'):
+            expected_modes.update(t2v='text_to_video', r2v='omni_reference',
+                                  f2v='first_last_frame', v2v='omni_reference')
+        assert body['mode'] == expected_modes[mode]
         assert endpoint == '/videos'
         assert 'data:' not in json.dumps(body)
         if mode in {'r2v', 'f2v', 'v2v'}:
             urls = [c[c['type']]['url'] for c in body['content'] if c['type'] != 'text']
             assert urls == refs
         elif mode == 'i2v':
-            assert body['content'][1] == {'type': 'image_url', 'role': 'image', 'image_url': {'url': refs[0]}}
+            assert body['content'][1] == {'type': 'image_url', 'role': 'first_frame' if model.startswith('minimax-h3') else 'image', 'image_url': {'url': refs[0]}}
+        elif model.startswith('minimax-h3'):
+            assert body['content'] == [{'type': 'text', 'text': 'walk'}]
         else:
             assert body['prompt'] == 'walk'
             assert 'content' not in body
@@ -139,6 +146,12 @@ def test_playground_preserves_video_model_and_all_url_references(monkeypatch, tm
     monkeypatch.setattr(uniart, '_post', post)
     monkeypatch.setattr(uniart, '_poll', poll)
     monkeypatch.setattr(uniart, '_download_result', lambda *a: None)
+    if model.startswith('minimax-h3') and resolution == '480p':
+        with pytest.raises(RuntimeError, match='supports 720p or 2k'):
+            service._process_video_generation(gen)
+        assert captured == []
+        assert gen.provider_tasks == {}
+        return
     service._process_video_generation(gen)
     assert len(captured) == 1
     assert gen.provider_tasks == {'0': 'accepted'}

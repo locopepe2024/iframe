@@ -4,6 +4,8 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { AlertCircle, BrainCircuit, Check, CheckCircle2, Loader2, Pencil, RotateCcw, Save, Send, X } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { api } from "@/lib/api";
+import { useDirectorSkills } from "@/lib/directorSkills";
+import DirectorSkillsSelector from "@/components/modules/DirectorSkillsSelector";
 import {
     useProjectStore,
     type DirectorProfile,
@@ -55,6 +57,7 @@ type LocalDirectorDraft = {
 export default function DirectorProfilePanel({ mindMapOnly = false, onApplied, historicalProfile = null }: { mindMapOnly?: boolean; onApplied?: () => void; historicalProfile?: DirectorProfile | null }) {
     const t = useTranslations("artDirection");
     const { currentProject, updateProject } = useProjectStore();
+    const creativeSkills = useDirectorSkills(currentProject?.id, "episode");
     const confirmed = currentProject?.art_direction?.director_profile;
     const [draftText, setDraftText] = useState(() => editableProfile(confirmed));
     const [instruction, setInstruction] = useState("");
@@ -266,13 +269,14 @@ export default function DirectorProfilePanel({ mindMapOnly = false, onApplied, h
     };
 
     const analyze = async () => {
+        if (!creativeSkills.canRun) return;
         if (!currentProject) return;
         setBusy("analyze");
         setStatus({ kind: "running", action: "analyze", jobStatus: "queued" });
         try {
             const profile = await api.analyzeDirectorProfile(currentProject.id, jobStatus => {
                 setStatus({ kind: "running", action: "analyze", jobStatus });
-            });
+            }, creativeSkills.selected);
             applyAiResultToDraft(profile);
             setStatus({ kind: "success", action: "analyze", jobStatus: "completed" });
         } catch (error) {
@@ -462,6 +466,7 @@ export default function DirectorProfilePanel({ mindMapOnly = false, onApplied, h
 
     return (
         <>
+        <DirectorSkillsSelector state={creativeSkills} disabled={busy !== null} />
         <section className="border-b border-border pb-8" aria-labelledby="director-profile-title">
             <div className="flex flex-wrap items-start justify-between gap-3 mb-4">
                 <div>
@@ -488,7 +493,7 @@ export default function DirectorProfilePanel({ mindMapOnly = false, onApplied, h
                         size="sm"
                         leftIcon={<RotateCcw />}
                         loading={busy === "analyze"}
-                        disabled={busy !== null}
+                        disabled={busy !== null || !creativeSkills.canRun}
                         onClick={analyze}
                     >
                         {draftText ? t("directorReanalyze") : t("directorAnalyze")}

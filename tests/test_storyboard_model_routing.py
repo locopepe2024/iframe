@@ -345,6 +345,73 @@ def test_shot_candidate_requires_current_reviewed_input(tmp_path):
         pipeline.generate_storyboard_candidate(script.id, frame.id, "reviewed", "negative", token)
 
 
+def test_canonical_render_token_binds_negative_prompt():
+    from src.apps.comic_gen.pipeline import ComicGenPipeline
+
+    reviewed = ComicGenPipeline.storyboard_render_preview_token("context", "frame", "no blur")
+    assert reviewed != ComicGenPipeline.storyboard_render_preview_token("context", "frame", "no motion")
+    assert reviewed != ComicGenPipeline.storyboard_render_preview_token("context", "changed", "no blur")
+
+
+def test_candidate_preview_uses_confirmed_scene_design_without_video_timing():
+    scene = Scene(id="scene-1", name="长街", description="青石路", asset_design={
+        "design_revisions": [{"revision": 1, "design": {
+            "visual_notes": "粮铺沿街排列", "ambient_lighting": "冷灰蓝天光",
+            "visual_constraints": {"key_light_direction": "side", "visible_face_limit": 2},
+        }}],
+    })
+    frame = StoryboardFrame(id="frame-1", scene_id=scene.id, camera_movement="快速推进", transition_hint="叠化")
+    script = Script(id="episode-1", title="Episode", original_text="", scenes=[scene], frames=[frame],
+                    created_at=time.time(), updated_at=time.time())
+    pipeline = ComicGenPipeline.__new__(ComicGenPipeline)
+    pipeline.scripts = {script.id: script}
+    pipeline.series_store = {}
+    pipeline.resolve_project_assets = Mock(return_value={"characters": [], "scenes": [scene], "props": []})
+
+    preview = pipeline.preview_storyboard_candidate_prompt(script.id, frame.id, "人物站在粮铺前")
+    assert "粮铺沿街排列" in preview
+    assert "冷灰蓝天光" in preview
+    assert "主光方向：侧面光" in preview
+    assert "可见人脸上限：2 张" not in preview
+    assert "快速推进" not in preview
+    assert "叠化" not in preview
+    original_token = pipeline.storyboard_candidate_preview_token(script.id, frame.id, preview, None)
+    scene.asset_design["design_revisions"].append({"revision": 2, "design": {"visual_notes": "粮铺门面已改"}})
+    assert pipeline.storyboard_candidate_preview_token(script.id, frame.id, preview, None) != original_token
+
+
+def test_candidate_preview_uses_scene_baseline_without_old_shot_content():
+    scene = Scene(id="scene-1", name="青溪镇粮铺",
+                  description="木质粮铺，流民匪寇劫掠，近景百姓退后", asset_design={
+        "design_revisions": [{"revision": 1, "design": {
+            "visual_notes": "木质粮铺，流民匪寇劫掠",
+            "asset_baseline": {
+                "scene_identity": "青溪镇粮铺", "location_type": "长街粮铺",
+                "fixed_geometry": ["木质铺面", "柜台"], "fixed_landmarks": ["粮袋"],
+                "materials": ["旧木材"], "environment": ["青石板长街"],
+                "time_baseline": "黄昏", "lighting_baseline": "右侧斜光",
+                "composition_tendency": "沿街纵深", "reusable_constraints": [], "basis": ["observed"],
+            },
+            "shot_only_content": ["流民匪寇劫掠", "近景百姓退后"],
+            "visual_constraints": {"visible_face_limit": 2},
+        }}],
+    })
+    frame = StoryboardFrame(id="frame-1", scene_id=scene.id)
+    script = Script(id="episode-1", title="Episode", original_text="", scenes=[scene], frames=[frame],
+                    created_at=time.time(), updated_at=time.time())
+    pipeline = ComicGenPipeline.__new__(ComicGenPipeline)
+    pipeline.scripts = {script.id: script}
+    pipeline.series_store = {}
+    pipeline.resolve_project_assets = Mock(return_value={"characters": [], "scenes": [scene], "props": []})
+
+    preview = pipeline.preview_storyboard_candidate_prompt(script.id, frame.id, "粮铺空镜")
+
+    assert "固定结构：木质铺面、柜台" in preview
+    assert "流民匪寇" not in preview
+    assert "百姓退后" not in preview
+    assert "可见人脸上限" not in preview
+
+
 def test_render_preview_is_the_exact_complete_generator_prompt():
     now = time.time()
     frame = StoryboardFrame(

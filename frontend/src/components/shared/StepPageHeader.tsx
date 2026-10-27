@@ -38,8 +38,8 @@ export default function StepPageHeader({
 }: StepPageHeaderProps) {
     const stepStr = String(stepNumber).padStart(2, "0");
     return (
-        <header className="shrink-0 border-b border-border-subtle px-7 pt-[22px] pb-4">
-            <div className="flex items-start gap-5">
+        <header className="shrink-0 border-b border-border-subtle px-4 pt-4 pb-4 sm:px-7 sm:pt-[22px]">
+            <div className="flex flex-col gap-3 md:flex-row md:items-start md:gap-5">
                 <div className="flex-1 min-w-0">
                     <div className="font-mono text-[0.59375rem] font-normal uppercase tracking-[0.22em] text-text-muted">
                         <span>STEP</span>
@@ -51,12 +51,12 @@ export default function StepPageHeader({
                         <h1 className="font-display text-[2.125rem] font-semibold leading-[1.05] tracking-[-0.02em] text-foreground">
                             {title}
                         </h1>
-                        {pills ? <div className="flex items-center gap-2">{pills}</div> : null}
+                        {pills ? <div className="flex min-w-0 flex-wrap items-center gap-2">{pills}</div> : null}
                     </div>
                     <p className="mt-1.5 text-[0.8125rem] text-text-secondary">{subtitle}</p>
                 </div>
                 {trailing ? (
-                    <div className="flex items-center gap-2 shrink-0 pt-1">{trailing}</div>
+                    <div className="order-first flex shrink-0 items-center gap-2 self-end md:order-none md:self-auto md:pt-1">{trailing}</div>
                 ) : null}
             </div>
         </header>

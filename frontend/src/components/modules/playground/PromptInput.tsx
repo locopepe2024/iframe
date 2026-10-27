@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { Film, Plus, X, FileText, Music } from 'lucide-react';
 import { useTranslations } from 'next-intl';
 import PreviewImage from '@/components/shared/preview/PreviewImage';
@@ -8,7 +8,8 @@ import PreviewVideo from '@/components/shared/preview/PreviewVideo';
 import { usePlaygroundStore } from './usePlaygroundStore';
 import { referenceKey, referenceName } from './referenceMedia';
 import FullNameHints from './FullNameHints';
-import ReferencePromptEditor, { type ReferenceSuggestion } from './ReferencePromptEditor';
+import ReferencePromptEditor, { type ReferenceSuggestion, type PromptSlashSuggestion } from './ReferencePromptEditor';
+import CharacterPromptDictionary from '../CharacterPromptDictionary';
 import PromptTemplateModal from './PromptTemplateModal';
 import PromptHistoryDrawer from './PromptHistoryDrawer';
 
@@ -32,6 +33,8 @@ export default function PromptInput({ onSubmit, onOpenReferences }: PromptInputP
 
   const [showNegPrompt, setShowNegPrompt] = useState(false);
   const [mention, setMention] = useState<ReferenceSuggestion | null>(null);
+  const [dictionary, setDictionary] = useState<PromptSlashSuggestion | null>(null);
+  const dictionaryKeys = useRef<((event: KeyboardEvent) => boolean) | null>(null);
 
   const referenceCandidates = inputMedia.map((path, index) => ({
     path,
@@ -91,8 +94,14 @@ export default function PromptInput({ onSubmit, onOpenReferences }: PromptInputP
       {/* Main prompt textarea */}
       <div className="flex items-start gap-3">
       <ReferencePromptEditor value={prompt} labels={[...referenceCandidates.map((candidate) => candidate.label), ...Object.values(mediaNames)]}
-        onChange={handlePromptChange} onSubmit={onSubmit} onMentionChange={setMention} placeholder={t('prompt.placeholder')} />
+        onChange={handlePromptChange} onSubmit={onSubmit} onMentionChange={setMention}
+        onSlashChange={(next) => { setDictionary(next); if (next) setMention(null); }}
+        onSlashKeyDown={(event) => dictionaryKeys.current?.(event) || false}
+        placeholder={t('prompt.placeholder')} />
       </div>
+      <p className="mt-1 text-xs text-text-muted">/ 检索词典；点击模板中的 [变量] 选择词条填写；@ 选择参考素材。</p>
+      {dictionary && <CharacterPromptDictionary suggestion={dictionary} onClose={() => setDictionary(null)}
+        onApply={(text) => setPrompt(text)} keyHandler={dictionaryKeys} />}
 
       {mention && (
         <div

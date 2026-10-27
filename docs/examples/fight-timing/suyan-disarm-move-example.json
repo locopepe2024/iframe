@@ -1,0 +1,30 @@
+{
+  "schema_version": 1,
+  "status": "draft",
+  "character_id": "suyan",
+  "combat_profile": {
+    "profile_id": "suyan.swordfighter.v1",
+    "weapon_hand": "right",
+    "support_hand": "left",
+    "distance_preference": "mid_to_close",
+    "force_chain": ["footwork", "hip_rotation", "torso", "shoulder", "elbow", "wrist"],
+    "invariants": ["保持面向当前对手", "不自动松开剑", "不将拨械改写为身体斩击"]
+  },
+  "move": {
+    "move_id": "suyan.sword.disarm_sweep.v1",
+    "label": "抽击·剑鞭拨械",
+    "aliases": ["抽击", "剑鞭", "Whiplash"],
+    "category": "sword_flexible_strike",
+    "starting_state": "中距，右手持剑，手腕与剑身基本持平，剑身位于身体前侧，目标持械手腕或前臂处于可接近范围",
+    "body_mechanics": ["击中前保持正常速度或略微加速", "从手腕与剑身持平的起势快速前刺启动", "前脚切入", "探身并将剑尖送到目标附近", "剑尖对准对方持械手腕或前臂的可控接触区", "握柄和前臂保持受控，剑尖接近目标后由手腕继续横向短促加速发力，不用整条手臂抡动", "剑身中段在横向发力并接触目标的负载下形成浅C形侧弯，接触后出现短促局部颤振，形变波沿剑身传播并回弹", "击中后目标手臂或武器沿受力方向产生受控反应"],
+    "weapon_trajectory": "剑尖先向目标腕部或前臂前伸并到达其附近；握柄和前臂保持稳定，手腕继续横向短促发力，剑身中段在接触持械手或前臂的负载下形成可见的浅C形侧弯，剑身中段和剑尖出现短促受力颤振，随后回弹；这是柔韧剑身的局部抽击，不是整把剑像木棍一样刚性挥舞，不形成剑花圆环或能量波",
+    "target_relation": "针对对方持械手腕、前臂或手部附近的受控抽击，以打断握持和卸械为目的；不以伤害身体为目的，不默认攻击躯干",
+    "contact_result": "一次可读的柔韧剑身接触，目标手腕、前臂或持械手沿受力方向短促偏移，武器是否脱手由当前镜头授权；不自动造成伤口",
+    "recovery_state": "保持面向对手并进入下一动作",
+    "visible_cues": ["侧面近景能看见握柄和前臂保持受控、手腕继续横向发力", "剑身中段在接触负载下形成浅C形侧弯而非整把剑一起平移", "剑身中段和剑尖出现短促局部颤振", "形变波沿剑身传播并回弹", "剑身侧面完成单次受控接触", "受击手臂或武器沿受力方向偏移"],
+    "forbidden_interpretations": ["不改为剑花或绕身回环", "不改为拍刃的剑身对剑身碰撞", "不改为绕剑变线Coupé或直线刺击", "不添加发光能量波代替真实剑身形变", "不自动造成身体伤口"]
+  },
+  "reference_uses": [],
+  "source_refs": ["character_performance_draft"],
+  "revision": 1
+}

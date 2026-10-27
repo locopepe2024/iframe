@@ -1,4 +1,5 @@
 import type { ShotNode } from "./ShotCard";
+import { describeCharacterMove, findCharacterMove } from "@/lib/characterMoveDictionary";
 
 /** Resolve the art-direction layer for one shot.
  *
@@ -46,8 +47,7 @@ export function directorShotSuggestions(shot: ShotNode): string[] {
         ["导演效果", context.shot?.director_effect],
         ["角色表演", context.shot?.performance_action],
         ["动作物理", context.shot?.action_physics],
-        ["运镜", context.shot?.camera_movement],
-        ["构图", context.shot?.composition],
+        ["构图", shot.composition ? undefined : context.shot?.composition],
         ["环境音", context.shot?.ambient_sound],
     ];
     const lighting = context.shot?.lighting;
@@ -65,6 +65,7 @@ export function directorShotSuggestions(shot: ShotNode): string[] {
         shot.cameraMovementStructured?.description || shot.cameraMovementStructured?.primary || "",
         shot.shotSize || "",
         shot.cameraAngle || "",
+        shot.composition || "",
         shot.transitionHint || "",
     ].map(normalizedPromptText).filter(Boolean);
     const clauses = values.flatMap(([label, raw]) => {
@@ -93,6 +94,7 @@ export function buildAssembledPrompt(
     shot: ShotNode,
     preserveReferences = false,
     globalStylePrompt = "",
+    inheritedLighting = "",
 ): string {
     let base = (shot.prompt || "").trim();
 
@@ -108,9 +110,17 @@ export function buildAssembledPrompt(
     const prefix = resolveStylePrompt(
         globalStylePrompt,
         shot.stylePromptOverride,
-        shot.lightingOverride,
+        shot.lightingOverride || inheritedLighting,
     );
     const suffixes: string[] = [];
+
+    const performanceMoves = shot.performanceMoves?.length
+        ? shot.performanceMoves
+        : (shot.moveRef ? [{ characterId: "", moveRef: shot.moveRef, moveVariant: shot.moveVariant }] : []);
+    for (const performanceMove of performanceMoves) {
+        const move = findCharacterMove(performanceMove.moveRef);
+        if (move) suffixes.push(`${performanceMove.characterId ? `角色${performanceMove.characterId}：` : ""}${describeCharacterMove(move, performanceMove.moveVariant)}`);
+    }
 
     // Camera movement (natural language, speed naturally embedded)
     if (shot.cameraMovementStructured) {
@@ -125,11 +135,14 @@ export function buildAssembledPrompt(
     if (framingParts.length > 0) {
         suffixes.push(framingParts.join("，"));
     }
+    if (shot.composition) suffixes.push(`构图：${shot.composition}`);
 
     // Transition hint (optional, for multi-shot internal transitions)
     if (shot.transitionHint) {
         suffixes.push(shot.transitionHint);
     }
+
+    suffixes.push(...microExpressionDescriptions(shot));
 
     if (suffixes.length === 0) return [prefix, base].filter(Boolean).join(" . ");
 
@@ -140,15 +153,45 @@ export function buildAssembledPrompt(
     return [prefix, assembled].filter(Boolean).join(" . ");
 }
 
+function microExpressionDescriptions(shot: ShotNode): string[] {
+    return (shot.microExpressionTiming ?? []).flatMap(item => {
+        const phases = item.timing.map(phase =>
+            `${phase.phase}(${phase.relative_start.toFixed(2)}-${phase.relative_end.toFixed(2)}) ${phase.visible_change}`,
+        );
+        return phases.length ? [`${item.character_name || "当前角色"}表情时序：${phases.join("；")}`] : [];
+    });
+}
+
 export function buildGenerationPrompt(
     shot: ShotNode,
     generateAudio: boolean,
     modelId: string,
     globalStylePrompt = "",
+    inheritedLighting = "",
+    confirmedScene = "",
+    confirmedAssets = "",
 ): string {
-    if (shot.promptIsOptimized) return shot.prompt.trim();
+    if (shot.promptIsOptimized) {
+        const base = shot.prompt.trim();
+        const accepted = microExpressionDescriptions(shot).filter(item => !base.includes(item));
+        const performanceMoves = shot.performanceMoves?.length
+            ? shot.performanceMoves
+            : (shot.moveRef ? [{ characterId: "", moveRef: shot.moveRef, moveVariant: shot.moveVariant }] : []);
+        const moveTexts = performanceMoves.flatMap((performanceMove) => {
+            const move = findCharacterMove(performanceMove.moveRef);
+            if (!move || base.includes(move.move_ref)) return [];
+            return [`${performanceMove.characterId ? `角色${performanceMove.characterId}：` : ""}${describeCharacterMove(move, performanceMove.moveVariant)}`];
+        });
+        return [base, ...moveTexts, ...accepted].filter(Boolean).join("，");
+    }
     // An accepted optimizer result is already a complete provider prompt.
-    let prompt = buildAssembledPrompt(shot, true, globalStylePrompt);
+    let prompt = buildAssembledPrompt(shot, true, globalStylePrompt, inheritedLighting);
+    if (confirmedScene && !prompt.includes(confirmedScene)) {
+        prompt = [prompt, `场景视觉基线：${confirmedScene}`].filter(Boolean).join("\n");
+    }
+    if (confirmedAssets && !prompt.includes(confirmedAssets)) {
+        prompt = [prompt, `已确认资产外观：\n${confirmedAssets}`].filter(Boolean).join("\n");
+    }
     const line = shot.dialogueStructured?.line?.trim();
     if (!generateAudio || !line) return prompt;
     const speaker = shot.dialogueStructured?.speaker?.trim() || "Speaker";

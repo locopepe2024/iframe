@@ -4,9 +4,10 @@ import { useEffect, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { Check, Film, Loader2, MessageSquare, Send, X } from "lucide-react";
 import { useTranslations } from "next-intl";
-import type { StoryboardDraftFrame } from "@/lib/storyboardAnalysis";
+import type { StoryboardAnalysisLineage, StoryboardDraftFrame } from "@/lib/storyboardAnalysis";
 
 interface StoryboardAnalysisModalProps {
+    lineage?: StoryboardAnalysisLineage | null;
     isOpen: boolean;
     draft: StoryboardDraftFrame[] | null;
     feedback: string[];
@@ -19,6 +20,7 @@ interface StoryboardAnalysisModalProps {
 
 export default function StoryboardAnalysisModal({
     isOpen,
+    lineage,
     draft,
     feedback,
     existingShotCount,
@@ -83,7 +85,9 @@ export default function StoryboardAnalysisModal({
                             <div className="min-w-0 flex-1">
                                 <h2 className="text-display font-medium text-foreground">{t("draftTitle")}</h2>
                                 <p className="mt-1 text-xs leading-5 text-text-secondary">
-                                    {t("draftSubtitle", { count: draft.length })}
+                                    {lineage?.storyboard_mode === "plan"
+                                        ? `导演计划 r${lineage.shooting_plan_revision} · 已覆盖 ${new Set(draft.map(frame => frame.shot_id)).size} 个镜头 / ${draft.length} 帧`
+                                        : `从剧本设计 · ${draft.length} 帧 · Skills ${lineage?.creative_skill_run?.map(skill => skill.label).join("、") || "基础流程"}`}
                                 </p>
                             </div>
                             <button

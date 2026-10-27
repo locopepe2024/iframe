@@ -1,0 +1,32 @@
+{
+  "schema_version": 1,
+  "status": "design_example_not_observed",
+  "shot_duration_seconds": 4.0,
+  "action_contract": {
+    "source": "匪首",
+    "target": "老掌柜",
+    "contact": "踢击腿与老掌柜胸腹前侧单次接触",
+    "force_direction": "由画面右侧向老掌柜所在的左后方；实际深度方向须核对首帧",
+    "initial_blocking": "匪首在右侧，老掌柜居中并面向匪首；木桌须在受力后的可见路径上",
+    "reaction_sequence": ["即时受击后退", "踉跄撞桌", "桌面可见物品响应", "倒地完成"],
+    "prop_interactions": "木桌晃动或位移；仅首帧确实可见的桌上物品移动",
+    "end_state": "老掌柜已倒地；匪首留在原侧，踢击腿已收回",
+    "uncertainties": ["首帧中木桌是否位于后退路径", "桌面有哪些物品确实可见"],
+    "source_refs": ["user_story_action", "first_frame_pending_review"]
+  },
+  "camera": {
+    "movement": "fast_push_in",
+    "independent_of_subject_tempo": true
+  },
+  "authored_events": [
+    { "event_id": "e1", "action_ref": "single_kick", "actor_ids": ["bandit"], "visible_change": "匪首迅速抬腿并踢出", "start": 0.0, "end": 0.35, "predecessors": [], "overlaps_with": [], "visibility": "needs_first_frame_review", "source_refs": ["user_story_action"], "uncertainties": [], "timing_authority": "design_example" },
+    { "event_id": "e2", "action_ref": "single_kick", "actor_ids": ["bandit", "shopkeeper"], "visible_change": "脚部只接触老掌柜一次", "start": 0.35, "end": 0.5, "predecessors": ["e1"], "overlaps_with": ["e3"], "visibility": "needs_first_frame_review", "source_refs": ["user_story_action"], "uncertainties": ["接触部位是否在当前机位可见"], "timing_authority": "design_example" },
+    { "event_id": "e3", "action_ref": "impact_reaction", "actor_ids": ["bandit", "shopkeeper"], "visible_change": "老掌柜立即失衡并向受力方向踉跄后退；匪首收腿", "start": 0.45, "end": 0.9, "predecessors": ["e2"], "overlaps_with": ["e2"], "visibility": "needs_first_frame_review", "source_refs": ["user_story_action"], "uncertainties": [], "timing_authority": "design_example" },
+    { "event_id": "e4", "action_ref": "table_collision", "actor_ids": ["shopkeeper", "table"], "visible_change": "老掌柜撞桌，桌子晃动；实际可见的桌上物品随即移动", "start": 0.9, "end": 1.35, "predecessors": ["e3"], "overlaps_with": [], "visibility": "needs_first_frame_review", "source_refs": ["user_story_action", "first_frame_pending_review"], "uncertainties": ["桌子及其物品须位于画面可见区"], "timing_authority": "design_example" },
+    { "event_id": "e5", "action_ref": "fall", "actor_ids": ["shopkeeper"], "visible_change": "老掌柜倒地完成", "start": 1.35, "end": 1.8, "predecessors": ["e4"], "overlaps_with": [], "visibility": "needs_first_frame_review", "source_refs": ["user_story_action"], "uncertainties": ["当前景别能否看到倒地终态"], "timing_authority": "design_example" },
+    { "event_id": "e6", "action_ref": "end_state_hold", "actor_ids": ["bandit", "shopkeeper"], "visible_change": "保持碰撞后的终态，人物不继续缓慢下沉", "start": 1.8, "end": 4.0, "predecessors": ["e5"], "overlaps_with": [], "visibility": "needs_first_frame_review", "source_refs": ["shot_duration_seconds"], "uncertainties": ["终态保持是否符合镜头叙事任务"], "timing_authority": "design_example" }
+  ],
+  "reference_uses": [],
+  "observed_events": null,
+  "observation_status": "requires_source_frame_and_generated_video_review"
+}

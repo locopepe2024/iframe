@@ -23,12 +23,40 @@ const assets = [
 ];
 
 describe("storyboard multi-reference assets", () => {
+    it("resolves typed project tags by kind when a character and scene share a name", () => {
+        const sameName = [
+            { id: "person", name: "长街", kind: "character" as const, variants: [{ id: "face", url: "person.jpg" }] },
+            { id: "place", name: "长街", kind: "scene" as const, variants: [{ id: "street", url: "street.jpg" }] },
+        ];
+        const result = resolveReferenceSubmission("[scene:长街] [character:长街]", sameName);
+        expect(result.urls).toEqual(["street.jpg", "person.jpg"]);
+        expect(result.groups.map((group) => group.kind)).toEqual(["scene", "character"]);
+        const prompt = bindH3MultiReferencePrompt("[scene:长街] [character:长街]", result.groups);
+        expect(prompt).toContain("长街 (reference asset 1) 长街 (reference asset 2)");
+    });
+
+    it("does not bind a typed scene tag to a same-named character", () => {
+        const result = resolveReferenceSubmission("[scene:女主播]", assets);
+        expect(result.urls).toEqual([]);
+        expect(result.unresolvedNames).toEqual(["女主播"]);
+    });
+
+    it("requires disambiguation when two project assets have the same type and name", () => {
+        const repeated = [assets[0], { ...assets[0], id: "host-copy", variants: [{ id: "other", url: "wrong.jpg" }] }];
+        const result = resolveReferenceSubmission("[character:女主播]", repeated);
+        expect(result.urls).toEqual([]);
+        expect(result.unresolvedNames).toEqual(["女主播"]);
+    });
+
     it("uses one primary image for assets without an explicit shot selection", () => {
         const result = resolveReferenceSubmission(
             "[character:女主播] holds [prop:穿心莲]",
             assets,
         );
         expect(result.urls).toEqual(["host.jpg", "front.jpg"]);
+        expect(result.assetInputs.map((item) => [item.asset_type, item.asset_id, item.variant_id])).toEqual([
+            ["character", "host", "host-front"], ["prop", "product", "product-front"],
+        ]);
     });
 
     it("combines explicit slots and semantic asset tags without collisions", () => {
@@ -74,6 +102,21 @@ describe("storyboard multi-reference assets", () => {
 
         expect(result.urls).toEqual(["host-front.jpg"]);
         expect(result.groups[0].variants.map((variant) => variant.id)).toEqual(["host-front"]);
+    });
+
+    it("uses an explicitly reviewed single character look instead of the asset default", () => {
+        const character = {
+            ...assets[0],
+            variants: [
+                { id: "host-front", url: "host-front.jpg" },
+                { id: "host-injured", url: "host-injured.jpg" },
+            ],
+        };
+        const result = resolveReferenceSubmission(
+            "[character:女主播]", [character], { host: ["host-injured"] },
+        );
+        expect(result.urls).toEqual(["host-injured.jpg"]);
+        expect(result.groups[0].variants.map((variant) => variant.id)).toEqual(["host-injured"]);
     });
 
     it("binds all selected product pictures without mixing Subject and Picture syntax", () => {

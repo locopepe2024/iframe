@@ -42,6 +42,33 @@ def test_scene_prop_design_draft_and_confirmation_survive_reload(tmp_path, kind,
     assert loaded.asset_design == asset.asset_design
 
 
+def test_scene_asset_extraction_baseline_and_shot_only_content_survive_reload(tmp_path):
+    pipeline, scene, _ = make_pipeline(tmp_path)
+    baseline = {
+        "scene_identity": "青溪镇长街中段粮铺",
+        "location_type": "古代街市粮铺",
+        "fixed_geometry": ["沿街木质铺面", "木柜台"],
+        "fixed_landmarks": ["粮袋", "竹筐"],
+        "materials": ["旧木材", "粗麻布", "青石板"],
+        "environment": ["长街纵深"],
+        "time_baseline": "黄昏",
+        "lighting_baseline": "右后方斜射暖光",
+        "composition_tendency": "保留门前调度空间",
+        "reusable_constraints": ["固定结构保持一致"],
+        "basis": ["observed"],
+    }
+    design = {"visual_notes": "青溪镇长街中段粮铺", "asset_baseline": baseline,
+              "shot_only_content": ["流民匪寇劫掠", "当前人物近中远景分配"],
+              "unresolved": [], "confirmed": True}
+    pipeline.update_asset_attributes("project", "street", "scene", {"asset_design": design})
+    loaded = ComicGenPipeline.__new__(ComicGenPipeline)
+    loaded.data_file = pipeline.data_file
+    restored = loaded._load_data()["project"].scenes[0]
+    saved = restored.asset_design["design_revisions"][0]["design"]
+    assert saved["asset_baseline"]["scene_identity"] == "青溪镇长街中段粮铺"
+    assert saved["shot_only_content"] == ["流民匪寇劫掠", "当前人物近中远景分配"]
+
+
 def test_scene_prop_design_rejects_blank_confirmation_without_mutation(tmp_path):
     pipeline, scene, _ = make_pipeline(tmp_path)
     with pytest.raises(ValueError, match="concrete visual design"):
@@ -49,10 +76,76 @@ def test_scene_prop_design_rejects_blank_confirmation_without_mutation(tmp_path)
             "asset_design": {"visual_notes": " ", "confirmed": True},
         })
     assert scene.asset_design == {"design_draft": {}, "design_revisions": []}
+
     with pytest.raises(ValueError, match="unknown fields"):
         pipeline.update_asset_attributes("project", "street", "scene", {
             "asset_design": {"visual_notes": "Stone", "hidden_prompt": "red sunset"},
         })
+    assert scene.asset_design == {"design_draft": {}, "design_revisions": []}
+
+
+def test_scene_prompt_sources_roundtrip_without_overwriting_description(tmp_path):
+    pipeline, scene, _ = make_pipeline(tmp_path)
+    workspace = {
+        "settings_pending": True,
+        "design": {"prompt": "Unpolished stone street", "mode": "text", "references": []},
+        "ai": {"prompt": "AI stone street @Gate", "mode": "reference", "references": [
+            {"asset_type": "scene", "asset_id": "gate", "variant_id": "v2"},
+        ]},
+    }
+    pipeline.update_asset_attributes("project", "street", "scene", {"asset_design": {
+        "visual_notes": "Stone street", "prompt_workspace": workspace, "confirmed": True,
+    }})
+    reloaded = ComicGenPipeline.__new__(ComicGenPipeline)
+    reloaded.data_file = pipeline.data_file
+    saved = reloaded._load_data()["project"].scenes[0]
+    assert saved.asset_design["design_draft"]["prompt_workspace"] == workspace
+    assert saved.description == "A market street"
+    assert saved.image_asset == scene.image_asset
+    assert "prompt_workspace" not in saved.asset_design["design_revisions"][0]["design"]
+
+
+@pytest.mark.parametrize("source", ["design", "ai"])
+def test_scene_confirms_the_explicitly_selected_prompt_source(tmp_path, source):
+    pipeline, scene, _ = make_pipeline(tmp_path)
+    workspace = {"active_source": source,
+                 "design": {"prompt": "Original street"}, "ai": {"prompt": "AI street"}}
+    pipeline.update_asset_attributes("project", "street", "scene", {"asset_design": {
+        "visual_notes": "Editable panel notes", "prompt_workspace": workspace, "confirmed": True,
+    }})
+    assert scene.asset_design["design_draft"]["visual_notes"] == "Editable panel notes"
+    confirmed = scene.asset_design["design_revisions"][-1]["design"]
+    assert confirmed["visual_notes"] == workspace[source]["prompt"]
+    assert "prompt_workspace" not in confirmed
+    assert scene.description == "A market street"
+
+
+def test_scene_cannot_confirm_an_empty_selected_ai_source(tmp_path):
+    pipeline, scene, _ = make_pipeline(tmp_path)
+    with pytest.raises(ValueError, match="Selected scene design source"):
+        pipeline.update_asset_attributes("project", "street", "scene", {"asset_design": {
+            "visual_notes": "Panel notes", "confirmed": True, "prompt_workspace": {
+                "active_source": "ai", "design": {"prompt": "Original"}, "ai": {"prompt": " "},
+            },
+        }})
+    assert scene.asset_design == {"design_draft": {}, "design_revisions": []}
+
+
+@pytest.mark.parametrize("workspace", [
+    {"design": {"prompt": "original"}},
+    {"design": {"prompt": 4}, "ai": {"prompt": "AI"}},
+    {"design": {"prompt": "original"}, "ai": {"prompt": "x" * 30001}},
+    {"design": {"mode": "automatic"}, "ai": {}},
+    {"design": {"references": [{"asset_type": "scene", "asset_id": "gate"}]}, "ai": {}},
+    {"design": {}, "ai": {}, "hidden_prompt": "injected"},
+    {"design": {}, "ai": {}, "settings_pending": "false"},
+])
+def test_scene_rejects_invalid_prompt_workspace_before_mutation(tmp_path, workspace):
+    pipeline, scene, _ = make_pipeline(tmp_path)
+    with pytest.raises(ValueError):
+        pipeline.update_asset_attributes("project", "street", "scene", {"asset_design": {
+            "visual_notes": "Street", "prompt_workspace": workspace, "confirmed": True,
+        }})
     assert scene.asset_design == {"design_draft": {}, "design_revisions": []}
 
 
@@ -91,6 +184,34 @@ def test_scene_local_light_requires_a_target_and_prop_rejects_scene_fields(tmp_p
         })
     assert scene.asset_design["design_revisions"] == []
     assert prop.asset_design["design_revisions"] == []
+
+
+def test_prop_dimensions_are_confirmed_and_bounded(tmp_path):
+    pipeline, _, prop = make_pipeline(tmp_path)
+    design = {"visual_notes": "Plain sword", "dimensions": {"length_cm": 105}, "confirmed": True}
+    pipeline.update_asset_attributes("project", "sword", "prop", {"asset_design": design})
+    assert prop.asset_design["design_revisions"][0]["design"]["dimensions"] == {"length_cm": 105}
+    with pytest.raises(ValueError, match="length_cm"):
+        pipeline.update_asset_attributes("project", "sword", "prop", {
+            "asset_design": {"visual_notes": "Plain sword", "dimensions": {"length_cm": 0}, "confirmed": False},
+        })
+
+
+def test_scene_crowd_layers_are_confirmed_and_validated(tmp_path):
+    pipeline, scene, _ = make_pipeline(tmp_path)
+    crowd = {
+        "near": {"identity_policy": "asset_required", "density": "2人", "subjects": ["卖艺少女"], "text_elements": ["粮铺"], "motion": "避让"},
+        "mid": {"identity_policy": "template_allowed", "density": "稀疏", "subjects": ["流民"], "text_elements": [], "motion": "沿街后退"},
+        "far": {"identity_policy": "unidentified", "density": "密集", "subjects": ["路人"], "text_elements": [], "motion": "远离冲突"},
+    }
+    pipeline.update_asset_attributes("project", "street", "scene", {"asset_design": {
+        "visual_notes": "长街", "crowd_design": crowd, "confirmed": True,
+    }})
+    assert scene.asset_design["design_revisions"][0]["design"]["crowd_design"] == crowd
+    with pytest.raises(ValueError, match="identity_policy"):
+        pipeline.update_asset_attributes("project", "street", "scene", {"asset_design": {
+            "visual_notes": "长街", "crowd_design": {"near": {"identity_policy": "random"}, "mid": {}, "far": {}},
+        }})
 
 
 def test_scene_visual_constraints_are_saved_and_versioned(tmp_path):
@@ -189,3 +310,135 @@ def test_scene_variant_visual_snapshot_is_projected_as_reusable_preset(tmp_path)
     assert len(presets) == 1
     assert presets[0].source_asset_id == "street"
     assert presets[0].source_variant_id == "scene-variant-1"
+    assert presets[0].name.endswith("变体 1")
+
+
+def test_scene_prompt_layers_survive_reload_and_confirmed_snapshot(tmp_path):
+    pipeline, scene, _ = make_pipeline(tmp_path)
+    layers = {"version": 1,
+              "lighting": {"source": "月光", "angles": {"azimuth": 90, "elevation": 25}, "fill": "不额外补光"},
+              "camera": {"framing": "全景", "focal_length": "长焦观感", "depth_of_field": "深景深"},
+              "composition": {"spatial_layers": "前中后景分层"}}
+    pipeline.update_asset_attributes("project", "street", "scene", {"asset_design": {
+        "visual_notes": "Stone street", "prompt_layers": layers, "confirmed": True,
+    }})
+    restored = ComicGenPipeline.__new__(ComicGenPipeline)
+    restored.data_file = pipeline.data_file
+    saved = restored._load_data()["project"].scenes[0]
+    assert saved.asset_design["design_draft"]["prompt_layers"] == layers
+    assert saved.asset_design["design_revisions"][0]["design"]["prompt_layers"] == layers
+    assert "direction" not in saved.asset_design["design_draft"]["prompt_layers"]["lighting"]
+
+
+
+@pytest.mark.parametrize("layers", [
+    {"camera": {"brand": "hidden aesthetic"}},
+    {"camera": {"framing": ["全景"]}},
+    {"lighting": {"source": "x" * 501}},
+    {"lighting": {"angles": {"azimuth": 0}}},
+    {"lighting": {"angles": {"azimuth": 181, "elevation": 0}}},
+    {"lighting": {"angles": {"azimuth": True, "elevation": 0}}},
+    {"camera": {"angles": {"azimuth": 0, "elevation": 0}, "viewpoint": "侧面"}},
+    {"lighting": {"angles": {"azimuth": 0, "elevation": 0}, "direction": "左侧"}},
+    {"composition": {"continuity": "180 degree rule"}},
+])
+def test_scene_rejects_invalid_layers_before_mutation(tmp_path, layers):
+    pipeline, scene, _ = make_pipeline(tmp_path)
+    before = scene.model_dump()
+    with pytest.raises(ValueError):
+        pipeline.update_asset_attributes("project", "street", "scene", {"asset_design": {
+            "visual_notes": "Stone street", "prompt_layers": layers, "confirmed": True,
+        }})
+    assert scene.model_dump() == before
+
+
+@pytest.mark.parametrize("light", [{"direction": "顶部来光"}, {"angles": {"azimuth": 0, "elevation": 75}}])
+def test_scene_rejects_light_layer_contradicting_constraints(tmp_path, light):
+    pipeline, scene, _ = make_pipeline(tmp_path)
+    before = scene.model_dump()
+    with pytest.raises(ValueError, match="conflicts"):
+        pipeline.update_asset_attributes("project", "street", "scene", {"asset_design": {
+            "visual_notes": "Stone street", "prompt_layers": {"lighting": light},
+            "visual_constraints": {"forbidden_light_directions": ["top"]},
+        }})
+    assert scene.model_dump() == before
+
+
+def test_scene_focus_roundtrip(tmp_path):
+    pipeline, scene, _ = make_pipeline(tmp_path)
+    focus = {"target": "门口石狮", "x": 30, "y": 65, "radius": 18}
+    pipeline.update_asset_attributes("project", "street", "scene", {"asset_design": {
+        "visual_notes": "Stone street", "prompt_layers": {"camera": {"focus": focus}}, "confirmed": True,
+    }})
+    restored = ComicGenPipeline.__new__(ComicGenPipeline)
+    restored.data_file = pipeline.data_file
+    loaded = restored._load_data()["project"].scenes[0]
+    assert loaded.asset_design["design_draft"]["prompt_layers"]["camera"]["focus"] == focus
+    assert loaded.asset_design["design_revisions"][0]["design"]["prompt_layers"]["camera"]["focus"] == focus
+
+
+@pytest.mark.parametrize("focus", [
+    {}, {"target": " "}, {"x": 30}, {"y": 30}, {"radius": 18},
+    {"x": 101, "y": 30}, {"x": 30, "y": -1}, {"x": True, "y": 30},
+    {"x": 30.5, "y": 30}, {"x": "30", "y": 30},
+    {"x": 30, "y": 30, "radius": 43}, {"target": "x" * 501},
+    {"target": "gate", "world_distance": 10},
+])
+def test_scene_rejects_invalid_focus_before_mutation(tmp_path, focus):
+    pipeline, scene, _ = make_pipeline(tmp_path)
+    before = scene.model_dump()
+    with pytest.raises(ValueError):
+        pipeline.update_asset_attributes("project", "street", "scene", {"asset_design": {
+            "visual_notes": "Stone street", "prompt_layers": {"camera": {"focus": focus}}, "confirmed": True,
+        }})
+    assert scene.model_dump() == before
+
+
+@pytest.mark.parametrize("focus", [None, {"target": "远处山门"}, {"x": 0, "y": 100}])
+def test_scene_accepts_optional_focus_and_boundary_coordinates(tmp_path, focus):
+    pipeline, scene, _ = make_pipeline(tmp_path)
+    pipeline.update_asset_attributes("project", "street", "scene", {"asset_design": {
+        "visual_notes": "Stone street", "prompt_layers": {"camera": {"focus": focus}},
+    }})
+    assert scene.asset_design["design_draft"]["prompt_layers"]["camera"]["focus"] == focus
+
+
+def test_scene_atmosphere_roundtrip_without_implicit_light_changes(tmp_path):
+    pipeline, scene, _ = make_pipeline(tmp_path)
+    lighting = {"source": "传统油灯照明", "mood": "宁静平和", "air": "稀薄雾气", "color": "暖光", "shadow": "自然接触阴影", "rim": "微弱轮廓光"}
+    pipeline.update_asset_attributes("project", "street", "scene", {"asset_design": {
+        "visual_notes": "Stone street", "prompt_layers": {"lighting": lighting}, "confirmed": True,
+    }})
+    restored = ComicGenPipeline.__new__(ComicGenPipeline)
+    restored.data_file = pipeline.data_file
+    loaded = restored._load_data()["project"].scenes[0]
+    assert loaded.asset_design["design_draft"]["prompt_layers"] == {"lighting": lighting}
+    assert loaded.asset_design["design_revisions"][0]["design"]["prompt_layers"] == {"lighting": lighting}
+
+
+@pytest.mark.parametrize("field", ["season", "time_of_day", "mood", "air", "color", "shadow", "rim"])
+@pytest.mark.parametrize("bad_value", [["宁静"], "x" * 501, True])
+def test_scene_atmosphere_validation_before_mutation(tmp_path, field, bad_value):
+    pipeline, scene, _ = make_pipeline(tmp_path)
+    before = scene.model_dump()
+    with pytest.raises(ValueError):
+        pipeline.update_asset_attributes("project", "street", "scene", {"asset_design": {
+            "visual_notes": "Stone street", "prompt_layers": {"lighting": {field: bad_value}},
+        }})
+    assert scene.model_dump() == before
+
+
+def test_autumn_evening_skylight_roundtrip_and_tool_normalization(tmp_path):
+    from src.apps.comic_gen.scene_prompt_layers import ScenePromptLayers, validate_tool_panel, compile_tool_panel
+    pipeline, _, _ = make_pipeline(tmp_path)
+    lighting = {"season": "秋天", "time_of_day": "傍晚", "source": "来自天空的环境光照明", "color": "冷蓝色"}
+    pipeline.update_asset_attributes("project", "street", "scene", {"asset_design": {
+        "visual_notes": "Stone street", "prompt_layers": {"lighting": lighting}, "confirmed": True,
+    }})
+    loaded = pipeline._load_data()["project"].scenes[0]
+    assert loaded.asset_design["design_draft"]["prompt_layers"] == {"lighting": lighting}
+    assert loaded.asset_design["design_revisions"][0]["design"]["prompt_layers"] == {"lighting": lighting}
+    tool = ScenePromptLayers.model_validate({"lighting": {k: v for k, v in lighting.items() if k != "color"}})
+    reparsed = ScenePromptLayers.model_validate(tool.model_dump())
+    validate_tool_panel(reparsed, "lighting")
+    assert compile_tool_panel(reparsed) == "光影：季节：秋天；时段：傍晚；光源：来自天空的环境光照明"

@@ -14,6 +14,7 @@ Configuration via environment variables:
 """
 import os
 import logging
+import time
 from typing import Dict, List, Optional, Any
 
 from ...utils.endpoints import get_provider_base_url
@@ -136,10 +137,24 @@ class LLMAdapter:
 
         # 显式 model override 路径：单次尝试，失败就抛。
         if model:
-            return self._chat_once(
-                client, model, messages, response_format,
-                timeout_seconds=timeout_seconds, max_retries=max_retries, stream=stream,
-            )
+            try:
+                return self._chat_once(
+                    client, model, messages, response_format,
+                    timeout_seconds=timeout_seconds, max_retries=max_retries, stream=stream,
+                )
+            except RuntimeError as exc:
+                # UniArt occasionally returns a transient gateway 502 after
+                # accepting a multimodal request. Retry once at this boundary
+                # so callers keep the same model and reviewed input; payload
+                # and authentication errors are still surfaced immediately.
+                if "status=502" not in str(exc):
+                    raise
+                logger.warning("Transient LLM gateway 502; retrying model=%s once", model)
+                time.sleep(1.0)
+                return self._chat_once(
+                    client, model, messages, response_format,
+                    timeout_seconds=timeout_seconds, max_retries=0, stream=stream,
+                )
 
         # Provider 默认路径：DashScope 走 fallback chain，OpenAI 单次尝试。
         if self.provider == "openai":

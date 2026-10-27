@@ -68,3 +68,22 @@ def test_asset_generator_uses_chinese_fallback_prompt(tmp_path, monkeypatch, gen
     assert "电影感光线，电影剧照，8K，细节丰富，写实" == DEFAULT_CHARACTER_STYLE_SUFFIX
     assert DEFAULT_CHARACTER_STYLE_SUFFIX in generated_prompt
     assert "黑色短发。" in generated_prompt
+
+
+@pytest.mark.parametrize("kind", ["full_body", "three_view", "headshot"])
+@pytest.mark.parametrize("style", ["真人写实，自然皮肤纹理", "动漫插画，概念设计"])
+def test_character_scaffold_preserves_style_without_injecting_quality_words(kind, style):
+    prompt = build_character_image_prompt(kind, "苏砚", style)
+    assert style in prompt
+    assert prompt.count("概念设计") == style.count("概念设计")
+    assert "高质量" not in prompt
+    assert "杰作级细节" not in prompt
+
+
+@pytest.mark.parametrize("kind", ["full_body", "three_view", "headshot"])
+def test_character_expression_and_gaze_take_priority_over_defaults(kind):
+    description = "嘴部表现：嘴角上扬。视线表现：目光低垂。"
+    prompt = build_character_image_prompt(kind, "苏砚", description)
+    assert description in prompt
+    assert "未指定表情时采用中性表情" in prompt
+    assert "中性表情，正面看向镜头" not in prompt
