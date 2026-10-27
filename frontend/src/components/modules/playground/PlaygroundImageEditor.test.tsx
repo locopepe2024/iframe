@@ -12,7 +12,7 @@ vi.mock('@/components/shared/AssetIndexPreview', () => ({ AssetIndexPreview: () 
 vi.mock('@/store/toastStore', () => ({ toast: { success: mocks.toast } }));
 vi.mock('./ImageEditorReferenceTools', () => ({ default: () => null }));
 vi.mock('next/dynamic', () => ({ default: () => function Editor(props: ImageEditorProps) {
-  return <div>{props.source ? <button onClick={() => {
+  return <div>{props.headerActions}{props.source ? <button onClick={() => {
     const file = new File(['edited'], 'edited.png');
     file.arrayBuffer = async () => new TextEncoder().encode('edited').buffer;
     void props.onSave(file);
@@ -44,8 +44,10 @@ it('appends a saved edit without replacing ordered references or changing mode',
 it('keeps saved copies available after reopening and appends at the end', async () => {
   render(<PlaygroundImageEditor><ImageEditorButton /></PlaygroundImageEditor>);
   fireEvent.click(screen.getByText('title'));
-  await screen.findByText('Edited');
+  fireEvent.click(await screen.findByRole('button', { name: 'librarySource' }));
+  fireEvent.click(await screen.findByRole('button', { name: 'edit' }));
   fireEvent.click(screen.getByText('Close')); fireEvent.click(screen.getByText('title'));
+  fireEvent.click(await screen.findByRole('button', { name: 'librarySource' }));
   fireEvent.click(await screen.findByText('use'));
   expect(usePlaygroundStore.getState().inputMedia).toEqual(['/first.png', '/second.png', saved.path]);
   expect(mocks.list).toHaveBeenCalledTimes(2);
@@ -66,6 +68,7 @@ it('keeps saved panorama copies in image editing for explicit director import', 
   mocks.list.mockResolvedValue([{ ...saved, projection_type: 'equirectangular' }]);
   render(<PlaygroundImageEditor><ImageEditorButton /></PlaygroundImageEditor>);
   fireEvent.click(screen.getByText('title'));
+  fireEvent.click(await screen.findByRole('button', { name: 'librarySource' }));
   expect(await screen.findByText('Edited')).toBeInTheDocument();
   expect(screen.queryByText('openDirector')).not.toBeInTheDocument();
   expect(window.location.hash).toBe('');
@@ -83,5 +86,5 @@ it('opens the standalone editor immediately and selects a library variant as the
   expect(await screen.findByText('Save')).toBeInTheDocument();
   fireEvent.click(screen.getByText('Close'));
   fireEvent.click(screen.getByRole('button', { name: 'open' }));
-  expect(await screen.findByText('Edited')).toBeInTheDocument();
+  expect(screen.getByTestId('image-editor-empty-canvas')).toBeInTheDocument();
 });
