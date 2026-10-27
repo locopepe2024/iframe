@@ -2764,6 +2764,7 @@ class AssemblyEditPlan(BaseModel):
         max_length=120,
     )
     scope: Literal["project", "series"]
+    burn_subtitle_lane_id: Optional[str] = Field(None, min_length=1, max_length=120)
     target_duration_ms: int = Field(
         ASSEMBLY_DEFAULT_TARGET_DURATION_MS,
         ge=1,
@@ -2820,6 +2821,11 @@ class AssemblyEditPlan(BaseModel):
                         f"overlapping clips are not allowed in lane {lane.id}"
                     )
                 previous.append(clip)
+
+        if self.burn_subtitle_lane_id is not None:
+            selected = next((lane for lane in self.lanes if lane.id == self.burn_subtitle_lane_id), None)
+            if selected is None or selected.kind != "subtitle" or selected.muted:
+                raise ValueError("burn_subtitle_lane_id requires an enabled subtitle lane")
 
         marker_ids = [marker.id for marker in self.markers]
         if len(marker_ids) != len(set(marker_ids)):

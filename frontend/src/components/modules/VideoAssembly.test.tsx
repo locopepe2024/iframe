@@ -5,7 +5,7 @@ import { buildDraftAssemblyPlan } from "./assemblyEditPlan";
 import { useProjectStore, type Project } from "@/store/projectStore";
 import { api } from "@/lib/api";
 
-vi.mock("next-intl", () => ({ useTranslations: () => (key: string) => key }));
+vi.mock("next-intl", () => ({ useLocale: () => "en", useTranslations: () => (key: string) => key }));
 vi.mock("@/lib/api", () => ({ API_URL: "http://localhost", api: { getProject: vi.fn(), saveAssemblyPlan: vi.fn(), renderAssemblyPlan: vi.fn() } }));
 
 const source = (): Project => ({
@@ -54,4 +54,21 @@ describe("Assembly variant refresh", () => {
         expect(api.saveAssemblyPlan).toHaveResolved();
     });
 
+});
+
+it("undoes and redoes a draft edit, then clears history after save", async () => {
+    const project = source(); project.assembly_plan = buildDraftAssemblyPlan(project);
+    useProjectStore.setState({ currentProject: project, projects: [project] });
+    vi.mocked(api.saveAssemblyPlan).mockImplementation(async (_scope, _id, plan) => ({ ...plan, revision: plan.revision + 1 }));
+    render(<VideoAssembly />);
+    const target = screen.getByRole("spinbutton", { name: "targetSeconds" });
+    fireEvent.change(target, { target: { value: "10" } });
+    expect(target).toHaveValue(10);
+    fireEvent.click(screen.getByRole("button", { name: "Undo" }));
+    expect(target).toHaveValue(5);
+    fireEvent.click(screen.getByRole("button", { name: "Redo" }));
+    expect(target).toHaveValue(10);
+    fireEvent.click(screen.getByRole("button", { name: "savePlan" }));
+    await waitFor(() => expect(screen.getByRole("button", { name: "Undo" })).toBeDisabled());
+    expect(screen.getByRole("button", { name: "Redo" })).toBeDisabled();
 });

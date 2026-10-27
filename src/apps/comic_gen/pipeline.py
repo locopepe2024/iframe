@@ -9666,7 +9666,7 @@ class ComicGenPipeline(StudioOwnerMixin):
         os.makedirs(output_dir, exist_ok=True)
         output_path = _safe_resolve_path(
             output_dir,
-            f"assembly_{scope}_{resource_id}_{int(time.time())}.mp4",
+            f"assembly_{scope}_{resource_id}_{uuid.uuid4().hex}.mp4",
         )
         command = [ffmpeg_path, "-y"]
         for source_path in source_paths:
@@ -9694,12 +9694,12 @@ class ComicGenPipeline(StudioOwnerMixin):
         ])
 
         try:
-            subprocess.run(
-                command,
-                check=True,
-                capture_output=True,
-                timeout=600,
-            )
+            from .assembly_subtitles import render_with_subtitles
+            render_with_subtitles(command, plan)
+        except ValueError as exc:
+            if os.path.isfile(output_path):
+                os.remove(output_path)
+            raise AssemblyPlanValidationError(str(exc)) from exc
         except subprocess.TimeoutExpired as exc:
             raise RuntimeError("Assembly FFmpeg render timed out") from exc
         except subprocess.CalledProcessError as exc:

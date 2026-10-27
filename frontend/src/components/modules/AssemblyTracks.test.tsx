@@ -26,3 +26,14 @@ describe("Assembly tracks", () => {
         expect(onChange).not.toHaveBeenCalled();
     });
 });
+
+it("selects a burn-in lane and clears that selection when the lane is muted", () => {
+    const captionPlan = { ...plan, lanes: [{ ...plan.lanes[0], clips: [{ id: "c", timeline_start_ms: 0, timeline_end_ms: 1000, text: "Hello", enabled: true, source_refs: [] }] }] };
+    const onChange = vi.fn();
+    const view = render(<AssemblyTracks plan={captionPlan} project={project} resourceId="p" saved onChange={onChange} />);
+    fireEvent.change(screen.getByRole("combobox", { name: "Video captions" }), { target: { value: "sub" } });
+    expect(onChange.mock.calls[0][0].burn_subtitle_lane_id).toBe("sub");
+    view.rerender(<AssemblyTracks plan={{ ...captionPlan, burn_subtitle_lane_id: "sub" }} project={project} resourceId="p" saved onChange={onChange} />);
+    fireEvent.click(screen.getByRole("checkbox", { name: "Mute / hide" }));
+    expect(onChange.mock.calls[1][0].burn_subtitle_lane_id).toBeNull();
+});
