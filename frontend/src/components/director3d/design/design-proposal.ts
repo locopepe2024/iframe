@@ -1,3 +1,4 @@
+import { compileStreetLayout, type StreetLayout } from "./street-layout";
 import { navigateCrowd, crowdGait } from "./crowd-navigation";
 import { Vector3 } from "three";
 import type { AuthoringSnapshot, WorkbenchState } from "../state/workbench-store";
@@ -9,7 +10,7 @@ import type { ActorPathEasing, CameraPathPresetId, CameraPathState, DialogueTime
 
 type Vec = [number, number, number];
 export interface CrowdMember { actorId: string; positionM: Vec; destinationM: Vec; yawDeg: number; startSeconds: number; durationSeconds: number }
-export type DesignOperation =
+export type DesignOperation = StreetLayout
   | { kind: "crowd_motion"; groupId: string; label: string; behavior: "avoid" | "observe" | "pass"; members: CrowdMember[] }
   | { kind: "camera_cut"; cameraId: string; timeSeconds: number }
   | { kind: "add_camera"; cameraId: string; label: string; targetIds: string[]; azimuthDeg: number; elevationDeg: number; distanceM: number; focalLengthMm: number }
@@ -52,7 +53,7 @@ export function designContext(state: WorkbenchState): string {
     selectedCameraId: state.selectedCameraId, groundHeightM: state.renderScene.ground.heightM,
     animated: state.dialogueTimeline.tracks.length > 0 || Object.keys(state.actorPaths).length > 0 || Object.keys(state.cameraPaths).length > 0,
     crowdGroups: state.crowdGroups,
-    supported: ["crowd motion", "camera cuts", "add composed camera", "static placement", "pair facing", "numbered group blocking", "box proxy", "static camera", "static dolly", "timed camera path", "pose preset", "seated procedural chair reference"],
+    supported: ["street layout", "crowd motion", "camera cuts", "add composed camera", "static placement", "pair facing", "numbered group blocking", "box proxy", "static camera", "static dolly", "timed camera path", "pose preset", "seated procedural chair reference"],
     posePresets: DESIGN_POSES,
     seating: { representation: "procedural_reference", calibratedRig: "canonical_white_model", seatHeightM: SEATED_FIT.supportHeightM + SEATED_FIT.groundLiftM, preservesCamera: true },
   });
@@ -92,7 +93,21 @@ export function parseDesignProposal(raw: unknown): DesignProposal {
   if (!Array.isArray(p.operations) || p.operations.length > 16 || Boolean(p.clarification) === Boolean(p.operations.length)) throw new Error("提案须包含操作或待澄清问题。");
   for (const value of p.operations) {
     const op = object(value);
-    if (op.kind === "crowd_motion") {
+    if (op.kind === "street_layout") {
+      keys(op, ["kind","layoutId","centerM","widthM","lengthM","buildings","trees"]); text(op.layoutId);
+      if (!/^design-street-[A-Za-z0-9_-]+$/.test(op.layoutId)) throw new Error("街区 ID 无效。");
+      vector(op.centerM); number(op.widthM,2,30); number(op.lengthM,4,80);
+      if (!Array.isArray(op.buildings) || op.buildings.length > 12 || !Array.isArray(op.trees) || op.trees.length > 12) throw new Error("街区数量超限。");
+      const seen = new Set<string>();
+      for (const raw of [...op.buildings, ...op.trees]) {
+        const item = object(raw); text(item.id); if (!/^[A-Za-z0-9_-]+$/.test(item.id) || seen.has(item.id)) throw new Error("街区对象 ID 重复或无效。"); seen.add(item.id);
+      }
+      for (const raw of op.buildings) {
+        const b = object(raw); keys(b,["id","label","centerM","dimensionsM","doorWidthM","frontSide"]); text(b.label,80); vector(b.centerM); vector(b.dimensionsM,3,20); number(b.doorWidthM,.8,8);
+        if (!["negative_y","positive_y"].includes(b.frontSide as string)) throw new Error("建筑门朝向无效。");
+      }
+      for (const raw of op.trees) { const t = object(raw); keys(t,["id","positionM","heightM","trunkWidthM"]); vector(t.positionM); number(t.heightM,3,12); number(t.trunkWidthM,.2,1.5); }
+    } else if (op.kind === "crowd_motion") {
       keys(op, ["kind", "groupId", "label", "behavior", "members"]); text(op.groupId); text(op.label, 80);
       if (!/^design-crowd-[A-Za-z0-9_-]+$/.test(op.groupId as string)) throw new Error("群演组 ID 无效。");
       if (!["avoid", "observe", "pass"].includes(op.behavior as string)) throw new Error("群演行为不受支持。");
@@ -196,7 +211,13 @@ export function compileDesignProposal(state: WorkbenchState, raw: unknown): Desi
     moved.add(id);
   };
   for (const op of plan.operations) {
-    if (op.kind === "camera_cut") {
+    if (op.kind === "street_layout") {
+      const parts = compileStreetLayout(op, state.renderScene.ground.heightM);
+      for (const part of parts) {
+        if (sceneObjects[part.sceneObjectId] || characters[part.sceneObjectId] || cameras[part.sceneObjectId]) throw new Error("街区对象 ID 与已有对象重复。");
+        vector(part.transform.position); sceneObjects[part.sceneObjectId] = part; moved.add(part.sceneObjectId);
+      }
+    } else if (op.kind === "camera_cut") {
       if (cuts.some((cut) => cut.timeSeconds === op.timeSeconds)) throw new Error("同一时间不能重复切镜。");
       cuts.push(op); continue;
     } else if (op.kind === "crowd_motion") {

@@ -145,7 +145,42 @@ class CameraCut(StrictModel):
     timeSeconds: float = Field(ge=0, le=600)
 
 
-Operation = Annotated[Place | Pair | Group | Box | FrameCamera | Dolly | SetPose | SeatActor | CameraMotion | CrowdMotion | AddCamera | CameraCut, Field(discriminator="kind")]
+class StreetBuilding(StrictModel):
+    id: str = Field(pattern=r"^[A-Za-z0-9_-]+$", max_length=100)
+    label: str = Field(min_length=1, max_length=80)
+    centerM: Vector
+    dimensionsM: tuple[Annotated[float, Field(ge=3, le=20)], Annotated[float, Field(ge=3, le=20)], Annotated[float, Field(ge=3, le=20)]]
+    doorWidthM: float = Field(ge=0.8, le=8)
+    frontSide: Literal["negative_y", "positive_y"]
+
+
+class StreetTree(StrictModel):
+    id: str = Field(pattern=r"^[A-Za-z0-9_-]+$", max_length=100)
+    positionM: Vector
+    heightM: float = Field(ge=3, le=12)
+    trunkWidthM: float = Field(ge=0.2, le=1.5)
+
+
+class StreetLayout(StrictModel):
+    kind: Literal["street_layout"]
+    layoutId: str = Field(pattern=r"^design-street-[A-Za-z0-9_-]+$", max_length=100)
+    centerM: Vector
+    widthM: float = Field(ge=2, le=30)
+    lengthM: float = Field(ge=4, le=80)
+    buildings: list[StreetBuilding] = Field(max_length=12)
+    trees: list[StreetTree] = Field(max_length=12)
+
+    @model_validator(mode="after")
+    def unique_ids(self):
+        ids = [item.id for item in [*self.buildings, *self.trees]]
+        if len(ids) != len(set(ids)):
+            raise ValueError("Street object IDs must be unique")
+        if any(b.doorWidthM > b.dimensionsM[0] - 0.6 for b in self.buildings):
+            raise ValueError("Door exceeds building frontage")
+        return self
+
+
+Operation = Annotated[Place | Pair | Group | Box | FrameCamera | Dolly | SetPose | SeatActor | CameraMotion | CrowdMotion | AddCamera | CameraCut | StreetLayout, Field(discriminator="kind")]
 
 
 class ModelProposal(StrictModel):
@@ -216,6 +251,17 @@ selection/context, ask which pair. Never act on hidden actors. Only use these
 new operations when scene.supported declares them. Other rigs require clarification.
 Do not claim physics, arbitrary contact, real furniture or foot-flat validation.
 Timed camera motion is supported with one new camera_motion operation on the selected camera when there is no existing animation or camera path. Map 推进/靠近 to push_in, 拉远 to pull_out, 环绕 to orbit or half_arc, 横移 to lateral, 升起 to lift and 下降 to drop. Preserve the current camera transform, lens, targets, actors and props; use the requested duration and ease_in_out unless another easing is explicit. A camera_motion operation stages a timeline path and does not change actor or prop transforms. If a camera path already exists, return clarification.
+When scene.supported includes street layout, street_layout creates editable white-model
+roads, open-door building shells and box tree references. Road runs along Y,
+widthM is X, lengthM is Y. Buildings have centerM, dimensionsM [width,depth,height],
+doorWidthM and frontSide negative_y/positive_y (front wall faces -Y/+Y).
+Place a shop at a road END for a door facing along Y, never overlap road and
+building footprints. This slice does not support doors facing +/-X or rotated
+streets. Ask clarification for essential unsupported orientation. Trees specify
+positionM, heightM, trunkWidthM. Layout ID starts design-street-. Member IDs
+must be unique ASCII alphanumeric/hyphen/underscore. Declare assumed dimensions.
+Compile street_layout before crowd_motion. Geometry is a proxy, not a reconstruction
+of an image or final architectural asset. Do not position actors inside walls.
 When scene.supported includes crowd motion, crowd_motion creates or arranges grouped
 canonical white-model extras: avoid = retreat, observe = remain in place,
 pass = keep traversing. Use explicit member positionM, destinationM, yawDeg,

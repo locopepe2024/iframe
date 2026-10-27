@@ -193,3 +193,33 @@ def test_duplicate_crowd_members_rejected():
     with pytest.raises(ValueError):
         design.ModelProposal.model_validate(dict(summary="test", assumptions=[],
             clarification=None, operations=[operation]))
+
+
+def street_operation():
+    return dict(kind="street_layout", layoutId="design-street-grain", centerM=[0, 0, 0],
+                widthM=6, lengthM=12, buildings=[dict(id="shop", label="粮铺",
+                centerM=[0, 9, 0], dimensionsM=[6, 6, 4], doorWidthM=2, frontSide="negative_y")],
+                trees=[dict(id="tree", positionM=[-2, -4, 0], heightM=5, trunkWidthM=0.6)])
+
+
+def test_street_layout_contract():
+    op = street_operation()
+    value = design.ModelProposal.model_validate(dict(summary="街区", assumptions=["尺寸为布局假设"], clarification=None, operations=[op]))
+    assert value.model_dump(mode="json")["operations"][0] == op
+
+
+@pytest.mark.parametrize("change", [{"widthM": 0}, {"layoutId": "other"}, {"code": "bad"}])
+def test_street_layout_rejects_invalid_fields(change):
+    with pytest.raises(ValueError):
+        design.StreetLayout.model_validate({**street_operation(), **change})
+
+
+def test_street_rejects_duplicate_ids_and_invalid_door():
+    op = street_operation()
+    op["trees"][0]["id"] = "shop"
+    with pytest.raises(ValueError):
+        design.StreetLayout.model_validate(op)
+    op = street_operation()
+    op["buildings"][0]["doorWidthM"] = 6
+    with pytest.raises(ValueError):
+        design.StreetLayout.model_validate(op)

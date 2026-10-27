@@ -318,3 +318,20 @@ an approximate stepping reference, not motion capture or foot-contact solving.
 Verify routing around counters, blocked goals, crossing flows/wait timing,
 continuous clearance, gait phase vs travel, neutral holds, atomic undo and
 bundle round trips. Browser skin appearance remains a separate runtime check.
+
+### Editable street block slice
+
+Add a bounded `street_layout` operation with a stable layout ID, road center,
+width/length, building footprints (center, width/depth/height, door width,
+front side) and tree anchors. Axis-aligned road runs along Y. Building frontage
+faces +/-Y, with a genuine gap between front-wall piers and a lintel above.
+Emit normal editable primitive objects with stable prefixed IDs, not a new
+scene owner. Floor slabs end at ground height, so they do not block walking.
+Trees use box proxies in this first slice to retain the current navigation
+contract. Reject overlapping footprints, road/building overlap, invalid doors,
+ID collisions, below-ground layouts and actors inside generated obstacles.
+All dimensions are explicit model assumptions, not inferred metric truth from
+reference images. Save/reuse through existing sceneObjects and design bundle.
+Verify door gap, connected street entry, navigation through door, pure preview,
+atomic apply/undo and schema parity. General rotated streets, roof/detail
+modeling, navmesh integration and foot IK remain subsequent slices.
