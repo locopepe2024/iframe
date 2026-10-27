@@ -533,3 +533,32 @@ def test_real_multitrack_audio_offset_and_mute(pipeline):
             levels.append(math.sqrt(sum(v*v for v in values) / len(values)))
         assert levels[0] < 10 and levels[2] < 10
         assert levels[1] < 10 if muted else levels[1] > 100
+
+
+def test_real_ffmpeg_burns_selected_captions_only_in_cue_range(pipeline):
+    ffmpeg = shutil.which('ffmpeg')
+    if not ffmpeg:
+        pytest.skip('FFmpeg required')
+    filters = subprocess.run([ffmpeg, '-hide_banner', '-filters'], capture_output=True, check=True).stdout
+    if b' subtitles ' not in filters:
+        pytest.skip('FFmpeg built without libass')
+    root = Path(pipeline.output_root)
+    (root / 'video').mkdir(parents=True, exist_ok=True)
+    subprocess.run([ffmpeg, '-y', '-f', 'lavfi', '-i', 'color=c=black:s=160x90:d=2:r=24',
+                    '-c:v', 'libx264', str(root / 'video/caption.mp4')], check=True, capture_output=True)
+    project = _project('caption', 'video/caption.mp4')
+    project.assembly_plan = _plan('project', [_clip('caption', 0, 2000)], 2000)
+    project.assembly_plan.lanes.append(AssemblyLane(id='en', kind='subtitle', clips=[AssemblyClip(
+        id='cue', timeline_start_ms=500, timeline_end_ms=1500, text='Visible caption\nSecond line')]))
+    project.assembly_plan.burn_subtitle_lane_id = 'en'
+    pipeline.scripts[project.id] = project
+    result = pipeline.render_assembly_plan('project', project.id)
+    output = str(root / result.merged_video_url)
+    samples = []
+    for timestamp in (0.2, 0.8, 1.8):
+        pixels = subprocess.run([ffmpeg, '-v', 'error', '-ss', str(timestamp), '-i', output,
+            '-frames:v', '1', '-vf', 'crop=1280:200:0:520', '-pix_fmt', 'gray', '-f', 'rawvideo', '-'],
+            check=True, capture_output=True).stdout
+        samples.append(sum(p > 100 for p in pixels))
+    assert samples[0] == 0 and samples[2] == 0
+    assert samples[1] > 100
