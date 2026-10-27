@@ -323,8 +323,9 @@ bundle round trips. Browser skin appearance remains a separate runtime check.
 
 Add a bounded `street_layout` operation with a stable layout ID, road center,
 width/length, building footprints (center, width/depth/height, door width,
-front side) and tree anchors. Axis-aligned road runs along Y. Building frontage
-faces +/-Y, with a genuine gap between front-wall piers and a lintel above.
+front side) and tree anchors. Axis-aligned road runs along Y. Building frontage may face +/-Y at a road
+end or +/-X along a road side, with a genuine gap between wall piers and a
+lintel above.
 Emit normal editable primitive objects with stable prefixed IDs, not a new
 scene owner. Floor slabs end at ground height, so they do not block walking.
 Trees use box proxies in this first slice to retain the current navigation
@@ -335,6 +336,10 @@ reference images. Save/reuse through existing sceneObjects and design bundle.
 Verify door gap, connected street entry, navigation through door, pure preview,
 atomic apply/undo and schema parity. General rotated streets, roof/detail
 modeling, navmesh integration and foot IK remain subsequent slices.
+
+### Side-facing storefront doors
+
+Street layouts support negative_x/positive_x front sides for buildings placed along the middle of a Y-axis road. The side wall is split into two piers and a lintel, preserving a real traversable door opening and existing box-navigation contract. Door width is bounded by the wall frontage. Rotated roads and imported architectural meshes remain outside this slice.
 
 ### Recast proxy navmesh integration
 

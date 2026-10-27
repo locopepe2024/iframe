@@ -2,7 +2,7 @@ import type { SceneObjectAuthoringState } from "../types";
 type Vec = [number, number, number];
 export interface StreetLayout {
   kind: "street_layout"; layoutId: string; centerM: Vec; widthM: number; lengthM: number;
-  buildings: Array<{id: string; label: string; centerM: Vec; dimensionsM: Vec; doorWidthM: number; frontSide: "negative_y" | "positive_y"}>;
+  buildings: Array<{id: string; label: string; centerM: Vec; dimensionsM: Vec; doorWidthM: number; frontSide: "negative_x" | "positive_x" | "negative_y" | "positive_y"}>;
   trees: Array<{id: string; positionM: Vec; heightM: number; trunkWidthM: number}>;
 }
 export function compileStreetLayout(op: StreetLayout, ground: number): SceneObjectAuthoringState[] {
@@ -18,18 +18,24 @@ export function compileStreetLayout(op: StreetLayout, ground: number): SceneObje
   for (const b of op.buildings) {
     if (Math.abs(b.centerM[2]-ground) > .001) throw new Error("建筑必须位于当前地面。");
     const [w,d,h] = b.dimensionsM, [x,y,z] = b.centerM, thickness = .15;
-    if (b.doorWidthM > w-.6) throw new Error("门宽超出建筑开间。");
+    const frontage = b.frontSide.endsWith("x") ? d : w;
+    if (b.doorWidthM > frontage-.6) throw new Error("门宽超出建筑开间。");
     if (footprints.some((f) => Math.abs(x-f.center[0]) < (w+f.size[0])/2 && Math.abs(y-f.center[1]) < (d+f.size[1])/2)) throw new Error("建筑占地与道路或其他建筑重叠。");
     footprints.push({center: b.centerM, size: [w,d]});
-    const front = b.frontSide === "negative_y" ? -1 : 1;
-    const pier = (w-b.doorWidthM)/2, doorHeight = Math.min(2.2,h-.2);
+    const axisX = b.frontSide.endsWith("x"), front = b.frontSide === "negative_y" || b.frontSide === "negative_x" ? -1 : 1;
+    const pier = ((axisX ? d : w)-b.doorWidthM)/2, doorHeight = Math.min(2.2,h-.2);
     box(`${b.id}-floor`, `${b.label}地面`, [x,y,z-.1], [w,d,.1], "#64748b");
-    box(`${b.id}-back`, `${b.label}后墙`, [x,y-front*(d/2-thickness/2),z], [w,thickness,h], "#94a3b8");
-    for (const side of [-1,1]) {
-      box(`${b.id}-side-${side}`, `${b.label}侧墙`, [x+side*(w/2-thickness/2),y,z], [thickness,d,h], "#94a3b8");
-      box(`${b.id}-pier-${side}`, `${b.label}门侧`, [x+side*(b.doorWidthM/2+pier/2),y+front*(d/2-thickness/2),z], [pier,thickness,h], "#94a3b8");
+    if (!axisX) {
+      box(`${b.id}-back`, `${b.label}后墙`, [x,y-front*(d/2-thickness/2),z], [w,thickness,h], "#94a3b8");
+      for (const side of [-1,1]) box(`${b.id}-side-${side}`, `${b.label}侧墙`, [x+side*(w/2-thickness/2),y,z], [thickness,d,h], "#94a3b8");
+      for (const side of [-1,1]) box(`${b.id}-pier-${side}`, `${b.label}门侧`, [x+side*(b.doorWidthM/2+pier/2),y+front*(d/2-thickness/2),z], [pier,thickness,h], "#94a3b8");
+      box(`${b.id}-lintel`, `${b.label}门楣`, [x,y+front*(d/2-thickness/2),z+doorHeight], [b.doorWidthM,thickness,h-doorHeight], "#94a3b8");
+    } else {
+      box(`${b.id}-back`, `${b.label}后墙`, [x-front*(w/2-thickness/2),y,z], [thickness,d,h], "#94a3b8");
+      for (const side of [-1,1]) box(`${b.id}-side-${side}`, `${b.label}侧墙`, [x,y+side*(d/2-thickness/2),z], [w,thickness,h], "#94a3b8");
+      for (const side of [-1,1]) box(`${b.id}-pier-${side}`, `${b.label}门侧`, [x+front*(w/2-thickness/2),y+side*(b.doorWidthM/2+pier/2),z], [thickness,pier,h], "#94a3b8");
+      box(`${b.id}-lintel`, `${b.label}门楣`, [x+front*(w/2-thickness/2),y,z+doorHeight], [thickness,b.doorWidthM,h-doorHeight], "#94a3b8");
     }
-    box(`${b.id}-lintel`, `${b.label}门楣`, [x,y+front*(d/2-thickness/2),z+doorHeight], [b.doorWidthM,thickness,h-doorHeight], "#94a3b8");
   }
   for (const tree of op.trees) {
     if (Math.abs(tree.positionM[2]-ground) > .001) throw new Error("树位必须位于地面。");
