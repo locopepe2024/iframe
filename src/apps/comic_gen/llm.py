@@ -683,8 +683,10 @@ DEFAULT_ENTITY_EXTRACTION_PROMPT = """
 
 重要：
 - 所有描述性内容（名称、描述）必须使用中文（简体中文）。
-- 只提取角色（characters）、场景（scenes）和道具（props）。
+- 只输出角色（characters）、背景群演（crowd_groups）、场景（scenes）和道具（props）。
 - 角色的 description 同时记录稳定的视觉特征和稳定的性格信息，使用“外观：”与“性格：”分隔。
+- 人物覆盖：有独立对白、关键行动、跨场状态或需再次辨认的个体进入 `characters`，没有姓名也使用剧本称谓；例如匪首、带头打手、探子首领。不得只提主角。
+- 群体覆盖：匿名匪寇、普通打手、随行探子与街上百姓各按社会身份提出 `crowd_groups` 候选；文本出现的路人、行人、围观者、商贩不能因没有姓名而丢失。近、中、远景是分镜中的站位和可读性，不是不同身份，也不应固化成三个外观主组。
 - 肤色、肤质、体型和性格只能依据原文明确描述，或由多处一致的行为、对白和叙述直接支持；未提及时省略，不要根据姓名、国籍、身份或单一情绪自行推断。
 - 同一人物在时间、年龄、身份、服装或外形发生显著变化时，必须为每个视觉状态建立独立角色条目；名称使用“主名（阶段/身份）”，例如“周涵（大学时期）”“周涵（职场时期）”。这些条目仍属于同一人物，但可以分别生成和绑定不同的角色设计。
 
@@ -935,6 +937,20 @@ class ScriptProcessor:
             content = _strip_markdown_json(content)
             data = json.loads(content)
             self._require_scene_baselines(data)
+            if self._missing_crowd_signals(text, data):
+                correction = (
+                    "上一轮实体提取漏掉了原文中的匿名群体。请依据原文补全 crowd_groups，"
+                    "保留其他已正确的 characters、scenes、props，不编造原文未出现的人物或群体。"
+                    "按社会身份区分匪寇、打手、探子和市井百姓；近中远景是分镜层级。"
+                )
+                content = self.llm.chat(messages=[
+                    {"role": "user", "content": prompt},
+                    {"role": "assistant", "content": json.dumps(data, ensure_ascii=False)},
+                    {"role": "user", "content": correction},
+                ])
+                data = json.loads(_strip_markdown_json(content))
+                self._require_scene_baselines(data)
+            self._require_crowd_coverage(text, data)
             return self._create_script_from_data(title, text, data)
                 
         except json.JSONDecodeError as e:
@@ -976,6 +992,7 @@ class ScriptProcessor:
             if not isinstance(data, dict) or not all(key in data for key in ("characters", "scenes", "props")):
                 raise ValueError("修订结果缺少 characters、scenes 或 props")
             self._require_scene_baselines(data)
+            self._require_crowd_coverage(text, data)
             return self._create_script_from_data(title, text, data)
         except json.JSONDecodeError as exc:
             raise RuntimeError(f"LLM 返回的数据格式错误，无法解析 JSON: {exc}") from exc
@@ -1002,6 +1019,18 @@ class ScriptProcessor:
             "asset_baseline" in scene["asset_design"]["design_draft"]
         ) for scene in data["scenes"]):
             raise ValueError("场景提取缺少可复用资产基线，请重新提取")
+
+    @staticmethod
+    def _missing_crowd_signals(text: str, data: Dict[str, Any]) -> List[str]:
+        signals = ("百姓", "路人", "行人", "围观者", "商贩", "人群", "匪众", "数名匪寇", "匪寇们", "数名打手", "打手们", "随行探子")
+        found = [signal for signal in signals if signal in text]
+        return found if found and not data.get("crowd_groups") else []
+
+    @classmethod
+    def _require_crowd_coverage(cls, text: str, data: Dict[str, Any]) -> None:
+        found = cls._missing_crowd_signals(text, data)
+        if found and not data.get("crowd_groups"):
+            raise ValueError(f"群演提取缺失：原文出现{', '.join(found)}，但 crowd_groups 为空；请重新提取或修订")
 
     def _create_script_from_data(self, title: str, original_text: str, data: Dict[str, Any]) -> Script:
         script_id = str(uuid.uuid4())
@@ -1659,7 +1688,9 @@ class ScriptProcessor:
                 "宏观地点不能只作为子地点名称前缀，也不能只写进子地点的 environment 或 shot_only_content。"
                 "例如文本同时涉及‘青溪镇长街’、‘长街中段粮铺’、‘梧桐树街角’、‘另一处卖艺街角’和‘街边阁楼’，scenes 必须分别包含这五个地点；"
                 "不要把另一处地点仅放入长街的 shot_only_content。已确认的跨地点视线写入双方 environment。"
-                "群体合并必须同时依据社会身份、服装体系、典型道具、行为目的和视觉功能；士兵与百姓、江湖人物与百姓等不同属性群体即使同处一个地点也必须分组，不得仅因同一地点而合并。只返回 characters、crowd_groups、scenes、props 四个顶层字段的合法 JSON。")
+                "人物覆盖硬规则：逐段核对有独立对白、关键行动、跨场状态或需再次辨认的个体，放入 characters；没有姓名也使用原文称谓，不因戏份少而省略。"
+                "群体覆盖硬规则：逐段核对匿名匪寇、普通打手、随行探子、路人、行人、百姓、围观者、商贩等；来源出现的匿名群体必须输出 crowd_groups 候选，不能返回空列表。近中远景只属于分镜层级，不拆成三个身份或永久资产。"
+                "群体合并必须同时依据社会身份、服装体系、典型道具、行为目的和视觉功能；士兵与百姓、江湖人物与百姓等不同属性群体即使同处一个地点也必须分组；流民匪寇与普通路人同样分组。不得仅因同一地点而合并。只返回 characters、crowd_groups、scenes、props 四个顶层字段的合法 JSON。")
 
     def analyze_script_for_styles(self, script_text: str, custom_style_prompt: str = "") -> List[Dict[str, Any]]:
         """使用 LLM 分析剧本并推荐视觉风格

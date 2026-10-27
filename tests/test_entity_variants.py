@@ -48,7 +48,7 @@ def test_scene_extraction_skill_applies_to_custom_prompt_and_persists_draft():
              "asset_baseline": baseline,
              "shot_only_content": ["流民匪寇劫掠", "百姓退让", "近中远景人物分配"],
              "uncertainties": []}
-    processor.llm.chat.return_value = json.dumps({"characters": [], "scenes": [scene], "props": []}, ensure_ascii=False)
+    processor.llm.chat.return_value = json.dumps({"characters": [], "crowd_groups": [{"extra_id": "crowd-town", "label": "市井百姓"}, {"extra_id": "crowd-bandits", "label": "流民匪寇"}], "scenes": [scene], "props": []}, ensure_ascii=False)
 
     script = processor.parse_novel("测试", "长街中段粮铺，匪寇劫掠，百姓退让，黄昏", "请提取：{text}")
     prompt = processor.llm.chat.call_args.kwargs["messages"][0]["content"]
@@ -141,3 +141,37 @@ def test_entity_extraction_prompt_separates_distinct_crowd_identities():
     assert "江湖人物与百姓等不同属性群体即使同处一个地点也必须分组" in prompt
     assert "士兵与百姓" in prompt
     assert "社会身份、服装体系、典型道具、行为目的和视觉功能" in prompt
+
+
+def test_extraction_rejects_missing_crowd_groups_when_source_names_anonymous_people():
+    processor = ScriptProcessor.__new__(ScriptProcessor)
+    processor.llm = Mock(is_configured=True)
+    processor.llm.chat.return_value = json.dumps({"characters": [], "crowd_groups": [], "scenes": [], "props": []})
+
+    with pytest.raises(ValueError, match="群演提取缺失.*百姓"):
+        processor.parse_novel("测试", "长街百姓围观匪寇")
+
+
+def test_extraction_accepts_empty_crowd_groups_without_anonymous_people():
+    processor = ScriptProcessor.__new__(ScriptProcessor)
+    processor.llm = Mock(is_configured=True)
+    processor.llm.chat.return_value = json.dumps({"characters": [], "crowd_groups": [], "scenes": [], "props": []})
+
+    assert processor.parse_novel("测试", "苏砚独自站在房间里").crowd_group_candidates == []
+
+
+def test_extraction_repairs_missing_crowd_groups_once():
+    processor = ScriptProcessor.__new__(ScriptProcessor)
+    processor.llm = Mock(is_configured=True)
+    processor.llm.chat.side_effect = [
+        json.dumps({"characters": [], "crowd_groups": [], "scenes": [], "props": []}),
+        json.dumps({"characters": [], "crowd_groups": [
+            {"extra_id": "town", "label": "市井百姓", "role_tags": ["路人", "围观"]},
+            {"extra_id": "bandits", "label": "流民匪寇"},
+        ], "scenes": [], "props": []}, ensure_ascii=False),
+    ]
+
+    result = processor.parse_novel("测试", "长街百姓围观数名匪寇")
+
+    assert [group.label for group in result.crowd_group_candidates] == ["市井百姓", "流民匪寇"]
+    assert processor.llm.chat.call_count == 2
