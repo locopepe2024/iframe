@@ -91,3 +91,16 @@ it("offers explicitly disclosed continuous SenseVoice capture in the demo and ke
   fireEvent.change(screen.getByLabelText("识别方式"),{target:{value:"browser"}});expect(screen.getByText(/交给浏览器识别/)).toBeInTheDocument();
  }finally{vi.unstubAllEnvs();}
 });
+
+it("keeps voice feedback inside the input panel without changing the draft and restarts on start only",()=>{
+ const start=vi.fn();
+ render(<CompanionComposer mode="chat" value="保留的草稿" outputStatus="正在连接语音…" onVoiceStart={start} disabled={false} busy={false} allowed inputRef={createRef()} onMode={()=>{}} onChange={()=>{}} onSend={()=>{}} onUpload={()=>{}} onAllow={()=>{}} onRequestConsent={()=>{}} retry={null}/>);
+ const input=screen.getByLabelText("和我聊聊天");
+ expect(input).toHaveValue("保留的草稿");
+ expect(input.closest("label")?.parentElement).toContainElement(screen.getByRole("status"));
+ fireEvent.click(screen.getByRole("button",{name:"语音输入"}));
+ fireEvent.click(screen.getByRole("button",{name:"同意并开始聊天"}));
+ expect(start).toHaveBeenCalledOnce();
+ fireEvent.click(screen.getByRole("button",{name:"停止"}));
+ expect(start).toHaveBeenCalledOnce();
+});

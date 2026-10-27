@@ -37,6 +37,8 @@ export default function AgentChat() {
   const [openTalking, setOpenTalking] = useState(false);
   const [messages, setMessages] = useState<UserMessage[]>([]), [after, setAfter] = useState<number | null>(null);
   const [allowed, setAllowed] = useState(false);
+  const [voiceConnectionEpoch, setVoiceConnectionEpoch] = useState(0);
+  const [voiceOutputStatus, setVoiceOutputStatus] = useState("");
   const [spokenReply, setSpokenReply] = useState<SpokenReply | null>(null);
   const [responseMode, setResponseMode] = useState<ResponseMode>("text");
   const [identity, setIdentity] = useState<CompanionIdentity>(defaultCompanionIdentity);
@@ -362,14 +364,14 @@ export default function AgentChat() {
       {page?.next_cursor && <button disabled={busy || pending} onClick={() => void run(() => memories(appliedQuery, page.next_cursor!))}>更多个人记忆</button>}
     </section>
     </details>}
-    {responseMode === "audio" && <OpenTalkingReply key={session} reply={spokenReply} voice={identity.voice} />}
+    {responseMode === "audio" && <OpenTalkingReply key={session} reply={spokenReply} voice={identity.voice} connectionEpoch={voiceConnectionEpoch} onStatus={setVoiceOutputStatus} />}
     {openTalking && <DigitalCompanionPanel identity={identity} onClose={() => setOpenTalking(false)} />}
     <input ref={fileRef} type="file" hidden accept="image/jpeg,image/png,image/webp,video/mp4,video/quicktime,video/webm,.mov" multiple aria-label="选择要上传的照片或视频" onChange={event => {
       const files=Array.from(event.target.files ?? []);event.target.value="";
       if(files.length>20){setNotice("每次最多选择 20 个文件，请重新选择。");return;}
       if(files.length){setUploadFiles(files);setNotice("");}
     }} />
-    <CompanionComposer mode={mode} value={text} disabled={inputDisabled || pending} busy={busy} allowed={allowed} inputRef={inputRef}
+    <CompanionComposer outputStatus={voiceOutputStatus} onVoiceStart={() => setVoiceConnectionEpoch(value => value + 1)} mode={mode} value={text} disabled={inputDisabled || pending} busy={busy} allowed={allowed} inputRef={inputRef}
       attachments={<AttachmentDraft items={pendingMedia[mode]} disabled={inputDisabled || pending} onRemove={id => {setPendingMedia(old => ({...old,[mode]:old[mode].filter(item=>item.id!==id)}));setMediaAcknowledged(false);}} />}
       hasAttachments={pendingMedia[mode].length > 0} mediaAcknowledged={mediaAcknowledged} onMediaAcknowledged={setMediaAcknowledged}
       onMode={next => {setMode(next);setAlbumOpen(false);setMediaAcknowledged(false);}} onChange={updateDraft} onSend={submit} onVoiceFinal={voiceText => {

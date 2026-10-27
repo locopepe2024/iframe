@@ -191,3 +191,7 @@
   .shell .sendButton svg { width: 24px; height: 24px; }
   .shell .settingsPanel { position: fixed; inset: 0; z-index: 30; width: 100vw; max-width: none; max-height: none; height: 100dvh; overflow-y: auto; margin: 0; padding: max(1rem, env(safe-area-inset-top)) .9rem max(1rem, env(safe-area-inset-bottom)); border: 0; border-radius: 0; }
 }
+
+.composerStatus { margin: 0; font-size: .85rem; line-height: 1.4; color: var(--muted); overflow-wrap: anywhere; }
+.openTalkingReply { flex-shrink: 0; }
+.openTalkingReply video { max-height: 64px; width: 64px; }

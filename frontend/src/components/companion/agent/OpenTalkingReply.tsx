@@ -3,7 +3,6 @@
 import { useEffect, useRef, useState } from "react";
 import { companionPlayback } from "@/lib/companionPlaybackQueue";
 import styles from "./chat.module.css";
-import SoundOutputCheck from "./SoundOutputCheck";
 
 export type SpokenReply = { id: string; text: string };
 const base = (process.env.NEXT_PUBLIC_OPENTALKING_URL || "/opentalking-mock/api").replace(/\/$/, "");
@@ -83,19 +82,17 @@ function waitForPeer(pc: RTCPeerConnection, signal: AbortSignal, gathering = fal
 }
 
 /** One media session per chat page, independent of message-history reconciliation. */
-export default function OpenTalkingReply({ reply, voice }: { reply: SpokenReply | null; voice?: string }) {
+export default function OpenTalkingReply({ reply, voice, connectionEpoch = 0, onStatus }: { reply: SpokenReply | null; voice?: string; connectionEpoch?: number; onStatus?: (status: string) => void }) {
   const video = useRef<HTMLVideoElement>(null);
-  const latestReply = useRef<SpokenReply | null>(null);
   const [state, setState] = useState<State>("idle"), [error, setError] = useState("");
-  const [retry, setRetry] = useState(0);
   const enqueue = useRef<((reply: SpokenReply) => void) | null>(null);
   const pending = useRef<SpokenReply[]>([]), seen = useRef(new Set<string>());
   const failed = useRef<SpokenReply | null>(null);
-  const interrupt = useRef<(() => void) | null>(null);
   const audible = useRef(false);
   const resumeAudio = useRef<(() => void) | null>(null);
 
   useEffect(() => {
+    setState("idle"); setError(""); failed.current = null;
     const lifetime = new AbortController(), owner = Symbol("opentalking-page");
     let session = "", peer: RTCPeerConnection | null = null, events: EventSource | null = null;
     let audio: AudioContext | null = null, source: MediaStreamAudioSourceNode | null = null;
@@ -209,6 +206,7 @@ export default function OpenTalkingReply({ reply, voice }: { reply: SpokenReply 
           // Do not consume a live WebRTC utterance while the browser blocks output.
           try {
             if (!video.current) throw new Error("播放器未就绪。");
+            video.current.muted = false;
             await video.current.play();
             playbackBlocked = false;
           } catch {
@@ -219,6 +217,8 @@ export default function OpenTalkingReply({ reply, voice }: { reply: SpokenReply 
           const complete = new Promise<void>((resolve, reject) => {
             active = { command, playing, done: resolve, fail: reject };
             abort = () => {
+              if (video.current) video.current.muted = true;
+              update("ready");
               if (session) void request(`/sessions/${session}/interrupt`, undefined, {}).catch(() => {});
               resolve();
             };
@@ -247,13 +247,12 @@ export default function OpenTalkingReply({ reply, voice }: { reply: SpokenReply 
       });
     };
     enqueue.current = queueReply;
-    interrupt.current = () => { companionPlayback.cancel(owner); update("ready"); };
     pending.current.splice(0).forEach(queueReply);
     let disposed = false;
     const dispose = () => {
       if (disposed) return;
       disposed = true;
-      lifetime.abort(); enqueue.current = null; interrupt.current = null; resumeAudio.current = null;
+      lifetime.abort(); enqueue.current = null; resumeAudio.current = null;
       companionPlayback.cancel(owner);
       active?.done(); events?.close(); peer?.close(); cancelAnimationFrame(animation);
       source?.disconnect(); void audio?.close().catch(() => {});
@@ -262,35 +261,26 @@ export default function OpenTalkingReply({ reply, voice }: { reply: SpokenReply 
     };
     window.addEventListener("pagehide", dispose);
     return () => { window.removeEventListener("pagehide", dispose); dispose(); };
-  }, [voice, retry]);
+  }, [voice, connectionEpoch]);
 
   useEffect(() => {
-    if (reply) latestReply.current = reply;
     if (!reply || seen.current.has(reply.id)) return;
     seen.current.add(reply.id);
     if (enqueue.current) enqueue.current(reply); else pending.current.push(reply);
   }, [reply]);
+  const status = state === "opening" ? "正在连接语音…" : state === "waiting" ? "正在准备回复…" : state === "audio" ? "小安正在说话…" : state === "blocked" ? "请点击播放声音" : state === "error" ? "语音连接中断，请关闭后重新开启麦克风。" : "";
+  useEffect(() => { onStatus?.(status); }, [status, onStatus]);
+  useEffect(() => () => { onStatus?.(""); }, [onStatus]);
   return <section className={styles.openTalkingReply} aria-label="OpenTalking 语音回复">
     <video ref={video} autoPlay playsInline controls aria-label="数字人回复" />
-    <p role="status">{state === "idle" ? "语音回复已开启" : state === "opening" ? "正在连接语音…" : state === "waiting" ? "正在准备回复声音…" : state === "audio" ? "已收到回复音频" : state === "ready" ? "语音已就绪" : state === "blocked" ? "请点击播放声音" : `文字已保留：${error}`}</p>
+    <span className={styles.visuallyHidden} role="status">{status}{state === "error" ? error : ""}</span>
     {state === "blocked" && <button type="button" onClick={() => {
       resumeAudio.current?.();
+      if (video.current) video.current.muted = false;
       void video.current?.play().then(() => {
         if (failed.current) { const item = failed.current; failed.current = null; enqueue.current?.(item); }
         else setState("waiting");
       }).catch(() => { setError("浏览器仍未允许播放，请检查媒体权限。"); });
     }}>播放声音</button>}
-    <button type="button" onClick={() => interrupt.current?.()}>打断语音</button>
-    <SoundOutputCheck disabled={!latestReply.current || ["opening", "waiting", "audio"].includes(state)} replay={() => {
-      if (latestReply.current) enqueue.current?.(latestReply.current);
-    }} snapshot={() => {
-      const node = video.current, stream = node?.srcObject as MediaStream | null;
-      const tracks = stream?.getAudioTracks?.() ?? [];
-      return `回复音轨 ${tracks.length} 条；${tracks.some(t => t.enabled && t.readyState === "live") ? "音轨有效" : "尚无有效音轨"}；播放器${node?.paused ? "暂停" : "运行"}；${node?.muted ? "已静音" : "未静音"}；音量 ${Math.round((node?.volume ?? 0) * 100)}%。`;
-    }} />
-    {state === "error" && <button type="button" onClick={() => {
-      if (failed.current) { pending.current.unshift(failed.current); failed.current = null; }
-      setError(""); setRetry(value => value + 1);
-    }}>重试语音连接</button>}
   </section>;
 }

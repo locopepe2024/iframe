@@ -65,3 +65,31 @@ it("waits for explicit playback permission before sending speech, then reuses th
  expect(calls.filter(c=>c.url.endsWith("/sessions"))).toHaveLength(1);
  view.unmount();play.mockRestore();
 });
+
+it("interrupts the current utterance without closing its peer and unmutes the next reply",async()=>{
+ const view=render(<OpenTalkingReply reply={{id:"one",text:"你好"}}/>);
+ await waitFor(()=>expect(speaks()).toHaveLength(1));
+ await act(async()=>companionPlayback.cancel());
+ expect(peer.close).not.toHaveBeenCalled();
+ expect(calls.some(c=>c.url.endsWith("/interrupt"))).toBe(true);
+ expect(screen.getByLabelText("数字人回复")).toHaveProperty("muted",true);
+ view.rerender(<OpenTalkingReply reply={{id:"two",text:"接着聊"}}/>);
+ await waitFor(()=>expect(speaks()).toHaveLength(2));
+ expect(screen.getByLabelText("数字人回复")).toHaveProperty("muted",false);
+ view.unmount();
+});
+it("resets a connection on microphone restart without replaying the previous reply",async()=>{
+ const view=render(<OpenTalkingReply reply={{id:"one",text:"你好"}} connectionEpoch={0}/>);
+ await waitFor(()=>expect(speaks()).toHaveLength(1));
+ const oldPeer=peer;
+ view.rerender(<OpenTalkingReply reply={{id:"one",text:"你好"}} connectionEpoch={1}/>);
+ await act(async()=>{});
+ expect(oldPeer.close).toHaveBeenCalledOnce();
+ expect(speaks()).toHaveLength(1);
+ expect(screen.queryByRole("button",{name:"检查声音"})).not.toBeInTheDocument();
+ expect(screen.queryByRole("button",{name:"重试语音连接"})).not.toBeInTheDocument();
+ view.rerender(<OpenTalkingReply reply={{id:"two",text:"新的话"}} connectionEpoch={1}/>);
+ await waitFor(()=>expect(speaks()).toHaveLength(2));
+ expect(calls.filter(c=>c.url.endsWith("/sessions"))).toHaveLength(2);
+ view.unmount();
+});
