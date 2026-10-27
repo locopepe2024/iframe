@@ -1459,7 +1459,7 @@ class ComicGenPipeline(StudioOwnerMixin):
         # even when the short-lived preview cache has expired.
         cached = self._extraction_cache.pop(script_id, None)
         if draft is not None:
-            normalized = {key: list(draft.get(key, [])) for key in ("characters", "scenes", "props")}
+            normalized = {key: list(draft.get(key, [])) for key in ("characters", "crowd_groups", "scenes", "props")}
             new_script = self.script_processor._create_script_from_data(
                 existing_script.title, text, normalized
             )

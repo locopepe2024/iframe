@@ -1271,6 +1271,7 @@ def extraction_response(job, script_id):
         pipeline._extraction_cache[script_id] = (time.time(), result)
         job = {**job, 'result': {
             'characters': [c.dict() for c in result.characters],
+            'crowd_groups': [c.dict() for c in result.crowd_group_candidates],
             'scenes': [s.dict() for s in result.scenes],
             'props': [p.dict() for p in result.props],
         }}
@@ -1307,7 +1308,7 @@ def start_extraction_refinement(
     instructions = [item.strip() for item in request.instructions if item.strip()]
     if not instructions or any(len(item) > 2000 for item in instructions):
         raise HTTPException(422, "Revision instructions must contain 1-12 non-empty items of at most 2000 characters")
-    draft = {key: list(request.draft.get(key, [])) for key in ("characters", "scenes", "props")}
+    draft = {key: list(request.draft.get(key, [])) for key in ("characters", "crowd_groups", "scenes", "props")}
     llm = pipeline.script_processor.llm
     prompt = getattr(getattr(script, "prompt_config", None), "entity_extraction", "")
     fingerprint = hashlib.sha256(json.dumps([

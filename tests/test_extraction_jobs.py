@@ -271,13 +271,15 @@ def test_api_returns_before_worker_and_resumes_persisted_preview(tmp_path, monke
     monkeypatch.setenv('IFRAME_DATA_DIR', str(tmp_path / 'config'))
     monkeypatch.chdir(tmp_path)
     from src.apps.comic_gen import api
-    from src.apps.comic_gen.models import Script, Character
+    from src.apps.comic_gen.models import Script, Character, ExtraRosterEntry
     from src.apps.identity import UserContext
     from src.apps.studio_access import require_studio_user
     gate = Event()
     user = UserContext('owner', 'owner', '', '')
     source = Script(id='project', title='Test', original_text='text', owner_profile_id='owner', created_at=1, updated_at=1)
-    result = Script(id='result', title='Test', original_text='text', created_at=1, updated_at=1, characters=[Character(id='actor', name='A', description='Actor')])
+    result = Script(id='result', title='Test', original_text='text', created_at=1, updated_at=1,
+                    characters=[Character(id='actor', name='A', description='Actor')],
+                    crowd_group_candidates=[ExtraRosterEntry(extra_id='townspeople', label='市井百姓')])
     with ThreadPoolExecutor(max_workers=1) as executor:
         jobs = ExtractionJobs(tmp_path / 'api-jobs.db', executor=executor)
         def parse(*args): gate.wait(2); return result
@@ -301,6 +303,7 @@ def test_api_returns_before_worker_and_resumes_persisted_preview(tmp_path, monke
                     if status.json()['status'] == 'completed': break
                     time.sleep(.01)
                 assert status.json()['result']['characters'][0]['name'] == 'A'
+                assert status.json()['result']['crowd_groups'][0]['label'] == '市井百姓'
                 pipeline._extraction_cache.clear()
                 assert client.get(path + '/' + job_id).status_code == 200
                 assert pipeline._extraction_cache[source.id][1].original_text == 'text'
@@ -323,13 +326,14 @@ def test_api_returns_before_worker_and_resumes_persisted_preview(tmp_path, monke
 def test_refinement_job_forwards_current_draft_and_accumulated_instructions(tmp_path, monkeypatch):
     from types import SimpleNamespace
     from src.apps.comic_gen import api
-    from src.apps.comic_gen.models import Script, Character
+    from src.apps.comic_gen.models import Script, Character, ExtraRosterEntry
     from src.apps.identity import UserContext
 
     user = UserContext('owner', 'owner', '', '')
     source = Script(id='project', title='Test', original_text='source text', owner_profile_id='owner', created_at=1, updated_at=1)
     refined = Script(id='draft', title='Test', original_text='source text', created_at=1, updated_at=1,
-                     characters=[Character(id='actor', name='主播', description='25岁马来女性')])
+                     characters=[Character(id='actor', name='主播', description='25岁马来女性')],
+                     crowd_group_candidates=[ExtraRosterEntry(extra_id='bandits', label='流民匪寇')])
     captured = {}
     processor = SimpleNamespace(
         llm=SimpleNamespace(provider='openai', _get_default_model=lambda: 'test'),
@@ -344,7 +348,7 @@ def test_refinement_job_forwards_current_draft_and_accumulated_instructions(tmp_
         monkeypatch.setattr(api, 'extraction_jobs', jobs)
         request = api.ExtractionRefineRequest(
             text='source text',
-            draft={'characters': [{'name': '女主播'}], 'scenes': [], 'props': []},
+            draft={'characters': [{'name': '女主播'}], 'crowd_groups': [{'extra_id': 'townspeople', 'label': '市井百姓'}], 'scenes': [], 'props': []},
             instructions=['不要提取路人', '把女主播补充为马来女性'],
         )
 
@@ -353,8 +357,10 @@ def test_refinement_job_forwards_current_draft_and_accumulated_instructions(tmp_
         response = api.extraction_response(done, 'project')
 
     assert captured['draft']['characters'][0]['name'] == '女主播'
+    assert captured['draft']['crowd_groups'][0]['label'] == '市井百姓'
     assert captured['instructions'] == ['不要提取路人', '把女主播补充为马来女性']
     assert response['result']['characters'][0]['name'] == '主播'
+    assert response['result']['crowd_groups'][0]['label'] == '流民匪寇'
     assert pipeline.scripts['project'].characters == []
     assert pipeline._extraction_cache['project'][1].characters[0].name == '主播'
 

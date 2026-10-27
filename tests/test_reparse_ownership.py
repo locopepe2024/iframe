@@ -13,6 +13,7 @@ from src.apps.comic_gen.models import (
     Character,
     Scene,
     Prop,
+    ExtraRosterEntry,
     DirectorProfile,
     DirectorProfileRevision,
     ScriptFactLedgerEntry,
@@ -120,7 +121,8 @@ class ReparseOwnershipTest(unittest.TestCase):
                               owner_user_id="user-a", owner_profile_id="profile-a")
             refined = Script(id="draft", title="Project", original_text="new",
                              created_at=2, updated_at=2,
-                             characters=[Character(id="temporary", name="主播", description="马来女性")])
+                             characters=[Character(id="temporary", name="主播", description="马来女性")],
+                             crowd_group_candidates=[ExtraRosterEntry(extra_id="townspeople", label="市井百姓")])
             pipeline.scripts = {original.id: original}
             pipeline._save_lock = threading.RLock()
             pipeline.series_store = {}
@@ -130,6 +132,7 @@ class ReparseOwnershipTest(unittest.TestCase):
             pipeline._extraction_cache = {}
             draft = {
                 "characters": [{"name": "主播", "description": "马来女性"}],
+                "crowd_groups": [{"extra_id": "townspeople", "label": "市井百姓"}],
                 "scenes": [],
                 "props": [],
             }
@@ -141,6 +144,7 @@ class ReparseOwnershipTest(unittest.TestCase):
             )
             pipeline.script_processor.parse_novel.assert_not_called()
             self.assertEqual(result.characters[0].name, "主播")
+            self.assertEqual(result.crowd_group_candidates[0].label, "市井百姓")
             self.assertEqual(result.owner_profile_id, "profile-a")
 
 
