@@ -5,7 +5,9 @@ export interface Preview {
   status: "pending_confirmation" | "preview_closed"; preview_token: string; action?: "save" | "delete";
   preview?: { content?: string; quote?: string; source_text?: string; source_message_id?: string; type?: string; importance?: number; memory?: Memory; notice?: string };
 }
-export interface Turn { turn_id: string; status: string; result?: ({ kind: "text"; text: string } | { kind: "upload_guide" } | ({ kind: "confirmation" } & Preview) | { kind: "read"; name: string; memories: Memory[]; next_cursor: string | null }) }
+export interface PhotoRead { kind: "photo_read"; name: string; arguments: Record<string, unknown>; photos: { photo_id: string; date: import("./photoApi").PhotoDateAnnotation; description?: import("./photoApi").DescriptionReview | null; story?: { text: string } | null; analysis?: import("./photoApi").PhotoAnalysis | null }[]; next_after_id: string | null }
+export interface PhotoTask { kind: "photo_task"; task_id: string; status: "waiting_input" | "completed" | "cancelled"; step: "select_photo" | "review_photo" | "closed" | "cancelled"; revision: number; photos: PhotoRead["photos"] }
+export interface Turn { turn_id: string; status: string; result?: (PhotoTask | PhotoRead | { kind: "text"; text: string } | { kind: "upload_guide" } | ({ kind: "confirmation" } & Preview) | { kind: "read"; name: string; memories: Memory[]; next_cursor: string | null }) }
 export interface MemoryPage { memories: Memory[]; next_cursor: string | null }
 export interface Diary { day: string; text: string; source_turn_id: string; revision: number; updated_at: number }
 const base = `${API_URL}/companion-agent-api/companion-runtime`;
@@ -27,6 +29,7 @@ async function request<T>(path: string, method = "GET", body?: unknown): Promise
   return response.json();
 }
 export const companionApi = {
+  photoTaskInput: (id: string, body: {operation_id: string; expected_revision: number; action: "select" | "close" | "cancel"; photo_id?: string}) => request<PhotoTask>(`/photo-tasks/${encodeURIComponent(id)}/input`, "POST", body),
   diaries: (month: string) => request<{diaries: Diary[]}>(`/diaries?${new URLSearchParams({month})}`),
   saveDiary: (day: string, body: {operation_id: string; text: string; source_turn_id: string; expected_revision: number}) => request<Diary>(`/diaries/${encodeURIComponent(day)}`, "PUT", body),
   session: (operation_id: string) => request<{ session_id: string }>("/sessions", "POST", { operation_id }),

@@ -3,6 +3,8 @@ import { Fragment, useEffect, useRef, useState } from "react";
 import { companionApi, type MemoryPage, type Preview, type Turn, type UserMessage } from "@/lib/companionApi";
 import styles from "../photos/photos.module.css";
 import chatStyles from "./chat.module.css";
+import PhotoTaskCard from "./PhotoTaskCard";
+import PhotoToolResult from "./PhotoToolResult";
 import PhotoConversationCard from "../PhotoConversationCard";
 import TodayPlanCards from "./TodayPlanCards";
 import AttachmentDraft from "./AttachmentDraft";
@@ -310,6 +312,8 @@ export default function AgentChat() {
           })}
           media={attached.filter(item => item.anchor === index + 1).map(item => ({ id: item.id, kind: item.kind, name: item.name })) as DiaryContextMedia[]}
         /> : <article className={chatStyles.assistant}><p>{message.turn.result.text}</p><SpeechPlayback text={message.turn.result.text} voice={identity.voice}/></article>)}
+        {message.turn?.result?.kind === "photo_task" && <PhotoTaskCard key={message.turn.turn_id} task={message.turn.result} />}
+        {message.turn?.result?.kind === "photo_read" && <PhotoToolResult key={message.turn.turn_id} result={message.turn.result} />}
         {message.turn?.result?.kind === "upload_guide" && !dismissedUploadGuides.includes(message.turn.turn_id) && <UploadGuideCard {...uploadGuideActions(message.turn.turn_id)} />}
       </div>{renderAttached(index+1)}</Fragment>;
       })}
