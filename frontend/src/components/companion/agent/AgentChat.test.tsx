@@ -81,6 +81,17 @@ it("retains same request after uncertain response and paginates actual memories"
   fireEvent.click(screen.getAllByRole("button",{name:"删除这条记忆"})[1]);await screen.findByRole("button",{name:"确认删除记忆"});
   expect(api.confirm).not.toHaveBeenCalled();expect(screen.getByText(/只删除这条记忆/)).toBeInTheDocument();
 });
+it("keeps retry actionable when consent was turned off",async()=>{
+ api.chat.mockRejectedValueOnce(new Error("暂不可用"));
+ await start();allowText();fireEvent.click(screen.getByRole("button",{name:"发送"}));
+ await screen.findByRole("alert");
+ fireEvent.click(screen.getByRole("button",{name:"更多"}));
+ fireEvent.click(screen.getByLabelText("允许发送文字，开始聊天"));
+ fireEvent.click(screen.getByRole("button",{name:"更多"}));
+ fireEvent.click(screen.getByRole("button",{name:"重试原请求"}));
+ expect(screen.getAllByRole("status").some(node => /允许发送文字/.test(node.textContent || ""))).toBe(true);
+ expect(screen.getByRole("button",{name:"重试原请求"})).not.toBeDisabled();
+});
 it("restores server history and latest result from identifiers only",async()=>{
   localStorage.setItem("iframe-companion-agent-session-v1","s");localStorage.setItem("iframe-companion-agent-turn-v1","t");
   api.messages.mockResolvedValueOnce({messages:[{id:"m",sequence:1,text:"历史用户原话"}],next_after:1}).mockResolvedValueOnce({messages:[{id:"m2",sequence:2,text:"下一页"}],next_after:null});

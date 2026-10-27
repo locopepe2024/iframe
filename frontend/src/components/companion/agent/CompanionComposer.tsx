@@ -96,6 +96,6 @@ export default function CompanionComposer({ mode, value, disabled, busy, allowed
     </section>}
     {voice.notice && !recording && <p role="status" className={styles.voiceStatus}>{voice.notice}</p>}
     {voice.listening || voice.finishing ? <p role="status" className={styles.voiceStatus}>{voice.finishing ? "正在整理语音，请稍等…" : localCapture ? capture.playing ? "正在播放回复，点击打断后说话。" : voice.notice : "正在听，点停止结束。"}</p> : null}
-    {retry && <button disabled={busy || !allowed} onClick={retry}>重试原请求</button>}
+    {retry && <button type="button" disabled={busy} onClick={retry}>重试原请求</button>}
   </footer>;
 }

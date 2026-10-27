@@ -159,6 +159,19 @@ export default function AgentChat() {
     }
     await history(activeSession);
   }
+  function retryLastRequest() {
+    if (!sendOperation.current) {
+      setHasRetry(false);
+      setError("原请求已失效，请重新输入后发送。");
+      return;
+    }
+    if (!allowed) {
+      setMenu(true);
+      setNotice("请先在“更多 → 聊天设置”中允许发送文字，再重试原请求。");
+      return;
+    }
+    void run(() => send(true));
+  }
   async function memories(search: string, cursor = "") {
     const value = await companionApi.tool<MemoryPage>(search ? "memory.search" : "memory.list", { ...(search ? { query: search } : {}), cursor, limit: 20 });
     setPage(old => cursor ? { ...value, memories: [...(old?.memories ?? []), ...value.memories] } : value); setAppliedQuery(search);
@@ -361,7 +374,7 @@ export default function AgentChat() {
       }} onAllow={setAllowed}
       onUpload={() => { if (uploadFiles.length) setNotice("请先完成或关闭当前上传。"); else fileRef.current?.click(); }}
       onRequestConsent={() => { setMenu(true); setNotice("请在“更多 → 聊天设置”中允许发送文字。"); }}
-      retry={hasRetry ? () => void run(() => send(true)) : null} />
+      retry={hasRetry ? retryLastRequest : null} />
     <nav className={chatStyles.bottomNav} aria-label="主要功能">
       <button type="button" aria-current={feature === "diary" ? "page" : undefined} onClick={() => setFeature("diary")}><BookOpen size={22} aria-hidden="true" /><span>日记</span></button>
       <button type="button" aria-current={feature === "plaza" ? "page" : undefined} onClick={() => setFeature("plaza")}><Compass size={22} aria-hidden="true" /><span>广场</span></button>
