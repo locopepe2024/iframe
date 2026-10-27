@@ -238,16 +238,16 @@ export default function AgentChat() {
       <section aria-label="聊天设置">
         <h2>聊天设置</h2>
         <p className={styles.note}>您本次及最近最多 20 条发言将发送至您配置的 UniArt / Qwen 服务。照片不会随文字自动发送。</p>
-        <label className={styles.check}><input type="checkbox" checked={allowed} disabled={busy} onChange={event => {
+        <label className={styles.check}><input type="checkbox" checked={allowed} onChange={event => {
           const value = event.target.checked; setAllowed(value); localStorage.setItem(consentKey, String(value));
         }} />允许发送文字，开始聊天</label>
         <fieldset className={styles.choice}><legend>小安回复方式</legend>
-          <label className={styles.check}><input type="radio" name="companion-response-mode" value="audio" checked={responseMode === "audio"} disabled={busy} onChange={() => { setResponseMode("audio"); localStorage.setItem(responseModeKey, "audio"); }} />方案 1：语音回复（可能计费）</label>
-          <label className={styles.check}><input type="radio" name="companion-response-mode" value="text" checked={responseMode === "text"} disabled={busy} onChange={() => { setResponseMode("text"); localStorage.setItem(responseModeKey, "text"); }} />方案 2：只回复文字</label>
+          <label className={styles.check}><input type="radio" name="companion-response-mode" value="audio" checked={responseMode === "audio"} onChange={() => { setResponseMode("audio"); localStorage.setItem(responseModeKey, "audio"); }} />方案 1：语音回复（可能计费）</label>
+          <label className={styles.check}><input type="radio" name="companion-response-mode" value="text" checked={responseMode === "text"} onChange={() => { setResponseMode("text"); localStorage.setItem(responseModeKey, "text"); }} />方案 2：只回复文字</label>
         </fieldset>
         <p className={styles.note}>语音回复由 OpenTalking 播放，并保留文字记录；播放受阻时可点击“播放声音”。</p>
         <div className={chatStyles.settingsSaveRow}>
-          <button type="button" className={chatStyles.settingsSaveButton} disabled={busy} onClick={saveChatSettings}>保存设置</button>
+          <button type="button" className={chatStyles.settingsSaveButton} onClick={saveChatSettings}>保存设置</button>
           {settingsSaved && <span className={chatStyles.settingsSaved} role="status">✓ 设置已保存</span>}
         </div>
       </section>
