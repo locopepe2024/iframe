@@ -160,3 +160,58 @@ motion-asset-package/
 - 膝部和支持脚标注可导出并转换为规范化格式。
 - 诊断报告能区分人工区域距离、模型间分歧和目标投影误差。
 - 不改动现有主链路即可重复生成资产包。
+
+## 开源组件组合
+
+本系统不寻找一个包办所有能力的仓库，而采用分层组合：
+
+| 层 | 组件 | 边界 |
+|---|---|---|
+| 标注入口 | Label Studio | 时间段、动作标签、膝/脚区域、遮挡和人工状态 |
+| 标注转换 | label-studio-converter | 将导出转换为项目规范格式；不负责PTS语义 |
+| 数据集转换 | Datumaro | 数据集导入、导出、格式一致性和统计 |
+| 数据浏览 | FiftyOne（可选） | 多模型结果和样本浏览；不作为资产真值层 |
+| 文件版本 | DVC（首选）或lakeFS | 大文件和数据集版本、内容哈希 |
+| 语义资产包 | iFrame manifest/JSON | PTS、坐标系、相机、rig、模型、诊断关系和质量状态 |
+
+DVC/lakeFS记录文件版本，不记录动作语义关系。因此下列关系必须由项目manifest维护：
+
+```text
+source_frame 17
+  -> pts 0.783655s
+  -> MediaPipe observation
+  -> RTMPose observation
+  -> Label Studio review region
+  -> target rig projection
+  -> diagnostic error
+```
+
+## 版本边界
+
+- **文件版本**：视频、帧图、模型输出、标注导出和动作包由DVC或lakeFS跟踪。
+- **语义版本**：manifest中的schema版本、坐标系、PTS映射、rig哈希、模型版本和脚本哈希由iFrame维护。
+- **重算关系**：manifest必须能指向产生每个`derived`文件的输入和工具版本。
+- **不可变发布**：发布动作包时冻结manifest和所有输入哈希；后续修订生成新package_id，不覆盖旧包。
+
+## 最小发布清单
+
+```text
+package_id
+manifest_schema
+source_clip_sha256
+frames_sha256
+annotation_export_sha256
+normalized_annotation_sha256
+model_observation_sha256
+rig_sha256
+camera_spec_sha256
+retarget_bundle_sha256
+producer_git_commit
+producer_script_sha256
+quality_status
+limitations[]
+```
+
+## 组件选择原则
+
+第一阶段优先使用Label Studio + 自有manifest + DVC，不同时引入CVAT、FiftyOne和lakeFS。Datumaro只在出现多格式交换需求时加入。这样可以减少重复的任务、数据集和版本语义，保持当前六帧诊断链路可复核。

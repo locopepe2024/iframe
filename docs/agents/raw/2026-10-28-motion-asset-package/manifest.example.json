@@ -1,0 +1,54 @@
+{
+  "package_id": "recreation2-six-event-v1",
+  "manifest_schema": "motion-asset-package.v1",
+  "source": {
+    "clip_sha256": "sha256:...",
+    "width": 1394,
+    "height": 792,
+    "pts_authoritative": true,
+    "frames_sha256": "sha256:..."
+  },
+  "sampling": {
+    "source_frames": [1, 17, 23, 29, 41, 55],
+    "frame_map": "source_pts_to_target_output",
+    "mapping_sha256": "sha256:..."
+  },
+  "annotations": {
+    "tool": "label-studio",
+    "raw_export_sha256": "sha256:...",
+    "normalized_sha256": "sha256:..."
+  },
+  "observations": [
+    {
+      "model": "mediapipe",
+      "version": "...",
+      "coordinate_space": "source_pixels",
+      "sha256": "sha256:..."
+    },
+    {
+      "model": "rtmpose",
+      "version": "...",
+      "coordinate_space": "source_pixels",
+      "sha256": "sha256:..."
+    }
+  ],
+  "retarget": {
+    "rig_sha256": "sha256:...",
+    "camera_spec_sha256": "sha256:...",
+    "bundle_sha256": "sha256:...",
+    "status": "diagnostic_only"
+  },
+  "provenance": {
+    "producer_git_commit": "...",
+    "producer_script_sha256": "sha256:...",
+    "dvc_revision": "..."
+  },
+  "quality": {
+    "status": "needs_review",
+    "limitations": [
+      "no_manual_3d_ground_truth",
+      "camera_intrinsics_candidate_only",
+      "contact_not_verified"
+    ]
+  }
+}
