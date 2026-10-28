@@ -134,6 +134,14 @@ class Box(StrictModel):
     dimensionsM: tuple[Annotated[float, Field(gt=0.05, le=20)], Annotated[float, Field(gt=0.05, le=20)], Annotated[float, Field(gt=0.05, le=20)]]
 
 
+class AddActor(StrictModel):
+    kind: Literal["add_actor"]
+    actorId: str = Field(pattern=r"^design-extra-[A-Za-z0-9_-]+$", max_length=100)
+    label: str = Field(min_length=1, max_length=80)
+    positionM: Vector
+    yawDeg: float = Field(ge=-360, le=360)
+
+
 class FrameCamera(StrictModel):
     kind: Literal["frame_camera"]
     cameraId: Identifier
@@ -252,7 +260,8 @@ class StreetLayout(StrictModel):
         return self
 
 
-Operation = Annotated[Place | Pair | Group | Box | FrameCamera | Dolly | SetPose | SeatActor | CameraMotion | CrowdMotion | AddCamera | CameraCut | StreetLayout, Field(discriminator="kind")]
+StaticOperation = Annotated[Place | Pair | Group | Box | AddActor | FrameCamera | Dolly | SetPose | SeatActor | StreetLayout, Field(discriminator="kind")]
+Operation = Annotated[Place | Pair | Group | Box | AddActor | FrameCamera | Dolly | SetPose | SeatActor | CameraMotion | CrowdMotion | AddCamera | CameraCut | StreetLayout, Field(discriminator="kind")]
 
 
 class ModelProposal(StrictModel):
@@ -265,6 +274,21 @@ class ModelProposal(StrictModel):
     def coherent(self):
         if bool(self.clarification) == bool(self.operations):
             raise ValueError("Return operations or a clarification, exclusively")
+        return self
+
+
+class SpatialDraftProposal(ModelProposal):
+    """A static-only extraction, with evidence separate from authored assumptions."""
+
+    operations: list[StaticOperation] = Field(max_length=16)
+    assumptions: list[Annotated[str, Field(min_length=1, max_length=280)]] = Field(max_length=4)
+    observations: list[Annotated[str, Field(min_length=1, max_length=280)]] = Field(max_length=4)
+    deferredActions: list[Annotated[str, Field(min_length=1, max_length=280)]] = Field(max_length=4)
+
+    @model_validator(mode="after")
+    def disclose_assumptions(self):
+        if self.operations and not self.assumptions:
+            raise ValueError("空间草稿必须记录设计假设")
         return self
 
 
@@ -287,6 +311,7 @@ class ReferenceImage(StrictModel):
 
 
 class DesignRequest(StrictModel):
+    mode: Literal["edit", "spatial_draft"] = "edit"
     prompt: str = Field(min_length=1, max_length=2000)
     baseRevision: str = Field(pattern=r"^design-fnv1a32:[0-9a-f]{8}$")
     context: str = Field(min_length=2, max_length=100000)
@@ -297,6 +322,8 @@ class DesignRequest(StrictModel):
     def context_json(self):
         if not self.prompt.strip() or not isinstance(json.loads(self.context), dict):
             raise ValueError("Expected nonempty prompt and JSON scene object")
+        if self.mode == "spatial_draft" and self.referenceImage is None:
+            raise ValueError("空间草稿需要场景参考图")
         return self
 
 
@@ -321,6 +348,11 @@ lens and bindings. Use context and history for references like 'closer' or 'the 
 person'. Current context wins over older turns. State chosen distances and other
 unspecified values in assumptions. Do not claim collision/visibility verification.
 Supported: positions, facing, pair spacing, box props, static cameras and dolly.
+When context.supported includes static actor markers, add_actor creates an unbound
+canonical white-model marker, not a real character asset. Use a unique design-extra-
+actorId, descriptive label, positionM on the ground and yawDeg. Reuse existing actor
+identities when they match; never repurpose an unrelated actor. Create markers before
+operations referencing them. Keep at most 40 visible actors, including existing ones.
 arrange_group places 2-10 existing visible actors at explicit numbered positions,
 preserves the supplied identities and applies only listed supported pose presets.
 Use it when the user supplies a numbered blocking plan; never invent missing actor IDs.
@@ -395,6 +427,30 @@ in frame. A request to change only the camera must not place or arrange entities
 """
 
 
+SPATIAL_DRAFT_SYSTEM = """The user explicitly selected REFERENCE IMAGE SPATIAL DRAFT.
+This narrows the task to static space and blocking, even when the description includes
+later actions. Extract the environment, key props, circulation, entrances and static
+actor markers from the image and description. Put unperformed action/timing/contact
+requests in deferredActions; do not reject the static draft solely because they need
+unsupported actions. Do not create timeline tracks, crowd_motion, camera_motion,
+camera cuts or extra cameras. Do not silently claim those actions were implemented.
+observations contains only visible image evidence, not guessed dimensions or facts
+from the description. assumptions contains chosen metric scale, hidden geometry,
+depth, actor count and initial positions, plus any difference from the description.
+deferredActions lists the requested motion/contact that remains to be designed.
+When a draft is possible, include at least one explicit design assumption.
+Prefer usable coarse shells and separate editable props to decorative detail. For a
+street shop, establish the street/shop opening connection and usable counter area
+before placing people. Label markers by role, not as inferred real asset bindings.
+Use static add_actor for missing people, preserving unrelated existing actors. Keep
+current camera unless the user requests composition. The image is design evidence,
+not metric reconstruction. Do not request coordinates or hidden dimensions when an
+explicit editable assumption suffices. Ask only when the desired static space or
+subject cannot be identified. These scope rules override the general all-or-clarify
+rule only for this explicitly selected draft mode.
+"""
+
+
 @router.post("/design-proposals")
 def propose(request: DesignRequest, user: UserContext = Depends(require_user_context)):
     token = set_studio_user(user)
@@ -402,8 +458,10 @@ def propose(request: DesignRequest, user: UserContext = Depends(require_user_con
         adapter = LLMAdapter()
         if not adapter.is_configured:
             raise HTTPException(503, "请先配置当前用户的语言模型服务。")
-        schema = json.dumps(ModelProposal.model_json_schema(), ensure_ascii=False)
-        messages: list[dict[str, object]] = [{"role": "system", "content": SYSTEM + "\nResponse schema:\n" + schema}]
+        proposal_type = SpatialDraftProposal if request.mode == "spatial_draft" else ModelProposal
+        schema = json.dumps(proposal_type.model_json_schema(), ensure_ascii=False)
+        scope = "\n" + SPATIAL_DRAFT_SYSTEM if request.mode == "spatial_draft" else ""
+        messages: list[dict[str, object]] = [{"role": "system", "content": SYSTEM + scope + "\nResponse schema:\n" + schema}]
         messages.extend(turn.model_dump() for turn in request.history)
         user_text = json.dumps({"scene": json.loads(request.context), "request": request.prompt,
                                 "referenceImage": bool(request.referenceImage)}, ensure_ascii=False)
@@ -419,9 +477,17 @@ def propose(request: DesignRequest, user: UserContext = Depends(require_user_con
         except Exception as exc:
             raise HTTPException(502, "设计服务请求失败，请稍后重试；当前场景未修改。") from exc
         try:
-            result = ModelProposal.model_validate_json(raw)
+            result = proposal_type.model_validate_json(raw)
         except (ValidationError, ValueError) as exc:
             raise HTTPException(502, "设计服务返回了无效提案；当前场景未修改，请重新描述。") from exc
+        if isinstance(result, SpatialDraftProposal):
+            # Persist evidence with the existing proposal/design-bundle provenance.
+            # Keep observation claims labeled as model readings, not verified truth.
+            notes = ([f"图像解读（待校正）：{item}" for item in result.observations]
+                     + [f"设计假设：{item}" for item in result.assumptions]
+                     + [f"未编排动作：{item}" for item in result.deferredActions])
+            result = ModelProposal(summary=result.summary, clarification=result.clarification,
+                                   assumptions=notes, operations=result.operations)
         return {"schemaVersion": "iframe.director3d.design-proposal.v1", "baseRevision": request.baseRevision, **result.model_dump()}
     finally:
         reset_studio_user(token)
