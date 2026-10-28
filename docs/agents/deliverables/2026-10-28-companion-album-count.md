@@ -17,3 +17,9 @@
 - 已部署测试站后端，6 个文件 SHA256 与发布文件逐项一致；保留远端既有 model.py 日志及上下文代码，只应用本次提示词增量。旧源码备份位于 /srv/lumenx/companion-demo/backups/album-count-772ad4f1。无需前端更新或数据库迁移。
 - 测试身份线上 POST /companion-runtime/tools 的 photo.album.count 返回 total=0 与对应中文回复；这是专用空测试身份，不代表用户的照片数量。健康检查正常。
 - 测试身份尝试普通聊天数量问题时，因未配置个人 UniArt 渠道返回 409。尚未验证真实 Qwen 工具选择，也未验证自然语音；不能把接口及模拟工具测试当作语义验收。
+
+## 真实渠道验收补充
+
+经授权，在主机内复用最近更新的 Demo 个人渠道，为独立 browser-companion-album-count-validation 测试身份加密保存配置。未输出或下载密钥，未修改用户原配置。
+
+通过已部署 FastAPI 应用的完整聊天入口，实际请求 UniArt/Qwen，依次提交用户提供的三种数量问法。3 次均 HTTP 200、模型选择 photo.album.count、结果 kind=text，没有进入 album_guide。独立测试相册为空，均返回“一共有0张照片”，不代表用户相册总数。此结果覆盖真实模型选择、工具执行、结果持久化及聊天响应；未覆盖麦克风识别及 WebRTC 播放。
