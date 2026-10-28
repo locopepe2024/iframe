@@ -269,3 +269,18 @@ def test_street_rejects_duplicate_ids_and_invalid_door():
     op["buildings"][0]["doorWidthM"] = 6
     with pytest.raises(ValueError):
         design.StreetLayout.model_validate(op)
+
+
+@pytest.mark.parametrize("mime,extension", [("video/mp4;codecs=vp9", ".mp4"), ("video/webm;codecs=vp8", ".webm")])
+def test_reference_video_accepts_browser_codec_parameters(client, monkeypatch, tmp_path, mime, extension):
+    c, _ = client
+    monkeypatch.setenv("IFRAME_MEDIA_ROOT", str(tmp_path / "media"))
+    result = c.post("/director3d/reference-assets", data={"kind": "camera_motion_video", "sourcePackageChecksum": "fnv1a32:12345678"},
+                    files={"file": ("recording" + extension, b"recorded-video", mime)})
+    assert result.status_code == 200, result.text
+    saved = list((tmp_path / "media").rglob("*" + extension))
+    assert len(saved) == 1
+    assert saved[0].read_bytes() == b"recorded-video"
+    content = c.get(f"/director3d/reference-assets/{result.json()['mediaId']}/content")
+    assert content.status_code == 200
+    assert content.headers["content-type"].split(";")[0] == mime.split(";")[0]

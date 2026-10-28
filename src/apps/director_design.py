@@ -34,7 +34,8 @@ async def save_reference_asset(
     sourcePackageChecksum: str = Form(...), metadata: str = Form("{}"),
     user: UserContext = Depends(require_user_context),
 ):
-    if kind not in REFERENCE_TYPES or file.content_type not in REFERENCE_TYPES[kind]:
+    content_type = (file.content_type or "").split(";", 1)[0].strip().lower()
+    if kind not in REFERENCE_TYPES or content_type not in REFERENCE_TYPES[kind]:
         raise HTTPException(422, "Unsupported director reference type")
     if not re.fullmatch(r"fnv1a32:[0-9a-f]{8}", sourcePackageChecksum):
         raise HTTPException(422, "Invalid source package checksum")
@@ -57,7 +58,7 @@ async def save_reference_asset(
             raise HTTPException(422, "Design bundle checksum mismatch")
     root = media_root()
     owner_hash = hashlib.sha256(user.owner_profile_id.encode()).hexdigest()[:24]
-    relative = f"users/{owner_hash}/director3d/references/{uuid4().hex}{REFERENCE_EXTENSIONS[file.content_type]}"
+    relative = f"users/{owner_hash}/director3d/references/{uuid4().hex}{REFERENCE_EXTENSIONS[content_type]}"
     path = Path(ManagedMediaRoot(root).resolve(str(Path(root).resolve() / relative)))
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_bytes(content)
