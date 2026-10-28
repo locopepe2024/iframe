@@ -5,7 +5,7 @@ export function spokenTurnText(result: Turn["result"]): string | undefined {
   if (!result) return undefined;
   switch (result.kind) {
     case "text": return result.text;
-    case "photo_task": case "diary_read": case "album_guide": case "photo_action":
+    case "media_draft": case "photo_task": case "diary_read": case "album_guide": case "photo_action":
       return result.spoken_text;
     case "upload_guide": return "可以从手机添加照片或视频，也可以从相册选择。请在卡片里选择。";
     case "photo_read": return result.photos.length

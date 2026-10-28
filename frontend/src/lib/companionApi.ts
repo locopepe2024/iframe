@@ -7,8 +7,10 @@ export interface Preview {
 }
 export interface PhotoRead { kind: "photo_read"; name: string; arguments: Record<string, unknown>; photos: { photo_id: string; date: import("./photoApi").PhotoDateAnnotation; description?: import("./photoApi").DescriptionReview | null; story?: { text: string } | null; analysis?: import("./photoApi").PhotoAnalysis | null }[]; next_after_id: string | null }
 export interface PhotoTask { kind: "photo_task"; task_id: string; spoken_text?: string; status: "waiting_input" | "completed" | "cancelled"; step: "select_photo" | "review_photo" | "closed" | "cancelled"; revision: number; photos: PhotoRead["photos"] }
+export interface CreativeContext {task_id:string;revision:number}
+export interface MediaDraft { kind: "media_draft"; task_id: string; session_id: string; revision: number; status: "active"|"paused"|"cancelled"; step: "awaiting_asset"|"awaiting_brief"|"configuring"; type: "image_edit"|"image_generate"|"video_generate"; brief: string; photo_id: string|null; spoken_text: string }
 export interface DiaryRead { kind: "diary_read"; name: string; diaries: Diary[]; open_calendar: boolean; month?: string; days?: string[]; spoken_text: string }
-export interface Turn { turn_id: string; status: string; result?: (PhotoActionResult | { kind: "album_guide"; browse: boolean; spoken_text: string } | DiaryRead | PhotoTask | PhotoRead | { kind: "text"; text: string } | { kind: "upload_guide" } | ({ kind: "confirmation" } & Preview) | { kind: "read"; name: string; memories: Memory[]; next_cursor: string | null }) }
+export interface Turn { turn_id: string; status: string; result?: (MediaDraft | PhotoActionResult | { kind: "album_guide"; browse: boolean; spoken_text: string } | DiaryRead | PhotoTask | PhotoRead | { kind: "text"; text: string } | { kind: "upload_guide" } | ({ kind: "confirmation" } & Preview) | { kind: "read"; name: string; memories: Memory[]; next_cursor: string | null }) }
 export interface MemoryPage { memories: Memory[]; next_cursor: string | null }
 export interface Diary { day: string; text: string; source_turn_id: string; revision: number; updated_at: number }
 const base = `${API_URL}/companion-agent-api/companion-runtime`;
@@ -30,12 +32,15 @@ async function request<T>(path: string, method = "GET", body?: unknown): Promise
   return response.json();
 }
 export const companionApi = {
+  mediaDrafts: (session: string) => request<{tasks:MediaDraft[]}>(`/sessions/${encodeURIComponent(session)}/media-drafts`),
+  startMediaDraft: (session: string, body: {operation_id:string;type:MediaDraft["type"];brief?:string}) => request<MediaDraft>(`/sessions/${encodeURIComponent(session)}/media-drafts`, "POST", body),
+  updateMediaDraft: (session: string, body: {operation_id:string;task_id:string;expected_revision:number;action:"brief"|"select_photo"|"clear_photo"|"pause"|"resume"|"cancel";brief?:string;photo_id?:string}) => request<MediaDraft>(`/sessions/${encodeURIComponent(session)}/media-drafts/input`, "POST", body),
   photoTaskInput: (id: string, body: {operation_id: string; expected_revision: number; action: "select" | "close" | "cancel"; photo_id?: string}) => request<PhotoTask>(`/photo-tasks/${encodeURIComponent(id)}/input`, "POST", body),
   diaries: (month: string) => request<{diaries: Diary[]}>(`/diaries?${new URLSearchParams({month})}`),
   saveDiary: (day: string, body: {operation_id: string; text: string; source_turn_id: string; expected_revision: number}) => request<Diary>(`/diaries/${encodeURIComponent(day)}`, "PUT", body),
   session: (operation_id: string) => request<{ session_id: string }>("/sessions", "POST", { operation_id }),
   messages: (id: string, before?: number) => request<{ messages: UserMessage[]; next_after: number | null; next_before: number | null }>(`/sessions/${encodeURIComponent(id)}/conversation?${before === undefined ? "latest=true" : `before=${before}`}`),
-  chat: (id: string, body: { operation_id: string; text: string; allow_external_text: true; selected_photo_id?: string }) => request<Turn>(`/sessions/${encodeURIComponent(id)}/chat`, "POST", body),
+  chat: (id: string, body: { operation_id: string; text: string; allow_external_text: true; selected_photo_id?: string; creative_context?:CreativeContext }) => request<Turn>(`/sessions/${encodeURIComponent(id)}/chat`, "POST", body),
   turn: (id: string) => request<Turn>(`/turns/${encodeURIComponent(id)}`),
   tool: <T>(name: string, args: object) => request<T>("/tools", "POST", { name, arguments: args }),
   confirm: (preview_token: string, operation_id: string) => request<{ action: string; memory_id: string }>("/confirmations", "POST", { preview_token, operation_id, method: "button" }),

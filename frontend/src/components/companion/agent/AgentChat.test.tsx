@@ -2,7 +2,7 @@ import { fireEvent, render, screen, waitFor, within } from "@testing-library/rea
 import { beforeEach, expect, it, vi } from "vitest";
 import AgentChat from "./AgentChat";
 import {diaryPrompt,today} from "./DiaryCard";
-const api=vi.hoisted(()=>({session:vi.fn(),messages:vi.fn(),chat:vi.fn(),turn:vi.fn(),tool:vi.fn(),confirm:vi.fn(),cancel:vi.fn(),diaries:vi.fn(),saveDiary:vi.fn()}));
+const api=vi.hoisted(()=>({mediaDrafts:vi.fn(),startMediaDraft:vi.fn(),updateMediaDraft:vi.fn(),session:vi.fn(),messages:vi.fn(),chat:vi.fn(),turn:vi.fn(),tool:vi.fn(),confirm:vi.fn(),cancel:vi.fn(),diaries:vi.fn(),saveDiary:vi.fn()}));
 const focusFetch=vi.hoisted(()=>vi.fn());
 vi.mock("@/lib/api",async importOriginal=>({...await importOriginal<typeof import("@/lib/api")>(),authenticatedFetch:focusFetch}));
 const playback=vi.hoisted(()=>vi.fn());
@@ -15,7 +15,7 @@ vi.mock("../photos/PhotoImage",()=>({default:()=> <img alt="照片缩略图"/>})
 vi.mock("../PhotoConversationCard",()=>({default: ({label}:{label:string})=><article>{label}</article>}));
 const preview={status:"pending_confirmation",preview_token:"token",action:"save",preview:{content:"喜欢散步",quote:"喜欢散步",source_text:"请记住我喜欢散步",source_message_id:"m",type:"preference",importance:3}};
 beforeEach(()=>{
-  localStorage.clear();vi.resetAllMocks();focusFetch.mockResolvedValue({ok:true,json:async()=>({revision:0})});api.diaries.mockResolvedValue({diaries:[]});photoApi.list.mockResolvedValue({photos:[]});api.session.mockResolvedValue({session_id:"s"});api.messages.mockResolvedValue({messages:[],next_before:null});
+  localStorage.clear();vi.resetAllMocks();api.mediaDrafts.mockResolvedValue({tasks:[]});focusFetch.mockResolvedValue({ok:true,json:async()=>({revision:0})});api.diaries.mockResolvedValue({diaries:[]});photoApi.list.mockResolvedValue({photos:[]});api.session.mockResolvedValue({session_id:"s"});api.messages.mockResolvedValue({messages:[],next_before:null});
   api.chat.mockResolvedValue({turn_id:"t",status:"completed",result:{kind:"confirmation",...preview}});
   api.confirm.mockResolvedValue({action:"save",memory_id:"memory"});api.cancel.mockResolvedValue({status:"preview_closed"});
 });
@@ -44,6 +44,7 @@ it("selects photos into an unsent attachment draft",async()=>{
   fireEvent.click(screen.getByRole("button",{name:"相册"}));
   await screen.findByRole("button",{name:/选择照片 1/});
   fireEvent.click(screen.getByRole("button",{name:/选择照片 1/}));
+  
   expect(screen.getByRole("region",{name:"待发送附件"})).toHaveTextContent("相册照片");
   expect(within(screen.getByRole("region",{name:"会话消息"})).queryByText("相册照片")).not.toBeInTheDocument();
   expect(photoApi.list).toHaveBeenCalledWith("all","","","");
@@ -150,60 +151,43 @@ it("keeps debugging controls off the main screen and restores paired replies",as
   expect(screen.queryByRole("button",{name:"重新读取本会话原话"})).not.toBeInTheDocument();
 });
 
-async function switchMode(label: string) {
-  fireEvent.click(screen.getByRole("button", {name: /^创作类型：/}));
-  fireEvent.click(screen.getByRole("menuitemradio", {name: label}));
-}
-it("keeps chat, image and video drafts independent without sending a media request to chat", async () => {
-  await start();
-  await switchMode("图片");
-  fireEvent.change(screen.getByLabelText("想生成的图片"), {target:{value:"一朵花"}});
-  await switchMode("视频");
-  fireEvent.change(screen.getByLabelText("想生成的视频"), {target:{value:"花朵慢慢开放"}});
-  await switchMode("聊天");
-  expect(screen.getByLabelText("和我聊聊天")).toHaveValue("请记住我喜欢散步");
-  await switchMode("图片");
-  expect(screen.getByLabelText("想生成的图片")).toHaveValue("一朵花");
-  fireEvent.click(screen.getByRole("button",{name:"发送"}));
-  expect(screen.getByRole("region",{name:"图片创作引导"})).toBeInTheDocument();
-  expect(api.chat).not.toHaveBeenCalled();
-  expect(photoApi.list).not.toHaveBeenCalled();
-  await switchMode("视频");
-  expect(screen.getByLabelText("想生成的视频")).toHaveValue("花朵慢慢开放");
-  await switchMode("图片");
-  expect(screen.getByRole("region",{name:"图片创作引导"})).toBeInTheDocument();
+const creative = {kind:"media_draft",task_id:"creative",session_id:"s",revision:1,status:"active",step:"awaiting_asset",type:"image_edit",brief:"",photo_id:null,spoken_text:"想修改哪张照片？可以上传，或从相册选择。"};
+it("keeps one conversational input and opens a creative card without interpreting the unsent draft as a prompt",async()=>{
+ api.startMediaDraft.mockResolvedValue(creative);
+ await start();
+ expect(screen.queryByRole("button",{name:/创作类型：/})).not.toBeInTheDocument();
+ fireEvent.click(screen.getByText("创作",{selector:"summary"}));
+ fireEvent.click(screen.getByRole("button",{name:"修改照片"}));
+ await screen.findByRole("region",{name:"当前创作任务"});
+ expect(screen.getByLabelText("和我聊聊天")).toHaveValue("请记住我喜欢散步");
+ expect(screen.queryByRole("button",{name:"查看生成设置"})).not.toBeInTheDocument();
+ expect(api.chat).not.toHaveBeenCalled();
+ expect(api.startMediaDraft).toHaveBeenCalledWith("s",expect.objectContaining({type:"image_edit"}));
 });
-it("previews recommended media settings honestly and can go back or cancel", async () => {
-  await start(); await switchMode("视频");
-  fireEvent.change(screen.getByLabelText("想生成的视频"),{target:{value:"老街骑马"}});
-  fireEvent.click(screen.getByRole("button",{name:"发送"}));
-  fireEvent.click(screen.getByRole("button",{name:"不加参考图片"}));
-  fireEvent.click(screen.getByRole("button",{name:"10 秒"}));
-  expect(screen.getByText("老街骑马",{selector:"dd"})).toBeInTheDocument();
-  expect(screen.getByText("10 秒",{selector:"dd"})).toBeInTheDocument();
-  fireEvent.click(screen.getByRole("button",{name:"返回修改"}));
-  fireEvent.click(screen.getByRole("button",{name:"用推荐设置"}));
-  expect(screen.getByText("5 秒",{selector:"dd"})).toBeInTheDocument();
-  expect(screen.getByText("尚未报价")).toBeInTheDocument();
-  expect(screen.queryByRole("button",{name:"确认生成（可能计费）"})).not.toBeInTheDocument();
-  fireEvent.click(screen.getByRole("button",{name:"确认设置"}));
-  expect(screen.getByText("已确认本次设置，尚未开始生成。")).toBeInTheDocument();
-  expect(api.chat).not.toHaveBeenCalled();
-  fireEvent.click(screen.getByRole("button",{name:"取消创作"}));
-  expect(screen.getByLabelText("想生成的视频")).toHaveValue("老街骑马");
-  expect(screen.queryByRole("region",{name:"视频创作引导"})).not.toBeInTheDocument();
+it("uses a model tool result to wait for a concrete brief instead of displaying intent as generation settings",async()=>{
+ api.chat.mockResolvedValue({turn_id:"creative-turn",status:"completed",result:creative});
+ await start();allowText();
+ fireEvent.change(screen.getByLabelText("和我聊聊天"),{target:{value:"我们编辑一张图片吧"}});
+ fireEvent.click(screen.getByRole("button",{name:"发送"}));
+ await screen.findByRole("region",{name:"当前创作任务"});
+ expect(screen.queryByText("设置已确认")).not.toBeInTheDocument();
+ expect(screen.getByLabelText("和我聊聊天")).toHaveValue("");
 });
-it("does not reuse an already-sent chat draft when switching modes",async()=>{
-  api.chat.mockResolvedValue({turn_id:"t",status:"completed",result:{kind:"text",text:"您好"}});
-  await start();allowText();fireEvent.click(screen.getByRole("button",{name:"发送"}));
-  await screen.findByText("您好"); await switchMode("图片"); await switchMode("聊天");
-  expect(screen.getByLabelText("和我聊聊天")).toHaveValue("");
+it("offers explicit slash shortcuts while preserving the conversational input",async()=>{
+ await start();
+ fireEvent.change(screen.getByLabelText("和我聊聊天"),{target:{value:"/"}});
+ fireEvent.click(screen.getByRole("button",{name:"/图像编辑"}));
+ expect(screen.getByLabelText("和我聊聊天")).toHaveValue("/图像编辑 ");
+ expect(api.chat).not.toHaveBeenCalled();
 });
-it("supports Escape and arrow navigation in the mode menu",async()=>{
-  await start(); const trigger=screen.getByRole("button",{name:"创作类型：聊天"});
-  fireEvent.click(trigger); expect(screen.getByRole("menuitemradio",{name:"聊天"})).toHaveFocus();
-  fireEvent.keyDown(document.activeElement!,{key:"ArrowDown"});expect(screen.getByRole("menuitemradio",{name:"图片"})).toHaveFocus();
-  fireEvent.keyDown(document.activeElement!,{key:"Escape"});expect(screen.queryByRole("menu")).not.toBeInTheDocument();expect(trigger).toHaveFocus();
+it("restores a creative brief after reload and preserves it when pausing",async()=>{
+ localStorage.setItem("iframe-companion-agent-session-v1","s");
+ api.mediaDrafts.mockResolvedValue({tasks:[creative]});
+ api.updateMediaDraft.mockResolvedValue({...creative,revision:2,status:"paused",spoken_text:"创作要求已保留，先回到聊天。"});
+ render(<AgentChat/>);
+ fireEvent.click(await screen.findByRole("button",{name:"先聊会儿"}));
+ await screen.findByRole("button",{name:"继续这次创作"});
+ expect(api.updateMediaDraft).toHaveBeenCalledWith("s",expect.objectContaining({task_id:"creative",expected_revision:1,action:"pause"}));
 });
 
 it("opens daily sample plans without calling the model and preserves an existing draft",async()=>{
@@ -239,6 +223,7 @@ async function selectPhoto() {
   photoApi.list.mockResolvedValue({photos:[{photo_id:"p"}],next_after_id:null});
   fireEvent.click(screen.getByRole("button",{name:"相册"}));
   fireEvent.click(await screen.findByRole("button",{name:/选择照片 1/}));
+  
 }
 it("removes a selected photo without sending or deleting the original",async()=>{
   await start();await selectPhoto();
@@ -269,15 +254,14 @@ it("retains attachments through an uncertain text request and only clears them a
   expect(Object.keys(api.chat.mock.calls[0][1]).sort()).toEqual(["allow_external_text","operation_id","text"]);
   expect(within(screen.getByRole("region",{name:"会话消息"})).getAllByText("相册照片")).toHaveLength(1);
 });
-it("keeps attachments independent between types and binds a single photo when submitting a media description",async()=>{
-  await start();await selectPhoto();await switchMode("视频");
-  expect(screen.queryByRole("region",{name:"待发送附件"})).not.toBeInTheDocument();
-  fireEvent.change(screen.getByLabelText("想生成的视频"),{target:{value:"花园里的光"}});
-  await selectPhoto();fireEvent.click(screen.getByRole("button",{name:"发送"}));
-  expect(screen.getByText("已选择参考照片")).toBeInTheDocument();
-  expect(screen.getByRole("button",{name:"5 秒"})).toBeInTheDocument();
-  await switchMode("聊天");expect(screen.getByRole("region",{name:"待发送附件"})).toBeInTheDocument();
-  expect(api.chat).not.toHaveBeenCalled();
+it("keeps unsent chat attachments when opening a creative task",async()=>{
+ api.startMediaDraft.mockResolvedValue(creative);
+ await start();await selectPhoto();
+ fireEvent.click(screen.getByText("创作",{selector:"summary"}));
+ fireEvent.click(screen.getByRole("button",{name:"修改照片"}));
+ await screen.findByRole("region",{name:"当前创作任务"});
+ expect(screen.getByRole("region",{name:"待发送附件"})).toBeInTheDocument();
+ expect(api.chat).not.toHaveBeenCalled();
 });
 it("shows an explicit diary card for a completed diary request without auto saving",async()=>{
   const day=today(),prompt=diaryPrompt(day);
@@ -414,6 +398,7 @@ it("restores the scope card and starts a durable task only for the explicitly se
   api.chat.mockResolvedValue(task);
   api.messages.mockResolvedValue({messages: [{id: "m2", sequence: 2, text: "整理这张照片", turn: task}], next_before: null});
   fireEvent.click(screen.getByRole("button", {name: "选择照片 1"}));
+  
   await screen.findByRole("region", {name: "相册整理任务"});
   expect(api.chat.mock.calls[0][1]).toMatchObject({text: "整理这张照片", selected_photo_id: "selected"});
   expect(screen.queryByRole("dialog", {name: "浏览相册"})).not.toBeInTheDocument();

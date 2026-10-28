@@ -17,7 +17,8 @@ const modes = [
   { value: "video", label: "视频", icon: Video },
 ] as const;
 
-export default function CompanionComposer({ mode, value, disabled, busy, allowed, inputRef, onMode, onChange, onSend, onVoiceFinal, onUpload, onAllow, onRequestConsent, retry, attachments, hasAttachments = false, mediaAcknowledged = false, onMediaAcknowledged, onCaptureStatus, onVoiceStart, voiceControl, onCaptureActive, onVoiceCancel }: {
+export default function CompanionComposer({ mode, value, disabled, busy, allowed, inputRef, onMode, onChange, onSend, onVoiceFinal, onUpload, onAllow, onRequestConsent, retry, attachments, hasAttachments = false, mediaAcknowledged = false, onMediaAcknowledged, onCaptureStatus, onVoiceStart, voiceControl, onCaptureActive, onVoiceCancel, unified = false, onCreative }: {
+  unified?: boolean; onCreative?: (type:"image_edit"|"image_generate"|"video_generate")=>void;
   onVoiceCancel?: ()=>void; voiceControl?: VoiceControl; onCaptureActive?: (active:boolean)=>void;
   onCaptureStatus?: (status: string) => void; onVoiceStart?: () => void;
   mode: ComposerMode; value: string; disabled: boolean; busy: boolean; allowed: boolean;
@@ -86,8 +87,9 @@ export default function CompanionComposer({ mode, value, disabled, busy, allowed
       <label>
         <textarea aria-label={mode === "chat" ? "和我聊聊天" : mode === "image" ? "想生成的图片" : "想生成的视频"} ref={inputRef} rows={2} placeholder={mode === "chat" ? "和我聊聊天…" : "说说想做什么，再点箭头继续…"} maxLength={4000} value={value} disabled={disabled || recording} onChange={event => onChange(event.target.value)} />
       </label>
+      {unified && value === "/" && <div role="group" aria-label="快捷指令">{["/图像编辑","/图像生成","/视频生成"].map(command=><button type="button" key={command} disabled={disabled} onClick={()=>{onChange(command+" ");inputRef.current?.focus();}}>{command}</button>)}</div>}
       <div className={styles.toolbar}>
-        <div ref={picker} className={styles.modePicker} onKeyDown={event => {
+        {!unified && <div ref={picker} className={styles.modePicker} onKeyDown={event => {
           if (event.key === "Escape") { event.preventDefault(); setMenu(false); trigger.current?.focus(); }
           if (menu && ["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key)) {
             event.preventDefault();
@@ -99,7 +101,8 @@ export default function CompanionComposer({ mode, value, disabled, busy, allowed
         }}>
           <button ref={trigger} type="button" aria-label={`创作类型：${selected.label}`} aria-haspopup="menu" aria-expanded={menu} disabled={disabled || recording} onClick={() => setMenu(!menu)}><ModeIcon size={22} aria-hidden="true" /><span>{selected.label}</span><ChevronDown size={18} aria-hidden="true" /></button>
           {menu && <div role="menu" aria-label="选择创作类型" className={styles.modeMenu} style={{ left: Math.max(8, trigger.current?.getBoundingClientRect().left ?? 8), bottom: Math.max(8, Math.min(window.innerHeight * .45, window.innerHeight - (trigger.current?.getBoundingClientRect().top ?? 0) + 8)) }}>{modes.map(({ value: next, label, icon: Icon }) => <button type="button" role="menuitemradio" aria-checked={mode === next} key={next} onClick={() => { voice.stopAll(); onMode(next); setMenu(false); trigger.current?.focus(); }}><Icon size={22} aria-hidden="true" />{label}</button>)}</div>}
-        </div>
+        </div>}
+        {!unified ? null : <details><summary aria-label="创作功能">创作</summary><div role="group" aria-label="创作功能卡片">{([['image_edit','修改照片'],['image_generate','生成图片'],['video_generate','生成视频']] as const).map(([type,label])=><button key={type} type="button" disabled={disabled || recording} onClick={()=>onCreative?.(type)}>{label}</button>)}</div></details>}
         <button type="button" className={styles.albumButton} aria-label="上传" disabled={disabled || recording} onClick={onUpload}><Plus size={24} aria-hidden="true" /><span>上传</span></button>
         <div className={styles.composerActions}>
           {playing && <button type="button" aria-label="停止本轮播报" title="停止本轮播报，继续听您说话" onClick={() => companionPlayback.cancel()}><VolumeX size={22} aria-hidden="true" /></button>}
