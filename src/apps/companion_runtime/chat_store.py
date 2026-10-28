@@ -11,7 +11,7 @@ from .tools import dispatch, MODELS
 
 
 from .diary_store import DiaryStore
-from .intent import diary_day
+from .intent import diary_day, classify
 
 
 from .photo_tasks import PhotoTasks
@@ -46,10 +46,15 @@ class ChatStore(PhotoTasks, DiaryStore, CompanionStore):
                 message['turn'] = self.turn(owner, actor, turns[message['id']])
         return page
 
-    def claim_turn(self, owner, actor, session, operation_id, text):
+    def claim_turn(self, owner, actor, session, operation_id, text, selected_photo_id=None):
         message=self.message(owner,session,operation_id,text)
         with self.connection(write=True) as db:
             row=db.execute('SELECT * FROM companion_turns WHERE owner=? AND operation_id=?',(owner,operation_id)).fetchone()
+            binding = db.execute('SELECT photo_id FROM companion_turn_photo_requests WHERE owner=? AND operation_id=?', (owner,operation_id)).fetchone()
+            if row and (binding['photo_id'] if binding else None) != selected_photo_id:
+                raise Conflict('Selected photo changed')
+            if not row:
+                db.execute('INSERT INTO companion_turn_photo_requests VALUES (?,?,?)', (owner,operation_id,selected_photo_id))
             if row:
                 if row['session_id']!=session or row['text']!=text or row['actor']!=actor:
                     raise Conflict('Turn operation changed')
@@ -70,6 +75,11 @@ class ChatStore(PhotoTasks, DiaryStore, CompanionStore):
             if tasks:
                 messages[-1]['workflow_tasks'] = [dict(task_id=t['id'], revision=t['revision'], step=t['step'],
                     candidate_ids=json.loads(t['payload'])['candidate_ids'], selected_id=json.loads(t['payload'])['selected_id']) for t in tasks]
+                from .photo_tools import read_photos
+                for task in messages[-1]['workflow_tasks']:
+                    if task['selected_id']:
+                        try: task['selected_photo'] = read_photos(owner, 'photo.item.read', dict(photo_id=task['selected_id']))['photos'][0]
+                        except Missing: task['selected_photo'] = None
             return dict(id=identity,token=token,message_id=message['id'],messages=messages,cached=False)
 
     def fail_turn(self, owner, claim):
@@ -82,8 +92,31 @@ class ChatStore(PhotoTasks, DiaryStore, CompanionStore):
             if not row or row['actor']!=actor or row['status']!='running' or row['token']!=claim['token'] or row['lease_until']<=self.clock():
                 raise Conflict('Turn claim expired')
             diary_request = diary_day(row['text']) is not None
-            if proposal['kind']=='upload_guide':
+            intent = classify(row['text'])
+            arguments = proposal.get('arguments', {})
+            unscoped_album = proposal.get('name') in ('photo.album.list', 'photo.organize.start') and not (
+                arguments.get('year') or arguments.get('query', '').strip() or arguments.get('view') == 'pending' or arguments.get('photo_id') or arguments.get('date_prefix'))
+            if intent.name in ('album.scope', 'album.browse') or proposal['kind'] == 'album_guide' or unscoped_album:
+                result = dict(kind='album_guide', browse=intent.name == 'album.browse',
+                              spoken_text='您想整理什么时候、和谁有关的照片？也可以打开相册挑选。')
+            elif proposal['kind']=='upload_guide':
                 result=dict(kind='upload_guide')
+            elif proposal.get('name') == 'photo.action':
+                from .photo_tools import photo_store
+                from ..photos.annotations import PhotoFacts
+                values = MODELS['photo.action'].model_validate(proposal['arguments']).model_dump()
+                tasks = db.execute("SELECT payload FROM companion_photo_tasks WHERE owner=? AND actor=? AND session_id=? AND status='waiting_input' AND step='review_photo'", (owner, actor, row['session_id'])).fetchall()
+                if not any(json.loads(t['payload'])['selected_id'] == values['photo_id'] for t in tasks):
+                    raise ValueError('Select this photo in the current session first')
+                if values['action'] != 'edit' and values['changes']:
+                    raise ValueError('Only edit actions accept changes')
+                photos = photo_store()
+                current = photos.annotations(owner, values['photo_id'])
+                merged = PhotoFacts.model_validate({**current['facts'], **values['changes']}).model_dump()
+                result = dict(kind='photo_action', photo_id=values['photo_id'], action=values['action'],
+                              expected_revision=current['revision'], facts=merged,
+                              spoken_text={'analyze':'要帮您分析这张照片吗？确认后会把缩略图交给看图模型。',
+                                           'edit':'已整理您的修改，请核对后保存。', 'delete':'要删除这张照片吗？请先确认。'}[values['action']])
             elif proposal['kind']=='text' and not (diary_request and re.search(r'实际记忆查询结果|没有匹配的记忆|memory[._]search', proposal.get('text',''), re.I)):
                 result=dict(kind='text',text=proposal['text'])
             elif diary_request:

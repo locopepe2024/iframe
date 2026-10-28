@@ -140,9 +140,9 @@ def test_task_http_identity_and_revision_contract(stores):
 def test_spoken_task_continuation_context_and_transaction(stores):
     chat, _ = stores
     session = chat.session('owner', 'voice-session')['session_id']
-    first = chat.claim_turn('owner', 'actor', session, 'start', '帮我整理照片')
+    first = chat.claim_turn('owner', 'actor', session, 'start', '帮我整理没有日期的照片')
     task = chat.finish_turn('owner', 'actor', first,
-        dict(kind='tool', name='photo.organize.start', arguments={}))['result']
+        dict(kind='tool', name='photo.organize.start', arguments={'view': 'pending'}))['result']
     next_turn = chat.claim_turn('owner', 'actor', session, 'select', '先整理第一张')
     context = next_turn['messages'][-1]['workflow_tasks'][0]
     assert context == dict(task_id=task['task_id'], revision=1, step='select_photo',
@@ -177,3 +177,58 @@ def test_model_cannot_continue_a_different_session_task(stores):
             arguments=dict(task_id=task_id, expected_revision=1, action='cancel')))
     assert chat.photo_task('owner', 'actor', task_id)['revision'] == 1
     assert chat.turn('owner', 'actor', claim['id'])['status'] == 'running'
+
+
+def test_explicit_photo_selection_creates_single_persisted_workspace(stores):
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+    from src.apps.companion_runtime.api import router, get_store
+    from src.apps.identity import UserContext, require_user_context
+    chat, _ = stores
+    session = chat.session('owner', 'picked-session')['session_id']
+    app = FastAPI(); app.include_router(router)
+    app.dependency_overrides[get_store] = lambda: chat
+    app.dependency_overrides[require_user_context] = lambda: UserContext('actor', 'owner', '', '')
+    with TestClient(app) as client:
+        body = dict(operation_id='picked', text='整理这张照片', selected_photo_id='mine', allow_external_text=True)
+        result = client.post(f'/companion-runtime/sessions/{session}/chat', json=body)
+        assert result.status_code == 200, result.text
+        turn = result.json()
+        assert turn['result']['step'] == 'review_photo'
+        assert [p['photo_id'] for p in turn['result']['photos']] == ['mine']
+        assert client.post(f'/companion-runtime/sessions/{session}/chat', json=body).json() == turn
+        assert chat.workflow_context('owner', 'actor', session)['album_tasks'][0]['selected']
+        assert client.get('/companion-runtime/turns/' + turn['turn_id']).json() == turn
+        assert client.post(f'/companion-runtime/sessions/{session}/chat', json={**body, 'operation_id': 'other-photo', 'selected_photo_id': 'theirs'}).status_code == 404
+        assert client.post(f'/companion-runtime/sessions/{session}/chat', json={**body, 'operation_id': 'missing-photo', 'selected_photo_id': 'absent'}).status_code == 404
+
+
+def test_photo_action_requires_selection_and_never_mutates_without_confirmation(stores):
+    chat, photos = stores
+    session = chat.session('owner','action-session')['session_id']
+    proposal = dict(kind='tool',name='photo.action',arguments=dict(photo_id='mine',action='edit',changes={'location':'杭州'}))
+    claim = chat.claim_turn('owner','actor',session,'unselected','地点改成杭州')
+    with pytest.raises(ValueError,match='Select this photo'):
+        chat.finish_turn('owner','actor',claim,proposal)
+    task = chat.start_photo_task('owner','actor',session,'choose',dict(photo_id='mine'))
+    claim = chat.claim_turn('owner','actor',session,'edit','地点改成杭州')
+    assert claim['messages'][-1]['workflow_tasks'][0]['selected_photo']['annotations']['revision'] == 0
+    result = chat.finish_turn('owner','actor',claim,proposal)['result']
+    assert result['kind'] == 'photo_action' and result['facts']['location'] == '杭州'
+    assert result['expected_revision'] == 0
+    assert photos.annotations('owner','mine')['facts']['location'] == ''
+    photos.delete_photo('owner','mine','actor',operation_id='delete-selected')
+    assert chat.photo_task('owner','actor',task)['photos'] == []
+    assert chat.conversation('owner','actor',session)['messages']
+
+
+def test_selection_is_part_of_turn_retry_identity(stores):
+    from src.apps.companion_runtime.store import Conflict
+    chat, _ = stores
+    session = chat.session('owner','select-idempotency')['session_id']
+    claim = chat.claim_turn('owner','actor',session,'select-turn','选择这张照片','mine')
+    chat.finish_turn('owner','actor',claim,dict(kind='tool',name='photo.organize.start',arguments={'photo_id':'mine'}))
+    assert chat.claim_turn('owner','actor',session,'select-turn','选择这张照片','mine')['cached']
+    for changed in ('theirs',None):
+        with pytest.raises(Conflict,match='Selected photo changed'):
+            chat.claim_turn('owner','actor',session,'select-turn','选择这张照片',changed)

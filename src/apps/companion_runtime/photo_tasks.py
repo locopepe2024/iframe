@@ -26,11 +26,11 @@ class PhotoTasks:
                 if old['session_id'] != session_id or json.loads(old['payload'])['query'] != query:
                     raise Conflict('Task operation changed')
                 return old['id']
-            page = read_photos(owner, 'photo.album.list', query)
+            page = read_photos(owner, 'photo.item.read', dict(photo_id=query['photo_id'])) if query.get('photo_id') else read_photos(owner, 'photo.album.list', {k: v for k, v in query.items() if k != 'photo_id'})
             task_id = str(uuid.uuid4())
-            payload = dict(query=query, candidate_ids=[p['photo_id'] for p in page['photos']], selected_id=None)
+            payload = dict(query=query, candidate_ids=[p['photo_id'] for p in page['photos']], selected_id=query.get('photo_id'))
             db.execute('INSERT INTO companion_photo_tasks VALUES (?,?,?,?,?,?,?,?,?)',
-                       (task_id, owner, actor, session_id, operation_id, 'waiting_input', 'select_photo', 1, encode(payload)))
+                       (task_id, owner, actor, session_id, operation_id, 'waiting_input', 'review_photo' if query.get('photo_id') else 'select_photo', 1, encode(payload)))
             return task_id
 
     def photo_task(self, owner, actor, task_id):
@@ -41,12 +41,15 @@ class PhotoTasks:
         if row['status'] == 'waiting_input':
             ids = [payload['selected_id']] if payload['selected_id'] else payload['candidate_ids']
             for photo_id in ids:
-                photos.extend(read_photos(owner, 'photo.item.read', dict(photo_id=photo_id))['photos'])
+                try:
+                    photos.extend(read_photos(owner, 'photo.item.read', dict(photo_id=photo_id))['photos'])
+                except Missing:
+                    continue
         return dict(kind='photo_task', task_id=task_id, status=row['status'], step=row['step'],
                     revision=row['revision'], photos=photos,
                     spoken_text=('已取消本次整理。' if row['status'] == 'cancelled' else
                         '本次整理已结束。' if row['status'] == 'completed' else
-                        '选好这张了，可以说说照片背后的故事，也可以在卡片里核对画面。' if row['step'] == 'review_photo' else
+                        '选好这张了，可以说说照片背后的故事，也可以在卡片里核对画面。' if row['step'] == 'review_photo' and photos else
                         f'找到{len(photos)}张照片，您想先整理第几张？' if photos else
                         '没有找到符合条件的照片，换个年份或备注再找找吧。'))
 

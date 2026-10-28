@@ -140,7 +140,7 @@ def test_personal_channel_wire_strict_tools_and_safe_failure(monkeypatch):
     assert body['parallel_tool_calls'] is False
     # The previous regular proposal still carried the memory and photo tools.
     regular_body=post.call_args_list[0].kwargs['json']
-    assert {t['function']['name'] for t in regular_body['tools']}=={'diary_open','diary_list','diary_read','memory_save','memory_search','memory_list','memory_delete','photo_album_list','photo_item_read','photo_organize_start','photo_organize_input'}
+    assert {t['function']['name'] for t in regular_body['tools']}=={'diary_open','diary_list','diary_read','memory_save','memory_search','memory_list','memory_delete','photo_album_list','photo_item_read','photo_organize_start','photo_organize_input','photo_action'}
     assert regular_body['max_tokens'] < body['max_tokens']
     assert 'confirm' not in str(regular_body['tools'])
     response.json.return_value={'choices':[{'message':{'tool_calls':[dict(type='function',function=dict(name='memory_confirm',arguments='{}'))]}}]}
@@ -184,3 +184,24 @@ def test_recent_conversation_pages_keep_latest_results_and_older_history(chat):
     assert original['messages'][0]['text'] == '整理照片 0'
     assert original['next_after'] is not None
     assert client.get(f'/companion-runtime/sessions/{session}/conversation?before=0').status_code == 422
+
+
+@pytest.mark.parametrize('text', ['梳理相册', '帮我整理照片', '我想整理一下我的相册'])
+def test_generic_album_request_asks_scope_without_model_or_photo_read(chat, text):
+    store, _, client, session, callback = chat
+    result = client.post(f'/companion-runtime/sessions/{session}/chat', json=dict(
+        operation_id='album-scope', text=text, allow_external_text=True))
+    assert result.status_code == 200, result.text
+    assert result.json()['result']['kind'] == 'album_guide'
+    callback.assert_not_called()
+    assert store.workflow_context('owner', 'actor', session)['album_tasks'] == []
+
+
+def test_unscoped_model_album_request_is_stopped_before_reading(chat):
+    _, _, client, session, callback = chat
+    callback.side_effect = None
+    callback.return_value = dict(kind='tool', name='photo.album.list', arguments={})
+    result = client.post(f'/companion-runtime/sessions/{session}/chat', json=dict(
+        operation_id='album-no-scope', text='找点回忆看看', allow_external_text=True))
+    assert result.status_code == 200, result.text
+    assert result.json()['result']['kind'] == 'album_guide'

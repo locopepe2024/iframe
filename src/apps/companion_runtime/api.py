@@ -30,6 +30,7 @@ class UserMessage(Operation):
 
 class ChatRequest(UserMessage):
     allow_external_text: Literal[True]
+    selected_photo_id: str | None = Field(default=None, min_length=1, max_length=120)
 
 
 class DiarySave(Operation):
@@ -239,16 +240,22 @@ def cancel(body: Cancellation, identity: Owner, store: Store):
 @router.post('/sessions/{session_id}/chat')
 def chat(session_id: str, body: ChatRequest, identity: Owner, store: Store):
     with errors():
-        claim=store.claim_turn(identity.owner_profile_id,identity.user_id,session_id,body.operation_id,body.text)
+        claim=store.claim_turn(identity.owner_profile_id,identity.user_id,session_id,body.operation_id,body.text,body.selected_photo_id)
         if claim['cached']:
             return store.turn(identity.owner_profile_id,identity.user_id,claim['id'])
         try:
+            intent = classify(body.text)
             # Diary is a writing lane. It receives the current session's user
             # messages but never receives memory tools, even if the model
             # would otherwise interpret the request as a search.
-            intent=classify(body.text)
-            proposal=({'kind':'upload_guide'} if intent.name == 'media.upload_help' else
-                      (propose_diary if intent.name == 'diary.compose' else propose)(identity,claim['messages'],claim['message_id']))
+            if body.selected_photo_id:
+                proposal = dict(kind='tool', name='photo.organize.start', arguments=dict(photo_id=body.selected_photo_id))
+            elif intent.name in ('album.scope', 'album.browse'):
+                proposal = dict(kind='album_guide')
+            elif intent.name == 'media.upload_help':
+                proposal = dict(kind='upload_guide')
+            else:
+                proposal = (propose_diary if intent.name == 'diary.compose' else propose)(identity, claim['messages'], claim['message_id'])
             return store.finish_turn(identity.owner_profile_id,identity.user_id,claim,proposal)
         except Exception as exc:
             store.fail_turn(identity.owner_profile_id,claim)

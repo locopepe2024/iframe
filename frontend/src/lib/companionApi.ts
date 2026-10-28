@@ -8,7 +8,7 @@ export interface Preview {
 export interface PhotoRead { kind: "photo_read"; name: string; arguments: Record<string, unknown>; photos: { photo_id: string; date: import("./photoApi").PhotoDateAnnotation; description?: import("./photoApi").DescriptionReview | null; story?: { text: string } | null; analysis?: import("./photoApi").PhotoAnalysis | null }[]; next_after_id: string | null }
 export interface PhotoTask { kind: "photo_task"; task_id: string; spoken_text?: string; status: "waiting_input" | "completed" | "cancelled"; step: "select_photo" | "review_photo" | "closed" | "cancelled"; revision: number; photos: PhotoRead["photos"] }
 export interface DiaryRead { kind: "diary_read"; name: string; diaries: Diary[]; open_calendar: boolean; spoken_text: string }
-export interface Turn { turn_id: string; status: string; result?: (DiaryRead | PhotoTask | PhotoRead | { kind: "text"; text: string } | { kind: "upload_guide" } | ({ kind: "confirmation" } & Preview) | { kind: "read"; name: string; memories: Memory[]; next_cursor: string | null }) }
+export interface Turn { turn_id: string; status: string; result?: (PhotoActionResult | { kind: "album_guide"; browse: boolean; spoken_text: string } | DiaryRead | PhotoTask | PhotoRead | { kind: "text"; text: string } | { kind: "upload_guide" } | ({ kind: "confirmation" } & Preview) | { kind: "read"; name: string; memories: Memory[]; next_cursor: string | null }) }
 export interface MemoryPage { memories: Memory[]; next_cursor: string | null }
 export interface Diary { day: string; text: string; source_turn_id: string; revision: number; updated_at: number }
 const base = `${API_URL}/companion-agent-api/companion-runtime`;
@@ -35,7 +35,7 @@ export const companionApi = {
   saveDiary: (day: string, body: {operation_id: string; text: string; source_turn_id: string; expected_revision: number}) => request<Diary>(`/diaries/${encodeURIComponent(day)}`, "PUT", body),
   session: (operation_id: string) => request<{ session_id: string }>("/sessions", "POST", { operation_id }),
   messages: (id: string, before?: number) => request<{ messages: UserMessage[]; next_after: number | null; next_before: number | null }>(`/sessions/${encodeURIComponent(id)}/conversation?${before === undefined ? "latest=true" : `before=${before}`}`),
-  chat: (id: string, body: { operation_id: string; text: string; allow_external_text: true }) => request<Turn>(`/sessions/${encodeURIComponent(id)}/chat`, "POST", body),
+  chat: (id: string, body: { operation_id: string; text: string; allow_external_text: true; selected_photo_id?: string }) => request<Turn>(`/sessions/${encodeURIComponent(id)}/chat`, "POST", body),
   turn: (id: string) => request<Turn>(`/turns/${encodeURIComponent(id)}`),
   tool: <T>(name: string, args: object) => request<T>("/tools", "POST", { name, arguments: args }),
   confirm: (preview_token: string, operation_id: string) => request<{ action: string; memory_id: string }>("/confirmations", "POST", { preview_token, operation_id, method: "button" }),
@@ -43,3 +43,5 @@ export const companionApi = {
   opentalkingBind: (session_id: string, ttl_seconds = 900) => request<{ context_token: string; expires_at: number }>("/opentalking/bind", "POST", { session_id, ttl_seconds }),
   opentalkingRelease: (context_token: string) => request<{ session_id: string; status: string }>("/opentalking/release", "POST", { context_token }),
 };
+
+export interface PhotoActionResult {kind:"photo_action";photo_id:string;action:"analyze"|"edit"|"delete";expected_revision:number;facts:import("./photoApi").PhotoFacts;spoken_text:string}
