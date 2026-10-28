@@ -93,3 +93,21 @@ it("resets a connection on microphone restart without replaying the previous rep
  expect(calls.filter(c=>c.url.endsWith("/sessions"))).toHaveLength(2);
  view.unmount();
 });
+
+it("never speaks a cancelled reply when its delayed player becomes ready",async()=>{
+ let resume!:(value:void)=>void;
+ const play=vi.spyOn(HTMLMediaElement.prototype,"play").mockImplementationOnce(()=>new Promise(resolve=>{resume=resolve;})).mockResolvedValue();
+ const view=render(<OpenTalkingReply reply={{id:"old",text:"旧回复"}}/>);
+ try {
+   await waitFor(()=>expect(play).toHaveBeenCalledTimes(1));
+   await act(async()=>companionPlayback.cancel());
+   view.rerender(<OpenTalkingReply reply={{id:"new",text:"新回复"}}/>);
+   await waitFor(()=>expect(speaks()).toHaveLength(1));
+   await act(async()=>resume());
+   expect(speaks().map(call=>JSON.parse(call.init.body as string).text)).toEqual(["新回复"]);
+   const command=JSON.parse(speaks()[0].init.body as string).command_id;
+   view.rerender(<OpenTalkingReply reply={{id:"third",text:"下一句"}}/>);
+   act(()=>events.dispatchEvent(new MessageEvent("speech.ended",{data:JSON.stringify({utterance_id:command,text:"新回复"})})));
+   await waitFor(()=>expect(speaks()).toHaveLength(2));
+ } finally {view.unmount();play.mockRestore();}
+});

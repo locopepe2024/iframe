@@ -200,6 +200,7 @@ export default function OpenTalkingReply({ reply, voice, connectionEpoch = 0, on
       companionPlayback.enqueue(owner, async (signal, playing) => {
         let timeout: ReturnType<typeof setTimeout> | undefined;
         let abort: (() => void) | undefined;
+        let ownedCommand = "";
         try {
           opening ??= open(); await opening;
           if (signal.aborted || !live()) return;
@@ -210,9 +211,12 @@ export default function OpenTalkingReply({ reply, voice, connectionEpoch = 0, on
             await video.current.play();
             playbackBlocked = false;
           } catch {
+            if (signal.aborted || !live()) return;
             playbackBlocked = true; failed.current = item; update("blocked"); return;
           }
+          if (signal.aborted || !live()) return;
           const command = `iframe-${crypto.randomUUID()}`;
+          ownedCommand = command;
           audible.current = false; update("waiting");
           const complete = new Promise<void>((resolve, reject) => {
             active = { command, playing, done: resolve, fail: reject };
@@ -242,7 +246,8 @@ export default function OpenTalkingReply({ reply, voice, connectionEpoch = 0, on
             failed.current = item; setError(formatOpenTalkingError(failure)); update("error");
           }
         } finally {
-          clearTimeout(timeout); if (abort) signal.removeEventListener("abort", abort); active = null;
+          clearTimeout(timeout); if (abort) signal.removeEventListener("abort", abort);
+          if (ownedCommand && active?.command === ownedCommand) active = null;
         }
       });
     };
