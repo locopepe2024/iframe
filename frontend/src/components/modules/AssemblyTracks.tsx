@@ -6,6 +6,7 @@ import { api, type AssemblyEditPlan } from "@/lib/api";
 import type { Project } from "@/store/projectStore";
 import { reorderAssemblyVideo, moveAssemblyClipInTimeline, removeAssemblyClip, resizeAssemblyClipInTimeline, splitAssemblyClip, trimAssemblyClip } from "./assemblyEditing";
 import { extractErrorDetail, getAssetUrl, getVideoPosterUrl } from "@/lib/utils";
+import TimelineFilmstrip from './TimelineFilmstrip';
 
 export function AssemblyTracks({ plan, resourceId, onChange, saved, project, materials, onUploadAudio, onExportSubtitles }: {
     plan: AssemblyEditPlan; resourceId: string; saved: boolean; project: Pick<Project, "id" | "frames" | "video_tasks" | "bgm_url">;
@@ -17,6 +18,21 @@ export function AssemblyTracks({ plan, resourceId, onChange, saved, project, mat
     const zh = useLocale().startsWith("zh");
     const t = (cn: string, en: string) => zh ? cn : en;
     const [position, setPosition] = useState(0);
+    const [zoom, setZoom] = useState(1);
+    const [viewportWidth, setViewportWidth] = useState(640);
+    const timelineViewport = useRef<HTMLDivElement>(null);
+    const timelineWidth = Math.max(640, viewportWidth) * zoom;
+    const tickSeconds = [0.1, 0.2, 0.5, 1, 2, 5, 10, 15, 30, 60, 120, 300, 600, 1800, 3600].find(step => step * 1000 / plan.target_duration_ms * timelineWidth >= 70) || Math.ceil(plan.target_duration_ms / 1000 / 10);
+    const ticks = Array.from({ length: Math.floor(plan.target_duration_ms / (tickSeconds * 1000)) + 1 }, (_, i) => i * tickSeconds);
+    useEffect(() => {
+        const element = timelineViewport.current;
+        if (!element) return;
+        const measure = () => setViewportWidth(element.clientWidth || 640);
+        measure();
+        const observer = new ResizeObserver(measure);
+        observer.observe(element);
+        return () => observer.disconnect();
+    }, []);
     const [error, setError] = useState<string | null>(null);
     const [busy, setBusy] = useState(false);
     const [selected, setSelected] = useState<{ laneId: string; clipId: string } | null>(null);
@@ -58,7 +74,8 @@ export function AssemblyTracks({ plan, resourceId, onChange, saved, project, mat
     useEffect(() => { if (!currentMedia) setPlaying(false); }, [currentMedia?.url]);
     useEffect(() => { setPlaying(false); setPosition(0); setSelected(null); setMediaError(null); }, [project.id]);
     useEffect(() => { setMediaError(null); }, [currentMedia?.url]);
-    const seek = (value: number) => { setMediaError(null); setPosition(value); };
+    const seek = (value: number) => { setMediaError(null); setPosition(Math.max(0, Math.min(plan.target_duration_ms, Math.round(value)))); };
+    useEffect(() => { setPosition(value => Math.min(value, plan.target_duration_ms)); }, [plan.target_duration_ms]);
     const selectClip = (laneId: string, clip: typeof videos[number]) => {
         setSelected({ laneId, clipId: clip.id });
         setSourceIn(clip.source_start_ms ?? 0);
@@ -156,6 +173,13 @@ export function AssemblyTracks({ plan, resourceId, onChange, saved, project, mat
         </section>}
         <div className="flex flex-wrap gap-2">{(["subtitle", "dialogue", "bgm", "sfx"] as const).map(kind => <button key={kind} className={control} type="button" disabled={plan.lanes.length >= 8} onClick={() => onChange({ ...plan, lanes: [...plan.lanes, { id: `${kind}-${createRenderRequestId()}`, kind, label: kind, clips: [], allow_overlap: kind !== "subtitle" }] })}>{t("添加", "Add")} {laneName(kind)}</button>)}</div>
         <label className="block text-xs text-text-secondary">{t("时间线播放头", "Timeline playhead")} · {(position / 1000).toFixed(2)}s<input className="block w-full accent-primary" type="range" aria-label={t("时间线播放头", "Timeline playhead")} min={0} max={plan.target_duration_ms} step={10} value={position} onChange={e => seek(Number(e.target.value))} /></label>
+        <div className="flex flex-wrap items-center gap-2">
+            <label className="text-xs">{t("播放头（秒）", "Playhead (seconds)")} <input className={`${control} w-28`} type="number" min={0} max={plan.target_duration_ms / 1000} step={0.001} value={position / 1000} onChange={e => seek(Number(e.target.value) * 1000)} /></label>
+            <button type="button" className={control} aria-label={t("缩小时间轴", "Zoom out")} disabled={zoom <= 0.5} onClick={() => setZoom(z => Math.max(0.5, z / 2))}>−</button>
+            <span className="text-xs tabular-nums">{Math.round(zoom * 100)}%</span>
+            <button type="button" className={control} aria-label={t("放大时间轴", "Zoom in")} disabled={zoom >= 16} onClick={() => setZoom(z => Math.min(16, z * 2))}>＋</button>
+            <button type="button" className={control} onClick={() => { setZoom(1); if (timelineViewport.current) timelineViewport.current.scrollLeft = 0; }}>{t("适应时间轴", "Fit timeline")}</button>
+        </div>
         <div className="min-h-12 whitespace-pre-wrap rounded bg-elevated p-3 text-center text-foreground">{active.map(c => c.text).join("\n") || t("当前无字幕", "No caption at this time")}</div>
         <label className="flex flex-wrap items-center gap-2 text-xs text-text-secondary">{t("成片字幕", "Video captions")}
             <select className={control} value={plan.burn_subtitle_lane_id || ""} onChange={e => onChange({ ...plan, burn_subtitle_lane_id: e.target.value || null })}>
@@ -182,7 +206,14 @@ export function AssemblyTracks({ plan, resourceId, onChange, saved, project, mat
             <button type="button" className={`${control} border-red-500/40 text-red-200`} onClick={() => applyEdit(() => removeAssemblyClip(plan, selected.laneId, selected.clipId))}>{t("删除片段", "Delete clip")}</button>
         </div>}
         {error && <p role="alert" className="text-xs text-red-300">{error}</p>}
-        <div className="overflow-x-auto" aria-label={t("可横向滚动的时间线", "Scrollable timeline")}><div style={{ minWidth: Math.max(640, videos.length * 72) }}>
+        <div ref={timelineViewport} className="overflow-x-auto" aria-label={t("可横向滚动的时间线", "Scrollable timeline")}><div data-timeline-canvas style={{ width: timelineWidth }}>
+        <div role="slider" tabIndex={0} aria-label={t("时间轴刻度", "Timeline ruler")} aria-valuemin={0} aria-valuemax={plan.target_duration_ms / 1000} aria-valuenow={position / 1000} className="relative h-10 cursor-crosshair border-b border-glass-border bg-elevated text-xs tabular-nums" onPointerDown={event => {
+            const bounds = event.currentTarget.getBoundingClientRect();
+            seek((event.clientX - bounds.left) / bounds.width * plan.target_duration_ms);
+        }} onKeyDown={event => { if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') { event.preventDefault(); seek(position + (event.key === 'ArrowRight' ? 1 : -1) * (event.shiftKey ? 1000 : 10)); } }}>
+            {ticks.map(seconds => <span key={seconds} className="pointer-events-none absolute inset-y-0 border-l border-glass-border pl-1 pt-1" style={{ left: `${seconds * 1000 / plan.target_duration_ms * 100}%` }}>{seconds.toFixed(tickSeconds < 1 ? 1 : 0)}s</span>)}
+            <span className="pointer-events-none absolute inset-y-0 z-10 w-px bg-primary" style={{ left: `${position / plan.target_duration_ms * 100}%` }} />
+        </div>
         {plan.lanes.map(lane => <div key={lane.id} className="space-y-2 border-t border-glass-border pt-2">
             <div className="flex flex-wrap items-center gap-2 text-xs text-text-secondary"><span>{laneName(lane.kind)}</span>
                 <label className="flex min-h-11 items-center gap-2"><input type="checkbox" checked={Boolean(lane.muted)} onChange={e => onChange({ ...plan, burn_subtitle_lane_id: e.target.checked && plan.burn_subtitle_lane_id === lane.id ? null : plan.burn_subtitle_lane_id, lanes: plan.lanes.map(l => l.id === lane.id ? { ...l, muted: e.target.checked } : l) })} />{t("静音 / 隐藏", "Mute / hide")}</label>
@@ -217,7 +248,7 @@ export function AssemblyTracks({ plan, resourceId, onChange, saved, project, mat
                     setSourceIn(c.source_start_ms ?? 0);
                     setSourceOut(c.source_end_ms ?? (c.source_start_ms ?? 0) + c.timeline_end_ms - c.timeline_start_ms);
                     seek(c.timeline_start_ms);
-                }} aria-pressed={selected?.laneId === lane.id && selected?.clipId === c.id} className="absolute inset-y-1 min-w-1 truncate rounded bg-primary/40 px-1 text-left text-xs text-foreground aria-pressed:ring-2 aria-pressed:ring-inset aria-pressed:ring-primary focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary" style={{ left: `${c.timeline_start_ms / plan.target_duration_ms * 100}%`, width: `${(c.timeline_end_ms - c.timeline_start_ms) / plan.target_duration_ms * 100}%`, opacity: c.enabled && !lane.muted ? 1 : 0.3 }}>{lane.kind === "video" && mediaFor(c)?.poster && <img src={mediaFor(c)!.poster} alt="" loading="lazy" draggable={false} className="pointer-events-none h-14 w-full object-cover" />}<span className="pointer-events-none block truncate">{c.text || c.label || c.id}</span>{selected?.laneId === lane.id && selected?.clipId === c.id && <><span role="button" aria-label={`${c.label || c.id} start handle`} className="absolute inset-y-0 left-0 z-10 w-3 cursor-ew-resize bg-foreground/30" onPointerDown={e => { e.stopPropagation(); dragRef.current = { laneId: lane.id, clipId: c.id, startX: e.clientX, origin: c.timeline_start_ms, mode: "resize", edge: "start" }; e.currentTarget.setPointerCapture(e.pointerId); }} /><span role="button" aria-label={`${c.label || c.id} end handle`} className="absolute inset-y-0 right-0 z-10 w-3 cursor-ew-resize bg-foreground/30" onPointerDown={e => { e.stopPropagation(); dragRef.current = { laneId: lane.id, clipId: c.id, startX: e.clientX, origin: c.timeline_end_ms, mode: "resize", edge: "end" }; e.currentTarget.setPointerCapture(e.pointerId); }} /></>}</button>)}
+                }} aria-pressed={selected?.laneId === lane.id && selected?.clipId === c.id} className="absolute inset-y-1 min-w-1 truncate rounded bg-primary/40 px-1 text-left text-xs text-foreground aria-pressed:ring-2 aria-pressed:ring-inset aria-pressed:ring-primary focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary" style={{ left: `${c.timeline_start_ms / plan.target_duration_ms * 100}%`, width: `${(c.timeline_end_ms - c.timeline_start_ms) / plan.target_duration_ms * 100}%`, opacity: c.enabled && !lane.muted ? 1 : 0.3 }}>{lane.kind === "video" && mediaFor(c) && <TimelineFilmstrip url={mediaFor(c)!.url} poster={mediaFor(c)!.poster} startMs={c.source_start_ms ?? 0} endMs={c.source_end_ms ?? (c.source_start_ms ?? 0) + c.timeline_end_ms - c.timeline_start_ms} width={timelineWidth * (c.timeline_end_ms - c.timeline_start_ms) / plan.target_duration_ms} />}<span className="pointer-events-none block truncate">{c.text || c.label || c.id}</span>{selected?.laneId === lane.id && selected?.clipId === c.id && <><span role="button" aria-label={`${c.label || c.id} start handle`} className="absolute inset-y-0 left-0 z-10 w-3 cursor-ew-resize bg-foreground/30" onPointerDown={e => { e.stopPropagation(); dragRef.current = { laneId: lane.id, clipId: c.id, startX: e.clientX, origin: c.timeline_start_ms, mode: "resize", edge: "start" }; e.currentTarget.setPointerCapture(e.pointerId); }} /><span role="button" aria-label={`${c.label || c.id} end handle`} className="absolute inset-y-0 right-0 z-10 w-3 cursor-ew-resize bg-foreground/30" onPointerDown={e => { e.stopPropagation(); dragRef.current = { laneId: lane.id, clipId: c.id, startX: e.clientX, origin: c.timeline_end_ms, mode: "resize", edge: "end" }; e.currentTarget.setPointerCapture(e.pointerId); }} /></>}</button>)}
                 <span className="pointer-events-none absolute inset-y-0 w-px bg-foreground" style={{ left: `${position / plan.target_duration_ms * 100}%` }} />
             </div>
             {lane.kind !== "subtitle" && lane.clips.filter(c => selected?.laneId === lane.id && selected?.clipId === c.id).map(cue => <label key={cue.id} className="flex min-h-11 items-center gap-2 text-xs text-text-secondary">{cue.label || cue.id} · {t("音量", "Gain")}

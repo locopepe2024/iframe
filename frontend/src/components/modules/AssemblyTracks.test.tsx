@@ -12,7 +12,7 @@ describe("Assembly tracks", () => {
     it("creates a caption at the playhead without saving or rendering", () => {
         const onChange = vi.fn();
         render(<AssemblyTracks plan={plan} project={project} resourceId="p" saved={false} onChange={onChange} />);
-        fireEvent.change(screen.getByRole("slider"), { target: { value: "1500" } });
+        fireEvent.change(screen.getByRole("slider", { name: "Timeline playhead" }), { target: { value: "1500" } });
         fireEvent.click(screen.getByRole("button", { name: "Add caption" }));
         expect(onChange.mock.calls[0][0].lanes[0].clips[0]).toMatchObject({ timeline_start_ms: 1500, timeline_end_ms: 3500, text: "New caption" });
         expect(screen.getByRole("button", { name: "Download SRT" })).toBeDisabled();
@@ -44,7 +44,7 @@ it("previews the exact timeline take and shows gain only after selection", () =>
     const videoPlan = { ...plan, lanes: [{ id: "v", kind: "video" as const, allow_overlap: false, clips: [{ id: "shot", label: "Shot 1", source_project_id: "p", source_frame_id: "f", source_task_id: "take", timeline_start_ms: 0, timeline_end_ms: 5000, source_refs: [], enabled: true }] }] };
     render(<AssemblyTracks plan={videoPlan} project={videoProject} resourceId="p" saved onChange={vi.fn()} />);
     expect(screen.getByLabelText("Timeline video preview").getAttribute("src")).toContain("take.mp4");
-    expect(screen.queryByRole("spinbutton")).toBeNull();
+    expect(screen.queryByRole("spinbutton", { name: "Shot 1 · Gain" })).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Shot 1" }));
     expect(screen.getByRole("spinbutton", { name: "Shot 1 · Gain" })).toHaveValue(1);
 });
@@ -57,7 +57,7 @@ it("maps seeking into a trimmed source and continues into the next shot", () => 
         { id: "b", source_task_id: "b", timeline_start_ms: 5000, timeline_end_ms: 10000, source_start_ms: 1000, source_end_ms: 6000, source_refs: [], enabled: true },
     ] }] };
     render(<AssemblyTracks plan={videoPlan} project={videoProject} resourceId="p" saved onChange={vi.fn()} />);
-    fireEvent.change(screen.getByRole("slider"), { target: { value: "1500" } });
+    fireEvent.change(screen.getByRole("slider", { name: "Timeline playhead" }), { target: { value: "1500" } });
     const video = screen.getByLabelText("Timeline video preview") as HTMLVideoElement;
     expect(video.currentTime).toBe(5);
     expect(video.playbackRate).toBe(2);
@@ -67,7 +67,7 @@ it("maps seeking into a trimmed source and continues into the next shot", () => 
     const next = screen.getByLabelText("Timeline video preview") as HTMLVideoElement;
     expect(next.getAttribute("src")).toContain("b.mp4");
     expect(next.currentTime).toBe(1);
-    expect(screen.getByRole("slider")).toHaveValue("5000");
+    expect(screen.getByRole("slider", { name: "Timeline playhead" })).toHaveValue("5000");
     expect(play).toHaveBeenCalled();
     play.mockRestore();
 });
@@ -95,7 +95,7 @@ it("offers visible sequence controls and recombines trimmed and split sources", 
     fireEvent.change(screen.getByRole("spinbutton", { name: "Source out (ms)" }), { target: { value: "2500" } });
     fireEvent.click(screen.getByRole("button", { name: "Apply trim at original speed" }));
     expect(ordered()[1]).toMatchObject({ source_start_ms: 500, source_end_ms: 2500, timeline_start_ms: 3000, timeline_end_ms: 5000 });
-    fireEvent.change(screen.getByRole("slider"), { target: { value: "4000" } });
+    fireEvent.change(screen.getByRole("slider", { name: "Timeline playhead" }), { target: { value: "4000" } });
     fireEvent.click(screen.getByRole("button", { name: "Split at playhead" }));
     expect(ordered().map(c => c.source_media_id)).toEqual(["m2", "m1", "m1", "m3"]);
     const secondHalf = ordered()[2];
@@ -104,4 +104,20 @@ it("offers visible sequence controls and recombines trimmed and split sources", 
     fireEvent.click(screen.getByRole("button", { name: "Move later" }));
     expect(ordered().map(c => c.source_media_id)).toEqual(["m2", "m1", "m3", "m1"]);
     expect(latest.target_duration_ms).toBe(8000);
+});
+
+
+it("zooms the shared ruler, seeks precisely, and fits without changing clip ranges", () => {
+    const onChange = vi.fn();
+    const view = render(<AssemblyTracks plan={plan} project={project} resourceId="p" saved onChange={onChange} />);
+    const canvas = () => view.container.querySelector('[data-timeline-canvas]') as HTMLElement;
+    const initial = canvas().style.width;
+    fireEvent.click(screen.getByRole("button", { name: "Zoom in" }));
+    expect(canvas().style.width).not.toBe(initial);
+    fireEvent.change(screen.getByRole("spinbutton", { name: "Playhead (seconds)" }), { target: { value: "1.234" } });
+    expect(screen.getByRole("slider", { name: "Timeline playhead" })).toHaveValue("1234");
+    fireEvent.click(screen.getByRole("button", { name: "Fit timeline" }));
+    expect(canvas().style.width).toBe(initial);
+    expect(screen.getByRole("spinbutton", { name: "Playhead (seconds)" })).toHaveValue(1.234);
+    expect(onChange).not.toHaveBeenCalled();
 });
