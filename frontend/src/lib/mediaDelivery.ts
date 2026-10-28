@@ -21,6 +21,11 @@ export function isManagedMedia(reference: string): boolean {
   return path.startsWith('/studio/media/') || path.startsWith('/playground/media/');
 }
 
+// Signed display URLs rotate while the underlying owned media stays the same.
+export function mediaReferenceIdentity(reference: string): string {
+  return managedPath(reference) || reference;
+}
+
 export async function resolveMediaDelivery(reference: string, preview = 0): Promise<string> {
   const path = managedPath(reference);
   let endpoint: string;
