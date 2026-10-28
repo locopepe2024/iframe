@@ -17,24 +17,24 @@ class DiaryStore:
         day = diary_day(source['text'])
         result = json.loads(source['result'])
         if day and requested_day and day != requested_day:
-            return dict(day=day, spoken_text='保存日期与草稿日期不一致，请先核对要保存哪一天的日记。')
+            return dict(status='needs_review', day=day, spoken_text='保存日期与草稿日期不一致，请先核对要保存哪一天的日记。')
         day = day or requested_day
         if not day:
-            return dict(day='', spoken_text='这篇日记还没有确定日期，请告诉我要保存到哪一天。')
+            return dict(status='needs_date', day='', spoken_text='这篇日记还没有确定日期，请告诉我要保存到哪一天。')
         if result.get('kind') != 'text' or result.get('name'):
             raise ValueError('Select a generated diary draft')
         text = result['text']
         if focus and focus.get('kind') == 'diary' and (focus['object_id'] != day or focus.get('draft') != text):
-            return dict(day=day, spoken_text='日记编辑器里还有修改，请核对当前正文后点击保存。')
+            return dict(status='needs_review', day=day, spoken_text='日记编辑器里还有修改，请核对当前正文后点击保存。')
         existing = db.execute('SELECT text,source_turn_id FROM companion_diaries WHERE owner=? AND actor=? AND day=?',
                               (owner, actor, day)).fetchone()
         if existing:
             if existing['source_turn_id'] == source_id and existing['text'] == text:
-                return dict(day=day, spoken_text='这篇日记已经保存了。')
-            return dict(day=day, spoken_text='这一天已有日记，请在日记编辑器里核对后确认替换。')
+                return dict(status='already_saved', day=day, spoken_text='这篇日记已经保存了。')
+            return dict(status='needs_review', day=day, spoken_text='这一天已有日记，请在日记编辑器里核对后确认替换。')
         self.save_diary(owner, actor, day, operation_id=operation, text=text,
                         source_turn_id=source_id, expected_revision=0)
-        return dict(day=day, spoken_text=f'{day} 的日记已保存。')
+        return dict(status='saved', day=day, spoken_text=f'{day} 的日记已保存。')
 
     def diaries(self, owner, actor, month):
         date.fromisoformat(month + '-01')

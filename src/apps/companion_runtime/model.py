@@ -44,6 +44,8 @@ def _propose(identity, messages, current_message_id, *, diary=False):
             '如果事实不足，只提出一个最需要补充的问题。绝对不要查询、保存或删除个人记忆，也不要输出工具调用。')
         prompt = system_prompt(profile) + instruction
         if not diary:
+            prompt += '\nlast_operation是服务端实际操作回执。日记saved/already_saved表示保存任务已结束，不再追问或继续写；needs_review/needs_date只说明下一步，不能称保存成功。可见照片、旧workflow_tasks只是保留工作域，不代表用户要继续讨论。用户没有明确新意图时等待，不重复之前的问题，不主动切回照片。对无法理解的语音片段，只简短说明没听清，不补全意图、不反复追问。'
+        if not diary:
             prompt += '\n你已注册以下站内能力，应按需求调用工具，不要声称无法打开站内相册或日记。外部手机相册仍需用户上传。\n' + json.dumps(CAPABILITIES, ensure_ascii=False)
         response = requests.post(configured['base_url'].rstrip('/')+'/chat/completions',
             headers={'Authorization': 'Bearer '+configured['api_key']},

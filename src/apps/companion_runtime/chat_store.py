@@ -71,8 +71,9 @@ class ChatStore(PhotoTasks, DiaryStore, CompanionStore):
             db.execute("UPDATE companion_turns SET status='running',token=?,lease_until=?,result=NULL WHERE owner=? AND id=?",(token,self.clock()+120,owner,identity))
             rows=db.execute('SELECT id,text FROM companion_messages WHERE owner=? AND session_id=? AND sequence<=? ORDER BY sequence DESC LIMIT 20',(owner,session,message['sequence'])).fetchall()
             messages = [dict(r) for r in reversed(rows)]
-            from .conversation_context import attach_replies
+            from .conversation_context import attach_replies, attach_last_operation
             attach_replies(db, owner, actor, session, messages)
+            attach_last_operation(db, owner, actor, session, messages, identity)
             from .interaction_focus import read_focus
             focus_row = db.execute('SELECT payload FROM companion_turn_focus WHERE owner=? AND turn_id=?', (owner,identity)).fetchone()
             focus = json.loads(focus_row['payload']) if focus_row else read_focus(db, owner, actor, session)
@@ -166,7 +167,8 @@ class ChatStore(PhotoTasks, DiaryStore, CompanionStore):
                 if name in ('photo.organize.start', 'photo.organize.input'):
                     result=dict(kind='photo_task',task_id=task_id)
                 elif name == 'diary.save_draft':
-                    result=dict(kind='text', text=output['spoken_text'], name=name, day=output['day'])
+                    result=dict(kind='text', text=output['spoken_text'], name=name, day=output['day'],
+                                operation_status=output['status'])
                 elif name == 'photo.album.count':
                     # Preserve the count at query time; history must not silently
                     # re-count after uploads or deletions. Text uses normal speech.

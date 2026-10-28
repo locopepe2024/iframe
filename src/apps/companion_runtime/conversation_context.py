@@ -34,6 +34,8 @@ def attach_replies(db, owner, actor, session, messages):
         reply = dict(turn_id=row['id'], kind=kind)
         if kind == 'text':
             reply['text'] = result['text'][:4000]
+            if result.get('name') == 'diary.save_draft' and result.get('operation_status'):
+                reply.update(tool=result['name'], operation_status=result['operation_status'], day=result['day'])
         elif kind == 'read':
             reply.update(tool=result['name'], status='executed',
                          summary=result.get('context_summary'))
@@ -51,3 +53,15 @@ def attach_replies(db, owner, actor, session, messages):
         if size <= remaining:
             message['assistant_reply'] = reply
             remaining -= size
+
+
+def attach_last_operation(db, owner, actor, session, messages, turn_id):
+    """Persisted tool truth survives the bounded conversational message window."""
+    row = db.execute(
+        "SELECT result FROM companion_turns WHERE owner=? AND actor=? AND session_id=? "
+        "AND status='completed' AND sequence < (SELECT sequence FROM companion_turns WHERE id=?) "
+        "AND json_extract(result, '$.operation_status') IS NOT NULL ORDER BY sequence DESC LIMIT 1",
+        (owner, actor, session, turn_id)).fetchone()
+    if row and messages:
+        result = json.loads(row['result'])
+        messages[-1]['last_operation'] = dict(tool=result['name'], status=result['operation_status'], day=result['day'])

@@ -44,3 +44,49 @@ def test_read_summary_does_not_copy_private_bodies():
     assert read_summary('memory.search', {'memories':[{'content':'private'}]}) is None
     assert read_summary('diary.read', {'diaries':[{'day':'2026-10-28','text':'private'}]}) == dict(days=['2026-10-28'], open_calendar=False)
     assert read_summary('photo.album.list', {'photos':[{'photo_id':'p'}], 'next_after_id':'p'}) == dict(photo_ids=['p'], has_more=True)
+
+
+def test_diary_save_receipt_is_shared_and_does_not_reopen_previous_photo_task(tmp_path):
+    store = ChatStore(tmp_path / 'chat.db', initialize=True)
+    session = store.session('owner', 's')['session_id']
+    draft = store.claim_turn('owner', 'actor', session, 'draft', '请把 2026-10-28 我们聊的内容整理成一篇回忆日记。')
+    source = store.finish_turn('owner', 'actor', draft, dict(kind='text', text='今天翻看了照片。'))
+    save = store.claim_turn('owner', 'actor', session, 'save', '把日记保存。')
+    store.finish_turn('owner', 'actor', save, dict(kind='tool', name='diary.save_draft', arguments={'source_turn_id':source['turn_id']}))
+    next_turn = store.claim_turn('owner', 'actor', session, 'next', '保存了吗？')
+    receipt = next_turn['messages'][-2]['assistant_reply']
+    assert receipt['tool'] == 'diary.save_draft'
+    assert receipt['operation_status'] == 'saved'
+    assert receipt['day'] == '2026-10-28'
+    assert next_turn['messages'][-1]['last_operation'] == dict(tool='diary.save_draft', status='saved', day='2026-10-28')
+
+
+def test_last_operation_survives_twenty_messages_but_never_crosses_session(tmp_path):
+    store = ChatStore(tmp_path / 'chat.db', initialize=True)
+    session = store.session('owner', 's')['session_id']
+    draft = store.claim_turn('owner', 'actor', session, 'draft', '请把 2026-10-28 我们聊的内容整理成一篇回忆日记。')
+    source = store.finish_turn('owner', 'actor', draft, dict(kind='text', text='今天翻看了照片。'))
+    save = store.claim_turn('owner', 'actor', session, 'save', '把日记保存。')
+    store.finish_turn('owner', 'actor', save, dict(kind='tool', name='diary.save_draft', arguments={'source_turn_id':source['turn_id']}))
+    for index in range(21):
+        turn = store.claim_turn('owner', 'actor', session, f'chat-{index}', '你好')
+        store.finish_turn('owner', 'actor', turn, dict(kind='text', text='你好。'))
+    current = store.claim_turn('owner', 'actor', session, 'check', '保存了吗')
+    assert current['messages'][-1]['last_operation']['status'] == 'saved'
+    other = store.session('owner', 'elsewhere')['session_id']
+    elsewhere = store.claim_turn('owner', 'actor', other, 'other', '你好')
+    assert 'last_operation' not in elsewhere['messages'][-1]
+    different_actor = store.claim_turn('owner', 'other-actor', session, 'different-actor', '你好')
+    assert 'last_operation' not in different_actor['messages'][-1]
+
+
+def test_failed_save_is_not_a_completed_task_receipt(tmp_path):
+    store = ChatStore(tmp_path / 'chat.db', initialize=True)
+    session = store.session('owner', 's')['session_id']
+    draft = store.claim_turn('owner', 'actor', session, 'draft', '请把 2026-10-28 我们聊的内容整理成一篇回忆日记。')
+    source = store.finish_turn('owner', 'actor', draft, dict(kind='text', text='今天翻看了照片。'))
+    store.save_diary('owner','actor','2026-10-28',operation_id='existing',text='手动修改后的日记',source_turn_id='',expected_revision=0)
+    save = store.claim_turn('owner', 'actor', session, 'save', '保存')
+    store.finish_turn('owner', 'actor', save, dict(kind='tool', name='diary.save_draft', arguments={'source_turn_id':source['turn_id']}))
+    current = store.claim_turn('owner', 'actor', session, 'check', '保存了吗')
+    assert current['messages'][-1]['last_operation']['status'] == 'needs_review'
