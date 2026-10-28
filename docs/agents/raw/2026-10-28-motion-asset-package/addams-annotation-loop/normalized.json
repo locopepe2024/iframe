@@ -1,0 +1,54 @@
+{
+  "schema": "addams-reviewed-points.v1",
+  "coordinate_space": "review_image_pixels",
+  "image_size": [
+    960,
+    520
+  ],
+  "source": "submitted_annotations_only",
+  "frames": [
+    {
+      "source_frame": 20,
+      "pts_s": 0.76,
+      "image_sha256": "bcfd03dd8c09e1d3f4ed793276fffe34bd3c16463eabbd00cbe03c4800626e11",
+      "status": "pending",
+      "joints": {},
+      "contact": "uncertain"
+    },
+    {
+      "source_frame": 21,
+      "pts_s": 0.8,
+      "image_sha256": "3eae2a5ca1e97f9dc2bbd414177c39ec709353cfba4162bb24f9ce3e54111571",
+      "status": "pending",
+      "joints": {},
+      "contact": "uncertain"
+    },
+    {
+      "source_frame": 22,
+      "pts_s": 0.84,
+      "image_sha256": "172649548dcb0f84134b5d96c47bd99eaf8164baeeac16157661da4db767ec33",
+      "status": "pending",
+      "joints": {},
+      "contact": "uncertain"
+    },
+    {
+      "source_frame": 23,
+      "pts_s": 0.88,
+      "image_sha256": "bbbd5b305a1b242675bf28ef24eba91475f29f162bd48e84c9043559bb6a7171",
+      "status": "pending",
+      "joints": {},
+      "contact": "uncertain"
+    },
+    {
+      "source_frame": 24,
+      "pts_s": 0.92,
+      "image_sha256": "430b7f848f69619f4442385da66810a16506dd806ad656f8c25f24b162bb0060",
+      "status": "pending",
+      "joints": {},
+      "contact": "uncertain"
+    }
+  ],
+  "solver_ready": false,
+  "export_sha256": "d571ec9c70266b32b7db1aeb4ed2bd4d0cbbf9427cf766d4dcce2723b0e23efd",
+  "tasks_sha256": "d571ec9c70266b32b7db1aeb4ed2bd4d0cbbf9427cf766d4dcce2723b0e23efd"
+}
