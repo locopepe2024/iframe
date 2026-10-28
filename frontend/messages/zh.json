@@ -689,6 +689,9 @@
   },
   "recreation": {
     "poseReview": {
+      "semanticLabel": "点位含义",
+      "semantic": {"joint": "骨骼关节", "body_contour": "身体轮廓", "uncertain": "不确定"},
+      "semanticHelp": "髋关节是大腿的旋转中心，不是腰髋外轮廓。轮廓点独立保留，不参与关节拟合。",
       "title": "动作标注",
       "instructions": "选择源帧，再选关节，在图上点击或拖动定位，方向键可微调。左右按人物自身定义；隐藏点标记遮挡或不确定。",
       "sourceFrame": "源帧号",

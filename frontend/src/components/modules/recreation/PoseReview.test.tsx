@@ -38,7 +38,7 @@ describe("project motion review", () => {
     fireEvent.change(screen.getByRole("combobox", { name: "Leg depth order" }), { target: { value: "right_front" } });
     fireEvent.click(screen.getByRole("button", { name: "Save annotations" }));
     await screen.findByText("Annotations saved to this project.");
-    expect(poseReviewApi.save).toHaveBeenCalledWith("p", expect.objectContaining({ revision: 0, depth_order: "right_front", joints: { left_knee: { xy: [51, 60], visibility: "uncertain" } } }));
+    expect(poseReviewApi.save).toHaveBeenCalledWith("p", expect.objectContaining({ revision: 0, depth_order: "right_front", joints: { left_knee: { xy: [51, 60], visibility: "uncertain", semantic: "uncertain" } } }));
     expect(screen.getByRole("button", { name: "Export saved annotations" })).not.toBeDisabled();
     expect(screen.getByRole("button", { name: "Save annotations" })).toBeDisabled();
   });
@@ -52,6 +52,13 @@ describe("project motion review", () => {
     expect(confirm).toHaveBeenCalled(); expect(poseReviewApi.frame).toHaveBeenCalledTimes(1);
     fireEvent.click(screen.getByRole("button", { name: "Save annotations" }));
     await screen.findByText("Annotations saved to this project.");
+  });
+  it("keeps outline semantics separate from visibility and preserves coordinates", async () => {
+    await load();
+    fireEvent.change(screen.getByRole("combobox", { name: "Point meaning" }), { target: { value: "body_contour" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save annotations" }));
+    await screen.findByText("Annotations saved to this project.");
+    expect(poseReviewApi.save).toHaveBeenCalledWith("p", expect.objectContaining({ joints: { left_knee: { xy: [50, 60], visibility: "uncertain", semantic: "body_contour" } } }));
   });
   it("restores saved frame links without claiming recomputation", async () => {
     vi.mocked(poseReviewApi.list).mockResolvedValue({ analysis_id: "a", frames: [{ ...frame, revision: 1 }] });

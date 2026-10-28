@@ -363,7 +363,7 @@ export type PoseVisibility = "visible" | "occluded" | "uncertain";
 export interface PoseReviewFrame {
   analysis_id: string; pts: number; source_frame: number; time_base: string; source_checksum: string;
   media_id: string; image_sha256: string; image_url: string; width: number; height: number; revision: number;
-  joints: Partial<Record<PoseJointName, { xy: [number, number]; visibility: PoseVisibility }>>;
+  joints: Partial<Record<PoseJointName, { xy: [number, number]; visibility: PoseVisibility; semantic?: "joint" | "body_contour" | "uncertain" }>>;
   depth_order: "left_front" | "right_front" | "uncertain";
   contact: "left" | "right" | "both" | "airborne" | "uncertain";
   status: "draft" | "reviewed" | "not_evaluable";

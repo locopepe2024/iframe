@@ -310,6 +310,7 @@ def retry_assembly_task(task_id: str, background: BackgroundTasks,
 
 
 class PoseJointRequest(BaseModel):
+    semantic: str = "uncertain"
     xy: list[float] = Field(min_length=2, max_length=2)
     visibility: str
 

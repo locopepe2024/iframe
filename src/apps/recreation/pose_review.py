@@ -86,6 +86,7 @@ def frame_record(service, db, record, media):
              'joints': {}, 'contact': 'uncertain', 'status': 'draft', 'depth_order': 'uncertain'}
     if saved:
         frame.update(saved)
+        frame["joints"] = {name: {**joint, "semantic": joint.get("semantic", "uncertain")} for name, joint in frame["joints"].items()}
     return frame
 
 
@@ -105,7 +106,10 @@ def save(service, project_id, payload):
         joints = payload['joints']
         if set(joints) - JOINTS:
             raise HTTPException(422, 'Unknown joint')
+        joints = {name: {**joint, 'semantic': joint.get('semantic', 'uncertain')} for name, joint in joints.items()}
         for joint in joints.values():
+            if joint['semantic'] not in {'joint', 'body_contour', 'uncertain'}:
+                raise HTTPException(422, 'Invalid point semantic')
             xy = joint.get('xy')
             if joint.get('visibility') not in {'visible', 'occluded', 'uncertain'} or not isinstance(xy, list) or len(xy) != 2:
                 raise HTTPException(422, 'Invalid joint review')

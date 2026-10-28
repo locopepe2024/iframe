@@ -16,14 +16,19 @@ def angles(v):return [math.atan2(v[2],v[0]),math.atan2(v[1],math.hypot(v[0],v[2]
 def direction(a):return np.array([math.cos(a[1])*math.cos(a[0]),math.sin(a[1]),math.cos(a[1])*math.sin(a[0])])
 
 
+def is_joint(j):
+    # Legacy v1 Addams labels used joint-only semantics; product defaults differ.
+    return j['visibility']=='visible' and j.get('semantic','joint')=='joint'
+
+
 def solve(review,control,camera,rig,weights=(0,1,4)):
     frames=review['frames']
     if not review.get('solver_ready') or len(frames)!=5 or [f['source_frame'] for f in frames]!=list(range(20,25)):
         raise ValueError('Five submitted, reviewed frames20–24 required; predictions/pending frames cannot drive solve')
     if review.get('coordinate_space')!='review_image_pixels' or review.get('image_size')!=[960,520]:
         raise ValueError('Unsupported annotation coordinates')
-    if any(f['status']!='reviewed' or sum(j['visibility']=='visible' for j in f['joints'].values())<4 for f in frames):
-        raise ValueError('Each reviewed frame needs at least four visible joints')
+    if any(f['status']!='reviewed' or sum(is_joint(j) for j in f['joints'].values())<4 for f in frames):
+        raise ValueError('Each reviewed frame needs at least four visible skeletal joints')
     times=np.array([f['pts_s'] for f in frames]);dt=np.diff(times)
     if not np.allclose(dt,.04,atol=1e-9):raise ValueError('This diagnostic requires consecutive25fps PTS')
     raw={r['source_frame']:r for r in control['rows'] if r['case']=='distributed_swing'}
@@ -40,7 +45,7 @@ def solve(review,control,camera,rig,weights=(0,1,4)):
         initial[i,8:]=cam[f['source_frame']]['translation'][:2]
     # Unwrap azimuths to avoid artificial2pi transitions at initialization.
     for col in [0,2,4,6]:initial[:,col]=np.unwrap(initial[:,col])
-    visible=[(i,n,np.array(j['xy_px'])) for i,f in enumerate(frames) for n,j in f['joints'].items() if j['visibility']=='visible']
+    visible=[(i,n,np.array(j['xy_px'])) for i,f in enumerate(frames) for n,j in f['joints'].items() if is_joint(j)]
     allowed={s+'_'+p for s in sides for p in parts}
     if any(n not in allowed or not np.all(np.isfinite(xy)) or np.any(xy<0) or xy[0]>960 or xy[1]>520 for _,n,xy in visible):raise ValueError('Invalid reviewed joint')
 

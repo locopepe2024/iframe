@@ -78,3 +78,19 @@ def test_authenticated_api_roundtrip_and_request_validation(service, video, monk
     assert client.post(url+'/frame',json={'analysis_id':project['analysis_id'],'pts':1.5}).status_code == 422
     app.dependency_overrides[require_studio_user] = lambda: UserContext('foreign','foreign','Foreign','')
     assert client.get(url).status_code == 404
+
+
+def test_point_semantics_are_preserved_and_legacy_is_uncertain(service,video):
+    project=completed(service,video)
+    frame=pose_review.prepare(service,project['id'],project['analysis_id'],project['analysis']['frame_pts'][0])
+    data=payload(frame)
+    data['joints']['left_hip']['semantic']='body_contour'
+    data['joints']['left_knee']['semantic']='joint'
+    saved=pose_review.save(service,project['id'],data)
+    restored=pose_review.prepare(service,project['id'],project['analysis_id'],frame['pts'])
+    assert restored['joints']['left_hip']['semantic']=='body_contour'
+    assert restored['joints']['left_knee']['semantic']=='joint'
+    assert restored['joints']['right_hip']['semantic']=='uncertain'
+    assert restored['joints']['left_hip']['xy']==data['joints']['left_hip']['xy']
+    bad=payload(saved);bad['joints']['left_hip']['semantic']='waist-is-bone'
+    with pytest.raises(HTTPException):pose_review.save(service,project['id'],bad)

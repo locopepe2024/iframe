@@ -62,7 +62,7 @@ export default function PoseReview({ project }: { project: RecreationProject }) 
     if (!frame || busy || !loaded) return;
     const joint = frame.joints[selected];
     edit({ ...frame, status: "draft", joints: { ...frame.joints, [selected]: {
-      xy: [Math.max(0, Math.min(frame.width, x)), Math.max(0, Math.min(frame.height, y))], visibility: joint?.visibility ?? "uncertain",
+      xy: [Math.max(0, Math.min(frame.width, x)), Math.max(0, Math.min(frame.height, y))], visibility: joint?.visibility ?? "uncertain", semantic: joint?.semantic ?? "uncertain",
     } } });
   }
   function pointer(e: React.PointerEvent<SVGSVGElement>) {
@@ -112,14 +112,16 @@ export default function PoseReview({ project }: { project: RecreationProject }) 
             const color = side === "left" ? "#2dd4bf" : "#fb923c";
             return (["hip", "knee"] as const).map((part, i) => {
               const a = frame.joints[`${side}_${part}`], b = frame.joints[`${side}_${i === 0 ? "knee" : "ankle"}`];
-              return a && b && <line key={`${side}-${part}`} x1={a.xy[0]} y1={a.xy[1]} x2={b.xy[0]} y2={b.xy[1]} stroke={color} strokeWidth={3} strokeDasharray={a.visibility !== "visible" || b.visibility !== "visible" ? "6 4" : undefined} pointerEvents="none" />;
+              return a && b && a.semantic === "joint" && b.semantic === "joint" && <line key={`${side}-${part}`} x1={a.xy[0]} y1={a.xy[1]} x2={b.xy[0]} y2={b.xy[1]} stroke={color} strokeWidth={3} strokeDasharray={a.visibility !== "visible" || b.visibility !== "visible" ? "6 4" : undefined} pointerEvents="none" />;
             });
           })}
-          {poseJoints.map(n => { const p = frame.joints[n]; return p && <g key={n} pointerEvents="none"><circle cx={p.xy[0]} cy={p.xy[1]} r={n === selected ? 7 : 5} stroke={n === selected ? "#fbbf24" : n.startsWith("left") ? "#2dd4bf" : "#fb923c"} strokeWidth={2} fill="none" /><text x={p.xy[0] + 10} y={p.xy[1]} fill="white" stroke="black" strokeWidth={2} paintOrder="stroke" fontSize={13}>{t(`joints.${n}`)}</text></g>; })}
+          {poseJoints.map(n => { const p = frame.joints[n]; return p && <g key={n} pointerEvents="none">{p.semantic === "body_contour" ? <rect x={p.xy[0] - 6} y={p.xy[1] - 6} width={12} height={12} stroke="#f472b6" strokeWidth={2} fill="none" /> : <circle cx={p.xy[0]} cy={p.xy[1]} r={n === selected ? 7 : 5} stroke={n === selected ? "#fbbf24" : n.startsWith("left") ? "#2dd4bf" : "#fb923c"} strokeWidth={2} fill="none" />}<text x={p.xy[0] + 10} y={p.xy[1]} fill="white" stroke="black" strokeWidth={2} paintOrder="stroke" fontSize={13}>{t(`joints.${n}`)}</text></g>; })}
         </svg>
         <p className="text-xs text-text-muted">{t("legend")}</p>
+        <p className="text-xs text-text-muted">{t("semanticHelp")}</p>
         <div className="flex flex-wrap gap-2">{poseJoints.map(n => <button key={n} className={`glass-button min-h-11 ${selected === n ? "ring-2 ring-primary" : ""}`} aria-pressed={selected === n} disabled={busy} onClick={() => setSelected(n)}>{t(`joints.${n}`)}{frame.joints[n] ? " ✓" : ""}</button>)}</div>
         <div className="flex flex-wrap items-end gap-3">
+          <label className="text-sm">{t("semanticLabel")}<select className="glass-input block" value={joint?.semantic ?? "uncertain"} disabled={busy || !joint} onChange={e => { if (joint) edit({ ...frame, status: "draft", joints: { ...frame.joints, [selected]: { ...joint, semantic: e.target.value as "joint" | "body_contour" | "uncertain" } } }); }}>{["uncertain", "joint", "body_contour"].map(v => <option key={v} value={v}>{t(`semantic.${v}`)}</option>)}</select></label>
           <label className="text-sm">{t("visibilityLabel", { joint: t(`joints.${selected}`) })}<select className="glass-input block" value={joint?.visibility ?? "uncertain"} disabled={busy || !joint} onChange={e => { if (joint) edit({ ...frame, status: "draft", joints: { ...frame.joints, [selected]: { ...joint, visibility: e.target.value as PoseVisibility } } }); }}>{["uncertain", "visible", "occluded"].map(v => <option key={v} value={v}>{t(`visibility.${v}`)}</option>)}</select></label>
           <label className="text-sm">{t("contactLabel")}<select className="glass-input block" value={frame.contact} disabled={busy} onChange={e => edit({ ...frame, contact: e.target.value as PoseReviewFrame["contact"] })}>{["uncertain", "left", "right", "both", "airborne"].map(v => <option key={v} value={v}>{t(`contact.${v}`)}</option>)}</select></label>
           <label className="text-sm">{t("depthLabel")}<select className="glass-input block" value={frame.depth_order} disabled={busy} onChange={e => edit({ ...frame, status: "draft", depth_order: e.target.value as PoseReviewFrame["depth_order"] })}>{["uncertain", "left_front", "right_front"].map(v => <option key={v} value={v}>{t(`depth.${v}`)}</option>)}</select></label>

@@ -689,6 +689,9 @@
   },
   "recreation": {
     "poseReview": {
+      "semanticLabel": "Point meaning",
+      "semantic": {"joint": "Skeletal joint", "body_contour": "Body outline", "uncertain": "Uncertain"},
+      "semanticHelp": "Hip joints are the leg rotation centers, not the waist silhouette. Outline points are preserved separately and excluded from joint fitting.",
       "title": "Annotate motion",
       "instructions": "Choose a source frame, then select a joint and click or drag on the image. Arrow keys adjust the selected point. Left/right refer to the person. Mark hidden points uncertain or occluded.",
       "sourceFrame": "Source frame",

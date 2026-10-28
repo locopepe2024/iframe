@@ -1,0 +1,464 @@
+{
+  "scope": "Same27 visible skeletal points for all cases; frame24 contour hips excluded",
+  "input_sha256": {
+    "addams-contour-separated-v2/normalized.json": "5a73669a5865ac898d7a6dc0c74638db905ce1550bb543c9b8f3744bd4e07e5a",
+    "addams-human-reviewed-v1/candidates.json": "9e419e249011aed104672d7318bb1aa1ba138537a7c7a52f31a57cbcbb3270b6",
+    "addams-contour-separated-v2/candidates.json": "e243cefacc0717ec3d24c7e2e9da8a6819ae4de915a7f116da8ca61b9b8d98de",
+    "addams-fixed-rig/distributed-score.json": "585ffeedea022c11ecbab80120ab5e9640e3bdddcd2e2ef4fd88c9a1f9027557"
+  },
+  "rows": [
+    {
+      "case": "original",
+      "point_count": 27,
+      "rmse_px": 24.154193598610515,
+      "frames": [
+        {
+          "source_frame": 20,
+          "errors_px": {
+            "left_hip": 33.36635444695929,
+            "right_hip": 32.40022289897765,
+            "left_knee": 17.357085627596827,
+            "right_knee": 6.336396259823955,
+            "left_ankle": 15.384549633433414,
+            "right_ankle": 12.513991773500154
+          },
+          "rmse_px": 21.976467526119848
+        },
+        {
+          "source_frame": 21,
+          "errors_px": {
+            "right_hip": 31.075230092229884,
+            "left_knee": 25.676451615388167,
+            "right_knee": 9.287683704341921,
+            "left_ankle": 29.92783378807117,
+            "right_ankle": 13.105936634919658
+          },
+          "rmse_px": 23.573934638745573
+        },
+        {
+          "source_frame": 22,
+          "errors_px": {
+            "left_hip": 2.0237486452502904,
+            "right_hip": 9.264619666655431,
+            "left_knee": 24.10753522567498,
+            "right_knee": 26.77766131125261,
+            "left_ankle": 22.960752828293447,
+            "right_ankle": 29.9549937310975
+          },
+          "rmse_px": 21.651185325428575
+        },
+        {
+          "source_frame": 23,
+          "errors_px": {
+            "left_hip": 5.839299148241474,
+            "right_hip": 10.408665420999776,
+            "left_knee": 52.55309848488048,
+            "right_knee": 9.071546364150167,
+            "left_ankle": 17.32158553907659,
+            "right_ankle": 15.692044014640237
+          },
+          "rmse_px": 24.265326480159562
+        },
+        {
+          "source_frame": 24,
+          "errors_px": {
+            "left_knee": 34.525786486611906,
+            "right_knee": 11.413187600636904,
+            "left_ankle": 42.14204068934158,
+            "right_ankle": 25.145822260588673
+          },
+          "rmse_px": 30.53913372359178
+        }
+      ]
+    },
+    {
+      "case": "v1_0",
+      "point_count": 27,
+      "rmse_px": 14.911526967232113,
+      "frames": [
+        {
+          "source_frame": 20,
+          "errors_px": {
+            "left_hip": 29.722342048740998,
+            "right_hip": 29.90054573082656,
+            "left_knee": 1.049935507134812,
+            "right_knee": 1.0122499339979174,
+            "left_ankle": 0.4918662066327966,
+            "right_ankle": 0.18936435559205134
+          },
+          "rmse_px": 17.22336135208042
+        },
+        {
+          "source_frame": 21,
+          "errors_px": {
+            "right_hip": 2.9491042209540095,
+            "left_knee": 3.2372333010991117,
+            "right_knee": 1.6691664464430547,
+            "left_ankle": 1.8290529522027295,
+            "right_ankle": 0.15342334051804138
+          },
+          "rmse_px": 2.25086584234167
+        },
+        {
+          "source_frame": 22,
+          "errors_px": {
+            "left_hip": 22.531548047794377,
+            "right_hip": 15.557150200950337,
+            "left_knee": 17.072321631163028,
+            "right_knee": 15.002175155461934,
+            "left_ankle": 1.1247221096537856,
+            "right_ankle": 1.3444559766429862
+          },
+          "rmse_px": 14.544744565048845
+        },
+        {
+          "source_frame": 23,
+          "errors_px": {
+            "left_hip": 13.817153543342982,
+            "right_hip": 23.86841213547781,
+            "left_knee": 30.477006157828047,
+            "right_knee": 9.09559097479976,
+            "left_ankle": 1.013903776093887,
+            "right_ankle": 0.5644412293357387
+          },
+          "rmse_px": 17.192726680212957
+        },
+        {
+          "source_frame": 24,
+          "errors_px": {
+            "left_knee": 20.461706058322324,
+            "right_knee": 26.8090958211192,
+            "left_ankle": 4.181062368244715,
+            "right_ankle": 0.7900351230695395
+          },
+          "rmse_px": 16.996429563190404
+        }
+      ]
+    },
+    {
+      "case": "v1_1",
+      "point_count": 27,
+      "rmse_px": 16.086195303667633,
+      "frames": [
+        {
+          "source_frame": 20,
+          "errors_px": {
+            "left_hip": 32.19474703722267,
+            "right_hip": 27.66659001936993,
+            "left_knee": 5.078475940997281,
+            "right_knee": 2.7863765888826184,
+            "left_ankle": 2.746476199238707,
+            "right_ankle": 1.3264574771558586
+          },
+          "rmse_px": 17.53472446994205
+        },
+        {
+          "source_frame": 21,
+          "errors_px": {
+            "right_hip": 14.293029453832068,
+            "left_knee": 9.082369495167574,
+            "right_knee": 9.016905463007014,
+            "left_ankle": 3.354333962425865,
+            "right_ankle": 3.463265502113871
+          },
+          "rmse_px": 8.846812703039246
+        },
+        {
+          "source_frame": 22,
+          "errors_px": {
+            "left_hip": 26.062675146771653,
+            "right_hip": 12.417840490261591,
+            "left_knee": 22.388667327993232,
+            "right_knee": 12.949535440213856,
+            "left_ankle": 9.64813019818716,
+            "right_ankle": 4.200374289965253
+          },
+          "rmse_px": 16.39684040491545
+        },
+        {
+          "source_frame": 23,
+          "errors_px": {
+            "left_hip": 10.602081630519702,
+            "right_hip": 26.247092599019116,
+            "left_knee": 30.857029352474814,
+            "right_knee": 13.14379723868171,
+            "left_ankle": 5.71906633029923,
+            "right_ankle": 2.553507693137065
+          },
+          "rmse_px": 18.099069001572193
+        },
+        {
+          "source_frame": 24,
+          "errors_px": {
+            "left_knee": 19.320886107530725,
+            "right_knee": 26.575995615051244,
+            "left_ankle": 9.311419434769322,
+            "right_ankle": 2.3800704245296047
+          },
+          "rmse_px": 17.116859014048966
+        }
+      ]
+    },
+    {
+      "case": "v1_4",
+      "point_count": 27,
+      "rmse_px": 20.477710062940712,
+      "frames": [
+        {
+          "source_frame": 20,
+          "errors_px": {
+            "left_hip": 35.15337102212693,
+            "right_hip": 26.918518141088683,
+            "left_knee": 17.50534949479166,
+            "right_knee": 4.23882875199134,
+            "left_ankle": 12.297650700149894,
+            "right_ankle": 8.661755147521408
+          },
+          "rmse_px": 20.457391729451793
+        },
+        {
+          "source_frame": 21,
+          "errors_px": {
+            "right_hip": 13.557894188961246,
+            "left_knee": 7.288375915875585,
+            "right_knee": 16.1527205944622,
+            "left_ankle": 16.08571646791775,
+            "right_ankle": 9.338069727192307
+          },
+          "rmse_px": 12.990743792786411
+        },
+        {
+          "source_frame": 22,
+          "errors_px": {
+            "left_hip": 31.707593588567626,
+            "right_hip": 14.02607041254955,
+            "left_knee": 32.86966957770638,
+            "right_knee": 8.38111591948726,
+            "left_ankle": 29.605615670936775,
+            "right_ankle": 10.060815319367535
+          },
+          "rmse_px": 23.560110740913654
+        },
+        {
+          "source_frame": 23,
+          "errors_px": {
+            "left_hip": 8.630959118253855,
+            "right_hip": 29.821122749149627,
+            "left_knee": 35.107209600476395,
+            "right_knee": 19.0339567619622,
+            "left_ankle": 14.07419949424396,
+            "right_ankle": 1.7772440552476312
+          },
+          "rmse_px": 21.44699738543268
+        },
+        {
+          "source_frame": 24,
+          "errors_px": {
+            "left_knee": 16.001325659642198,
+            "right_knee": 30.100056566244646,
+            "left_ankle": 25.751470575056544,
+            "right_ankle": 7.193950230817603
+          },
+          "rmse_px": 21.66187310032615
+        }
+      ]
+    },
+    {
+      "case": "v2_0",
+      "point_count": 27,
+      "rmse_px": 13.817295959848135,
+      "frames": [
+        {
+          "source_frame": 20,
+          "errors_px": {
+            "left_hip": 29.722344274971405,
+            "right_hip": 29.900543841292123,
+            "left_knee": 1.049935530544759,
+            "right_knee": 1.012259972284537,
+            "left_ankle": 0.4918662037726993,
+            "right_ankle": 0.18936355181518646
+          },
+          "rmse_px": 17.223361542741483
+        },
+        {
+          "source_frame": 21,
+          "errors_px": {
+            "right_hip": 2.949104291130911,
+            "left_knee": 3.2372333071267247,
+            "right_knee": 1.6691664381518847,
+            "left_ankle": 1.8290530606990434,
+            "right_ankle": 0.15342332976238632
+          },
+          "rmse_px": 2.250865878721251
+        },
+        {
+          "source_frame": 22,
+          "errors_px": {
+            "left_hip": 22.531602100625534,
+            "right_hip": 15.555337197247194,
+            "left_knee": 17.07395570212894,
+            "right_knee": 15.001469727789294,
+            "left_ankle": 1.1247597940667318,
+            "right_ankle": 1.3443866535516655
+          },
+          "rmse_px": 14.544633179295676
+        },
+        {
+          "source_frame": 23,
+          "errors_px": {
+            "left_hip": 13.81810363544786,
+            "right_hip": 23.868313850153132,
+            "left_knee": 30.477242081594504,
+            "right_knee": 9.097959119070207,
+            "left_ankle": 1.0142307235992285,
+            "right_ankle": 0.5645619554408702
+          },
+          "rmse_px": 17.19311360847709
+        },
+        {
+          "source_frame": 24,
+          "errors_px": {
+            "left_knee": 11.560661215758435,
+            "right_knee": 12.99439337088328,
+            "left_ankle": 2.007997404303738,
+            "right_ankle": 0.38429634266520973
+          },
+          "rmse_px": 8.756181874502623
+        }
+      ]
+    },
+    {
+      "case": "v2_1",
+      "point_count": 27,
+      "rmse_px": 15.049110839334379,
+      "frames": [
+        {
+          "source_frame": 20,
+          "errors_px": {
+            "left_hip": 32.22905574289715,
+            "right_hip": 27.656421205751588,
+            "left_knee": 5.1272193186721955,
+            "right_knee": 2.9380644052352203,
+            "left_ankle": 2.7117892431192283,
+            "right_ankle": 1.2635842884594524
+          },
+          "rmse_px": 17.547367867826274
+        },
+        {
+          "source_frame": 21,
+          "errors_px": {
+            "right_hip": 14.468061171855464,
+            "left_knee": 9.230519338706298,
+            "right_knee": 8.57559045786713,
+            "left_ankle": 3.147670818461552,
+            "right_ankle": 3.307665966178146
+          },
+          "rmse_px": 8.819484324619575
+        },
+        {
+          "source_frame": 22,
+          "errors_px": {
+            "left_hip": 25.85804619347798,
+            "right_hip": 12.053298516899611,
+            "left_knee": 22.497132850669782,
+            "right_knee": 13.168226296310994,
+            "left_ankle": 9.231079601708137,
+            "right_ankle": 4.722175813061637
+          },
+          "rmse_px": 16.33480692364015
+        },
+        {
+          "source_frame": 23,
+          "errors_px": {
+            "left_hip": 13.069257774038263,
+            "right_hip": 26.512721863251397,
+            "left_knee": 29.080369681753098,
+            "right_knee": 11.381916023035753,
+            "left_ankle": 6.165872124497474,
+            "right_ankle": 3.8203522636299088
+          },
+          "rmse_px": 17.80242915549789
+        },
+        {
+          "source_frame": 24,
+          "errors_px": {
+            "left_knee": 10.86401809385836,
+            "right_knee": 14.931256307158918,
+            "left_ankle": 5.68143214779607,
+            "right_ankle": 1.6447752007310636
+          },
+          "rmse_px": 9.694757098100826
+        }
+      ]
+    },
+    {
+      "case": "v2_4",
+      "point_count": 27,
+      "rmse_px": 19.863137510673965,
+      "frames": [
+        {
+          "source_frame": 20,
+          "errors_px": {
+            "left_hip": 35.636233782323835,
+            "right_hip": 26.978146449327127,
+            "left_knee": 17.797705953622156,
+            "right_knee": 4.898952455765825,
+            "left_ankle": 12.755162952330082,
+            "right_ankle": 8.589313653069784
+          },
+          "rmse_px": 20.71629836375431
+        },
+        {
+          "source_frame": 21,
+          "errors_px": {
+            "right_hip": 13.61222637093264,
+            "left_knee": 7.1243839344545234,
+            "right_knee": 16.224407654866035,
+            "left_ankle": 15.681045092363695,
+            "right_ankle": 9.031630936963104
+          },
+          "rmse_px": 12.858821793154736
+        },
+        {
+          "source_frame": 22,
+          "errors_px": {
+            "left_hip": 32.15871067830764,
+            "right_hip": 14.860100741748884,
+            "left_knee": 32.552167685950074,
+            "right_knee": 7.75371389396273,
+            "left_ankle": 29.404054151339842,
+            "right_ankle": 9.422824062673817
+          },
+          "rmse_px": 23.551917758435643
+        },
+        {
+          "source_frame": 23,
+          "errors_px": {
+            "left_hip": 11.582506413153288,
+            "right_hip": 30.073998867265143,
+            "left_knee": 32.6924125103069,
+            "right_knee": 16.772117565431053,
+            "left_ankle": 13.769087623998477,
+            "right_ankle": 4.420476901982029
+          },
+          "rmse_px": 20.80795527392516
+        },
+        {
+          "source_frame": 24,
+          "errors_px": {
+            "left_knee": 9.381252580837472,
+            "right_knee": 25.801297808411647,
+            "left_ankle": 23.06968659159868,
+            "right_ankle": 6.248948400190933
+          },
+          "rmse_px": 18.200100714876925
+        }
+      ]
+    }
+  ],
+  "limits": [
+    "In-sample fitting residual, not independent3D validation.",
+    "Other frames retain legacyjoint semantics pending clarification.",
+    "Contours are not skeletal ground truth; physical contact not enforced."
+  ]
+}

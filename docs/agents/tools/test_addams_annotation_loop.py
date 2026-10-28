@@ -83,6 +83,14 @@ class SolverTests(unittest.TestCase):
         a=self.module.solve(hidden,self.control,self.camera,self.rig,weights=(0,));b=self.module.solve(other,self.control,self.camera,self.rig,weights=(0,))
         self.assertEqual(a['visible_joint_count'],29)
         self.assertEqual(a['candidates'],b['candidates'])
+        contour=copy.deepcopy(review)
+        for n in ['left_hip','right_hip']:contour['frames'][-1]['joints'][n]['semantic']='body_contour'
+        altered=copy.deepcopy(contour)
+        for n in ['left_hip','right_hip']:altered['frames'][-1]['joints'][n]['xy_px']=[-99999,99999]
+        a=self.module.solve(contour,self.control,self.camera,self.rig,weights=(0,))
+        b=self.module.solve(altered,self.control,self.camera,self.rig,weights=(0,))
+        self.assertEqual(a['visible_joint_count'],28)
+        self.assertEqual(a['candidates'],b['candidates'])
 
 
 if __name__=='__main__':unittest.main()
