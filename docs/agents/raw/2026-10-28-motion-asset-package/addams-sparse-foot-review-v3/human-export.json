@@ -1,0 +1,1297 @@
+{
+  "schema": "addams-full-joint-review.v1",
+  "tasks_sha256": "5c5079ed7fbf5fa687f975823f0c3b2b6c79f572278af2d31d69e478ecfe70b0",
+  "source_sha256": "3b0d8f32549c80ef04e988c1bfe1393582fd6349047b306ce6c2df7bdae63c96",
+  "frames": [
+    {
+      "source_frame": 49,
+      "image_sha256": "4bbbf2379a50281615c48354fcadac22908a428547d4f112862a95638f06435d",
+      "joints": {
+        "left_shoulder": {
+          "xy_px": [
+            698.0789432227612,
+            117.79327082633972
+          ],
+          "visibility": "visible",
+          "semantic": "body_contour",
+          "confirmed": true,
+          "origin": "user_selected_person_model_points"
+        },
+        "left_elbow": {
+          "xy_px": [
+            698.0789432227612,
+            136.6917031556368
+          ],
+          "visibility": "visible",
+          "semantic": "joint",
+          "confirmed": true,
+          "origin": "user_selected_person_model_points"
+        },
+        "left_wrist": {
+          "xy_px": [
+            617.4456319510937,
+            114.01358436048031
+          ],
+          "visibility": "visible",
+          "semantic": "joint",
+          "confirmed": true,
+          "origin": "user_selected_person_model_points"
+        },
+        "left_hip": {
+          "xy_px": [
+            641.38364623487,
+            305.5176986306906
+          ],
+          "visibility": "occluded",
+          "semantic": "joint",
+          "confirmed": true,
+          "origin": "user_selected_person_model_points"
+        },
+        "left_knee": {
+          "xy_px": [
+            419.796875,
+            317.484375
+          ],
+          "visibility": "visible",
+          "semantic": "joint",
+          "confirmed": true,
+          "origin": "user_selected_person_model_points"
+        },
+        "left_ankle": {
+          "xy_px": [
+            338.578125,
+            334.39453125
+          ],
+          "visibility": "visible",
+          "semantic": "joint",
+          "confirmed": true,
+          "origin": "user_selected_person_model_points"
+        },
+        "right_shoulder": {
+          "xy_px": [
+            623.7451093941927,
+            156.85003097355366
+          ],
+          "visibility": "occluded",
+          "semantic": "joint",
+          "confirmed": true,
+          "origin": "user_selected_person_model_points"
+        },
+        "right_elbow": {
+          "xy_px": [
+            597.2873041331768,
+            223.6244918704033
+          ],
+          "visibility": "occluded",
+          "semantic": "joint",
+          "confirmed": true,
+          "origin": "user_selected_person_model_points"
+        },
+        "right_wrist": {
+          "xy_px": [
+            560.7503349632025,
+            214.80522345006466
+          ],
+          "visibility": "visible",
+          "semantic": "joint",
+          "confirmed": true,
+          "origin": "user_selected_person_model_points"
+        },
+        "right_hip": {
+          "xy_px": [
+            585.9482447355986,
+            291.6588482558727
+          ],
+          "visibility": "occluded",
+          "semantic": "joint",
+          "confirmed": true,
+          "origin": "user_selected_person_model_points"
+        },
+        "right_knee": {
+          "xy_px": [
+            620.44140625,
+            424.8125
+          ],
+          "visibility": "visible",
+          "semantic": "joint",
+          "confirmed": true,
+          "origin": "user_selected_person_model_points"
+        },
+        "right_ankle": {
+          "xy_px": [
+            697.34375,
+            485.328125
+          ],
+          "visibility": "visible",
+          "semantic": "joint",
+          "confirmed": true,
+          "origin": "user_selected_person_model_points"
+        }
+      },
+      "identity": "1",
+      "contact": "right",
+      "status": "reviewed"
+    },
+    {
+      "source_frame": 50,
+      "image_sha256": "399e5b834bffece1d90ff4b99057d8fbab5eee6700e8d3ec136a3457d3f2e960",
+      "joints": {
+        "left_shoulder": {
+          "xy_px": [
+            691.7279626329739,
+            116.03385931253428
+          ],
+          "visibility": "visible",
+          "semantic": "joint",
+          "confirmed": true,
+          "origin": "single_detector_unverified_identity"
+        },
+        "left_elbow": {
+          "xy_px": [
+            695.890625,
+            131.359375
+          ],
+          "visibility": "visible",
+          "semantic": "joint",
+          "confirmed": true,
+          "origin": "single_detector_unverified_identity"
+        },
+        "left_wrist": {
+          "xy_px": [
+            627.951756755511,
+            97.36765271425247
+          ],
+          "visibility": "visible",
+          "semantic": "joint",
+          "confirmed": true,
+          "origin": "single_detector_unverified_identity"
+        },
+        "left_hip": {
+          "xy_px": [
+            635.7293428381283,
+            260.6969604492187
+          ],
+          "visibility": "visible",
+          "semantic": "joint",
+          "confirmed": true,
+          "origin": "single_detector_unverified_identity"
+        },
+        "left_knee": {
+          "xy_px": [
+            508.1769310832023,
+            282.4742014805476
+          ],
+          "visibility": "uncertain",
+          "semantic": "joint",
+          "confirmed": true,
+          "origin": "single_detector_unverified_identity"
+        },
+        "left_ankle": {
+          "xy_px": [
+            367.12890625,
+            269.0234375
+          ],
+          "visibility": "visible",
+          "semantic": "joint",
+          "confirmed": true,
+          "origin": "single_detector_unverified_identity"
+        },
+        "right_shoulder": {
+          "xy_px": [
+            657.5065838694572,
+            148.69972085952753
+          ],
+          "visibility": "occluded",
+          "semantic": "joint",
+          "confirmed": true,
+          "origin": "single_detector_unverified_identity"
+        },
+        "right_elbow": {
+          "xy_px": [
+            606.1745157241821,
+            223.36454725265497
+          ],
+          "visibility": "occluded",
+          "semantic": "joint",
+          "confirmed": true,
+          "origin": "single_detector_unverified_identity"
+        },
+        "right_wrist": {
+          "xy_px": [
+            567.286585311095,
+            217.1424783865611
+          ],
+          "visibility": "visible",
+          "semantic": "joint",
+          "confirmed": true,
+          "origin": "single_detector_unverified_identity"
+        },
+        "right_hip": {
+          "xy_px": [
+            648.1734805703163,
+            296.473856429259
+          ],
+          "visibility": "occluded",
+          "semantic": "joint",
+          "confirmed": true,
+          "origin": "single_detector_unverified_identity"
+        },
+        "right_knee": {
+          "xy_px": [
+            631.0627911885579,
+            427.137302617232
+          ],
+          "visibility": "visible",
+          "semantic": "joint",
+          "confirmed": true,
+          "origin": "single_detector_unverified_identity"
+        },
+        "right_ankle": {
+          "xy_px": [
+            685.50589376688,
+            470.6917846798896
+          ],
+          "visibility": "uncertain",
+          "semantic": "joint",
+          "confirmed": true,
+          "origin": "single_detector_unverified_identity"
+        }
+      },
+      "identity": "0",
+      "contact": "right",
+      "status": "reviewed"
+    },
+    {
+      "source_frame": 51,
+      "image_sha256": "2bc521864ba1141eaecb34d2962eea5134a7018690183d29f71ea061acbdeef3",
+      "joints": {
+        "left_shoulder": {
+          "xy_px": [
+            661.2031424045563,
+            127.46905428171158
+          ],
+          "visibility": "occluded",
+          "semantic": "joint",
+          "confirmed": true,
+          "origin": "single_detector_unverified_identity"
+        },
+        "left_elbow": {
+          "xy_px": [
+            687.3250918587048,
+            120.59485705693561
+          ],
+          "visibility": "visible",
+          "semantic": "joint",
+          "confirmed": true,
+          "origin": "single_detector_unverified_identity"
+        },
+        "left_wrist": {
+          "xy_px": [
+            640.5805507302284,
+            86.22387093305588
+          ],
+          "visibility": "visible",
+          "semantic": "joint",
+          "confirmed": true,
+          "origin": "single_detector_unverified_identity"
+        },
+        "left_hip": {
+          "xy_px": [
+            602.0850462714832,
+            270.45235655705136
+          ],
+          "visibility": "visible",
+          "semantic": "joint",
+          "confirmed": true,
+          "origin": "single_detector_unverified_identity"
+        },
+        "left_knee": {
+          "xy_px": [
+            489.34821178515756,
+            270.45235655705136
+          ],
+          "visibility": "visible",
+          "semantic": "joint",
+          "confirmed": true,
+          "origin": "single_detector_unverified_identity"
+        },
+        "left_ankle": {
+          "xy_px": [
+            405.48300564289093,
+            259.45364099740976
+          ],
+          "visibility": "visible",
+          "semantic": "joint",
+          "confirmed": true,
+          "origin": "single_detector_unverified_identity"
+        },
+        "right_shoulder": {
+          "xy_px": [
+            648.8295873999596,
+            146.71680651108426
+          ],
+          "visibility": "occluded",
+          "semantic": "joint",
+          "confirmed": true,
+          "origin": "single_detector_unverified_identity"
+        },
+        "right_elbow": {
+          "xy_px": [
+            607.5844040513039,
+            216.83361820379895
+          ],
+          "visibility": "occluded",
+          "semantic": "joint",
+          "confirmed": true,
+          "origin": "single_detector_unverified_identity"
+        },
+        "right_wrist": {
+          "xy_px": [
+            566.3392207026482,
+            226.4574943184852
+          ],
+          "visibility": "occluded",
+          "semantic": "joint",
+          "confirmed": true,
+          "origin": "single_detector_unverified_identity"
+        },
+        "right_hip": {
+          "xy_px": [
+            635.0811929504077,
+            311.69753990570706
+          ],
+          "visibility": "occluded",
+          "semantic": "joint",
+          "confirmed": true,
+          "origin": "single_detector_unverified_identity"
+        },
+        "right_knee": {
+          "xy_px": [
+            633.7063535054524,
+            432.6834110617637
+          ],
+          "visibility": "visible",
+          "semantic": "joint",
+          "confirmed": true,
+          "origin": "single_detector_unverified_identity"
+        },
+        "right_ankle": {
+          "xy_px": [
+            685.9502524137497,
+            465.67955774068827
+          ],
+          "visibility": "visible",
+          "semantic": "joint",
+          "confirmed": true,
+          "origin": "single_detector_unverified_identity"
+        }
+      },
+      "identity": "0",
+      "contact": "right",
+      "status": "reviewed"
+    },
+    {
+      "source_frame": 52,
+      "image_sha256": "41f414e67b5b48fd424af620103499f0be7ff6a7ab318f2de7b1ffa97c53434f",
+      "joints": {
+        "left_shoulder": {
+          "xy_px": [
+            657.0320507287979,
+            132.10358262062073
+          ],
+          "visibility": "visible",
+          "semantic": "joint",
+          "confirmed": true,
+          "origin": "single_detector_unverified_identity"
+        },
+        "left_elbow": {
+          "xy_px": [
+            675.0683196783066,
+            124.3737530708313
+          ],
+          "visibility": "visible",
+          "semantic": "joint",
+          "confirmed": true,
+          "origin": "single_detector_unverified_identity"
+        },
+        "left_wrist": {
+          "xy_px": [
+            629.9776473045349,
+            96.0310447216034
+          ],
+          "visibility": "visible",
+          "semantic": "joint",
+          "confirmed": true,
+          "origin": "single_detector_unverified_identity"
+        },
+        "left_hip": {
+          "xy_px": [
+            584.8869749307632,
+            272.52881944179535
+          ],
+          "visibility": "visible",
+          "semantic": "joint",
+          "confirmed": true,
+          "origin": "single_detector_unverified_identity"
+        },
+        "left_knee": {
+          "xy_px": [
+            479.24597108364105,
+            275.10542929172516
+          ],
+          "visibility": "uncertain",
+          "semantic": "joint",
+          "confirmed": true,
+          "origin": "single_detector_unverified_identity"
+        },
+        "left_ankle": {
+          "xy_px": [
+            434.1552987098694,
+            267.37559974193573
+          ],
+          "visibility": "uncertain",
+          "semantic": "joint",
+          "confirmed": true,
+          "origin": "single_detector_unverified_identity"
+        },
+        "right_shoulder": {
+          "xy_px": [
+            687.9513689279556,
+            155.293071269989
+          ],
+          "visibility": "occluded",
+          "semantic": "joint",
+          "confirmed": true,
+          "origin": "single_detector_unverified_identity"
+        },
+        "right_elbow": {
+          "xy_px": [
+            620.9595128297806,
+            205.5369633436203
+          ],
+          "visibility": "occluded",
+          "semantic": "joint",
+          "confirmed": true,
+          "origin": "single_detector_unverified_identity"
+        },
+        "right_wrist": {
+          "xy_px": [
+            610.6530734300613,
+            112.77900874614716
+          ],
+          "visibility": "occluded",
+          "semantic": "joint",
+          "confirmed": true,
+          "origin": "single_detector_unverified_identity"
+        },
+        "right_hip": {
+          "xy_px": [
+            615.806293129921,
+            320.1961016654968
+          ],
+          "visibility": "occluded",
+          "semantic": "joint",
+          "confirmed": true,
+          "origin": "single_detector_unverified_identity"
+        },
+        "right_knee": {
+          "xy_px": [
+            626.1127325296402,
+            432.27863013744354
+          ],
+          "visibility": "visible",
+          "semantic": "joint",
+          "confirmed": true,
+          "origin": "single_detector_unverified_identity"
+        },
+        "right_ankle": {
+          "xy_px": [
+            677.6449295282364,
+            468.3511680364609
+          ],
+          "visibility": "visible",
+          "semantic": "joint",
+          "confirmed": true,
+          "origin": "single_detector_unverified_identity"
+        }
+      },
+      "identity": "0",
+      "contact": "right",
+      "status": "reviewed"
+    },
+    {
+      "source_frame": 53,
+      "image_sha256": "6ec3682cc60aa63aa50d9b1ec4cedbaa1524d6c56f24efc33885cea3786e447b",
+      "joints": {
+        "left_shoulder": {
+          "xy_px": [
+            673.2265625,
+            136.92578125
+          ],
+          "visibility": "occluded",
+          "semantic": "joint",
+          "confirmed": true,
+          "origin": "user_selected_person_model_points"
+        },
+        "left_elbow": {
+          "xy_px": [
+            662.8884245380759,
+            131.37704565748572
+          ],
+          "visibility": "visible",
+          "semantic": "joint",
+          "confirmed": true,
+          "origin": "user_selected_person_model_points"
+        },
+        "left_wrist": {
+          "xy_px": [
+            621.7269196100533,
+            100.1940873786807
+          ],
+          "visibility": "visible",
+          "semantic": "joint",
+          "confirmed": true,
+          "origin": "user_selected_person_model_points"
+        },
+        "left_hip": {
+          "xy_px": [
+            574.3288230262697,
+            283.5498820580542
+          ],
+          "visibility": "visible",
+          "semantic": "joint",
+          "confirmed": true,
+          "origin": "user_selected_person_model_points"
+        },
+        "left_knee": {
+          "xy_px": [
+            485.7692215144634,
+            293.5284287072718
+          ],
+          "visibility": "visible",
+          "semantic": "joint",
+          "confirmed": true,
+          "origin": "user_selected_person_model_points"
+        },
+        "left_ankle": {
+          "xy_px": [
+            473.2960382029414,
+            291.0337920449674
+          ],
+          "visibility": "visible",
+          "semantic": "joint",
+          "confirmed": true,
+          "origin": "user_selected_person_model_points"
+        },
+        "right_shoulder": {
+          "xy_px": [
+            670.3723345249891,
+            153.82877561822534
+          ],
+          "visibility": "occluded",
+          "semantic": "joint",
+          "confirmed": true,
+          "origin": "user_selected_person_model_points"
+        },
+        "right_elbow": {
+          "xy_px": [
+            650.4152412265539,
+            142.60291063785553
+          ],
+          "visibility": "occluded",
+          "semantic": "joint",
+          "confirmed": true,
+          "origin": "user_selected_person_model_points"
+        },
+        "right_wrist": {
+          "xy_px": [
+            619.2322829477489,
+            105.18336070328951
+          ],
+          "visibility": "occluded",
+          "semantic": "joint",
+          "confirmed": true,
+          "origin": "user_selected_person_model_points"
+        },
+        "right_hip": {
+          "xy_px": [
+            629.2108295969665,
+            315.9801586680114
+          ],
+          "visibility": "occluded",
+          "semantic": "joint",
+          "confirmed": true,
+          "origin": "user_selected_person_model_points"
+        },
+        "right_knee": {
+          "xy_px": [
+            619.2322829477489,
+            436.9700367897749
+          ],
+          "visibility": "visible",
+          "semantic": "joint",
+          "confirmed": true,
+          "origin": "user_selected_person_model_points"
+        },
+        "right_ankle": {
+          "xy_px": [
+            665.3830612003803,
+            464.4110400751233
+          ],
+          "visibility": "occluded",
+          "semantic": "joint",
+          "confirmed": true,
+          "origin": "user_selected_person_model_points"
+        }
+      },
+      "identity": "0",
+      "contact": "right",
+      "status": "reviewed"
+    },
+    {
+      "source_frame": 54,
+      "image_sha256": "1a7c6b8580bc8dcc91f92f41b6243b1a329d7744415f2a10f86a1fa9615e0471",
+      "joints": {
+        "left_shoulder": {
+          "xy_px": [
+            595.5415819734335,
+            154.25383216515183
+          ],
+          "visibility": "occluded",
+          "semantic": "joint",
+          "confirmed": true,
+          "origin": "single_detector_unverified_identity"
+        },
+        "left_elbow": {
+          "xy_px": [
+            650.0222753509879,
+            142.4102031700313
+          ],
+          "visibility": "uncertain",
+          "semantic": "joint",
+          "confirmed": true,
+          "origin": "single_detector_unverified_identity"
+        },
+        "left_wrist": {
+          "xy_px": [
+            613.3070254661143,
+            110.43240488320589
+          ],
+          "visibility": "uncertain",
+          "semantic": "joint",
+          "confirmed": true,
+          "origin": "single_detector_unverified_identity"
+        },
+        "left_hip": {
+          "xy_px": [
+            578.9605013802648,
+            288.08683981001377
+          ],
+          "visibility": "uncertain",
+          "semantic": "joint",
+          "confirmed": true,
+          "origin": "single_detector_unverified_identity"
+        },
+        "left_knee": {
+          "xy_px": [
+            491.73828125000006,
+            325.03125
+          ],
+          "visibility": "occluded",
+          "semantic": "joint",
+          "confirmed": true,
+          "origin": "single_detector_unverified_identity"
+        },
+        "left_ankle": {
+          "xy_px": [
+            437.84765625,
+            365.23828125
+          ],
+          "visibility": "uncertain",
+          "semantic": "joint",
+          "confirmed": true,
+          "origin": "single_detector_unverified_identity"
+        },
+        "right_shoulder": {
+          "xy_px": [
+            660.6815414465964,
+            157.806920863688
+          ],
+          "visibility": "uncertain",
+          "semantic": "joint",
+          "confirmed": true,
+          "origin": "single_detector_unverified_identity"
+        },
+        "right_elbow": {
+          "xy_px": [
+            654.7597269490361,
+            149.51638056710362
+          ],
+          "visibility": "occluded",
+          "semantic": "joint",
+          "confirmed": true,
+          "origin": "single_detector_unverified_identity"
+        },
+        "right_wrist": {
+          "xy_px": [
+            614.4913883656263,
+            111.61676778271794
+          ],
+          "visibility": "occluded",
+          "semantic": "joint",
+          "confirmed": true,
+          "origin": "single_detector_unverified_identity"
+        },
+        "right_hip": {
+          "xy_px": [
+            615.6757512651384,
+            301.11483170464635
+          ],
+          "visibility": "occluded",
+          "semantic": "joint",
+          "confirmed": true,
+          "origin": "single_detector_unverified_identity"
+        },
+        "right_knee": {
+          "xy_px": [
+            626.63671875,
+            444.6953125
+          ],
+          "visibility": "uncertain",
+          "semantic": "joint",
+          "confirmed": true,
+          "origin": "single_detector_unverified_identity"
+        },
+        "right_ankle": {
+          "xy_px": [
+            681.53125,
+            480.26171875
+          ],
+          "visibility": "uncertain",
+          "semantic": "joint",
+          "confirmed": true,
+          "origin": "single_detector_unverified_identity"
+        }
+      },
+      "identity": "0",
+      "contact": "right",
+      "status": "reviewed"
+    },
+    {
+      "source_frame": 55,
+      "image_sha256": "ffa194977a417e79884290814f58c9bad6a9c0de59a1975f550e92f9a22efa97",
+      "joints": {
+        "left_shoulder": {
+          "xy_px": [
+            616.07421875,
+            157.3984375
+          ],
+          "visibility": "visible",
+          "semantic": "joint",
+          "confirmed": true,
+          "origin": "single_detector_unverified_identity"
+        },
+        "left_elbow": {
+          "xy_px": [
+            598.28515625,
+            142.3125
+          ],
+          "visibility": "visible",
+          "semantic": "joint",
+          "confirmed": true,
+          "origin": "single_detector_unverified_identity"
+        },
+        "left_wrist": {
+          "xy_px": [
+            582.078125,
+            114.71875
+          ],
+          "visibility": "uncertain",
+          "semantic": "joint",
+          "confirmed": true,
+          "origin": "single_detector_unverified_identity"
+        },
+        "left_hip": {
+          "xy_px": [
+            561.424908593297,
+            304.06110203266144
+          ],
+          "visibility": "uncertain",
+          "semantic": "joint",
+          "confirmed": true,
+          "origin": "single_detector_unverified_identity"
+        },
+        "left_knee": {
+          "xy_px": [
+            478.58984375,
+            382.49609375
+          ],
+          "visibility": "uncertain",
+          "semantic": "joint",
+          "confirmed": true,
+          "origin": "single_detector_unverified_identity"
+        },
+        "left_ankle": {
+          "xy_px": [
+            443.19921875,
+            433.98046875
+          ],
+          "visibility": "uncertain",
+          "semantic": "joint",
+          "confirmed": true,
+          "origin": "single_detector_unverified_identity"
+        },
+        "right_shoulder": {
+          "xy_px": [
+            470.48046875,
+            406.7265625
+          ],
+          "visibility": "occluded",
+          "semantic": "joint",
+          "confirmed": true,
+          "origin": "single_detector_unverified_identity"
+        },
+        "right_elbow": {
+          "xy_px": [
+            618.9273892641068,
+            230.12934117019176
+          ],
+          "visibility": "occluded",
+          "semantic": "joint",
+          "confirmed": true,
+          "origin": "single_detector_unverified_identity"
+        },
+        "right_wrist": {
+          "xy_px": [
+            588.4158689081669,
+            126.85957996547222
+          ],
+          "visibility": "occluded",
+          "semantic": "joint",
+          "confirmed": true,
+          "origin": "single_detector_unverified_identity"
+        },
+        "right_hip": {
+          "xy_px": [
+            640.0507495105267,
+            321.66390223801136
+          ],
+          "visibility": "occluded",
+          "semantic": "joint",
+          "confirmed": true,
+          "origin": "single_detector_unverified_identity"
+        },
+        "right_knee": {
+          "xy_px": [
+            617.7538692504168,
+            443.7099836617708
+          ],
+          "visibility": "visible",
+          "semantic": "joint",
+          "confirmed": true,
+          "origin": "single_detector_unverified_identity"
+        },
+        "right_ankle": {
+          "xy_px": [
+            681.43359375,
+            476.55078125
+          ],
+          "visibility": "visible",
+          "semantic": "joint",
+          "confirmed": true,
+          "origin": "single_detector_unverified_identity"
+        }
+      },
+      "identity": "0",
+      "contact": "right",
+      "status": "reviewed"
+    },
+    {
+      "source_frame": 56,
+      "image_sha256": "44e7d7bc2176f8fd61d96d5fbf2169144556c53e9483bb1ac44a70fc9959f263",
+      "joints": {
+        "left_shoulder": {
+          "xy_px": [
+            589.88671875,
+            161.5078125
+          ],
+          "visibility": "uncertain",
+          "semantic": "joint",
+          "confirmed": true,
+          "origin": "single_detector_unverified_identity"
+        },
+        "left_elbow": {
+          "xy_px": [
+            582.015625,
+            152.15234375
+          ],
+          "visibility": "uncertain",
+          "semantic": "joint",
+          "confirmed": true,
+          "origin": "single_detector_unverified_identity"
+        },
+        "left_wrist": {
+          "xy_px": [
+            544.8104953169823,
+            132.31248266994953
+          ],
+          "visibility": "uncertain",
+          "semantic": "joint",
+          "confirmed": true,
+          "origin": "single_detector_unverified_identity"
+        },
+        "left_hip": {
+          "xy_px": [
+            545.955033801496,
+            323.4504095837474
+          ],
+          "visibility": "uncertain",
+          "semantic": "joint",
+          "confirmed": true,
+          "origin": "single_detector_unverified_identity"
+        },
+        "left_knee": {
+          "xy_px": [
+            486.4390326067805,
+            396.700872592628
+          ],
+          "visibility": "uncertain",
+          "semantic": "joint",
+          "confirmed": true,
+          "origin": "single_detector_unverified_identity"
+        },
+        "left_ankle": {
+          "xy_px": [
+            452.1171875,
+            463.2421875
+          ],
+          "visibility": "uncertain",
+          "semantic": "joint",
+          "confirmed": true,
+          "origin": "single_detector_unverified_identity"
+        },
+        "right_shoulder": {
+          "xy_px": [
+            666.93359375,
+            181.6640625
+          ],
+          "visibility": "visible",
+          "semantic": "joint",
+          "confirmed": true,
+          "origin": "single_detector_unverified_identity"
+        },
+        "right_elbow": {
+          "xy_px": [
+            594.0256501510739,
+            242.18817718327045
+          ],
+          "visibility": "occluded",
+          "semantic": "joint",
+          "confirmed": true,
+          "origin": "single_detector_unverified_identity"
+        },
+        "right_wrist": {
+          "xy_px": [
+            556.2558801621199,
+            140.32425206154585
+          ],
+          "visibility": "occluded",
+          "semantic": "joint",
+          "confirmed": true,
+          "origin": "single_detector_unverified_identity"
+        },
+        "right_hip": {
+          "xy_px": [
+            616.9164198413491,
+            332.60671745985746
+          ],
+          "visibility": "uncertain",
+          "semantic": "joint",
+          "confirmed": true,
+          "origin": "single_detector_unverified_identity"
+        },
+        "right_knee": {
+          "xy_px": [
+            602.0374195426702,
+            447.0605659112334
+          ],
+          "visibility": "visible",
+          "semantic": "joint",
+          "confirmed": true,
+          "origin": "single_detector_unverified_identity"
+        },
+        "right_ankle": {
+          "xy_px": [
+            672.66796875,
+            469.234375
+          ],
+          "visibility": "uncertain",
+          "semantic": "joint",
+          "confirmed": true,
+          "origin": "single_detector_unverified_identity"
+        }
+      },
+      "identity": "0",
+      "contact": "right",
+      "status": "reviewed"
+    },
+    {
+      "source_frame": 57,
+      "image_sha256": "6f60063fbd996ffccaa4b5910c8735c0157becc41353937c75a5bd26f52107b6",
+      "joints": {
+        "left_shoulder": {
+          "xy_px": [
+            536.6717387698591,
+            153.51069171354175
+          ],
+          "visibility": "visible",
+          "semantic": "joint",
+          "confirmed": true,
+          "origin": "single_detector_unverified_identity"
+        },
+        "left_elbow": {
+          "xy_px": [
+            532.12890625,
+            148.27734375
+          ],
+          "visibility": "visible",
+          "semantic": "joint",
+          "confirmed": true,
+          "origin": "single_detector_unverified_identity"
+        },
+        "left_wrist": {
+          "xy_px": [
+            515.8578306771815,
+            140.791081212461
+          ],
+          "visibility": "visible",
+          "semantic": "joint",
+          "confirmed": true,
+          "origin": "single_detector_unverified_identity"
+        },
+        "left_hip": {
+          "xy_px": [
+            532.0464258603752,
+            311.92765886336565
+          ],
+          "visibility": "uncertain",
+          "semantic": "joint",
+          "confirmed": true,
+          "origin": "single_detector_unverified_identity"
+        },
+        "left_knee": {
+          "xy_px": [
+            493.78125000000006,
+            422.19140625
+          ],
+          "visibility": "uncertain",
+          "semantic": "joint",
+          "confirmed": true,
+          "origin": "single_detector_unverified_identity"
+        },
+        "left_ankle": {
+          "xy_px": [
+            491.78906250000006,
+            485.8828125
+          ],
+          "visibility": "uncertain",
+          "semantic": "joint",
+          "confirmed": true,
+          "origin": "single_detector_unverified_identity"
+        },
+        "right_shoulder": {
+          "xy_px": [
+            649.15625,
+            184.27734375
+          ],
+          "visibility": "uncertain",
+          "semantic": "joint",
+          "confirmed": true,
+          "origin": "single_detector_unverified_identity"
+        },
+        "right_elbow": {
+          "xy_px": [
+            637.2722945511341,
+            255.26757572218776
+          ],
+          "visibility": "occluded",
+          "semantic": "joint",
+          "confirmed": true,
+          "origin": "single_detector_unverified_identity"
+        },
+        "right_wrist": {
+          "xy_px": [
+            572.5179138183594,
+            143.10373766720295
+          ],
+          "visibility": "uncertain",
+          "semantic": "joint",
+          "confirmed": true,
+          "origin": "single_detector_unverified_identity"
+        },
+        "right_hip": {
+          "xy_px": [
+            607.2077606394887,
+            320.0219564549625
+          ],
+          "visibility": "occluded",
+          "semantic": "joint",
+          "confirmed": true,
+          "origin": "single_detector_unverified_identity"
+        },
+        "right_knee": {
+          "xy_px": [
+            593.331821911037,
+            435.65477919206023
+          ],
+          "visibility": "uncertain",
+          "semantic": "joint",
+          "confirmed": true,
+          "origin": "single_detector_unverified_identity"
+        },
+        "right_ankle": {
+          "xy_px": [
+            662.96875,
+            473.03515625
+          ],
+          "visibility": "uncertain",
+          "semantic": "joint",
+          "confirmed": true,
+          "origin": "single_detector_unverified_identity"
+        }
+      },
+      "identity": "0",
+      "contact": "right",
+      "status": "reviewed"
+    },
+    {
+      "source_frame": 58,
+      "image_sha256": "db2e9ce914daf04cbe119c74307bede794aed2ed1b44c75d3a114a33ee4c3df7",
+      "joints": {
+        "left_shoulder": {
+          "xy_px": [
+            507.83486288785934,
+            148.00316441059113
+          ],
+          "visibility": "uncertain",
+          "semantic": "joint",
+          "confirmed": true,
+          "origin": "user_selected_person_model_points"
+        },
+        "left_elbow": {
+          "xy_px": [
+            471.3828125,
+            174.703125
+          ],
+          "visibility": "occluded",
+          "semantic": "joint",
+          "confirmed": true,
+          "origin": "user_selected_person_model_points"
+        },
+        "left_wrist": {
+          "xy_px": [
+            483.67187499999994,
+            137.07421875
+          ],
+          "visibility": "uncertain",
+          "semantic": "joint",
+          "confirmed": true,
+          "origin": "user_selected_person_model_points"
+        },
+        "left_hip": {
+          "xy_px": [
+            524.1763125061989,
+            317.25389260053635
+          ],
+          "visibility": "uncertain",
+          "semantic": "joint",
+          "confirmed": true,
+          "origin": "user_selected_person_model_points"
+        },
+        "left_knee": {
+          "xy_px": [
+            497.32964527606964,
+            414.1353439092636
+          ],
+          "visibility": "uncertain",
+          "semantic": "joint",
+          "confirmed": true,
+          "origin": "user_selected_person_model_points"
+        },
+        "left_ankle": {
+          "xy_px": [
+            493.72265625000006,
+            481.05078125
+          ],
+          "visibility": "uncertain",
+          "semantic": "joint",
+          "confirmed": true,
+          "origin": "user_selected_person_model_points"
+        },
+        "right_shoulder": {
+          "xy_px": [
+            622.2250102162361,
+            171.34809243679047
+          ],
+          "visibility": "uncertain",
+          "semantic": "joint",
+          "confirmed": true,
+          "origin": "user_selected_person_model_points"
+        },
+        "right_elbow": {
+          "xy_px": [
+            621.0577638149261,
+            246.05186212062836
+          ],
+          "visibility": "occluded",
+          "semantic": "joint",
+          "confirmed": true,
+          "origin": "user_selected_person_model_points"
+        },
+        "right_wrist": {
+          "xy_px": [
+            568.5316757559776,
+            164.34461402893066
+          ],
+          "visibility": "occluded",
+          "semantic": "joint",
+          "confirmed": true,
+          "origin": "user_selected_person_model_points"
+        },
+        "right_hip": {
+          "xy_px": [
+            634.92578125,
+            310.12890625
+          ],
+          "visibility": "uncertain",
+          "semantic": "joint",
+          "confirmed": true,
+          "origin": "user_selected_person_model_points"
+        },
+        "right_knee": {
+          "xy_px": [
+            583.7058789730072,
+            431.6440399289131
+          ],
+          "visibility": "uncertain",
+          "semantic": "joint",
+          "confirmed": true,
+          "origin": "user_selected_person_model_points"
+        },
+        "right_ankle": {
+          "xy_px": [
+            618.7232710123062,
+            440.98201113939285
+          ],
+          "visibility": "uncertain",
+          "semantic": "joint",
+          "confirmed": true,
+          "origin": "user_selected_person_model_points"
+        }
+      },
+      "identity": "0",
+      "contact": "left",
+      "status": "reviewed"
+    }
+  ]
+}
