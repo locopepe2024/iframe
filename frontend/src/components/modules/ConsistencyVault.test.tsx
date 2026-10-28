@@ -92,6 +92,8 @@ it("shows all merged crowd templates in Assets without treating them as characte
     expect(within(crowdSection).getByText("往来江湖客")).toBeInTheDocument();
     expect(within(crowdSection).getAllByText(/流民匪寇|江湖打手|青溪镇市井百姓/)).toHaveLength(3);
     expect(screen.queryByText("No characters found")).not.toBeInTheDocument();
+    fireEvent.click(within(crowdSection).getByRole("button", { name: /玄宸阁随行探子/ }));
+    expect(screen.getByRole("dialog", { name: "编辑群演：玄宸阁随行探子" })).toBeInTheDocument();
 });
 
 it("saves only character design and retains current assets without refetching the project", async () => {
