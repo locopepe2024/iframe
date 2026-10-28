@@ -47,6 +47,52 @@ def completed(service, video):
     return result
 
 
+def test_version_restore_preserves_source_and_history(service, video):
+    project = completed(service, video)
+    saved = service.confirm(project["id"], project["revision"], project["analysis_id"], [])
+    restored = service.restore_version(saved["id"], saved["revision"], project["revision"])
+    assert restored["revision"] == saved["revision"] + 1
+    assert restored["status"] == "review"
+    assert restored["timeline"] is None
+    assert restored["source_media_id"] == saved["source_media_id"]
+    assert restored["source_fingerprint"] == saved["source_fingerprint"]
+    assert restored["restored_from_revision"] == project["revision"]
+    assert service.versions(saved["id"])[0]["revision"] == restored["revision"]
+    again = service.restore_version(saved["id"], restored["revision"], saved["revision"])
+    assert again["timeline"] == saved["timeline"]
+    assert again["revision"] == restored["revision"] + 1
+    with pytest.raises(HTTPException) as exc:
+        service.restore_version(saved["id"], restored["revision"], 0)
+    assert exc.value.status_code == 409
+
+
+def test_versions_reject_foreign_owner_and_active_analysis(service, video):
+    project = register(service, video)
+    stranger = RecreationService(UserContext("other", "other", "Other", ""))
+    for action in (lambda: stranger.versions(project["id"]),
+                   lambda: stranger.restore_version(project["id"], 0, 0)):
+        with pytest.raises(HTTPException) as exc:
+            action()
+        assert exc.value.status_code == 404
+    queued = service.start(project["id"], 0)
+    with pytest.raises(HTTPException) as exc:
+        service.restore_version(project["id"], queued["revision"], 0)
+    assert exc.value.status_code == 409
+    cancelled = service.cancel_analysis(project["id"], queued["revision"], queued["analysis_id"])
+    assert not next(v for v in service.versions(project["id"]) if v["revision"] == queued["revision"])["restorable"]
+    with pytest.raises(HTTPException) as exc:
+        service.restore_version(project["id"], cancelled["revision"], queued["revision"])
+    assert exc.value.status_code == 409
+
+
+def test_restore_rejects_changed_source(service, video):
+    project = completed(service, video)
+    service._path(project["source_url"]).write_bytes(b"changed")
+    with pytest.raises(HTTPException) as exc:
+        service.restore_version(project["id"], project["revision"], 0)
+    assert exc.value.status_code == 409
+
+
 def test_real_vfr_analysis_and_confirmation(service, video):
     project = completed(service, video)
     data = project["analysis"]

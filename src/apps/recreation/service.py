@@ -172,10 +172,12 @@ class RecreationService:
             connection.execute("CREATE TABLE IF NOT EXISTS keyframe_tasks (task_id TEXT PRIMARY KEY, owner TEXT NOT NULL, project_id TEXT NOT NULL, data TEXT NOT NULL)")
             connection.execute("CREATE TABLE IF NOT EXISTS recreation_generation_tasks (task_id TEXT PRIMARY KEY, owner TEXT NOT NULL, project_id TEXT NOT NULL, generation_id TEXT NOT NULL, data TEXT NOT NULL)")
             connection.execute("CREATE TABLE IF NOT EXISTS recreation_assembly_tasks (task_id TEXT PRIMARY KEY, owner TEXT NOT NULL, project_id TEXT NOT NULL, generation_id TEXT NOT NULL, data TEXT NOT NULL)")
+            connection.execute("CREATE TABLE IF NOT EXISTS recreation_project_versions (project_id TEXT NOT NULL, owner TEXT NOT NULL, revision INTEGER NOT NULL, data TEXT NOT NULL, created_at REAL NOT NULL, PRIMARY KEY (project_id, owner, revision))")
             connection.execute("CREATE INDEX IF NOT EXISTS media_owner_project ON media_records(owner, project_id, created_at, media_id)")
             connection.execute("CREATE INDEX IF NOT EXISTS keyframe_owner_project ON keyframe_tasks(owner, project_id)")
             connection.execute("CREATE INDEX IF NOT EXISTS generation_owner_project ON recreation_generation_tasks(owner, project_id, generation_id)")
             connection.execute("CREATE INDEX IF NOT EXISTS assembly_owner_project ON recreation_assembly_tasks(owner, project_id, generation_id)")
+            connection.execute("CREATE INDEX IF NOT EXISTS recreation_versions_owner_project ON recreation_project_versions(owner, project_id, revision)")
             connection.execute("BEGIN IMMEDIATE")
             yield connection
             connection.commit()
@@ -193,10 +195,60 @@ class RecreationService:
         return json.loads(row[0])
 
     def _save(self, db, record):
+        self._snapshot_version(db, self._get(db, record["id"]))
         record["revision"] += 1
         record["updated_at"] = time.time()
         db.execute("UPDATE projects SET data=? WHERE id=? AND owner=?",
                    (json.dumps(record), record["id"], self.user.owner_profile_id))
+        self._snapshot_version(db, record)
+
+    def _snapshot_version(self, db, record):
+        db.execute(
+            "INSERT OR IGNORE INTO recreation_project_versions VALUES (?, ?, ?, ?, ?)",
+            (record["id"], self.user.owner_profile_id, record["revision"],
+             json.dumps(record), record["updated_at"]),
+        )
+
+    def versions(self, project_id):
+        with self.db() as db:
+            self._get(db, project_id)
+            rows = db.execute("SELECT revision, data, created_at FROM recreation_project_versions WHERE project_id=? AND owner=? ORDER BY revision DESC", (project_id, self.user.owner_profile_id)).fetchall()
+            versions = []
+            for revision, data, created_at in rows:
+                snapshot = json.loads(data)
+                versions.append({"revision": revision, "created_at": created_at,
+                                 "status": snapshot["status"],
+                                 "has_timeline": bool(snapshot.get("timeline")),
+                                 "restorable": snapshot["status"] not in ("queued", "analyzing")})
+            return versions
+
+    def restore_version(self, project_id, current_revision, target_revision):
+        before = self.get(project_id)
+        with self.db() as db:
+            self._verified_source_media(db, before)
+        with self.db() as db:
+            current = self._get(db, project_id)
+            if current["revision"] != current_revision:
+                raise HTTPException(409, "Project changed; refresh before restoring a version")
+            if current["status"] in ("queued", "analyzing"):
+                raise HTTPException(409, "Cancel active analysis before restoring a version")
+            if target_revision == current_revision:
+                raise HTTPException(409, "Version is already current")
+            row = db.execute("SELECT data FROM recreation_project_versions WHERE project_id=? AND owner=? AND revision=?", (project_id, self.user.owner_profile_id, target_revision)).fetchone()
+            if not row:
+                raise HTTPException(404, "Recreation project version not found")
+            snapshot = json.loads(row[0])
+            for field in ("source_media_id", "source_fingerprint", "source_url", "owner_profile_id", "owner_user_id", "id"):
+                if snapshot.get(field) != current.get(field):
+                    raise HTTPException(409, "Historical source identity does not match")
+            if snapshot.get("status") in ("queued", "analyzing"):
+                raise HTTPException(409, "An active analysis cannot be restored")
+            restored = dict(snapshot)
+            restored["revision"] = current["revision"]
+            restored["attempt"] = current["attempt"]
+            restored["restored_from_revision"] = target_revision
+            self._save(db, restored)
+            return restored
 
     def _path(self, stored):
         path = (self.output_root / stored).resolve()
@@ -297,6 +349,8 @@ class RecreationService:
             with self.db() as db:
                 db.execute("INSERT INTO projects VALUES (?, ?, ?)",
                            (project_id, self.user.owner_profile_id, json.dumps(record)))
+                db.execute("INSERT INTO recreation_project_versions(project_id, owner, revision, data, created_at) VALUES (?, ?, ?, ?, ?)",
+                           (project_id, self.user.owner_profile_id, record["revision"], json.dumps(record), record["created_at"]))
                 db.execute("INSERT INTO media_records VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
                            (media_id, self.user.owner_profile_id, project_id, "source_video", record["title"], record["source_url"], digest, json.dumps({"mime": "video"}), time.time()))
             return record
