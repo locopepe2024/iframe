@@ -183,6 +183,9 @@ it('supports keyboard playback, seek, split and delete without intercepting form
     render(<AssemblyTracks plan={videoPlan} project={project} resourceId="p" saved onChange={onChange} />);
     const clip = screen.getByRole('button', { name: 'Edit clip 1: One' });
     fireEvent.click(clip);
+    fireEvent.keyDown(window, { key: 's', metaKey: true });
+    fireEvent.keyDown(window, { key: 'Backspace', ctrlKey: true });
+    expect(onChange).not.toHaveBeenCalled();
     fireEvent.keyDown(window, { key: 'ArrowRight' });
     expect(screen.getByRole('slider', { name: 'Timeline playhead' })).toHaveValue('100');
     fireEvent.keyDown(window, { key: 's' });

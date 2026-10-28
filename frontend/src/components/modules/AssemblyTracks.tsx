@@ -141,6 +141,7 @@ export function AssemblyTracks({ plan, resourceId, onChange, saved, project, mat
     useEffect(() => {
         const onKeyDown = (event: KeyboardEvent) => {
             const target = event.target as HTMLElement | null;
+            if (event.altKey || event.ctrlKey || event.metaKey) return;
             if (target?.tagName === "INPUT" || target?.tagName === "TEXTAREA" || target?.tagName === "SELECT" || target?.isContentEditable) return;
             if (event.key === " ") { event.preventDefault(); if (currentMedia) setPlaying(value => !value); return; }
             if (event.key === "ArrowLeft" || event.key === "ArrowRight") { event.preventDefault(); seek(position + (event.key === "ArrowRight" ? 100 : -100)); return; }
