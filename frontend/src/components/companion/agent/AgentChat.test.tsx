@@ -537,3 +537,21 @@ it("speaks upload guidance and pending confirmation through OpenTalking without 
  await waitFor(()=>expect(playback.mock.calls.some(([props])=>props.reply?.id === "confirmation-audio" && props.reply.text.includes("还没有执行"))).toBe(true));
  expect(api.confirm).not.toHaveBeenCalled();
 });
+
+
+it("does not speak a late reply after text mode was selected and audio re-enabled",async()=>{
+ const {act}=await import("@testing-library/react");
+ let complete!:(value:unknown)=>void;
+ api.chat.mockImplementationOnce(()=>new Promise(resolve=>{complete=resolve;}));
+ localStorage.setItem("iframe-companion-agent-response-mode-v1","audio");
+ await start();allowText();
+ fireEvent.click(screen.getByRole("button",{name:"发送"}));
+ await waitFor(()=>expect(api.chat).toHaveBeenCalledOnce());
+ fireEvent.click(screen.getByRole("button",{name:"更多"}));
+ fireEvent.click(screen.getByRole("radio",{name:/方案 2/}));
+ fireEvent.click(screen.getByRole("radio",{name:/方案 1/}));
+ playback.mockClear();
+ await act(async()=>complete({turn_id:"late-reply",status:"completed",result:{kind:"text",text:"这条只保留文字"}}));
+ await screen.findByText("这条只保留文字");
+ expect(playback.mock.calls.some(([props])=>props.reply?.id === "late-reply")).toBe(false);
+});

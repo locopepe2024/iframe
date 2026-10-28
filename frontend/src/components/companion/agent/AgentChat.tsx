@@ -49,7 +49,9 @@ export default function AgentChat() {
   const [voiceControl,setVoiceControl] = useState<VoiceControl>();
   const [voiceActive,setVoiceActive] = useState(false);
   const [voiceChat,setVoiceChat] = useState(false);
-  const captureChanged = useCallback((active:boolean)=>{setVoiceActive(active);if(!active)setVoiceChat(false);},[]);
+  const speechEpoch = useRef(0);
+  const speechEnabled = useRef(false);
+  const captureChanged = useCallback((active:boolean)=>{setVoiceActive(active);if(!active){speechEpoch.current++;setVoiceChat(false);}},[]);
   const [messages, setMessages] = useState<UserMessage[]>([]), [after, setAfter] = useState<number | null>(null);
   const [allowed, setAllowed] = useState(false);
   const [voiceConnectionEpoch, setVoiceConnectionEpoch] = useState(0);
@@ -58,6 +60,7 @@ export default function AgentChat() {
   const [spokenReply, setSpokenReply] = useState<SpokenReply | null>(null);
   const [responseMode, setResponseMode] = useState<ResponseMode>("text");
   const audioReply = responseMode === "audio" || voiceChat;
+  speechEnabled.current = audioReply;
   const [identity, setIdentity] = useState<CompanionIdentity>(defaultCompanionIdentity);
   const [mode, setMode] = useState<ComposerMode>("chat");
   const [drafts, setDrafts] = useState<Record<ComposerMode, string>>({ chat: "", image: "", video: "" });
@@ -155,6 +158,7 @@ export default function AgentChat() {
     } catch { /* ignore malformed browser state */ }
   }, []);
   async function newSession() {
+    speechEpoch.current++;
     voiceQueue.current = [];
     setVoiceChat(false);setVoiceControl(old=>({id:(old?.id ?? 0)+1,action:"cancel"}));
     companionPlayback.cancel();setSpokenReply(null);
@@ -165,6 +169,7 @@ export default function AgentChat() {
     setMenu(false); setAlbumOpen(false); setUploadFiles([]); setAttached([]); setPendingMedia({chat:[],image:[],video:[]}); setMediaAcknowledged(false); setSession(result.session_id); setMessages([]); setAfter(null); setTurn(null); setPreview(null); setDraft(null); setDrafts({ chat: "", image: "", video: "" }); setGuides({ image: null, video: null }); setMode("chat"); setNotice("已开始新的聊天。");
   }
   async function send(retry = false, voiceText?: string, selectedPhotoId?: string, capturedFocus?:InteractionFocus) {
+    const requestSpeechEpoch = speechEpoch.current;
     const requestedText = voiceText ?? text;
     const turnFocus = capturedFocus ?? focus.current();
     const editing = turnFocus.kind !== "chat";
@@ -209,7 +214,7 @@ export default function AgentChat() {
     }
     localStorage.setItem(turnKey, result.turn_id);
     if (alive.current) {
-      if (audioReply) {
+      if (audioReply && speechEnabled.current && requestSpeechEpoch === speechEpoch.current) {
         const replyText = spokenTurnText(result.result);
         if (replyText) setSpokenReply({ id: result.turn_id, text: replyText });
       }
@@ -315,7 +320,7 @@ export default function AgentChat() {
   }
   return <InteractionFocusContext.Provider value={focus}><main className={`${styles.shell} ${chatStyles.shell}`} data-agent-build="upload-preview-20261024-v3">
     <header className={chatStyles.header}><div className={chatStyles.assistantIdentity}><h1><span aria-hidden="true">{identity.avatar}</span> {identity.name}</h1><span role="status" className={chatStyles.assistantStatus}>{voiceOutputStatus || (busy ? "正在处理…" : captureStatus || "在线")}</span></div><div className={chatStyles.headerActions}><button type="button" className={chatStyles.headerIcon} aria-label={voiceActive ? "停止语音聊天" : "打开语音聊天"} aria-pressed={voiceActive} disabled={(!voiceActive && (inputDisabled || pending))} onClick={() => {
-      if (voiceActive) {setVoiceChat(false);companionPlayback.cancel();setVoiceControl(old=>({id:(old?.id ?? 0)+1,action:"stop"}));}
+      if (voiceActive) {speechEpoch.current++;setVoiceChat(false);companionPlayback.cancel();setVoiceControl(old=>({id:(old?.id ?? 0)+1,action:"stop"}));}
       else {
         if(!allowed){setMenu(true);setNotice("请先在聊天设置中允许发送文字，再开始语音聊天。");return;}
         setMode("chat");setSpokenReply(null);setVoiceChat(true);setVoiceControl(old=>({id:(old?.id ?? 0)+1,action:"start"}));}
@@ -332,7 +337,7 @@ export default function AgentChat() {
         }} />允许发送文字，开始聊天</label>
         <fieldset className={styles.choice}><legend>小安回复方式</legend>
           <label className={styles.check}><input type="radio" name="companion-response-mode" value="audio" checked={responseMode === "audio"} onChange={() => { setResponseMode("audio"); localStorage.setItem(responseModeKey, "audio"); }} />方案 1：语音回复（可能计费）</label>
-          <label className={styles.check}><input type="radio" name="companion-response-mode" value="text" checked={responseMode === "text"} onChange={() => { setVoiceChat(false);setResponseMode("text"); localStorage.setItem(responseModeKey, "text"); }} />方案 2：只回复文字</label>
+          <label className={styles.check}><input type="radio" name="companion-response-mode" value="text" checked={responseMode === "text"} onChange={() => { speechEpoch.current++;speechEnabled.current=false;companionPlayback.cancel();setSpokenReply(null);setVoiceChat(false);setResponseMode("text"); localStorage.setItem(responseModeKey, "text"); }} />方案 2：只回复文字</label>
         </fieldset>
         <p className={styles.note}>语音回复由 OpenTalking 播放，并保留文字记录；播放受阻时可点击“播放声音”。</p>
         <label className={styles.check}><input type="checkbox" checked={edgeCoordinatorEnabled} disabled={runtimeCapability.status !== "edge_ready"} onChange={event => { const value = event.target.checked; setEdgeCoordinatorEnabled(value); localStorage.setItem("iframe-companion-edge-coordinator-v1", String(value)); }} />启用端侧任务协调器（测试）</label>
