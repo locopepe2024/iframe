@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { AssemblyEditPlan } from "@/lib/api";
-import { moveAssemblyClipInTimeline, removeAssemblyClip, splitAssemblyClip, trimAssemblyClip } from "./assemblyEditing";
+import { reorderAssemblyVideo, moveAssemblyClipInTimeline, removeAssemblyClip, splitAssemblyClip, trimAssemblyClip } from "./assemblyEditing";
 function plan(): AssemblyEditPlan { return { id: "p", scope: "project", revision: 1, target_duration_ms: 6000, provenance: {}, markers: [], lanes: [{ id: "v", kind: "video", allow_overlap: false, clips: [
     { id: "a", timeline_start_ms: 0, timeline_end_ms: 4000, source_start_ms: 1000, source_end_ms: 5000, source_refs: ["frame:a"], enabled: true },
     { id: "b", timeline_start_ms: 4000, timeline_end_ms: 6000, source_start_ms: 0, source_end_ms: 2000, source_refs: ["frame:b"], enabled: true },
@@ -46,4 +46,15 @@ describe("Assembly editing", () => {
     it("rejects moving a video clip out of its sequence", () => {
         expect(() => moveAssemblyClipInTimeline(plan(), "v", "a", 500)).toThrow("remain in sequence");
     });
+});
+
+it("reorders videos by changing timeline ranges while preserving source crops", () => {
+    const original = plan();
+    const moved = reorderAssemblyVideo(original, "b", -1);
+    const ordered = moved.lanes[0].clips.slice().sort((a,b) => a.timeline_start_ms - b.timeline_start_ms);
+    expect(ordered.map(c => c.id)).toEqual(["b", "a"]);
+    expect(ordered[0]).toMatchObject({ timeline_start_ms: 0, timeline_end_ms: 2000 });
+    expect(ordered[1]).toMatchObject({ timeline_start_ms: 2000, timeline_end_ms: 6000 });
+    expect(ordered[0].source_start_ms).toBe(original.lanes[0].clips[1].source_start_ms);
+    expect(original.lanes[0].clips[0].timeline_start_ms).toBe(0);
 });

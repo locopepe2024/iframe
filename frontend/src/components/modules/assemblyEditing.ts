@@ -99,3 +99,14 @@ export function resizeAssemblyClipInTimeline(plan: AssemblyEditPlan, laneId: str
     if (!lane.allow_overlap && clips.some((a, i) => clips.some((b, j) => i !== j && a.timeline_start_ms < b.timeline_end_ms && b.timeline_start_ms < a.timeline_end_ms))) throw new Error("Clip would overlap another clip");
     return { ...plan, lanes: plan.lanes.map(l => l.id === laneId ? { ...l, clips } : l) };
 }
+
+/** Reorder an adjacent video pair and rebuild contiguous timeline positions. */
+export function reorderAssemblyVideo(plan: AssemblyEditPlan, clipId: string, direction: -1 | 1): AssemblyEditPlan {
+    const videos = plan.lanes.filter(l => l.kind === "video").flatMap(l => l.clips).sort((a,b) => a.timeline_start_ms - b.timeline_start_ms);
+    const index = videos.findIndex(c => c.id === clipId), other = index + direction;
+    if (index < 0 || other < 0 || other >= videos.length) return plan;
+    [videos[index], videos[other]] = [videos[other], videos[index]];
+    let cursor = 0;
+    const positions = new Map(videos.map(c => { const start = cursor; cursor += c.timeline_end_ms - c.timeline_start_ms; return [c.id, [start, cursor]] as const; }));
+    return { ...plan, lanes: plan.lanes.map(l => l.kind !== "video" ? l : { ...l, clips: l.clips.map(c => ({ ...c, timeline_start_ms: positions.get(c.id)![0], timeline_end_ms: positions.get(c.id)![1] })) }) };
+}

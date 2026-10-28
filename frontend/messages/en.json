@@ -719,7 +719,8 @@
     "offlineBannerText": "You're offline — you can continue once reconnected"
   },
   "nav": {
-    "recreation": "Editor",
+    "recreation": "Recreation",
+    "editing": "Editor",
     "workspace": "Workspace",
     "library": "Library",
     "editor": "Script Editor",

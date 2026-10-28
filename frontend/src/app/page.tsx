@@ -28,6 +28,7 @@ const SettingsPage = dynamic(() => import("@/components/settings/SettingsPage"),
 const AssetLibraryPage = dynamic(() => import("@/components/library/AssetLibraryPage"), { ssr: false });
 const PlaygroundPage = dynamic(() => import("@/components/modules/playground/PlaygroundPage"), { ssr: false });
 const ImageEditorPage = dynamic(() => import("@/components/modules/playground/PlaygroundImageEditor").then(mod => mod.StandaloneImageEditorPage), { ssr: false });
+const EditingPage = dynamic(() => import("@/components/modules/editing/EditingPage"), { ssr: false });
 const RecreationPage = dynamic(() => import("@/components/modules/recreation/RecreationPage"), { ssr: false });
 const DirectorWorkbench = dynamic(() => import("@/components/director3d/DirectorWorkbench"), {
   ssr: false,
@@ -468,7 +469,7 @@ export default function Home() {
   const [isImportDialogOpen, setIsImportDialogOpen] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
   const [showCreateDropdown, setShowCreateDropdown] = useState(false);
-  const [currentView, setCurrentView] = useState<'home' | 'project' | 'series' | 'series-episode' | 'library' | 'settings' | 'playground' | 'image-editor' | 'recreation' | 'director3d' | 'studio/editor' | 'project-editor'>('home');
+  const [currentView, setCurrentView] = useState<'home' | 'project' | 'series' | 'series-episode' | 'library' | 'settings' | 'playground' | 'image-editor' | 'recreation' | 'editing' | 'director3d' | 'studio/editor' | 'project-editor'>('home');
   const [activeTab, setActiveTab] = useState<GlobalTab>("workspace");
   const [wsSearch, setWsSearch] = useState("");
   const online = useOnline();
@@ -639,6 +640,11 @@ export default function Home() {
         setEpisodeId(null);
         return;
       }
+      if (hash === '#/editing' || hash.startsWith('#/editing?')) {
+        setCurrentView('editing');
+        setActiveTab('editing');
+        return;
+      }
       if (hash === '#/recreation') {
         setCurrentView('recreation');
         setActiveTab('recreation');
@@ -739,6 +745,7 @@ export default function Home() {
 
   // Determine content based on activeTab
   const renderContent = () => {
+    if (currentView === 'editing') return <EditingPage />;
     if (currentView === 'recreation') {
       return <RecreationPage />;
     }
