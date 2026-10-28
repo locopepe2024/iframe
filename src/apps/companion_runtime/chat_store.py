@@ -107,7 +107,7 @@ class ChatStore(PhotoTasks, DiaryStore, CompanionStore):
                 diary_request = False
                 intent = Intent('chat')
             arguments = proposal.get('arguments', {})
-            unscoped_album = proposal.get('name') in ('photo.album.list', 'photo.organize.start') and not (
+            unscoped_album = proposal.get('name') == 'photo.organize.start' and not (
                 arguments.get('year') or arguments.get('query', '').strip() or arguments.get('view') == 'pending' or arguments.get('photo_id') or arguments.get('date_prefix'))
             if intent.name in ('album.scope', 'album.browse') or proposal['kind'] == 'album_guide' or unscoped_album:
                 result = dict(kind='album_guide', browse=intent.name == 'album.browse',

@@ -40,7 +40,7 @@ def _propose(identity, messages, current_message_id, *, diary=False):
                   parameters=item['parameters'])) for item in tool_schemas()] if not diary else []
     try:
         profile = get_profile(os.getenv('IFRAME_COMPANION_PERSONALITY'))
-        instruction = ('\n用户要求整理照片时用 photo_organize_start 委派工作流；只查找照片用 photo_album_list；询问全相册照片数量用 photo_album_count，直接统计，不当成整理任务，不要求日期或人物范围。workflow_tasks 是服务端提供的当前任务状态；用户继续选择、结束或取消时用 photo_organize_input，不重复发起。有多项任务或照片选择不明确时只问一个澄清问题。不要声称已完成分析或保存。') if not diary else ('\n这是回忆日记写作任务。只根据 user_messages 中已经说过的事实写一篇简短日记；'
+        instruction = ('\n用户要求整理照片时用 photo_organize_start 委派工作流；浏览或查找照片用 photo_album_list，明确看全部照片时允许不加筛选并分页返回，不要追问整理范围；询问全相册照片数量用 photo_album_count，直接统计，不当成整理任务，不要求日期或人物范围。workflow_tasks 是服务端提供的当前任务状态；用户继续选择、结束或取消时用 photo_organize_input，不重复发起。有多项任务或照片选择不明确时只问一个澄清问题。不要声称已完成分析或保存。') if not diary else ('\n这是回忆日记写作任务。只根据 user_messages 中已经说过的事实写一篇简短日记；'
             '如果事实不足，只提出一个最需要补充的问题。绝对不要查询、保存或删除个人记忆，也不要输出工具调用。')
         prompt = system_prompt(profile) + instruction
         if not diary:

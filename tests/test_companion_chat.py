@@ -197,11 +197,17 @@ def test_generic_album_request_asks_scope_without_model_or_photo_read(chat, text
     assert store.workflow_context('owner', 'actor', session)['album_tasks'] == []
 
 
-def test_unscoped_model_album_request_is_stopped_before_reading(chat):
+@pytest.mark.parametrize("text", ["我想看一下我们全部照片。", "找点回忆看看"])
+def test_unscoped_model_album_browse_is_not_rewritten_as_organizing(chat, monkeypatch, text):
     _, _, client, session, callback = chat
     callback.side_effect = None
     callback.return_value = dict(kind='tool', name='photo.album.list', arguments={})
+    read = Mock(return_value=dict(photos=[], next_after_id=None))
+    monkeypatch.setattr('src.apps.companion_runtime.photo_tools.read_photos', read)
     result = client.post(f'/companion-runtime/sessions/{session}/chat', json=dict(
-        operation_id='album-no-scope', text='找点回忆看看', allow_external_text=True))
+        operation_id='album-no-scope', text=text, allow_external_text=True))
     assert result.status_code == 200, result.text
-    assert result.json()['result']['kind'] == 'album_guide'
+    assert result.json()['result']['kind'] == 'photo_read'
+    callback.assert_called_once()
+    assert read.call_args.args[1] == 'photo.album.list'
+    assert read.call_args.args[2]['limit'] == 6
