@@ -1,0 +1,262 @@
+{
+  "schema": "addams-native-constrained-pose-fit.v1",
+  "source_sha256": "3b0d8f32549c80ef04e988c1bfe1393582fd6349047b306ce6c2df7bdae63c96",
+  "focal_px": 673.9856215031623,
+  "frames": [
+    14,
+    16,
+    17,
+    18,
+    19,
+    22,
+    23,
+    24
+  ],
+  "annotation_count": 42,
+  "fits": [
+    {
+      "bound_rad": 0.5,
+      "overall_rmse_px": 11.70042610168457,
+      "overall_median_px": 1.4302630424499512,
+      "rows": [
+        {
+          "source_frame": 49,
+          "count": 7,
+          "rmse_px": 21.33039093017578,
+          "median_px": 3.0830063819885254,
+          "max_px": 55.996280670166016,
+          "delta_body_norm": 1.9728479385375977,
+          "delta_global_norm": 0.5291153192520142,
+          "delta_translation": [
+            -0.0878487303853035,
+            0.057612646371126175,
+            -0.41995900869369507
+          ]
+        },
+        {
+          "source_frame": 50,
+          "count": 7,
+          "rmse_px": 13.061602592468262,
+          "median_px": 1.6383675336837769,
+          "max_px": 30.021120071411133,
+          "delta_body_norm": 1.7741566896438599,
+          "delta_global_norm": 0.16958357393741608,
+          "delta_translation": [
+            0.0016685794107615948,
+            0.021934568881988525,
+            -0.1292503923177719
+          ]
+        },
+        {
+          "source_frame": 51,
+          "count": 7,
+          "rmse_px": 2.778902769088745,
+          "median_px": 1.3222147226333618,
+          "max_px": 6.002110958099365,
+          "delta_body_norm": 2.016274929046631,
+          "delta_global_norm": 0.709086537361145,
+          "delta_translation": [
+            -0.022101951763033867,
+            0.0590907484292984,
+            -0.18395563960075378
+          ]
+        },
+        {
+          "source_frame": 52,
+          "count": 6,
+          "rmse_px": 14.063220977783203,
+          "median_px": 1.6059064865112305,
+          "max_px": 30.476377487182617,
+          "delta_body_norm": 2.1730434894561768,
+          "delta_global_norm": 0.5638484358787537,
+          "delta_translation": [
+            -0.02355802431702614,
+            0.043610796332359314,
+            -0.10099710524082184
+          ]
+        },
+        {
+          "source_frame": 53,
+          "count": 6,
+          "rmse_px": 4.600402355194092,
+          "median_px": 1.5269533395767212,
+          "max_px": 10.7018404006958,
+          "delta_body_norm": 1.8921360969543457,
+          "delta_global_norm": 0.6933345794677734,
+          "delta_translation": [
+            -0.08574280142784119,
+            0.055661480873823166,
+            -0.2486763447523117
+          ]
+        },
+        {
+          "source_frame": 55,
+          "count": 4,
+          "rmse_px": 0.7150506973266602,
+          "median_px": 0.7761443853378296,
+          "max_px": 0.8247894048690796,
+          "delta_body_norm": 1.2467981576919556,
+          "delta_global_norm": 0.2620491087436676,
+          "delta_translation": [
+            -0.02788950502872467,
+            0.04485591873526573,
+            -0.1378464698791504
+          ]
+        },
+        {
+          "source_frame": 56,
+          "count": 2,
+          "rmse_px": 0.5932184457778931,
+          "median_px": 0.5021631121635437,
+          "max_px": 0.8179799914360046,
+          "delta_body_norm": 0.839320182800293,
+          "delta_global_norm": 0.10490643233060837,
+          "delta_translation": [
+            0.032894931733608246,
+            -0.008073724806308746,
+            -0.00519031286239624
+          ]
+        },
+        {
+          "source_frame": 57,
+          "count": 3,
+          "rmse_px": 0.2766363322734833,
+          "median_px": 0.27652648091316223,
+          "max_px": 0.33957046270370483,
+          "delta_body_norm": 1.1933231353759766,
+          "delta_global_norm": 0.6066758632659912,
+          "delta_translation": [
+            -0.15148894488811493,
+            0.019940020516514778,
+            0.053122393786907196
+          ]
+        }
+      ]
+    },
+    {
+      "bound_rad": 0.8,
+      "overall_rmse_px": 11.303885459899902,
+      "overall_median_px": 1.117328405380249,
+      "rows": [
+        {
+          "source_frame": 49,
+          "count": 7,
+          "rmse_px": 20.65090560913086,
+          "median_px": 1.290763020515442,
+          "max_px": 54.47277069091797,
+          "delta_body_norm": 2.680431604385376,
+          "delta_global_norm": 0.5237166881561279,
+          "delta_translation": [
+            -0.08368159830570221,
+            0.056737255305051804,
+            -0.4192040264606476
+          ]
+        },
+        {
+          "source_frame": 50,
+          "count": 7,
+          "rmse_px": 12.732126235961914,
+          "median_px": 1.9618804454803467,
+          "max_px": 29.17814064025879,
+          "delta_body_norm": 2.6622679233551025,
+          "delta_global_norm": 0.16836564242839813,
+          "delta_translation": [
+            0.004821476060897112,
+            0.021996982395648956,
+            -0.12348837405443192
+          ]
+        },
+        {
+          "source_frame": 51,
+          "count": 7,
+          "rmse_px": 1.5904351472854614,
+          "median_px": 0.990031361579895,
+          "max_px": 2.9165329933166504,
+          "delta_body_norm": 2.4595677852630615,
+          "delta_global_norm": 0.7322152256965637,
+          "delta_translation": [
+            0.0024784475099295378,
+            0.05084037408232689,
+            -0.14096666872501373
+          ]
+        },
+        {
+          "source_frame": 52,
+          "count": 6,
+          "rmse_px": 14.21120548248291,
+          "median_px": 2.3561182022094727,
+          "max_px": 32.021331787109375,
+          "delta_body_norm": 2.5909745693206787,
+          "delta_global_norm": 0.589698851108551,
+          "delta_translation": [
+            0.0005727605894207954,
+            0.0412222221493721,
+            -0.07062774151563644
+          ]
+        },
+        {
+          "source_frame": 53,
+          "count": 6,
+          "rmse_px": 1.0547429323196411,
+          "median_px": 1.031646728515625,
+          "max_px": 1.3880105018615723,
+          "delta_body_norm": 1.8041636943817139,
+          "delta_global_norm": 0.7407189607620239,
+          "delta_translation": [
+            -0.10259449481964111,
+            0.05779239907860756,
+            -0.30830609798431396
+          ]
+        },
+        {
+          "source_frame": 55,
+          "count": 4,
+          "rmse_px": 1.1076936721801758,
+          "median_px": 0.7402691841125488,
+          "max_px": 1.8764779567718506,
+          "delta_body_norm": 1.0849840641021729,
+          "delta_global_norm": 0.27008989453315735,
+          "delta_translation": [
+            -0.026119612157344818,
+            0.04193964973092079,
+            -0.1394445151090622
+          ]
+        },
+        {
+          "source_frame": 56,
+          "count": 2,
+          "rmse_px": 1.5170081853866577,
+          "median_px": 1.4841535091400146,
+          "max_px": 1.7981632947921753,
+          "delta_body_norm": 0.5196352005004883,
+          "delta_global_norm": 0.1080651581287384,
+          "delta_translation": [
+            0.03251828998327255,
+            -0.005517906509339809,
+            -0.008108426816761494
+          ]
+        },
+        {
+          "source_frame": 57,
+          "count": 3,
+          "rmse_px": 0.5936433672904968,
+          "median_px": 0.588190495967865,
+          "max_px": 0.6445010900497437,
+          "delta_body_norm": 0.43697208166122437,
+          "delta_global_norm": 0.6415256261825562,
+          "delta_translation": [
+            -0.15369614958763123,
+            0.016161926090717316,
+            0.028045879676938057
+          ]
+        }
+      ]
+    }
+  ],
+  "limits": [
+    "Joint fit only over reviewed visible points; no held-out frames.",
+    "SMPL-X shape and camera candidate fixed.",
+    "Bounds are diagnostic choices, not learned anatomical limits.",
+    "No floor, contact, world trajectory, lighting or white-rig export."
+  ]
+}
