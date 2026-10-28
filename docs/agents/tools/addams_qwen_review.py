@@ -1,5 +1,6 @@
 """Isolated Qwen visual review; no automatic labels or animation edits."""
-import argparse,base64,hashlib,io,json,os,time
+import argparse,base64,hashlib,io,json,os,time,uuid
+from datetime import datetime,timezone
 from pathlib import Path
 from dotenv import load_dotenv
 from PIL import Image,ImageDraw
@@ -13,7 +14,7 @@ def picture(path):
  raw=path.read_bytes();im=Image.open(io.BytesIO(raw)).convert('RGB');im.thumbnail((960,520));buf=io.BytesIO();im.save(buf,format='JPEG',quality=92);b=buf.getvalue()
  return {'type':'image_url','image_url':{'url':'data:image/jpeg;base64,'+base64.b64encode(b).decode()}},{'path':str(path.relative_to(ROOT)),'original_sha256':digest(raw),'submitted_sha256':digest(b),'submitted_size':list(im.size)}
 def main():
- p=argparse.ArgumentParser();p.add_argument('--output',type=Path,required=True);p.add_argument('--run',action='store_true');p.add_argument('--sheet',action='store_true');a=p.parse_args();a.output.mkdir(parents=True,exist_ok=False)
+ p=argparse.ArgumentParser();p.add_argument('--output',type=Path,required=True);p.add_argument('--run',action='store_true');p.add_argument('--sheet',action='store_true');p.add_argument('--stream',action='store_true');a=p.parse_args();a.output.mkdir(parents=True,exist_ok=False)
  tasks=json.loads((B/'addams-full-joint-review-v1/tasks.json').read_text())['tasks'];items={t['source_frame']:t for t in tasks};content=[{'type':'text','text':PROMPT}];evidence=[]
  for sf in range(46,60):
   t=items[sf];img,meta=picture(B/'addams-full-joint-review-v1'/t['image']);meta.update(source_frame=sf,pts_s=(sf-1)/25);evidence.append(meta);content.extend([{'type':'text','text':f'源第{sf}帧，PTS={(sf-1)/25:.2f}s'},img])
@@ -30,15 +31,31 @@ def main():
  if not key:raise SystemExit('UNIART_API_KEY is not configured')
  client=OpenAI(api_key=key,base_url=os.getenv('UNIART_BASE_URL','https://uniart.fun/v1'),timeout=180,max_retries=0)
  def call(name,images,prompt):
-  start=time.monotonic()
+  start=time.monotonic();trace={'pass':name,'client_request_id':str(uuid.uuid4()),'started_utc':datetime.now(timezone.utc).isoformat(),'stream':a.stream};chunks=[]
+  (a.output/(name+'-transport.json')).write_text(json.dumps(trace,indent=2)+'\n')
   try:
+   if a.stream:
+    with client.chat.completions.with_streaming_response.create(model=model,messages=[{'role':'system','content':SYSTEM},{'role':'user','content':[{'type':'text','text':prompt}]+images}],max_tokens=5000,stream=True,stream_options={'include_usage':True},extra_headers={'X-Client-Request-Id':trace['client_request_id']}) as response:
+     trace['headers_elapsed_s']=round(time.monotonic()-start,2);trace['response_ids']={k:response.headers[k] for k in ['x-request-id','request-id','cf-ray'] if k in response.headers};(a.output/(name+'-transport.json')).write_text(json.dumps(trace,indent=2)+'\n')
+     for chunk in response.parse():
+      if not chunks:trace['first_chunk_elapsed_s']=round(time.monotonic()-start,2)
+      chunks.append(chunk.model_dump())
+    text=''.join(c['choices'][0]['delta'].get('content') or '' for c in chunks if c.get('choices'));finish=next((c['choices'][0].get('finish_reason') for c in reversed(chunks) if c.get('choices') and c['choices'][0].get('finish_reason')),None)
+    trace.update(elapsed_s=round(time.monotonic()-start,2),finish_reason=finish,model_returned=chunks[0].get('model') if chunks else None)
+    (a.output/(name+'-response.json')).write_text(json.dumps({'transport':trace,'chunks':chunks},ensure_ascii=False,indent=2)+'\n');(a.output/(name+'.txt')).write_text(text+'\n');(a.output/(name+'-transport.json')).write_text(json.dumps(trace,indent=2)+'\n');print(json.dumps(trace),flush=True)
+    if not text or finish!='stop':raise RuntimeError('Incomplete streamed content')
+    return text
    r=client.chat.completions.create(model=model,messages=[{'role':'system','content':SYSTEM},{'role':'user','content':[{'type':'text','text':prompt}]+images}],max_tokens=5000)
    (a.output/(name+'-response.json')).write_text(r.model_dump_json(indent=2)+'\n');s=r.choices[0].message.content or '';(a.output/(name+'.txt')).write_text(s+'\n');print(json.dumps({'pass':name,'model_returned':r.model,'elapsed_s':round(time.monotonic()-start,2),'finish_reason':r.choices[0].finish_reason},ensure_ascii=False),flush=True);return s
   except Exception as e:
-   info={'pass':name,'error_type':type(e).__name__,'status_code':getattr(e,'status_code',None),'elapsed_s':round(time.monotonic()-start,2)};(a.output/(name+'-error.json')).write_text(json.dumps(info,indent=2)+'\n');print(json.dumps(info),flush=True);return None
+   causes=[];cause=e
+   while cause is not None:causes.append(type(cause).__name__);cause=cause.__cause__
+   if chunks:(a.output/(name+'-partial.json')).write_text(json.dumps(chunks,ensure_ascii=False,indent=2)+'\n')
+   info={'client_request_id':trace['client_request_id'],'causes':causes,'pass':name,'error_type':type(e).__name__,'status_code':getattr(e,'status_code',None),'elapsed_s':round(time.monotonic()-start,2)};(a.output/(name+'-error.json')).write_text(json.dumps(info,indent=2)+'\n');print(json.dumps(info),flush=True);return None
  source=call('source',content[1:],PROMPT+(' 画面合并为一张时间序列图，从左到右、从上到下阅读，各格标有源帧号。' if a.sheet else ''))
  if source is None:raise SystemExit(2)
  candidate=B/'addams-fullbody-reviewed-v1/front-049.png';img,meta=picture(candidate);manifest['candidate_image']=meta;(a.output/'manifest.json').write_text(json.dumps(manifest,ensure_ascii=False,indent=2)+'\n')
  compare='''前14张为源第46到59帧的连续画面；最后一张为白模候选第49帧。仅比较这个候选单帧与源第49帧及其上下文，不推断白模其他帧。独立判断，不预设哪方正确。输出JSON：source_action_context、frame49_pose_differences（body_part、source_visible_evidence、candidate_visible_evidence、severity、uncertainty）、candidate_support_assessment、cannot_judge、suggested_constraints。不得因为体型外貌不同直接判动作错误；不得从单帧声称滑脚。'''
- compare+=(' 输入先是一张源时间序列图，左到右、上到下共14格；最后一张才是候选。' if a.sheet else '');(a.output/'compare-prompt.txt').write_text(compare+'\n');call('comparison',content[1:]+[{'type':'text','text':'以下仅为候选白模第49帧'},img],compare)
+ compare+=(' 输入先是一张源时间序列图，左到右、上到下共14格；最后一张才是候选。' if a.sheet else '');(a.output/'compare-prompt.txt').write_text(compare+'\n');result=call('comparison',content[1:]+[{'type':'text','text':'以下仅为候选白模第49帧'},img],compare)
+ if result is None:raise SystemExit(2)
 if __name__=='__main__':main()

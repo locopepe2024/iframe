@@ -1,0 +1,1 @@
+前14张为源第46到59帧的连续画面；最后一张为白模候选第49帧。仅比较这个候选单帧与源第49帧及其上下文，不推断白模其他帧。独立判断，不预设哪方正确。输出JSON：source_action_context、frame49_pose_differences（body_part、source_visible_evidence、candidate_visible_evidence、severity、uncertainty）、candidate_support_assessment、cannot_judge、suggested_constraints。不得因为体型外貌不同直接判动作错误；不得从单帧声称滑脚。 输入先是一张源时间序列图，左到右、上到下共14格；最后一张才是候选。

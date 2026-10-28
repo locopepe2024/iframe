@@ -1,0 +1,12 @@
+{
+  "client_request_id": "6a807d82-e2db-4cee-a7be-863a913e09ee",
+  "causes": [
+    "APIConnectionError",
+    "RemoteProtocolError",
+    "RemoteProtocolError"
+  ],
+  "pass": "comparison",
+  "error_type": "APIConnectionError",
+  "status_code": null,
+  "elapsed_s": 61.45
+}

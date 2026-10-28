@@ -1,0 +1,12 @@
+{
+  "pass": "source",
+  "client_request_id": "1ec8f512-da30-4cc3-bf84-98fb6a56cd5f",
+  "started_utc": "2026-10-28T15:45:10.329539+00:00",
+  "stream": true,
+  "headers_elapsed_s": 41.66,
+  "response_ids": {},
+  "first_chunk_elapsed_s": 41.68,
+  "elapsed_s": 87.64,
+  "finish_reason": "stop",
+  "model_returned": "qwen3.8-flash"
+}
