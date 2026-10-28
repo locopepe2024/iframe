@@ -1,0 +1,8 @@
+{
+  "max_endpoint_error_units": 1.17108333083291e-06,
+  "max_projection_error_review_px": 0.00028763400453838686,
+  "frame_count": 65,
+  "limits": [
+    "Numerical roundtrip only; not source motion acceptance."
+  ]
+}
