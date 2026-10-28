@@ -47,7 +47,7 @@ class PhotoTaskInput(Operation):
 
 
 class ToolRequest(Strict):
-    name: Literal['diary.open', 'diary.list', 'diary.read', 'memory.save', 'memory.search', 'memory.list', 'memory.delete', 'photo.album.list', 'photo.item.read']
+    name: Literal['diary.open', 'diary.list', 'diary.read', 'memory.save', 'memory.search', 'memory.list', 'memory.delete', 'photo.album.count', 'photo.album.list', 'photo.item.read']
     arguments: dict
 
 

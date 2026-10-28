@@ -137,6 +137,15 @@ class PhotoWorkflowStore(DateStore):
         return self._change(owner, photo_id, actor, operation_id, expected_revision,
                             consent_version, "organize", {})
 
+    def album_count(self, owner: str) -> int:
+        """Count the owner's live photos without loading or paginating metadata."""
+        with self._connection() as connection:
+            return connection.execute(
+                "SELECT COUNT(*) FROM photo_date_states p WHERE p.owner=? "
+                "AND NOT EXISTS (SELECT 1 FROM photo_deletions x "
+                "WHERE x.owner=p.owner AND x.photo_id=p.photo_id)", (owner,),
+            ).fetchone()[0]
+
     def album_page(self, owner: str, *, view: str, year: int | None,
                    after_id: str, limit: int, query: str = "", date_prefix: str = "", order: str = "id") -> dict:
         if view not in ("all", "pending") or not 1 <= limit <= 100 or len(query) > 100:

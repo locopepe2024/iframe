@@ -11,6 +11,48 @@ from src.apps.companion_runtime.store import Missing
 from src.apps.companion_runtime.tools import dispatch
 
 
+def test_album_count_is_global_owner_scoped_read_only_and_excludes_deleted(stores):
+    chat, photos = stores
+    for i in range(20):
+        photos.register_photo('owner', 'batch', f'extra-{i}', PhotoTimeEvidence())
+    photos.delete_photo('owner', 'mine', 'actor', operation_id='remove')
+    with sqlite3.connect(photos.path) as db:
+        before = '\n'.join(db.iterdump())
+    result = dispatch(chat, 'owner', 'actor', 'photo.album.count', {})
+    assert result == dict(total=20, spoken_text='相册里一共有20张照片。')
+    assert dispatch(chat, 'empty-owner', 'actor', 'photo.album.count', {})['total'] == 0
+    for arguments in ({'owner': 'other'}, {'limit': 6}, {'year': 2026}):
+        with pytest.raises(ValidationError):
+            dispatch(chat, 'owner', 'actor', 'photo.album.count', arguments)
+    with sqlite3.connect(photos.path) as db:
+        assert '\n'.join(db.iterdump()) == before
+
+
+@pytest.mark.parametrize('text', [
+    '呃，我们现在里面一共有多少张照片？',
+    '相册里面一共有多少张照片？',
+    '呃，我我我我是说我们现在有多少张照片？',
+])
+def test_count_question_result_is_text_snapshot_not_organize_guide(stores, text):
+    from src.apps.companion_runtime.intent import classify
+    chat, photos = stores
+    assert classify(text).name == 'chat'  # Interpretation stays with the model.
+    session = chat.session('owner', 'count')['session_id']
+    claim = chat.claim_turn('owner', 'actor', session, 'count', text)
+    turn = chat.finish_turn('owner', 'actor', claim,
+        dict(kind='tool', name='photo.album.count', arguments={}))
+    assert turn['result']['kind'] == 'text'
+    assert turn['result']['text'] == '相册里一共有1张照片。'
+    with chat.connection() as db:
+        assert db.execute('SELECT COUNT(*) FROM companion_photo_tasks').fetchone()[0] == 0
+    photos.register_photo('owner', 'batch', 'new', PhotoTimeEvidence())
+    assert chat.turn('owner', 'actor', turn['turn_id']) == turn
+    assert chat.conversation('owner', 'actor', session)['messages'][0]['turn'] == turn
+    next_claim = chat.claim_turn('owner', 'actor', session, 'count-again', text)
+    assert chat.finish_turn('owner', 'actor', next_claim,
+        dict(kind='tool', name='photo.album.count', arguments={}))['result']['text'] == '相册里一共有2张照片。'
+
+
 @pytest.fixture
 def stores(tmp_path, monkeypatch):
     photos = PhotoWorkflowStore(tmp_path / 'photos.db')

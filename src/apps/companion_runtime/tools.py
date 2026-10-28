@@ -57,6 +57,10 @@ class ReadDiary(Strict):
         return value
 
 
+class CountPhotos(Strict):
+    pass
+
+
 class ListPhotos(Strict):
     view: Literal['all', 'pending'] = 'all'
     year: int | None = Field(default=None, ge=1800, le=2200)
@@ -90,13 +94,14 @@ class ReadPhoto(Strict):
 
 
 CAPABILITIES = [
-    dict(name='album', description='打开和查询站内相册、查看照片、发起与继续整理工作流；分析及修改需用户确认。', tools=['photo.album.list', 'photo.item.read', 'photo.organize.start', 'photo.organize.input', 'photo.action']),
+    dict(name='album', description='统计相册照片总数、打开和查询站内相册、查看照片、发起与继续整理工作流；分析及修改需用户确认。', tools=['photo.album.count', 'photo.album.list', 'photo.item.read', 'photo.organize.start', 'photo.organize.input', 'photo.action']),
     dict(name='diary', description='打开日记月历、按月查询、按日期阅读已保存日记。写日记使用独立写作入口；保存与修改由编辑器确认。', tools=['diary.open', 'diary.list', 'diary.read']),
     dict(name='memory', description='查询个人记忆；保存、删除需用户确认。', tools=['memory.save', 'memory.search', 'memory.list', 'memory.delete']),
 ]
 
 
 DESCRIPTIONS = {
+    'photo.album.count': '查询当前用户相册的实际照片总数，排除已删除照片。用户问一共有多少张、相册总共多少照片等数量问题时调用；直接返回统计，不询问整理范围，不打开相册，不从分页照片或聊天记录猜数量。无参数。只支持全相册总数；若明确询问某日期或人物的数量，此工具不支持筛选，不能把全库总数当成筛选数量。',
     'photo.action': '对当前选中的照片请求分析、修改资料或删除。只生成待确认卡片，不声称已完成。action=analyze需要用户确认外部看图；edit的changes仅填写用户明确说出的people、scene、lighting、location、latitude、longitude、capture_time、notes，未修改字段不传；姓名/年龄不得猜。delete必须确认。photo_id只可从工作流状态取得；没有选中照片先请用户选择。',
     'diary.open': '用户要求打开日记、查看日记本时展示日记月历入口。不保存或生成日记。',
     'diary.list': '按明确的 YYYY-MM 月份查询当前用户已保存日记。不要用记忆搜索代替日记查询；月份不清楚先询问。',
@@ -111,7 +116,7 @@ DESCRIPTIONS = {
 
 MODELS = {'photo.action': PhotoAction, 'diary.open': OpenDiary, 'diary.list': ListDiaries, 'diary.read': ReadDiary, 'memory.save': SaveMemory, 'memory.search': SearchMemories,
           'memory.list': ListMemories, 'memory.delete': DeleteMemory,
-          'photo.album.list': ListPhotos, 'photo.item.read': ReadPhoto, 'photo.organize.start': OrganizePhotos, 'photo.organize.input': PhotoTaskCommand}
+          'photo.album.count': CountPhotos, 'photo.album.list': ListPhotos, 'photo.item.read': ReadPhoto, 'photo.organize.start': OrganizePhotos, 'photo.organize.input': PhotoTaskCommand}
 
 
 def tool_schemas():

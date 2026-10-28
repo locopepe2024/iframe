@@ -162,6 +162,11 @@ class ChatStore(PhotoTasks, DiaryStore, CompanionStore):
                     output=dispatch(scoped,owner,actor,name,values)
                 if name in ('photo.organize.start', 'photo.organize.input'):
                     result=dict(kind='photo_task',task_id=task_id)
+                elif name == 'photo.album.count':
+                    # Preserve the count at query time; history must not silently
+                    # re-count after uploads or deletions. Text uses normal speech.
+                    result=dict(kind='text', text=output['spoken_text'],
+                                name=name, total=output['total'])
                 elif name in ('memory.save','memory.delete'):
                     result=dict(kind='confirmation',preview_token=output['preview_token'])
                 else:

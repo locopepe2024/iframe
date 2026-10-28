@@ -10,7 +10,7 @@ from .store import Missing
 
 
 def read_photos(owner, name, values):
-    if name not in ('photo.album.list', 'photo.item.read'):
+    if name not in ('photo.album.count', 'photo.album.list', 'photo.item.read'):
         raise ValueError('Unknown read-only photo tool')
     configured = os.getenv('IFRAME_PHOTOS_LOCAL_DB_PATH', '')
     path = Path(configured)
@@ -18,6 +18,9 @@ def read_photos(owner, name, values):
         raise HTTPException(503, '相册暂不可用，请稍后重试。')
     store = PhotoWorkflowStore(path, initialize=False)
     try:
+        if name == 'photo.album.count':
+            total = store.album_count(owner)
+            return dict(total=total, spoken_text=f'相册里一共有{total}张照片。')
         if name == 'photo.album.list':
             page = store.album_page(owner, **values)
             return dict(photos=[dict(photo, date=photo['date'].model_dump(mode='json'))
