@@ -4,9 +4,10 @@ import { useEffect, useRef, useState } from "react";
 import { photoApi } from "@/lib/photoApi";
 import { companionMediaApi } from "@/lib/companionMediaApi";
 import styles from "./chat.module.css";
+import PhotoOrganizationChoice from "./PhotoOrganizationChoice";
 
 export type UploadedMedia = { kind: "photo" | "video"; id: string; name: string };
-type Item = { file: File; operation: string; done: boolean; error: string };
+type Item = { file: File; operation: string; done: boolean; error: string; photoId?: string };
 export default function MediaUpload({files,disabled,onUploaded,onClose,onBusyChange}:{files:File[];disabled:boolean;onUploaded:(media:UploadedMedia)=>void;onClose:()=>void;onBusyChange?:(busy:boolean)=>void}) {
   const [items,setItems]=useState<Item[]>(()=>files.map(file=>({file,operation:crypto.randomUUID(),done:false,error:""})));
   const [previews,setPreviews]=useState<Record<string,string>>({});
@@ -44,7 +45,7 @@ export default function MediaUpload({files,disabled,onUploaded,onClose,onBusyCha
         if(item.file.name.length>255)throw new Error("文件名太长，请缩短后重新选择。");
         const result=video ? await companionMediaApi.upload(item.operation,item.file) : await photoApi.upload(item.operation,item.file);
         if(!alive.current)break;
-        setItems(old=>old.map((row,i)=>i===index?{...row,done:true,error:""}:row));
+        setItems(old=>old.map((row,i)=>i===index?{...row,done:true,error:"",photoId:!video && "photo_id" in result ? result.photo_id : undefined}:row));
         callback.current({kind:video?"video":"photo",id:"video_id" in result?result.video_id:result.photo_id,name:item.file.name});
       }catch(error){if(alive.current)setItems(old=>old.map((row,i)=>i===index?{...row,error:error instanceof Error?error.message:"上传未完成，请重试。"}:row));}
     }
@@ -55,6 +56,7 @@ export default function MediaUpload({files,disabled,onUploaded,onClose,onBusyCha
     <ul>{items.map((item,i)=><li key={item.operation} className={styles.uploadItem}>
       {previews[item.file.name] && (item.file.type.startsWith("video/") ? <video className={styles.uploadPreview} src={previews[item.file.name]} muted playsInline preload="metadata" aria-label={`${item.file.name} 缩略图`} /> : <picture><source srcSet={previews[item.file.name]} /><img className={styles.uploadPreview} src={objectPreviews[item.file.name] || previews[item.file.name]} alt={`${item.file.name} 缩略图`} /></picture>)}
       <p>{item.file.name}：{item.done?"已上传":"待上传"}</p>{item.error&&<p role="alert">{item.error}</p>}
+      {item.photoId && <PhotoOrganizationChoice photoId={item.photoId} name={item.file.name} disabled={busy || disabled}/>}
     </li>)}</ul>
     <button type="button" disabled={busy||disabled||items.every(item=>item.done)} onClick={()=>void upload()}>{busy?"正在上传…":items.some(item=>item.error)?"重试未完成的上传":"确认上传"}</button>
     <button type="button" disabled={busy} onClick={onClose}>{items.every(item=>item.done)?"完成":"关闭上传"}</button>
