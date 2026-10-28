@@ -1,0 +1,29 @@
+{
+  "schema": "addams-inference-preflight.v1",
+  "video_path": "/Users/owen/Downloads/\u767d\u6a21/\u52a8\u4f5c\u767d\u6a21_28/\u767d\u819c-\u4e9a\u5f53\u65af\u4e00\u5bb6-CDL\u674e\u7d2b\u5fae-09\u6539.mp4",
+  "video_sha256": "3b0d8f32549c80ef04e988c1bfe1393582fd6349047b306ce6c2df7bdae63c96",
+  "stream": {
+    "width": 3840,
+    "height": 2080,
+    "r_frame_rate": "25/1",
+    "nb_frames": "217"
+  },
+  "python_packages": {
+    "cv2": false,
+    "mediapipe": false,
+    "rtmlib": false,
+    "onnxruntime": true
+  },
+  "ready": false,
+  "required_for_current_dual_model_plan": [
+    "cv2",
+    "rtmlib",
+    "onnxruntime"
+  ],
+  "status": "blocked_missing_inference_dependencies",
+  "limits": [
+    "No pose inference was run",
+    "No model weights were downloaded",
+    "No 3D or rig result exists"
+  ]
+}
