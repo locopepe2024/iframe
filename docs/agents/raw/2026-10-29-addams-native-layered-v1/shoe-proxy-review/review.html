@@ -1,0 +1,15 @@
+<!doctype html><meta charset="utf-8"><title>Addams 鞋底代理点复核</title>
+<style>body{margin:0;background:#17191e;color:#eee;font:16px system-ui}main{max-width:1280px;margin:20px auto;padding:0 16px}canvas{width:100%;max-height:72vh;object-fit:contain;border:1px solid #555;touch-action:none}.bar{display:flex;flex-wrap:wrap;gap:8px;margin:10px 0}button,select{font:inherit;padding:8px;background:#272b33;color:#eee;border:1px solid #777}.selected{outline:3px solid #5fe1bb}.hint{color:#ffd38b}.points{line-height:1.5}</style>
+<main><h1>鞋底代理点：第49、52、53帧</h1><p class="hint">只标可见鞋面/鞋底代理点，不修改膝踝骨关节。每只脚可标鞋跟、前掌、脚尖；看不清可留空。</p>
+<div class="bar"><label>帧 <select id="frame"><option value="49">49 · 1.92s · 右脚支撑</option><option value="52">52 · 2.04s · 右脚支撑</option><option value="53">53 · 2.08s · 右脚支撑</option></select></label><span id="buttons"></span><button id="clear">清除当前点</button><button id="download">下载 JSON</button></div>
+<canvas id="canvas"></canvas><div class="points" id="points"></div>
+<script>
+const frames=[49,52,53], labels=['left_heel','left_forefoot','left_toe','right_heel','right_forefoot','right_toe'];
+const imagePaths={49:'images/source-049.png',52:'images/source-052.png',53:'images/source-053.png'};
+const state=Object.fromEntries(frames.map(f=>[f,{source_frame:f,contact:'right',points:Object.fromEntries(labels.map(x=>[x,null]))}]));
+let selected='right_heel', image=new Image(), frame=49; const canvas=document.getElementById('canvas'),ctx=canvas.getContext('2d');
+function draw(){image.onload=()=>{canvas.width=image.naturalWidth;canvas.height=image.naturalHeight;ctx.drawImage(image,0,0);for(const [name,p] of Object.entries(state[frame].points)){if(!p)continue;ctx.fillStyle=name.startsWith('left')?'#4fc3ff':'#ffbb4f';ctx.beginPath();ctx.arc(p.x*canvas.width,p.y*canvas.height,18,0,Math.PI*2);ctx.fill();ctx.fillStyle='#111';ctx.font='24px system-ui';ctx.fillText(name.replace('_',' '),p.x*canvas.width+20,p.y*canvas.height)}};image.src=imagePaths[frame];renderButtons()}
+function renderButtons(){document.getElementById('buttons').innerHTML=labels.map(x=>`<button class="${x===selected?'selected':''}" data-label="${x}">${x}</button>`).join('');document.querySelectorAll('[data-label]').forEach(b=>b.onclick=()=>{selected=b.dataset.label;renderButtons()});const p=state[frame].points;document.getElementById('points').textContent=labels.map(x=>`${x}: ${p[x]?Math.round(p[x].x*3840)+','+Math.round(p[x].y*2080):'空'}`).join(' · ')}
+canvas.onclick=e=>{const r=canvas.getBoundingClientRect();state[frame].points[selected]={x:(e.clientX-r.left)/r.width,y:(e.clientY-r.top)/r.height};draw()};
+document.getElementById('frame').onchange=e=>{frame=+e.target.value;draw()};document.getElementById('clear').onclick=()=>{state[frame].points=Object.fromEntries(labels.map(x=>[x,null]));draw()};document.getElementById('download').onclick=()=>{const blob=new Blob([JSON.stringify({schema:'addams-shoe-proxy-review.v1',image_size:[3840,2080],frames:Object.values(state)},null,2)],{type:'application/json'});const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='addams-shoe-proxy-review.json';a.click()};draw();
+</script></main>
