@@ -425,3 +425,67 @@ it("keeps the original request when task focus cannot be synchronized",async()=>
   const put=focusFetch.mock.calls.find(([,options])=>options.method === "PUT");
   expect(JSON.parse(put![1].body).focus).toEqual({kind:"chat",object_id:"",phase:"viewing",draft:""});
 });
+
+
+it("uses the same agent and OpenTalking reply path from the top voice entry",async()=>{
+ const {act}=await import("@testing-library/react");
+ let recognition!:{onresult:((event:unknown)=>void)|null;stop:ReturnType<typeof vi.fn>};
+ class Recognition {
+   onresult=null;onerror=null;onend=null;lang="";continuous=false;interimResults=false;
+   stop=vi.fn();abort=vi.fn();start=vi.fn();constructor(){recognition=this;}
+ }
+ Object.defineProperty(window,"SpeechRecognition",{configurable:true,value:Recognition});
+ try {
+   api.chat.mockResolvedValueOnce({turn_id:"voice-1",status:"completed",result:{kind:"text",text:"我在这里"}})
+     .mockResolvedValueOnce({turn_id:"voice-2",status:"completed",result:{kind:"text",text:"一起看看相册"}});
+   localStorage.setItem("iframe-companion-agent-response-mode-v1","text");
+   await start();allowText();
+   fireEvent.click(screen.getByRole("button",{name:"打开语音聊天"}));
+   expect(await screen.findByRole("button",{name:"同意并开始聊天"})).toBeInTheDocument();
+   fireEvent.click(screen.getByRole("button",{name:"同意并开始聊天"}));
+   expect(screen.getByRole("button",{name:"停止"})).toBeInTheDocument();
+   act(()=>recognition.onresult?.({results:[[{transcript:"小安你好"}]]}));
+   await waitFor(()=>expect(api.chat).toHaveBeenCalledTimes(1));
+   await waitFor(()=>expect(playback.mock.calls.some(([props])=>props.reply?.text === "我在这里")).toBe(true));
+   act(()=>recognition.onresult?.({results:[[{transcript:"小安你好"}],[{transcript:"看看相册"}]]}));
+   await waitFor(()=>expect(api.chat).toHaveBeenCalledTimes(2));
+   await waitFor(()=>expect(playback.mock.calls.some(([props])=>props.reply?.text === "一起看看相册")).toBe(true));
+   expect(api.chat.mock.calls.map(([id])=>id)).toEqual(["s","s"]);
+   expect(localStorage.getItem("iframe-companion-agent-response-mode-v1")).toBe("text");
+   fireEvent.click(screen.getByRole("button",{name:"停止语音聊天"}));
+   expect(recognition.stop).toHaveBeenCalledOnce();
+ } finally {delete (window as Window & {SpeechRecognition?:unknown}).SpeechRecognition;}
+});
+
+
+it("cancels the top voice prompt without enabling audio replies",async()=>{
+  await start();allowText();
+  fireEvent.click(screen.getByRole("button",{name:"打开语音聊天"}));
+  fireEvent.click(await screen.findByRole("button",{name:"先用文字"}));
+  playback.mockClear();
+  api.chat.mockResolvedValue({turn_id:"text-only",status:"completed",result:{kind:"text",text:"文字回复"}});
+  fireEvent.click(screen.getByRole("button",{name:"发送"}));
+  await screen.findByText("文字回复");
+  expect(playback).not.toHaveBeenCalled();
+});
+
+it("cancels the shared microphone when starting a new session",async()=>{
+ const {act}=await import("@testing-library/react");
+ let recognition!:{onresult:((event:unknown)=>void)|null;abort:ReturnType<typeof vi.fn>};
+ class Recognition {
+   onresult=null;onerror=null;onend=null;lang="";continuous=false;interimResults=false;
+   stop=vi.fn();abort=vi.fn();start=vi.fn();constructor(){recognition=this;}
+ }
+ Object.defineProperty(window,"SpeechRecognition",{configurable:true,value:Recognition});
+ try {
+   await start();allowText();
+   fireEvent.click(screen.getByRole("button",{name:"打开语音聊天"}));
+   fireEvent.click(await screen.findByRole("button",{name:"同意并开始聊天"}));
+   const late=recognition.onresult;
+   fireEvent.click(screen.getByRole("button",{name:"更多"}));
+   fireEvent.click(screen.getByRole("button",{name:"新建会话"}));
+   await waitFor(()=>expect(recognition.abort).toHaveBeenCalled());
+   act(()=>late?.({results:[[{transcript:"旧会话的录音"}]]}));
+   expect(api.chat).not.toHaveBeenCalled();
+ } finally {delete (window as Window & {SpeechRecognition?:unknown}).SpeechRecognition;}
+});

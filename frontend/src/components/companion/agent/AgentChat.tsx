@@ -1,5 +1,5 @@
 "use client";
-import { Fragment, useEffect, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useRef, useState } from "react";
 import { companionApi, type MemoryPage, type Preview, type Turn, type UserMessage } from "@/lib/companionApi";
 import styles from "../photos/photos.module.css";
 import chatStyles from "./chat.module.css";
@@ -13,7 +13,7 @@ import AttachmentDraft from "./AttachmentDraft";
 import AlbumPicker from "./AlbumPicker";
 import MediaUpload, { type UploadedMedia } from "./MediaUpload";
 import VideoConversationCard from "./VideoConversationCard";
-import CompanionComposer, { type ComposerMode } from "./CompanionComposer";
+import CompanionComposer, { type ComposerMode, type VoiceControl } from "./CompanionComposer";
 import GenerationGuide, { createGenerationDraft, isUnderspecifiedMediaRequest, type GenerationDraft, type MediaMode } from "./GenerationGuide";
 import CompanionFeatureSheet, { type CompanionFeature } from "./CompanionFeatureSheet";
 import DiaryCalendar from "./DiaryCalendar";
@@ -25,7 +25,7 @@ import OpenTalkingReply, { type SpokenReply } from "./OpenTalkingReply";
 import UploadGuideCard from "./UploadGuideCard";
 import { isOpenAlbumCommand } from "./localCommands";
 import { BookOpen, Images, UserRound, Compass, Mic } from "lucide-react";
-import DigitalCompanionPanel from "./DigitalCompanionPanel";
+import { companionPlayback } from "@/lib/companionPlaybackQueue";
 import { detectCompanionRuntimeCapability, type CompanionRuntimeCapability } from "./companionRuntimeCapability";
 import { coordinateOnDevice } from "./edgeTaskCoordinator";
 
@@ -45,7 +45,10 @@ export default function AgentChat() {
   const sendFocus = useRef<{operation:string;focus:InteractionFocus;ready:boolean} | null>(null);
   const [session, setSession] = useState("");
   const [menu, setMenu] = useState(false);
-  const [openTalking, setOpenTalking] = useState(false);
+  const [voiceControl,setVoiceControl] = useState<VoiceControl>();
+  const [voiceActive,setVoiceActive] = useState(false);
+  const [voiceChat,setVoiceChat] = useState(false);
+  const captureChanged = useCallback((active:boolean)=>{setVoiceActive(active);if(!active)setVoiceChat(false);},[]);
   const [messages, setMessages] = useState<UserMessage[]>([]), [after, setAfter] = useState<number | null>(null);
   const [allowed, setAllowed] = useState(false);
   const [voiceConnectionEpoch, setVoiceConnectionEpoch] = useState(0);
@@ -53,6 +56,7 @@ export default function AgentChat() {
   const [voiceOutputStatus, setVoiceOutputStatus] = useState("");
   const [spokenReply, setSpokenReply] = useState<SpokenReply | null>(null);
   const [responseMode, setResponseMode] = useState<ResponseMode>("text");
+  const audioReply = responseMode === "audio" || voiceChat;
   const [identity, setIdentity] = useState<CompanionIdentity>(defaultCompanionIdentity);
   const [mode, setMode] = useState<ComposerMode>("chat");
   const [drafts, setDrafts] = useState<Record<ComposerMode, string>>({ chat: "", image: "", video: "" });
@@ -67,7 +71,7 @@ export default function AgentChat() {
   const [runtimeCapability, setRuntimeCapability] = useState<CompanionRuntimeCapability>({ status: "checking", reason: "正在检查设备能力…", memoryGb: null });
   const [edgeCoordinatorEnabled, setEdgeCoordinatorEnabled] = useState(false);
   const locked = useRef(false), alive = useRef(true);
-  const voiceQueue = useRef<string[]>([]);
+  const voiceQueue = useRef<{text:string;focus:InteractionFocus}[]>([]);
   const [voiceRevision, setVoiceRevision] = useState(0);
   const sessionOperation = useRef("");
   const sendOperation = useRef<{ operation_id: string; text: string; allow_external_text: true; selected_photo_id?: string } | null>(null);
@@ -117,7 +121,7 @@ export default function AgentChat() {
     if (!allowed || locked.current || hasRetry || uploading || preview?.status === "pending_confirmation" || !voiceQueue.current.length) return;
     if ((preview ?? (turn?.result?.kind === "confirmation" ? turn.result : null))?.status === "pending_confirmation") return;
     const next = voiceQueue.current.shift()!;
-    void run(() => send(false, next));
+    void run(() => send(false, next.text, undefined, next.focus));
     // Use the current render's session and settings after each completed operation.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [voiceRevision, busy, hasRetry, uploading, preview, turn, allowed]);
@@ -151,16 +155,18 @@ export default function AgentChat() {
   }, []);
   async function newSession() {
     voiceQueue.current = [];
-    setSpokenReply(null);
+    setVoiceChat(false);setVoiceControl(old=>({id:(old?.id ?? 0)+1,action:"cancel"}));
+    companionPlayback.cancel();setSpokenReply(null);
     if (!sessionOperation.current) sessionOperation.current = crypto.randomUUID();
     const result = await companionApi.session(sessionOperation.current);
     localStorage.setItem(sessionKey, result.session_id); localStorage.removeItem(turnKey);
     sessionOperation.current = ""; sendOperation.current = null; setHasRetry(false);
     setMenu(false); setAlbumOpen(false); setUploadFiles([]); setAttached([]); setPendingMedia({chat:[],image:[],video:[]}); setMediaAcknowledged(false); setSession(result.session_id); setMessages([]); setAfter(null); setTurn(null); setPreview(null); setDraft(null); setDrafts({ chat: "", image: "", video: "" }); setGuides({ image: null, video: null }); setMode("chat"); setNotice("已开始新的聊天。");
   }
-  async function send(retry = false, voiceText?: string, selectedPhotoId?: string) {
+  async function send(retry = false, voiceText?: string, selectedPhotoId?: string, capturedFocus?:InteractionFocus) {
     const requestedText = voiceText ?? text;
-    const editing = focus.current().kind !== "chat";
+    const turnFocus = capturedFocus ?? focus.current();
+    const editing = turnFocus.kind !== "chat";
     const requestedDay = editing ? undefined : diaryDay(requestedText, "", today());
     const submittedText = requestedDay ? diaryPrompt(requestedDay) : requestedText;
     if (!editing && !retry && !selectedPhotoId && edgeCoordinatorEnabled && runtimeCapability.status === "edge_ready") {
@@ -183,7 +189,7 @@ export default function AgentChat() {
     }
     if (!sendOperation.current || !retry) sendOperation.current = { operation_id: crypto.randomUUID(), text: submittedText, allow_external_text: true, ...(selectedPhotoId ? {selected_photo_id: selectedPhotoId} : {}) };
     if (!sendFocus.current || sendFocus.current.operation !== sendOperation.current.operation_id)
-      sendFocus.current = {operation:sendOperation.current.operation_id,focus:{...focus.current()},ready:false};
+      sendFocus.current = {operation:sendOperation.current.operation_id,focus:{...turnFocus},ready:false};
     if (!retry) setLastSubmittedText(submittedText);
     setPreview(null);
     if (!session && !sessionOperation.current) sessionOperation.current = crypto.randomUUID();
@@ -202,7 +208,7 @@ export default function AgentChat() {
     }
     localStorage.setItem(turnKey, result.turn_id);
     if (alive.current) {
-      if (responseMode === "audio") {
+      if (audioReply) {
         const replyText = result.result?.kind === "text" ? result.result.text : (result.result?.kind === "photo_task" || result.result?.kind === "diary_read" || result.result?.kind === "album_guide" || result.result?.kind === "photo_action") ? result.result.spoken_text : undefined;
         if (replyText) setSpokenReply({ id: result.turn_id, text: replyText });
       }
@@ -307,7 +313,12 @@ export default function AgentChat() {
     setDraft(null); setPreview({ status: "preview_closed", preview_token: activePreview.preview_token }); setNotice("已关闭预览，未执行新的保存或删除。");
   }
   return <InteractionFocusContext.Provider value={focus}><main className={`${styles.shell} ${chatStyles.shell}`} data-agent-build="upload-preview-20261024-v3">
-    <header className={chatStyles.header}><div className={chatStyles.assistantIdentity}><h1><span aria-hidden="true">{identity.avatar}</span> {identity.name}</h1><span role="status" className={chatStyles.assistantStatus}>{voiceOutputStatus || (busy ? "正在处理…" : captureStatus || "在线")}</span></div><div className={chatStyles.headerActions}><button type="button" className={chatStyles.headerIcon} aria-label="打开语音聊天" onClick={() => setOpenTalking(true)}><Mic size={22} aria-hidden="true" /></button><button type="button" aria-expanded={menu} onClick={() => setMenu(!menu)}>更多</button></div></header>
+    <header className={chatStyles.header}><div className={chatStyles.assistantIdentity}><h1><span aria-hidden="true">{identity.avatar}</span> {identity.name}</h1><span role="status" className={chatStyles.assistantStatus}>{voiceOutputStatus || (busy ? "正在处理…" : captureStatus || "在线")}</span></div><div className={chatStyles.headerActions}><button type="button" className={chatStyles.headerIcon} aria-label={voiceActive ? "停止语音聊天" : "打开语音聊天"} aria-pressed={voiceActive} disabled={(!voiceActive && (inputDisabled || pending))} onClick={() => {
+      if (voiceActive) {setVoiceChat(false);companionPlayback.cancel();setVoiceControl(old=>({id:(old?.id ?? 0)+1,action:"stop"}));}
+      else {
+        if(!allowed){setMenu(true);setNotice("请先在聊天设置中允许发送文字，再开始语音聊天。");return;}
+        setMode("chat");setSpokenReply(null);setVoiceChat(true);setVoiceControl(old=>({id:(old?.id ?? 0)+1,action:"start"}));}
+    }}><Mic size={22} aria-hidden="true" /></button><button type="button" aria-expanded={menu} onClick={() => setMenu(!menu)}>更多</button></div></header>
     {menu && <aside className={`${styles.panel} ${chatStyles.settingsPanel}`} aria-label="聊天管理">
       <div className={chatStyles.settingsHeader}><h2>设置</h2><button type="button" aria-label="关闭设置" onClick={() => setMenu(false)}>×</button></div>
       <a href={`${prefix}/companion/photos`}>生活相册</a>
@@ -320,7 +331,7 @@ export default function AgentChat() {
         }} />允许发送文字，开始聊天</label>
         <fieldset className={styles.choice}><legend>小安回复方式</legend>
           <label className={styles.check}><input type="radio" name="companion-response-mode" value="audio" checked={responseMode === "audio"} onChange={() => { setResponseMode("audio"); localStorage.setItem(responseModeKey, "audio"); }} />方案 1：语音回复（可能计费）</label>
-          <label className={styles.check}><input type="radio" name="companion-response-mode" value="text" checked={responseMode === "text"} onChange={() => { setResponseMode("text"); localStorage.setItem(responseModeKey, "text"); }} />方案 2：只回复文字</label>
+          <label className={styles.check}><input type="radio" name="companion-response-mode" value="text" checked={responseMode === "text"} onChange={() => { setVoiceChat(false);setResponseMode("text"); localStorage.setItem(responseModeKey, "text"); }} />方案 2：只回复文字</label>
         </fieldset>
         <p className={styles.note}>语音回复由 OpenTalking 播放，并保留文字记录；播放受阻时可点击“播放声音”。</p>
         <label className={styles.check}><input type="checkbox" checked={edgeCoordinatorEnabled} disabled={runtimeCapability.status !== "edge_ready"} onChange={event => { const value = event.target.checked; setEdgeCoordinatorEnabled(value); localStorage.setItem("iframe-companion-edge-coordinator-v1", String(value)); }} />启用端侧任务协调器（测试）</label>
@@ -443,19 +454,18 @@ export default function AgentChat() {
       {page?.next_cursor && <button disabled={busy || pending} onClick={() => void run(() => memories(appliedQuery, page.next_cursor!))}>更多个人记忆</button>}
     </section>
     </details>}
-    {responseMode === "audio" && <OpenTalkingReply key={session} reply={spokenReply} voice={identity.voice} connectionEpoch={voiceConnectionEpoch} onStatus={setVoiceOutputStatus} />}
-    {openTalking && <DigitalCompanionPanel identity={identity} onClose={() => setOpenTalking(false)} />}
+    {audioReply && <OpenTalkingReply key={session} reply={spokenReply} voice={identity.voice} connectionEpoch={voiceConnectionEpoch} onStatus={setVoiceOutputStatus} />}
     <input ref={fileRef} type="file" hidden accept="image/jpeg,image/png,image/webp,video/mp4,video/quicktime,video/webm,.mov" multiple aria-label="选择要上传的照片或视频" onChange={event => {
       const files=Array.from(event.target.files ?? []);event.target.value="";
       if(files.length>20){setNotice("每次最多选择 20 个文件，请重新选择。");return;}
       if(files.length){setUploadFiles(files);setNotice("");}
     }} />
-    <CompanionComposer onCaptureStatus={setCaptureStatus} onVoiceStart={() => setVoiceConnectionEpoch(value => value + 1)} mode={mode} value={text} disabled={inputDisabled || pending} busy={busy} allowed={allowed} inputRef={inputRef}
+    <CompanionComposer voiceControl={voiceControl} onCaptureActive={captureChanged} onVoiceCancel={()=>setVoiceChat(false)} onCaptureStatus={setCaptureStatus} onVoiceStart={() => setVoiceConnectionEpoch(value => value + 1)} mode={mode} value={text} disabled={inputDisabled || pending} busy={busy} allowed={allowed} inputRef={inputRef}
       attachments={<AttachmentDraft items={pendingMedia[mode]} disabled={inputDisabled || pending} onRemove={id => {setPendingMedia(old => ({...old,[mode]:old[mode].filter(item=>item.id!==id)}));setMediaAcknowledged(false);}} />}
       hasAttachments={pendingMedia[mode].length > 0} mediaAcknowledged={mediaAcknowledged} onMediaAcknowledged={setMediaAcknowledged}
       onMode={next => {setMode(next);setAlbumOpen(false);setMediaAcknowledged(false);}} onChange={updateDraft} onSend={submit} onVoiceFinal={voiceText => {
         if (!allowed) { setMenu(true); setNotice("请先在“更多 → 聊天设置”中允许发送文字。"); return; }
-        voiceQueue.current.push(voiceText);
+        voiceQueue.current.push({text:voiceText,focus:{...focus.current()}});
         setVoiceRevision(value => value + 1);
       }} onAllow={setAllowed}
       onUpload={() => { if (uploadFiles.length) setNotice("请先完成或关闭当前上传。"); else fileRef.current?.click(); }}

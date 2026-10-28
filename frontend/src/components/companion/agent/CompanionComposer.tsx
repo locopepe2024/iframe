@@ -9,6 +9,7 @@ import styles from "./chat.module.css";
 import FeatureDialog from "./FeatureDialog";
 import { companionPlayback } from "@/lib/companionPlaybackQueue";
 
+export interface VoiceControl {id:number;action:"start"|"stop"|"cancel"}
 export type ComposerMode = "chat" | "image" | "video";
 const modes = [
   { value: "chat", label: "聊天", icon: MessageCircle },
@@ -16,7 +17,8 @@ const modes = [
   { value: "video", label: "视频", icon: Video },
 ] as const;
 
-export default function CompanionComposer({ mode, value, disabled, busy, allowed, inputRef, onMode, onChange, onSend, onVoiceFinal, onUpload, onAllow, onRequestConsent, retry, attachments, hasAttachments = false, mediaAcknowledged = false, onMediaAcknowledged, onCaptureStatus, onVoiceStart }: {
+export default function CompanionComposer({ mode, value, disabled, busy, allowed, inputRef, onMode, onChange, onSend, onVoiceFinal, onUpload, onAllow, onRequestConsent, retry, attachments, hasAttachments = false, mediaAcknowledged = false, onMediaAcknowledged, onCaptureStatus, onVoiceStart, voiceControl, onCaptureActive, onVoiceCancel }: {
+  onVoiceCancel?: ()=>void; voiceControl?: VoiceControl; onCaptureActive?: (active:boolean)=>void;
   onCaptureStatus?: (status: string) => void; onVoiceStart?: () => void;
   mode: ComposerMode; value: string; disabled: boolean; busy: boolean; allowed: boolean;
   inputRef: RefObject<HTMLTextAreaElement>;
@@ -41,6 +43,8 @@ export default function CompanionComposer({ mode, value, disabled, busy, allowed
   const localCapture=mode === "chat" && engine === "local";
   const voice=localCapture?capture:browserVoice;
   const recording = voice.listening || voice.finishing;
+  const handledControl = useRef(0);
+  useEffect(()=>{onCaptureActive?.(recording);},[recording,onCaptureActive]);
   const [playing, setPlaying] = useState(companionPlayback.isPlaying());
   useEffect(() => companionPlayback.subscribe(() => setPlaying(companionPlayback.isPlaying())), []);
   const status = voice.finishing ? "正在整理语音…" : voice.listening ? "正在听…" : voice.notice;
@@ -51,6 +55,16 @@ export default function CompanionComposer({ mode, value, disabled, busy, allowed
     else companionPlayback.cancel();
     voice.toggleListening();
   }
+
+  useEffect(()=>{
+    if (!voiceControl || handledControl.current === voiceControl.id) return;
+    handledControl.current = voiceControl.id;
+    if (voiceControl.action === "cancel") { capture.stopAll(); browserVoice.stopAll(); setVoicePrompt(false); }
+    else if (voiceControl.action === "stop") { if (voice.listening) voice.toggleListening(); setVoicePrompt(false); }
+    else if (!recording) { if (voiceConsent) toggleVoice(); else setVoicePrompt(true); }
+    // Commands run once with this render's mode, consent and capture instance.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  },[voiceControl]);
 
   const localCommand = isOpenAlbumCommand(value);
   const selected = modes.find(item => item.value === mode)!;
@@ -102,11 +116,11 @@ export default function CompanionComposer({ mode, value, disabled, busy, allowed
       </div>
     </div>
     {localCapture && capture.failed && <div><button type="button" onClick={capture.retry}>重试语音识别</button><button type="button" onClick={capture.stopAll}>结束并清空待识别语音</button></div>}
-    {voicePrompt && <FeatureDialog title="语音输入说明" className={styles.voiceConsentDialog} onClose={() => setVoicePrompt(false)}>
+    {voicePrompt && <FeatureDialog title="语音输入说明" className={styles.voiceConsentDialog} onClose={() => {setVoicePrompt(false);onVoiceCancel?.();}}>
       {mode === "chat" && process.env.NEXT_PUBLIC_API_URL === "/companion-demo" && <label>识别方式<select aria-label="识别方式" value={engine} onChange={event=>setEngine(event.target.value as "local"|"browser")}><option value="local">持续收音（测试）</option><option value="browser">浏览器识别</option></select></label>}
       <p>{localCapture ? "持续采集麦克风，停顿后分段交给本站 SenseVoice 测试服务识别并加入聊天。播放回复时暂停识别，点击停止播报即可继续说；不会保存录音文件。" : mode === "chat" ? "语音会交给浏览器识别，并连续加入聊天。您可以随时点停止。" : "语音会交给浏览器的语音服务识别，文字先放入输入框，您检查后再发送。"}</p>
       <div className={styles.voiceConsentActions}><button type="button" disabled={disabled && !busy} onClick={() => { setVoiceConsent(true); setVoicePrompt(false); toggleVoice(); }}>{mode === "chat" ? "同意并开始聊天" : "同意并开始听写"}</button>
-      <button type="button" onClick={() => setVoicePrompt(false)}>先用文字</button></div>
+      <button type="button" onClick={() => {setVoicePrompt(false);onVoiceCancel?.();}}>先用文字</button></div>
     </FeatureDialog>}
     {retry && <button type="button" disabled={busy} onClick={retry}>重试原请求</button>}
   </footer>;
