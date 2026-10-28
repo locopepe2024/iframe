@@ -7,6 +7,7 @@ import { AlertTriangle, Download, Film, Image as ImageIcon, Loader2, Play, Chevr
 import { api } from "@/lib/api";
 import type { Series, Character, Scene, Prop, Project, ExtraRosterEntry } from "@/store/projectStore";
 import AssetCard from "@/components/common/AssetCard";
+import CharacterWorkbench from "@/components/modules/CharacterWorkbench";
 import { useTranslations } from "next-intl";
 import SeriesSidebar, { type SidebarItem } from "./SeriesSidebar";
 import { AssemblyPlanPhase } from "@/components/modules/VideoAssembly";
@@ -289,7 +290,7 @@ export default function SeriesDetailPage({ seriesId }: SeriesDetailPageProps) {
   );
 }
 
-function ExtraRosterPanel({ series, seriesId, onSaved }: { series: Series; seriesId: string; onSaved: () => Promise<void> }) {
+export function ExtraRosterPanel({ series, seriesId, onSaved }: { series: Series; seriesId: string; onSaved: () => Promise<void> }) {
   const [entries, setEntries] = useState<ExtraRosterEntry[]>(series.extra_roster ?? []);
   const [saving, setSaving] = useState(false);
   const [brief, setBrief] = useState("");
@@ -297,11 +298,28 @@ function ExtraRosterPanel({ series, seriesId, onSaved }: { series: Series; serie
   const [generating, setGenerating] = useState(false);
   const [selectedProposals, setSelectedProposals] = useState<string[]>([]);
   const [creatingVisualAsset, setCreatingVisualAsset] = useState<string | null>(null);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [editingCharacterId, setEditingCharacterId] = useState<string | null>(null);
+  const [error, setError] = useState("");
   useEffect(() => setEntries(series.extra_roster ?? []), [series.extra_roster]);
-  const add = (kind: ExtraRosterEntry["kind"]) => setEntries(items => [...items, {
-    extra_id: "extra-" + Date.now(), label: kind === "fixed_extra" ? "新固定群演" : "新人群模板", kind,
-  }]);
-  const save = async () => { setSaving(true); try { await api.updateSeries(seriesId, { extra_roster: entries }); await onSaved(); } finally { setSaving(false); } };
+  const selected = entries.find(item => item.extra_id === selectedId) ?? entries[0];
+  const linkedCharacter = series.characters?.find(item => item.id === editingCharacterId);
+  const add = (kind: ExtraRosterEntry["kind"]) => {
+    const extra_id = "extra-" + crypto.randomUUID();
+    setEntries(items => [...items, { extra_id, label: kind === "fixed_extra" ? "新固定群演" : "新人群模板", kind }]);
+    setSelectedId(extra_id);
+  };
+  const save = async () => { setSaving(true); setError(""); try { await api.updateSeries(seriesId, { extra_roster: entries }); await onSaved(); } catch (cause) { setError(extractErrorDetail(cause, "保存群演库失败")); } finally { setSaving(false); } };
+  const bindCharacter = async (entry: ExtraRosterEntry, characterId: string) => {
+    const next = entries.map(item => item.extra_id === entry.extra_id ? { ...item, visual_asset_id: characterId || null } : item);
+    setSaving(true); setError("");
+    try {
+      await api.updateSeries(seriesId, { extra_roster: next });
+      setEntries(next);
+      await onSaved();
+    } catch (cause) { setError(extractErrorDetail(cause, "关联角色失败")); }
+    finally { setSaving(false); }
+  };
   const generate = async () => {
     if (!brief.trim()) return;
     setGenerating(true);
@@ -327,10 +345,10 @@ function ExtraRosterPanel({ series, seriesId, onSaved }: { series: Series; serie
         description: [entry.height, entry.body_build, entry.wardrobe, entry.palette, ...(entry.props ?? [])]
           .filter(Boolean).join("；"),
       });
-      setEntries(items => items.map(item => item.extra_id === entry.extra_id
-        ? { ...item, visual_asset_id: character.id }
-        : item));
-    } finally { setCreatingVisualAsset(null); }
+      await bindCharacter(entry, character.id);
+      setEditingCharacterId(character.id);
+    } catch (cause) { setError(extractErrorDetail(cause, "创建角色失败")); }
+    finally { setCreatingVisualAsset(null); }
   };
   return <div className="flex-1 overflow-auto p-8">
     <h2 className="text-xl font-display font-bold text-foreground">群演资产库</h2>
@@ -347,30 +365,67 @@ function ExtraRosterPanel({ series, seriesId, onSaved }: { series: Series; serie
         <button type="button" disabled={!selectedProposals.length} onClick={adopt} className="rounded border border-primary px-3 py-2 text-xs text-primary">采用选中候选</button>
       </div>}
     </div>
-    <div className="mt-5 max-w-3xl space-y-3">
-      {entries.map((entry, index) => <div key={entry.extra_id} className="grid grid-cols-[1fr_1fr_2fr_auto] gap-2 rounded border border-glass-border p-3">
+    {error && <p role="alert" className="mt-3 text-sm text-danger">{error}</p>}
+    <div className="mt-5 flex max-w-5xl flex-col gap-4 md:flex-row">
+      <div className="w-full shrink-0 space-y-1 md:w-56" aria-label="群演条目">
+        {entries.map(entry => <button key={entry.extra_id} type="button" onClick={() => setSelectedId(entry.extra_id)}
+          className={`block w-full rounded border px-3 py-2 text-left text-sm ${selected?.extra_id === entry.extra_id ? "border-primary text-foreground" : "border-glass-border text-text-secondary"}`}>
+          <span className="block truncate">{entry.label}</span><span className="text-xs text-text-muted">{entry.kind === "fixed_extra" ? "固定群演" : "人群模板"}</span>
+        </button>)}
+      </div>
+      <div className="min-w-0 flex-1 space-y-3">
+      {selected && (() => { const entry = selected; const index = entries.findIndex(item => item.extra_id === entry.extra_id); return <div key={entry.extra_id} className="grid gap-2 rounded border border-glass-border p-3 sm:grid-cols-2">
+        {entry.kind === "fixed_extra" && series.characters?.find(character => character.id === entry.visual_asset_id) &&
+          <div className="max-w-48 sm:col-span-2"><AssetCard asset={series.characters.find(character => character.id === entry.visual_asset_id)!} type="characters" /></div>}
         <input aria-label="群演名称" value={entry.label} onChange={e => setEntries(items => items.map((item, i) => i === index ? { ...item, label: e.target.value } : item))} className="bg-input-bg border border-glass-border p-2 text-sm" />
         <select aria-label="群演类型" value={entry.kind} onChange={e => setEntries(items => items.map((item, i) => i === index ? { ...item, kind: e.target.value as ExtraRosterEntry["kind"] } : item))} className="bg-input-bg border border-glass-border p-2 text-sm">
           <option value="fixed_extra">固定群演</option><option value="extra_template">人群模板</option>
         </select>
-        <input aria-label="群演外观" value={entry.wardrobe ?? ""} placeholder="服装、体态、色彩与识别锚点" onChange={e => setEntries(items => items.map((item, i) => i === index ? { ...item, wardrobe: e.target.value } : item))} className="bg-input-bg border border-glass-border p-2 text-sm" />
-        <div className="flex flex-col items-end gap-2">
+        <input aria-label="群演外观" value={entry.wardrobe ?? ""} placeholder="服装、体态、色彩与识别锚点" onChange={e => setEntries(items => items.map((item, i) => i === index ? { ...item, wardrobe: e.target.value } : item))} className="bg-input-bg border border-glass-border p-2 text-sm sm:col-span-2" />
+        <div className="flex flex-wrap items-center gap-2 sm:col-span-2">
           {entry.kind === "fixed_extra" && (
-            <button type="button" disabled={Boolean(entry.visual_asset_id) || creatingVisualAsset === entry.extra_id}
+            <>
+            <select aria-label="关联角色资产" value={entry.visual_asset_id ?? ""} disabled={saving} onChange={e => void bindCharacter(entry, e.target.value)} className="min-w-0 flex-1 bg-input-bg border border-glass-border p-2 text-sm">
+              <option value="">未关联角色</option>
+              {(series.characters ?? []).map(character => <option key={character.id} value={character.id}>{character.name}</option>)}
+              {entry.visual_asset_id && !series.characters?.some(character => character.id === entry.visual_asset_id) && <option value={entry.visual_asset_id}>原角色已失效</option>}
+            </select>
+            {entry.visual_asset_id && series.characters?.some(character => character.id === entry.visual_asset_id) && <button type="button" onClick={() => setEditingCharacterId(entry.visual_asset_id!)} className="rounded border border-primary px-2 py-1 text-xs text-primary">编辑角色</button>}
+            <button type="button" disabled={Boolean(entry.visual_asset_id) || creatingVisualAsset === entry.extra_id || saving}
               onClick={() => void createVisualAsset(entry)}
               className="whitespace-nowrap rounded border border-primary px-2 py-1 text-[11px] text-primary">
-              {entry.visual_asset_id ? "已关联视觉资产" : creatingVisualAsset === entry.extra_id ? "创建中…" : "创建视觉角色资产"}
+              {creatingVisualAsset === entry.extra_id ? "创建中…" : "新建角色"}
             </button>
+            </>
           )}
-          <button type="button" className="text-danger" onClick={() => setEntries(items => items.filter((_, i) => i !== index))}>删除</button>
+          <button type="button" className="ml-auto text-danger" onClick={() => { setEntries(items => items.filter((_, i) => i !== index)); setSelectedId(null); }}>删除</button>
         </div>
-      </div>)}
+      </div>; })()}
       <div className="flex gap-2">
         <button type="button" onClick={() => add("fixed_extra")} className="rounded border border-glass-border px-3 py-2 text-xs">添加固定群演</button>
         <button type="button" onClick={() => add("extra_template")} className="rounded border border-glass-border px-3 py-2 text-xs">添加人群模板</button>
         <button type="button" disabled={saving} onClick={save} className="rounded bg-primary px-3 py-2 text-xs text-white">{saving ? "保存中…" : "保存群演库"}</button>
       </div>
+      </div>
     </div>
+    {linkedCharacter && <CharacterWorkbench asset={linkedCharacter} seriesId={seriesId} onClose={() => setEditingCharacterId(null)}
+      onUpdateDescription={async description => { await api.updateSeriesAssetAttributes(seriesId, linkedCharacter.id, "character", { description }); await onSaved(); }}
+      onUpdateAttributes={async attributes => { await api.updateSeriesAssetAttributes(seriesId, linkedCharacter.id, "character", attributes); await onSaved(); }}
+      onRename={async name => { await api.updateSeriesAssetAttributes(seriesId, linkedCharacter.id, "character", { name }); await onSaved(); }}
+      onGenerate={async (type, prompt, applyStyle, negativePrompt, batchSize, references = [], imageGenerationMode = "text", reviewFingerprint) => {
+        try {
+          const derived = type === "three_view" || type === "headshot";
+          const result = await api.generateSeriesCharacter(seriesId, { asset_id: linkedCharacter.id, asset_type: "character", style_preset: "realistic", generation_type: type, prompt, apply_style: applyStyle, negative_prompt: negativePrompt, batch_size: batchSize, ...(derived ? { reference: references[0] } : { references }), image_generation_mode: imageGenerationMode, preserve_prompt: true, expected_review_fingerprint: reviewFingerprint });
+          if (result._task_id) {
+            const poll = async () => {
+              const task = await api.getTaskStatus(result._task_id);
+              if (task.status === "completed" || task.status === "failed") { await onSaved(); return; }
+              window.setTimeout(() => void poll(), 2500);
+            };
+            void poll();
+          } else await onSaved();
+        } catch (cause) { setError(extractErrorDetail(cause, "生成角色图片失败")); }
+      }} generatingTypes={[]} />}
   </div>;
 }
 

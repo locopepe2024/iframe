@@ -1293,6 +1293,10 @@ export const api = {
         const res = await axios.post(`${API_URL}/projects/${scriptId}/assets/generate/preview`, request);
         return res.data;
     },
+    previewSeriesAssetImageSubmission: async (seriesId: string, request: AssetImageReviewRequest): Promise<AssetImageReviewProjection> => {
+        const res = await axios.post(`${API_URL}/series/${seriesId}/assets/generate/preview`, request);
+        return res.data;
+    },
 
     generateAsset: async (scriptId: string, assetId: string, assetType: string, stylePreset: string, stylePrompt?: string, generationType: string = "all", prompt: string = "", applyStyle: boolean = true, negativePrompt: string = "", batchSize: number = 1, modelName?: string, aspectRatio?: string, reference?: AssetLibraryReference, references?: AssetLibraryReference[], imageGenerationMode: "text" | "reference" = "text", preservePrompt: boolean = false, expectedReviewFingerprint?: string, sceneTool?: import("@/components/modules/SceneImageTools").SceneToolParams) => {
         const res = await axios.post(`${API_URL}/projects/${scriptId}/assets/generate`, {
@@ -2784,6 +2788,10 @@ export const api = {
         persona?: string;
     }) => {
         const response = await axios.post(`${API_URL}/series/${seriesId}/characters`, data);
+        return response.data;
+    },
+    generateSeriesCharacter: async (seriesId: string, data: Record<string, unknown>) => {
+        const response = await axios.post(`${API_URL}/series/${seriesId}/assets/generate`, data);
         return response.data;
     },
     generateExtraRosterProposals: async (seriesId: string, brief: string, count = 6) => {

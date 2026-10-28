@@ -373,6 +373,7 @@ function AssetReferencePicker({
 }
 interface CharacterWorkbenchProps {
     asset: any;
+    seriesId?: string;
     onClose: () => void;
     onUpdateDescription: (desc: string) => void;
     onUpdateAttributes?: (attributes: Record<string, unknown>) => void | Promise<void>;
@@ -387,7 +388,7 @@ interface CharacterWorkbenchProps {
     planEntries?: AssetPlanEntry[];
 }
 
-export default function CharacterWorkbench({ asset, onClose, onUpdateDescription, onUpdateAttributes, onRename, onGenerate, generatingTypes = [], stylePrompt = "", styleNegativePrompt = "", onGenerateVideo, onDeleteVideo, isGeneratingVideo, planEntries = [] }: CharacterWorkbenchProps) {
+export default function CharacterWorkbench({ asset, seriesId, onClose, onUpdateDescription, onUpdateAttributes, onRename, onGenerate, generatingTypes = [], stylePrompt = "", styleNegativePrompt = "", onGenerateVideo, onDeleteVideo, isGeneratingVideo, planEntries = [] }: CharacterWorkbenchProps) {
     const tc = useTranslations("character");
     const [activePanel, setActivePanel] = useState<"full_body" | "three_view" | "headshot" | "video">("full_body");
     const [isPlanOpen, setIsPlanOpen] = useState(false);
@@ -1045,7 +1046,7 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
         const references = [...promptReferences[promptType], ...promptPickerReferences[promptType]]
             .filter((reference, index, all) => all.findIndex((candidate) => referenceKey(candidate) === referenceKey(reference)) === index);
         const imageGenerationMode = promptModes[promptType];
-        if (!currentProject?.id) return;
+        if (!seriesId && !currentProject?.id) return;
         const isDerived = type === "three_view" || type === "headshot";
         setPendingImageReview({
             asset_id: asset.id,
@@ -1054,7 +1055,7 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
             prompt,
             negative_prompt: negativePrompt,
             batch_size: batchSize,
-            model_name: currentProject.series_id ? undefined : resolveAssetGenerationModel(currentProject.model_settings?.t2i_model),
+            model_name: seriesId || currentProject?.series_id ? undefined : resolveAssetGenerationModel(currentProject?.model_settings?.t2i_model),
             image_generation_mode: imageGenerationMode,
             ...(isDerived ? { reference: references[0] } : { references }),
             apply_style: false,
@@ -1556,8 +1557,9 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
 
 
             </motion.div>
-            {imageReviewRequest && currentProject?.id && <AssetImageSubmissionReview
-                projectId={currentProject.id}
+            {imageReviewRequest && (seriesId || currentProject?.id) && <AssetImageSubmissionReview
+                projectId={seriesId || currentProject!.id}
+                scope={seriesId ? "series" : "project"}
                 request={imageReviewRequest}
                 validationError={reviewValidationError}
                 editor={<>
