@@ -1,0 +1,269 @@
+{
+  "schema": "addams-annotation-semantic-review.v1",
+  "items": [
+    {
+      "source_frame": 49,
+      "joint": "left_knee",
+      "review_xy": [
+        419.796875,
+        317.484375
+      ],
+      "native_xy": [
+        525.5,
+        294.2
+      ],
+      "vitpose_xy": [
+        499.4,
+        309.9
+      ],
+      "native_error_px": 108.21,
+      "vitpose_error_px": 79.99,
+      "semantic_review_needed": true,
+      "reason": "膝/踝被裤腿或鞋面遮挡，可能标到了轮廓或鞋部代理点；请确认是否应改为骨关节中心，或另建鞋底代理点。"
+    },
+    {
+      "source_frame": 49,
+      "joint": "left_ankle",
+      "review_xy": [
+        338.578125,
+        334.39453125
+      ],
+      "native_xy": [
+        425.0,
+        370.9
+      ],
+      "vitpose_xy": [
+        370.7,
+        327.4
+      ],
+      "native_error_px": 93.8,
+      "vitpose_error_px": 32.85,
+      "semantic_review_needed": true,
+      "reason": "膝/踝被裤腿或鞋面遮挡，可能标到了轮廓或鞋部代理点；请确认是否应改为骨关节中心，或另建鞋底代理点。"
+    },
+    {
+      "source_frame": 49,
+      "joint": "right_ankle",
+      "review_xy": [
+        697.34375,
+        485.328125
+      ],
+      "native_xy": [
+        737.5,
+        480.6
+      ],
+      "vitpose_xy": [
+        685.3,
+        475.6
+      ],
+      "native_error_px": 40.43,
+      "vitpose_error_px": 15.49,
+      "semantic_review_needed": true,
+      "reason": "膝/踝被裤腿或鞋面遮挡，可能标到了轮廓或鞋部代理点；请确认是否应改为骨关节中心，或另建鞋底代理点。"
+    },
+    {
+      "source_frame": 50,
+      "joint": "right_knee",
+      "review_xy": [
+        631.0627911885579,
+        427.137302617232
+      ],
+      "native_xy": [
+        644.3,
+        390.9
+      ],
+      "vitpose_xy": [
+        625.8,
+        406.1
+      ],
+      "native_error_px": 38.56,
+      "vitpose_error_px": 21.72,
+      "semantic_review_needed": true,
+      "reason": "膝/踝被裤腿或鞋面遮挡，可能标到了轮廓或鞋部代理点；请确认是否应改为骨关节中心，或另建鞋底代理点。"
+    },
+    {
+      "source_frame": 51,
+      "joint": "right_knee",
+      "review_xy": [
+        633.7063535054524,
+        432.6834110617637
+      ],
+      "native_xy": [
+        638.6,
+        388.8
+      ],
+      "vitpose_xy": [
+        625.9,
+        411.1
+      ],
+      "native_error_px": 44.13,
+      "vitpose_error_px": 22.9,
+      "semantic_review_needed": true,
+      "reason": "膝/踝被裤腿或鞋面遮挡，可能标到了轮廓或鞋部代理点；请确认是否应改为骨关节中心，或另建鞋底代理点。"
+    },
+    {
+      "source_frame": 51,
+      "joint": "right_ankle",
+      "review_xy": [
+        685.9502524137497,
+        465.67955774068827
+      ],
+      "native_xy": [
+        724.8,
+        462.3
+      ],
+      "vitpose_xy": [
+        682.6,
+        472.6
+      ],
+      "native_error_px": 39.02,
+      "vitpose_error_px": 7.69,
+      "semantic_review_needed": true,
+      "reason": "膝/踝被裤腿或鞋面遮挡，可能标到了轮廓或鞋部代理点；请确认是否应改为骨关节中心，或另建鞋底代理点。"
+    },
+    {
+      "source_frame": 52,
+      "joint": "right_knee",
+      "review_xy": [
+        626.1127325296402,
+        432.27863013744354
+      ],
+      "native_xy": [
+        634.4,
+        396.2
+      ],
+      "vitpose_xy": [
+        624.9,
+        429.4
+      ],
+      "native_error_px": 37.06,
+      "vitpose_error_px": 3.16,
+      "semantic_review_needed": true,
+      "reason": "膝/踝被裤腿或鞋面遮挡，可能标到了轮廓或鞋部代理点；请确认是否应改为骨关节中心，或另建鞋底代理点。"
+    },
+    {
+      "source_frame": 52,
+      "joint": "right_ankle",
+      "review_xy": [
+        677.6449295282364,
+        468.3511680364609
+      ],
+      "native_xy": [
+        723.5,
+        467.9
+      ],
+      "vitpose_xy": [
+        681.4,
+        474.1
+      ],
+      "native_error_px": 45.89,
+      "vitpose_error_px": 6.88,
+      "semantic_review_needed": true,
+      "reason": "膝/踝被裤腿或鞋面遮挡，可能标到了轮廓或鞋部代理点；请确认是否应改为骨关节中心，或另建鞋底代理点。"
+    },
+    {
+      "source_frame": 53,
+      "joint": "left_ankle",
+      "review_xy": [
+        473.2960382029414,
+        291.0337920449674
+      ],
+      "native_xy": [
+        396.4,
+        308.4
+      ],
+      "vitpose_xy": [
+        457.0,
+        297.5
+      ],
+      "native_error_px": 78.82,
+      "vitpose_error_px": 17.54,
+      "semantic_review_needed": true,
+      "reason": "膝/踝被裤腿或鞋面遮挡，可能标到了轮廓或鞋部代理点；请确认是否应改为骨关节中心，或另建鞋底代理点。"
+    },
+    {
+      "source_frame": 53,
+      "joint": "right_knee",
+      "review_xy": [
+        619.2322829477489,
+        436.9700367897749
+      ],
+      "native_xy": [
+        629.4,
+        402.3
+      ],
+      "vitpose_xy": [
+        621.3,
+        438.5
+      ],
+      "native_error_px": 36.1,
+      "vitpose_error_px": 2.58,
+      "semantic_review_needed": true,
+      "reason": "膝/踝被裤腿或鞋面遮挡，可能标到了轮廓或鞋部代理点；请确认是否应改为骨关节中心，或另建鞋底代理点。"
+    },
+    {
+      "source_frame": 55,
+      "joint": "right_knee",
+      "review_xy": [
+        617.7538692504168,
+        443.7099836617708
+      ],
+      "native_xy": [
+        614.6,
+        412.8
+      ],
+      "vitpose_xy": [
+        601.1,
+        404.5
+      ],
+      "native_error_px": 31.03,
+      "vitpose_error_px": 42.56,
+      "semantic_review_needed": true,
+      "reason": "膝/踝被裤腿或鞋面遮挡，可能标到了轮廓或鞋部代理点；请确认是否应改为骨关节中心，或另建鞋底代理点。"
+    },
+    {
+      "source_frame": 56,
+      "joint": "right_shoulder",
+      "review_xy": [
+        666.93359375,
+        181.6640625
+      ],
+      "native_xy": [
+        629.2,
+        192.0
+      ],
+      "vitpose_xy": [
+        644.5,
+        183.5
+      ],
+      "native_error_px": 39.14,
+      "vitpose_error_px": 22.5,
+      "semantic_review_needed": true,
+      "reason": "人工点与原生回归关节存在明显偏差；请确认是否标的是骨关节中心而非服装/轮廓点。"
+    },
+    {
+      "source_frame": 57,
+      "joint": "left_wrist",
+      "review_xy": [
+        515.8578306771815,
+        140.791081212461
+      ],
+      "native_xy": [
+        475.0,
+        129.6
+      ],
+      "vitpose_xy": [
+        512.5,
+        139.4
+      ],
+      "native_error_px": 42.36,
+      "vitpose_error_px": 3.66,
+      "semantic_review_needed": true,
+      "reason": "人工点与原生回归关节存在明显偏差；请确认是否标的是骨关节中心而非服装/轮廓点。"
+    }
+  ],
+  "limits": [
+    "这是复核队列，不自动改写标注。",
+    "衣物轮廓和鞋底代理点不能直接作为SMPL骨关节真值。"
+  ]
+}
