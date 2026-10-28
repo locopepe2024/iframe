@@ -121,3 +121,19 @@ it("zooms the shared ruler, seeks precisely, and fits without changing clip rang
     expect(screen.getByRole("spinbutton", { name: "Playhead (seconds)" })).toHaveValue(1.234);
     expect(onChange).not.toHaveBeenCalled();
 });
+
+it("splits the video under the precise playhead without hidden clip selection", () => {
+    const initial: AssemblyEditPlan = { ...plan, target_duration_ms: 30000, lanes: [{ id: "v", kind: "video", allow_overlap: false, clips: [{ id: "one", label: "1.mp4", source_media_id: "m1", timeline_start_ms: 0, timeline_end_ms: 30000, source_start_ms: 0, source_end_ms: 30000, enabled: true, source_refs: [] }] }] };
+    const onChange = vi.fn();
+    render(<AssemblyTracks plan={initial} project={project} resourceId="p" saved onChange={onChange} />);
+    const split = screen.getByRole("button", { name: "Split at playhead" });
+    expect(split).toBeDisabled();
+    fireEvent.change(screen.getByRole("spinbutton", { name: "Playhead (seconds)" }), { target: { value: "16.484" } });
+    expect(split).toBeEnabled();
+    expect(screen.getByText(/Split target: 1.mp4/)).toBeVisible();
+    fireEvent.click(split);
+    const clips = onChange.mock.calls[0][0].lanes[0].clips;
+    expect(clips).toHaveLength(2);
+    expect(clips[0]).toMatchObject({ source_start_ms: 0, source_end_ms: 16484, timeline_start_ms: 0, timeline_end_ms: 16484 });
+    expect(clips[1]).toMatchObject({ source_start_ms: 16484, source_end_ms: 30000, timeline_start_ms: 16484, timeline_end_ms: 30000 });
+});

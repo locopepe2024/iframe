@@ -105,6 +105,11 @@ export function AssemblyTracks({ plan, resourceId, onChange, saved, project, mat
     const endDrag = () => { dragRef.current = null; };
     const selectedLane = plan.lanes.find(l => l.id === selected?.laneId);
     const selectedClip = selectedLane?.clips.find(c => c.id === selected?.clipId);
+    // Video splitting follows the visible playhead; explicitly selected audio
+    // and subtitle lanes retain their own target rather than splitting video.
+    const splitClip = selectedLane && selectedLane.kind !== 'video' ? selectedClip : currentVideo;
+    const splitLane = selectedLane && selectedLane.kind !== 'video' ? selectedLane : plan.lanes.find(l => l.kind === 'video' && l.clips.some(c => c.id === splitClip?.id));
+    const canSplit = Boolean(splitClip && splitLane && position > splitClip.timeline_start_ms && position < splitClip.timeline_end_ms);
     const selectedAudioUrl = selectedLane && selectedClip && selectedLane.kind !== "video" && selectedLane.kind !== "subtitle"
         ? getAssetUrl(materials?.[selectedClip.source_media_id || ""]?.url) || uploadedAudioSources[selectedClip.source_media_id || ""] || getAssetUrl(selectedLane.kind === "bgm"
             ? project.bgm_url
@@ -175,6 +180,10 @@ export function AssemblyTracks({ plan, resourceId, onChange, saved, project, mat
         <label className="block text-xs text-text-secondary">{t("时间线播放头", "Timeline playhead")} · {(position / 1000).toFixed(2)}s<input className="block w-full accent-primary" type="range" aria-label={t("时间线播放头", "Timeline playhead")} min={0} max={plan.target_duration_ms} step={10} value={position} onChange={e => seek(Number(e.target.value))} /></label>
         <div className="flex flex-wrap items-center gap-2">
             <label className="text-xs">{t("播放头（秒）", "Playhead (seconds)")} <input className={`${control} w-28`} type="number" min={0} max={plan.target_duration_ms / 1000} step={0.001} value={position / 1000} onChange={e => seek(Number(e.target.value) * 1000)} /></label>
+            <button type="button" className={`${control} border-primary text-primary`} disabled={!canSplit} onClick={() => {
+                if (splitClip && splitLane) applyEdit(() => splitAssemblyClip(plan, splitLane.id, splitClip.id, position, createRenderRequestId()));
+            }}>{t("在播放头分割", "Split at playhead")}</button>
+            <span className="text-xs text-text-secondary" role="status">{splitClip ? t(`分割对象：${splitClip.label || splitClip.id} · ${(position / 1000).toFixed(3)} 秒`, `Split target: ${splitClip.label || splitClip.id} · ${(position / 1000).toFixed(3)}s`) : t("将播放头移到要分割的片段内部。", "Move the playhead inside the clip to split it.")}{splitClip && !canSplit ? t(" · 请将播放头移到片段内部。", " · Move the playhead inside the clip.") : ''}</span>
             <button type="button" className={control} aria-label={t("缩小时间轴", "Zoom out")} disabled={zoom <= 0.5} onClick={() => setZoom(z => Math.max(0.5, z / 2))}>−</button>
             <span className="text-xs tabular-nums">{Math.round(zoom * 100)}%</span>
             <button type="button" className={control} aria-label={t("放大时间轴", "Zoom in")} disabled={zoom >= 16} onClick={() => setZoom(z => Math.min(16, z * 2))}>＋</button>
@@ -193,7 +202,6 @@ export function AssemblyTracks({ plan, resourceId, onChange, saved, project, mat
             {selectedAudioUrl && <label className="w-full text-xs text-text-secondary">{t("试听素材", "Preview source")}
                 <audio controls preload="metadata" src={selectedAudioUrl} aria-label={t("选中音频试听", "Selected audio preview")} className="mt-1 h-9 w-full" />
             </label>}
-            <button type="button" className={control} disabled={position <= selectedClip.timeline_start_ms || position >= selectedClip.timeline_end_ms} onClick={() => applyEdit(() => splitAssemblyClip(plan, selected.laneId, selected.clipId, position, createRenderRequestId()))}>{t("在播放头分割", "Split at playhead")}</button>
             {selectedLane?.kind !== "subtitle" && <>
                 <label className="text-xs text-text-secondary">{t("源入点（毫秒）", "Source in (ms)")}<input className={`${control} block w-32`} type="number" min={0} step={1} value={sourceIn} onChange={e => setSourceIn(Number(e.target.value))} /></label>
                 <label className="text-xs text-text-secondary">{t("源出点（毫秒）", "Source out (ms)")}<input className={`${control} block w-32`} type="number" min={1} step={1} value={sourceOut} onChange={e => setSourceOut(Number(e.target.value))} /></label>
