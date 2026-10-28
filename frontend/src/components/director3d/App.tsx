@@ -1,3 +1,4 @@
+import { FramingDiagnosticsPanel } from "./camera/FramingDiagnosticsPanel";
 import { DesignAssistantPanel } from "./design/DesignAssistantPanel";
 import { designRevision, type DesignPreview } from "./design/design-proposal";
 import { useCallback, useEffect, useState } from "react";
@@ -181,6 +182,7 @@ export function App({ restoredSavedAt = null }: DirectorAppProps = {}) {
               <span><strong>单位：</strong>米 / 度</span>
             </div>
             </section>
+            <FramingDiagnosticsPanel preview={activeDesignPreview} disabled={recordingVideo} />
             <DesignAssistantPanel onPreview={showDesignPreview} previewing={activeDesignPreview !== null} disabled={recordingVideo} />
             {activeDesignPreview && <p role="status">设计预览期间暂不可导出参考图或提交深度；请先应用或退出预览。</p>}
             <div hidden={activeDesignPreview !== null}><TemporalToolsInspector /></div>
