@@ -19,5 +19,6 @@ export const companionServices={
   generate:async(body:object):Promise<GenerationJob> => (await request("/generations",body)).json(),
   job:async(id:string):Promise<GenerationJob> => (await request(`/generations/${encodeURIComponent(id)}`)).json(),
   media:async(id:string) => (await request(`/generations/${encodeURIComponent(id)}/media`)).blob(),
+  save:async(id:string) => (await request(`/generations/${encodeURIComponent(id)}/save`,{allow_save:true})).json() as Promise<{asset_type:string;photo_id?:string;video_id?:string;created:boolean}>,
   speech:async(text:string,voice?:string) => (await request("/speech",{text,voice,allow_external_text:true})).blob(),
 };

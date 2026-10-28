@@ -186,3 +186,18 @@ def test_video_reference_modes_route_to_shared_h3_contract(client, monkeypatch):
     assert calls[1]['first_frame'] and calls[1]['last_frame']
     assert len(calls[2]['ref_image_paths']) == 2
     assert all(call['generate_audio'] is False for call in calls)
+
+
+def test_completed_generation_can_be_saved_to_album_idempotently(client, monkeypatch, tmp_path):
+    c, store, _ = client
+    services.initialize(store)
+    output = tmp_path / 'generated.png'; output.write_bytes(b'generated-image')
+    with store.connection(write=True) as db:
+        db.execute('INSERT INTO companion_generations VALUES (?,?,?,?,?,?,?)', ('save-job','owner','save-op','digest','image','completed',str(output)))
+    photo_store = Mock(); photo_store.upload.return_value = {'photo_id':'saved-photo','created':True}
+    monkeypatch.setattr(services, 'photo_store', lambda: photo_store)
+    prepared = object()
+    monkeypatch.setattr('src.apps.photos.media.prepare_photo', lambda raw: prepared)
+    first = c.post('/companion-runtime/generations/save-job/save', json={'allow_save':True})
+    assert first.status_code == 200 and first.json() == {'asset_type':'photo','photo_id':'saved-photo','created':True}
+    photo_store.upload.assert_called_once_with('owner','generated-save-job',prepared)

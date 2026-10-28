@@ -45,6 +45,10 @@ class Generate(Strict):
     allow_external_generation: Literal[True]
 
 
+class SaveGeneration(Strict):
+    allow_save: Literal[True]
+
+
 class Speech(Strict):
     text: str = Field(min_length=1, max_length=3000)
     voice: Literal['longanhuan_v3.6', 'longanyang_v3.6'] = 'longanhuan_v3.6'
@@ -271,6 +275,32 @@ def get_media(job_id: str, identity: Owner, store: Store):
     if row['status'] != 'completed' or not row['path'] or not Path(row['path']).is_file():
         raise HTTPException(409, '生成结果尚未就绪。')
     return FileResponse(row['path'], media_type='image/png' if row['mode'] == 'image' else 'video/mp4', headers={'Cache-Control': 'no-store'})
+
+
+@router.post('/generations/{job_id}/save')
+def save_generation(job_id: str, body: SaveGeneration, identity: Owner, store: Store):
+    initialize(store)
+    row = job(store, identity.owner_profile_id, job_id)
+    if row['status'] != 'completed' or not row['path'] or not Path(row['path']).is_file():
+        raise HTTPException(409, '生成结果尚未就绪。')
+    raw = Path(row['path']).read_bytes()
+    if row['mode'] == 'image':
+        try:
+            from ..photos.media import prepare_photo
+            result = photo_store().upload(identity.owner_profile_id, 'generated-' + job_id, prepare_photo(raw))
+        except Exception as exc:
+            if isinstance(exc, HTTPException):
+                raise
+            raise HTTPException(422, '生成图片无法保存到相册。') from None
+        return {'asset_type': 'photo', 'photo_id': result['photo_id'], 'created': result['created']}
+    try:
+        from ..photos.videos import database, save as save_video
+        result = save_video(database(), identity.owner_profile_id, 'generated-' + job_id, raw, '小安生成-' + job_id + '.mp4')
+    except Exception as exc:
+        if isinstance(exc, HTTPException):
+            raise
+        raise HTTPException(422, '生成视频无法保存到相册。') from None
+    return {'asset_type': 'video', 'video_id': result['video_id'], 'created': result['created']}
 
 
 @router.post('/speech')
