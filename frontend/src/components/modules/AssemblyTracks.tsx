@@ -1,5 +1,6 @@
 "use client";
 import { useState, useRef, useEffect, type PointerEvent } from "react";
+import { createRenderRequestId } from '@/lib/renderRequestId';
 import { useLocale } from "next-intl";
 import { api, type AssemblyEditPlan } from "@/lib/api";
 import type { Project } from "@/store/projectStore";
@@ -93,7 +94,7 @@ export function AssemblyTracks({ plan, resourceId, onChange, saved, project, mat
             setUploadedAudioSources(current => ({ ...current, [uploaded.media_id!]: uploaded.url || "" }));
             const start = Math.min(position, plan.target_duration_ms - 1);
             onChange({ ...plan, lanes: plan.lanes.map(l => l.id === laneId ? { ...l, clips: [...l.clips, {
-                id: crypto.randomUUID(), timeline_start_ms: start, timeline_end_ms: Math.min(start + (uploaded.duration_ms || 2000), plan.target_duration_ms),
+                id: createRenderRequestId(), timeline_start_ms: start, timeline_end_ms: Math.min(start + (uploaded.duration_ms || 2000), plan.target_duration_ms),
                 source_start_ms: 0, source_project_id: onUploadAudio ? undefined : project.id, source_media_id: uploaded.media_id,
                 source_refs: [`media:${uploaded.media_id}`], label: file.name, enabled: true, gain: 1,
             }] } : l) });
@@ -135,7 +136,7 @@ export function AssemblyTracks({ plan, resourceId, onChange, saved, project, mat
             <span className="text-xs text-text-muted">{t("素材画面预览；独立音轨混音与最终字幕样式请以导出成片为准。", "Source video preview. Export to review the mixed audio and final caption styling.")}</span>
         </div>
         {mediaError && <p role="alert" className="text-xs text-red-300">{mediaError}</p>}
-        <div className="flex flex-wrap gap-2">{(["subtitle", "dialogue", "bgm", "sfx"] as const).map(kind => <button key={kind} className={control} type="button" disabled={plan.lanes.length >= 8} onClick={() => onChange({ ...plan, lanes: [...plan.lanes, { id: `${kind}-${crypto.randomUUID()}`, kind, label: kind, clips: [], allow_overlap: kind !== "subtitle" }] })}>{t("添加", "Add")} {laneName(kind)}</button>)}</div>
+        <div className="flex flex-wrap gap-2">{(["subtitle", "dialogue", "bgm", "sfx"] as const).map(kind => <button key={kind} className={control} type="button" disabled={plan.lanes.length >= 8} onClick={() => onChange({ ...plan, lanes: [...plan.lanes, { id: `${kind}-${createRenderRequestId()}`, kind, label: kind, clips: [], allow_overlap: kind !== "subtitle" }] })}>{t("添加", "Add")} {laneName(kind)}</button>)}</div>
         <label className="block text-xs text-text-secondary">{t("时间线播放头", "Timeline playhead")} · {(position / 1000).toFixed(2)}s<input className="block w-full accent-primary" type="range" aria-label={t("时间线播放头", "Timeline playhead")} min={0} max={plan.target_duration_ms} step={10} value={position} onChange={e => seek(Number(e.target.value))} /></label>
         <div className="min-h-12 whitespace-pre-wrap rounded bg-elevated p-3 text-center text-foreground">{active.map(c => c.text).join("\n") || t("当前无字幕", "No caption at this time")}</div>
         <label className="flex flex-wrap items-center gap-2 text-xs text-text-secondary">{t("成片字幕", "Video captions")}
@@ -150,7 +151,7 @@ export function AssemblyTracks({ plan, resourceId, onChange, saved, project, mat
             {selectedAudioUrl && <label className="w-full text-xs text-text-secondary">{t("试听素材", "Preview source")}
                 <audio controls preload="metadata" src={selectedAudioUrl} aria-label={t("选中音频试听", "Selected audio preview")} className="mt-1 h-9 w-full" />
             </label>}
-            <button type="button" className={control} disabled={position <= selectedClip.timeline_start_ms || position >= selectedClip.timeline_end_ms} onClick={() => applyEdit(() => splitAssemblyClip(plan, selected.laneId, selected.clipId, position, crypto.randomUUID()))}>{t("在播放头分割", "Split at playhead")}</button>
+            <button type="button" className={control} disabled={position <= selectedClip.timeline_start_ms || position >= selectedClip.timeline_end_ms} onClick={() => applyEdit(() => splitAssemblyClip(plan, selected.laneId, selected.clipId, position, createRenderRequestId()))}>{t("在播放头分割", "Split at playhead")}</button>
             {selectedLane?.kind !== "subtitle" && <>
                 <label className="text-xs text-text-secondary">{t("源入点（毫秒）", "Source in (ms)")}<input className={`${control} block w-32`} type="number" min={0} step={1} value={sourceIn} onChange={e => setSourceIn(Number(e.target.value))} /></label>
                 <label className="text-xs text-text-secondary">{t("源出点（毫秒）", "Source out (ms)")}<input className={`${control} block w-32`} type="number" min={1} step={1} value={sourceOut} onChange={e => setSourceOut(Number(e.target.value))} /></label>
@@ -174,7 +175,7 @@ export function AssemblyTracks({ plan, resourceId, onChange, saved, project, mat
                         const sourceId = e.target.value;
                         const start = Math.min(position, plan.target_duration_ms - 1);
                         onChange({ ...plan, lanes: plan.lanes.map(l => l.id === lane.id ? { ...l, clips: [...l.clips, {
-                            id: crypto.randomUUID(), timeline_start_ms: start, timeline_end_ms: Math.min(start + 2000, plan.target_duration_ms),
+                            id: createRenderRequestId(), timeline_start_ms: start, timeline_end_ms: Math.min(start + 2000, plan.target_duration_ms),
                             source_start_ms: 0, source_project_id: project.id,
                             source_frame_id: lane.kind === "bgm" ? undefined : sourceId,
                             source_refs: [`project:${project.id}:${sourceId}`], label: sourceId, enabled: true, gain: 1,
@@ -189,7 +190,7 @@ export function AssemblyTracks({ plan, resourceId, onChange, saved, project, mat
                 {lane.kind === "subtitle" && <><button type="button" className={control} onClick={() => {
                     const start = Math.min(position, plan.target_duration_ms - 1), end = Math.min(start + 2000, plan.target_duration_ms);
                     if (lane.clips.some(c => c.timeline_start_ms < end && start < c.timeline_end_ms)) { setError(t("此位置已有字幕，请移动播放头。", "A caption overlaps this position. Move the playhead.")); return; }
-                    setError(null); onChange({ ...plan, lanes: plan.lanes.map(l => l.id === lane.id ? { ...l, clips: [...l.clips, { id: crypto.randomUUID(), timeline_start_ms: start, timeline_end_ms: end, source_start_ms: 0, text: t("新字幕", "New caption"), enabled: true, source_refs: [] }] } : l) });
+                    setError(null); onChange({ ...plan, lanes: plan.lanes.map(l => l.id === lane.id ? { ...l, clips: [...l.clips, { id: createRenderRequestId(), timeline_start_ms: start, timeline_end_ms: end, source_start_ms: 0, text: t("新字幕", "New caption"), enabled: true, source_refs: [] }] } : l) });
                 }}>{t("添加字幕", "Add caption")}</button><button type="button" className={control} disabled={!saved || busy || lane.muted} onClick={() => download(lane.id)}>{t("下载 SRT", "Download SRT")}</button></>}
             </div>
             <div className={`relative overflow-hidden rounded bg-elevated ${lane.kind === "video" ? "h-24" : "h-10"}`} aria-label={`${lane.kind} timeline`} onPointerMove={updateDrag} onPointerUp={endDrag}>

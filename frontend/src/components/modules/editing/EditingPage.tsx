@@ -1,5 +1,6 @@
 'use client';
 import { useEffect, useState } from 'react';
+import { createRenderRequestId } from '@/lib/renderRequestId';
 import { useLocale } from 'next-intl';
 import { editing, type EditMaterial, type EditProject } from '@/lib/editing';
 import type { AssemblyEditPlan } from '@/lib/api';
@@ -12,6 +13,8 @@ export function EditingMaterials({ onSelect, disabled = false }: { onSelect: (it
   const [items, setItems] = useState<EditMaterial[]>([]);
   const [cursor, setCursor] = useState<number | null>(null);
   const [error, setError] = useState('');
+  const [uploadErrors, setUploadErrors] = useState<string[]>([]);
+  const [uploadProgress, setUploadProgress] = useState<{ current: number; total: number } | null>(null);
   const [busy, setBusy] = useState(false);
   const [reload, setReload] = useState(0);
   useEffect(() => { let active = true; setBusy(true);
@@ -22,11 +25,29 @@ export function EditingMaterials({ onSelect, disabled = false }: { onSelect: (it
     <div className="flex flex-wrap items-center gap-3">
       <h2 className="font-semibold">{zh ? '剪辑素材库' : 'Editing materials'}</h2>
       <input className="glass-input px-3 py-2" aria-label={zh ? '搜索剪辑素材' : 'Search editing materials'} value={query} onChange={e => setQuery(e.target.value)} />
-      <label className="glass-button cursor-pointer px-3 py-2">{zh ? '上传视频或音频' : 'Upload video or audio'}<input className="sr-only" type="file" accept="video/*,audio/*" disabled={busy || disabled} onChange={async e => { const file = e.target.files?.[0]; e.target.value = ''; if (!file) return; setBusy(true); try { await editing.upload(file); setReload(n => n + 1); } catch (err) { setError(extractErrorDetail(err)); } finally { setBusy(false); } }} /></label>
+      <label className="glass-button cursor-pointer px-3 py-2">{zh ? '上传视频或音频' : 'Upload video or audio'}<input className="sr-only" type="file" multiple accept="video/*,audio/*" disabled={busy || disabled} onChange={async e => {
+        const files = Array.from(e.target.files || []);
+        e.target.value = '';
+        if (!files.length) return;
+        setBusy(true); setUploadErrors([]);
+        const failures: string[] = [];
+        let uploaded = 0;
+        try {
+          for (let index = 0; index < files.length; index += 1) {
+            const file = files[index];
+            setUploadProgress({ current: index + 1, total: files.length });
+            try { await editing.upload(file); uploaded += 1; }
+            catch (err) { failures.push(`${file.name}: ${extractErrorDetail(err)}`); }
+          }
+          setUploadErrors(failures);
+          if (uploaded) setReload(n => n + 1);
+        } finally { setUploadProgress(null); setBusy(false); }
+      }} /></label>
     </div>
     <p className="text-xs text-text-secondary">{zh ? '添加素材只引用当前版本；剪辑保存在独立项目中。生成成片会明确标记为生成素材。' : 'Materials are referenced at their current version. Edits are saved in a separate project. Rendered outputs are labeled as generated.'}</p>
     {error && <p role="alert">{error}</p>}
-    {busy && <p role="status">{zh ? '正在读取素材…' : 'Loading materials…'}</p>}
+    {uploadErrors.length > 0 && <p role="alert" className="whitespace-pre-line">{uploadErrors.join('\n')}</p>}
+    {busy && <p role="status">{uploadProgress ? `${zh ? '正在上传' : 'Uploading'} ${uploadProgress.current} / ${uploadProgress.total}` : (zh ? '正在读取素材…' : 'Loading materials…')}</p>}
     {!busy && !items.length && <p>{zh ? '暂无素材，请上传视频。' : 'No materials. Upload a video to begin.'}</p>}
     <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">{items.map(item => <article className="rounded-lg border border-glass-border p-3" key={item.id}>
       <p className="truncate font-medium" title={item.name}>{item.name}</p>
@@ -68,8 +89,8 @@ export default function EditingPage() {
     const lane = current.lanes.find(l => l.kind === kind);
     const start = item.video && plan ? plan.target_duration_ms : 0;
     const duration = item.video ? item.duration_ms : Math.min(item.duration_ms, current.target_duration_ms);
-    const clip = { id: crypto.randomUUID(), timeline_start_ms: start, timeline_end_ms: start + duration, source_start_ms: 0, source_end_ms: duration, source_media_id: item.id, source_refs: [`media:${item.id}`], label: item.name, enabled: true, gain: 1 };
-    const lanes = lane ? current.lanes.map(l => l.id === lane.id ? { ...l, clips: [...l.clips, clip] } : l) : [...current.lanes, { id: crypto.randomUUID(), kind, label: kind, allow_overlap: kind !== 'video', clips: [clip] }];
+    const clip = { id: createRenderRequestId(), timeline_start_ms: start, timeline_end_ms: start + duration, source_start_ms: 0, source_end_ms: duration, source_media_id: item.id, source_refs: [`media:${item.id}`], label: item.name, enabled: true, gain: 1 };
+    const lanes = lane ? current.lanes.map(l => l.id === lane.id ? { ...l, clips: [...l.clips, clip] } : l) : [...current.lanes, { id: createRenderRequestId(), kind, label: kind, allow_overlap: kind !== 'video', clips: [clip] }];
     if (lanes.length > 8) { setError(t('最多支持 8 条泳道。', 'At most 8 lanes.')); return; }
     setSources(old => ({ ...old, [item.id]: item }));
     change({ ...current, lanes, target_duration_ms: item.video ? start + duration : current.target_duration_ms });
