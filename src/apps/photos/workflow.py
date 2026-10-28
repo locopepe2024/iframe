@@ -2,6 +2,7 @@
 
 from datetime import datetime, timedelta, timezone
 import uuid
+import re
 
 from .date_store import DateStore, OperationConflict, PhotoNotAvailable
 from .dates import DateAnnotation
@@ -137,35 +138,51 @@ class PhotoWorkflowStore(DateStore):
                             consent_version, "organize", {})
 
     def album_page(self, owner: str, *, view: str, year: int | None,
-                   after_id: str, limit: int, query: str = "") -> dict:
+                   after_id: str, limit: int, query: str = "", date_prefix: str = "", order: str = "id") -> dict:
         if view not in ("all", "pending") or not 1 <= limit <= 100 or len(query) > 100:
             raise ValueError("Invalid album query")
+        if order not in ('id', 'recent'):
+            raise ValueError('Invalid album order')
+        if date_prefix:
+            if not re.fullmatch(r'\d{4}(?:-\d{2}(?:-\d{2})?)?', date_prefix):
+                raise ValueError('Invalid album date')
+            datetime.fromisoformat(date_prefix + ('-01-01' if len(date_prefix) == 4 else '-01' if len(date_prefix) == 7 else ''))
         query = query.strip()
-        conditions = ["p.owner = ?", "p.photo_id > ?"]
-        params = [owner, after_id]
+        conditions = ["p.owner = ?", "NOT EXISTS (SELECT 1 FROM photo_deletions x WHERE x.owner=p.owner AND x.photo_id=p.photo_id)"]
+        params = [owner]
+        if order == 'recent':
+            if after_id:
+                conditions.append("p.rowid < (SELECT rowid FROM photo_date_states WHERE owner=? AND photo_id=?)")
+                params.extend([owner, after_id])
+        else:
+            conditions.append("p.photo_id > ?")
+            params.append(after_id)
+        if date_prefix:
+            conditions.append("substr(COALESCE(NULLIF(json_extract(a.facts, '$.capture_time'), ''), json_extract(p.annotation, '$.date.value')), 1, ?) = ?")
+            params.extend([len(date_prefix), date_prefix])
         if view == "pending":
-            conditions.append("p.album_year IS NULL")
+            conditions.append("p.album_year IS NULL AND COALESCE(json_extract(a.facts, '$.capture_time'), '') = ''")
         if year is not None:
-            conditions.append("p.album_year = ?")
+            conditions.append("CAST(substr(COALESCE(NULLIF(json_extract(a.facts, '$.capture_time'), ''), json_extract(p.annotation, '$.date.value')), 1, 4) AS INTEGER) = ?")
             params.append(year)
-        joins, fields = "", ""
+        joins, fields = " LEFT JOIN photo_annotations a ON a.owner=p.owner AND a.photo_id=p.photo_id ", ""
         if query:
             # Join only the latest owner-scoped source versions, never historical
             # text or unreviewed model observations. instr treats SQL wildcards literally.
-            joins = """
+            joins += """
                 LEFT JOIN photo_stories s ON s.owner=p.owner AND s.photo_id=p.photo_id
                     AND s.revision=(SELECT MAX(revision) FROM photo_stories WHERE owner=p.owner AND photo_id=p.photo_id)
                 LEFT JOIN photo_description_reviews d ON d.owner=p.owner AND d.photo_id=p.photo_id
                     AND d.revision=(SELECT MAX(revision) FROM photo_description_reviews WHERE owner=p.owner AND photo_id=p.photo_id)
             """
-            fields = ", s.text AS story_text, s.revision AS story_revision, d.description AS description_text, d.revision AS description_revision"
-            conditions.append("(instr(s.text, ?) > 0 OR instr(d.description, ?) > 0)")
-            params.extend([query, query])
+            fields = ", s.text AS story_text, s.revision AS story_revision, d.description AS description_text, d.revision AS description_revision, a.facts AS facts_text, a.revision AS facts_revision"
+            conditions.append("(instr(s.text, ?) > 0 OR instr(d.description, ?) > 0 OR instr(a.facts, ?) > 0)")
+            params.extend([query, query, query])
         with self._connection() as connection:
             rows = connection.execute(
                 "SELECT p.photo_id, p.batch_id, p.annotation" + fields
                 + " FROM photo_date_states p " + joins + " WHERE "
-                + " AND ".join(conditions) + " ORDER BY p.photo_id LIMIT ?",
+                + " AND ".join(conditions) + (" ORDER BY p.rowid DESC LIMIT ?" if order == "recent" else " ORDER BY p.photo_id LIMIT ?"),
                 (*params, limit + 1),
             ).fetchall()
             page = rows[:limit]
@@ -175,7 +192,7 @@ class PhotoWorkflowStore(DateStore):
                          "date": DateAnnotation.model_validate_json(row["annotation"])}
                 if query:
                     matches = []
-                    for source in ("story", "description"):
+                    for source in ("story", "description", "facts"):
                         text = row[source + "_text"] or ""
                         index = text.find(query)
                         if index >= 0:

@@ -70,3 +70,44 @@ def test_search_source_excerpt_and_combined_year_filter(setup):
     assert client.get('/photos/albums', params={'query': '踏青', 'view': 'pending'}).json()['photos'] == []
     # Blank search retains the existing full album response.
     assert client.get('/photos/albums', params={'query': '   '}).json() == client.get('/photos/albums').json()
+
+
+def test_album_date_filter_precision_validation_and_recent_pagination(setup):
+    client, store, _, path = setup
+    first_id = path.split('/')[-1]
+    raw = BytesIO(); Image.new('RGB', (8, 8), 'blue').save(raw, 'PNG')
+    second_id = client.post('/photos/uploads/recent-second', content=raw.getvalue()).json()['photo_id']
+    recent = client.get('/photos/albums', params={'order': 'recent', 'limit': 1}).json()
+    assert recent['photos'][0]['photo_id'] == second_id
+    older = client.get('/photos/albums', params={'order': 'recent', 'limit': 1, 'after_id': recent['next_after_id']}).json()
+    assert older['photos'][0]['photo_id'] == first_id
+    assert older['next_after_id'] is None
+    assert client.get('/photos/albums', params={'order': 'recent', 'after_id': 'other-owner-or-absent'}).json()['photos'] == []
+    batch_id = next(p['batch_id'] for p in client.get('/photos/albums').json()['photos'] if p['photo_id'] == first_id)
+    question = client.post('/photos/batches/' + batch_id + '/time-question').json()
+    consent = client.post('/photos/batches/' + batch_id + '/time-consent', json=dict(question_id=question['question_id'], granted=True, method='button')).json()
+    result = client.patch(path + '/date', json=dict(value='2025-10-01', precision='day', expected_revision=1,
+        consent_version=consent['consent_version'], operation_id='dated'))
+    assert result.status_code == 200, result.text
+    for prefix in ('2025', '2025-10', '2025-10-01'):
+        page = client.get('/photos/albums', params={'date_prefix': prefix}).json()
+        assert [p['photo_id'] for p in page['photos']] == [first_id]
+    assert client.get('/photos/albums', params={'date_prefix': '2025-10-02'}).json()['photos'] == []
+    for prefix in ('2025-02-30', '2025-13', 'bad'):
+        assert client.get('/photos/albums', params={'date_prefix': prefix}).status_code == 422
+
+
+def test_confirmed_structured_facts_are_searchable_and_override_date_filters(setup):
+    client, store, _, path = setup
+    record = client.get(path + '/annotations').json()
+    facts = {**record['facts'], 'people':[dict(reference='p1',name='小明',age=68,gender='male')],
+             'location':'杭州', 'capture_time':'1985-10'}
+    body = dict(operation_id='facts-search', expected_revision=0, facts=facts)
+    assert client.post(path + '/annotations', json=body).status_code == 200
+    for params in ({'query':'小明'}, {'query':'杭州','year':1985}, {'date_prefix':'1985-10'}):
+        assert len(client.get('/photos/albums', params=params).json()['photos']) == 1
+    assert client.get('/photos/albums',params={'view':'pending'}).json()['photos'] == []
+    assert client.get('/photos/albums',params={'year':2026}).json()['photos'] == []
+    changed = {**facts, 'people':[], 'location':'苏州'}
+    assert client.post(path + '/annotations',json={**body,'facts':changed,'operation_id':'edit-facts','expected_revision':1}).status_code == 200
+    assert client.get('/photos/albums',params={'query':'杭州'}).json()['photos'] == []

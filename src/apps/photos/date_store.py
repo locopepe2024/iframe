@@ -22,6 +22,7 @@ from .dates import (
 )
 from .media import PreparedPhoto
 from .people_schema import PEOPLE_SCHEMA
+from .annotations import AnnotationStore, SCHEMA as ANNOTATION_SCHEMA
 
 
 class PhotoNotAvailable(LookupError):
@@ -47,7 +48,7 @@ class DateChange(Snapshot):
     restored_from_revision: int | None = None
 
 
-_SCHEMA = PEOPLE_SCHEMA + """
+_SCHEMA = PEOPLE_SCHEMA + ANNOTATION_SCHEMA + """
 CREATE TABLE IF NOT EXISTS photo_batch_undos (
  owner TEXT NOT NULL, batch_id TEXT NOT NULL, operation_id TEXT NOT NULL,
  preview_token TEXT NOT NULL, actor TEXT NOT NULL, created_at TEXT NOT NULL,
@@ -165,7 +166,7 @@ CREATE TABLE IF NOT EXISTS photo_time_revocations (
 """
 
 
-class DateStore:
+class DateStore(AnnotationStore):
     def __init__(self, path: str | Path, *, initialize: bool = True):
         if not str(path) or str(path) == ":memory:":
             raise ValueError("An explicit persistent SQLite file is required")
@@ -213,7 +214,7 @@ class DateStore:
             "SELECT * FROM photo_date_states WHERE owner = ? AND photo_id = ?",
             (owner, photo_id),
         ).fetchone()
-        if row is None:
+        if row is None or connection.execute("SELECT 1 FROM photo_deletions WHERE owner=? AND photo_id=?", (owner,photo_id)).fetchone():
             raise PhotoNotAvailable("Photo is not available")
         return row
 
@@ -265,6 +266,7 @@ class DateStore:
 
     def media(self, owner: str, photo_id: str, *, thumbnail: bool) -> tuple[bytes, str]:
         with self._connection() as connection:
+            self._photo(connection, owner, photo_id)
             column = "thumbnail" if thumbnail else "original"
             row = connection.execute(
                 f"SELECT {column} AS content, media_type FROM photo_media "

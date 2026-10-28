@@ -17,6 +17,7 @@ from .dates import DateRevisionConflict, ManualPrecision
 from . import media
 from .people_corrections import PhotoPeopleCorrectionStore as PhotoPeopleReviewStore
 from .people_tasks import PeopleConsentRequired
+from .annotations import PhotoFacts
 from .analysis import analyze_photo, AnalysisUnavailable, AnalysisCredentialRejected
 
 
@@ -389,10 +390,12 @@ def albums(identity: Owner, store: Store, view: Literal["all", "pending"] = "all
             year: int | None = Query(default=None, ge=1, le=9999),
             after_id: str = Query(default="", max_length=80),
             limit: int = Query(default=50, ge=1, le=100),
-            query: str = Query(default="", max_length=100)):
+            query: str = Query(default="", max_length=100),
+            date_prefix: str = Query(default="", max_length=10),
+            order: Literal["id", "recent"] = "id"):
     with api_errors():
         return store.album_page(identity.owner_profile_id, view=view, year=year,
-                                after_id=after_id, limit=limit, query=query)
+                                after_id=after_id, limit=limit, query=query, date_prefix=date_prefix, order=order)
 
 
 @router.post("/uploads/{upload_id}", status_code=201)
@@ -434,6 +437,34 @@ def thumbnail(photo_id: str, identity: Owner, store: Store):
 def read_date(photo_id: str, identity: Owner, store: Store):
     with api_errors():
         return store.read(identity.owner_profile_id, photo_id)
+
+
+class AnnotationUpdate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    operation_id: str = Field(min_length=1, max_length=120)
+    expected_revision: int = Field(ge=0)
+    facts: PhotoFacts
+
+class PhotoDelete(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    operation_id: str = Field(min_length=1, max_length=120)
+    confirmed: Literal[True]
+
+@router.get("/{photo_id}/annotations")
+def read_annotations(photo_id: str, identity: Owner, store: Store):
+    with api_errors():
+        return store.annotations(identity.owner_profile_id, photo_id)
+
+@router.post("/{photo_id}/annotations")
+def save_annotations(photo_id: str, body: AnnotationUpdate, identity: Owner, store: Store):
+    with api_errors():
+        return store.save_annotations(identity.owner_profile_id, photo_id, identity.user_id,
+            operation_id=body.operation_id, expected_revision=body.expected_revision, facts=body.facts.model_dump())
+
+@router.post("/{photo_id}/delete")
+def delete_photo(photo_id: str, body: PhotoDelete, identity: Owner, store: Store):
+    with api_errors():
+        return store.delete_photo(identity.owner_profile_id, photo_id, identity.user_id, operation_id=body.operation_id)
 
 
 @router.get("/{photo_id}/analysis")
