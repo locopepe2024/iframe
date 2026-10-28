@@ -16,6 +16,10 @@ export type GenerationDraft = {
   task_id?: string;
   expected_revision?: number;
   job_id?: string;
+  video_mode?: "t2v"|"i2v"|"f2v"|"r2v";
+  first_reference?: string | null;
+  last_reference?: string | null;
+  references?: string[];
 };
 
 export function createGenerationDraft(mode: MediaMode, prompt: string): GenerationDraft {
@@ -25,7 +29,7 @@ export function createGenerationDraft(mode: MediaMode, prompt: string): Generati
 /** Match complete intent-only requests, never a request with concrete scene/edit details. */
 export function isUnderspecifiedMediaRequest(text: string): boolean {
   const compact = text.replace(/[\s，。！？、,.!?：:]/g, "").replace(/^(?:(?:嗯|呃|额|那个|就是))+/, "");
-  const prefix = "(?:请|请你|麻烦|麻烦你)?(?:帮我|给我|为我|我想|我要|我想要)?";
+  const prefix = "(?:请|请你|麻烦|麻烦你)?(?:我们|咱们)?(?:一起)?(?:帮我|给我|为我|我想|我要|我想要)?";
   const media = "(?:这|那|我的|这张|那张|一|1|几)?(?:张|幅|段|个)?(?:图片|图像|照片|图|画|视频|短视频)";
   const create = new RegExp(`^${prefix}(?:生成|创作|制作|做|画|拍)${media}(?:吧|一下)?$`);
   const edit = new RegExp(`^${prefix}(?:优化|加工|修改|修饰|编辑|美化|修)(?:一下)?${media}(?:吧|一下)?$`);

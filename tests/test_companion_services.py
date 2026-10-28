@@ -103,7 +103,7 @@ def test_draft_generation_validates_revision_brief_and_reference_before_provider
     result = c.post('/companion-runtime/generations', json=body)
     assert result.status_code == 200, result.text
     media.media.assert_called_with('owner', 'mine', thumbnail=False)
-    assert executor.call_args.args[-1]['_reference_media'] == (b'image-bytes', 'image/jpeg')
+    assert executor.call_args.args[-1]['_reference_media']['image'] == (b'image-bytes', 'image/jpeg')
     assert c.post('/companion-runtime/generations', json=body).json()['id'] == result.json()['id']
     assert executor.call_count == 1
     assert c.post('/companion-runtime/generations', json={**body, 'operation_id':'duplicate'}).status_code == 409
@@ -154,3 +154,35 @@ def test_submission_requires_current_parameter_revision(client, monkeypatch):
     assert c.post('/companion-runtime/generations', json=body).status_code == 409
     assert c.post('/companion-runtime/generations', json={**body,'setting':'横向 16:9'}).status_code == 200
     execute.assert_called_once()
+
+
+def test_video_reference_modes_route_to_shared_h3_contract(client, monkeypatch):
+    from pathlib import Path
+    from src.models.uniart import UniArtVideoModel
+    c, store, _ = client
+    calls=[]
+    def output(self, prompt, path, **kwargs):
+        calls.append(kwargs)
+        for key in ('img_path', 'first_frame', 'last_frame'):
+            if key in kwargs: assert Path(kwargs[key]).read_bytes() in (b'first-bytes', b'last-bytes')
+        for item in kwargs.get('ref_image_paths', []): assert Path(item).read_bytes() in (b'a-bytes', b'b-bytes')
+        Path(path).write_bytes(b'video')
+    monkeypatch.setattr(UniArtVideoModel, 'generate', output)
+    identity = UserContext('user', 'owner', '', '')
+    services.initialize(store)
+    for index, mode_body in enumerate((
+        dict(video_mode='i2v', first=(b'first-bytes', 'image/jpeg')),
+        dict(video_mode='f2v', first=(b'first-bytes', 'image/jpeg'), last=(b'last-bytes', 'image/jpeg')),
+        dict(video_mode='r2v', refs=[(b'a-bytes', 'image/jpeg'), (b'b-bytes', 'image/jpeg')]),
+    )):
+        job_id=f'mode-{index}'
+        body = services.Generate(operation_id=job_id, mode='video', model='h3', prompt='让画面动起来', setting='5 秒', allow_external_generation=True, video_mode=mode_body['video_mode'])
+        with store.connection(write=True) as db:
+            db.execute('INSERT INTO companion_generations VALUES (?,?,?,?,?,?,NULL)', (job_id, 'owner', job_id, 'digest', 'video', 'running'))
+        reference = {'first': mode_body.get('first'), 'last': mode_body.get('last'), 'refs': mode_body.get('refs', [])}
+        services.execute(store, identity, job_id, body, {}, {'_reference_media': reference})
+        assert services.job(store, 'owner', job_id)['status'] == 'completed'
+    assert calls[0]['img_path']
+    assert calls[1]['first_frame'] and calls[1]['last_frame']
+    assert len(calls[2]['ref_image_paths']) == 2
+    assert all(call['generate_audio'] is False for call in calls)

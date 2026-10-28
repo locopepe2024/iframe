@@ -36,6 +36,10 @@ class Generate(Strict):
     prompt: str = Field(min_length=1, max_length=4000)
     setting: str = Field(max_length=40)
     reference: str | None = Field(default=None, min_length=1, max_length=120)
+    references: list[str] = Field(default_factory=list, max_length=9)
+    first_reference: str | None = Field(default=None, min_length=1, max_length=120)
+    last_reference: str | None = Field(default=None, min_length=1, max_length=120)
+    video_mode: Literal['t2v', 'i2v', 'f2v', 'r2v'] | None = None
     task_id: str | None = Field(default=None, min_length=1, max_length=120)
     expected_revision: int | None = Field(default=None, ge=1)
     allow_external_generation: Literal[True]
@@ -103,14 +107,34 @@ def execute(store, identity, job_id, body, config, options):
         reference_media = options.pop('_reference_media', None)
         # The shared adapter publishes local files via managed storage; never send blobs/data URLs.
         with tempfile.TemporaryDirectory(prefix='companion-reference-') as directory:
-            if reference_media:
-                content, mime = reference_media
+            def materialize(item, name):
+                content, mime = item
                 suffix = {'image/jpeg': '.jpg', 'image/png': '.png', 'image/webp': '.webp'}.get(mime)
                 if not suffix:
                     raise ValueError('Unsupported reference image type')
-                material = Path(directory) / ('reference' + suffix)
+                material = Path(directory) / (name + suffix)
                 material.write_bytes(content)
-                options['ref_image_path' if body.mode == 'image' else 'img_path'] = str(material)
+                return str(material)
+            if reference_media:
+                if isinstance(reference_media, tuple):
+                    reference_media = {'image': reference_media}
+                if body.mode == 'image' and reference_media.get('image'):
+                    options['ref_image_path'] = materialize(reference_media['image'], 'reference')
+                elif body.mode == 'video':
+                    if reference_media.get('image') and not reference_media.get('first') and not reference_media.get('refs'):
+                        reference_media['first'] = reference_media['image']
+                    if body.reference and not body.first_reference and not body.references:
+                        reference_media['first'] = reference_media.get('image')
+                    mode = body.video_mode or ('f2v' if body.first_reference and body.last_reference else 'r2v' if body.references else 'i2v' if (body.reference or reference_media.get('first')) else 't2v')
+                    if mode == 'i2v' and reference_media.get('first'):
+                        options['img_path'] = materialize(reference_media['first'], 'first')
+                    elif mode == 'f2v':
+                        options['first_frame'] = materialize(reference_media['first'], 'first')
+                        options['last_frame'] = materialize(reference_media['last'], 'last')
+                    elif mode == 'r2v':
+                        options['ref_image_paths'] = [materialize(item, f'reference-{index}') for index, item in enumerate(reference_media.get('refs', []), 1)]
+                    else:
+                        raise ValueError('Video reference material does not match selected mode')
             if body.mode == 'image':
                 ratio = body.setting.split()[-1]
                 UniArtImageModel(config).generate(body.prompt, str(output), model_name=body.model, aspect_ratio=ratio, **options)
@@ -139,13 +163,27 @@ def checked_draft(db, store, identity, body):
         raise HTTPException(404, '创作任务不存在。')
     payload = json.loads(row['payload'])
     expected_mode = 'video' if payload['type'] == 'video_generate' else 'image'
+    mode = payload.get('video_mode', 't2v')
+    references = payload.get('reference_photo_ids', [])
     if (row['status'] != 'active' or row['revision'] != body.expected_revision
             or body.mode != expected_mode or body.prompt != payload['brief']
             or body.reference != payload['photo_id']
+            or body.references != references
+            or body.first_reference != payload.get('first_photo_id')
+            or body.last_reference != payload.get('last_photo_id')
+            or (body.video_mode or mode) != mode
             or body.setting != payload.get('setting', '5 秒' if expected_mode == 'video' else '方形 1:1')):
         raise HTTPException(409, '创作要求已改变，请查看当前卡片再确认。')
     if not payload['brief'].strip() or (payload['type'] == 'image_edit' and not payload['photo_id']):
         raise HTTPException(422, '请先补充具体要求和需要修改的照片。')
+    if payload['type'] == 'video_generate':
+        mode = payload.get('video_mode', 't2v')
+        if mode == 'i2v' and not payload.get('first_photo_id'):
+            raise HTTPException(422, '首帧视频需要先选择一张照片。')
+        if mode == 'f2v' and (not payload.get('first_photo_id') or not payload.get('last_photo_id')):
+            raise HTTPException(422, '首尾帧视频需要选择首帧和尾帧。')
+        if mode == 'r2v' and not payload.get('reference_photo_ids'):
+            raise HTTPException(422, '全能参考需要至少选择一张照片。')
     return payload
 
 
@@ -166,7 +204,7 @@ def generate(body: Generate, identity: Owner, store: Store, background: Backgrou
         catalog = fetch_uniart_catalog(config)
     except Exception:
         raise HTTPException(502, '模型列表读取失败，请检查渠道配置。') from None
-    capability = ('i2i' if body.reference else 't2i') if body.mode == 'image' else ('i2v' if body.reference else 't2v')
+    capability = ('i2i' if body.reference else 't2i') if body.mode == 'image' else (body.video_mode or ('f2v' if body.first_reference and body.last_reference else 'r2v' if body.references else 'i2v' if body.reference else 't2v'))
     selected = next((m for m in catalog if m['id'] == body.model and capability in m['capabilities']), None)
     if not selected:
         raise HTTPException(422, '请选择支持当前创作类型的模型。')
@@ -186,14 +224,18 @@ def generate(body: Generate, identity: Owner, store: Store, background: Backgrou
         seconds = int(body.setting.split()[0]) if body.setting in ('5 秒', '10 秒') else 0
         if not seconds or not duration.get('min', 999) <= seconds <= duration.get('max', 0):
             raise HTTPException(422, '所选模型不支持该时长。')
-    if body.reference:
+    if body.reference or body.references or body.first_reference or body.last_reference:
+        ids = list(dict.fromkeys([item for item in ([body.reference, body.first_reference, body.last_reference] + body.references) if item]))
+        materials = {}
         try:
-            content, mime = photo_store().media(identity.owner_profile_id, body.reference, thumbnail=False)
+            for photo_id in ids:
+                content, mime = photo_store().media(identity.owner_profile_id, photo_id, thumbnail=False)
+                if mime not in ('image/jpeg', 'image/png', 'image/webp'):
+                    raise HTTPException(422, '请选择照片作为参考素材。')
+                materials[photo_id] = (content, mime)
         except PhotoNotAvailable:
             raise HTTPException(404, '参考照片不可用，请重新选择。') from None
-        if mime not in ('image/jpeg', 'image/png', 'image/webp'):
-            raise HTTPException(422, '请选择照片作为参考素材。')
-        options['_reference_media'] = (content, mime)
+        options['_reference_media'] = {'image': materials.get(body.reference), 'first': materials.get(body.first_reference), 'last': materials.get(body.last_reference), 'refs': [materials[item] for item in body.references]}
     job_id = str(uuid.uuid4())
     try:
         with store.connection(write=True) as db:

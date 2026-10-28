@@ -36,13 +36,14 @@ class SearchMemories(ListMemories):
 
 class StartMediaDraft(Strict):
     type: Literal['image_edit', 'image_generate', 'video_generate']
+    video_mode: Literal['t2v', 'i2v', 'f2v', 'r2v'] | None = None
     brief: str = Field(default='', max_length=4000)
 
 
 class UpdateMediaDraft(Strict):
     task_id: str = Field(min_length=1, max_length=120)
     expected_revision: int = Field(ge=1)
-    action: Literal['brief', 'select_photo', 'clear_photo', 'setting', 'pause', 'resume', 'cancel']
+    action: Literal['brief', 'select_photo', 'select_first_photo', 'select_last_photo', 'add_reference_photo', 'remove_reference_photo', 'video_mode', 'clear_photo', 'setting', 'pause', 'resume', 'cancel']
     setting: str | None = Field(default=None, max_length=40)
     brief: str = Field(default='', max_length=4000)
     photo_id: str | None = Field(default=None, max_length=120)

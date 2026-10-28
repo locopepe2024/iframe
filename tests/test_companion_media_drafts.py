@@ -88,3 +88,16 @@ def test_editor_content_cannot_start_creative_task(tmp_path):
     claim=store.claim_turn('owner','actor',session,'diary','今天开发图片生成')
     with pytest.raises(ValueError):
         store.finish_turn('owner','actor',claim,dict(kind='tool',name='media.draft.start',arguments=dict(type='image_generate')))
+
+
+def test_video_reference_modes_keep_distinct_material_slots(tmp_path, monkeypatch):
+    store, session = setup(tmp_path)
+    task = store.start_media_draft('owner', 'actor', session, 'video', dict(type='video_generate', video_mode='f2v', brief='从春天走到秋天'))
+    monkeypatch.setattr('src.apps.companion_runtime.media_drafts.read_photos', lambda *args: {'photos':[{}]})
+    task = store.update_media_draft('owner', 'actor', session, task['task_id'], 'first', dict(expected_revision=1, action='select_first_photo', photo_id='first'))
+    task = store.update_media_draft('owner', 'actor', session, task['task_id'], 'last', dict(expected_revision=2, action='select_last_photo', photo_id='last'))
+    assert task['video_mode'] == 'f2v' and task['first_photo_id'] == 'first' and task['last_photo_id'] == 'last'
+    task = store.update_media_draft('owner', 'actor', session, task['task_id'], 'mode', dict(expected_revision=3, action='video_mode', video_mode='r2v'))
+    task = store.update_media_draft('owner', 'actor', session, task['task_id'], 'add-a', dict(expected_revision=4, action='add_reference_photo', photo_id='a'))
+    task = store.update_media_draft('owner', 'actor', session, task['task_id'], 'add-b', dict(expected_revision=5, action='add_reference_photo', photo_id='b'))
+    assert task['video_mode'] == 'r2v' and task['reference_photo_ids'] == ['a','b']

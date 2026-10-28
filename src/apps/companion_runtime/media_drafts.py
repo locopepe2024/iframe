@@ -10,6 +10,11 @@ def display(row):
     payload = json.loads(row['payload'])
     state = row['status']
     payload.setdefault('setting', '5 秒' if payload['type'] == 'video_generate' else '方形 1:1')
+    if payload['type'] == 'video_generate':
+        payload.setdefault('video_mode', 't2v')
+        payload.setdefault('first_photo_id', None)
+        payload.setdefault('last_photo_id', None)
+        payload.setdefault('reference_photo_ids', [])
     step = ('submitted' if state == 'submitted' else 'awaiting_asset' if payload['type'] == 'image_edit' and not payload['photo_id'] else
             'awaiting_brief' if not payload['brief'] else 'configuring')
     spoken = ('创作已提交，可以继续聊天。' if state == 'submitted' else '已取消这次创作。' if state == 'cancelled' else '创作要求已保留，先回到聊天。' if state == 'paused' else
@@ -47,6 +52,8 @@ class MediaDrafts:
             if self.active_media_draft(db, owner, actor, session):
                 raise Conflict('Pause or cancel the current creative task before starting another')
             payload = dict(type=values['type'], brief=values.get('brief', '').strip(), photo_id=None)
+            if values['type'] == 'video_generate':
+                payload.update(video_mode=values.get('video_mode') or 't2v', first_photo_id=None, last_photo_id=None, reference_photo_ids=[])
             task_id = str(uuid.uuid4())
             db.execute('INSERT INTO companion_media_drafts VALUES (?,?,?,?,?,?,?,?,?,?)',
                        (task_id, owner, actor, session, operation_id, request, 'active', 1, encode(payload), self.clock()))
@@ -83,13 +90,33 @@ class MediaDrafts:
                 if not brief:
                     raise ValueError('A concrete creative brief is required')
                 payload['brief'] = brief
-            elif action == 'select_photo':
+            elif action in ('select_photo', 'select_first_photo', 'select_last_photo', 'add_reference_photo', 'remove_reference_photo'):
                 photo_id = values.get('photo_id')
                 if not photo_id:
                     raise ValueError('Select a photo')
-                # Same owner-scoped live photo read used by the album tools.
-                read_photos(owner, 'photo.item.read', dict(photo_id=photo_id))
-                payload['photo_id'] = photo_id
+                if payload['type'] == 'video_generate' and action == 'select_first_photo':
+                    target = 'first_photo_id'
+                elif payload['type'] == 'video_generate' and action == 'select_last_photo':
+                    target = 'last_photo_id'
+                elif payload['type'] == 'video_generate' and action in ('add_reference_photo', 'remove_reference_photo'):
+                    read_photos(owner, 'photo.item.read', dict(photo_id=photo_id))
+                    refs = list(payload.get('reference_photo_ids', []))
+                    if action == 'add_reference_photo' and photo_id not in refs:
+                        if len(refs) >= 9: raise ValueError('Too many reference photos')
+                        refs.append(photo_id)
+                    elif action == 'remove_reference_photo':
+                        refs = [item for item in refs if item != photo_id]
+                    payload['reference_photo_ids'] = refs
+                    target = None
+                else:
+                    target = 'photo_id'
+                if target:
+                    read_photos(owner, 'photo.item.read', dict(photo_id=photo_id))
+                    payload[target] = photo_id
+            elif action == 'video_mode':
+                if payload['type'] != 'video_generate' or values.get('video_mode') not in ('t2v', 'i2v', 'f2v', 'r2v'):
+                    raise ValueError('Unsupported video mode')
+                payload['video_mode'] = values['video_mode']
             elif action == 'setting':
                 setting = values.get('setting')
                 allowed = ('5 秒', '10 秒') if payload['type'] == 'video_generate' else ('方形 1:1', '横向 16:9', '竖向 9:16')

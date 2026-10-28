@@ -246,9 +246,9 @@ export default function AgentChat() {
     const task=await companionApi.startMediaDraft(activeSession,{operation_id:crypto.randomUUID(),type});
     setCreativeTask(task);setNotice("");
   }
-  async function changeCreative(action:"clear_photo"|"select_photo"|"setting"|"pause"|"resume"|"cancel", photo_id?:string) {
+  async function changeCreative(action:"clear_photo"|"select_photo"|"select_first_photo"|"select_last_photo"|"add_reference_photo"|"remove_reference_photo"|"video_mode"|"setting"|"pause"|"resume"|"cancel", photo_id?:string) {
     if (!creativeTask) return;
-    const task=await companionApi.updateMediaDraft(session,{operation_id:crypto.randomUUID(),task_id:creativeTask.task_id,expected_revision:creativeTask.revision,action,...(photo_id?(action==="setting"?{setting:photo_id}:{photo_id}):{})});
+    const task=await companionApi.updateMediaDraft(session,{operation_id:crypto.randomUUID(),task_id:creativeTask.task_id,expected_revision:creativeTask.revision,action,...(photo_id?(action==="setting"?{setting:photo_id}:action==="video_mode"?{video_mode:photo_id as "t2v"|"i2v"|"f2v"|"r2v"}:{photo_id}):{})});
     setCreativeTask(task);
   }
   function organizeSelectedPhoto(id: string) {
