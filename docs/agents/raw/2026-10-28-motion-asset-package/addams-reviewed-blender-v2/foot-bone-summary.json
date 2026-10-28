@@ -1,0 +1,23 @@
+{
+  "rows": [
+    {
+      "weight": 0,
+      "camera_relative_ankle_vertical_range_units": 0.060846686363220215,
+      "max_ankle_step_units": 0.13661962683741544
+    },
+    {
+      "weight": 1,
+      "camera_relative_ankle_vertical_range_units": 0.07818543910980225,
+      "max_ankle_step_units": 0.061745917538279765
+    },
+    {
+      "weight": 4,
+      "camera_relative_ankle_vertical_range_units": 0.13948118686676025,
+      "max_ankle_step_units": 0.09419248412958205
+    }
+  ],
+  "limits": [
+    "Camera-relative ankle bone motion, not sole slip or ground contact metric.",
+    "No calibrated ground; cannot infer physical contact from these values."
+  ]
+}
