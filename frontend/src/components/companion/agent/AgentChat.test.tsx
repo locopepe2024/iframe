@@ -308,7 +308,9 @@ it("gives a natural-language diary request save actions and calendar retrieval",
  api.diaries.mockResolvedValue({diaries:[saved]});
  fireEvent.click(screen.getByRole("button",{name:"查看已保存日记"}));
  await screen.findByRole("button",{name:`${day}，已有日记`});
- expect(screen.getAllByRole("article",{name:"已保存日记"})).toHaveLength(2);
+ expect(screen.getAllByRole("article",{name:"已保存日记"})).toHaveLength(1);
+  fireEvent.click(screen.getByRole("button",{name:`${day}，已有日记`}));
+  expect(screen.getAllByRole("article",{name:"已保存日记"})).toHaveLength(2);
 });
 
 it("restores save actions for a historical natural diary reply with a dated heading",async()=>{
@@ -374,7 +376,9 @@ it("shows the registered diary capability and opens its calendar",async()=>{
   api.messages.mockResolvedValue({messages:[{id:"diary-msg",sequence:1,text:"打开日记",turn:{turn_id:"diary-turn",status:"completed",result:{kind:"diary_read",name:"diary.open",diaries:[],open_calendar:true,spoken_text:"日记入口已经打开，可以查看日历或选择一天写日记。"}}}],next_before:null});
   localStorage.setItem("iframe-companion-agent-session-v1","s");
   render(<AgentChat/>);
-  fireEvent.click(await screen.findByRole("button",{name:"打开日记月历"}));
+  const reopen = await screen.findByRole("button",{name:"打开日记月历"});
+  expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  fireEvent.click(reopen);
   await screen.findByRole("dialog");
   expect(screen.queryByText("实际记忆查询结果")).not.toBeInTheDocument();
 });
@@ -554,4 +558,16 @@ it("does not speak a late reply after text mode was selected and audio re-enable
  await act(async()=>complete({turn_id:"late-reply",status:"completed",result:{kind:"text",text:"这条只保留文字"}}));
  await screen.findByText("这条只保留文字");
  expect(playback.mock.calls.some(([props])=>props.reply?.id === "late-reply")).toBe(false);
+});
+
+it("opens the calendar from a fresh diary list reply without dumping saved entries into chat",async()=>{
+ api.chat.mockResolvedValue({turn_id:"calendar-new",status:"completed",result:{kind:"diary_read",name:"diary.list",open_calendar:true,month:"2025-02",spoken_text:"这个月有1篇已保存日记。",diaries:[{day:"2025-02-14",text:"不应在聊天展示的正文",revision:1,source_turn_id:""}]}});
+ await start(); allowText();
+ fireEvent.change(screen.getByLabelText("和我聊聊天"),{target:{value:"看一下都哪些天写日记了"}});
+ fireEvent.click(screen.getByRole("button",{name:"发送"}));
+ await screen.findByRole("dialog",{name:"日记"});
+ expect(screen.getByLabelText("选择年月")).toHaveValue("2025-02");
+ expect(screen.queryByText("不应在聊天展示的正文")).not.toBeInTheDocument();
+ fireEvent.click(screen.getByRole("button",{name:"关闭日记"}));
+ expect(screen.queryByRole("dialog",{name:"日记"})).not.toBeInTheDocument();
 });

@@ -8,7 +8,7 @@ def read_summary(name, output):
         return dict(photo_ids=[p['photo_id'] for p in output.get('photos', [])[:12]],
                     has_more=bool(output.get('next_after_id')))
     if name.startswith('diary.'):
-        return dict(days=[d['day'] for d in output.get('diaries', [])[:31]],
+        return dict(days=output.get('days', [d['day'] for d in output.get('diaries', [])])[:31],
                     open_calendar=bool(output.get('open_calendar')))
     return None
 

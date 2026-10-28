@@ -46,6 +46,10 @@ def test_read_summary_does_not_copy_private_bodies():
     assert read_summary('photo.album.list', {'photos':[{'photo_id':'p'}], 'next_after_id':'p'}) == dict(photo_ids=['p'], has_more=True)
 
 
+def test_calendar_summary_keeps_marked_dates_without_diary_bodies():
+    assert read_summary('diary.list', {'days':['2026-10-28'], 'diaries':[], 'open_calendar':True}) == dict(days=['2026-10-28'], open_calendar=True)
+
+
 def test_diary_save_receipt_is_shared_and_does_not_reopen_previous_photo_task(tmp_path):
     store = ChatStore(tmp_path / 'chat.db', initialize=True)
     session = store.session('owner', 's')['session_id']

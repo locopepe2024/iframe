@@ -83,6 +83,7 @@ export default function AgentChat() {
   const [draft, setDraft] = useState<string | null>(null);
   const [hasRetry, setHasRetry] = useState(false);
   const [albumOpen,setAlbumOpen] = useState(false);
+  const [diaryMonth, setDiaryMonth] = useState<string | undefined>();
   const [feature,setFeature] = useState<CompanionFeature | null>(null);
   const [dismissedUploadGuides, setDismissedUploadGuides] = useState<string[]>([]);
   const [uploading,setUploading] = useState(false);
@@ -217,6 +218,9 @@ export default function AgentChat() {
       if (audioReply && speechEnabled.current && requestSpeechEpoch === speechEpoch.current) {
         const replyText = spokenTurnText(result.result);
         if (replyText) setSpokenReply({ id: result.turn_id, text: replyText });
+      }
+      if (result.result?.kind === "diary_read" && (result.result.open_calendar || result.result.name !== "diary.read")) {
+        setDiaryMonth(result.result.month); setFeature("diary");
       }
       setDraft(null); setTurn(result); setPreview(result.result?.kind === "confirmation" ? result.result : null); setDrafts(old => ({ ...old, chat: "" })); sendOperation.current = null; setHasRetry(false);
       commitAttachments();
@@ -391,8 +395,8 @@ export default function AgentChat() {
         /> : <article className={chatStyles.assistant}><p>{message.turn.result.text}</p><SpeechPlayback text={message.turn.result.text} voice={identity.voice}/></article>)}
         {message.turn?.result?.kind === "diary_read" && <section className={styles.panel} aria-label="日记查询结果">
           <p>{message.turn.result.spoken_text}</p>
-          {message.turn.result.diaries.map(entry => <DiaryCard key={`${entry.day}-${entry.revision}`} day={entry.day} text={entry.text} sourceTurn={entry.source_turn_id} saved={entry} onOpenDiary={() => setFeature("diary")} />)}
-          <button type="button" onClick={() => setFeature("diary")}>打开日记月历</button>
+          {message.turn.result.name === "diary.read" && message.turn.result.diaries.map(entry => <DiaryCard key={`${entry.day}-${entry.revision}`} day={entry.day} text={entry.text} sourceTurn={entry.source_turn_id} saved={entry} onOpenDiary={() => setFeature("diary")} />)}
+          <button type="button" onClick={() => {setDiaryMonth(message.turn?.result?.kind === "diary_read" ? message.turn.result.month : undefined);setFeature("diary");}}>打开日记月历</button>
         </section>}
         {message.turn?.result?.kind === "photo_action" && index === messages.length - 1 && <PhotoActionCard key={message.turn.turn_id} result={message.turn.result} />}
         {message.turn?.result?.kind === "album_guide" && index === messages.length - 1 && <AlbumScopeCard key={message.turn.turn_id} browse={message.turn.result.browse} disabled={inputDisabled || pending} onSelect={organizeSelectedPhoto} />}
@@ -409,15 +413,15 @@ export default function AgentChat() {
     {turn?.result?.kind === "photo_task" && !messages.some(m => m.turn?.turn_id === turn.turn_id) && <PhotoTaskCard key={`${turn.turn_id}-${turn.result.revision}`} task={turn.result} />}
     {turn?.result?.kind === "diary_read" && !messages.some(m => m.turn?.turn_id === turn.turn_id) && <section className={styles.panel} aria-label="日记查询结果">
       <p>{turn.result.spoken_text}</p>
-      {turn.result.diaries.map(entry => <DiaryCard key={`${entry.day}-${entry.revision}`} day={entry.day} text={entry.text} sourceTurn={entry.source_turn_id} saved={entry} onOpenDiary={() => setFeature("diary")} />)}
-      <button type="button" onClick={() => setFeature("diary")}>打开日记月历</button>
+      {turn.result.name === "diary.read" && turn.result.diaries.map(entry => <DiaryCard key={`${entry.day}-${entry.revision}`} day={entry.day} text={entry.text} sourceTurn={entry.source_turn_id} saved={entry} onOpenDiary={() => setFeature("diary")} />)}
+      <button type="button" onClick={() => {setDiaryMonth(turn.result?.kind === "diary_read" ? turn.result.month : undefined);setFeature("diary");}}>打开日记月历</button>
     </section>}
     {turn?.result?.kind === "upload_guide" && !messages.some(m => m.turn?.turn_id === turn.turn_id) && !dismissedUploadGuides.includes(turn.turn_id) && <UploadGuideCard {...uploadGuideActions(turn.turn_id)} />}
     {uploadFiles.length > 0 && <MediaUpload files={uploadFiles} disabled={inputDisabled || pending} onUploaded={attach} onBusyChange={setUploading} onClose={() => setUploadFiles([])} />}
     {albumOpen && <AlbumPicker disabled={inputDisabled || pending} onClose={() => setAlbumOpen(false)} onPhoto={photo => {
       attach({kind:"photo",id:photo.photo_id,name:"相册照片"});setAlbumOpen(false);
     }} onVideo={video => {attach({kind:"video",id:video.video_id,name:video.name});setAlbumOpen(false);}} />}
-    {feature === "diary" ? <DiaryCalendar onClose={()=>setFeature(null)} onCreate={day=>{setFeature(null);startDiaryPrompt(day);}}/> : feature && <CompanionFeatureSheet feature={feature} onClose={() => setFeature(null)} />}
+    {feature === "diary" ? <DiaryCalendar initialMonth={diaryMonth} onClose={()=>setFeature(null)} onCreate={day=>{setFeature(null);startDiaryPrompt(day);}}/> : feature && <CompanionFeatureSheet feature={feature} onClose={() => setFeature(null)} />}
     {mode !== "chat" && (guide ? <GenerationGuide key={mode} value={guide} disabled={inputDisabled || pending} onChange={updateGuide} onEdit={() => { updateDraft(guide.prompt); inputRef.current?.focus(); }} onCancel={() => { updateDraft(guide.prompt); setNotice("已取消创作，描述草稿仍保留。"); }} /> : <article className={chatStyles.assistant}><span>陪伴助手</span><p>{mode === "video" ? "想做一段什么视频？" : "想生成一张什么图片？"}在下面说说，点箭头后我们一步步来。</p></article>)}
     {notice && <p role="status">{notice}</p>}{error && <p role="alert">{error}</p>}
     {turn?.result?.kind === "read" && <section className={styles.panel} aria-label="工具读取结果"><h2>实际记忆查询结果</h2>
@@ -478,7 +482,7 @@ export default function AgentChat() {
       onRequestConsent={() => { setMenu(true); setNotice("请在“更多 → 聊天设置”中允许发送文字。"); }}
       retry={hasRetry ? retryLastRequest : null} />
     <nav className={chatStyles.bottomNav} aria-label="主要功能">
-      <button type="button" aria-current={feature === "diary" ? "page" : undefined} onClick={() => setFeature("diary")}><BookOpen size={22} aria-hidden="true" /><span>日记</span></button>
+      <button type="button" aria-current={feature === "diary" ? "page" : undefined} onClick={() => {setDiaryMonth(undefined);setFeature("diary");}}><BookOpen size={22} aria-hidden="true" /><span>日记</span></button>
       <button type="button" aria-current={feature === "plaza" ? "page" : undefined} onClick={() => setFeature("plaza")}><Compass size={22} aria-hidden="true" /><span>广场</span></button>
       <button type="button" aria-current={albumOpen ? "page" : undefined} onClick={() => { setFeature(null); setAlbumOpen(true); }}><Images size={22} aria-hidden="true" /><span>相册</span></button>
       <button type="button" aria-current={feature === "mine" ? "page" : undefined} onClick={() => setFeature("mine")}><UserRound size={22} aria-hidden="true" /><span>我的</span></button>

@@ -12,8 +12,11 @@ def test_capabilities_and_diary_reads_do_not_mutate(tmp_path):
     assert {t for c in CAPABILITIES for t in c['tools']} == set(MODELS)
     assert dispatch(store, 'owner', 'actor', 'diary.open', {})['open_calendar']
     listed = dispatch(store, 'owner', 'actor', 'diary.list', {'month': '2026-10'})
-    assert len(listed['diaries']) == 1
-    assert dispatch(store, 'owner', 'actor', 'diary.read', {'day': '2026-10-27'})['diaries'] == listed['diaries']
+    assert listed['open_calendar'] is True
+    assert listed['month'] == '2026-10'
+    assert listed['days'] == ['2026-10-27']
+    assert listed['diaries'] == []
+    assert dispatch(store, 'owner', 'actor', 'diary.read', {'day': '2026-10-27'})['diaries'][0]['text'] == '今天散步了。'
     assert dispatch(store, 'other', 'actor', 'diary.read', {'day': '2026-10-27'})['diaries'] == []
     assert dispatch(store, 'owner', 'other', 'diary.list', {'month': '2026-10'})['diaries'] == []
     assert dispatch(store, 'owner', 'actor', 'diary.read', {'day': '2026-10-26'})['diaries'] == []

@@ -10,6 +10,8 @@ it("defaults to today, marks only saved days and browses a different month",asyn
   api.diaries.mockResolvedValueOnce({diaries:[saved]}).mockResolvedValue({diaries:[]});
   const create=vi.fn();render(<DiaryCalendar onClose={()=>{}} onCreate={create}/>);
   expect(await screen.findByRole("button",{name:day+"，已有日记"})).toHaveAttribute("aria-pressed","true");
+  expect(screen.queryByText("和女儿一起喝茶。")).not.toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button",{name:day+"，已有日记"}));
   expect(screen.getByText("和女儿一起喝茶。")).toBeInTheDocument();
   const markedDay = screen.getByRole("button",{name:day+"，已有日记"});
   expect(within(markedDay).getByText("✅")).toHaveClass(/calendarDayMark/);
@@ -61,4 +63,14 @@ it("starts a diary directly without a model reply and saves typed media words as
  fireEvent.click(within(screen.getByRole("dialog",{name:"日记编辑器"})).getByRole("button",{name:"保存日记"}));
  await screen.findByRole("button",{name:day+"，已有日记"});
  expect(api.saveDiary).toHaveBeenCalledWith(day,expect.objectContaining({text,source_turn_id:"",expected_revision:0}));
+});
+
+it("opens the requested month without showing diary bodies until a date is selected",async()=>{
+ api.diaries.mockResolvedValue({diaries:[{day:"2025-02-14",text:"只在点击日期后显示",source_turn_id:"",revision:1,updated_at:1}]});
+ render(<DiaryCalendar initialMonth="2025-02" onClose={()=>{}} onCreate={()=>{}}/>);
+ const date=await screen.findByRole("button",{name:"2025-02-14，已有日记"});
+ expect(api.diaries).toHaveBeenCalledWith("2025-02");
+ expect(screen.queryByText("只在点击日期后显示")).not.toBeInTheDocument();
+ fireEvent.click(date);
+ expect(await screen.findByText("只在点击日期后显示")).toBeInTheDocument();
 });
