@@ -1,11 +1,11 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Check, Film, FolderOpen, Loader2, Plus, RefreshCw, Trash2, Upload, X } from "lucide-react";
+import { Check, Film, FolderOpen, Loader2, Plus, RefreshCw, Trash2, Upload, X, Library } from "lucide-react";
 import { useTranslations } from "next-intl";
 import axios from "axios";
 import { API_URL } from "@/lib/api";
-import { CutEvidence, importCuts, recreationApi, RecreationProject, seconds } from "@/lib/recreation";
+import { CutEvidence, importCuts, recreationApi, RecreationMedia, RecreationProject, seconds } from "@/lib/recreation";
 import ShotReferences from "./ShotReferences";
 
 const workflowSteps = ["split", "parse", "analyze", "replace", "submit", "assemble"] as const;
@@ -57,6 +57,9 @@ export default function RecreationPage() {
   const [error, setError] = useState("");
   const [step, setStep] = useState<WorkflowStep>("split");
   const [runProgress, setRunProgress] = useState<RunProgress>(emptyRunProgress);
+  const [showMediaPicker, setShowMediaPicker] = useState(false);
+  const [libraryVideos, setLibraryVideos] = useState<RecreationMedia[]>([]);
+  const [libraryLoading, setLibraryLoading] = useState(false);
   const video = useRef<HTMLVideoElement>(null);
   const file = useRef<HTMLInputElement>(null);
   const activeId = useRef<string | null>(null);
@@ -131,6 +134,25 @@ export default function RecreationPage() {
     try { await action(); } catch (err) { report(err); } finally { setBusy(false); }
   }
 
+  async function openMediaPicker() {
+    setShowMediaPicker(true);
+    setLibraryLoading(true);
+    try {
+      const page = await recreationApi.searchMedia({ kind: "source_video", limit: 100, cursor: 0 });
+      setLibraryVideos(page.items);
+    } catch (err) {
+      report(err);
+      setLibraryVideos([]);
+    } finally {
+      setLibraryLoading(false);
+    }
+  }
+
+  async function chooseLibraryVideo(item: RecreationMedia) {
+    setShowMediaPicker(false);
+    await act(async () => open(await recreationApi.get(item.project_id)));
+  }
+
   async function chooseCut(pts: number) {
     if (!project || !analysis || cuts.includes(pts)) return;
     const pair = evidence[pts] ?? await recreationApi.evidence(project, pts);
@@ -153,9 +175,14 @@ export default function RecreationPage() {
   return <div className="h-full overflow-y-auto p-4 md:p-8 text-foreground">
     <header className="flex flex-wrap items-center justify-between gap-3 border-b border-border pb-4">
       <h1 className="text-xl font-semibold flex items-center gap-2"><Film size={22} />{t("title")}</h1>
+      <div className="flex flex-wrap gap-2">
+      <button className="glass-button flex items-center gap-2" disabled={busy} onClick={() => void openMediaPicker()}>
+        <Library size={16} />从素材库选择视频
+      </button>
       <button className="glass-button flex items-center gap-2" disabled={busy} onClick={() => file.current?.click()}>
         <Upload size={16} />{t("upload")}
       </button>
+      </div>
       <input ref={file} type="file" accept=".mp4,.mov,.webm,.mkv" className="hidden" aria-label={t("upload")}
         onChange={event => { const selected = event.target.files?.[0]; event.target.value = "";
           if (selected) void act(async () => {
@@ -164,6 +191,20 @@ export default function RecreationPage() {
           }); }} />
     </header>
     {error && <div role="alert" className="my-4 border-l-2 border-red-400 pl-3 text-sm text-red-400 break-words">{error}</div>}
+    {showMediaPicker && <div className="fixed inset-0 z-40 grid place-items-center bg-black/60 p-4" role="dialog" aria-modal="true" aria-label="从素材库选择视频" onClick={() => setShowMediaPicker(false)}>
+      <section className="glass-panel max-h-[80vh] w-full max-w-3xl overflow-hidden rounded-2xl p-5" onClick={event => event.stopPropagation()}>
+        <header className="mb-4 flex items-center justify-between gap-3">
+          <div><h2 className="text-lg font-semibold">从素材库选择视频</h2><p className="text-xs text-text-muted">选择后会进入独立剪辑工作区，可继续切分、替换和合成。</p></div>
+          <button type="button" className="glass-button p-2" aria-label="关闭" onClick={() => setShowMediaPicker(false)}><X size={16} /></button>
+        </header>
+        {libraryLoading ? <div className="flex items-center gap-2 py-10 text-sm text-text-muted"><Loader2 size={16} className="animate-spin" />正在读取视频素材…</div> : libraryVideos.length === 0 ? <p className="py-10 text-sm text-text-muted">素材库暂无可剪辑的视频。请先上传视频。</p> : <div className="grid max-h-[58vh] grid-cols-1 gap-3 overflow-y-auto sm:grid-cols-2">
+          {libraryVideos.map(item => <button key={item.media_id} type="button" className="glass-panel overflow-hidden rounded-xl text-left transition-colors hover:border-primary/60" onClick={() => void chooseLibraryVideo(item)}>
+            <video src={item.storage_path.startsWith("/") ? `${API_URL}${item.storage_path}` : item.storage_path} preload="metadata" muted className="aspect-video w-full bg-black object-contain" />
+            <span className="block truncate p-3 text-sm">{item.display_name}</span>
+          </button>)}
+        </div>}
+      </section>
+    </div>}
     <div className="grid gap-6 mt-5 lg:grid-cols-[220px_minmax(0,1fr)]">
       <aside className="min-w-0">
         <h2 className="text-sm font-semibold mb-3">{t("sources")}</h2>
