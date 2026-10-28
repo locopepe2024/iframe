@@ -9,3 +9,11 @@
 验证：超过 12 张的全库统计、隔离其他用户、排除删除、空相册、只读、严格参数、历史快照及新查询、原始三种语音转写不被确定性路由拦截。模型请求携带统计工具，实际语义选择另作渠道验证。
 
 涉及 photos/workflow.py、companion_runtime/{tools,photo_tools,chat_store,api,model}.py 及对应测试。运行 `.venv/bin/python -m pytest tests/test_companion_photo_tools.py tests/test_companion_chat.py`。
+
+## 验证与部署结果
+
+- 本地提交：772ad4f1；未推送。
+- 当前工作区 55 项测试通过；独立提取提交版本后 49 项通过，4 项已有测试依赖未提交的 workflow_context，排除这 4 项后通过。此次新增的 4 项统计测试全部通过，不依赖协调器。
+- 已部署测试站后端，6 个文件 SHA256 与发布文件逐项一致；保留远端既有 model.py 日志及上下文代码，只应用本次提示词增量。旧源码备份位于 /srv/lumenx/companion-demo/backups/album-count-772ad4f1。无需前端更新或数据库迁移。
+- 测试身份线上 POST /companion-runtime/tools 的 photo.album.count 返回 total=0 与对应中文回复；这是专用空测试身份，不代表用户的照片数量。健康检查正常。
+- 测试身份尝试普通聊天数量问题时，因未配置个人 UniArt 渠道返回 409。尚未验证真实 Qwen 工具选择，也未验证自然语音；不能把接口及模拟工具测试当作语义验收。
