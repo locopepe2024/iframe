@@ -26,6 +26,7 @@ it('adds multiple clips and an audio lane over HTTP without crypto.randomUUID', 
   fireEvent.change(screen.getByRole('combobox', { name: 'Editing project' }), { target: { value: project.id } });
   fireEvent.click(await screen.findByRole('button', { name: 'Select material' }));
   await waitFor(() => expect(screen.getByRole('button', { name: 'Save edit' })).toBeEnabled());
+  fireEvent.click(screen.getByRole('button', { name: 'Material panel' }));
   await waitFor(() => expect(screen.getByRole('button', { name: 'Select material' })).toBeEnabled());
   fireEvent.click(screen.getByRole('button', { name: 'Select material' }));
   await waitFor(() => expect(editing.material).toHaveBeenCalledTimes(2));

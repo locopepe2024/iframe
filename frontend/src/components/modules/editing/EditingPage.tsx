@@ -73,10 +73,10 @@ export default function EditingPage() {
         <label className="text-sm">{t('添加音频到', 'Add audio to')} <select className="glass-input px-3 py-2" value={audioLane} onChange={e => setAudioLane(e.target.value as typeof audioLane)}><option value="bgm">BGM</option><option value="dialogue">{t('对白', 'Dialogue')}</option><option value="sfx">{t('音效', 'SFX')}</option></select></label>
         {plan && <>
           <div className="flex gap-2"><button className="glass-button px-3 py-2" disabled={!undo.length} onClick={() => { setRedo(old => [...old, plan]); setPlan(undo[undo.length - 1]); setUndo(old => old.slice(0, -1)); setDirty(true); }}>{t('撤销', 'Undo')}</button><button className="glass-button px-3 py-2" disabled={!redo.length} onClick={() => { setUndo(old => [...old, plan]); setPlan(redo[redo.length - 1]); setRedo(old => old.slice(0, -1)); setDirty(true); }}>{t('重做', 'Redo')}</button></div>
-          <AssemblyTracks plan={plan} resourceId={project.id} saved={!dirty} project={{ id: project.id, frames: [], video_tasks: [] }} materials={sources} onChange={change}
+          <AssemblyTracks plan={plan} resourceId={project.id} saved={!dirty} project={{ id: project.id, frames: [], video_tasks: [] }} materials={sources} materialPanel={<EditingMaterials onSelect={add} disabled={busy} />} onChange={change}
             onExportSubtitles={lane => editing.subtitles(project.id, lane)} onUploadAudio={async file => { const item = await editing.upload(file); setSources(old => ({ ...old, [item.id]: item })); return { media_id: item.id, url: item.url, duration_ms: item.duration_ms }; }} />
         </>}
-        <details className="rounded-lg border border-glass-border p-3"><summary className="cursor-pointer text-sm font-medium">{t('添加素材到时间轴', 'Add materials to timeline')}</summary><div className="mt-3 max-h-80 overflow-y-auto"><EditingMaterials onSelect={add} disabled={busy} /></div></details>
+        {!plan && <EditingMaterials onSelect={add} disabled={busy} />}
         <button type="button" className="glass-button px-3 py-2 text-sm" onClick={() => { setTab('materials'); window.location.hash = '#/editing?tab=materials'; }}>{t('上传或管理素材', 'Upload or manage materials')}</button>
       </fieldset>
     </>}

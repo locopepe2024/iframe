@@ -139,3 +139,16 @@ it("splits the video under the precise playhead without hidden clip selection", 
     expect(clips[0]).toMatchObject({ source_start_ms: 0, source_end_ms: 16484, timeline_start_ms: 0, timeline_end_ms: 16484 });
     expect(clips[1]).toMatchObject({ source_start_ms: 16484, source_end_ms: 30000, timeline_start_ms: 16484, timeline_end_ms: 30000 });
 });
+
+it('collapses optional panels and adjusts track height without changing the plan', () => {
+    const onChange = vi.fn();
+    render(<AssemblyTracks plan={plan} project={project} resourceId="p" saved onChange={onChange} materialPanel={<div>Project materials</div>} />);
+    expect(screen.queryByText('Project materials')).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Material panel' }));
+    expect(screen.getByText('Project materials')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Clip properties' }));
+    expect(screen.queryByRole('complementary', { name: 'Selected clip properties' })).toBeNull();
+    fireEvent.change(screen.getByRole('slider', { name: /Track area height/ }), { target: { value: '420' } });
+    expect(screen.getByLabelText('Scrollable timeline')).toHaveStyle({ height: '420px' });
+    expect(onChange).not.toHaveBeenCalled();
+});
