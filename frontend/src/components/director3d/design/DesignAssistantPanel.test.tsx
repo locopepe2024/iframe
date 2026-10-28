@@ -185,7 +185,7 @@ it("reports invalid saved content without changing the scene", async () => {
 
 it("clears blocking animation as one undoable action and enables a new camera motion", async () => {
   const defaults = initial;
-  useWorkbenchStore.setState({ actorPaths: defaults.actorPaths });
+  useWorkbenchStore.setState({ actorPaths: defaults.actorPaths, rigAdmissionStatus: "passed" });
   const before = useWorkbenchStore.getState();
   const request = { ...proposal(), operations: [{ kind: "camera_motion" as const, cameraId: before.selectedCameraId, presetId: "push_in" as const, durationSeconds: 4, easing: "ease_in_out" as const, distanceM: .5 }] };
   expect(() => compileDesignProposal(before, request)).toThrow("不能已有动画");
@@ -201,6 +201,9 @@ it("clears blocking animation as one undoable action and enables a new camera mo
   expect(clean.dialogueTimeline.fps).toBe(before.dialogueTimeline.fps);
   expect(clean.dialogueTimeline.durationSeconds).toBe(before.dialogueTimeline.durationSeconds);
   expect(compileDesignProposal(clean, { ...request, baseRevision: designRevision(clean) }).cameraPaths).not.toEqual({});
+  const crowd = { ...request, baseRevision: designRevision(clean), operations: [{ kind: "crowd_motion" as const, groupId: "design-crowd-reset", label: "近处避让", behavior: "avoid" as const,
+    members: [{ actorId: "design-extra-reset", positionM: [-5, 3, 0] as [number, number, number], destinationM: [-3, 3, 0] as [number, number, number], yawDeg: -90, startSeconds: 0, durationSeconds: 4 }] }] };
+  expect(compileDesignProposal(clean, crowd).crowdGroups["design-crowd-reset"].actorIds).toEqual(["design-extra-reset"]);
   act(() => clean.undo());
   expect(useWorkbenchStore.getState().actorPaths).toEqual(before.actorPaths);
   expect(useWorkbenchStore.getState().dialogueTimeline).toEqual(before.dialogueTimeline);
