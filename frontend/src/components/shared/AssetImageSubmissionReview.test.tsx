@@ -3,7 +3,7 @@ import { expect, it, vi } from "vitest";
 import AssetImageSubmissionReview from "./AssetImageSubmissionReview";
 
 const preview = vi.hoisted(() => vi.fn());
-vi.mock("@/lib/api", () => ({ api: { previewAssetImageSubmission: preview } }));
+vi.mock("@/lib/api", () => ({ api: { previewAssetImageSubmission: preview, previewSeriesAssetImageSubmission: preview } }));
 vi.mock("@/components/shared/AssetIndexPreview", () => ({ AssetIndexPreview: ({ alt }: { alt: string }) => <span data-testid="reference-preview">{alt}</span> }));
 
 const request = {
@@ -31,6 +31,21 @@ it("shows the server-effective request and confirms its fingerprint", async () =
     expect(screen.getByText("red sunset")).toBeInTheDocument();
     expect(screen.getByText("scene · long-street · blue-1")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "确认并生成" }));
+    expect(confirm).toHaveBeenCalledWith(projection);
+});
+
+it("previews series character requests against the series asset", async () => {
+    const projection = {
+        positive_prompt: request.prompt, negative_prompt: request.negative_prompt,
+        selected_model_id: "series-image-model", aspect_ratio: "16:9",
+        generation_type: "all", image_generation_mode: "reference", batch_size: 2,
+        reference_inputs: request.references, fingerprint: "series-review",
+    };
+    preview.mockResolvedValueOnce(projection);
+    const confirm = vi.fn();
+    render(<AssetImageSubmissionReview projectId="series-1" scope="series" request={request} onBack={vi.fn()} onConfirm={confirm} />);
+    await waitFor(() => expect(preview).toHaveBeenCalledWith("series-1", request));
+    fireEvent.click(await screen.findByRole("button", { name: "确认并生成" }));
     expect(confirm).toHaveBeenCalledWith(projection);
 });
 

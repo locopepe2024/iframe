@@ -8,6 +8,7 @@ import { describeSceneDirection } from "@/lib/sceneDirection";
 
 type Props = {
     projectId: string;
+    scope?: "project" | "series";
     request: AssetImageReviewRequest;
     referenceIndex?: AssetReferenceIndexEntry[];
     editor?: ReactNode;
@@ -17,7 +18,7 @@ type Props = {
     onConfirm: (review: AssetImageReviewProjection) => void;
 };
 
-export default function AssetImageSubmissionReview({ projectId, request, referenceIndex, editor, validationError = "", sourceLabel, onBack, onConfirm }: Props) {
+export default function AssetImageSubmissionReview({ projectId, scope = "project", request, referenceIndex, editor, validationError = "", sourceLabel, onBack, onConfirm }: Props) {
     const [review, setReview] = useState<AssetImageReviewProjection | null>(null);
     const [reviewedProject, setReviewedProject] = useState("");
     const [reviewedRequest, setReviewedRequest] = useState<AssetImageReviewRequest | null>(null);
@@ -37,7 +38,7 @@ export default function AssetImageSubmissionReview({ projectId, request, referen
         setError("");
         if (validationError) return;
         if (!request.prompt.trim()) { setError("请填写出图提示词。"); return; }
-        api.previewAssetImageSubmission(projectId, request).then((result) => {
+        (scope === "series" ? api.previewSeriesAssetImageSubmission(projectId, request) : api.previewAssetImageSubmission(projectId, request)).then((result) => {
             if (!active) return;
             if (result.positive_prompt !== request.prompt || result.negative_prompt !== request.negative_prompt) {
                 setError("预览文本与待提交文本不一致，请返回检查。 ");
@@ -50,7 +51,7 @@ export default function AssetImageSubmissionReview({ projectId, request, referen
             if (active) setError(extractErrorDetail(cause, "无法获取提交预览"));
         });
         return () => { active = false; };
-    }, [projectId, request, validationError]);
+    }, [projectId, scope, request, validationError]);
 
     const currentReview = reviewedRequest === request && reviewedProject === projectId && !validationError ? review : null;
 

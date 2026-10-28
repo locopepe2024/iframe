@@ -8,7 +8,6 @@ import { api } from "@/lib/api";
 import type { Series, Character, Scene, Prop, Project, ExtraRosterEntry } from "@/store/projectStore";
 import AssetCard from "@/components/common/AssetCard";
 import CharacterWorkbench from "@/components/modules/CharacterWorkbench";
-import { resolveAssetGenerationModel } from "@/lib/modelCatalog";
 import { useTranslations } from "next-intl";
 import SeriesSidebar, { type SidebarItem } from "./SeriesSidebar";
 import { AssemblyPlanPhase } from "@/components/modules/VideoAssembly";
@@ -409,13 +408,14 @@ export function ExtraRosterPanel({ series, seriesId, onSaved }: { series: Series
       </div>
       </div>
     </div>
-    {linkedCharacter && <CharacterWorkbench asset={linkedCharacter} onClose={() => setEditingCharacterId(null)}
+    {linkedCharacter && <CharacterWorkbench asset={linkedCharacter} seriesId={seriesId} onClose={() => setEditingCharacterId(null)}
       onUpdateDescription={async description => { await api.updateSeriesAssetAttributes(seriesId, linkedCharacter.id, "character", { description }); await onSaved(); }}
       onUpdateAttributes={async attributes => { await api.updateSeriesAssetAttributes(seriesId, linkedCharacter.id, "character", attributes); await onSaved(); }}
       onRename={async name => { await api.updateSeriesAssetAttributes(seriesId, linkedCharacter.id, "character", { name }); await onSaved(); }}
       onGenerate={async (type, prompt, applyStyle, negativePrompt, batchSize, references = [], imageGenerationMode = "text", reviewFingerprint) => {
         try {
-          const result = await api.generateSeriesCharacter(seriesId, { asset_id: linkedCharacter.id, asset_type: "character", style_preset: "realistic", generation_type: type, prompt, apply_style: applyStyle, negative_prompt: negativePrompt, batch_size: batchSize, model_name: resolveAssetGenerationModel(undefined), references, image_generation_mode: imageGenerationMode, preserve_prompt: true, expected_review_fingerprint: reviewFingerprint });
+          const derived = type === "three_view" || type === "headshot";
+          const result = await api.generateSeriesCharacter(seriesId, { asset_id: linkedCharacter.id, asset_type: "character", style_preset: "realistic", generation_type: type, prompt, apply_style: applyStyle, negative_prompt: negativePrompt, batch_size: batchSize, ...(derived ? { reference: references[0] } : { references }), image_generation_mode: imageGenerationMode, preserve_prompt: true, expected_review_fingerprint: reviewFingerprint });
           if (result._task_id) {
             const poll = async () => {
               const task = await api.getTaskStatus(result._task_id);

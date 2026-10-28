@@ -1293,6 +1293,10 @@ export const api = {
         const res = await axios.post(`${API_URL}/projects/${scriptId}/assets/generate/preview`, request);
         return res.data;
     },
+    previewSeriesAssetImageSubmission: async (seriesId: string, request: AssetImageReviewRequest): Promise<AssetImageReviewProjection> => {
+        const res = await axios.post(`${API_URL}/series/${seriesId}/assets/generate/preview`, request);
+        return res.data;
+    },
 
     generateAsset: async (scriptId: string, assetId: string, assetType: string, stylePreset: string, stylePrompt?: string, generationType: string = "all", prompt: string = "", applyStyle: boolean = true, negativePrompt: string = "", batchSize: number = 1, modelName?: string, aspectRatio?: string, reference?: AssetLibraryReference, references?: AssetLibraryReference[], imageGenerationMode: "text" | "reference" = "text", preservePrompt: boolean = false, expectedReviewFingerprint?: string, sceneTool?: import("@/components/modules/SceneImageTools").SceneToolParams) => {
         const res = await axios.post(`${API_URL}/projects/${scriptId}/assets/generate`, {
