@@ -1,0 +1,461 @@
+{
+  "units": "960x520 review pixels",
+  "visible_point_count": 29,
+  "summary_rmse_px": {
+    "old_per_frame_depth": 26.680851537479473,
+    "temporal_0": 19.04596614643089,
+    "temporal_1": 19.992842094165688,
+    "temporal_4": 23.42553584575525
+  },
+  "rows": [
+    {
+      "case": "old_per_frame_depth",
+      "source_frame": 20,
+      "visible_joint_errors_px": {
+        "left_hip": 33.36635444695929,
+        "right_hip": 32.40022289897765,
+        "left_knee": 17.357085627596827,
+        "right_knee": 6.336396259823955,
+        "left_ankle": 15.384549633433414,
+        "right_ankle": 12.513991773500154
+      },
+      "rmse_px": 21.976467526119848
+    },
+    {
+      "case": "old_per_frame_depth",
+      "source_frame": 21,
+      "visible_joint_errors_px": {
+        "right_hip": 31.075230092229884,
+        "left_knee": 25.676451615388167,
+        "right_knee": 9.287683704341921,
+        "left_ankle": 29.92783378807117,
+        "right_ankle": 13.105936634919658
+      },
+      "rmse_px": 23.573934638745573
+    },
+    {
+      "case": "old_per_frame_depth",
+      "source_frame": 22,
+      "visible_joint_errors_px": {
+        "left_hip": 2.0237486452502904,
+        "right_hip": 9.264619666655431,
+        "left_knee": 24.10753522567498,
+        "right_knee": 26.77766131125261,
+        "left_ankle": 22.960752828293447,
+        "right_ankle": 29.9549937310975
+      },
+      "rmse_px": 21.651185325428575
+    },
+    {
+      "case": "old_per_frame_depth",
+      "source_frame": 23,
+      "visible_joint_errors_px": {
+        "left_hip": 5.839299148241474,
+        "right_hip": 10.408665420999776,
+        "left_knee": 52.55309848488048,
+        "right_knee": 9.071546364150167,
+        "left_ankle": 17.32158553907659,
+        "right_ankle": 15.692044014640237
+      },
+      "rmse_px": 24.265326480159562
+    },
+    {
+      "case": "old_per_frame_depth",
+      "source_frame": 24,
+      "visible_joint_errors_px": {
+        "left_hip": 69.21183779246762,
+        "right_hip": 10.070351870590494,
+        "left_knee": 34.525786486611906,
+        "right_knee": 11.413187600636904,
+        "left_ankle": 42.14204068934158,
+        "right_ankle": 25.145822260588673
+      },
+      "rmse_px": 37.908321935423004
+    },
+    {
+      "case": "temporal_0",
+      "source_frame": 20,
+      "visible_joint_errors_px": {
+        "left_hip": 29.722342048740998,
+        "right_hip": 29.90054573082656,
+        "left_knee": 1.049935507134812,
+        "right_knee": 1.0122499339979174,
+        "left_ankle": 0.4918662066327966,
+        "right_ankle": 0.18936435559205134
+      },
+      "rmse_px": 17.22336135208042
+    },
+    {
+      "case": "temporal_0",
+      "source_frame": 21,
+      "visible_joint_errors_px": {
+        "right_hip": 2.9491042209540095,
+        "left_knee": 3.2372333010991117,
+        "right_knee": 1.6691664464430547,
+        "left_ankle": 1.8290529522027295,
+        "right_ankle": 0.15342334051804138
+      },
+      "rmse_px": 2.25086584234167
+    },
+    {
+      "case": "temporal_0",
+      "source_frame": 22,
+      "visible_joint_errors_px": {
+        "left_hip": 22.531548047794377,
+        "right_hip": 15.557150200950337,
+        "left_knee": 17.072321631163028,
+        "right_knee": 15.002175155461934,
+        "left_ankle": 1.1247221096537856,
+        "right_ankle": 1.3444559766429862
+      },
+      "rmse_px": 14.544744565048845
+    },
+    {
+      "case": "temporal_0",
+      "source_frame": 23,
+      "visible_joint_errors_px": {
+        "left_hip": 13.817153543342982,
+        "right_hip": 23.86841213547781,
+        "left_knee": 30.477006157828047,
+        "right_knee": 9.09559097479976,
+        "left_ankle": 1.013903776093887,
+        "right_ankle": 0.5644412293357387
+      },
+      "rmse_px": 17.192726680212957
+    },
+    {
+      "case": "temporal_0",
+      "source_frame": 24,
+      "visible_joint_errors_px": {
+        "left_hip": 52.11272102994467,
+        "right_hip": 42.43149877841542,
+        "left_knee": 20.461706058322324,
+        "right_knee": 26.8090958211192,
+        "left_ankle": 4.181062368244715,
+        "right_ankle": 0.7900351230695395
+      },
+      "rmse_px": 30.74541226837341
+    },
+    {
+      "case": "temporal_1",
+      "source_frame": 20,
+      "visible_joint_errors_px": {
+        "left_hip": 32.19474703722267,
+        "right_hip": 27.66659001936993,
+        "left_knee": 5.078475940997281,
+        "right_knee": 2.7863765888826184,
+        "left_ankle": 2.746476199238707,
+        "right_ankle": 1.3264574771558586
+      },
+      "rmse_px": 17.53472446994205
+    },
+    {
+      "case": "temporal_1",
+      "source_frame": 21,
+      "visible_joint_errors_px": {
+        "right_hip": 14.293029453832068,
+        "left_knee": 9.082369495167574,
+        "right_knee": 9.016905463007014,
+        "left_ankle": 3.354333962425865,
+        "right_ankle": 3.463265502113871
+      },
+      "rmse_px": 8.846812703039246
+    },
+    {
+      "case": "temporal_1",
+      "source_frame": 22,
+      "visible_joint_errors_px": {
+        "left_hip": 26.062675146771653,
+        "right_hip": 12.417840490261591,
+        "left_knee": 22.388667327993232,
+        "right_knee": 12.949535440213856,
+        "left_ankle": 9.64813019818716,
+        "right_ankle": 4.200374289965253
+      },
+      "rmse_px": 16.39684040491545
+    },
+    {
+      "case": "temporal_1",
+      "source_frame": 23,
+      "visible_joint_errors_px": {
+        "left_hip": 10.602081630519702,
+        "right_hip": 26.247092599019116,
+        "left_knee": 30.857029352474814,
+        "right_knee": 13.14379723868171,
+        "left_ankle": 5.71906633029923,
+        "right_ankle": 2.553507693137065
+      },
+      "rmse_px": 18.099069001572193
+    },
+    {
+      "case": "temporal_1",
+      "source_frame": 24,
+      "visible_joint_errors_px": {
+        "left_hip": 52.47956618752857,
+        "right_hip": 43.022321014154095,
+        "left_knee": 19.320886107530725,
+        "right_knee": 26.575995615051244,
+        "left_ankle": 9.311419434769322,
+        "right_ankle": 2.3800704245296047
+      },
+      "rmse_px": 31.029481741035234
+    },
+    {
+      "case": "temporal_4",
+      "source_frame": 20,
+      "visible_joint_errors_px": {
+        "left_hip": 35.15337102212693,
+        "right_hip": 26.918518141088683,
+        "left_knee": 17.50534949479166,
+        "right_knee": 4.23882875199134,
+        "left_ankle": 12.297650700149894,
+        "right_ankle": 8.661755147521408
+      },
+      "rmse_px": 20.457391729451793
+    },
+    {
+      "case": "temporal_4",
+      "source_frame": 21,
+      "visible_joint_errors_px": {
+        "right_hip": 13.557894188961246,
+        "left_knee": 7.288375915875585,
+        "right_knee": 16.1527205944622,
+        "left_ankle": 16.08571646791775,
+        "right_ankle": 9.338069727192307
+      },
+      "rmse_px": 12.990743792786411
+    },
+    {
+      "case": "temporal_4",
+      "source_frame": 22,
+      "visible_joint_errors_px": {
+        "left_hip": 31.707593588567626,
+        "right_hip": 14.02607041254955,
+        "left_knee": 32.86966957770638,
+        "right_knee": 8.38111591948726,
+        "left_ankle": 29.605615670936775,
+        "right_ankle": 10.060815319367535
+      },
+      "rmse_px": 23.560110740913654
+    },
+    {
+      "case": "temporal_4",
+      "source_frame": 23,
+      "visible_joint_errors_px": {
+        "left_hip": 8.630959118253855,
+        "right_hip": 29.821122749149627,
+        "left_knee": 35.107209600476395,
+        "right_knee": 19.0339567619622,
+        "left_ankle": 14.07419949424396,
+        "right_ankle": 1.7772440552476312
+      },
+      "rmse_px": 21.44699738543268
+    },
+    {
+      "case": "temporal_4",
+      "source_frame": 24,
+      "visible_joint_errors_px": {
+        "left_hip": 49.25912087682863,
+        "right_hip": 46.533501009636396,
+        "left_knee": 16.001325659642198,
+        "right_knee": 30.100056566244646,
+        "left_ankle": 25.751470575056544,
+        "right_ankle": 7.193950230817603
+      },
+      "rmse_px": 32.83487650509841
+    }
+  ],
+  "human_edits": [
+    {
+      "source_frame": 20,
+      "joint": "left_hip",
+      "visibility": "visible",
+      "human_minus_mp_px": 21.20349977996393
+    },
+    {
+      "source_frame": 20,
+      "joint": "right_hip",
+      "visibility": "visible",
+      "human_minus_mp_px": 24.955844297556055
+    },
+    {
+      "source_frame": 20,
+      "joint": "left_knee",
+      "visibility": "visible",
+      "human_minus_mp_px": 28.511645947961423
+    },
+    {
+      "source_frame": 20,
+      "joint": "right_knee",
+      "visibility": "visible",
+      "human_minus_mp_px": 0.0
+    },
+    {
+      "source_frame": 20,
+      "joint": "left_ankle",
+      "visibility": "visible",
+      "human_minus_mp_px": 30.365698646456675
+    },
+    {
+      "source_frame": 20,
+      "joint": "right_ankle",
+      "visibility": "visible",
+      "human_minus_mp_px": 0.0
+    },
+    {
+      "source_frame": 21,
+      "joint": "left_hip",
+      "visibility": "uncertain",
+      "human_minus_mp_px": 0.0
+    },
+    {
+      "source_frame": 21,
+      "joint": "right_hip",
+      "visibility": "visible",
+      "human_minus_mp_px": 24.889327118055157
+    },
+    {
+      "source_frame": 21,
+      "joint": "left_knee",
+      "visibility": "visible",
+      "human_minus_mp_px": 11.251568957416133
+    },
+    {
+      "source_frame": 21,
+      "joint": "right_knee",
+      "visibility": "visible",
+      "human_minus_mp_px": 0.0
+    },
+    {
+      "source_frame": 21,
+      "joint": "left_ankle",
+      "visibility": "visible",
+      "human_minus_mp_px": 42.35274416678502
+    },
+    {
+      "source_frame": 21,
+      "joint": "right_ankle",
+      "visibility": "visible",
+      "human_minus_mp_px": 0.0
+    },
+    {
+      "source_frame": 22,
+      "joint": "left_hip",
+      "visibility": "visible",
+      "human_minus_mp_px": 0.0
+    },
+    {
+      "source_frame": 22,
+      "joint": "right_hip",
+      "visibility": "visible",
+      "human_minus_mp_px": 0.0
+    },
+    {
+      "source_frame": 22,
+      "joint": "left_knee",
+      "visibility": "visible",
+      "human_minus_mp_px": 0.0
+    },
+    {
+      "source_frame": 22,
+      "joint": "right_knee",
+      "visibility": "visible",
+      "human_minus_mp_px": 0.0
+    },
+    {
+      "source_frame": 22,
+      "joint": "left_ankle",
+      "visibility": "visible",
+      "human_minus_mp_px": 25.527436598520904
+    },
+    {
+      "source_frame": 22,
+      "joint": "right_ankle",
+      "visibility": "visible",
+      "human_minus_mp_px": 23.153231449554667
+    },
+    {
+      "source_frame": 23,
+      "joint": "left_hip",
+      "visibility": "visible",
+      "human_minus_mp_px": 0.0
+    },
+    {
+      "source_frame": 23,
+      "joint": "right_hip",
+      "visibility": "visible",
+      "human_minus_mp_px": 0.0
+    },
+    {
+      "source_frame": 23,
+      "joint": "left_knee",
+      "visibility": "visible",
+      "human_minus_mp_px": 37.83245621855321
+    },
+    {
+      "source_frame": 23,
+      "joint": "right_knee",
+      "visibility": "visible",
+      "human_minus_mp_px": 0.0
+    },
+    {
+      "source_frame": 23,
+      "joint": "left_ankle",
+      "visibility": "visible",
+      "human_minus_mp_px": 14.13761554266218
+    },
+    {
+      "source_frame": 23,
+      "joint": "right_ankle",
+      "visibility": "visible",
+      "human_minus_mp_px": 12.43589638529456
+    },
+    {
+      "source_frame": 24,
+      "joint": "left_hip",
+      "visibility": "visible",
+      "human_minus_mp_px": 69.95745716181187
+    },
+    {
+      "source_frame": 24,
+      "joint": "right_hip",
+      "visibility": "visible",
+      "human_minus_mp_px": 0.0
+    },
+    {
+      "source_frame": 24,
+      "joint": "left_knee",
+      "visibility": "visible",
+      "human_minus_mp_px": 31.33327440265066
+    },
+    {
+      "source_frame": 24,
+      "joint": "right_knee",
+      "visibility": "visible",
+      "human_minus_mp_px": 0.0
+    },
+    {
+      "source_frame": 24,
+      "joint": "left_ankle",
+      "visibility": "visible",
+      "human_minus_mp_px": 30.995333728751508
+    },
+    {
+      "source_frame": 24,
+      "joint": "right_ankle",
+      "visibility": "visible",
+      "human_minus_mp_px": 0.0
+    }
+  ],
+  "limits": [
+    "Fitting residual against submitted points, not independent accuracy.",
+    "Old baseline has per-frame depth; new candidates share frame21 depth.",
+    "No anatomical limits, mesh, contact or world-motion acceptance.",
+    "All five frames reviewed as right support; contact labels not yet enforced."
+  ],
+  "input_sha256": {
+    "human-export.json": "0a57391245a5182e66f512c2c68b3b136dd4d15d200181fe35235bc108d2bfff",
+    "normalized.json": "d69b4c3221b7f635dbe7b029a7577df9da097b755eabf5b18d051d313bee7440",
+    "candidates.json": "9e419e249011aed104672d7318bb1aa1ba138537a7c7a52f31a57cbcbb3270b6"
+  }
+}

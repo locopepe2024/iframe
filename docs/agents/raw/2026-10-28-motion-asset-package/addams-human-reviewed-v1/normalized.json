@@ -1,0 +1,269 @@
+{
+  "schema": "addams-reviewed-points.v1",
+  "coordinate_space": "review_image_pixels",
+  "image_size": [
+    960,
+    520
+  ],
+  "source": "submitted_annotations_only",
+  "frames": [
+    {
+      "source_frame": 20,
+      "pts_s": 0.76,
+      "image_sha256": "bcfd03dd8c09e1d3f4ed793276fffe34bd3c16463eabbd00cbe03c4800626e11",
+      "status": "reviewed",
+      "joints": {
+        "left_hip": {
+          "xy_px": [
+            589.8570686070685,
+            303.5823754789272
+          ],
+          "visibility": "visible"
+        },
+        "right_hip": {
+          "xy_px": [
+            490.9849272349272,
+            349.7291068007663
+          ],
+          "visibility": "visible"
+        },
+        "left_knee": {
+          "xy_px": [
+            562.5935550935551,
+            341.452346743295
+          ],
+          "visibility": "visible"
+        },
+        "right_knee": {
+          "xy_px": [
+            522.7207374572754,
+            419.58516120910645
+          ],
+          "visibility": "visible"
+        },
+        "left_ankle": {
+          "xy_px": [
+            568.8383575883576,
+            409.75993773946357
+          ],
+          "visibility": "visible"
+        },
+        "right_ankle": {
+          "xy_px": [
+            526.424617767334,
+            499.7849464416504
+          ],
+          "visibility": "visible"
+        }
+      },
+      "contact": "right"
+    },
+    {
+      "source_frame": 21,
+      "pts_s": 0.8,
+      "image_sha256": "3eae2a5ca1e97f9dc2bbd414177c39ec709353cfba4162bb24f9ce3e54111571",
+      "status": "reviewed",
+      "joints": {
+        "left_hip": {
+          "xy_px": [
+            569.6472358703613,
+            308.2476735115051
+          ],
+          "visibility": "uncertain"
+        },
+        "right_hip": {
+          "xy_px": [
+            489.3983887733888,
+            352.10668103448273
+          ],
+          "visibility": "visible"
+        },
+        "left_knee": {
+          "xy_px": [
+            594.5465176715176,
+            356.58943965517244
+          ],
+          "visibility": "visible"
+        },
+        "right_knee": {
+          "xy_px": [
+            516.5505981445312,
+            419.20411586761475
+          ],
+          "visibility": "visible"
+        },
+        "left_ankle": {
+          "xy_px": [
+            582.1621621621622,
+            433.97539511494256
+          ],
+          "visibility": "visible"
+        },
+        "right_ankle": {
+          "xy_px": [
+            525.5841064453125,
+            499.20891523361206
+          ],
+          "visibility": "visible"
+        }
+      },
+      "contact": "right"
+    },
+    {
+      "source_frame": 22,
+      "pts_s": 0.84,
+      "image_sha256": "172649548dcb0f84134b5d96c47bd99eaf8164baeeac16157661da4db767ec33",
+      "status": "reviewed",
+      "joints": {
+        "left_hip": {
+          "xy_px": [
+            569.5710182189941,
+            307.9198145866394
+          ],
+          "visibility": "visible"
+        },
+        "right_hip": {
+          "xy_px": [
+            506.87610626220703,
+            347.09474086761475
+          ],
+          "visibility": "visible"
+        },
+        "left_knee": {
+          "xy_px": [
+            658.6227607727051,
+            392.4786853790283
+          ],
+          "visibility": "visible"
+        },
+        "right_knee": {
+          "xy_px": [
+            507.8304862976074,
+            457.706835269928
+          ],
+          "visibility": "visible"
+        },
+        "left_ankle": {
+          "xy_px": [
+            637.710498960499,
+            436.4969468390805
+          ],
+          "visibility": "visible"
+        },
+        "right_ankle": {
+          "xy_px": [
+            515.2156964656964,
+            504.4231920498084
+          ],
+          "visibility": "visible"
+        }
+      },
+      "contact": "right"
+    },
+    {
+      "source_frame": 23,
+      "pts_s": 0.88,
+      "image_sha256": "bbbd5b305a1b242675bf28ef24eba91475f29f162bd48e84c9043559bb6a7171",
+      "status": "reviewed",
+      "joints": {
+        "left_hip": {
+          "xy_px": [
+            562.7005004882812,
+            310.61050176620483
+          ],
+          "visibility": "visible"
+        },
+        "right_hip": {
+          "xy_px": [
+            504.9690628051758,
+            360.0169014930725
+          ],
+          "visibility": "visible"
+        },
+        "left_knee": {
+          "xy_px": [
+            689.5283264033264,
+            299.82339559386975
+          ],
+          "visibility": "visible"
+        },
+        "right_knee": {
+          "xy_px": [
+            494.5685577392578,
+            445.2576804161072
+          ],
+          "visibility": "visible"
+        },
+        "left_ankle": {
+          "xy_px": [
+            728.3497920997921,
+            337.148587164751
+          ],
+          "visibility": "visible"
+        },
+        "right_ankle": {
+          "xy_px": [
+            519.4022869022868,
+            496.072497605364
+          ],
+          "visibility": "visible"
+        }
+      },
+      "contact": "right"
+    },
+    {
+      "source_frame": 24,
+      "pts_s": 0.92,
+      "image_sha256": "430b7f848f69619f4442385da66810a16506dd806ad656f8c25f24b162bb0060",
+      "status": "reviewed",
+      "joints": {
+        "left_hip": {
+          "xy_px": [
+            597.2245322245323,
+            247.96036877394639
+          ],
+          "visibility": "visible"
+        },
+        "right_hip": {
+          "xy_px": [
+            513.8975143432617,
+            360.8866357803345
+          ],
+          "visibility": "visible"
+        },
+        "left_knee": {
+          "xy_px": [
+            690.4443866943867,
+            269.5453184865901
+          ],
+          "visibility": "visible"
+        },
+        "right_knee": {
+          "xy_px": [
+            498.43482971191406,
+            440.61564683914185
+          ],
+          "visibility": "visible"
+        },
+        "left_ankle": {
+          "xy_px": [
+            778.9514033264032,
+            256.46671455938696
+          ],
+          "visibility": "visible"
+        },
+        "right_ankle": {
+          "xy_px": [
+            519.1546440124512,
+            490.1966381072998
+          ],
+          "visibility": "visible"
+        }
+      },
+      "contact": "right"
+    }
+  ],
+  "solver_ready": true,
+  "export_sha256": "0a57391245a5182e66f512c2c68b3b136dd4d15d200181fe35235bc108d2bfff",
+  "tasks_sha256": "d571ec9c70266b32b7db1aeb4ed2bd4d0cbbf9427cf766d4dcce2723b0e23efd"
+}

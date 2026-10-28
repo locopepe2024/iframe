@@ -1,0 +1,1027 @@
+[
+  {
+    "data": {
+      "image": "/data/local-files/?d=images/frame-020.jpg",
+      "clip_id": "addams-first2s",
+      "source_frame": 20,
+      "source_pts_s": 0.76,
+      "image_sha256": "bcfd03dd8c09e1d3f4ed793276fffe34bd3c16463eabbd00cbe03c4800626e11",
+      "image_width": 960,
+      "image_height": 520
+    },
+    "annotations": [
+      {
+        "result": [
+          {
+            "id": "left_hip",
+            "from_name": "joints",
+            "to_name": "image",
+            "type": "keypointlabels",
+            "original_width": 960,
+            "original_height": 520,
+            "image_rotation": 0,
+            "value": {
+              "x": 61.443444646569645,
+              "y": 58.38122605363984,
+              "width": 0.6,
+              "keypointlabels": [
+                "left_hip"
+              ]
+            }
+          },
+          {
+            "id": "left_hip",
+            "from_name": "visibility",
+            "to_name": "image",
+            "type": "choices",
+            "value": {
+              "choices": [
+                "visible"
+              ]
+            }
+          },
+          {
+            "id": "right_hip",
+            "from_name": "joints",
+            "to_name": "image",
+            "type": "keypointlabels",
+            "original_width": 960,
+            "original_height": 520,
+            "image_rotation": 0,
+            "value": {
+              "x": 51.14426325363826,
+              "y": 67.25559746168582,
+              "width": 0.6,
+              "keypointlabels": [
+                "right_hip"
+              ]
+            }
+          },
+          {
+            "id": "right_hip",
+            "from_name": "visibility",
+            "to_name": "image",
+            "type": "choices",
+            "value": {
+              "choices": [
+                "visible"
+              ]
+            }
+          },
+          {
+            "id": "left_knee",
+            "from_name": "joints",
+            "to_name": "image",
+            "type": "keypointlabels",
+            "original_width": 960,
+            "original_height": 520,
+            "image_rotation": 0,
+            "value": {
+              "x": 58.60349532224532,
+              "y": 65.66391283524904,
+              "width": 0.6,
+              "keypointlabels": [
+                "left_knee"
+              ]
+            }
+          },
+          {
+            "id": "left_knee",
+            "from_name": "visibility",
+            "to_name": "image",
+            "type": "choices",
+            "value": {
+              "choices": [
+                "visible"
+              ]
+            }
+          },
+          {
+            "id": "right_knee",
+            "from_name": "joints",
+            "to_name": "image",
+            "type": "keypointlabels",
+            "original_width": 960,
+            "original_height": 520,
+            "image_rotation": 0,
+            "value": {
+              "x": 54.45007681846619,
+              "y": 80.68945407867432,
+              "width": 0.6,
+              "keypointlabels": [
+                "right_knee"
+              ]
+            }
+          },
+          {
+            "id": "right_knee",
+            "from_name": "visibility",
+            "to_name": "image",
+            "type": "choices",
+            "value": {
+              "choices": [
+                "visible"
+              ]
+            }
+          },
+          {
+            "id": "left_ankle",
+            "from_name": "joints",
+            "to_name": "image",
+            "type": "keypointlabels",
+            "original_width": 960,
+            "original_height": 520,
+            "image_rotation": 0,
+            "value": {
+              "x": 59.25399558212058,
+              "y": 78.79998802681992,
+              "width": 0.6,
+              "keypointlabels": [
+                "left_ankle"
+              ]
+            }
+          },
+          {
+            "id": "left_ankle",
+            "from_name": "visibility",
+            "to_name": "image",
+            "type": "choices",
+            "value": {
+              "choices": [
+                "visible"
+              ]
+            }
+          },
+          {
+            "id": "right_ankle",
+            "from_name": "joints",
+            "to_name": "image",
+            "type": "keypointlabels",
+            "original_width": 960,
+            "original_height": 520,
+            "image_rotation": 0,
+            "value": {
+              "x": 54.83589768409729,
+              "y": 96.11248970031738,
+              "width": 0.6,
+              "keypointlabels": [
+                "right_ankle"
+              ]
+            }
+          },
+          {
+            "id": "right_ankle",
+            "from_name": "visibility",
+            "to_name": "image",
+            "type": "choices",
+            "value": {
+              "choices": [
+                "visible"
+              ]
+            }
+          },
+          {
+            "from_name": "contact",
+            "to_name": "image",
+            "type": "choices",
+            "value": {
+              "choices": [
+                "right"
+              ]
+            }
+          },
+          {
+            "from_name": "frame_status",
+            "to_name": "image",
+            "type": "choices",
+            "value": {
+              "choices": [
+                "reviewed"
+              ]
+            }
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "data": {
+      "image": "/data/local-files/?d=images/frame-021.jpg",
+      "clip_id": "addams-first2s",
+      "source_frame": 21,
+      "source_pts_s": 0.8,
+      "image_sha256": "3eae2a5ca1e97f9dc2bbd414177c39ec709353cfba4162bb24f9ce3e54111571",
+      "image_width": 960,
+      "image_height": 520
+    },
+    "annotations": [
+      {
+        "result": [
+          {
+            "id": "left_hip",
+            "from_name": "joints",
+            "to_name": "image",
+            "type": "keypointlabels",
+            "original_width": 960,
+            "original_height": 520,
+            "image_rotation": 0,
+            "value": {
+              "x": 59.33825373649597,
+              "y": 59.278398752212524,
+              "width": 0.6,
+              "keypointlabels": [
+                "left_hip"
+              ]
+            }
+          },
+          {
+            "id": "left_hip",
+            "from_name": "visibility",
+            "to_name": "image",
+            "type": "choices",
+            "value": {
+              "choices": [
+                "uncertain"
+              ]
+            }
+          },
+          {
+            "id": "right_hip",
+            "from_name": "joints",
+            "to_name": "image",
+            "type": "keypointlabels",
+            "original_width": 960,
+            "original_height": 520,
+            "image_rotation": 0,
+            "value": {
+              "x": 50.97899883056133,
+              "y": 67.71282327586206,
+              "width": 0.6,
+              "keypointlabels": [
+                "right_hip"
+              ]
+            }
+          },
+          {
+            "id": "right_hip",
+            "from_name": "visibility",
+            "to_name": "image",
+            "type": "choices",
+            "value": {
+              "choices": [
+                "visible"
+              ]
+            }
+          },
+          {
+            "id": "left_knee",
+            "from_name": "joints",
+            "to_name": "image",
+            "type": "keypointlabels",
+            "original_width": 960,
+            "original_height": 520,
+            "image_rotation": 0,
+            "value": {
+              "x": 61.93192892411642,
+              "y": 68.57489224137932,
+              "width": 0.6,
+              "keypointlabels": [
+                "left_knee"
+              ]
+            }
+          },
+          {
+            "id": "left_knee",
+            "from_name": "visibility",
+            "to_name": "image",
+            "type": "choices",
+            "value": {
+              "choices": [
+                "visible"
+              ]
+            }
+          },
+          {
+            "id": "right_knee",
+            "from_name": "joints",
+            "to_name": "image",
+            "type": "keypointlabels",
+            "original_width": 960,
+            "original_height": 520,
+            "image_rotation": 0,
+            "value": {
+              "x": 53.80735397338867,
+              "y": 80.61617612838745,
+              "width": 0.6,
+              "keypointlabels": [
+                "right_knee"
+              ]
+            }
+          },
+          {
+            "id": "right_knee",
+            "from_name": "visibility",
+            "to_name": "image",
+            "type": "choices",
+            "value": {
+              "choices": [
+                "visible"
+              ]
+            }
+          },
+          {
+            "id": "left_ankle",
+            "from_name": "joints",
+            "to_name": "image",
+            "type": "keypointlabels",
+            "original_width": 960,
+            "original_height": 520,
+            "image_rotation": 0,
+            "value": {
+              "x": 60.641891891891895,
+              "y": 83.45680675287356,
+              "width": 0.6,
+              "keypointlabels": [
+                "left_ankle"
+              ]
+            }
+          },
+          {
+            "id": "left_ankle",
+            "from_name": "visibility",
+            "to_name": "image",
+            "type": "choices",
+            "value": {
+              "choices": [
+                "visible"
+              ]
+            }
+          },
+          {
+            "id": "right_ankle",
+            "from_name": "joints",
+            "to_name": "image",
+            "type": "keypointlabels",
+            "original_width": 960,
+            "original_height": 520,
+            "image_rotation": 0,
+            "value": {
+              "x": 54.74834442138672,
+              "y": 96.00171446800232,
+              "width": 0.6,
+              "keypointlabels": [
+                "right_ankle"
+              ]
+            }
+          },
+          {
+            "id": "right_ankle",
+            "from_name": "visibility",
+            "to_name": "image",
+            "type": "choices",
+            "value": {
+              "choices": [
+                "visible"
+              ]
+            }
+          },
+          {
+            "from_name": "contact",
+            "to_name": "image",
+            "type": "choices",
+            "value": {
+              "choices": [
+                "right"
+              ]
+            }
+          },
+          {
+            "from_name": "frame_status",
+            "to_name": "image",
+            "type": "choices",
+            "value": {
+              "choices": [
+                "reviewed"
+              ]
+            }
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "data": {
+      "image": "/data/local-files/?d=images/frame-022.jpg",
+      "clip_id": "addams-first2s",
+      "source_frame": 22,
+      "source_pts_s": 0.84,
+      "image_sha256": "172649548dcb0f84134b5d96c47bd99eaf8164baeeac16157661da4db767ec33",
+      "image_width": 960,
+      "image_height": 520
+    },
+    "annotations": [
+      {
+        "result": [
+          {
+            "id": "left_hip",
+            "from_name": "joints",
+            "to_name": "image",
+            "type": "keypointlabels",
+            "original_width": 960,
+            "original_height": 520,
+            "image_rotation": 0,
+            "value": {
+              "x": 59.33031439781189,
+              "y": 59.215348958969116,
+              "width": 0.6,
+              "keypointlabels": [
+                "left_hip"
+              ]
+            }
+          },
+          {
+            "id": "left_hip",
+            "from_name": "visibility",
+            "to_name": "image",
+            "type": "choices",
+            "value": {
+              "choices": [
+                "visible"
+              ]
+            }
+          },
+          {
+            "id": "right_hip",
+            "from_name": "joints",
+            "to_name": "image",
+            "type": "keypointlabels",
+            "original_width": 960,
+            "original_height": 520,
+            "image_rotation": 0,
+            "value": {
+              "x": 52.79959440231323,
+              "y": 66.74898862838745,
+              "width": 0.6,
+              "keypointlabels": [
+                "right_hip"
+              ]
+            }
+          },
+          {
+            "id": "right_hip",
+            "from_name": "visibility",
+            "to_name": "image",
+            "type": "choices",
+            "value": {
+              "choices": [
+                "visible"
+              ]
+            }
+          },
+          {
+            "id": "left_knee",
+            "from_name": "joints",
+            "to_name": "image",
+            "type": "keypointlabels",
+            "original_width": 960,
+            "original_height": 520,
+            "image_rotation": 0,
+            "value": {
+              "x": 68.60653758049011,
+              "y": 75.47667026519775,
+              "width": 0.6,
+              "keypointlabels": [
+                "left_knee"
+              ]
+            }
+          },
+          {
+            "id": "left_knee",
+            "from_name": "visibility",
+            "to_name": "image",
+            "type": "choices",
+            "value": {
+              "choices": [
+                "visible"
+              ]
+            }
+          },
+          {
+            "id": "right_knee",
+            "from_name": "joints",
+            "to_name": "image",
+            "type": "keypointlabels",
+            "original_width": 960,
+            "original_height": 520,
+            "image_rotation": 0,
+            "value": {
+              "x": 52.899008989334106,
+              "y": 88.02054524421692,
+              "width": 0.6,
+              "keypointlabels": [
+                "right_knee"
+              ]
+            }
+          },
+          {
+            "id": "right_knee",
+            "from_name": "visibility",
+            "to_name": "image",
+            "type": "choices",
+            "value": {
+              "choices": [
+                "visible"
+              ]
+            }
+          },
+          {
+            "id": "left_ankle",
+            "from_name": "joints",
+            "to_name": "image",
+            "type": "keypointlabels",
+            "original_width": 960,
+            "original_height": 520,
+            "image_rotation": 0,
+            "value": {
+              "x": 66.42817697505198,
+              "y": 83.94172054597702,
+              "width": 0.6,
+              "keypointlabels": [
+                "left_ankle"
+              ]
+            }
+          },
+          {
+            "id": "left_ankle",
+            "from_name": "visibility",
+            "to_name": "image",
+            "type": "choices",
+            "value": {
+              "choices": [
+                "visible"
+              ]
+            }
+          },
+          {
+            "id": "right_ankle",
+            "from_name": "joints",
+            "to_name": "image",
+            "type": "keypointlabels",
+            "original_width": 960,
+            "original_height": 520,
+            "image_rotation": 0,
+            "value": {
+              "x": 53.66830171517671,
+              "y": 97.00446000957854,
+              "width": 0.6,
+              "keypointlabels": [
+                "right_ankle"
+              ]
+            }
+          },
+          {
+            "id": "right_ankle",
+            "from_name": "visibility",
+            "to_name": "image",
+            "type": "choices",
+            "value": {
+              "choices": [
+                "visible"
+              ]
+            }
+          },
+          {
+            "from_name": "contact",
+            "to_name": "image",
+            "type": "choices",
+            "value": {
+              "choices": [
+                "right"
+              ]
+            }
+          },
+          {
+            "from_name": "frame_status",
+            "to_name": "image",
+            "type": "choices",
+            "value": {
+              "choices": [
+                "reviewed"
+              ]
+            }
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "data": {
+      "image": "/data/local-files/?d=images/frame-023.jpg",
+      "clip_id": "addams-first2s",
+      "source_frame": 23,
+      "source_pts_s": 0.88,
+      "image_sha256": "bbbd5b305a1b242675bf28ef24eba91475f29f162bd48e84c9043559bb6a7171",
+      "image_width": 960,
+      "image_height": 520
+    },
+    "annotations": [
+      {
+        "result": [
+          {
+            "id": "left_hip",
+            "from_name": "joints",
+            "to_name": "image",
+            "type": "keypointlabels",
+            "original_width": 960,
+            "original_height": 520,
+            "image_rotation": 0,
+            "value": {
+              "x": 58.6146354675293,
+              "y": 59.73278880119324,
+              "width": 0.6,
+              "keypointlabels": [
+                "left_hip"
+              ]
+            }
+          },
+          {
+            "id": "left_hip",
+            "from_name": "visibility",
+            "to_name": "image",
+            "type": "choices",
+            "value": {
+              "choices": [
+                "visible"
+              ]
+            }
+          },
+          {
+            "id": "right_hip",
+            "from_name": "joints",
+            "to_name": "image",
+            "type": "keypointlabels",
+            "original_width": 960,
+            "original_height": 520,
+            "image_rotation": 0,
+            "value": {
+              "x": 52.60094404220581,
+              "y": 69.23401951789856,
+              "width": 0.6,
+              "keypointlabels": [
+                "right_hip"
+              ]
+            }
+          },
+          {
+            "id": "right_hip",
+            "from_name": "visibility",
+            "to_name": "image",
+            "type": "choices",
+            "value": {
+              "choices": [
+                "visible"
+              ]
+            }
+          },
+          {
+            "id": "left_knee",
+            "from_name": "joints",
+            "to_name": "image",
+            "type": "keypointlabels",
+            "original_width": 960,
+            "original_height": 520,
+            "image_rotation": 0,
+            "value": {
+              "x": 71.82586733367984,
+              "y": 57.65834530651341,
+              "width": 0.6,
+              "keypointlabels": [
+                "left_knee"
+              ]
+            }
+          },
+          {
+            "id": "left_knee",
+            "from_name": "visibility",
+            "to_name": "image",
+            "type": "choices",
+            "value": {
+              "choices": [
+                "visible"
+              ]
+            }
+          },
+          {
+            "id": "right_knee",
+            "from_name": "joints",
+            "to_name": "image",
+            "type": "keypointlabels",
+            "original_width": 960,
+            "original_height": 520,
+            "image_rotation": 0,
+            "value": {
+              "x": 51.517558097839355,
+              "y": 85.62647700309753,
+              "width": 0.6,
+              "keypointlabels": [
+                "right_knee"
+              ]
+            }
+          },
+          {
+            "id": "right_knee",
+            "from_name": "visibility",
+            "to_name": "image",
+            "type": "choices",
+            "value": {
+              "choices": [
+                "visible"
+              ]
+            }
+          },
+          {
+            "id": "left_ankle",
+            "from_name": "joints",
+            "to_name": "image",
+            "type": "keypointlabels",
+            "original_width": 960,
+            "original_height": 520,
+            "image_rotation": 0,
+            "value": {
+              "x": 75.86977001039502,
+              "y": 64.83626676245211,
+              "width": 0.6,
+              "keypointlabels": [
+                "left_ankle"
+              ]
+            }
+          },
+          {
+            "id": "left_ankle",
+            "from_name": "visibility",
+            "to_name": "image",
+            "type": "choices",
+            "value": {
+              "choices": [
+                "visible"
+              ]
+            }
+          },
+          {
+            "id": "right_ankle",
+            "from_name": "joints",
+            "to_name": "image",
+            "type": "keypointlabels",
+            "original_width": 960,
+            "original_height": 520,
+            "image_rotation": 0,
+            "value": {
+              "x": 54.10440488565489,
+              "y": 95.39855723180077,
+              "width": 0.6,
+              "keypointlabels": [
+                "right_ankle"
+              ]
+            }
+          },
+          {
+            "id": "right_ankle",
+            "from_name": "visibility",
+            "to_name": "image",
+            "type": "choices",
+            "value": {
+              "choices": [
+                "visible"
+              ]
+            }
+          },
+          {
+            "from_name": "contact",
+            "to_name": "image",
+            "type": "choices",
+            "value": {
+              "choices": [
+                "right"
+              ]
+            }
+          },
+          {
+            "from_name": "frame_status",
+            "to_name": "image",
+            "type": "choices",
+            "value": {
+              "choices": [
+                "reviewed"
+              ]
+            }
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "data": {
+      "image": "/data/local-files/?d=images/frame-024.jpg",
+      "clip_id": "addams-first2s",
+      "source_frame": 24,
+      "source_pts_s": 0.92,
+      "image_sha256": "430b7f848f69619f4442385da66810a16506dd806ad656f8c25f24b162bb0060",
+      "image_width": 960,
+      "image_height": 520
+    },
+    "annotations": [
+      {
+        "result": [
+          {
+            "id": "left_hip",
+            "from_name": "joints",
+            "to_name": "image",
+            "type": "keypointlabels",
+            "original_width": 960,
+            "original_height": 520,
+            "image_rotation": 0,
+            "value": {
+              "x": 62.210888773388774,
+              "y": 47.684686302681996,
+              "width": 0.6,
+              "keypointlabels": [
+                "left_hip"
+              ]
+            }
+          },
+          {
+            "id": "left_hip",
+            "from_name": "visibility",
+            "to_name": "image",
+            "type": "choices",
+            "value": {
+              "choices": [
+                "visible"
+              ]
+            }
+          },
+          {
+            "id": "right_hip",
+            "from_name": "joints",
+            "to_name": "image",
+            "type": "keypointlabels",
+            "original_width": 960,
+            "original_height": 520,
+            "image_rotation": 0,
+            "value": {
+              "x": 53.530991077423096,
+              "y": 69.40127611160278,
+              "width": 0.6,
+              "keypointlabels": [
+                "right_hip"
+              ]
+            }
+          },
+          {
+            "id": "right_hip",
+            "from_name": "visibility",
+            "to_name": "image",
+            "type": "choices",
+            "value": {
+              "choices": [
+                "visible"
+              ]
+            }
+          },
+          {
+            "id": "left_knee",
+            "from_name": "joints",
+            "to_name": "image",
+            "type": "keypointlabels",
+            "original_width": 960,
+            "original_height": 520,
+            "image_rotation": 0,
+            "value": {
+              "x": 71.92129028066529,
+              "y": 51.835638170498086,
+              "width": 0.6,
+              "keypointlabels": [
+                "left_knee"
+              ]
+            }
+          },
+          {
+            "id": "left_knee",
+            "from_name": "visibility",
+            "to_name": "image",
+            "type": "choices",
+            "value": {
+              "choices": [
+                "visible"
+              ]
+            }
+          },
+          {
+            "id": "right_knee",
+            "from_name": "joints",
+            "to_name": "image",
+            "type": "keypointlabels",
+            "original_width": 960,
+            "original_height": 520,
+            "image_rotation": 0,
+            "value": {
+              "x": 51.920294761657715,
+              "y": 84.73377823829651,
+              "width": 0.6,
+              "keypointlabels": [
+                "right_knee"
+              ]
+            }
+          },
+          {
+            "id": "right_knee",
+            "from_name": "visibility",
+            "to_name": "image",
+            "type": "choices",
+            "value": {
+              "choices": [
+                "visible"
+              ]
+            }
+          },
+          {
+            "id": "left_ankle",
+            "from_name": "joints",
+            "to_name": "image",
+            "type": "keypointlabels",
+            "original_width": 960,
+            "original_height": 520,
+            "image_rotation": 0,
+            "value": {
+              "x": 81.14077117983368,
+              "y": 49.32052203065134,
+              "width": 0.6,
+              "keypointlabels": [
+                "left_ankle"
+              ]
+            }
+          },
+          {
+            "id": "left_ankle",
+            "from_name": "visibility",
+            "to_name": "image",
+            "type": "choices",
+            "value": {
+              "choices": [
+                "visible"
+              ]
+            }
+          },
+          {
+            "id": "right_ankle",
+            "from_name": "joints",
+            "to_name": "image",
+            "type": "keypointlabels",
+            "original_width": 960,
+            "original_height": 520,
+            "image_rotation": 0,
+            "value": {
+              "x": 54.078608751297,
+              "y": 94.26858425140381,
+              "width": 0.6,
+              "keypointlabels": [
+                "right_ankle"
+              ]
+            }
+          },
+          {
+            "id": "right_ankle",
+            "from_name": "visibility",
+            "to_name": "image",
+            "type": "choices",
+            "value": {
+              "choices": [
+                "visible"
+              ]
+            }
+          },
+          {
+            "from_name": "contact",
+            "to_name": "image",
+            "type": "choices",
+            "value": {
+              "choices": [
+                "right"
+              ]
+            }
+          },
+          {
+            "from_name": "frame_status",
+            "to_name": "image",
+            "type": "choices",
+            "value": {
+              "choices": [
+                "reviewed"
+              ]
+            }
+          }
+        ]
+      }
+    ]
+  }
+]
