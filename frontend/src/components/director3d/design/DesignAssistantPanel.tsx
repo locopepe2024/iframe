@@ -11,6 +11,8 @@ export function DesignAssistantPanel({ onPreview, previewing, disabled = false }
   const [navigation, setNavigation] = useState<"boxes" | "navmesh">("boxes");
   const [navigationLoading, setNavigationLoading] = useState(false);
   const [prompt, setPrompt] = useState("");
+  const [mode, setMode] = useState<"edit" | "spatial_draft">("edit");
+  const [imageLoading, setImageLoading] = useState(false);
   const [savedDesigns, setSavedDesigns] = useState<DirectorReferenceAsset[] | null>(null);
   const [selectedDesignId, setSelectedDesignId] = useState("");
   const [referenceImage, setReferenceImage] = useState<DesignReferenceImage | null>(null);
@@ -31,7 +33,7 @@ export function DesignAssistantPanel({ onPreview, previewing, disabled = false }
   useEffect(() => { if (stale || disabled) onPreview(null); }, [stale, disabled, onPreview]);
 
   const generate = async () => {
-    if (!prompt.trim() || pending.current || disabled) return;
+    if (!prompt.trim() || pending.current || disabled || imageLoading || (mode === "spatial_draft" && !referenceImage)) return;
     const controller = new AbortController(); pending.current = controller;
     setBusy(true); setError(""); setMessage(""); onPreview(null);
     const requestText = prompt.trim();
@@ -43,7 +45,7 @@ export function DesignAssistantPanel({ onPreview, previewing, disabled = false }
       if (rejectedDesign?.proposal === proposal && proposal?.baseRevision === baseRevision) {
         context.rejectedDesign = { operations: proposal.operations, reason: rejectedDesign.reason };
       }
-      const next = await directorDesignApi.propose({ prompt: requestText, baseRevision, context: JSON.stringify(context), history, referenceImage }, controller.signal);
+      const next = await directorDesignApi.propose({ prompt: requestText, baseRevision, context: JSON.stringify(context), history, referenceImage, mode }, controller.signal);
       if (controller.signal.aborted) return;
       if (next.baseRevision !== baseRevision) throw new Error("设计提案与请求场景不匹配，请重试。");
       setProposal(next); setRejectedDesign(null);
@@ -179,19 +181,34 @@ export function DesignAssistantPanel({ onPreview, previewing, disabled = false }
     {navigationLoading && <p role="status">正在加载导航网格引擎…</p>}
     <p>描述人物摆位、姿态、坐椅子、当前机位或带时长的运镜，也可以说“四秒缓慢推进”。先预览，再应用。</p>
     <form onSubmit={(event) => { event.preventDefault(); void generate(); }}>
+      <label>设计范围<select value={mode} disabled={busy || disabled} onChange={(event) => {
+        setMode(event.target.value as "edit" | "spatial_draft");
+        setHistory([]); setProposal(null); setRejectedDesign(null); onPreview(null); setError(""); setMessage("");
+      }}><option value="edit">布局、姿态与动画</option><option value="spatial_draft">参考图建场景（静态空间草稿）</option></select></label>
+      {mode === "spatial_draft" && <p role="status">上传场景参考图，再粘贴场景或分镜描述。先生成可编辑的空间、道具和人物白模标记；动作与时序会列为未编排内容。尺寸、隐藏结构和人物深度由你校正。</p>}
       <label htmlFor="director-design-prompt">设计要求</label>
       <textarea id="director-design-prompt" value={prompt} maxLength={2000} rows={3} disabled={busy || disabled} onChange={(event) => setPrompt(event.target.value)} placeholder="例如：让两个人相对站立，间隔三米；用当前机位、35mm 镜头拍摄两人。" />
-      <label className="director-reference-picker">场景参考图（可选）<input type="file" accept="image/png,image/jpeg,image/webp" disabled={busy || disabled} onChange={(event) => {
+      <label className="director-reference-picker">{mode === "spatial_draft" ? "场景参考图（必选）" : "场景参考图（可选）"}<input type="file" accept="image/png,image/jpeg,image/webp" disabled={busy || disabled || imageLoading} onChange={(event) => {
         const file = event.target.files?.[0]; event.currentTarget.value = "";
         if (!file) return;
+        if (!["image/png", "image/jpeg", "image/webp"].includes(file.type)) { setError("请选择 PNG、JPEG 或 WebP 参考图。"); return; }
         if (file.size > 3 * 1024 * 1024) { setError("参考图不能超过 3 MB。"); return; }
+        setImageLoading(true);
         const reader = new FileReader();
-        reader.onload = async () => { const url = String(reader.result || ""); if (!url.startsWith("data:image/")) { setError("参考图格式无效。"); return; } setReferenceImage({ url }); setReferenceFile(file); setReferenceImageName(file.name); setReferenceHash(Array.from(new Uint8Array(await crypto.subtle.digest("SHA-256", await file.arrayBuffer()))).map((byte) => byte.toString(16).padStart(2, "0")).join("")); setError(""); };
-        reader.onerror = () => setError("参考图读取失败，请重试。");
+        reader.onload = async () => {
+          try {
+            const url = String(reader.result || "");
+            if (!url.startsWith("data:image/")) throw new Error("参考图格式无效。");
+            const hash = Array.from(new Uint8Array(await crypto.subtle.digest("SHA-256", await file.arrayBuffer()))).map((byte) => byte.toString(16).padStart(2, "0")).join("");
+            setReferenceImage({ url }); setReferenceFile(file); setReferenceImageName(file.name); setReferenceHash(hash); setError("");
+          } catch { setError("参考图读取失败，请重试。"); }
+          finally { setImageLoading(false); }
+        };
+        reader.onerror = () => { setError("参考图读取失败，请重试。"); setImageLoading(false); };
         reader.readAsDataURL(file);
       }} /></label>
       {referenceImage && <p role="status">已绑定参考图：{referenceImageName}。它只用于解析构图和白模假设。</p>}
-      <div className="blocking-reference-actions"><button type="submit" disabled={busy || disabled || !prompt.trim()}>{busy ? "正在设计…" : "生成设计提案"}</button>{busy && pending.current && <button type="button" onClick={cancelRequest}>停止生成</button>}{history.length > 0 && !busy && <button type="button" disabled={disabled} onClick={() => { setHistory([]); setProposal(null); onPreview(null); setMessage("已清空对话，场景保持当前编辑结果。"); }}>新对话</button>}</div>
+      <div className="blocking-reference-actions"><button type="submit" disabled={busy || disabled || imageLoading || !prompt.trim() || (mode === "spatial_draft" && !referenceImage)}>{busy ? "正在设计…" : "生成设计提案"}</button>{busy && pending.current && <button type="button" onClick={cancelRequest}>停止生成</button>}{history.length > 0 && !busy && <button type="button" disabled={disabled} onClick={() => { setHistory([]); setProposal(null); onPreview(null); setMessage("已清空对话，场景保持当前编辑结果。"); }}>新对话</button>}</div>
     </form>
     {disabled && <p role="status">录制期间暂不可设计场景。</p>}
     {busy && <p role="status">{pending.current ? "正在根据当前场景生成提案，尚未修改舞台…" : "正在读写素材库，请稍候…"}</p>}
@@ -201,7 +218,7 @@ export function DesignAssistantPanel({ onPreview, previewing, disabled = false }
       {proposal.assumptions.length > 0 && <details open><summary>设计假设</summary><ul>{proposal.assumptions.map((item, index) => <li key={index}>{item}</li>)}</ul></details>}
       {proposal.clarification ? <p role="status">{proposal.clarification}</p> : <>
         <p>{proposal.operations.length} 项操作。预览不会保存；应用后可拖动或输入数值继续编辑。</p>
-        <ol>{proposal.operations.map((op, index) => <li key={index}>{{street_layout: "街区建筑与通道布局", crowd_motion: "群演分组与分时移动", add_camera: "新增构图机位", camera_cut: "时间线切镜", place_entity: "调整对象位置与朝向", arrange_pair: "双人相对摆位", arrange_group: "多人编号占位编排", add_box: "添加道具占位", frame_camera: "设计静态机位", dolly_camera: "调整机位距离", camera_motion: "创建带时长的运镜路径", set_pose: "设置人物姿态", seat_actor: "坐在程序化椅子参考上"}[op.kind]} · {"layoutId" in op ? op.layoutId : "cameraId" in op ? op.cameraId : "entityId" in op ? op.entityId : "actorId" in op ? op.actorId : "actorIds" in op ? op.actorIds.join(" / ") : op.members.map((member) => member.actorId).join(" / ")}{op.kind === "camera_motion" && ` · ${op.durationSeconds} 秒 · ${op.distanceM == null ? "预设距离" : `${op.distanceM} 米`}`}</li>)}</ol>
+        <ol>{proposal.operations.map((op, index) => <li key={index}>{{add_actor: "新增静态白模人物标记", street_layout: "街区建筑与通道布局", crowd_motion: "群演分组与分时移动", add_camera: "新增构图机位", camera_cut: "时间线切镜", place_entity: "调整对象位置与朝向", arrange_pair: "双人相对摆位", arrange_group: "多人编号占位编排", add_box: "添加道具占位", frame_camera: "设计静态机位", dolly_camera: "调整机位距离", camera_motion: "创建带时长的运镜路径", set_pose: "设置人物姿态", seat_actor: "坐在程序化椅子参考上"}[op.kind]} · {"layoutId" in op ? op.layoutId : "cameraId" in op ? op.cameraId : "entityId" in op ? op.entityId : "actorId" in op ? op.actorId : "actorIds" in op ? op.actorIds.join(" / ") : op.members.map((member) => member.actorId).join(" / ")}{op.kind === "camera_motion" && ` · ${op.durationSeconds} 秒 · ${op.distanceM == null ? "预设距离" : `${op.distanceM} 米`}`}</li>)}</ol>
         {proposal.operations.some((op) => op.kind === "crowd_motion") && <p role="status">群演将自动绕开方盒障碍并按顺序避让，必要时增加最多 8 秒等待；请拖动预览时间检查实际反应与通行节奏。步态为程序化参考，含标准白模直线段平地支撑脚锁定；转角仍为离散换向，请检查脚步衔接。</p>}
         {proposal.operations.some((op) => op.kind === "seat_actor") && <p role="status">椅子是可编辑的程序化占位，不是真实家具资产。坐姿仅适配标准白模；手动移动后需重新检查接触。</p>}
         <div className="blocking-reference-actions"><button type="button" disabled={stale || busy || navigationLoading || disabled} onClick={preview}>预览设计</button><button type="button" disabled={stale || busy || navigationLoading || disabled || !previewing} onClick={apply}>应用设计</button>{previewing && <button type="button" onClick={() => onPreview(null)}>退出预览</button>}<button type="button" disabled={busy} onClick={() => { setProposal(null); onPreview(null); setError(""); }}>放弃提案</button></div>

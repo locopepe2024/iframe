@@ -11,6 +11,7 @@ import type { ActorPathEasing, CameraPathPresetId, CameraPathState, DialogueTime
 type Vec = [number, number, number];
 export interface CrowdMember { actorId: string; positionM: Vec; destinationM: Vec; yawDeg: number; startSeconds: number; durationSeconds: number }
 export type DesignOperation = StreetLayout
+  | { kind: "add_actor"; actorId: string; label: string; positionM: Vec; yawDeg: number }
   | { kind: "crowd_motion"; groupId: string; label: string; behavior: "avoid" | "observe" | "pass"; members: CrowdMember[] }
   | { kind: "camera_cut"; cameraId: string; timeSeconds: number }
   | { kind: "add_camera"; cameraId: string; label: string; targetIds: string[]; azimuthDeg: number; elevationDeg: number; distanceM: number; focalLengthMm: number }
@@ -53,7 +54,7 @@ export function designContext(state: WorkbenchState): string {
     selectedCameraId: state.selectedCameraId, groundHeightM: state.renderScene.ground.heightM,
     animated: state.dialogueTimeline.tracks.length > 0 || Object.keys(state.actorPaths).length > 0 || Object.keys(state.cameraPaths).length > 0,
     crowdGroups: state.crowdGroups,
-    supported: ["street layout", "crowd motion", "camera cuts", "add composed camera", "static placement", "pair facing", "numbered group blocking", "box proxy", "static camera", "static dolly", "timed camera path", "pose preset", "seated procedural chair reference"],
+    supported: ["static actor markers", "street layout", "crowd motion", "camera cuts", "add composed camera", "static placement", "pair facing", "numbered group blocking", "box proxy", "static camera", "static dolly", "timed camera path", "pose preset", "seated procedural chair reference"],
     posePresets: DESIGN_POSES,
     seating: { representation: "procedural_reference", calibratedRig: "canonical_white_model", seatHeightM: SEATED_FIT.supportHeightM + SEATED_FIT.groundLiftM, preservesCamera: true },
   });
@@ -136,6 +137,9 @@ export function parseDesignProposal(raw: unknown): DesignProposal {
         text(item.actorId); if (memberIds.has(item.actorId as string)) throw new Error("多人编排人物不能重复。"); memberIds.add(item.actorId as string);
         vector(item.positionM); number(item.yawDeg, -360, 360); if (item.presetId != null && !DESIGN_POSES.includes(item.presetId as DesignPoseId)) throw new Error("多人编排姿态不受支持。");
       });
+    } else if (op.kind === "add_actor") {
+      keys(op, ["kind", "actorId", "label", "positionM", "yawDeg"]); text(op.actorId); text(op.label, 80); vector(op.positionM); number(op.yawDeg, -360, 360);
+      if (!/^design-extra-[A-Za-z0-9_-]+$/.test(op.actorId as string)) throw new Error("新增白模人物 ID 无效。");
     } else if (op.kind === "add_box") {
       keys(op, ["kind", "entityId", "label", "positionM", "dimensionsM"]); text(op.entityId); text(op.label, 80); vector(op.positionM); vector(op.dimensionsM, .050001, 20);
       if (!(op.entityId as string).startsWith("design-box-")) throw new Error("新占位物体 ID 无效。");
@@ -220,6 +224,20 @@ export function compileDesignProposal(state: WorkbenchState, raw: unknown, navig
         if (sceneObjects[part.sceneObjectId] || characters[part.sceneObjectId] || cameras[part.sceneObjectId]) throw new Error("街区对象 ID 与已有对象重复。");
         vector(part.transform.position); sceneObjects[part.sceneObjectId] = part; moved.add(part.sceneObjectId);
       }
+    } else if (op.kind === "add_actor") {
+      if (characters[op.actorId] || sceneObjects[op.actorId] || cameras[op.actorId]) throw new Error("新增白模人物 ID 与已有对象重复。");
+      const actorMappingId = `actor-mapping-${op.actorId}`;
+      if (actorMappings[actorMappingId]) throw new Error("白模人物 mapping ID 重复。");
+      if (Math.abs(op.positionM[2] - state.renderScene.ground.heightM) > .001) throw new Error("新增白模人物必须位于地面。");
+      characters[op.actorId] = { characterId: op.actorId, actorMappingId, proxyAssetId: null, label: `${op.label}（白模标记）`,
+        transform: { position: [...op.positionM], rotationDeg: [0, 0, op.yawDeg], scale: [1, 1, 1], groundSnap: true },
+        poseRevision: 1, poseRootOffsetM: [0, 0, 0], jointRotations: {}, activePresetId: "pose.neutral", adjustedJointIds: [], visible: true, locked: false, calibratedPlacement: null };
+      actorMappings[actorMappingId] = { actorMappingId, characterId: op.actorId, subjectId: null, referenceSetId: null, proxyAssetId: null, appearanceRole: "unassigned" };
+      editableActor(op.actorId);
+      // Creation validates the rig, but a later static pose operation is allowed.
+      posed.delete(op.actorId);
+      moved.add(op.actorId);
+      if (Object.values(characters).filter((actor) => actor.visible).length > 40) throw new Error("当前白模参考最多支持 40 个可见人物。");
     } else if (op.kind === "camera_cut") {
       if (cuts.some((cut) => cut.timeSeconds === op.timeSeconds)) throw new Error("同一时间不能重复切镜。");
       cuts.push(op); continue;

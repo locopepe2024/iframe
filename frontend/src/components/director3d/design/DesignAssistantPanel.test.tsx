@@ -28,6 +28,50 @@ async function generate(text = "用35mm拍摄当前人物") {
   await screen.findByRole("button", { name: "预览设计" });
 }
 
+it("requires an image for spatial draft and sends the explicit scope while preserving preview/apply", async () => {
+  useWorkbenchStore.setState({ rigAdmissionStatus: "passed" });
+  const result = { ...proposal(), summary: "粮铺静态空间草稿", assumptions: ["未编排动作：踹倒尚未编排"],
+    operations: [{ kind: "add_actor" as const, actorId: "design-extra-keeper", label: "掌柜", positionM: [8, 0, 0] as [number, number, number], yawDeg: 0 }] };
+  vi.mocked(directorDesignApi.propose).mockResolvedValue(result);
+  const buffer = new Uint8Array([1, 2, 3]).buffer;
+  const image = new File([buffer], "粮铺.png", { type: "image/png" });
+  Object.defineProperty(image, "arrayBuffer", { value: async () => buffer });
+  vi.spyOn(crypto.subtle, "digest").mockResolvedValue(new Uint8Array(32).buffer);
+  render(<App />);
+  fireEvent.change(screen.getByRole("combobox", { name: "设计范围" }), { target: { value: "spatial_draft" } });
+  fireEvent.change(screen.getByRole("textbox", { name: "设计要求" }), { target: { value: "建立粮铺空间，匪首踹倒掌柜" } });
+  expect(screen.getByRole("button", { name: "生成设计提案" })).toBeDisabled();
+  fireEvent.change(screen.getByLabelText("场景参考图（必选）"), { target: { files: [image] } });
+  await waitFor(() => expect(screen.getByRole("button", { name: "生成设计提案" })).toBeEnabled());
+  fireEvent.click(screen.getByRole("button", { name: "生成设计提案" }));
+  await screen.findByText(result.summary);
+  const request = vi.mocked(directorDesignApi.propose).mock.calls[0][0];
+  expect(request.mode).toBe("spatial_draft");
+  expect(request.referenceImage?.url).toMatch(/^data:image\/png/);
+  expect(request.history).toEqual([]);
+  expect(screen.getByText(result.assumptions[0])).toBeInTheDocument();
+  expect(useWorkbenchStore.getState().characters["design-extra-keeper"]).toBeUndefined();
+  fireEvent.click(screen.getByRole("button", { name: "预览设计" }));
+  expect(useWorkbenchStore.getState().characters["design-extra-keeper"]).toBeUndefined();
+  fireEvent.click(screen.getByRole("button", { name: "应用设计" }));
+  expect(useWorkbenchStore.getState().characters["design-extra-keeper"].label).toContain("白模标记");
+  expect(useWorkbenchStore.getState().designSource?.fileName).toBe("粮铺.png");
+  expect(useWorkbenchStore.getState().exportDirectorDesignBundle().authoring.designAssumptions).toEqual(result.assumptions);
+});
+
+it("clears a pending proposal and conversation when changing design scope", async () => {
+  vi.mocked(directorDesignApi.propose).mockResolvedValue(proposal());
+  render(<App />);
+  await generate();
+  fireEvent.click(screen.getByRole("button", { name: "预览设计" }));
+  fireEvent.change(screen.getByRole("combobox", { name: "设计范围" }), { target: { value: "spatial_draft" } });
+  expect(screen.queryByRole("button", { name: "应用设计" })).not.toBeInTheDocument();
+  expect(screen.getByTestId("stage-design-state")).toHaveTextContent("authored");
+  fireEvent.change(screen.getByRole("combobox", { name: "设计范围" }), { target: { value: "edit" } });
+  await generate("继续调整当前机位");
+  expect(vi.mocked(directorDesignApi.propose).mock.calls[1][0].history).toEqual([]);
+});
+
 it("previews without store mutation, gates exports and applies in one undoable transaction", async () => {
   const before = useWorkbenchStore.getState();
   vi.mocked(directorDesignApi.propose).mockResolvedValue(proposal());
