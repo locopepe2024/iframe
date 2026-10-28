@@ -13,7 +13,7 @@ vi.mock("../photos/PhotoImage",()=>({default:()=> <img alt="照片缩略图"/>})
 vi.mock("../PhotoConversationCard",()=>({default: ({label}:{label:string})=><article>{label}</article>}));
 const preview={status:"pending_confirmation",preview_token:"token",action:"save",preview:{content:"喜欢散步",quote:"喜欢散步",source_text:"请记住我喜欢散步",source_message_id:"m",type:"preference",importance:3}};
 beforeEach(()=>{
-  localStorage.clear();vi.resetAllMocks();api.diaries.mockResolvedValue({diaries:[]});photoApi.list.mockResolvedValue({photos:[]});api.session.mockResolvedValue({session_id:"s"});api.messages.mockResolvedValue({messages:[],next_after:null});
+  localStorage.clear();vi.resetAllMocks();api.diaries.mockResolvedValue({diaries:[]});photoApi.list.mockResolvedValue({photos:[]});api.session.mockResolvedValue({session_id:"s"});api.messages.mockResolvedValue({messages:[],next_before:null});
   api.chat.mockResolvedValue({turn_id:"t",status:"completed",result:{kind:"confirmation",...preview}});
   api.confirm.mockResolvedValue({action:"save",memory_id:"memory"});api.cancel.mockResolvedValue({status:"preview_closed"});
 });
@@ -104,7 +104,7 @@ it("opens channel settings instead of retrying when the personal channel is miss
 });
 it("restores server history and latest result from identifiers only",async()=>{
   localStorage.setItem("iframe-companion-agent-session-v1","s");localStorage.setItem("iframe-companion-agent-turn-v1","t");
-  api.messages.mockResolvedValueOnce({messages:[{id:"m",sequence:1,text:"历史用户原话"}],next_after:1}).mockResolvedValueOnce({messages:[{id:"m2",sequence:2,text:"下一页"}],next_after:null});
+  api.messages.mockResolvedValueOnce({messages:[{id:"m",sequence:1,text:"历史用户原话"}],next_before:1}).mockResolvedValueOnce({messages:[{id:"m2",sequence:2,text:"下一页"}],next_before:null});
   api.turn.mockResolvedValue({turn_id:"t",status:"completed",result:{kind:"confirmation",status:"preview_closed",preview_token:"old"}});
   render(<AgentChat/>);await screen.findByText("历史用户原话");
   await waitFor(()=>expect(screen.getByRole("button",{name:"更多历史消息"})).not.toBeDisabled());
@@ -129,7 +129,7 @@ it("renders an upload guide for the live upload-help result",async()=>{
 
 it("restores an upload guide attached to a historical user message",async()=>{
   localStorage.setItem("iframe-companion-agent-session-v1","s");
-  api.messages.mockResolvedValue({messages:[{id:"m-upload",sequence:1,text:"怎么发",turn:{turn_id:"upload-turn",status:"completed",result:{kind:"upload_guide"}}}],next_after:null});
+  api.messages.mockResolvedValue({messages:[{id:"m-upload",sequence:1,text:"怎么发",turn:{turn_id:"upload-turn",status:"completed",result:{kind:"upload_guide"}}}],next_before:null});
   render(<AgentChat/>);
   const card=await screen.findByRole("article",{name:"上传素材引导"});
   expect(card).toHaveTextContent("怎么加入照片或视频？");
@@ -138,7 +138,7 @@ it("restores an upload guide attached to a historical user message",async()=>{
 
 it("keeps debugging controls off the main screen and restores paired replies",async()=>{
   localStorage.setItem("iframe-companion-agent-session-v1","s");
-  api.messages.mockResolvedValue({messages:[{id:"m",sequence:1,text:"今天女儿来看我了",turn:{turn_id:"t",status:"completed",result:{kind:"text",text:"你们一起做了什么？"}}}],next_after:null});
+  api.messages.mockResolvedValue({messages:[{id:"m",sequence:1,text:"今天女儿来看我了",turn:{turn_id:"t",status:"completed",result:{kind:"text",text:"你们一起做了什么？"}}}],next_before:null});
   render(<AgentChat/>);
   await screen.findByText("你们一起做了什么？");
   expect(screen.getByText("今天女儿来看我了")).toBeInTheDocument();
@@ -282,7 +282,7 @@ it("shows an explicit diary card for a completed diary request without auto savi
   api.chat.mockResolvedValue({turn_id:"diary-turn",status:"completed",result:{kind:"text",text:"今天和女儿一起喝茶。"}});
   await start();fireEvent.change(screen.getByLabelText("和我聊聊天"),{target:{value:""}});
   fireEvent.click(screen.getByRole("button",{name:"日记"}));fireEvent.click(await screen.findByRole("button",{name:"整理这一天的日记"}));
-  api.messages.mockResolvedValue({messages:[{id:"dm",text:prompt,turn:{turn_id:"diary-turn",result:{kind:"text",text:"今天和女儿一起喝茶。"}}}],next_after:null});
+  api.messages.mockResolvedValue({messages:[{id:"dm",text:prompt,turn:{turn_id:"diary-turn",result:{kind:"text",text:"今天和女儿一起喝茶。"}}}],next_before:null});
   fireEvent.click(screen.getByRole("button",{name:"发送"}));allowText();fireEvent.click(screen.getByRole("button",{name:"发送"}));
   const card=await screen.findByRole("article",{name:"日记草稿"});
   await waitFor(()=>expect(within(card).getByRole("button",{name:"继续写日记"})).toBeEnabled());
@@ -311,7 +311,7 @@ it("gives a natural-language diary request save actions and calendar retrieval",
 
 it("restores save actions for a historical natural diary reply with a dated heading",async()=>{
  localStorage.setItem("iframe-companion-agent-session-v1","s");
- api.messages.mockResolvedValue({messages:[{id:"old",text:"写一下今天的日记吧",turn:{turn_id:"old-turn",result:{kind:"text",text:"**2026年10月24日 · 日记**\n今天喝茶。"}}}],next_after:null});
+ api.messages.mockResolvedValue({messages:[{id:"old",text:"写一下今天的日记吧",turn:{turn_id:"old-turn",result:{kind:"text",text:"**2026年10月24日 · 日记**\n今天喝茶。"}}}],next_before:null});
  render(<AgentChat/>);
  const card=await screen.findByRole("article",{name:"日记草稿"});
  expect(card).toHaveTextContent("2026-10-24");
@@ -369,10 +369,26 @@ it("keeps text mode silent when a workflow responds",async()=>{
   expect(playback).not.toHaveBeenCalled();
 });
 it("shows the registered diary capability and opens its calendar",async()=>{
-  api.messages.mockResolvedValue({messages:[{id:"diary-msg",sequence:1,text:"打开日记",turn:{turn_id:"diary-turn",status:"completed",result:{kind:"diary_read",name:"diary.open",diaries:[],open_calendar:true,spoken_text:"日记入口已经打开，可以查看日历或选择一天写日记。"}}}],next_after:null});
+  api.messages.mockResolvedValue({messages:[{id:"diary-msg",sequence:1,text:"打开日记",turn:{turn_id:"diary-turn",status:"completed",result:{kind:"diary_read",name:"diary.open",diaries:[],open_calendar:true,spoken_text:"日记入口已经打开，可以查看日历或选择一天写日记。"}}}],next_before:null});
   localStorage.setItem("iframe-companion-agent-session-v1","s");
   render(<AgentChat/>);
   fireEvent.click(await screen.findByRole("button",{name:"打开日记月历"}));
   await screen.findByRole("dialog");
   expect(screen.queryByText("实际记忆查询结果")).not.toBeInTheDocument();
+});
+
+
+it("does not offer retry while a request is pending or when only history refresh fails", async () => {
+  let complete!: (value: unknown) => void;
+  api.chat.mockImplementation(() => new Promise(resolve => { complete = resolve; }));
+  await start(); allowText();
+  fireEvent.change(screen.getByLabelText("和我聊聊天"), {target: {value: "梳理相册"}});
+  fireEvent.click(screen.getByRole("button", {name: "发送"}));
+  await waitFor(() => expect(api.chat).toHaveBeenCalledOnce());
+  expect(screen.queryByRole("button", {name: "重试原请求"})).not.toBeInTheDocument();
+  api.messages.mockRejectedValueOnce(new Error("history unavailable"));
+  complete({turn_id: "album-turn", status: "completed", result: {kind: "photo_read", name: "photo.album.list", arguments: {}, photos: [], next_after_id: null}});
+  await screen.findByText(/历史消息暂未刷新/);
+  expect(screen.queryByRole("button", {name: "重试原请求"})).not.toBeInTheDocument();
+  expect(screen.getByLabelText("和我聊聊天")).toHaveValue("");
 });

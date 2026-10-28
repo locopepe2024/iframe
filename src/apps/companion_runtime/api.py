@@ -190,9 +190,9 @@ def messages(session_id: str, identity: Owner, store: Store, after: int = Query(
 
 
 @router.get('/sessions/{session_id}/conversation')
-def conversation(session_id: str, identity: Owner, store: Store, after: int = Query(default=0,ge=0), limit: int = Query(default=20,ge=1,le=100)):
+def conversation(session_id: str, identity: Owner, store: Store, after: int = Query(default=0,ge=0), limit: int = Query(default=20,ge=1,le=100), latest: bool = False, before: int | None = Query(default=None,ge=1)):
     with errors():
-        return store.conversation(identity.owner_profile_id, identity.user_id, session_id, after=after, limit=limit)
+        return store.conversation(identity.owner_profile_id, identity.user_id, session_id, after=after, limit=limit, latest=latest, before=before)
 
 
 @router.get('/tools')

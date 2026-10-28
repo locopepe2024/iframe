@@ -18,8 +18,21 @@ from .photo_tasks import PhotoTasks
 
 
 class ChatStore(PhotoTasks, DiaryStore, CompanionStore):
-    def conversation(self, owner, actor, session, *, after=0, limit=20):
-        page = self.messages(owner, session, after=after, limit=limit)
+    def conversation(self, owner, actor, session, *, after=0, limit=20, latest=False, before=None):
+        if latest or before is not None:
+            if not 1 <= limit <= 100 or (before is not None and before < 1):
+                raise ValueError('Invalid page')
+            with self.connection() as db:
+                self.one(db, 'companion_sessions', owner, session)
+                boundary = ' AND sequence<?' if before is not None else ''
+                params = (owner, session, before, limit + 1) if before is not None else (owner, session, limit + 1)
+                rows = db.execute('SELECT * FROM companion_messages WHERE owner=? AND session_id=?'
+                                  + boundary + ' ORDER BY sequence DESC LIMIT ?', params).fetchall()
+            selected = list(reversed(rows[:limit]))
+            page = dict(messages=[dict(row) for row in selected], next_after=None,
+                        next_before=selected[0]['sequence'] if len(rows) > limit else None)
+        else:
+            page = self.messages(owner, session, after=after, limit=limit)
         ids = [message['id'] for message in page['messages']]
         if not ids:
             return page

@@ -115,9 +115,9 @@ export default function AgentChat() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [voiceRevision, busy, hasRetry, uploading, preview, turn, allowed]);
   useEffect(() => { void detectCompanionRuntimeCapability().then(setRuntimeCapability); }, []);
-  async function history(id: string, cursor = 0) {
+  async function history(id: string, cursor?: number) {
     const result = await companionApi.messages(id, cursor);
-    if (alive.current) { setMessages(old => cursor ? [...old, ...result.messages] : result.messages); setAfter(result.next_after); }
+    if (alive.current) { setMessages(old => cursor !== undefined ? [...result.messages, ...old] : result.messages); setAfter(result.next_before ?? null); }
   }
   useEffect(() => {
     setIdentity(readCompanionIdentity());
@@ -175,11 +175,17 @@ export default function AgentChat() {
     }
     if (!sendOperation.current || !retry) sendOperation.current = { operation_id: crypto.randomUUID(), text: submittedText, allow_external_text: true };
     if (!retry) setLastSubmittedText(submittedText);
-    setHasRetry(true); setPreview(null);
+    setPreview(null);
     if (!session && !sessionOperation.current) sessionOperation.current = crypto.randomUUID();
     const activeSession = session || (await companionApi.session(sessionOperation.current)).session_id;
     if (!session) { sessionOperation.current = ""; setSession(activeSession); localStorage.setItem(sessionKey, activeSession); }
-    const result = await companionApi.chat(activeSession, sendOperation.current);
+    let result: Turn;
+    try {
+      result = await companionApi.chat(activeSession, sendOperation.current);
+    } catch (failure) {
+      if (alive.current) setHasRetry(true);
+      throw failure;
+    }
     localStorage.setItem(turnKey, result.turn_id);
     if (alive.current) {
       if (responseMode === "audio") {
@@ -189,7 +195,8 @@ export default function AgentChat() {
       setDraft(null); setTurn(result); setPreview(result.result?.kind === "confirmation" ? result.result : null); setDrafts(old => ({ ...old, chat: "" })); sendOperation.current = null; setHasRetry(false);
       commitAttachments();
     }
-    await history(activeSession);
+    try { await history(activeSession); }
+    catch { if (alive.current) setNotice("回复已收到，历史消息暂未刷新，请稍后重新打开聊天。"); }
   }
   function retryLastRequest() {
     if (!sendOperation.current) {
@@ -331,6 +338,7 @@ export default function AgentChat() {
       </div>
     </section>}
     <section aria-label="会话消息">
+      {after !== null && <button disabled={busy} onClick={() => void run(() => history(session, after))}>更多历史消息</button>}
       {renderAttached(0)}
       {messages.map((message,index) => {
         const day = diaryDay(message.text, message.turn?.result?.kind === "text" ? message.turn.result.text : "");
@@ -350,13 +358,19 @@ export default function AgentChat() {
           <button type="button" onClick={() => setFeature("diary")}>打开日记月历</button>
         </section>}
         {message.turn?.result?.kind === "photo_task" && !messages.slice(index + 1).some(later => later.turn?.result?.kind === "photo_task" && later.turn.result.task_id === (message.turn?.result?.kind === "photo_task" ? message.turn.result.task_id : "")) && <PhotoTaskCard key={`${message.turn.turn_id}-${message.turn.result.revision}`} task={message.turn.result} />}
-        {message.turn?.result?.kind === "photo_read" && <PhotoToolResult key={message.turn.turn_id} result={message.turn.result} />}
+        {message.turn?.result?.kind === "photo_read" && <><article className={chatStyles.assistant}><p>我找到照片了，我们一起看看。需要整理哪一张，可以直接告诉我。</p></article><PhotoToolResult key={message.turn.turn_id} result={message.turn.result} /></>}
         {message.turn?.result?.kind === "upload_guide" && !dismissedUploadGuides.includes(message.turn.turn_id) && <UploadGuideCard {...uploadGuideActions(message.turn.turn_id)} />}
       </div>{renderAttached(index+1)}</Fragment>;
       })}
-      {after !== null && <button disabled={busy} onClick={() => void run(() => history(session, after))}>更多历史消息</button>}
     </section>
     {turn?.result?.kind === "text" && !messages.some(m => m.turn?.turn_id === turn.turn_id) && (diaryDay(lastSubmittedText) ? <DiaryCard day={diaryDay(lastSubmittedText)!} text={turn.result.text} sourceTurn={turn.turn_id} onOpenDiary={() => setFeature("diary")} /> : <article className={chatStyles.assistant}><p>{turn.result.text}</p>{responseMode === "text" && <SpeechPlayback text={turn.result.text} voice={identity.voice}/>}</article>)}
+    {turn?.result?.kind === "photo_read" && !messages.some(m => m.turn?.turn_id === turn.turn_id) && <PhotoToolResult key={turn.turn_id} result={turn.result} />}
+    {turn?.result?.kind === "photo_task" && !messages.some(m => m.turn?.turn_id === turn.turn_id) && <PhotoTaskCard key={`${turn.turn_id}-${turn.result.revision}`} task={turn.result} />}
+    {turn?.result?.kind === "diary_read" && !messages.some(m => m.turn?.turn_id === turn.turn_id) && <section className={styles.panel} aria-label="日记查询结果">
+      <p>{turn.result.spoken_text}</p>
+      {turn.result.diaries.map(entry => <DiaryCard key={`${entry.day}-${entry.revision}`} day={entry.day} text={entry.text} sourceTurn={entry.source_turn_id} saved={entry} onOpenDiary={() => setFeature("diary")} />)}
+      <button type="button" onClick={() => setFeature("diary")}>打开日记月历</button>
+    </section>}
     {turn?.result?.kind === "upload_guide" && !messages.some(m => m.turn?.turn_id === turn.turn_id) && !dismissedUploadGuides.includes(turn.turn_id) && <UploadGuideCard {...uploadGuideActions(turn.turn_id)} />}
     {uploadFiles.length > 0 && <MediaUpload files={uploadFiles} disabled={inputDisabled || pending} onUploaded={attach} onBusyChange={setUploading} onClose={() => setUploadFiles([])} />}
     {albumOpen && <AlbumPicker disabled={inputDisabled || pending} onClose={() => setAlbumOpen(false)} onPhoto={photo => {

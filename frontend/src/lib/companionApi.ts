@@ -34,7 +34,7 @@ export const companionApi = {
   diaries: (month: string) => request<{diaries: Diary[]}>(`/diaries?${new URLSearchParams({month})}`),
   saveDiary: (day: string, body: {operation_id: string; text: string; source_turn_id: string; expected_revision: number}) => request<Diary>(`/diaries/${encodeURIComponent(day)}`, "PUT", body),
   session: (operation_id: string) => request<{ session_id: string }>("/sessions", "POST", { operation_id }),
-  messages: (id: string, after = 0) => request<{ messages: UserMessage[]; next_after: number | null }>(`/sessions/${encodeURIComponent(id)}/conversation?after=${after}`),
+  messages: (id: string, before?: number) => request<{ messages: UserMessage[]; next_after: number | null; next_before: number | null }>(`/sessions/${encodeURIComponent(id)}/conversation?${before === undefined ? "latest=true" : `before=${before}`}`),
   chat: (id: string, body: { operation_id: string; text: string; allow_external_text: true }) => request<Turn>(`/sessions/${encodeURIComponent(id)}/chat`, "POST", body),
   turn: (id: string) => request<Turn>(`/turns/${encodeURIComponent(id)}`),
   tool: <T>(name: string, args: object) => request<T>("/tools", "POST", { name, arguments: args }),

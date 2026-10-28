@@ -161,3 +161,26 @@ def test_conversation_history_pairs_replies_and_enforces_owner_actor(chat):
     assert store.conversation('owner','someone-else',session)['messages'][0].get('turn') is None
     from src.apps.companion_runtime.store import Missing
     with pytest.raises(Missing):store.conversation('other-owner','actor',session)
+
+
+def test_recent_conversation_pages_keep_latest_results_and_older_history(chat):
+    store, _, client, session, callback = chat
+    callback.side_effect = None
+    callback.return_value = dict(kind='text', text='我们一起整理。')
+    for index in range(25):
+        result = client.post(f'/companion-runtime/sessions/{session}/chat', json=dict(
+            operation_id=f'recent-{index}', text=f'整理照片 {index}', allow_external_text=True))
+        assert result.status_code == 200
+    latest = client.get(f'/companion-runtime/sessions/{session}/conversation?latest=true').json()
+    assert len(latest['messages']) == 20
+    assert latest['messages'][0]['text'] == '整理照片 5'
+    assert latest['messages'][-1]['text'] == '整理照片 24'
+    assert latest['messages'][-1]['turn']['result']['text'] == '我们一起整理。'
+    older = client.get(f'/companion-runtime/sessions/{session}/conversation?before={latest["next_before"]}').json()
+    assert [m['text'] for m in older['messages']] == [f'整理照片 {i}' for i in range(5)]
+    assert older['next_before'] is None
+    # Preserve the forward pagination contract for existing callers.
+    original = client.get(f'/companion-runtime/sessions/{session}/conversation').json()
+    assert original['messages'][0]['text'] == '整理照片 0'
+    assert original['next_after'] is not None
+    assert client.get(f'/companion-runtime/sessions/{session}/conversation?before=0').status_code == 422
