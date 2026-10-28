@@ -688,6 +688,58 @@
     "imageEditor": "Image editor"
   },
   "recreation": {
+    "poseReview": {
+      "title": "Annotate motion",
+      "instructions": "Choose a source frame, then select a joint and click or drag on the image. Arrow keys adjust the selected point. Left/right refer to the person. Mark hidden points uncertain or occluded.",
+      "sourceFrame": "Source frame",
+      "load": "Load frame",
+      "export": "Export saved annotations",
+      "loading": "Loading frame",
+      "savedFrames": "Saved frames",
+      "frameLabel": "Frame {frame}",
+      "editor": "Joint editor: select a joint, click to place, or use arrow keys",
+      "discard": "Discard unsaved changes to this frame?",
+      "saved": "Annotations saved to this project.",
+      "error": "Could not load or save. Your edits are kept. If the frame or analysis changed, reload the frame before trying again.",
+      "unsaved": "Unsaved changes",
+      "save": "Save annotations",
+      "visibilityLabel": "{joint} visibility",
+      "contactLabel": "Foot contact",
+      "statusLabel": "Review status",
+      "noRecompute": "Annotations are saved separately. 3D motion has not been recalculated.",
+      "joints": {
+        "left_hip": "Left hip",
+        "right_hip": "Right hip",
+        "left_knee": "Left knee",
+        "right_knee": "Right knee",
+        "left_ankle": "Left ankle",
+        "right_ankle": "Right ankle"
+      },
+      "visibility": {
+        "visible": "Visible",
+        "occluded": "Occluded",
+        "uncertain": "Uncertain"
+      },
+      "contact": {
+        "left": "Left support",
+        "right": "Right support",
+        "both": "Both feet",
+        "airborne": "Airborne",
+        "uncertain": "Uncertain"
+      },
+      "status": {
+        "draft": "Draft",
+        "reviewed": "Reviewed",
+        "not_evaluable": "Not evaluable"
+      },
+      "depthLabel": "Leg depth order",
+      "depth": {
+        "left_front": "Left leg in front",
+        "right_front": "Right leg in front",
+        "uncertain": "Uncertain"
+      },
+      "legend": "Teal: left leg · Orange: right leg. Depth order is a review label, not measured distance."
+    },
     "title": "Video Recreation",
     "workflowNavigation": "Recreation project stages",
     "openAssets": "Assets",

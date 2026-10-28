@@ -307,3 +307,41 @@ def retry_assembly_task(task_id: str, background: BackgroundTasks,
     task = service.retry_assembly_task(task_id)
     background.add_task(service.process_assembly_task, task_id)
     return public(task, user)
+
+
+class PoseJointRequest(BaseModel):
+    xy: list[float] = Field(min_length=2, max_length=2)
+    visibility: str
+
+
+class PoseFrameRequest(BaseModel):
+    analysis_id: str
+    pts: StrictInt
+
+
+class PoseReviewRequest(PoseFrameRequest):
+    media_id: str
+    image_sha256: str
+    revision: int = Field(ge=0)
+    depth_order: str = "uncertain"
+    joints: dict[str, PoseJointRequest] = Field(max_length=6)
+    contact: str
+    status: str
+
+
+@router.get('/projects/{project_id}/pose-review')
+def get_pose_reviews(project_id: str, user: UserContext = Depends(require_studio_user)):
+    from .pose_review import reviews
+    return public(reviews(RecreationService(user), project_id), user)
+
+
+@router.post('/projects/{project_id}/pose-review/frame')
+def prepare_pose_review(project_id: str, request: PoseFrameRequest, user: UserContext = Depends(require_studio_user)):
+    from .pose_review import prepare
+    return public(prepare(RecreationService(user), project_id, request.analysis_id, request.pts), user)
+
+
+@router.put('/projects/{project_id}/pose-review/frame')
+def save_pose_review(project_id: str, request: PoseReviewRequest, user: UserContext = Depends(require_studio_user)):
+    from .pose_review import save
+    return public(save(RecreationService(user), project_id, request.model_dump()), user)

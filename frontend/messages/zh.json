@@ -688,6 +688,58 @@
     "imageEditor": "图片编辑"
   },
   "recreation": {
+    "poseReview": {
+      "title": "动作标注",
+      "instructions": "选择源帧，再选关节，在图上点击或拖动定位，方向键可微调。左右按人物自身定义；隐藏点标记遮挡或不确定。",
+      "sourceFrame": "源帧号",
+      "load": "载入源帧",
+      "export": "导出已保存标注",
+      "loading": "正在载入源帧",
+      "savedFrames": "已保存帧",
+      "frameLabel": "第 {frame} 帧",
+      "editor": "关节编辑：选择关节后点击定位，或用方向键调整",
+      "discard": "放弃当前帧尚未保存的修改？",
+      "saved": "标注已保存到当前项目。",
+      "error": "载入或保存失败，当前修改已保留。如果源帧或分析版本已变化，请重新载入该帧。",
+      "unsaved": "有未保存修改",
+      "save": "保存标注",
+      "visibilityLabel": "{joint}可见性",
+      "contactLabel": "脚部接触",
+      "statusLabel": "审核状态",
+      "noRecompute": "标注独立保存，三维动作尚未重新计算。",
+      "joints": {
+        "left_hip": "左髋",
+        "right_hip": "右髋",
+        "left_knee": "左膝",
+        "right_knee": "右膝",
+        "left_ankle": "左踝",
+        "right_ankle": "右踝"
+      },
+      "visibility": {
+        "visible": "可见",
+        "occluded": "遮挡",
+        "uncertain": "不确定"
+      },
+      "contact": {
+        "left": "左脚支撑",
+        "right": "右脚支撑",
+        "both": "双脚支撑",
+        "airborne": "腾空",
+        "uncertain": "不确定"
+      },
+      "status": {
+        "draft": "草稿",
+        "reviewed": "已复核",
+        "not_evaluable": "不可评"
+      },
+      "depthLabel": "双腿前后关系",
+      "depth": {
+        "left_front": "左腿在前",
+        "right_front": "右腿在前",
+        "uncertain": "不确定"
+      },
+      "legend": "青色：左腿 · 橙色：右腿。前后关系是人工审查记录，不是实测距离。"
+    },
     "title": "视频复刻",
     "workflowNavigation": "复刻项目阶段",
     "openAssets": "素材与资产",

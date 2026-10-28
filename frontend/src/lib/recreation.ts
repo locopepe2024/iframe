@@ -356,3 +356,26 @@ export const recreationApi = {
   evidence: (project: RecreationProject, pts: number): Promise<CutEvidence> =>
     axios.post(`${API_URL}/recreation/projects/${project.id}/evidence`, { analysis_id: project.analysis_id, pts }).then(r => r.data),
 };
+
+export const poseJoints = ["left_hip", "right_hip", "left_knee", "right_knee", "left_ankle", "right_ankle"] as const;
+export type PoseJointName = typeof poseJoints[number];
+export type PoseVisibility = "visible" | "occluded" | "uncertain";
+export interface PoseReviewFrame {
+  analysis_id: string; pts: number; source_frame: number; time_base: string; source_checksum: string;
+  media_id: string; image_sha256: string; image_url: string; width: number; height: number; revision: number;
+  joints: Partial<Record<PoseJointName, { xy: [number, number]; visibility: PoseVisibility }>>;
+  depth_order: "left_front" | "right_front" | "uncertain";
+  contact: "left" | "right" | "both" | "airborne" | "uncertain";
+  status: "draft" | "reviewed" | "not_evaluable";
+}
+export const poseReviewApi = {
+  list: (projectId: string): Promise<{ analysis_id: string; frames: PoseReviewFrame[] }> =>
+    axios.get(`${API_URL}/recreation/projects/${projectId}/pose-review`).then(r => r.data),
+  frame: (projectId: string, analysisId: string, pts: number): Promise<PoseReviewFrame> =>
+    axios.post(`${API_URL}/recreation/projects/${projectId}/pose-review/frame`, { analysis_id: analysisId, pts }).then(r => r.data),
+  save: (projectId: string, frame: PoseReviewFrame): Promise<PoseReviewFrame> =>
+    axios.put(`${API_URL}/recreation/projects/${projectId}/pose-review/frame`, {
+      analysis_id: frame.analysis_id, pts: frame.pts, media_id: frame.media_id, image_sha256: frame.image_sha256,
+      revision: frame.revision, joints: frame.joints, contact: frame.contact, status: frame.status, depth_order: frame.depth_order,
+    }).then(r => r.data),
+};

@@ -7,6 +7,7 @@ import axios from "axios";
 import { API_URL } from "@/lib/api";
 import { CutEvidence, importCuts, recreationApi, RecreationProject, seconds } from "@/lib/recreation";
 import ShotReferences from "./ShotReferences";
+import PoseReview from "./PoseReview";
 
 const workflowSteps = ["split", "parse", "analyze", "replace", "submit", "assemble"] as const;
 type WorkflowStep = typeof workflowSteps[number];
@@ -284,6 +285,7 @@ export default function RecreationPage() {
             {step === "analyze" && <section className="border-t border-border py-5 space-y-3">
               <h3 className="font-semibold">{t("steps.analyze")}</h3>
               <p className="text-sm text-text-muted">{t("analysisScope")}</p>
+              <PoseReview key={`${project.id}:${project.analysis_id}`} project={project} />
               <details><summary className="cursor-pointer text-sm">{t("contactSheet")}</summary>
                 <img loading="lazy" decoding="async" width={960} height={540} src={media(analysis.contact_sheet_preview_url || analysis.contact_sheet_url)} alt={t("contactSheet")} className="mt-4 w-full" />
               </details>
