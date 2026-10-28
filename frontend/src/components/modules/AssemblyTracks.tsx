@@ -138,7 +138,7 @@ export function AssemblyTracks({ plan, resourceId, onChange, saved, project, mat
             setTimeout(() => URL.revokeObjectURL(url), 1000);
         } catch (e) { setError(extractErrorDetail(e)); } finally { setBusy(false); }
     };
-    return <section aria-label={t("多泳道编辑", "Multitrack editing")} className="space-y-3 rounded-lg border border-glass-border p-3">
+    return <section aria-label={t("多泳道编辑", "Multitrack editing")} className="min-w-0 space-y-3 rounded-lg border border-glass-border p-3" style={{ contain: "inline-size" }}>
         <div className="relative mx-auto aspect-video max-h-[420px] w-full overflow-hidden rounded-lg bg-black">
             {currentMedia ? <video ref={videoRef} key={currentMedia.url} src={currentMedia.url} poster={currentMedia.poster || undefined} preload="metadata" playsInline className="h-full w-full object-contain" aria-label={t("剪辑画面预览", "Timeline video preview")}
                 onLoadedMetadata={syncVideo} onError={() => { setPlaying(false); setMediaError(t("视频无法加载，请检查该镜头素材。", "Video unavailable. Check this shot's media.")); }}
@@ -206,7 +206,7 @@ export function AssemblyTracks({ plan, resourceId, onChange, saved, project, mat
             <button type="button" className={`${control} border-red-500/40 text-red-200`} onClick={() => applyEdit(() => removeAssemblyClip(plan, selected.laneId, selected.clipId))}>{t("删除片段", "Delete clip")}</button>
         </div>}
         {error && <p role="alert" className="text-xs text-red-300">{error}</p>}
-        <div ref={timelineViewport} className="overflow-x-auto" aria-label={t("可横向滚动的时间线", "Scrollable timeline")}><div data-timeline-canvas style={{ width: timelineWidth }}>
+        <div ref={timelineViewport} className="w-full min-w-0 overflow-x-auto" style={{ contain: "inline-size" }} aria-label={t("可横向滚动的时间线", "Scrollable timeline")}><div data-timeline-canvas style={{ width: timelineWidth }}>
         <div role="slider" tabIndex={0} aria-label={t("时间轴刻度", "Timeline ruler")} aria-valuemin={0} aria-valuemax={plan.target_duration_ms / 1000} aria-valuenow={position / 1000} className="relative h-10 cursor-crosshair border-b border-glass-border bg-elevated text-xs tabular-nums" onPointerDown={event => {
             const bounds = event.currentTarget.getBoundingClientRect();
             seek((event.clientX - bounds.left) / bounds.width * plan.target_duration_ms);
