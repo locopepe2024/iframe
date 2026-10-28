@@ -168,6 +168,21 @@ def test_spatial_draft_cannot_omit_design_assumptions(client, monkeypatch):
     assert c.post("/director3d/design-proposals", json=spatial_request()).status_code == 502
 
 
+def test_rejected_spatial_draft_gets_explicit_non_repeat_correction_instruction(client, monkeypatch):
+    c, _ = client
+    seen = {}
+    def generate(self, messages, **kwargs):
+        seen["text"] = messages[-1]["content"][0]["text"]
+        return json.dumps({**spatial_response(), "clarification": "请先调整树的位置。", "operations": []})
+    monkeypatch.setattr(design.LLMAdapter, "chat", generate)
+    context = json.loads(spatial_request()["context"])
+    context["rejectedDesign"] = {"reason": "人物与占位道具重叠", "operations": spatial_response()["operations"]}
+    result = c.post("/director3d/design-proposals", json={**spatial_request(), "context": json.dumps(context, ensure_ascii=False)})
+    assert result.status_code == 200
+    assert "不得原样重复上一版 operations" in seen["text"]
+    assert "人物与占位道具重叠" in seen["text"]
+
+
 def test_reference_assets_keep_checksum_and_owner_boundary(client, monkeypatch, tmp_path):
     c, app = client
     monkeypatch.setenv("IFRAME_MEDIA_ROOT", str(tmp_path / "media"))

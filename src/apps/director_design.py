@@ -463,8 +463,17 @@ def propose(request: DesignRequest, user: UserContext = Depends(require_user_con
         scope = "\n" + SPATIAL_DRAFT_SYSTEM if request.mode == "spatial_draft" else ""
         messages: list[dict[str, object]] = [{"role": "system", "content": SYSTEM + scope + "\nResponse schema:\n" + schema}]
         messages.extend(turn.model_dump() for turn in request.history)
-        user_text = json.dumps({"scene": json.loads(request.context), "request": request.prompt,
+        context_value = json.loads(request.context)
+        user_text = json.dumps({"scene": context_value, "request": request.prompt,
                                 "referenceImage": bool(request.referenceImage)}, ensure_ascii=False)
+        rejected = context_value.get("rejectedDesign") if isinstance(context_value, dict) else None
+        if isinstance(rejected, dict):
+            reason = str(rejected.get("reason") or "校验失败")[:600]
+            prior_ops = rejected.get("operations")
+            user_text += ("\n这是对上一版候选的纠错请求。上一版未应用，原因是：" + reason
+                          + "。必须针对该原因改变相关坐标或占位，不得原样重复上一版 operations；"
+                          + "如果无法安全修正，返回 clarification，不要返回相同 operations。"
+                          + "上一版 operations 摘要：" + json.dumps(prior_ops, ensure_ascii=False)[:3000])
         if request.referenceImage:
             messages.append({"role": "user", "content": [
                 {"type": "text", "text": user_text + "\n请把参考图当作二维构图证据，输出可编辑白模操作，并把不确定尺度、遮挡、深度和接触写入 assumptions。"},
