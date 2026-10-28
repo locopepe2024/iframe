@@ -1,0 +1,33 @@
+{
+  "source_frame_count": 217,
+  "source_sha256": "3b0d8f32549c80ef04e988c1bfe1393582fd6349047b306ce6c2df7bdae63c96",
+  "frames": [
+    {
+      "file": "i-01.png",
+      "source_frame": 1,
+      "pts_s": 0.0,
+      "pict_type": "I",
+      "size": [
+        3840,
+        2080
+      ],
+      "sha256": "f355fdb338e4c5a6649ffad90a38441674d904d1893ff658b304b3a619ac7c10"
+    },
+    {
+      "file": "i-02.png",
+      "source_frame": 151,
+      "pts_s": 6.0,
+      "pict_type": "I",
+      "size": [
+        3840,
+        2080
+      ],
+      "sha256": "e2f988e4cfac8867c72918114d9b7782d4fbfe95b8015aa73369998e46a3bd96"
+    }
+  ],
+  "limits": [
+    "I-frame type does not prove sharpness.",
+    "No I frame near source frame49 (1.92s).",
+    "Native-resolution decoded PNG, not image enhancement."
+  ]
+}
