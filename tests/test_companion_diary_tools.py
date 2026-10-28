@@ -8,7 +8,7 @@ from src.apps.companion_runtime.tools import CAPABILITIES, MODELS, dispatch
 def test_capabilities_and_diary_reads_do_not_mutate(tmp_path):
     store = ChatStore(tmp_path / 'chat.db', initialize=True)
     store.save_diary('owner', 'actor', '2026-10-27', operation_id='save', text='今天散步了。', source_turn_id='', expected_revision=0)
-    assert {c['name'] for c in CAPABILITIES} == {'album', 'diary', 'memory'}
+    assert {c['name'] for c in CAPABILITIES} == {'album', 'diary', 'memory', 'creative'}
     assert {t for c in CAPABILITIES for t in c['tools']} == set(MODELS)
     assert dispatch(store, 'owner', 'actor', 'diary.open', {})['open_calendar']
     listed = dispatch(store, 'owner', 'actor', 'diary.list', {'month': '2026-10'})

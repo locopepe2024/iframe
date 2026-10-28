@@ -41,6 +41,8 @@ def attach_replies(db, owner, actor, session, messages):
                          summary=result.get('context_summary'))
         elif kind == 'confirmation':
             reply['status'] = 'confirmation_requested_outcome_unknown'
+        elif kind == 'media_draft':
+            reply.update(task_id=result['task_id'], revision=result['revision'], status=result['status'], step=result['step'])
         elif kind == 'photo_task':
             reply.update(task_id=result['task_id'], status='workflow_started_or_updated')
         elif kind == 'photo_action':

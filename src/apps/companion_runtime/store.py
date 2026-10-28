@@ -59,6 +59,19 @@ from .photo_tasks_schema import TASK_SCHEMA
 SCHEMA += DIARY_SCHEMA + TASK_SCHEMA
 from .interaction_focus import FOCUS_SCHEMA
 SCHEMA += FOCUS_SCHEMA
+SCHEMA += """
+CREATE TABLE IF NOT EXISTS companion_media_drafts (
+ id TEXT PRIMARY KEY, owner TEXT NOT NULL, actor TEXT NOT NULL, session_id TEXT NOT NULL,
+ operation_id TEXT NOT NULL, request TEXT NOT NULL, status TEXT NOT NULL,
+ revision INTEGER NOT NULL, payload TEXT NOT NULL, created_at REAL NOT NULL,
+ UNIQUE(owner,actor,operation_id)
+);
+CREATE TABLE IF NOT EXISTS companion_media_draft_operations (
+ owner TEXT NOT NULL, actor TEXT NOT NULL, task_id TEXT NOT NULL, operation_id TEXT NOT NULL,
+ request TEXT NOT NULL, result TEXT NOT NULL, PRIMARY KEY(owner,actor,task_id,operation_id)
+);
+CREATE INDEX IF NOT EXISTS companion_media_session ON companion_media_drafts(owner,actor,session_id,status);
+"""
 TYPES = ('preference', 'personal_fact', 'photo_recollection')
 
 

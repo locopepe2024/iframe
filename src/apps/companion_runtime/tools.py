@@ -34,6 +34,19 @@ class SearchMemories(ListMemories):
     query: str = Field(min_length=1, max_length=100)
 
 
+class StartMediaDraft(Strict):
+    type: Literal['image_edit', 'image_generate', 'video_generate']
+    brief: str = Field(default='', max_length=4000)
+
+
+class UpdateMediaDraft(Strict):
+    task_id: str = Field(min_length=1, max_length=120)
+    expected_revision: int = Field(ge=1)
+    action: Literal['brief', 'select_photo', 'clear_photo', 'pause', 'resume', 'cancel']
+    brief: str = Field(default='', max_length=4000)
+    photo_id: str | None = Field(default=None, max_length=120)
+
+
 class OpenDiary(Strict):
     pass
 
@@ -108,6 +121,7 @@ class ReadPhoto(Strict):
 
 
 CAPABILITIES = [
+    dict(name='creative', description='通过对话准备修改照片、生成图片或视频的任务卡片，不提交生成。', tools=['media.draft.start', 'media.draft.update']),
     dict(name='album', description='统计相册照片总数、打开和查询站内相册、查看照片、发起与继续整理工作流；分析及修改需用户确认。', tools=['photo.album.count', 'photo.album.list', 'photo.item.read', 'photo.organize.start', 'photo.organize.input', 'photo.action']),
     dict(name='diary', description='打开日记月历、查询已保存日记；用户明确说保存时可保存当前会话已生成且未修改的日记草稿。覆盖或编辑由编辑器核对。', tools=['diary.save_draft', 'diary.open', 'diary.list', 'diary.read']),
     dict(name='memory', description='查询个人记忆；保存、删除需用户确认。', tools=['memory.save', 'memory.search', 'memory.list', 'memory.delete']),
@@ -115,6 +129,8 @@ CAPABILITIES = [
 
 
 DESCRIPTIONS = {
+    'media.draft.start': '开始修改照片(image_edit)、生成图片(image_generate)或视频(video_generate)任务卡片，不生成或计费。用户只说我们编辑一张图片吧、生成图片时brief留空，不能把启动指令当描述。有具体修改要求或画面内容时才提炼到brief，不擅自加风格场景。若已有active_media_draft，先用update继续、暂停或取消；不能覆盖。相册姓名日期修改不属于画面编辑。',
+    'media.draft.update': '继续active_media_draft任务，task_id和expected_revision必须来自服务端当前快照。brief动作替换完整要求，保留此前未被修改的约束；只在用户给出具体修改/创作内容时使用，不把闲聊或取消指令加入brief。select_photo只能取真实已选照片ID。pause保留并回聊天，resume恢复，cancel取消草稿。不会提交生成或收费。',
     'diary.save_draft': '仅当用户明确要求保存已经看过的日记草稿时调用。从本会话 assistant_reply.turn_id 取得对应日记生成结果的 source_turn_id，不传正文、不生成新正文、不猜ID。多轮对话写成的日记也支持：day必须填写用户明确确定的YYYY-MM-DD日期，source_turn_id指向实际日记正文，不是提问、闲聊或保存说明。年份用明确会话时间，不从照片推断，不清楚先问。不用于用户只是提到日记或要求继续写。标准写作请求的日期由服务端核对；多轮写作日期由上下文确定，正文始终从源记录读取；当天已有其他版本或编辑器内容变动会提示核对，绝不静默覆盖。没有明确可保存的草稿时只问用户要保存哪篇。',
     'photo.album.count': '查询当前用户相册的实际照片总数，排除已删除照片。用户问一共有多少张、相册总共多少照片等数量问题时调用；直接返回统计，不询问整理范围，不打开相册，不从分页照片或聊天记录猜数量。无参数。只支持全相册总数；若明确询问某日期或人物的数量，此工具不支持筛选，不能把全库总数当成筛选数量。',
     'photo.action': '对当前选中的照片请求分析、修改资料或删除。只生成待确认卡片，不声称已完成。action=analyze需要用户确认外部看图；edit的changes仅填写用户明确说出的people、scene、lighting、location、latitude、longitude、capture_time、notes，未修改字段不传；姓名/年龄不得猜。delete必须确认。photo_id只可从工作流状态取得；没有选中照片先请用户选择。',
@@ -129,14 +145,14 @@ DESCRIPTIONS = {
 }
 
 
-MODELS = {'diary.save_draft': SaveDiaryDraft, 'photo.action': PhotoAction, 'diary.open': OpenDiary, 'diary.list': ListDiaries, 'diary.read': ReadDiary, 'memory.save': SaveMemory, 'memory.search': SearchMemories,
+MODELS = {'media.draft.start': StartMediaDraft, 'media.draft.update': UpdateMediaDraft, 'diary.save_draft': SaveDiaryDraft, 'photo.action': PhotoAction, 'diary.open': OpenDiary, 'diary.list': ListDiaries, 'diary.read': ReadDiary, 'memory.save': SaveMemory, 'memory.search': SearchMemories,
           'memory.list': ListMemories, 'memory.delete': DeleteMemory,
           'photo.album.count': CountPhotos, 'photo.album.list': ListPhotos, 'photo.item.read': ReadPhoto, 'photo.organize.start': OrganizePhotos, 'photo.organize.input': PhotoTaskCommand}
 
 
 def tool_schemas():
     return [dict(name=name, parameters=model.model_json_schema(),
-                 effect='explicit_save' if name == 'diary.save_draft' else 'workflow_start' if name in ('photo.organize.start', 'photo.organize.input') else 'proposal_only' if name in ('memory.save','memory.delete','photo.action') else 'read_only')
+                 effect='draft_update' if name.startswith('media.draft.') else 'explicit_save' if name == 'diary.save_draft' else 'workflow_start' if name in ('photo.organize.start', 'photo.organize.input') else 'proposal_only' if name in ('memory.save','memory.delete','photo.action') else 'read_only')
             for name, model in MODELS.items()]
 
 
@@ -144,6 +160,8 @@ def dispatch(store, owner, actor, name, arguments):
     if name not in MODELS:
         raise ValueError('Unknown companion tool')
     values = MODELS[name].model_validate(arguments).model_dump()
+    if name.startswith('media.draft.'):
+        raise ValueError('Creative draft requires a claimed turn or session-scoped operation')
     if name == 'diary.save_draft':
         raise ValueError('Diary save requires a claimed chat turn')
     if name == 'diary.open':

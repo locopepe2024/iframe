@@ -15,7 +15,7 @@ from .store import Missing, Conflict
 from .chat_store import ChatStore as CompanionStore
 from .intent import classify
 from .model import propose, propose_diary, ModelUnavailable
-from .tools import Strict, dispatch, tool_schemas, CAPABILITIES
+from .tools import StartMediaDraft, UpdateMediaDraft, Strict, dispatch, tool_schemas, CAPABILITIES
 from .opentalking_binding import BindingUnavailable, SessionBindings
 from .opentalking_context import ContextUnavailable, IframeContextReader
 from .interaction_focus import FocusUpdate, read_focus, update_focus, active_editor
@@ -29,7 +29,13 @@ class UserMessage(Operation):
     text: str = Field(min_length=1, max_length=4000)
 
 
+class CreativeContext(Strict):
+    task_id: str = Field(max_length=120)
+    revision: int = Field(ge=0)
+
+
 class ChatRequest(UserMessage):
+    creative_context: CreativeContext | None = None
     allow_external_text: Literal[True]
     selected_photo_id: str | None = Field(default=None, min_length=1, max_length=120)
 
@@ -245,6 +251,48 @@ def photo_task_input(task_id: str, body: PhotoTaskInput, identity: Owner, store:
         return store.update_photo_task(identity.owner_profile_id, identity.user_id, task_id, body.model_dump())
 
 
+class MediaDraftStart(Operation, StartMediaDraft):
+    pass
+
+
+class MediaDraftInput(Operation, UpdateMediaDraft):
+    pass
+
+
+@router.get('/sessions/{session_id}/media-drafts')
+def media_drafts(session_id: str, identity: Owner, store: Store):
+    with errors(), store.connection() as db:
+        store.one(db, 'companion_sessions', identity.owner_profile_id, session_id)
+        rows = db.execute("SELECT id FROM companion_media_drafts WHERE owner=? AND actor=? AND session_id=? ORDER BY rowid DESC LIMIT 5",
+                          (identity.owner_profile_id, identity.user_id, session_id)).fetchall()
+        return dict(tasks=[store.media_draft(identity.owner_profile_id, identity.user_id, row['id']) for row in rows])
+
+
+@router.post('/sessions/{session_id}/media-drafts')
+def start_media_draft(session_id: str, body: MediaDraftStart, identity: Owner, store: Store):
+    with errors():
+        with store.connection() as db:
+            if active_editor(read_focus(db, identity.owner_profile_id, identity.user_id, session_id)):
+                raise Conflict('Return to chat before starting a creative task')
+        return store.start_media_draft(identity.owner_profile_id, identity.user_id, session_id,
+                                       body.operation_id, body.model_dump(exclude={'operation_id'}))
+
+
+@router.post('/sessions/{session_id}/media-drafts/input')
+def input_media_draft(session_id: str, body: MediaDraftInput, identity: Owner, store: Store):
+    with errors():
+        return store.update_media_draft(identity.owner_profile_id, identity.user_id, session_id, body.task_id,
+                                        body.operation_id, body.model_dump(exclude={'operation_id','task_id'}))
+
+
+def creative_shortcut(text):
+    command, _, brief = text.strip().partition(' ')
+    kinds = {'/图像编辑':'image_edit', '/图像生成':'image_generate', '/视频生成':'video_generate'}
+    if command in kinds:
+        return dict(kind='tool', name='media.draft.start', arguments=dict(type=kinds[command], brief=brief.strip()))
+    return None
+
+
 @router.post('/cancel')
 def cancel(body: Cancellation, identity: Owner, store: Store):
     with errors():
@@ -260,11 +308,18 @@ def chat(session_id: str, body: ChatRequest, identity: Owner, store: Store):
         try:
             intent = classify(body.text)
             editing = active_editor(claim['messages'][-1].get('interaction_focus'))
+            if body.creative_context is not None:
+                current = claim['messages'][-1].get('active_media_draft')
+                expected = dict(task_id=current['task_id'],revision=current['revision']) if current else dict(task_id='',revision=0)
+                if body.creative_context.model_dump() != expected:
+                    raise Conflict('Creative task changed since this sentence was captured; review before resending')
             # Diary is a writing lane. It receives the current session's user
             # messages but never receives memory tools, even if the model
             # would otherwise interpret the request as a search.
             if body.selected_photo_id:
                 proposal = dict(kind='tool', name='photo.organize.start', arguments=dict(photo_id=body.selected_photo_id))
+            elif not editing and creative_shortcut(body.text):
+                proposal = creative_shortcut(body.text)
             elif editing:
                 proposal = propose(identity, claim['messages'], claim['message_id'])
             elif intent.name in ('album.scope', 'album.browse'):

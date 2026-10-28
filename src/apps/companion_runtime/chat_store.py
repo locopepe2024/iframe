@@ -17,7 +17,10 @@ from .intent import diary_day, classify
 from .photo_tasks import PhotoTasks
 
 
-class ChatStore(PhotoTasks, DiaryStore, CompanionStore):
+from .media_drafts import MediaDrafts
+
+
+class ChatStore(MediaDrafts, PhotoTasks, DiaryStore, CompanionStore):
     def conversation(self, owner, actor, session, *, after=0, limit=20, latest=False, before=None):
         if latest or before is not None:
             if not 1 <= limit <= 100 or (before is not None and before < 1):
@@ -80,6 +83,9 @@ class ChatStore(PhotoTasks, DiaryStore, CompanionStore):
             if not focus_row:
                 db.execute('INSERT INTO companion_turn_focus VALUES (?,?,?)', (owner,identity,encode(focus)))
             messages[-1]['interaction_focus'] = focus
+            creative = self.active_media_draft(db, owner, actor, session)
+            if creative:
+                messages[-1]['active_media_draft'] = creative
             tasks = db.execute("SELECT * FROM companion_photo_tasks WHERE owner=? AND actor=? AND session_id=? AND status='waiting_input' ORDER BY rowid DESC LIMIT 3", (owner,actor,session)).fetchall()
             if tasks:
                 messages[-1]['workflow_tasks'] = [dict(task_id=t['id'], revision=t['revision'], step=t['step'],
@@ -107,6 +113,8 @@ class ChatStore(PhotoTasks, DiaryStore, CompanionStore):
                 from .intent import Intent
                 diary_request = False
                 intent = Intent('chat')
+            if active_editor(claim.get('messages', [{}])[-1].get('interaction_focus')) and proposal.get('name', '').startswith('media.draft.'):
+                raise ValueError('Finish or leave the current editor before starting a creative task')
             arguments = proposal.get('arguments', {})
             unscoped_album = proposal.get('name') == 'photo.organize.start' and not (
                 arguments.get('year') or arguments.get('query', '').strip() or arguments.get('view') == 'pending' or arguments.get('photo_id') or arguments.get('date_prefix'))
@@ -149,7 +157,12 @@ class ChatStore(PhotoTasks, DiaryStore, CompanionStore):
                 def shared_connection(**_):
                     yield db
                 scoped=copy.copy(self);scoped.connection=shared_connection
-                if name == 'diary.save_draft':
+                if name == 'media.draft.start':
+                    output = scoped.start_media_draft(owner,actor,row['session_id'],row['operation_id'],values)
+                elif name == 'media.draft.update':
+                    task_id = values.pop('task_id')
+                    output = scoped.update_media_draft(owner,actor,row['session_id'],task_id,row['operation_id'],values)
+                elif name == 'diary.save_draft':
                     output = scoped.save_session_draft(db, owner, actor, row['session_id'], row['id'],
                                                       values['source_turn_id'], claim['messages'][-1].get('interaction_focus'), values['day'])
                 elif name == 'photo.organize.start':
@@ -164,7 +177,9 @@ class ChatStore(PhotoTasks, DiaryStore, CompanionStore):
                     output = None
                 else:
                     output=dispatch(scoped,owner,actor,name,values)
-                if name in ('photo.organize.start', 'photo.organize.input'):
+                if name.startswith('media.draft.'):
+                    result = output
+                elif name in ('photo.organize.start', 'photo.organize.input'):
                     result=dict(kind='photo_task',task_id=task_id)
                 elif name == 'diary.save_draft':
                     result=dict(kind='text', text=output['spoken_text'], name=name, day=output['day'],
