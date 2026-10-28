@@ -71,6 +71,8 @@ class ChatStore(PhotoTasks, DiaryStore, CompanionStore):
             db.execute("UPDATE companion_turns SET status='running',token=?,lease_until=?,result=NULL WHERE owner=? AND id=?",(token,self.clock()+120,owner,identity))
             rows=db.execute('SELECT id,text FROM companion_messages WHERE owner=? AND session_id=? AND sequence<=? ORDER BY sequence DESC LIMIT 20',(owner,session,message['sequence'])).fetchall()
             messages = [dict(r) for r in reversed(rows)]
+            from .conversation_context import attach_replies
+            attach_replies(db, owner, actor, session, messages)
             tasks = db.execute("SELECT * FROM companion_photo_tasks WHERE owner=? AND actor=? AND session_id=? AND status='waiting_input' ORDER BY rowid DESC LIMIT 3", (owner,actor,session)).fetchall()
             if tasks:
                 messages[-1]['workflow_tasks'] = [dict(task_id=t['id'], revision=t['revision'], step=t['step'],
@@ -153,6 +155,10 @@ class ChatStore(PhotoTasks, DiaryStore, CompanionStore):
                     result=dict(kind='confirmation',preview_token=output['preview_token'])
                 else:
                     result=dict(kind='read',name=name,arguments=values)
+                    from .conversation_context import read_summary
+                    summary = read_summary(name, output)
+                    if summary is not None:
+                        result['context_summary'] = summary
             db.execute("UPDATE companion_turns SET status='completed',token=NULL,result=? WHERE owner=? AND id=?",(encode(result),owner,claim['id']))
         return self.turn(owner,actor,claim['id'])
 
