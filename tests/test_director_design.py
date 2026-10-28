@@ -102,6 +102,34 @@ def test_reference_image_is_sent_as_multimodal_evidence(client):
     assert result.status_code == 200, result.text
 
 
+def test_reference_assets_keep_checksum_and_owner_boundary(client, monkeypatch, tmp_path):
+    c, app = client
+    monkeypatch.setenv("IFRAME_MEDIA_ROOT", str(tmp_path / "media"))
+    checksum = "fnv1a32:12345678"
+    bundle = {"schemaVersion": "iframe.director3d.design-bundle.v1", "sourcePackageChecksum": checksum}
+    saved = c.post("/director3d/reference-assets", data={"kind": "design_bundle", "sourcePackageChecksum": checksum, "metadata": json.dumps({"assumptions": ["distance uncertain"]})}, files={"file": ("design.json", json.dumps(bundle).encode(), "application/json")})
+    assert saved.status_code == 200, saved.text
+    media_id = saved.json()["mediaId"]
+    listed = c.get("/director3d/reference-assets")
+    assert listed.status_code == 200
+    assert listed.json()[0]["metadata"]["assumptions"] == ["distance uncertain"]
+    assert c.get(f"/director3d/reference-assets/{media_id}/content").json() == bundle
+    app.dependency_overrides[require_user_context] = lambda: UserContext("owner-b", "profile-b", "B", "")
+    assert c.get("/director3d/reference-assets").json() == []
+    assert c.get(f"/director3d/reference-assets/{media_id}/content").status_code == 404
+
+
+def test_reference_asset_rejects_stale_bundle_and_wrong_media_type(client, monkeypatch, tmp_path):
+    c, _ = client
+    monkeypatch.setenv("IFRAME_MEDIA_ROOT", str(tmp_path / "media"))
+    checksum = "fnv1a32:12345678"
+    bundle = {"schemaVersion": "iframe.director3d.design-bundle.v1", "sourcePackageChecksum": "fnv1a32:87654321"}
+    stale = c.post("/director3d/reference-assets", data={"kind": "design_bundle", "sourcePackageChecksum": checksum}, files={"file": ("design.json", json.dumps(bundle).encode(), "application/json")})
+    assert stale.status_code == 422
+    wrong = c.post("/director3d/reference-assets", data={"kind": "camera_motion_video", "sourcePackageChecksum": checksum}, files={"file": ("video.txt", b"video", "text/plain")})
+    assert wrong.status_code == 422
+
+
 @pytest.mark.parametrize("url", ["http://localhost/image.png", "javascript:alert(1)", "not-an-image"])
 def test_reference_image_rejects_uncontrolled_urls(client, url):
     c, _ = client

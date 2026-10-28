@@ -55,3 +55,19 @@ it("keeps the evaluated package checksum in the exported bundle", () => {
   expect(bundle.sourcePackageChecksum).toBe(currentDirectorShotPackage(state).packageChecksum);
   expect(bundle.package.packageChecksum).toBe(bundle.sourcePackageChecksum);
 });
+
+it("carries the design source and assumptions through export and import", () => {
+  const state = useWorkbenchStore.getState();
+  const source = { fileName: "street.png", mimeType: "image/png", sizeBytes: 120, sha256: "a".repeat(64), mediaId: "media-source", assumptions: ["遮挡关系待核对"] };
+  useWorkbenchStore.setState({ designSource: source, designAssumptions: ["尺度为估计"] });
+  const bundle = createDirectorDesignBundle(useWorkbenchStore.getState());
+  expect(bundle.authoring.designSource).toEqual(source);
+  expect(bundle.authoring.designAssumptions).toEqual(["尺度为估计"]);
+  useWorkbenchStore.setState({ designSource: null, designAssumptions: [] });
+  expect(useWorkbenchStore.getState().importDirectorDesignBundle(bundle)).toEqual({ ok: true });
+  expect(useWorkbenchStore.getState().designSource).toEqual(source);
+  expect(useWorkbenchStore.getState().designAssumptions).toEqual(["尺度为估计"]);
+  const invalid = structuredClone(bundle) as any;
+  invalid.authoring.designSource.sha256 = "invalid";
+  expect(() => parseDirectorDesignBundle(invalid)).toThrow("来源");
+});

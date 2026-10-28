@@ -93,6 +93,8 @@ function validateDependencies(authoring: CoreAuthoring, pkg: DirectorShotPackage
 export function createDirectorDesignBundle(state: WorkbenchState): DirectorDesignBundleV1 {
   const pkg = currentDirectorShotPackage(state);
   const authoring: CoreAuthoring = {
+    designAssumptions: [...state.designAssumptions],
+    designSource: structuredClone(state.designSource),
     crowdGroups: structuredClone(state.crowdGroups),
     characters: structuredClone(state.characters), actorMappings: structuredClone(state.actorMappings), sceneObjects: structuredClone(state.sceneObjects),
     renderScene: structuredClone(state.renderScene), panoramaScenePackage: structuredClone(state.panoramaScenePackage), dialogueTimeline: structuredClone(state.dialogueTimeline),
@@ -128,7 +130,17 @@ export function parseDirectorDesignBundle(raw: unknown): DirectorDesignBundleV1 
   if (pkg.schemaVersion !== "iframe.director3d.shot-package.v1") throw new Error("shot package 版本不受支持。");
   if (pkg.packageChecksum !== sourceChecksum) throw new Error("设计包 checksum 与 shot package 不一致。");
   const a = record(root.authoring, "authoring");
-  exactKeys(a, ["crowdGroups", "characters", "actorMappings", "sceneObjects", "renderScene", "panoramaScenePackage", "dialogueTimeline", "cameras", "actorPaths", "cameraPaths", "externalCameraMotionProposals", "pathEvents", "cameraSnapshots", "dialogueReferenceInputs", "subjectReferenceSets", "subjectProxies", "environmentInputCatalog", "objectAssetCatalog"], "authoring");
+  exactKeys(a, ["designAssumptions", "designSource", "crowdGroups", "characters", "actorMappings", "sceneObjects", "renderScene", "panoramaScenePackage", "dialogueTimeline", "cameras", "actorPaths", "cameraPaths", "externalCameraMotionProposals", "pathEvents", "cameraSnapshots", "dialogueReferenceInputs", "subjectReferenceSets", "subjectProxies", "environmentInputCatalog", "objectAssetCatalog"], "authoring");
+  if (array(a.designAssumptions, "设计假设").some((item) => typeof item !== "string" || item.length > 300)) throw new Error("设计假设无效。");
+  if (a.designSource !== null) {
+    const source = record(a.designSource, "authoring.designSource");
+    exactKeys(source, ["fileName", "mimeType", "sizeBytes", "sha256", "mediaId", "assumptions"], "authoring.designSource");
+    if (typeof source.fileName !== "string" || !source.fileName || !["image/png", "image/jpeg", "image/webp"].includes(String(source.mimeType)) ||
+        typeof source.sizeBytes !== "number" || source.sizeBytes < 1 || source.sizeBytes > 3 * 1024 * 1024 ||
+        typeof source.sha256 !== "string" || !/^[0-9a-f]{64}$/.test(source.sha256) ||
+        (source.mediaId !== null && typeof source.mediaId !== "string")) throw new Error("参考图来源无效。");
+    if (array(source.assumptions, "参考图假设").some((item) => typeof item !== "string" || item.length > 300)) throw new Error("参考图假设无效。");
+  }
   for (const [key, value] of Object.entries(a)) if (key.endsWith("Catalog") || ["characters", "actorMappings", "sceneObjects", "cameras", "actorPaths", "cameraPaths", "subjectReferenceSets", "subjectProxies"].includes(key)) map(value, `authoring.${key}`);
   for (const key of ["externalCameraMotionProposals", "pathEvents", "cameraSnapshots", "dialogueReferenceInputs"]) array(a[key], `authoring.${key}`);
   const d = record(root.dependencies, "dependencies");

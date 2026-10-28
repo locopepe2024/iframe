@@ -13,6 +13,9 @@ export function DesignAssistantPanel({ onPreview, previewing, disabled = false }
   const [prompt, setPrompt] = useState("");
   const [referenceImage, setReferenceImage] = useState<DesignReferenceImage | null>(null);
   const [referenceImageName, setReferenceImageName] = useState("");
+  const [referenceFile, setReferenceFile] = useState<File | null>(null);
+  const [referenceHash, setReferenceHash] = useState("");
+  const [proposalReference, setProposalReference] = useState<{ file: File; hash: string } | null>(null);
   const [proposal, setProposal] = useState<DesignProposal | null>(null);
   const [history, setHistory] = useState<DesignTurn[]>([]);
   const [busy, setBusy] = useState(false);
@@ -29,6 +32,7 @@ export function DesignAssistantPanel({ onPreview, previewing, disabled = false }
     const controller = new AbortController(); pending.current = controller;
     setBusy(true); setError(""); setMessage(""); onPreview(null);
     const requestText = prompt.trim();
+    const requestReference = referenceFile && referenceHash ? { file: referenceFile, hash: referenceHash } : null;
     try {
       const state = useWorkbenchStore.getState();
       const baseRevision = designRevision(state);
@@ -36,6 +40,7 @@ export function DesignAssistantPanel({ onPreview, previewing, disabled = false }
       if (controller.signal.aborted) return;
       if (next.baseRevision !== baseRevision) throw new Error("设计提案与请求场景不匹配，请重试。");
       setProposal(next);
+      setProposalReference(requestReference);
       setHistory((turns) => [...turns, { role: "user", content: requestText }, { role: "assistant", content: (next.clarification ?? next.summary).slice(0, 2000) }].slice(-8) as DesignTurn[]);
       setPrompt("");
     } catch (caught) {
@@ -64,7 +69,10 @@ export function DesignAssistantPanel({ onPreview, previewing, disabled = false }
   const apply = () => {
     if (!proposal || !previewing || disabled || busy) return;
     try {
-      useWorkbenchStore.getState().applyDesignProposal(proposal, navigation);
+      useWorkbenchStore.getState().applyDesignProposal(proposal, navigation, proposalReference ? {
+        fileName: proposalReference.file.name, mimeType: proposalReference.file.type, sizeBytes: proposalReference.file.size,
+        sha256: proposalReference.hash, mediaId: null, assumptions: proposal.assumptions,
+      } : null);
       onPreview(null); setProposal(null); setError(""); setMessage("设计已应用，可继续输入修改，也可一步撤销。");
     } catch (caught) { onPreview(null); setError(caught instanceof Error ? caught.message : "应用失败。"); }
   };
@@ -77,6 +85,22 @@ export function DesignAssistantPanel({ onPreview, previewing, disabled = false }
     const url = URL.createObjectURL(blob);
     const anchor = document.createElement("a"); anchor.href = url; anchor.download = `director3d-design-${bundle.sourcePackageChecksum.replace(/[^a-z0-9_-]/gi, "-")}.json`; anchor.click();
     URL.revokeObjectURL(url); setMessage("设计包已导出；保存到资产库仍需用户显式操作。");
+  };
+  const saveBundle = async () => {
+    try {
+      setBusy(true); setError("");
+      let state = useWorkbenchStore.getState();
+      let bundle = state.exportDirectorDesignBundle();
+      if (proposalReference && state.designSource?.sha256 === proposalReference.hash && !state.designSource.mediaId) {
+        const savedImage = await directorDesignApi.saveReferenceAsset(proposalReference.file, proposalReference.file.name, "reference_image", bundle.sourcePackageChecksum, { sha256: proposalReference.hash });
+        state.setDesignSourceMediaId(proposalReference.hash, savedImage.mediaId);
+        state = useWorkbenchStore.getState();
+        bundle = state.exportDirectorDesignBundle();
+      }
+      const saved = await directorDesignApi.saveReferenceAsset(new Blob([JSON.stringify(bundle)], { type: "application/json" }), `director-design-${bundle.sourcePackageChecksum}.json`, "design_bundle", bundle.sourcePackageChecksum, { referenceImageMediaId: bundle.authoring.designSource?.mediaId ?? null, assumptions: bundle.authoring.designAssumptions });
+      setMessage(`设计包已保存到过程素材库：${saved.mediaId}`);
+    } catch (caught) { setError(caught instanceof Error ? caught.message : "保存设计包失败。"); }
+    finally { setBusy(false); }
   };
   const importBundle = (file: File | undefined) => {
     if (!file) return;
@@ -92,7 +116,7 @@ export function DesignAssistantPanel({ onPreview, previewing, disabled = false }
   };
   return <section className="design-assistant" aria-labelledby="design-assistant-title">
     <div className="dialogue-heading"><h2 id="design-assistant-title">自然语言设计</h2><span className="revision-badge">场景与机位</span></div>
-    <div className="blocking-reference-actions"><button type="button" onClick={exportBundle} disabled={disabled}>导出设计包</button><label className="button-like">导入设计包<input type="file" accept="application/json,.json" hidden disabled={disabled} onChange={(event) => { importBundle(event.target.files?.[0]); event.currentTarget.value = ""; }} /></label></div>
+    <div className="blocking-reference-actions"><button type="button" onClick={exportBundle} disabled={disabled}>导出设计包</button><button type="button" onClick={() => void saveBundle()} disabled={disabled || busy}>保存设计包到素材库</button><label className="button-like">导入设计包<input type="file" accept="application/json,.json" hidden disabled={disabled} onChange={(event) => { importBundle(event.target.files?.[0]); event.currentTarget.value = ""; }} /></label></div>
     <label>群演寻路模式<select aria-label="群演寻路模式" value={navigation} disabled={busy || navigationLoading || disabled} onChange={async (event) => {
       const mode = event.target.value as "boxes" | "navmesh";
       onPreview(null); setMessage(""); setError("");
@@ -113,7 +137,7 @@ export function DesignAssistantPanel({ onPreview, previewing, disabled = false }
         if (!file) return;
         if (file.size > 3 * 1024 * 1024) { setError("参考图不能超过 3 MB。"); return; }
         const reader = new FileReader();
-        reader.onload = () => { const url = String(reader.result || ""); setReferenceImage(url.startsWith("data:image/") ? { url } : null); setReferenceImageName(file.name); setError(""); };
+        reader.onload = async () => { const url = String(reader.result || ""); if (!url.startsWith("data:image/")) { setError("参考图格式无效。"); return; } setReferenceImage({ url }); setReferenceFile(file); setReferenceImageName(file.name); setReferenceHash(Array.from(new Uint8Array(await crypto.subtle.digest("SHA-256", await file.arrayBuffer()))).map((byte) => byte.toString(16).padStart(2, "0")).join("")); setError(""); };
         reader.onerror = () => setError("参考图读取失败，请重试。");
         reader.readAsDataURL(file);
       }} /></label>

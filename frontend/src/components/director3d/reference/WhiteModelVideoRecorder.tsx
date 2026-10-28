@@ -5,12 +5,13 @@ import { useWorkbenchStore } from "../state/workbench-store";
 import { activeCameraAtFrame } from "../timeline/timeline-evaluation";
 import { currentDirectorShotPackage } from "./current-shot-package";
 import { recordWhiteModelVideo } from "./record-white-model-video";
+import { directorDesignApi } from "@/lib/directorDesign";
 
-interface VideoResult { url: string; extension: "webm" | "mp4"; signature: string; snapshotId: string; packageChecksum: string; }
+interface VideoResult { url: string; blob: Blob; extension: "webm" | "mp4"; signature: string; snapshotId: string; packageChecksum: string; fps: number; durationSeconds: number; mediaId: string | null; }
 
 function recordingSignature(state: ReturnType<typeof useWorkbenchStore.getState>): string {
   return JSON.stringify({
-    characters: state.characters, sceneObjects: state.sceneObjects, renderScene: state.renderScene,
+    crowdGroups: state.crowdGroups, characters: state.characters, sceneObjects: state.sceneObjects, renderScene: state.renderScene,
     cameras: state.cameras, actorPaths: state.actorPaths, cameraPaths: state.cameraPaths,
     dialogueTimeline: state.dialogueTimeline, selectedCameraId: state.selectedCameraId,
   });
@@ -40,6 +41,7 @@ export function WhiteModelVideoRecorder({ recording, setRecording, stopPlayback 
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<VideoResult | null>(null);
   const [reviewOpen, setReviewOpen] = useState(false);
+  const [saving, setSaving] = useState(false);
   const currentSignature = useWorkbenchStore(recordingSignature);
   const stale = result !== null && result.signature !== currentSignature;
   const abortRef = useRef<AbortController | null>(null);
@@ -97,7 +99,7 @@ export function WhiteModelVideoRecorder({ recording, setRecording, stopPlayback 
       const url = URL.createObjectURL(video.blob);
       if (resultRef.current) URL.revokeObjectURL(resultRef.current);
       resultRef.current = url;
-      setResult({ url, extension: video.extension, signature, snapshotId: recordingSnapshotId(signature), packageChecksum: first.packageChecksum });
+      setResult({ url, blob: video.blob, extension: video.extension, signature, snapshotId: recordingSnapshotId(signature), packageChecksum: first.packageChecksum, fps, durationSeconds: state.dialogueTimeline.durationSeconds, mediaId: null });
       setReviewOpen(true);
     } catch (caught) {
       if (!controller.signal.aborted) setError(caught instanceof Error ? caught.message : "录制失败。");
@@ -109,6 +111,23 @@ export function WhiteModelVideoRecorder({ recording, setRecording, stopPlayback 
     }
   };
 
+  const save = async () => {
+    if (!result || stale || saving) return;
+    setSaving(true); setError(null);
+    try {
+      const bundle = useWorkbenchStore.getState().exportDirectorDesignBundle();
+      if (bundle.sourcePackageChecksum !== result.packageChecksum) throw new Error("设计包首帧已变化，请重新录制。");
+      const bundleAsset = await directorDesignApi.saveReferenceAsset(new Blob([JSON.stringify(bundle)], { type: "application/json" }), `director-design-${bundle.sourcePackageChecksum}.json`, "design_bundle", bundle.sourcePackageChecksum);
+      if (recordingSignature(useWorkbenchStore.getState()) !== result.signature) throw new Error("保存期间导演设置已变化，请重新录制。");
+      const saved = await directorDesignApi.saveReferenceAsset(result.blob, `director-camera-${result.snapshotId}.${result.extension}`, "camera_motion_video", result.packageChecksum, {
+        designBundleMediaId: bundleAsset.mediaId, snapshotId: result.snapshotId, fps: result.fps,
+        durationSeconds: result.durationSeconds, referenceImageMediaId: bundle.authoring.designSource?.mediaId ?? null,
+      });
+      setResult((current) => current?.snapshotId === result.snapshotId ? { ...current, mediaId: saved.mediaId } : current);
+    } catch (caught) { setError(caught instanceof Error ? caught.message : "保存视频失败。"); }
+    finally { setSaving(false); }
+  };
+
   return <div className="white-model-video-recorder">
     <div className="white-model-video-actions">
       {recording
@@ -116,6 +135,8 @@ export function WhiteModelVideoRecorder({ recording, setRecording, stopPlayback 
         : <button type="button" onClick={() => void start()}><Film size={16} aria-hidden="true"/>录制白模视频</button>}
       {result && <a href={result.url} download={`director-reference.${result.extension}`} title="下载白模参考视频"><Download size={16} aria-hidden="true"/>下载</a>}
       {result && <button type="button" onClick={() => setReviewOpen(true)}>查看视频</button>}
+      {result && <button type="button" onClick={() => void save()} disabled={stale || saving || Boolean(result.mediaId)}>{saving ? "保存中…" : result.mediaId ? "已保存" : "保存视频到素材库"}</button>}
+      {result?.mediaId && <span>素材 ID {result.mediaId}</span>}
       {result && <span>录制快照 {result.snapshotId} · package {result.packageChecksum}</span>}
       {stale && <span role="status">当前导演设置已变化，视频为旧版本；请重新录制。</span>}
       {recording && <span role="status">录制中 · {progress} 帧</span>}

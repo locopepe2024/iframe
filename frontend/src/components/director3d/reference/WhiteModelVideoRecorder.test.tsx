@@ -4,8 +4,10 @@ import { afterEach, expect, it, vi } from "vitest";
 import { useWorkbenchStore } from "../state/workbench-store";
 import { WhiteModelVideoRecorder } from "./WhiteModelVideoRecorder";
 import { recordWhiteModelVideo } from "./record-white-model-video";
+import { directorDesignApi } from "@/lib/directorDesign";
 
 vi.mock("./record-white-model-video", () => ({ recordWhiteModelVideo: vi.fn() }));
+vi.mock("@/lib/directorDesign", () => ({ directorDesignApi: { saveReferenceAsset: vi.fn() } }));
 
 const initialState = useWorkbenchStore.getState();
 
@@ -53,8 +55,32 @@ it("records the camera view and restores the original view and playhead", async 
   expect(setRecording).toHaveBeenCalledWith(false);
   act(() => useWorkbenchStore.getState().setCameraTransformAxis("camera-main", "position", 0, 2));
   expect(screen.getAllByText(/当前导演设置已变化/)).toHaveLength(2);
+  expect(screen.getByRole("button", { name: "保存视频到素材库" })).toBeDisabled();
   view.unmount();
   expect(URL.revokeObjectURL).toHaveBeenCalledWith("blob:director-test");
+});
+
+it("saves the exact recorded video with its design bundle and checksum", async () => {
+  vi.stubGlobal("requestAnimationFrame", (callback: FrameRequestCallback) => window.setTimeout(() => callback(performance.now()), 0));
+  vi.stubGlobal("URL", { createObjectURL: vi.fn(() => "blob:director-test"), revokeObjectURL: vi.fn() });
+  const stage = document.createElement("div"); stage.id = "director-viewport";
+  const canvas = document.createElement("canvas"); canvas.width = 640; canvas.height = 360;
+  stage.appendChild(canvas); document.body.appendChild(stage);
+  act(() => useWorkbenchStore.getState().setRigAdmissionIssues([]));
+  const blob = new Blob(["video"], { type: "video/webm" });
+  vi.mocked(recordWhiteModelVideo).mockResolvedValue({ blob, extension: "webm" });
+  vi.mocked(directorDesignApi.saveReferenceAsset).mockResolvedValueOnce({ mediaId: "bundle-1", kind: "design_bundle", sourcePackageChecksum: "fnv1a32:00000000" }).mockResolvedValueOnce({ mediaId: "video-1", kind: "camera_motion_video", sourcePackageChecksum: "fnv1a32:00000000" });
+  render(<WhiteModelVideoRecorder recording={false} setRecording={vi.fn()} stopPlayback={vi.fn()} />);
+  fireEvent.click(screen.getByRole("button", { name: "录制白模视频" }));
+  await screen.findByRole("button", { name: "保存视频到素材库" });
+  fireEvent.click(screen.getByRole("button", { name: "保存视频到素材库" }));
+  await screen.findByText("素材 ID video-1");
+  const calls = vi.mocked(directorDesignApi.saveReferenceAsset).mock.calls;
+  expect(calls[0][2]).toBe("design_bundle");
+  expect(calls[1][0]).toBe(blob);
+  expect(calls[1][2]).toBe("camera_motion_video");
+  expect(calls[1][3]).toBe(calls[0][3]);
+  expect(calls[1][4]).toMatchObject({ designBundleMediaId: "bundle-1" });
 });
 
 it("rejects a timeline cut to a camera with a different aspect ratio", async () => {
