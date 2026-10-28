@@ -102,6 +102,72 @@ def test_reference_image_is_sent_as_multimodal_evidence(client):
     assert result.status_code == 200, result.text
 
 
+def spatial_request():
+    return {**request(), "mode": "spatial_draft", "prompt": "按参考图建立粮铺空间；匪首踹倒掌柜，百姓延迟避让",
+            "referenceImage": {"url": "data:image/png;base64," + "A" * 32}}
+
+
+def spatial_response():
+    return {"summary": "粮铺门前空间草稿", "assumptions": ["柜台宽两米，尺度待校正"],
+            "observations": ["店门与街面相连"], "deferredActions": ["踹倒与延迟避让尚未编排"],
+            "clarification": None, "operations": [{"kind": "add_actor", "actorId": "design-extra-shopkeeper",
+                "label": "老掌柜", "positionM": [3, 0, 0], "yawDeg": 90}]}
+
+
+def test_spatial_draft_requires_image_before_calling_model(client, monkeypatch):
+    c, _ = client
+    def unexpected(*args, **kwargs):
+        pytest.fail("Missing image must fail before provider call")
+    monkeypatch.setattr(design, "LLMAdapter", unexpected)
+    assert c.post("/director3d/design-proposals", json={**spatial_request(), "referenceImage": None}).status_code == 422
+
+
+def test_spatial_draft_sends_image_and_preserves_labeled_evidence(client, monkeypatch):
+    c, _ = client
+    def generate(self, messages, **kwargs):
+        assert "REFERENCE IMAGE SPATIAL DRAFT" in messages[0]["content"]
+        assert messages[-1]["content"][1]["image_url"]["url"] == spatial_request()["referenceImage"]["url"]
+        assert json.loads(messages[-1]["content"][0]["text"].split("\n")[0])["request"] == spatial_request()["prompt"]
+        return json.dumps(spatial_response())
+    monkeypatch.setattr(design.LLMAdapter, "chat", generate)
+    result = c.post("/director3d/design-proposals", json=spatial_request())
+    assert result.status_code == 200, result.text
+    assert result.json()["operations"] == spatial_response()["operations"]
+    assert result.json()["assumptions"] == ["图像解读（待校正）：店门与街面相连", "设计假设：柜台宽两米，尺度待校正", "未编排动作：踹倒与延迟避让尚未编排"]
+    assert set(result.json()) == {"schemaVersion", "baseRevision", "summary", "assumptions", "clarification", "operations"}
+    assert current_studio_user() is None
+
+
+@pytest.mark.parametrize("operation", [
+    {"kind": "camera_motion", "cameraId": "camera-main", "presetId": "push_in", "durationSeconds": 4, "easing": "linear"},
+    {"kind": "camera_cut", "cameraId": "camera-main", "timeSeconds": 0},
+    {"kind": "crowd_motion", "groupId": "design-crowd-near", "label": "近景", "behavior": "observe",
+     "members": [{"actorId": "design-extra-near", "positionM": [3, 0, 0], "destinationM": [3, 0, 0], "yawDeg": 0, "startSeconds": 0, "durationSeconds": 4}]},
+])
+def test_spatial_draft_rejects_animation_even_if_model_returns_it(client, monkeypatch, operation):
+    c, _ = client
+    monkeypatch.setattr(design.LLMAdapter, "chat", lambda *a, **kw: json.dumps({**spatial_response(), "operations": [operation]}))
+    result = c.post("/director3d/design-proposals", json=spatial_request())
+    assert result.status_code == 502
+    assert current_studio_user() is None
+
+
+def test_spatial_draft_max_notes_fit_existing_proposal_contract(client, monkeypatch):
+    c, _ = client
+    maximum = {**spatial_response(), **{field: ["字" * 280] * 4 for field in ["observations", "assumptions", "deferredActions"]}}
+    monkeypatch.setattr(design.LLMAdapter, "chat", lambda *a, **kw: json.dumps(maximum))
+    result = c.post("/director3d/design-proposals", json=spatial_request())
+    assert result.status_code == 200, result.text
+    assert len(result.json()["assumptions"]) == 12
+    design.ModelProposal.model_validate({key: value for key, value in result.json().items() if key not in {"schemaVersion", "baseRevision"}})
+
+
+def test_spatial_draft_cannot_omit_design_assumptions(client, monkeypatch):
+    c, _ = client
+    monkeypatch.setattr(design.LLMAdapter, "chat", lambda *a, **kw: json.dumps({**spatial_response(), "assumptions": []}))
+    assert c.post("/director3d/design-proposals", json=spatial_request()).status_code == 502
+
+
 def test_reference_assets_keep_checksum_and_owner_boundary(client, monkeypatch, tmp_path):
     c, app = client
     monkeypatch.setenv("IFRAME_MEDIA_ROOT", str(tmp_path / "media"))

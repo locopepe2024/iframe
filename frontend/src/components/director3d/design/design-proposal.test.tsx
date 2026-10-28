@@ -24,6 +24,73 @@ function fixture() {
   return { state, ids, proposal };
 }
 
+it("creates an unbound static actor and frames it without adding animation, then preserves notes through apply/export/undo", () => {
+  useWorkbenchStore.setState({ rigAdmissionStatus: "passed" });
+  const before = useWorkbenchStore.getState();
+  const proposal = plan([
+    { kind: "add_actor", actorId: "design-extra-keeper", label: "老掌柜", positionM: [8, 0, 0], yawDeg: 90 },
+    { kind: "frame_camera", cameraId: before.selectedCameraId, targetIds: ["design-extra-keeper"], azimuthDeg: 0, elevationDeg: 10, distanceM: 6, focalLengthMm: 35 },
+  ]);
+  proposal.assumptions = ["图像解读（待校正）：店门连着街道", "设计假设：人物深度待校正", "未编排动作：踹倒尚未编排"];
+  const preview = compileDesignProposal(before, proposal);
+  expect(useWorkbenchStore.getState()).toBe(before);
+  expect(preview.dialogueTimeline).toEqual(before.dialogueTimeline);
+  expect(preview.cameraPaths).toEqual(before.cameraPaths);
+  expect(preview.characters["design-extra-keeper"].label).toBe("老掌柜（白模标记）");
+  expect(preview.actorMappings["actor-mapping-design-extra-keeper"].subjectId).toBeNull();
+  expect(preview.cameras[before.selectedCameraId].subjectTargetIds).toEqual(["design-extra-keeper"]);
+  before.applyDesignProposal(proposal);
+  const applied = useWorkbenchStore.getState();
+  const bundle = applied.exportDirectorDesignBundle();
+  expect(bundle.authoring.designAssumptions).toEqual(proposal.assumptions);
+  expect(applied.characters["design-extra-keeper"].transform.position).toEqual([8, 0, 0]);
+  expect(applied.undoStack.length).toBe(before.undoStack.length + 1);
+  applied.undo();
+  expect(useWorkbenchStore.getState().characters).toEqual(before.characters);
+  expect(useWorkbenchStore.getState().actorMappings).toEqual(before.actorMappings);
+});
+
+it("keeps the existing camera and animation when adding only a static marker", () => {
+  useWorkbenchStore.setState({ rigAdmissionStatus: "passed" });
+  const state = useWorkbenchStore.getState();
+  const animated = compileDesignProposal(state, plan([{ kind: "camera_motion", cameraId: state.selectedCameraId, presetId: "push_in", durationSeconds: 4, easing: "ease_in_out", distanceM: .1 }]));
+  useWorkbenchStore.setState({ cameraPaths: animated.cameraPaths, dialogueTimeline: animated.dialogueTimeline });
+  const before = useWorkbenchStore.getState();
+  const preview = compileDesignProposal(before, plan([{ kind: "add_actor", actorId: "design-extra-bystander", label: "远处百姓", positionM: [8, 8, 0], yawDeg: 0 }]));
+  expect(preview.cameras).toEqual(before.cameras);
+  expect(preview.cameraPaths).toEqual(before.cameraPaths);
+  expect(preview.dialogueTimeline).toEqual(before.dialogueTimeline);
+});
+
+it("rejects duplicate static actors, missing rig admission, airborne placement and overlapping blocking", () => {
+  const marker = { kind: "add_actor" as const, actorId: "design-extra-new", label: "百姓", positionM: [8, 0, 0] as [number, number, number], yawDeg: 0 };
+  useWorkbenchStore.setState({ rigAdmissionStatus: "pending" });
+  expect(() => compileDesignProposal(useWorkbenchStore.getState(), plan([marker]))).toThrow(/准入/);
+  useWorkbenchStore.setState({ rigAdmissionStatus: "passed" });
+  expect(() => compileDesignProposal(useWorkbenchStore.getState(), plan([marker, marker]))).toThrow(/重复/);
+  expect(() => compileDesignProposal(useWorkbenchStore.getState(), plan([{ ...marker, positionM: [8, 0, 1] }]))).toThrow(/地面/);
+  const positionM = Object.values(useWorkbenchStore.getState().characters)[0].transform.position;
+  expect(() => compileDesignProposal(useWorkbenchStore.getState(), plan([{ ...marker, positionM }]))).toThrow(/间距/);
+  expect(() => compileDesignProposal(useWorkbenchStore.getState(), plan([
+    marker, { kind: "add_box", entityId: "design-box-collision", label: "柜台", positionM: [8, 0, 0], dimensionsM: [2, 1, 1] },
+  ]))).toThrow(/重叠/);
+  expect(useWorkbenchStore.getState().characters[marker.actorId]).toBeUndefined();
+});
+
+it("bounds static cast size without mutating the original scene", () => {
+  useWorkbenchStore.setState({ rigAdmissionStatus: "passed" });
+  for (let batch = 0; batch < 3; batch++) {
+    const operations: DesignOperation[] = Array.from({ length: batch === 2 ? 8 : 15 }, (_, i) => ({
+      kind: "add_actor", actorId: `design-extra-cap-${batch}-${i}`, label: "百姓", positionM: [20 + i * 2, batch * 3, 0], yawDeg: 0,
+    }));
+    useWorkbenchStore.getState().applyDesignProposal(plan(operations));
+  }
+  const before = useWorkbenchStore.getState();
+  expect(Object.values(before.characters).filter(a => a.visible)).toHaveLength(40);
+  expect(() => compileDesignProposal(before, plan([{ kind: "add_actor", actorId: "design-extra-over", label: "百姓", positionM: [10, 10, 0], yawDeg: 0 }]))).toThrow(/40/);
+  expect(useWorkbenchStore.getState()).toBe(before);
+});
+
 it("compiles a pair and prop with deterministic facing and a 35mm camera without mutating state", () => {
   const { state, ids, proposal } = fixture();
   const preview = compileDesignProposal(state, proposal);

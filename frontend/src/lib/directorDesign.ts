@@ -17,7 +17,7 @@ export const directorDesignApi = {
     const response = await axios.post<{ mediaId: string; kind: string; sourcePackageChecksum: string }>(`${API_URL}/director3d/reference-assets`, form);
     return response.data;
   },
-  async propose(request: { prompt: string; baseRevision: string; context: string; history: DesignTurn[]; referenceImage?: DesignReferenceImage | null }, signal?: AbortSignal) {
+  async propose(request: { prompt: string; baseRevision: string; context: string; history: DesignTurn[]; referenceImage?: DesignReferenceImage | null; mode?: "edit" | "spatial_draft" }, signal?: AbortSignal) {
     const response = await axios.post<unknown>(`${API_URL}/director3d/design-proposals`, request, { timeout: 60000, signal });
     return parseDesignProposal(response.data);
   },
