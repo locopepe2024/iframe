@@ -117,12 +117,12 @@ export default function EditingPage() {
       {versions.length > 0 && <div className="flex flex-wrap gap-2">{versions.filter(v => v.revision > 0).map(v => <button className="glass-button px-3 py-2" key={v.revision} disabled={busy || dirty || v.revision === project.revision} onClick={() => void run(async () => accept(await editing.restore(project.id, project.revision, v.revision)))}>{t('恢复', 'Restore')} v{v.revision}</button>)}</div>}
       <fieldset disabled={busy} className="space-y-4 disabled:opacity-60">
         <label className="text-sm">{t('添加音频到', 'Add audio to')} <select className="glass-input px-3 py-2" value={audioLane} onChange={e => setAudioLane(e.target.value as typeof audioLane)}><option value="bgm">BGM</option><option value="dialogue">{t('对白', 'Dialogue')}</option><option value="sfx">{t('音效', 'SFX')}</option></select></label>
-        <EditingMaterials onSelect={add} disabled={busy} />
         {plan && <>
           <div className="flex gap-2"><button className="glass-button px-3 py-2" disabled={!undo.length} onClick={() => { setRedo(old => [...old, plan]); setPlan(undo[undo.length - 1]); setUndo(old => old.slice(0, -1)); setDirty(true); }}>{t('撤销', 'Undo')}</button><button className="glass-button px-3 py-2" disabled={!redo.length} onClick={() => { setUndo(old => [...old, plan]); setPlan(redo[redo.length - 1]); setRedo(old => old.slice(0, -1)); setDirty(true); }}>{t('重做', 'Redo')}</button></div>
           <AssemblyTracks plan={plan} resourceId={project.id} saved={!dirty} project={{ id: project.id, frames: [], video_tasks: [] }} materials={sources} onChange={change}
             onExportSubtitles={lane => editing.subtitles(project.id, lane)} onUploadAudio={async file => { const item = await editing.upload(file); setSources(old => ({ ...old, [item.id]: item })); return { media_id: item.id, url: item.url, duration_ms: item.duration_ms }; }} />
         </>}
+        <EditingMaterials onSelect={add} disabled={busy} />
       </fieldset>
     </>}
   </div>;

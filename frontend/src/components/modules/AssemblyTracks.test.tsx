@@ -45,7 +45,7 @@ it("previews the exact timeline take and shows gain only after selection", () =>
     render(<AssemblyTracks plan={videoPlan} project={videoProject} resourceId="p" saved onChange={vi.fn()} />);
     expect(screen.getByLabelText("Timeline video preview").getAttribute("src")).toContain("take.mp4");
     expect(screen.queryByRole("spinbutton", { name: "Shot 1 · Gain" })).toBeNull();
-    fireEvent.click(screen.getByRole("button", { name: "Shot 1" }));
+    fireEvent.click(screen.getByRole("button", { name: "Edit clip 1: Shot 1" }));
     expect(screen.getByRole("spinbutton", { name: "Shot 1 · Gain" })).toHaveValue(1);
 });
 
@@ -87,7 +87,9 @@ it("offers visible sequence controls and recombines trimmed and split sources", 
         return <AssemblyTracks plan={value} project={project} resourceId="p" saved={false} onChange={next => { latest = next; setValue(next); }} />;
     }
     render(<Editor />);
-    fireEvent.click(screen.getByRole("button", { name: "Move 2.mp4 earlier" }));
+    expect(screen.queryByRole("region", { name: "Video sequence" })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Edit clip 2: 2.mp4" }));
+    fireEvent.click(screen.getByRole("button", { name: "Move earlier" }));
     const ordered = () => latest.lanes[0].clips.slice().sort((a,b) => a.timeline_start_ms - b.timeline_start_ms);
     expect(ordered().map(c => c.label)).toEqual(["2.mp4", "1.mp4", "3.mp4"]);
     fireEvent.click(screen.getByRole("button", { name: "Edit clip 2: 1.mp4" }));
