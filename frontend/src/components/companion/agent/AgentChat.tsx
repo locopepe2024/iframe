@@ -29,6 +29,8 @@ import DigitalCompanionPanel from "./DigitalCompanionPanel";
 import { detectCompanionRuntimeCapability, type CompanionRuntimeCapability } from "./companionRuntimeCapability";
 import { coordinateOnDevice } from "./edgeTaskCoordinator";
 
+import { InteractionFocusContext, createInteractionFocus, createFocusSync, type InteractionFocus } from "./InteractionFocus";
+
 const prefix = process.env.NEXT_PUBLIC_API_URL === "/companion-demo" ? "/companion-demo" : "";
 const sessionKey = "iframe-companion-agent-session-v1";
 const turnKey = "iframe-companion-agent-turn-v1";
@@ -38,6 +40,9 @@ type ResponseMode = "audio" | "text";
 const dismissedUploadGuideKey = "iframe-companion-agent-dismissed-upload-guides-v1";
 
 export default function AgentChat() {
+  const focus = useRef(createInteractionFocus()).current;
+  const syncFocus = useRef(createFocusSync()).current;
+  const sendFocus = useRef<{operation:string;focus:InteractionFocus;ready:boolean} | null>(null);
   const [session, setSession] = useState("");
   const [menu, setMenu] = useState(false);
   const [openTalking, setOpenTalking] = useState(false);
@@ -155,9 +160,10 @@ export default function AgentChat() {
   }
   async function send(retry = false, voiceText?: string, selectedPhotoId?: string) {
     const requestedText = voiceText ?? text;
-    const requestedDay = diaryDay(requestedText, "", today());
+    const editing = focus.current().kind !== "chat";
+    const requestedDay = editing ? undefined : diaryDay(requestedText, "", today());
     const submittedText = requestedDay ? diaryPrompt(requestedDay) : requestedText;
-    if (!retry && !selectedPhotoId && edgeCoordinatorEnabled && runtimeCapability.status === "edge_ready") {
+    if (!editing && !retry && !selectedPhotoId && edgeCoordinatorEnabled && runtimeCapability.status === "edge_ready") {
       try {
         const context = messages.slice(-10).map(message => {
           const reply = message.turn?.result?.kind === "text" ? `\n陪伴助手：${message.turn.result.text}` : "";
@@ -176,6 +182,8 @@ export default function AgentChat() {
       }
     }
     if (!sendOperation.current || !retry) sendOperation.current = { operation_id: crypto.randomUUID(), text: submittedText, allow_external_text: true, ...(selectedPhotoId ? {selected_photo_id: selectedPhotoId} : {}) };
+    if (!sendFocus.current || sendFocus.current.operation !== sendOperation.current.operation_id)
+      sendFocus.current = {operation:sendOperation.current.operation_id,focus:{...focus.current()},ready:false};
     if (!retry) setLastSubmittedText(submittedText);
     setPreview(null);
     if (!session && !sessionOperation.current) sessionOperation.current = crypto.randomUUID();
@@ -183,6 +191,10 @@ export default function AgentChat() {
     if (!session) { sessionOperation.current = ""; setSession(activeSession); localStorage.setItem(sessionKey, activeSession); }
     let result: Turn;
     try {
+      if (!sendFocus.current.ready) {
+        await syncFocus(activeSession, sendFocus.current.operation, sendFocus.current.focus);
+        sendFocus.current.ready = true;
+      }
       result = await companionApi.chat(activeSession, sendOperation.current);
     } catch (failure) {
       if (alive.current) setHasRetry(true);
@@ -294,7 +306,7 @@ export default function AgentChat() {
     await companionApi.cancel(activePreview.preview_token);
     setDraft(null); setPreview({ status: "preview_closed", preview_token: activePreview.preview_token }); setNotice("已关闭预览，未执行新的保存或删除。");
   }
-  return <main className={`${styles.shell} ${chatStyles.shell}`} data-agent-build="upload-preview-20261024-v3">
+  return <InteractionFocusContext.Provider value={focus}><main className={`${styles.shell} ${chatStyles.shell}`} data-agent-build="upload-preview-20261024-v3">
     <header className={chatStyles.header}><div className={chatStyles.assistantIdentity}><h1><span aria-hidden="true">{identity.avatar}</span> {identity.name}</h1><span role="status" className={chatStyles.assistantStatus}>{voiceOutputStatus || (busy ? "正在处理…" : captureStatus || "在线")}</span></div><div className={chatStyles.headerActions}><button type="button" className={chatStyles.headerIcon} aria-label="打开语音聊天" onClick={() => setOpenTalking(true)}><Mic size={22} aria-hidden="true" /></button><button type="button" aria-expanded={menu} onClick={() => setMenu(!menu)}>更多</button></div></header>
     {menu && <aside className={`${styles.panel} ${chatStyles.settingsPanel}`} aria-label="聊天管理">
       <div className={chatStyles.settingsHeader}><h2>设置</h2><button type="button" aria-label="关闭设置" onClick={() => setMenu(false)}>×</button></div>
@@ -455,5 +467,5 @@ export default function AgentChat() {
       <button type="button" aria-current={albumOpen ? "page" : undefined} onClick={() => { setFeature(null); setAlbumOpen(true); }}><Images size={22} aria-hidden="true" /><span>相册</span></button>
       <button type="button" aria-current={feature === "mine" ? "page" : undefined} onClick={() => setFeature("mine")}><UserRound size={22} aria-hidden="true" /><span>我的</span></button>
     </nav>
-  </main>;
+  </main></InteractionFocusContext.Provider>;
 }

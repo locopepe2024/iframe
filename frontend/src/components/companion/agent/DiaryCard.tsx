@@ -80,7 +80,7 @@ export default function DiaryCard({ day, text, sourceTurn, saved, onSaved, onOpe
           {media.map(item => <span key={item.id} className={styles.diaryMediaChip}>{item.kind === "photo" ? "照片" : "视频"} · {item.name}</span>)}
         </div>}
       </details>}
-      <DiaryEditor initialText={draft} busy={busy || !loaded} error={error} onSave={value=>void save(value)} onCancel={()=>{setEditing(false);onExitEditor?.();}}/>
+      <DiaryEditor day={day} initialText={draft} busy={busy || !loaded} error={error} onSave={value=>void save(value)} onCancel={()=>{setEditing(false);onExitEditor?.();}}/>
       </section>
     </FeatureDialog>}
   </article>;

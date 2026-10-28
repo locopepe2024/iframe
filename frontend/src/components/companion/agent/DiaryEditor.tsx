@@ -1,8 +1,9 @@
 "use client";
 import { useRef, useState } from "react";
+import { useInteractionFocus } from "./InteractionFocus";
 import { useDiaryDictation } from "./useDiaryDictation";
 
-export default function DiaryEditor({initialText,busy,error,onSave,onCancel}:{initialText:string;busy:boolean;error:string;onSave:(text:string)=>void;onCancel:()=>void}) {
+export default function DiaryEditor({day,initialText,busy,error,onSave,onCancel}:{day?:string;initialText:string;busy:boolean;error:string;onSave:(text:string)=>void;onCancel:()=>void}) {
   const [text,setText]=useState(initialText),[consent,setConsent]=useState(false),[prompt,setPrompt]=useState(false);
   const [savePending,setSavePending]=useState(false);
   const value=useRef(initialText);
@@ -11,6 +12,7 @@ export default function DiaryEditor({initialText,busy,error,onSave,onCancel}:{in
     if(value.current.length+next.length+1>12000){voice.stop();return;}
     change(`${value.current}${value.current ? "\n" : ""}${next}`);
   },()=>{if(!busy && value.current.trim())setSavePending(true);});
+  useInteractionFocus(day ? {kind:"diary",object_id:day,phase:voice.listening ? "listening" : "editing",draft:text} : null);
   return <>
     <label>日记内容<textarea rows={12} maxLength={12000} value={text} disabled={busy} onChange={event=>change(event.target.value)}/></label>
     <button type="button" disabled={busy || savePending} onClick={()=>{if(voice.listening)voice.stop();else if(consent)voice.start();else setPrompt(true);}}>{voice.listening ? "暂停记录" : "开始或继续语音记录"}</button>

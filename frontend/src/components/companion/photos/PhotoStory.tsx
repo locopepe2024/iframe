@@ -3,6 +3,7 @@
 import { useEffect, useId, useRef, useState } from "react";
 import { photoApi, type PhotoStory as Story } from "@/lib/photoApi";
 import { useCompanionVoice } from "../useCompanionVoice";
+import { useInteractionFocus } from "../agent/InteractionFocus";
 import styles from "./photos.module.css";
 
 // The parent keys this component by photo ID so unsaved stories and voice stay scoped.
@@ -25,6 +26,7 @@ export default function PhotoStory({ photoId }: { photoId: string }) {
     setDraft(current => current ? `${current}\n${text}` : text);
     setError("");
   }, {continuous:true});
+  useInteractionFocus(mode !== "idle" ? {kind:"photo",object_id:photoId,phase:voice.listening ? "listening" : "editing",draft} : null);
   useEffect(() => {
     alive.current = true;
     photoApi.story(photoId).then(value => { if (alive.current) { setStory(value); setLoaded(true); } })

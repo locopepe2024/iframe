@@ -3,6 +3,8 @@ import { beforeEach, expect, it, vi } from "vitest";
 import AgentChat from "./AgentChat";
 import {diaryPrompt,today} from "./DiaryCard";
 const api=vi.hoisted(()=>({session:vi.fn(),messages:vi.fn(),chat:vi.fn(),turn:vi.fn(),tool:vi.fn(),confirm:vi.fn(),cancel:vi.fn(),diaries:vi.fn(),saveDiary:vi.fn()}));
+const focusFetch=vi.hoisted(()=>vi.fn());
+vi.mock("@/lib/api",async importOriginal=>({...await importOriginal<typeof import("@/lib/api")>(),authenticatedFetch:focusFetch}));
 const playback=vi.hoisted(()=>vi.fn());
 vi.mock("./OpenTalkingReply",()=>({default:(props:unknown)=>{playback(props);return null;}}));
 const photoApi=vi.hoisted(()=>({list:vi.fn()}));
@@ -13,7 +15,7 @@ vi.mock("../photos/PhotoImage",()=>({default:()=> <img alt="照片缩略图"/>})
 vi.mock("../PhotoConversationCard",()=>({default: ({label}:{label:string})=><article>{label}</article>}));
 const preview={status:"pending_confirmation",preview_token:"token",action:"save",preview:{content:"喜欢散步",quote:"喜欢散步",source_text:"请记住我喜欢散步",source_message_id:"m",type:"preference",importance:3}};
 beforeEach(()=>{
-  localStorage.clear();vi.resetAllMocks();api.diaries.mockResolvedValue({diaries:[]});photoApi.list.mockResolvedValue({photos:[]});api.session.mockResolvedValue({session_id:"s"});api.messages.mockResolvedValue({messages:[],next_before:null});
+  localStorage.clear();vi.resetAllMocks();focusFetch.mockResolvedValue({ok:true,json:async()=>({revision:0})});api.diaries.mockResolvedValue({diaries:[]});photoApi.list.mockResolvedValue({photos:[]});api.session.mockResolvedValue({session_id:"s"});api.messages.mockResolvedValue({messages:[],next_before:null});
   api.chat.mockResolvedValue({turn_id:"t",status:"completed",result:{kind:"confirmation",...preview}});
   api.confirm.mockResolvedValue({action:"save",memory_id:"memory"});api.cancel.mockResolvedValue({status:"preview_closed"});
 });
@@ -411,4 +413,15 @@ it("restores the scope card and starts a durable task only for the explicitly se
   await screen.findByRole("region", {name: "相册整理任务"});
   expect(api.chat.mock.calls[0][1]).toMatchObject({text: "整理这张照片", selected_photo_id: "selected"});
   expect(screen.queryByRole("dialog", {name: "浏览相册"})).not.toBeInTheDocument();
+});
+
+it("keeps the original request when task focus cannot be synchronized",async()=>{
+  await start();allowText();focusFetch.mockRejectedValueOnce(new Error("offline"));
+  fireEvent.click(screen.getByRole("button",{name:"发送"}));
+  await screen.findByRole("alert");expect(api.chat).not.toHaveBeenCalled();
+  fireEvent.click(screen.getByRole("button",{name:"重试原请求"}));
+  await screen.findByRole("region",{name:"记忆操作确认"});
+  expect(api.chat).toHaveBeenCalledOnce();
+  const put=focusFetch.mock.calls.find(([,options])=>options.method === "PUT");
+  expect(JSON.parse(put![1].body).focus).toEqual({kind:"chat",object_id:"",phase:"viewing",draft:""});
 });
