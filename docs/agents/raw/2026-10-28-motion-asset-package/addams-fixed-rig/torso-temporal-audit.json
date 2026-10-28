@@ -1,0 +1,3468 @@
+{
+  "input_sha256": {
+    "addams-fixed-rig/distributed-score.json": "585ffeedea022c11ecbab80120ab5e9640e3bdddcd2e2ef4fd88c9a1f9027557",
+    "addams-fixed-rig/distributed-control.json": "36fb25bde062c6db83deb61a2ed494daf8ea16dd8d39ca0169fa7388586f2832",
+    "addams-pose-media/observations.json": "e5b27e3fa7c52c3cb756bf66d76ddc8cf637309380f07c0b95e330078b292ed4"
+  },
+  "scope": {
+    "first_frame": 6,
+    "last_frame": 24,
+    "duration_s": 0.72
+  },
+  "identity_max_error_px2": 8.185452315956354e-12,
+  "summary": {
+    "hip_axis": {
+      "rmse_px": {
+        "median": 36.891823610977895,
+        "max": 119.26293772469062
+      },
+      "sum_terms_px2": {
+        "midpoint": 42103.87620326379,
+        "width": 10147.735788516697,
+        "direction": 1321.6949583186856
+      },
+      "temporal": {
+        "shoulder_midpoint_speed_model_units_s": {
+          "median": 0.41854135332325826,
+          "max": 2.974113106789113
+        },
+        "midpoint_velocity_residual_px_s": {
+          "median": 315.14605440287636,
+          "max": 1460.6427272373294
+        }
+      },
+      "worst_velocity_interval": [
+        21,
+        22
+      ]
+    },
+    "hip_axis_chest": {
+      "rmse_px": {
+        "median": 35.48192793033628,
+        "max": 81.3821092509067
+      },
+      "sum_terms_px2": {
+        "midpoint": 24398.247585729434,
+        "width": 9439.993444854079,
+        "direction": 1394.3965887654238
+      },
+      "temporal": {
+        "shoulder_midpoint_speed_model_units_s": {
+          "median": 0.6494393406787338,
+          "max": 2.8982614161232605
+        },
+        "midpoint_velocity_residual_px_s": {
+          "median": 287.063396781855,
+          "max": 1461.5144399159508
+        }
+      },
+      "worst_velocity_interval": [
+        21,
+        22
+      ]
+    },
+    "distributed_swing": {
+      "rmse_px": {
+        "median": 34.7398112130639,
+        "max": 62.646888959314744
+      },
+      "sum_terms_px2": {
+        "midpoint": 17323.790321930446,
+        "width": 9072.986604703008,
+        "direction": 1367.1703654051455
+      },
+      "temporal": {
+        "shoulder_midpoint_speed_model_units_s": {
+          "median": 1.0593366252130736,
+          "max": 3.043927866383277
+        },
+        "midpoint_velocity_residual_px_s": {
+          "median": 252.80679610008804,
+          "max": 1387.7135687019263
+        }
+      },
+      "worst_velocity_interval": [
+        21,
+        22
+      ]
+    },
+    "distributed_twist": {
+      "rmse_px": {
+        "median": 34.217351952656095,
+        "max": 61.411967931255134
+      },
+      "sum_terms_px2": {
+        "midpoint": 17128.19819633494,
+        "width": 8362.109058762313,
+        "direction": 1645.0991276613436
+      },
+      "temporal": {
+        "shoulder_midpoint_speed_model_units_s": {
+          "median": 1.0689307723931476,
+          "max": 3.0982253730258322
+        },
+        "midpoint_velocity_residual_px_s": {
+          "median": 266.0999244845363,
+          "max": 1380.9729101412217
+        }
+      },
+      "worst_velocity_interval": [
+        21,
+        22
+      ]
+    }
+  },
+  "twist_minus_swing": [
+    {
+      "source_frame": 6,
+      "rmse_delta_px": -0.7442698118465145,
+      "terms_delta_px2": {
+        "midpoint": -9.340448010853379,
+        "width": -75.15937586715899,
+        "direction": 0.7354903118612128
+      }
+    },
+    {
+      "source_frame": 7,
+      "rmse_delta_px": -1.2349210280596097,
+      "terms_delta_px2": {
+        "midpoint": -15.149118373375586,
+        "width": -137.24831369608097,
+        "direction": -0.8054590217327586
+      }
+    },
+    {
+      "source_frame": 8,
+      "rmse_delta_px": -2.899898672590396,
+      "terms_delta_px2": {
+        "midpoint": -53.34599059413313,
+        "width": -285.37178326169993,
+        "direction": 31.710763985477115
+      }
+    },
+    {
+      "source_frame": 9,
+      "rmse_delta_px": -1.3162367119150602,
+      "terms_delta_px2": {
+        "midpoint": -31.239252200285705,
+        "width": -163.3392519032925,
+        "direction": 80.75767552168281
+      }
+    },
+    {
+      "source_frame": 10,
+      "rmse_delta_px": -0.9766090404843553,
+      "terms_delta_px2": {
+        "midpoint": -30.077007919079165,
+        "width": -84.20805213646588,
+        "direction": 47.994279535843816
+      }
+    },
+    {
+      "source_frame": 11,
+      "rmse_delta_px": -0.05258027411952071,
+      "terms_delta_px2": {
+        "midpoint": -5.512023523917435,
+        "width": -30.00415153622896,
+        "direction": 31.745336081899495
+      }
+    },
+    {
+      "source_frame": 12,
+      "rmse_delta_px": -0.017045143728140033,
+      "terms_delta_px2": {
+        "midpoint": -13.758343722354653,
+        "width": -46.27608051912716,
+        "direction": 58.520200523884796
+      }
+    },
+    {
+      "source_frame": 13,
+      "rmse_delta_px": -0.029513873636332733,
+      "terms_delta_px2": {
+        "midpoint": -7.50574745005656,
+        "width": -11.547997559958844,
+        "direction": 16.407406128114417
+      }
+    },
+    {
+      "source_frame": 14,
+      "rmse_delta_px": 0.03186028926948836,
+      "terms_delta_px2": {
+        "midpoint": -1.4362765321201323,
+        "width": -0.9539900058241528,
+        "direction": 4.6049224848079575
+      }
+    },
+    {
+      "source_frame": 15,
+      "rmse_delta_px": 0.20931494008352303,
+      "terms_delta_px2": {
+        "midpoint": -2.798475825140372,
+        "width": 3.0191593587531997,
+        "direction": 15.037315767771815
+      }
+    },
+    {
+      "source_frame": 16,
+      "rmse_delta_px": 0.5017055206206997,
+      "terms_delta_px2": {
+        "midpoint": -2.665186883009085,
+        "width": 4.8739271238758874,
+        "direction": 28.030629723433776
+      }
+    },
+    {
+      "source_frame": 17,
+      "rmse_delta_px": 0.4959452321527209,
+      "terms_delta_px2": {
+        "midpoint": -3.6412360628995657,
+        "width": 5.554111098391161,
+        "direction": 26.092242776486728
+      }
+    },
+    {
+      "source_frame": 18,
+      "rmse_delta_px": 0.12298909333368613,
+      "terms_delta_px2": {
+        "midpoint": -0.8661317854837876,
+        "width": 0.5684279080557815,
+        "direction": 6.671512485508174
+      }
+    },
+    {
+      "source_frame": 19,
+      "rmse_delta_px": 2.2703596979381757,
+      "terms_delta_px2": {
+        "midpoint": -11.974143386326034,
+        "width": 30.819835715134786,
+        "direction": 96.63405525977487
+      }
+    },
+    {
+      "source_frame": 20,
+      "rmse_delta_px": 1.5585866841221474,
+      "terms_delta_px2": {
+        "midpoint": -3.4275553455921397,
+        "width": 21.661102315222422,
+        "direction": 68.86361324234122
+      }
+    },
+    {
+      "source_frame": 21,
+      "rmse_delta_px": 1.258450221957112,
+      "terms_delta_px2": {
+        "midpoint": -1.8871224578457486,
+        "width": 25.869521437173262,
+        "direction": 57.64932363093385
+      }
+    },
+    {
+      "source_frame": 22,
+      "rmse_delta_px": -0.756960260848814,
+      "terms_delta_px2": {
+        "midpoint": -12.581654250125894,
+        "width": -0.2785337209186025,
+        "direction": -39.51515218473651
+      }
+    },
+    {
+      "source_frame": 23,
+      "rmse_delta_px": -3.2257252958044305,
+      "terms_delta_px2": {
+        "midpoint": -15.622476392893212,
+        "width": 2.0215720731283113,
+        "direction": -113.24562479096767
+      }
+    },
+    {
+      "source_frame": 24,
+      "rmse_delta_px": -2.2104171591818975,
+      "terms_delta_px2": {
+        "midpoint": 27.236065119983536,
+        "width": 29.122327236326328,
+        "direction": -139.95976920618705
+      }
+    }
+  ],
+  "rows": [
+    {
+      "case": "hip_axis",
+      "source_frame": 6,
+      "pts_s": 0.2,
+      "terms_px2": {
+        "midpoint": 13627.728642182257,
+        "width": 345.470316131567,
+        "direction": 250.4493564096133
+      },
+      "shoulder_rmse_px": 119.26293772469062,
+      "midpoint_residual_xy_px": [
+        -116.53398220163695,
+        -6.896349353884432
+      ],
+      "width_ratio": 0.5834892865108283,
+      "line_error_deg": -26.845205062569356,
+      "mp_visibility_min": 0.9988081455230713
+    },
+    {
+      "case": "hip_axis",
+      "source_frame": 7,
+      "pts_s": 0.24,
+      "terms_px2": {
+        "midpoint": 9898.333786899986,
+        "width": 401.52279301514153,
+        "direction": 31.131877887414475
+      },
+      "shoulder_rmse_px": 101.64147016745945,
+      "midpoint_residual_xy_px": [
+        -98.68014745800076,
+        12.67131739667235
+      ],
+      "width_ratio": 0.4877912807227662,
+      "line_error_deg": -11.720810956399363,
+      "mp_visibility_min": 0.9988088011741638
+    },
+    {
+      "case": "hip_axis",
+      "source_frame": 8,
+      "pts_s": 0.28,
+      "terms_px2": {
+        "midpoint": 6608.70152731741,
+        "width": 539.745581555467,
+        "direction": 13.669543265549464
+      },
+      "shoulder_rmse_px": 84.62928956418357,
+      "midpoint_residual_xy_px": [
+        -80.31823251281475,
+        12.557191299603573
+      ],
+      "width_ratio": 0.46710347370944444,
+      "line_error_deg": 7.114107775562328,
+      "mp_visibility_min": 0.9989122152328491
+    },
+    {
+      "case": "hip_axis",
+      "source_frame": 9,
+      "pts_s": 0.32,
+      "terms_px2": {
+        "midpoint": 2580.8040586991488,
+        "width": 893.7707268158309,
+        "direction": 147.9833437574389
+      },
+      "shoulder_rmse_px": 60.18769084515883,
+      "midpoint_residual_xy_px": [
+        -48.304497523764894,
+        15.731483645090208
+      ],
+      "width_ratio": 0.4785101424286309,
+      "line_error_deg": 17.64549916265256,
+      "mp_visibility_min": 0.9989982843399048
+    },
+    {
+      "case": "hip_axis",
+      "source_frame": 10,
+      "pts_s": 0.36,
+      "terms_px2": {
+        "midpoint": 1360.1997179358937,
+        "width": 883.938893899136,
+        "direction": 151.71891199380843
+      },
+      "shoulder_rmse_px": 48.94749762581167,
+      "midpoint_residual_xy_px": [
+        -36.6309697328461,
+        4.286230787907584
+      ],
+      "width_ratio": 0.5298043207317088,
+      "line_error_deg": 15.380021143606736,
+      "mp_visibility_min": 0.9990935921669006
+    },
+    {
+      "case": "hip_axis",
+      "source_frame": 11,
+      "pts_s": 0.4,
+      "terms_px2": {
+        "midpoint": 598.4224342635827,
+        "width": 820.2591657379535,
+        "direction": 266.4037371682334
+      },
+      "shoulder_rmse_px": 41.049790951596464,
+      "midpoint_residual_xy_px": [
+        -17.169366705743414,
+        17.42513360600981
+      ],
+      "width_ratio": 0.5265650167438147,
+      "line_error_deg": 21.428194706441477,
+      "mp_visibility_min": 0.9991710782051086
+    },
+    {
+      "case": "hip_axis",
+      "source_frame": 12,
+      "pts_s": 0.44,
+      "terms_px2": {
+        "midpoint": 1086.3623814404912,
+        "width": 903.7054060026501,
+        "direction": 154.3141322294332
+      },
+      "shoulder_rmse_px": 46.30747153184435,
+      "midpoint_residual_xy_px": [
+        -6.369042509791598,
+        32.33879526124866
+      ],
+      "width_ratio": 0.48969954199656796,
+      "line_error_deg": 17.331260132259477,
+      "mp_visibility_min": 0.9992533326148987
+    },
+    {
+      "case": "hip_axis",
+      "source_frame": 13,
+      "pts_s": 0.48,
+      "terms_px2": {
+        "midpoint": 1107.8829523663144,
+        "width": 852.6409403420979,
+        "direction": 4.5789322721234385
+      },
+      "shoulder_rmse_px": 44.32948031480333,
+      "midpoint_residual_xy_px": [
+        -10.524481660543472,
+        31.577179071969027
+      ],
+      "width_ratio": 0.5108310123681504,
+      "line_error_deg": 2.8740046804451143,
+      "mp_visibility_min": 0.9993264079093933
+    },
+    {
+      "case": "hip_axis",
+      "source_frame": 14,
+      "pts_s": 0.52,
+      "terms_px2": {
+        "midpoint": 594.1933573183737,
+        "width": 669.0499405918852,
+        "direction": 0.3122124393003105
+      },
+      "shoulder_rmse_px": 35.54652599551129,
+      "midpoint_residual_xy_px": [
+        -8.920360040966614,
+        22.685249261533357
+      ],
+      "width_ratio": 0.5583596693537521,
+      "line_error_deg": -0.7315316501034113,
+      "mp_visibility_min": 0.9993920922279358
+    },
+    {
+      "case": "hip_axis",
+      "source_frame": 15,
+      "pts_s": 0.56,
+      "terms_px2": {
+        "midpoint": 740.2011657377009,
+        "width": 619.5552467630977,
+        "direction": 1.2502368427067267
+      },
+      "shoulder_rmse_px": 36.891823610977895,
+      "midpoint_residual_xy_px": [
+        -4.727623514888592,
+        26.792736732912772
+      ],
+      "width_ratio": 0.5614515909817986,
+      "line_error_deg": -1.5064428135770405,
+      "mp_visibility_min": 0.9994519352912903
+    },
+    {
+      "case": "hip_axis",
+      "source_frame": 16,
+      "pts_s": 0.6,
+      "terms_px2": {
+        "midpoint": 490.421458858581,
+        "width": 451.5808040578239,
+        "direction": 0.05471426203757801
+      },
+      "shoulder_rmse_px": 30.69294670080477,
+      "midpoint_residual_xy_px": [
+        -6.131008685276697,
+        21.279854119792333
+      ],
+      "width_ratio": 0.6120031684782095,
+      "line_error_deg": -0.3127930193164611,
+      "mp_visibility_min": 0.9995031356811523
+    },
+    {
+      "case": "hip_axis",
+      "source_frame": 17,
+      "pts_s": 0.64,
+      "terms_px2": {
+        "midpoint": 480.21505949629824,
+        "width": 401.3961246131905,
+        "direction": 0.20628280154687673
+      },
+      "shoulder_rmse_px": 29.695411546416306,
+      "midpoint_residual_xy_px": [
+        -7.670990325095374,
+        20.527322449082135
+      ],
+      "width_ratio": 0.6303691681112701,
+      "line_error_deg": 0.6047004321908335,
+      "mp_visibility_min": 0.9995520710945129
+    },
+    {
+      "case": "hip_axis",
+      "source_frame": 18,
+      "pts_s": 0.68,
+      "terms_px2": {
+        "midpoint": 360.8902030930693,
+        "width": 302.1135979870193,
+        "direction": 2.289951691501301
+      },
+      "shoulder_rmse_px": 25.793288909551464,
+      "midpoint_residual_xy_px": [
+        -7.747552810975094,
+        17.34547861934692
+      ],
+      "width_ratio": 0.6686756026686779,
+      "line_error_deg": 2.021244513358865,
+      "mp_visibility_min": 0.9995953440666199
+    },
+    {
+      "case": "hip_axis",
+      "source_frame": 19,
+      "pts_s": 0.72,
+      "terms_px2": {
+        "midpoint": 270.1914156103748,
+        "width": 379.40851481563936,
+        "direction": 18.337128736362047
+      },
+      "shoulder_rmse_px": 25.844478310896054,
+      "midpoint_residual_xy_px": [
+        -7.5855294683320835,
+        14.582563502191249
+      ],
+      "width_ratio": 0.6410008187931535,
+      "line_error_deg": 5.6503445172446725,
+      "mp_visibility_min": 0.9996340274810791
+    },
+    {
+      "case": "hip_axis",
+      "source_frame": 20,
+      "pts_s": 0.76,
+      "terms_px2": {
+        "midpoint": 305.716803921121,
+        "width": 454.0068306367412,
+        "direction": 20.03429208373109
+      },
+      "shoulder_rmse_px": 27.924145942921765,
+      "midpoint_residual_xy_px": [
+        -3.2727548268728697,
+        17.17573520302119
+      ],
+      "width_ratio": 0.6145555882740111,
+      "line_error_deg": 5.920424346197564,
+      "mp_visibility_min": 0.9996640682220459
+    },
+    {
+      "case": "hip_axis",
+      "source_frame": 21,
+      "pts_s": 0.8,
+      "terms_px2": {
+        "midpoint": 523.2881354759877,
+        "width": 504.7844547145955,
+        "direction": 17.19251439971231
+      },
+      "shoulder_rmse_px": 32.33055991767379,
+      "midpoint_residual_xy_px": [
+        3.000151938224633,
+        22.677901662710212
+      ],
+      "width_ratio": 0.5996132078388255,
+      "line_error_deg": 5.469509817501828,
+      "mp_visibility_min": 0.9996729493141174
+    },
+    {
+      "case": "hip_axis",
+      "source_frame": 22,
+      "pts_s": 0.84,
+      "terms_px2": {
+        "midpoint": 1263.8483137446601,
+        "width": 38.864856333684806,
+        "direction": 84.84287959290032
+      },
+      "shoulder_rmse_px": 37.249913418305354,
+      "midpoint_residual_xy_px": [
+        -4.938522776452089,
+        -35.205955554864914
+      ],
+      "width_ratio": 0.8961891965711472,
+      "line_error_deg": 9.293315297401836,
+      "mp_visibility_min": 0.9996302723884583
+    },
+    {
+      "case": "hip_axis",
+      "source_frame": 23,
+      "pts_s": 0.88,
+      "terms_px2": {
+        "midpoint": 33.57449737994815,
+        "width": 329.29883050316437,
+        "direction": 95.92590401087818
+      },
+      "shoulder_rmse_px": 21.419599246811135,
+      "midpoint_residual_xy_px": [
+        1.9646816474337356,
+        -5.451102952998156
+      ],
+      "width_ratio": 0.7172664502285016,
+      "line_error_deg": 10.337649703199663,
+      "mp_visibility_min": 0.9996450543403625
+    },
+    {
+      "case": "hip_axis",
+      "source_frame": 24,
+      "pts_s": 0.92,
+      "terms_px2": {
+        "midpoint": 172.9002915225873,
+        "width": 356.6227640000111,
+        "direction": 60.999006474394264
+      },
+      "shoulder_rmse_px": 24.300659702917404,
+      "midpoint_residual_xy_px": [
+        -13.145138392992465,
+        0.3250048486757464
+      ],
+      "width_ratio": 0.707940472900173,
+      "line_error_deg": 8.232393676560617,
+      "mp_visibility_min": 0.9996200203895569
+    },
+    {
+      "case": "hip_axis_chest",
+      "source_frame": 6,
+      "pts_s": 0.2,
+      "terms_px2": {
+        "midpoint": 6297.1780153188965,
+        "width": 309.13766913981857,
+        "direction": 16.732021667798108
+      },
+      "shoulder_rmse_px": 81.3821092509067,
+      "midpoint_residual_xy_px": [
+        -79.35132421050889,
+        -0.7384858547067665
+      ],
+      "width_ratio": 0.6059995007379413,
+      "line_error_deg": -6.750450085059675,
+      "mp_visibility_min": 0.9988081455230713
+    },
+    {
+      "case": "hip_axis_chest",
+      "source_frame": 7,
+      "pts_s": 0.24,
+      "terms_px2": {
+        "midpoint": 5489.2185374572355,
+        "width": 408.4566589017441,
+        "direction": 7.08901361103085
+      },
+      "shoulder_rmse_px": 76.84246358602776,
+      "midpoint_residual_xy_px": [
+        -72.24379093889752,
+        16.4332957203996
+      ],
+      "width_ratio": 0.48338756493207324,
+      "line_error_deg": -5.610908900952607,
+      "mp_visibility_min": 0.9988088011741638
+    },
+    {
+      "case": "hip_axis_chest",
+      "source_frame": 8,
+      "pts_s": 0.28,
+      "terms_px2": {
+        "midpoint": 3655.963657171213,
+        "width": 555.8882773392436,
+        "direction": 16.482127865444
+      },
+      "shoulder_rmse_px": 65.02564157604219,
+      "midpoint_residual_xy_px": [
+        -58.745243544098685,
+        14.316424767229591
+      ],
+      "width_ratio": 0.4591932554092133,
+      "line_error_deg": 7.879926916987156,
+      "mp_visibility_min": 0.9989122152328491
+    },
+    {
+      "case": "hip_axis_chest",
+      "source_frame": 9,
+      "pts_s": 0.32,
+      "terms_px2": {
+        "midpoint": 1373.964504702119,
+        "width": 878.8709470621299,
+        "direction": 99.88630367139285
+      },
+      "shoulder_rmse_px": 48.50486321427616,
+      "midpoint_residual_xy_px": [
+        -33.63214958716958,
+        15.583421281874138
+      ],
+      "width_ratio": 0.4828752104122949,
+      "line_error_deg": 14.41240785404786,
+      "mp_visibility_min": 0.9989982843399048
+    },
+    {
+      "case": "hip_axis_chest",
+      "source_frame": 10,
+      "pts_s": 0.36,
+      "terms_px2": {
+        "midpoint": 658.7284100620019,
+        "width": 792.0543951664021,
+        "direction": 10.726692530667606
+      },
+      "shoulder_rmse_px": 38.22969392709115,
+      "midpoint_residual_xy_px": [
+        -25.08810186714487,
+        5.41438406153128
+      ],
+      "width_ratio": 0.5549128907252492,
+      "line_error_deg": 3.984723405683944,
+      "mp_visibility_min": 0.9990935921669006
+    },
+    {
+      "case": "hip_axis_chest",
+      "source_frame": 11,
+      "pts_s": 0.4,
+      "terms_px2": {
+        "midpoint": 384.9340860682641,
+        "width": 766.883864783489,
+        "direction": 120.17368018737398
+      },
+      "shoulder_rmse_px": 35.66499167305563,
+      "midpoint_residual_xy_px": [
+        -10.50956448951547,
+        16.567532716399853
+      ],
+      "width_ratio": 0.5422276048880366,
+      "line_error_deg": 14.135895786575464,
+      "mp_visibility_min": 0.9991710782051086
+    },
+    {
+      "case": "hip_axis_chest",
+      "source_frame": 12,
+      "pts_s": 0.44,
+      "terms_px2": {
+        "midpoint": 957.0163238880551,
+        "width": 873.8272633150098,
+        "direction": 85.83935396706875
+      },
+      "shoulder_rmse_px": 43.779937656078665,
+      "midpoint_residual_xy_px": [
+        -4.52263808500453,
+        30.60330159705194
+      ],
+      "width_ratio": 0.4982061743003014,
+      "line_error_deg": 12.793116259072068,
+      "mp_visibility_min": 0.9992533326148987
+    },
+    {
+      "case": "hip_axis_chest",
+      "source_frame": 13,
+      "pts_s": 0.48,
+      "terms_px2": {
+        "midpoint": 1026.76229700426,
+        "width": 812.8375860819184,
+        "direction": 16.05850822076036
+      },
+      "shoulder_rmse_px": 43.077353578265914,
+      "midpoint_residual_xy_px": [
+        -5.797232417097803,
+        31.514352179703934
+      ],
+      "width_ratio": 0.5223852685777743,
+      "line_error_deg": 5.32367864891066,
+      "mp_visibility_min": 0.9993264079093933
+    },
+    {
+      "case": "hip_axis_chest",
+      "source_frame": 14,
+      "pts_s": 0.52,
+      "terms_px2": {
+        "midpoint": 500.36412089172956,
+        "width": 626.2148707454074,
+        "direction": 26.128550138224
+      },
+      "shoulder_rmse_px": 33.95154697175611,
+      "midpoint_residual_xy_px": [
+        -5.079781083618059,
+        21.78439682511879
+      ],
+      "width_ratio": 0.572731233965148,
+      "line_error_deg": 6.611275774750447,
+      "mp_visibility_min": 0.9993920922279358
+    },
+    {
+      "case": "hip_axis_chest",
+      "source_frame": 15,
+      "pts_s": 0.56,
+      "terms_px2": {
+        "midpoint": 650.7148297663756,
+        "width": 579.7822993630463,
+        "direction": 28.47008052415731
+      },
+      "shoulder_rmse_px": 35.48192793033628,
+      "midpoint_residual_xy_px": [
+        -2.1037575268725277,
+        25.42221536441116
+      ],
+      "width_ratio": 0.5757615803041747,
+      "line_error_deg": 7.103155365613292,
+      "mp_visibility_min": 0.9994519352912903
+    },
+    {
+      "case": "hip_axis_chest",
+      "source_frame": 16,
+      "pts_s": 0.6,
+      "terms_px2": {
+        "midpoint": 396.93060554537806,
+        "width": 412.3321173455868,
+        "direction": 55.45308904532294
+      },
+      "shoulder_rmse_px": 29.40605060079114,
+      "midpoint_residual_xy_px": [
+        -3.078117287270402,
+        19.683896959473884
+      ],
+      "width_ratio": 0.6292475540421756,
+      "line_error_deg": 9.832596845778188,
+      "mp_visibility_min": 0.9995031356811523
+    },
+    {
+      "case": "hip_axis_chest",
+      "source_frame": 17,
+      "pts_s": 0.64,
+      "terms_px2": {
+        "midpoint": 358.844793278487,
+        "width": 364.01234761342045,
+        "direction": 75.29304608687471
+      },
+      "shoulder_rmse_px": 28.251551939296753,
+      "midpoint_residual_xy_px": [
+        -4.817948847484331,
+        18.32026643314751
+      ],
+      "width_ratio": 0.6480024344162831,
+      "line_error_deg": 11.413310466778999,
+      "mp_visibility_min": 0.9995520710945129
+    },
+    {
+      "case": "hip_axis_chest",
+      "source_frame": 18,
+      "pts_s": 0.68,
+      "terms_px2": {
+        "midpoint": 288.57890696978484,
+        "width": 263.17036258324566,
+        "direction": 93.27976099526313
+      },
+      "shoulder_rmse_px": 25.39742173033109,
+      "midpoint_residual_xy_px": [
+        -4.809064754956239,
+        16.29269170985637
+      ],
+      "width_ratio": 0.6907663336780124,
+      "line_error_deg": 12.717770043709532,
+      "mp_visibility_min": 0.9995953440666199
+    },
+    {
+      "case": "hip_axis_chest",
+      "source_frame": 19,
+      "pts_s": 0.72,
+      "terms_px2": {
+        "midpoint": 172.5622264668438,
+        "width": 346.1780821428595,
+        "direction": 110.02111448985806
+      },
+      "shoulder_rmse_px": 25.075115614879262,
+      "midpoint_residual_xy_px": [
+        -5.760898672076905,
+        11.805688161090245
+      ],
+      "width_ratio": 0.6570824555283229,
+      "line_error_deg": 13.696994099382312,
+      "mp_visibility_min": 0.9996340274810791
+    },
+    {
+      "case": "hip_axis_chest",
+      "source_frame": 20,
+      "pts_s": 0.76,
+      "terms_px2": {
+        "midpoint": 215.30241044439694,
+        "width": 419.2868409488635,
+        "direction": 106.9315366016931
+      },
+      "shoulder_rmse_px": 27.23087930998472,
+      "midpoint_residual_xy_px": [
+        -1.7755792085299618,
+        14.56536058319989
+      ],
+      "width_ratio": 0.6295870374633361,
+      "line_error_deg": 13.539078537509305,
+      "mp_visibility_min": 0.9996640682220459
+    },
+    {
+      "case": "hip_axis_chest",
+      "source_frame": 21,
+      "pts_s": 0.8,
+      "terms_px2": {
+        "midpoint": 434.6124119500231,
+        "width": 470.21867075386984,
+        "direction": 57.87451249941569
+      },
+      "shoulder_rmse_px": 31.027497404774834,
+      "midpoint_residual_xy_px": [
+        3.148478878694732,
+        20.608238466701522
+      ],
+      "width_ratio": 0.6135647889493161,
+      "line_error_deg": 9.92902056186001,
+      "mp_visibility_min": 0.9996729493141174
+    },
+    {
+      "case": "hip_axis_chest",
+      "source_frame": 22,
+      "pts_s": 0.84,
+      "terms_px2": {
+        "midpoint": 1415.2114044239106,
+        "width": 14.167726379927899,
+        "direction": 127.19940588389272
+      },
+      "shoulder_rmse_px": 39.45349840873091,
+      "midpoint_residual_xy_px": [
+        -6.798211055149011,
+        -36.99994230905719
+      ],
+      "width_ratio": 0.9373221487641303,
+      "line_error_deg": 11.131867692317032,
+      "mp_visibility_min": 0.9996302723884583
+    },
+    {
+      "case": "hip_axis_chest",
+      "source_frame": 23,
+      "pts_s": 0.88,
+      "terms_px2": {
+        "midpoint": 33.779694977683846,
+        "width": 261.2201777969486,
+        "direction": 191.71643264853628
+      },
+      "shoulder_rmse_px": 22.061647840158486,
+      "midpoint_residual_xy_px": [
+        2.703708571888569,
+        -5.144866853085716
+      ],
+      "width_ratio": 0.7481826716052657,
+      "line_error_deg": 14.327249314762165,
+      "mp_visibility_min": 0.9996450543403625
+    },
+    {
+      "case": "hip_axis_chest",
+      "source_frame": 24,
+      "pts_s": 0.92,
+      "terms_px2": {
+        "midpoint": 87.58034934277705,
+        "width": 285.4532873911473,
+        "direction": 149.04135813064931
+      },
+      "shoulder_rmse_px": 22.848960476673227,
+      "midpoint_residual_xy_px": [
+        -9.355226878142105,
+        0.2451109978450745
+      ],
+      "width_ratio": 0.7387030314497809,
+      "line_error_deg": 12.612032680739425,
+      "mp_visibility_min": 0.9996200203895569
+    },
+    {
+      "case": "distributed_swing",
+      "source_frame": 6,
+      "pts_s": 0.2,
+      "terms_px2": {
+        "midpoint": 2827.270305721891,
+        "width": 370.9332885356491,
+        "direction": 10.448178953703518
+      },
+      "shoulder_rmse_px": 56.64496246985467,
+      "midpoint_residual_xy_px": [
+        -52.244291073254544,
+        9.88960848441161
+      ],
+      "width_ratio": 0.5684126438718444,
+      "line_error_deg": -5.506796747030987,
+      "mp_visibility_min": 0.9988081455230713
+    },
+    {
+      "case": "distributed_swing",
+      "source_frame": 7,
+      "pts_s": 0.24,
+      "terms_px2": {
+        "midpoint": 3485.47644130192,
+        "width": 433.9496911858776,
+        "direction": 5.206563792906991
+      },
+      "shoulder_rmse_px": 62.646888959314744,
+      "midpoint_residual_xy_px": [
+        -54.22151444541032,
+        23.35602304648802
+      ],
+      "width_ratio": 0.4675098763246721,
+      "line_error_deg": -4.889072380455936,
+      "mp_visibility_min": 0.9988088011741638
+    },
+    {
+      "case": "distributed_swing",
+      "source_frame": 8,
+      "pts_s": 0.28,
+      "terms_px2": {
+        "midpoint": 2371.597430408514,
+        "width": 568.5951325627198,
+        "direction": 17.431456970266026
+      },
+      "shoulder_rmse_px": 54.38404196031681,
+      "midpoint_residual_xy_px": [
+        -44.77170136616883,
+        19.159649975589588
+      ],
+      "width_ratio": 0.4530471241422933,
+      "line_error_deg": 8.158928553556034,
+      "mp_visibility_min": 0.9989122152328491
+    },
+    {
+      "case": "distributed_swing",
+      "source_frame": 9,
+      "pts_s": 0.32,
+      "terms_px2": {
+        "midpoint": 961.4686711989896,
+        "width": 863.2405437770467,
+        "direction": 102.0913813983716
+      },
+      "shoulder_rmse_px": 43.89533684088104,
+      "midpoint_residual_xy_px": [
+        -24.57375222631265,
+        18.91029806001967
+      ],
+      "width_ratio": 0.48749427873652923,
+      "line_error_deg": 14.501906005495991,
+      "mp_visibility_min": 0.9989982843399048
+    },
+    {
+      "case": "distributed_swing",
+      "source_frame": 10,
+      "pts_s": 0.36,
+      "terms_px2": {
+        "midpoint": 433.70347182380266,
+        "width": 736.8466991523783,
+        "direction": 14.707177041695104
+      },
+      "shoulder_rmse_px": 34.42756668743634,
+      "midpoint_residual_xy_px": [
+        -17.898505613534553,
+        10.646453335551456
+      ],
+      "width_ratio": 0.5707047498197259,
+      "line_error_deg": 4.601143354110223,
+      "mp_visibility_min": 0.9990935921669006
+    },
+    {
+      "case": "distributed_swing",
+      "source_frame": 11,
+      "pts_s": 0.4,
+      "terms_px2": {
+        "midpoint": 428.5678676371686,
+        "width": 730.9457093713615,
+        "direction": 128.1632688552395
+      },
+      "shoulder_rmse_px": 35.884214438437546,
+      "midpoint_residual_xy_px": [
+        -7.0081079108642825,
+        19.479586524021755
+      ],
+      "width_ratio": 0.5530825002858997,
+      "line_error_deg": 14.455955099094185,
+      "mp_visibility_min": 0.9991710782051086
+    },
+    {
+      "case": "distributed_swing",
+      "source_frame": 12,
+      "pts_s": 0.44,
+      "terms_px2": {
+        "midpoint": 1030.1918349027292,
+        "width": 854.6822156828015,
+        "direction": 88.84532209954159
+      },
+      "shoulder_rmse_px": 44.42656156720967,
+      "midpoint_residual_xy_px": [
+        -4.139175641184522,
+        31.82858872011377
+      ],
+      "width_ratio": 0.5037336233584158,
+      "line_error_deg": 12.944221846109016,
+      "mp_visibility_min": 0.9992533326148987
+    },
+    {
+      "case": "distributed_swing",
+      "source_frame": 13,
+      "pts_s": 0.48,
+      "terms_px2": {
+        "midpoint": 1212.508590595554,
+        "width": 783.6491154570567,
+        "direction": 15.084410934444804
+      },
+      "shoulder_rmse_px": 44.846874104970304,
+      "midpoint_residual_xy_px": [
+        -0.9967470589193681,
+        34.80682527746663
+      ],
+      "width_ratio": 0.5310390846991386,
+      "line_error_deg": 5.1173338478716595,
+      "mp_visibility_min": 0.9993264079093933
+    },
+    {
+      "case": "distributed_swing",
+      "source_frame": 14,
+      "pts_s": 0.52,
+      "terms_px2": {
+        "midpoint": 587.7410259684567,
+        "width": 596.1381359250045,
+        "direction": 22.97532122585926
+      },
+      "shoulder_rmse_px": 34.7398112130639,
+      "midpoint_residual_xy_px": [
+        -0.041790085534898935,
+        24.243334744981098
+      ],
+      "width_ratio": 0.5831182236212901,
+      "line_error_deg": 6.143596043005947,
+      "mp_visibility_min": 0.9993920922279358
+    },
+    {
+      "case": "distributed_swing",
+      "source_frame": 15,
+      "pts_s": 0.56,
+      "terms_px2": {
+        "midpoint": 742.5874997070064,
+        "width": 552.9972390099927,
+        "direction": 25.21516283378378
+      },
+      "shoulder_rmse_px": 36.34281086474715,
+      "midpoint_residual_xy_px": [
+        2.0868075750516937,
+        27.170438602490634
+      ],
+      "width_ratio": 0.585677039057531,
+      "line_error_deg": 6.627413694434842,
+      "mp_visibility_min": 0.9994519352912903
+    },
+    {
+      "case": "distributed_swing",
+      "source_frame": 16,
+      "pts_s": 0.6,
+      "terms_px2": {
+        "midpoint": 457.0226004262138,
+        "width": 385.97006832465195,
+        "direction": 50.16359780529638
+      },
+      "shoulder_rmse_px": 29.885720111052404,
+      "midpoint_residual_xy_px": [
+        1.8393874765916962,
+        21.29880874925101
+      ],
+      "width_ratio": 0.6412951438610206,
+      "line_error_deg": 9.262355435339687,
+      "mp_visibility_min": 0.9995031356811523
+    },
+    {
+      "case": "distributed_swing",
+      "source_frame": 17,
+      "pts_s": 0.64,
+      "terms_px2": {
+        "midpoint": 374.7433885775401,
+        "width": 339.0403607854615,
+        "direction": 69.43863159666944
+      },
+      "shoulder_rmse_px": 27.98611050074073,
+      "midpoint_residual_xy_px": [
+        0.07751797662842819,
+        19.358134712333197
+      ],
+      "width_ratio": 0.6602908044536863,
+      "line_error_deg": 10.856430713359433,
+      "mp_visibility_min": 0.9995520710945129
+    },
+    {
+      "case": "distributed_swing",
+      "source_frame": 18,
+      "pts_s": 0.68,
+      "terms_px2": {
+        "midpoint": 345.76154384256773,
+        "width": 236.77565898345944,
+        "direction": 85.71601880419166
+      },
+      "shoulder_rmse_px": 25.850594221994577,
+      "midpoint_residual_xy_px": [
+        0.3623258613901612,
+        18.591134010940152
+      ],
+      "width_ratio": 0.7066832886124257,
+      "line_error_deg": 12.050644337937436,
+      "mp_visibility_min": 0.9995953440666199
+    },
+    {
+      "case": "distributed_swing",
+      "source_frame": 19,
+      "pts_s": 0.72,
+      "terms_px2": {
+        "midpoint": 160.1549334456388,
+        "width": 324.1181532383433,
+        "direction": 106.06422253513529
+      },
+      "shoulder_rmse_px": 24.296858011255644,
+      "midpoint_residual_xy_px": [
+        -1.949077720479977,
+        12.504240460146605
+      ],
+      "width_ratio": 0.6681883735828508,
+      "line_error_deg": 13.33454270449668,
+      "mp_visibility_min": 0.9996340274810791
+    },
+    {
+      "case": "distributed_swing",
+      "source_frame": 20,
+      "pts_s": 0.76,
+      "terms_px2": {
+        "midpoint": 238.35276157335014,
+        "width": 396.1042331186067,
+        "direction": 103.30513269138828
+      },
+      "shoulder_rmse_px": 27.161776955555496,
+      "midpoint_residual_xy_px": [
+        1.6839974847428607,
+        15.346560332684646
+      ],
+      "width_ratio": 0.6399728091130259,
+      "line_error_deg": 13.197567874476869,
+      "mp_visibility_min": 0.9996640682220459
+    },
+    {
+      "case": "distributed_swing",
+      "source_frame": 21,
+      "pts_s": 0.8,
+      "terms_px2": {
+        "midpoint": 507.59776595092796,
+        "width": 447.41044550207755,
+        "direction": 56.499445556926275
+      },
+      "shoulder_rmse_px": 31.804208165114446,
+      "midpoint_residual_xy_px": [
+        5.2178963421288245,
+        21.91737492752557
+      ],
+      "width_ratio": 0.6230534122586471,
+      "line_error_deg": 9.734896828392277,
+      "mp_visibility_min": 0.9996729493141174
+    },
+    {
+      "case": "distributed_swing",
+      "source_frame": 22,
+      "pts_s": 0.84,
+      "terms_px2": {
+        "midpoint": 1090.2873288873002,
+        "width": 3.4701223009367674,
+        "direction": 129.44506361948243
+      },
+      "shoulder_rmse_px": 34.97431221350491,
+      "midpoint_residual_xy_px": [
+        -5.116260353334326,
+        -32.62071747960488
+      ],
+      "width_ratio": 0.9689803845506395,
+      "line_error_deg": 11.044460253502695,
+      "mp_visibility_min": 0.9996302723884583
+    },
+    {
+      "case": "distributed_swing",
+      "source_frame": 23,
+      "pts_s": 0.88,
+      "terms_px2": {
+        "midpoint": 48.32274862100051,
+        "width": 213.54795331374999,
+        "direction": 190.73659761219824
+      },
+      "shoulder_rmse_px": 21.27456931519297,
+      "midpoint_residual_xy_px": [
+        6.942551103086657,
+        -0.35175673700831567
+      ],
+      "width_ratio": 0.7723173390515295,
+      "line_error_deg": 14.064195160903976,
+      "mp_visibility_min": 0.9996450543403625
+    },
+    {
+      "case": "distributed_swing",
+      "source_frame": 24,
+      "pts_s": 0.92,
+      "terms_px2": {
+        "midpoint": 20.434111339875365,
+        "width": 234.57183847583195,
+        "direction": 145.63341107804536
+      },
+      "shoulder_rmse_px": 20.015977640219187,
+      "midpoint_residual_xy_px": [
+        -1.8769060060808442,
+        4.112339380962254
+      ],
+      "width_ratio": 0.763132878335564,
+      "line_error_deg": 12.264486288129504,
+      "mp_visibility_min": 0.9996200203895569
+    },
+    {
+      "case": "distributed_twist",
+      "source_frame": 6,
+      "pts_s": 0.2,
+      "terms_px2": {
+        "midpoint": 2817.9298577110376,
+        "width": 295.77391266849014,
+        "direction": 11.183669265564731
+      },
+      "shoulder_rmse_px": 55.900692658008154,
+      "midpoint_residual_xy_px": [
+        -52.129250949085645,
+        10.023524988659972
+      ],
+      "width_ratio": 0.6146097339238774,
+      "line_error_deg": -5.479000851873522,
+      "mp_visibility_min": 0.9988081455230713
+    },
+    {
+      "case": "distributed_twist",
+      "source_frame": 7,
+      "pts_s": 0.24,
+      "terms_px2": {
+        "midpoint": 3470.3273229285446,
+        "width": 296.70137748979664,
+        "direction": 4.401104771174232
+      },
+      "shoulder_rmse_px": 61.411967931255134,
+      "midpoint_residual_xy_px": [
+        -53.997172365140614,
+        23.55064116956987
+      ],
+      "width_ratio": 0.5596969978798993,
+      "line_error_deg": -4.10782450525256,
+      "mp_visibility_min": 0.9988088011741638
+    },
+    {
+      "case": "distributed_twist",
+      "source_frame": 8,
+      "pts_s": 0.28,
+      "terms_px2": {
+        "midpoint": 2318.251439814381,
+        "width": 283.2233493010198,
+        "direction": 49.14222095574314
+      },
+      "shoulder_rmse_px": 51.48414328772641,
+      "midpoint_residual_xy_px": [
+        -43.963946996086975,
+        19.632187966185427
+      ],
+      "width_ratio": 0.6139772782361989,
+      "line_error_deg": 11.778424524741581,
+      "mp_visibility_min": 0.9989122152328491
+    },
+    {
+      "case": "distributed_twist",
+      "source_frame": 9,
+      "pts_s": 0.32,
+      "terms_px2": {
+        "midpoint": 930.2294189987039,
+        "width": 699.9012918737542,
+        "direction": 182.8490569200544
+      },
+      "shoulder_rmse_px": 42.57910012896598,
+      "midpoint_residual_xy_px": [
+        -23.78807857954746,
+        19.088130775222055
+      ],
+      "width_ratio": 0.5385217886568274,
+      "line_error_deg": 18.49641797348686,
+      "mp_visibility_min": 0.9989982843399048
+    },
+    {
+      "case": "distributed_twist",
+      "source_frame": 10,
+      "pts_s": 0.36,
+      "terms_px2": {
+        "midpoint": 403.6264639047235,
+        "width": 652.6386470159124,
+        "direction": 62.70145657753892
+      },
+      "shoulder_rmse_px": 33.450957646951984,
+      "midpoint_residual_xy_px": [
+        -17.080488261930896,
+        10.577494251417221
+      ],
+      "width_ratio": 0.5959790309051216,
+      "line_error_deg": 9.304451670370517,
+      "mp_visibility_min": 0.9990935921669006
+    },
+    {
+      "case": "distributed_twist",
+      "source_frame": 11,
+      "pts_s": 0.4,
+      "terms_px2": {
+        "midpoint": 423.05584411325117,
+        "width": 700.9415578351326,
+        "direction": 159.908604937139
+      },
+      "shoulder_rmse_px": 35.831634164318025,
+      "midpoint_residual_xy_px": [
+        -6.685490844327887,
+        19.451479539707492
+      ],
+      "width_ratio": 0.562351237704845,
+      "line_error_deg": 16.02343840208359,
+      "mp_visibility_min": 0.9991710782051086
+    },
+    {
+      "case": "distributed_twist",
+      "source_frame": 12,
+      "pts_s": 0.44,
+      "terms_px2": {
+        "midpoint": 1016.4334911803745,
+        "width": 808.4061351636743,
+        "direction": 147.3655226234264
+      },
+      "shoulder_rmse_px": 44.40951642348153,
+      "midpoint_residual_xy_px": [
+        -3.135448855500499,
+        31.72699878108415
+      ],
+      "width_ratio": 0.5173555479364489,
+      "line_error_deg": 16.471574341934502,
+      "mp_visibility_min": 0.9992533326148987
+    },
+    {
+      "case": "distributed_twist",
+      "source_frame": 13,
+      "pts_s": 0.48,
+      "terms_px2": {
+        "midpoint": 1205.0028431454975,
+        "width": 772.1011178970979,
+        "direction": 31.49181706255922
+      },
+      "shoulder_rmse_px": 44.81736023133397,
+      "midpoint_residual_xy_px": [
+        -0.6159391885398691,
+        34.70768592201904
+      ],
+      "width_ratio": 0.5345072561924903,
+      "line_error_deg": 7.372591549174961,
+      "mp_visibility_min": 0.9993264079093933
+    },
+    {
+      "case": "distributed_twist",
+      "source_frame": 14,
+      "pts_s": 0.52,
+      "terms_px2": {
+        "midpoint": 586.3047494363366,
+        "width": 595.1841459191803,
+        "direction": 27.58024371066722
+      },
+      "shoulder_rmse_px": 34.77167150233339,
+      "midpoint_residual_xy_px": [
+        0.07424714527212473,
+        24.2136167640804
+      ],
+      "width_ratio": 0.5834519216858323,
+      "line_error_deg": 6.729895009842797,
+      "mp_visibility_min": 0.9993920922279358
+    },
+    {
+      "case": "distributed_twist",
+      "source_frame": 15,
+      "pts_s": 0.56,
+      "terms_px2": {
+        "midpoint": 739.789023881866,
+        "width": 556.0163983687459,
+        "direction": 40.252478601555595
+      },
+      "shoulder_rmse_px": 36.55212580483067,
+      "midpoint_residual_xy_px": [
+        2.4621446138212377,
+        27.087393152211916
+      ],
+      "width_ratio": 0.5845475539262758,
+      "line_error_deg": 8.384441053635257,
+      "mp_visibility_min": 0.9994519352912903
+    },
+    {
+      "case": "distributed_twist",
+      "source_frame": 16,
+      "pts_s": 0.6,
+      "terms_px2": {
+        "midpoint": 454.3574135432047,
+        "width": 390.84399544852783,
+        "direction": 78.19422752873015
+      },
+      "shoulder_rmse_px": 30.387425631673104,
+      "midpoint_residual_xy_px": [
+        2.3594108163324563,
+        21.184678287455256
+      ],
+      "width_ratio": 0.6390374342931324,
+      "line_error_deg": 11.591728327157979,
+      "mp_visibility_min": 0.9995031356811523
+    },
+    {
+      "case": "distributed_twist",
+      "source_frame": 17,
+      "pts_s": 0.64,
+      "terms_px2": {
+        "midpoint": 371.1021525146405,
+        "width": 344.59447188385263,
+        "direction": 95.53087437315617
+      },
+      "shoulder_rmse_px": 28.48205573289345,
+      "midpoint_residual_xy_px": [
+        0.548333385800504,
+        19.256206350490146
+      ],
+      "width_ratio": 0.6575195738983605,
+      "line_error_deg": 12.767937439502127,
+      "mp_visibility_min": 0.9995520710945129
+    },
+    {
+      "case": "distributed_twist",
+      "source_frame": 18,
+      "pts_s": 0.68,
+      "terms_px2": {
+        "midpoint": 344.89541205708395,
+        "width": 237.34408689151522,
+        "direction": 92.38753128969984
+      },
+      "shoulder_rmse_px": 25.973583315328263,
+      "midpoint_residual_xy_px": [
+        0.46189259123718784,
+        18.5656151875246
+      ],
+      "width_ratio": 0.7063314165948805,
+      "line_error_deg": 12.515757368753249,
+      "mp_visibility_min": 0.9995953440666199
+    },
+    {
+      "case": "distributed_twist",
+      "source_frame": 19,
+      "pts_s": 0.72,
+      "terms_px2": {
+        "midpoint": 148.18079005931276,
+        "width": 354.9379889534781,
+        "direction": 202.69827779491015
+      },
+      "shoulder_rmse_px": 26.56721770919382,
+      "midpoint_residual_xy_px": [
+        -0.47726432662341267,
+        12.163593581744067
+      ],
+      "width_ratio": 0.6527708608860903,
+      "line_error_deg": 18.691090990518443,
+      "mp_visibility_min": 0.9996340274810791
+    },
+    {
+      "case": "distributed_twist",
+      "source_frame": 20,
+      "pts_s": 0.76,
+      "terms_px2": {
+        "midpoint": 234.925206227758,
+        "width": 417.76533543382914,
+        "direction": 172.1687459337295
+      },
+      "shoulder_rmse_px": 28.720363639677643,
+      "midpoint_residual_xy_px": [
+        2.7595350172498456,
+        15.076809102602908
+      ],
+      "width_ratio": 0.6302597244210556,
+      "line_error_deg": 17.194976450021922,
+      "mp_visibility_min": 0.9996640682220459
+    },
+    {
+      "case": "distributed_twist",
+      "source_frame": 21,
+      "pts_s": 0.8,
+      "terms_px2": {
+        "midpoint": 505.7106434930822,
+        "width": 473.2799669392508,
+        "direction": 114.14876918786013
+      },
+      "shoulder_rmse_px": 33.06265838707156,
+      "midpoint_residual_xy_px": [
+        6.334023782787881,
+        21.577552831870435
+      ],
+      "width_ratio": 0.6123089121370123,
+      "line_error_deg": 13.975807729000003,
+      "mp_visibility_min": 0.9996729493141174
+    },
+    {
+      "case": "distributed_twist",
+      "source_frame": 22,
+      "pts_s": 0.84,
+      "terms_px2": {
+        "midpoint": 1077.7056746371743,
+        "width": 3.191588580018165,
+        "direction": 89.92991143474592
+      },
+      "shoulder_rmse_px": 34.217351952656095,
+      "midpoint_residual_xy_px": [
+        -5.803841514363569,
+        -32.31131532935984
+      ],
+      "width_ratio": 0.9702513357542143,
+      "line_error_deg": 9.195233922349766,
+      "mp_visibility_min": 0.9996302723884583
+    },
+    {
+      "case": "distributed_twist",
+      "source_frame": 23,
+      "pts_s": 0.88,
+      "terms_px2": {
+        "midpoint": 32.700272228107295,
+        "width": 215.5695253868783,
+        "direction": 77.49097282123057
+      },
+      "shoulder_rmse_px": 18.04884401938854,
+      "midpoint_residual_xy_px": [
+        5.703527895185061,
+        0.41236122144687215
+      ],
+      "width_ratio": 0.7712421877477899,
+      "line_error_deg": 8.957305917207188,
+      "mp_visibility_min": 0.9996450543403625
+    },
+    {
+      "case": "distributed_twist",
+      "source_frame": 24,
+      "pts_s": 0.92,
+      "terms_px2": {
+        "midpoint": 47.6701764598589,
+        "width": 263.6941657121583,
+        "direction": 5.673641871858308
+      },
+      "shoulder_rmse_px": 17.80556048103729,
+      "midpoint_residual_xy_px": [
+        -3.674492629771919,
+        5.845364006938382
+      ],
+      "width_ratio": 0.7488592959910042,
+      "line_error_deg": 2.4392320828920377,
+      "mp_visibility_min": 0.9996200203895569
+    }
+  ],
+  "temporal": [
+    {
+      "case": "hip_axis",
+      "frames": [
+        6,
+        7
+      ],
+      "dt_s": 0.03999999999999998,
+      "shoulder_midpoint_speed_model_units_s": 0.7542979540058175,
+      "projected_midpoint_speed_px_s": 674.1232788327987,
+      "source_midpoint_speed_px_s": 111.54049257048042,
+      "midpoint_velocity_residual_px_s": 662.2183349894487,
+      "pose_step_at_previous_translation_px": [
+        7.527451484867697,
+        2.51472120590131
+      ],
+      "translation_step_at_current_pose_px": [
+        7.102010394998956,
+        20.136688401634842
+      ],
+      "translation_delta_model_units": [
+        0.04822860824330586,
+        -0.0020983126270502778,
+        0.7324031013160632
+      ]
+    },
+    {
+      "case": "hip_axis",
+      "frames": [
+        7,
+        8
+      ],
+      "dt_s": 0.040000000000000036,
+      "shoulder_midpoint_speed_model_units_s": 0.12425158652499908,
+      "projected_midpoint_speed_px_s": 330.7447832546737,
+      "source_midpoint_speed_px_s": 658.6111806406645,
+      "midpoint_velocity_residual_px_s": 459.0567402431568,
+      "pose_step_at_previous_translation_px": [
+        0.45430776641603643,
+        -0.13402248576124975
+      ],
+      "translation_step_at_current_pose_px": [
+        -5.329134840883341,
+        12.432942748708342
+      ],
+      "translation_delta_model_units": [
+        -0.014516437640102704,
+        0.032539139621970706,
+        0.21094028106999074
+      ]
+    },
+    {
+      "case": "hip_axis",
+      "frames": [
+        8,
+        9
+      ],
+      "dt_s": 0.03999999999999998,
+      "shoulder_midpoint_speed_model_units_s": 0.6590711349502231,
+      "projected_midpoint_speed_px_s": 425.54442667298537,
+      "source_midpoint_speed_px_s": 1011.4896031402819,
+      "midpoint_velocity_residual_px_s": 804.2680522700947,
+      "pose_step_at_previous_translation_px": [
+        -2.7334323112925745,
+        -1.4394583093914264
+      ],
+      "translation_step_at_current_pose_px": [
+        -3.7062113770257383,
+        17.196104008378427
+      ],
+      "translation_delta_model_units": [
+        -0.012103102877310578,
+        0.06270219569623547,
+        0.13456244708170928
+      ]
+    },
+    {
+      "case": "hip_axis",
+      "frames": [
+        9,
+        10
+      ],
+      "dt_s": 0.03999999999999998,
+      "shoulder_midpoint_speed_model_units_s": 1.3904828556327082,
+      "projected_midpoint_speed_px_s": 536.4240839948789,
+      "source_midpoint_speed_px_s": 863.7915883076757,
+      "midpoint_velocity_residual_px_s": 408.706086364487,
+      "pose_step_at_previous_translation_px": [
+        -11.851877748855259,
+        -2.019838265789673
+      ],
+      "translation_step_at_current_pose_px": [
+        -9.554728852010612,
+        0.5506648725657897
+      ],
+      "translation_delta_model_units": [
+        -0.04088994312722818,
+        0.024306224000666038,
+        -0.35645922069411284
+      ]
+    },
+    {
+      "case": "hip_axis",
+      "frames": [
+        10,
+        11
+      ],
+      "dt_s": 0.040000000000000036,
+      "shoulder_midpoint_speed_model_units_s": 0.4893447898042298,
+      "projected_midpoint_speed_px_s": 600.9109557944472,
+      "source_midpoint_speed_px_s": 495.9978921965042,
+      "midpoint_velocity_residual_px_s": 587.039585360341,
+      "pose_step_at_previous_translation_px": [
+        -4.672227704013665,
+        -0.36011405832198307
+      ],
+      "translation_step_at_current_pose_px": [
+        7.4500042845831445,
+        24.235505576337232
+      ],
+      "translation_delta_model_units": [
+        0.030607700777591906,
+        0.07712787935054186,
+        0.4465984964657048
+      ]
+    },
+    {
+      "case": "hip_axis",
+      "frames": [
+        11,
+        12
+      ],
+      "dt_s": 0.03999999999999998,
+      "shoulder_midpoint_speed_model_units_s": 1.0397147994494715,
+      "projected_midpoint_speed_px_s": 606.1555274812156,
+      "source_midpoint_speed_px_s": 280.89619308313274,
+      "midpoint_velocity_residual_px_s": 460.34247217737544,
+      "pose_step_at_previous_translation_px": [
+        -9.321315025596732,
+        0.02611097892790326
+      ],
+      "translation_step_at_current_pose_px": [
+        13.382027595877162,
+        23.877651298488075
+      ],
+      "translation_delta_model_units": [
+        0.06409393514039745,
+        0.09453883022246323,
+        0.7273909137863619
+      ]
+    },
+    {
+      "case": "hip_axis",
+      "frames": [
+        12,
+        13
+      ],
+      "dt_s": 0.03999999999999998,
+      "shoulder_midpoint_speed_model_units_s": 2.974113106789113,
+      "projected_midpoint_speed_px_s": 198.88123267961015,
+      "source_midpoint_speed_px_s": 93.28771806446133,
+      "midpoint_velocity_residual_px_s": 105.61644567542,
+      "pose_step_at_previous_translation_px": [
+        -22.95628881341321,
+        4.08742916173162
+      ],
+      "translation_step_at_current_pose_px": [
+        15.152644859194538,
+        -5.633111074430445
+      ],
+      "translation_delta_model_units": [
+        0.07671171050861951,
+        -0.026700197504523626,
+        -0.13881476106821644
+      ]
+    },
+    {
+      "case": "hip_axis",
+      "frames": [
+        13,
+        14
+      ],
+      "dt_s": 0.040000000000000036,
+      "shoulder_midpoint_speed_model_units_s": 0.9027375854132805,
+      "projected_midpoint_speed_px_s": 267.63283916636317,
+      "source_midpoint_speed_px_s": 50.50341336213364,
+      "midpoint_velocity_residual_px_s": 225.8866169177972,
+      "pose_step_at_previous_translation_px": [
+        -6.481507911196047,
+        2.2912205576974145
+      ],
+      "translation_step_at_current_pose_px": [
+        9.585206099376421,
+        -12.536746220984952
+      ],
+      "translation_delta_model_units": [
+        0.04613858197652432,
+        -0.054959159186283524,
+        -0.28724607496246524
+      ]
+    },
+    {
+      "case": "hip_axis",
+      "frames": [
+        14,
+        15
+      ],
+      "dt_s": 0.040000000000000036,
+      "shoulder_midpoint_speed_model_units_s": 0.17492249672285898,
+      "projected_midpoint_speed_px_s": 209.4029947734337,
+      "source_midpoint_speed_px_s": 98.41146576507211,
+      "midpoint_velocity_residual_px_s": 146.7363556362388,
+      "pose_step_at_previous_translation_px": [
+        -0.40210804850278237,
+        0.21122041750109588
+      ],
+      "translation_step_at_current_pose_px": [
+        8.30208658660473,
+        2.572611806190025
+      ],
+      "translation_delta_model_units": [
+        0.039802005353788555,
+        0.00979249191189463,
+        0.10150461575393344
+      ]
+    },
+    {
+      "case": "hip_axis",
+      "frames": [
+        15,
+        16
+      ],
+      "dt_s": 0.039999999999999925,
+      "shoulder_midpoint_speed_model_units_s": 0.3477379168422867,
+      "projected_midpoint_speed_px_s": 135.84997132640146,
+      "source_midpoint_speed_px_s": 33.11023190163556,
+      "midpoint_velocity_residual_px_s": 142.21762514389482,
+      "pose_step_at_previous_translation_px": [
+        -2.6404671254181267,
+        1.112540223504766
+      ],
+      "translation_step_at_current_pose_px": [
+        2.559103439405021,
+        -6.54592991002761
+      ],
+      "translation_delta_model_units": [
+        0.009294594758074703,
+        -0.024847838586795457,
+        -0.2327261035728201
+      ]
+    },
+    {
+      "case": "hip_axis",
+      "frames": [
+        16,
+        17
+      ],
+      "dt_s": 0.040000000000000036,
+      "shoulder_midpoint_speed_model_units_s": 0.07317770903371767,
+      "projected_midpoint_speed_px_s": 148.15568963384104,
+      "source_midpoint_speed_px_s": 126.07648106663272,
+      "midpoint_velocity_residual_px_s": 42.850374607467685,
+      "pose_step_at_previous_translation_px": [
+        -0.39589754707554903,
+        0.19517581784646154
+      ],
+      "translation_step_at_current_pose_px": [
+        -0.8747903076479133,
+        -5.983571603318012
+      ],
+      "translation_delta_model_units": [
+        -0.004951627657746205,
+        -0.023988323674111522,
+        -0.09126329601198613
+      ]
+    },
+    {
+      "case": "hip_axis",
+      "frames": [
+        17,
+        18
+      ],
+      "dt_s": 0.040000000000000036,
+      "shoulder_midpoint_speed_model_units_s": 0.22436926561400794,
+      "projected_midpoint_speed_px_s": 172.1229335349362,
+      "source_midpoint_speed_px_s": 103.95445598314348,
+      "midpoint_velocity_residual_px_s": 79.56912078135322,
+      "pose_step_at_previous_translation_px": [
+        -1.8463084968097405,
+        0.8338878590640775
+      ],
+      "translation_step_at_current_pose_px": [
+        -1.0320394581251549,
+        -7.088262316049963
+      ],
+      "translation_delta_model_units": [
+        -0.005453346606419995,
+        -0.026909627519448975,
+        -0.1115162008577073
+      ]
+    },
+    {
+      "case": "hip_axis",
+      "frames": [
+        18,
+        19
+      ],
+      "dt_s": 0.039999999999999925,
+      "shoulder_midpoint_speed_model_units_s": 0.202586028096931,
+      "projected_midpoint_speed_px_s": 168.78940317884113,
+      "source_midpoint_speed_px_s": 99.67226383181243,
+      "midpoint_velocity_residual_px_s": 69.19154350500763,
+      "pose_step_at_previous_translation_px": [
+        1.5718805448890407,
+        -0.7495894480506138
+      ],
+      "translation_step_at_current_pose_px": [
+        -0.9367727524779639,
+        -5.972048618133073
+      ],
+      "translation_delta_model_units": [
+        -0.0036024842703871462,
+        -0.027935566821869068,
+        0.04888836460210921
+      ]
+    },
+    {
+      "case": "hip_axis",
+      "frames": [
+        19,
+        20
+      ],
+      "dt_s": 0.040000000000000036,
+      "shoulder_midpoint_speed_model_units_s": 0.028841999777369277,
+      "projected_midpoint_speed_px_s": 66.78870273310014,
+      "source_midpoint_speed_px_s": 63.71351020312335,
+      "midpoint_velocity_residual_px_s": 125.80879484856887,
+      "pose_step_at_previous_translation_px": [
+        0.22588094182816576,
+        -0.09053084030040282
+      ],
+      "translation_step_at_current_pose_px": [
+        2.342528007492376,
+        0.8256803281481666
+      ],
+      "translation_delta_model_units": [
+        0.011295792479687011,
+        -0.0008705979906344918,
+        0.09770735405215891
+      ]
+    },
+    {
+      "case": "hip_axis",
+      "frames": [
+        20,
+        21
+      ],
+      "dt_s": 0.040000000000000036,
+      "shoulder_midpoint_speed_model_units_s": 0.03748657066322642,
+      "projected_midpoint_speed_px_s": 142.99049472003392,
+      "source_midpoint_speed_px_s": 180.1348913800061,
+      "midpoint_velocity_residual_px_s": 208.6012868993932,
+      "pose_step_at_previous_translation_px": [
+        -0.1251736003989663,
+        0.033126950268353994
+      ],
+      "translation_step_at_current_pose_px": [
+        -0.8059325052921054,
+        5.610195825224196
+      ],
+      "translation_delta_model_units": [
+        -0.003111489362068315,
+        0.023138702056517385,
+        0.04584456283604066
+      ]
+    },
+    {
+      "case": "hip_axis",
+      "frames": [
+        21,
+        22
+      ],
+      "dt_s": 0.039999999999999925,
+      "shoulder_midpoint_speed_model_units_s": 0.264827161502169,
+      "projected_midpoint_speed_px_s": 1397.641678571225,
+      "source_midpoint_speed_px_s": 488.0008376857399,
+      "midpoint_velocity_residual_px_s": 1460.6427272373294,
+      "pose_step_at_previous_translation_px": [
+        -2.1556245812558927,
+        0.9632109729924423
+      ],
+      "translation_step_at_current_pose_px": [
+        -23.49303968115032,
+        -50.6380500793386
+      ],
+      "translation_delta_model_units": [
+        -0.07924908416715168,
+        -0.07974927388114808,
+        -1.6161853096984369
+      ]
+    },
+    {
+      "case": "hip_axis",
+      "frames": [
+        22,
+        23
+      ],
+      "dt_s": 0.040000000000000036,
+      "shoulder_midpoint_speed_model_units_s": 1.5480337605820182,
+      "projected_midpoint_speed_px_s": 1003.8471362246273,
+      "source_midpoint_speed_px_s": 522.0967804389417,
+      "midpoint_velocity_residual_px_s": 763.628461964968,
+      "pose_step_at_previous_translation_px": [
+        -19.361283978434074,
+        10.580113652101858
+      ],
+      "translation_step_at_current_pose_px": [
+        7.193638983679762,
+        27.685836380947734
+      ],
+      "translation_delta_model_units": [
+        0.00705480855997237,
+        0.054386389195376944,
+        0.45459088428532635
+      ]
+    },
+    {
+      "case": "hip_axis",
+      "frames": [
+        23,
+        24
+      ],
+      "dt_s": 0.040000000000000036,
+      "shoulder_midpoint_speed_model_units_s": 1.9915834501510363,
+      "projected_midpoint_speed_px_s": 438.97023671714686,
+      "source_midpoint_speed_px_s": 170.59192622055684,
+      "midpoint_velocity_residual_px_s": 404.4054918879555,
+      "pose_step_at_previous_translation_px": [
+        -19.45377198639568,
+        14.531430627719885
+      ],
+      "translation_step_at_current_pose_px": [
+        6.778224712082761,
+        -2.3806162001075677
+      ],
+      "translation_delta_model_units": [
+        0.020857057376536703,
+        -0.00905878374255556,
+        0.03220113172585881
+      ]
+    },
+    {
+      "case": "hip_axis_chest",
+      "frames": [
+        6,
+        7
+      ],
+      "dt_s": 0.03999999999999998,
+      "shoulder_midpoint_speed_model_units_s": 0.3968387445793629,
+      "projected_midpoint_speed_px_s": 515.6095935709576,
+      "source_midpoint_speed_px_s": 111.54049257048042,
+      "midpoint_velocity_residual_px_s": 464.61483488357413,
+      "pose_step_at_previous_translation_px": [
+        3.1643881130660247,
+        0.6992572170509277
+      ],
+      "translation_step_at_current_pose_px": [
+        0.7187722947758175,
+        19.556267215034865
+      ],
+      "translation_delta_model_units": [
+        0.04822860799106987,
+        -0.0020983168027702143,
+        0.7324030686257887
+      ]
+    },
+    {
+      "case": "hip_axis_chest",
+      "frames": [
+        7,
+        8
+      ],
+      "dt_s": 0.040000000000000036,
+      "shoulder_midpoint_speed_model_units_s": 0.47681394684524625,
+      "projected_midpoint_speed_px_s": 354.2983052458073,
+      "source_midpoint_speed_px_s": 658.6111806406645,
+      "midpoint_velocity_residual_px_s": 341.58813321199125,
+      "pose_step_at_previous_translation_px": [
+        -3.101087244044038,
+        -2.2242021390563593
+      ],
+      "translation_step_at_current_pose_px": [
+        -6.637107380810448,
+        12.520377545902193
+      ],
+      "translation_delta_model_units": [
+        -0.014516437485998793,
+        0.0325391404576731,
+        0.21094028790667485
+      ]
+    },
+    {
+      "case": "hip_axis_chest",
+      "frames": [
+        8,
+        9
+      ],
+      "dt_s": 0.03999999999999998,
+      "shoulder_midpoint_speed_model_units_s": 1.5934321904474555,
+      "projected_midpoint_speed_px_s": 480.7336113903583,
+      "source_midpoint_speed_px_s": 1011.4896031402819,
+      "midpoint_velocity_residual_px_s": 628.6258666019435,
+      "pose_step_at_previous_translation_px": [
+        -9.046621340258298,
+        -3.714137104277711
+      ],
+      "translation_step_at_current_pose_px": [
+        -4.29366338018076,
+        17.563486972422623
+      ],
+      "translation_delta_model_units": [
+        -0.012103102877310578,
+        0.06270219569623547,
+        0.13456244708170928
+      ]
+    },
+    {
+      "case": "hip_axis_chest",
+      "frames": [
+        9,
+        10
+      ],
+      "dt_s": 0.03999999999999998,
+      "shoulder_midpoint_speed_model_units_s": 2.1660215036599038,
+      "projected_midpoint_speed_px_s": 613.421134835128,
+      "source_midpoint_speed_px_s": 863.7915883076757,
+      "midpoint_velocity_residual_px_s": 332.0486310681558,
+      "pose_step_at_previous_translation_px": [
+        -15.744397395722558,
+        -0.8730836853438007
+      ],
+      "translation_step_at_current_pose_px": [
+        -8.791689276037403,
+        0.6801259289596828
+      ],
+      "translation_delta_model_units": [
+        -0.04088994312722818,
+        0.024306224000666038,
+        -0.35645922069411284
+      ]
+    },
+    {
+      "case": "hip_axis_chest",
+      "frames": [
+        10,
+        11
+      ],
+      "dt_s": 0.040000000000000036,
+      "shoulder_midpoint_speed_model_units_s": 0.9324428937157944,
+      "projected_midpoint_speed_px_s": 549.7661239037782,
+      "source_midpoint_speed_px_s": 495.9978921965042,
+      "midpoint_velocity_residual_px_s": 458.888927865811,
+      "pose_step_at_previous_translation_px": [
+        -8.93491537402025,
+        -3.107783876076212
+      ],
+      "translation_step_at_current_pose_px": [
+        6.829626305116449,
+        24.99742123085781
+      ],
+      "translation_delta_model_units": [
+        0.030607700777591906,
+        0.07712787935054186,
+        0.4465984964657048
+      ]
+    },
+    {
+      "case": "hip_axis_chest",
+      "frames": [
+        11,
+        12
+      ],
+      "dt_s": 0.03999999999999998,
+      "shoulder_midpoint_speed_model_units_s": 1.5612664411884907,
+      "projected_midpoint_speed_px_s": 575.9542090107263,
+      "source_midpoint_speed_px_s": 280.89619308313274,
+      "midpoint_velocity_residual_px_s": 381.4823847867291,
+      "pose_step_at_previous_translation_px": [
+        -14.057341562615477,
+        -1.6094706071090172
+      ],
+      "translation_step_at_current_pose_px": [
+        13.30465634145503,
+        24.635340109938227
+      ],
+      "translation_delta_model_units": [
+        0.06409393514039745,
+        0.09453883022246323,
+        0.7273909137863619
+      ]
+    },
+    {
+      "case": "hip_axis_chest",
+      "frames": [
+        12,
+        13
+      ],
+      "dt_s": 0.03999999999999998,
+      "shoulder_midpoint_speed_model_units_s": 2.8982614161232605,
+      "projected_midpoint_speed_px_s": 123.11091666548442,
+      "source_midpoint_speed_px_s": 93.28771806446133,
+      "midpoint_velocity_residual_px_s": 39.16793870274225,
+      "pose_step_at_previous_translation_px": [
+        -20.57937228338602,
+        5.898146427430049
+      ],
+      "translation_step_at_current_pose_px": [
+        15.656573147825952,
+        -5.771161568197243
+      ],
+      "translation_delta_model_units": [
+        0.07671171050861951,
+        -0.026700197504523626,
+        -0.13881476106821644
+      ]
+    },
+    {
+      "case": "hip_axis_chest",
+      "frames": [
+        13,
+        14
+      ],
+      "dt_s": 0.040000000000000036,
+      "shoulder_midpoint_speed_model_units_s": 1.0220574300599379,
+      "projected_midpoint_speed_px_s": 282.5777769996407,
+      "source_midpoint_speed_px_s": 50.50341336213364,
+      "midpoint_velocity_residual_px_s": 243.90926542739695,
+      "pose_step_at_previous_translation_px": [
+        -7.841166863199021,
+        1.8176622435426282
+      ],
+      "translation_step_at_current_pose_px": [
+        10.05819476528228,
+        -12.90121345097964
+      ],
+      "translation_delta_model_units": [
+        0.04613858197652432,
+        -0.054959159186283524,
+        -0.28724607496246524
+      ]
+    },
+    {
+      "case": "hip_axis_chest",
+      "frames": [
+        14,
+        15
+      ],
+      "dt_s": 0.040000000000000036,
+      "shoulder_midpoint_speed_model_units_s": 0.3993908776088318,
+      "projected_midpoint_speed_px_s": 176.81450450066845,
+      "source_midpoint_speed_px_s": 98.41146576507211,
+      "midpoint_velocity_residual_px_s": 117.50117003439675,
+      "pose_step_at_previous_translation_px": [
+        -1.7623255808831573,
+        -0.35325724189351604
+      ],
+      "translation_step_at_current_pose_px": [
+        8.445591149652614,
+        2.667420533497591
+      ],
+      "translation_delta_model_units": [
+        0.039802005353788555,
+        0.00979249191189463,
+        0.10150461575393344
+      ]
+    },
+    {
+      "case": "hip_axis_chest",
+      "frames": [
+        15,
+        16
+      ],
+      "dt_s": 0.039999999999999925,
+      "shoulder_midpoint_speed_model_units_s": 0.3127594784526873,
+      "projected_midpoint_speed_px_s": 141.73737701428908,
+      "source_midpoint_speed_px_s": 33.11023190163556,
+      "midpoint_velocity_residual_px_s": 145.51132915327545,
+      "pose_step_at_previous_translation_px": [
+        -2.432587308529037,
+        1.1300962887904689
+      ],
+      "translation_step_at_current_pose_px": [
+        2.7802490325061626,
+        -6.788921767130148
+      ],
+      "translation_delta_model_units": [
+        0.009294594758074703,
+        -0.024847838586795457,
+        -0.2327261035728201
+      ]
+    },
+    {
+      "case": "hip_axis_chest",
+      "frames": [
+        16,
+        17
+      ],
+      "dt_s": 0.040000000000000036,
+      "shoulder_midpoint_speed_model_units_s": 0.18315281565490343,
+      "projected_midpoint_speed_px_s": 164.15696187140824,
+      "source_midpoint_speed_px_s": 126.07648106663272,
+      "midpoint_velocity_residual_px_s": 55.263584700085126,
+      "pose_step_at_previous_translation_px": [
+        -0.6351589225436101,
+        -0.22045634059367103
+      ],
+      "translation_step_at_current_pose_px": [
+        -0.8353788525751042,
+        -6.179038300494085
+      ],
+      "translation_delta_model_units": [
+        -0.004951627657746205,
+        -0.023988323674111522,
+        -0.09126329601198613
+      ]
+    },
+    {
+      "case": "hip_axis_chest",
+      "frames": [
+        17,
+        18
+      ],
+      "dt_s": 0.040000000000000036,
+      "shoulder_midpoint_speed_model_units_s": 0.4688195316342928,
+      "projected_midpoint_speed_px_s": 145.36886849845123,
+      "source_midpoint_speed_px_s": 103.95445598314348,
+      "midpoint_velocity_residual_px_s": 50.68985466558605,
+      "pose_step_at_previous_translation_px": [
+        -1.8095255637604168,
+        2.2209878038889315
+      ],
+      "translation_step_at_current_pose_px": [
+        -0.983375812766667,
+        -7.321093154430713
+      ],
+      "translation_delta_model_units": [
+        -0.005453346606419995,
+        -0.026909627519448975,
+        -0.1115162008577073
+      ]
+    },
+    {
+      "case": "hip_axis_chest",
+      "frames": [
+        18,
+        19
+      ],
+      "dt_s": 0.039999999999999925,
+      "shoulder_midpoint_speed_model_units_s": 0.5400727206029053,
+      "projected_midpoint_speed_px_s": 211.48211674990506,
+      "source_midpoint_speed_px_s": 99.67226383181243,
+      "midpoint_velocity_residual_px_s": 114.67123836325838,
+      "pose_step_at_previous_translation_px": [
+        0.5027534490060361,
+        -2.3620447069069144
+      ],
+      "translation_step_at_current_pose_px": [
+        -0.981502916358636,
+        -6.083681790887226
+      ],
+      "translation_delta_model_units": [
+        -0.0036024842703871462,
+        -0.027935566821869068,
+        0.04888836460210921
+      ]
+    },
+    {
+      "case": "hip_axis_chest",
+      "frames": [
+        19,
+        20
+      ],
+      "dt_s": 0.040000000000000036,
+      "shoulder_midpoint_speed_model_units_s": 0.022526797355650927,
+      "projected_midpoint_speed_px_s": 60.38856941305486,
+      "source_midpoint_speed_px_s": 63.71351020312335,
+      "midpoint_velocity_residual_px_s": 121.1882912657989,
+      "pose_step_at_previous_translation_px": [
+        -0.12206042968409747,
+        -0.0058354806516263125
+      ],
+      "translation_step_at_current_pose_px": [
+        2.363014201092369,
+        0.9074856897791221
+      ],
+      "translation_delta_model_units": [
+        0.011295792479687011,
+        -0.0008705979906344918,
+        0.09770735405215891
+      ]
+    },
+    {
+      "case": "hip_axis_chest",
+      "frames": [
+        20,
+        21
+      ],
+      "dt_s": 0.040000000000000036,
+      "shoulder_midpoint_speed_model_units_s": 0.16375730933412325,
+      "projected_midpoint_speed_px_s": 164.77346720814828,
+      "source_midpoint_speed_px_s": 180.1348913800061,
+      "midpoint_velocity_residual_px_s": 194.87611635548743,
+      "pose_step_at_previous_translation_px": [
+        -1.4539300207992483,
+        0.4223298679570746
+      ],
+      "translation_step_at_current_pose_px": [
+        -0.8260247627646322,
+        5.7617043313480565
+      ],
+      "translation_delta_model_units": [
+        -0.0031114890715326082,
+        0.02313870259301007,
+        0.04584456714719831
+      ]
+    },
+    {
+      "case": "hip_axis_chest",
+      "frames": [
+        21,
+        22
+      ],
+      "dt_s": 0.039999999999999925,
+      "shoulder_midpoint_speed_model_units_s": 0.7588059607545623,
+      "projected_midpoint_speed_px_s": 1415.35534228669,
+      "source_midpoint_speed_px_s": 488.0008376857399,
+      "midpoint_velocity_residual_px_s": 1461.5144399159508,
+      "pose_step_at_previous_translation_px": [
+        -2.7857647536171726,
+        3.3532645995362884
+      ],
+      "translation_step_at_current_pose_px": [
+        -24.870914727956063,
+        -52.75242726406606
+      ],
+      "translation_delta_model_units": [
+        -0.07924908417393206,
+        -0.07974927398916667,
+        -1.6161853105184933
+      ]
+    },
+    {
+      "case": "hip_axis_chest",
+      "frames": [
+        22,
+        23
+      ],
+      "dt_s": 0.040000000000000036,
+      "shoulder_midpoint_speed_model_units_s": 1.3923206845800558,
+      "projected_midpoint_speed_px_s": 1037.1211148270754,
+      "source_midpoint_speed_px_s": 522.0967804389417,
+      "midpoint_velocity_residual_px_s": 831.0506561366748,
+      "pose_step_at_previous_translation_px": [
+        -16.994423918327186,
+        11.362783932025849
+      ],
+      "translation_step_at_current_pose_px": [
+        7.4254941267246295,
+        29.003388955128486
+      ],
+      "translation_delta_model_units": [
+        0.007054808483245717,
+        0.054386389016856995,
+        0.4545908830127563
+      ]
+    },
+    {
+      "case": "hip_axis_chest",
+      "frames": [
+        23,
+        24
+      ],
+      "dt_s": 0.040000000000000036,
+      "shoulder_midpoint_speed_model_units_s": 1.7433787622612755,
+      "projected_midpoint_speed_px_s": 380.00158932190567,
+      "source_midpoint_speed_px_s": 170.59192622055684,
+      "midpoint_velocity_residual_px_s": 330.217528136313,
+      "pose_step_at_previous_translation_px": [
+        -16.661071954637237,
+        14.249551310934407
+      ],
+      "translation_step_at_current_pose_px": [
+        7.036409270719844,
+        -2.484866834065201
+      ],
+      "translation_delta_model_units": [
+        0.020857055533903934,
+        -0.009058785499820227,
+        0.032201113812753146
+      ]
+    },
+    {
+      "case": "distributed_swing",
+      "frames": [
+        6,
+        7
+      ],
+      "dt_s": 0.03999999999999998,
+      "shoulder_midpoint_speed_model_units_s": 0.21170818104509903,
+      "projected_midpoint_speed_px_s": 433.70807722268654,
+      "source_midpoint_speed_px_s": 111.54049257048042,
+      "midpoint_velocity_residual_px_s": 340.2698684694095,
+      "pose_step_at_previous_translation_px": [
+        -1.4515357817206223,
+        -1.5154279588794282
+      ],
+      "translation_step_at_current_pose_px": [
+        -3.750060454204686,
+        18.065585377935207
+      ],
+      "translation_delta_model_units": [
+        0.04822860828603545,
+        -0.002098318268885277,
+        0.732403058237177
+      ]
+    },
+    {
+      "case": "distributed_swing",
+      "frames": [
+        7,
+        8
+      ],
+      "dt_s": 0.040000000000000036,
+      "shoulder_midpoint_speed_model_units_s": 0.8405385935557034,
+      "projected_midpoint_speed_px_s": 401.24270207386695,
+      "source_midpoint_speed_px_s": 658.6111806406645,
+      "midpoint_velocity_residual_px_s": 258.49143383142905,
+      "pose_step_at_previous_translation_px": [
+        -6.275369816690045,
+        -4.158741060423523
+      ],
+      "translation_step_at_current_pose_px": [
+        -7.511559123721781,
+        12.37541434954096
+      ],
+      "translation_delta_model_units": [
+        -0.014516437631927927,
+        0.032539139090566285,
+        0.21094027628271128
+      ]
+    },
+    {
+      "case": "distributed_swing",
+      "frames": [
+        8,
+        9
+      ],
+      "dt_s": 0.03999999999999998,
+      "shoulder_midpoint_speed_model_units_s": 2.244020963066572,
+      "projected_midpoint_speed_px_s": 550.7742459864228,
+      "source_midpoint_speed_px_s": 1011.4896031402819,
+      "midpoint_velocity_residual_px_s": 504.98720641840004,
+      "pose_step_at_previous_translation_px": [
+        -13.579557459591797,
+        -5.37155404621933
+      ],
+      "translation_step_at_current_pose_px": [
+        -4.675872077920189,
+        17.70455548414978
+      ],
+      "translation_delta_model_units": [
+        -0.012103103133491026,
+        0.06270219488271017,
+        0.13456244086643654
+      ]
+    },
+    {
+      "case": "distributed_swing",
+      "frames": [
+        9,
+        10
+      ],
+      "dt_s": 0.03999999999999998,
+      "shoulder_midpoint_speed_model_units_s": 2.8591500373916063,
+      "projected_midpoint_speed_px_s": 661.5086197591502,
+      "source_midpoint_speed_px_s": 863.7915883076757,
+      "midpoint_velocity_residual_px_s": 265.57725685232197,
+      "pose_step_at_previous_translation_px": [
+        -18.0798405481313,
+        0.5352458352550968
+      ],
+      "translation_step_at_current_pose_px": [
+        -8.32504723087527,
+        1.1769889042354293
+      ],
+      "translation_delta_model_units": [
+        -0.04088994312722818,
+        0.024306224000666038,
+        -0.35645922069411284
+      ]
+    },
+    {
+      "case": "distributed_swing",
+      "frames": [
+        10,
+        11
+      ],
+      "dt_s": 0.040000000000000036,
+      "shoulder_midpoint_speed_model_units_s": 1.4382500581015971,
+      "projected_midpoint_speed_px_s": 510.22906465166955,
+      "source_midpoint_speed_px_s": 495.9978921965042,
+      "midpoint_velocity_residual_px_s": 350.55759516766733,
+      "pose_step_at_previous_translation_px": [
+        -12.312414242140107,
+        -5.537218987000216
+      ],
+      "translation_step_at_current_pose_px": [
+        6.518985498277175,
+        25.10684087538354
+      ],
+      "translation_delta_model_units": [
+        0.030607700777591906,
+        0.07712787935054186,
+        0.4465984964657048
+      ]
+    },
+    {
+      "case": "distributed_swing",
+      "frames": [
+        11,
+        12
+      ],
+      "dt_s": 0.03999999999999998,
+      "shoulder_midpoint_speed_model_units_s": 2.0878468014530123,
+      "projected_midpoint_speed_px_s": 542.1827803918862,
+      "source_midpoint_speed_px_s": 280.89619308313274,
+      "midpoint_velocity_residual_px_s": 316.94698650473816,
+      "pose_step_at_previous_translation_px": [
+        -17.25157745124261,
+        -3.3450162925152256
+      ],
+      "translation_step_at_current_pose_px": [
+        13.380898095250984,
+        24.684119110784366
+      ],
+      "translation_delta_model_units": [
+        0.06409393514039745,
+        0.09453883022246323,
+        0.7273909137863619
+      ]
+    },
+    {
+      "case": "distributed_swing",
+      "frames": [
+        12,
+        13
+      ],
+      "dt_s": 0.03999999999999998,
+      "shoulder_midpoint_speed_model_units_s": 3.043927866383277,
+      "projected_midpoint_speed_px_s": 56.2927350686691,
+      "source_midpoint_speed_px_s": 93.28771806446133,
+      "midpoint_velocity_residual_px_s": 108.23802008244957,
+      "pose_step_at_previous_translation_px": [
+        -16.574137780429623,
+        7.966695478808731
+      ],
+      "translation_step_at_current_pose_px": [
+        16.06836155922798,
+        -5.7725246448750624
+      ],
+      "translation_delta_model_units": [
+        0.07671171050861951,
+        -0.026700197504523626,
+        -0.13881476106821644
+      ]
+    },
+    {
+      "case": "distributed_swing",
+      "frames": [
+        13,
+        14
+      ],
+      "dt_s": 0.040000000000000036,
+      "shoulder_midpoint_speed_model_units_s": 1.022639373126601,
+      "projected_midpoint_speed_px_s": 304.1809523379318,
+      "source_midpoint_speed_px_s": 50.50341336213364,
+      "midpoint_velocity_residual_px_s": 265.1641885829029,
+      "pose_step_at_previous_translation_px": [
+        -8.097561830625807,
+        1.0545463938390753
+      ],
+      "translation_step_at_current_pose_px": [
+        10.552095372613792,
+        -12.971632779176474
+      ],
+      "translation_delta_model_units": [
+        0.04613858197652432,
+        -0.054959159186283524,
+        -0.28724607496246524
+      ]
+    },
+    {
+      "case": "distributed_swing",
+      "frames": [
+        14,
+        15
+      ],
+      "dt_s": 0.040000000000000036,
+      "shoulder_midpoint_speed_model_units_s": 0.5986869623433472,
+      "projected_midpoint_speed_px_s": 151.30282575176935,
+      "source_midpoint_speed_px_s": 98.41146576507211,
+      "midpoint_velocity_residual_px_s": 90.48088538920078,
+      "pose_step_at_previous_translation_px": [
+        -2.654853549264317,
+        -1.067978239760123
+      ],
+      "translation_step_at_current_pose_px": [
+        8.490693221874835,
+        2.6714268495813656
+      ],
+      "translation_delta_model_units": [
+        0.039802005353788555,
+        0.00979249191189463,
+        0.10150461575393344
+      ]
+    },
+    {
+      "case": "distributed_swing",
+      "frames": [
+        15,
+        16
+      ],
+      "dt_s": 0.039999999999999925,
+      "shoulder_midpoint_speed_model_units_s": 0.2685285263921912,
+      "projected_midpoint_speed_px_s": 147.27444261391037,
+      "source_midpoint_speed_px_s": 33.11023190163556,
+      "midpoint_velocity_residual_px_s": 146.92101159844546,
+      "pose_step_at_previous_translation_px": [
+        -2.0144254197356872,
+        1.0281438433527512
+      ],
+      "translation_step_at_current_pose_px": [
+        3.0890268056506898,
+        -6.820280769994781
+      ],
+      "translation_delta_model_units": [
+        0.009294594758074703,
+        -0.024847838586795457,
+        -0.2327261035728201
+      ]
+    },
+    {
+      "case": "distributed_swing",
+      "frames": [
+        16,
+        17
+      ],
+      "dt_s": 0.040000000000000036,
+      "shoulder_midpoint_speed_model_units_s": 0.2985895156776962,
+      "projected_midpoint_speed_px_s": 178.36035652305267,
+      "source_midpoint_speed_px_s": 126.07648106663272,
+      "midpoint_velocity_residual_px_s": 65.52861899805536,
+      "pose_step_at_previous_translation_px": [
+        -0.7500227915032838,
+        -0.7142938473126037
+      ],
+      "translation_step_at_current_pose_px": [
+        -0.7425529233647694,
+        -6.262244304366561
+      ],
+      "translation_delta_model_units": [
+        -0.004951627657746205,
+        -0.023988323674111522,
+        -0.09126329601198613
+      ]
+    },
+    {
+      "case": "distributed_swing",
+      "frames": [
+        17,
+        18
+      ],
+      "dt_s": 0.040000000000000036,
+      "shoulder_midpoint_speed_model_units_s": 0.8292457090102068,
+      "projected_midpoint_speed_px_s": 114.77471679194038,
+      "source_midpoint_speed_px_s": 103.95445598314348,
+      "midpoint_velocity_residual_px_s": 20.454302835220787,
+      "pose_step_at_previous_translation_px": [
+        -1.6551878280429264,
+        3.5734057819137774
+      ],
+      "translation_step_at_current_pose_px": [
+        -0.8617897562505163,
+        -7.412937110557493
+      ],
+      "translation_delta_model_units": [
+        -0.005453346606419995,
+        -0.026909627519448975,
+        -0.1115162008577073
+      ]
+    },
+    {
+      "case": "distributed_swing",
+      "frames": [
+        18,
+        19
+      ],
+      "dt_s": 0.039999999999999925,
+      "shoulder_midpoint_speed_model_units_s": 1.0960338772995462,
+      "projected_midpoint_speed_px_s": 255.3108743435884,
+      "source_midpoint_speed_px_s": 99.67226383181243,
+      "midpoint_velocity_residual_px_s": 162.77449818877946,
+      "pose_step_at_previous_translation_px": [
+        -0.7940720318302965,
+        -3.8547624744202267
+      ],
+      "translation_step_at_current_pose_px": [
+        -1.0442471002717753,
+        -6.190854025401336
+      ],
+      "translation_delta_model_units": [
+        -0.0036024842703871462,
+        -0.027935566821869068,
+        0.04888836460210921
+      ]
+    },
+    {
+      "case": "distributed_swing",
+      "frames": [
+        19,
+        20
+      ],
+      "dt_s": 0.040000000000000036,
+      "shoulder_midpoint_speed_model_units_s": 0.05134873523817757,
+      "projected_midpoint_speed_px_s": 53.245102517871125,
+      "source_midpoint_speed_px_s": 63.71351020312335,
+      "midpoint_velocity_residual_px_s": 115.32025435886575,
+      "pose_step_at_previous_translation_px": [
+        -0.4280477906748956,
+        0.08142948410892359
+      ],
+      "translation_step_at_current_pose_px": [
+        2.3167573037590614,
+        0.9028681754469403
+      ],
+      "translation_delta_model_units": [
+        0.011295792479687011,
+        -0.0008705979906344918,
+        0.09770735405215891
+      ]
+    },
+    {
+      "case": "distributed_swing",
+      "frames": [
+        20,
+        21
+      ],
+      "dt_s": 0.040000000000000036,
+      "shoulder_midpoint_speed_model_units_s": 0.3177502442712303,
+      "projected_midpoint_speed_px_s": 191.24638947034964,
+      "source_midpoint_speed_px_s": 180.1348913800061,
+      "midpoint_velocity_residual_px_s": 186.5208526780723,
+      "pose_step_at_previous_translation_px": [
+        -2.8085942154952477,
+        0.8777301756824727
+      ],
+      "translation_step_at_current_pose_px": [
+        -0.8615197979073628,
+        5.8342407349619805
+      ],
+      "translation_delta_model_units": [
+        -0.0031114872673964067,
+        0.023138705924462794,
+        0.0458445939181491
+      ]
+    },
+    {
+      "case": "distributed_swing",
+      "frames": [
+        21,
+        22
+      ],
+      "dt_s": 0.039999999999999925,
+      "shoulder_midpoint_speed_model_units_s": 1.351981533084605,
+      "projected_midpoint_speed_px_s": 1353.8965210700069,
+      "source_midpoint_speed_px_s": 488.0008376857399,
+      "midpoint_velocity_residual_px_s": 1387.7135687019263,
+      "pose_step_at_previous_translation_px": [
+        -3.3268555638825887,
+        5.781013869278667
+      ],
+      "translation_step_at_current_pose_px": [
+        -24.717290679310054,
+        -52.11008816518017
+      ],
+      "translation_delta_model_units": [
+        -0.0792490851860605,
+        -0.07974927612467797,
+        -1.6161853275452076
+      ]
+    },
+    {
+      "case": "distributed_swing",
+      "frames": [
+        22,
+        23
+      ],
+      "dt_s": 0.040000000000000036,
+      "shoulder_midpoint_speed_model_units_s": 1.2764127845035618,
+      "projected_midpoint_speed_px_s": 1034.4629708937246,
+      "source_midpoint_speed_px_s": 522.0967804389417,
+      "midpoint_velocity_residual_px_s": 861.2130838056087,
+      "pose_step_at_previous_translation_px": [
+        -13.94222814789805,
+        11.559863710677803
+      ],
+      "translation_step_at_current_pose_px": [
+        6.930190185678896,
+        29.22019446310162
+      ],
+      "translation_delta_model_units": [
+        0.007054807201597679,
+        0.054386387229752864,
+        0.45459086802150583
+      ]
+    },
+    {
+      "case": "distributed_swing",
+      "frames": [
+        23,
+        24
+      ],
+      "dt_s": 0.040000000000000036,
+      "shoulder_midpoint_speed_model_units_s": 1.5103348997038604,
+      "projected_midpoint_speed_px_s": 314.49386323121774,
+      "source_midpoint_speed_px_s": 170.59192622055684,
+      "midpoint_velocity_residual_px_s": 247.122158368747,
+      "pose_step_at_previous_translation_px": [
+        -13.576011413489937,
+        13.450133883954578
+      ],
+      "translation_step_at_current_pose_px": [
+        7.1908270704357165,
+        -2.6113311400455927
+      ],
+      "translation_delta_model_units": [
+        0.020857055982761857,
+        -0.009058784946241016,
+        0.032201118668437
+      ]
+    },
+    {
+      "case": "distributed_twist",
+      "frames": [
+        6,
+        7
+      ],
+      "dt_s": 0.03999999999999998,
+      "shoulder_midpoint_speed_model_units_s": 0.2202245937979094,
+      "projected_midpoint_speed_px_s": 434.34728257536136,
+      "source_midpoint_speed_px_s": 111.54049257048042,
+      "midpoint_velocity_residual_px_s": 341.3868796801433,
+      "pose_step_at_previous_translation_px": [
+        -1.3069045777313022,
+        -1.4063370189768136
+      ],
+      "translation_step_at_current_pose_px": [
+        -3.785389702093198,
+        18.017196056866084
+      ],
+      "translation_delta_model_units": [
+        0.04822860797306762,
+        -0.0020983166947177723,
+        0.732403069402038
+      ]
+    },
+    {
+      "case": "distributed_twist",
+      "frames": [
+        7,
+        8
+      ],
+      "dt_s": 0.040000000000000036,
+      "shoulder_midpoint_speed_model_units_s": 0.7506384706490348,
+      "projected_midpoint_speed_px_s": 392.50076818344576,
+      "source_midpoint_speed_px_s": 658.6111806406645,
+      "midpoint_velocity_residual_px_s": 269.2813199208858,
+      "pose_step_at_previous_translation_px": [
+        -5.6608643591329155,
+        -3.8365786465085137
+      ],
+      "translation_step_at_current_pose_px": [
+        -7.542652291466766,
+        12.331171803139938
+      ],
+      "translation_delta_model_units": [
+        -0.014516437460808242,
+        0.03253914059428098,
+        0.210940289024232
+      ]
+    },
+    {
+      "case": "distributed_twist",
+      "frames": [
+        8,
+        9
+      ],
+      "dt_s": 0.03999999999999998,
+      "shoulder_midpoint_speed_model_units_s": 2.3119763438558008,
+      "projected_midpoint_speed_px_s": 547.1448367615117,
+      "source_midpoint_speed_px_s": 1011.4896031402819,
+      "midpoint_velocity_residual_px_s": 504.58006338721657,
+      "pose_step_at_previous_translation_px": [
+        -13.575147104438884,
+        -5.647386536270233
+      ],
+      "translation_step_at_current_pose_px": [
+        -4.702363156389765,
+        17.685682698807227
+      ],
+      "translation_delta_model_units": [
+        -0.012103102877310578,
+        0.06270219569623547,
+        0.13456244708170928
+      ]
+    },
+    {
+      "case": "distributed_twist",
+      "frames": [
+        9,
+        10
+      ],
+      "dt_s": 0.03999999999999998,
+      "shoulder_midpoint_speed_model_units_s": 2.8810245267818186,
+      "projected_midpoint_speed_px_s": 660.3306955395469,
+      "source_midpoint_speed_px_s": 863.7915883076757,
+      "midpoint_velocity_residual_px_s": 270.9043903175348,
+      "pose_step_at_previous_translation_px": [
+        -18.133779315574202,
+        0.30016737682746
+      ],
+      "translation_step_at_current_pose_px": [
+        -8.238764758593902,
+        1.1652755633264462
+      ],
+      "translation_delta_model_units": [
+        -0.04088994312722818,
+        0.024306224000666038,
+        -0.35645922069411284
+      ]
+    },
+    {
+      "case": "distributed_twist",
+      "frames": [
+        10,
+        11
+      ],
+      "dt_s": 0.040000000000000036,
+      "shoulder_midpoint_speed_model_units_s": 1.4580051428494665,
+      "projected_midpoint_speed_px_s": 514.8543851160202,
+      "source_midpoint_speed_px_s": 495.9978921965042,
+      "midpoint_velocity_residual_px_s": 341.6902711235398,
+      "pose_step_at_previous_translation_px": [
+        -12.76034135741645,
+        -5.497441907279864
+      ],
+      "translation_step_at_current_pose_px": [
+        6.471512328486256,
+        25.10791589548316
+      ],
+      "translation_delta_model_units": [
+        0.030607700777591906,
+        0.07712787935054186,
+        0.4465984964657048
+      ]
+    },
+    {
+      "case": "distributed_twist",
+      "frames": [
+        11,
+        12
+      ],
+      "dt_s": 0.03999999999999998,
+      "shoulder_midpoint_speed_model_units_s": 2.0252193332487733,
+      "projected_midpoint_speed_px_s": 537.5871688906896,
+      "source_midpoint_speed_px_s": 280.89619308313274,
+      "midpoint_velocity_residual_px_s": 319.46358435650205,
+      "pose_step_at_previous_translation_px": [
+        -16.35626166837619,
+        -3.435606759514286
+      ],
+      "translation_step_at_current_pose_px": [
+        13.166692031532193,
+        24.701226623068067
+      ],
+      "translation_delta_model_units": [
+        0.06409393514039745,
+        0.09453883022246323,
+        0.7273909137863619
+      ]
+    },
+    {
+      "case": "distributed_twist",
+      "frames": [
+        12,
+        13
+      ],
+      "dt_s": 0.03999999999999998,
+      "shoulder_midpoint_speed_model_units_s": 3.0982253730258322,
+      "projected_midpoint_speed_px_s": 61.74088173093541,
+      "source_midpoint_speed_px_s": 93.28771806446133,
+      "midpoint_velocity_residual_px_s": 97.57184786749035,
+      "pose_step_at_previous_translation_px": [
+        -17.20882519724944,
+        7.9722560998895915
+      ],
+      "translation_step_at_current_pose_px": [
+        16.080130060743272,
+        -5.775634682373891
+      ],
+      "translation_delta_model_units": [
+        0.07671171050861951,
+        -0.026700197504523626,
+        -0.13881476106821644
+      ]
+    },
+    {
+      "case": "distributed_twist",
+      "frames": [
+        13,
+        14
+      ],
+      "dt_s": 0.040000000000000036,
+      "shoulder_midpoint_speed_model_units_s": 1.0490784834139142,
+      "projected_midpoint_speed_px_s": 301.20822093767686,
+      "source_midpoint_speed_px_s": 50.50341336213364,
+      "midpoint_velocity_residual_px_s": 262.9185290481868,
+      "pose_step_at_previous_translation_px": [
+        -8.370585520706868,
+        1.1260651650800924
+      ],
+      "translation_step_at_current_pose_px": [
+        10.560348423122377,
+        -12.9737301758706
+      ],
+      "translation_delta_model_units": [
+        0.04613858197652432,
+        -0.054959159186283524,
+        -0.28724607496246524
+      ]
+    },
+    {
+      "case": "distributed_twist",
+      "frames": [
+        14,
+        15
+      ],
+      "dt_s": 0.040000000000000036,
+      "shoulder_midpoint_speed_model_units_s": 0.5852610179869385,
+      "projected_midpoint_speed_px_s": 157.22913382562308,
+      "source_midpoint_speed_px_s": 98.41146576507211,
+      "midpoint_velocity_residual_px_s": 93.40986647995713,
+      "pose_step_at_previous_translation_px": [
+        -2.385610469511107,
+        -1.123595809369391
+      ],
+      "translation_step_at_current_pose_px": [
+        8.480749950084146,
+        2.673716949812615
+      ],
+      "translation_delta_model_units": [
+        0.039802005353788555,
+        0.00979249191189463,
+        0.10150461575393344
+      ]
+    },
+    {
+      "case": "distributed_twist",
+      "frames": [
+        15,
+        16
+      ],
+      "dt_s": 0.039999999999999925,
+      "shoulder_midpoint_speed_model_units_s": 0.2582804709769488,
+      "projected_midpoint_speed_px_s": 148.73755453072684,
+      "source_midpoint_speed_px_s": 33.11023190163556,
+      "midpoint_velocity_residual_px_s": 147.5902203055936,
+      "pose_step_at_previous_translation_px": [
+        -1.9014099918776992,
+        1.0041237616525223
+      ],
+      "translation_step_at_current_pose_px": [
+        3.120697678763918,
+        -6.827345699811588
+      ],
+      "translation_delta_model_units": [
+        0.009294594758074703,
+        -0.024847838586795457,
+        -0.2327261035728201
+      ]
+    },
+    {
+      "case": "distributed_twist",
+      "frames": [
+        16,
+        17
+      ],
+      "dt_s": 0.040000000000000036,
+      "shoulder_midpoint_speed_model_units_s": 0.2994593291135625,
+      "projected_midpoint_speed_px_s": 178.32392129687943,
+      "source_midpoint_speed_px_s": 126.07648106663272,
+      "midpoint_velocity_residual_px_s": 66.1390839020515,
+      "pose_step_at_previous_translation_px": [
+        -0.8110767000260921,
+        -0.6992427276544788
+      ],
+      "translation_step_at_current_pose_px": [
+        -0.7307069454106454,
+        -6.265093324071984
+      ],
+      "translation_delta_model_units": [
+        -0.004951627657746205,
+        -0.023988323674111522,
+        -0.09126329601198613
+      ]
+    },
+    {
+      "case": "distributed_twist",
+      "frames": [
+        17,
+        18
+      ],
+      "dt_s": 0.040000000000000036,
+      "shoulder_midpoint_speed_model_units_s": 0.8376754656326426,
+      "projected_midpoint_speed_px_s": 118.5931505132561,
+      "source_midpoint_speed_px_s": 103.95445598314348,
+      "midpoint_velocity_residual_px_s": 17.39950008855934,
+      "pose_step_at_previous_translation_px": [
+        -2.0295767429703346,
+        3.6506656732641716
+      ],
+      "translation_step_at_current_pose_px": [
+        -0.8586495206481572,
+        -7.413787463480389
+      ],
+      "translation_delta_model_units": [
+        -0.005453346606419995,
+        -0.026909627519448975,
+        -0.1115162008577073
+      ]
+    },
+    {
+      "case": "distributed_twist",
+      "frames": [
+        18,
+        19
+      ],
+      "dt_s": 0.039999999999999925,
+      "shoulder_midpoint_speed_model_units_s": 1.0887830613723808,
+      "projected_midpoint_speed_px_s": 259.2805566316018,
+      "source_midpoint_speed_px_s": 99.67226383181243,
+      "midpoint_velocity_residual_px_s": 161.76351635421062,
+      "pose_step_at_previous_translation_px": [
+        0.5994990920892178,
+        -4.17274628508568
+      ],
+      "translation_step_at_current_pose_px": [
+        -1.065571560181752,
+        -6.187998269722868
+      ],
+      "translation_delta_model_units": [
+        -0.0036024842703871462,
+        -0.027935566821869068,
+        0.04888836460210921
+      ]
+    },
+    {
+      "case": "distributed_twist",
+      "frames": [
+        19,
+        20
+      ],
+      "dt_s": 0.040000000000000036,
+      "shoulder_midpoint_speed_model_units_s": 0.0842002963558751,
+      "projected_midpoint_speed_px_s": 45.694577918347726,
+      "source_midpoint_speed_px_s": 63.71351020312335,
+      "midpoint_velocity_residual_px_s": 108.86831111333308,
+      "pose_step_at_previous_translation_px": [
+        -0.7944599448127292,
+        0.14482241612876123
+      ],
+      "translation_step_at_current_pose_px": [
+        2.2868935965473156,
+        0.9103708917479025
+      ],
+      "translation_delta_model_units": [
+        0.011295792479687011,
+        -0.0008705979906344918,
+        0.09770735405215891
+      ]
+    },
+    {
+      "case": "distributed_twist",
+      "frames": [
+        20,
+        21
+      ],
+      "dt_s": 0.040000000000000036,
+      "shoulder_midpoint_speed_model_units_s": 0.31091127162695253,
+      "projected_midpoint_speed_px_s": 189.22255652952276,
+      "source_midpoint_speed_px_s": 180.1348913800061,
+      "midpoint_velocity_residual_px_s": 185.4667068650203,
+      "pose_step_at_previous_translation_px": [
+        -2.7534533572205646,
+        0.8022074895412175
+      ],
+      "translation_step_at_current_pose_px": [
+        -0.8760707480299743,
+        5.839692555529837
+      ],
+      "translation_delta_model_units": [
+        -0.0031114877391781315,
+        0.023138705053287772,
+        0.04584458691754456
+      ]
+    },
+    {
+      "case": "distributed_twist",
+      "frames": [
+        21,
+        22
+      ],
+      "dt_s": 0.039999999999999925,
+      "shoulder_midpoint_speed_model_units_s": 1.405442545933597,
+      "projected_midpoint_speed_px_s": 1364.1717128517264,
+      "source_midpoint_speed_px_s": 488.0008376857399,
+      "midpoint_velocity_residual_px_s": 1380.9729101412217,
+      "pose_step_at_previous_translation_px": [
+        -4.825757994603464,
+        6.292688377414265
+      ],
+      "translation_step_at_current_pose_px": [
+        -25.022096850277478,
+        -51.9725384274156
+      ],
+      "translation_delta_model_units": [
+        -0.0792490839175169,
+        -0.07974927405038273,
+        -1.616185310741875
+      ]
+    },
+    {
+      "case": "distributed_twist",
+      "frames": [
+        22,
+        23
+      ],
+      "dt_s": 0.040000000000000036,
+      "shoulder_midpoint_speed_model_units_s": 1.327037632046082,
+      "projected_midpoint_speed_px_s": 1048.0675118979955,
+      "source_midpoint_speed_px_s": 522.0967804389417,
+      "midpoint_velocity_residual_px_s": 867.2004373736323,
+      "pose_step_at_previous_translation_px": [
+        -14.768371825230645,
+        12.18370964413947
+      ],
+      "translation_step_at_current_pose_px": [
+        7.204891816139138,
+        29.051064337850107
+      ],
+      "translation_delta_model_units": [
+        0.0070548057646399875,
+        0.054386385253698016,
+        0.45459085135840116
+      ]
+    },
+    {
+      "case": "distributed_twist",
+      "frames": [
+        23,
+        24
+      ],
+      "dt_s": 0.040000000000000036,
+      "shoulder_midpoint_speed_model_units_s": 1.5836153196911065,
+      "projected_midpoint_speed_px_s": 342.45221791077785,
+      "source_midpoint_speed_px_s": 170.59192622055684,
+      "midpoint_velocity_residual_px_s": 270.95293437430314,
+      "pose_step_at_previous_translation_px": [
+        -14.159878298763658,
+        14.442565687806677
+      ],
+      "translation_step_at_current_pose_px": [
+        7.216130539919959,
+        -2.634856276376752
+      ],
+      "translation_delta_model_units": [
+        0.02085705844430588,
+        -0.009058782494821116,
+        0.03220114300571053
+      ]
+    }
+  ],
+  "limits": [
+    "MP shoulders construct the candidates; residuals are not independent truth.",
+    "MP visibility scores are not human visibility annotations.",
+    "Finite difference speed includes intended motion and estimation error; not a jitter verdict.",
+    "Projection uses per-frame fitted translations; model-space speed is hip-relative.",
+    "Pose/translation displacement decomposition applies pose first; reversing order changes the components.",
+    "No mesh, contact, camera or full-clip validation; no candidate selected."
+  ]
+}
