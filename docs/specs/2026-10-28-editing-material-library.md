@@ -29,4 +29,7 @@ Uploaded media becomes difficult to manage as the library grows, and the timelin
 ## Boundaries
 
 - No migration of existing media is required; existing uploads appear in “未分类”.
+- Deletion removes an upload from the editing library through an owner-scoped tombstone; immutable blobs and shared registry mappings are retained for other product references. It does not reclaim disk space.
+- Saved historical versions also prevent deletion. Save and delete share the editing database write lock to avoid a reference race.
+- The sidebar supports icon-only collapse/restore, localized names and tooltips, and optional local preference persistence.
 - No physical directory is created per folder. Folder metadata is stored in the owner-scoped editing database; media storage remains immutable and registry-backed.

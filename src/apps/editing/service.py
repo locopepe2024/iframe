@@ -32,6 +32,10 @@ class EditingService:
         try:
             db.execute('CREATE TABLE IF NOT EXISTS edits (id TEXT PRIMARY KEY, owner TEXT NOT NULL, data TEXT NOT NULL)')
             db.execute('CREATE TABLE IF NOT EXISTS edit_versions (id TEXT, owner TEXT, revision INTEGER, data TEXT NOT NULL, PRIMARY KEY(id, owner, revision))')
+            db.execute('CREATE TABLE IF NOT EXISTS editing_folders (id TEXT PRIMARY KEY, owner TEXT NOT NULL, name TEXT NOT NULL, created_at REAL NOT NULL)')
+            db.execute('CREATE UNIQUE INDEX IF NOT EXISTS editing_folders_owner_name ON editing_folders(owner, name)')
+            db.execute('CREATE TABLE IF NOT EXISTS editing_material_folders (owner TEXT NOT NULL, material_key TEXT NOT NULL, folder_id TEXT NOT NULL, PRIMARY KEY(owner, material_key))')
+            db.execute('CREATE TABLE IF NOT EXISTS editing_deleted_materials (owner TEXT NOT NULL, material_key TEXT NOT NULL, PRIMARY KEY(owner, material_key))')
             db.execute('BEGIN IMMEDIATE')
             yield db
             db.commit()
@@ -68,25 +72,120 @@ class EditingService:
         return record
 
     def materials(self, query='', cursor=0):
+        return self.materials_page(query=query, cursor=cursor)
+
+    def folders(self):
+        with self.db() as db:
+            return [dict(id=row[0], name=row[1], created_at=row[2]) for row in db.execute(
+                'SELECT id, name, created_at FROM editing_folders WHERE owner=? ORDER BY name COLLATE NOCASE, id',
+                (self.user.owner_profile_id,),
+            )]
+
+    def create_folder(self, name):
+        name = name.strip()
+        if not name or len(name) > 80:
+            raise HTTPException(422, 'Folder name must be 1 to 80 characters')
+        record = dict(id=uuid4().hex, name=name, created_at=time.time())
+        try:
+            with self.db() as db:
+                db.execute('INSERT INTO editing_folders(id, owner, name, created_at) VALUES(?,?,?,?)', (record['id'], self.user.owner_profile_id, name, record['created_at']))
+        except sqlite3.IntegrityError as exc:
+            raise HTTPException(409, 'Folder name already exists') from exc
+        return record
+
+    def delete_folder(self, folder_id):
+        with self.db() as db:
+            row = db.execute('SELECT id FROM editing_folders WHERE id=? AND owner=?', (folder_id, self.user.owner_profile_id)).fetchone()
+            if not row:
+                raise HTTPException(404, 'Folder not found')
+            if db.execute('SELECT 1 FROM editing_material_folders WHERE owner=? AND folder_id=? LIMIT 1', (self.user.owner_profile_id, folder_id)).fetchone():
+                raise HTTPException(409, 'Folder is not empty')
+            db.execute('DELETE FROM editing_folders WHERE id=? AND owner=?', (folder_id, self.user.owner_profile_id))
+        return {'id': folder_id, 'deleted': True}
+
+    def rename_folder(self, folder_id, name):
+        name = name.strip()
+        if not name or len(name) > 80:
+            raise HTTPException(422, 'Folder name must be 1 to 80 characters')
+        try:
+            with self.db() as db:
+                result = db.execute('UPDATE editing_folders SET name=? WHERE id=? AND owner=?', (name, folder_id, self.user.owner_profile_id))
+                if not result.rowcount:
+                    raise HTTPException(404, 'Folder not found')
+        except sqlite3.IntegrityError as exc:
+            raise HTTPException(409, 'Folder name already exists') from exc
+        return dict(id=folder_id, name=name)
+
+    def _assign_folder(self, db, material_key, folder_id):
+        if folder_id:
+            if not db.execute('SELECT 1 FROM editing_folders WHERE id=? AND owner=?', (folder_id, self.user.owner_profile_id)).fetchone():
+                raise HTTPException(404, 'Folder not found')
+            db.execute('INSERT INTO editing_material_folders(owner, material_key, folder_id) VALUES(?,?,?) ON CONFLICT(owner, material_key) DO UPDATE SET folder_id=excluded.folder_id', (self.user.owner_profile_id, material_key, folder_id))
+        else:
+            db.execute('DELETE FROM editing_material_folders WHERE owner=? AND material_key=?', (self.user.owner_profile_id, material_key))
+
+    def assign_folder(self, material_key, folder_id):
+        with self.db() as db:
+            self.resolve(material_key, db=db)
+            self._assign_folder(db, material_key, folder_id)
+        return dict(id=material_key, folder_id=folder_id)
+
+    def materials_page(self, query='', cursor=0, folder_id=None):
         items = []
+        with self.db() as db:
+            folder_rows = db.execute('SELECT material_key, folder_id FROM editing_material_folders WHERE owner=?', (self.user.owner_profile_id,)).fetchall()
+            deleted = {row[0] for row in db.execute('SELECT material_key FROM editing_deleted_materials WHERE owner=?', (self.user.owner_profile_id,))}
+            folder_names = {row[0]: row[1] for row in db.execute('SELECT id, name FROM editing_folders WHERE owner=?', (self.user.owner_profile_id,))}
+        assignments = dict(folder_rows)
         for item in list_media(self.user.owner_profile_id, output_root=str(self.output_root)):
             if Path(item['storage_key']).suffix.lower() not in ('.mp4', '.mov', '.mkv', '.webm', '.wav', '.mp3', '.m4a', '.aac', '.ogg'):
                 continue
-            items.append(dict(id='core:'+item['media_id'], name=item['display_name'], url=item['storage_key'], origin='upload' if item['kind'] in ('editing_upload', 'temporary_input') else 'generated', sha256=item['sha256'], created_at=item['created_at']))
+            key = 'core:'+item['media_id']
+            assigned = assignments.get(key)
+            if key in deleted or (folder_id == '__none' and assigned is not None) or (folder_id not in (None, '__none') and assigned != folder_id):
+                continue
+            items.append(dict(id=key, name=item['display_name'], url=item['storage_key'], origin='upload' if item['kind'] in ('editing_upload', 'temporary_input') else 'generated', sha256=item['sha256'], created_at=item['created_at'], folder_id=assigned, folder_name=folder_names.get(assigned), deletable=item['kind'] == 'editing_upload'))
         recreation = RecreationService(self.user, output_root=str(self.output_root))
         for kind in ('source_video', 'generated_video', 'final_video'):
             offset = 0
             while True:
                 page = recreation.search_media(kind=kind, limit=100, cursor=offset)
                 for item in page['items']:
-                    items.append(dict(id='recreation:'+item['media_id'], name=item['display_name'], url=item['storage_path'], origin='upload' if kind == 'source_video' else 'generated', sha256=item['sha256'], created_at=item['created_at']))
+                    key = 'recreation:'+item['media_id']
+                    assigned = assignments.get(key)
+                    if key in deleted or (folder_id == '__none' and assigned is not None) or (folder_id not in (None, '__none') and assigned != folder_id):
+                        continue
+                    items.append(dict(id=key, name=item['display_name'], url=item['storage_path'], origin='upload' if kind == 'source_video' else 'generated', sha256=item['sha256'], created_at=item['created_at'], folder_id=assigned, folder_name=folder_names.get(assigned), deletable=False))
                 if page['next_cursor'] is None:
                     break
                 offset = page['next_cursor']
         items = sorted((item for item in items if query.casefold() in item['name'].casefold()), key=lambda item: (item['created_at'], item['id']), reverse=True)
         return dict(items=items[cursor:cursor+24], next_cursor=cursor+24 if len(items)>cursor+24 else None)
 
-    def resolve(self, key):
+    def delete_material(self, key):
+        origin, _, media_id = key.partition(':')
+        if origin != 'core':
+            raise HTTPException(422, 'Only uploaded editing materials can be deleted')
+        item = get_media(self.user.owner_profile_id, media_id, output_root=str(self.output_root))
+        if not item or item['kind'] != 'editing_upload':
+            raise HTTPException(404, 'Uploaded material not found')
+        with self.db() as db:
+            # Every saved version matters: deleting an old source must not break restore.
+            for row in db.execute('SELECT data FROM edit_versions WHERE owner=? UNION ALL SELECT data FROM edits WHERE owner=?', (self.user.owner_profile_id, self.user.owner_profile_id)):
+                if key in (json.loads(row[0]).get('sources') or {}):
+                    raise HTTPException(409, 'Material is referenced by a saved editing project or version')
+            db.execute('INSERT OR IGNORE INTO editing_deleted_materials(owner, material_key) VALUES(?,?)', (self.user.owner_profile_id, key))
+            db.execute('DELETE FROM editing_material_folders WHERE owner=? AND material_key=?', (self.user.owner_profile_id, key))
+        # The immutable blob and shared registry remain available to other product
+        # references. Library deletion is not a cross-product garbage collector.
+        return {'id': key, 'deleted': True}
+
+    def resolve(self, key, db=None):
+        if db is None:
+            with self.db() as connection:
+                self._check_not_deleted(connection, key)
+        else:
+            self._check_not_deleted(db, key)
         origin, _, media_id = key.partition(':')
         if origin == 'core':
             item = get_media(self.user.owner_profile_id, media_id, output_root=str(self.output_root))
@@ -118,6 +217,10 @@ class EditingService:
             raise HTTPException(422, 'Material duration is empty')
         return dict(id=key, name=name, url=stored, sha256=actual, duration_ms=duration_ms, video='video' in kinds, audio='audio' in kinds), str(path)
 
+    def _check_not_deleted(self, db, key):
+        if db.execute('SELECT 1 FROM editing_deleted_materials WHERE owner=? AND material_key=?', (self.user.owner_profile_id, key)).fetchone():
+            raise HTTPException(404, 'Material not found')
+
     @staticmethod
     def _probe(path):
         ffprobe = get_ffprobe_path(get_ffmpeg_path())
@@ -133,7 +236,11 @@ class EditingService:
         except (OSError, subprocess.SubprocessError, ValueError, KeyError) as exc:
             raise HTTPException(422, 'Material is unreadable or has no finite duration') from exc
 
-    def upload(self, stream, filename):
+    def upload(self, stream, filename, folder_id=None):
+        if folder_id:
+            with self.db() as db:
+                if not db.execute('SELECT 1 FROM editing_folders WHERE id=? AND owner=?', (folder_id, self.user.owner_profile_id)).fetchone():
+                    raise HTTPException(404, 'Folder not found')
         suffix = Path(filename).suffix.lower()
         if suffix not in ('.mp4', '.mov', '.mkv', '.webm', '.wav', '.mp3', '.m4a', '.aac', '.ogg'):
             raise HTTPException(422, 'Unsupported video or audio file')
@@ -150,13 +257,17 @@ class EditingService:
             data = self._probe(path)
             if float(data['format']['duration']) <= 0:
                 raise HTTPException(422, 'Material duration is empty')
-            media_id = register_media(self.user.owner_profile_id, path.relative_to(self.output_root).as_posix(), kind='editing_upload', display_name=Path(filename).name, sha256=fingerprint(path), output_root=str(self.output_root))
+            with self.db() as db:
+                if folder_id and not db.execute('SELECT 1 FROM editing_folders WHERE id=? AND owner=?', (folder_id, self.user.owner_profile_id)).fetchone():
+                    raise HTTPException(404, 'Folder not found')
+                media_id = register_media(self.user.owner_profile_id, path.relative_to(self.output_root).as_posix(), kind='editing_upload', display_name=Path(filename).name, sha256=fingerprint(path), output_root=str(self.output_root))
+                self._assign_folder(db, 'core:'+media_id, folder_id)
             return self.resolve('core:'+media_id)[0]
         except BaseException:
             path.unlink(missing_ok=True)
             raise
 
-    def validate(self, plan, expected_sources=None):
+    def validate(self, plan, expected_sources=None, db=None):
         if plan.scope != 'project':
             raise HTTPException(422, 'Independent edit requires project plan geometry')
         if any(m.source_episode_id for m in plan.markers):
@@ -172,7 +283,7 @@ class EditingService:
                     raise HTTPException(422, 'Clip requires material identity')
                 key = clip.source_media_id
                 if key not in sources:
-                    sources[key], paths[key] = self.resolve(key)
+                    sources[key], paths[key] = self.resolve(key, db=db)
                 source = sources[key]
                 old = (expected_sources or {}).get(key)
                 if old and source['sha256'] != old['sha256']:
@@ -196,12 +307,11 @@ class EditingService:
         return sources, paths, videos
 
     def save(self, edit_id, revision, plan):
-        current = self.get(edit_id)
-        sources, _, _ = self.validate(plan, current['sources'])
         with self.db() as db:
             record = self._get(db, edit_id)
             if record['revision'] != revision:
                 raise HTTPException(409, 'Editing project changed; reload before saving')
+            sources, _, _ = self.validate(plan, record['sources'], db=db)
             plan = plan.model_copy(update={'id': 'assembly-'+edit_id, 'revision': revision+1})
             record.update(revision=revision+1, plan=plan.model_dump(), sources=sources, output=None)
             self._persist(db, record)
