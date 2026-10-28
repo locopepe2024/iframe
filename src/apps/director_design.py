@@ -201,11 +201,25 @@ class Turn(StrictModel):
     content: str = Field(min_length=1, max_length=2000)
 
 
+class ReferenceImage(StrictModel):
+    """A caller-provided image used as visual evidence for blocking only."""
+
+    url: str = Field(min_length=12, max_length=4_000_000)
+    mediaId: str | None = Field(default=None, min_length=1, max_length=200)
+
+    @model_validator(mode="after")
+    def controlled_url(self):
+        if not (self.url.startswith("data:image/") or self.url.startswith("https://")):
+            raise ValueError("Reference image must be an HTTPS URL or an image data URL")
+        return self
+
+
 class DesignRequest(StrictModel):
     prompt: str = Field(min_length=1, max_length=2000)
     baseRevision: str = Field(pattern=r"^design-fnv1a32:[0-9a-f]{8}$")
     context: str = Field(min_length=2, max_length=100000)
     history: list[Turn] = Field(default_factory=list, max_length=8)
+    referenceImage: ReferenceImage | None = None
 
     @model_validator(mode="after")
     def context_json(self):
@@ -306,9 +320,17 @@ def propose(request: DesignRequest, user: UserContext = Depends(require_user_con
         if not adapter.is_configured:
             raise HTTPException(503, "请先配置当前用户的语言模型服务。")
         schema = json.dumps(ModelProposal.model_json_schema(), ensure_ascii=False)
-        messages = [{"role": "system", "content": SYSTEM + "\nResponse schema:\n" + schema}]
+        messages: list[dict[str, object]] = [{"role": "system", "content": SYSTEM + "\nResponse schema:\n" + schema}]
         messages.extend(turn.model_dump() for turn in request.history)
-        messages.append({"role": "user", "content": json.dumps({"scene": json.loads(request.context), "request": request.prompt}, ensure_ascii=False)})
+        user_text = json.dumps({"scene": json.loads(request.context), "request": request.prompt,
+                                "referenceImage": bool(request.referenceImage)}, ensure_ascii=False)
+        if request.referenceImage:
+            messages.append({"role": "user", "content": [
+                {"type": "text", "text": user_text + "\n请把参考图当作二维构图证据，输出可编辑白模操作，并把不确定尺度、遮挡、深度和接触写入 assumptions。"},
+                {"type": "image_url", "image_url": {"url": request.referenceImage.url}},
+            ]})
+        else:
+            messages.append({"role": "user", "content": user_text})
         try:
             raw = adapter.chat(messages, response_format={"type": "json_object"}, timeout_seconds=45, max_retries=0)
         except Exception as exc:

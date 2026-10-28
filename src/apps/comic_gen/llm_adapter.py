@@ -105,7 +105,7 @@ class LLMAdapter:
 
     def chat(
         self,
-        messages: List[Dict[str, str]],
+        messages: List[Dict[str, Any]],
         model: Optional[str] = None,
         response_format: Optional[Dict[str, str]] = None,
         *,
@@ -194,7 +194,7 @@ class LLMAdapter:
         self,
         client,
         model: str,
-        messages: List[Dict[str, str]],
+        messages: List[Dict[str, Any]],
         response_format: Optional[Dict[str, str]],
         *,
         timeout_seconds: Optional[float] = None,

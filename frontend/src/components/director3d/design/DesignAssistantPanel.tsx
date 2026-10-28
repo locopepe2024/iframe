@@ -1,7 +1,7 @@
 import { initializeNavigation } from "./navmesh-routing";
 import { useEffect, useRef, useState } from "react";
 import axios from "axios";
-import { directorDesignApi, type DesignTurn } from "@/lib/directorDesign";
+import { directorDesignApi, type DesignReferenceImage, type DesignTurn } from "@/lib/directorDesign";
 import { useWorkbenchStore } from "../state/workbench-store";
 import { compileDesignProposal, designContext, designRevision, type DesignPreview, type DesignProposal } from "./design-proposal";
 
@@ -11,6 +11,8 @@ export function DesignAssistantPanel({ onPreview, previewing, disabled = false }
   const [navigation, setNavigation] = useState<"boxes" | "navmesh">("boxes");
   const [navigationLoading, setNavigationLoading] = useState(false);
   const [prompt, setPrompt] = useState("");
+  const [referenceImage, setReferenceImage] = useState<DesignReferenceImage | null>(null);
+  const [referenceImageName, setReferenceImageName] = useState("");
   const [proposal, setProposal] = useState<DesignProposal | null>(null);
   const [history, setHistory] = useState<DesignTurn[]>([]);
   const [busy, setBusy] = useState(false);
@@ -30,7 +32,7 @@ export function DesignAssistantPanel({ onPreview, previewing, disabled = false }
     try {
       const state = useWorkbenchStore.getState();
       const baseRevision = designRevision(state);
-      const next = await directorDesignApi.propose({ prompt: requestText, baseRevision, context: designContext(state), history }, controller.signal);
+      const next = await directorDesignApi.propose({ prompt: requestText, baseRevision, context: designContext(state), history, referenceImage }, controller.signal);
       if (controller.signal.aborted) return;
       if (next.baseRevision !== baseRevision) throw new Error("设计提案与请求场景不匹配，请重试。");
       setProposal(next);
@@ -106,6 +108,16 @@ export function DesignAssistantPanel({ onPreview, previewing, disabled = false }
     <form onSubmit={(event) => { event.preventDefault(); void generate(); }}>
       <label htmlFor="director-design-prompt">设计要求</label>
       <textarea id="director-design-prompt" value={prompt} maxLength={2000} rows={3} disabled={busy || disabled} onChange={(event) => setPrompt(event.target.value)} placeholder="例如：让两个人相对站立，间隔三米；用当前机位、35mm 镜头拍摄两人。" />
+      <label className="director-reference-picker">场景参考图（可选）<input type="file" accept="image/png,image/jpeg,image/webp" disabled={busy || disabled} onChange={(event) => {
+        const file = event.target.files?.[0]; event.currentTarget.value = "";
+        if (!file) return;
+        if (file.size > 3 * 1024 * 1024) { setError("参考图不能超过 3 MB。"); return; }
+        const reader = new FileReader();
+        reader.onload = () => { const url = String(reader.result || ""); setReferenceImage(url.startsWith("data:image/") ? { url } : null); setReferenceImageName(file.name); setError(""); };
+        reader.onerror = () => setError("参考图读取失败，请重试。");
+        reader.readAsDataURL(file);
+      }} /></label>
+      {referenceImage && <p role="status">已绑定参考图：{referenceImageName}。它只用于解析构图和白模假设。</p>}
       <div className="blocking-reference-actions"><button type="submit" disabled={busy || disabled || !prompt.trim()}>{busy ? "正在设计…" : "生成设计提案"}</button>{busy && <button type="button" onClick={cancelRequest}>停止生成</button>}{history.length > 0 && !busy && <button type="button" disabled={disabled} onClick={() => { setHistory([]); setProposal(null); onPreview(null); setMessage("已清空对话，场景保持当前编辑结果。"); }}>新对话</button>}</div>
     </form>
     {disabled && <p role="status">录制期间暂不可设计场景。</p>}
