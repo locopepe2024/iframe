@@ -150,7 +150,7 @@ class ChatStore(PhotoTasks, DiaryStore, CompanionStore):
                 scoped=copy.copy(self);scoped.connection=shared_connection
                 if name == 'diary.save_draft':
                     output = scoped.save_session_draft(db, owner, actor, row['session_id'], row['id'],
-                                                      values['source_turn_id'], claim['messages'][-1].get('interaction_focus'))
+                                                      values['source_turn_id'], claim['messages'][-1].get('interaction_focus'), values['day'])
                 elif name == 'photo.organize.start':
                     task_id = scoped.start_photo_task(owner,actor,row['session_id'],row['operation_id'],values)
                     output = None

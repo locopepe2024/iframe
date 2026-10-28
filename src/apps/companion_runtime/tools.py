@@ -39,6 +39,14 @@ class OpenDiary(Strict):
 
 class SaveDiaryDraft(Strict):
     source_turn_id: str = Field(min_length=1, max_length=120)
+    day: str | None = Field(default=None, pattern=r'^\d{4}-\d{2}-\d{2}$')
+
+    @field_validator('day')
+    @classmethod
+    def valid_day(cls, value):
+        if value is not None:
+            date.fromisoformat(value)
+        return value
 
 
 class ListDiaries(Strict):
@@ -105,7 +113,7 @@ CAPABILITIES = [
 
 
 DESCRIPTIONS = {
-    'diary.save_draft': '仅当用户明确要求保存已经看过的日记草稿时调用。从本会话 assistant_reply.turn_id 取得对应日记生成结果的 source_turn_id，不传正文、不生成新正文、不猜ID。不用于用户只是提到日记或要求继续写。日期和正文由服务器读取既有草稿；当天已有其他版本或编辑器内容变动会提示核对，绝不静默覆盖。没有明确可保存的草稿时只问用户要保存哪篇。',
+    'diary.save_draft': '仅当用户明确要求保存已经看过的日记草稿时调用。从本会话 assistant_reply.turn_id 取得对应日记生成结果的 source_turn_id，不传正文、不生成新正文、不猜ID。多轮对话写成的日记也支持：day必须填写用户明确确定的YYYY-MM-DD日期，source_turn_id指向实际日记正文，不是提问、闲聊或保存说明。年份用明确会话时间，不从照片推断，不清楚先问。不用于用户只是提到日记或要求继续写。标准写作请求的日期由服务端核对；多轮写作日期由上下文确定，正文始终从源记录读取；当天已有其他版本或编辑器内容变动会提示核对，绝不静默覆盖。没有明确可保存的草稿时只问用户要保存哪篇。',
     'photo.album.count': '查询当前用户相册的实际照片总数，排除已删除照片。用户问一共有多少张、相册总共多少照片等数量问题时调用；直接返回统计，不询问整理范围，不打开相册，不从分页照片或聊天记录猜数量。无参数。只支持全相册总数；若明确询问某日期或人物的数量，此工具不支持筛选，不能把全库总数当成筛选数量。',
     'photo.action': '对当前选中的照片请求分析、修改资料或删除。只生成待确认卡片，不声称已完成。action=analyze需要用户确认外部看图；edit的changes仅填写用户明确说出的people、scene、lighting、location、latitude、longitude、capture_time、notes，未修改字段不传；姓名/年龄不得猜。delete必须确认。photo_id只可从工作流状态取得；没有选中照片先请用户选择。',
     'diary.open': '用户要求打开日记、查看日记本时展示日记月历入口。不保存或生成日记。',

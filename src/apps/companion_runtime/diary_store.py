@@ -8,15 +8,20 @@ from .store import Conflict, Missing, encode
 
 
 class DiaryStore:
-    def save_session_draft(self, db, owner, actor, session, operation, source_id, focus):
+    def save_session_draft(self, db, owner, actor, session, operation, source_id, focus, requested_day=None):
         from .intent import diary_day
-        source = db.execute('SELECT text,status,result FROM companion_turns WHERE owner=? AND actor=? AND session_id=? AND id=?',
-                            (owner, actor, session, source_id)).fetchone()
+        source = db.execute('SELECT text,status,result FROM companion_turns WHERE owner=? AND actor=? AND session_id=? AND id=? AND sequence < (SELECT sequence FROM companion_turns WHERE owner=? AND id=?)',
+                            (owner, actor, session, source_id, owner, operation)).fetchone()
         if not source or source['status'] != 'completed':
             raise Missing('Diary draft unavailable in this session')
         day = diary_day(source['text'])
         result = json.loads(source['result'])
-        if not day or result.get('kind') != 'text' or result.get('name'):
+        if day and requested_day and day != requested_day:
+            return dict(day=day, spoken_text='保存日期与草稿日期不一致，请先核对要保存哪一天的日记。')
+        day = day or requested_day
+        if not day:
+            return dict(day='', spoken_text='这篇日记还没有确定日期，请告诉我要保存到哪一天。')
+        if result.get('kind') != 'text' or result.get('name'):
             raise ValueError('Select a generated diary draft')
         text = result['text']
         if focus and focus.get('kind') == 'diary' and (focus['object_id'] != day or focus.get('draft') != text):
