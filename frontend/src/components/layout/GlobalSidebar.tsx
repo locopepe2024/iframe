@@ -1,6 +1,7 @@
 "use client";
 
-import { LayoutGrid, Layers, Wand2, Settings, FileText, Film, Box, ImagePlus } from "lucide-react";
+import { LayoutGrid, Layers, Wand2, Settings, FileText, Film, Box, ImagePlus, PanelLeftClose, PanelLeftOpen } from "lucide-react";
+import { useEffect, useState } from "react";
 import { useTranslations } from "next-intl";
 import clsx from "clsx";
 import IFrameBranding from "./IFrameBranding";
@@ -34,17 +35,20 @@ function NavButton({
   label,
   icon: Icon,
   onClick,
+  collapsed,
 }: {
   active: boolean;
   label: string;
   icon: typeof LayoutGrid;
   onClick: () => void;
+  collapsed?: boolean;
 }) {
   return (
     <button
       type="button"
       onClick={onClick}
       aria-current={active ? "page" : undefined}
+      title={collapsed ? label : undefined}
       className={clsx(
         "group relative flex items-center gap-3 w-full px-3 py-2.5 rounded-lg text-left transition-colors",
         active
@@ -64,21 +68,16 @@ function NavButton({
           active ? "text-primary" : "text-text-muted group-hover:text-foreground"
         )}
       />
-      <span className="text-base">{label}</span>
+      <span className={clsx("text-base", collapsed && "sr-only")}>{label}</span>
     </button>
   );
 }
 
-/**
- * 全局导航 —— 带文字标签的品牌侧栏（Line B "Luminous Atelier"）。
- *
- * 顶部常驻 Logo + LUMENX 字标 + Slogan；主导航图标+文字（无 hover、无歧义）；
- * 设置固定底部；底部版本号。早先为给二级筛选栏腾地的 60px 图标轨已废弃——
- * 资产库/设置改走横向筛选后，竖向只剩这一条栏，故恢复完整品牌呈现。
- * 结构对所有主题统一，视觉身份由语义 token 切换（zero-leak）。
- */
 export default function GlobalSidebar({ activeTab, onTabChange }: GlobalSidebarProps) {
   const t = useTranslations("nav");
+  const [collapsed, setCollapsed] = useState(false);
+  useEffect(() => { try { setCollapsed(window.localStorage.getItem("iframe-sidebar-collapsed") === "1"); } catch { /* Storage may be disabled in embedded browsers. */ } }, []);
+  const toggleCollapsed = () => setCollapsed(value => { const next = !value; try { window.localStorage.setItem("iframe-sidebar-collapsed", next ? "1" : "0"); } catch { /* Keep the toggle usable without storage. */ } return next; });
 
   const handleNav = (id: GlobalTab, hash: string) => {
     onTabChange(id);
@@ -87,7 +86,7 @@ export default function GlobalSidebar({ activeTab, onTabChange }: GlobalSidebarP
 
   return (
     <aside
-      className="w-52 flex-shrink-0 h-full hidden md:flex flex-col border-r border-glass-border bg-surface/60 backdrop-blur-xl"
+      className={clsx("flex-shrink-0 h-full hidden md:flex flex-col border-r border-glass-border bg-surface/60 backdrop-blur-xl transition-[width] duration-200 motion-reduce:transition-none", collapsed ? "w-[4.25rem]" : "w-52")}
       data-tauri-drag-region
     >
       {/* Traffic Light inset for Tauri desktop */}
@@ -97,12 +96,10 @@ export default function GlobalSidebar({ activeTab, onTabChange }: GlobalSidebarP
         type="button"
         onClick={() => handleNav("workspace", "#/")}
         aria-label={t("workspaceAria")}
-        className="text-left px-4 pt-5 pb-4 border-b border-glass-border hover:opacity-90 transition-opacity"
+        className={clsx("text-left pt-5 pb-4 border-b border-glass-border hover:opacity-90 transition-opacity", collapsed ? "px-2" : "px-4")}
       >
-        <IFrameBranding size="md" showSlogan={false} />
-        <p className="font-display atelier-display text-[0.75rem] italic text-text-muted tracking-wide leading-snug mt-2.5">
-          Powered by Lumenx & Uniart
-        </p>
+        <div className={clsx(collapsed && "flex justify-center")}>{collapsed ? <img src="iframe-logo.png" alt="iFrame" className="h-9 w-9 object-contain" /> : <IFrameBranding size="md" showSlogan={false} />}</div>
+        {!collapsed && <p className="font-display atelier-display text-[0.75rem] italic text-text-muted tracking-wide leading-snug mt-2.5">Powered by Lumenx & Uniart</p>}
       </button>
 
       {/* Primary navigation */}
@@ -114,8 +111,9 @@ export default function GlobalSidebar({ activeTab, onTabChange }: GlobalSidebarP
               label={t(item.id)}
               icon={item.icon}
               onClick={() => handleNav(item.id, item.hash)}
+              collapsed={collapsed}
             />
-            {item.id === "playground" && activeTab === "playground" && <PlaygroundSessionSubnav />}
+            {item.id === "playground" && activeTab === "playground" && !collapsed && <PlaygroundSessionSubnav />}
           </div>
         ))}
       </nav>
@@ -127,10 +125,12 @@ export default function GlobalSidebar({ activeTab, onTabChange }: GlobalSidebarP
           label={t("settings")}
           icon={Settings}
           onClick={() => handleNav("settings", "#/settings")}
+          collapsed={collapsed}
         />
-        <div className="px-3 pt-2.5 font-mono text-[0.6875rem] tracking-wide text-text-muted">
-          {APP_VERSION_LABEL}
-        </div>
+        <button type="button" className="group mt-1 flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-text-secondary hover:bg-hover-bg hover:text-foreground" onPointerDown={event => { event.stopPropagation(); }} onClick={toggleCollapsed} aria-expanded={!collapsed} aria-label={t(collapsed ? "expandSidebar" : "collapseSidebar")} title={t(collapsed ? "expandSidebar" : "collapseSidebar")}>
+          {collapsed ? <PanelLeftOpen size={18} /> : <PanelLeftClose size={18} />}<span className={clsx("text-sm", collapsed && "sr-only")}>{t(collapsed ? "expandSidebar" : "collapseSidebar")}</span>
+        </button>
+        {!collapsed && <div className="px-3 pt-1 font-mono text-[0.6875rem] tracking-wide text-text-muted">{APP_VERSION_LABEL}</div>}
       </div>
     </aside>
   );

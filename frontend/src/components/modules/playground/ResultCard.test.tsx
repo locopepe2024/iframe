@@ -1,4 +1,5 @@
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { resolveMediaDelivery } from '@/lib/mediaDelivery';
 import { downloadOutput } from './downloadOutput';
 import { playgroundApi } from '@/lib/api';
 import { expect, it, vi } from 'vitest';
@@ -7,11 +8,41 @@ import { usePlaygroundStore, type PlaygroundGeneration } from './usePlaygroundSt
 vi.mock('next-intl', () => ({ useTranslations: () => (key: string) => key }));
 vi.mock('@/lib/api', () => ({ API_URL: 'https://garage.uniart.fun', playgroundApi: { saveToLibrary: vi.fn() } }));
 vi.mock('./downloadOutput', () => ({ downloadOutput: vi.fn() }));
+vi.mock('@/lib/mediaDelivery', () => ({ resolveMediaDelivery: vi.fn() }));
 vi.mock('@/components/library/NewLibraryAssetDialog', () => ({
   default: ({ initialImageUrl, initialSourceGenerationId, initialSourceOutputId }: { initialImageUrl?: string; initialSourceGenerationId?: string; initialSourceOutputId?: string }) => (
     <div role="dialog" data-image-url={initialImageUrl} data-generation-id={initialSourceGenerationId} data-output-id={initialSourceOutputId}>import asset</div>
   ),
 }));
+
+it('recovers a failed historical cover when history supplies a renewed URL', async () => {
+  vi.mocked(resolveMediaDelivery).mockRejectedValueOnce(new Error('temporary failure'));
+  const generation: PlaygroundGeneration = {
+    id: 'historical', mode: 't2i', model_id: 'model', prompt: 'historical cover', input_media: [], parameters: {},
+    batch_size: 1, outputs: [{ id: 'out', media_path: '/playground/media/historical/out?expires=1', thumbnail_path: '/playground/media/historical/out?thumbnail=1&expires=1', media_type: 'image', saved_to_library: false }],
+    status: 'completed', created_at: '2026-09-15T08:00:00Z',
+  };
+  const { rerender } = render(<ResultCard generation={generation} />);
+  fireEvent.error(screen.getByAltText('historical cover'));
+  await screen.findByText('card.imageUnavailable');
+  rerender(<ResultCard generation={{ ...generation, outputs: [{ ...generation.outputs[0], thumbnail_path: '/playground/media/historical/out?thumbnail=1&expires=2' }] }} />);
+  await waitFor(() => expect(screen.getByAltText('historical cover')).toHaveAttribute('src', expect.stringContaining('expires=2')));
+});
+
+it('retries the image request even when renewal returns the same signed cover URL', async () => {
+  vi.mocked(resolveMediaDelivery).mockResolvedValueOnce('https://garage.uniart.fun/playground/media/gen/out?thumbnail=1&signature=same');
+  render(<ResultCard generation={{
+    id: 'same-url', mode: 't2i', model_id: 'model', prompt: 'same cover', input_media: [], parameters: {}, batch_size: 1,
+    outputs: [{ id: 'out', media_path: '/playground/media/gen/out', thumbnail_path: '/playground/media/gen/out?thumbnail=1&signature=same', media_type: 'image', saved_to_library: false }],
+    status: 'completed', created_at: '2026-09-15T08:00:00Z',
+  }} />);
+  const image = screen.getByAltText('same cover');
+  const previous = image.getAttribute('src');
+  fireEvent.error(image);
+  await waitFor(() => expect(image.getAttribute('src')).not.toBe(previous));
+  expect(image.getAttribute('src')).toContain('signature=same');
+  expect(image).toHaveAttribute('loading', 'lazy');
+});
 
 it.each(['image', 'video'] as const)('appends a %s card reference without replacing or reordering the current draft', (mediaType) => {
   const existing = ['/first.png', '/second.mp4'];

@@ -1,0 +1,30 @@
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { afterEach, beforeEach, expect, it, vi } from 'vitest';
+import GlobalSidebar from './GlobalSidebar';
+vi.mock('next-intl', () => ({ useTranslations: () => (key: string) => key }));
+vi.mock('@/lib/transport', () => ({ isTauri: () => false }));
+vi.mock('@/components/modules/playground/PlaygroundSessionSubnav', () => ({ default: () => <div>Session subnav</div> }));
+beforeEach(() => { window.localStorage.clear(); });
+afterEach(() => { cleanup(); vi.restoreAllMocks(); });
+it('collapses and restores navigation, retains route labels and remembers the preference', () => {
+  const change = vi.fn();
+  const first = render(<GlobalSidebar activeTab="playground" onTabChange={change} />);
+  expect(screen.getByText('Session subnav')).toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button', { name: 'collapseSidebar' }));
+  expect(screen.getByRole('button', { name: 'expandSidebar' })).toHaveAttribute('aria-expanded', 'false');
+  expect(screen.queryByText('Session subnav')).not.toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'editing' })).toHaveAttribute('title', 'editing');
+  fireEvent.click(screen.getByRole('button', { name: 'editing' }));
+  expect(change).toHaveBeenCalledWith('editing');
+  first.unmount();
+  render(<GlobalSidebar activeTab="editing" onTabChange={change} />);
+  fireEvent.click(screen.getByRole('button', { name: 'expandSidebar' }));
+  expect(screen.getByRole('button', { name: 'collapseSidebar' })).toHaveAttribute('aria-expanded', 'true');
+});
+it('keeps the toggle usable when embedded browser storage is unavailable', () => {
+  vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => { throw new Error('Blocked'); });
+  vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => { throw new Error('Blocked'); });
+  render(<GlobalSidebar activeTab="editing" onTabChange={vi.fn()} />);
+  fireEvent.click(screen.getByRole('button', { name: 'collapseSidebar' }));
+  expect(screen.getByRole('button', { name: 'expandSidebar' })).toBeInTheDocument();
+});

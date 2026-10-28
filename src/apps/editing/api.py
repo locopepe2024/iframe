@@ -21,6 +21,12 @@ class SaveRequest(RevisionRequest):
 class RestoreRequest(RevisionRequest):
     target_revision: int = Field(ge=0)
 
+class FolderRequest(BaseModel):
+    name: str = Field(min_length=1, max_length=80)
+
+class MaterialFolderRequest(BaseModel):
+    folder_id: str | None = Field(None, max_length=80)
+
 
 def public(value, user):
     return sign_studio_media_paths(value, user.owner_profile_id)
@@ -33,17 +39,41 @@ def projects(user: UserContext = Depends(require_studio_user)):
 def create(body: CreateRequest, user: UserContext = Depends(require_studio_user)):
     return public(EditingService(user).create(body.title), user)
 
+@router.get('/folders')
+def folders(user: UserContext = Depends(require_studio_user)):
+    return public(EditingService(user).folders(), user)
+
+@router.post('/folders', status_code=201)
+def create_folder(body: FolderRequest, user: UserContext = Depends(require_studio_user)):
+    return public(EditingService(user).create_folder(body.name), user)
+
+@router.delete('/folders/{folder_id}')
+def delete_folder(folder_id: str, user: UserContext = Depends(require_studio_user)):
+    return EditingService(user).delete_folder(folder_id)
+
+@router.patch('/folders/{folder_id}')
+def rename_folder(folder_id: str, body: FolderRequest, user: UserContext = Depends(require_studio_user)):
+    return EditingService(user).rename_folder(folder_id, body.name)
+
 @router.get('/materials')
-def materials(q: str = Query('', max_length=120), cursor: int = Query(0, ge=0), user: UserContext = Depends(require_studio_user)):
-    return public(EditingService(user).materials(q, cursor), user)
+def materials(q: str = Query('', max_length=120), cursor: int = Query(0, ge=0), folder_id: str | None = Query(None), user: UserContext = Depends(require_studio_user)):
+    return public(EditingService(user).materials_page(q, cursor, folder_id), user)
 
 @router.post('/materials', status_code=201)
-def upload(file: UploadFile = File(...), user: UserContext = Depends(require_studio_user)):
-    return public(EditingService(user).upload(file.file, file.filename or 'material.mp4'), user)
+def upload(file: UploadFile = File(...), folder_id: str | None = Query(None), user: UserContext = Depends(require_studio_user)):
+    return public(EditingService(user).upload(file.file, file.filename or 'material.mp4', folder_id), user)
 
 @router.get('/materials/{key}')
 def material(key: str, user: UserContext = Depends(require_studio_user)):
     return public(EditingService(user).resolve(key)[0], user)
+
+@router.delete('/materials/{key}')
+def delete_material(key: str, user: UserContext = Depends(require_studio_user)):
+    return EditingService(user).delete_material(key)
+
+@router.patch('/materials/{key}')
+def move_material(key: str, body: MaterialFolderRequest, user: UserContext = Depends(require_studio_user)):
+    return EditingService(user).assign_folder(key, body.folder_id)
 
 @router.get('/projects/{edit_id}')
 def project(edit_id: str, user: UserContext = Depends(require_studio_user)):

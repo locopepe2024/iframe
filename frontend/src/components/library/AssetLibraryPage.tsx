@@ -1,6 +1,6 @@
 "use client";
 
-import { EditingMaterials } from "../modules/editing/EditingPage";
+import { EditingMaterialManager } from "../modules/editing/EditingPage";
 import { useState, useEffect, useMemo, useRef } from "react";
 import { useTranslations } from "next-intl";
 import { Search, Star, ArrowDownUp, ChevronDown, Check, Plus, Trash2, Folder, ArrowLeft } from "lucide-react";
@@ -185,7 +185,7 @@ export default function AssetLibraryPage() {
       {["assets", "platform", "templates", "media", "editing"].map(value => <button key={value} type="button" aria-pressed={section === value}
         className="glass-button px-4 py-2 aria-pressed:text-primary" onClick={() => setSection(value)}>{value === "editing" ? "剪辑素材" : value === "platform" ? tl("platform") : value === "templates" ? "工作台模板" : t(value)}</button>)}
     </div>
-    {section === "assets" ? <SemanticAssetLibrary /> : section === "platform" ? <PlatformReferenceReviewQueue /> : section === "templates" ? <WorkbenchTemplateLibrary /> : section === "editing" ? <div className="overflow-y-auto p-4"><EditingMaterials onSelect={item => { window.location.hash = `#/editing?media=${encodeURIComponent(item.id)}`; }} /></div> : <RecreationMediaLibrary />}
+    {section === "assets" ? <SemanticAssetLibrary /> : section === "platform" ? <PlatformReferenceReviewQueue /> : section === "templates" ? <WorkbenchTemplateLibrary /> : section === "editing" ? <div className="min-h-0 flex-1 overflow-y-auto p-4"><EditingMaterialManager /></div> : <RecreationMediaLibrary />}
   </div>;
 }
 

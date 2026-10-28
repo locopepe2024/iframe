@@ -719,6 +719,8 @@
     "offlineBannerText": "网络已断开 — 重新连接后可继续操作"
   },
   "nav": {
+    "collapseSidebar": "缩进导航栏",
+    "expandSidebar": "恢复导航栏",
     "recreation": "复刻",
     "editing": "剪辑",
     "workspace": "工作区",

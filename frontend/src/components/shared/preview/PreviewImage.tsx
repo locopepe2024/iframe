@@ -32,7 +32,7 @@ import { AlertTriangle, RefreshCw, Maximize2, Copy, Check } from "lucide-react";
 import clsx from "clsx";
 import { useTranslations } from "next-intl";
 import { getAssetUrl } from "@/lib/utils";
-import { isManagedMedia, resolveMediaDelivery, resolveRegisteredMediaDelivery } from "@/lib/mediaDelivery";
+import { isManagedMedia, mediaReferenceIdentity, resolveMediaDelivery, resolveRegisteredMediaDelivery } from "@/lib/mediaDelivery";
 import { useLightbox, type LightboxItem } from "./LightboxProvider";
 
 export interface PreviewImageProps {
@@ -75,25 +75,47 @@ export default function PreviewImage({
     const [hasRetriedOnce, setHasRetriedOnce] = useState(false);
     const [copied, setCopied] = useState(false);
     const [freshSrc, setFreshSrc] = useState<string>();
+    const [visible, setVisible] = useState(false);
+    const requestVersion = useRef(0);
+    const renewing = useRef(false);
+    const retried = useRef(false);
+    const managed = Boolean(mediaId || isManagedMedia(src || ""));
+    const sourceIdentity = mediaId || mediaReferenceIdentity(src || "");
     const wrapperRef = useRef<HTMLDivElement | null>(null);
     /** Sized-adaptive bucket; recomputed on resize via ResizeObserver. */
     const [sizeBucket, setSizeBucket] = useState<"micro" | "mid" | "large">("large");
 
     useEffect(() => {
-        setErrored(false);
-        setHasRetriedOnce(false);
-        setRetryNonce(0);
-        setFreshSrc(undefined);
-    }, [src, mediaId]);
+        const element = wrapperRef.current;
+        if (!element) return;
+        if (typeof IntersectionObserver === "undefined") { setVisible(true); return; }
+        const observer = new IntersectionObserver(entries => {
+            if (entries.some(entry => entry.isIntersecting)) { setVisible(true); observer.disconnect(); }
+        }, { rootMargin: "200px" });
+        observer.observe(element);
+        return () => observer.disconnect();
+    }, []);
 
     useEffect(() => {
-        if (!src || (!mediaId && !isManagedMedia(src))) return;
-        let active = true;
+        setErrored(false);
+        setHasRetriedOnce(false);
+        retried.current = false;
+        renewing.current = false;
+        setRetryNonce(0);
+        setFreshSrc(undefined);
+    }, [sourceIdentity]);
+
+    useEffect(() => {
+        if (!src || !managed || !visible) return;
+        const version = ++requestVersion.current;
+        renewing.current = true;
         void (mediaId ? resolveRegisteredMediaDelivery(mediaId, 320) : resolveMediaDelivery(src, 320))
-            .then(url => { if (active) setFreshSrc(url); })
-            .catch(() => { if (active) setErrored(true); });
-        return () => { active = false; };
-    }, [src, mediaId]);
+            .then(url => { if (version === requestVersion.current) setFreshSrc(url); })
+            .catch(() => { if (version === requestVersion.current) setErrored(true); })
+            .finally(() => { if (version === requestVersion.current) renewing.current = false; });
+        return () => { requestVersion.current += 1; };
+        // A changed signature is not a changed source. Keep an in-flight preview.
+    }, [sourceIdentity, managed, visible]);
 
     useEffect(() => {
         const el = wrapperRef.current;
@@ -118,10 +140,11 @@ export default function PreviewImage({
         : "";
 
     const handleError = () => {
-        if (src && (mediaId || isManagedMedia(src)) && !hasRetriedOnce) {
-            setHasRetriedOnce(true);
-            void (mediaId ? resolveRegisteredMediaDelivery(mediaId, 320) : resolveMediaDelivery(src, 320)).then(url => { setFreshSrc(url); setErrored(false); })
-                .catch(() => setErrored(true));
+        if (managed) {
+            if (!displaySrc || renewing.current) return;
+            if (retried.current) { setErrored(true); return; }
+            retried.current = true;
+            renewPreview();
             return;
         }
         // First failure → silent automatic retry once (cache hiccup / signature blip).
@@ -134,10 +157,23 @@ export default function PreviewImage({
         }
     };
 
+    const renewPreview = () => {
+        if (!src || renewing.current) return;
+        renewing.current = true;
+        const version = ++requestVersion.current;
+        void (mediaId ? resolveRegisteredMediaDelivery(mediaId, 320) : resolveMediaDelivery(src, 320))
+            .then(url => { if (version === requestVersion.current) {
+                setFreshSrc(url); setRetryNonce(n => n + 1); setErrored(false);
+            } })
+            .catch(() => { if (version === requestVersion.current) setErrored(true); })
+            .finally(() => { if (version === requestVersion.current) renewing.current = false; });
+    };
+
     const handleManualRetry = () => {
         setErrored(false);
         if (src && (mediaId || isManagedMedia(src))) {
-            void (mediaId ? resolveRegisteredMediaDelivery(mediaId, 320) : resolveMediaDelivery(src, 320)).then(setFreshSrc).catch(() => setErrored(true));
+            retried.current = false;
+            renewPreview();
             return;
         }
         setRetryNonce(n => n + 1);
@@ -194,13 +230,13 @@ export default function PreviewImage({
             {!errored ? (
                 <>
                     {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img
+                    {displaySrc && <img
                         src={displaySrc}
                         alt={alt ?? ""}
                         loading="lazy"
                         onError={handleError}
                         className="h-full w-full object-cover"
-                    />
+                    />}
                     {!noLightbox && sizeBucket !== "micro" ? (
                         <button
                             type="button"
