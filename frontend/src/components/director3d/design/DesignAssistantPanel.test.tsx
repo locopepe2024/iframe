@@ -3,7 +3,7 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { App } from "../App";
 import { useWorkbenchStore } from "../state/workbench-store";
 import { directorDesignApi } from "@/lib/directorDesign";
-import { designRevision, type DesignPreview, type DesignProposal } from "./design-proposal";
+import { compileDesignProposal, designRevision, type DesignPreview, type DesignProposal } from "./design-proposal";
 
 vi.mock("@/lib/directorDesign", () => ({ directorDesignApi: { propose: vi.fn(), listReferenceAssets: vi.fn(), readReferenceAsset: vi.fn() } }));
 vi.mock("@/lib/panoramaAssets", () => ({ panoramaAssetApi: { list: vi.fn().mockResolvedValue([]) } }));
@@ -181,4 +181,32 @@ it("reports invalid saved content without changing the scene", async () => {
   await screen.findByRole("alert");
   expect(useWorkbenchStore.getState().characters).toBe(before.characters);
   expect(useWorkbenchStore.getState().undoStack).toBe(before.undoStack);
+});
+
+it("clears blocking animation as one undoable action and enables a new camera motion", async () => {
+  const defaults = initial;
+  useWorkbenchStore.setState({ actorPaths: defaults.actorPaths, rigAdmissionStatus: "passed" });
+  const before = useWorkbenchStore.getState();
+  const request = { ...proposal(), operations: [{ kind: "camera_motion" as const, cameraId: before.selectedCameraId, presetId: "push_in" as const, durationSeconds: 4, easing: "ease_in_out" as const, distanceM: .5 }] };
+  expect(() => compileDesignProposal(before, request)).toThrow("不能已有动画");
+  render(<App />);
+  fireEvent.click(screen.getByText("重新编排动画"));
+  fireEvent.click(screen.getByRole("button", { name: "清除动画，保留布局" }));
+  const clean = useWorkbenchStore.getState();
+  expect(clean.actorPaths).toEqual({});
+  expect(clean.characters).toBe(before.characters);
+  expect(clean.sceneObjects).toBe(before.sceneObjects);
+  expect(clean.cameras).toBe(before.cameras);
+  expect(clean.designSource).toBe(before.designSource);
+  expect(clean.dialogueTimeline.fps).toBe(before.dialogueTimeline.fps);
+  expect(clean.dialogueTimeline.durationSeconds).toBe(before.dialogueTimeline.durationSeconds);
+  expect(compileDesignProposal(clean, { ...request, baseRevision: designRevision(clean) }).cameraPaths).not.toEqual({});
+  const crowd = { ...request, baseRevision: designRevision(clean), operations: [{ kind: "crowd_motion" as const, groupId: "design-crowd-reset", label: "近处避让", behavior: "avoid" as const,
+    members: [{ actorId: "design-extra-reset", positionM: [-5, 3, 0] as [number, number, number], destinationM: [-3, 3, 0] as [number, number, number], yawDeg: -90, startSeconds: 0, durationSeconds: 4 }] }] };
+  expect(compileDesignProposal(clean, crowd).crowdGroups["design-crowd-reset"].actorIds).toEqual(["design-extra-reset"]);
+  act(() => clean.undo());
+  expect(useWorkbenchStore.getState().actorPaths).toEqual(before.actorPaths);
+  expect(useWorkbenchStore.getState().dialogueTimeline).toEqual(before.dialogueTimeline);
+  act(() => useWorkbenchStore.getState().redo());
+  expect(useWorkbenchStore.getState().actorPaths).toEqual({});
 });

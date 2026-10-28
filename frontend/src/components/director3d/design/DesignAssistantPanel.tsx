@@ -141,6 +141,14 @@ export function DesignAssistantPanel({ onPreview, previewing, disabled = false }
   };
   return <section className="design-assistant" aria-labelledby="design-assistant-title">
     <div className="dialogue-heading"><h2 id="design-assistant-title">自然语言设计</h2><span className="revision-badge">场景与机位</span></div>
+    <details><summary>重新编排动画</summary>
+      <p>清除人物和机位路径、时间线内容（含对白、焦点与接触）及路径事件，保留布局、姿态、机位和来源信息，回到第 1 帧。可通过撤销恢复；建议先保存设计包。</p>
+      <button type="button" disabled={disabled || busy || navigationLoading} onClick={() => {
+        useWorkbenchStore.getState().clearAnimationForDesign();
+        onPreview(null); setProposal(null); setProposalReference(null); setHistory([]); setError("");
+        setMessage("动画已清除，布局已保留；现在可以生成新的群演或运镜方案，可撤销恢复。");
+      }}>清除动画，保留布局</button>
+    </details>
     <div className="blocking-reference-actions"><button type="button" disabled={disabled || busy} onClick={() => void loadSavedDesigns()}>读取已保存的设计</button></div>
     {savedDesigns !== null && <div>
       {savedDesigns.length === 0 ? <p role="status">还没有保存的 3D 设计。</p> : <>
