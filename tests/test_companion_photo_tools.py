@@ -63,6 +63,22 @@ def test_photo_turn_round_trip_and_history(stores):
         chat.turn('other', 'actor', turn['turn_id'])
 
 
+def test_combined_photo_search_via_chat_tool_is_persisted_and_owner_scoped(stores):
+    chat, photos = stores
+    from src.apps.photos.annotations import PhotoFacts
+    facts = PhotoFacts(location='海边', capture_time='2025-10', notes='和女儿散步').model_dump()
+    for owner, photo_id in [('owner', 'mine'), ('other', 'theirs')]:
+        photos.save_annotations(owner, photo_id, 'actor', operation_id='facts', expected_revision=0, facts=facts)
+    session = chat.session('owner', 'search-session')['session_id']
+    claim = chat.claim_turn('owner', 'actor', session, 'search-turn', '找2025年女儿在海边的照片')
+    result = chat.finish_turn('owner', 'actor', claim, dict(kind='tool', name='photo.album.list',
+        arguments=dict(year=2025, query='女儿 海边')))['result']
+    assert [photo['photo_id'] for photo in result['photos']] == ['mine']
+    assert result['photos'][0]['search_matches'][0]['source'] == 'facts'
+    assert chat.conversation('owner', 'actor', session)['messages'][0]['turn']['result'] == result
+    assert dispatch(chat, 'owner', 'actor', 'photo.album.list', dict(query='女儿 山里'))['photos'] == []
+
+
 def task_input(action, revision=1, operation='input', photo_id=None):
     return dict(operation_id=operation, expected_revision=revision, action=action, photo_id=photo_id)
 

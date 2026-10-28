@@ -111,3 +111,20 @@ def test_confirmed_structured_facts_are_searchable_and_override_date_filters(set
     changed = {**facts, 'people':[], 'location':'苏州'}
     assert client.post(path + '/annotations',json={**body,'facts':changed,'operation_id':'edit-facts','expected_revision':1}).status_code == 200
     assert client.get('/photos/albums',params={'query':'杭州'}).json()['photos'] == []
+
+
+def test_multiple_keywords_match_across_latest_confirmed_sources(setup):
+    client, store, _, path = setup
+    facts = client.get(path + '/annotations').json()['facts']
+    facts.update(location='海边', lighting='夕阳', capture_time='2025-10', notes='和女儿出游')
+    assert client.post(path + '/annotations', json=dict(operation_id='search-facts', expected_revision=0, facts=facts)).status_code == 200
+    store.save_story('owner', path.split('/')[-1], 'actor', text='退休纪念', expected_revision=0, operation_id='story-keywords')
+    def search(query, **params):
+        return client.get('/photos/albums', params=dict(query=query, **params)).json()['photos']
+    results = search('女儿 海边 退休', year=2025)
+    assert len(results) == 1
+    assert {m['source'] for m in results[0]['search_matches']} == {'facts', 'story'}
+    assert search('女儿 山里') == []
+    assert search('女儿 海边', year=2024) == []
+    assert search('capture_time') == []  # JSON field names are not photo content.
+    assert search('女儿 海边', date_prefix='2025-10')

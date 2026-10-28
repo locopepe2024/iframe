@@ -148,6 +148,7 @@ class PhotoWorkflowStore(DateStore):
                 raise ValueError('Invalid album date')
             datetime.fromisoformat(date_prefix + ('-01-01' if len(date_prefix) == 4 else '-01' if len(date_prefix) == 7 else ''))
         query = query.strip()
+        keywords = list(dict.fromkeys(query.split()))
         conditions = ["p.owner = ?", "NOT EXISTS (SELECT 1 FROM photo_deletions x WHERE x.owner=p.owner AND x.photo_id=p.photo_id)"]
         params = [owner]
         if order == 'recent':
@@ -175,9 +176,12 @@ class PhotoWorkflowStore(DateStore):
                 LEFT JOIN photo_description_reviews d ON d.owner=p.owner AND d.photo_id=p.photo_id
                     AND d.revision=(SELECT MAX(revision) FROM photo_description_reviews WHERE owner=p.owner AND photo_id=p.photo_id)
             """
-            fields = ", s.text AS story_text, s.revision AS story_revision, d.description AS description_text, d.revision AS description_revision, a.facts AS facts_text, a.revision AS facts_revision"
-            conditions.append("(instr(s.text, ?) > 0 OR instr(d.description, ?) > 0 OR instr(a.facts, ?) > 0)")
-            params.extend([query, query, query])
+            # Search leaf values, not JSON keys such as 'capture_time'.
+            facts_text = "(SELECT group_concat(CAST(f.value AS TEXT), char(10)) FROM json_tree(a.facts) f WHERE f.type IN ('text', 'integer', 'real'))"
+            fields = ", s.text AS story_text, s.revision AS story_revision, d.description AS description_text, d.revision AS description_revision, " + facts_text + " AS facts_text, a.revision AS facts_revision"
+            for keyword in keywords:
+                conditions.append("(instr(s.text, ?) > 0 OR instr(d.description, ?) > 0 OR EXISTS (SELECT 1 FROM json_tree(a.facts) f WHERE f.type IN ('text', 'integer', 'real') AND instr(CAST(f.value AS TEXT), ?) > 0))")
+                params.extend([keyword, keyword, keyword])
         with self._connection() as connection:
             rows = connection.execute(
                 "SELECT p.photo_id, p.batch_id, p.annotation" + fields
@@ -194,7 +198,8 @@ class PhotoWorkflowStore(DateStore):
                     matches = []
                     for source in ("story", "description", "facts"):
                         text = row[source + "_text"] or ""
-                        index = text.find(query)
+                        indices = [text.find(keyword) for keyword in keywords if keyword in text]
+                        index = min(indices) if indices else -1
                         if index >= 0:
                             start = max(0, index - 30)
                             matches.append({"source": source, "revision": row[source + "_revision"],
