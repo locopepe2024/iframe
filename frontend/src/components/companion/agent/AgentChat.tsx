@@ -184,7 +184,7 @@ export default function AgentChat() {
     const editing = turnFocus.kind !== "chat";
     const requestedDay = editing ? undefined : diaryDay(requestedText, "", today());
     const submittedText = requestedDay ? diaryPrompt(requestedDay) : requestedText;
-    if (!editing && !retry && !selectedPhotoId && edgeCoordinatorEnabled && runtimeCapability.status === "edge_ready") {
+    if (!editing && !retry && !selectedPhotoId && !submittedText.trimStart().startsWith("/") && creativeTask?.status !== "active" && edgeCoordinatorEnabled && runtimeCapability.status === "edge_ready") {
       try {
         const context = messages.slice(-10).map(message => {
           const reply = message.turn?.result?.kind === "text" ? `\n陪伴助手：${message.turn.result.text}` : "";

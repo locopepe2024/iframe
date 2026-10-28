@@ -263,7 +263,7 @@ class MediaDraftInput(Operation, UpdateMediaDraft):
 def media_drafts(session_id: str, identity: Owner, store: Store):
     with errors(), store.connection() as db:
         store.one(db, 'companion_sessions', identity.owner_profile_id, session_id)
-        rows = db.execute("SELECT id FROM companion_media_drafts WHERE owner=? AND actor=? AND session_id=? ORDER BY rowid DESC LIMIT 5",
+        rows = db.execute("SELECT id FROM companion_media_drafts WHERE owner=? AND actor=? AND session_id=? ORDER BY CASE status WHEN 'active' THEN 0 WHEN 'paused' THEN 1 ELSE 2 END,rowid DESC LIMIT 5",
                           (identity.owner_profile_id, identity.user_id, session_id)).fetchall()
         return dict(tasks=[store.media_draft(identity.owner_profile_id, identity.user_id, row['id']) for row in rows])
 
@@ -286,10 +286,14 @@ def input_media_draft(session_id: str, body: MediaDraftInput, identity: Owner, s
 
 
 def creative_shortcut(text):
-    command, _, brief = text.strip().partition(' ')
+    parts = text.strip().split(maxsplit=1)
+    command = parts[0] if parts else ''
+    brief = parts[1] if len(parts) > 1 else ''
     kinds = {'/图像编辑':'image_edit', '/图像生成':'image_generate', '/视频生成':'video_generate'}
     if command in kinds:
         return dict(kind='tool', name='media.draft.start', arguments=dict(type=kinds[command], brief=brief.strip()))
+    if command.startswith('/'):
+        return dict(kind='text', text='可以使用 /图像编辑、/图像生成 或 /视频生成，也可以直接告诉我想做什么。')
     return None
 
 

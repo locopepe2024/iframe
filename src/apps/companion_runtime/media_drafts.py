@@ -15,7 +15,7 @@ def display(row):
               '想修改哪张照片？可以上传，或从相册选择。' if step == 'awaiting_asset' else
               '想怎么修改这张照片？' if payload['type'] == 'image_edit' and step == 'awaiting_brief' else
               '想创作什么内容？' if step == 'awaiting_brief' else
-              '要求记下了，可以继续补充，也可以查看生成设置。')
+              '要求记下了，还可以继续补充。')
     return dict(kind='media_draft', task_id=row['id'], session_id=row['session_id'],
                 revision=row['revision'], status=state, step=step, **payload, spoken_text=spoken)
 
