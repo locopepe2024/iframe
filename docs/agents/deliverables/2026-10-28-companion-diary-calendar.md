@@ -1,0 +1,9 @@
+# 日记浏览统一进入月历
+
+代码事实：旧diary.open只展示入口按钮；diary.list返回整月正文，AgentChat逐篇渲染，open_calendar未触发打开。
+
+改动：新完成的diary.open/list直接打开月历；历史恢复不自动弹窗，按钮仍可重新打开。列表回执仅日期和数量，指定月份保留；省略月份由服务端按demo的Asia/Hong_Kong当前月份处理。单日diary.read保留正文能力；月历中的已有日记须点日期后展开。底部入口默认本月。
+
+提交05269959、1da97e45，已部署现有companion-demo，未推送。隔离前端构建成功，44项UI测试通过；28项后端测试通过。工作目录类型检查通过；隔离源码类型检查有既有CharacterWorkbench的ReferenceCandidate.description两处错误和未随前端归档带入的director3d示例JSON，未以构建忽略类型错误充当类型检查通过。隔离构建复用本机node_modules，现有CopilotKit CSS alias另映射到依赖物理路径，无产品源码改动。
+
+线上HTTP页面11个script路径与本次构建一致。真实渠道测试：打开日历返回diary.open/open_calendar=true；随后哪些天写日记返回diary.list、month=2026-10、三个日期、空diaries、open_calendar=true。未修改用户实际会话。浏览器自然语音和弹窗视觉仍待用户验收，未使用浏览器MCP。
