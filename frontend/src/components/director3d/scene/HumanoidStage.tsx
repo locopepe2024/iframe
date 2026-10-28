@@ -625,10 +625,12 @@ export function HumanoidStage({ recordingVideo: videoRecording = false, preview 
         <directionalLight position={lightDirection.map((value) => value * 5) as [number, number, number]} intensity={3.2} castShadow />
         <group position={sceneRootTransform.position} rotation={sceneRootTransform.rotationDeg.map(THREE.MathUtils.degToRad) as [number, number, number]} scale={sceneRootTransform.scale}>
           {ground.visible && <>
-            <gridHelper args={[8, Math.max(1, Math.round(8 / ground.gridSpacingM)), "#52617a", "#263247"]} position={[0, 0, ground.heightM]} rotation={[Math.PI / 2, 0, 0]} />
+            {!recordingVideo && <gridHelper args={[8, Math.max(1, Math.round(8 / ground.gridSpacingM)), "#52617a", "#263247"]} position={[0, 0, ground.heightM]} rotation={[Math.PI / 2, 0, 0]} />}
             <mesh userData={{ directorDepthGeometry: true }} receiveShadow position={[0, 0, ground.heightM]}>
               <planeGeometry args={[10, 10]} />
-              <meshStandardMaterial color="#111827" roughness={0.95} transparent opacity={ground.opacity} />
+              {/* Bias only the display depth of the base plane behind coplanar road/floor geometry.
+                  World coordinates remain unchanged for scene editing and Blender depth capture. */}
+              <meshStandardMaterial color="#111827" roughness={0.95} transparent={ground.opacity < 1} opacity={ground.opacity} polygonOffset polygonOffsetFactor={1} polygonOffsetUnits={1} />
             </mesh>
           </>}
           <Suspense fallback={<LoadingModel />}>
