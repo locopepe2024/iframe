@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import React from "react";
-import { act, cleanup, render, screen } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { NextIntlClientProvider } from "next-intl";
 import { afterEach, expect, it, vi } from "vitest";
 import messages from "../../../messages/zh.json";
@@ -37,6 +37,8 @@ it("shows merged characters and series crowd groups in Cast", () => {
     expect(screen.getByText("苏砚（雪痕客）")).toBeTruthy();
     expect(screen.getByText("流民匪寇")).toBeTruthy();
     expect(screen.getByText("青溪镇市井百姓")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: /流民匪寇/ }));
+    expect(screen.getByRole("dialog", { name: "编辑群演：流民匪寇" })).toBeTruthy();
 });
 
 

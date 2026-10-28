@@ -33,6 +33,9 @@ import WorkflowActionButton from "@/components/shared/WorkflowActionButton";
 import VoicePickerModal from "./cast/VoicePickerModal";
 import CastWorkbenchModal, { activePolls } from "./cast/CastWorkbenchModal";
 import CharacterWorkbenchBridge from "./cast/CharacterWorkbenchBridge";
+import CrowdGroupEditor from "@/components/shared/CrowdGroupEditor";
+import type { ExtraRosterEntry } from "@/store/projectStore";
+import { toast } from "@/store/toastStore";
 
 type AssetKind = "character" | "scene" | "prop";
 
@@ -59,6 +62,7 @@ export default function Cast() {
     const t = useTranslations("cast");
     const currentProject = useProjectStore((state) => state.currentProject);
     const currentSeries = useProjectStore((state) => state.currentSeries);
+    const setCurrentSeries = useProjectStore((state) => state.setCurrentSeries);
 
     // R2V v2 Phase 5 — add new asset modal (placeholder for full
     // generation flow which lands in a follow-up patch). For now this
@@ -67,6 +71,14 @@ export default function Cast() {
     // PR-3* · Cast redesign — tab filter + workbench launcher.
     const [activeTab, setActiveTab] = useState<"all" | "character" | "scene" | "prop">("all");
     const [workbench, setWorkbench] = useState<{ kind: "character" | "scene" | "prop"; entityId: string } | null>(null);
+    const [selectedCrowd, setSelectedCrowd] = useState<ExtraRosterEntry | null>(null);
+    const openCrowd = async (group: ExtraRosterEntry) => {
+        if (!currentProject?.series_id) { toast.warning("请先将群演加入系列资产库"); return; }
+        try {
+            if (currentSeries?.id !== currentProject.series_id) setCurrentSeries(await api.getSeries(currentProject.series_id));
+            setSelectedCrowd(group);
+        } catch { toast.error("无法读取系列群演资产"); }
+    };
 
     const removeGeneratingTask = useProjectStore((s) => s.removeGeneratingTask);
     const generatingTasks = useProjectStore((s) => s.generatingTasks);
@@ -150,7 +162,7 @@ export default function Cast() {
 
     const crowdGroups = useMemo(() => {
         const seriesGroups = currentSeries && currentSeries.id === currentProject?.series_id ? currentSeries.extra_roster ?? [] : [];
-        const groups = [...(currentProject?.crowd_groups ?? []), ...seriesGroups, ...(currentProject?.crowd_group_candidates ?? [])];
+        const groups = [...(currentProject?.crowd_group_candidates ?? []), ...(currentProject?.crowd_groups ?? []), ...seriesGroups];
         return Array.from(new Map(groups.map(group => [group.extra_id, group])).values());
     }, [
         currentSeries,
@@ -253,10 +265,19 @@ export default function Cast() {
                                 <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
                                     {crowdGroups.map(group => (
                                         <button type="button" key={group.extra_id}
-                                            disabled={!group.visual_asset_id || !characters.some(character => character.id === group.visual_asset_id)}
-                                            onClick={() => group.visual_asset_id && setWorkbench({ kind: "character", entityId: group.visual_asset_id })}
-                                            className="min-w-0 rounded border border-glass-border bg-glass px-3 py-2.5 text-left enabled:hover:border-primary/60 disabled:cursor-default">
-                                            <div className="truncate text-sm font-medium text-foreground" title={group.label}>{group.label}</div>
+                                            onClick={() => void openCrowd(group)}
+                                            className="min-w-0 rounded border border-glass-border bg-glass px-3 py-2.5 text-left hover:border-primary/60">
+                                            <div className="flex items-center gap-3">
+                                                <div className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded bg-surface-inset">
+                                                    {(() => {
+                                                        const character = currentSeries?.characters?.find(item => item.id === group.visual_asset_id);
+                                                        const url = character && characterImageUrl(character);
+                                                        return url ? <img src={getAssetUrl(url)} alt="" className="h-full w-full object-cover" /> : <Users size={18} className="text-text-muted" />;
+                                                    })()}
+                                                </div>
+                                                <div className="min-w-0"><div className="truncate text-sm font-medium text-foreground" title={group.label}>{group.label}</div>
+                                                    <div className="text-xs text-text-muted">{group.kind === "fixed_extra" ? "固定群演" : "人群模板"}</div></div>
+                                            </div>
                                             {group.role_tags?.length ? (
                                                 <div className="mt-1 truncate text-xs text-text-muted" title={group.role_tags.join("、")}>{group.role_tags.join("、")}</div>
                                             ) : null}
@@ -306,6 +327,9 @@ export default function Cast() {
                     onClose={() => setWorkbench(null)}
                 />
             )}
+            {selectedCrowd && currentSeries && currentSeries.id === currentProject?.series_id && <CrowdGroupEditor
+                group={selectedCrowd} series={currentSeries} onClose={() => setSelectedCrowd(null)} onSaved={setCurrentSeries}
+                onEditCharacter={currentProject?.characters?.some(character => character.id === selectedCrowd.visual_asset_id) ? id => setWorkbench({ kind: "character", entityId: id }) : undefined} />}
 
             {/* R2V v2 Phase 5 — real Add new cast modal (AI / upload tabs). */}
             <AddCastPlaceholderModal
