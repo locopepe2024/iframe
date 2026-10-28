@@ -73,6 +73,12 @@ class ChatStore(PhotoTasks, DiaryStore, CompanionStore):
             messages = [dict(r) for r in reversed(rows)]
             from .conversation_context import attach_replies
             attach_replies(db, owner, actor, session, messages)
+            from .interaction_focus import read_focus
+            focus_row = db.execute('SELECT payload FROM companion_turn_focus WHERE owner=? AND turn_id=?', (owner,identity)).fetchone()
+            focus = json.loads(focus_row['payload']) if focus_row else read_focus(db, owner, actor, session)
+            if not focus_row:
+                db.execute('INSERT INTO companion_turn_focus VALUES (?,?,?)', (owner,identity,encode(focus)))
+            messages[-1]['interaction_focus'] = focus
             tasks = db.execute("SELECT * FROM companion_photo_tasks WHERE owner=? AND actor=? AND session_id=? AND status='waiting_input' ORDER BY rowid DESC LIMIT 3", (owner,actor,session)).fetchall()
             if tasks:
                 messages[-1]['workflow_tasks'] = [dict(task_id=t['id'], revision=t['revision'], step=t['step'],
@@ -95,6 +101,11 @@ class ChatStore(PhotoTasks, DiaryStore, CompanionStore):
                 raise Conflict('Turn claim expired')
             diary_request = diary_day(row['text']) is not None
             intent = classify(row['text'])
+            from .interaction_focus import active_editor
+            if active_editor(claim.get('messages', [{}])[-1].get('interaction_focus')):
+                from .intent import Intent
+                diary_request = False
+                intent = Intent('chat')
             arguments = proposal.get('arguments', {})
             unscoped_album = proposal.get('name') in ('photo.album.list', 'photo.organize.start') and not (
                 arguments.get('year') or arguments.get('query', '').strip() or arguments.get('view') == 'pending' or arguments.get('photo_id') or arguments.get('date_prefix'))

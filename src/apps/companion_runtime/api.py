@@ -18,6 +18,7 @@ from .model import propose, propose_diary, ModelUnavailable
 from .tools import Strict, dispatch, tool_schemas, CAPABILITIES
 from .opentalking_binding import BindingUnavailable, SessionBindings
 from .opentalking_context import ContextUnavailable, IframeContextReader
+from .interaction_focus import FocusUpdate, read_focus, update_focus, active_editor
 
 
 class Operation(Strict):
@@ -196,6 +197,19 @@ def conversation(session_id: str, identity: Owner, store: Store, after: int = Qu
         return store.conversation(identity.owner_profile_id, identity.user_id, session_id, after=after, limit=limit, latest=latest, before=before)
 
 
+@router.get('/sessions/{session_id}/focus')
+def focus(session_id: str, identity: Owner, store: Store):
+    with errors(), store.connection() as db:
+        store.one(db, 'companion_sessions', identity.owner_profile_id, session_id)
+        return read_focus(db, identity.owner_profile_id, identity.user_id, session_id)
+
+
+@router.put('/sessions/{session_id}/focus')
+def set_focus(session_id: str, body: FocusUpdate, identity: Owner, store: Store):
+    with errors():
+        return update_focus(store, identity.owner_profile_id, identity.user_id, session_id, body)
+
+
 @router.get('/tools')
 def schemas(identity: Owner):
     return dict(tools=tool_schemas(), capabilities=CAPABILITIES)
@@ -245,11 +259,14 @@ def chat(session_id: str, body: ChatRequest, identity: Owner, store: Store):
             return store.turn(identity.owner_profile_id,identity.user_id,claim['id'])
         try:
             intent = classify(body.text)
+            editing = active_editor(claim['messages'][-1].get('interaction_focus'))
             # Diary is a writing lane. It receives the current session's user
             # messages but never receives memory tools, even if the model
             # would otherwise interpret the request as a search.
             if body.selected_photo_id:
                 proposal = dict(kind='tool', name='photo.organize.start', arguments=dict(photo_id=body.selected_photo_id))
+            elif editing:
+                proposal = propose(identity, claim['messages'], claim['message_id'])
             elif intent.name in ('album.scope', 'album.browse'):
                 proposal = dict(kind='album_guide')
             elif intent.name == 'media.upload_help':

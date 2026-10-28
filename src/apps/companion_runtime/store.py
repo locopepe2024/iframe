@@ -57,6 +57,8 @@ CREATE TABLE IF NOT EXISTS companion_turns (
 """
 from .photo_tasks_schema import TASK_SCHEMA
 SCHEMA += DIARY_SCHEMA + TASK_SCHEMA
+from .interaction_focus import FOCUS_SCHEMA
+SCHEMA += FOCUS_SCHEMA
 TYPES = ('preference', 'personal_fact', 'photo_recollection')
 
 
