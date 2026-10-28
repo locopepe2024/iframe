@@ -7,57 +7,8 @@ import type { AssemblyEditPlan } from '@/lib/api';
 import { AssemblyTracks } from '../AssemblyTracks';
 import { extractErrorDetail, getAssetUrl } from '@/lib/utils';
 
-export function EditingMaterials({ onSelect, disabled = false }: { onSelect: (item: EditMaterial) => void; disabled?: boolean }) {
-  const zh = useLocale().startsWith('zh');
-  const [query, setQuery] = useState('');
-  const [items, setItems] = useState<EditMaterial[]>([]);
-  const [cursor, setCursor] = useState<number | null>(null);
-  const [error, setError] = useState('');
-  const [uploadErrors, setUploadErrors] = useState<string[]>([]);
-  const [uploadProgress, setUploadProgress] = useState<{ current: number; total: number } | null>(null);
-  const [busy, setBusy] = useState(false);
-  const [reload, setReload] = useState(0);
-  useEffect(() => { let active = true; setBusy(true);
-    editing.materials(query).then(page => { if (active) { setItems(page.items); setCursor(page.next_cursor); setError(''); } }).catch(e => { if (active) setError(extractErrorDetail(e)); }).finally(() => { if (active) setBusy(false); });
-    return () => { active = false; };
-  }, [query, reload]);
-  return <section className="glass-panel space-y-3 rounded-xl p-4" aria-label={zh ? '剪辑素材库' : 'Editing materials'}>
-    <div className="flex flex-wrap items-center gap-3">
-      <h2 className="font-semibold">{zh ? '剪辑素材库' : 'Editing materials'}</h2>
-      <input className="glass-input px-3 py-2" aria-label={zh ? '搜索剪辑素材' : 'Search editing materials'} value={query} onChange={e => setQuery(e.target.value)} />
-      <label className="glass-button cursor-pointer px-3 py-2">{zh ? '上传视频或音频' : 'Upload video or audio'}<input className="sr-only" type="file" multiple accept="video/*,audio/*" disabled={busy || disabled} onChange={async e => {
-        const files = Array.from(e.target.files || []);
-        e.target.value = '';
-        if (!files.length) return;
-        setBusy(true); setUploadErrors([]);
-        const failures: string[] = [];
-        let uploaded = 0;
-        try {
-          for (let index = 0; index < files.length; index += 1) {
-            const file = files[index];
-            setUploadProgress({ current: index + 1, total: files.length });
-            try { await editing.upload(file); uploaded += 1; }
-            catch (err) { failures.push(`${file.name}: ${extractErrorDetail(err)}`); }
-          }
-          setUploadErrors(failures);
-          if (uploaded) setReload(n => n + 1);
-        } finally { setUploadProgress(null); setBusy(false); }
-      }} /></label>
-    </div>
-    <p className="text-xs text-text-secondary">{zh ? '添加素材只引用当前版本；剪辑保存在独立项目中。生成成片会明确标记为生成素材。' : 'Materials are referenced at their current version. Edits are saved in a separate project. Rendered outputs are labeled as generated.'}</p>
-    {error && <p role="alert">{error}</p>}
-    {uploadErrors.length > 0 && <p role="alert" className="whitespace-pre-line">{uploadErrors.join('\n')}</p>}
-    {busy && <p role="status">{uploadProgress ? `${zh ? '正在上传' : 'Uploading'} ${uploadProgress.current} / ${uploadProgress.total}` : (zh ? '正在读取素材…' : 'Loading materials…')}</p>}
-    {!busy && !items.length && <p>{zh ? '暂无素材，请上传视频。' : 'No materials. Upload a video to begin.'}</p>}
-    <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">{items.map(item => <article className="rounded-lg border border-glass-border p-3" key={item.id}>
-      <p className="truncate font-medium" title={item.name}>{item.name}</p>
-      <p className="text-xs text-text-muted">{item.origin === 'generated' ? (zh ? '生成素材' : 'Generated') : (zh ? '上传素材' : 'Uploaded')}</p>
-      <details className="my-2 break-all text-xs text-text-muted"><summary>{zh ? '素材身份' : 'Material identity'}</summary>{item.id}<br />SHA256: {item.sha256 || (zh ? '添加时固定校验值' : 'Captured when added')}</details>
-      <button type="button" className="glass-button px-3 py-2" disabled={busy || disabled} onClick={async () => { setBusy(true); try { onSelect(await editing.material(item.id)); } catch (err) { setError(extractErrorDetail(err)); } finally { setBusy(false); } }}>{zh ? '选择素材' : 'Select material'}</button>
-    </article>)}</div>
-    {cursor !== null && <button className="glass-button px-3 py-2" disabled={busy} onClick={async () => { setBusy(true); try { const page = await editing.materials(query, cursor); setItems(old => [...old, ...page.items]); setCursor(page.next_cursor); } catch (err) { setError(extractErrorDetail(err)); } finally { setBusy(false); } }}>{zh ? '加载更多' : 'Load more'}</button>}
-  </section>;
-}
+export { EditingMaterials, EditingMaterialManager } from './EditingMaterials';
+import { EditingMaterials, EditingMaterialManager } from './EditingMaterials';
 
 export default function EditingPage() {
   const zh = useLocale().startsWith('zh');
@@ -74,6 +25,8 @@ export default function EditingPage() {
   const [redo, setRedo] = useState<AssemblyEditPlan[]>([]);
   const [versions, setVersions] = useState<{ revision: number }[]>([]);
   const [pendingMedia, setPendingMedia] = useState('');
+  const [tab, setTab] = useState<'edit' | 'materials'>('edit');
+  useEffect(() => { const read = () => setTab(new URLSearchParams(window.location.hash.split('?')[1] || '').get('tab') === 'materials' ? 'materials' : 'edit'); read(); window.addEventListener('hashchange', read); return () => window.removeEventListener('hashchange', read); }, []);
   useEffect(() => { const read = () => setPendingMedia(new URLSearchParams(window.location.hash.split('?')[1] || '').get('media') || ''); read(); window.addEventListener('hashchange', read); return () => window.removeEventListener('hashchange', read); }, []);
   useEffect(() => { const warn = (e: BeforeUnloadEvent) => { if (dirty) { e.preventDefault(); e.returnValue = ''; } }; window.addEventListener('beforeunload', warn); return () => window.removeEventListener('beforeunload', warn); }, [dirty]);
   const [audioLane, setAudioLane] = useState<'bgm' | 'dialogue' | 'sfx'>('bgm');
@@ -96,8 +49,9 @@ export default function EditingPage() {
     change({ ...current, lanes, target_duration_ms: item.video ? start + duration : current.target_duration_ms });
   };
   return <div className="h-full space-y-5 overflow-y-auto p-4 md:p-7">
-    <h1 className="font-display text-2xl font-semibold">{t('独立剪辑', 'Independent editing')}</h1>
-    <p className="text-sm text-text-secondary">{t('从素材库选择或上传视频，按顺序剪辑，添加音轨和字幕后合成。', 'Select or upload videos, arrange the sequence, add audio and captions, then render.')}</p>
+    <div className="flex flex-wrap items-center gap-2"><h1 className="font-display mr-3 text-2xl font-semibold">{t('独立剪辑', 'Independent editing')}</h1><button type="button" className="glass-button px-3 py-2" aria-pressed={tab === 'edit'} onClick={() => { setTab('edit'); window.location.hash = '#/editing'; }}>{t('剪辑工作区', 'Editing')}</button><button type="button" className="glass-button px-3 py-2" aria-pressed={tab === 'materials'} onClick={() => { setTab('materials'); window.location.hash = '#/editing?tab=materials'; }}>{t('素材管理', 'Materials')}</button></div>
+    <p className="text-sm text-text-secondary">{tab === 'materials' ? t('管理上传素材和目录；生成素材仍由来源项目维护。', 'Manage uploaded materials and folders; generated materials remain owned by their source project.') : t('从素材库选择视频，按顺序剪辑，添加音轨和字幕后合成。', 'Select videos, arrange the sequence, add audio and captions, then render.')}</p>
+    {tab === 'materials' ? <EditingMaterialManager onSelect={item => { add(item); setTab('edit'); window.location.hash = '#/editing'; }} disabled={!project || busy} /> : <>
     {error && <p role="alert" className="text-red-300">{error}</p>}
     <div className="flex flex-wrap gap-3">
       <select className="glass-input px-3 py-2" aria-label={t('剪辑项目', 'Editing project')} disabled={busy || dirty} value={project?.id || ''} onChange={e => { const id = e.target.value; if (id) void run(async () => accept(await editing.get(id))); }}><option value="">{t('选择项目', 'Select project')}</option>{projects.map(p => <option key={p.id} value={p.id}>{p.title}</option>)}</select>
@@ -122,8 +76,10 @@ export default function EditingPage() {
           <AssemblyTracks plan={plan} resourceId={project.id} saved={!dirty} project={{ id: project.id, frames: [], video_tasks: [] }} materials={sources} onChange={change}
             onExportSubtitles={lane => editing.subtitles(project.id, lane)} onUploadAudio={async file => { const item = await editing.upload(file); setSources(old => ({ ...old, [item.id]: item })); return { media_id: item.id, url: item.url, duration_ms: item.duration_ms }; }} />
         </>}
-        <EditingMaterials onSelect={add} disabled={busy} />
+        <details className="rounded-lg border border-glass-border p-3"><summary className="cursor-pointer text-sm font-medium">{t('添加素材到时间轴', 'Add materials to timeline')}</summary><div className="mt-3 max-h-80 overflow-y-auto"><EditingMaterials onSelect={add} disabled={busy} /></div></details>
+        <button type="button" className="glass-button px-3 py-2 text-sm" onClick={() => { setTab('materials'); window.location.hash = '#/editing?tab=materials'; }}>{t('上传或管理素材', 'Upload or manage materials')}</button>
       </fieldset>
+    </>}
     </>}
   </div>;
 }
