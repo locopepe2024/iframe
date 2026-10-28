@@ -138,6 +138,18 @@ export function AssemblyTracks({ plan, resourceId, onChange, saved, project, mat
     const applyEdit = (edit: () => AssemblyEditPlan) => {
         try { onChange(edit()); setError(null); } catch (e) { setError(e instanceof Error ? e.message : String(e)); }
     };
+    useEffect(() => {
+        const onKeyDown = (event: KeyboardEvent) => {
+            const target = event.target as HTMLElement | null;
+            if (target?.tagName === "INPUT" || target?.tagName === "TEXTAREA" || target?.tagName === "SELECT" || target?.isContentEditable) return;
+            if (event.key === " ") { event.preventDefault(); if (currentMedia) setPlaying(value => !value); return; }
+            if (event.key === "ArrowLeft" || event.key === "ArrowRight") { event.preventDefault(); seek(position + (event.key === "ArrowRight" ? 100 : -100)); return; }
+            if (event.key.toLowerCase() === "s" && canSplit) { event.preventDefault(); if (splitClip && splitLane) applyEdit(() => splitAssemblyClip(plan, splitLane.id, splitClip.id, position, createRenderRequestId())); return; }
+            if ((event.key === "Delete" || event.key === "Backspace") && selected) { event.preventDefault(); applyEdit(() => removeAssemblyClip(plan, selected.laneId, selected.clipId)); setSelected(null); }
+        };
+        window.addEventListener("keydown", onKeyDown);
+        return () => window.removeEventListener("keydown", onKeyDown);
+    }, [currentMedia, position, canSplit, splitClip?.id, splitLane?.id, selected?.laneId, selected?.clipId, plan]);
     const control = "min-h-11 rounded-md border border-glass-border bg-elevated px-3 py-2 text-xs text-foreground focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary disabled:opacity-40";
     const active = plan.lanes.filter(l => l.kind === "subtitle" && !l.muted).flatMap(l => l.clips.filter(c => c.enabled && c.timeline_start_ms <= position && position < c.timeline_end_ms));
     const download = async (id: string) => {
