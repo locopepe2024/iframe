@@ -29,7 +29,11 @@ def client(monkeypatch):
         def chat(self, messages, **kwargs):
             assert current_studio_user() == owner
             assert "positionM is the BOTTOM center" in messages[0]["content"]
-            assert json.loads(messages[-1]["content"])["request"] == request()["prompt"]
+            content = messages[-1]["content"]
+            if isinstance(content, list):
+                assert any(item["type"] == "image_url" for item in content)
+                content = next(item["text"] for item in content if item["type"] == "text")
+            assert json.loads(content.split("\n", 1)[0])["request"] == request()["prompt"]
             assert kwargs["response_format"] == {"type": "json_object"}
             return json.dumps(response())
     monkeypatch.setattr(design, "LLMAdapter", Adapter)
@@ -89,6 +93,20 @@ def test_unconfigured_provider_and_clarification(client, monkeypatch):
 def test_invalid_requests(client, change):
     c, _ = client
     assert c.post("/director3d/design-proposals", json={**request(), **change}).status_code == 422
+
+
+def test_reference_image_is_sent_as_multimodal_evidence(client):
+    c, _ = client
+    image_request = {**request(), "referenceImage": {"url": "data:image/png;base64," + ("A" * 32), "mediaId": "media-grain-shop"}}
+    result = c.post("/director3d/design-proposals", json=image_request)
+    assert result.status_code == 200, result.text
+
+
+@pytest.mark.parametrize("url", ["http://localhost/image.png", "javascript:alert(1)", "not-an-image"])
+def test_reference_image_rejects_uncontrolled_urls(client, url):
+    c, _ = client
+    result = c.post("/director3d/design-proposals", json={**request(), "referenceImage": {"url": url}})
+    assert result.status_code == 422
 
 
 def test_seated_pair_proposal_uses_typed_actor_operations_and_keeps_camera(client, monkeypatch):
