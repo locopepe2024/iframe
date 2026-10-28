@@ -1,0 +1,338 @@
+{
+  "method": "per-frame positive uniform scale + translation, fit and score same6 joints; no rotation",
+  "units": "960x520 pixels",
+  "mean_per_frame_residual_median_px": 15.743060571769398,
+  "mean_per_frame_residual_max_px": 29.431788154559623,
+  "max_direction_error_deg": 0.0,
+  "max_bone_length_delta_units": 1.870732616204851e-06,
+  "rows": [
+    {
+      "source_frame": 6,
+      "scale": 0.774251801655423,
+      "translation_xy": [
+        108.87308781792177,
+        91.71716410867339
+      ],
+      "per_joint_residual_px": {
+        "left_hip": 21.08007638124712,
+        "left_knee": 8.700885098045514,
+        "left_ankle": 39.21836872185951,
+        "right_hip": 33.53049338565904,
+        "right_knee": 36.39032784339675,
+        "right_ankle": 37.6705774971498
+      },
+      "mean_px": 29.431788154559623
+    },
+    {
+      "source_frame": 7,
+      "scale": 0.6133262176322615,
+      "translation_xy": [
+        201.9220828762492,
+        126.6597517884428
+      ],
+      "per_joint_residual_px": {
+        "left_hip": 27.545524420320525,
+        "left_knee": 18.76848728475267,
+        "left_ankle": 28.616704669069136,
+        "right_hip": 22.68095260029828,
+        "right_knee": 28.856311278122206,
+        "right_ankle": 41.547575628173654
+      },
+      "mean_px": 28.002592646789413
+    },
+    {
+      "source_frame": 8,
+      "scale": 0.6083194276843946,
+      "translation_xy": [
+        203.16090791227873,
+        133.19619363080318
+      ],
+      "per_joint_residual_px": {
+        "left_hip": 22.093765071588724,
+        "left_knee": 6.692664632759969,
+        "left_ankle": 24.58181911834741,
+        "right_hip": 15.620896395189174,
+        "right_knee": 34.14581611394511,
+        "right_ankle": 25.712146748166152
+      },
+      "mean_px": 21.474518013332755
+    },
+    {
+      "source_frame": 9,
+      "scale": 0.6144533649171012,
+      "translation_xy": [
+        193.85031888005818,
+        139.75791199341091
+      ],
+      "per_joint_residual_px": {
+        "left_hip": 13.626085540328164,
+        "left_knee": 8.32075576860833,
+        "left_ankle": 12.109644773169004,
+        "right_hip": 11.173560493121666,
+        "right_knee": 14.939992536418856,
+        "right_ankle": 8.36880144481404
+      },
+      "mean_px": 11.423140092743344
+    },
+    {
+      "source_frame": 10,
+      "scale": 0.7043337274674827,
+      "translation_xy": [
+        138.2280032916966,
+        123.66437320796564
+      ],
+      "per_joint_residual_px": {
+        "left_hip": 3.3348540564728726,
+        "left_knee": 14.928133050776028,
+        "left_ankle": 15.577994131587126,
+        "right_hip": 9.429346220147986,
+        "right_knee": 4.446696963051168,
+        "right_ankle": 10.51049752638799
+      },
+      "mean_px": 9.704586991403861
+    },
+    {
+      "source_frame": 11,
+      "scale": 0.6709093176778073,
+      "translation_xy": [
+        158.34813709586632,
+        142.73167558865634
+      ],
+      "per_joint_residual_px": {
+        "left_hip": 0.33163902015075036,
+        "left_knee": 13.63258669265803,
+        "left_ankle": 6.192813002448189,
+        "right_hip": 11.457152500782433,
+        "right_knee": 2.19380824522937,
+        "right_ankle": 3.3311827594872607
+      },
+      "mean_px": 6.189863703459339
+    },
+    {
+      "source_frame": 12,
+      "scale": 0.6395731306683714,
+      "translation_xy": [
+        186.2087722015168,
+        155.49389386247628
+      ],
+      "per_joint_residual_px": {
+        "left_hip": 4.834976955018851,
+        "left_knee": 21.733394882254395,
+        "left_ankle": 17.6758037782677,
+        "right_hip": 18.082548038324585,
+        "right_knee": 5.003263883018889,
+        "right_ankle": 20.76797192360319
+      },
+      "mean_px": 14.682993243414602
+    },
+    {
+      "source_frame": 13,
+      "scale": 0.5766340888205576,
+      "translation_xy": [
+        232.77137653790868,
+        169.38189161967236
+      ],
+      "per_joint_residual_px": {
+        "left_hip": 6.6065462696527995,
+        "left_knee": 23.749225219768405,
+        "left_ankle": 17.09530308128101,
+        "right_hip": 23.255092685084964,
+        "right_knee": 11.389946126221897,
+        "right_ankle": 16.913916832493655
+      },
+      "mean_px": 16.50167170241712
+    },
+    {
+      "source_frame": 14,
+      "scale": 0.5852018987368627,
+      "translation_xy": [
+        239.54634943727706,
+        162.8556353381703
+      ],
+      "per_joint_residual_px": {
+        "left_hip": 8.612103354135613,
+        "left_knee": 15.131241819266423,
+        "left_ankle": 24.000450359570127,
+        "right_hip": 23.610262373403955,
+        "right_knee": 12.74861177323495,
+        "right_ankle": 8.181122676174995
+      },
+      "mean_px": 15.380632059297678
+    },
+    {
+      "source_frame": 15,
+      "scale": 0.5795541434040417,
+      "translation_xy": [
+        251.1149338386926,
+        163.06133701630867
+      ],
+      "per_joint_residual_px": {
+        "left_hip": 7.6222428414411505,
+        "left_knee": 21.283422311011353,
+        "left_ankle": 16.36277599901215,
+        "right_hip": 20.550945136404795,
+        "right_knee": 12.17007582505867,
+        "right_ankle": 12.094553792607304
+      },
+      "mean_px": 15.01400265092257
+    },
+    {
+      "source_frame": 16,
+      "scale": 0.5967991835540509,
+      "translation_xy": [
+        247.58135556449008,
+        157.1809846711062
+      ],
+      "per_joint_residual_px": {
+        "left_hip": 7.852151103289207,
+        "left_knee": 21.227785898286378,
+        "left_ankle": 19.766875700728924,
+        "right_hip": 20.699192553033704,
+        "right_knee": 13.815655997041048,
+        "right_ankle": 10.679625656196443
+      },
+      "mean_px": 15.673547818095951
+    },
+    {
+      "source_frame": 17,
+      "scale": 0.6038827004036026,
+      "translation_xy": [
+        242.77709553919965,
+        151.67054643840507
+      ],
+      "per_joint_residual_px": {
+        "left_hip": 8.598807883043225,
+        "left_knee": 16.98445154594158,
+        "left_ankle": 19.882647807475863,
+        "right_hip": 23.234480955861756,
+        "right_knee": 13.08612348114957,
+        "right_ankle": 12.671851757144388
+      },
+      "mean_px": 15.743060571769398
+    },
+    {
+      "source_frame": 18,
+      "scale": 0.6119134038144294,
+      "translation_xy": [
+        239.462898238552,
+        144.38220549114098
+      ],
+      "per_joint_residual_px": {
+        "left_hip": 6.769568993770106,
+        "left_knee": 19.645027264329155,
+        "left_ankle": 14.757689935132701,
+        "right_hip": 24.016846156870514,
+        "right_knee": 13.26884635660322,
+        "right_ankle": 10.734937447659997
+      },
+      "mean_px": 14.865486025727616
+    },
+    {
+      "source_frame": 19,
+      "scale": 0.6087532458204895,
+      "translation_xy": [
+        239.81179887464373,
+        139.31602510724676
+      ],
+      "per_joint_residual_px": {
+        "left_hip": 10.572108434815672,
+        "left_knee": 18.157984231033492,
+        "left_ankle": 13.755018209662914,
+        "right_hip": 21.125387531061524,
+        "right_knee": 16.04282642062669,
+        "right_ankle": 11.334930646463459
+      },
+      "mean_px": 15.164709245610625
+    },
+    {
+      "source_frame": 20,
+      "scale": 0.5973881371188895,
+      "translation_xy": [
+        247.6507402389766,
+        139.24721521672143
+      ],
+      "per_joint_residual_px": {
+        "left_hip": 8.979834987132335,
+        "left_knee": 28.779216939335384,
+        "left_ankle": 23.366900171242488,
+        "right_hip": 24.537651060667343,
+        "right_knee": 19.611922511979657,
+        "right_ankle": 14.200205421322964
+      },
+      "mean_px": 19.912621848613362
+    },
+    {
+      "source_frame": 21,
+      "scale": 0.5440313672714507,
+      "translation_xy": [
+        269.0727071073446,
+        160.2254624719454
+      ],
+      "per_joint_residual_px": {
+        "left_hip": 16.953640365218906,
+        "left_knee": 30.396156164999137,
+        "left_ankle": 29.92752072603414,
+        "right_hip": 22.82162400570616,
+        "right_knee": 22.459298570008915,
+        "right_ankle": 20.415078031586948
+      },
+      "mean_px": 23.828886310592367
+    },
+    {
+      "source_frame": 22,
+      "scale": 0.7790528399869968,
+      "translation_xy": [
+        159.23474782723605,
+        102.06815391199336
+      ],
+      "per_joint_residual_px": {
+        "left_hip": 13.770419553191063,
+        "left_knee": 14.309311271323788,
+        "left_ankle": 17.663088587889323,
+        "right_hip": 26.690201168361114,
+        "right_knee": 14.570831867451101,
+        "right_ankle": 23.12107421945315
+      },
+      "mean_px": 18.354154444611588
+    },
+    {
+      "source_frame": 23,
+      "scale": 0.7042461748055291,
+      "translation_xy": [
+        187.32495089021012,
+        126.26641272628851
+      ],
+      "per_joint_residual_px": {
+        "left_hip": 15.638976720214835,
+        "left_knee": 27.588502135553004,
+        "left_ankle": 19.55874789300026,
+        "right_hip": 36.83807081609516,
+        "right_knee": 25.789829398957746,
+        "right_ankle": 16.529284915862604
+      },
+      "mean_px": 23.6572353132806
+    },
+    {
+      "source_frame": 24,
+      "scale": 0.7188806984037343,
+      "translation_xy": [
+        183.10611490079702,
+        116.74307277143225
+      ],
+      "per_joint_residual_px": {
+        "left_hip": 10.840098187917445,
+        "left_knee": 31.876485944022864,
+        "left_ankle": 18.065602215073767,
+        "right_hip": 44.93469797875717,
+        "right_knee": 23.994381230944747,
+        "right_ankle": 16.25879128769517
+      },
+      "mean_px": 24.32834280740186
+    }
+  ],
+  "limits": [
+    "Optimistic in-sample fit, no held-out truth",
+    "Per-frame scale/translation do not recover source camera or world root",
+    "Source target is model estimate, not manual truth"
+  ]
+}
