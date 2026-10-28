@@ -53,11 +53,11 @@ it("dictation only updates a draft and switching photos aborts recognition", asy
   expect(screen.getByRole("button", { name: "说说这张照片" })).toBeDisabled();
   fireEvent.click(screen.getByLabelText("本次允许听写照片讲述"));
   fireEvent.click(screen.getByRole("button", { name: "说说这张照片" }));
-  act(() => { recognition.onresult({ results: [[{ transcript: "同意" }]] }); recognition.onend(); });
+  expect(recognition.continuous).toBe(true);
+  act(() => { recognition.onresult({ results: [[{ transcript: "同意" }]] }); });
   expect(screen.getByLabelText("我的讲述草稿（可修改）")).toHaveValue("同意");
   expect(api.saveStory).not.toHaveBeenCalled();
   expect(screen.queryByRole("region", { name: "讲述保存确认" })).not.toBeInTheDocument();
-  fireEvent.click(screen.getByRole("button", { name: "说说这张照片" }));
   const old = recognition;
   view.rerender(<PhotoStory key="two" photoId="two" />);
   await screen.findByRole("button", { name: "讲讲这张照片" });
@@ -65,6 +65,28 @@ it("dictation only updates a draft and switching photos aborts recognition", asy
   expect(old.onresult).toBeNull();
   fireEvent.click(screen.getByRole("button", { name: "讲讲这张照片" }));
   expect(screen.getByLabelText("我的讲述草稿（可修改）")).toHaveValue("");
+});
+it("appends sentences across a browser recognition restart without saving", async () => {
+  const instances:any[]=[];
+  vi.stubGlobal("SpeechRecognition", class {
+    onresult:any;onend:any;onerror:any;
+    constructor(){instances.push(this);}
+    start(){} stop(){this.onend?.();} abort=vi.fn();
+  });
+  const view=render(<PhotoStory photoId="photo"/>);
+  fireEvent.click(await screen.findByRole("button",{name:"讲讲这张照片"}));
+  fireEvent.change(screen.getByLabelText("我的讲述草稿（可修改）"),{target:{value:"已有回忆"}});
+  fireEvent.click(screen.getByLabelText("本次允许听写照片讲述"));
+  fireEvent.click(screen.getByRole("button",{name:"说说这张照片"}));
+  act(()=>instances[0].onresult({results:[[{transcript:"女儿来了"}]]}));
+  act(()=>instances[0].onend());
+  await waitFor(()=>expect(instances).toHaveLength(2));
+  act(()=>instances[1].onresult({results:[[{transcript:"我们一起喝茶"}]]}));
+  expect(screen.getByLabelText("我的讲述草稿（可修改）")).toHaveValue("已有回忆\n女儿来了\n我们一起喝茶");
+  expect(api.saveStory).not.toHaveBeenCalled();
+  fireEvent.click(screen.getByRole("button",{name:"停止讲述听写"}));
+  expect(screen.getByRole("button",{name:"核对我的讲述"})).not.toBeDisabled();
+  view.unmount();
 });
 it("loads history pages and restores old text only through a new confirmation", async () => {
   api.story.mockResolvedValue({ revision: 3, text: "现在的讲述" });

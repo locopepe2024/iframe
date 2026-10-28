@@ -21,7 +21,10 @@ export default function PhotoStory({ photoId }: { photoId: string }) {
   const [notice, setNotice] = useState("");
   const alive = useRef(true), locked = useRef(false);
   const preview = useRef<HTMLDivElement>(null);
-  const voice = useCompanionVoice(text => { setDraft(text); setError(""); });
+  const voice = useCompanionVoice(text => {
+    setDraft(current => current ? `${current}\n${text}` : text);
+    setError("");
+  }, {continuous:true});
   useEffect(() => {
     alive.current = true;
     photoApi.story(photoId).then(value => { if (alive.current) { setStory(value); setLoaded(true); } })
@@ -45,8 +48,6 @@ export default function PhotoStory({ photoId }: { photoId: string }) {
   const textToRead = mode === "confirm" ? pending?.text : mode === "edit" ? draft : story?.text;
   return <section aria-label="我的照片讲述" aria-busy={busy} className={styles.voice}>
     <h3>我的讲述</h3>
-    <p>写下或说说照片背后的回忆。不记得也没关系，下次再说。</p>
-    <p>这是您讲述的记录，与 AI 画面描述分开保存，不会自动修改照片日期或人物资料。</p>
     {story && <p className={styles.storyText}>{story.text}</p>}
     {!loaded && !error && <p role="status">正在读取讲述…</p>}
     {error && <p role="alert">{error}</p>}
@@ -58,8 +59,8 @@ export default function PhotoStory({ photoId }: { photoId: string }) {
       {mode === "edit" && <>
         <label htmlFor={draftId}>我的讲述草稿（可修改）</label>
         <textarea id={draftId} rows={6} value={draft} disabled={busy || voice.listening || voice.finishing} onChange={event => setDraft(event.target.value)} />
-        <p>最多 4000 字。未保存的草稿在切换照片后会清除。</p>
-        <p>听写可能由浏览器语音服务处理。不保存录音；说“同意”不会自动保存。听写结果会替换当前草稿。</p>
+        <p>可以连续说，点停止后修改或保存。最多 4000 字。</p>
+        <details><summary>听写说明</summary><p>听写可能由浏览器语音服务处理，不保存录音。文字追加到草稿，不会自动保存；切换照片会清除未保存内容。</p></details>
         <label className={styles.check}><input type="checkbox" checked={allowed} disabled={busy} onChange={event => {
           setAllowed(event.target.checked); if (!event.target.checked) voice.stopAll();
         }} />本次允许听写照片讲述</label>
