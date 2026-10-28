@@ -343,7 +343,18 @@ widthM is X, lengthM is Y. Buildings have centerM, dimensionsM [width,depth,heig
 doorWidthM and frontSide negative_x/positive_x/negative_y/positive_y. A
 negative/positive X front opens the side wall and a negative/positive Y front
 opens the end wall. Side-facing doors allow a shop along the middle of a road;
-never overlap road and building footprints. Rotated streets remain unsupported.
+never overlap road and building footprints. Road bounds are centerM.x +/- widthM/2
+and centerM.y +/- lengthM/2. For a building to the right of a Y-axis road,
+its centerM.x - dimensionsM.x/2 must be >= the road right edge; use negative_x
+for a doorway facing the road. Mirror this for left-side buildings with positive_x.
+Place props inside the usable interior and keep doorway/circulation space clear.
+Infer visible adjacency and screen composition from the reference image; choose
+missing dimensions, hidden structure and depth as editable assumptions, not measurements.
+Do not require the user to supply coordinates when a reasonable design assumption suffices.
+If scene.rejectedDesign exists, it is a rejected candidate, NOT current geometry.
+Use its operations and reason to correct the requested design against current scene;
+never repeat the rejected geometry unchanged or remove unrelated authored content.
+Rotated streets remain unsupported.
 Trees specify
 positionM, heightM, trunkWidthM. Layout ID starts design-street-. Member IDs
 must be unique ASCII alphanumeric/hyphen/underscore. Declare assumed dimensions.

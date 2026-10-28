@@ -19,6 +19,7 @@ export function DesignAssistantPanel({ onPreview, previewing, disabled = false }
   const [referenceHash, setReferenceHash] = useState("");
   const [proposalReference, setProposalReference] = useState<{ file: File; hash: string } | null>(null);
   const [proposal, setProposal] = useState<DesignProposal | null>(null);
+  const [rejectedDesign, setRejectedDesign] = useState<{ proposal: DesignProposal; reason: string } | null>(null);
   const [history, setHistory] = useState<DesignTurn[]>([]);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
@@ -38,10 +39,14 @@ export function DesignAssistantPanel({ onPreview, previewing, disabled = false }
     try {
       const state = useWorkbenchStore.getState();
       const baseRevision = designRevision(state);
-      const next = await directorDesignApi.propose({ prompt: requestText, baseRevision, context: designContext(state), history, referenceImage }, controller.signal);
+      const context = JSON.parse(designContext(state));
+      if (rejectedDesign?.proposal === proposal && proposal?.baseRevision === baseRevision) {
+        context.rejectedDesign = { operations: proposal.operations, reason: rejectedDesign.reason };
+      }
+      const next = await directorDesignApi.propose({ prompt: requestText, baseRevision, context: JSON.stringify(context), history, referenceImage }, controller.signal);
       if (controller.signal.aborted) return;
       if (next.baseRevision !== baseRevision) throw new Error("设计提案与请求场景不匹配，请重试。");
-      setProposal(next);
+      setProposal(next); setRejectedDesign(null);
       setProposalReference(requestReference);
       setHistory((turns) => [...turns, { role: "user", content: requestText }, { role: "assistant", content: (next.clarification ?? next.summary).slice(0, 2000) }].slice(-8) as DesignTurn[]);
       setPrompt("");
@@ -57,7 +62,7 @@ export function DesignAssistantPanel({ onPreview, previewing, disabled = false }
     if (!proposal || disabled || busy) return;
     try {
       const candidate = compileDesignProposal(useWorkbenchStore.getState(), proposal, navigation);
-      onPreview(candidate); setError("");
+      onPreview(candidate); setError(""); setRejectedDesign(null);
       const waits = proposal.operations.flatMap((op) => op.kind === "crowd_motion" ? op.members.flatMap((member) => {
         const track = candidate.dialogueTimeline.tracks.find((item) => item.target.targetId === member.actorId && item.propertyKey === "transform.position_m");
         const firstMove = track?.keyframes.findIndex((key) => JSON.stringify(key.value) !== JSON.stringify(member.positionM)) ?? -1;
@@ -66,7 +71,11 @@ export function DesignAssistantPanel({ onPreview, previewing, disabled = false }
       }) : []);
       setMessage(waits.length ? `通行避让：${waits.join("；")}。实际时间线 ${candidate.dialogueTimeline.durationSeconds.toFixed(2)} 秒。` : "");
     }
-    catch (caught) { setError(caught instanceof Error ? caught.message : "设计无法预览。"); }
+    catch (caught) {
+      onPreview(null);
+      const reason = caught instanceof Error ? caught.message : "设计无法预览。";
+      setRejectedDesign({ proposal, reason }); setError(reason);
+    }
   };
   const apply = () => {
     if (!proposal || !previewing || disabled || busy) return;
@@ -186,6 +195,7 @@ export function DesignAssistantPanel({ onPreview, previewing, disabled = false }
     </form>
     {disabled && <p role="status">录制期间暂不可设计场景。</p>}
     {busy && <p role="status">{pending.current ? "正在根据当前场景生成提案，尚未修改舞台…" : "正在读写素材库，请稍候…"}</p>}
+    {rejectedDesign?.proposal === proposal && !stale && <p role="status">预览校验未通过。继续输入调整要求并生成时，会附上本次方案和校验原因。</p>}
     {proposal && <div className="design-proposal">
       <h3>设计提案</h3><p>{proposal.summary}</p>
       {proposal.assumptions.length > 0 && <details open><summary>设计假设</summary><ul>{proposal.assumptions.map((item, index) => <li key={index}>{item}</li>)}</ul></details>}

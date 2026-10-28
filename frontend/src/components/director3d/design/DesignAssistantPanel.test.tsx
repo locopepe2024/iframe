@@ -210,3 +210,35 @@ it("clears blocking animation as one undoable action and enables a new camera mo
   act(() => useWorkbenchStore.getState().redo());
   expect(useWorkbenchStore.getState().actorPaths).toEqual({});
 });
+
+function overlappingStreet(): DesignProposal {
+  return { ...proposal(), operations: [{kind: "street_layout", layoutId: "design-street-invalid", centerM: [0,0,0], widthM: 6, lengthM: 12,
+    buildings: [{id: "shop", label: "粮铺", centerM: [0,0,0], dimensionsM: [6,6,4], doorWidthM: 2, frontSide: "negative_x"}], trees: []}] };
+}
+it("returns rejected spatial geometry and its validation reason on the next user request", async () => {
+  const bad = overlappingStreet();
+  const before = useWorkbenchStore.getState();
+  vi.mocked(directorDesignApi.propose).mockResolvedValueOnce(bad).mockResolvedValueOnce(proposal());
+  render(<App />);
+  await generate("按参考图建立粮铺");
+  fireEvent.click(screen.getByRole("button", {name: "预览设计"}));
+  expect(await screen.findByRole("alert")).toHaveTextContent("建筑占地与道路或其他建筑重叠");
+  expect(useWorkbenchStore.getState().sceneObjects).toBe(before.sceneObjects);
+  expect(useWorkbenchStore.getState().undoStack).toBe(before.undoStack);
+  await generate("把粮铺移到道路右侧");
+  await waitFor(() => expect(directorDesignApi.propose).toHaveBeenCalledTimes(2));
+  const context = JSON.parse(vi.mocked(directorDesignApi.propose).mock.calls[1][0].context);
+  expect(context.rejectedDesign.operations).toEqual(bad.operations);
+  expect(context.rejectedDesign.reason).toContain("建筑占地与道路或其他建筑重叠");
+});
+it("does not attach rejected geometry after the scene revision changes", async () => {
+  vi.mocked(directorDesignApi.propose).mockResolvedValueOnce(overlappingStreet()).mockResolvedValueOnce(proposal());
+  render(<App />);
+  await generate();
+  fireEvent.click(screen.getByRole("button", {name: "预览设计"}));
+  await screen.findByRole("alert");
+  act(() => useWorkbenchStore.getState().setSkyColor("#123456"));
+  await generate("重新设计");
+  await waitFor(() => expect(directorDesignApi.propose).toHaveBeenCalledTimes(2));
+  expect(JSON.parse(vi.mocked(directorDesignApi.propose).mock.calls[1][0].context)).not.toHaveProperty("rejectedDesign");
+});
