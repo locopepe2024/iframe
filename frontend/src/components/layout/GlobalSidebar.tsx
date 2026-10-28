@@ -127,7 +127,7 @@ export default function GlobalSidebar({ activeTab, onTabChange }: GlobalSidebarP
           onClick={() => handleNav("settings", "#/settings")}
           collapsed={collapsed}
         />
-        <button type="button" className="group mt-1 flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-text-secondary hover:bg-hover-bg hover:text-foreground" onClick={toggleCollapsed} aria-expanded={!collapsed} aria-label={t(collapsed ? "expandSidebar" : "collapseSidebar")} title={t(collapsed ? "expandSidebar" : "collapseSidebar")}>
+        <button type="button" className="group mt-1 flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-text-secondary hover:bg-hover-bg hover:text-foreground" onPointerDown={event => { event.stopPropagation(); }} onClick={toggleCollapsed} aria-expanded={!collapsed} aria-label={t(collapsed ? "expandSidebar" : "collapseSidebar")} title={t(collapsed ? "expandSidebar" : "collapseSidebar")}>
           {collapsed ? <PanelLeftOpen size={18} /> : <PanelLeftClose size={18} />}<span className={clsx("text-sm", collapsed && "sr-only")}>{t(collapsed ? "expandSidebar" : "collapseSidebar")}</span>
         </button>
         {!collapsed && <div className="px-3 pt-1 font-mono text-[0.6875rem] tracking-wide text-text-muted">{APP_VERSION_LABEL}</div>}
