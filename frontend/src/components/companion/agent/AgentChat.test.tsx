@@ -489,3 +489,51 @@ it("cancels the shared microphone when starting a new session",async()=>{
    expect(api.chat).not.toHaveBeenCalled();
  } finally {delete (window as Window & {SpeechRecognition?:unknown}).SpeechRecognition;}
 });
+
+
+it("keeps the diary focus of a queued voice sentence after the editor closes",async()=>{
+ const {act}=await import("@testing-library/react");
+ let recognition!:{onresult:((event:unknown)=>void)|null};
+ class Recognition {
+   onresult=null;onerror=null;onend=null;lang="";continuous=false;interimResults=false;
+   stop=vi.fn();abort=vi.fn();start=vi.fn();constructor(){recognition=this;}
+ }
+ Object.defineProperty(window,"SpeechRecognition",{configurable:true,value:Recognition});
+ try {
+   let complete!:(value:unknown)=>void;
+   api.chat.mockImplementationOnce(()=>new Promise(resolve=>{complete=resolve;}))
+     .mockResolvedValue({turn_id:"diary-voice",status:"completed",result:{kind:"text",text:"可以接着讲"}});
+   await start();allowText();
+   fireEvent.click(screen.getByRole("button",{name:"语音输入"}));
+   fireEvent.click(screen.getByRole("button",{name:"同意并开始聊天"}));
+   act(()=>recognition.onresult?.({results:[[{transcript:"你好"}]]}));
+   await waitFor(()=>expect(api.chat).toHaveBeenCalledTimes(1));
+   fireEvent.click(screen.getByRole("button",{name:"日记"}));
+   fireEvent.click(await screen.findByRole("button",{name:"开始记录日记"}));
+   fireEvent.change(await screen.findByLabelText("日记内容"),{target:{value:"今天女儿来看我"}});
+   act(()=>recognition.onresult?.({results:[[{transcript:"你好"}],[{transcript:"女儿教我怎么上传照片"}]]}));
+   fireEvent.click(screen.getByRole("button",{name:"取消编辑"}));
+   await act(async()=>complete({turn_id:"first-voice",status:"completed",result:{kind:"text",text:"你好"}}));
+   await waitFor(()=>expect(api.chat).toHaveBeenCalledTimes(2));
+   const updates=focusFetch.mock.calls.filter(([,options])=>options.method === "PUT").map(([,options])=>JSON.parse(options.body));
+   expect(updates[1].focus).toEqual({kind:"diary",object_id:today(),phase:"editing",draft:"今天女儿来看我"});
+   expect(api.chat.mock.calls[1][1].text).toBe("女儿教我怎么上传照片");
+   expect(api.saveDiary).not.toHaveBeenCalled();
+ } finally {delete (window as Window & {SpeechRecognition?:unknown}).SpeechRecognition;}
+});
+
+
+it("speaks upload guidance and pending confirmation through OpenTalking without claiming completion",async()=>{
+ localStorage.setItem("iframe-companion-agent-response-mode-v1","audio");
+ api.chat.mockResolvedValueOnce({turn_id:"upload-audio",status:"completed",result:{kind:"upload_guide"}})
+   .mockResolvedValueOnce({turn_id:"confirmation-audio",status:"completed",result:{kind:"confirmation",...preview}});
+ await start();allowText();
+ fireEvent.change(screen.getByLabelText("和我聊聊天"),{target:{value:"怎么上传照片"}});
+ fireEvent.click(screen.getByRole("button",{name:"发送"}));
+ await waitFor(()=>expect(playback.mock.calls.some(([props])=>props.reply?.text.includes("从手机添加"))).toBe(true));
+ await waitFor(()=>expect(screen.getByLabelText("和我聊聊天")).not.toBeDisabled());
+ fireEvent.change(screen.getByLabelText("和我聊聊天"),{target:{value:"请记住我喜欢散步"}});
+ fireEvent.click(screen.getByRole("button",{name:"发送"}));
+ await waitFor(()=>expect(playback.mock.calls.some(([props])=>props.reply?.id === "confirmation-audio" && props.reply.text.includes("还没有执行"))).toBe(true));
+ expect(api.confirm).not.toHaveBeenCalled();
+});

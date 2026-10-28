@@ -21,6 +21,7 @@ import DiaryCard, { diaryDay, diaryPrompt, formatDiaryDay, today, type DiaryCont
 import UniArtSettings from "./UniArtSettings";
 import CompanionIdentitySettings, { defaultCompanionIdentity, readCompanionIdentity, type CompanionIdentity } from "./CompanionIdentitySettings";
 import SpeechPlayback from "./SpeechPlayback";
+import { spokenTurnText } from "./spokenTurnText";
 import OpenTalkingReply, { type SpokenReply } from "./OpenTalkingReply";
 import UploadGuideCard from "./UploadGuideCard";
 import { isOpenAlbumCommand } from "./localCommands";
@@ -209,7 +210,7 @@ export default function AgentChat() {
     localStorage.setItem(turnKey, result.turn_id);
     if (alive.current) {
       if (audioReply) {
-        const replyText = result.result?.kind === "text" ? result.result.text : (result.result?.kind === "photo_task" || result.result?.kind === "diary_read" || result.result?.kind === "album_guide" || result.result?.kind === "photo_action") ? result.result.spoken_text : undefined;
+        const replyText = spokenTurnText(result.result);
         if (replyText) setSpokenReply({ id: result.turn_id, text: replyText });
       }
       setDraft(null); setTurn(result); setPreview(result.result?.kind === "confirmation" ? result.result : null); setDrafts(old => ({ ...old, chat: "" })); sendOperation.current = null; setHasRetry(false);
