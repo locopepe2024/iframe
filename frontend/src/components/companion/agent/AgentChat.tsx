@@ -246,9 +246,9 @@ export default function AgentChat() {
     const task=await companionApi.startMediaDraft(activeSession,{operation_id:crypto.randomUUID(),type});
     setCreativeTask(task);setNotice("");
   }
-  async function changeCreative(action:"clear_photo"|"select_photo"|"pause"|"resume"|"cancel", photo_id?:string) {
+  async function changeCreative(action:"clear_photo"|"select_photo"|"setting"|"pause"|"resume"|"cancel", photo_id?:string) {
     if (!creativeTask) return;
-    const task=await companionApi.updateMediaDraft(session,{operation_id:crypto.randomUUID(),task_id:creativeTask.task_id,expected_revision:creativeTask.revision,action,...(photo_id?{photo_id}:{})});
+    const task=await companionApi.updateMediaDraft(session,{operation_id:crypto.randomUUID(),task_id:creativeTask.task_id,expected_revision:creativeTask.revision,action,...(photo_id?(action==="setting"?{setting:photo_id}:{photo_id}):{})});
     setCreativeTask(task);
   }
   function organizeSelectedPhoto(id: string) {
@@ -429,7 +429,7 @@ export default function AgentChat() {
       </div>{renderAttached(index+1)}</Fragment>;
       })}
     </section>
-    {creativeTask && creativeTask.status !== "cancelled" && <MediaDraftCard task={creativeTask} disabled={inputDisabled || !!pending} onAction={async(action,photo)=>{let ok=false;await run(async()=>{await changeCreative(action,photo);ok=true;});return ok;}} onUpload={()=>{creativeUpload.current={task_id:creativeTask.task_id,revision:creativeTask.revision};fileRef.current?.click();}}/>}
+    {creativeTask && creativeTask.status !== "cancelled" && <MediaDraftCard key={creativeTask.task_id} task={creativeTask} onRefresh={()=>{void run(async()=>{const data=await companionApi.mediaDrafts(session);setCreativeTask(data.tasks.find(task=>task.task_id===creativeTask.task_id)??null);});}} disabled={inputDisabled || !!pending} onAction={async(action,photo)=>{let ok=false;await run(async()=>{await changeCreative(action,photo);ok=true;});return ok;}} onUpload={()=>{creativeUpload.current={task_id:creativeTask.task_id,revision:creativeTask.revision};fileRef.current?.click();}}/>}
     {turn?.result?.kind === "text" && !messages.some(m => m.turn?.turn_id === turn.turn_id) && (diaryDay(lastSubmittedText) ? <DiaryCard day={diaryDay(lastSubmittedText)!} text={turn.result.text} sourceTurn={turn.turn_id} onOpenDiary={() => setFeature("diary")} /> : <article className={chatStyles.assistant}><p>{turn.result.text}</p>{responseMode === "text" && <SpeechPlayback text={turn.result.text} voice={identity.voice}/>}</article>)}
     {turn?.result?.kind === "photo_action" && !messages.some(m => m.turn?.turn_id === turn.turn_id) && <PhotoActionCard key={turn.turn_id} result={turn.result} />}
     {turn?.result?.kind === "album_guide" && !messages.some(m => m.turn?.turn_id === turn.turn_id) && <AlbumScopeCard key={turn.turn_id} browse={turn.result.browse} disabled={inputDisabled || pending} onSelect={organizeSelectedPhoto} />}

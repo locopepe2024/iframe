@@ -13,6 +13,9 @@ export type GenerationDraft = {
   step: "reference" | "parameters" | "review" | "confirmed";
   reference: string | null;
   setting: string;
+  task_id?: string;
+  expected_revision?: number;
+  job_id?: string;
 };
 
 export function createGenerationDraft(mode: MediaMode, prompt: string): GenerationDraft {
