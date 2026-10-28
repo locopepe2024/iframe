@@ -2,16 +2,87 @@
 from __future__ import annotations
 
 import json
+import hashlib
+import re
+from pathlib import Path
+from uuid import uuid4
 from typing import Annotated, Literal
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
+from fastapi.responses import FileResponse
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
 
 from .identity import UserContext, require_user_context
 from .studio_access import reset_studio_user, set_studio_user
 from .comic_gen.llm_adapter import LLMAdapter
+from .media_registry import get_media, list_media, register_media
+from ..utils.managed_media_root import ManagedMediaRoot
+from ..utils.storage_config import media_root
 
 router = APIRouter(prefix="/director3d", tags=["director3d"])
+REFERENCE_TYPES = {
+    "reference_image": ("image/png", "image/jpeg", "image/webp"),
+    "design_bundle": ("application/json",),
+    "camera_motion_video": ("video/webm", "video/mp4"),
+}
+REFERENCE_EXTENSIONS = {"image/png": ".png", "image/jpeg": ".jpg", "image/webp": ".webp", "application/json": ".json", "video/webm": ".webm", "video/mp4": ".mp4"}
+
+
+@router.post("/reference-assets")
+async def save_reference_asset(
+    file: UploadFile = File(...), kind: str = Form(...),
+    sourcePackageChecksum: str = Form(...), metadata: str = Form("{}"),
+    user: UserContext = Depends(require_user_context),
+):
+    if kind not in REFERENCE_TYPES or file.content_type not in REFERENCE_TYPES[kind]:
+        raise HTTPException(422, "Unsupported director reference type")
+    if not re.fullmatch(r"fnv1a32:[0-9a-f]{8}", sourcePackageChecksum):
+        raise HTTPException(422, "Invalid source package checksum")
+    try:
+        details = json.loads(metadata)
+    except (ValueError, TypeError) as exc:
+        raise HTTPException(422, "Invalid reference metadata") from exc
+    if not isinstance(details, dict) or len(metadata) > 16000:
+        raise HTTPException(422, "Invalid reference metadata")
+    max_bytes = 3 * 1024 * 1024 if kind == "reference_image" else 25 * 1024 * 1024
+    content = await file.read(max_bytes + 1)
+    if not content or len(content) > max_bytes:
+        raise HTTPException(413, "Reference media exceeds size limit")
+    if kind == "design_bundle":
+        try:
+            bundle = json.loads(content)
+        except ValueError as exc:
+            raise HTTPException(422, "Invalid design bundle") from exc
+        if not isinstance(bundle, dict) or bundle.get("sourcePackageChecksum") != sourcePackageChecksum or bundle.get("schemaVersion") != "iframe.director3d.design-bundle.v1":
+            raise HTTPException(422, "Design bundle checksum mismatch")
+    root = media_root()
+    owner_hash = hashlib.sha256(user.owner_profile_id.encode()).hexdigest()[:24]
+    relative = f"users/{owner_hash}/director3d/references/{uuid4().hex}{REFERENCE_EXTENSIONS[file.content_type]}"
+    path = Path(ManagedMediaRoot(root).resolve(str(Path(root).resolve() / relative)))
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_bytes(content)
+    media_id = register_media(user.owner_profile_id, relative, kind=f"director_{kind}",
+                              display_name=(file.filename or kind)[:120], sha256=hashlib.sha256(content).hexdigest(),
+                              metadata={**details, "sourcePackageChecksum": sourcePackageChecksum}, output_root=root)
+    return {"mediaId": media_id, "kind": kind, "sourcePackageChecksum": sourcePackageChecksum}
+
+
+@router.get("/reference-assets")
+def list_reference_assets(user: UserContext = Depends(require_user_context)):
+    return [{"mediaId": item["media_id"], "kind": item["kind"].removeprefix("director_"),
+             "name": item["display_name"], "metadata": item["metadata"], "sha256": item["sha256"]}
+            for item in list_media(user.owner_profile_id, output_root=media_root()) if item["kind"].startswith("director_")]
+
+
+@router.get("/reference-assets/{media_id}/content")
+def get_reference_asset_content(media_id: str, user: UserContext = Depends(require_user_context)):
+    item = get_media(user.owner_profile_id, media_id, output_root=media_root())
+    if not item or not item["kind"].startswith("director_"):
+        raise HTTPException(404, "Reference asset not found")
+    path = Path(ManagedMediaRoot(media_root()).resolve(str(Path(media_root()).resolve() / item["storage_key"])))
+    if not path.is_file():
+        raise HTTPException(404, "Reference media not found")
+    return FileResponse(path, headers={"Cache-Control": "private, no-store", "X-Content-Type-Options": "nosniff"})
 Number = Annotated[float, Field(strict=True, ge=-100, le=100)]
 Vector = tuple[Number, Number, Number]
 Identifier = Annotated[str, Field(min_length=1, max_length=100)]

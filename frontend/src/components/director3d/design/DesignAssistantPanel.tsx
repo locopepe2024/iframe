@@ -1,7 +1,7 @@
 import { initializeNavigation } from "./navmesh-routing";
 import { useEffect, useRef, useState } from "react";
 import axios from "axios";
-import { directorDesignApi, type DesignReferenceImage, type DesignTurn } from "@/lib/directorDesign";
+import { directorDesignApi, type DirectorReferenceAsset, type DesignReferenceImage, type DesignTurn } from "@/lib/directorDesign";
 import { useWorkbenchStore } from "../state/workbench-store";
 import { compileDesignProposal, designContext, designRevision, type DesignPreview, type DesignProposal } from "./design-proposal";
 
@@ -11,8 +11,13 @@ export function DesignAssistantPanel({ onPreview, previewing, disabled = false }
   const [navigation, setNavigation] = useState<"boxes" | "navmesh">("boxes");
   const [navigationLoading, setNavigationLoading] = useState(false);
   const [prompt, setPrompt] = useState("");
+  const [savedDesigns, setSavedDesigns] = useState<DirectorReferenceAsset[] | null>(null);
+  const [selectedDesignId, setSelectedDesignId] = useState("");
   const [referenceImage, setReferenceImage] = useState<DesignReferenceImage | null>(null);
   const [referenceImageName, setReferenceImageName] = useState("");
+  const [referenceFile, setReferenceFile] = useState<File | null>(null);
+  const [referenceHash, setReferenceHash] = useState("");
+  const [proposalReference, setProposalReference] = useState<{ file: File; hash: string } | null>(null);
   const [proposal, setProposal] = useState<DesignProposal | null>(null);
   const [history, setHistory] = useState<DesignTurn[]>([]);
   const [busy, setBusy] = useState(false);
@@ -29,6 +34,7 @@ export function DesignAssistantPanel({ onPreview, previewing, disabled = false }
     const controller = new AbortController(); pending.current = controller;
     setBusy(true); setError(""); setMessage(""); onPreview(null);
     const requestText = prompt.trim();
+    const requestReference = referenceFile && referenceHash ? { file: referenceFile, hash: referenceHash } : null;
     try {
       const state = useWorkbenchStore.getState();
       const baseRevision = designRevision(state);
@@ -36,6 +42,7 @@ export function DesignAssistantPanel({ onPreview, previewing, disabled = false }
       if (controller.signal.aborted) return;
       if (next.baseRevision !== baseRevision) throw new Error("设计提案与请求场景不匹配，请重试。");
       setProposal(next);
+      setProposalReference(requestReference);
       setHistory((turns) => [...turns, { role: "user", content: requestText }, { role: "assistant", content: (next.clarification ?? next.summary).slice(0, 2000) }].slice(-8) as DesignTurn[]);
       setPrompt("");
     } catch (caught) {
@@ -64,7 +71,10 @@ export function DesignAssistantPanel({ onPreview, previewing, disabled = false }
   const apply = () => {
     if (!proposal || !previewing || disabled || busy) return;
     try {
-      useWorkbenchStore.getState().applyDesignProposal(proposal, navigation);
+      useWorkbenchStore.getState().applyDesignProposal(proposal, navigation, proposalReference ? {
+        fileName: proposalReference.file.name, mimeType: proposalReference.file.type, sizeBytes: proposalReference.file.size,
+        sha256: proposalReference.hash, mediaId: null, assumptions: proposal.assumptions,
+      } : null);
       onPreview(null); setProposal(null); setError(""); setMessage("设计已应用，可继续输入修改，也可一步撤销。");
     } catch (caught) { onPreview(null); setError(caught instanceof Error ? caught.message : "应用失败。"); }
   };
@@ -78,6 +88,22 @@ export function DesignAssistantPanel({ onPreview, previewing, disabled = false }
     const anchor = document.createElement("a"); anchor.href = url; anchor.download = `director3d-design-${bundle.sourcePackageChecksum.replace(/[^a-z0-9_-]/gi, "-")}.json`; anchor.click();
     URL.revokeObjectURL(url); setMessage("设计包已导出；保存到资产库仍需用户显式操作。");
   };
+  const saveBundle = async () => {
+    try {
+      setBusy(true); setError("");
+      let state = useWorkbenchStore.getState();
+      let bundle = state.exportDirectorDesignBundle();
+      if (proposalReference && state.designSource?.sha256 === proposalReference.hash && !state.designSource.mediaId) {
+        const savedImage = await directorDesignApi.saveReferenceAsset(proposalReference.file, proposalReference.file.name, "reference_image", bundle.sourcePackageChecksum, { sha256: proposalReference.hash });
+        state.setDesignSourceMediaId(proposalReference.hash, savedImage.mediaId);
+        state = useWorkbenchStore.getState();
+        bundle = state.exportDirectorDesignBundle();
+      }
+      const saved = await directorDesignApi.saveReferenceAsset(new Blob([JSON.stringify(bundle)], { type: "application/json" }), `director-design-${bundle.sourcePackageChecksum}.json`, "design_bundle", bundle.sourcePackageChecksum, { referenceImageMediaId: bundle.authoring.designSource?.mediaId ?? null, assumptions: bundle.authoring.designAssumptions });
+      setMessage(`设计包已保存到过程素材库：${saved.mediaId}`);
+    } catch (caught) { setError(caught instanceof Error ? caught.message : "保存设计包失败。"); }
+    finally { setBusy(false); }
+  };
   const importBundle = (file: File | undefined) => {
     if (!file) return;
     const reader = new FileReader();
@@ -90,9 +116,39 @@ export function DesignAssistantPanel({ onPreview, previewing, disabled = false }
     };
     reader.readAsText(file);
   };
+  const loadSavedDesigns = async () => {
+    setBusy(true); setError("");
+    try {
+      const assets = (await directorDesignApi.listReferenceAssets()).filter((asset) => asset.kind === "design_bundle");
+      setSavedDesigns(assets); setSelectedDesignId("");
+    } catch { setError("读取已保存的设计失败，请重试。"); }
+    finally { setBusy(false); }
+  };
+  const restoreSavedDesign = async () => {
+    if (!selectedDesignId || busy || disabled) return;
+    const baseRevision = designRevision(useWorkbenchStore.getState());
+    setBusy(true); setError("");
+    try {
+      const blob = await directorDesignApi.readReferenceAsset(selectedDesignId);
+      const raw = JSON.parse(await blob.text());
+      if (designRevision(useWorkbenchStore.getState()) !== baseRevision) throw new Error("读取期间场景已变化，请重新导入。");
+      const result = useWorkbenchStore.getState().importDirectorDesignBundle(raw);
+      if (!result.ok) throw new Error(result.errors.join("；"));
+      onPreview(null); setProposal(null); setProposalReference(null); setHistory([]);
+      setMessage("已从素材库导入设计，可继续调整；可通过撤销恢复原场景。");
+    } catch (caught) { setError(caught instanceof Error ? caught.message : "导入设计失败。"); }
+    finally { setBusy(false); }
+  };
   return <section className="design-assistant" aria-labelledby="design-assistant-title">
     <div className="dialogue-heading"><h2 id="design-assistant-title">自然语言设计</h2><span className="revision-badge">场景与机位</span></div>
-    <div className="blocking-reference-actions"><button type="button" onClick={exportBundle} disabled={disabled}>导出设计包</button><label className="button-like">导入设计包<input type="file" accept="application/json,.json" hidden disabled={disabled} onChange={(event) => { importBundle(event.target.files?.[0]); event.currentTarget.value = ""; }} /></label></div>
+    <div className="blocking-reference-actions"><button type="button" disabled={disabled || busy} onClick={() => void loadSavedDesigns()}>读取已保存的设计</button></div>
+    {savedDesigns !== null && <div>
+      {savedDesigns.length === 0 ? <p role="status">还没有保存的 3D 设计。</p> : <>
+        <label>已保存的 3D 设计<select value={selectedDesignId} disabled={disabled || busy} onChange={(event) => setSelectedDesignId(event.target.value)}><option value="">选择设计</option>{savedDesigns.map((asset) => <option key={asset.mediaId} value={asset.mediaId}>{asset.name}</option>)}</select></label>
+        <button type="button" disabled={disabled || busy || !selectedDesignId} onClick={() => void restoreSavedDesign()}>导入所选设计</button>
+      </>}
+    </div>}
+    <div className="blocking-reference-actions"><button type="button" onClick={exportBundle} disabled={disabled}>导出设计包</button><button type="button" onClick={() => void saveBundle()} disabled={disabled || busy}>保存设计包到素材库</button><label className="button-like">导入设计包<input type="file" accept="application/json,.json" hidden disabled={disabled} onChange={(event) => { importBundle(event.target.files?.[0]); event.currentTarget.value = ""; }} /></label></div>
     <label>群演寻路模式<select aria-label="群演寻路模式" value={navigation} disabled={busy || navigationLoading || disabled} onChange={async (event) => {
       const mode = event.target.value as "boxes" | "navmesh";
       onPreview(null); setMessage(""); setError("");
@@ -113,15 +169,15 @@ export function DesignAssistantPanel({ onPreview, previewing, disabled = false }
         if (!file) return;
         if (file.size > 3 * 1024 * 1024) { setError("参考图不能超过 3 MB。"); return; }
         const reader = new FileReader();
-        reader.onload = () => { const url = String(reader.result || ""); setReferenceImage(url.startsWith("data:image/") ? { url } : null); setReferenceImageName(file.name); setError(""); };
+        reader.onload = async () => { const url = String(reader.result || ""); if (!url.startsWith("data:image/")) { setError("参考图格式无效。"); return; } setReferenceImage({ url }); setReferenceFile(file); setReferenceImageName(file.name); setReferenceHash(Array.from(new Uint8Array(await crypto.subtle.digest("SHA-256", await file.arrayBuffer()))).map((byte) => byte.toString(16).padStart(2, "0")).join("")); setError(""); };
         reader.onerror = () => setError("参考图读取失败，请重试。");
         reader.readAsDataURL(file);
       }} /></label>
       {referenceImage && <p role="status">已绑定参考图：{referenceImageName}。它只用于解析构图和白模假设。</p>}
-      <div className="blocking-reference-actions"><button type="submit" disabled={busy || disabled || !prompt.trim()}>{busy ? "正在设计…" : "生成设计提案"}</button>{busy && <button type="button" onClick={cancelRequest}>停止生成</button>}{history.length > 0 && !busy && <button type="button" disabled={disabled} onClick={() => { setHistory([]); setProposal(null); onPreview(null); setMessage("已清空对话，场景保持当前编辑结果。"); }}>新对话</button>}</div>
+      <div className="blocking-reference-actions"><button type="submit" disabled={busy || disabled || !prompt.trim()}>{busy ? "正在设计…" : "生成设计提案"}</button>{busy && pending.current && <button type="button" onClick={cancelRequest}>停止生成</button>}{history.length > 0 && !busy && <button type="button" disabled={disabled} onClick={() => { setHistory([]); setProposal(null); onPreview(null); setMessage("已清空对话，场景保持当前编辑结果。"); }}>新对话</button>}</div>
     </form>
     {disabled && <p role="status">录制期间暂不可设计场景。</p>}
-    {busy && <p role="status">正在根据当前场景生成提案，尚未修改舞台…</p>}
+    {busy && <p role="status">{pending.current ? "正在根据当前场景生成提案，尚未修改舞台…" : "正在读写素材库，请稍候…"}</p>}
     {proposal && <div className="design-proposal">
       <h3>设计提案</h3><p>{proposal.summary}</p>
       {proposal.assumptions.length > 0 && <details open><summary>设计假设</summary><ul>{proposal.assumptions.map((item, index) => <li key={index}>{item}</li>)}</ul></details>}

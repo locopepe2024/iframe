@@ -40,6 +40,8 @@ export interface CharacterAuthoringState {
 }
 
 export interface AuthoringSnapshot {
+  designAssumptions: string[];
+  designSource: { fileName: string; mimeType: string; sizeBytes: number; sha256: string; mediaId: string | null; assumptions: string[] } | null;
   crowdGroups: Record<string, CrowdGroupState>;
   characters: Record<string, CharacterAuthoringState>;
   actorMappings: Record<string, ActorMappingState>;
@@ -755,6 +757,8 @@ function constrainSceneObjectPosition(
 }
 
 export interface WorkbenchState {
+  designAssumptions: string[];
+  designSource: AuthoringSnapshot["designSource"];
   crowdGroups: Record<string, CrowdGroupState>;
   characters: Record<string, CharacterAuthoringState>;
   actorMappings: Record<string, ActorMappingState>;
@@ -814,7 +818,8 @@ export interface WorkbenchState {
   undoStack: AuthoringSnapshot[];
   redoStack: AuthoringSnapshot[];
   unsavedChanges: boolean;
-  applyDesignProposal: (proposal: DesignProposal, navigation?: "boxes" | "navmesh") => void;
+  applyDesignProposal: (proposal: DesignProposal, navigation?: "boxes" | "navmesh", source?: AuthoringSnapshot["designSource"]) => void;
+  setDesignSourceMediaId: (sha256: string, mediaId: string) => void;
   exportDirectorDesignBundle: () => ReturnType<typeof createDirectorDesignBundle>;
   importDirectorDesignBundle: (raw: unknown, options?: { expectedCurrentPackageChecksum?: string }) => { ok: true } | { ok: false; errors: string[] };
   markExplicitlySaved: () => void;
@@ -1049,6 +1054,8 @@ function mutateSceneObject(
 
 function snapshotAuthoring(state: WorkbenchState): AuthoringSnapshot {
   return {
+    designAssumptions: state.designAssumptions,
+    designSource: state.designSource,
     crowdGroups: state.crowdGroups,
     characters: state.characters,
     actorMappings: state.actorMappings,
@@ -1227,6 +1234,8 @@ export const useWorkbenchStore = create<WorkbenchState>((set, get) => ({
   panoramaDiagnosticPreviewYawDeg: 0,
   panoramaDiagnosticPreviewFlipVertical: false,
   renderScene: createInitialRenderSceneState(),
+  designAssumptions: [],
+  designSource: null,
   selectedJointId: "root",
   jointFilter: "",
   viewMode: "director",
@@ -1239,10 +1248,11 @@ export const useWorkbenchStore = create<WorkbenchState>((set, get) => ({
   fullscreenActive: false,
   playheadFrame: 1,
   commandHistory: [],
-  applyDesignProposal: (proposal, navigation) => set((state) => {
+  applyDesignProposal: (proposal, navigation, source) => set((state) => {
     const preview = compileDesignProposal(state, proposal, navigation);
-    return mutateScene(state, "design.proposal.apply", { crowdGroups: preview.crowdGroups, actorMappings: preview.actorMappings, characters: preview.characters, sceneObjects: preview.sceneObjects, cameras: preview.cameras, cameraPaths: preview.cameraPaths, dialogueTimeline: preview.dialogueTimeline });
+    return mutateScene(state, "design.proposal.apply", { crowdGroups: preview.crowdGroups, actorMappings: preview.actorMappings, characters: preview.characters, sceneObjects: preview.sceneObjects, cameras: preview.cameras, cameraPaths: preview.cameraPaths, dialogueTimeline: preview.dialogueTimeline, designAssumptions: [...proposal.assumptions], designSource: source ?? null });
   }),
+  setDesignSourceMediaId: (sha256, mediaId) => set((state) => state.designSource?.sha256 === sha256 ? { designSource: { ...state.designSource, mediaId } } : state),
   exportDirectorDesignBundle: () => createDirectorDesignBundle(get()),
   importDirectorDesignBundle: (raw, options) => {
     try {
