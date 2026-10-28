@@ -719,6 +719,8 @@
     "offlineBannerText": "You're offline — you can continue once reconnected"
   },
   "nav": {
+    "collapseSidebar": "Collapse navigation",
+    "expandSidebar": "Expand navigation",
     "recreation": "Recreation",
     "editing": "Editor",
     "workspace": "Workspace",
