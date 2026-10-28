@@ -1,0 +1,2230 @@
+{
+  "schema": "addams-review-queue.v1",
+  "source_sha256": "3b0d8f32549c80ef04e988c1bfe1393582fd6349047b306ce6c2df7bdae63c96",
+  "inputs_sha256": {
+    "observations.json.gz": "f6043cf40f7f5c910adadb808065085df2cad6a114df45f0da5eb6ba36c1eeee",
+    "report.json": "e2e47af4b7b46ca8842694f3a2c9a787c48e34f6b9eebe93b205616b4dd05b20"
+  },
+  "parameters": {
+    "model_disagreement_threshold_review_px": 30,
+    "review_size": [
+      960,
+      520
+    ],
+    "confidence_filter": 0.5
+  },
+  "visual_review": {
+    "cut_first_frames": [
+      66,
+      159
+    ],
+    "protagonist_out_of_frame": [
+      175,
+      217
+    ],
+    "protagonist_partial_exit_frame": 174,
+    "note": "Agent visual review, separate from user joint annotations; all tail173\u2013217 thumbnails inspected."
+  },
+  "summary": [
+    {
+      "id": "shot1",
+      "first_frame": 1,
+      "last_frame": 65,
+      "review_frames": 28,
+      "visually_out_of_frame": 0,
+      "reason_counts": {
+        "independent_missing": 0,
+        "model_disagreement_gt30_review_px": 17,
+        "mp_missing": 7,
+        "multiple_proposals": 4,
+        "target_identity_review": 0
+      }
+    },
+    {
+      "id": "shot2",
+      "first_frame": 66,
+      "last_frame": 158,
+      "review_frames": 52,
+      "visually_out_of_frame": 0,
+      "reason_counts": {
+        "independent_missing": 11,
+        "model_disagreement_gt30_review_px": 20,
+        "mp_missing": 28,
+        "multiple_proposals": 1,
+        "target_identity_review": 0
+      }
+    },
+    {
+      "id": "shot3",
+      "first_frame": 159,
+      "last_frame": 217,
+      "review_frames": 16,
+      "visually_out_of_frame": 43,
+      "reason_counts": {
+        "independent_missing": 0,
+        "model_disagreement_gt30_review_px": 0,
+        "mp_missing": 5,
+        "multiple_proposals": 12,
+        "target_identity_review": 16
+      }
+    }
+  ],
+  "frames": [
+    {
+      "source_frame": 1,
+      "pts_s": 0.0,
+      "segment_id": "shot1",
+      "target_status": "unassigned",
+      "reasons": [
+        "mp_missing"
+      ]
+    },
+    {
+      "source_frame": 2,
+      "pts_s": 0.04,
+      "segment_id": "shot1",
+      "target_status": "unassigned",
+      "reasons": [
+        "mp_missing"
+      ]
+    },
+    {
+      "source_frame": 3,
+      "pts_s": 0.08,
+      "segment_id": "shot1",
+      "target_status": "unassigned",
+      "reasons": [
+        "mp_missing"
+      ]
+    },
+    {
+      "source_frame": 4,
+      "pts_s": 0.12,
+      "segment_id": "shot1",
+      "target_status": "unassigned",
+      "reasons": [
+        "mp_missing"
+      ]
+    },
+    {
+      "source_frame": 5,
+      "pts_s": 0.16,
+      "segment_id": "shot1",
+      "target_status": "unassigned",
+      "reasons": [
+        "mp_missing"
+      ]
+    },
+    {
+      "source_frame": 6,
+      "pts_s": 0.2,
+      "segment_id": "shot1",
+      "target_status": "unassigned",
+      "reasons": []
+    },
+    {
+      "source_frame": 7,
+      "pts_s": 0.24,
+      "segment_id": "shot1",
+      "target_status": "unassigned",
+      "reasons": []
+    },
+    {
+      "source_frame": 8,
+      "pts_s": 0.28,
+      "segment_id": "shot1",
+      "target_status": "unassigned",
+      "reasons": []
+    },
+    {
+      "source_frame": 9,
+      "pts_s": 0.32,
+      "segment_id": "shot1",
+      "target_status": "unassigned",
+      "reasons": []
+    },
+    {
+      "source_frame": 10,
+      "pts_s": 0.36,
+      "segment_id": "shot1",
+      "target_status": "unassigned",
+      "reasons": []
+    },
+    {
+      "source_frame": 11,
+      "pts_s": 0.4,
+      "segment_id": "shot1",
+      "target_status": "unassigned",
+      "reasons": []
+    },
+    {
+      "source_frame": 12,
+      "pts_s": 0.44,
+      "segment_id": "shot1",
+      "target_status": "unassigned",
+      "reasons": []
+    },
+    {
+      "source_frame": 13,
+      "pts_s": 0.48,
+      "segment_id": "shot1",
+      "target_status": "unassigned",
+      "reasons": []
+    },
+    {
+      "source_frame": 14,
+      "pts_s": 0.52,
+      "segment_id": "shot1",
+      "target_status": "unassigned",
+      "reasons": []
+    },
+    {
+      "source_frame": 15,
+      "pts_s": 0.56,
+      "segment_id": "shot1",
+      "target_status": "unassigned",
+      "reasons": []
+    },
+    {
+      "source_frame": 16,
+      "pts_s": 0.6,
+      "segment_id": "shot1",
+      "target_status": "unassigned",
+      "reasons": []
+    },
+    {
+      "source_frame": 17,
+      "pts_s": 0.64,
+      "segment_id": "shot1",
+      "target_status": "unassigned",
+      "reasons": []
+    },
+    {
+      "source_frame": 18,
+      "pts_s": 0.68,
+      "segment_id": "shot1",
+      "target_status": "unassigned",
+      "reasons": []
+    },
+    {
+      "source_frame": 19,
+      "pts_s": 0.72,
+      "segment_id": "shot1",
+      "target_status": "unassigned",
+      "reasons": []
+    },
+    {
+      "source_frame": 20,
+      "pts_s": 0.76,
+      "segment_id": "shot1",
+      "target_status": "unassigned",
+      "reasons": []
+    },
+    {
+      "source_frame": 21,
+      "pts_s": 0.8,
+      "segment_id": "shot1",
+      "target_status": "unassigned",
+      "reasons": []
+    },
+    {
+      "source_frame": 22,
+      "pts_s": 0.84,
+      "segment_id": "shot1",
+      "target_status": "unassigned",
+      "reasons": [
+        "model_disagreement_gt30_review_px"
+      ]
+    },
+    {
+      "source_frame": 23,
+      "pts_s": 0.88,
+      "segment_id": "shot1",
+      "target_status": "unassigned",
+      "reasons": [
+        "model_disagreement_gt30_review_px"
+      ]
+    },
+    {
+      "source_frame": 24,
+      "pts_s": 0.92,
+      "segment_id": "shot1",
+      "target_status": "unassigned",
+      "reasons": [
+        "model_disagreement_gt30_review_px"
+      ]
+    },
+    {
+      "source_frame": 25,
+      "pts_s": 0.96,
+      "segment_id": "shot1",
+      "target_status": "unassigned",
+      "reasons": []
+    },
+    {
+      "source_frame": 26,
+      "pts_s": 1.0,
+      "segment_id": "shot1",
+      "target_status": "unassigned",
+      "reasons": []
+    },
+    {
+      "source_frame": 27,
+      "pts_s": 1.04,
+      "segment_id": "shot1",
+      "target_status": "unassigned",
+      "reasons": []
+    },
+    {
+      "source_frame": 28,
+      "pts_s": 1.08,
+      "segment_id": "shot1",
+      "target_status": "unassigned",
+      "reasons": []
+    },
+    {
+      "source_frame": 29,
+      "pts_s": 1.12,
+      "segment_id": "shot1",
+      "target_status": "unassigned",
+      "reasons": [
+        "model_disagreement_gt30_review_px"
+      ]
+    },
+    {
+      "source_frame": 30,
+      "pts_s": 1.16,
+      "segment_id": "shot1",
+      "target_status": "unassigned",
+      "reasons": []
+    },
+    {
+      "source_frame": 31,
+      "pts_s": 1.2,
+      "segment_id": "shot1",
+      "target_status": "unassigned",
+      "reasons": []
+    },
+    {
+      "source_frame": 32,
+      "pts_s": 1.24,
+      "segment_id": "shot1",
+      "target_status": "unassigned",
+      "reasons": []
+    },
+    {
+      "source_frame": 33,
+      "pts_s": 1.28,
+      "segment_id": "shot1",
+      "target_status": "unassigned",
+      "reasons": []
+    },
+    {
+      "source_frame": 34,
+      "pts_s": 1.32,
+      "segment_id": "shot1",
+      "target_status": "unassigned",
+      "reasons": []
+    },
+    {
+      "source_frame": 35,
+      "pts_s": 1.36,
+      "segment_id": "shot1",
+      "target_status": "unassigned",
+      "reasons": []
+    },
+    {
+      "source_frame": 36,
+      "pts_s": 1.4,
+      "segment_id": "shot1",
+      "target_status": "unassigned",
+      "reasons": []
+    },
+    {
+      "source_frame": 37,
+      "pts_s": 1.44,
+      "segment_id": "shot1",
+      "target_status": "unassigned",
+      "reasons": [
+        "multiple_proposals"
+      ]
+    },
+    {
+      "source_frame": 38,
+      "pts_s": 1.48,
+      "segment_id": "shot1",
+      "target_status": "unassigned",
+      "reasons": [
+        "multiple_proposals"
+      ]
+    },
+    {
+      "source_frame": 39,
+      "pts_s": 1.52,
+      "segment_id": "shot1",
+      "target_status": "unassigned",
+      "reasons": [
+        "model_disagreement_gt30_review_px"
+      ]
+    },
+    {
+      "source_frame": 40,
+      "pts_s": 1.56,
+      "segment_id": "shot1",
+      "target_status": "unassigned",
+      "reasons": []
+    },
+    {
+      "source_frame": 41,
+      "pts_s": 1.6,
+      "segment_id": "shot1",
+      "target_status": "unassigned",
+      "reasons": []
+    },
+    {
+      "source_frame": 42,
+      "pts_s": 1.64,
+      "segment_id": "shot1",
+      "target_status": "unassigned",
+      "reasons": []
+    },
+    {
+      "source_frame": 43,
+      "pts_s": 1.68,
+      "segment_id": "shot1",
+      "target_status": "unassigned",
+      "reasons": [
+        "multiple_proposals"
+      ]
+    },
+    {
+      "source_frame": 44,
+      "pts_s": 1.72,
+      "segment_id": "shot1",
+      "target_status": "unassigned",
+      "reasons": []
+    },
+    {
+      "source_frame": 45,
+      "pts_s": 1.76,
+      "segment_id": "shot1",
+      "target_status": "unassigned",
+      "reasons": []
+    },
+    {
+      "source_frame": 46,
+      "pts_s": 1.8,
+      "segment_id": "shot1",
+      "target_status": "unassigned",
+      "reasons": []
+    },
+    {
+      "source_frame": 47,
+      "pts_s": 1.84,
+      "segment_id": "shot1",
+      "target_status": "unassigned",
+      "reasons": [
+        "model_disagreement_gt30_review_px"
+      ]
+    },
+    {
+      "source_frame": 48,
+      "pts_s": 1.88,
+      "segment_id": "shot1",
+      "target_status": "unassigned",
+      "reasons": [
+        "model_disagreement_gt30_review_px"
+      ]
+    },
+    {
+      "source_frame": 49,
+      "pts_s": 1.92,
+      "segment_id": "shot1",
+      "target_status": "unassigned",
+      "reasons": [
+        "multiple_proposals"
+      ]
+    },
+    {
+      "source_frame": 50,
+      "pts_s": 1.96,
+      "segment_id": "shot1",
+      "target_status": "unassigned",
+      "reasons": []
+    },
+    {
+      "source_frame": 51,
+      "pts_s": 2.0,
+      "segment_id": "shot1",
+      "target_status": "unassigned",
+      "reasons": [
+        "model_disagreement_gt30_review_px"
+      ]
+    },
+    {
+      "source_frame": 52,
+      "pts_s": 2.04,
+      "segment_id": "shot1",
+      "target_status": "unassigned",
+      "reasons": [
+        "model_disagreement_gt30_review_px"
+      ]
+    },
+    {
+      "source_frame": 53,
+      "pts_s": 2.08,
+      "segment_id": "shot1",
+      "target_status": "unassigned",
+      "reasons": [
+        "model_disagreement_gt30_review_px"
+      ]
+    },
+    {
+      "source_frame": 54,
+      "pts_s": 2.12,
+      "segment_id": "shot1",
+      "target_status": "unassigned",
+      "reasons": [
+        "model_disagreement_gt30_review_px"
+      ]
+    },
+    {
+      "source_frame": 55,
+      "pts_s": 2.16,
+      "segment_id": "shot1",
+      "target_status": "unassigned",
+      "reasons": [
+        "model_disagreement_gt30_review_px"
+      ]
+    },
+    {
+      "source_frame": 56,
+      "pts_s": 2.2,
+      "segment_id": "shot1",
+      "target_status": "unassigned",
+      "reasons": [
+        "model_disagreement_gt30_review_px"
+      ]
+    },
+    {
+      "source_frame": 57,
+      "pts_s": 2.24,
+      "segment_id": "shot1",
+      "target_status": "unassigned",
+      "reasons": []
+    },
+    {
+      "source_frame": 58,
+      "pts_s": 2.28,
+      "segment_id": "shot1",
+      "target_status": "unassigned",
+      "reasons": [
+        "model_disagreement_gt30_review_px"
+      ]
+    },
+    {
+      "source_frame": 59,
+      "pts_s": 2.32,
+      "segment_id": "shot1",
+      "target_status": "unassigned",
+      "reasons": [
+        "model_disagreement_gt30_review_px"
+      ]
+    },
+    {
+      "source_frame": 60,
+      "pts_s": 2.36,
+      "segment_id": "shot1",
+      "target_status": "unassigned",
+      "reasons": []
+    },
+    {
+      "source_frame": 61,
+      "pts_s": 2.4,
+      "segment_id": "shot1",
+      "target_status": "unassigned",
+      "reasons": []
+    },
+    {
+      "source_frame": 62,
+      "pts_s": 2.44,
+      "segment_id": "shot1",
+      "target_status": "unassigned",
+      "reasons": [
+        "model_disagreement_gt30_review_px"
+      ]
+    },
+    {
+      "source_frame": 63,
+      "pts_s": 2.48,
+      "segment_id": "shot1",
+      "target_status": "unassigned",
+      "reasons": [
+        "model_disagreement_gt30_review_px"
+      ]
+    },
+    {
+      "source_frame": 64,
+      "pts_s": 2.52,
+      "segment_id": "shot1",
+      "target_status": "unassigned",
+      "reasons": [
+        "mp_missing"
+      ]
+    },
+    {
+      "source_frame": 65,
+      "pts_s": 2.56,
+      "segment_id": "shot1",
+      "target_status": "unassigned",
+      "reasons": [
+        "mp_missing"
+      ]
+    },
+    {
+      "source_frame": 66,
+      "pts_s": 2.6,
+      "segment_id": "shot2",
+      "target_status": "unassigned",
+      "reasons": []
+    },
+    {
+      "source_frame": 67,
+      "pts_s": 2.64,
+      "segment_id": "shot2",
+      "target_status": "unassigned",
+      "reasons": []
+    },
+    {
+      "source_frame": 68,
+      "pts_s": 2.68,
+      "segment_id": "shot2",
+      "target_status": "unassigned",
+      "reasons": []
+    },
+    {
+      "source_frame": 69,
+      "pts_s": 2.72,
+      "segment_id": "shot2",
+      "target_status": "unassigned",
+      "reasons": []
+    },
+    {
+      "source_frame": 70,
+      "pts_s": 2.76,
+      "segment_id": "shot2",
+      "target_status": "unassigned",
+      "reasons": [
+        "model_disagreement_gt30_review_px"
+      ]
+    },
+    {
+      "source_frame": 71,
+      "pts_s": 2.8,
+      "segment_id": "shot2",
+      "target_status": "unassigned",
+      "reasons": []
+    },
+    {
+      "source_frame": 72,
+      "pts_s": 2.84,
+      "segment_id": "shot2",
+      "target_status": "unassigned",
+      "reasons": []
+    },
+    {
+      "source_frame": 73,
+      "pts_s": 2.88,
+      "segment_id": "shot2",
+      "target_status": "unassigned",
+      "reasons": []
+    },
+    {
+      "source_frame": 74,
+      "pts_s": 2.92,
+      "segment_id": "shot2",
+      "target_status": "unassigned",
+      "reasons": []
+    },
+    {
+      "source_frame": 75,
+      "pts_s": 2.96,
+      "segment_id": "shot2",
+      "target_status": "unassigned",
+      "reasons": []
+    },
+    {
+      "source_frame": 76,
+      "pts_s": 3.0,
+      "segment_id": "shot2",
+      "target_status": "unassigned",
+      "reasons": [
+        "model_disagreement_gt30_review_px"
+      ]
+    },
+    {
+      "source_frame": 77,
+      "pts_s": 3.04,
+      "segment_id": "shot2",
+      "target_status": "unassigned",
+      "reasons": []
+    },
+    {
+      "source_frame": 78,
+      "pts_s": 3.08,
+      "segment_id": "shot2",
+      "target_status": "unassigned",
+      "reasons": []
+    },
+    {
+      "source_frame": 79,
+      "pts_s": 3.12,
+      "segment_id": "shot2",
+      "target_status": "unassigned",
+      "reasons": [
+        "model_disagreement_gt30_review_px"
+      ]
+    },
+    {
+      "source_frame": 80,
+      "pts_s": 3.16,
+      "segment_id": "shot2",
+      "target_status": "unassigned",
+      "reasons": []
+    },
+    {
+      "source_frame": 81,
+      "pts_s": 3.2,
+      "segment_id": "shot2",
+      "target_status": "unassigned",
+      "reasons": []
+    },
+    {
+      "source_frame": 82,
+      "pts_s": 3.24,
+      "segment_id": "shot2",
+      "target_status": "unassigned",
+      "reasons": [
+        "mp_missing"
+      ]
+    },
+    {
+      "source_frame": 83,
+      "pts_s": 3.28,
+      "segment_id": "shot2",
+      "target_status": "unassigned",
+      "reasons": [
+        "mp_missing"
+      ]
+    },
+    {
+      "source_frame": 84,
+      "pts_s": 3.32,
+      "segment_id": "shot2",
+      "target_status": "unassigned",
+      "reasons": [
+        "model_disagreement_gt30_review_px"
+      ]
+    },
+    {
+      "source_frame": 85,
+      "pts_s": 3.36,
+      "segment_id": "shot2",
+      "target_status": "unassigned",
+      "reasons": [
+        "model_disagreement_gt30_review_px"
+      ]
+    },
+    {
+      "source_frame": 86,
+      "pts_s": 3.4,
+      "segment_id": "shot2",
+      "target_status": "unassigned",
+      "reasons": [
+        "mp_missing"
+      ]
+    },
+    {
+      "source_frame": 87,
+      "pts_s": 3.44,
+      "segment_id": "shot2",
+      "target_status": "unassigned",
+      "reasons": [
+        "mp_missing"
+      ]
+    },
+    {
+      "source_frame": 88,
+      "pts_s": 3.48,
+      "segment_id": "shot2",
+      "target_status": "unassigned",
+      "reasons": [
+        "mp_missing"
+      ]
+    },
+    {
+      "source_frame": 89,
+      "pts_s": 3.52,
+      "segment_id": "shot2",
+      "target_status": "unassigned",
+      "reasons": [
+        "mp_missing"
+      ]
+    },
+    {
+      "source_frame": 90,
+      "pts_s": 3.56,
+      "segment_id": "shot2",
+      "target_status": "unassigned",
+      "reasons": [
+        "mp_missing"
+      ]
+    },
+    {
+      "source_frame": 91,
+      "pts_s": 3.6,
+      "segment_id": "shot2",
+      "target_status": "unassigned",
+      "reasons": []
+    },
+    {
+      "source_frame": 92,
+      "pts_s": 3.64,
+      "segment_id": "shot2",
+      "target_status": "unassigned",
+      "reasons": []
+    },
+    {
+      "source_frame": 93,
+      "pts_s": 3.68,
+      "segment_id": "shot2",
+      "target_status": "unassigned",
+      "reasons": [
+        "model_disagreement_gt30_review_px"
+      ]
+    },
+    {
+      "source_frame": 94,
+      "pts_s": 3.72,
+      "segment_id": "shot2",
+      "target_status": "unassigned",
+      "reasons": [
+        "model_disagreement_gt30_review_px"
+      ]
+    },
+    {
+      "source_frame": 95,
+      "pts_s": 3.76,
+      "segment_id": "shot2",
+      "target_status": "unassigned",
+      "reasons": []
+    },
+    {
+      "source_frame": 96,
+      "pts_s": 3.8,
+      "segment_id": "shot2",
+      "target_status": "unassigned",
+      "reasons": [
+        "mp_missing"
+      ]
+    },
+    {
+      "source_frame": 97,
+      "pts_s": 3.84,
+      "segment_id": "shot2",
+      "target_status": "unassigned",
+      "reasons": [
+        "mp_missing"
+      ]
+    },
+    {
+      "source_frame": 98,
+      "pts_s": 3.88,
+      "segment_id": "shot2",
+      "target_status": "unassigned",
+      "reasons": [
+        "mp_missing",
+        "independent_missing"
+      ]
+    },
+    {
+      "source_frame": 99,
+      "pts_s": 3.92,
+      "segment_id": "shot2",
+      "target_status": "unassigned",
+      "reasons": [
+        "mp_missing",
+        "independent_missing"
+      ]
+    },
+    {
+      "source_frame": 100,
+      "pts_s": 3.96,
+      "segment_id": "shot2",
+      "target_status": "unassigned",
+      "reasons": [
+        "mp_missing"
+      ]
+    },
+    {
+      "source_frame": 101,
+      "pts_s": 4.0,
+      "segment_id": "shot2",
+      "target_status": "unassigned",
+      "reasons": [
+        "mp_missing"
+      ]
+    },
+    {
+      "source_frame": 102,
+      "pts_s": 4.04,
+      "segment_id": "shot2",
+      "target_status": "unassigned",
+      "reasons": []
+    },
+    {
+      "source_frame": 103,
+      "pts_s": 4.08,
+      "segment_id": "shot2",
+      "target_status": "unassigned",
+      "reasons": [
+        "mp_missing"
+      ]
+    },
+    {
+      "source_frame": 104,
+      "pts_s": 4.12,
+      "segment_id": "shot2",
+      "target_status": "unassigned",
+      "reasons": [
+        "mp_missing"
+      ]
+    },
+    {
+      "source_frame": 105,
+      "pts_s": 4.16,
+      "segment_id": "shot2",
+      "target_status": "unassigned",
+      "reasons": [
+        "mp_missing"
+      ]
+    },
+    {
+      "source_frame": 106,
+      "pts_s": 4.2,
+      "segment_id": "shot2",
+      "target_status": "unassigned",
+      "reasons": []
+    },
+    {
+      "source_frame": 107,
+      "pts_s": 4.24,
+      "segment_id": "shot2",
+      "target_status": "unassigned",
+      "reasons": []
+    },
+    {
+      "source_frame": 108,
+      "pts_s": 4.28,
+      "segment_id": "shot2",
+      "target_status": "unassigned",
+      "reasons": [
+        "mp_missing"
+      ]
+    },
+    {
+      "source_frame": 109,
+      "pts_s": 4.32,
+      "segment_id": "shot2",
+      "target_status": "unassigned",
+      "reasons": [
+        "independent_missing"
+      ]
+    },
+    {
+      "source_frame": 110,
+      "pts_s": 4.36,
+      "segment_id": "shot2",
+      "target_status": "unassigned",
+      "reasons": []
+    },
+    {
+      "source_frame": 111,
+      "pts_s": 4.4,
+      "segment_id": "shot2",
+      "target_status": "unassigned",
+      "reasons": []
+    },
+    {
+      "source_frame": 112,
+      "pts_s": 4.44,
+      "segment_id": "shot2",
+      "target_status": "unassigned",
+      "reasons": []
+    },
+    {
+      "source_frame": 113,
+      "pts_s": 4.48,
+      "segment_id": "shot2",
+      "target_status": "unassigned",
+      "reasons": [
+        "model_disagreement_gt30_review_px"
+      ]
+    },
+    {
+      "source_frame": 114,
+      "pts_s": 4.52,
+      "segment_id": "shot2",
+      "target_status": "unassigned",
+      "reasons": []
+    },
+    {
+      "source_frame": 115,
+      "pts_s": 4.56,
+      "segment_id": "shot2",
+      "target_status": "unassigned",
+      "reasons": [
+        "mp_missing",
+        "independent_missing"
+      ]
+    },
+    {
+      "source_frame": 116,
+      "pts_s": 4.6,
+      "segment_id": "shot2",
+      "target_status": "unassigned",
+      "reasons": [
+        "mp_missing",
+        "independent_missing"
+      ]
+    },
+    {
+      "source_frame": 117,
+      "pts_s": 4.64,
+      "segment_id": "shot2",
+      "target_status": "unassigned",
+      "reasons": []
+    },
+    {
+      "source_frame": 118,
+      "pts_s": 4.68,
+      "segment_id": "shot2",
+      "target_status": "unassigned",
+      "reasons": []
+    },
+    {
+      "source_frame": 119,
+      "pts_s": 4.72,
+      "segment_id": "shot2",
+      "target_status": "unassigned",
+      "reasons": []
+    },
+    {
+      "source_frame": 120,
+      "pts_s": 4.76,
+      "segment_id": "shot2",
+      "target_status": "unassigned",
+      "reasons": []
+    },
+    {
+      "source_frame": 121,
+      "pts_s": 4.8,
+      "segment_id": "shot2",
+      "target_status": "unassigned",
+      "reasons": [
+        "mp_missing"
+      ]
+    },
+    {
+      "source_frame": 122,
+      "pts_s": 4.84,
+      "segment_id": "shot2",
+      "target_status": "unassigned",
+      "reasons": []
+    },
+    {
+      "source_frame": 123,
+      "pts_s": 4.88,
+      "segment_id": "shot2",
+      "target_status": "unassigned",
+      "reasons": [
+        "mp_missing",
+        "independent_missing"
+      ]
+    },
+    {
+      "source_frame": 124,
+      "pts_s": 4.92,
+      "segment_id": "shot2",
+      "target_status": "unassigned",
+      "reasons": []
+    },
+    {
+      "source_frame": 125,
+      "pts_s": 4.96,
+      "segment_id": "shot2",
+      "target_status": "unassigned",
+      "reasons": [
+        "independent_missing"
+      ]
+    },
+    {
+      "source_frame": 126,
+      "pts_s": 5.0,
+      "segment_id": "shot2",
+      "target_status": "unassigned",
+      "reasons": []
+    },
+    {
+      "source_frame": 127,
+      "pts_s": 5.04,
+      "segment_id": "shot2",
+      "target_status": "unassigned",
+      "reasons": []
+    },
+    {
+      "source_frame": 128,
+      "pts_s": 5.08,
+      "segment_id": "shot2",
+      "target_status": "unassigned",
+      "reasons": [
+        "mp_missing"
+      ]
+    },
+    {
+      "source_frame": 129,
+      "pts_s": 5.12,
+      "segment_id": "shot2",
+      "target_status": "unassigned",
+      "reasons": []
+    },
+    {
+      "source_frame": 130,
+      "pts_s": 5.16,
+      "segment_id": "shot2",
+      "target_status": "unassigned",
+      "reasons": []
+    },
+    {
+      "source_frame": 131,
+      "pts_s": 5.2,
+      "segment_id": "shot2",
+      "target_status": "unassigned",
+      "reasons": []
+    },
+    {
+      "source_frame": 132,
+      "pts_s": 5.24,
+      "segment_id": "shot2",
+      "target_status": "unassigned",
+      "reasons": []
+    },
+    {
+      "source_frame": 133,
+      "pts_s": 5.28,
+      "segment_id": "shot2",
+      "target_status": "unassigned",
+      "reasons": []
+    },
+    {
+      "source_frame": 134,
+      "pts_s": 5.32,
+      "segment_id": "shot2",
+      "target_status": "unassigned",
+      "reasons": [
+        "mp_missing"
+      ]
+    },
+    {
+      "source_frame": 135,
+      "pts_s": 5.36,
+      "segment_id": "shot2",
+      "target_status": "unassigned",
+      "reasons": [
+        "mp_missing"
+      ]
+    },
+    {
+      "source_frame": 136,
+      "pts_s": 5.4,
+      "segment_id": "shot2",
+      "target_status": "unassigned",
+      "reasons": [
+        "model_disagreement_gt30_review_px"
+      ]
+    },
+    {
+      "source_frame": 137,
+      "pts_s": 5.44,
+      "segment_id": "shot2",
+      "target_status": "unassigned",
+      "reasons": [
+        "model_disagreement_gt30_review_px"
+      ]
+    },
+    {
+      "source_frame": 138,
+      "pts_s": 5.48,
+      "segment_id": "shot2",
+      "target_status": "unassigned",
+      "reasons": [
+        "model_disagreement_gt30_review_px"
+      ]
+    },
+    {
+      "source_frame": 139,
+      "pts_s": 5.52,
+      "segment_id": "shot2",
+      "target_status": "unassigned",
+      "reasons": [
+        "model_disagreement_gt30_review_px"
+      ]
+    },
+    {
+      "source_frame": 140,
+      "pts_s": 5.56,
+      "segment_id": "shot2",
+      "target_status": "unassigned",
+      "reasons": [
+        "model_disagreement_gt30_review_px"
+      ]
+    },
+    {
+      "source_frame": 141,
+      "pts_s": 5.6,
+      "segment_id": "shot2",
+      "target_status": "unassigned",
+      "reasons": []
+    },
+    {
+      "source_frame": 142,
+      "pts_s": 5.64,
+      "segment_id": "shot2",
+      "target_status": "unassigned",
+      "reasons": [
+        "model_disagreement_gt30_review_px"
+      ]
+    },
+    {
+      "source_frame": 143,
+      "pts_s": 5.68,
+      "segment_id": "shot2",
+      "target_status": "unassigned",
+      "reasons": [
+        "model_disagreement_gt30_review_px"
+      ]
+    },
+    {
+      "source_frame": 144,
+      "pts_s": 5.72,
+      "segment_id": "shot2",
+      "target_status": "unassigned",
+      "reasons": [
+        "model_disagreement_gt30_review_px"
+      ]
+    },
+    {
+      "source_frame": 145,
+      "pts_s": 5.76,
+      "segment_id": "shot2",
+      "target_status": "unassigned",
+      "reasons": [
+        "mp_missing",
+        "independent_missing"
+      ]
+    },
+    {
+      "source_frame": 146,
+      "pts_s": 5.8,
+      "segment_id": "shot2",
+      "target_status": "unassigned",
+      "reasons": [
+        "model_disagreement_gt30_review_px"
+      ]
+    },
+    {
+      "source_frame": 147,
+      "pts_s": 5.84,
+      "segment_id": "shot2",
+      "target_status": "unassigned",
+      "reasons": [
+        "mp_missing"
+      ]
+    },
+    {
+      "source_frame": 148,
+      "pts_s": 5.88,
+      "segment_id": "shot2",
+      "target_status": "unassigned",
+      "reasons": []
+    },
+    {
+      "source_frame": 149,
+      "pts_s": 5.92,
+      "segment_id": "shot2",
+      "target_status": "unassigned",
+      "reasons": []
+    },
+    {
+      "source_frame": 150,
+      "pts_s": 5.96,
+      "segment_id": "shot2",
+      "target_status": "unassigned",
+      "reasons": []
+    },
+    {
+      "source_frame": 151,
+      "pts_s": 6.0,
+      "segment_id": "shot2",
+      "target_status": "unassigned",
+      "reasons": []
+    },
+    {
+      "source_frame": 152,
+      "pts_s": 6.04,
+      "segment_id": "shot2",
+      "target_status": "unassigned",
+      "reasons": [
+        "mp_missing"
+      ]
+    },
+    {
+      "source_frame": 153,
+      "pts_s": 6.08,
+      "segment_id": "shot2",
+      "target_status": "unassigned",
+      "reasons": [
+        "mp_missing",
+        "independent_missing"
+      ]
+    },
+    {
+      "source_frame": 154,
+      "pts_s": 6.12,
+      "segment_id": "shot2",
+      "target_status": "unassigned",
+      "reasons": [
+        "model_disagreement_gt30_review_px"
+      ]
+    },
+    {
+      "source_frame": 155,
+      "pts_s": 6.16,
+      "segment_id": "shot2",
+      "target_status": "unassigned",
+      "reasons": [
+        "independent_missing",
+        "multiple_proposals"
+      ]
+    },
+    {
+      "source_frame": 156,
+      "pts_s": 6.2,
+      "segment_id": "shot2",
+      "target_status": "unassigned",
+      "reasons": [
+        "model_disagreement_gt30_review_px"
+      ]
+    },
+    {
+      "source_frame": 157,
+      "pts_s": 6.24,
+      "segment_id": "shot2",
+      "target_status": "unassigned",
+      "reasons": [
+        "model_disagreement_gt30_review_px"
+      ]
+    },
+    {
+      "source_frame": 158,
+      "pts_s": 6.28,
+      "segment_id": "shot2",
+      "target_status": "unassigned",
+      "reasons": [
+        "independent_missing"
+      ]
+    },
+    {
+      "source_frame": 159,
+      "pts_s": 6.32,
+      "segment_id": "shot3",
+      "target_status": "unassigned",
+      "reasons": [
+        "multiple_proposals",
+        "target_identity_review"
+      ]
+    },
+    {
+      "source_frame": 160,
+      "pts_s": 6.36,
+      "segment_id": "shot3",
+      "target_status": "unassigned",
+      "reasons": [
+        "multiple_proposals",
+        "target_identity_review"
+      ]
+    },
+    {
+      "source_frame": 161,
+      "pts_s": 6.4,
+      "segment_id": "shot3",
+      "target_status": "unassigned",
+      "reasons": [
+        "multiple_proposals",
+        "target_identity_review"
+      ]
+    },
+    {
+      "source_frame": 162,
+      "pts_s": 6.44,
+      "segment_id": "shot3",
+      "target_status": "unassigned",
+      "reasons": [
+        "multiple_proposals",
+        "target_identity_review"
+      ]
+    },
+    {
+      "source_frame": 163,
+      "pts_s": 6.48,
+      "segment_id": "shot3",
+      "target_status": "unassigned",
+      "reasons": [
+        "multiple_proposals",
+        "target_identity_review"
+      ]
+    },
+    {
+      "source_frame": 164,
+      "pts_s": 6.52,
+      "segment_id": "shot3",
+      "target_status": "unassigned",
+      "reasons": [
+        "mp_missing",
+        "multiple_proposals",
+        "target_identity_review"
+      ]
+    },
+    {
+      "source_frame": 165,
+      "pts_s": 6.56,
+      "segment_id": "shot3",
+      "target_status": "unassigned",
+      "reasons": [
+        "target_identity_review"
+      ]
+    },
+    {
+      "source_frame": 166,
+      "pts_s": 6.6,
+      "segment_id": "shot3",
+      "target_status": "unassigned",
+      "reasons": [
+        "multiple_proposals",
+        "target_identity_review"
+      ]
+    },
+    {
+      "source_frame": 167,
+      "pts_s": 6.64,
+      "segment_id": "shot3",
+      "target_status": "unassigned",
+      "reasons": [
+        "multiple_proposals",
+        "target_identity_review"
+      ]
+    },
+    {
+      "source_frame": 168,
+      "pts_s": 6.68,
+      "segment_id": "shot3",
+      "target_status": "unassigned",
+      "reasons": [
+        "target_identity_review"
+      ]
+    },
+    {
+      "source_frame": 169,
+      "pts_s": 6.72,
+      "segment_id": "shot3",
+      "target_status": "unassigned",
+      "reasons": [
+        "mp_missing",
+        "target_identity_review"
+      ]
+    },
+    {
+      "source_frame": 170,
+      "pts_s": 6.76,
+      "segment_id": "shot3",
+      "target_status": "unassigned",
+      "reasons": [
+        "mp_missing",
+        "multiple_proposals",
+        "target_identity_review"
+      ]
+    },
+    {
+      "source_frame": 171,
+      "pts_s": 6.8,
+      "segment_id": "shot3",
+      "target_status": "unassigned",
+      "reasons": [
+        "mp_missing",
+        "target_identity_review"
+      ]
+    },
+    {
+      "source_frame": 172,
+      "pts_s": 6.84,
+      "segment_id": "shot3",
+      "target_status": "unassigned",
+      "reasons": [
+        "mp_missing",
+        "multiple_proposals",
+        "target_identity_review"
+      ]
+    },
+    {
+      "source_frame": 173,
+      "pts_s": 6.88,
+      "segment_id": "shot3",
+      "target_status": "unassigned",
+      "reasons": [
+        "multiple_proposals",
+        "target_identity_review"
+      ]
+    },
+    {
+      "source_frame": 174,
+      "pts_s": 6.92,
+      "segment_id": "shot3",
+      "target_status": "unassigned",
+      "reasons": [
+        "multiple_proposals",
+        "target_identity_review"
+      ]
+    },
+    {
+      "source_frame": 175,
+      "pts_s": 6.96,
+      "segment_id": "shot3",
+      "target_status": "out_of_frame_visual_review",
+      "reasons": []
+    },
+    {
+      "source_frame": 176,
+      "pts_s": 7.0,
+      "segment_id": "shot3",
+      "target_status": "out_of_frame_visual_review",
+      "reasons": []
+    },
+    {
+      "source_frame": 177,
+      "pts_s": 7.04,
+      "segment_id": "shot3",
+      "target_status": "out_of_frame_visual_review",
+      "reasons": []
+    },
+    {
+      "source_frame": 178,
+      "pts_s": 7.08,
+      "segment_id": "shot3",
+      "target_status": "out_of_frame_visual_review",
+      "reasons": []
+    },
+    {
+      "source_frame": 179,
+      "pts_s": 7.12,
+      "segment_id": "shot3",
+      "target_status": "out_of_frame_visual_review",
+      "reasons": []
+    },
+    {
+      "source_frame": 180,
+      "pts_s": 7.16,
+      "segment_id": "shot3",
+      "target_status": "out_of_frame_visual_review",
+      "reasons": []
+    },
+    {
+      "source_frame": 181,
+      "pts_s": 7.2,
+      "segment_id": "shot3",
+      "target_status": "out_of_frame_visual_review",
+      "reasons": []
+    },
+    {
+      "source_frame": 182,
+      "pts_s": 7.24,
+      "segment_id": "shot3",
+      "target_status": "out_of_frame_visual_review",
+      "reasons": []
+    },
+    {
+      "source_frame": 183,
+      "pts_s": 7.28,
+      "segment_id": "shot3",
+      "target_status": "out_of_frame_visual_review",
+      "reasons": []
+    },
+    {
+      "source_frame": 184,
+      "pts_s": 7.32,
+      "segment_id": "shot3",
+      "target_status": "out_of_frame_visual_review",
+      "reasons": []
+    },
+    {
+      "source_frame": 185,
+      "pts_s": 7.36,
+      "segment_id": "shot3",
+      "target_status": "out_of_frame_visual_review",
+      "reasons": []
+    },
+    {
+      "source_frame": 186,
+      "pts_s": 7.4,
+      "segment_id": "shot3",
+      "target_status": "out_of_frame_visual_review",
+      "reasons": []
+    },
+    {
+      "source_frame": 187,
+      "pts_s": 7.44,
+      "segment_id": "shot3",
+      "target_status": "out_of_frame_visual_review",
+      "reasons": []
+    },
+    {
+      "source_frame": 188,
+      "pts_s": 7.48,
+      "segment_id": "shot3",
+      "target_status": "out_of_frame_visual_review",
+      "reasons": []
+    },
+    {
+      "source_frame": 189,
+      "pts_s": 7.52,
+      "segment_id": "shot3",
+      "target_status": "out_of_frame_visual_review",
+      "reasons": []
+    },
+    {
+      "source_frame": 190,
+      "pts_s": 7.56,
+      "segment_id": "shot3",
+      "target_status": "out_of_frame_visual_review",
+      "reasons": []
+    },
+    {
+      "source_frame": 191,
+      "pts_s": 7.6,
+      "segment_id": "shot3",
+      "target_status": "out_of_frame_visual_review",
+      "reasons": []
+    },
+    {
+      "source_frame": 192,
+      "pts_s": 7.64,
+      "segment_id": "shot3",
+      "target_status": "out_of_frame_visual_review",
+      "reasons": []
+    },
+    {
+      "source_frame": 193,
+      "pts_s": 7.68,
+      "segment_id": "shot3",
+      "target_status": "out_of_frame_visual_review",
+      "reasons": []
+    },
+    {
+      "source_frame": 194,
+      "pts_s": 7.72,
+      "segment_id": "shot3",
+      "target_status": "out_of_frame_visual_review",
+      "reasons": []
+    },
+    {
+      "source_frame": 195,
+      "pts_s": 7.76,
+      "segment_id": "shot3",
+      "target_status": "out_of_frame_visual_review",
+      "reasons": []
+    },
+    {
+      "source_frame": 196,
+      "pts_s": 7.8,
+      "segment_id": "shot3",
+      "target_status": "out_of_frame_visual_review",
+      "reasons": []
+    },
+    {
+      "source_frame": 197,
+      "pts_s": 7.84,
+      "segment_id": "shot3",
+      "target_status": "out_of_frame_visual_review",
+      "reasons": []
+    },
+    {
+      "source_frame": 198,
+      "pts_s": 7.88,
+      "segment_id": "shot3",
+      "target_status": "out_of_frame_visual_review",
+      "reasons": []
+    },
+    {
+      "source_frame": 199,
+      "pts_s": 7.92,
+      "segment_id": "shot3",
+      "target_status": "out_of_frame_visual_review",
+      "reasons": []
+    },
+    {
+      "source_frame": 200,
+      "pts_s": 7.96,
+      "segment_id": "shot3",
+      "target_status": "out_of_frame_visual_review",
+      "reasons": []
+    },
+    {
+      "source_frame": 201,
+      "pts_s": 8.0,
+      "segment_id": "shot3",
+      "target_status": "out_of_frame_visual_review",
+      "reasons": []
+    },
+    {
+      "source_frame": 202,
+      "pts_s": 8.04,
+      "segment_id": "shot3",
+      "target_status": "out_of_frame_visual_review",
+      "reasons": []
+    },
+    {
+      "source_frame": 203,
+      "pts_s": 8.08,
+      "segment_id": "shot3",
+      "target_status": "out_of_frame_visual_review",
+      "reasons": []
+    },
+    {
+      "source_frame": 204,
+      "pts_s": 8.12,
+      "segment_id": "shot3",
+      "target_status": "out_of_frame_visual_review",
+      "reasons": []
+    },
+    {
+      "source_frame": 205,
+      "pts_s": 8.16,
+      "segment_id": "shot3",
+      "target_status": "out_of_frame_visual_review",
+      "reasons": []
+    },
+    {
+      "source_frame": 206,
+      "pts_s": 8.2,
+      "segment_id": "shot3",
+      "target_status": "out_of_frame_visual_review",
+      "reasons": []
+    },
+    {
+      "source_frame": 207,
+      "pts_s": 8.24,
+      "segment_id": "shot3",
+      "target_status": "out_of_frame_visual_review",
+      "reasons": []
+    },
+    {
+      "source_frame": 208,
+      "pts_s": 8.28,
+      "segment_id": "shot3",
+      "target_status": "out_of_frame_visual_review",
+      "reasons": []
+    },
+    {
+      "source_frame": 209,
+      "pts_s": 8.32,
+      "segment_id": "shot3",
+      "target_status": "out_of_frame_visual_review",
+      "reasons": []
+    },
+    {
+      "source_frame": 210,
+      "pts_s": 8.36,
+      "segment_id": "shot3",
+      "target_status": "out_of_frame_visual_review",
+      "reasons": []
+    },
+    {
+      "source_frame": 211,
+      "pts_s": 8.4,
+      "segment_id": "shot3",
+      "target_status": "out_of_frame_visual_review",
+      "reasons": []
+    },
+    {
+      "source_frame": 212,
+      "pts_s": 8.44,
+      "segment_id": "shot3",
+      "target_status": "out_of_frame_visual_review",
+      "reasons": []
+    },
+    {
+      "source_frame": 213,
+      "pts_s": 8.48,
+      "segment_id": "shot3",
+      "target_status": "out_of_frame_visual_review",
+      "reasons": []
+    },
+    {
+      "source_frame": 214,
+      "pts_s": 8.52,
+      "segment_id": "shot3",
+      "target_status": "out_of_frame_visual_review",
+      "reasons": []
+    },
+    {
+      "source_frame": 215,
+      "pts_s": 8.56,
+      "segment_id": "shot3",
+      "target_status": "out_of_frame_visual_review",
+      "reasons": []
+    },
+    {
+      "source_frame": 216,
+      "pts_s": 8.6,
+      "segment_id": "shot3",
+      "target_status": "out_of_frame_visual_review",
+      "reasons": []
+    },
+    {
+      "source_frame": 217,
+      "pts_s": 8.64,
+      "segment_id": "shot3",
+      "target_status": "out_of_frame_visual_review",
+      "reasons": []
+    }
+  ],
+  "tasks": [
+    {
+      "reason": "independent_missing",
+      "segment_id": "shot2",
+      "first_frame": 98,
+      "last_frame": 99,
+      "review_frame": 98
+    },
+    {
+      "reason": "independent_missing",
+      "segment_id": "shot2",
+      "first_frame": 109,
+      "last_frame": 109,
+      "review_frame": 109
+    },
+    {
+      "reason": "independent_missing",
+      "segment_id": "shot2",
+      "first_frame": 115,
+      "last_frame": 116,
+      "review_frame": 115
+    },
+    {
+      "reason": "independent_missing",
+      "segment_id": "shot2",
+      "first_frame": 123,
+      "last_frame": 123,
+      "review_frame": 123
+    },
+    {
+      "reason": "independent_missing",
+      "segment_id": "shot2",
+      "first_frame": 125,
+      "last_frame": 125,
+      "review_frame": 125
+    },
+    {
+      "reason": "independent_missing",
+      "segment_id": "shot2",
+      "first_frame": 145,
+      "last_frame": 145,
+      "review_frame": 145
+    },
+    {
+      "reason": "independent_missing",
+      "segment_id": "shot2",
+      "first_frame": 153,
+      "last_frame": 153,
+      "review_frame": 153
+    },
+    {
+      "reason": "independent_missing",
+      "segment_id": "shot2",
+      "first_frame": 155,
+      "last_frame": 155,
+      "review_frame": 155
+    },
+    {
+      "reason": "independent_missing",
+      "segment_id": "shot2",
+      "first_frame": 158,
+      "last_frame": 158,
+      "review_frame": 158
+    },
+    {
+      "reason": "model_disagreement_gt30_review_px",
+      "segment_id": "shot1",
+      "first_frame": 22,
+      "last_frame": 24,
+      "review_frame": 23
+    },
+    {
+      "reason": "model_disagreement_gt30_review_px",
+      "segment_id": "shot1",
+      "first_frame": 29,
+      "last_frame": 29,
+      "review_frame": 29
+    },
+    {
+      "reason": "model_disagreement_gt30_review_px",
+      "segment_id": "shot1",
+      "first_frame": 39,
+      "last_frame": 39,
+      "review_frame": 39
+    },
+    {
+      "reason": "model_disagreement_gt30_review_px",
+      "segment_id": "shot1",
+      "first_frame": 47,
+      "last_frame": 48,
+      "review_frame": 47
+    },
+    {
+      "reason": "model_disagreement_gt30_review_px",
+      "segment_id": "shot1",
+      "first_frame": 51,
+      "last_frame": 56,
+      "review_frame": 53
+    },
+    {
+      "reason": "model_disagreement_gt30_review_px",
+      "segment_id": "shot1",
+      "first_frame": 58,
+      "last_frame": 59,
+      "review_frame": 58
+    },
+    {
+      "reason": "model_disagreement_gt30_review_px",
+      "segment_id": "shot1",
+      "first_frame": 62,
+      "last_frame": 63,
+      "review_frame": 62
+    },
+    {
+      "reason": "model_disagreement_gt30_review_px",
+      "segment_id": "shot2",
+      "first_frame": 70,
+      "last_frame": 70,
+      "review_frame": 70
+    },
+    {
+      "reason": "model_disagreement_gt30_review_px",
+      "segment_id": "shot2",
+      "first_frame": 76,
+      "last_frame": 76,
+      "review_frame": 76
+    },
+    {
+      "reason": "model_disagreement_gt30_review_px",
+      "segment_id": "shot2",
+      "first_frame": 79,
+      "last_frame": 79,
+      "review_frame": 79
+    },
+    {
+      "reason": "model_disagreement_gt30_review_px",
+      "segment_id": "shot2",
+      "first_frame": 84,
+      "last_frame": 85,
+      "review_frame": 84
+    },
+    {
+      "reason": "model_disagreement_gt30_review_px",
+      "segment_id": "shot2",
+      "first_frame": 93,
+      "last_frame": 94,
+      "review_frame": 93
+    },
+    {
+      "reason": "model_disagreement_gt30_review_px",
+      "segment_id": "shot2",
+      "first_frame": 113,
+      "last_frame": 113,
+      "review_frame": 113
+    },
+    {
+      "reason": "model_disagreement_gt30_review_px",
+      "segment_id": "shot2",
+      "first_frame": 136,
+      "last_frame": 140,
+      "review_frame": 138
+    },
+    {
+      "reason": "model_disagreement_gt30_review_px",
+      "segment_id": "shot2",
+      "first_frame": 142,
+      "last_frame": 144,
+      "review_frame": 143
+    },
+    {
+      "reason": "model_disagreement_gt30_review_px",
+      "segment_id": "shot2",
+      "first_frame": 146,
+      "last_frame": 146,
+      "review_frame": 146
+    },
+    {
+      "reason": "model_disagreement_gt30_review_px",
+      "segment_id": "shot2",
+      "first_frame": 154,
+      "last_frame": 154,
+      "review_frame": 154
+    },
+    {
+      "reason": "model_disagreement_gt30_review_px",
+      "segment_id": "shot2",
+      "first_frame": 156,
+      "last_frame": 157,
+      "review_frame": 156
+    },
+    {
+      "reason": "mp_missing",
+      "segment_id": "shot1",
+      "first_frame": 1,
+      "last_frame": 5,
+      "review_frame": 3
+    },
+    {
+      "reason": "mp_missing",
+      "segment_id": "shot1",
+      "first_frame": 64,
+      "last_frame": 65,
+      "review_frame": 64
+    },
+    {
+      "reason": "mp_missing",
+      "segment_id": "shot2",
+      "first_frame": 82,
+      "last_frame": 83,
+      "review_frame": 82
+    },
+    {
+      "reason": "mp_missing",
+      "segment_id": "shot2",
+      "first_frame": 86,
+      "last_frame": 90,
+      "review_frame": 88
+    },
+    {
+      "reason": "mp_missing",
+      "segment_id": "shot2",
+      "first_frame": 96,
+      "last_frame": 101,
+      "review_frame": 98
+    },
+    {
+      "reason": "mp_missing",
+      "segment_id": "shot2",
+      "first_frame": 103,
+      "last_frame": 105,
+      "review_frame": 104
+    },
+    {
+      "reason": "mp_missing",
+      "segment_id": "shot2",
+      "first_frame": 108,
+      "last_frame": 108,
+      "review_frame": 108
+    },
+    {
+      "reason": "mp_missing",
+      "segment_id": "shot2",
+      "first_frame": 115,
+      "last_frame": 116,
+      "review_frame": 115
+    },
+    {
+      "reason": "mp_missing",
+      "segment_id": "shot2",
+      "first_frame": 121,
+      "last_frame": 121,
+      "review_frame": 121
+    },
+    {
+      "reason": "mp_missing",
+      "segment_id": "shot2",
+      "first_frame": 123,
+      "last_frame": 123,
+      "review_frame": 123
+    },
+    {
+      "reason": "mp_missing",
+      "segment_id": "shot2",
+      "first_frame": 128,
+      "last_frame": 128,
+      "review_frame": 128
+    },
+    {
+      "reason": "mp_missing",
+      "segment_id": "shot2",
+      "first_frame": 134,
+      "last_frame": 135,
+      "review_frame": 134
+    },
+    {
+      "reason": "mp_missing",
+      "segment_id": "shot2",
+      "first_frame": 145,
+      "last_frame": 145,
+      "review_frame": 145
+    },
+    {
+      "reason": "mp_missing",
+      "segment_id": "shot2",
+      "first_frame": 147,
+      "last_frame": 147,
+      "review_frame": 147
+    },
+    {
+      "reason": "mp_missing",
+      "segment_id": "shot2",
+      "first_frame": 152,
+      "last_frame": 153,
+      "review_frame": 152
+    },
+    {
+      "reason": "mp_missing",
+      "segment_id": "shot3",
+      "first_frame": 164,
+      "last_frame": 164,
+      "review_frame": 164
+    },
+    {
+      "reason": "mp_missing",
+      "segment_id": "shot3",
+      "first_frame": 169,
+      "last_frame": 172,
+      "review_frame": 170
+    },
+    {
+      "reason": "multiple_proposals",
+      "segment_id": "shot1",
+      "first_frame": 37,
+      "last_frame": 38,
+      "review_frame": 37
+    },
+    {
+      "reason": "multiple_proposals",
+      "segment_id": "shot1",
+      "first_frame": 43,
+      "last_frame": 43,
+      "review_frame": 43
+    },
+    {
+      "reason": "multiple_proposals",
+      "segment_id": "shot1",
+      "first_frame": 49,
+      "last_frame": 49,
+      "review_frame": 49
+    },
+    {
+      "reason": "multiple_proposals",
+      "segment_id": "shot2",
+      "first_frame": 155,
+      "last_frame": 155,
+      "review_frame": 155
+    },
+    {
+      "reason": "multiple_proposals",
+      "segment_id": "shot3",
+      "first_frame": 159,
+      "last_frame": 164,
+      "review_frame": 161
+    },
+    {
+      "reason": "multiple_proposals",
+      "segment_id": "shot3",
+      "first_frame": 166,
+      "last_frame": 167,
+      "review_frame": 166
+    },
+    {
+      "reason": "multiple_proposals",
+      "segment_id": "shot3",
+      "first_frame": 170,
+      "last_frame": 170,
+      "review_frame": 170
+    },
+    {
+      "reason": "multiple_proposals",
+      "segment_id": "shot3",
+      "first_frame": 172,
+      "last_frame": 174,
+      "review_frame": 173
+    },
+    {
+      "reason": "target_identity_review",
+      "segment_id": "shot3",
+      "first_frame": 159,
+      "last_frame": 174,
+      "review_frame": 166
+    }
+  ],
+  "contact_sheet_source_frames": [
+    1,
+    3,
+    37,
+    43,
+    49,
+    64,
+    65,
+    66,
+    82,
+    86,
+    87,
+    88,
+    98,
+    104,
+    108,
+    109,
+    113,
+    115,
+    121,
+    123,
+    125,
+    128,
+    134,
+    139,
+    145,
+    147,
+    152,
+    153,
+    155,
+    158,
+    159,
+    161,
+    164,
+    166,
+    170,
+    173,
+    174,
+    175,
+    217
+  ],
+  "limits": [
+    "Risk thresholds are review heuristics, not accuracy gates.",
+    "Detection identity remains unassigned; do not retarget shot3 directly.",
+    "Missing detection is not equivalent to occlusion/absence.",
+    "No new3D motion/contact acceptance."
+  ]
+}
