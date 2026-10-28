@@ -1,0 +1,98 @@
+{
+  "schema": "addams-contact-label-audit.v1",
+  "rows": [
+    {
+      "source_frame": 49,
+      "contact": "right",
+      "ankles": {
+        "left_ankle": [
+          338.578125,
+          334.39453125
+        ],
+        "right_ankle": [
+          697.34375,
+          485.328125
+        ]
+      }
+    },
+    {
+      "source_frame": 50,
+      "contact": "right",
+      "ankles": {
+        "left_ankle": [
+          367.12890625,
+          269.0234375
+        ]
+      }
+    },
+    {
+      "source_frame": 51,
+      "contact": "right",
+      "ankles": {
+        "left_ankle": [
+          405.48300564289093,
+          259.45364099740976
+        ],
+        "right_ankle": [
+          685.9502524137497,
+          465.67955774068827
+        ]
+      }
+    },
+    {
+      "source_frame": 52,
+      "contact": "right",
+      "ankles": {
+        "right_ankle": [
+          677.6449295282364,
+          468.3511680364609
+        ]
+      }
+    },
+    {
+      "source_frame": 53,
+      "contact": "right",
+      "ankles": {
+        "left_ankle": [
+          473.2960382029414,
+          291.0337920449674
+        ]
+      }
+    },
+    {
+      "source_frame": 54,
+      "contact": "right",
+      "ankles": {}
+    },
+    {
+      "source_frame": 55,
+      "contact": "right",
+      "ankles": {
+        "right_ankle": [
+          681.43359375,
+          476.55078125
+        ]
+      }
+    },
+    {
+      "source_frame": 56,
+      "contact": "right",
+      "ankles": {}
+    },
+    {
+      "source_frame": 57,
+      "contact": "right",
+      "ankles": {}
+    },
+    {
+      "source_frame": 58,
+      "contact": "left",
+      "ankles": {}
+    }
+  ],
+  "limits": [
+    "Contact is a user semantic label, not a measured sole point.",
+    "Ankle pixel y is image coordinate and includes camera/ground perspective.",
+    "No floor plane or shoe mesh was fitted."
+  ]
+}
