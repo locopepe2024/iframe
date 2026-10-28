@@ -5,7 +5,7 @@ import { Check, Film, FolderOpen, Loader2, Plus, RefreshCw, Trash2, Upload, X, L
 import { useTranslations } from "next-intl";
 import axios from "axios";
 import { API_URL } from "@/lib/api";
-import { CutEvidence, importCuts, recreationApi, RecreationMedia, RecreationProject, seconds } from "@/lib/recreation";
+import { CutEvidence, importCuts, recreationApi, RecreationMedia, RecreationProject, RecreationProjectVersion, seconds } from "@/lib/recreation";
 import ShotReferences from "./ShotReferences";
 
 const workflowSteps = ["split", "parse", "analyze", "replace", "submit", "assemble"] as const;
@@ -60,6 +60,9 @@ export default function RecreationPage() {
   const [showMediaPicker, setShowMediaPicker] = useState(false);
   const [libraryVideos, setLibraryVideos] = useState<RecreationMedia[]>([]);
   const [libraryLoading, setLibraryLoading] = useState(false);
+  const [versions, setVersions] = useState<RecreationProjectVersion[]>([]);
+  const [versionBusy, setVersionBusy] = useState(false);
+  const [historyError, setHistoryError] = useState("");
   const video = useRef<HTMLVideoElement>(null);
   const file = useRef<HTMLInputElement>(null);
   const activeId = useRef<string | null>(null);
@@ -83,6 +86,15 @@ export default function RecreationPage() {
     setStep(record.status === "confirmed" ? "replace" : record.analysis ? "parse" : "split");
     setProjects(all => [record, ...all.filter(p => p.id !== record.id)]);
   }
+
+  useEffect(() => {
+    if (!project) return;
+    let active = true;
+    setVersions([]); setHistoryError("");
+    recreationApi.versions(project.id).then(items => { if (active) setVersions(items); })
+      .catch(() => { if (active) setHistoryError("版本历史读取失败，请刷新重试。"); });
+    return () => { active = false; };
+  }, [project?.id, project?.revision]);
 
   useEffect(() => {
     let alive = true;
@@ -153,6 +165,21 @@ export default function RecreationPage() {
     await act(async () => open(await recreationApi.get(item.project_id)));
   }
 
+  async function restoreVersion(revision: number) {
+    if (!project || revision === project.revision || busy || versionBusy || processing) return;
+    if (dirty && !window.confirm("恢复版本将放弃尚未保存的切点，是否继续？")) return;
+    setVersionBusy(true);
+    setBusy(true);
+    try {
+      open(await recreationApi.restoreVersion(project, revision));
+    } catch (err) {
+      report(err);
+    } finally {
+      setVersionBusy(false);
+      setBusy(false);
+    }
+  }
+
   async function chooseCut(pts: number) {
     if (!project || !analysis || cuts.includes(pts)) return;
     const pair = evidence[pts] ?? await recreationApi.evidence(project, pts);
@@ -194,13 +221,14 @@ export default function RecreationPage() {
     {showMediaPicker && <div className="fixed inset-0 z-40 grid place-items-center bg-black/60 p-4" role="dialog" aria-modal="true" aria-label="从素材库选择视频" onClick={() => setShowMediaPicker(false)}>
       <section className="glass-panel max-h-[80vh] w-full max-w-3xl overflow-hidden rounded-2xl p-5" onClick={event => event.stopPropagation()}>
         <header className="mb-4 flex items-center justify-between gap-3">
-          <div><h2 className="text-lg font-semibold">从素材库选择视频</h2><p className="text-xs text-text-muted">选择后会进入独立剪辑工作区，可继续切分、替换和合成。</p></div>
+          <div><h2 className="text-lg font-semibold">从素材库选择视频</h2><p className="text-xs text-text-muted">打开该素材原有的复刻项目，后续修改会保存到该项目。</p></div>
           <button type="button" className="glass-button p-2" aria-label="关闭" onClick={() => setShowMediaPicker(false)}><X size={16} /></button>
         </header>
         {libraryLoading ? <div className="flex items-center gap-2 py-10 text-sm text-text-muted"><Loader2 size={16} className="animate-spin" />正在读取视频素材…</div> : libraryVideos.length === 0 ? <p className="py-10 text-sm text-text-muted">素材库暂无可剪辑的视频。请先上传视频。</p> : <div className="grid max-h-[58vh] grid-cols-1 gap-3 overflow-y-auto sm:grid-cols-2">
           {libraryVideos.map(item => <button key={item.media_id} type="button" className="glass-panel overflow-hidden rounded-xl text-left transition-colors hover:border-primary/60" onClick={() => void chooseLibraryVideo(item)}>
             <video src={item.storage_path.startsWith("/") ? `${API_URL}${item.storage_path}` : item.storage_path} preload="metadata" muted className="aspect-video w-full bg-black object-contain" />
             <span className="block truncate p-3 text-sm">{item.display_name}</span>
+            <span className="block px-3 pb-3 text-xs text-text-muted">原始上传 · {item.media_id} · SHA-256 {item.sha256.slice(0, 12)}</span>
           </button>)}
         </div>}
       </section>
@@ -222,8 +250,14 @@ export default function RecreationPage() {
         {!project ? <div className="py-16 text-center text-text-muted">{t("selectSource")}</div> : <>
           <div className="flex flex-wrap items-start justify-between gap-3 mb-4">
             <div className="min-w-0"><h2 className="text-lg font-semibold break-words">{project.title}</h2>
-              <p className="text-sm text-text-muted">{t(dirty ? "unsaved" : project.status)}</p></div>
+              <p className="text-sm text-text-muted">{t(dirty ? "unsaved" : project.status)} · 剪辑项目版本 {project.revision}</p>
+              <p className="break-all text-xs text-text-muted">原始上传 · {project.source_media_id || "未索引"} · SHA-256 {project.source_fingerprint || "未记录"}</p>
+              {historyError && <p role="alert" className="text-sm text-red-400">{historyError}</p>}</div>
             <div className="flex gap-2">
+              <select aria-label="恢复剪辑版本" className="glass-input min-h-10 text-sm" value="" disabled={busy || versionBusy || processing || !versions.some(v => v.restorable && v.revision !== project.revision)} onChange={event => { if (!event.target.value) return; const value = Number(event.target.value); if (Number.isInteger(value)) void restoreVersion(value); }}>
+                <option value="">{versions.length < 2 ? "暂无历史版本" : "恢复历史版本"}</option>
+                {versions.filter(version => version.restorable && version.revision !== project.revision).map(version => <option key={version.revision} value={version.revision}>版本 {version.revision}{version.has_timeline ? " · 已保存切点" : " · 无已保存切点"}</option>)}
+              </select>
               <button className="glass-button p-2" title={t("refresh")} aria-label={t("refresh")} disabled={busy}
                 onClick={() => void act(async () => open(await recreationApi.get(project.id)))}><RefreshCw size={16} /></button>
               {processing && project.analysis_id && <button className="glass-button flex items-center gap-2" disabled={busy}

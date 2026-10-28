@@ -8,7 +8,7 @@ import { recreationApi, RecreationAssemblyTask, RecreationGenerationTask, Recrea
 
 vi.mock("@/lib/recreation", async importOriginal => ({
   ...await importOriginal<typeof import("@/lib/recreation")>(),
-  recreationApi: { list: vi.fn(), get: vi.fn(), confirm: vi.fn(), analyze: vi.fn(), upload: vi.fn(), evidence: vi.fn(), media: vi.fn(), searchMedia: vi.fn(), bindShot: vi.fn(), uploadImage: vi.fn(), models: vi.fn(), keyframeTasks: vi.fn(), generationTasks: vi.fn(), assemblyTasks: vi.fn() },
+  recreationApi: { versions: vi.fn(), restoreVersion: vi.fn(), list: vi.fn(), get: vi.fn(), confirm: vi.fn(), analyze: vi.fn(), upload: vi.fn(), evidence: vi.fn(), media: vi.fn(), searchMedia: vi.fn(), bindShot: vi.fn(), uploadImage: vi.fn(), models: vi.fn(), keyframeTasks: vi.fn(), generationTasks: vi.fn(), assemblyTasks: vi.fn() },
 }));
 
 const project: RecreationProject = {
@@ -22,6 +22,7 @@ const project: RecreationProject = {
 
 beforeEach(() => {
   window.localStorage.clear();
+  vi.mocked(recreationApi.versions).mockResolvedValue([]);
   vi.mocked(recreationApi.list).mockResolvedValue([project]);
   vi.mocked(recreationApi.get).mockResolvedValue(project);
   vi.mocked(recreationApi.media).mockResolvedValue({ media_id: "image", project_id: "source", kind: "evidence_frame", display_name: "Evidence", storage_path: "/image.png", sha256: "hash", created_at: 1, metadata: {} });
@@ -41,6 +42,19 @@ async function open() {
 }
 
 describe("recreation confirmation", () => {
+  it("restores a historical project version and displays the new revision", async () => {
+    vi.mocked(recreationApi.versions).mockResolvedValue([
+      { revision: 1, created_at: 1, status: "registered", has_timeline: false, restorable: true },
+    ]);
+    vi.mocked(recreationApi.restoreVersion).mockResolvedValue({ ...project, revision: 4 });
+    await open();
+    const picker = screen.getByRole("combobox", { name: "恢复剪辑版本" });
+    await waitFor(() => expect(picker).toBeEnabled());
+    fireEvent.change(picker, { target: { value: "1" } });
+    await waitFor(() => expect(recreationApi.restoreVersion).toHaveBeenCalledWith(project, 1));
+    expect(await screen.findByText(/剪辑项目版本 4/)).toBeInTheDocument();
+  });
+
   it("restores the last project and workflow stage after reload", async () => {
     window.localStorage.setItem("iframe.recreation.workspace.v1", JSON.stringify({ projectId: "source", step: "analyze" }));
     render(<NextIntlClientProvider locale="en" messages={messages}><RecreationPage /></NextIntlClientProvider>);
