@@ -34,3 +34,12 @@ def test_diary_tool_round_trip_uses_diary_result_not_memory(tmp_path):
     assert turn['result']['kind'] == 'diary_read'
     assert store.conversation('owner', 'actor', session)['messages'][0]['turn'] == turn
     assert store.turn('owner', 'actor', turn['turn_id']) == turn
+
+
+def test_diary_calendar_defaults_to_current_demo_month_without_requesting_bodies(tmp_path):
+    from datetime import datetime
+    from zoneinfo import ZoneInfo
+    store = ChatStore(tmp_path / 'chat.db', initialize=True)
+    result = dispatch(store, 'owner', 'actor', 'diary.list', {})
+    assert result['month'] == datetime.now(ZoneInfo('Asia/Hong_Kong')).strftime('%Y-%m')
+    assert result['open_calendar'] is True and result['diaries'] == []

@@ -1,6 +1,7 @@
 """Strict memory and read-only photo tool boundary. Model-facing writes only return confirmation drafts."""
 from typing import Literal
-from datetime import date
+from datetime import date, datetime
+from zoneinfo import ZoneInfo
 from pydantic import field_validator
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -50,12 +51,13 @@ class SaveDiaryDraft(Strict):
 
 
 class ListDiaries(Strict):
-    month: str = Field(pattern=r'^\d{4}-\d{2}$')
+    month: str | None = Field(default=None, pattern=r'^\d{4}-\d{2}$')
 
     @field_validator('month')
     @classmethod
     def valid_month(cls, value):
-        date.fromisoformat(value + '-01')
+        if value is not None:
+            date.fromisoformat(value + '-01')
         return value
 
 
@@ -117,7 +119,7 @@ DESCRIPTIONS = {
     'photo.album.count': '查询当前用户相册的实际照片总数，排除已删除照片。用户问一共有多少张、相册总共多少照片等数量问题时调用；直接返回统计，不询问整理范围，不打开相册，不从分页照片或聊天记录猜数量。无参数。只支持全相册总数；若明确询问某日期或人物的数量，此工具不支持筛选，不能把全库总数当成筛选数量。',
     'photo.action': '对当前选中的照片请求分析、修改资料或删除。只生成待确认卡片，不声称已完成。action=analyze需要用户确认外部看图；edit的changes仅填写用户明确说出的people、scene、lighting、location、latitude、longitude、capture_time、notes，未修改字段不传；姓名/年龄不得猜。delete必须确认。photo_id只可从工作流状态取得；没有选中照片先请用户选择。',
     'diary.open': '用户要求打开日历、日记、查看日记本时直接打开日记月历。不保存或生成日记。',
-    'diary.list': '用户问哪些天写过日记、查看某月日记时，按 YYYY-MM 月份打开日记月历，以日期标记展示，不展开正文。未指定月份时用会话当前月份；只有明确阅读某一天才用diary.read。不要用记忆搜索代替日记查询。',
+    'diary.list': '用户问哪些天写过日记、查看某月日记时，按 YYYY-MM 月份打开日记月历，以日期标记展示，不展开正文。未指定月份时省略month，服务端默认本月，不要追问月份；只有明确阅读某一天才用diary.read。不要用记忆搜索代替日记查询。',
     'diary.read': '按明确的 YYYY-MM-DD 日期阅读当前用户已保存的日记，并展示可编辑的日记卡片。不修改或编造正文。',
 
     'photo.organize.input': '继续当前会话的相册任务。依据 workflow_tasks 的 task_id、revision 和按顺序排列的候选照片ID选择照片，或明确结束、取消。仅在用户明确要求时操作；有歧义先问清楚。',
@@ -147,8 +149,9 @@ def dispatch(store, owner, actor, name, arguments):
     if name == 'diary.open':
         return dict(diaries=[], open_calendar=True, spoken_text='日记入口已经打开，可以查看日历或选择一天写日记。')
     if name == 'diary.list':
-        result = store.diaries(owner, actor, values['month'])
-        return dict(diaries=[], days=[entry['day'] for entry in result['diaries']], month=values['month'], open_calendar=True, spoken_text=f"这个月有{len(result['diaries'])}篇已保存日记，已在月历标出。")
+        month = values['month'] or datetime.now(ZoneInfo('Asia/Hong_Kong')).strftime('%Y-%m')
+        result = store.diaries(owner, actor, month)
+        return dict(diaries=[], days=[entry['day'] for entry in result['diaries']], month=month, open_calendar=True, spoken_text=f"这个月有{len(result['diaries'])}篇已保存日记，已在月历标出。")
     if name == 'diary.read':
         entries = store.diaries(owner, actor, values['day'][:7])['diaries']
         entries = [entry for entry in entries if entry['day'] == values['day']]
