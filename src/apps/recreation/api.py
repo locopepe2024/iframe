@@ -62,6 +62,9 @@ class ConfirmRequest(AnalyzeRequest):
     analysis_id: str
     cut_pts: list[StrictInt] = Field(max_length=120)
 
+class RestoreVersionRequest(AnalyzeRequest):
+    target_revision: int = Field(ge=0)
+
 
 class EvidenceRequest(BaseModel):
     analysis_id: str
@@ -108,6 +111,15 @@ def project(project_id: str, user: UserContext = Depends(require_studio_user)):
     service = RecreationService(user)
     service.recover_generation_tasks()
     return public(service.get(project_id), user)
+
+@router.get("/projects/{project_id}/versions")
+def project_versions(project_id: str, user: UserContext = Depends(require_studio_user)):
+    return public(RecreationService(user).versions(project_id), user)
+
+@router.post("/projects/{project_id}/versions/restore")
+def restore_project_version(project_id: str, request: RestoreVersionRequest,
+                            user: UserContext = Depends(require_studio_user)):
+    return public(RecreationService(user).restore_version(project_id, request.revision, request.target_revision), user)
 
 
 @router.post("/projects/{project_id}/reindex")

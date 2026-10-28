@@ -51,6 +51,7 @@ export interface RecreationMedia {
   metadata: { parent_media_id?: string; analysis_id?: string; pts?: number | null; time_base?: string; role?: string; extraction_method?: string; note?: string };
 }
 export interface RecreationMediaPage { items: RecreationMedia[]; next_cursor: number | null }
+export interface RecreationProjectVersion { revision: number; created_at: number; status: RecreationProject["status"]; has_timeline: boolean; restorable: boolean }
 
 export const RECREATION_FRAME_MANIFEST_SCHEMA_VERSION = "recreation.frame-manifest.v1" as const;
 export type RecreationFrameManifestReviewState = "draft" | "reviewed";
@@ -340,6 +341,8 @@ export const recreationApi = {
     return r.data;
   }),
   get: (id: string): Promise<RecreationProject> => axios.get(`${API_URL}/recreation/projects/${id}`).then(r => r.data),
+  versions: (id: string): Promise<RecreationProjectVersion[]> => axios.get(`${API_URL}/recreation/projects/${id}/versions`).then(r => r.data),
+  restoreVersion: (project: RecreationProject, targetRevision: number): Promise<RecreationProject> => axios.post(`${API_URL}/recreation/projects/${project.id}/versions/restore`, { revision: project.revision, target_revision: targetRevision }).then(r => r.data),
   upload: (file: File): Promise<RecreationProject> => {
     const data = new FormData(); data.append("file", file);
     return axios.post(`${API_URL}/recreation/projects`, data).then(r => r.data);
