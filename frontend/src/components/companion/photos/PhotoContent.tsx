@@ -28,7 +28,6 @@ export default function PhotoContent({ photoId }: { photoId: string }) {
     finally { setBusy(false); }
   }
   return <section aria-label="照片内容描述" aria-busy={busy}>
-    <h3>一起看看这张照片</h3>
     {!loaded && <p role="status">正在读取照片描述…</p>}
     {loaded && !analysis && <>
       <p>可以让 Qwen 看看画面，帮您开始讲故事。会将去除照片信息的缩略图发送给配置的外部 Qwen 服务，描述保存在本相册。不识别人物身份，不修改拍摄日期。</p>
@@ -37,7 +36,9 @@ export default function PhotoContent({ photoId }: { photoId: string }) {
       {error && <button disabled={busy} onClick={() => { setError(""); }}>准备重试</button>}
     </>}
     {error && <p role="alert">{error}</p>}
-    {analysis && <>
+    {loaded && <PhotoFactsEditor photoId={photoId} analysis={analysis} />}
+    {analysis && <details>
+      <summary>查看 AI 分析详情</summary>
       <p>AI 看图描述，尚待您核对</p>
       <p>{analysis.observation.visible_summary}</p>
       <dl>{([['scene','场景'],['lighting','光影'],['time_clues','时间线索']] as const).map(([key,label])=>analysis.observation[key] && <div key={key}><dt>{label}</dt><dd>{analysis.observation[key]}</dd></div>)}</dl>
@@ -45,8 +46,8 @@ export default function PhotoContent({ photoId }: { photoId: string }) {
       {!!analysis.observation.visible_text.length && <><h3>看见的文字（可能有误）</h3><ul>{analysis.observation.visible_text.map((text, i) => <li key={i}>{text}</li>)}</ul></>}
       {!!analysis.observation.uncertainties.length && <><h3>还不确定的地方</h3><ul>{analysis.observation.uncertainties.map((text, i) => <li key={i}>{text}</li>)}</ul></>}
       <p>{analysis.observation.story_question}</p><p>不想说也可以，下次再聊。</p>
-      <DescriptionReview key={photoId} photoId={photoId} original={analysis.observation.visible_summary} />
-    </>}
-    {loaded && <><PhotoFactsEditor photoId={photoId} analysis={analysis} /><PhotoDelete photoId={photoId}/></>}
+      <details><summary>核对完整描述与历史</summary><DescriptionReview key={photoId} photoId={photoId} original={analysis.observation.visible_summary} /></details>
+    </details>}
+    {loaded && <details><summary>更多操作</summary><PhotoDelete photoId={photoId}/></details>}
   </section>;
 }
