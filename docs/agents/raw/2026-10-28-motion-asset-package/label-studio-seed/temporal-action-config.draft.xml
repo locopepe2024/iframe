@@ -1,0 +1,11 @@
+<!-- Draft: validate TimelineLabels against the deployed Label Studio version before import. -->
+<View>
+  <Video name="video" value="$video"/>
+  <TimelineLabels name="action_segment" toName="video">
+    <Label value="support_phase" background="#16a34a"/>
+    <Label value="foot_lift" background="#f59e0b"/>
+    <Label value="turning_phase" background="#2563eb"/>
+    <Label value="uncertain" background="#6b7280"/>
+  </TimelineLabels>
+  <TextArea name="action_description" toName="video" editable="true"/>
+</View>

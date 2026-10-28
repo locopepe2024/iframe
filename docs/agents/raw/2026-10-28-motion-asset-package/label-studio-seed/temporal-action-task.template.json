@@ -1,0 +1,8 @@
+{
+  "data": {
+    "video": "STAGE_SOURCE_VIDEO_HERE",
+    "clip_id": "recreation2-clip-exact10",
+    "source_sha256": "6614a5f7afdc5dd7342058e99027f2f42eee19594dcfd90c46017ddcfce114c0",
+    "annotation_scope": "temporal_action_segments"
+  }
+}

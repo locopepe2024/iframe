@@ -1,0 +1,80 @@
+[
+  {
+    "task_id": "recreation2-event-001",
+    "data": {
+      "image": "docs/agents/raw/2026-10-22-independent-pose/frames/source-01.png",
+      "clip_id": "recreation2-clip-exact10",
+      "source_frame": 1,
+      "source_pts_s": 0.0,
+      "image_sha256": "8d86577c27a7eb381840a42f5f5991ea0758e6857709003f04a5d38dd0750768",
+      "image_width": 1394,
+      "image_height": 792,
+      "annotation_scope": "knee_regions_support_foot_occlusion"
+    }
+  },
+  {
+    "task_id": "recreation2-event-017",
+    "data": {
+      "image": "docs/agents/raw/2026-10-22-independent-pose/frames/source-02.png",
+      "clip_id": "recreation2-clip-exact10",
+      "source_frame": 17,
+      "source_pts_s": 0.783655,
+      "image_sha256": "bf2a28d4e75540048dae768e75ae94f751e459ff0d05664f4f30f2c5aa2ccab6",
+      "image_width": 1394,
+      "image_height": 792,
+      "annotation_scope": "knee_regions_support_foot_occlusion"
+    }
+  },
+  {
+    "task_id": "recreation2-event-023",
+    "data": {
+      "image": "docs/agents/raw/2026-10-22-independent-pose/frames/source-03.png",
+      "clip_id": "recreation2-clip-exact10",
+      "source_frame": 23,
+      "source_pts_s": 0.964499,
+      "image_sha256": "ceb7659f412ad10a5fd679b8baed4cc9966672175e3a5af7c9788e81870417e1",
+      "image_width": 1394,
+      "image_height": 792,
+      "annotation_scope": "knee_regions_support_foot_occlusion"
+    }
+  },
+  {
+    "task_id": "recreation2-event-029",
+    "data": {
+      "image": "docs/agents/raw/2026-10-22-independent-pose/frames/source-04.png",
+      "clip_id": "recreation2-clip-exact10",
+      "source_frame": 29,
+      "source_pts_s": 1.145343,
+      "image_sha256": "0d6d76b46b5862b1c619cc2a53eb4ede83fda581e2f8240d960dae27d4555c7b",
+      "image_width": 1394,
+      "image_height": 792,
+      "annotation_scope": "knee_regions_support_foot_occlusion"
+    }
+  },
+  {
+    "task_id": "recreation2-event-041",
+    "data": {
+      "image": "docs/agents/raw/2026-10-22-independent-pose/frames/source-05.png",
+      "clip_id": "recreation2-clip-exact10",
+      "source_frame": 41,
+      "source_pts_s": 1.50703,
+      "image_sha256": "3ec070a840a8a403ed6d20b2a95f00242361986bae8ffdb8e354214e12a916c2",
+      "image_width": 1394,
+      "image_height": 792,
+      "annotation_scope": "knee_regions_support_foot_occlusion"
+    }
+  },
+  {
+    "task_id": "recreation2-event-055",
+    "data": {
+      "image": "docs/agents/raw/2026-10-22-independent-pose/frames/source-06.png",
+      "clip_id": "recreation2-clip-exact10",
+      "source_frame": 55,
+      "source_pts_s": 1.959139,
+      "image_sha256": "3e68eb549ed24307ff69df6fe3f2ba531a5c996247a049ebedcd96d34d8995b8",
+      "image_width": 1394,
+      "image_height": 792,
+      "annotation_scope": "knee_regions_support_foot_occlusion"
+    }
+  }
+]

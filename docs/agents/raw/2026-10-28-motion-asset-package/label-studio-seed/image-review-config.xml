@@ -1,0 +1,21 @@
+<View>
+  <Header value="Source frame: $source_frame | PTS: $source_pts_s s"/>
+  <Image name="image" value="$image" zoom="true"/>
+  <RectangleLabels name="knee_region" toName="image">
+    <Label value="left_knee_visible" background="#16a34a"/>
+    <Label value="right_knee_visible" background="#2563eb"/>
+    <Label value="left_knee_uncertain" background="#f59e0b"/>
+    <Label value="right_knee_uncertain" background="#f97316"/>
+  </RectangleLabels>
+  <PolygonLabels name="support_foot" toName="image">
+    <Label value="left_support_foot" background="#7c3aed"/>
+    <Label value="right_support_foot" background="#db2777"/>
+    <Label value="foot_uncertain" background="#6b7280"/>
+  </PolygonLabels>
+  <Choices name="frame_status" toName="image" choice="single-radio">
+    <Choice value="reviewed"/>
+    <Choice value="occluded"/>
+    <Choice value="not_evaluable"/>
+  </Choices>
+  <TextArea name="review_notes" toName="image" editable="true"/>
+</View>
