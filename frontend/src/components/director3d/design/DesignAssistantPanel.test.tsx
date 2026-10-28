@@ -5,7 +5,7 @@ import { useWorkbenchStore } from "../state/workbench-store";
 import { directorDesignApi } from "@/lib/directorDesign";
 import { designRevision, type DesignPreview, type DesignProposal } from "./design-proposal";
 
-vi.mock("@/lib/directorDesign", () => ({ directorDesignApi: { propose: vi.fn() } }));
+vi.mock("@/lib/directorDesign", () => ({ directorDesignApi: { propose: vi.fn(), listReferenceAssets: vi.fn(), readReferenceAsset: vi.fn() } }));
 vi.mock("@/lib/panoramaAssets", () => ({ panoramaAssetApi: { list: vi.fn().mockResolvedValue([]) } }));
 vi.mock("../scene/HumanoidStage", () => ({ HumanoidStage: ({ preview, previewFrame }: { preview?: DesignPreview | null; previewFrame?: number }) => <div data-testid="stage-design-state" data-preview-frame={previewFrame}>{preview ? JSON.stringify(preview.cameras[preview.cameraId].transform.position) : "authored"}</div> }));
 
@@ -128,4 +128,57 @@ it("scrubs a crowd-only candidate and applies group membership without requiring
   fireEvent.click(screen.getByRole("button", { name: "应用设计" }));
   expect(useWorkbenchStore.getState().crowdGroups["design-crowd-near"].actorIds).toEqual(["design-extra-near"]);
   expect(useWorkbenchStore.getState().dialogueTimeline.tracks[0].trackKind).toBe("character_transform");
+});
+
+const savedAsset = { mediaId: "saved-layout", kind: "design_bundle" as const, name: "粮铺布局.json", sha256: "a".repeat(64), metadata: { sourcePackageChecksum: "fnv1a32:12345678" } };
+async function chooseSavedDesign() {
+  fireEvent.click(screen.getByRole("button", { name: "读取已保存的设计" }));
+  const picker = await screen.findByRole("combobox", { name: "已保存的 3D 设计" });
+  fireEvent.change(picker, { target: { value: savedAsset.mediaId } });
+  fireEvent.click(screen.getByRole("button", { name: "导入所选设计" }));
+}
+
+it("opens a saved design from the library with its provenance and supports undo", async () => {
+  useWorkbenchStore.getState().setSkyColor("#223344");
+  const bundle = useWorkbenchStore.getState().exportDirectorDesignBundle();
+  bundle.authoring.designAssumptions = ["粮铺尺度待校正"];
+  useWorkbenchStore.getState().setSkyColor("#556677");
+  const before = useWorkbenchStore.getState();
+  vi.mocked(directorDesignApi.listReferenceAssets).mockResolvedValue([savedAsset, { ...savedAsset, mediaId: "image", kind: "reference_image", name: "source.png" }]);
+  vi.mocked(directorDesignApi.readReferenceAsset).mockResolvedValue(new Blob([JSON.stringify(bundle)]));
+  render(<App />);
+  await chooseSavedDesign();
+  await screen.findByText(/已从素材库导入设计/);
+  expect(screen.queryByRole("option", { name: "source.png" })).not.toBeInTheDocument();
+  expect(directorDesignApi.readReferenceAsset).toHaveBeenCalledWith(savedAsset.mediaId);
+  expect(useWorkbenchStore.getState().designAssumptions).toEqual(["粮铺尺度待校正"]);
+  expect(useWorkbenchStore.getState().undoStack.length).toBe(before.undoStack.length + 1);
+  act(() => useWorkbenchStore.getState().undo());
+  expect(useWorkbenchStore.getState().renderScene.skyColor).toBe(before.renderScene.skyColor);
+});
+
+it("keeps edits made while a saved design is being fetched", async () => {
+  const bundle = useWorkbenchStore.getState().exportDirectorDesignBundle();
+  let resolve!: (blob: Blob) => void;
+  vi.mocked(directorDesignApi.listReferenceAssets).mockResolvedValue([savedAsset]);
+  vi.mocked(directorDesignApi.readReferenceAsset).mockImplementation(() => new Promise((done) => { resolve = done; }));
+  render(<App />);
+  await chooseSavedDesign();
+  act(() => useWorkbenchStore.getState().setSkyColor("#123456"));
+  const edited = useWorkbenchStore.getState();
+  await act(async () => resolve(new Blob([JSON.stringify(bundle)])));
+  await screen.findByText("读取期间场景已变化，请重新导入。");
+  expect(useWorkbenchStore.getState().renderScene.skyColor).toBe("#123456");
+  expect(useWorkbenchStore.getState().undoStack).toBe(edited.undoStack);
+});
+
+it("reports invalid saved content without changing the scene", async () => {
+  const before = useWorkbenchStore.getState();
+  vi.mocked(directorDesignApi.listReferenceAssets).mockResolvedValue([savedAsset]);
+  vi.mocked(directorDesignApi.readReferenceAsset).mockResolvedValue(new Blob(['{"schemaVersion":"unknown"}']));
+  render(<App />);
+  await chooseSavedDesign();
+  await screen.findByRole("alert");
+  expect(useWorkbenchStore.getState().characters).toBe(before.characters);
+  expect(useWorkbenchStore.getState().undoStack).toBe(before.undoStack);
 });
