@@ -1,0 +1,44 @@
+{
+  "frames": [
+    6,
+    24
+  ],
+  "pts_s": [
+    0.2,
+    0.92
+  ],
+  "samples": 19,
+  "missing": 0,
+  "repeated_2d_max_delta_native_px": 0,
+  "limb_lengths_model_units": {
+    "left_thigh": {
+      "min": 0.24157300996458014,
+      "median": 0.2931784796096985,
+      "max": 0.41071736409207843,
+      "max_min_ratio": 1.7001790231131306
+    },
+    "left_shin": {
+      "min": 0.2372857261095276,
+      "median": 0.3116400184548818,
+      "max": 0.4112899723705518,
+      "max_min_ratio": 1.7333110554686564
+    },
+    "right_thigh": {
+      "min": 0.28386914282847775,
+      "median": 0.3323407575428429,
+      "max": 0.43376897437541617,
+      "max_min_ratio": 1.5280596194899296
+    },
+    "right_shin": {
+      "min": 0.29640883323788314,
+      "median": 0.3388456678153175,
+      "max": 0.37688724525339456,
+      "max_min_ratio": 1.2715115171717013
+    }
+  },
+  "status": "REVIEW",
+  "camera": null,
+  "global_root": null,
+  "contact": null,
+  "rig_bundle": null
+}
