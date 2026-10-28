@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { AssemblyTracks } from "./AssemblyTracks";
@@ -76,4 +77,31 @@ it("does not replace an unavailable saved take with the frame's newer video", ()
     render(<AssemblyTracks plan={unavailable} project={{ ...project, frames: [{ id: "f", video_url: "newer.mp4" }] } as Project} resourceId="p" saved onChange={vi.fn()} />);
     expect(screen.queryByLabelText("Timeline video preview")).toBeNull();
     expect(screen.getByRole("button", { name: "Play" })).toBeDisabled();
+});
+
+it("offers visible sequence controls and recombines trimmed and split sources", () => {
+    const initial: AssemblyEditPlan = { ...plan, target_duration_ms: 9000, lanes: [{ id: "v", kind: "video", allow_overlap: false, clips: [1, 2, 3].map((n, i) => ({ id: `c${n}`, label: `${n}.mp4`, source_media_id: `m${n}`, source_start_ms: 0, source_end_ms: 3000, timeline_start_ms: i * 3000, timeline_end_ms: (i + 1) * 3000, enabled: true, source_refs: [] })) }] };
+    let latest = initial;
+    function Editor() {
+        const [value, setValue] = useState(initial);
+        return <AssemblyTracks plan={value} project={project} resourceId="p" saved={false} onChange={next => { latest = next; setValue(next); }} />;
+    }
+    render(<Editor />);
+    fireEvent.click(screen.getByRole("button", { name: "Move 2.mp4 earlier" }));
+    const ordered = () => latest.lanes[0].clips.slice().sort((a,b) => a.timeline_start_ms - b.timeline_start_ms);
+    expect(ordered().map(c => c.label)).toEqual(["2.mp4", "1.mp4", "3.mp4"]);
+    fireEvent.click(screen.getByRole("button", { name: "Edit clip 2: 1.mp4" }));
+    fireEvent.change(screen.getByRole("spinbutton", { name: "Source in (ms)" }), { target: { value: "500" } });
+    fireEvent.change(screen.getByRole("spinbutton", { name: "Source out (ms)" }), { target: { value: "2500" } });
+    fireEvent.click(screen.getByRole("button", { name: "Apply trim at original speed" }));
+    expect(ordered()[1]).toMatchObject({ source_start_ms: 500, source_end_ms: 2500, timeline_start_ms: 3000, timeline_end_ms: 5000 });
+    fireEvent.change(screen.getByRole("slider"), { target: { value: "4000" } });
+    fireEvent.click(screen.getByRole("button", { name: "Split at playhead" }));
+    expect(ordered().map(c => c.source_media_id)).toEqual(["m2", "m1", "m1", "m3"]);
+    const secondHalf = ordered()[2];
+    expect(secondHalf).toMatchObject({ source_start_ms: 1500, source_end_ms: 2500 });
+    fireEvent.click(screen.getByRole("button", { name: "Edit clip 3: 1.mp4" }));
+    fireEvent.click(screen.getByRole("button", { name: "Move later" }));
+    expect(ordered().map(c => c.source_media_id)).toEqual(["m2", "m1", "m3", "m1"]);
+    expect(latest.target_duration_ms).toBe(8000);
 });
