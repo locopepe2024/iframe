@@ -1,0 +1,22 @@
+{
+  "clip_id": "addams-cdl-liziwei-09-revised",
+  "path": "/Users/owen/Downloads/白模/动作白模_28/白膜-亚当斯一家-CDL李紫微-09改.mp4",
+  "sha256": "3b0d8f32549c80ef04e988c1bfe1393582fd6349047b306ce6c2df7bdae63c96",
+  "video": {
+    "codec": "h264",
+    "width": 3840,
+    "height": 2080,
+    "duration_s": 8.683991,
+    "frame_count": 217,
+    "frame_rate": "25/1",
+    "pts_authoritative": "not_yet_verified"
+  },
+  "audio": {"codec": "aac", "frame_count": 375},
+  "status": "ingest_observed_only",
+  "limitations": [
+    "source camera parameters unavailable",
+    "person and shot segmentation not yet generated",
+    "no 3d motion recovery run",
+    "no rig retarget or depth output"
+  ]
+}
