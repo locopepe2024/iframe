@@ -253,7 +253,7 @@ export default function AgentChat() {
     };
   }
   function renderAttached(anchor: number) {
-    return attached.filter(item => item.anchor === anchor).map((item,index) => item.kind === "photo" ? <PhotoConversationCard key={`${item.id}-${index}`} photoId={item.id} label={item.name} /> : <VideoConversationCard key={`${item.id}-${index}`} id={item.id} name={item.name} />);
+    return attached.filter(item => item.anchor === anchor).map((item,index) => item.kind === "photo" ? <PhotoConversationCard key={`${item.id}-${index}`} photoId={item.id} label={item.name} onOrganize={() => organizeSelectedPhoto(item.id)} /> : <VideoConversationCard key={`${item.id}-${index}`} id={item.id} name={item.name} />);
   }
   function submit() {
     if (inputDisabled || pending) return;

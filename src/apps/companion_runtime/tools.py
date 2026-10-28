@@ -137,7 +137,7 @@ def dispatch(store, owner, actor, name, arguments):
         return store.prepare(owner, actor, 'save', values)
     if name == 'memory.delete':
         return store.prepare(owner, actor, 'delete', values)
-    if name in ('photo.organize.start', 'photo.organize.input'):
+    if name in ('photo.organize.start', 'photo.organize.input', 'photo.action'):
         raise ValueError('Workflow start requires a claimed chat turn')
     if name.startswith('photo.'):
         from .photo_tools import read_photos
