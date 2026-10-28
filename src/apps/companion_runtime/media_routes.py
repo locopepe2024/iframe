@@ -1,6 +1,8 @@
 """Explicit demo generation and TTS through the owner's UniArt channel."""
 import hashlib
 import sqlite3
+import json
+import tempfile
 import uuid
 from pathlib import Path
 from typing import Literal
@@ -12,6 +14,9 @@ from pydantic import Field
 
 from .api import Owner, Store
 from .tools import Strict
+from .photo_tools import photo_store
+from .store import Missing
+from ..photos.date_store import PhotoNotAvailable
 from . import channel
 from ..user_config import UserConfigUpdate
 from ...utils.uniart_catalog import fetch_uniart_catalog
@@ -30,7 +35,9 @@ class Generate(Strict):
     model: str = Field(min_length=1, max_length=160)
     prompt: str = Field(min_length=1, max_length=4000)
     setting: str = Field(max_length=40)
-    reference: None = None
+    reference: str | None = Field(default=None, min_length=1, max_length=120)
+    task_id: str | None = Field(default=None, min_length=1, max_length=120)
+    expected_revision: int | None = Field(default=None, ge=1)
     allow_external_generation: Literal[True]
 
 
@@ -92,11 +99,23 @@ def execute(store, identity, job_id, body, config, options):
     try:
         from ...models.uniart import UniArtImageModel, UniArtVideoModel
         output.parent.mkdir(exist_ok=True)
-        if body.mode == 'image':
-            ratio = body.setting.split()[-1]
-            UniArtImageModel(config).generate(body.prompt, str(output), model_name=body.model, aspect_ratio=ratio, **options)
-        else:
-            UniArtVideoModel(config).generate(body.prompt, str(output), model_name=body.model, duration=int(body.setting.split()[0]), generate_audio=False, **options)
+        options = dict(options)
+        reference_media = options.pop('_reference_media', None)
+        # The shared adapter publishes local files via managed storage; never send blobs/data URLs.
+        with tempfile.TemporaryDirectory(prefix='companion-reference-') as directory:
+            if reference_media:
+                content, mime = reference_media
+                suffix = {'image/jpeg': '.jpg', 'image/png': '.png', 'image/webp': '.webp'}.get(mime)
+                if not suffix:
+                    raise ValueError('Unsupported reference image type')
+                material = Path(directory) / ('reference' + suffix)
+                material.write_bytes(content)
+                options['ref_image_path' if body.mode == 'image' else 'img_path'] = str(material)
+            if body.mode == 'image':
+                ratio = body.setting.split()[-1]
+                UniArtImageModel(config).generate(body.prompt, str(output), model_name=body.model, aspect_ratio=ratio, **options)
+            else:
+                UniArtVideoModel(config).generate(body.prompt, str(output), model_name=body.model, duration=int(body.setting.split()[0]), generate_audio=False, **options)
         if not output.is_file() or output.stat().st_size == 0:
             raise ValueError('Missing generated file')
         status = 'completed'
@@ -105,6 +124,29 @@ def execute(store, identity, job_id, body, config, options):
     with store.connection(write=True) as db:
         db.execute('UPDATE companion_generations SET status=?,path=? WHERE id=? AND owner=?',
                    (status, str(output) if status == 'completed' else None, job_id, identity.owner_profile_id))
+
+
+def checked_draft(db, store, identity, body):
+    if not body.task_id:
+        if body.expected_revision is not None or body.reference:
+            raise HTTPException(422, '请从当前创作卡片确认素材与要求。')
+        return None
+    try:
+        row = store.one(db, 'companion_media_drafts', identity.owner_profile_id, body.task_id)
+    except Missing:
+        raise HTTPException(404, '创作任务不存在。') from None
+    if row['actor'] != identity.user_id:
+        raise HTTPException(404, '创作任务不存在。')
+    payload = json.loads(row['payload'])
+    expected_mode = 'video' if payload['type'] == 'video_generate' else 'image'
+    if (row['status'] != 'active' or row['revision'] != body.expected_revision
+            or body.mode != expected_mode or body.prompt != payload['brief']
+            or body.reference != payload['photo_id']
+            or body.setting != payload.get('setting', '5 秒' if expected_mode == 'video' else '方形 1:1')):
+        raise HTTPException(409, '创作要求已改变，请查看当前卡片再确认。')
+    if not payload['brief'].strip() or (payload['type'] == 'image_edit' and not payload['photo_id']):
+        raise HTTPException(422, '请先补充具体要求和需要修改的照片。')
+    return payload
 
 
 @router.post('/generations')
@@ -117,12 +159,14 @@ def generate(body: Generate, identity: Owner, store: Store, background: Backgrou
         if old['digest'] != digest:
             raise HTTPException(409, '原生成请求已改变。')
         return dict(id=old['id'], status=old['status'])
+    with store.connection() as db:
+        checked_draft(db, store, identity, body)
     config = channel.runtime(identity)
     try:
         catalog = fetch_uniart_catalog(config)
     except Exception:
         raise HTTPException(502, '模型列表读取失败，请检查渠道配置。') from None
-    capability = 't2i' if body.mode == 'image' else 't2v'
+    capability = ('i2i' if body.reference else 't2i') if body.mode == 'image' else ('i2v' if body.reference else 't2v')
     selected = next((m for m in catalog if m['id'] == body.model and capability in m['capabilities']), None)
     if not selected:
         raise HTTPException(422, '请选择支持当前创作类型的模型。')
@@ -142,9 +186,28 @@ def generate(body: Generate, identity: Owner, store: Store, background: Backgrou
         seconds = int(body.setting.split()[0]) if body.setting in ('5 秒', '10 秒') else 0
         if not seconds or not duration.get('min', 999) <= seconds <= duration.get('max', 0):
             raise HTTPException(422, '所选模型不支持该时长。')
+    if body.reference:
+        try:
+            content, mime = photo_store().media(identity.owner_profile_id, body.reference, thumbnail=False)
+        except PhotoNotAvailable:
+            raise HTTPException(404, '参考照片不可用，请重新选择。') from None
+        if mime not in ('image/jpeg', 'image/png', 'image/webp'):
+            raise HTTPException(422, '请选择照片作为参考素材。')
+        options['_reference_media'] = (content, mime)
     job_id = str(uuid.uuid4())
     try:
         with store.connection(write=True) as db:
+            # Recheck under the same write transaction that reserves the paid operation.
+            old = db.execute('SELECT * FROM companion_generations WHERE owner=? AND operation_id=?', (identity.owner_profile_id, body.operation_id)).fetchone()
+            if old:
+                if old['digest'] != digest:
+                    raise HTTPException(409, '原生成请求已改变。')
+                return dict(id=old['id'], status=old['status'])
+            payload = checked_draft(db, store, identity, body)
+            if payload is not None:
+                payload['job_id'] = job_id
+                db.execute("UPDATE companion_media_drafts SET status='submitted',revision=revision+1,payload=? WHERE id=? AND owner=? AND actor=?",
+                           (json.dumps(payload, ensure_ascii=False), body.task_id, identity.owner_profile_id, identity.user_id))
             db.execute('INSERT INTO companion_generations VALUES (?,?,?,?,?,?,NULL)', (job_id, identity.owner_profile_id, body.operation_id, digest, body.mode, 'running'))
     except sqlite3.IntegrityError:
         raise HTTPException(409, '该请求已在处理，请查询任务。') from None

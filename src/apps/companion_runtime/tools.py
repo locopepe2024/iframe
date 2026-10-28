@@ -42,7 +42,8 @@ class StartMediaDraft(Strict):
 class UpdateMediaDraft(Strict):
     task_id: str = Field(min_length=1, max_length=120)
     expected_revision: int = Field(ge=1)
-    action: Literal['brief', 'select_photo', 'clear_photo', 'pause', 'resume', 'cancel']
+    action: Literal['brief', 'select_photo', 'clear_photo', 'setting', 'pause', 'resume', 'cancel']
+    setting: str | None = Field(default=None, max_length=40)
     brief: str = Field(default='', max_length=4000)
     photo_id: str | None = Field(default=None, max_length=120)
 

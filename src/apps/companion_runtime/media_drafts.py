@@ -9,9 +9,10 @@ from .photo_tools import read_photos
 def display(row):
     payload = json.loads(row['payload'])
     state = row['status']
-    step = ('awaiting_asset' if payload['type'] == 'image_edit' and not payload['photo_id'] else
+    payload.setdefault('setting', '5 秒' if payload['type'] == 'video_generate' else '方形 1:1')
+    step = ('submitted' if state == 'submitted' else 'awaiting_asset' if payload['type'] == 'image_edit' and not payload['photo_id'] else
             'awaiting_brief' if not payload['brief'] else 'configuring')
-    spoken = ('已取消这次创作。' if state == 'cancelled' else '创作要求已保留，先回到聊天。' if state == 'paused' else
+    spoken = ('创作已提交，可以继续聊天。' if state == 'submitted' else '已取消这次创作。' if state == 'cancelled' else '创作要求已保留，先回到聊天。' if state == 'paused' else
               '想修改哪张照片？可以上传，或从相册选择。' if step == 'awaiting_asset' else
               '想怎么修改这张照片？' if payload['type'] == 'image_edit' and step == 'awaiting_brief' else
               '想创作什么内容？' if step == 'awaiting_brief' else
@@ -63,7 +64,7 @@ class MediaDrafts:
                 if previous['request'] != request:
                     raise Conflict('Creative operation changed')
                 return json.loads(previous['result'])
-            if row['revision'] != values['expected_revision'] or row['status'] == 'cancelled':
+            if row['revision'] != values['expected_revision'] or row['status'] in ('cancelled', 'submitted'):
                 raise Conflict('Creative task changed or closed')
             payload = json.loads(row['payload'])
             action = values['action']
@@ -89,6 +90,12 @@ class MediaDrafts:
                 # Same owner-scoped live photo read used by the album tools.
                 read_photos(owner, 'photo.item.read', dict(photo_id=photo_id))
                 payload['photo_id'] = photo_id
+            elif action == 'setting':
+                setting = values.get('setting')
+                allowed = ('5 秒', '10 秒') if payload['type'] == 'video_generate' else ('方形 1:1', '横向 16:9', '竖向 9:16')
+                if setting not in allowed:
+                    raise ValueError('Unsupported creative setting')
+                payload['setting'] = setting
             elif action == 'clear_photo':
                 payload['photo_id'] = None
             else:
