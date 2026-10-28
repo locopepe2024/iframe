@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { Expand, Download, Video, Copy, Check, Replace, Crown, Bookmark, PencilLine, LibraryBig } from 'lucide-react';
 import { useTranslations } from 'next-intl';
@@ -148,19 +148,34 @@ function CompletedCard({ generation, outputIndex, onGenerateVideo, onOpenDetail,
   const [actionError, setActionError] = useState('');
   const [importAssetOpen, setImportAssetOpen] = useState(false);
   const [freshCover, setFreshCover] = useState<string | null>(null);
-  const [coverRetry, setCoverRetry] = useState(false);
+  const coverRetry = useRef(false);
+  const coverRequest = useRef(0);
   const aspectRatio = getOutputAspectRatio(generation.parameters);
 
   const saved = output?.saved_to_library ?? false;
   const mediaUrl = output?.media_path ? getMediaUrl(output.media_path) : null;
   const coverUrl = freshCover || (output?.thumbnail_path ? getMediaUrl(output.thumbnail_path) : mediaUrl);
+  useEffect(() => {
+    setFreshCover(null);
+    setImgError(false);
+    coverRetry.current = false;
+    // Ignore a renewal that completes after the output or its signed URLs change.
+    coverRequest.current += 1;
+    return () => { coverRequest.current += 1; };
+  }, [output?.id, output?.media_path, output?.thumbnail_path]);
   const refreshCover = useCallback(() => {
     if (!output?.media_path) return;
-    if (coverRetry) { setImgError(true); return; }
-    setCoverRetry(true);
-    void resolveMediaDelivery(output.media_path, 320).then(url => { setFreshCover(url); setImgError(false); })
-      .catch(() => setImgError(true));
-  }, [output?.media_path, coverRetry]);
+    if (coverRetry.current) { setImgError(true); return; }
+    coverRetry.current = true;
+    const request = ++coverRequest.current;
+    void resolveMediaDelivery(output.media_path, 320).then(url => {
+      if (request !== coverRequest.current) return;
+      // Renewals within the same second can return the same signature. Force
+      // a new image request rather than retaining a cached failed response.
+      setFreshCover(`${url}${url.includes('?') ? '&' : '?'}__r=${Date.now()}`);
+      setImgError(false);
+    }).catch(() => { if (request === coverRequest.current) setImgError(true); });
+  }, [output?.media_path]);
   const updateGeneration = usePlaygroundStore((s) => s.updateGeneration);
   const restoreGeneration = usePlaygroundStore((s) => s.restoreGeneration);
   const featuredByGen = usePlaygroundStore((s) => s.featuredByGen);
@@ -224,9 +239,14 @@ function CompletedCard({ generation, outputIndex, onGenerateVideo, onOpenDetail,
                 <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 15.75l5.159-5.159a2.25 2.25 0 013.182 0l5.159 5.159m-1.5-1.5l1.409-1.409a2.25 2.25 0 013.182 0l2.909 2.909M3.75 21h16.5A2.25 2.25 0 0022.5 18.75V5.25A2.25 2.25 0 0020.25 3H3.75A2.25 2.25 0 001.5 5.25v13.5A2.25 2.25 0 003.75 21z" />
               </svg>
               <span className="font-mono text-[0.5625rem] text-text-muted/50">{t('card.imageUnavailable') || 'Unavailable'}</span>
+              <button type="button" className="text-xs text-primary" onClick={(event) => {
+                event.stopPropagation();
+                coverRetry.current = false;
+                refreshCover();
+              }}>{t('card.retry')}</button>
             </div>
           ) : (
-            <img src={coverUrl || mediaUrl} alt={prompt} className="w-full h-full object-cover" onError={refreshCover} />
+            <img src={coverUrl || mediaUrl} alt={prompt} loading="lazy" decoding="async" className="w-full h-full object-cover" onError={refreshCover} />
           )
         ) : (
           <div className="w-full h-full bg-gradient-to-br from-elevated to-surface" />
