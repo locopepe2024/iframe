@@ -169,6 +169,7 @@ from ...utils.cos_previews import create_cos_media_preview
 from ...utils.cos_storage import is_cos_configured
 from ..agent_api import router as agent_router
 from ..knowledge.api import router as knowledge_router
+from ..editing.api import router as editing_router
 from ..recreation.api import router as recreation_router
 from ..director_depth import router as director_depth_router
 from ..director_design import router as director_design_router
@@ -178,6 +179,7 @@ app.include_router(playground_router, prefix="/playground")
 app.include_router(agent_router)
 app.include_router(knowledge_router)
 app.include_router(recreation_router)
+app.include_router(editing_router)
 app.include_router(director_depth_router)
 app.include_router(director_design_router)
 
@@ -443,6 +445,7 @@ async def enforce_studio_owner_boundary(request: Request, call_next):
         or path == "/series"
         or path.startswith("/series/")
         or path.startswith("/recreation/")
+        or path.startswith("/editing/")
         or path == "/library"
         or path.startswith("/library/")
         or path == "/asset-index"

@@ -719,7 +719,8 @@
     "offlineBannerText": "网络已断开 — 重新连接后可继续操作"
   },
   "nav": {
-    "recreation": "剪辑",
+    "recreation": "复刻",
+    "editing": "剪辑",
     "workspace": "工作区",
     "library": "资产库",
     "editor": "剧本编辑器",

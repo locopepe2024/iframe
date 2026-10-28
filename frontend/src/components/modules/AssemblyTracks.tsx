@@ -3,11 +3,14 @@ import { useState, useRef, useEffect, type PointerEvent } from "react";
 import { useLocale } from "next-intl";
 import { api, type AssemblyEditPlan } from "@/lib/api";
 import type { Project } from "@/store/projectStore";
-import { moveAssemblyClipInTimeline, removeAssemblyClip, resizeAssemblyClipInTimeline, splitAssemblyClip, trimAssemblyClip } from "./assemblyEditing";
+import { reorderAssemblyVideo, moveAssemblyClipInTimeline, removeAssemblyClip, resizeAssemblyClipInTimeline, splitAssemblyClip, trimAssemblyClip } from "./assemblyEditing";
 import { extractErrorDetail, getAssetUrl, getVideoPosterUrl } from "@/lib/utils";
 
-export function AssemblyTracks({ plan, resourceId, onChange, saved, project }: {
-    plan: AssemblyEditPlan; resourceId: string; saved: boolean; project: Project;
+export function AssemblyTracks({ plan, resourceId, onChange, saved, project, materials, onUploadAudio, onExportSubtitles }: {
+    plan: AssemblyEditPlan; resourceId: string; saved: boolean; project: Pick<Project, "id" | "frames" | "video_tasks" | "bgm_url">;
+    materials?: Record<string, { url: string }>;
+    onUploadAudio?: (file: File) => Promise<{ media_id: string; url: string; duration_ms: number }>;
+    onExportSubtitles?: (lane: string) => Promise<Blob>;
     onChange: (plan: AssemblyEditPlan) => void;
 }) {
     const zh = useLocale().startsWith("zh");
@@ -27,6 +30,10 @@ export function AssemblyTracks({ plan, resourceId, onChange, saved, project }: {
     const videos = plan.lanes.filter(l => l.kind === "video" && !l.muted).flatMap(l => l.clips.filter(c => c.enabled)).sort((a,b) => a.timeline_start_ms - b.timeline_start_ms);
     const currentVideo = videos.find(c => c.timeline_start_ms <= position && position < c.timeline_end_ms);
     const mediaFor = (clip: typeof videos[number]) => {
+        if (materials && clip.source_media_id) {
+            const url = materials[clip.source_media_id]?.url;
+            return url ? { url: getAssetUrl(url), poster: getVideoPosterUrl(url) } : null;
+        }
         if (clip.source_project_id && clip.source_project_id !== project.id) return null;
         const frame = project.frames.find(f => f.id === clip.source_frame_id);
         const task = project.video_tasks?.find(task => task.id === clip.source_task_id);
@@ -74,20 +81,20 @@ export function AssemblyTracks({ plan, resourceId, onChange, saved, project }: {
     const selectedLane = plan.lanes.find(l => l.id === selected?.laneId);
     const selectedClip = selectedLane?.clips.find(c => c.id === selected?.clipId);
     const selectedAudioUrl = selectedLane && selectedClip && selectedLane.kind !== "video" && selectedLane.kind !== "subtitle"
-        ? uploadedAudioSources[selectedClip.source_media_id || ""] || getAssetUrl(selectedLane.kind === "bgm"
+        ? getAssetUrl(materials?.[selectedClip.source_media_id || ""]?.url) || uploadedAudioSources[selectedClip.source_media_id || ""] || getAssetUrl(selectedLane.kind === "bgm"
             ? project.bgm_url
             : project.frames.find(f => f.id === selectedClip.source_frame_id)?.[selectedLane.kind === "dialogue" ? "audio_url" : "sfx_url"])
         : "";
     const uploadAudio = async (laneId: string, kind: "dialogue" | "bgm" | "sfx", file: File) => {
         setBusy(true); setError(null);
         try {
-            const uploaded = await api.uploadFile(file) as { url?: string; media_id?: string };
+            const uploaded: { url?: string; media_id?: string; duration_ms?: number } = onUploadAudio ? await onUploadAudio(file) : await api.uploadFile(file);
             if (!uploaded.media_id) throw new Error(t("上传未返回素材 ID", "Upload did not return a media ID"));
             setUploadedAudioSources(current => ({ ...current, [uploaded.media_id!]: uploaded.url || "" }));
             const start = Math.min(position, plan.target_duration_ms - 1);
             onChange({ ...plan, lanes: plan.lanes.map(l => l.id === laneId ? { ...l, clips: [...l.clips, {
-                id: crypto.randomUUID(), timeline_start_ms: start, timeline_end_ms: Math.min(start + 2000, plan.target_duration_ms),
-                source_start_ms: 0, source_project_id: project.id, source_media_id: uploaded.media_id,
+                id: crypto.randomUUID(), timeline_start_ms: start, timeline_end_ms: Math.min(start + (uploaded.duration_ms || 2000), plan.target_duration_ms),
+                source_start_ms: 0, source_project_id: onUploadAudio ? undefined : project.id, source_media_id: uploaded.media_id,
                 source_refs: [`media:${uploaded.media_id}`], label: file.name, enabled: true, gain: 1,
             }] } : l) });
         } catch (e) { setError(extractErrorDetail(e)); } finally { setBusy(false); }
@@ -100,7 +107,7 @@ export function AssemblyTracks({ plan, resourceId, onChange, saved, project }: {
     const download = async (id: string) => {
         setBusy(true); setError(null);
         try {
-            const blob = await api.exportAssemblySubtitles(plan.scope, resourceId, id);
+            const blob = onExportSubtitles ? await onExportSubtitles(id) : await api.exportAssemblySubtitles(plan.scope, resourceId, id);
             const url = URL.createObjectURL(blob); const a = document.createElement("a");
             a.href = url; a.download = "subtitles.srt"; a.click();
             setTimeout(() => URL.revokeObjectURL(url), 1000);
@@ -149,6 +156,10 @@ export function AssemblyTracks({ plan, resourceId, onChange, saved, project }: {
                 <label className="text-xs text-text-secondary">{t("源出点（毫秒）", "Source out (ms)")}<input className={`${control} block w-32`} type="number" min={1} step={1} value={sourceOut} onChange={e => setSourceOut(Number(e.target.value))} /></label>
                 <button type="button" className={control} onClick={() => applyEdit(() => trimAssemblyClip(plan, selected.laneId, selected.clipId, sourceIn, sourceOut))}>{t("应用原速裁切", "Apply trim at original speed")}</button>
             </>}
+            {selectedLane?.kind === "video" && <>
+                <button type="button" className={control} disabled={videos[0]?.id === selectedClip.id} onClick={() => applyEdit(() => reorderAssemblyVideo(plan, selectedClip.id, -1))}>{t("向前移动", "Move earlier")}</button>
+                <button type="button" className={control} disabled={videos[videos.length - 1]?.id === selectedClip.id} onClick={() => applyEdit(() => reorderAssemblyVideo(plan, selectedClip.id, 1))}>{t("向后移动", "Move later")}</button>
+            </>}
             <button type="button" className={`${control} border-red-500/40 text-red-200`} onClick={() => applyEdit(() => removeAssemblyClip(plan, selected.laneId, selected.clipId))}>{t("删除片段", "Delete clip")}</button>
         </div>}
         {error && <p role="alert" className="text-xs text-red-300">{error}</p>}
@@ -157,7 +168,7 @@ export function AssemblyTracks({ plan, resourceId, onChange, saved, project }: {
             <div className="flex flex-wrap items-center gap-2 text-xs text-text-secondary"><span>{laneName(lane.kind)}</span>
                 <label className="flex min-h-11 items-center gap-2"><input type="checkbox" checked={Boolean(lane.muted)} onChange={e => onChange({ ...plan, burn_subtitle_lane_id: e.target.checked && plan.burn_subtitle_lane_id === lane.id ? null : plan.burn_subtitle_lane_id, lanes: plan.lanes.map(l => l.id === lane.id ? { ...l, muted: e.target.checked } : l) })} />{t("静音 / 隐藏", "Mute / hide")}</label>
                 {lane.kind !== "video" && <button type="button" className={control} onClick={() => onChange({ ...plan, burn_subtitle_lane_id: plan.burn_subtitle_lane_id === lane.id ? null : plan.burn_subtitle_lane_id, lanes: plan.lanes.filter(l => l.id !== lane.id) })}>{t("移除泳道", "Remove lane")}</button>}
-                {(["dialogue", "bgm", "sfx"] as string[]).includes(lane.kind) && <label>{t("添加项目音频", "Add project audio")}
+                {!materials && (["dialogue", "bgm", "sfx"] as string[]).includes(lane.kind) && <label>{t("添加项目音频", "Add project audio")}
                     <select className={control} value="" onChange={e => {
                         if (!e.target.value) return;
                         const sourceId = e.target.value;
