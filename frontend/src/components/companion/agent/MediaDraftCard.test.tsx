@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { beforeEach, expect, it, vi } from "vitest";
 import MediaDraftCard from "./MediaDraftCard";
 import type { MediaDraft } from "@/lib/companionApi";
@@ -50,4 +50,13 @@ it("keeps an uncertain paid operation frozen and retries the same request",async
  fireEvent.click(screen.getByRole("button",{name:"查询或重试原生成请求"}));
  await waitFor(()=>expect(api.generate).toHaveBeenCalledTimes(2));
  expect(api.generate.mock.calls[0][0]).toEqual(api.generate.mock.calls[1][0]);
+});
+
+it("filters video models by the selected reference mode",async()=>{
+ api.models.mockResolvedValue({models:[{id:"h3-f2v",display_name:"首尾帧",capabilities:["f2v"]},{id:"h3-t2v",display_name:"文字生成",capabilities:["t2v"]}]});
+ const video:MediaDraft={kind:"media_draft",task_id:"video",session_id:"session",revision:4,status:"active",step:"configuring",type:"video_generate",brief:"从白天到夜晚",photo_id:null,first_photo_id:"first",last_photo_id:"last",reference_photo_ids:[],video_mode:"f2v",setting:"5 秒",spoken_text:"要求记下了。"};
+ render(<MediaDraftCard task={video} disabled={false} onAction={vi.fn()} onUpload={()=>{}}/>);
+ fireEvent.click(screen.getByRole("button",{name:"读取我的可用模型"}));
+ await screen.findByRole("option",{name:"首尾帧"});
+ expect(within(screen.getByRole("combobox",{name:"生成模型"})).queryByRole("option",{name:"文字生成"})).not.toBeInTheDocument();
 });
