@@ -1,0 +1,102 @@
+{
+  "schema": "addams-kick-validation.v1",
+  "frames": [
+    {
+      "source_frame": 46,
+      "mp_torso_up_deviation_camera_vertical_deg": 59.80691643484078,
+      "mp_hip_axis_tilt_camera_horizontal_deg": 52.752216848532726,
+      "rig_hip_axis_tilt_camera_horizontal_deg": 48.24251035652534,
+      "mp_hip_projection_length_review_px": 60.13340970124845
+    },
+    {
+      "source_frame": 47,
+      "mp_torso_up_deviation_camera_vertical_deg": 57.9977618180547,
+      "mp_hip_axis_tilt_camera_horizontal_deg": 13.383662472951782,
+      "rig_hip_axis_tilt_camera_horizontal_deg": 25.26270279742737,
+      "mp_hip_projection_length_review_px": 23.50808221426241
+    },
+    {
+      "source_frame": 48,
+      "mp_torso_up_deviation_camera_vertical_deg": 36.180247775857524,
+      "mp_hip_axis_tilt_camera_horizontal_deg": 2.239323813657048,
+      "rig_hip_axis_tilt_camera_horizontal_deg": 1.4723311388700155,
+      "mp_hip_projection_length_review_px": 18.632689669647682
+    },
+    {
+      "source_frame": 49,
+      "mp_torso_up_deviation_camera_vertical_deg": 141.51965472194684,
+      "mp_hip_axis_tilt_camera_horizontal_deg": 24.720493694131186,
+      "rig_hip_axis_tilt_camera_horizontal_deg": 22.853979385413858,
+      "mp_hip_projection_length_review_px": 51.63059939222481
+    },
+    {
+      "source_frame": 50,
+      "mp_torso_up_deviation_camera_vertical_deg": 13.613682238548671,
+      "mp_hip_axis_tilt_camera_horizontal_deg": 9.604799895932015,
+      "rig_hip_axis_tilt_camera_horizontal_deg": 4.894286270048342,
+      "mp_hip_projection_length_review_px": 23.803693262339717
+    },
+    {
+      "source_frame": 51,
+      "mp_torso_up_deviation_camera_vertical_deg": 17.28621001791252,
+      "mp_hip_axis_tilt_camera_horizontal_deg": 14.370472328066088,
+      "rig_hip_axis_tilt_camera_horizontal_deg": 3.897162333913637,
+      "mp_hip_projection_length_review_px": 26.878785900280256
+    },
+    {
+      "source_frame": 52,
+      "mp_torso_up_deviation_camera_vertical_deg": 136.81193895617307,
+      "mp_hip_axis_tilt_camera_horizontal_deg": 32.119414937858636,
+      "rig_hip_axis_tilt_camera_horizontal_deg": 34.77132970962936,
+      "mp_hip_projection_length_review_px": 41.99814983580558
+    },
+    {
+      "source_frame": 53,
+      "mp_torso_up_deviation_camera_vertical_deg": 130.62278833556792,
+      "mp_hip_axis_tilt_camera_horizontal_deg": 35.23113116262522,
+      "rig_hip_axis_tilt_camera_horizontal_deg": 32.77542342904784,
+      "mp_hip_projection_length_review_px": 49.797988902383075
+    },
+    {
+      "source_frame": 54,
+      "mp_torso_up_deviation_camera_vertical_deg": 143.27659162817966,
+      "mp_hip_axis_tilt_camera_horizontal_deg": 22.97036979979804,
+      "rig_hip_axis_tilt_camera_horizontal_deg": 25.2544630828711,
+      "mp_hip_projection_length_review_px": 63.74834196832834
+    },
+    {
+      "source_frame": 55,
+      "mp_torso_up_deviation_camera_vertical_deg": 144.33279437955335,
+      "mp_hip_axis_tilt_camera_horizontal_deg": 19.24212243033172,
+      "rig_hip_axis_tilt_camera_horizontal_deg": 19.842914028456654,
+      "mp_hip_projection_length_review_px": 55.31631396490266
+    },
+    {
+      "source_frame": 56,
+      "mp_torso_up_deviation_camera_vertical_deg": 156.38803140575496,
+      "mp_hip_axis_tilt_camera_horizontal_deg": 23.410371998827138,
+      "rig_hip_axis_tilt_camera_horizontal_deg": 2.471176104271873,
+      "mp_hip_projection_length_review_px": 18.46801252781023
+    },
+    {
+      "source_frame": 57,
+      "mp_torso_up_deviation_camera_vertical_deg": 3.950362485555435,
+      "mp_hip_axis_tilt_camera_horizontal_deg": 1.8158258639456633,
+      "rig_hip_axis_tilt_camera_horizontal_deg": 0.3983950052477335,
+      "mp_hip_projection_length_review_px": 36.19384182832027
+    },
+    {
+      "source_frame": 58,
+      "mp_torso_up_deviation_camera_vertical_deg": 3.3719308522683322,
+      "mp_hip_axis_tilt_camera_horizontal_deg": 10.482910041144294,
+      "rig_hip_axis_tilt_camera_horizontal_deg": 5.94410559340666,
+      "mp_hip_projection_length_review_px": 41.42919755937553
+    }
+  ],
+  "visual_observation": "Source remains substantially upright while smooth candidate folds/inverts at frames52\u201356. Source-side MP lower-body placement is inconsistent with visible anatomy.",
+  "limits": [
+    "Camera vertical is not calibrated gravity.",
+    "No independent human joint annotations on these frames.",
+    "Hip swing/rest-axis mapping still needs isolation; MP torso error alone does not identify sole cause."
+  ]
+}
