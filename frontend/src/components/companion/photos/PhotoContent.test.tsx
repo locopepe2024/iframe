@@ -4,8 +4,7 @@ import PhotoContent from "./PhotoContent";
 
 const api = vi.hoisted(() => ({ analysis: vi.fn(), analyze: vi.fn() }));
 vi.mock("@/lib/photoApi", () => ({ photoApi: api }));
-vi.mock("./PhotoFactsEditor", () => ({ default: () => null }));
-vi.mock("./DescriptionReview", () => ({ default: () => null }));
+vi.mock("./PhotoFactsEditor", () => ({ default: ({analysis}:{analysis:unknown}) => <div aria-label="照片资料">{analysis ? "已填入资料" : "手动资料"}</div> }));
 const result = { observation: { visible_summary: "画面中有一张桌子。", visible_text: [], uncertainties: ["看不清桌上的字。"], story_question: "您想说说这张照片吗？" } };
 beforeEach(() => { vi.resetAllMocks(); api.analysis.mockResolvedValue(null); api.analyze.mockResolvedValue(result); });
 describe("Qwen photo observations", () => {
@@ -15,15 +14,18 @@ describe("Qwen photo observations", () => {
     expect(button).toBeDisabled(); expect(api.analyze).not.toHaveBeenCalled();
     fireEvent.click(screen.getByLabelText("本次允许 Qwen 分析这张照片"));
     fireEvent.click(button);
-    expect(await screen.findByText("画面中有一张桌子。")).toBeInTheDocument();
+    expect(await screen.findByText("已填入资料")).toBeInTheDocument();
     expect(api.analyze).toHaveBeenCalledWith("one");
-    expect(screen.getByText("AI 看图描述，尚待您核对")).toBeInTheDocument();
-    expect(screen.getByText("看不清桌上的字。")).toBeInTheDocument();
+    expect(screen.queryByText("画面中有一张桌子。")).not.toBeInTheDocument();
+    expect(screen.queryByText("看不清桌上的字。")).not.toBeInTheDocument();
+    expect(screen.queryByText("您想说说这张照片吗？")).not.toBeInTheDocument();
+    expect(screen.queryByText("核对完整描述与历史")).not.toBeInTheDocument();
   });
   it("shows stored results without another paid request", async () => {
     api.analysis.mockResolvedValue(result);
     render(<PhotoContent photoId="one" />);
-    await screen.findByText("画面中有一张桌子。");
+    await screen.findByText("已填入资料");
+    expect(screen.getAllByLabelText("照片资料")).toHaveLength(1);
     expect(api.analyze).not.toHaveBeenCalled();
   });
   it("shows provider failure and allows an explicit retry", async () => {
@@ -36,6 +38,6 @@ describe("Qwen photo observations", () => {
     fireEvent.click(screen.getByRole("button", { name: "准备重试" }));
     fireEvent.click(screen.getByRole("button", { name: "看看照片内容" }));
     await waitFor(() => expect(api.analyze).toHaveBeenCalledTimes(2));
-    await screen.findByText("画面中有一张桌子。");
+    await screen.findByText("已填入资料");
   });
 });

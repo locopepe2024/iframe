@@ -1,0 +1,9 @@
+.editor { display: grid; gap: .75rem; min-width: 0; }
+.editor h3, .editor p { margin: 0; }
+.fields { border: 0; padding: 0; margin: 0; min-width: 0; display: grid; gap: .75rem; }
+.fields label { display: grid; gap: .35rem; margin: 0; }
+.fields legend { padding: 0; margin-bottom: .35rem; }
+.editor .fields input, .editor .fields textarea, .editor .fields select { width: 100%; min-width: 0; box-sizing: border-box; }
+.details summary { min-height: 44px; display: list-item; padding: .5rem 0; cursor: pointer; }
+.details[open] { display: grid; gap: .75rem; }
+.hint { color: var(--muted, #bdcbd9); font-size: .9em; }

@@ -12,7 +12,7 @@ export default function PhotoActionCard({result}:{result:PhotoActionResult}){
  if(cancelled)return <p>已取消这次操作。</p>;
  return <article className={styles.guideCard} aria-label="照片操作确认">
  <p>{result.spoken_text}</p>
- {result.action==='delete'?<PhotoDelete photoId={result.photo_id} initialConfirm/>:result.action==='edit'?<PhotoFactsEditor photoId={result.photo_id} initialPatch={result.facts} expectedRevision={result.expected_revision}/>:analysis?<><p>AI观察，待核对：{analysis.observation.visible_summary}</p><PhotoFactsEditor photoId={result.photo_id} analysis={analysis}/></>:<button type="button" disabled={busy} onClick={()=>void analyze()}>{busy?'正在分析…':'确认分析这张照片'}</button>}
+ {result.action==='delete'?<PhotoDelete photoId={result.photo_id} initialConfirm/>:result.action==='edit'?<PhotoFactsEditor photoId={result.photo_id} initialPatch={result.facts} expectedRevision={result.expected_revision}/>:analysis?<PhotoFactsEditor photoId={result.photo_id} analysis={analysis}/>:<button type="button" disabled={busy} onClick={()=>void analyze()}>{busy?'正在分析…':'确认分析这张照片'}</button>}
  {error&&<p role="alert">{error}</p>}<button type="button" disabled={busy} onClick={()=>setCancelled(true)}>关闭</button>
  </article>;
 }

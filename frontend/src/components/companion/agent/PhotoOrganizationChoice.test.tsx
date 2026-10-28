@@ -2,8 +2,8 @@ import {fireEvent,render,screen} from "@testing-library/react";
 import {afterEach,expect,it,vi} from "vitest";
 import PhotoOrganizationChoice from "./PhotoOrganizationChoice";
 
-vi.mock("../photos/PhotoFactsEditor",()=>({default:({photoId}:{photoId:string})=><div>手动资料 {photoId}</div>}));
-vi.mock("../photos/PhotoContent",()=>({default:({photoId}:{photoId:string})=><div>辅助分析 {photoId}</div>}));
+vi.mock("../photos/PhotoFactsEditor",()=>({default:({photoId,onSaved}:{photoId:string;onSaved:()=>void})=><div>手动资料 {photoId}<button onClick={onSaved}>模拟保存</button></div>}));
+vi.mock("../photos/PhotoContent",()=>({default:({photoId,onSaved}:{photoId:string;onSaved:()=>void})=><div>辅助分析 {photoId}<button onClick={onSaved}>模拟保存</button></div>}));
 afterEach(()=>vi.restoreAllMocks());
 
 it("allows cancelling departure before discarding the editor",()=>{
@@ -37,4 +37,14 @@ it("defers without opening either editor",()=>{
   render(<PhotoOrganizationChoice photoId="p3" name="风景"/>);
   fireEvent.click(screen.getByRole("button",{name:"以后再说"}));
   expect(screen.queryByRole("region")).not.toBeInTheDocument();
+});
+
+it.each(['自己填写','小安帮我整理'])("closes the %s editor only after its successful save",choice=>{
+  render(<PhotoOrganizationChoice photoId="p5" name="照片"/>);
+  fireEvent.click(screen.getByRole("button",{name:choice}));
+  expect(screen.getAllByRole("button",{name:"返回选择整理方式"})).toHaveLength(1);
+  expect(screen.queryByRole("button",{name:"收起整理"})).not.toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button",{name:"模拟保存"}));
+  expect(screen.getByRole("status")).toHaveTextContent("照片资料已保存。");
+  expect(screen.queryByRole("button",{name:"模拟保存"})).not.toBeInTheDocument();
 });

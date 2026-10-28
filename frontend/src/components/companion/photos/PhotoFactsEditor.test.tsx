@@ -63,3 +63,21 @@ it('does not overwrite an ongoing manual draft when analysis arrives',async()=>{
  expect(screen.getByLabelText('场景')).toHaveValue('我的场景');
  expect(screen.queryByLabelText('姓名')).not.toBeInTheDocument();
 });
+
+it('keeps secondary fields collapsed and uses one explicit save',async()=>{
+ api.annotations.mockResolvedValue({revision:0,facts:{...facts,scene:''}});
+ const done=vi.fn();
+ api.saveAnnotations.mockRejectedValueOnce(new Error('网络中断')).mockImplementationOnce(async(_id,body)=>({revision:1,facts:body.facts}));
+ render(<PhotoFactsEditor photoId="p" analysis={analysis} onSaved={done}/>);
+ await screen.findByLabelText('姓名');
+ expect(screen.getByLabelText('画面位置').closest('details')).not.toHaveAttribute('open');
+ expect(screen.getByLabelText('年龄').closest('details')).not.toHaveAttribute('open');
+ expect(screen.getByLabelText('场景').closest('details')).not.toHaveAttribute('open');
+ expect(screen.getAllByRole('button',{name:'保存照片资料'})).toHaveLength(1);
+ expect(screen.queryByRole('button',{name:'从画面人物开始填写'})).not.toBeInTheDocument();
+ fireEvent.click(screen.getByRole('button',{name:'保存照片资料'}));
+ await screen.findByRole('alert');
+ expect(done).not.toHaveBeenCalled();
+ fireEvent.click(screen.getByRole('button',{name:'重试原保存'}));
+ await waitFor(()=>expect(done).toHaveBeenCalledOnce());
+});
