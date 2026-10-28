@@ -1,0 +1,169 @@
+{
+  "model_requested": "qwen3.8-flash",
+  "source_sha256": "3b0d8f32549c80ef04e988c1bfe1393582fd6349047b306ce6c2df7bdae63c96",
+  "images": [
+    {
+      "path": "docs/agents/raw/2026-10-28-motion-asset-package/addams-full-joint-review-v1/images/native-014.png",
+      "original_sha256": "9100e3b7cbcc0146776e340c10edf8ff749c4a378932c4e02a6909d756fd670b",
+      "submitted_sha256": "9b8b64039a85f36d32bf4395347c1987a1e91a6a5b0dd17062ba80fc9c3203fa",
+      "submitted_size": [
+        960,
+        520
+      ],
+      "source_frame": 46,
+      "pts_s": 1.8
+    },
+    {
+      "path": "docs/agents/raw/2026-10-28-motion-asset-package/addams-full-joint-review-v1/images/native-015.png",
+      "original_sha256": "d8efce0f6fefe95b38d0e0a11038dd892d71b0656f112f7b062da93a1dbac7b8",
+      "submitted_sha256": "300fd1703f33a14406d7ba57dabb930a304509fac5b56806b615e73ab2706ade",
+      "submitted_size": [
+        960,
+        520
+      ],
+      "source_frame": 47,
+      "pts_s": 1.84
+    },
+    {
+      "path": "docs/agents/raw/2026-10-28-motion-asset-package/addams-full-joint-review-v1/images/native-016.png",
+      "original_sha256": "4e6b32bcaae56114e49812bafa04a589ae97b82c2247096a1063b54e7c439aaa",
+      "submitted_sha256": "7cadd2d5047559c1584db67b6203bfb404c7d9deb762ae16c857bb59ec994d30",
+      "submitted_size": [
+        960,
+        520
+      ],
+      "source_frame": 48,
+      "pts_s": 1.88
+    },
+    {
+      "path": "docs/agents/raw/2026-10-28-motion-asset-package/addams-full-joint-review-v1/images/native-017.png",
+      "original_sha256": "4bbbf2379a50281615c48354fcadac22908a428547d4f112862a95638f06435d",
+      "submitted_sha256": "0017bd9f3031cbd371378f08dfea8aebc38f7d528354bd53e77a46f426cd3e5e",
+      "submitted_size": [
+        960,
+        520
+      ],
+      "source_frame": 49,
+      "pts_s": 1.92
+    },
+    {
+      "path": "docs/agents/raw/2026-10-28-motion-asset-package/addams-full-joint-review-v1/images/native-018.png",
+      "original_sha256": "399e5b834bffece1d90ff4b99057d8fbab5eee6700e8d3ec136a3457d3f2e960",
+      "submitted_sha256": "d503542ef0ec00622a1b12557c6810b29e8483b60129e755ca4d377326c3fa24",
+      "submitted_size": [
+        960,
+        520
+      ],
+      "source_frame": 50,
+      "pts_s": 1.96
+    },
+    {
+      "path": "docs/agents/raw/2026-10-28-motion-asset-package/addams-full-joint-review-v1/images/native-019.png",
+      "original_sha256": "2bc521864ba1141eaecb34d2962eea5134a7018690183d29f71ea061acbdeef3",
+      "submitted_sha256": "69fd10c8e8f4614171d0c7eafdb715b315f503e79713ef940e6017459cb0c998",
+      "submitted_size": [
+        960,
+        520
+      ],
+      "source_frame": 51,
+      "pts_s": 2.0
+    },
+    {
+      "path": "docs/agents/raw/2026-10-28-motion-asset-package/addams-full-joint-review-v1/images/native-020.png",
+      "original_sha256": "41f414e67b5b48fd424af620103499f0be7ff6a7ab318f2de7b1ffa97c53434f",
+      "submitted_sha256": "df9694cecc5930ef63abc960076007cb8d4e532893182aa7217bcd0a1bdf5507",
+      "submitted_size": [
+        960,
+        520
+      ],
+      "source_frame": 52,
+      "pts_s": 2.04
+    },
+    {
+      "path": "docs/agents/raw/2026-10-28-motion-asset-package/addams-full-joint-review-v1/images/native-021.png",
+      "original_sha256": "6ec3682cc60aa63aa50d9b1ec4cedbaa1524d6c56f24efc33885cea3786e447b",
+      "submitted_sha256": "33b1c794872f31e0e51aabbfe87246e696effd2a563f9d17746d9bc135a3dcac",
+      "submitted_size": [
+        960,
+        520
+      ],
+      "source_frame": 53,
+      "pts_s": 2.08
+    },
+    {
+      "path": "docs/agents/raw/2026-10-28-motion-asset-package/addams-full-joint-review-v1/images/native-022.png",
+      "original_sha256": "1a7c6b8580bc8dcc91f92f41b6243b1a329d7744415f2a10f86a1fa9615e0471",
+      "submitted_sha256": "369afef3963865a773ea7ec50ad53c9c4f41037b341573941e508845b9d260df",
+      "submitted_size": [
+        960,
+        520
+      ],
+      "source_frame": 54,
+      "pts_s": 2.12
+    },
+    {
+      "path": "docs/agents/raw/2026-10-28-motion-asset-package/addams-full-joint-review-v1/images/native-023.png",
+      "original_sha256": "ffa194977a417e79884290814f58c9bad6a9c0de59a1975f550e92f9a22efa97",
+      "submitted_sha256": "bc0e67ba2d46671ff215241fa690ae2e2470eda98b0ba6ef7062f4f9cedbeefd",
+      "submitted_size": [
+        960,
+        520
+      ],
+      "source_frame": 55,
+      "pts_s": 2.16
+    },
+    {
+      "path": "docs/agents/raw/2026-10-28-motion-asset-package/addams-full-joint-review-v1/images/native-024.png",
+      "original_sha256": "44e7d7bc2176f8fd61d96d5fbf2169144556c53e9483bb1ac44a70fc9959f263",
+      "submitted_sha256": "89d5b755de0272e966baead591e59ce9a62950c8450cf4e33c38d22c7a04714e",
+      "submitted_size": [
+        960,
+        520
+      ],
+      "source_frame": 56,
+      "pts_s": 2.2
+    },
+    {
+      "path": "docs/agents/raw/2026-10-28-motion-asset-package/addams-full-joint-review-v1/images/native-025.png",
+      "original_sha256": "6f60063fbd996ffccaa4b5910c8735c0157becc41353937c75a5bd26f52107b6",
+      "submitted_sha256": "00a46cf0fffe36d51e7b79b6d357907d41ce5dcf2825d08e270e2578d259f8bc",
+      "submitted_size": [
+        960,
+        520
+      ],
+      "source_frame": 57,
+      "pts_s": 2.24
+    },
+    {
+      "path": "docs/agents/raw/2026-10-28-motion-asset-package/addams-full-joint-review-v1/images/native-026.png",
+      "original_sha256": "db2e9ce914daf04cbe119c74307bede794aed2ed1b44c75d3a114a33ee4c3df7",
+      "submitted_sha256": "29897fd16b34703b8135e790a744722e6555a1fb58badc8d5119630d34df11e7",
+      "submitted_size": [
+        960,
+        520
+      ],
+      "source_frame": 58,
+      "pts_s": 2.28
+    },
+    {
+      "path": "docs/agents/raw/2026-10-28-motion-asset-package/addams-full-joint-review-v1/images/native-027.png",
+      "original_sha256": "f8d88569337062442cf2b6ff915883be1264ca404cd20c057f282772087e09c7",
+      "submitted_sha256": "bb7c7edb4cc7c30beaa7ac7850869c52f26b762d48b5d700bff35f043376853a",
+      "submitted_size": [
+        960,
+        520
+      ],
+      "source_frame": 59,
+      "pts_s": 2.32
+    }
+  ],
+  "human_labels_provided": false,
+  "candidate_provided_in_source_pass": false,
+  "source_fps": 25,
+  "limits": [
+    "Model visual opinions only; no labels automatically accepted.",
+    "Sequential images with timestamps, not native video ingestion.",
+    "No independent accuracy claim."
+  ],
+  "input_mode": "sequential_images"
+}
