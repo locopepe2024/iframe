@@ -1,0 +1,197 @@
+{
+  "frame_count": 217,
+  "types": {
+    "I": 2,
+    "P": 215
+  },
+  "selected": [
+    {
+      "source_frame": 3,
+      "key_frame": 0,
+      "best_effort_timestamp_time": "0.080000",
+      "pict_type": "P"
+    },
+    {
+      "source_frame": 98,
+      "key_frame": 0,
+      "best_effort_timestamp_time": "3.880000",
+      "pict_type": "P"
+    },
+    {
+      "source_frame": 109,
+      "key_frame": 0,
+      "best_effort_timestamp_time": "4.320000",
+      "pict_type": "P"
+    },
+    {
+      "source_frame": 115,
+      "key_frame": 0,
+      "best_effort_timestamp_time": "4.560000",
+      "pict_type": "P"
+    },
+    {
+      "source_frame": 123,
+      "key_frame": 0,
+      "best_effort_timestamp_time": "4.880000",
+      "pict_type": "P"
+    },
+    {
+      "source_frame": 125,
+      "key_frame": 0,
+      "best_effort_timestamp_time": "4.960000",
+      "pict_type": "P"
+    },
+    {
+      "source_frame": 145,
+      "key_frame": 0,
+      "best_effort_timestamp_time": "5.760000",
+      "pict_type": "P"
+    },
+    {
+      "source_frame": 153,
+      "key_frame": 0,
+      "best_effort_timestamp_time": "6.080000",
+      "pict_type": "P"
+    },
+    {
+      "source_frame": 155,
+      "key_frame": 0,
+      "best_effort_timestamp_time": "6.160000",
+      "pict_type": "P"
+    },
+    {
+      "source_frame": 158,
+      "key_frame": 0,
+      "best_effort_timestamp_time": "6.280000",
+      "pict_type": "P"
+    }
+  ],
+  "ffmpeg_stderr": "[in#0 @ 0x7e1024000] Unknown cover type: 0x1.\n",
+  "preview_comparison": [
+    {
+      "source_frame": 3,
+      "native_size": [
+        3840,
+        2080
+      ],
+      "preview_size": [
+        960,
+        520
+      ],
+      "mean_absolute_rgb_difference_display_px": 2.19093015491453
+    },
+    {
+      "source_frame": 98,
+      "native_size": [
+        3840,
+        2080
+      ],
+      "preview_size": [
+        960,
+        520
+      ],
+      "mean_absolute_rgb_difference_display_px": 3.256550480769231
+    },
+    {
+      "source_frame": 109,
+      "native_size": [
+        3840,
+        2080
+      ],
+      "preview_size": [
+        960,
+        520
+      ],
+      "mean_absolute_rgb_difference_display_px": 3.6447309027777774
+    },
+    {
+      "source_frame": 115,
+      "native_size": [
+        3840,
+        2080
+      ],
+      "preview_size": [
+        960,
+        520
+      ],
+      "mean_absolute_rgb_difference_display_px": 3.4916386217948716
+    },
+    {
+      "source_frame": 123,
+      "native_size": [
+        3840,
+        2080
+      ],
+      "preview_size": [
+        960,
+        520
+      ],
+      "mean_absolute_rgb_difference_display_px": 3.7076749465811965
+    },
+    {
+      "source_frame": 125,
+      "native_size": [
+        3840,
+        2080
+      ],
+      "preview_size": [
+        960,
+        520
+      ],
+      "mean_absolute_rgb_difference_display_px": 3.8762540064102566
+    },
+    {
+      "source_frame": 145,
+      "native_size": [
+        3840,
+        2080
+      ],
+      "preview_size": [
+        960,
+        520
+      ],
+      "mean_absolute_rgb_difference_display_px": 3.949089877136752
+    },
+    {
+      "source_frame": 153,
+      "native_size": [
+        3840,
+        2080
+      ],
+      "preview_size": [
+        960,
+        520
+      ],
+      "mean_absolute_rgb_difference_display_px": 3.1625046741452993
+    },
+    {
+      "source_frame": 155,
+      "native_size": [
+        3840,
+        2080
+      ],
+      "preview_size": [
+        960,
+        520
+      ],
+      "mean_absolute_rgb_difference_display_px": 4.289236778846154
+    },
+    {
+      "source_frame": 158,
+      "native_size": [
+        3840,
+        2080
+      ],
+      "preview_size": [
+        960,
+        520
+      ],
+      "mean_absolute_rgb_difference_display_px": 4.185259748931624
+    }
+  ],
+  "code_facts": [
+    "Both inference scripts use sequential cv2.VideoCapture.read on source.mp4, no preview JPEG input.",
+    "Review images use FFmpeg sequential select n=source_frame-1 then scale960x520, default JPEG quality.",
+    "Neither path requests only I frames or P residual data."
+  ]
+}
