@@ -1,0 +1,551 @@
+{
+  "coordinates": "source MP xyz equals diagnostic right/down/forward after Blender x,z,-y roundtrip; proper rotation determinant+1",
+  "max_segment_closure_error_units": 1.843614525176679e-06,
+  "rows": [
+    {
+      "source_frame": 20,
+      "side": "left",
+      "source_hip_to_ankle": [
+        0.06860947608947754,
+        0.2882147505879402,
+        0.08024622686207294
+      ],
+      "rig_hip_to_ankle": [
+        0.10245206952095032,
+        0.42062050104141235,
+        0.026503048837184906
+      ],
+      "endpoint_closure_error_units": 7.194074444490444e-07,
+      "segments": [
+        {
+          "bone": "upper_leg",
+          "source_vector": [
+            0.030890539288520813,
+            0.10338321328163147,
+            -0.2161370050162077
+          ],
+          "source_length": 0.24157300996458014,
+          "rig_length": 0.40986435272907484,
+          "length_ratio": 1.6966479524727116,
+          "rig_vector": [
+            0.05241025984287262,
+            0.1754050850868225,
+            -0.3667093589901924
+          ],
+          "direction_closure_error_units": 9.729606469680771e-07
+        },
+        {
+          "bone": "lower_leg",
+          "source_vector": [
+            0.037718936800956726,
+            0.18483153730630875,
+            0.29638323187828064
+          ],
+          "source_length": 0.35132383283094054,
+          "rig_length": 0.4661002877208821,
+          "length_ratio": 1.3266970360794532,
+          "rig_vector": [
+            0.0500418096780777,
+            0.24521541595458984,
+            0.3932124078273773
+          ],
+          "direction_closure_error_units": 1.6659976455321267e-06
+        }
+      ]
+    },
+    {
+      "source_frame": 20,
+      "side": "right",
+      "source_hip_to_ankle": [
+        0.10534012457355857,
+        0.6457163505256176,
+        0.1865327563136816
+      ],
+      "rig_hip_to_ankle": [
+        0.13249025866389275,
+        0.8119835555553436,
+        0.24108630418777466
+      ],
+      "endpoint_closure_error_units": 6.807924364926096e-07,
+      "segments": [
+        {
+          "bone": "upper_leg",
+          "source_vector": [
+            0.05392082780599594,
+            0.3323247544467449,
+            0.02172045223414898
+          ],
+          "source_length": 0.33737068060907294,
+          "rig_length": 0.40986435272907484,
+          "length_ratio": 1.2148784001891488,
+          "rig_vector": [
+            0.06550725176930428,
+            0.40373408794403076,
+            0.026387855410575867
+          ],
+          "direction_closure_error_units": 1.666045778995878e-07
+        },
+        {
+          "bone": "lower_leg",
+          "source_vector": [
+            0.05141929676756263,
+            0.3133915960788727,
+            0.16481230407953262
+          ],
+          "source_length": 0.3578006877424054,
+          "rig_length": 0.4661002877208821,
+          "length_ratio": 1.3026813633640797,
+          "rig_vector": [
+            0.06698300689458847,
+            0.40824946761131287,
+            0.2146984487771988
+          ],
+          "direction_closure_error_units": 5.392742745296416e-07
+        }
+      ]
+    },
+    {
+      "source_frame": 21,
+      "side": "left",
+      "source_hip_to_ankle": [
+        0.1157827377319336,
+        0.35913723707199097,
+        0.4483629958704114
+      ],
+      "rig_hip_to_ankle": [
+        0.1906888261437416,
+        0.507896363735199,
+        0.5386150367558002
+      ],
+      "endpoint_closure_error_units": 1.8529581654849772e-06,
+      "segments": [
+        {
+          "bone": "upper_leg",
+          "source_vector": [
+            0.12524767220020294,
+            0.21247686445713043,
+            0.0642268331721425
+          ],
+          "source_length": 0.25486954196299233,
+          "rig_length": 0.40986435272907484,
+          "length_ratio": 1.608133908713926,
+          "rig_vector": [
+            0.20141500979661942,
+            0.3416910767555237,
+            0.10328568890690804
+          ],
+          "direction_closure_error_units": 3.828726734315762e-07
+        },
+        {
+          "bone": "lower_leg",
+          "source_vector": [
+            -0.009464934468269348,
+            0.14666037261486053,
+            0.3841361626982689
+          ],
+          "source_length": 0.4112899723705518,
+          "rig_length": 0.4661002877208821,
+          "length_ratio": 1.133264409619374,
+          "rig_vector": [
+            -0.010726183652877808,
+            0.1662052869796753,
+            0.4353293478488922
+          ],
+          "direction_closure_error_units": 1.5396788238080252e-06
+        }
+      ]
+    },
+    {
+      "source_frame": 21,
+      "side": "right",
+      "source_hip_to_ankle": [
+        0.11005848925560713,
+        0.6217364110052586,
+        0.17651747446507215
+      ],
+      "rig_hip_to_ankle": [
+        0.142796341329813,
+        0.8079021871089935,
+        0.23849985748529434
+      ],
+      "endpoint_closure_error_units": 8.491705941116108e-07,
+      "segments": [
+        {
+          "bone": "upper_leg",
+          "source_vector": [
+            0.059204015880823135,
+            0.32411522045731544,
+            0.015015539713203907
+          ],
+          "source_length": 0.3298200389021106,
+          "rig_length": 0.40986435272907484,
+          "length_ratio": 1.2426908749796162,
+          "rig_vector": [
+            0.07357227429747581,
+            0.4027749001979828,
+            0.018659770488739014
+          ],
+          "direction_closure_error_units": 1.5995310117336387e-07
+        },
+        {
+          "bone": "lower_leg",
+          "source_vector": [
+            0.05085447337478399,
+            0.2976211905479431,
+            0.16150193475186825
+          ],
+          "source_length": 0.3424141139818836,
+          "rig_length": 0.4661002877208821,
+          "length_ratio": 1.3612180943731265,
+          "rig_vector": [
+            0.06922406703233719,
+            0.40512728691101074,
+            0.21984008699655533
+          ],
+          "direction_closure_error_units": 7.348069216148396e-07
+        }
+      ]
+    },
+    {
+      "source_frame": 22,
+      "side": "left",
+      "source_hip_to_ankle": [
+        0.27263912558555603,
+        0.34874195978045464,
+        0.36398726236075163
+      ],
+      "rig_hip_to_ankle": [
+        0.2646150290966034,
+        0.3687814474105835,
+        0.47505148500204086
+      ],
+      "endpoint_closure_error_units": 2.0273860214214445e-06,
+      "segments": [
+        {
+          "bone": "upper_leg",
+          "source_vector": [
+            0.29572856426239014,
+            0.2844581715762615,
+            0.017802192829549313
+          ],
+          "source_length": 0.41071736409207843,
+          "rig_length": 0.40986435272907484,
+          "length_ratio": 0.9979231183349425,
+          "rig_vector": [
+            0.29511433839797974,
+            0.28386735916137695,
+            0.017765413969755173
+          ],
+          "direction_closure_error_units": 1.9867972677482642e-07
+        },
+        {
+          "bone": "lower_leg",
+          "source_vector": [
+            -0.023089438676834106,
+            0.06428378820419312,
+            0.3461850695312023
+          ],
+          "source_length": 0.3528592211783847,
+          "rig_length": 0.4661002877208821,
+          "length_ratio": 1.3209242092762241,
+          "rig_vector": [
+            -0.030499309301376343,
+            0.08491408824920654,
+            0.4572860710322857
+          ],
+          "direction_closure_error_units": 1.8355504241659678e-06
+        }
+      ]
+    },
+    {
+      "source_frame": 22,
+      "side": "right",
+      "source_hip_to_ankle": [
+        0.11113898875191808,
+        0.42049146816134453,
+        0.35333595518022776
+      ],
+      "rig_hip_to_ankle": [
+        0.1458718329668045,
+        0.5236950516700745,
+        0.4653158336877823
+      ],
+      "endpoint_closure_error_units": 2.00695108508645e-06,
+      "segments": [
+        {
+          "bone": "upper_leg",
+          "source_vector": [
+            0.013311497867107391,
+            0.3333122245967388,
+            0.02672284934669733
+          ],
+          "source_length": 0.33464659824701515,
+          "rig_length": 0.40986435272907484,
+          "length_ratio": 1.224767724746267,
+          "rig_vector": [
+            0.016303494572639465,
+            0.4082300066947937,
+            0.03272944688796997
+          ],
+          "direction_closure_error_units": 1.7047493385687342e-07
+        },
+        {
+          "bone": "lower_leg",
+          "source_vector": [
+            0.09782749088481069,
+            0.08717924356460571,
+            0.3266131058335304
+          ],
+          "source_length": 0.351918398756785,
+          "rig_length": 0.4661002877208821,
+          "length_ratio": 1.3244555822243598,
+          "rig_vector": [
+            0.12956833839416504,
+            0.11546504497528076,
+            0.4325863867998123
+          ],
+          "direction_closure_error_units": 1.843614525176679e-06
+        }
+      ]
+    },
+    {
+      "source_frame": 23,
+      "side": "left",
+      "source_hip_to_ankle": [
+        0.5281190276145935,
+        0.13152853026986122,
+        0.4135936563834548
+      ],
+      "rig_hip_to_ankle": [
+        0.6386048570275307,
+        0.15481120347976685,
+        0.529445581138134
+      ],
+      "endpoint_closure_error_units": 1.637878651753688e-06,
+      "segments": [
+        {
+          "bone": "upper_leg",
+          "source_vector": [
+            0.3263992667198181,
+            0.09787188470363617,
+            0.14077145513147116
+          ],
+          "source_length": 0.36868955736569026,
+          "rig_length": 0.40986435272907484,
+          "length_ratio": 1.1116787675180742,
+          "rig_vector": [
+            0.3628510907292366,
+            0.1088019609451294,
+            0.1564931645989418
+          ],
+          "direction_closure_error_units": 5.456935460013558e-07
+        },
+        {
+          "bone": "lower_leg",
+          "source_vector": [
+            0.2017197608947754,
+            0.03365664556622505,
+            0.27282220125198364
+          ],
+          "source_length": 0.3409627328934846,
+          "rig_length": 0.4661002877208821,
+          "length_ratio": 1.367012411489821,
+          "rig_vector": [
+            0.27575376629829407,
+            0.04600924253463745,
+            0.3729524165391922
+          ],
+          "direction_closure_error_units": 1.1522083616022011e-06
+        }
+      ]
+    },
+    {
+      "source_frame": 23,
+      "side": "right",
+      "source_hip_to_ankle": [
+        0.10197415295988321,
+        0.4599110782146454,
+        0.42588560841977596
+      ],
+      "rig_hip_to_ankle": [
+        0.14398688077926636,
+        0.6046442091464996,
+        0.5783963315188885
+      ],
+      "endpoint_closure_error_units": 1.5398276829795738e-06,
+      "segments": [
+        {
+          "bone": "upper_leg",
+          "source_vector": [
+            0.011776387691497803,
+            0.2843032777309418,
+            0.16777106188237667
+          ],
+          "source_length": 0.3303243349206318,
+          "rig_length": 0.40986435272907484,
+          "length_ratio": 1.2407936969813453,
+          "rig_vector": [
+            0.014612019062042236,
+            0.35276156663894653,
+            0.20816994830965996
+          ],
+          "direction_closure_error_units": 6.900871823798946e-07
+        },
+        {
+          "bone": "lower_leg",
+          "source_vector": [
+            0.09019776526838541,
+            0.1756078004837036,
+            0.2581145465373993
+          ],
+          "source_length": 0.3249566980142774,
+          "rig_length": 0.4661002877208821,
+          "length_ratio": 1.4343458392121013,
+          "rig_vector": [
+            0.12937486171722412,
+            0.2518826425075531,
+            0.3702263832092285
+          ],
+          "direction_closure_error_units": 9.195716005049798e-07
+        }
+      ]
+    }
+  ],
+  "changes_21_to_22": [
+    {
+      "side": "left",
+      "source_hip_to_ankle_delta": [
+        0.15685638785362244,
+        -0.010395277291536331,
+        -0.08437573350965977
+      ],
+      "rig_hip_to_ankle_delta": [
+        0.07392620295286179,
+        -0.13911491632461548,
+        -0.06356355175375938
+      ],
+      "segments": [
+        {
+          "bone": "upper_leg",
+          "source_length_step": [
+            0.07658654223176498,
+            0.12992551531822127,
+            0.0392734729894872
+          ],
+          "source_direction_step": [
+            0.0938943498304222,
+            -0.05794420819909019,
+            -0.0856981133320804
+          ],
+          "direction_change_deg": 19.58446938118384,
+          "rig_vector_delta": [
+            0.09369932860136032,
+            -0.05782371759414673,
+            -0.08552027493715286
+          ]
+        },
+        {
+          "bone": "lower_leg",
+          "source_length_step": [
+            0.0013446552751530457,
+            -0.020835605819946333,
+            -0.05457308967969251
+          ],
+          "source_direction_step": [
+            -0.014969159483717806,
+            -0.06154097859072108,
+            0.016621996512625938
+          ],
+          "direction_change_deg": 10.647714082563947,
+          "rig_vector_delta": [
+            -0.019773125648498535,
+            -0.08129119873046875,
+            0.02195672318339348
+          ]
+        }
+      ]
+    },
+    {
+      "side": "right",
+      "source_hip_to_ankle_delta": [
+        0.0010804994963109493,
+        -0.20124494284391403,
+        0.1768184807151556
+      ],
+      "rig_hip_to_ankle_delta": [
+        0.003075491636991501,
+        -0.28420713543891907,
+        0.22681597620248795
+      ],
+      "segments": [
+        {
+          "bone": "upper_leg",
+          "source_length_step": [
+            0.0008663867030537668,
+            0.004743075500601567,
+            0.0002197361741960732
+          ],
+          "source_direction_step": [
+            -0.0467589047167695,
+            0.004453928638821799,
+            0.011487573459297353
+          ],
+          "direction_change_deg": 8.286198041136721,
+          "rig_vector_delta": [
+            -0.05726877972483635,
+            0.005455106496810913,
+            0.014069676399230957
+          ]
+        },
+        {
+          "bone": "lower_leg",
+          "source_length_step": [
+            0.0014115522032983724,
+            0.008260981176034415,
+            0.00448276025111661
+          ],
+          "source_direction_step": [
+            0.04556146530672832,
+            -0.21870292815937184,
+            0.16062841083054555
+          ],
+          "direction_change_deg": 46.02484688447616,
+          "rig_vector_delta": [
+            0.06034427136182785,
+            -0.28966224193573,
+            0.212746299803257
+          ]
+        }
+      ]
+    }
+  ],
+  "length_counterfactuals": [
+    {
+      "case": "rig_lengths",
+      "depth": 2.6895571465002646,
+      "rmse_px": 13.34884333408021
+    },
+    {
+      "case": "source_lengths_22",
+      "depth": 2.52601161407512,
+      "rmse_px": 8.926628569515172
+    },
+    {
+      "case": "source_lengths_21",
+      "depth": 2.1949448930914874,
+      "rmse_px": 20.96904600789241
+    }
+  ],
+  "input_sha256": {
+    "world-candidate.json": "9fefe5b68e24f9af0f5f9323457c26056e3712f2c2fea02cc8ee0afb43ef9a60",
+    "distributed-control.json": "36fb25bde062c6db83deb61a2ed494daf8ea16dd8d39ca0169fa7388586f2832",
+    "fixed-rig-report.json": "45e8664bdef98bb11dce3556ea127cf39d6f342fb6b8d242e196805c2c80eb10",
+    "distributed-score.json": "585ffeedea022c11ecbab80120ab5e9640e3bdddcd2e2ef4fd88c9a1f9027557"
+  },
+  "limits": [
+    "Direction closure verifies mapping, not correctness of upstream3D.",
+    "Source lengths are model estimates; mixed lengths and rig hips are not a valid calibrated body.",
+    "Counterfactual depth changes include body-size changes; not recovered camera calibration.",
+    "No manual ankle identity/contact truth or originalL3 mesh validation."
+  ]
+}
