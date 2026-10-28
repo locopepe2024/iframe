@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { AssemblyEditPlan } from "@/lib/api";
-import { reorderAssemblyVideo, moveAssemblyClipInTimeline, removeAssemblyClip, splitAssemblyClip, trimAssemblyClip } from "./assemblyEditing";
+import { insertAssemblyVideo, reorderAssemblyVideo, moveAssemblyClipInTimeline, removeAssemblyClip, splitAssemblyClip, trimAssemblyClip } from "./assemblyEditing";
 function plan(): AssemblyEditPlan { return { id: "p", scope: "project", revision: 1, target_duration_ms: 6000, provenance: {}, markers: [], lanes: [{ id: "v", kind: "video", allow_overlap: false, clips: [
     { id: "a", timeline_start_ms: 0, timeline_end_ms: 4000, source_start_ms: 1000, source_end_ms: 5000, source_refs: ["frame:a"], enabled: true },
     { id: "b", timeline_start_ms: 4000, timeline_end_ms: 6000, source_start_ms: 0, source_end_ms: 2000, source_refs: ["frame:b"], enabled: true },
@@ -57,4 +57,16 @@ it("reorders videos by changing timeline ranges while preserving source crops", 
     expect(ordered[1]).toMatchObject({ timeline_start_ms: 2000, timeline_end_ms: 6000 });
     expect(ordered[0].source_start_ms).toBe(original.lanes[0].clips[1].source_start_ms);
     expect(original.lanes[0].clips[0].timeline_start_ms).toBe(0);
+});
+
+it("inserts a split video at a distant boundary without moving captions or source crops", () => {
+    const original = splitAssemblyClip(plan(), "v", "a", 2000, "middle");
+    const moved = insertAssemblyVideo(original, "a", "b", true);
+    const order = moved.lanes[0].clips.slice().sort((a,b) => a.timeline_start_ms-b.timeline_start_ms);
+    expect(order.map(c=>c.id)).toEqual(["middle", "b", "a"]);
+    expect(order.map(c=>[c.timeline_start_ms,c.timeline_end_ms])).toEqual([[0,2000],[2000,4000],[4000,6000]]);
+    expect(order[2].source_start_ms).toBe(1000);
+    expect(moved.target_duration_ms).toBe(original.target_duration_ms);
+    expect(insertAssemblyVideo(original, "a", "middle", false)).toBe(original);
+    expect(insertAssemblyVideo(original, "a", "a", true)).toBe(original);
 });

@@ -152,3 +152,27 @@ it('collapses optional panels and adjusts track height without changing the plan
     expect(screen.getByLabelText('Scrollable timeline')).toHaveStyle({ height: '420px' });
     expect(onChange).not.toHaveBeenCalled();
 });
+
+it('commits one reorder on drop and none during drag or cancellation', () => {
+    const videoPlan: AssemblyEditPlan = { ...plan, lanes: [{ id: 'v', kind: 'video', allow_overlap: false, clips: [
+        { id: 'one', label: 'One', timeline_start_ms: 0, timeline_end_ms: 2000, enabled: true, source_refs: [] },
+        { id: 'two', label: 'Two', timeline_start_ms: 2000, timeline_end_ms: 5000, enabled: true, source_refs: [] },
+    ] }] };
+    const onChange = vi.fn();
+    render(<AssemblyTracks plan={videoPlan} project={project} resourceId="p" saved onChange={onChange} />);
+    const first = screen.getByRole('button', { name: 'Edit clip 1: One' });
+    const second = screen.getByRole('button', { name: 'Edit clip 2: Two' });
+    const dataTransfer = { setData: vi.fn(), effectAllowed: '', dropEffect: '' };
+    fireEvent.dragStart(first, { dataTransfer });
+    fireEvent.dragOver(second, { dataTransfer, clientX: 1 });
+    expect(onChange).not.toHaveBeenCalled();
+    const drop = new MouseEvent('drop', { bubbles: true, clientX: 1 });
+    Object.defineProperty(drop, 'dataTransfer', { value: dataTransfer });
+    fireEvent(second, drop);
+    expect(onChange).toHaveBeenCalledTimes(1);
+    const clips = onChange.mock.calls[0][0].lanes[0].clips;
+    expect(clips.find((c: {id: string})=>c.id === 'two').timeline_start_ms).toBe(0);
+    fireEvent.dragStart(second, { dataTransfer });
+    fireEvent.dragEnd(second, { dataTransfer });
+    expect(onChange).toHaveBeenCalledTimes(1);
+});

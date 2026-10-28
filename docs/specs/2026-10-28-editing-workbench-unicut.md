@@ -16,3 +16,6 @@ Existing AssemblyTracks and EditingPage behavior tests, typecheck, production fr
 
 ## Subsequent capability scope
 Drag video clips to reorder, snapping with visible feedback, explicit keyboard editing commands, audio waveforms and synchronized audio preview each need separate behavior specs and validation before being claimed as supported. This slice does not introduce those capabilities or replace the renderer.
+
+## Slice 2: video drag reorder
+Native drag/drop moves a video clip before or after another clip according to the target midpoint. A visible insertion indicator shows the candidate boundary. Commit only on drop, so undo records one change. Source ranges and IDs remain unchanged, video remains contiguous, duration and other lanes stay anchored. Canceling drag makes no plan mutation. Existing move buttons remain the keyboard alternative. Foreign drags are ignored. Test direct arbitrary moves, no-op, and drop behavior.

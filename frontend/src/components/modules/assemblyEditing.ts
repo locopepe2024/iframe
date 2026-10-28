@@ -110,3 +110,17 @@ export function reorderAssemblyVideo(plan: AssemblyEditPlan, clipId: string, dir
     const positions = new Map(videos.map(c => { const start = cursor; cursor += c.timeline_end_ms - c.timeline_start_ms; return [c.id, [start, cursor]] as const; }));
     return { ...plan, lanes: plan.lanes.map(l => l.kind !== "video" ? l : { ...l, clips: l.clips.map(c => ({ ...c, timeline_start_ms: positions.get(c.id)![0], timeline_end_ms: positions.get(c.id)![1] })) }) };
 }
+
+/** Insert a video relative to another without changing source ranges or other lanes. */
+export function insertAssemblyVideo(plan: AssemblyEditPlan, clipId: string, targetId: string, after: boolean): AssemblyEditPlan {
+    if (clipId === targetId) return plan;
+    const videos = plan.lanes.filter(l => l.kind === "video").flatMap(l => l.clips).sort((a,b) => a.timeline_start_ms - b.timeline_start_ms);
+    const source = videos.find(c => c.id === clipId);
+    if (!source || !videos.some(c => c.id === targetId)) throw new Error("Video clip not found");
+    const next = videos.filter(c => c.id !== clipId);
+    next.splice(next.findIndex(c => c.id === targetId) + (after ? 1 : 0), 0, source);
+    if (next.every((c, i) => c.id === videos[i].id)) return plan;
+    let cursor = 0;
+    const positions = new Map(next.map(c => { const start = cursor; cursor += c.timeline_end_ms - c.timeline_start_ms; return [c.id, [start, cursor]] as const; }));
+    return { ...plan, lanes: plan.lanes.map(l => l.kind !== "video" ? l : { ...l, clips: l.clips.map(c => ({ ...c, timeline_start_ms: positions.get(c.id)![0], timeline_end_ms: positions.get(c.id)![1] })) }) };
+}

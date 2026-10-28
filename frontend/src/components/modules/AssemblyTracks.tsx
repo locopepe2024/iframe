@@ -4,7 +4,7 @@ import { createRenderRequestId } from '@/lib/renderRequestId';
 import { useLocale } from "next-intl";
 import { api, type AssemblyEditPlan } from "@/lib/api";
 import type { Project } from "@/store/projectStore";
-import { reorderAssemblyVideo, moveAssemblyClipInTimeline, removeAssemblyClip, resizeAssemblyClipInTimeline, splitAssemblyClip, trimAssemblyClip } from "./assemblyEditing";
+import { insertAssemblyVideo, reorderAssemblyVideo, moveAssemblyClipInTimeline, removeAssemblyClip, resizeAssemblyClipInTimeline, splitAssemblyClip, trimAssemblyClip } from "./assemblyEditing";
 import { extractErrorDetail, getAssetUrl, getVideoPosterUrl } from "@/lib/utils";
 import TimelineFilmstrip from './TimelineFilmstrip';
 
@@ -18,6 +18,8 @@ export function AssemblyTracks({ plan, resourceId, onChange, saved, project, mat
 }) {
     const zh = useLocale().startsWith("zh");
     const t = (cn: string, en: string) => zh ? cn : en;
+    const videoDrag = useRef<string | null>(null);
+    const [dropTarget, setDropTarget] = useState<{ id: string; after: boolean } | null>(null);
     const [position, setPosition] = useState(0);
     const [showMaterials, setShowMaterials] = useState(false);
     const [showInspector, setShowInspector] = useState(true);
@@ -261,12 +263,34 @@ export function AssemblyTracks({ plan, resourceId, onChange, saved, project, mat
                 }}>{t("添加字幕", "Add caption")}</button><button type="button" className={control} disabled={!saved || busy || lane.muted} onClick={() => download(lane.id)}>{t("下载 SRT", "Download SRT")}</button></>}
             </div>
             <div className={`relative overflow-hidden rounded bg-elevated ${lane.kind === "video" ? "h-24" : "h-10"}`} data-timeline-width aria-label={`${lane.kind} timeline`} onPointerMove={updateDrag} onPointerUp={endDrag} onPointerCancel={endDrag}>
-                {lane.clips.map(c => <button key={c.id} type="button" aria-label={lane.kind === "video" ? `${t("编辑片段", "Edit clip")} ${sequence.findIndex(item => item.clip.id === c.id) + 1}: ${c.label || c.id}` : (c.text || c.label || c.id)} title={c.text || c.label || c.id} onPointerDown={e => { selectClip(lane.id, c); beginDrag(e, lane.id, c.id, c.timeline_start_ms); }} onClick={() => {
+                {lane.clips.map(c => <button key={c.id} type="button"
+                    draggable={lane.kind === "video"}
+                    onDragStart={event => {
+                        if (lane.kind !== "video") return;
+                        videoDrag.current = c.id; event.dataTransfer.effectAllowed = "move";
+                        event.dataTransfer.setData("text/plain", c.id);
+                    }}
+                    onDragOver={event => {
+                        if (lane.kind !== "video" || !videoDrag.current || videoDrag.current === c.id) return;
+                        event.preventDefault(); event.dataTransfer.dropEffect = "move";
+                        const bounds = event.currentTarget.getBoundingClientRect();
+                        setDropTarget({ id: c.id, after: event.clientX >= bounds.left + bounds.width / 2 });
+                    }}
+                    onDrop={event => {
+                        if (lane.kind !== "video" || !videoDrag.current || videoDrag.current === c.id) return;
+                        event.preventDefault();
+                        const bounds = event.currentTarget.getBoundingClientRect();
+                        const next = insertAssemblyVideo(plan, videoDrag.current, c.id, event.clientX >= bounds.left + bounds.width / 2);
+                        if (next !== plan) onChange(next);
+                        videoDrag.current = null; setDropTarget(null);
+                    }}
+                    onDragEnd={() => { videoDrag.current = null; setDropTarget(null); }} aria-label={lane.kind === "video" ? `${t("编辑片段", "Edit clip")} ${sequence.findIndex(item => item.clip.id === c.id) + 1}: ${c.label || c.id}` : (c.text || c.label || c.id)} title={c.text || c.label || c.id} onPointerDown={e => { selectClip(lane.id, c); beginDrag(e, lane.id, c.id, c.timeline_start_ms); }} onClick={() => {
                     setSelected({ laneId: lane.id, clipId: c.id });
                     setSourceIn(c.source_start_ms ?? 0);
                     setSourceOut(c.source_end_ms ?? (c.source_start_ms ?? 0) + c.timeline_end_ms - c.timeline_start_ms);
                     seek(c.timeline_start_ms);
-                }} aria-pressed={selected?.laneId === lane.id && selected?.clipId === c.id} className="absolute inset-y-1 min-w-1 truncate rounded bg-primary/40 px-1 text-left text-xs text-foreground aria-pressed:ring-2 aria-pressed:ring-inset aria-pressed:ring-primary focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary" style={{ left: `${c.timeline_start_ms / plan.target_duration_ms * 100}%`, width: `${(c.timeline_end_ms - c.timeline_start_ms) / plan.target_duration_ms * 100}%`, opacity: c.enabled && !lane.muted ? 1 : 0.3 }}>{lane.kind === "video" && mediaFor(c) && <TimelineFilmstrip url={mediaFor(c)!.url} poster={mediaFor(c)!.poster} startMs={c.source_start_ms ?? 0} endMs={c.source_end_ms ?? (c.source_start_ms ?? 0) + c.timeline_end_ms - c.timeline_start_ms} width={timelineWidth * (c.timeline_end_ms - c.timeline_start_ms) / plan.target_duration_ms} />}<span className="pointer-events-none block truncate">{c.text || c.label || c.id}</span>{selected?.laneId === lane.id && selected?.clipId === c.id && <><span role="button" aria-label={`${c.label || c.id} start handle`} className="absolute inset-y-0 left-0 z-10 w-3 cursor-ew-resize bg-foreground/30" onPointerDown={e => { e.stopPropagation(); dragRef.current = { laneId: lane.id, clipId: c.id, startX: e.clientX, origin: c.timeline_start_ms, mode: "resize", edge: "start" }; e.currentTarget.setPointerCapture(e.pointerId); }} /><span role="button" aria-label={`${c.label || c.id} end handle`} className="absolute inset-y-0 right-0 z-10 w-3 cursor-ew-resize bg-foreground/30" onPointerDown={e => { e.stopPropagation(); dragRef.current = { laneId: lane.id, clipId: c.id, startX: e.clientX, origin: c.timeline_end_ms, mode: "resize", edge: "end" }; e.currentTarget.setPointerCapture(e.pointerId); }} /></>}</button>)}
+                }} aria-pressed={selected?.laneId === lane.id && selected?.clipId === c.id} className="absolute inset-y-1 min-w-1 truncate rounded bg-primary/40 px-1 text-left text-xs text-foreground aria-pressed:ring-2 aria-pressed:ring-inset aria-pressed:ring-primary focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary" style={{ left: `${c.timeline_start_ms / plan.target_duration_ms * 100}%`, width: `${(c.timeline_end_ms - c.timeline_start_ms) / plan.target_duration_ms * 100}%`, opacity: c.enabled && !lane.muted ? 1 : 0.3 }}>{lane.kind === "video" && mediaFor(c) && <TimelineFilmstrip url={mediaFor(c)!.url} poster={mediaFor(c)!.poster} startMs={c.source_start_ms ?? 0} endMs={c.source_end_ms ?? (c.source_start_ms ?? 0) + c.timeline_end_ms - c.timeline_start_ms} width={timelineWidth * (c.timeline_end_ms - c.timeline_start_ms) / plan.target_duration_ms} />}{dropTarget?.id === c.id && <span aria-hidden="true" className={`pointer-events-none absolute inset-y-0 z-20 w-1 bg-primary ${dropTarget.after ? "right-0" : "left-0"}`} />}
+                    <span className="pointer-events-none block truncate">{c.text || c.label || c.id}</span>{selected?.laneId === lane.id && selected?.clipId === c.id && <><span role="button" aria-label={`${c.label || c.id} start handle`} className="absolute inset-y-0 left-0 z-10 w-3 cursor-ew-resize bg-foreground/30" onPointerDown={e => { e.stopPropagation(); dragRef.current = { laneId: lane.id, clipId: c.id, startX: e.clientX, origin: c.timeline_start_ms, mode: "resize", edge: "start" }; e.currentTarget.setPointerCapture(e.pointerId); }} /><span role="button" aria-label={`${c.label || c.id} end handle`} className="absolute inset-y-0 right-0 z-10 w-3 cursor-ew-resize bg-foreground/30" onPointerDown={e => { e.stopPropagation(); dragRef.current = { laneId: lane.id, clipId: c.id, startX: e.clientX, origin: c.timeline_end_ms, mode: "resize", edge: "end" }; e.currentTarget.setPointerCapture(e.pointerId); }} /></>}</button>)}
                 <span className="pointer-events-none absolute inset-y-0 w-px bg-foreground" style={{ left: `${position / plan.target_duration_ms * 100}%` }} />
             </div>
         </div>)}
