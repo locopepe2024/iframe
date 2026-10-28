@@ -184,10 +184,7 @@ export function AssemblyTracks({ plan, resourceId, onChange, saved, project, mat
                 if (splitClip && splitLane) applyEdit(() => splitAssemblyClip(plan, splitLane.id, splitClip.id, position, createRenderRequestId()));
             }}>{t("在播放头分割", "Split at playhead")}</button>
             <span className="text-xs text-text-secondary" role="status">{splitClip ? t(`分割对象：${splitClip.label || splitClip.id} · ${(position / 1000).toFixed(3)} 秒`, `Split target: ${splitClip.label || splitClip.id} · ${(position / 1000).toFixed(3)}s`) : t("将播放头移到要分割的片段内部。", "Move the playhead inside the clip to split it.")}{splitClip && !canSplit ? t(" · 请将播放头移到片段内部。", " · Move the playhead inside the clip.") : ''}</span>
-            <button type="button" className={control} aria-label={t("缩小时间轴", "Zoom out")} disabled={zoom <= 0.5} onClick={() => setZoom(z => Math.max(0.5, z / 2))}>−</button>
-            <span className="text-xs tabular-nums">{Math.round(zoom * 100)}%</span>
-            <button type="button" className={control} aria-label={t("放大时间轴", "Zoom in")} disabled={zoom >= 16} onClick={() => setZoom(z => Math.min(16, z * 2))}>＋</button>
-            <button type="button" className={control} onClick={() => { setZoom(1); if (timelineViewport.current) timelineViewport.current.scrollLeft = 0; }}>{t("适应时间轴", "Fit timeline")}</button>
+
         </div>
         <div className="min-h-12 whitespace-pre-wrap rounded bg-elevated p-3 text-center text-foreground">{active.map(c => c.text).join("\n") || t("当前无字幕", "No caption at this time")}</div>
         <label className="flex flex-wrap items-center gap-2 text-xs text-text-secondary">{t("成片字幕", "Video captions")}
@@ -214,6 +211,12 @@ export function AssemblyTracks({ plan, resourceId, onChange, saved, project, mat
             <button type="button" className={`${control} border-red-500/40 text-red-200`} onClick={() => applyEdit(() => removeAssemblyClip(plan, selected.laneId, selected.clipId))}>{t("删除片段", "Delete clip")}</button>
         </div>}
         {error && <p role="alert" className="text-xs text-red-300">{error}</p>}
+        <div className="sticky top-0 z-20 flex flex-wrap items-center gap-2 rounded-lg border border-glass-border bg-surface p-2" role="group" aria-label={t("时间轴缩放", "Timeline zoom")}><span className="text-sm font-medium">{t("时间轴", "Timeline")}</span>
+            <button type="button" className={control} aria-label={t("缩小时间轴", "Zoom out")} disabled={zoom <= 0.5} onClick={() => setZoom(z => Math.max(0.5, z / 2))}>{t("缩小时间轴 −", "Zoom out −")}</button>
+            <span className="text-xs tabular-nums">{Math.round(zoom * 100)}%</span>
+            <button type="button" className={control} aria-label={t("放大时间轴", "Zoom in")} disabled={zoom >= 16} onClick={() => setZoom(z => Math.min(16, z * 2))}>{t("放大时间轴 ＋", "Zoom in ＋")}</button>
+            <button type="button" className={control} onClick={() => { setZoom(1); if (timelineViewport.current) timelineViewport.current.scrollLeft = 0; }}>{t("适应时间轴", "Fit timeline")}</button>
+        </div>
         <div ref={timelineViewport} className="w-full min-w-0 overflow-x-auto" style={{ contain: "inline-size" }} aria-label={t("可横向滚动的时间线", "Scrollable timeline")}><div data-timeline-canvas style={{ width: timelineWidth }}>
         <div role="slider" tabIndex={0} aria-label={t("时间轴刻度", "Timeline ruler")} aria-valuemin={0} aria-valuemax={plan.target_duration_ms / 1000} aria-valuenow={position / 1000} className="relative h-10 cursor-crosshair border-b border-glass-border bg-elevated text-xs tabular-nums" onPointerDown={event => {
             const bounds = event.currentTarget.getBoundingClientRect();
