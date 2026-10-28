@@ -148,7 +148,10 @@ class ChatStore(PhotoTasks, DiaryStore, CompanionStore):
                 def shared_connection(**_):
                     yield db
                 scoped=copy.copy(self);scoped.connection=shared_connection
-                if name == 'photo.organize.start':
+                if name == 'diary.save_draft':
+                    output = scoped.save_session_draft(db, owner, actor, row['session_id'], row['id'],
+                                                      values['source_turn_id'], claim['messages'][-1].get('interaction_focus'))
+                elif name == 'photo.organize.start':
                     task_id = scoped.start_photo_task(owner,actor,row['session_id'],row['operation_id'],values)
                     output = None
                 elif name == 'photo.organize.input':
@@ -162,6 +165,8 @@ class ChatStore(PhotoTasks, DiaryStore, CompanionStore):
                     output=dispatch(scoped,owner,actor,name,values)
                 if name in ('photo.organize.start', 'photo.organize.input'):
                     result=dict(kind='photo_task',task_id=task_id)
+                elif name == 'diary.save_draft':
+                    result=dict(kind='text', text=output['spoken_text'], name=name, day=output['day'])
                 elif name == 'photo.album.count':
                     # Preserve the count at query time; history must not silently
                     # re-count after uploads or deletions. Text uses normal speech.

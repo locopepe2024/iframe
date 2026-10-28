@@ -140,7 +140,7 @@ def test_personal_channel_wire_strict_tools_and_safe_failure(monkeypatch):
     assert body['parallel_tool_calls'] is False
     # The previous regular proposal still carried the memory and photo tools.
     regular_body=post.call_args_list[0].kwargs['json']
-    assert {t['function']['name'] for t in regular_body['tools']}=={'diary_open','diary_list','diary_read','memory_save','memory_search','memory_list','memory_delete','photo_album_count','photo_album_list','photo_item_read','photo_organize_start','photo_organize_input','photo_action'}
+    assert {t['function']['name'] for t in regular_body['tools']}=={'diary_save_draft','diary_open','diary_list','diary_read','memory_save','memory_search','memory_list','memory_delete','photo_album_count','photo_album_list','photo_item_read','photo_organize_start','photo_organize_input','photo_action'}
     assert regular_body['max_tokens'] < body['max_tokens']
     assert 'confirm' not in str(regular_body['tools'])
     response.json.return_value={'choices':[{'message':{'tool_calls':[dict(type='function',function=dict(name='memory_confirm',arguments='{}'))]}}]}

@@ -8,6 +8,29 @@ from .store import Conflict, Missing, encode
 
 
 class DiaryStore:
+    def save_session_draft(self, db, owner, actor, session, operation, source_id, focus):
+        from .intent import diary_day
+        source = db.execute('SELECT text,status,result FROM companion_turns WHERE owner=? AND actor=? AND session_id=? AND id=?',
+                            (owner, actor, session, source_id)).fetchone()
+        if not source or source['status'] != 'completed':
+            raise Missing('Diary draft unavailable in this session')
+        day = diary_day(source['text'])
+        result = json.loads(source['result'])
+        if not day or result.get('kind') != 'text' or result.get('name'):
+            raise ValueError('Select a generated diary draft')
+        text = result['text']
+        if focus and focus.get('kind') == 'diary' and (focus['object_id'] != day or focus.get('draft') != text):
+            return dict(day=day, spoken_text='日记编辑器里还有修改，请核对当前正文后点击保存。')
+        existing = db.execute('SELECT text,source_turn_id FROM companion_diaries WHERE owner=? AND actor=? AND day=?',
+                              (owner, actor, day)).fetchone()
+        if existing:
+            if existing['source_turn_id'] == source_id and existing['text'] == text:
+                return dict(day=day, spoken_text='这篇日记已经保存了。')
+            return dict(day=day, spoken_text='这一天已有日记，请在日记编辑器里核对后确认替换。')
+        self.save_diary(owner, actor, day, operation_id=operation, text=text,
+                        source_turn_id=source_id, expected_revision=0)
+        return dict(day=day, spoken_text=f'{day} 的日记已保存。')
+
     def diaries(self, owner, actor, month):
         date.fromisoformat(month + '-01')
         with self.connection() as db:
