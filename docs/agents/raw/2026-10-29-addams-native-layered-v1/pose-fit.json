@@ -1,0 +1,140 @@
+{
+  "schema": "addams-native-pose-fit.v1",
+  "source_sha256": "3b0d8f32549c80ef04e988c1bfe1393582fd6349047b306ce6c2df7bdae63c96",
+  "focal_px": 673.9856215031623,
+  "rows": [
+    {
+      "source_frame": 49,
+      "model_frame": 14,
+      "count": 7,
+      "baseline_camera_rmse_px": 47.054962158203125,
+      "fitted_rmse_px": 20.871007919311523,
+      "fitted_median_px": 2.384091854095459,
+      "max_px": 54.93458557128906,
+      "delta_body_norm": 2.807741403579712,
+      "delta_global_norm": 0.5124902725219727,
+      "delta_trans": [
+        -0.0804763063788414,
+        0.05480988696217537,
+        -0.427086740732193
+      ]
+    },
+    {
+      "source_frame": 50,
+      "model_frame": 16,
+      "count": 7,
+      "baseline_camera_rmse_px": 18.312816619873047,
+      "fitted_rmse_px": 13.272174835205078,
+      "fitted_median_px": 1.5928868055343628,
+      "max_px": 30.433378219604492,
+      "delta_body_norm": 2.4135684967041016,
+      "delta_global_norm": 0.1757000982761383,
+      "delta_trans": [
+        0.005406046286225319,
+        0.024064376950263977,
+        -0.1194092333316803
+      ]
+    },
+    {
+      "source_frame": 51,
+      "model_frame": 17,
+      "count": 7,
+      "baseline_camera_rmse_px": 24.999101638793945,
+      "fitted_rmse_px": 1.3598451614379883,
+      "fitted_median_px": 1.3648788928985596,
+      "max_px": 2.1515536308288574,
+      "delta_body_norm": 2.0387728214263916,
+      "delta_global_norm": 0.7259872555732727,
+      "delta_trans": [
+        2.7164118364453316e-05,
+        0.05316472798585892,
+        -0.14186811447143555
+      ]
+    },
+    {
+      "source_frame": 52,
+      "model_frame": 18,
+      "count": 6,
+      "baseline_camera_rmse_px": 24.03177261352539,
+      "fitted_rmse_px": 12.761828422546387,
+      "fitted_median_px": 5.253763198852539,
+      "max_px": 28.309173583984375,
+      "delta_body_norm": 3.0888333320617676,
+      "delta_global_norm": 0.27008357644081116,
+      "delta_trans": [
+        -0.01674763113260269,
+        0.027163954451680183,
+        -0.1353166699409485
+      ]
+    },
+    {
+      "source_frame": 53,
+      "model_frame": 19,
+      "count": 6,
+      "baseline_camera_rmse_px": 35.75014877319336,
+      "fitted_rmse_px": 1.264768362045288,
+      "fitted_median_px": 0.6410642862319946,
+      "max_px": 2.517815351486206,
+      "delta_body_norm": 1.4110482931137085,
+      "delta_global_norm": 0.741402268409729,
+      "delta_trans": [
+        -0.10284175723791122,
+        0.059293586760759354,
+        -0.2992262840270996
+      ]
+    },
+    {
+      "source_frame": 55,
+      "model_frame": 22,
+      "count": 4,
+      "baseline_camera_rmse_px": 18.30363655090332,
+      "fitted_rmse_px": 2.070493459701538,
+      "fitted_median_px": 1.9433448314666748,
+      "max_px": 2.6007072925567627,
+      "delta_body_norm": 0.5318542122840881,
+      "delta_global_norm": 0.2752167582511902,
+      "delta_trans": [
+        -0.02851099893450737,
+        0.03904283046722412,
+        -0.13810011744499207
+      ]
+    },
+    {
+      "source_frame": 56,
+      "model_frame": 23,
+      "count": 2,
+      "baseline_camera_rmse_px": 18.5122013092041,
+      "fitted_rmse_px": 1.0728282928466797,
+      "fitted_median_px": 1.0717952251434326,
+      "max_px": 1.1188663244247437,
+      "delta_body_norm": 0.10588052123785019,
+      "delta_global_norm": 0.1410001963376999,
+      "delta_trans": [
+        0.016577892005443573,
+        -0.007826829329133034,
+        -0.001622998621314764
+      ]
+    },
+    {
+      "source_frame": 57,
+      "model_frame": 24,
+      "count": 3,
+      "baseline_camera_rmse_px": 4.559700965881348,
+      "fitted_rmse_px": 0.6295676231384277,
+      "fitted_median_px": 0.6142286062240601,
+      "max_px": 0.6739755868911743,
+      "delta_body_norm": 0.12727414071559906,
+      "delta_global_norm": 0.641947329044342,
+      "delta_trans": [
+        -0.158342644572258,
+        0.017652014270424843,
+        0.051081571727991104
+      ]
+    }
+  ],
+  "limits": [
+    "Key-frame pose optimization is an optimistic upper bound, not accepted motion.",
+    "Only visible reviewed points drive each frame; no temporal smoothness or held-out validation.",
+    "SMPL-X betas and camera candidate are fixed; no white-rig edits or contact constraints."
+  ]
+}
