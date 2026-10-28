@@ -819,6 +819,7 @@ export interface WorkbenchState {
   redoStack: AuthoringSnapshot[];
   unsavedChanges: boolean;
   applyDesignProposal: (proposal: DesignProposal, navigation?: "boxes" | "navmesh", source?: AuthoringSnapshot["designSource"]) => void;
+  clearAnimationForDesign: () => void;
   setDesignSourceMediaId: (sha256: string, mediaId: string) => void;
   exportDirectorDesignBundle: () => ReturnType<typeof createDirectorDesignBundle>;
   importDirectorDesignBundle: (raw: unknown, options?: { expectedCurrentPackageChecksum?: string }) => { ok: true } | { ok: false; errors: string[] };
@@ -1252,6 +1253,14 @@ export const useWorkbenchStore = create<WorkbenchState>((set, get) => ({
     const preview = compileDesignProposal(state, proposal, navigation);
     return mutateScene(state, "design.proposal.apply", { crowdGroups: preview.crowdGroups, actorMappings: preview.actorMappings, characters: preview.characters, sceneObjects: preview.sceneObjects, cameras: preview.cameras, cameraPaths: preview.cameraPaths, dialogueTimeline: preview.dialogueTimeline, designAssumptions: [...proposal.assumptions], designSource: source ?? null });
   }),
+  clearAnimationForDesign: () => set((state) => ({
+    ...mutateScene(state, "design.animation.clear", {
+      actorPaths: {}, cameraPaths: {}, pathEvents: [], externalCameraMotionProposals: [],
+      dialogueTimeline: { ...createInitialDialogueTimeline(), timelineId: state.dialogueTimeline.timelineId,
+        durationSeconds: state.dialogueTimeline.durationSeconds, fps: state.dialogueTimeline.fps },
+    }),
+    playheadFrame: 1, selectedActorPathControlPointId: null, selectedCameraPathControlPointId: null,
+  })),
   setDesignSourceMediaId: (sha256, mediaId) => set((state) => state.designSource?.sha256 === sha256 ? { designSource: { ...state.designSource, mediaId } } : state),
   exportDirectorDesignBundle: () => createDirectorDesignBundle(get()),
   importDirectorDesignBundle: (raw, options) => {
