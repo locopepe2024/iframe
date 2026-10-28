@@ -2,6 +2,8 @@
 
 import { useEffect, useState } from "react";
 import { photoApi, type PhotoAnalysis } from "@/lib/photoApi";
+import PhotoDelete from "./PhotoDelete";
+import PhotoFactsEditor from "./PhotoFactsEditor";
 import DescriptionReview from "./DescriptionReview";
 
 export default function PhotoContent({ photoId }: { photoId: string }) {
@@ -38,10 +40,13 @@ export default function PhotoContent({ photoId }: { photoId: string }) {
     {analysis && <>
       <p>AI 看图描述，尚待您核对</p>
       <p>{analysis.observation.visible_summary}</p>
+      <dl>{([['scene','场景'],['lighting','光影'],['time_clues','时间线索']] as const).map(([key,label])=>analysis.observation[key] && <div key={key}><dt>{label}</dt><dd>{analysis.observation[key]}</dd></div>)}</dl>
+      {!!analysis.observation.people?.length && <details><summary>画面人物</summary>{analysis.observation.people.map(person=><p key={person.reference}>{person.reference} · {[person.position,person.appearance,person.clothing,person.activity].filter(Boolean).join('；')}</p>)}</details>}
       {!!analysis.observation.visible_text.length && <><h3>看见的文字（可能有误）</h3><ul>{analysis.observation.visible_text.map((text, i) => <li key={i}>{text}</li>)}</ul></>}
       {!!analysis.observation.uncertainties.length && <><h3>还不确定的地方</h3><ul>{analysis.observation.uncertainties.map((text, i) => <li key={i}>{text}</li>)}</ul></>}
       <p>{analysis.observation.story_question}</p><p>不想说也可以，下次再聊。</p>
       <DescriptionReview key={photoId} photoId={photoId} original={analysis.observation.visible_summary} />
     </>}
+    {loaded && <><PhotoFactsEditor photoId={photoId} analysis={analysis} /><PhotoDelete photoId={photoId}/></>}
   </section>;
 }

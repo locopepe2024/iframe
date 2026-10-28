@@ -8,11 +8,12 @@ import PhotoImage from "../photos/PhotoImage";
 import { VideoCover } from "./VideoConversationCard";
 import styles from "./chat.module.css";
 
-export default function AlbumPicker({ disabled = false, onPhoto, onVideo, onClose }: {
+export default function AlbumPicker({ disabled = false, initialDate = "", initialQuery = "", order = "id", onPhoto, onVideo, onClose }: {
+  initialDate?: string; initialQuery?: string; order?: "id" | "recent";
   disabled?: boolean; onPhoto: (photo: AlbumPhoto) => void; onVideo?: (video: CompanionVideo) => void; onClose: () => void;
 }) {
   const [kind,setKind] = useState<"photos" | "videos">("photos");
-  const [query,setQuery] = useState(""), [applied,setApplied] = useState("");
+  const [query,setQuery] = useState(initialQuery), [applied,setApplied] = useState("");
   const [photos,setPhotos] = useState<AlbumPhoto[]>([]), [videos,setVideos] = useState<CompanionVideo[]>([]);
   const [cursor,setCursor] = useState<string|null>(null), [busy,setBusy] = useState(true), [error,setError] = useState("");
   const serial = useRef(0), lock = useRef(false);
@@ -21,7 +22,7 @@ export default function AlbumPicker({ disabled = false, onPhoto, onVideo, onClos
     lock.current = true; setBusy(true); setError("");
     try {
       if (type === "photos") {
-        const page = await photoApi.list("all", "", after, search);
+        const page = initialDate || order !== "id" ? await photoApi.list("all", "", after, search, {date_prefix: initialDate, order}) : await photoApi.list("all", "", after, search);
         if (serial.current === request) { setPhotos(old => after ? [...old,...page.photos] : page.photos); setCursor(page.next_after_id); }
       } else {
         const page = await companionMediaApi.list(search,after);
@@ -32,7 +33,7 @@ export default function AlbumPicker({ disabled = false, onPhoto, onVideo, onClos
     finally { if (serial.current === request) { lock.current=false; setBusy(false); } }
   }
   useEffect(() => {
-    void load("photos", "");
+    void load("photos", initialQuery);
     const onKeyDown = (event: KeyboardEvent) => { if (event.key === "Escape") onClose(); };
     window.addEventListener("keydown", onKeyDown);
     return () => { serial.current++; window.removeEventListener("keydown", onKeyDown); };
@@ -41,6 +42,7 @@ export default function AlbumPicker({ disabled = false, onPhoto, onVideo, onClos
   return <div className={styles.sheetBackdrop} role="presentation" onMouseDown={event => { if (event.target === event.currentTarget) onClose(); }}>
     <section className={styles.albumSheet} role="dialog" aria-modal="true" aria-label="浏览相册" aria-busy={busy} onMouseDown={event => event.stopPropagation()}>
     <div className={styles.sheetHandle} aria-hidden="true" /><div className={styles.albumHeader}><h2>相册</h2><button className={styles.albumIcon} type="button" aria-label="关闭相册" onClick={onClose}><X size={24} aria-hidden="true" /></button></div>
+    {(initialDate || order === "recent") && <p>{initialDate ? `拍摄日期：${initialDate}` : "最近加入的照片"}</p>}
     {onVideo && <div className={styles.choices}><button type="button" disabled={blocked} aria-pressed={kind === "photos"} onClick={() => { setKind("photos");setQuery("");void load("photos", ""); }}>照片</button><button type="button" disabled={blocked} aria-pressed={kind === "videos"} onClick={() => { setKind("videos");setQuery("");void load("videos", ""); }}>视频</button></div>}
     <form className={styles.albumSearch} onSubmit={event => { event.preventDefault(); if (!lock.current && !disabled) void load(kind, query.trim()); }}>
       <button className={styles.albumIcon} type="submit" disabled={blocked} aria-label="搜索"><Search size={24} aria-hidden="true" /></button>

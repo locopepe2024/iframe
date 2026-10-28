@@ -12,6 +12,8 @@ beforeEach(() => vi.resetAllMocks());
 it("opens the selected photo workspace and closes with persisted task state", async () => {
   api.photoTaskInput.mockResolvedValueOnce({...task, revision: 2, step: "review_photo"}).mockResolvedValueOnce({...task, revision: 3, status: "completed", step: "closed", photos: []});
   render(<PhotoTaskCard task={task} />);
+  expect(screen.queryByAltText("照片")).not.toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button", {name: "从找到的 1 张照片中选择"}));
   fireEvent.click(screen.getByRole("button", {name: "整理这张照片 1"}));
   await screen.findByText("讲述编辑入口");
   expect(api.photoTaskInput.mock.calls[0][1]).toMatchObject({expected_revision: 1, action: "select", photo_id: "mine"});

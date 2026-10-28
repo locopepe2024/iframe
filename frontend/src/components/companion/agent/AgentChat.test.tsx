@@ -392,3 +392,23 @@ it("does not offer retry while a request is pending or when only history refresh
   expect(screen.queryByRole("button", {name: "重试原请求"})).not.toBeInTheDocument();
   expect(screen.getByLabelText("和我聊聊天")).toHaveValue("");
 });
+
+it("restores the scope card and starts a durable task only for the explicitly selected photo", async () => {
+  localStorage.setItem("iframe-companion-agent-session-v1", "s");
+  localStorage.setItem("iframe-companion-agent-text-consent-v1", "true");
+  const scope = {turn_id: "scope", status: "completed", result: {kind: "album_guide", browse: false, spoken_text: "想整理哪些照片？"}};
+  api.messages.mockResolvedValue({messages: [{id: "m", sequence: 1, text: "梳理相册", turn: scope}], next_before: null});
+  photoApi.list.mockResolvedValue({photos: [{photo_id: "selected"}], next_after_id: null});
+  render(<AgentChat />);
+  await screen.findByRole("article", {name: "选择整理范围"});
+  expect(photoApi.list).not.toHaveBeenCalled();
+  fireEvent.click(screen.getByRole("button", {name: "最近加入"}));
+  await screen.findByRole("button", {name: "选择照片 1"});
+  const task = {turn_id: "picked", status: "completed", result: {kind: "photo_task", task_id: "task", step: "review_photo", status: "waiting_input", revision: 1, photos: []}};
+  api.chat.mockResolvedValue(task);
+  api.messages.mockResolvedValue({messages: [{id: "m2", sequence: 2, text: "整理这张照片", turn: task}], next_before: null});
+  fireEvent.click(screen.getByRole("button", {name: "选择照片 1"}));
+  await screen.findByRole("region", {name: "相册整理任务"});
+  expect(api.chat.mock.calls[0][1]).toMatchObject({text: "整理这张照片", selected_photo_id: "selected"});
+  expect(screen.queryByRole("dialog", {name: "浏览相册"})).not.toBeInTheDocument();
+});

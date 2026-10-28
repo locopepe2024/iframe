@@ -9,11 +9,14 @@ export interface PhotoDateAnnotation {
 }
 export interface AlbumPhoto {
   photo_id: string; batch_id: string; date: PhotoDateAnnotation;
-  search_matches?: { source: "story" | "description"; revision: number; excerpt: string }[];
+  search_matches?: { source: "story" | "description" | "facts"; revision: number; excerpt: string }[];
 }
+export interface PhotoPersonFact { reference: string; name: string; age: number | null; gender: "unknown" | "female" | "male" | "other" }
+export interface PhotoFacts { people: PhotoPersonFact[]; scene: string; lighting: string; location: string; latitude: number | null; longitude: number | null; capture_time: string; notes: string }
+export interface PhotoAnnotations { revision: number; facts: PhotoFacts; actor: string; updated_at: string }
 export interface PhotoAnalysis {
   model: string; provider: "qwen"; status: "needs_review"; created_at: string;
-  observation: { visible_summary: string; visible_text: string[]; uncertainties: string[]; story_question: string };
+  observation: { people?: {reference: string; position: string; appearance: string; clothing: string; activity: string}[]; scene?: string; lighting?: string; time_clues?: string; objects?: string[]; relationships?: string[]; visible_summary: string; visible_text: string[]; uncertainties: string[]; story_question: string };
 }
 export interface TimeConsent { granted: boolean; consent_version: number }
 export interface UploadManifestItem { item_id: string; filename: string; size: number; sha256: string }
@@ -111,6 +114,9 @@ function serviceError(status: number) {
     : "服务暂不可用，请稍后重试。");
 }
 export const photoApi = {
+  annotations: (id: string) => request<PhotoAnnotations>(`/${encodeURIComponent(id)}/annotations`),
+  saveAnnotations: (id: string, body: {operation_id: string; expected_revision: number; facts: PhotoFacts}) => request<PhotoAnnotations>(`/${encodeURIComponent(id)}/annotations`, "POST", body),
+  deletePhoto: (id: string, operation_id: string) => request<{photo_id: string; status: "deleted"}>(`/${encodeURIComponent(id)}/delete`, "POST", {operation_id, confirmed: true}),
   peopleCorrectionPreview: (body: PeopleCorrectionSelection) => request<PeopleCorrectionPreview>("/people-corrections/preview", "POST", body),
   correctPeople: (body: PeopleCorrectionRequest) => request<PeopleCorrectionReceipt>("/people-corrections", "POST", body),
   peopleCorrectionHistory: (after = 0) => request<{ changes: PeopleCorrectionReceipt[]; next_after: number | null }>(`/people-corrections/history?after=${after}`),
@@ -151,8 +157,8 @@ export const photoApi = {
   descriptionHistory: (id: string, after = 0) => request<{ changes: DescriptionReview[]; next_after_revision: number | null }>(`/${encodeURIComponent(id)}/description/history?after_revision=${after}`),
   analysis: (id: string) => request<PhotoAnalysis | null>(`/${encodeURIComponent(id)}/analysis`),
   analyze: (id: string) => request<PhotoAnalysis>(`/${encodeURIComponent(id)}/analysis`, "POST", { allow_external_analysis: true }),
-  list: (view: string, year: string, after = "", query = "") => request<{ photos: AlbumPhoto[]; next_after_id: string | null }>(
-    `/albums?${new URLSearchParams({ view, ...(year ? { year } : {}), ...(query ? { query } : {}), after_id: after, limit: "20" })}`),
+  list: (view: string, year: string, after = "", query = "", filters?: {date_prefix?: string; order?: "id" | "recent"}) => request<{ photos: AlbumPhoto[]; next_after_id: string | null }>(
+    `/albums?${new URLSearchParams({ view, ...(year ? { year } : {}), ...(query ? { query } : {}), ...(filters?.date_prefix ? {date_prefix: filters.date_prefix} : {}), ...(filters?.order ? {order: filters.order} : {}), after_id: after, limit: "20" })}`),
   batch: (id: string) => request<TimeConsent>(`/batches/${encodeURIComponent(id)}`),
   question: (id: string) => request<TimeQuestion>(`/batches/${encodeURIComponent(id)}/time-question`, "POST"),
   answer: (id: string, question: string, granted: boolean) => request<TimeConsent>(

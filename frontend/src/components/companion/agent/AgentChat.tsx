@@ -3,6 +3,8 @@ import { Fragment, useEffect, useRef, useState } from "react";
 import { companionApi, type MemoryPage, type Preview, type Turn, type UserMessage } from "@/lib/companionApi";
 import styles from "../photos/photos.module.css";
 import chatStyles from "./chat.module.css";
+import PhotoActionCard from "./PhotoActionCard";
+import AlbumScopeCard from "./AlbumScopeCard";
 import PhotoTaskCard from "./PhotoTaskCard";
 import PhotoToolResult from "./PhotoToolResult";
 import PhotoConversationCard from "../PhotoConversationCard";
@@ -63,7 +65,7 @@ export default function AgentChat() {
   const voiceQueue = useRef<string[]>([]);
   const [voiceRevision, setVoiceRevision] = useState(0);
   const sessionOperation = useRef("");
-  const sendOperation = useRef<{ operation_id: string; text: string; allow_external_text: true } | null>(null);
+  const sendOperation = useRef<{ operation_id: string; text: string; allow_external_text: true; selected_photo_id?: string } | null>(null);
   const confirmOperation = useRef<{ token: string; id: string } | null>(null);
   const [draft, setDraft] = useState<string | null>(null);
   const [hasRetry, setHasRetry] = useState(false);
@@ -151,11 +153,11 @@ export default function AgentChat() {
     sessionOperation.current = ""; sendOperation.current = null; setHasRetry(false);
     setMenu(false); setAlbumOpen(false); setUploadFiles([]); setAttached([]); setPendingMedia({chat:[],image:[],video:[]}); setMediaAcknowledged(false); setSession(result.session_id); setMessages([]); setAfter(null); setTurn(null); setPreview(null); setDraft(null); setDrafts({ chat: "", image: "", video: "" }); setGuides({ image: null, video: null }); setMode("chat"); setNotice("已开始新的聊天。");
   }
-  async function send(retry = false, voiceText?: string) {
+  async function send(retry = false, voiceText?: string, selectedPhotoId?: string) {
     const requestedText = voiceText ?? text;
     const requestedDay = diaryDay(requestedText, "", today());
     const submittedText = requestedDay ? diaryPrompt(requestedDay) : requestedText;
-    if (!retry && edgeCoordinatorEnabled && runtimeCapability.status === "edge_ready") {
+    if (!retry && !selectedPhotoId && edgeCoordinatorEnabled && runtimeCapability.status === "edge_ready") {
       try {
         const context = messages.slice(-10).map(message => {
           const reply = message.turn?.result?.kind === "text" ? `\n陪伴助手：${message.turn.result.text}` : "";
@@ -173,7 +175,7 @@ export default function AgentChat() {
         setNotice("端侧协调器暂不可用，本轮改用服务端处理。");
       }
     }
-    if (!sendOperation.current || !retry) sendOperation.current = { operation_id: crypto.randomUUID(), text: submittedText, allow_external_text: true };
+    if (!sendOperation.current || !retry) sendOperation.current = { operation_id: crypto.randomUUID(), text: submittedText, allow_external_text: true, ...(selectedPhotoId ? {selected_photo_id: selectedPhotoId} : {}) };
     if (!retry) setLastSubmittedText(submittedText);
     setPreview(null);
     if (!session && !sessionOperation.current) sessionOperation.current = crypto.randomUUID();
@@ -189,7 +191,7 @@ export default function AgentChat() {
     localStorage.setItem(turnKey, result.turn_id);
     if (alive.current) {
       if (responseMode === "audio") {
-        const replyText = result.result?.kind === "text" ? result.result.text : (result.result?.kind === "photo_task" || result.result?.kind === "diary_read") ? result.result.spoken_text : undefined;
+        const replyText = result.result?.kind === "text" ? result.result.text : (result.result?.kind === "photo_task" || result.result?.kind === "diary_read" || result.result?.kind === "album_guide" || result.result?.kind === "photo_action") ? result.result.spoken_text : undefined;
         if (replyText) setSpokenReply({ id: result.turn_id, text: replyText });
       }
       setDraft(null); setTurn(result); setPreview(result.result?.kind === "confirmation" ? result.result : null); setDrafts(old => ({ ...old, chat: "" })); sendOperation.current = null; setHasRetry(false);
@@ -197,6 +199,12 @@ export default function AgentChat() {
     }
     try { await history(activeSession); }
     catch { if (alive.current) setNotice("回复已收到，历史消息暂未刷新，请稍后重新打开聊天。"); }
+  }
+  function organizeSelectedPhoto(id: string) {
+    if (inputDisabled || pending) return;
+    if (!allowed) { setMenu(true); setNotice("请先在聊天设置中允许发送文字。"); return; }
+    if (drafts.chat.trim()) { setNotice("输入框里还有未发送的话，请先发送或清空，再整理照片。"); return; }
+    void run(() => send(false, "整理这张照片", id));
   }
   function retryLastRequest() {
     if (!sendOperation.current) {
@@ -357,14 +365,18 @@ export default function AgentChat() {
           {message.turn.result.diaries.map(entry => <DiaryCard key={`${entry.day}-${entry.revision}`} day={entry.day} text={entry.text} sourceTurn={entry.source_turn_id} saved={entry} onOpenDiary={() => setFeature("diary")} />)}
           <button type="button" onClick={() => setFeature("diary")}>打开日记月历</button>
         </section>}
+        {message.turn?.result?.kind === "photo_action" && index === messages.length - 1 && <PhotoActionCard key={message.turn.turn_id} result={message.turn.result} />}
+        {message.turn?.result?.kind === "album_guide" && index === messages.length - 1 && <AlbumScopeCard key={message.turn.turn_id} browse={message.turn.result.browse} disabled={inputDisabled || pending} onSelect={organizeSelectedPhoto} />}
         {message.turn?.result?.kind === "photo_task" && !messages.slice(index + 1).some(later => later.turn?.result?.kind === "photo_task" && later.turn.result.task_id === (message.turn?.result?.kind === "photo_task" ? message.turn.result.task_id : "")) && <PhotoTaskCard key={`${message.turn.turn_id}-${message.turn.result.revision}`} task={message.turn.result} />}
-        {message.turn?.result?.kind === "photo_read" && <><article className={chatStyles.assistant}><p>我找到照片了，我们一起看看。需要整理哪一张，可以直接告诉我。</p></article><PhotoToolResult key={message.turn.turn_id} result={message.turn.result} /></>}
+        {message.turn?.result?.kind === "photo_read" && <><article className={chatStyles.assistant}><p>我找到照片了，我们一起看看。需要整理哪一张，可以直接告诉我。</p></article><PhotoToolResult key={message.turn.turn_id} result={message.turn.result} onSelect={organizeSelectedPhoto} /></>}
         {message.turn?.result?.kind === "upload_guide" && !dismissedUploadGuides.includes(message.turn.turn_id) && <UploadGuideCard {...uploadGuideActions(message.turn.turn_id)} />}
       </div>{renderAttached(index+1)}</Fragment>;
       })}
     </section>
     {turn?.result?.kind === "text" && !messages.some(m => m.turn?.turn_id === turn.turn_id) && (diaryDay(lastSubmittedText) ? <DiaryCard day={diaryDay(lastSubmittedText)!} text={turn.result.text} sourceTurn={turn.turn_id} onOpenDiary={() => setFeature("diary")} /> : <article className={chatStyles.assistant}><p>{turn.result.text}</p>{responseMode === "text" && <SpeechPlayback text={turn.result.text} voice={identity.voice}/>}</article>)}
-    {turn?.result?.kind === "photo_read" && !messages.some(m => m.turn?.turn_id === turn.turn_id) && <PhotoToolResult key={turn.turn_id} result={turn.result} />}
+    {turn?.result?.kind === "photo_action" && !messages.some(m => m.turn?.turn_id === turn.turn_id) && <PhotoActionCard key={turn.turn_id} result={turn.result} />}
+    {turn?.result?.kind === "album_guide" && !messages.some(m => m.turn?.turn_id === turn.turn_id) && <AlbumScopeCard key={turn.turn_id} browse={turn.result.browse} disabled={inputDisabled || pending} onSelect={organizeSelectedPhoto} />}
+    {turn?.result?.kind === "photo_read" && !messages.some(m => m.turn?.turn_id === turn.turn_id) && <PhotoToolResult key={turn.turn_id} result={turn.result} onSelect={organizeSelectedPhoto} />}
     {turn?.result?.kind === "photo_task" && !messages.some(m => m.turn?.turn_id === turn.turn_id) && <PhotoTaskCard key={`${turn.turn_id}-${turn.result.revision}`} task={turn.result} />}
     {turn?.result?.kind === "diary_read" && !messages.some(m => m.turn?.turn_id === turn.turn_id) && <section className={styles.panel} aria-label="日记查询结果">
       <p>{turn.result.spoken_text}</p>
