@@ -1,0 +1,59 @@
+{
+  "source_sha256": "3b0d8f32549c80ef04e988c1bfe1393582fd6349047b306ce6c2df7bdae63c96",
+  "source_fps": 25,
+  "model_fps": 30,
+  "source_range": [
+    37,
+    65
+  ],
+  "review_range": [
+    49,
+    58
+  ],
+  "review_points": 42,
+  "camera": "assumed static, focal=image diagonal, principal point=image center",
+  "not_accepted": [
+    "world trajectory",
+    "floor",
+    "foot contact",
+    "lighting",
+    "anatomical plausibility"
+  ],
+  "files": {
+    "direction-049.png": "93addd513c0f634616cb759aec1125d4e5c7969d40aa7203b4ede9bbed740b1d",
+    "direction-051.png": "b33cf8fc55710f52a12e36511ddaa958ebec2fd3cf8929b3e3f0064f8862b54f",
+    "direction-053.png": "83c4e54b3d3ec70692b41ffbe12ad4d3f16d28ed0a49b88b8b8771e6b513c7c3",
+    "direction-058.png": "839447d6382ccccef1f192eb33aff527b8b6f45c9f273d5166dc5bbb5dfcf07a",
+    "direction-side-049.png": "a57a0239ef264152c5e8e70346aff8e6b9df7c8ba80d84c7b997001bc6c2b7e2",
+    "direction-side-051.png": "c26b5a14d6aaab23201eadfc2144cd1733687c914b9b6002276919fe4144c2ee",
+    "direction-side-053.png": "e328ec654616094bbb4306759e1e6625feae00dc09e36511ecc1142bea89d0b4",
+    "direction-side-058.png": "759309ee697ff750ff8a230a2f6df13fe215a2c34a3b20930b74fe581dc5e8be",
+    "direction.mp4": "076b9cd845e66bfbfe3eea93a866eebe7620dc6700a0bed8aad4565ab7b474be",
+    "frame-map.json": "6ce3bdaf9ad863c0bef8230eb310693c5036de571448eb77f0f75ec58323925c",
+    "human-score.json": "4001cd81459ccf2f70057d3359df4172b428a5a2329f432139900379f0ec7cc1",
+    "native-human-contact.png": "c500cccdc624764c43fabf84d33f739d34b627b5bbbfbcd871cd0d933f9e9d83",
+    "native-motion.json": "a206d7536c045d3eb49d4a875c0b6703421e4cfe54fdfc318e3a9295d084de08",
+    "native-overlay.mp4": "f57bbffa3c2d3e1c19db2ab8611c4b954dc43d5a8f242d3ad7bedd2d7a7c23cc",
+    "retarget-score.json": "9289cba1fd246af81ce6b88dc80e2b2d334eabb9196f6d6678ef6e4579e5ee6d",
+    "rotation-049.png": "f9a06e433f389f83c477b5ec232eeea1d6e80ea583c24d8f55fa32142a23e9a3",
+    "rotation-051.png": "9dce3dabdfa14d3dcb25d2106270bcdbcf697690327b39aee4a957731c872255",
+    "rotation-053.png": "e332bd1ca6ef8d87163de0a4a0b19a9eaafa4ba142c5a4aff5c87689ddc1951f",
+    "rotation-058.png": "715b6d7cbde4d653fc63653b09402634a95750c3e982b7052fcfaeef50be01ec",
+    "rotation-limb-rest-049.png": "726c8746c60339884f7e9a1977acb6437f65b711760f0ea4d106a79fdaede0a9",
+    "rotation-limb-rest-051.png": "ac5f939253e22efbac1acd7b1f8646b5df8e108bcb35873990f6961e5d40c4b5",
+    "rotation-limb-rest-053.png": "9d1226415f14d893ac4daa38c7583377672bee60db66898de38abae9b47c5b9c",
+    "rotation-limb-rest-058.png": "0fb0731aa5e65231725d02839954ae92131f96ecc9bb335f3a41d5037a6bdd15",
+    "rotation-limb-rest-side-049.png": "5b6b3c260c9a9e205e5fed26ee59991b440a94aa1f96527865745d0abfac0c5a",
+    "rotation-limb-rest-side-051.png": "c52ea5bf281beb4a39a8c3fad2ebae96f1e014a18cc2d34888a4a4503d790eca",
+    "rotation-limb-rest-side-053.png": "c95ab885706b625279e49b4d9adabb4821dc202f320f400d641e450136cb919e",
+    "rotation-limb-rest-side-058.png": "6138859e1092ca14dc86eb5942c3458797d3fd1229426ecd006950c59dd7aaff",
+    "rotation-limb-rest.mp4": "817ca9d5f9de47ce9cc9881944ac0715e8ebad9c11f4b38c960364140cae3bfd",
+    "rotation-side-049.png": "fe57b57a3d47b550e1765fd3e3fca924dbdc3e988166f9aa9957221357ee584f",
+    "rotation-side-051.png": "4268280865e5b2453384b58b246cb2456840ecce4ad7d7e06d570c3ad2474fcc",
+    "rotation-side-053.png": "4c09d456b0d7788566fa45b21e40b6e29d84b4d4cc2f950dbd8b75f1e7ffa897",
+    "rotation-side-058.png": "c8cf73c4428541cc8bfd5fce7936e0276a1316e2d8d07d859b3aab8dc0b53da5",
+    "rotation.mp4": "8ca95a354729dfe86441920bde17f7b0d42ea2f046cf7eee964b4733efbd545c",
+    "source.mp4": "6a44bf18a2f38a98b81eba0cb78a21aa396c20989f744695c71c493c055eaef6",
+    "validation.json": "ad822ecada8ffa0ea7465f0548bccbf480b0ccfce54a27a0b46ddb99b321c89f"
+  }
+}

@@ -1,0 +1,47 @@
+{
+  "direction": {
+    "camera_reprojection_max_px": 7.651494175320295e-05
+  },
+  "rest_direction_gap_degrees": {
+    "upper_leg_l": 10.040949254488087,
+    "lower_leg_l": 7.7173180450761025,
+    "upper_leg_r": 9.622775191422287,
+    "lower_leg_r": 2.8479884605318597,
+    "upper_arm_l": 20.113689624467998,
+    "lower_arm_l": 7.60772253720137,
+    "upper_arm_r": 8.704141215038605,
+    "lower_arm_r": 4.986998589461341
+  },
+  "arm_world_matrix": [
+    [
+      1.0,
+      0.0,
+      0.0,
+      0.5778026580810547
+    ],
+    [
+      0.0,
+      1.0,
+      0.0,
+      -4.216684341430664
+    ],
+    [
+      0.0,
+      0.0,
+      1.0,
+      -0.9173930287361145
+    ],
+    [
+      0.0,
+      0.0,
+      0.0,
+      1.0
+    ]
+  ],
+  "rotation": {
+    "camera_reprojection_max_px": 7.651494175320295e-05
+  },
+  "rotation-limb-rest": {
+    "camera_reprojection_max_px": 7.651494175320295e-05
+  }
+}
