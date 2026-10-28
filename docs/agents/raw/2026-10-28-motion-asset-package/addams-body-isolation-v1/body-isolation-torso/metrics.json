@@ -1,0 +1,41 @@
+{
+  "case": "torso",
+  "frames": [
+    {
+      "source_frame": 49,
+      "torso_up_camera_vertical_deg": 9.77764631575774
+    },
+    {
+      "source_frame": 50,
+      "torso_up_camera_vertical_deg": 4.713389749047093
+    },
+    {
+      "source_frame": 51,
+      "torso_up_camera_vertical_deg": 4.560250077666237
+    },
+    {
+      "source_frame": 52,
+      "torso_up_camera_vertical_deg": 15.744832546402918
+    },
+    {
+      "source_frame": 53,
+      "torso_up_camera_vertical_deg": 15.25270375632516
+    },
+    {
+      "source_frame": 54,
+      "torso_up_camera_vertical_deg": 11.144100791299662
+    },
+    {
+      "source_frame": 55,
+      "torso_up_camera_vertical_deg": 8.639383337744068
+    },
+    {
+      "source_frame": 56,
+      "torso_up_camera_vertical_deg": 7.112705857765166
+    },
+    {
+      "source_frame": 57,
+      "torso_up_camera_vertical_deg": 4.945220456742489
+    }
+  ]
+}

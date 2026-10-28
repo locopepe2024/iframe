@@ -1,0 +1,41 @@
+{
+  "case": "both",
+  "frames": [
+    {
+      "source_frame": 49,
+      "torso_up_camera_vertical_deg": 19.768479910984507
+    },
+    {
+      "source_frame": 50,
+      "torso_up_camera_vertical_deg": 4.713389749047093
+    },
+    {
+      "source_frame": 51,
+      "torso_up_camera_vertical_deg": 4.560250077666237
+    },
+    {
+      "source_frame": 52,
+      "torso_up_camera_vertical_deg": 4.879616916651339
+    },
+    {
+      "source_frame": 53,
+      "torso_up_camera_vertical_deg": 5.1319825880863785
+    },
+    {
+      "source_frame": 54,
+      "torso_up_camera_vertical_deg": 5.274068878956038
+    },
+    {
+      "source_frame": 55,
+      "torso_up_camera_vertical_deg": 5.2872788916976665
+    },
+    {
+      "source_frame": 56,
+      "torso_up_camera_vertical_deg": 5.173581855226342
+    },
+    {
+      "source_frame": 57,
+      "torso_up_camera_vertical_deg": 4.945220456742489
+    }
+  ]
+}
