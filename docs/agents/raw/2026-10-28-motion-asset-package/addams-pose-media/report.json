@@ -1,0 +1,23 @@
+{
+  "source_sha256": "3b0d8f32549c80ef04e988c1bfe1393582fd6349047b306ce6c2df7bdae63c96",
+  "frames": 50,
+  "mp_detected_frames": 44,
+  "rtm_inferred_frames": 44,
+  "versions": {
+    "mediapipe": "1.2.0",
+    "rtmlib": "0.0.16",
+    "onnxruntime": "1.31.1",
+    "opencv-contrib-python": "5.0.0.93",
+    "numpy": "2.5.4"
+  },
+  "weights_sha256": {
+    "rtmpose": "5c0a4bf67953e6d2ac43ce15e77dc9d5d354ae18430a47d2c5963a7bc5683e3c",
+    "mediapipe": "5134a3aad27a58b93da0088d431f366da362b44e3ccfbe3462b3827a839011b1"
+  },
+  "status": "REVIEW",
+  "limits": [
+    "No independent person detector; RTMPose ROI depends on MediaPipe",
+    "No ground truth, camera calibration, contact or 3D verification",
+    "Single pose assumption not independently validated"
+  ]
+}
