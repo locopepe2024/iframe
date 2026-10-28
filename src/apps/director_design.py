@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 import hashlib
+import os
 import re
 from pathlib import Path
 from uuid import uuid4
@@ -20,6 +21,7 @@ from ..utils.managed_media_root import ManagedMediaRoot
 from ..utils.storage_config import media_root
 
 router = APIRouter(prefix="/director3d", tags=["director3d"])
+DESIGN_LLM_TIMEOUT_SECONDS = float(os.getenv("DIRECTOR_DESIGN_LLM_TIMEOUT_SECONDS", "120"))
 REFERENCE_TYPES = {
     "reference_image": ("image/png", "image/jpeg", "image/webp"),
     "design_bundle": ("application/json",),
@@ -482,8 +484,11 @@ def propose(request: DesignRequest, user: UserContext = Depends(require_user_con
         else:
             messages.append({"role": "user", "content": user_text})
         try:
-            raw = adapter.chat(messages, response_format={"type": "json_object"}, timeout_seconds=45, max_retries=0)
+            raw = adapter.chat(messages, response_format={"type": "json_object"}, timeout_seconds=DESIGN_LLM_TIMEOUT_SECONDS, max_retries=0)
         except Exception as exc:
+            detail = str(exc).lower()
+            if "timed out" in detail or "timeout" in detail:
+                raise HTTPException(504, "设计模型处理超时，请稍后重试或缩短描述；当前场景未修改。") from exc
             raise HTTPException(502, "设计服务请求失败，请稍后重试；当前场景未修改。") from exc
         try:
             result = proposal_type.model_validate_json(raw)

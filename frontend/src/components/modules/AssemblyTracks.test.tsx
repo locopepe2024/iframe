@@ -176,3 +176,23 @@ it('commits one reorder on drop and none during drag or cancellation', () => {
     fireEvent.dragEnd(second, { dataTransfer });
     expect(onChange).toHaveBeenCalledTimes(1);
 });
+
+it('supports keyboard playback, seek, split and delete without intercepting form fields', () => {
+    const videoPlan: AssemblyEditPlan = { ...plan, lanes: [{ id: 'v', kind: 'video', allow_overlap: false, clips: [{ id: 'one', label: 'One', timeline_start_ms: 0, timeline_end_ms: 5000, source_start_ms: 0, source_end_ms: 5000, enabled: true, source_refs: [] }] }] };
+    const onChange = vi.fn();
+    render(<AssemblyTracks plan={videoPlan} project={project} resourceId="p" saved onChange={onChange} />);
+    const clip = screen.getByRole('button', { name: 'Edit clip 1: One' });
+    fireEvent.click(clip);
+    fireEvent.keyDown(window, { key: 's', metaKey: true });
+    fireEvent.keyDown(window, { key: 'Backspace', ctrlKey: true });
+    expect(onChange).not.toHaveBeenCalled();
+    fireEvent.keyDown(window, { key: 'ArrowRight' });
+    expect(screen.getByRole('slider', { name: 'Timeline playhead' })).toHaveValue('100');
+    fireEvent.keyDown(window, { key: 's' });
+    expect(onChange).toHaveBeenCalledTimes(1);
+    const input = screen.getByRole('spinbutton', { name: 'Playhead (seconds)' });
+    fireEvent.keyDown(input, { key: 'Delete' });
+    expect(onChange).toHaveBeenCalledTimes(1);
+    fireEvent.keyDown(window, { key: 'Delete' });
+    expect(onChange).toHaveBeenCalledTimes(2);
+});

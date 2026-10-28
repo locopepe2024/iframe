@@ -80,6 +80,21 @@ def test_provider_failure_does_not_leak_credentials(client, monkeypatch):
     assert current_studio_user() is None
 
 
+def test_provider_timeout_is_reported_as_timeout_with_extended_budget(client, monkeypatch):
+    c, _ = client
+    captured = {}
+    def timeout(*args, **kwargs):
+        captured.update(kwargs)
+        raise RuntimeError("Request timed out")
+    monkeypatch.setattr(design.LLMAdapter, "chat", timeout)
+    result = c.post("/director3d/design-proposals", json=request())
+    assert result.status_code == 504
+    assert "超时" in result.json()["detail"]
+    assert captured["timeout_seconds"] == design.DESIGN_LLM_TIMEOUT_SECONDS
+    assert design.DESIGN_LLM_TIMEOUT_SECONDS >= 90
+    assert current_studio_user() is None
+
+
 def test_unconfigured_provider_and_clarification(client, monkeypatch):
     c, _ = client
     monkeypatch.setattr(design.LLMAdapter, "is_configured", False)
