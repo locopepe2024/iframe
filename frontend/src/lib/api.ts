@@ -2786,6 +2786,10 @@ export const api = {
         const response = await axios.post(`${API_URL}/series/${seriesId}/characters`, data);
         return response.data;
     },
+    generateSeriesCharacter: async (seriesId: string, data: Record<string, unknown>) => {
+        const response = await axios.post(`${API_URL}/series/${seriesId}/assets/generate`, data);
+        return response.data;
+    },
     generateExtraRosterProposals: async (seriesId: string, brief: string, count = 6) => {
         const response = await axios.post(API_URL + "/series/" + seriesId + "/extra-roster/proposals", { brief, count });
         return response.data as { proposals: import("@/store/projectStore").ExtraRosterEntry[] };

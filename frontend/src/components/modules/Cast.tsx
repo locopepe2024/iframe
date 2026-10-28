@@ -252,12 +252,15 @@ export default function Cast() {
                                 </header>
                                 <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
                                     {crowdGroups.map(group => (
-                                        <div key={group.extra_id} className="min-w-0 rounded border border-glass-border bg-glass px-3 py-2.5">
+                                        <button type="button" key={group.extra_id}
+                                            disabled={!group.visual_asset_id || !characters.some(character => character.id === group.visual_asset_id)}
+                                            onClick={() => group.visual_asset_id && setWorkbench({ kind: "character", entityId: group.visual_asset_id })}
+                                            className="min-w-0 rounded border border-glass-border bg-glass px-3 py-2.5 text-left enabled:hover:border-primary/60 disabled:cursor-default">
                                             <div className="truncate text-sm font-medium text-foreground" title={group.label}>{group.label}</div>
                                             {group.role_tags?.length ? (
                                                 <div className="mt-1 truncate text-xs text-text-muted" title={group.role_tags.join("、")}>{group.role_tags.join("、")}</div>
                                             ) : null}
-                                        </div>
+                                        </button>
                                     ))}
                                 </div>
                             </section>
