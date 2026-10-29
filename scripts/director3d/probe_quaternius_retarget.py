@@ -12,6 +12,7 @@ from mathutils import Matrix, Quaternion, Vector
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from sole_contact_metrics import summarize_sole
+from support_contact_metrics import measure_interval, validate_annotations
 
 
 def sole_regions(target):
@@ -201,6 +202,7 @@ def main():
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--preview-dir", type=Path)
     parser.add_argument("--sole-contact", action="store_true", help="Measure weighted sole-region geometry; no contact acceptance")
+    parser.add_argument("--support-annotations", type=Path, help="Explicit checksum-bound support interval hypotheses and route offsets")
     parser.add_argument("--foot-pivot", choices=("foot", "ankle"), default="foot",
                         help="Diagnostic A/B: transfer source foot rotation at target ankle instead of mid-foot")
     parser.add_argument("--foot-axis-correction", action="store_true",
@@ -211,6 +213,8 @@ def main():
     parser.add_argument("--pelvis-translation", action="store_true",
                         help="Diagnostic only: transfer scaled world-space hips displacement from rest")
     args = parser.parse_args(raw)
+    if args.support_annotations and not args.sole_contact:
+        raise ValueError("support annotations require --sole-contact")
 
     mapping = json.loads(args.mapping.read_text())
     if mapping.get("schema") != "director3d-bone-map.v1" or mapping.get("retargetStatus") != "unmapped":
@@ -282,6 +286,20 @@ def main():
                                        sourceRestHipRootM=source_height, targetRestHipRootM=target_height,
                                        maxPositionResidualM=0.0, maxBasisChange=0.0)
     actions = list(dict.fromkeys(args.actions))
+    support_intervals = []
+    if args.support_annotations:
+        action_ranges = {}
+        for name in actions:
+            action = bpy.data.actions.get(name)
+            if not action:
+                raise ValueError(f"missing support action: {name}")
+            action_ranges[name] = tuple(round(v) for v in action.frame_range)
+        support_intervals = validate_annotations(json.loads(args.support_annotations.read_text()),
+                                                 source_hash, target_hash, action_ranges)
+        for item in support_intervals:
+            if not any(obj.name == item["mesh"] and index == item["vertexIndex"]
+                       for obj, index in regions[item["side"]]):
+                raise ValueError("annotated contact vertex is outside selected sole region")
     reports = []
     if args.preview_dir:
         args.preview_dir.mkdir(parents=True, exist_ok=True)
@@ -400,6 +418,18 @@ def main():
                        "selection": "rest weighted foot vertices, bottom 0.02m band, weight >= 0.5",
                        "vertices": [{"mesh": obj.name, "index": index} for obj, index in regions[side]]}
                 for side in regions}
+            reports[-1]["annotatedSupport"] = []
+            for item in support_intervals:
+                if item["action"] != name:
+                    continue
+                side = item["side"]
+                vertex_slot = next(i for i, (obj, index) in enumerate(regions[side])
+                                   if obj.name == item["mesh"] and index == item["vertexIndex"])
+                points = [sample["points"][vertex_slot] for sample in sole_samples[side]
+                          if item["startFrame"] <= sample["frame"] <= item["endFrame"]]
+                reports[-1]["annotatedSupport"].append({
+                    "annotation": item, "measurement": measure_interval(points, item["routeTranslationsM"],
+                        bpy.context.scene.render.fps / bpy.context.scene.render.fps_base)})
 
     report = {
         "schema": "director3d-retarget-diagnostic.v1",
@@ -425,6 +455,7 @@ def main():
         "sourceBones": len(source.data.bones),
         "targetBones": len(target.data.bones),
         "sequenceRendered": bool(args.sequence_dir),
+        "supportAnnotationSha256": sha256(args.support_annotations) if args.support_annotations else None,
         "authoredFPS": "unverified",
         "actions": reports,
         "warnings": mapping["warnings"] + [
