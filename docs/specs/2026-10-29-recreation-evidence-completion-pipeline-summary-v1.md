@@ -62,3 +62,7 @@
 ## Joint semantic review slice
 
 第49–58帧18个膝踝局部放大后，保守归类为膝`ambiguous_joint_center`、踝`shoe_or_sole_proxy_candidate`，均不硬锁；这是待人工语义选择队列，不是识别率。通过后joint_center进入姿态约束，shoe_proxy独立进入接触候选，无法判断者走前后关键帧软插值。
+
+## Human semantic handoff
+
+第49–58帧膝踝18项已整理成三选一复核页：joint_center / shoe_proxy / unusable。默认pending，支持本地保存与下载JSON；结果仅进入证据层，不直接改动作链路。通过后分别用于姿态锚点、鞋底接触候选或时序补全。

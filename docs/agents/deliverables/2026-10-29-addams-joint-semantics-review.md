@@ -21,3 +21,7 @@
 人工只需对18项选择：`joint_center`、`shoe_proxy`、`unusable`，并可一次批量选择同类点；同时确认左右身份。通过的joint_center才进入姿态硬/强软约束，shoe_proxy单独进入脚底接触候选，unusable由前后关键帧插值。随后用留出清晰帧验收，不回填源图像细节。
 
 证据：`docs/agents/raw/2026-10-29-addams-joint-semantics-v1/`，已冻结原图和点位输入。
+
+## Annotation handoff
+
+已将只读核对页扩展为18项本地标注页，每项提供三选一：`joint_center`、`shoe_proxy`、`unusable`。结果先存浏览器localStorage，也可下载`joint-semantics-decisions.json`；默认pending。导出的决定只改变点的语义用途，不修改源图、姿态、相机或IK。页面检查确认包含18个选择控件。
