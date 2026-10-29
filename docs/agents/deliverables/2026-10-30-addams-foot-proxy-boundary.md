@@ -41,3 +41,9 @@
 右脚鞋面点49→51跳变19.48px，51→52为1.90px，52→55为4.73px。故不把右脚从49帧整段锁定；暂把51–55记为较保守的支撑阶段候选，49保留为过渡候选。左脚50→51为26.62px、51→53为71.93px，暂保留为腾空摆动候选。统计只用于软阶段先验，未产生完整帧标签、地面或IK约束。
 
 [区间探针](../raw/2026-10-30-addams-foot-proxy-boundary/contact-interval-probe.json)
+
+## 鞋底证据门控
+
+用户确认“模糊、转身、侧身时鞋底几何证据可能不存在”。已将该原则落到证据层：现有7个鞋面/踝附近点统一标记`sole_geometry_status=unavailable`，保留原始`shoe_proxy`选择，但`ik_eligible=false`。鞋存在只能作为二维可见性证据；没有明确后跟、前掌、脚尖或鞋底—地面轮廓时，转入时序骨架推断或人工复核。
+
+[鞋底证据门控记录](../raw/2026-10-30-addams-foot-proxy-boundary/sole-evidence-gate.json)

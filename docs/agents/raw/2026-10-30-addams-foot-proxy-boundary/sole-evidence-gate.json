@@ -1,0 +1,151 @@
+{
+  "schema": "addams-sole-evidence-gate.v1",
+  "production_eligible": false,
+  "rule": "No visible sole geometry means no sole IK target. Shoe presence may remain as 2D evidence.",
+  "states": {
+    "verified_visible": "may map to heel/forefoot/toe after subtype review",
+    "partial_contour": "2D shape/orientation only; no depth/contact lock",
+    "unavailable": "temporal inference or human review; no IK"
+  },
+  "rows": [
+    {
+      "source_frame": 49,
+      "joint_label": "right_ankle",
+      "xy": [
+        697.34375,
+        485.328125
+      ],
+      "side": "right",
+      "phase_interpretation": "support_candidate",
+      "contact_interpretation": "contact_candidate",
+      "sole_ik_eligible": false,
+      "evidence_level": "hypothesis_from_adjacent_visual_context",
+      "reason": "Blur/side/turning and current marker placement do not expose a verified heel, forefoot, toe, or sole-ground contour.",
+      "original_semantic_preserved": "shoe_proxy",
+      "sole_geometry_status": "unavailable",
+      "sole_geometry_evidence_level": "not_observed",
+      "ik_eligible": false,
+      "fallback_route": "temporal_skeleton_inference_or_human_review"
+    },
+    {
+      "source_frame": 50,
+      "joint_label": "left_ankle",
+      "xy": [
+        367.12890625,
+        269.0234375
+      ],
+      "side": "left",
+      "phase_interpretation": "airborne_swing_candidate",
+      "contact_interpretation": "airborne_candidate",
+      "sole_ik_eligible": false,
+      "evidence_level": "hypothesis_from_adjacent_visual_context",
+      "reason": "Blur/side/turning and current marker placement do not expose a verified heel, forefoot, toe, or sole-ground contour.",
+      "original_semantic_preserved": "shoe_proxy",
+      "sole_geometry_status": "unavailable",
+      "sole_geometry_evidence_level": "not_observed",
+      "ik_eligible": false,
+      "fallback_route": "temporal_skeleton_inference_or_human_review"
+    },
+    {
+      "source_frame": 51,
+      "joint_label": "left_ankle",
+      "xy": [
+        393.291259765625,
+        264.1270446777344
+      ],
+      "side": "left",
+      "phase_interpretation": "airborne_swing_candidate",
+      "contact_interpretation": "airborne_candidate",
+      "sole_ik_eligible": false,
+      "evidence_level": "hypothesis_from_adjacent_visual_context",
+      "reason": "Blur/side/turning and current marker placement do not expose a verified heel, forefoot, toe, or sole-ground contour.",
+      "original_semantic_preserved": "shoe_proxy",
+      "sole_geometry_status": "unavailable",
+      "sole_geometry_evidence_level": "not_observed",
+      "ik_eligible": false,
+      "fallback_route": "temporal_skeleton_inference_or_human_review"
+    },
+    {
+      "source_frame": 51,
+      "joint_label": "right_ankle",
+      "xy": [
+        682.5911254882812,
+        472.6006164550781
+      ],
+      "side": "right",
+      "phase_interpretation": "support_candidate",
+      "contact_interpretation": "contact_candidate",
+      "sole_ik_eligible": false,
+      "evidence_level": "hypothesis_from_adjacent_visual_context",
+      "reason": "Blur/side/turning and current marker placement do not expose a verified heel, forefoot, toe, or sole-ground contour.",
+      "original_semantic_preserved": "shoe_proxy",
+      "sole_geometry_status": "unavailable",
+      "sole_geometry_evidence_level": "not_observed",
+      "ik_eligible": false,
+      "fallback_route": "temporal_skeleton_inference_or_human_review"
+    },
+    {
+      "source_frame": 52,
+      "joint_label": "right_ankle",
+      "xy": [
+        681.423828125,
+        474.1033020019531
+      ],
+      "side": "right",
+      "phase_interpretation": "support_candidate",
+      "contact_interpretation": "contact_candidate",
+      "sole_ik_eligible": false,
+      "evidence_level": "hypothesis_from_adjacent_visual_context",
+      "reason": "Blur/side/turning and current marker placement do not expose a verified heel, forefoot, toe, or sole-ground contour.",
+      "original_semantic_preserved": "shoe_proxy",
+      "sole_geometry_status": "unavailable",
+      "sole_geometry_evidence_level": "not_observed",
+      "ik_eligible": false,
+      "fallback_route": "temporal_skeleton_inference_or_human_review"
+    },
+    {
+      "source_frame": 53,
+      "joint_label": "left_ankle",
+      "xy": [
+        457.0008850097656,
+        297.5215759277344
+      ],
+      "side": "left",
+      "phase_interpretation": "airborne_swing_candidate",
+      "contact_interpretation": "airborne_candidate",
+      "sole_ik_eligible": false,
+      "evidence_level": "hypothesis_from_adjacent_visual_context",
+      "reason": "Blur/side/turning and current marker placement do not expose a verified heel, forefoot, toe, or sole-ground contour.",
+      "original_semantic_preserved": "shoe_proxy",
+      "sole_geometry_status": "unavailable",
+      "sole_geometry_evidence_level": "not_observed",
+      "ik_eligible": false,
+      "fallback_route": "temporal_skeleton_inference_or_human_review"
+    },
+    {
+      "source_frame": 55,
+      "joint_label": "right_ankle",
+      "xy": [
+        679.7135009765625,
+        478.5099792480469
+      ],
+      "side": "right",
+      "phase_interpretation": "support_candidate",
+      "contact_interpretation": "contact_candidate",
+      "sole_ik_eligible": false,
+      "evidence_level": "hypothesis_from_adjacent_visual_context",
+      "reason": "Blur/side/turning and current marker placement do not expose a verified heel, forefoot, toe, or sole-ground contour.",
+      "original_semantic_preserved": "shoe_proxy",
+      "sole_geometry_status": "unavailable",
+      "sole_geometry_evidence_level": "not_observed",
+      "ik_eligible": false,
+      "fallback_route": "temporal_skeleton_inference_or_human_review"
+    }
+  ],
+  "limits": [
+    "This gate does not infer contact from proximity or darkness.",
+    "Current rows preserve the user shoe_proxy choice but are blocked from IK.",
+    "Neighboring frames are context, not substitute measurements."
+  ],
+  "next_step": "Classify each frame for sole evidence before any foot target is constructed."
+}
