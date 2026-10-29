@@ -107,6 +107,26 @@ def direction_angle(source, source_bone, target, target_bone):
     return math.degrees(source_direction.angle(target_direction))
 
 
+def foot_axis_diagnostics(source, target):
+    """Compare anatomical ankle-to-toe-base vectors, independent of mapped pivot."""
+    result = {}
+    for side, source_side in (("l", "L"), ("r", "R")):
+        sb = source.pose.bones[f"DEF-foot.{source_side}"]
+        tb = target.pose.bones[f"DEF_foot_{side}"]
+        sr = source.data.bones[sb.name]
+        tr = target.data.bones[tb.name]
+        sv = source.matrix_world.to_3x3() @ (sb.tail-sb.head)
+        tv = target.matrix_world.to_3x3() @ (tb.tail-tb.head)
+        srv = source.matrix_world.to_3x3() @ (sr.tail_local-sr.head_local)
+        trv = target.matrix_world.to_3x3() @ (tr.tail_local-tr.head_local)
+        if min(sv.length, tv.length, srv.length, trv.length) < 1e-8:
+            raise ValueError("degenerate anatomical foot axis")
+        result[side] = {"sourceAxis": list(sv.normalized()), "targetAxis": list(tv.normalized()),
+                        "angleDeg": math.degrees(sv.angle(tv)),
+                        "restAngleDeg": math.degrees(srv.angle(trv))}
+    return result
+
+
 def world_position(armature, bone, endpoint="head"):
     position = getattr(bone, endpoint)
     return [round(value, 5) for value in armature.matrix_world @ position]
@@ -328,6 +348,7 @@ def main():
             }
             samples.append({"frame": frame, "sourceMotionDeg": source_motion, "sourceFrameStepDeg": source_continuity, "rotationResidualDeg": residuals, "directionErrorDeg": direction_errors, "frameStepDeg": continuity, "sourcePointsM": source_points, "targetPointsM": target_points})
             if regions:
+                samples[-1]["anatomicalFootAxes"] = foot_axis_diagnostics(source, target)
                 for side, points in evaluated_sole(regions).items():
                     sole_samples[side].append({"frame": frame, "points": points})
             if args.sequence_dir:
