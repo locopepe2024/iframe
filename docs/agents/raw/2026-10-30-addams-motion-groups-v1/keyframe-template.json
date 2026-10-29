@@ -1,0 +1,30 @@
+{
+  "schema": "addams-motion-group-keyframe-review.v1",
+  "group": {
+    "group_id": "G1",
+    "frames": [
+      49,
+      51,
+      53,
+      55
+    ],
+    "roles": [
+      "entry",
+      "support_peak",
+      "left_swing_peak",
+      "exit"
+    ],
+    "source_range": [
+      49,
+      55
+    ],
+    "action_semantics": {
+      "left_leg": "lifted_forward_swing",
+      "right_leg": "forefoot_support",
+      "right_heel": "raised"
+    },
+    "boundary_status": "candidate",
+    "notes": ""
+  },
+  "production_eligible": false
+}
