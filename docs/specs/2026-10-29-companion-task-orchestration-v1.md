@@ -211,3 +211,12 @@
 隔离链路已验证：source operation accepted → waiting_user → 选择事件校验并恢复原操作 → 独立 asset.bind → 成功回执。卡片展示没有 photo_id，不能被当成素材已经选中；未知卡片事件、旧版本、空选择事件和非当前用户照片均被拒绝。相关测试命令共50项通过。
 
 目前仍未挂到真实前端卡片事件 API，也未把绑定写入现有 `companion_media_drafts` 的事务；测试使用隔离任务库和 owner 校验假适配器。下一步将把真实 `media_drafts` 的 `open_album/open_upload/select_photo` 事件映射到这两个协议操作，保留旧前端兼容路径但不允许两套工具同时给模型选择。
+
+
+## 实现进度：现有 media_drafts 兼容桥
+
+2026-10-29：新增 `media_draft_bridge.py`，把现有来源卡片映射到统一的 `media.source.request` / `photo_selected` / `media.asset.bind` 契约。桥接层先核对当前任务、卡片 ID 和 revision，再调用原有 `ChatStore.update_media_draft`；因此业务状态仍由现有 media_drafts 事务保存，旧路径不会因为模型直接传入 photo_id 而绕过卡片。
+
+已验证：当前卡片可生成统一等待描述；旧卡片不能产生选择事件；有效选择可更新真实草稿；同一事件重试返回原结果；草稿 revision 更新后再次使用旧事件被拒绝。桥接测试、素材工具和既有 UI 卡片测试共12项通过。
+
+边界：这仍是服务内兼容模块，尚未增加新的HTTP/SSE事件入口；客户端仍调用现有 `/media-drafts/input`。上传完成、相册选择完成和服务端 `asset.bind` 回执尚未在同一 API 响应中暴露给模型调度器。下一步增加受认证保护的统一事件入口，先支持 `photo_selected`，并将回执写入现有会话消息/状态快照。
