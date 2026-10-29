@@ -29,3 +29,7 @@ LLM语义输出是否稳定、左右身份是否正确、对漫画模糊帧的�
 ## 双向语义插值执行器
 
 已生成[插值结果](../raw/2026-10-30-addams-semantic-interpolation-v1/frame-semantics-interpolated.json)。执行器只在前后清晰组对同一类别状态达成一致时扩展为`temporal_inference`；单侧锚点、冲突锚点或缺少语义时保持unknown/unassessed。它不生成像素坐标、深度、焦距或公制离地距离。
+
+## 结构化多模态语义请求
+
+已生成[语义分析请求包](../raw/2026-10-30-addams-semantic-interpolation-v1/semantic-pass-request.json)。每组只提供2–3个代表帧，要求模型输出镜头变化、动作阶段、左右脚状态、脚跟状态、鞋底证据和不确定性；明确禁止输出坐标、深度、焦距和公制离地距离。模型输出必须经过证据等级复核后，才能进入双向语义插值。
