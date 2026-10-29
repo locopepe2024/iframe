@@ -15,6 +15,23 @@ Use the CC0 Universal Animation Library Standard glTF pair as a local source and
 - Record source and target pelvis/foot world positions across all frames. These are contact-review evidence only: the diagnostic does not infer ground calibration or accept a contact candidate.
 - Optional static preview renders may be generated in a temporary directory for visual inspection. They are not a motion-quality or production render gate.
 
+## Optional pelvis-translation experiment (2026-10-29)
+
+`--pelvis-translation` compares rotation-only transfer against scaled source
+hips displacement from the rest pose. Scale is target/source rest hip-to-root
+world distance. Both armatures must have aligned world orientations and uniform
+positive scale; fail the experiment for invalid calibration. Transfer the desired
+world hips position into target pose space after rotation transfer. Leave the
+default rotation-only path unchanged. Report the option, calibration, and maximum
+per-frame world-position residual. This is neither root-motion extraction nor a
+ground offset, support-foot lock, terrain solver, or contact acceptance.
+
+Run all four locomotion clips on media Blender 4.5.9 and compare every sampled
+frame with the rotation-only baseline. Success means finite positions, a pelvis
+transfer residual below 0.1 mm, and a maximum mapped-bone 3×3 pose-basis element
+change below 1e-5 after applying the translation;
+foot-tail minima are evidence only. Keep the candidate out of the playable catalog.
+
 ## Success criteria
 
 1. The map names existing source and target bones and has no duplicate target entries.

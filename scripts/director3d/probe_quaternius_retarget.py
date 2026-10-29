@@ -103,6 +103,10 @@ def main():
     parser.add_argument("--mapping", type=Path, required=True)
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--preview-dir", type=Path)
+    parser.add_argument("--actions", nargs="+", default=["Punch_Jab", "Punch_Cross", "Sword_Attack"],
+                        help="Exact source action names to inspect; missing actions fail closed")
+    parser.add_argument("--pelvis-translation", action="store_true",
+                        help="Diagnostic only: transfer scaled world-space hips displacement from rest")
     args = parser.parse_args(raw)
 
     mapping = json.loads(args.mapping.read_text())
@@ -132,7 +136,32 @@ def main():
 
     source_rest = {item["source"]: source.data.bones[item["source"]].matrix_local.to_quaternion() for item in pairs}
     target_rest = {item["target"]: target.data.bones[item["target"]].matrix_local.to_quaternion() for item in pairs}
-    actions = ("Punch_Jab", "Punch_Cross", "Sword_Attack")
+    translation_calibration = {"enabled": args.pelvis_translation}
+    if args.pelvis_translation:
+        for rig in (source, target):
+            for name in (("DEF-hips", "root") if rig == source else ("pelvis", "root")):
+                if name not in rig.data.bones:
+                    raise ValueError(f"missing calibration bone: {name}")
+            _, _, scale = rig.matrix_world.decompose()
+            if (not all(math.isfinite(value) and value > 0 for value in scale)
+                    or max(scale)-min(scale) > 1e-6
+                    or rig.matrix_world.to_3x3().determinant() <= 0):
+                raise ValueError("pelvis translation requires uniform positive armature scale")
+        if quaternion_angle(source.matrix_world.to_quaternion(), target.matrix_world.to_quaternion()) > 0.01:
+            raise ValueError("pelvis translation requires aligned world orientations")
+        source_hips_rest = source.matrix_world @ source.data.bones["DEF-hips"].head_local
+        target_hips_rest = target.matrix_world @ target.data.bones["pelvis"].head_local
+        source_root_rest = source.matrix_world @ source.data.bones["root"].head_local
+        target_root_rest = target.matrix_world @ target.data.bones["root"].head_local
+        source_height = (source_hips_rest-source_root_rest).length
+        target_height = (target_hips_rest-target_root_rest).length
+        if not all(math.isfinite(value) and value >= 1e-6 for value in (source_height, target_height)):
+            raise ValueError("invalid rest hips/root calibration")
+        translation_scale = target_height/source_height
+        translation_calibration.update(scale=translation_scale, basis="world_rest_hips_displacement",
+                                       sourceRestHipRootM=source_height, targetRestHipRootM=target_height,
+                                       maxPositionResidualM=0.0, maxBasisChange=0.0)
+    actions = list(dict.fromkeys(args.actions))
     reports = []
     if args.preview_dir:
         args.preview_dir.mkdir(parents=True, exist_ok=True)
@@ -185,6 +214,29 @@ def main():
                 if item["target"] in previous:
                     continuity[item["target"]] = round(quaternion_angle(previous[item["target"]], evaluated), 4)
                 previous[item["target"]] = evaluated.copy()
+            if args.pelvis_translation:
+                before_basis = {item["target"]: target.pose.bones[item["target"]].matrix.to_3x3().copy()
+                                for item in pairs}
+                source_hips = source.matrix_world @ source.pose.bones["DEF-hips"].head
+                displacement = (source_hips-source_hips_rest)*translation_scale
+                hips = target.pose.bones["pelvis"]
+                desired = hips.matrix.copy()
+                desired.translation = target.matrix_world.inverted() @ (target_hips_rest+displacement)
+                hips.matrix = desired
+                bpy.context.view_layer.update()
+                actual = target.matrix_world @ hips.head
+                residual = (actual-(target_hips_rest+displacement)).length
+                if not math.isfinite(residual) or residual > 0.0001:
+                    raise ValueError(f"pelvis translation residual: {name} frame {frame}: {residual}")
+                translation_calibration["maxPositionResidualM"] = max(
+                    translation_calibration["maxPositionResidualM"], residual)
+                basis_change = max(abs(target.pose.bones[bone].matrix[row][col]-basis[row][col])
+                                   for bone, basis in before_basis.items()
+                                   for row in range(3) for col in range(3))
+                if not math.isfinite(basis_change) or basis_change > 1e-5:
+                    raise ValueError(f"pelvis translation changed bone basis: {name} frame {frame}")
+                translation_calibration["maxBasisChange"] = max(
+                    translation_calibration["maxBasisChange"], basis_change)
             source_points = {
                 "pelvis": world_position(source, source.pose.bones["DEF-hips"]),
                 "foot_l": world_position(source, source.pose.bones["DEF-foot.L"], "tail"),
@@ -223,6 +275,7 @@ def main():
         "targetSha256": target_hash,
         "blenderVersion": bpy.app.version_string,
         "mappedBones": len(pairs),
+        "pelvisTranslation": translation_calibration,
         "sourceBones": len(source.data.bones),
         "targetBones": len(target.data.bones),
         "actions": reports,

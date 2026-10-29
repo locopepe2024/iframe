@@ -24,6 +24,48 @@
       "fps": 120,
       "skeletonProfile": "cmu_bvh",
       "retargetStatus": "unmapped"
+    },
+    {
+      "motionId": "candidate-quaternius-locomotion-pack",
+      "title": "Quaternius locomotion candidate",
+      "format": "glb",
+      "source": { "kind": "external", "label": "Quaternius asset packs", "url": "https://quaternius.com/" },
+      "licenseId": "package-specific-license",
+      "licenseStatus": "needs_verification",
+      "actionTags": ["walk", "run", "idle", "candidate"],
+      "fps": 24,
+      "skeletonProfile": "package_specific",
+      "retargetStatus": "unmapped",
+      "availability": "intake",
+      "notes": "候选来源；未指定具体资源包、文件哈希或许可，不得直接用于生产。"
+    },
+    {
+      "motionId": "candidate-mixamo-locomotion-pack",
+      "title": "Mixamo locomotion candidate",
+      "format": "fbx",
+      "source": { "kind": "external", "label": "Adobe Mixamo", "url": "https://www.mixamo.com/" },
+      "licenseId": "service-and-asset-terms",
+      "licenseStatus": "needs_verification",
+      "actionTags": ["walk", "small_step", "stagger", "jog", "run", "candidate"],
+      "fps": 24,
+      "skeletonProfile": "mixamo",
+      "retargetStatus": "unmapped",
+      "availability": "intake",
+      "notes": "候选服务；具体下载文件和再分发边界必须逐项核对。"
+    },
+    {
+      "motionId": "candidate-cmu-bvh-locomotion",
+      "title": "CMU locomotion candidate",
+      "format": "bvh",
+      "source": { "kind": "external", "label": "CMU Motion Capture Database", "url": "http://mocap.cs.cmu.edu/" },
+      "licenseId": "cmu-database-terms",
+      "licenseStatus": "needs_verification",
+      "actionTags": ["walk", "run", "turn", "candidate"],
+      "fps": 120,
+      "skeletonProfile": "cmu_bvh",
+      "retargetStatus": "unmapped",
+      "availability": "intake",
+      "notes": "研究数据库候选；数据库条款和项目分发场景需要人工确认。"
     }
   ]
 }
