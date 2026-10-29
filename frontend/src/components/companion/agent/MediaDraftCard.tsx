@@ -1,5 +1,5 @@
 "use client";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { MediaDraft } from "@/lib/companionApi";
 import GenerationSubmit from "./GenerationSubmit";
 import AlbumPicker from "./AlbumPicker";
@@ -11,6 +11,9 @@ export default function MediaDraftCard({task,disabled,onAction,onUpload,onRefres
  const video=task.type==="video_generate", videoMode=task.video_mode||"t2v";
  const title=task.type==="image_edit"?"修改照片":task.type==="image_generate"?"生成图片":"生成视频";
  const openAlbum=(target:typeof albumTarget)=>{setAlbumTarget(target);setAlbum(true);};
+ useEffect(()=>{
+  if(task.ui_action === "open_album" && task.status === "active") openAlbum("photo");
+ },[task]);
  return <section className={styles.guideCard} aria-label="当前创作任务">
   <h2>{title}</h2><p>{task.spoken_text}</p>
   {!video && task.photo_id && <PhotoImage id={task.photo_id}/>} {task.brief && <><h3>{task.type==="image_edit"?"修改要求":"创作内容"}</h3><p>{task.brief}</p></>}

@@ -160,14 +160,7 @@ export default function OpenTalkingReply({ reply, voice, connectionEpoch = 0, on
             if (!live() || !analyser) return;
             analyser.getFloatTimeDomainData(samples);
             const rms = Math.sqrt(samples.reduce((sum, sample) => sum + sample * sample, 0) / samples.length);
-            if (active && rms > .003) {
-              // The analyser is the source of truth for an audible WebRTC
-              // track. A stale autoplay rejection can leave playbackBlocked
-              // set even after the user agent starts rendering the stream;
-              // do not keep showing “请点击播放声音” once audio is detected.
-              audible.current = true; playbackBlocked = false; active.playing();
-              if (video.current && !video.current.paused && !video.current.muted) update("audio");
-            }
+            if (active && rms > .003) { audible.current = true; active.playing(); if (!playbackBlocked && video.current && !video.current.paused && !video.current.muted) update("audio"); }
             animation = requestAnimationFrame(inspect);
           };
           inspect();
@@ -245,8 +238,11 @@ export default function OpenTalkingReply({ reply, voice, connectionEpoch = 0, on
           if (!["queued", "duplicate"].includes(sent.status)) throw new Error("语音任务未入队，请重试。");
           await complete;
           if (!signal.aborted && live()) {
-            if (!audible.current) { failed.current = item; setError("本轮尚未检测到有效音频，请点击播放或重试。"); update("blocked"); }
-            else update("ready");
+            // Missing analyser samples are not evidence of autoplay denial:
+            // speech.ended can arrive before the next animation frame. Only
+            // an actual play() rejection above asks the user to unlock audio.
+            // The server receipt confirms completion, not physical audibility.
+            update("ready");
           }
         } catch (failure) {
           if (live() && !signal.aborted) {

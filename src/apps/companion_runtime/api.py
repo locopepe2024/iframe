@@ -315,8 +315,8 @@ def chat(session_id: str, body: ChatRequest, identity: Owner, store: Store):
         try:
             intent = classify(body.text)
             editing = active_editor(claim['messages'][-1].get('interaction_focus'))
+            current = claim['messages'][-1].get('active_media_draft')
             if body.creative_context is not None:
-                current = claim['messages'][-1].get('active_media_draft')
                 expected = dict(task_id=current['task_id'],revision=current['revision']) if current else dict(task_id='',revision=0)
                 if body.creative_context.model_dump() != expected:
                     raise Conflict('Creative task changed since this sentence was captured; review before resending')
@@ -328,6 +328,10 @@ def chat(session_id: str, body: ChatRequest, identity: Owner, store: Store):
             elif not editing and creative_shortcut(body.text):
                 proposal = creative_shortcut(body.text)
             elif editing:
+                proposal = propose(identity, claim['messages'], claim['message_id'])
+            elif current:
+                # In a task, Qwen interprets the answer against the live state;
+                # generic upload/album keywords must not steal the turn.
                 proposal = propose(identity, claim['messages'], claim['message_id'])
             elif intent.name in ('album.scope', 'album.browse'):
                 proposal = dict(kind='album_guide')

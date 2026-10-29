@@ -239,7 +239,6 @@ export default function AgentChat() {
   }
   async function startCreative(type: MediaDraft["type"]) {
     if (focus.current().kind !== "chat") {setNotice("请先返回聊天，当前编辑草稿会保留。");return;}
-    if (creativeTask?.status === "active") {setNotice("请先完成、暂停或取消当前创作。");return;}
     if (!sessionOperation.current) sessionOperation.current = crypto.randomUUID();
     const activeSession = session || (await companionApi.session(sessionOperation.current)).session_id;
     if (!session) {setSession(activeSession);localStorage.setItem(sessionKey,activeSession);sessionOperation.current="";}
@@ -308,7 +307,7 @@ export default function AgentChat() {
   }
   function submit() {
     if (inputDisabled || pending) return;
-    if (isOpenAlbumCommand(text)) {
+    if (isOpenAlbumCommand(text) && creativeTask?.status !== "active") {
       setAlbumOpen(true);
       setDrafts(old => ({ ...old, [mode]: "" }));
       setNotice("");

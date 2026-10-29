@@ -35,6 +35,7 @@ it("keeps one media session across two replies and ignores duplicate history rer
  const first=JSON.parse(speaks()[0].init.body as string);
  act(()=>events.dispatchEvent(new MessageEvent("speech.ended",{data:JSON.stringify({utterance_id:first.command_id,text:"今天开心"})})));
  await waitFor(()=>expect(speaks()).toHaveLength(2));
+ expect(screen.queryByRole("button",{name:"播放声音"})).not.toBeInTheDocument();
  expect(calls.filter(c=>c.url.endsWith("/sessions"))).toHaveLength(1);expect(screen.queryByText("OpenTalking 已连接")).not.toBeInTheDocument();
  view.unmount();await act(async()=>{});expect(peer.close).toHaveBeenCalledOnce();expect(events.close).toHaveBeenCalledOnce();
  expect(calls.some(c=>c.url.endsWith("/s1")&&c.init.method==="DELETE")).toBe(true);

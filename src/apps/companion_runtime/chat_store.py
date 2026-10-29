@@ -85,6 +85,8 @@ class ChatStore(MediaDrafts, PhotoTasks, DiaryStore, CompanionStore):
             messages[-1]['interaction_focus'] = focus
             creative = self.active_media_draft(db, owner, actor, session)
             if creative:
+                creative['available_actions'] = ['open_upload', 'open_album', 'brief', 'pause', 'cancel']
+                creative['asset_selection'] = 'user_selection_required' if not creative.get('photo_id') else 'selected'
                 messages[-1]['active_media_draft'] = creative
             tasks = db.execute("SELECT * FROM companion_photo_tasks WHERE owner=? AND actor=? AND session_id=? AND status='waiting_input' ORDER BY rowid DESC LIMIT 3", (owner,actor,session)).fetchall()
             if tasks:
@@ -108,6 +110,11 @@ class ChatStore(MediaDrafts, PhotoTasks, DiaryStore, CompanionStore):
                 raise Conflict('Turn claim expired')
             diary_request = diary_day(row['text']) is not None
             intent = classify(row['text'])
+            if claim.get('messages', [{}])[-1].get('active_media_draft'):
+                # Task-specific interpretation belongs to the model. An answer
+                # mentioning the album must not overwrite its tool proposal.
+                from .intent import Intent
+                intent = Intent('chat')
             from .interaction_focus import active_editor
             if active_editor(claim.get('messages', [{}])[-1].get('interaction_focus')):
                 from .intent import Intent

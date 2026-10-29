@@ -43,6 +43,13 @@ class MediaDrafts:
         with self.connection(write=True) as db:
             self.one(db, 'companion_sessions', owner, session)
             request = encode(values)
+            start_request = encode(dict(kind='start', session_id=session, values=values))
+            receipt = db.execute('SELECT request,result FROM companion_media_draft_operations WHERE owner=? AND actor=? AND operation_id=? AND json_extract(request,\'$.kind\')=\'start\'',
+                                 (owner, actor, operation_id)).fetchone()
+            if receipt:
+                if receipt['request'] != start_request:
+                    raise Conflict('Creative operation changed')
+                return json.loads(receipt['result'])
             old = db.execute('SELECT * FROM companion_media_drafts WHERE owner=? AND actor=? AND operation_id=?',
                              (owner, actor, operation_id)).fetchone()
             if old:
@@ -60,10 +67,12 @@ class MediaDrafts:
                 # the same lane is idempotent for the current session.
                 if active_payload.get('type') == values['type']:
                     result = display(active_row)
-                    db.execute('INSERT OR IGNORE INTO companion_media_draft_operations VALUES (?,?,?,?,?,?)',
-                               (owner, actor, active_row['id'], operation_id, request, encode(result)))
+                    if values.get('brief', '').strip() and values['brief'].strip() != active_payload.get('brief', ''):
+                        raise Conflict('请继续补充当前创作要求，或先暂停这次创作。')
+                    db.execute('INSERT INTO companion_media_draft_operations VALUES (?,?,?,?,?,?)',
+                               (owner, actor, active_row['id'], operation_id, start_request, encode(result)))
                     return result
-                db.execute("UPDATE companion_media_drafts SET status='paused' WHERE id=? AND owner=? AND actor=?",
+                db.execute("UPDATE companion_media_drafts SET status='paused',revision=revision+1 WHERE id=? AND owner=? AND actor=?",
                            (active_row['id'], owner, actor))
             payload = dict(type=values['type'], brief=values.get('brief', '').strip(), photo_id=None)
             if values['type'] == 'video_generate':
@@ -99,6 +108,14 @@ class MediaDrafts:
                 status = 'paused' if action == 'pause' else 'cancelled'
             elif status != 'active':
                 raise Conflict('Resume the task before changing its brief')
+            elif action in ('open_upload', 'open_album'):
+                # UI navigation is part of this task, never a second draft.
+                # Persist the operation receipt, but do not change the brief.
+                result = display(row)
+                result.update(ui_action=action, spoken_text='请在卡片中选择要上传的照片。' if action == 'open_upload' else '相册已打开，请选择要修改的照片。')
+                db.execute('INSERT INTO companion_media_draft_operations VALUES (?,?,?,?,?,?)',
+                           (owner, actor, task_id, operation_id, request, encode(result)))
+                return result
             elif action == 'brief':
                 brief = values.get('brief', '').strip()
                 if not brief:
