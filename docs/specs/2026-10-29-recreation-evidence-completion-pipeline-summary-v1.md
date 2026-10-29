@@ -58,3 +58,7 @@
 ## Evidence classification slice
 
 已生成46–65证据来源/冲突分类，见[分类报告](../agents/deliverables/2026-10-29-addams-evidence-classification.md)。60条躯干/左右腿区域的局部可见性仍unassessed；不将已有点或模型一致误当可靠锚点。旧semantic-review对部分膝踝点的解剖语义已有疑问，应先核对轮廓/鞋代理与关节中心。当前仅64用户复核的腾空与相对脚尖高低作为硬语义约束，不锁厘米高度或三维坐标。分类记录不是识别率；下一步先补证据判断，再确定插值锚点。
+
+## Joint semantic review slice
+
+第49–58帧18个膝踝局部放大后，保守归类为膝`ambiguous_joint_center`、踝`shoe_or_sole_proxy_candidate`，均不硬锁；这是待人工语义选择队列，不是识别率。通过后joint_center进入姿态约束，shoe_proxy独立进入接触候选，无法判断者走前后关键帧软插值。
