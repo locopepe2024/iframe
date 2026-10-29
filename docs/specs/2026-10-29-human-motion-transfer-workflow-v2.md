@@ -78,3 +78,7 @@
 ## VLM semantic observation layer
 
 公开方案与验证协议见[视觉语言模型辅助分析](2026-10-29-vlm-human-video-analysis-v1.md)。VLM提供镜头、动作阶段、遮挡与接触候选及证据帧，与背景/姿态几何独立核对。先原RGB盲测，再局部ROI复核，最后候选对照；不把文本输出当几何真值，不给盲测已知动作顺序，不自动锁脚。深度留待同样本消融。
+
+## Evidence locking and completion execution summary
+
+后续执行闸门及历史问题对照见[流水线summary](2026-10-29-recreation-evidence-completion-pipeline-summary-v1.md)。先在未修复原图上建立识别基线，锁定可靠局部，再联合前后帧补全；仅将剩余关键冲突交人工，按最终白模分项验收回归。此入口不表示产品实现完成。
