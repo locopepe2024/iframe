@@ -156,11 +156,26 @@ MODELS = {'media.draft.start': StartMediaDraft, 'media.draft.update': UpdateMedi
           'photo.album.count': CountPhotos, 'photo.album.list': ListPhotos, 'photo.item.read': ReadPhoto, 'photo.organize.start': OrganizePhotos, 'photo.organize.input': PhotoTaskCommand}
 
 
-def tool_schemas():
-    return [dict(name=name, parameters=model.model_json_schema(),
+def tool_schemas(messages=None):
+    schemas = [dict(name=name, parameters=model.model_json_schema(),
                  **({'ui_catalog': UI_CATALOG} if name == 'media.draft.start' else {}),
                  effect='draft_update' if name.startswith('media.draft.') else 'explicit_save' if name == 'diary.save_draft' else 'workflow_start' if name in ('photo.organize.start', 'photo.organize.input') else 'proposal_only' if name in ('memory.save','memory.delete','photo.action') else 'read_only')
             for name, model in MODELS.items()]
+    current = messages[-1].get('active_media_draft') if messages else None
+    for item in schemas:
+        if item['name'] != 'media.draft.update':
+            continue
+        props = item['parameters']['properties']
+        # Card clicks resolve saved choices; the language model uses business
+        # actions directly and must not invent a client event/card identifier.
+        props['action']['enum'].remove('choose_source')
+        props.pop('card_id'); props.pop('option_id')
+        props['action']['description'] = ('用户提供具体创作要求时选brief，即使照片尚未选择也先记录。'
+            '只有选择素材来源才用open_album/open_upload；这些导航动作不会保存brief。')
+        if current:
+            props['task_id']['enum'] = [current['task_id']]
+            props['expected_revision']['enum'] = [current['revision']]
+    return schemas
 
 
 def dispatch(store, owner, actor, name, arguments):

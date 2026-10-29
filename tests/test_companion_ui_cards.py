@@ -3,8 +3,21 @@ from pydantic import ValidationError
 
 from src.apps.companion_runtime.chat_store import ChatStore
 from src.apps.companion_runtime.store import Conflict, Missing
-from src.apps.companion_runtime.tools import StartMediaDraft, UpdateMediaDraft
+from src.apps.companion_runtime.tools import StartMediaDraft, UpdateMediaDraft, tool_schemas
 from src.apps.companion_runtime.ui_cards import SourceChoiceCopy
+
+
+def test_model_catalog_excludes_click_actions_and_binds_live_task_identifiers():
+    def update(messages=None):
+        return next(t for t in tool_schemas(messages) if t['name'] == 'media.draft.update')['parameters']['properties']
+    props = update([{'active_media_draft': {'task_id': 'real-task', 'revision': 7}}])
+    assert 'choose_source' not in props['action']['enum']
+    assert 'card_id' not in props and 'option_id' not in props
+    assert props['task_id']['enum'] == ['real-task']
+    assert props['expected_revision']['enum'] == [7]
+    # Building a schema for one turn must not leak its IDs into another turn.
+    assert 'enum' not in update()['task_id']
+    assert 'choose_source' in UpdateMediaDraft.model_json_schema()['properties']['action']['enum']
 
 
 def test_model_copy_is_validated_and_actions_are_server_registered(tmp_path):
