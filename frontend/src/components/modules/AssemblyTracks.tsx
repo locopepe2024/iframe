@@ -7,6 +7,8 @@ import type { Project } from "@/store/projectStore";
 import { insertAssemblyVideo, reorderAssemblyVideo, snapAssemblyTimelineTime, moveAssemblyClipInTimeline, removeAssemblyClip, resizeAssemblyClipInTimeline, splitAssemblyClip, trimAssemblyClip } from "./assemblyEditing";
 import { extractErrorDetail, getAssetUrl, getVideoPosterUrl } from "@/lib/utils";
 import TimelineFilmstrip from './TimelineFilmstrip';
+import TimelineAudioPreview, { usePreviewGain } from './TimelineAudioPreview';
+import TimelineWaveform from './TimelineWaveform';
 
 export function AssemblyTracks({ plan: committedPlan, resourceId, onChange, saved, project, materials, onUploadAudio, onExportSubtitles, materialPanel }: {
     plan: AssemblyEditPlan; resourceId: string; saved: boolean; project: Pick<Project, "id" | "frames" | "video_tasks" | "bgm_url">;
@@ -49,6 +51,7 @@ export function AssemblyTracks({ plan: committedPlan, resourceId, onChange, save
     const [sourceOut, setSourceOut] = useState(1);
     const videoRef = useRef<HTMLVideoElement>(null);
     const [playing, setPlaying] = useState(false);
+    const [buffering, setBuffering] = useState(false);
     const [mediaError, setMediaError] = useState<string | null>(null);
     const [uploadedAudioSources, setUploadedAudioSources] = useState<Record<string, string>>({});
     const dragRef = useRef<{ laneId: string; clipId: string; startX: number; origin: number; base?: AssemblyEditPlan; next?: AssemblyEditPlan; mode: "move" | "resize"; edge?: "start" | "end" } | null>(null);
@@ -125,16 +128,27 @@ export function AssemblyTracks({ plan: committedPlan, resourceId, onChange, save
     };
     const selectedLane = plan.lanes.find(l => l.id === selected?.laneId);
     const selectedClip = selectedLane?.clips.find(c => c.id === selected?.clipId);
+    useEffect(() => {
+        if (!selectedClip) return;
+        setSourceIn(selectedClip.source_start_ms ?? 0);
+        setSourceOut(selectedClip.source_end_ms ?? (selectedClip.source_start_ms ?? 0) + selectedClip.timeline_end_ms - selectedClip.timeline_start_ms);
+    }, [selectedClip?.id, selectedClip?.source_start_ms, selectedClip?.source_end_ms, selectedClip?.timeline_start_ms, selectedClip?.timeline_end_ms]);
     // Video splitting follows the visible playhead; explicitly selected audio
     // and subtitle lanes retain their own target rather than splitting video.
     const splitClip = selectedLane && selectedLane.kind !== 'video' ? selectedClip : currentVideo;
     const splitLane = selectedLane && selectedLane.kind !== 'video' ? selectedLane : plan.lanes.find(l => l.kind === 'video' && l.clips.some(c => c.id === splitClip?.id));
     const canSplit = Boolean(splitClip && splitLane && position > splitClip.timeline_start_ms && position < splitClip.timeline_end_ms);
-    const selectedAudioUrl = selectedLane && selectedClip && selectedLane.kind !== "video" && selectedLane.kind !== "subtitle"
-        ? getAssetUrl(materials?.[selectedClip.source_media_id || ""]?.url) || uploadedAudioSources[selectedClip.source_media_id || ""] || getAssetUrl(selectedLane.kind === "bgm"
-            ? project.bgm_url
-            : project.frames.find(f => f.id === selectedClip.source_frame_id)?.[selectedLane.kind === "dialogue" ? "audio_url" : "sfx_url"])
-        : "";
+    const audioUrlFor = (clip: typeof videos[number], kind: string) => {
+        if (materials) return getAssetUrl(materials[clip.source_media_id || ""]?.url);
+        if (clip.source_project_id && clip.source_project_id !== project.id) return "";
+        return uploadedAudioSources[clip.source_media_id || ""] || getAssetUrl(kind === "bgm" ? project.bgm_url : project.frames.find(f => f.id === clip.source_frame_id)?.[kind === "dialogue" ? "audio_url" : "sfx_url"]);
+    };
+    const audioClips = plan.lanes.filter(l => ["dialogue", "bgm", "sfx"].includes(l.kind) && !l.muted).flatMap(lane => lane.clips.filter(c => c.enabled).map(clip => ({ lane, clip, url: audioUrlFor(clip, lane.kind) })));
+    const [audioError, setAudioError] = useState(false);
+    const reportAudioError = () => setAudioError(true);
+    useEffect(() => { setAudioError(false); }, [playing, project.id]);
+    usePreviewGain(videoRef, currentVideo?.gain ?? 1, playing, currentMedia?.url || "", reportAudioError);
+    const selectedAudioUrl = selectedLane && selectedClip && ["dialogue", "bgm", "sfx"].includes(selectedLane.kind) ? audioUrlFor(selectedClip, selectedLane.kind) : "";
     const uploadAudio = async (laneId: string, kind: "dialogue" | "bgm" | "sfx", file: File) => {
         setBusy(true); setError(null);
         try {
@@ -186,7 +200,7 @@ export function AssemblyTracks({ plan: committedPlan, resourceId, onChange, save
         <div data-editing-preview className="min-w-0 flex-1 space-y-2 rounded-lg bg-surface p-2">
         <div className="relative mx-auto aspect-video max-h-[24dvh] lg:max-h-[45dvh] w-full overflow-hidden rounded-lg bg-black">
             {currentMedia ? <video ref={videoRef} key={currentMedia.url} src={currentMedia.url} poster={currentMedia.poster || undefined} preload="metadata" playsInline className="h-full w-full object-contain" aria-label={t("剪辑画面预览", "Timeline video preview")}
-                onLoadedMetadata={syncVideo} onError={() => { setPlaying(false); setMediaError(t("视频无法加载，请检查该镜头素材。", "Video unavailable. Check this shot's media.")); }}
+                onLoadedMetadata={syncVideo} onWaiting={() => setBuffering(true)} onPlaying={() => setBuffering(false)} onError={() => { setPlaying(false); setMediaError(t("视频无法加载，请检查该镜头素材。", "Video unavailable. Check this shot's media.")); }}
                 onTimeUpdate={e => {
                     if (!playing || !currentVideo) return;
                     const sourceStart = currentVideo.source_start_ms ?? 0;
@@ -202,8 +216,10 @@ export function AssemblyTracks({ plan: committedPlan, resourceId, onChange, save
         <div className="flex flex-wrap items-center gap-3">
             <button type="button" className={control} disabled={!currentMedia} onClick={() => setPlaying(value => !value)}>{playing ? t("暂停", "Pause") : t("播放", "Play")}</button>
             <span className="text-xs text-text-secondary">{currentVideo?.label || t("选择镜头预览", "Select a shot to preview")}</span>
-            <span className="text-xs text-text-muted">{t("素材画面预览；独立音轨混音与最终字幕样式请以导出成片为准。", "Source video preview. Export to review the mixed audio and final caption styling.")}</span>
+            <span className="text-xs text-text-muted">{t("音轨随播放头同步预览；最终混音和字幕样式以导出成片为准。", "Audio tracks follow the playhead. Export to review final mixing and caption styling.")}</span>
         </div>
+        {audioClips.filter(item => item.url).map(({ lane, clip, url }) => <TimelineAudioPreview key={project.id + lane.id + clip.id + url} url={url} position={position} start={clip.timeline_start_ms} end={clip.timeline_end_ms} sourceStart={clip.source_start_ms ?? 0} sourceEnd={clip.source_end_ms ?? (clip.source_start_ms ?? 0) + clip.timeline_end_ms - clip.timeline_start_ms} gain={clip.gain ?? 1} playing={playing && !buffering} label={laneName(lane.kind) + " · " + (clip.label || clip.id)} onError={reportAudioError} />)}
+        {(audioError || audioClips.some(item => !item.url)) && <p role="alert" className="text-xs text-red-300">{t("部分音频无法预览，请检查素材或重新播放。", "Some audio could not be previewed. Check the source or retry playback.")}</p>}
         {mediaError && <p role="alert" className="text-xs text-red-300">{mediaError}</p>}
         </div>
         {showInspector && <aside aria-label={t("选中片段属性", "Selected clip properties")} className="min-w-0 overflow-y-auto rounded-lg border border-glass-border p-2 lg:max-h-[45dvh] lg:w-72 lg:shrink-0">
@@ -317,6 +333,7 @@ export function AssemblyTracks({ plan: committedPlan, resourceId, onChange, save
                     setSourceOut(c.source_end_ms ?? (c.source_start_ms ?? 0) + c.timeline_end_ms - c.timeline_start_ms);
                     seek(c.timeline_start_ms);
                 }} aria-pressed={selected?.laneId === lane.id && selected?.clipId === c.id} className="absolute inset-y-1 min-w-1 truncate rounded bg-primary/40 px-1 text-left text-xs text-foreground aria-pressed:ring-2 aria-pressed:ring-inset aria-pressed:ring-primary focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary" style={{ left: `${c.timeline_start_ms / plan.target_duration_ms * 100}%`, width: `${(c.timeline_end_ms - c.timeline_start_ms) / plan.target_duration_ms * 100}%`, opacity: c.enabled && !lane.muted ? 1 : 0.3 }}>{lane.kind === "video" && mediaFor(c) && <TimelineFilmstrip url={mediaFor(c)!.url} poster={mediaFor(c)!.poster} startMs={c.source_start_ms ?? 0} endMs={c.source_end_ms ?? (c.source_start_ms ?? 0) + c.timeline_end_ms - c.timeline_start_ms} width={timelineWidth * (c.timeline_end_ms - c.timeline_start_ms) / plan.target_duration_ms} />}{dropTarget?.id === c.id && <span aria-hidden="true" className={`pointer-events-none absolute inset-y-0 z-20 w-1 bg-primary ${dropTarget.after ? "right-0" : "left-0"}`} />}
+                    {["dialogue", "bgm", "sfx"].includes(lane.kind) && audioUrlFor(c, lane.kind) && <TimelineWaveform url={audioUrlFor(c, lane.kind)} startMs={c.source_start_ms ?? 0} endMs={c.source_end_ms ?? (c.source_start_ms ?? 0) + c.timeline_end_ms - c.timeline_start_ms} />}
                     <span className="pointer-events-none block truncate">{c.text || c.label || c.id}</span>{selected?.laneId === lane.id && selected?.clipId === c.id && <><span role="button" aria-label={`${c.label || c.id} start handle`} className="absolute inset-y-0 left-0 z-10 w-3 cursor-ew-resize bg-foreground/30" onPointerDown={e => { e.stopPropagation(); dragRef.current = { laneId: lane.id, clipId: c.id, startX: e.clientX, origin: c.timeline_start_ms, base: committedPlan, mode: "resize", edge: "start" }; e.currentTarget.setPointerCapture(e.pointerId); }} /><span role="button" aria-label={`${c.label || c.id} end handle`} className="absolute inset-y-0 right-0 z-10 w-3 cursor-ew-resize bg-foreground/30" onPointerDown={e => { e.stopPropagation(); dragRef.current = { laneId: lane.id, clipId: c.id, startX: e.clientX, origin: c.timeline_end_ms, base: committedPlan, mode: "resize", edge: "end" }; e.currentTarget.setPointerCapture(e.pointerId); }} /></>}</button>)}
                 <span className="pointer-events-none absolute inset-y-0 w-px bg-foreground" style={{ left: `${position / plan.target_duration_ms * 100}%` }} />
             </div>

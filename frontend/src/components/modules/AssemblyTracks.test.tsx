@@ -286,3 +286,28 @@ it('commits a video edge trim once and restores the entire gesture with undo', (
     fireEvent.click(screen.getByRole('button', { name: 'Undo gesture' }));
     expect(screen.getByRole('slider', { name: 'Timeline playhead' })).toHaveAttribute('max', '5000');
 });
+
+it('synchronizes overlapping audio lanes and removes muted or disabled players', () => {
+    const play = vi.spyOn(HTMLMediaElement.prototype, 'play').mockResolvedValue(undefined);
+    const pause = vi.spyOn(HTMLMediaElement.prototype, 'pause').mockImplementation(() => undefined);
+    const initial: AssemblyEditPlan = { ...plan, lanes: [
+        { id: 'v', kind: 'video', allow_overlap: false, clips: [{ id: 'video', source_media_id: 'v', timeline_start_ms: 0, timeline_end_ms: 5000, enabled: true, source_refs: [] }] },
+        ...(['bgm', 'dialogue', 'sfx'] as const).map((kind, i) => ({ id: kind, kind, allow_overlap: true, clips: [{ id: kind, label: kind, source_media_id: kind, timeline_start_ms: 1000, timeline_end_ms: 3000, source_start_ms: 2000, source_end_ms: 4000, gain: 0.5 + i * 0.1, enabled: true, source_refs: [] }] })),
+    ] };
+    const materials = { v: { url: 'v.mp4' }, bgm: { url: 'b.wav' }, dialogue: { url: 'd.wav' }, sfx: { url: 's.wav' } };
+    const view = render(<AssemblyTracks plan={initial} project={project} materials={materials} resourceId="p" saved onChange={vi.fn()} />);
+    fireEvent.change(screen.getByRole('slider', { name: 'Timeline playhead' }), { target: { value: '1500' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Play' }));
+    for (const [name, gain] of [['Music · bgm', 0.5], ['Dialogue · dialogue', 0.6], ['SFX · sfx', 0.7]] as const) {
+        const audio = screen.getByLabelText(name) as HTMLAudioElement;
+        expect(audio.currentTime).toBe(2.5);
+        expect(audio.volume).toBe(gain);
+        expect(play.mock.instances).toContain(audio);
+    }
+    fireEvent.click(screen.getByRole('button', { name: 'Pause' }));
+    expect(pause).toHaveBeenCalled();
+    view.rerender(<AssemblyTracks plan={{ ...initial, lanes: initial.lanes.map(l => l.kind === 'bgm' ? { ...l, muted: true } : l.kind === 'sfx' ? { ...l, clips: l.clips.map(c => ({ ...c, enabled: false })) } : l) }} project={project} materials={materials} resourceId="p" saved onChange={vi.fn()} />);
+    expect(screen.queryByLabelText('Music · bgm')).toBeNull();
+    expect(screen.queryByLabelText('SFX · sfx')).toBeNull();
+    play.mockRestore(); pause.mockRestore();
+});
