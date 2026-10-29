@@ -1,0 +1,46 @@
+{
+  "schema": "addams-target-contact-ik-probe.v1",
+  "rows": [
+    {
+      "source_frame": 49,
+      "blender_frame": 15,
+      "before_min_sole_height_m": -0.002251148223876953,
+      "after_min_sole_height_m": -1.9669532775878906e-05,
+      "after_anchor_xy_error_m": 3.761747306738811e-05,
+      "ankle_displacement_m": 0.0038018784913035853,
+      "non_support_ankle_displacement_m": 0.0,
+      "iterations": 5
+    },
+    {
+      "source_frame": 52,
+      "blender_frame": 19,
+      "before_min_sole_height_m": 0.0,
+      "after_min_sole_height_m": 1.430511474609375e-05,
+      "after_anchor_xy_error_m": 3.766452356679206e-05,
+      "ankle_displacement_m": 0.28097506714407927,
+      "non_support_ankle_displacement_m": 0.0,
+      "iterations": 8
+    },
+    {
+      "source_frame": 53,
+      "blender_frame": 20,
+      "before_min_sole_height_m": 0.013398468494415283,
+      "after_min_sole_height_m": 1.8537044525146484e-05,
+      "after_anchor_xy_error_m": 4.267958947078326e-05,
+      "ankle_displacement_m": 0.31936652490212514,
+      "non_support_ankle_displacement_m": 0.0,
+      "iterations": 10
+    }
+  ],
+  "contact_vertex": 6524,
+  "ground_z": 0.5256574749946594,
+  "ground_mode": "support-median",
+  "local_correction_limit_m": 0.05,
+  "local_ik_pass": false,
+  "limits": [
+    "Three labelled support frames only; no continuous foot-slip claim.",
+    "Ground is a diagnostic target-space hypothesis, not recovered source ground.",
+    "Mesh partition and single contact vertex remain heuristic.",
+    "Knee pole and tiptoe semantics require separate validation."
+  ]
+}

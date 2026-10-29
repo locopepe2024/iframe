@@ -1,0 +1,43 @@
+{
+  "schema": "addams-target-contact-ik-probe.v1",
+  "rows": [
+    {
+      "source_frame": 49,
+      "blender_frame": 15,
+      "before_min_sole_height_m": 0.5318136299028993,
+      "after_min_sole_height_m": 9.620562195777893e-07,
+      "after_anchor_xy_error_m": 2.3840740296872037e-05,
+      "ankle_displacement_m": 0.7320619704592061,
+      "non_support_ankle_displacement_m": 0.0,
+      "iterations": 9
+    },
+    {
+      "source_frame": 52,
+      "blender_frame": 19,
+      "before_min_sole_height_m": 0.5340647781267762,
+      "after_min_sole_height_m": 1.2004747986793518e-06,
+      "after_anchor_xy_error_m": 4.985546416924428e-05,
+      "ankle_displacement_m": 0.7972848922952345,
+      "non_support_ankle_displacement_m": 0.0,
+      "iterations": 9
+    },
+    {
+      "source_frame": 53,
+      "blender_frame": 20,
+      "before_min_sole_height_m": 0.5474632466211915,
+      "after_min_sole_height_m": 1.02166086435318e-06,
+      "after_anchor_xy_error_m": 3.5737346501449075e-05,
+      "ankle_displacement_m": 0.8247754009252122,
+      "non_support_ankle_displacement_m": 0.0,
+      "iterations": 9
+    }
+  ],
+  "contact_vertex": 6524,
+  "ground_z": -0.008407303132116795,
+  "limits": [
+    "Three labelled support frames only; no continuous foot-slip claim.",
+    "Ground is a target asset convention, not recovered source ground.",
+    "Mesh partition and single contact vertex remain heuristic.",
+    "Knee pole and tiptoe semantics require separate validation."
+  ]
+}
