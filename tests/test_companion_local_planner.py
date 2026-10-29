@@ -61,3 +61,24 @@ def test_resume_uses_unique_paused_task_and_can_then_request_source():
     for invalid in ({}, {'paused':state['paused'] * 2}, {'active':{'type':'image_edit','status':'active'}, **state}):
         with pytest.raises(ValueError):
             check(plan({'tool':'media.task.resume'}), invalid)
+
+
+def test_video_plan_registers_mode_and_frame_wait():
+    value = check({'decision': {'kind':'video_generate','steps':[
+        {'tool':'media.task.ensure','type':'video_generate'},
+        {'tool':'media.brief.set','brief':'让小狗跑起来'},
+        {'tool':'media.video.mode','mode':'f2v'},
+        {'tool':'media.source.request','source':'album','slot':'first_frame'},
+    ]}}, {})
+    assert value.kind == 'video_generate'
+    assert value.steps[2].mode == 'f2v'
+    with pytest.raises(ValueError):
+        check({'decision': {'kind':'image_edit','steps':[{'tool':'media.task.ensure','type':'video_generate'}]}}, {})
+
+
+def test_video_source_requires_frame_slot():
+    with pytest.raises(ValueError):
+        check({'decision': {'kind':'video_generate','steps':[
+            {'tool':'media.task.ensure','type':'video_generate'},
+            {'tool':'media.source.request','source':'album','slot':'source'},
+        ]}}, {})

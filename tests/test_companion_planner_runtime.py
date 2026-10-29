@@ -120,3 +120,21 @@ def test_editor_bypasses_media_planner(runtime):
     update_focus(store,'owner','actor',session,dict(operation_id='focus',expected_revision=0,focus=dict(kind='diary',object_id='2026-10-29',phase='editing')))
     assert send(runtime).status_code == 200
     planner.assert_not_called()
+
+
+def test_video_plan_creates_video_draft_and_frame_card(runtime):
+    store, session, _, planner, _ = runtime
+    planner.return_value = {'decision': {'kind':'video_generate','steps':[
+        {'tool':'media.task.ensure','type':'video_generate'},
+        {'tool':'media.brief.set','brief':'让小狗跑起来'},
+        {'tool':'media.video.mode','mode':'f2v'},
+        {'tool':'media.source.request','source':'album','slot':'first_frame'},
+    ]}}
+    response = send(runtime, operation='video')
+    # The fixture request text is image oriented; planner result is the source of truth.
+    assert response.status_code == 200, response.text
+    result=response.json()['result']
+    assert result['type']=='video_generate' and result['video_mode']=='f2v'
+    assert result['brief']=='让小狗跑起来' and result['step']=='configuring'
+    assert result['asset_card']['slot']=='first_frame'
+    assert result['execution']['status']=='waiting_user'

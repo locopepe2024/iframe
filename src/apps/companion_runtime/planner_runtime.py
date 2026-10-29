@@ -57,12 +57,20 @@ def execute_plan(store, db, owner, actor, row, claim, proposal):
         operation = f"{row['id']}-plan-{index}"
         if step.tool == 'media.task.ensure':
             if not task:
-                task = store.start_media_draft(owner, actor, row['session_id'], operation, dict(type='image_edit', brief=''))
+                task = store.start_media_draft(owner, actor, row['session_id'], operation, dict(type=step.type, brief=''))
         else:
             if step.tool == 'media.task.resume':
                 task = snapshot['paused_media_drafts'][0]
-            if step.tool == 'media.source.request':
+            if step.tool == 'media.video.mode':
+                action = 'video_mode'
+            elif step.tool == 'media.source.request':
                 action = 'ask' if step.source == 'ask' else 'open_' + step.source
+                if action == 'ask' and task.get('photo_id'):
+                    raise ValueError('Source is already selected')
+                if step.slot != 'source' and step.source != 'album':
+                    raise ValueError('Frame and reference slots require album selection')
+                if step.slot != 'source' and task.get('type') != 'video_generate':
+                    raise ValueError('Image task has no video asset slot')
                 if action == 'ask' and task.get('photo_id'):
                     raise ValueError('Source is already selected')
             else:
@@ -72,6 +80,8 @@ def execute_plan(store, db, owner, actor, row, claim, proposal):
                 values = dict(action=action, expected_revision=task['revision'])
                 if step.tool == 'media.brief.set':
                     values['brief'] = step.brief
+                elif step.tool == 'media.video.mode':
+                    values['video_mode'] = step.mode
                 task = store.update_media_draft(owner, actor, row['session_id'], task['task_id'], operation, values)
         waiting = step.tool == 'media.source.request'
         receipts.append(dict(tool=step.tool, status='waiting_user' if waiting else 'succeeded', revision=task['revision']))

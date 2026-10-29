@@ -12,6 +12,7 @@ class Strict(BaseModel):
 
 class Ensure(Strict):
     tool: Literal['media.task.ensure']
+    type: Literal['image_edit', 'video_generate'] = 'image_edit'
 
 
 class Brief(Strict):
@@ -22,6 +23,12 @@ class Brief(Strict):
 class Source(Strict):
     tool: Literal['media.source.request']
     source: Literal['ask', 'album', 'upload']
+    slot: Literal['source', 'first_frame', 'last_frame', 'reference'] = 'source'
+
+
+class Mode(Strict):
+    tool: Literal['media.video.mode']
+    mode: Literal['t2v', 'i2v', 'f2v', 'r2v']
 
 
 class Pause(Strict):
@@ -36,11 +43,11 @@ class Cancel(Strict):
     tool: Literal['media.task.cancel']
 
 
-Step = Annotated[Ensure | Brief | Source | Pause | Cancel | Resume, Field(discriminator='tool')]
+Step = Annotated[Ensure | Brief | Source | Mode | Pause | Cancel | Resume, Field(discriminator='tool')]
 
 
 class EditPlan(Strict):
-    kind: Literal['image_edit']
+    kind: Literal['image_edit', 'video_generate']
     steps: list[Step] = Field(min_length=1, max_length=4)
 
     @model_validator(mode='after')
@@ -52,6 +59,8 @@ class EditPlan(Strict):
             raise ValueError('Ensure must be first')
         if 'media.task.resume' in names and names[0] != 'media.task.resume':
             raise ValueError('Resume must be first')
+        if 'media.video.mode' in names and names.index('media.video.mode') == 0:
+            raise ValueError('Video mode requires a task')
         if 'media.source.request' in names and names[-1] != 'media.source.request':
             raise ValueError('User wait must be last')
         if any(n in names for n in ('media.task.pause', 'media.task.cancel')) and len(names) != 1:
@@ -74,8 +83,8 @@ class Proposal(Strict):
 
 
 SYSTEM = '''你是小安的主机任务编排器，只输出指定JSON，不执行任务、不回复聊天内容。
-图片画面编辑用image_edit。处理照片有歧义时clarify。普通聊天/日记/相册浏览/看图分析/视频用delegate，不假装完成。
-steps按序执行：media.task.ensure取得图片编辑任务；media.brief.set保存完整修改要求；media.source.request请求选图，source为ask/album/upload；media.task.pause暂停；media.task.cancel取消；media.task.resume恢复唯一暂停任务，先resume再补要求或选来源。
+图片画面编辑用image_edit；视频生成用video_generate。视频可选择t2v/i2v/f2v/r2v，并等待文字、首帧、首尾帧或参考图素材。处理照片有歧义时clarify。普通聊天/日记/相册浏览/看图分析用delegate，不假装完成。
+steps按序执行：media.task.ensure取得 image_edit 或 video_generate 任务；media.brief.set保存完整修改要求；media.source.request请求选图，source为ask/album/upload；media.task.pause暂停；media.task.cancel取消；media.task.resume恢复唯一暂停任务，先resume再补要求或选来源；media.video.mode设置视频模式。
 paused为暂停任务列表，无active且只有一个paused时明确继续才resume，不ensure。多个暂停任务需clarify，不能猜。
 已有active任务不必ensure；没有则先ensure。没有选图也先保存明确要求。只说修改照片不是画面要求，不能写进brief。选择来源不是brief。保存要求时保留旧brief中未被用户撤销的约束。
 缺少照片且没有其他明确来源时，最后source=ask；明确选择相册/上传时source=album/upload。已选图则不重复询问来源。只输出注册步骤，不编造素材或任务ID。
@@ -85,6 +94,7 @@ focus=diary_editor时，用户讲照片或视频也是日记内容，除非明�
 已有任务补充要求：{"decision":{"kind":"image_edit","steps":[{"tool":"media.brief.set","brief":"调亮，人物不变"},{"tool":"media.source.request","source":"ask"}]}}
 暂停：{"decision":{"kind":"image_edit","steps":[{"tool":"media.task.pause"}]}}
 澄清：{"decision":{"kind":"clarify","question":"想修改画面，还是整理资料？"}}
+视频示例：{"decision":{"kind":"video_generate","steps":[{"tool":"media.task.ensure","type":"video_generate"},{"tool":"media.brief.set","brief":"让照片中的小狗奔跑"},{"tool":"media.video.mode","mode":"f2v"},{"tool":"media.source.request","source":"album","slot":"first_frame"}]}}
 交给聊天：{"decision":{"kind":"delegate","capability":"chat"}}
 steps中一个工具至多一次；source步骤至多一个且排最后。'''
 
@@ -101,23 +111,38 @@ def check(proposal, state):
     """Validate state prerequisites without changing any task state."""
     decision = Proposal.model_validate(proposal).decision
     if isinstance(decision, EditPlan):
+        ensure_types = [step.type for step in decision.steps if isinstance(step, Ensure)]
+        if ensure_types and ensure_types[0] != decision.kind:
+            raise ValueError('Plan type and task type differ')
         active = state.get('active')
         editing = state.get('focus') in ('diary_editor', 'photo_editor')
         if editing:
             raise ValueError('Return from diary editor before a media plan')
-        available = bool(active and active.get('status') == 'active' and active.get('type') == 'image_edit')
+        available = bool(active and active.get('status') == 'active' and active.get('type') == decision.kind)
         for step in decision.steps:
             if isinstance(step, Resume):
                 paused = state.get('paused', [])
-                if active or len(paused) != 1 or paused[0].get('type') != 'image_edit':
-                    raise ValueError('Resume requires a single paused image editing task')
+                if active or len(paused) != 1 or paused[0].get('type') != decision.kind:
+                    raise ValueError('Resume requires a single paused media task')
                 available = True
             elif isinstance(step, Ensure):
                 if active and not available:
                     raise ValueError('Explicit lane switching is outside this experiment')
+                if step.type != decision.kind:
+                    raise ValueError('Ensure type differs from plan')
                 available = True
+            elif isinstance(step, Mode):
+                if decision.kind != 'video_generate':
+                    raise ValueError('Video mode requires a video plan')
+                if not available:
+                    raise ValueError('No active video task')
+            elif isinstance(step, Source):
+                if not available:
+                    raise ValueError('No active media task')
+                if decision.kind == 'video_generate' and step.slot == 'source':
+                    raise ValueError('Video source must name a frame or reference slot')
             elif not available:
-                raise ValueError('No active image editing task')
+                raise ValueError('No active media task')
     return decision
 
 
