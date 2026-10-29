@@ -50,10 +50,10 @@ it("does not offer generation before a concrete editing brief",()=>{
  expect(screen.queryByRole("button",{name:"确认生成（可能计费）"})).not.toBeInTheDocument();
 });
 it("opens a model-requested album in the current task and binds the selected photo",async()=>{
- const action=vi.fn().mockResolvedValue(true);
- render(<MediaDraftCard task={{...task,photo_id:null,brief:"",step:"awaiting_asset",ui_action:"open_album"}} disabled={false} onAction={action} onUpload={()=>{}}/>);
+ const action=vi.fn().mockResolvedValue(true); const event=vi.fn().mockResolvedValue(true);
+ render(<MediaDraftCard task={{...sourceTask,ui_action:"open_album"}} disabled={false} onAction={action} onAssetSelected={event} onUpload={()=>{}}/>);
  fireEvent.click(await screen.findByRole("button",{name:"选中测试照片"}));
- await waitFor(()=>expect(action).toHaveBeenCalledWith("select_photo","selected"));
+ await waitFor(()=>expect(event).toHaveBeenCalledWith("selected","source","creative:3:source"));
  await waitFor(()=>expect(screen.queryByRole("region",{name:"任务选图"})).not.toBeInTheDocument());
  expect(api.generate).not.toHaveBeenCalled();
 });
@@ -98,4 +98,20 @@ it("filters video models by the selected reference mode",async()=>{
  fireEvent.click(screen.getByRole("button",{name:"读取我的可用模型"}));
  await screen.findByRole("option",{name:"首尾帧"});
  expect(within(screen.getByRole("combobox",{name:"生成模型"})).queryByRole("option",{name:"文字生成"})).not.toBeInTheDocument();
+});
+
+it("reports expired selection cards without calling the legacy action",async()=>{
+ const action=vi.fn(),event=vi.fn();
+ render(<MediaDraftCard task={task} disabled={false} onAction={action} onAssetSelected={event} onUpload={()=>{}}/>);
+ fireEvent.click(screen.getByRole("button",{name:"换一张照片"}));
+ fireEvent.click(await screen.findByRole("button",{name:"选中测试照片"}));
+ expect(screen.getByRole("alert")).toHaveTextContent("选图卡片已失效");
+ expect(action).not.toHaveBeenCalled();expect(event).not.toHaveBeenCalled();
+});
+it.each(["first_frame","last_frame"] as const)("replaces the requested %s with its own current card",async slot=>{
+ const event=vi.fn().mockResolvedValue(true);
+ render(<MediaDraftCard task={{...task,type:"video_generate",video_mode:"f2v",first_photo_id:"first",last_photo_id:"last",selection_cards:{first_frame:"creative:3:first_frame",last_frame:"creative:3:last_frame"}}} disabled={false} onAction={vi.fn()} onAssetSelected={event} onUpload={()=>{}}/>);
+ fireEvent.click(screen.getByRole("button",{name:slot==="first_frame"?"更换首帧":"更换尾帧"}));
+ fireEvent.click(await screen.findByRole("button",{name:"选中测试照片"}));
+ await waitFor(()=>expect(event).toHaveBeenCalledWith("selected",slot,`creative:3:${slot}`));
 });
