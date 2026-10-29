@@ -1,5 +1,7 @@
 # 目标rig与接触IK：第一轮测试
 
+> 本轮指标已被后续坐标审计降级为历史诊断：原候选的相机上方为−Z，直接按+Z-up/min-Z验收接触无效。最新结论见 `2026-10-29-world-camera-contact-ablation-v2.md`。不得将本页极低接触误差作为通过依据。
+
 ## Observed
 
 运行于media Blender 4.5.9；只生成诊断资产。

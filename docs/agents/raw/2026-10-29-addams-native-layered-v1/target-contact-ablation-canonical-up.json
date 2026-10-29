@@ -1,0 +1,535 @@
+{
+  "schema": "addams-target-contact-ablation.v1",
+  "canonical_camera_up": true,
+  "projection_invariance_max_ndc": 0.0,
+  "candidate_sha256": "1ed1d29465a6331d662510971715251ffd4073f9ab8bb7f22b6681089cbc1f91",
+  "contact_vertex": 7372,
+  "diagnostic_plane_z": -0.9017112255096436,
+  "baseline": [
+    {
+      "source_frame": 49,
+      "blender_frame": 15,
+      "timing_error_s": 0.013333333333333308,
+      "arm_origin": [
+        0.5778026580810547,
+        4.216684341430664,
+        0.9173933863639832
+      ],
+      "root": [
+        0.5778026580810547,
+        4.216684341430664,
+        0.9173933863639832
+      ],
+      "pelvis": [
+        0.5778026580810547,
+        4.170984268188477,
+        -0.014406565576791763
+      ],
+      "ankle": [
+        0.9810628890991211,
+        4.237736225128174,
+        -0.7407904267311096
+      ],
+      "contact": [
+        0.8285688161849976,
+        4.240878582000732,
+        -0.8773686289787292
+      ],
+      "min_z": -0.8773686289787292,
+      "max_z": -0.5234059691429138,
+      "body_up": [
+        -0.10739565640687943,
+        0.2348574846982956,
+        0.9660786986351013
+      ],
+      "camera_up": [
+        0.0,
+        -4.371138828673793e-08,
+        1.0
+      ]
+    },
+    {
+      "source_frame": 52,
+      "blender_frame": 19,
+      "timing_error_s": 0.0,
+      "arm_origin": [
+        0.5354124903678894,
+        4.487048625946045,
+        0.9108600616455078
+      ],
+      "root": [
+        0.5354124903678894,
+        4.487048625946045,
+        0.9108600616455078
+      ],
+      "pelvis": [
+        0.5354124903678894,
+        4.441348552703857,
+        -0.020939890295267105
+      ],
+      "ankle": [
+        0.9993064403533936,
+        4.42563009262085,
+        -0.7415175437927246
+      ],
+      "contact": [
+        0.8701059222221375,
+        4.433945655822754,
+        -0.9000637531280518
+      ],
+      "min_z": -0.9017112255096436,
+      "max_z": -0.525657057762146,
+      "body_up": [
+        0.13032576441764832,
+        0.14424234628677368,
+        0.9809226989746094
+      ],
+      "camera_up": [
+        0.0,
+        -4.371138828673793e-08,
+        1.0
+      ]
+    },
+    {
+      "source_frame": 53,
+      "blender_frame": 20,
+      "timing_error_s": 0.00666666666666671,
+      "arm_origin": [
+        0.5236574411392212,
+        4.587308406829834,
+        0.8760966658592224
+      ],
+      "root": [
+        0.5236574411392212,
+        4.587308406829834,
+        0.8760966658592224
+      ],
+      "pelvis": [
+        0.5236574411392212,
+        4.5416083335876465,
+        -0.055703286081552505
+      ],
+      "ankle": [
+        0.9884518384933472,
+        4.461652755737305,
+        -0.7447119355201721
+      ],
+      "contact": [
+        0.8625993728637695,
+        4.4823431968688965,
+        -0.9047916531562805
+      ],
+      "min_z": -0.9060935378074646,
+      "max_z": -0.5390555262565613,
+      "body_up": [
+        0.11504574865102768,
+        0.13190363347530365,
+        0.9845638871192932
+      ],
+      "camera_up": [
+        0.0,
+        -4.371138828673793e-08,
+        1.0
+      ]
+    }
+  ],
+  "movement_decomposition": [
+    {
+      "source_frame": 49,
+      "pelvis_delta": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "ankle_delta": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "ankle_relative_pelvis_delta": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "contact_delta": [
+        0.0,
+        0.0,
+        0.0
+      ]
+    },
+    {
+      "source_frame": 52,
+      "pelvis_delta": [
+        -0.04239016771316528,
+        0.27036428451538086,
+        -0.006533324718475342
+      ],
+      "ankle_delta": [
+        0.01824355125427246,
+        0.18789386749267578,
+        -0.0007271170616149902
+      ],
+      "ankle_relative_pelvis_delta": [
+        0.060633718967437744,
+        -0.08247041702270508,
+        0.0058062076568603516
+      ],
+      "contact_delta": [
+        0.04153710603713989,
+        0.19306707382202148,
+        -0.02269512414932251
+      ]
+    },
+    {
+      "source_frame": 53,
+      "pelvis_delta": [
+        -0.054145216941833496,
+        0.3706240653991699,
+        -0.04129672050476074
+      ],
+      "ankle_delta": [
+        0.007388949394226074,
+        0.22391653060913086,
+        -0.0039215087890625
+      ],
+      "ankle_relative_pelvis_delta": [
+        0.06153416633605957,
+        -0.14670753479003906,
+        0.03737521171569824
+      ],
+      "contact_delta": [
+        0.03403055667877197,
+        0.24146461486816406,
+        -0.02742302417755127
+      ]
+    }
+  ],
+  "rows": [
+    {
+      "condition": "none",
+      "source_frame": 49,
+      "blender_frame": 15,
+      "activation_ankle_displacement_m": 5.960464477539063e-08,
+      "ankle_displacement_m": 5.960464477539063e-08,
+      "ankle_delta_world": [
+        -5.960464477539063e-08,
+        0.0,
+        0.0
+      ],
+      "after_z_gap_m": 0.024342596530914307,
+      "after_anchor_xy_error_m": 0.0,
+      "before_anchor_xy_error_m": 0.0,
+      "left_ankle_displacement_m": 0.0,
+      "pelvis_displacement_m": 0.0,
+      "ankle_world_rotation_delta_rad": 0.0,
+      "max_mesh_displacement_m": 4.805480091749757e-07,
+      "iterations": 1,
+      "within_5cm_ankle_budget": true
+    },
+    {
+      "condition": "none",
+      "source_frame": 52,
+      "blender_frame": 19,
+      "activation_ankle_displacement_m": 0.0,
+      "ankle_displacement_m": 0.0,
+      "ankle_delta_world": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "after_z_gap_m": 1.1920928955078125e-07,
+      "after_anchor_xy_error_m": 0.19748473244545367,
+      "before_anchor_xy_error_m": 0.19748474511949335,
+      "left_ankle_displacement_m": 0.0,
+      "pelvis_displacement_m": 0.0,
+      "ankle_world_rotation_delta_rad": 0.0,
+      "max_mesh_displacement_m": 5.331201499700045e-07,
+      "iterations": 1,
+      "within_5cm_ankle_budget": true
+    },
+    {
+      "condition": "none",
+      "source_frame": 53,
+      "blender_frame": 20,
+      "activation_ankle_displacement_m": 0.0,
+      "ankle_displacement_m": 0.0,
+      "ankle_delta_world": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "after_z_gap_m": -0.004382193088531494,
+      "after_anchor_xy_error_m": 0.24385037836007553,
+      "before_anchor_xy_error_m": 0.24385085194509878,
+      "left_ankle_displacement_m": 0.0,
+      "pelvis_displacement_m": 0.0,
+      "ankle_world_rotation_delta_rad": 0.0,
+      "max_mesh_displacement_m": 5.364418029785156e-07,
+      "iterations": 1,
+      "within_5cm_ankle_budget": true
+    },
+    {
+      "condition": "solver-only",
+      "source_frame": 49,
+      "blender_frame": 15,
+      "activation_ankle_displacement_m": 2.0124844331901233e-06,
+      "ankle_displacement_m": 2.0124844331901233e-06,
+      "ankle_delta_world": [
+        1.5497207641601562e-06,
+        -4.76837158203125e-07,
+        1.1920928955078125e-06
+      ],
+      "after_z_gap_m": 0.02434307336807251,
+      "after_anchor_xy_error_m": 1.669994083180654e-06,
+      "before_anchor_xy_error_m": 0.0,
+      "left_ankle_displacement_m": 0.0,
+      "pelvis_displacement_m": 0.0,
+      "ankle_world_rotation_delta_rad": 0.0,
+      "max_mesh_displacement_m": 2.3960770657350755e-06,
+      "iterations": 1,
+      "within_5cm_ankle_budget": true
+    },
+    {
+      "condition": "solver-only",
+      "source_frame": 52,
+      "blender_frame": 19,
+      "activation_ankle_displacement_m": 2.08531089836787e-06,
+      "ankle_displacement_m": 2.08531089836787e-06,
+      "ankle_delta_world": [
+        1.3113021850585938e-06,
+        -9.5367431640625e-07,
+        1.3113021850585938e-06
+      ],
+      "after_z_gap_m": 1.1920928955078125e-06,
+      "after_anchor_xy_error_m": 0.19748412173262334,
+      "before_anchor_xy_error_m": 0.19748474511949335,
+      "left_ankle_displacement_m": 0.0,
+      "pelvis_displacement_m": 0.0,
+      "ankle_world_rotation_delta_rad": 0.0,
+      "max_mesh_displacement_m": 2.6388101126168554e-06,
+      "iterations": 1,
+      "within_5cm_ankle_budget": true
+    },
+    {
+      "condition": "solver-only",
+      "source_frame": 53,
+      "blender_frame": 20,
+      "activation_ankle_displacement_m": 2.4226190367819756e-06,
+      "ankle_displacement_m": 2.4226190367819756e-06,
+      "ankle_delta_world": [
+        1.1920928955078125e-06,
+        -1.430511474609375e-06,
+        1.5497207641601562e-06
+      ],
+      "after_z_gap_m": -0.0043808817863464355,
+      "after_anchor_xy_error_m": 0.2438495884926855,
+      "before_anchor_xy_error_m": 0.24385085194509878,
+      "left_ankle_displacement_m": 0.0,
+      "pelvis_displacement_m": 0.0,
+      "ankle_world_rotation_delta_rad": 0.0,
+      "max_mesh_displacement_m": 2.6894841605850405e-06,
+      "iterations": 1,
+      "within_5cm_ankle_budget": true
+    },
+    {
+      "condition": "height",
+      "source_frame": 49,
+      "blender_frame": 15,
+      "activation_ankle_displacement_m": 2.0124844331901233e-06,
+      "ankle_displacement_m": 0.024341940476707034,
+      "ankle_delta_world": [
+        1.1920928955078125e-06,
+        0.0,
+        -0.024341940879821777
+      ],
+      "after_z_gap_m": 5.960464477539063e-08,
+      "after_anchor_xy_error_m": 1.3486991523486091e-06,
+      "before_anchor_xy_error_m": 0.0,
+      "left_ankle_displacement_m": 0.0,
+      "pelvis_displacement_m": 0.0,
+      "ankle_world_rotation_delta_rad": 0.0,
+      "max_mesh_displacement_m": 0.02712359396953218,
+      "iterations": 2,
+      "within_5cm_ankle_budget": true
+    },
+    {
+      "condition": "height",
+      "source_frame": 52,
+      "blender_frame": 19,
+      "activation_ankle_displacement_m": 2.08531089836787e-06,
+      "ankle_displacement_m": 2.08531089836787e-06,
+      "ankle_delta_world": [
+        1.3113021850585938e-06,
+        -9.5367431640625e-07,
+        1.3113021850585938e-06
+      ],
+      "after_z_gap_m": 1.1920928955078125e-06,
+      "after_anchor_xy_error_m": 0.19748412173262334,
+      "before_anchor_xy_error_m": 0.19748474511949335,
+      "left_ankle_displacement_m": 0.0,
+      "pelvis_displacement_m": 0.0,
+      "ankle_world_rotation_delta_rad": 0.0,
+      "max_mesh_displacement_m": 2.6388101126168554e-06,
+      "iterations": 1,
+      "within_5cm_ankle_budget": true
+    },
+    {
+      "condition": "height",
+      "source_frame": 53,
+      "blender_frame": 20,
+      "activation_ankle_displacement_m": 2.4226190367819756e-06,
+      "ankle_displacement_m": 0.004382372126619618,
+      "ankle_delta_world": [
+        1.2516975402832031e-06,
+        -9.5367431640625e-07,
+        0.00438237190246582
+      ],
+      "after_z_gap_m": -2.980232238769531e-07,
+      "after_anchor_xy_error_m": 0.24384962191112194,
+      "before_anchor_xy_error_m": 0.24385085194509878,
+      "left_ankle_displacement_m": 0.0,
+      "pelvis_displacement_m": 0.0,
+      "ankle_world_rotation_delta_rad": 0.0,
+      "max_mesh_displacement_m": 0.0048538597834864574,
+      "iterations": 2,
+      "within_5cm_ankle_budget": true
+    },
+    {
+      "condition": "xy",
+      "source_frame": 49,
+      "blender_frame": 15,
+      "activation_ankle_displacement_m": 2.0124844331901233e-06,
+      "ankle_displacement_m": 2.0124844331901233e-06,
+      "ankle_delta_world": [
+        1.5497207641601562e-06,
+        -4.76837158203125e-07,
+        1.1920928955078125e-06
+      ],
+      "after_z_gap_m": 0.02434307336807251,
+      "after_anchor_xy_error_m": 1.669994083180654e-06,
+      "before_anchor_xy_error_m": 0.0,
+      "left_ankle_displacement_m": 0.0,
+      "pelvis_displacement_m": 0.0,
+      "ankle_world_rotation_delta_rad": 0.0,
+      "max_mesh_displacement_m": 2.3960770657350755e-06,
+      "iterations": 1,
+      "within_5cm_ankle_budget": true
+    },
+    {
+      "condition": "xy",
+      "source_frame": 52,
+      "blender_frame": 19,
+      "activation_ankle_displacement_m": 2.08531089836787e-06,
+      "ankle_displacement_m": 0.19748453378746753,
+      "ankle_delta_world": [
+        -0.0415382981300354,
+        -0.19306659698486328,
+        3.5762786865234375e-07
+      ],
+      "after_z_gap_m": 0.0,
+      "after_anchor_xy_error_m": 1.2839233415447482e-06,
+      "before_anchor_xy_error_m": 0.19748474511949335,
+      "left_ankle_displacement_m": 0.0,
+      "pelvis_displacement_m": 0.0,
+      "ankle_world_rotation_delta_rad": 0.0,
+      "max_mesh_displacement_m": 0.20575735258600547,
+      "iterations": 2,
+      "within_5cm_ankle_budget": false
+    },
+    {
+      "condition": "xy",
+      "source_frame": 53,
+      "blender_frame": 20,
+      "activation_ankle_displacement_m": 2.4226190367819756e-06,
+      "ankle_displacement_m": 0.2438496634458149,
+      "ankle_delta_world": [
+        -0.03403216600418091,
+        -0.24146318435668945,
+        -4.172325134277344e-07
+      ],
+      "after_z_gap_m": -0.004383265972137451,
+      "after_anchor_xy_error_m": 2.2899356737492735e-06,
+      "before_anchor_xy_error_m": 0.24385085194509878,
+      "left_ankle_displacement_m": 0.0,
+      "pelvis_displacement_m": 0.0,
+      "ankle_world_rotation_delta_rad": 0.0,
+      "max_mesh_displacement_m": 0.2526125560891325,
+      "iterations": 2,
+      "within_5cm_ankle_budget": false
+    },
+    {
+      "condition": "full",
+      "source_frame": 49,
+      "blender_frame": 15,
+      "activation_ankle_displacement_m": 2.0124844331901233e-06,
+      "ankle_displacement_m": 0.02434194045401176,
+      "ankle_delta_world": [
+        -2.980232238769531e-07,
+        4.76837158203125e-07,
+        -0.024341940879821777
+      ],
+      "after_z_gap_m": 1.7881393432617188e-07,
+      "after_anchor_xy_error_m": 4.76837158203125e-07,
+      "before_anchor_xy_error_m": 0.0,
+      "left_ankle_displacement_m": 0.0,
+      "pelvis_displacement_m": 0.0,
+      "ankle_world_rotation_delta_rad": 0.0,
+      "max_mesh_displacement_m": 0.02712339494260329,
+      "iterations": 2,
+      "within_5cm_ankle_budget": true
+    },
+    {
+      "condition": "full",
+      "source_frame": 52,
+      "blender_frame": 19,
+      "activation_ankle_displacement_m": 2.08531089836787e-06,
+      "ankle_displacement_m": 0.19748450873507709,
+      "ankle_delta_world": [
+        -0.04153817892074585,
+        -0.19306659698486328,
+        -7.152557373046875e-07
+      ],
+      "after_z_gap_m": -1.1920928955078125e-06,
+      "after_anchor_xy_error_m": 1.1740753414387827e-06,
+      "before_anchor_xy_error_m": 0.19748474511949335,
+      "left_ankle_displacement_m": 0.0,
+      "pelvis_displacement_m": 0.0,
+      "ankle_world_rotation_delta_rad": 0.0,
+      "max_mesh_displacement_m": 0.20575740193344072,
+      "iterations": 2,
+      "within_5cm_ankle_budget": false
+    },
+    {
+      "condition": "full",
+      "source_frame": 53,
+      "blender_frame": 20,
+      "activation_ankle_displacement_m": 2.4226190367819756e-06,
+      "ankle_displacement_m": 0.2438889561258027,
+      "ankle_delta_world": [
+        -0.03403186798095703,
+        -0.24146318435668945,
+        0.00438004732131958
+      ],
+      "after_z_gap_m": -2.682209014892578e-06,
+      "after_anchor_xy_error_m": 2.065625602145607e-06,
+      "before_anchor_xy_error_m": 0.24385085194509878,
+      "left_ankle_displacement_m": 0.0,
+      "pelvis_displacement_m": 0.0,
+      "ankle_world_rotation_delta_rad": 0.0,
+      "max_mesh_displacement_m": 0.2526425858414006,
+      "iterations": 2,
+      "within_5cm_ankle_budget": false
+    }
+  ],
+  "checks": {
+    "no_constraint_baseline": true,
+    "non_support_unchanged": true,
+    "pelvis_unchanged": true
+  },
+  "limits": [
+    "Camera-up convention is not verified gravity or scene ground; camera pitch is unknown.",
+    "Fixed mesh contact point is a hypothesis; rolling/pivot is not classified.",
+    "Three labelled frames do not validate continuous contact or full motion.",
+    "Fresh scene per cell; no new animation keys or production edits."
+  ]
+}

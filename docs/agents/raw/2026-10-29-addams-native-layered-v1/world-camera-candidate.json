@@ -1,0 +1,17 @@
+{
+  "schema": "addams-world-camera-candidate.v1",
+  "scale": 1.1750743579715723,
+  "frames": 35,
+  "checked_joints": [
+    "head",
+    "pelvis",
+    "ankle_l",
+    "ankle_r"
+  ],
+  "max_projection_replay_gap_px": 0.00017784571779951605,
+  "limits": [
+    "Paired model world coordinates are inferred, not ground truth.",
+    "This change preserves existing pose and image errors.",
+    "No IK or physical camera calibration is performed."
+  ]
+}
