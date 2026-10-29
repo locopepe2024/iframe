@@ -1,0 +1,217 @@
+{
+  "schema": "director3d-retarget-diagnostic.v1",
+  "status": "candidate_only",
+  "sourceSha256": "0ff075c7ad6855c5c2c37a171592ee8f0d6ab2f58259e2be77a9b63dd8027765",
+  "sourceBufferSha256": "6e65377d81558333c4093dbb144a48fd19019343d82b1a3a7992a98ec0e0543c",
+  "targetSha256": "95eeb19c8abce2325479804b3dda429ebddfa6e8d07a2688541cc990fb676855",
+  "mappingSha256": "75ed3655f1d364adc037559db42e73b9a0a5eb9e4e248d62bddc79d3bfcef6e8",
+  "blenderVersion": "4.5.9 LTS",
+  "pelvisTranslation": {
+    "enabled": true,
+    "scale": 1.0161771537717967,
+    "basis": "world_rest_hips_displacement",
+    "sourceRestHipRootM": 0.9180681565414833,
+    "targetRestHipRootM": 0.9329198862828448,
+    "maxPositionResidualM": 7.028863677424642e-08,
+    "maxBasisChange": 2.980232238769531e-07
+  },
+  "rawReportSha256": "e8811eacd91f4709880628fec222972efee713a09f660c2f73ae3e52cb508119",
+  "actions": [
+    {
+      "action": "Walk_Loop",
+      "frameRange": [
+        0,
+        32
+      ],
+      "soleGeometry": {
+        "l": {
+          "status": "diagnostic_only",
+          "groundZM": 0,
+          "nearGroundBandM": [
+            -0.01,
+            0.02
+          ],
+          "evaluationFPS": 24.0,
+          "vertexCount": 197,
+          "minZM": -0.00928652472794056,
+          "maxZM": 0.36705029010772705,
+          "penetratingFrames": 0,
+          "nearGroundFrames": 22,
+          "adjacentNearGroundVertexSpeedSamples": 2393,
+          "maxAdjacentNearGroundVertexSpeedMps": 1.4380489172017754,
+          "endpointMaxVertexDisplacementM": 0.0,
+          "rootRouteCompensation": "none",
+          "supportPhase": "unclassified",
+          "selection": "rest weighted foot vertices, bottom 0.02m band, weight >= 0.5"
+        },
+        "r": {
+          "status": "diagnostic_only",
+          "groundZM": 0,
+          "nearGroundBandM": [
+            -0.01,
+            0.02
+          ],
+          "evaluationFPS": 24.0,
+          "vertexCount": 197,
+          "minZM": -0.010305613279342651,
+          "maxZM": 0.3549133241176605,
+          "penetratingFrames": 1,
+          "nearGroundFrames": 22,
+          "adjacentNearGroundVertexSpeedSamples": 2457,
+          "maxAdjacentNearGroundVertexSpeedMps": 1.565630772152022,
+          "endpointMaxVertexDisplacementM": 0.0,
+          "rootRouteCompensation": "none",
+          "supportPhase": "unclassified",
+          "selection": "rest weighted foot vertices, bottom 0.02m band, weight >= 0.5"
+        }
+      }
+    },
+    {
+      "action": "Walk_Formal_Loop",
+      "frameRange": [
+        0,
+        32
+      ],
+      "soleGeometry": {
+        "l": {
+          "status": "diagnostic_only",
+          "groundZM": 0,
+          "nearGroundBandM": [
+            -0.01,
+            0.02
+          ],
+          "evaluationFPS": 24.0,
+          "vertexCount": 197,
+          "minZM": -0.012162022292613983,
+          "maxZM": 0.36737000942230225,
+          "penetratingFrames": 2,
+          "nearGroundFrames": 23,
+          "adjacentNearGroundVertexSpeedSamples": 2462,
+          "maxAdjacentNearGroundVertexSpeedMps": 1.4131974546646047,
+          "endpointMaxVertexDisplacementM": 0.0,
+          "rootRouteCompensation": "none",
+          "supportPhase": "unclassified",
+          "selection": "rest weighted foot vertices, bottom 0.02m band, weight >= 0.5"
+        },
+        "r": {
+          "status": "diagnostic_only",
+          "groundZM": 0,
+          "nearGroundBandM": [
+            -0.01,
+            0.02
+          ],
+          "evaluationFPS": 24.0,
+          "vertexCount": 197,
+          "minZM": -0.012213164940476418,
+          "maxZM": 0.3552548587322235,
+          "penetratingFrames": 3,
+          "nearGroundFrames": 20,
+          "adjacentNearGroundVertexSpeedSamples": 2215,
+          "maxAdjacentNearGroundVertexSpeedMps": 1.8588845578073592,
+          "endpointMaxVertexDisplacementM": 0.0,
+          "rootRouteCompensation": "none",
+          "supportPhase": "unclassified",
+          "selection": "rest weighted foot vertices, bottom 0.02m band, weight >= 0.5"
+        }
+      }
+    },
+    {
+      "action": "Jog_Fwd_Loop",
+      "frameRange": [
+        0,
+        22
+      ],
+      "soleGeometry": {
+        "l": {
+          "status": "diagnostic_only",
+          "groundZM": 0,
+          "nearGroundBandM": [
+            -0.01,
+            0.02
+          ],
+          "evaluationFPS": 24.0,
+          "vertexCount": 197,
+          "minZM": 0.013576749712228775,
+          "maxZM": 0.5696941018104553,
+          "penetratingFrames": 0,
+          "nearGroundFrames": 2,
+          "adjacentNearGroundVertexSpeedSamples": 0,
+          "maxAdjacentNearGroundVertexSpeedMps": null,
+          "endpointMaxVertexDisplacementM": 0.024635869495814547,
+          "rootRouteCompensation": "none",
+          "supportPhase": "unclassified",
+          "selection": "rest weighted foot vertices, bottom 0.02m band, weight >= 0.5"
+        },
+        "r": {
+          "status": "diagnostic_only",
+          "groundZM": 0,
+          "nearGroundBandM": [
+            -0.01,
+            0.02
+          ],
+          "evaluationFPS": 24.0,
+          "vertexCount": 197,
+          "minZM": 0.006764118559658527,
+          "maxZM": 0.5740348696708679,
+          "penetratingFrames": 0,
+          "nearGroundFrames": 3,
+          "adjacentNearGroundVertexSpeedSamples": 10,
+          "maxAdjacentNearGroundVertexSpeedMps": 5.960399046199761,
+          "endpointMaxVertexDisplacementM": 0.010604597126911185,
+          "rootRouteCompensation": "none",
+          "supportPhase": "unclassified",
+          "selection": "rest weighted foot vertices, bottom 0.02m band, weight >= 0.5"
+        }
+      }
+    },
+    {
+      "action": "Sprint_Loop",
+      "frameRange": [
+        0,
+        16
+      ],
+      "soleGeometry": {
+        "l": {
+          "status": "diagnostic_only",
+          "groundZM": 0,
+          "nearGroundBandM": [
+            -0.01,
+            0.02
+          ],
+          "evaluationFPS": 24.0,
+          "vertexCount": 197,
+          "minZM": -0.0047232238575816154,
+          "maxZM": 0.62092524766922,
+          "penetratingFrames": 0,
+          "nearGroundFrames": 1,
+          "adjacentNearGroundVertexSpeedSamples": 0,
+          "maxAdjacentNearGroundVertexSpeedMps": null,
+          "endpointMaxVertexDisplacementM": 0.0,
+          "rootRouteCompensation": "none",
+          "supportPhase": "unclassified",
+          "selection": "rest weighted foot vertices, bottom 0.02m band, weight >= 0.5"
+        },
+        "r": {
+          "status": "diagnostic_only",
+          "groundZM": 0,
+          "nearGroundBandM": [
+            -0.01,
+            0.02
+          ],
+          "evaluationFPS": 24.0,
+          "vertexCount": 197,
+          "minZM": 0.027608657255768776,
+          "maxZM": 0.46351632475852966,
+          "penetratingFrames": 0,
+          "nearGroundFrames": 0,
+          "adjacentNearGroundVertexSpeedSamples": 0,
+          "maxAdjacentNearGroundVertexSpeedMps": null,
+          "endpointMaxVertexDisplacementM": 0.0,
+          "rootRouteCompensation": "none",
+          "supportPhase": "unclassified",
+          "selection": "rest weighted foot vertices, bottom 0.02m band, weight >= 0.5"
+        }
+      }
+    }
+  ]
+}
