@@ -1,0 +1,16 @@
+{
+  "schema": "addams-motion-group-subphase.v1",
+  "group_id": "G5",
+  "source_frames": [62,63,64,65],
+  "same_pose_group": true,
+  "subphases": [
+    {"frames":[62,63],"phase":"support_or_transition_candidate","sole_clearance":"unknown"},
+    {"frames":[64,65],"phase":"sole_airborne_candidate","sole_clearance":"visible_2d_gap_candidate","right_toe_higher_than_left":true}
+  ],
+  "production_eligible": false,
+  "limits": [
+    "Airborne status is user-supported semantic evidence, not metric 3D height.",
+    "The visible 2D gap requires a stable ground reference before measurement.",
+    "No foot IK or Blender animation was changed."
+  ]
+}

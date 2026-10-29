@@ -200,12 +200,17 @@
       ],
       "boundary_status": "user_defined_adjacent_window",
       "action_semantics": {
-        "phase": "pending_group_semantics"
+        "phase": "same_pose_group_with_contact_transition",
+        "frames_62_63": "support_or_transition_candidate",
+        "frames_64_65": "sole_airborne_candidate",
+        "foot_clearance": "visible_2d_gap_candidate",
+        "right_toe_vs_left_toe": "right_toe_higher_than_left_candidate"
       },
       "camera_shot": "same_shot_pending_cut_check",
       "representative_keyframes": [
         62,
         63,
+        64,
         65
       ],
       "group_rules": {
@@ -214,12 +219,11 @@
         "cross_group_inheritance": false,
         "foot_ik": "blocked_until_visible_sole_evidence"
       },
-      "confidence": "boundary_user_defined_semantics_unassessed",
+      "confidence": "user_supported_semantics_pending_pixel_gap_measurement",
       "unresolved": [
-        "exact action phase",
-        "contact state per group",
-        "sole subtype",
-        "3D depth/camera scale"
+        "2D gap reference line/ground contact contour",
+        "metric clearance/depth",
+        "whether both soles fully airborne or one toe grazes ground"
       ]
     }
   ],
@@ -229,5 +233,5 @@
     "Only representative keyframes are reviewed; group interpolation does not cross boundaries.",
     "Clear visibility does not guarantee sole geometry or contact evidence."
   ],
-  "next_step": "Review representative keyframes per window, then fit each group independently and compare boundary continuity."
+  "next_step": "For G5 compare 63/64/65 only: measure visible 2D sole-ground gap if a stable ground edge exists; keep metric clearance null when ground edge is ambiguous."
 }
