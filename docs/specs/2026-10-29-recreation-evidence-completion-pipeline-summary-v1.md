@@ -86,3 +86,7 @@ media完成源49–56帧固定原生相机/根/人体形状的髋膝时序拟合
 ## 2026-10-30 ankle preservation ablation
 
 不依赖SAM权重的踝软先验实验完成：0.70rad下留出51帧两膝RMSE28.40→15.12px，最大踝投影变化从无先验141.96降到49.52px；但相对原恢复仍移动0.170m，未通过完整腿链验收。原踝只为未验证先验，不当真值；不继续靠提高权重替代足部几何证据。见[报告](../agents/deliverables/2026-10-30-addams-ankle-prior.md)。
+
+## 2026-10-30 shoe versus sole visual boundary
+
+七个已有shoe_proxy及邻帧放大复查：标记多在鞋面/鞋筒与踝附近连接，不能确定heel/forefoot/toe鞋底对应。Agent解释独立保存，用户原始选择不覆盖；全部禁止直接作为鞋底贴地或解剖踝中心硬约束。旧“shoe_proxy进入脚底候选”需收窄为“鞋相关观测，物理子类型确认后才进入对应约束”。见[七点页](../agents/raw/2026-10-30-addams-foot-proxy-boundary/review.html)。
