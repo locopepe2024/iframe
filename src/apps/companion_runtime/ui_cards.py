@@ -1,6 +1,4 @@
 """Registered source-choice UI. Models supply copy, never executable actions."""
-from typing import Literal
-
 from pydantic import BaseModel, ConfigDict, Field
 
 

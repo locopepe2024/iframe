@@ -5,7 +5,7 @@ from zoneinfo import ZoneInfo
 from pydantic import field_validator
 
 from pydantic import BaseModel, ConfigDict, Field
-from .ui_cards import SourceChoiceCopy
+from .ui_cards import SourceChoiceCopy, UI_CATALOG
 
 
 class Strict(BaseModel):
@@ -158,6 +158,7 @@ MODELS = {'media.draft.start': StartMediaDraft, 'media.draft.update': UpdateMedi
 
 def tool_schemas():
     return [dict(name=name, parameters=model.model_json_schema(),
+                 **({'ui_catalog': UI_CATALOG} if name == 'media.draft.start' else {}),
                  effect='draft_update' if name.startswith('media.draft.') else 'explicit_save' if name == 'diary.save_draft' else 'workflow_start' if name in ('photo.organize.start', 'photo.organize.input') else 'proposal_only' if name in ('memory.save','memory.delete','photo.action') else 'read_only')
             for name, model in MODELS.items()]
 
