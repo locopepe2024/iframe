@@ -4,7 +4,7 @@ import uuid
 
 from .store import Conflict, Missing, encode
 from .photo_tools import read_photos
-from .ui_cards import SourceChoiceCopy, source_card, asset_slot_card, resolve_source
+from .ui_cards import SourceChoiceCopy, source_card, asset_slot_card, resolve_source, selection_cards
 
 
 def display(row):
@@ -25,6 +25,7 @@ def display(row):
               '要求记下了，还可以继续补充。')
     result = dict(kind='media_draft', task_id=row['id'], session_id=row['session_id'],
                 revision=row['revision'], status=state, step=step, **payload, spoken_text=spoken)
+    result['selection_cards'] = selection_cards(result)
     card = source_card(result)
     if card:
         result.update(ui_card=card, spoken_text=card['spoken_text'])

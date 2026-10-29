@@ -68,3 +68,16 @@ def asset_slot_card(task, slot):
                     dict(id='album', label='从相册选择', action='media.open_album'),
                     dict(id='back', label='返回聊天', action='media.pause')]),
                 spoken_text=labels[slot] + '，可以从相册选择。')
+
+
+def selection_cards(task):
+    """Current binding targets, independent of missing-asset guidance cards."""
+    if task.get('status') != 'active':
+        return {}
+    if task['type'] in ('image_edit', 'image_generate'):
+        slots = ('source',)
+    else:
+        slots = {'t2v': (), 'i2v': ('first_frame',),
+                 'f2v': ('first_frame', 'last_frame'),
+                 'r2v': ('reference',) if len(task.get('reference_photo_ids', [])) < 9 else ()}.get(task.get('video_mode', 't2v'), ())
+    return {slot: f"{task['task_id']}:{task['revision']}:{slot}" for slot in slots}

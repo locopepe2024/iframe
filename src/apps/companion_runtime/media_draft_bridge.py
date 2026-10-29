@@ -5,7 +5,7 @@ It validates the currently rendered source card before delegating selection;
 card display and asset binding remain separate protocol operations.
 """
 from .media_asset_tools import AssetBindArgs, PhotoSelected, SourceCardResult
-from .ui_cards import source_card, asset_slot_card
+from .ui_cards import source_card, selection_cards
 from .store import Conflict, Missing
 
 
@@ -22,8 +22,7 @@ def source_request_from_draft(task: dict) -> SourceCardResult:
 
 
 def selection_event_from_draft(task: dict, *, card_id: str, photo_id: str, slot: str = 'source') -> PhotoSelected:
-    card = source_card(task) if slot == 'source' else asset_slot_card(task, slot)
-    if card is None or card['card_id'] != card_id:
+    if selection_cards(task).get(slot) != card_id:
         raise Conflict('Asset card is stale or unavailable')
     if not photo_id.strip():
         raise ValueError('Photo selection is required')

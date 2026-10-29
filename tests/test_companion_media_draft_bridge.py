@@ -60,3 +60,24 @@ def test_video_frame_card_event_maps_to_existing_frame_action(tmp_path, monkeypa
     monkeypatch.setattr('src.apps.companion_runtime.media_drafts.read_photos', lambda *args: {'photos': [{}]})
     changed = apply_selection(store, 'owner', 'actor', session, task, event, operation_id='frame-event')
     assert changed['first_photo_id'] == 'first'
+
+@pytest.mark.parametrize('kind,slot,mode', [
+    ('image_edit', 'source', None), ('image_generate', 'source', None),
+    ('video_generate', 'first_frame', 'f2v'), ('video_generate', 'last_frame', 'f2v'),
+])
+def test_current_selection_cards_support_adding_and_replacing_assets(tmp_path, monkeypatch, kind, slot, mode):
+    store = ChatStore(tmp_path / 'replace.db', initialize=True)
+    session = store.session('owner', 'replacement')['session_id']
+    values = {'type': kind}
+    if mode:
+        values['video_mode'] = mode
+    task = store.start_media_draft('owner', 'actor', session, 'start', values)
+    monkeypatch.setattr('src.apps.companion_runtime.media_drafts.read_photos', lambda *args: {'photos': [{}]})
+    for revision, photo in ((1, 'original'), (2, 'replacement')):
+        card_id = task['selection_cards'][slot]
+        event = selection_event_from_draft(task, card_id=card_id, photo_id=photo, slot=slot)
+        task = apply_selection(store, 'owner', 'actor', session, task, event, operation_id=f'bind-{revision}')
+        field = {'source': 'photo_id', 'first_frame': 'first_photo_id', 'last_frame': 'last_photo_id'}[slot]
+        assert task[field] == photo and task['revision'] == revision + 1
+        with pytest.raises(Conflict):
+            selection_event_from_draft(task, card_id=card_id, photo_id='stale', slot=slot)
