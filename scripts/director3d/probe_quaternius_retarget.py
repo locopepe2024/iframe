@@ -127,6 +127,25 @@ def foot_axis_diagnostics(source, target):
     return result
 
 
+def foot_axis_corrections(source, target, pairs):
+    if quaternion_angle(source.matrix_world.to_quaternion(), target.matrix_world.to_quaternion()) > 0.01:
+        raise ValueError("axis correction requires aligned armature orientations")
+    corrections = {}
+    for item in pairs:
+        if item["source"] not in {"DEF-foot.L", "DEF-foot.R"}:
+            continue
+        side = item["source"][-1].lower()
+        sb = source.data.bones[item["source"]]
+        target_name = item["target"]
+        tb = target.data.bones[target_name]
+        source_axis = source.matrix_world.to_3x3() @ (sb.tail_local-sb.head_local)
+        target_axis = target.matrix_world.to_3x3() @ (tb.tail_local-tb.head_local)
+        correction_world = target_axis.normalized().rotation_difference(source_axis.normalized())
+        world_rotation = target.matrix_world.to_quaternion()
+        corrections[target_name] = world_rotation.inverted() @ correction_world @ world_rotation
+    return corrections
+
+
 def world_position(armature, bone, endpoint="head"):
     position = getattr(bone, endpoint)
     return [round(value, 5) for value in armature.matrix_world @ position]
@@ -184,6 +203,8 @@ def main():
     parser.add_argument("--sole-contact", action="store_true", help="Measure weighted sole-region geometry; no contact acceptance")
     parser.add_argument("--foot-pivot", choices=("foot", "ankle"), default="foot",
                         help="Diagnostic A/B: transfer source foot rotation at target ankle instead of mid-foot")
+    parser.add_argument("--foot-axis-correction", action="store_true",
+                        help="Diagnostic only: align source/target rest foot-axis vectors before transfer")
     parser.add_argument("--sequence-dir", type=Path, help="Render every inclusive frame in full-body and feet views")
     parser.add_argument("--actions", nargs="+", default=["Punch_Jab", "Punch_Cross", "Sword_Attack"],
                         help="Exact source action names to inspect; missing actions fail closed")
@@ -225,6 +246,7 @@ def main():
             if len(selected) != 1:
                 raise ValueError(f"missing explicit source foot pair: {side}")
             selected[0]["target"] = f"ankle_{side}"
+    axis_corrections = foot_axis_corrections(source, target, pairs) if args.foot_axis_correction else {}
     if len({item["target"] for item in pairs}) != len(pairs):
         raise ValueError("duplicate target bone in mapping")
     for item in pairs:
@@ -298,7 +320,8 @@ def main():
                 previous_source[item["target"]] = source_rotation.copy()
                 source_delta = source_bone.matrix.to_quaternion() @ source_rest[item["source"]].inverted()
                 source_motion[item["target"]] = round(quaternion_angle(source_delta, Quaternion((1, 0, 0, 0))), 4)
-                desired_rotation = source_delta @ target_rest[item["target"]]
+                correction = axis_corrections.get(item["target"], Quaternion((1, 0, 0, 0)))
+                desired_rotation = source_delta @ correction @ target_rest[item["target"]]
                 desired_pose = target_bone.matrix.copy()
                 desired_pose = Matrix.Translation(desired_pose.translation) @ desired_rotation.to_matrix().to_4x4()
                 target_bone.rotation_quaternion = target.convert_space(
@@ -390,6 +413,10 @@ def main():
         "blenderVersion": bpy.app.version_string,
         "mappedBones": len(pairs),
         "footPivot": args.foot_pivot,
+        "footAxisCorrection": {"enabled": args.foot_axis_correction,
+                                "targets": sorted(axis_corrections),
+                                "quaternionsWXYZ": {name: list(q) for name, q in axis_corrections.items()},
+                                "method": "source_delta @ target_to_source_rest_axis @ target_rest"},
         "effectivePairs": pairs,
         "effectiveNeutralTargetBones": [name for name in mapping["neutralTargetBones"]
                                         if name not in {item["target"] for item in pairs}]
