@@ -35,3 +35,9 @@
 基于已有鞋面点与邻帧上下文，右脚49/51/52/55暂记为`contact_candidate`，左脚50/51/53暂记为`airborne_swing_candidate`。这两类都是假设，不是接触事实；所有点仍禁止直接作为IK目标。右脚只可用于确定支撑阶段候选，左脚只用于足部方向/轮廓证据。未生成新像素点，也未修改原始shoe_proxy语义。
 
 [分流记录](../raw/2026-10-30-addams-foot-proxy-boundary/contact-semantic-audit.json)
+
+## 支撑区间保守化
+
+右脚鞋面点49→51跳变19.48px，51→52为1.90px，52→55为4.73px。故不把右脚从49帧整段锁定；暂把51–55记为较保守的支撑阶段候选，49保留为过渡候选。左脚50→51为26.62px、51→53为71.93px，暂保留为腾空摆动候选。统计只用于软阶段先验，未产生完整帧标签、地面或IK约束。
+
+[区间探针](../raw/2026-10-30-addams-foot-proxy-boundary/contact-interval-probe.json)

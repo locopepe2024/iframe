@@ -94,3 +94,7 @@ media完成源49–56帧固定原生相机/根/人体形状的髋膝时序拟合
 ## 2026-10-30 shoe contact phase split
 
 已有鞋面点按邻帧视觉上下文暂分：右脚49/51/52/55为支撑候选，左脚50/51/53为腾空摆动候选；均为hypothesis，不是接触事实，禁止直接IK锁定。右脚仅进入阶段分割候选，左脚仅进入足向/轮廓证据。见[分流记录](../agents/raw/2026-10-30-addams-foot-proxy-boundary/contact-semantic-audit.json)。
+
+## 2026-10-30 conservative contact interval
+
+鞋面点稀疏步长统计：右脚49→51为19.48px，51→52为1.90px，52→55为4.73px；不再从49帧整段锁支撑，51–55仅作软支撑候选。左脚50→51为26.62px、51→53为71.93px，保留腾空摆动候选。见[区间探针](../agents/raw/2026-10-30-addams-foot-proxy-boundary/contact-interval-probe.json)。
