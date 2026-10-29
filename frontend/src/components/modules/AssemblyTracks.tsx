@@ -1,5 +1,5 @@
 "use client";
-import { useState, useRef, useEffect, type PointerEvent, type ReactNode } from "react";
+import { useState, useRef, useEffect, type PointerEvent, type KeyboardEvent, type ReactNode } from "react";
 import { createRenderRequestId } from '@/lib/renderRequestId';
 import { useLocale } from "next-intl";
 import { api, type AssemblyEditPlan } from "@/lib/api";
@@ -142,18 +142,18 @@ export function AssemblyTracks({ plan, resourceId, onChange, saved, project, mat
     const applyEdit = (edit: () => AssemblyEditPlan) => {
         try { onChange(edit()); setError(null); } catch (e) { setError(e instanceof Error ? e.message : String(e)); }
     };
-    useEffect(() => {
-        const onKeyDown = (event: KeyboardEvent) => {
-            const target = event.target as HTMLElement | null;
-            if (target?.tagName === "INPUT" || target?.tagName === "TEXTAREA" || target?.tagName === "SELECT" || target?.isContentEditable) return;
-            if (event.key === " ") { event.preventDefault(); if (currentMedia) setPlaying(value => !value); return; }
-            if (event.key === "ArrowLeft" || event.key === "ArrowRight") { event.preventDefault(); seek(position + (event.key === "ArrowRight" ? 100 : -100)); return; }
-            if (event.key.toLowerCase() === "s" && canSplit) { event.preventDefault(); if (splitClip && splitLane) applyEdit(() => splitAssemblyClip(plan, splitLane.id, splitClip.id, position, createRenderRequestId())); return; }
-            if ((event.key === "Delete" || event.key === "Backspace") && selected) { event.preventDefault(); applyEdit(() => removeAssemblyClip(plan, selected.laneId, selected.clipId)); setSelected(null); }
-        };
-        window.addEventListener("keydown", onKeyDown);
-        return () => window.removeEventListener("keydown", onKeyDown);
-    }, [currentMedia, position, canSplit, splitClip?.id, splitLane?.id, selected?.laneId, selected?.clipId, plan]);
+    const onWorkbenchKeyDown = (event: KeyboardEvent<HTMLElement>) => {
+        if (event.defaultPrevented || event.nativeEvent.isComposing || event.ctrlKey || event.metaKey || event.altKey || event.shiftKey) return;
+        const target = event.target as HTMLElement;
+        // Preserve native input, media and interactive-control keyboard behavior.
+        // closest also catches descendants of rich-text editors and buttons.
+        if (target.closest('input, textarea, select, button, a, audio, video, [contenteditable]:not([contenteditable="false"]), [role="textbox"]')) return;
+        if (event.key === " ") { event.preventDefault(); if (!event.repeat && currentMedia) setPlaying(value => !value); return; }
+        if (event.key === "ArrowLeft" || event.key === "ArrowRight") { event.preventDefault(); seek(position + (event.key === "ArrowRight" ? 100 : -100)); return; }
+        if (event.repeat) return;
+        if (event.key.toLowerCase() === "s" && canSplit) { event.preventDefault(); if (splitClip && splitLane) applyEdit(() => splitAssemblyClip(plan, splitLane.id, splitClip.id, position, createRenderRequestId())); return; }
+        if ((event.key === "Delete" || event.key === "Backspace") && selected) { event.preventDefault(); applyEdit(() => removeAssemblyClip(plan, selected.laneId, selected.clipId)); setSelected(null); }
+    };
     const control = "min-h-11 rounded-md border border-glass-border bg-elevated px-3 py-2 text-xs text-foreground focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary disabled:opacity-40";
     const active = plan.lanes.filter(l => l.kind === "subtitle" && !l.muted).flatMap(l => l.clips.filter(c => c.enabled && c.timeline_start_ms <= position && position < c.timeline_end_ms));
     const download = async (id: string) => {
@@ -165,7 +165,7 @@ export function AssemblyTracks({ plan, resourceId, onChange, saved, project, mat
             setTimeout(() => URL.revokeObjectURL(url), 1000);
         } catch (e) { setError(extractErrorDetail(e)); } finally { setBusy(false); }
     };
-    return <section aria-label={t("多泳道编辑", "Multitrack editing")} className="min-w-0 space-y-3 rounded-lg border border-glass-border p-3" style={{ contain: "inline-size" }}>
+    return <section tabIndex={0} onKeyDown={onWorkbenchKeyDown} aria-label={t("多泳道编辑", "Multitrack editing")} className="min-w-0 space-y-3 rounded-lg border border-glass-border p-3" style={{ contain: "inline-size" }}>
         <div data-editing-workspace className="min-w-0 space-y-3">
         <div className="flex flex-wrap gap-2">
             {materialPanel && <button type="button" className={control} aria-expanded={showMaterials} onClick={() => setShowMaterials(value => !value)}>{t("素材面板", "Material panel")}</button>}

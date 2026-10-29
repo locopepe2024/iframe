@@ -183,13 +183,44 @@ it('supports keyboard playback, seek, split and delete without intercepting form
     render(<AssemblyTracks plan={videoPlan} project={project} resourceId="p" saved onChange={onChange} />);
     const clip = screen.getByRole('button', { name: 'Edit clip 1: One' });
     fireEvent.click(clip);
-    fireEvent.keyDown(window, { key: 'ArrowRight' });
+    fireEvent.keyDown(screen.getByRole('region', { name: 'Multitrack editing' }), { key: 'ArrowRight' });
     expect(screen.getByRole('slider', { name: 'Timeline playhead' })).toHaveValue('100');
-    fireEvent.keyDown(window, { key: 's' });
+    fireEvent.keyDown(screen.getByRole('region', { name: 'Multitrack editing' }), { key: 's' });
     expect(onChange).toHaveBeenCalledTimes(1);
     const input = screen.getByRole('spinbutton', { name: 'Playhead (seconds)' });
     fireEvent.keyDown(input, { key: 'Delete' });
     expect(onChange).toHaveBeenCalledTimes(1);
-    fireEvent.keyDown(window, { key: 'Delete' });
+    fireEvent.keyDown(screen.getByRole('region', { name: 'Multitrack editing' }), { key: 'Delete' });
     expect(onChange).toHaveBeenCalledTimes(2);
+});
+
+it('keeps shortcuts inside the workbench and preserves browser and control keys', () => {
+    const videoPlan: AssemblyEditPlan = { ...plan, lanes: [{ id: 'v', kind: 'video', allow_overlap: false, clips: [{ id: 'one', label: 'One', timeline_start_ms: 0, timeline_end_ms: 5000, enabled: true, source_refs: [] }] }] };
+    const onChange = vi.fn();
+    render(<><button>Outside editor</button><AssemblyTracks plan={videoPlan} project={project} resourceId="p" saved onChange={onChange} /></>);
+    fireEvent.click(screen.getByRole('button', { name: 'Edit clip 1: One' }));
+    const editor = screen.getByRole('region', { name: 'Multitrack editing' });
+    fireEvent.keyDown(screen.getByRole('button', { name: 'Outside editor' }), { key: 'Delete' });
+    expect(onChange).not.toHaveBeenCalled();
+    for (const modifier of ['ctrlKey', 'metaKey', 'altKey', 'shiftKey']) {
+        expect(fireEvent.keyDown(editor, { key: 'ArrowRight', [modifier]: true })).toBe(true);
+        expect(fireEvent.keyDown(editor, { key: 'Delete', [modifier]: true })).toBe(true);
+    }
+    expect(fireEvent.keyDown(editor, { key: 'Delete', isComposing: true })).toBe(true);
+    const control = screen.getByRole('button', { name: 'Clip properties' });
+    expect(fireEvent.keyDown(control, { key: ' ' })).toBe(true);
+    const editable = document.createElement('div');
+    editable.setAttribute('contenteditable', 'true');
+    const nested = document.createElement('span');
+    editable.append(nested);
+    editor.append(editable);
+    expect(fireEvent.keyDown(nested, { key: 'Delete' })).toBe(true);
+    expect(onChange).not.toHaveBeenCalled();
+    expect(screen.getByRole('slider', { name: 'Timeline playhead' })).toHaveValue('0');
+    fireEvent.keyDown(editor, { key: 'ArrowRight' });
+    expect(screen.getByRole('slider', { name: 'Timeline playhead' })).toHaveValue('100');
+    expect(fireEvent.keyDown(editor, { key: 'Delete', repeat: true })).toBe(true);
+    expect(onChange).not.toHaveBeenCalled();
+    fireEvent.keyDown(editor, { key: 'Delete' });
+    expect(onChange).toHaveBeenCalledTimes(1);
 });
