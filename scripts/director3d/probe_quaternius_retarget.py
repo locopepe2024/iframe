@@ -162,6 +162,8 @@ def main():
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--preview-dir", type=Path)
     parser.add_argument("--sole-contact", action="store_true", help="Measure weighted sole-region geometry; no contact acceptance")
+    parser.add_argument("--foot-pivot", choices=("foot", "ankle"), default="foot",
+                        help="Diagnostic A/B: transfer source foot rotation at target ankle instead of mid-foot")
     parser.add_argument("--sequence-dir", type=Path, help="Render every inclusive frame in full-body and feet views")
     parser.add_argument("--actions", nargs="+", default=["Punch_Jab", "Punch_Cross", "Sword_Attack"],
                         help="Exact source action names to inspect; missing actions fail closed")
@@ -187,7 +189,22 @@ def main():
     else:
         source = import_armature(args.source)
         target = load_target(args.target)
-    pairs = mapping["pairs"]
+    pairs = [dict(item) for item in mapping["pairs"]]
+    if args.foot_pivot == "ankle":
+        for side, source_side in (("l", "L"), ("r", "R")):
+            chain = [f"ankle_{side}", f"foot_{side}", f"DEF_foot_{side}", f"toe_{side}"]
+            if any(name not in target.data.bones for name in chain):
+                raise ValueError(f"missing explicit ankle chain: {side}")
+            for parent, child in zip(chain, chain[1:]):
+                if target.data.bones[child].parent != target.data.bones[parent]:
+                    raise ValueError(f"unexpected ankle chain: {side}")
+            ankle, foot = (target.data.bones[name] for name in chain[:2])
+            if quaternion_angle(ankle.matrix_local.to_quaternion(), foot.matrix_local.to_quaternion()) > 0.01:
+                raise ValueError(f"unaligned ankle/foot rest axes: {side}")
+            selected = [item for item in pairs if item == {"source": f"DEF-foot.{source_side}", "target": f"foot_{side}"}]
+            if len(selected) != 1:
+                raise ValueError(f"missing explicit source foot pair: {side}")
+            selected[0]["target"] = f"ankle_{side}"
     if len({item["target"] for item in pairs}) != len(pairs):
         raise ValueError("duplicate target bone in mapping")
     for item in pairs:
@@ -351,6 +368,11 @@ def main():
         "targetSha256": target_hash,
         "blenderVersion": bpy.app.version_string,
         "mappedBones": len(pairs),
+        "footPivot": args.foot_pivot,
+        "effectivePairs": pairs,
+        "effectiveNeutralTargetBones": [name for name in mapping["neutralTargetBones"]
+                                        if name not in {item["target"] for item in pairs}]
+                                       + (["foot_l", "foot_r"] if args.foot_pivot == "ankle" else []),
         "pelvisTranslation": translation_calibration,
         "sourceBones": len(source.data.bones),
         "targetBones": len(target.data.bones),
@@ -358,6 +380,7 @@ def main():
         "authoredFPS": "unverified",
         "actions": reports,
         "warnings": mapping["warnings"] + [
+            "Mapping warnings describe the input map; effective pairs and neutral bones record diagnostic overrides.",
             "Pelvis and foot positions are diagnostic only; no ground calibration, contact acceptance, or IK was performed.",
             *([] if args.target.suffix.lower() == ".blend" else [
                 "Target GLB is not the pinned Blender .blend rig; this report cannot validate production retargeting.",

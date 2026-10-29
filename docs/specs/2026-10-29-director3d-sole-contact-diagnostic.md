@@ -36,3 +36,14 @@ FPS remains unverified. Use temporary files, no production asset writes.
 Affected paths: the existing probe, a pure contact-metrics helper and focused
 tests. Commands: focused pytest, py_compile, media Blender background probe,
 FFmpeg sequence encoding. Admin owns merge/deployment.
+
+## Ankle-pivot A/B experiment
+
+Media rest-chain inspection shows source `DEF-foot` starts at the shin endpoint,
+whereas target `foot` starts after the neutral `ankle` helper. Test an explicit
+`--foot-pivot ankle` override: map source foot rotation to target ankle, leaving
+target foot neutral. Preserve source-map SHA and record effective pairs and
+neutral bones separately. Validate both sides' ankle→foot→DEF_foot→toe hierarchy
+and aligned ankle/foot rest axes before applying. Default stays `foot`.
+Compare four-action geometry metrics with identical pinned inputs; improvement
+of minima alone cannot accept contact or prove ankle pivot is the sole cause.
