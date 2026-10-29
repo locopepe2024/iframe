@@ -21,6 +21,26 @@ from .media_drafts import MediaDrafts
 
 
 class ChatStore(MediaDrafts, PhotoTasks, DiaryStore, CompanionStore):
+    def workflow_context(self, owner, actor, session):
+        """Return a bounded, read-only snapshot for a coordinator."""
+        with self.connection() as db:
+            self.one(db, 'companion_sessions', owner, session)
+            tasks = db.execute(
+                'SELECT id,status,step,revision,payload FROM companion_photo_tasks '
+                'WHERE owner=? AND actor=? AND session_id=? AND status=? ORDER BY rowid DESC LIMIT 3',
+                (owner, actor, session, 'waiting_input')).fetchall()
+            diaries = db.execute(
+                'SELECT day,revision,updated_at FROM companion_diaries '
+                'WHERE owner=? AND actor=? ORDER BY day DESC LIMIT 3', (owner, actor)).fetchall()
+        active = []
+        for task in tasks:
+            payload = json.loads(task['payload'])
+            active.append(dict(task_id=task['id'], status=task['status'], step=task['step'],
+                               revision=task['revision'], candidate_count=len(payload.get('candidate_ids', [])),
+                               selected=bool(payload.get('selected_id'))))
+        return dict(session_id=session, focused_task=active[0]['task_id'] if active else None,
+                    album_tasks=active, recent_diaries=[dict(row) for row in diaries])
+
     def conversation(self, owner, actor, session, *, after=0, limit=20, latest=False, before=None):
         if latest or before is not None:
             if not 1 <= limit <= 100 or (before is not None and before < 1):
