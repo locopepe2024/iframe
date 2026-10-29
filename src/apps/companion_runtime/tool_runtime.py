@@ -6,6 +6,7 @@ must check business preconditions and ownership inside the mutation transaction.
 from dataclasses import dataclass
 from typing import Literal
 
+from pydantic import BaseModel
 from .operation_protocol import Receipt, Strict, Wait
 
 
@@ -63,8 +64,8 @@ class ToolRegistry:
 
     @staticmethod
     def _check_model(model):
-        if not isinstance(model, type) or not issubclass(model, Strict):
-            raise ValueError('Tool schemas must use strict models')
+        if not isinstance(model, type) or not issubclass(model, BaseModel):
+            raise ValueError('Tool schemas must use Pydantic models')
         if model.model_config.get('extra') != 'forbid' or not model.model_config.get('strict'):
             raise ValueError('Tool schemas must reject extra fields and coercion')
 
