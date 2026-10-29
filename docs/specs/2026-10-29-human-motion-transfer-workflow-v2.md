@@ -74,3 +74,7 @@
 - 运行报告：`../agents/deliverables/2026-10-29-background-camera-validation-v1.md`及`2026-10-29-world-camera-contact-ablation-v2.md`。
 - 本轮只更改规范，不改生产代码、相机、模型权重或既有人工标签。
 - 后续实验沿用media Blender与背景追踪工具，命令、SHA及参数写入各切片报告。
+
+## VLM semantic observation layer
+
+公开方案与验证协议见[视觉语言模型辅助分析](2026-10-29-vlm-human-video-analysis-v1.md)。VLM提供镜头、动作阶段、遮挡与接触候选及证据帧，与背景/姿态几何独立核对。先原RGB盲测，再局部ROI复核，最后候选对照；不把文本输出当几何真值，不给盲测已知动作顺序，不自动锁脚。深度留待同样本消融。
