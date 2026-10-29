@@ -1,0 +1,156 @@
+{
+  "schema": "addams-shot-first-manifest.v1",
+  "source_range": [
+    46,
+    65
+  ],
+  "fps": 25,
+  "production_eligible": false,
+  "shots": [
+    {
+      "shot_id": "S_candidate_1",
+      "source_frames": [
+        46,
+        47,
+        48,
+        49,
+        50,
+        51,
+        52,
+        53,
+        54,
+        55,
+        56,
+        57,
+        58,
+        59,
+        60,
+        61,
+        62,
+        63,
+        64,
+        65
+      ],
+      "status": "same_shot_candidate_pending_boundary_review",
+      "camera_model_status": "one camera candidate only; focal/depth not separated",
+      "cut_before": null,
+      "cut_after": null,
+      "evidence": [
+        "no confirmed cut label within 46–65 in current evidence package"
+      ],
+      "limits": [
+        "same-shot is a candidate, not proven",
+        "camera motion/zoom can still occur within shot",
+        "no cross-shot interpolation until boundary confirmed"
+      ]
+    }
+  ],
+  "motion_groups": [
+    {
+      "G0": {
+        "shot_id": "S_candidate_1",
+        "source_frames": [
+          46,
+          47
+        ],
+        "representative_keyframes": [
+          46,
+          47
+        ]
+      }
+    },
+    {
+      "G1": {
+        "shot_id": "S_candidate_1",
+        "source_frames": [
+          48,
+          49
+        ],
+        "representative_keyframes": [
+          48,
+          49
+        ]
+      }
+    },
+    {
+      "G2": {
+        "shot_id": "S_candidate_1",
+        "source_frames": [
+          50,
+          51,
+          52,
+          53
+        ],
+        "representative_keyframes": [
+          50,
+          51,
+          53
+        ]
+      }
+    },
+    {
+      "G3": {
+        "shot_id": "S_candidate_1",
+        "source_frames": [
+          54,
+          55,
+          56,
+          57
+        ],
+        "representative_keyframes": [
+          54,
+          55,
+          57
+        ]
+      }
+    },
+    {
+      "G4": {
+        "shot_id": "S_candidate_1",
+        "source_frames": [
+          58,
+          59,
+          60,
+          61
+        ],
+        "representative_keyframes": [
+          58,
+          59,
+          61
+        ]
+      }
+    },
+    {
+      "G5": {
+        "shot_id": "S_candidate_1",
+        "source_frames": [
+          62,
+          63,
+          64,
+          65
+        ],
+        "representative_keyframes": [
+          62,
+          63,
+          65
+        ]
+      }
+    }
+  ],
+  "order": [
+    "shot_boundary",
+    "camera_candidate",
+    "motion_group",
+    "semantic_keyframes",
+    "temporal_fit",
+    "retarget_ik",
+    "validation"
+  ],
+  "rules": [
+    "A motion group cannot cross a confirmed shot cut.",
+    "Camera candidate is solved/frozen per shot before pose fitting.",
+    "If shot status is pending, group output remains diagnostic only.",
+    "Do not use same-shot assumption to prove focal length or absolute depth."
+  ],
+  "next_step": "Review cut_before/cut_after at 46 and 65 plus within-range discontinuities, then freeze shot ID before group fitting."
+}
