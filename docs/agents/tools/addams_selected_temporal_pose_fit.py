@@ -12,10 +12,11 @@ from hmr4d.utils.smplx_utils import make_smplx
 BASE = Path('/tmp/addams-pose/gvhmr-native-v1')
 parser = argparse.ArgumentParser()
 parser.add_argument('--ankle-prior-px', type=float, default=0.0)
+parser.add_argument('--phase-smooth-weight', type=float, default=0.0)
 args = parser.parse_args()
-if args.ankle_prior_px < 0:
+if args.ankle_prior_px < 0 or args.phase_smooth_weight < 0:
     parser.error('ankle prior weight must be nonnegative')
-OUT = BASE / ('selected-temporal-fit-v1' if args.ankle_prior_px == 0 else 'selected-temporal-ankle-prior-v1')
+OUT = BASE / ('selected-temporal-fit-v1' if args.ankle_prior_px == 0 and args.phase_smooth_weight == 0 else 'selected-temporal-phase-prior-v1')
 OUT.mkdir(exist_ok=True)
 fusion_path = BASE / 'selected-temporal-input.json'
 fusion = json.loads(fusion_path.read_text())
@@ -75,6 +76,13 @@ def fit(bound, holdout):
         # Robust pixel data loss, bounded pose prior, and temporal correction prior.
         loss = (torch.sqrt(residuals.square().sum(-1) + 4) - 2).mean()
         loss += 2*delta.square().mean() + 8*torch.diff(delta, n=2, dim=0).square().mean()
+        if args.phase_smooth_weight:
+            # Soft phase prior: smooth predicted right ankle camera trajectory only in 51-55 window.
+            # It is not a ground/contact or source-point target.
+            q = torch.arange(F, device=joints.device)
+            window = (q >= 2) & (q <= 6)
+            if window.sum() >= 3:
+                loss += args.phase_smooth_weight * torch.diff(joints[window, 16], n=2, dim=0).square().mean() / .05**2
         if args.ankle_prior_px:
             # Native ankle locations are a preservation prior, never source truth.
             loss += args.ankle_prior_px * ((joints[:, [15,16]] - base_j[:, [15,16]]) / .05).square().mean()
@@ -108,6 +116,7 @@ def fit(bound, holdout):
 result = {'schema': 'addams-selected-temporal-pose-fit.v1', 'production_eligible': False,
           'input_sha256': hashlib.sha256(fusion_path.read_bytes()).hexdigest(),
           'ankle_preservation_weight_px':args.ankle_prior_px,
+          'phase_smooth_weight':args.phase_smooth_weight,
           'ankle_prior_status':'native camera-space locations; unverified prior, not observation',
           'camera': {'fx':fx,'fy':fy,'cx':cx,'cy':cy,'fixed':True},
           'frame_map':rows, 'source_range':[49,56], 'baseline_projection_xy':base_xy.tolist(),
