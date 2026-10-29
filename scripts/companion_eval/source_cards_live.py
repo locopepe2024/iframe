@@ -42,13 +42,18 @@ def scenario(identity, index, repeat):
             return proposal, store.finish_turn(owner, actor, claim, proposal)['result']
         try:
             proposal, first = turn(start, 'start')
+            if index // 4 == 1 and proposal['kind'] == 'text':
+                record['clarification_review'] = 'pending_human_review'
+                # Ambiguous “处理” can mean editing or organizing. Answer the
+                # clarification rather than counting a question as failure.
+                proposal, first = turn('我要修改画面，不是整理资料', 'clarify')
             record['checks'].append(first.get('kind') == 'media_draft' and first.get('type') == 'image_edit')
-            record['checks'].append(first.get('brief') == '' and bool(first.get('ui_card')))
+            record['checks'].append((index // 4 == 2 or first.get('brief') == '') and bool(first.get('ui_card')))
             if not all(record['checks']):
                 record['passed'] = False
                 return record
             proposal, chosen = turn(source, 'source')
-            record['checks'].append(chosen.get('task_id') == first['task_id'] and chosen.get('ui_action') == action and chosen.get('brief') == '')
+            record['checks'].append(chosen.get('task_id') == first['task_id'] and chosen.get('ui_action') == action and chosen.get('brief') == first.get('brief'))
             proposal, brief = turn('把背景换成海边，人物保持不变', 'brief')
             record['checks'].append(proposal.get('name') == 'media.draft.update' and proposal.get('arguments', {}).get('action') == 'brief' and brief.get('task_id') == first['task_id'])
             record['checks'].append('海边' in brief.get('brief', '') and ('不变' in brief.get('brief', '') or '保留' in brief.get('brief', '')))
