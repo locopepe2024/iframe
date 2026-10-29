@@ -9,7 +9,7 @@ colors={'joint_center':(255,220,0),'shoe_proxy':(0,220,255)}
 # Build a single point per semantic joint; retain separate left/right ankle semantics.
 tracks=[]
 for group,js in FUS['groups'].items():
- for joint,r in js.items():tracks.append((group,joint,r['track']))
+ for joint,r in js.items():tracks.append((group,joint,{int(k):v for k,v in r['track'].items() if v['kind'] != 'edge_hold'}))
 frames=list(range(46,66));W,H=960,520
 for sf in frames:
  im=Image.open(FRAMES/f'frame-{sf:03}.jpg').convert('RGB');d=ImageDraw.Draw(im)
