@@ -1,0 +1,37 @@
+{
+  "schema": "addams-g5-adjacent-difference.v1",
+  "rows": [
+    {
+      "from": 62,
+      "to": 63,
+      "mean_abs_rgb_diff": [
+        0.17311298076923076,
+        0.17166866987179488,
+        0.19025841346153846
+      ]
+    },
+    {
+      "from": 63,
+      "to": 64,
+      "mean_abs_rgb_diff": [
+        2.477391826923077,
+        2.529591346153846,
+        2.6817908653846154
+      ]
+    },
+    {
+      "from": 64,
+      "to": 65,
+      "mean_abs_rgb_diff": [
+        1.648679887820513,
+        1.6784334935897436,
+        1.8314643429487178
+      ]
+    }
+  ],
+  "interpretation": "62-63 near duplicate; 63-64 largest transition; 64-65 continuing transition",
+  "limits": [
+    "Image difference includes compression, camera and lighting changes.",
+    "It does not prove contact or pose correctness."
+  ]
+}
