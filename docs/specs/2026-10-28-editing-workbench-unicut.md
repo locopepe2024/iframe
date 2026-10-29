@@ -19,3 +19,12 @@ Drag video clips to reorder, snapping with visible feedback, explicit keyboard e
 
 ## Slice 2: video drag reorder
 Native drag/drop moves a video clip before or after another clip according to the target midpoint. A visible insertion indicator shows the candidate boundary. Commit only on drop, so undo records one change. Source ranges and IDs remain unchanged, video remains contiguous, duration and other lanes stay anchored. Canceling drag makes no plan mutation. Existing move buttons remain the keyboard alternative. Foreign drags are ignored. Test direct arbitrary moves, no-op, and drop behavior.
+
+## Keyboard scope
+Shortcuts apply only to focused workbench surfaces (including the ruler), never
+to unrelated page controls. Tab can focus the workbench. Preserve native keys
+on inputs, buttons, links, media and rich-text descendants, browser modifier
+combinations, IME composition and already handled events. Arrow keys seek in
+100 ms steps; Space toggles preview; S splits at the playhead; Delete/Backspace
+remove the selection. Repeated destructive commands are ignored. Verify outside
+focus, native control behavior and modifier/composition guards with UI tests.
