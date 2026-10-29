@@ -5,6 +5,7 @@ from zoneinfo import ZoneInfo
 from pydantic import field_validator
 
 from pydantic import BaseModel, ConfigDict, Field
+from .ui_cards import SourceChoiceCopy
 
 
 class Strict(BaseModel):
@@ -38,12 +39,15 @@ class StartMediaDraft(Strict):
     type: Literal['image_edit', 'image_generate', 'video_generate']
     video_mode: Literal['t2v', 'i2v', 'f2v', 'r2v'] | None = None
     brief: str = Field(default='', max_length=4000)
+    source_choice: SourceChoiceCopy | None = Field(default=None, description='仅图片编辑缺少素材时，可提供来源选择卡标题。服务端绑定上传、相册、返回动作；不生成URL或工具名。省略使用默认卡片。')
 
 
 class UpdateMediaDraft(Strict):
     task_id: str = Field(min_length=1, max_length=120)
     expected_revision: int = Field(ge=1)
-    action: Literal['open_upload', 'open_album', 'brief', 'select_photo', 'select_first_photo', 'select_last_photo', 'add_reference_photo', 'remove_reference_photo', 'video_mode', 'clear_photo', 'setting', 'pause', 'resume', 'cancel']
+    action: Literal['choose_source', 'open_upload', 'open_album', 'brief', 'select_photo', 'select_first_photo', 'select_last_photo', 'add_reference_photo', 'remove_reference_photo', 'video_mode', 'clear_photo', 'setting', 'pause', 'resume', 'cancel']
+    card_id: str | None = Field(default=None, max_length=160)
+    option_id: Literal['upload', 'album', 'back'] | None = None
     setting: str | None = Field(default=None, max_length=40)
     brief: str = Field(default='', max_length=4000)
     photo_id: str | None = Field(default=None, max_length=120)

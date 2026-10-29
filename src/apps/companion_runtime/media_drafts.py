@@ -4,6 +4,7 @@ import uuid
 
 from .store import Conflict, Missing, encode
 from .photo_tools import read_photos
+from .ui_cards import SourceChoiceCopy, source_card, resolve_source
 
 
 def display(row):
@@ -22,8 +23,12 @@ def display(row):
               '想怎么修改这张照片？' if payload['type'] == 'image_edit' and step == 'awaiting_brief' else
               '想创作什么内容？' if step == 'awaiting_brief' else
               '要求记下了，还可以继续补充。')
-    return dict(kind='media_draft', task_id=row['id'], session_id=row['session_id'],
+    result = dict(kind='media_draft', task_id=row['id'], session_id=row['session_id'],
                 revision=row['revision'], status=state, step=step, **payload, spoken_text=spoken)
+    card = source_card(result)
+    if card:
+        result.update(ui_card=card, spoken_text=card['spoken_text'])
+    return result
 
 
 class MediaDrafts:
@@ -75,6 +80,10 @@ class MediaDrafts:
                 db.execute("UPDATE companion_media_drafts SET status='paused',revision=revision+1 WHERE id=? AND owner=? AND actor=?",
                            (active_row['id'], owner, actor))
             payload = dict(type=values['type'], brief=values.get('brief', '').strip(), photo_id=None)
+            if values.get('source_choice') is not None:
+                if values['type'] != 'image_edit':
+                    raise ValueError('Source choice requires an image editing task')
+                payload['source_choice'] = SourceChoiceCopy.model_validate(values['source_choice']).model_dump()
             if values['type'] == 'video_generate':
                 payload.update(video_mode=values.get('video_mode') or 't2v', first_photo_id=None, last_photo_id=None, reference_photo_ids=[])
             task_id = str(uuid.uuid4())
@@ -98,6 +107,8 @@ class MediaDrafts:
                 raise Conflict('Creative task changed or closed')
             payload = json.loads(row['payload'])
             action = values['action']
+            if action == 'choose_source':
+                action = resolve_source(display(row), values.get('card_id'), values.get('option_id'))
             status = row['status']
             if action == 'resume':
                 other = self.active_media_draft(db, owner, actor, session)
@@ -112,7 +123,7 @@ class MediaDrafts:
                 # UI navigation is part of this task, never a second draft.
                 # Persist the operation receipt, but do not change the brief.
                 result = display(row)
-                result.update(ui_action=action, spoken_text='请在卡片中选择要上传的照片。' if action == 'open_upload' else '相册已打开，请选择要修改的照片。')
+                result.update(ui_action=action, ui_event_id=operation_id, spoken_text='请在卡片中选择要上传的照片。' if action == 'open_upload' else '请在相册卡片中选择要修改的照片。')
                 db.execute('INSERT INTO companion_media_draft_operations VALUES (?,?,?,?,?,?)',
                            (owner, actor, task_id, operation_id, request, encode(result)))
                 return result
