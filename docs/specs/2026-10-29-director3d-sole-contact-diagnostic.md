@@ -47,3 +47,13 @@ neutral bones separately. Validate both sides' ankle→foot→DEF_foot→toe hie
 and aligned ankle/foot rest axes before applying. Default stays `foot`.
 Compare four-action geometry metrics with identical pinned inputs; improvement
 of minima alone cannot accept contact or prove ankle pivot is the sole cause.
+
+## Rest-axis correction experiment
+
+Optional `--foot-axis-correction` computes the shortest target-to-source rest
+axis rotation C, in target armature space. Transfer uses source_delta × C ×
+target_rest, with aligned armature orientations required. Record C as WXYZ.
+The source motion metric remains the uncorrected source delta. This aligns one
+axis only: twist, heel/toe support and anatomical equivalence remain unverified.
+Compare all four clips against the ankle-pivot baseline. Do not promote a
+correction that increases walking penetration, even if axis error decreases.
