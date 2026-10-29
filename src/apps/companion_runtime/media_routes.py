@@ -1,4 +1,5 @@
 """Explicit demo generation and TTS through the owner's UniArt channel."""
+import logging
 import hashlib
 import sqlite3
 import json
@@ -101,6 +102,12 @@ def job(store, owner, job_id):
         return dict(row)
 
 
+def check_reference_storage():
+    from ...utils.oss_utils import OSSImageUploader
+    if not OSSImageUploader().is_configured:
+        raise HTTPException(503, '参考照片传输服务尚未配置，请联系管理员；本次未提交生成。')
+
+
 def execute(store, identity, job_id, body, config, options):
     # A crash leaves an uncertain running task; it is never automatically resubmitted.
     output = store.path.parent / 'companion-generated' / (job_id + ('.png' if body.mode == 'image' else '.mp4'))
@@ -147,7 +154,9 @@ def execute(store, identity, job_id, body, config, options):
         if not output.is_file() or output.stat().st_size == 0:
             raise ValueError('Missing generated file')
         status = 'completed'
-    except Exception:
+    except Exception as exc:
+        # Log the boundary and exception class, never credentials or signed URLs.
+        logging.getLogger(__name__).error("Companion generation failed job=%s mode=%s error_type=%s", job_id, body.mode, type(exc).__name__)
         status = 'failed'
     with store.connection(write=True) as db:
         db.execute('UPDATE companion_generations SET status=?,path=? WHERE id=? AND owner=?',
@@ -229,6 +238,7 @@ def generate(body: Generate, identity: Owner, store: Store, background: Backgrou
         if not seconds or not duration.get('min', 999) <= seconds <= duration.get('max', 0):
             raise HTTPException(422, '所选模型不支持该时长。')
     if body.reference or body.references or body.first_reference or body.last_reference:
+        check_reference_storage()
         ids = list(dict.fromkeys([item for item in ([body.reference, body.first_reference, body.last_reference] + body.references) if item]))
         materials = {}
         try:

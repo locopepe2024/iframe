@@ -100,6 +100,14 @@ def test_draft_generation_validates_revision_brief_and_reference_before_provider
     assert c.post('/companion-runtime/generations', json={**body, 'prompt':'别的要求'}).status_code == 409
     assert c.post('/companion-runtime/generations', json={**body, 'model':'text'}).status_code == 422
     executor.assert_not_called()
+    from fastapi import HTTPException
+    def unavailable():
+        raise HTTPException(503, 'reference storage unavailable')
+    monkeypatch.setattr(services, 'check_reference_storage', unavailable)
+    assert c.post('/companion-runtime/generations', json=body).status_code == 503
+    executor.assert_not_called()
+    assert store.media_draft('owner', 'user', task['task_id'])['status'] == 'active'
+    monkeypatch.setattr(services, 'check_reference_storage', lambda: None)
     result = c.post('/companion-runtime/generations', json=body)
     assert result.status_code == 200, result.text
     media.media.assert_called_with('owner', 'mine', thumbnail=False)
