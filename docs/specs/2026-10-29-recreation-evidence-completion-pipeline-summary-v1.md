@@ -130,3 +130,7 @@ media完成源49–56帧固定原生相机/根/人体形状的髋膝时序拟合
 ## 2026-10-30 G5 duplicate and transition evidence
 
 62→63平均RGB差约0.18，63→64约2.56，64→65约1.72；62/63为近重复姿势，63→64为主要转折。G5保留同组，64作为离地关键帧候选，避免逐帧独立求解。
+
+## 2026-10-30 semantic grouping and interpolation
+
+确认可采用LLM/视觉模型结构化解读：先按镜头输出帧语义，再按相邻兼容状态归组；每组定义姿势、动作、接触、离地和相机目标。前后清晰组可做双向语义补偿，但保持`temporal_inference`证据等级，不能生成未观测的像素/深度/焦距/公制离地距离。冲突组输出unknown进入人工队列。见[语义插值契约](../agents/raw/2026-10-30-addams-semantic-interpolation-v1/contract.json)。
