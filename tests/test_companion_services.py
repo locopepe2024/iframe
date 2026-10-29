@@ -230,3 +230,19 @@ def test_unified_photo_selected_event_rejects_old_card_and_wrong_session(client,
     body['operation_id'] = 'wrong-session'
     body['card_id'] = task['ui_card']['card_id']
     assert c.post(f'/companion-runtime/sessions/{other}/events', json=body).status_code == 404
+
+
+def test_unified_frame_event_uses_video_slot_card(client, monkeypatch):
+    c, store, _ = client
+    session = store.session('owner', 'frame-events')['session_id']
+    task = store.start_media_draft('owner', 'user', session, 'start-frame-event',
+                                    {'type': 'video_generate', 'video_mode': 'f2v'})
+    from src.apps.companion_runtime.ui_cards import asset_slot_card
+    card = asset_slot_card(task, 'first_frame')
+    monkeypatch.setattr('src.apps.companion_runtime.media_drafts.read_photos', lambda *args: {'photos': [{}]})
+    result = c.post(f'/companion-runtime/sessions/{session}/events', json={
+        'operation_id': 'frame-event-1', 'event_type': 'photo_selected',
+        'task_id': task['task_id'], 'card_id': card['card_id'], 'photo_id': 'first',
+        'slot': 'first_frame', 'expected_revision': 1})
+    assert result.status_code == 200, result.text
+    assert result.json()['task']['first_photo_id'] == 'first'

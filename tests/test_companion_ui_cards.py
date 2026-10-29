@@ -72,3 +72,23 @@ def test_back_pauses_task_and_selected_photo_resolves_source_card(tmp_path, monk
     monkeypatch.setattr('src.apps.companion_runtime.media_drafts.read_photos', lambda *args: {'photos': [{}]})
     selected = store.update_media_draft('owner', 'actor', session, task['task_id'], 'select', dict(expected_revision=3, action='select_photo', photo_id='mine'))
     assert selected['step'] == 'awaiting_brief' and 'ui_card' not in selected
+
+
+def test_video_asset_cards_follow_mode_and_slot_state():
+    from src.apps.companion_runtime.ui_cards import asset_slot_card
+    base = dict(task_id='video-task', revision=3, status='active', type='video_generate',
+                video_mode='f2v', first_photo_id=None, last_photo_id=None, reference_photo_ids=[])
+    first = asset_slot_card(base, 'first_frame')
+    last = asset_slot_card(base, 'last_frame')
+    assert first['card_id'].endswith(':first_frame') and last['card_id'].endswith(':last_frame')
+    assert asset_slot_card({**base, 'first_photo_id': 'p1'}, 'first_frame') is None
+    assert asset_slot_card({**base, 'video_mode': 'i2v'}, 'last_frame') is None
+    assert asset_slot_card({**base, 'video_mode': 't2v'}, 'first_frame') is None
+
+
+def test_reference_card_stops_after_nine_photos():
+    from src.apps.companion_runtime.ui_cards import asset_slot_card
+    task = dict(task_id='r', revision=1, status='active', type='video_generate',
+                video_mode='r2v', first_photo_id=None, last_photo_id=None,
+                reference_photo_ids=['p' + str(i) for i in range(9)])
+    assert asset_slot_card(task, 'reference') is None

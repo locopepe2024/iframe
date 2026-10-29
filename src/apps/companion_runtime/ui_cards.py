@@ -38,3 +38,33 @@ def resolve_source(task, card_id, option_id):
     if not card or card['card_id'] != card_id or option_id not in SOURCE_ACTIONS:
         raise ValueError('Source card is unavailable or action is not registered')
     return SOURCE_ACTIONS[option_id]
+
+
+def asset_slot_card(task, slot):
+    """Return a registered card for a video asset slot, if it is currently needed."""
+    if task.get('status') != 'active' or task.get('type') != 'video_generate':
+        return None
+    mode = task.get('video_mode', 't2v')
+    missing = {
+        'i2v': ('first_frame',),
+        'f2v': ('first_frame', 'last_frame'),
+        'r2v': ('reference',),
+        't2v': (),
+    }.get(mode, ())
+    if slot not in missing:
+        return None
+    if slot == 'first_frame' and task.get('first_photo_id'):
+        return None
+    if slot == 'last_frame' and task.get('last_photo_id'):
+        return None
+    if slot == 'reference' and len(task.get('reference_photo_ids', [])) >= 9:
+        return None
+    labels = {'first_frame': '选择首帧照片', 'last_frame': '选择尾帧照片', 'reference': '添加参考照片'}
+    return dict(protocol='companion.ui.v1', component='choice_card',
+                card_id=f"{task['task_id']}:{task['revision']}:{slot}",
+                task=dict(id=task['task_id'], revision=task['revision']),
+                status='active', slot=slot,
+                props=dict(title=labels[slot], options=[
+                    dict(id='album', label='从相册选择', action='media.open_album'),
+                    dict(id='back', label='返回聊天', action='media.pause')]),
+                spoken_text=labels[slot] + '，可以从相册选择。')
