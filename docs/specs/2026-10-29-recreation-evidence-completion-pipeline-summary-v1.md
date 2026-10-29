@@ -66,3 +66,7 @@
 ## Human semantic handoff
 
 第49–58帧膝踝18项已整理成三选一复核页：joint_center / shoe_proxy / unusable。默认pending，支持本地保存与下载JSON；结果仅进入证据层，不直接改动作链路。通过后分别用于姿态锚点、鞋底接触候选或时序补全。
+
+## User semantic decisions applied
+
+用户下载的18项决策已冻结到证据层：11 joint_center、7 shoe_proxy；joint_center中8项采用ViTPose、3项人工，原生投影未被选作joint_center。沿用既有review点的局部比较显示ViTPose中位21.72px、原生36.10px，但不是独立真值或全片准确率。下一步按语义分流做时序软观测，shoe_proxy不进入关节中心误差评价，当前不升级硬约束。
