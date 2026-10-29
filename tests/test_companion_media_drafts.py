@@ -154,3 +154,12 @@ def test_same_lane_start_retry_cannot_create_a_task_after_switch(tmp_path):
     assert store.start_media_draft('owner', 'actor', session, 'repeat', dict(type='image_edit')) == repeated
     with store.connection() as db:
         assert store.active_media_draft(db, 'owner', 'actor', session)['task_id'] == switched['task_id']
+
+
+def test_video_draft_exposes_next_missing_asset_card(tmp_path):
+    store = ChatStore(tmp_path / 'chat.db', initialize=True)
+    session = store.session('owner', 'asset-card')['session_id']
+    task = store.start_media_draft('owner', 'actor', session, 'video-card',
+        {'type': 'video_generate', 'video_mode': 'f2v'})
+    assert task['asset_card']['slot'] == 'first_frame'
+    assert task['asset_card']['card_id'].endswith(':first_frame')

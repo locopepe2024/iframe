@@ -4,7 +4,7 @@ import uuid
 
 from .store import Conflict, Missing, encode
 from .photo_tools import read_photos
-from .ui_cards import SourceChoiceCopy, source_card, resolve_source
+from .ui_cards import SourceChoiceCopy, source_card, asset_slot_card, resolve_source
 
 
 def display(row):
@@ -28,6 +28,12 @@ def display(row):
     card = source_card(result)
     if card:
         result.update(ui_card=card, spoken_text=card['spoken_text'])
+    elif payload['type'] == 'video_generate':
+        for slot in ('first_frame', 'last_frame', 'reference'):
+            card = asset_slot_card(result, slot)
+            if card:
+                result.update(asset_card=card, spoken_text=card['spoken_text'])
+                break
     return result
 
 

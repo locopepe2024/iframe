@@ -263,3 +263,10 @@
 2026-10-29：前端 `MediaUpload` 完成照片上传后，`AgentChat` 现在调用统一 `photo_uploaded` 事件入口，而不是直接调用旧的 `select_photo`。上传前、上传中、失败、取消都不会绑定素材；回调会核对创建上传时保存的 task、revision 和当前来源卡片 ID。草稿已切换或卡片失效时，素材仍保留在相册，但提示用户重新选择。
 
 `companionApi.mediaEvent` 已加入客户端类型；前端 typecheck 通过。当前仅照片创作来源接入，视频上传仍保持原上传路径，首尾帧卡片选择也仍需前端呈现。
+
+
+## 实现进度：视频素材卡片前端展示
+
+2026-10-29：`media_drafts.display` 现在为视频任务返回当前缺失槽位的 `asset_card`；前端 `MediaDraftCard` 使用独立 `AssetSlotCard` 渲染首帧、尾帧和参考图入口，并在卡片存在时隐藏重复的旧槽位按钮。卡片仍只允许注册的相册/返回动作，选择后的事件由统一入口处理。
+
+后端相关媒体草稿、卡片、桥接和服务测试通过；前端 `npm run typecheck` 通过。当前前端相册选择仍有部分旧 `updateMediaDraft` 路径，下一步需统一改为带 card_id/slot 的 `mediaEvent`，然后再处理视频上传完成事件。
