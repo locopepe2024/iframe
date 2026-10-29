@@ -46,5 +46,21 @@ export function bakeDepthMeshes(scene: THREE.Scene) {
   });
   if (!meshes.length) throw new Error('场景中没有可导出的实体，请等待白模加载完成。');
   if (meshes.reduce((sum, mesh) => sum + mesh.positions.length, 0) > 300000) throw new Error('场景超过深度导出的顶点上限。');
-  return meshes;
+  if (meshes.reduce((sum, mesh) => sum + mesh.triangles.length, 0) > 600000) throw new Error('场景超过深度导出的三角面上限。');
+  if (meshes.some(mesh => mesh.positions.length > 150000 || mesh.triangles.length > 300000)) throw new Error('单个实体超过深度导出的几何上限。');
+  if (meshes.length <= 100) return meshes;
+  // Geometry is already skinned and in world coordinates. Batch it without
+  // changing vertices or faces, keeping the backend's per-mesh limits intact.
+  const batches: DepthSnapshot['meshes'] = [];
+  let batch: DepthSnapshot['meshes'][number] = {positions: [], triangles: []};
+  for (const mesh of meshes) {
+    if (batch.positions.length + mesh.positions.length > 150000 || batch.triangles.length + mesh.triangles.length > 300000) {
+      batches.push(batch); batch = {positions: [], triangles: []};
+    }
+    const offset = batch.positions.length;
+    for (const point of mesh.positions) batch.positions.push(point);
+    for (const triangle of mesh.triangles) batch.triangles.push(triangle.map(index => index + offset));
+  }
+  if (batch.positions.length) batches.push(batch);
+  return batches;
 }
