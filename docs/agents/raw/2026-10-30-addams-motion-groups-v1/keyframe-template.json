@@ -1,30 +1,195 @@
 {
-  "schema": "addams-motion-group-keyframe-review.v1",
-  "group": {
-    "group_id": "G1",
-    "frames": [
-      49,
-      51,
-      53,
-      55
-    ],
-    "roles": [
-      "entry",
-      "support_peak",
-      "left_swing_peak",
-      "exit"
-    ],
-    "source_range": [
-      49,
-      55
-    ],
-    "action_semantics": {
-      "left_leg": "lifted_forward_swing",
-      "right_leg": "forefoot_support",
-      "right_heel": "raised"
+  "schema": "addams-motion-group-keyframe-review.v2",
+  "groups": [
+    {
+      "group_id": "G0",
+      "source_frames": [
+        46,
+        47
+      ],
+      "boundary_status": "user_defined_adjacent_window",
+      "action_semantics": {
+        "phase": "pending_group_semantics"
+      },
+      "camera_shot": "same_shot_pending_cut_check",
+      "representative_keyframes": [
+        46,
+        47
+      ],
+      "group_rules": {
+        "inherit_side_roles": "soft_only",
+        "interpolate_within_group_only": true,
+        "cross_group_inheritance": false,
+        "foot_ik": "blocked_until_visible_sole_evidence"
+      },
+      "confidence": "boundary_user_defined_semantics_unassessed",
+      "unresolved": [
+        "exact action phase",
+        "contact state per group",
+        "sole subtype",
+        "3D depth/camera scale"
+      ]
     },
-    "boundary_status": "candidate",
-    "notes": ""
-  },
+    {
+      "group_id": "G1",
+      "source_frames": [
+        48,
+        49
+      ],
+      "boundary_status": "user_defined_adjacent_window",
+      "action_semantics": {
+        "left_leg": "transition_or_lift_pending",
+        "right_leg": "support_or_transition_pending"
+      },
+      "camera_shot": "same_shot_pending_cut_check",
+      "representative_keyframes": [
+        48,
+        49
+      ],
+      "group_rules": {
+        "inherit_side_roles": "soft_only",
+        "interpolate_within_group_only": true,
+        "cross_group_inheritance": false,
+        "foot_ik": "blocked_until_visible_sole_evidence"
+      },
+      "confidence": "boundary_user_defined_semantics_unassessed",
+      "unresolved": [
+        "exact action phase",
+        "contact state per group",
+        "sole subtype",
+        "3D depth/camera scale"
+      ]
+    },
+    {
+      "group_id": "G2",
+      "source_frames": [
+        50,
+        51,
+        52,
+        53
+      ],
+      "boundary_status": "user_defined_adjacent_window",
+      "action_semantics": {
+        "left_leg": "lifted_forward_swing_candidate",
+        "right_leg": "forefoot_support_candidate",
+        "right_heel": "raised_candidate"
+      },
+      "camera_shot": "same_shot_pending_cut_check",
+      "representative_keyframes": [
+        50,
+        51,
+        53
+      ],
+      "group_rules": {
+        "inherit_side_roles": "soft_only",
+        "interpolate_within_group_only": true,
+        "cross_group_inheritance": false,
+        "foot_ik": "blocked_until_visible_sole_evidence"
+      },
+      "confidence": "boundary_user_defined_semantics_partial",
+      "unresolved": [
+        "exact action phase",
+        "contact state per group",
+        "sole subtype",
+        "3D depth/camera scale"
+      ]
+    },
+    {
+      "group_id": "G3",
+      "source_frames": [
+        54,
+        55,
+        56,
+        57
+      ],
+      "boundary_status": "user_defined_adjacent_window",
+      "action_semantics": {
+        "phase": "pending_group_semantics"
+      },
+      "camera_shot": "same_shot_pending_cut_check",
+      "representative_keyframes": [
+        54,
+        55,
+        57
+      ],
+      "group_rules": {
+        "inherit_side_roles": "soft_only",
+        "interpolate_within_group_only": true,
+        "cross_group_inheritance": false,
+        "foot_ik": "blocked_until_visible_sole_evidence"
+      },
+      "confidence": "boundary_user_defined_semantics_unassessed",
+      "unresolved": [
+        "exact action phase",
+        "contact state per group",
+        "sole subtype",
+        "3D depth/camera scale"
+      ]
+    },
+    {
+      "group_id": "G4",
+      "source_frames": [
+        58,
+        59,
+        60,
+        61
+      ],
+      "boundary_status": "user_defined_adjacent_window",
+      "action_semantics": {
+        "phase": "pending_group_semantics"
+      },
+      "camera_shot": "same_shot_pending_cut_check",
+      "representative_keyframes": [
+        58,
+        59,
+        61
+      ],
+      "group_rules": {
+        "inherit_side_roles": "soft_only",
+        "interpolate_within_group_only": true,
+        "cross_group_inheritance": false,
+        "foot_ik": "blocked_until_visible_sole_evidence"
+      },
+      "confidence": "boundary_user_defined_semantics_unassessed",
+      "unresolved": [
+        "exact action phase",
+        "contact state per group",
+        "sole subtype",
+        "3D depth/camera scale"
+      ]
+    },
+    {
+      "group_id": "G5",
+      "source_frames": [
+        62,
+        63,
+        64,
+        65
+      ],
+      "boundary_status": "user_defined_adjacent_window",
+      "action_semantics": {
+        "phase": "pending_group_semantics"
+      },
+      "camera_shot": "same_shot_pending_cut_check",
+      "representative_keyframes": [
+        62,
+        63,
+        65
+      ],
+      "group_rules": {
+        "inherit_side_roles": "soft_only",
+        "interpolate_within_group_only": true,
+        "cross_group_inheritance": false,
+        "foot_ik": "blocked_until_visible_sole_evidence"
+      },
+      "confidence": "boundary_user_defined_semantics_unassessed",
+      "unresolved": [
+        "exact action phase",
+        "contact state per group",
+        "sole subtype",
+        "3D depth/camera scale"
+      ]
+    }
+  ],
   "production_eligible": false
 }
