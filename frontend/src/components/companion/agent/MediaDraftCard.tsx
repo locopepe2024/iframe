@@ -8,7 +8,7 @@ import AlbumPicker from "./AlbumPicker";
 import PhotoImage from "../photos/PhotoImage";
 import styles from "./chat.module.css";
 type Action = "clear_photo"|"select_photo"|"select_first_photo"|"select_last_photo"|"add_reference_photo"|"remove_reference_photo"|"video_mode"|"setting"|"pause"|"resume"|"cancel";
-export default function MediaDraftCard({task,disabled,onAction,onUpload,onRefresh,onChooseSource}:{task:MediaDraft;disabled:boolean;onAction:(action:Action,photo?:string)=>Promise<boolean>;onUpload:()=>void;onRefresh?:()=>void;onChooseSource?:(event:SourceChoiceEvent)=>Promise<boolean>}) {
+export default function MediaDraftCard({task,disabled,onAction,onUpload,onRefresh,onChooseSource,onAssetSelected}:{task:MediaDraft;disabled:boolean;onAction:(action:Action,photo?:string)=>Promise<boolean>;onUpload:()=>void;onRefresh?:()=>void;onChooseSource?:(event:SourceChoiceEvent)=>Promise<boolean>;onAssetSelected?:(photoId:string,slot:"source"|"first_frame"|"last_frame"|"reference",cardId:string)=>Promise<boolean>}) {
  const [album,setAlbum]=useState(false); const [albumTarget,setAlbumTarget]=useState<"photo"|"first"|"last"|"reference">("photo"); const [reserved,setReserved]=useState(false);
  const video=task.type==="video_generate", videoMode=task.video_mode||"t2v";
  const title=task.type==="image_edit"?"修改照片":task.type==="image_generate"?"生成图片":"生成视频";
@@ -42,6 +42,6 @@ export default function MediaDraftCard({task,disabled,onAction,onUpload,onRefres
    {task.status==="active" && <label>{video?"时长":"比例"}<select aria-label="创作参数" disabled={disabled||reserved} value={task.setting} onChange={e=>void onAction("setting",e.target.value)}>{(video?["5 秒","10 秒"]:["方形 1:1","横向 16:9","竖向 9:16"]).map(value=><option key={value}>{value}</option>)}</select></label>}
    <GenerationSubmit key={`${task.task_id}:${task.revision}`} value={{mode:video?"video":"image",prompt:task.brief,reference:video?null:task.photo_id,first_reference:task.first_photo_id,last_reference:task.last_photo_id,references:task.reference_photo_ids||[],video_mode:videoMode,setting:task.setting,step:"confirmed",task_id:task.task_id,expected_revision:task.revision,job_id:task.job_id}} disabled={disabled} onSubmitted={setReserved} onAccepted={onRefresh}/>
   </>}
-  {album && task.status==="active" && <AlbumPicker disabled={disabled} onClose={()=>setAlbum(false)} onPhoto={photo=>{const action=albumTarget==="first"?"select_first_photo":albumTarget==="last"?"select_last_photo":albumTarget==="reference"?"add_reference_photo":"select_photo";void onAction(action,photo.photo_id).then(ok=>{if(ok)setAlbum(false);});}}/>}
+  {album && task.status==="active" && <AlbumPicker disabled={disabled} onClose={()=>setAlbum(false)} onPhoto={photo=>{const slot=albumTarget==="first"?"first_frame":albumTarget==="last"?"last_frame":albumTarget==="reference"?"reference":"source";const cardId=slot==="source"?task.ui_card?.card_id:task.asset_card?.card_id;const action=slot==="first_frame"?"select_first_photo":slot==="last_frame"?"select_last_photo":slot==="reference"?"add_reference_photo":"select_photo";const request=cardId&&onAssetSelected?onAssetSelected(photo.photo_id,slot,cardId):onAction(action,photo.photo_id);void request.then(ok=>{if(ok)setAlbum(false);});}}/>}
  </section>;
 }

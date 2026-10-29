@@ -270,3 +270,12 @@
 2026-10-29：`media_drafts.display` 现在为视频任务返回当前缺失槽位的 `asset_card`；前端 `MediaDraftCard` 使用独立 `AssetSlotCard` 渲染首帧、尾帧和参考图入口，并在卡片存在时隐藏重复的旧槽位按钮。卡片仍只允许注册的相册/返回动作，选择后的事件由统一入口处理。
 
 后端相关媒体草稿、卡片、桥接和服务测试通过；前端 `npm run typecheck` 通过。当前前端相册选择仍有部分旧 `updateMediaDraft` 路径，下一步需统一改为带 card_id/slot 的 `mediaEvent`，然后再处理视频上传完成事件。
+
+
+## 实现进度：前端选图事件统一
+
+2026-10-29：`MediaDraftCard` 的相册选择现在优先调用 `companionApi.mediaEvent`，携带 `card_id`、`slot`、task revision 和新的 operation_id。图片来源卡片使用 `source`，视频卡片使用 `first_frame`、`last_frame` 或 `reference`；只有没有有效卡片的旧任务才回退到旧 `updateMediaDraft`。
+
+前端 `npm run typecheck` 通过；相关后端 API、草稿、卡片和桥接测试33项通过。本片没有改变旧接口的行为，也没有接入生成提交。
+
+剩余边界：旧接口兼容回退仍存在，需要真实测试站确认所有新草稿都返回卡片后再移除；视频上传完成事件、异步任务回执和 SSE 仍未收口。
