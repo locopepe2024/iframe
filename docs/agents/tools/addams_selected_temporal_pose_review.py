@@ -1,10 +1,14 @@
 """Source/baseline/fitted comparison for bounded selected-point pose fitting."""
+import argparse
 import json
 from pathlib import Path
 from PIL import Image, ImageDraw
 from addams_vlm_stream_probe import ROOT, FRAMES
 
-OUT = ROOT/'docs/agents/raw/2026-10-29-addams-selected-temporal-fit-v1'
+parser = argparse.ArgumentParser()
+parser.add_argument('--directory', type=Path, default=ROOT/'docs/agents/raw/2026-10-29-addams-selected-temporal-fit-v1')
+args = parser.parse_args()
+OUT = args.directory
 report = json.loads((OUT/'report.json').read_text())
 # Fixed-order report, show both experiments; no selection by heldout score.
 edges = [(5,7),(7,9),(6,8),(8,10),(5,6),(5,11),(6,12),(11,12),
@@ -39,6 +43,8 @@ for sf in frames:
     sheet = sheet.crop((0,0,1920,390))
     sheet.save(OUT/f'comparison-{sf:03}.jpg',quality=92)
 sections = []
+if report.get('ankle_preservation_weight_px',0):
+    sections.append('<li>本轮添加原恢复踝位置软先验；不是源真值或脚底接触约束。最大踝位移仍约50px，候选未通过验收。</li>')
 for case in report['cases']:
     m = case['metrics']
     sections.append(f'<li>旋转分量限幅 {case["bound_rad_per_component"]} rad：训练点 RMSE {m["train"]["baseline_px"]:.2f} → {m["train"]["fitted_px"]:.2f}px；留出帧51 RMSE {m["heldout"]["baseline_px"]:.2f} → {m["heldout"]["fitted_px"]:.2f}px。</li>')

@@ -82,3 +82,7 @@
 ## Selected temporal leg fit: rejected candidate
 
 media完成源49–56帧固定原生相机/根/人体形状的髋膝时序拟合，51帧两膝不参与姿态优化。0.35/0.70rad限幅下，训练9点RMSE由36.46降到22.29/21.78px，留出2点由28.40降到22.20/16.29px；但未约束踝投影相对基线最大移动65.03/141.96px，第51帧可见脚链退化。两档均不进入主链路。下一步必须完整腿链约束对照并检查未拟合部位退化，不能仅用膝点均值或插值验收。见[实验报告](../agents/deliverables/2026-10-29-addams-selected-temporal-pose-fit.md)。
+
+## 2026-10-30 ankle preservation ablation
+
+不依赖SAM权重的踝软先验实验完成：0.70rad下留出51帧两膝RMSE28.40→15.12px，最大踝投影变化从无先验141.96降到49.52px；但相对原恢复仍移动0.170m，未通过完整腿链验收。原踝只为未验证先验，不当真值；不继续靠提高权重替代足部几何证据。见[报告](../agents/deliverables/2026-10-30-addams-ankle-prior.md)。

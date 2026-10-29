@@ -1,6 +1,7 @@
 """Bounded leg-only sequence fit; selected-frame holdout, fixed native camera.
 Run in the existing GVHMR environment on media. No rig or production writes.
 """
+import argparse
 import hashlib
 import json
 from pathlib import Path
@@ -9,7 +10,12 @@ import torch
 from hmr4d.utils.smplx_utils import make_smplx
 
 BASE = Path('/tmp/addams-pose/gvhmr-native-v1')
-OUT = BASE / 'selected-temporal-fit-v1'
+parser = argparse.ArgumentParser()
+parser.add_argument('--ankle-prior-px', type=float, default=0.0)
+args = parser.parse_args()
+if args.ankle_prior_px < 0:
+    parser.error('ankle prior weight must be nonnegative')
+OUT = BASE / ('selected-temporal-fit-v1' if args.ankle_prior_px == 0 else 'selected-temporal-ankle-prior-v1')
 OUT.mkdir(exist_ok=True)
 fusion_path = BASE / 'selected-temporal-input.json'
 fusion = json.loads(fusion_path.read_text())
@@ -69,6 +75,9 @@ def fit(bound, holdout):
         # Robust pixel data loss, bounded pose prior, and temporal correction prior.
         loss = (torch.sqrt(residuals.square().sum(-1) + 4) - 2).mean()
         loss += 2*delta.square().mean() + 8*torch.diff(delta, n=2, dim=0).square().mean()
+        if args.ankle_prior_px:
+            # Native ankle locations are a preservation prior, never source truth.
+            loss += args.ankle_prior_px * ((joints[:, [15,16]] - base_j[:, [15,16]]) / .05).square().mean()
         loss.backward()
         opt.step()
         with torch.no_grad():
@@ -91,11 +100,15 @@ def fit(bound, holdout):
             'delta_axis_angle': delta.detach().tolist(),
             'body_pose_axis_angle': body.tolist(), 'joints_camera_m': joints.tolist(),
             'projection_xy': xy.tolist(),
+            'max_ankle_projection_change_px':float((xy[:,[15,16]]-base_xy[:,[15,16]]).norm(dim=-1).max()),
+            'max_ankle_position_change_m':float((joints[:,[15,16]]-base_j[:,[15,16]]).norm(dim=-1).max()),
             'bound_component_fraction': float((delta.detach().abs() >= bound-1e-5).float().mean()),
             'max_relative_hip_change_m': float(((joints[:,[11,12]]-joints[:,[11,12]].mean(1,keepdim=True))-(base_j[:,[11,12]]-base_j[:,[11,12]].mean(1,keepdim=True))).abs().max())}
 
 result = {'schema': 'addams-selected-temporal-pose-fit.v1', 'production_eligible': False,
           'input_sha256': hashlib.sha256(fusion_path.read_bytes()).hexdigest(),
+          'ankle_preservation_weight_px':args.ankle_prior_px,
+          'ankle_prior_status':'native camera-space locations; unverified prior, not observation',
           'camera': {'fx':fx,'fy':fy,'cx':cx,'cy':cy,'fixed':True},
           'frame_map':rows, 'source_range':[49,56], 'baseline_projection_xy':base_xy.tolist(),
           'cases':[],'limits':[
