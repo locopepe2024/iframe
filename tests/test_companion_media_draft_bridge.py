@@ -37,3 +37,9 @@ def test_real_draft_selection_uses_verified_event_and_is_idempotent(tmp_path, mo
     assert apply_selection(store, 'owner', 'actor', session, task, event, operation_id='evt-1') == selected
     with pytest.raises(Conflict):
         apply_selection(store, 'owner', 'actor', session, selected, event, operation_id='evt-2')
+
+
+def test_source_card_rejects_non_source_slot_until_frame_card_exists(tmp_path):
+    _, _, task = setup(tmp_path)
+    with pytest.raises(Conflict):
+        selection_event_from_draft(task, card_id=task['ui_card']['card_id'], photo_id='photo', slot='first_frame')

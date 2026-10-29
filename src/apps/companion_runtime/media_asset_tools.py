@@ -27,6 +27,7 @@ class PhotoSelected(Strict):
     card_id: str = Field(min_length=1, max_length=200)
     task_id: str = Field(min_length=1, max_length=120)
     revision: int = Field(ge=1)
+    slot: Literal['source', 'first_frame', 'last_frame', 'reference'] = 'source'
 
 
 class AssetBindArgs(Strict):

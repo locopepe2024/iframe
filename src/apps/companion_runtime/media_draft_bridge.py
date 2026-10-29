@@ -21,22 +21,24 @@ def source_request_from_draft(task: dict) -> SourceCardResult:
         'revision': task['revision'], 'source': source, 'status': 'waiting_user'})
 
 
-def selection_event_from_draft(task: dict, *, card_id: str, photo_id: str) -> PhotoSelected:
+def selection_event_from_draft(task: dict, *, card_id: str, photo_id: str, slot: str = 'source') -> PhotoSelected:
     card = source_card(task)
     if card is None or card['card_id'] != card_id:
         raise Conflict('Source card is stale or unavailable')
+    if slot != 'source':
+        raise Conflict('This source card only accepts a source photo')
     if not photo_id.strip():
         raise ValueError('Photo selection is required')
     return PhotoSelected.model_validate({
         'photo_id': photo_id, 'card_id': card_id,
-        'task_id': task['task_id'], 'revision': task['revision']})
+        'task_id': task['task_id'], 'revision': task['revision'], 'slot': slot})
 
 
 def bind_arguments(task: dict, event: PhotoSelected, *, event_id: str) -> AssetBindArgs:
     if event.task_id != task['task_id'] or event.revision != task['revision']:
         raise Conflict('Selection does not match the current draft revision')
     return AssetBindArgs(task_id=task['task_id'], photo_id=event.photo_id,
-                         slot='source', selection_event_id=event_id)
+                         slot=event.slot, selection_event_id=event_id)
 
 
 def apply_selection(store, owner: str, actor: str, session: str, task: dict,
@@ -45,6 +47,8 @@ def apply_selection(store, owner: str, actor: str, session: str, task: dict,
     bind_arguments(task, event, event_id=operation_id)
     if task['task_id'] != event.task_id:
         raise Missing('Creative task unavailable')
+    actions = {'source': 'select_photo', 'first_frame': 'select_first_photo',
+               'last_frame': 'select_last_photo', 'reference': 'add_reference_photo'}
     return store.update_media_draft(owner, actor, session, task['task_id'], operation_id, {
-        'expected_revision': event.revision, 'action': 'select_photo',
+        'expected_revision': event.revision, 'action': actions[event.slot],
         'photo_id': event.photo_id})

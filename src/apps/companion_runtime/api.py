@@ -53,6 +53,7 @@ class PhotoSelectedEvent(Operation):
     task_id: str = Field(min_length=1, max_length=120)
     card_id: str = Field(min_length=1, max_length=200)
     photo_id: str = Field(min_length=1, max_length=120)
+    slot: Literal['source', 'first_frame', 'last_frame', 'reference'] = 'source'
     expected_revision: int = Field(ge=1)
 
 
@@ -323,7 +324,7 @@ def media_event(session_id: str, body: PhotoSelectedEvent, identity: Owner, stor
                             status='accepted', task=cached,
                             next_step=cached.get('step'), spoken_text=cached.get('spoken_text'))
             raise Conflict('Creative task changed; refresh the source card')
-        event = selection_event_from_draft(task, card_id=body.card_id, photo_id=body.photo_id)
+        event = selection_event_from_draft(task, card_id=body.card_id, photo_id=body.photo_id, slot=body.slot)
         result = apply_selection(store, identity.owner_profile_id, identity.user_id,
                                  session_id, task, event, operation_id=body.operation_id)
         return dict(event_id=body.operation_id, event_type=body.event_type,

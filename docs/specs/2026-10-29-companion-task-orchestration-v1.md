@@ -229,3 +229,12 @@
 重复的 operation_id 在 revision 已变化时返回原草稿回执，不重复绑定；旧卡、错误会话、错误 revision 进入稳定错误响应。返回包含 event_id、任务快照和下一步，模型/前端可以继续同一任务。相关真实 FastAPI、media draft、UI card、桥接和工具测试共36项通过。
 
 当前范围只覆盖相册选择。上传完成事件、首尾帧/参考图槽位、异步分析结果、SSE 推送和统一 operation_store 回执尚未接入；因此这不是所有工具已经统一的证明。下一步扩展事件 schema 的槽位和上传结果，仍需逐项绑定真实素材并保持幂等。
+
+
+## 实现进度：素材槽位事件扩展
+
+2026-10-29：`photo_selected` 事件增加 `slot`，协议允许 `source`、`first_frame`、`last_frame`、`reference`。兼容桥按槽位映射到现有 draft 的 `select_photo`、`select_first_photo`、`select_last_photo` 和 `add_reference_photo` 动作。
+
+当前真实来源卡片只声明 `source`，因此首帧、尾帧和参考图事件在没有对应注册卡片时会被拒绝，而不会把普通来源卡片误用于其他槽位。相关服务、草稿、桥接、资产工具和操作协议测试共77项通过。
+
+上传完成仍未接入：上传接口必须先返回经过服务端归属校验的素材 ID，再产生独立 `asset.bind` 事件；不能使用文件名、临时 URL 或“上传卡片已打开”作为绑定凭据。
