@@ -7,7 +7,30 @@ vi.mock("@/lib/companionServices",async importOriginal=>({...await importOrigina
 vi.mock("../photos/PhotoImage",()=>({default:()=> <img alt="参考照片"/>}));
 vi.mock("./AlbumPicker",()=>({default:({onPhoto,onClose}:{onPhoto:(photo:{photo_id:string})=>void;onClose:()=>void})=><section aria-label="任务选图"><button onClick={()=>onPhoto({photo_id:"selected"})}>选中测试照片</button><button onClick={onClose}>关闭选图</button></section>}));
 const task:MediaDraft={kind:"media_draft",task_id:"creative",session_id:"session",revision:3,status:"active",step:"configuring",type:"image_edit",brief:"调亮，其他不变",photo_id:"mine",setting:"方形 1:1",spoken_text:"要求记下了。"};
+const sourceTask:MediaDraft={...task,photo_id:null,brief:"",step:"awaiting_asset",ui_card:{protocol:"companion.ui.v1",component:"choice_card",card_id:"creative:3:source",task:{id:"creative",revision:3},status:"active",spoken_text:"选照片",props:{title:"想修改哪张照片？",options:[{id:"upload",label:"上传照片",action:"media.open_upload"},{id:"album",label:"从相册选择",action:"media.open_album"},{id:"back",label:"返回聊天",action:"media.pause"}]}}};
 beforeEach(()=>{vi.resetAllMocks();api.models.mockResolvedValue({models:[{id:"editor",display_name:"图片编辑",capabilities:["i2i"]},{id:"text",display_name:"文字生成",capabilities:["t2i"]}]});api.generate.mockResolvedValue({id:"job",status:"running"});});
+it("routes declarative choices through the server without opening local files on response",async()=>{
+ const choose=vi.fn().mockResolvedValue(true),upload=vi.fn();
+ const props={disabled:false,onAction:vi.fn(),onUpload:upload,onChooseSource:choose};
+ const view=render(<MediaDraftCard {...props} task={sourceTask}/>);
+ fireEvent.click(screen.getByRole("button",{name:"上传照片"}));
+ await waitFor(()=>expect(choose).toHaveBeenCalledWith(expect.objectContaining({card_id:"creative:3:source",option_id:"upload"})));
+ expect(upload).not.toHaveBeenCalled();
+ view.rerender(<MediaDraftCard {...props} task={{...sourceTask,ui_action:"open_upload",ui_event_id:"upload"}}/>);
+ expect(upload).not.toHaveBeenCalled();
+ fireEvent.click(screen.getByRole("button",{name:"选择手机或电脑里的照片"}));
+ expect(upload).toHaveBeenCalledOnce();
+});
+it("does not reopen a dismissed album when the same navigation receipt rerenders",async()=>{
+ const props={disabled:false,onAction:vi.fn(),onUpload:vi.fn(),onChooseSource:vi.fn()};
+ const opened={...sourceTask,ui_action:"open_album" as const,ui_event_id:"album-1"};
+ const view=render(<MediaDraftCard {...props} task={opened}/>);
+ fireEvent.click(await screen.findByRole("button",{name:"关闭选图"}));
+ view.rerender(<MediaDraftCard {...props} task={{...opened}}/>);
+ expect(screen.queryByRole("region",{name:"任务选图"})).not.toBeInTheDocument();
+ view.rerender(<MediaDraftCard {...props} task={{...opened,ui_event_id:"album-2"}}/>);
+ expect(await screen.findByRole("region",{name:"任务选图"})).toBeInTheDocument();
+});
 it("waits for explicit paid confirmation and binds the current draft and photo",async()=>{
  const refresh=vi.fn();
  render(<MediaDraftCard task={task} disabled={false} onAction={vi.fn()} onUpload={()=>{}} onRefresh={refresh}/>);
