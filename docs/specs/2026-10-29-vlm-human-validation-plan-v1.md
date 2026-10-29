@@ -46,3 +46,11 @@
 本地四项离线验证：正常结束含usage/heartbeat、中断保留partial、缺DONE、length截断。通过后仅一次三图真实请求，任何失败均保留现状、不自动重发。成功也只证明小输入接收，不能证明完整多图稳定或语义准确；不改动作、相机、IK主链路。
 
 三图真实请求结果：101.595秒完整收回、JSON/帧覆盖通过；支持脚全部unknown，覆盖0/3。返回completion_tokens=3825大于请求max_tokens=1800，后续应先验证路由限额契约，不扩大批量请求。完整结论见 `docs/agents/deliverables/2026-10-29-vlm-stream-reception.md`。
+
+## Anchored temporal semantic completion slice
+
+目标改为动作语义约束下的合理补全，非逐像素还原。一次请求提交46–65连续20帧原RGB，仅提供已有第49帧解剖左右脚位置身份锚点，不提供接触或动作顺序。目标47/49/53/58/62/64；排除49锚点帧计分，留出47/53/58/62/64人工接触标签。输入身份标注与连续上下文同时变化，不宣称是受控消融。
+
+先验证JSON、帧引用、接触枚举及完整接收，事后才读取留出接触标签。评分报告unknown覆盖率与一致率；不把已有人工标签当无误真值。关键歧义或阶段矛盾需要回看原图，不直接进入IK。单次请求、无重试、max_tokens=2500但已知路由未保证该值等于计费用量硬上限，不添加未经核实的thinking参数。本轮不扩大批量，收到输出后再决定下一步。准备命令无网络通过，使用既有增量落盘接收器。
+
+执行完成：78.418秒完整返回，格式通过；排除锚点49后，五个留出帧覆盖5/5，与既有接触标签一致2/5。47/62/64集中复核，不将跑步先验改为接触硬约束。生成只读review.html和production_eligible=false的review-queue.json。结论见 `docs/agents/deliverables/2026-10-29-addams-semantic-completion-validation.md`。输入10361/output5867 tokens，未继续追加请求。
