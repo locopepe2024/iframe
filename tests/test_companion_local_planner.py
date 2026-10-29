@@ -52,3 +52,12 @@ def test_invalid_model_plan_remains_rejected_with_auditable_usage(monkeypatch):
         local_planner.propose_local('http://example.invalid', '取消', {})
     assert rejected.value.usage['prompt_tokens'] == 450
     assert rejected.value.proposal['decision']['steps'][0]['tool'] == 'media.task.cancel'
+
+
+def test_resume_uses_unique_paused_task_and_can_then_request_source():
+    state = {'paused':[{'type':'image_edit','status':'paused'}]}
+    result = check(plan({'tool':'media.task.resume'}, {'tool':'media.source.request','source':'album'}), state)
+    assert result.steps[0].tool == 'media.task.resume'
+    for invalid in ({}, {'paused':state['paused'] * 2}, {'active':{'type':'image_edit','status':'active'}, **state}):
+        with pytest.raises(ValueError):
+            check(plan({'tool':'media.task.resume'}), invalid)

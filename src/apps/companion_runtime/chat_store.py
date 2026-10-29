@@ -150,7 +150,15 @@ class ChatStore(MediaDrafts, PhotoTasks, DiaryStore, CompanionStore):
             arguments = proposal.get('arguments', {})
             unscoped_album = proposal.get('name') == 'photo.organize.start' and not (
                 arguments.get('year') or arguments.get('query', '').strip() or arguments.get('view') == 'pending' or arguments.get('photo_id') or arguments.get('date_prefix'))
-            if intent.name in ('album.scope', 'album.browse') or proposal['kind'] == 'album_guide' or unscoped_album:
+            if proposal['kind'] == 'local_plan':
+                from .planner_runtime import execute_plan
+                @contextmanager
+                def plan_connection(**_):
+                    yield db
+                scoped = copy.copy(self)
+                scoped.connection = plan_connection
+                result = execute_plan(scoped, db, owner, actor, row, claim, proposal)
+            elif intent.name in ('album.scope', 'album.browse') or proposal['kind'] == 'album_guide' or unscoped_album:
                 result = dict(kind='album_guide', browse=intent.name == 'album.browse',
                               spoken_text='您想整理什么时候、和谁有关的照片？也可以打开相册挑选。')
             elif proposal['kind']=='upload_guide':

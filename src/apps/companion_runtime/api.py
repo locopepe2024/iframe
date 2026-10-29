@@ -368,10 +368,14 @@ def chat(session_id: str, body: ChatRequest, identity: Owner, store: Store):
                 decision = decide(body.text, store.workflow_context(identity.owner_profile_id, identity.user_id, session_id))
                 if decision:
                     claim['messages'][-1]['coordinator_decision'] = decision
+            from .planner_runtime import plan_turn
+            planned = plan_turn(claim['messages']) if not body.selected_photo_id and not editing and intent.name != 'diary.compose' and not creative_shortcut(body.text) else None
             # Diary is a writing lane. It receives the current session's user
             # messages but never receives memory tools, even if the model
             # would otherwise interpret the request as a search.
-            if body.selected_photo_id:
+            if planned is not None:
+                proposal = (propose_diary if intent.name == 'diary.compose' else propose)(identity, claim['messages'], claim['message_id']) if planned['kind'] == 'delegate' else planned
+            elif body.selected_photo_id:
                 proposal = dict(kind='tool', name='photo.organize.start', arguments=dict(photo_id=body.selected_photo_id))
             elif not editing and creative_shortcut(body.text):
                 proposal = creative_shortcut(body.text)

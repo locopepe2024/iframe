@@ -28,11 +28,15 @@ class Pause(Strict):
     tool: Literal['media.task.pause']
 
 
+class Resume(Strict):
+    tool: Literal['media.task.resume']
+
+
 class Cancel(Strict):
     tool: Literal['media.task.cancel']
 
 
-Step = Annotated[Ensure | Brief | Source | Pause | Cancel, Field(discriminator='tool')]
+Step = Annotated[Ensure | Brief | Source | Pause | Cancel | Resume, Field(discriminator='tool')]
 
 
 class EditPlan(Strict):
@@ -46,6 +50,8 @@ class EditPlan(Strict):
             raise ValueError('Duplicate tool in bounded plan')
         if 'media.task.ensure' in names and names[0] != 'media.task.ensure':
             raise ValueError('Ensure must be first')
+        if 'media.task.resume' in names and names[0] != 'media.task.resume':
+            raise ValueError('Resume must be first')
         if 'media.source.request' in names and names[-1] != 'media.source.request':
             raise ValueError('User wait must be last')
         if any(n in names for n in ('media.task.pause', 'media.task.cancel')) and len(names) != 1:
@@ -69,7 +75,8 @@ class Proposal(Strict):
 
 SYSTEM = '''你是小安的主机任务编排器，只输出指定JSON，不执行任务、不回复聊天内容。
 图片画面编辑用image_edit。处理照片有歧义时clarify。普通聊天/日记/相册浏览/看图分析/视频用delegate，不假装完成。
-steps按序执行：media.task.ensure取得图片编辑任务；media.brief.set保存完整修改要求；media.source.request请求选图，source为ask/album/upload；media.task.pause暂停；media.task.cancel取消。
+steps按序执行：media.task.ensure取得图片编辑任务；media.brief.set保存完整修改要求；media.source.request请求选图，source为ask/album/upload；media.task.pause暂停；media.task.cancel取消；media.task.resume恢复唯一暂停任务，先resume再补要求或选来源。
+paused为暂停任务列表，无active且只有一个paused时明确继续才resume，不ensure。多个暂停任务需clarify，不能猜。
 已有active任务不必ensure；没有则先ensure。没有选图也先保存明确要求。只说修改照片不是画面要求，不能写进brief。选择来源不是brief。保存要求时保留旧brief中未被用户撤销的约束。
 缺少照片且没有其他明确来源时，最后source=ask；明确选择相册/上传时source=album/upload。已选图则不重复询问来源。只输出注册步骤，不编造素材或任务ID。
 focus=diary_editor时，用户讲照片或视频也是日记内容，除非明确要求离开编辑；不明确时问清。
@@ -95,12 +102,17 @@ def check(proposal, state):
     decision = Proposal.model_validate(proposal).decision
     if isinstance(decision, EditPlan):
         active = state.get('active')
-        editing = state.get('focus') == 'diary_editor'
+        editing = state.get('focus') in ('diary_editor', 'photo_editor')
         if editing:
             raise ValueError('Return from diary editor before a media plan')
         available = bool(active and active.get('status') == 'active' and active.get('type') == 'image_edit')
         for step in decision.steps:
-            if isinstance(step, Ensure):
+            if isinstance(step, Resume):
+                paused = state.get('paused', [])
+                if active or len(paused) != 1 or paused[0].get('type') != 'image_edit':
+                    raise ValueError('Resume requires a single paused image editing task')
+                available = True
+            elif isinstance(step, Ensure):
                 if active and not available:
                     raise ValueError('Explicit lane switching is outside this experiment')
                 available = True

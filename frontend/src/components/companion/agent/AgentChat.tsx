@@ -29,7 +29,6 @@ import { isOpenAlbumCommand } from "./localCommands";
 import { BookOpen, Images, UserRound, Compass, Mic } from "lucide-react";
 import { companionPlayback } from "@/lib/companionPlaybackQueue";
 import { detectCompanionRuntimeCapability, type CompanionRuntimeCapability } from "./companionRuntimeCapability";
-import { coordinateOnDevice } from "./edgeTaskCoordinator";
 
 import { InteractionFocusContext, createInteractionFocus, createFocusSync, type InteractionFocus } from "./InteractionFocus";
 
@@ -75,7 +74,6 @@ export default function AgentChat() {
   const [busy, setBusy] = useState(false), [error, setError] = useState(""), [notice, setNotice] = useState("");
   const [settingsSaved, setSettingsSaved] = useState(false);
   const [runtimeCapability, setRuntimeCapability] = useState<CompanionRuntimeCapability>({ status: "checking", reason: "正在检查设备能力…", memoryGb: null });
-  const [edgeCoordinatorEnabled, setEdgeCoordinatorEnabled] = useState(false);
   const locked = useRef(false), alive = useRef(true);
   const voiceQueue = useRef<{text:string;focus:InteractionFocus;creative:CreativeContext}[]>([]);
   const [voiceRevision, setVoiceRevision] = useState(0);
@@ -145,7 +143,6 @@ export default function AgentChat() {
     alive.current = true;
     void run(async () => {
       if (localStorage.getItem(consentKey) === "true") setAllowed(true);
-      if (localStorage.getItem("iframe-companion-edge-coordinator-v1") === "true") setEdgeCoordinatorEnabled(true);
       const savedResponseMode = localStorage.getItem(responseModeKey);
       if (savedResponseMode === "audio" || savedResponseMode === "text") setResponseMode(savedResponseMode);
       const id = localStorage.getItem(sessionKey);
@@ -188,24 +185,6 @@ export default function AgentChat() {
     const requestedDay = editing ? undefined : diaryDay(requestedText, "", today());
     const submittedText = requestedDay ? diaryPrompt(requestedDay) : requestedText;
     const resolvedSelectedPhotoId = selectedPhotoArg || (/^(使用|用)(这张|该)照片/.test(requestedText.trim()) ? selectedPhotoRef.current : null);
-    if (!editing && !retry && !resolvedSelectedPhotoId && !submittedText.trimStart().startsWith("/") && creativeTask?.status !== "active" && edgeCoordinatorEnabled && runtimeCapability.status === "edge_ready") {
-      try {
-        const context = messages.slice(-10).map(message => {
-          const reply = message.turn?.result?.kind === "text" ? `\n陪伴助手：${message.turn.result.text}` : "";
-          return `我：${message.text}${reply}`;
-        }).join("\n");
-        const decision = await Promise.race([
-          coordinateOnDevice(submittedText, context),
-          new Promise<never>((_, reject) => setTimeout(() => reject(new Error("edge coordinator timeout")), 8000)),
-        ]);
-        if (decision.need_clarification) {
-          setNotice(decision.question || "请先告诉我，您想继续聊天、写日记，还是整理照片？");
-          return;
-        }
-      } catch {
-        setNotice("端侧协调器暂不可用，本轮改用服务端处理。");
-      }
-    }
     if (!sendOperation.current || !retry) sendOperation.current = { operation_id: crypto.randomUUID(), text: submittedText, allow_external_text: true, ...(resolvedSelectedPhotoId ? {selected_photo_id: resolvedSelectedPhotoId} : {}), ...(capturedCreative ? {creative_context:capturedCreative} : creativeTask?.status === "active" ? {creative_context:{task_id:creativeTask.task_id,revision:creativeTask.revision}} : {}) };
     if (!sendFocus.current || sendFocus.current.operation !== sendOperation.current.operation_id)
       sendFocus.current = {operation:sendOperation.current.operation_id,focus:{...turnFocus},ready:false};
@@ -376,7 +355,6 @@ export default function AgentChat() {
           <label className={styles.check}><input type="radio" name="companion-response-mode" value="text" checked={responseMode === "text"} onChange={() => { speechEpoch.current++;speechEnabled.current=false;companionPlayback.cancel();setSpokenReply(null);setVoiceChat(false);setResponseMode("text"); localStorage.setItem(responseModeKey, "text"); }} />方案 2：只回复文字</label>
         </fieldset>
         <p className={styles.note}>语音回复由 OpenTalking 播放，并保留文字记录；播放受阻时可点击“播放声音”。</p>
-        <label className={styles.check}><input type="checkbox" checked={edgeCoordinatorEnabled} disabled={runtimeCapability.status !== "edge_ready"} onChange={event => { const value = event.target.checked; setEdgeCoordinatorEnabled(value); localStorage.setItem("iframe-companion-edge-coordinator-v1", String(value)); }} />启用端侧任务协调器（测试）</label>
         <div className={chatStyles.settingsSaveRow}>
           <button type="button" className={chatStyles.settingsSaveButton} onClick={saveChatSettings}>保存设置</button>
           {settingsSaved && <span className={chatStyles.settingsSaved} role="status">✓ 设置已保存</span>}
@@ -386,7 +364,7 @@ export default function AgentChat() {
       <UniArtSettings />
       <section aria-label="端侧协调器状态">
         <h2>设备能力</h2>
-        <p className={styles.note}>{runtimeCapability.status === "edge_ready" ? "端侧协调器可用。" : runtimeCapability.status === "checking" ? "正在检查端侧协调器…" : "使用服务端协调器。"} {runtimeCapability.reason}</p>
+        <p className={styles.note}>{runtimeCapability.status === "edge_ready" ? "设备支持 WebGPU。" : runtimeCapability.status === "checking" ? "正在检查设备…" : "任务由服务端处理。"} {runtimeCapability.reason}</p>
       </section>
       <p className={styles.note}>聊天内容会保留，可继续查看历史消息。</p>
     </aside>}
