@@ -21,3 +21,7 @@ LLM语义输出是否稳定、左右身份是否正确、对漫画模糊帧的�
 先对46–65代表帧运行一次结构化语义输出，比较人工确认的G1–G5边界、G5的63→64离地转折、左右身份和支撑状态。仅将双向一致的状态扩展到组内；冲突输出unknown并进入人工队列。通过后才把语义状态作为姿态/接触求解的软先验。
 
 [语义插值契约](../raw/2026-10-30-addams-semantic-interpolation-v1/contract.json)
+
+## 可执行语义中间产物
+
+已生成[帧语义扩展种子](../raw/2026-10-30-addams-semantic-interpolation-v1/frame-semantics-seed.json)。它只扩展类别状态，不生成坐标、深度、焦距或公制离地距离。目前仅G5中的用户确认事实写入`human_confirmed`；其余组保持`unassessed`，不会被下游误用。将来LLM输出可以替换这些帧的语义字段，而不改变骨架/IK接口。
