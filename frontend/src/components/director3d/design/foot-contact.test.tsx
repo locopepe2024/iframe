@@ -59,7 +59,7 @@ it("keeps actual GLB support ankles within 1 cm through baked interpolation, dep
   const tracks=[track,...crowdGait(track,actor)];
   // JSON replay and real timeline evaluator, including samples between baked keys.
   const replay=JSON.parse(JSON.stringify(tracks));
-  const count=Math.max(2,Math.ceil(length/.12/2)*2),step=length/count;
+  const count=Math.max(2,Math.ceil(length/.24/2)*2),step=length/count;
   for(let n=0;n<=420;n++) {
    const time=n/100;
    const evaluated=evaluateDirectorFrame({frame:n+1,fps:100,durationSeconds:5,tracks:replay,activeCameraTrackId:null,selectedCameraId:'',characters:{[actor.characterId]:actor},cameras:{},sceneObjects:{},actorPaths:{},cameraPaths:{}}).characters[actor.characterId];

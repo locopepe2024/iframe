@@ -46,7 +46,9 @@ it("ties gait to distance rather than elapsed time, holds neutral when waiting/s
   expect(pose(slow, 1).upper_leg_l[0]).toBeCloseTo(0,5);
   expect(pose(slow, 6).upper_leg_l[0]).toBeCloseTo(0,5);
   expect(pose(slow, 2.5).upper_leg_l[0]).toBeCloseTo(pose(fast, .25).upper_leg_l[0]);
-  expect(Math.abs(pose(slow, 2.5).upper_leg_l[0])).toBeGreaterThan(5);
+  // A single hip sample may cross neutral during a stride. The knee must
+  // still flex over the walk, regardless of stride length or sampled phase.
+  expect(Math.max(...Array.from({length: 31}, (_, i) => pose(slow, 2+i/10).lower_leg_l[0]))).toBeGreaterThan(5);
   expect(evaluateKeyframes(slow[1].keyframes, 3)).toEqual({rotation_deg: [0, 0, -90]});
 });
 it("routes around a stationary observer and preserves observation holds", () => {
@@ -55,6 +57,19 @@ it("routes around a stationary observer and preserves observation holds", () => 
   const routed = navigateCrowd([track("a", [-2, 0, 0], [2, 0, 0]), observer], {...actors(["a"]), observer: a}, {});
   expect(routed.find((item) => item.target.targetId === "a")!.keyframes.length).toBeGreaterThan(2);
   expect(routed.find((item) => item.target.targetId === "observer")).toEqual(observer);
+});
+
+it("uses readable alternating steps and contralateral arm swing on a slow street walk", () => {
+  const gait = crowdGait(track("a", [0, 0, 0], [0, 2.4, 0], 0, 6), actor);
+  const pose = (time: number) => evaluateKeyframes(gait[0].keyframes, time) as Record<string, number[]>;
+  // The first left swing lands after 0.24 m of root travel (0.6 s).
+  // Before that, the left leg advances and the right arm counter-swings.
+  expect(pose(.2).upper_arm_l[0]).toBeGreaterThan(2);
+  expect(pose(.2).upper_arm_r[0]).toBeLessThan(-2);
+  expect(pose(.8).upper_arm_l[0]).toBeLessThan(-5);
+  expect(pose(.8).upper_arm_r[0]).toBeGreaterThan(5);
+  expect(pose(0).upper_arm_l[0]).toBe(0);
+  expect(pose(6).upper_arm_l[0]).toBe(0);
 });
 it("budgets corner stops into arrival time and turns while the root is stationary", () => {
   const [routed] = navigateCrowd([track('a',[-3,0,0],[3,0,0])],actors(['a']),{counter:counter()});
