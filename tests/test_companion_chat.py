@@ -66,6 +66,30 @@ def test_upload_question_returns_card_without_memory_model_call(chat):
     callback.assert_not_called()
 
 
+def test_workflow_context_is_bounded_and_read_only(chat):
+    store, _, client, session, _ = chat
+    response = client.get(f'/companion-runtime/sessions/{session}/workflow-context')
+    assert response.status_code == 200, response.text
+    context = response.json()
+    assert context['session_id'] == session
+    assert context['focused_task'] is None
+    assert context['album_tasks'] == []
+    assert context['recent_diaries'] == []
+
+
+def test_coordinator_decision_is_passed_as_context_only(chat, monkeypatch):
+    _, _, client, session, callback = chat
+    callback.reset_mock()
+    callback.side_effect = None
+    callback.return_value = dict(kind='text', text='我们先看看相册。')
+    monkeypatch.setattr('src.apps.companion_runtime.api.decide', lambda text, context: {
+        'focus': 'album', 'action': 'open_or_select', 'need_clarification': False, 'source': 'model'})
+    response = client.post(f'/companion-runtime/sessions/{session}/chat', json=dict(
+        operation_id='coordinator-context', text='我想看看照片', allow_external_text=True))
+    assert response.status_code == 200, response.text
+    assert callback.call_args.args[1][-1]['coordinator_decision']['focus'] == 'album'
+
+
 def test_diary_request_never_surfaces_an_accidental_memory_read(chat):
     store,_,client,session,callback=chat
     callback.return_value=dict(kind='tool',name='memory.search',arguments=dict(query='2026-10-24',limit=20,min_importance=1,type=None,cursor=''))
@@ -211,3 +235,13 @@ def test_unscoped_model_album_browse_is_not_rewritten_as_organizing(chat, monkey
     callback.assert_called_once()
     assert read.call_args.args[1] == 'photo.album.list'
     assert read.call_args.args[2]['limit'] == 6
+
+
+def test_album_search_phrase_is_registered_read_tool(chat, monkeypatch):
+    store, _, client, session, callback = chat
+    monkeypatch.setattr('src.apps.companion_runtime.photo_tools.read_photos', lambda *args: {'photos': [], 'next_after_id': None})
+    response = client.post(f'/companion-runtime/sessions/{session}/chat', json=dict(
+        operation_id='album-search', text='搜索女儿在海边的照片', allow_external_text=True))
+    assert response.status_code == 200
+    assert response.json()['result']['name'] == 'photo.album.list'
+    assert response.json()['result']['arguments']['query'] == '女儿在海边'

@@ -381,6 +381,8 @@ def chat(session_id: str, body: ChatRequest, identity: Owner, store: Store):
                 # In a task, Qwen interprets the answer against the live state;
                 # generic upload/album keywords must not steal the turn.
                 proposal = propose(identity, claim['messages'], claim['message_id'])
+            elif intent.name == 'album.search':
+                proposal = dict(kind='tool', name='photo.album.list', arguments={'view': 'all', 'query': intent.query or ''})
             elif intent.name in ('album.scope', 'album.browse'):
                 proposal = dict(kind='album_guide')
             elif intent.name == 'media.upload_help':
