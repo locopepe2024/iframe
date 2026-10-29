@@ -42,7 +42,9 @@ def test_retries_revision_isolation_pause_resume_and_restore(tmp_path):
     store,session=setup(tmp_path)
     task=store.start_media_draft('owner','actor',session,'start',dict(type='video_generate',brief='小狗奔跑'))
     assert store.start_media_draft('owner','actor',session,'start',dict(type='video_generate',brief='小狗奔跑'))==task
-    with pytest.raises(Conflict): store.start_media_draft('owner','actor',session,'another',dict(type='image_edit'))
+    switched = store.start_media_draft('owner','actor',session,'another',dict(type='image_edit'))
+    assert switched['type'] == 'image_edit' and switched['step'] == 'awaiting_asset'
+    assert store.media_draft('owner','actor',task['task_id'])['status'] == 'paused'
     args=dict(expected_revision=1,action='pause')
     paused=store.update_media_draft('owner','actor',session,task['task_id'],'pause',args)
     assert paused['status']=='paused'
@@ -53,7 +55,8 @@ def test_retries_revision_isolation_pause_resume_and_restore(tmp_path):
     with pytest.raises(Missing): store.update_media_draft('owner','actor',other,task['task_id'],'cross',dict(expected_revision=2,action='resume'))
     restored=ChatStore(tmp_path/'chat.db').media_draft('owner','actor',task['task_id'])
     assert restored['brief']=='小狗奔跑' and restored['status']=='paused'
-    assert store.update_media_draft('owner','actor',session,task['task_id'],'resume',dict(expected_revision=2,action='resume'))['status']=='active'
+    with pytest.raises(Conflict):
+        store.update_media_draft('owner','actor',session,task['task_id'],'resume',dict(expected_revision=2,action='resume'))
 
 
 def test_http_shortcuts_and_stale_voice_context_do_not_call_model(tmp_path,monkeypatch):

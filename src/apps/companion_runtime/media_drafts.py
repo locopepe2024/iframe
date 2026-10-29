@@ -49,8 +49,22 @@ class MediaDrafts:
                 if old['session_id'] != session or old['request'] != request:
                     raise Conflict('Creative operation changed')
                 return display(old)
-            if self.active_media_draft(db, owner, actor, session):
-                raise Conflict('Pause or cancel the current creative task before starting another')
+            active_row = db.execute("SELECT * FROM companion_media_drafts WHERE owner=? AND actor=? AND session_id=? AND status='active' ORDER BY rowid DESC LIMIT 1",
+                                    (owner, actor, session)).fetchone()
+            if active_row:
+                active_payload = json.loads(active_row['payload'])
+                # A new explicit creative lane is a user correction of the
+                # current lane (for example: “画一张图” -> “修改一张照片”).
+                # Preserve the previous draft, but make the new lane active so
+                # the user can continue with its asset/brief card. Repeating
+                # the same lane is idempotent for the current session.
+                if active_payload.get('type') == values['type']:
+                    result = display(active_row)
+                    db.execute('INSERT OR IGNORE INTO companion_media_draft_operations VALUES (?,?,?,?,?,?)',
+                               (owner, actor, active_row['id'], operation_id, request, encode(result)))
+                    return result
+                db.execute("UPDATE companion_media_drafts SET status='paused' WHERE id=? AND owner=? AND actor=?",
+                           (active_row['id'], owner, actor))
             payload = dict(type=values['type'], brief=values.get('brief', '').strip(), photo_id=None)
             if values['type'] == 'video_generate':
                 payload.update(video_mode=values.get('video_mode') or 't2v', first_photo_id=None, last_photo_id=None, reference_photo_ids=[])

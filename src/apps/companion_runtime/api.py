@@ -81,7 +81,10 @@ def errors():
     except Missing as exc:
         raise HTTPException(404, 'Companion record is unavailable') from exc
     except Conflict as exc:
-        raise HTTPException(409, 'Companion state changed or capacity reached; review again') from exc
+        # Keep the stable status code, but return the boundary-specific reason
+        # so the client can recover the active card instead of showing an
+        # opaque capacity message.
+        raise HTTPException(409, str(exc) or 'Companion state changed; review again') from exc
     except (sqlite3.Error, OSError) as exc:
         raise HTTPException(503, 'Companion storage unavailable') from exc
     except (ValueError, KeyError, TypeError) as exc:
