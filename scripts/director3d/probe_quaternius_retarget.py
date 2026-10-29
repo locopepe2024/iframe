@@ -103,6 +103,8 @@ def main():
     parser.add_argument("--mapping", type=Path, required=True)
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--preview-dir", type=Path)
+    parser.add_argument("--actions", nargs="+", default=["Punch_Jab", "Punch_Cross", "Sword_Attack"],
+                        help="Exact source action names to inspect; missing actions fail closed")
     args = parser.parse_args(raw)
 
     mapping = json.loads(args.mapping.read_text())
@@ -132,7 +134,7 @@ def main():
 
     source_rest = {item["source"]: source.data.bones[item["source"]].matrix_local.to_quaternion() for item in pairs}
     target_rest = {item["target"]: target.data.bones[item["target"]].matrix_local.to_quaternion() for item in pairs}
-    actions = ("Punch_Jab", "Punch_Cross", "Sword_Attack")
+    actions = list(dict.fromkeys(args.actions))
     reports = []
     if args.preview_dir:
         args.preview_dir.mkdir(parents=True, exist_ok=True)
