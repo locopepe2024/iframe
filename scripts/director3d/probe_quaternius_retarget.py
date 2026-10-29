@@ -10,6 +10,51 @@ from pathlib import Path
 import bpy
 from mathutils import Matrix, Quaternion, Vector
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from sole_contact_metrics import summarize_sole
+
+
+def sole_regions(target):
+    """Fixed vertex IDs selected from weighted foot geometry in reset rest pose."""
+    regions = {}
+    meshes = [obj for obj in bpy.data.objects if obj.type == "MESH"
+              and any(mod.type == "ARMATURE" and mod.object == target for mod in obj.modifiers)]
+    if any(mod.type != "ARMATURE" for obj in meshes for mod in obj.modifiers if mod.show_viewport):
+        raise ValueError("sole diagnostic requires armature-only modifier stacks for stable vertex IDs")
+    for side in ("l", "r"):
+        candidates = []
+        names = {f"foot_{side}", f"toe_{side}", f"ankle_{side}", f"DEF_foot_{side}"}
+        for mesh in meshes:
+            groups = {g.index for g in mesh.vertex_groups if g.name in names}
+            for vertex in mesh.data.vertices:
+                if sum(g.weight for g in vertex.groups if g.group in groups) >= 0.5:
+                    candidates.append((mesh, vertex.index, (mesh.matrix_world @ vertex.co).z))
+        if not candidates:
+            raise ValueError(f"no weighted foot vertices for {side}")
+        floor = min(item[2] for item in candidates)
+        regions[side] = [(mesh, index) for mesh, index, z in candidates if z <= floor+0.02]
+    return regions
+
+
+def evaluated_sole(regions):
+    depsgraph = bpy.context.evaluated_depsgraph_get()
+    evaluated = {}
+    try:
+        for points in regions.values():
+            for obj, _ in points:
+                if obj.name not in evaluated:
+                    ev = obj.evaluated_get(depsgraph)
+                    mesh = ev.to_mesh()
+                    evaluated[obj.name] = (ev, mesh)
+                    if len(mesh.vertices) != len(obj.data.vertices):
+                        raise ValueError("sole evaluation changed mesh topology")
+        return {side: [list(evaluated[obj.name][0].matrix_world @
+                            evaluated[obj.name][1].vertices[index].co) for obj, index in points]
+                for side, points in regions.items()}
+    finally:
+        for ev, _ in evaluated.values():
+            ev.to_mesh_clear()
+
 
 def sha256(path):
     digest = hashlib.sha256()
@@ -71,28 +116,41 @@ def distance(left, right):
     return math.sqrt(sum((a - b) ** 2 for a, b in zip(left, right)))
 
 
-def render_preview(source, output):
+def render_preview(source, output, feet=False, ground=False):
     for obj in source.children_recursive:
         if obj.type == "MESH":
             obj.hide_render = True
     camera_data = bpy.data.cameras.new("diagnostic-camera")
     camera = bpy.data.objects.new("diagnostic-camera", camera_data)
     bpy.context.collection.objects.link(camera)
-    camera.location = (3.4, -5.5, 2.3)
-    focus = Vector((0, 0, 0.95))
+    camera.location = (2.8, -4, 1.4) if feet else (3.4, -5.5, 2.3)
+    focus = Vector((0, 0, 0.3 if feet else 0.95))
     camera.rotation_euler = (focus - camera.location).to_track_quat("-Z", "Y").to_euler()
     camera_data.type = "ORTHO"
-    camera_data.ortho_scale = 2.8
+    camera_data.ortho_scale = 1.25 if feet else 2.8
     scene = bpy.context.scene
     scene.camera = camera
     scene.render.engine = "BLENDER_WORKBENCH"
+    scene.display.shading.light = "STUDIO"
+    scene.display.shading.color_type = "SINGLE"
+    scene.display.shading.single_color = (0.7, 0.7, 0.7)
+    scene.display.shading.show_shadows = True
+    plane = None
+    if ground:
+        bpy.ops.mesh.primitive_plane_add(size=200, location=(0, 0, 0))
+        plane = bpy.context.object
     scene.render.resolution_x = 640
     scene.render.resolution_y = 640
     scene.render.resolution_percentage = 100
     scene.render.image_settings.file_format = "PNG"
     scene.render.filepath = str(output)
     bpy.ops.render.render(write_still=True)
+    if plane:
+        data = plane.data
+        bpy.data.objects.remove(plane, do_unlink=True)
+        bpy.data.meshes.remove(data)
     bpy.data.objects.remove(camera, do_unlink=True)
+    bpy.data.cameras.remove(camera_data)
 
 
 def main():
@@ -103,6 +161,8 @@ def main():
     parser.add_argument("--mapping", type=Path, required=True)
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--preview-dir", type=Path)
+    parser.add_argument("--sole-contact", action="store_true", help="Measure weighted sole-region geometry; no contact acceptance")
+    parser.add_argument("--sequence-dir", type=Path, help="Render every inclusive frame in full-body and feet views")
     parser.add_argument("--actions", nargs="+", default=["Punch_Jab", "Punch_Cross", "Sword_Attack"],
                         help="Exact source action names to inspect; missing actions fail closed")
     parser.add_argument("--pelvis-translation", action="store_true",
@@ -136,6 +196,7 @@ def main():
 
     source_rest = {item["source"]: source.data.bones[item["source"]].matrix_local.to_quaternion() for item in pairs}
     target_rest = {item["target"]: target.data.bones[item["target"]].matrix_local.to_quaternion() for item in pairs}
+    regions = sole_regions(target) if args.sole_contact else None
     translation_calibration = {"enabled": args.pelvis_translation}
     if args.pelvis_translation:
         for rig in (source, target):
@@ -175,6 +236,7 @@ def main():
         start, end = (round(value) for value in action.frame_range)
         sample_frames = range(start, end + 1)
         samples = []
+        sole_samples = {side: [] for side in ("l", "r")}
         previous = {}
         previous_source = {}
         for frame in sample_frames:
@@ -248,6 +310,14 @@ def main():
                 "foot_r": world_position(target, target.pose.bones["foot_r"], "tail"),
             }
             samples.append({"frame": frame, "sourceMotionDeg": source_motion, "sourceFrameStepDeg": source_continuity, "rotationResidualDeg": residuals, "directionErrorDeg": direction_errors, "frameStepDeg": continuity, "sourcePointsM": source_points, "targetPointsM": target_points})
+            if regions:
+                for side, points in evaluated_sole(regions).items():
+                    sole_samples[side].append({"frame": frame, "points": points})
+            if args.sequence_dir:
+                for view in ("body", "feet"):
+                    folder = args.sequence_dir / name / view
+                    folder.mkdir(parents=True, exist_ok=True)
+                    render_preview(source, folder / f"{frame-start:04d}.png", feet=view == "feet", ground=True)
             if args.preview_dir and frame == (start + end) // 2:
                 render_preview(source, args.preview_dir / f"{name}-frame-{frame}.png")
         first, last = samples[0], samples[-1]
@@ -263,6 +333,12 @@ def main():
             for side in ("foot_l", "foot_r")
         }
         reports.append({"action": name, "frameRange": [start, end], "pelvisTravelM": travel, "footHeightRangeM": foot_heights, "previewFrame": (start + end) // 2 if args.preview_dir else None, "samples": samples})
+        if regions:
+            reports[-1]["soleGeometry"] = {
+                side: {**summarize_sole(sole_samples[side], bpy.context.scene.render.fps / bpy.context.scene.render.fps_base),
+                       "selection": "rest weighted foot vertices, bottom 0.02m band, weight >= 0.5",
+                       "vertices": [{"mesh": obj.name, "index": index} for obj, index in regions[side]]}
+                for side in regions}
 
     report = {
         "schema": "director3d-retarget-diagnostic.v1",
@@ -278,6 +354,8 @@ def main():
         "pelvisTranslation": translation_calibration,
         "sourceBones": len(source.data.bones),
         "targetBones": len(target.data.bones),
+        "sequenceRendered": bool(args.sequence_dir),
+        "authoredFPS": "unverified",
         "actions": reports,
         "warnings": mapping["warnings"] + [
             "Pelvis and foot positions are diagnostic only; no ground calibration, contact acceptance, or IK was performed.",
