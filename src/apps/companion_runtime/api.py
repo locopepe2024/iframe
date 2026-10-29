@@ -18,7 +18,9 @@ from .model import propose, propose_diary, ModelUnavailable
 from .tools import StartMediaDraft, UpdateMediaDraft, Strict, dispatch, tool_schemas, CAPABILITIES
 from .opentalking_binding import BindingUnavailable, SessionBindings
 from .opentalking_context import ContextUnavailable, IframeContextReader
+from .coordinator import decide
 from .interaction_focus import FocusUpdate, read_focus, update_focus, active_editor
+from .media_draft_bridge import selection_event_from_draft, apply_selection
 
 
 class Operation(Strict):
@@ -44,6 +46,14 @@ class DiarySave(Operation):
     text: str = Field(min_length=1, max_length=12000)
     source_turn_id: str = Field(max_length=120)
     expected_revision: int = Field(ge=0)
+
+
+class PhotoSelectedEvent(Operation):
+    event_type: Literal['photo_selected']
+    task_id: str = Field(min_length=1, max_length=120)
+    card_id: str = Field(min_length=1, max_length=200)
+    photo_id: str = Field(min_length=1, max_length=120)
+    expected_revision: int = Field(ge=1)
 
 
 class PhotoTaskInput(Operation):
@@ -206,6 +216,12 @@ def conversation(session_id: str, identity: Owner, store: Store, after: int = Qu
         return store.conversation(identity.owner_profile_id, identity.user_id, session_id, after=after, limit=limit, latest=latest, before=before)
 
 
+@router.get('/sessions/{session_id}/workflow-context')
+def workflow_context(session_id: str, identity: Owner, store: Store):
+    with errors():
+        return store.workflow_context(identity.owner_profile_id, identity.user_id, session_id)
+
+
 @router.get('/sessions/{session_id}/focus')
 def focus(session_id: str, identity: Owner, store: Store):
     with errors(), store.connection() as db:
@@ -287,6 +303,33 @@ def input_media_draft(session_id: str, body: MediaDraftInput, identity: Owner, s
         return store.update_media_draft(identity.owner_profile_id, identity.user_id, session_id, body.task_id,
                                         body.operation_id, body.model_dump(exclude={'operation_id','task_id'}))
 
+@router.post('/sessions/{session_id}/events')
+def media_event(session_id: str, body: PhotoSelectedEvent, identity: Owner, store: Store):
+    """Consume one authenticated UI event and resume the current media draft.
+
+    This first event endpoint is deliberately narrow: only a real photo
+    selection is accepted. The draft store remains the source of business
+    truth; the bridge validates the rendered card before applying the event.
+    """
+    with errors():
+        task = store.media_draft(identity.owner_profile_id, identity.user_id, body.task_id)
+        if task.get('session_id') != session_id:
+            raise Missing('Creative task unavailable in this session')
+        if task.get('revision') != body.expected_revision:
+            cached = store.media_draft_operation(identity.owner_profile_id, identity.user_id,
+                                                 body.task_id, body.operation_id)
+            if cached is not None:
+                return dict(event_id=body.operation_id, event_type=body.event_type,
+                            status='accepted', task=cached,
+                            next_step=cached.get('step'), spoken_text=cached.get('spoken_text'))
+            raise Conflict('Creative task changed; refresh the source card')
+        event = selection_event_from_draft(task, card_id=body.card_id, photo_id=body.photo_id)
+        result = apply_selection(store, identity.owner_profile_id, identity.user_id,
+                                 session_id, task, event, operation_id=body.operation_id)
+        return dict(event_id=body.operation_id, event_type=body.event_type,
+                    status='accepted', task=result,
+                    next_step=result.get('step'), spoken_text=result.get('spoken_text'))
+
 
 def creative_shortcut(text):
     parts = text.strip().split(maxsplit=1)
@@ -320,6 +363,10 @@ def chat(session_id: str, body: ChatRequest, identity: Owner, store: Store):
                 expected = dict(task_id=current['task_id'],revision=current['revision']) if current else dict(task_id='',revision=0)
                 if body.creative_context.model_dump() != expected:
                     raise Conflict('Creative task changed since this sentence was captured; review before resending')
+            if not editing and not body.selected_photo_id and intent.name not in ('album.scope', 'album.browse'):
+                decision = decide(body.text, store.workflow_context(identity.owner_profile_id, identity.user_id, session_id))
+                if decision:
+                    claim['messages'][-1]['coordinator_decision'] = decision
             # Diary is a writing lane. It receives the current session's user
             # messages but never receives memory tools, even if the model
             # would otherwise interpret the request as a search.

@@ -220,3 +220,12 @@
 已验证：当前卡片可生成统一等待描述；旧卡片不能产生选择事件；有效选择可更新真实草稿；同一事件重试返回原结果；草稿 revision 更新后再次使用旧事件被拒绝。桥接测试、素材工具和既有 UI 卡片测试共12项通过。
 
 边界：这仍是服务内兼容模块，尚未增加新的HTTP/SSE事件入口；客户端仍调用现有 `/media-drafts/input`。上传完成、相册选择完成和服务端 `asset.bind` 回执尚未在同一 API 响应中暴露给模型调度器。下一步增加受认证保护的统一事件入口，先支持 `photo_selected`，并将回执写入现有会话消息/状态快照。
+
+
+## 实现进度：统一 photo_selected 事件入口
+
+2026-10-29：在 Companion API 增加受现有用户身份保护的 `POST /companion-runtime/sessions/{session_id}/events`，当前只接受 `event_type=photo_selected`。入口读取真实 media draft，核对 session、task、卡片 ID 和 expected revision，再通过兼容桥调用既有 `update_media_draft`；真实草稿仍是业务事实源。
+
+重复的 operation_id 在 revision 已变化时返回原草稿回执，不重复绑定；旧卡、错误会话、错误 revision 进入稳定错误响应。返回包含 event_id、任务快照和下一步，模型/前端可以继续同一任务。相关真实 FastAPI、media draft、UI card、桥接和工具测试共36项通过。
+
+当前范围只覆盖相册选择。上传完成事件、首尾帧/参考图槽位、异步分析结果、SSE 推送和统一 operation_store 回执尚未接入；因此这不是所有工具已经统一的证明。下一步扩展事件 schema 的槽位和上传结果，仍需逐项绑定真实素材并保持幂等。

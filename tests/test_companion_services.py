@@ -201,3 +201,32 @@ def test_completed_generation_can_be_saved_to_album_idempotently(client, monkeyp
     first = c.post('/companion-runtime/generations/save-job/save', json={'allow_save':True})
     assert first.status_code == 200 and first.json() == {'asset_type':'photo','photo_id':'saved-photo','created':True}
     photo_store.upload.assert_called_once_with('owner','generated-save-job',prepared)
+
+
+def test_unified_photo_selected_event_uses_current_card_and_returns_next_step(client, monkeypatch):
+    c, store, _ = client
+    session = store.session('owner', 'unified-events')['session_id']
+    task = store.start_media_draft('owner', 'user', session, 'start-event', {'type': 'image_edit'})
+    monkeypatch.setattr('src.apps.companion_runtime.media_drafts.read_photos', lambda *args: {'photos': [{}]})
+    body = dict(operation_id='photo-event-1', event_type='photo_selected', task_id=task['task_id'],
+                card_id=task['ui_card']['card_id'], photo_id='photo-owned', expected_revision=1)
+    result = c.post(f'/companion-runtime/sessions/{session}/events', json=body)
+    assert result.status_code == 200, result.text
+    assert result.json()['status'] == 'accepted'
+    assert result.json()['task']['revision'] == 2
+    assert result.json()['next_step'] == 'awaiting_brief'
+    assert c.post(f'/companion-runtime/sessions/{session}/events', json=body).json() == result.json()
+
+
+def test_unified_photo_selected_event_rejects_old_card_and_wrong_session(client, monkeypatch):
+    c, store, _ = client
+    session = store.session('owner', 'unified-stale')['session_id']
+    task = store.start_media_draft('owner', 'user', session, 'start-stale', {'type': 'image_edit'})
+    monkeypatch.setattr('src.apps.companion_runtime.media_drafts.read_photos', lambda *args: {'photos': [{}]})
+    body = dict(operation_id='stale-event', event_type='photo_selected', task_id=task['task_id'],
+                card_id='old:1:source', photo_id='photo-owned', expected_revision=1)
+    assert c.post(f'/companion-runtime/sessions/{session}/events', json=body).status_code == 409
+    other = store.session('owner', 'other-session')['session_id']
+    body['operation_id'] = 'wrong-session'
+    body['card_id'] = task['ui_card']['card_id']
+    assert c.post(f'/companion-runtime/sessions/{other}/events', json=body).status_code == 404

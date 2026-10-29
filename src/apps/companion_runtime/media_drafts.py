@@ -32,6 +32,12 @@ def display(row):
 
 
 class MediaDrafts:
+    def media_draft_operation(self, owner, actor, task_id, operation_id):
+        with self.connection() as db:
+            row = db.execute('SELECT result FROM companion_media_draft_operations WHERE owner=? AND actor=? AND task_id=? AND operation_id=?',
+                             (owner, actor, task_id, operation_id)).fetchone()
+            return json.loads(row['result']) if row else None
+
     def media_draft(self, owner, actor, task_id):
         with self.connection() as db:
             row = self.one(db, 'companion_media_drafts', owner, task_id)
