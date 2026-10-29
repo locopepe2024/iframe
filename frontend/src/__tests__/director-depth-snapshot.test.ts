@@ -27,3 +27,19 @@ it('bakes current bone deformation instead of rest vertices', () => {
   const [result] = bakeDepthMeshes(scene);
   expect(result.positions.map(point => point[2])).toEqual([2,2,2]);
 });
+
+it('packs a populated street within the mesh contract without losing world geometry', () => {
+  const scene = new THREE.Scene();
+  for (let i = 0; i < 128; i++) {
+    const mesh = new THREE.Mesh(new THREE.BoxGeometry(1,1,1));
+    mesh.userData.directorDepthGeometry = true;
+    mesh.position.set(i * 2,0,0); scene.add(mesh);
+  }
+  const result = bakeDepthMeshes(scene);
+  expect(result.length).toBeLessThanOrEqual(100);
+  expect(result.reduce((n,m) => n+m.positions.length,0)).toBe(128*24);
+  expect(result.reduce((n,m) => n+m.triangles.length,0)).toBe(128*12);
+  // Check reindexed triangles still refer to the correct box after batching.
+  const centers = result.flatMap(m => m.triangles.map(t => t.reduce((n,i) => n+m.positions[i][0],0)/3));
+  for (let i = 0; i < 128; i++) expect(centers.filter(x => Math.abs(x-i*2) <= .5)).toHaveLength(12);
+});

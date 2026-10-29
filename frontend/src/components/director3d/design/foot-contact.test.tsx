@@ -36,6 +36,29 @@ it("returns calibrated standing ankle targets for waiting",()=>{
  expect(result.targets.r).toEqual(result.targets.l);
 });
 
+it("counter-swings the actual GLB wrists against the advancing leg",async()=>{
+ const {crowdGait}=await import('./crowd-navigation');
+ const {evaluateKeyframes}=await import('../timeline/timeline-evaluation');
+ const {useWorkbenchStore}=await import('../state/workbench-store');
+ const bytes=readFileSync(new URL('../../../../public/models/director3d/white-model-neutral-female-v1/white-model-neutral-female-v1.glb',import.meta.url));
+ const {scene}=await new GLTFLoader().parseAsync(bytes.buffer.slice(bytes.byteOffset,bytes.byteOffset+bytes.byteLength),'');
+ const root=new Group();root.rotation.x=Math.PI/2;root.add(scene);root.updateMatrixWorld(true);
+ const bones=new Map<string,Bone>();scene.traverse(n=>{if(n instanceof Bone)bones.set(n.name,n);});
+ const before=Object.fromEntries(['wrist_l','wrist_r'].map(id=>[id,bones.get(id)!.getWorldPosition(new Vector3()).y]));
+ const actor=Object.values(useWorkbenchStore.getState().characters)[0];
+ const track:import('../types').TimelineTrackState={trackId:'counter-swing',trackKind:'character_transform',propertyKey:'transform.position_m',target:{targetType:'character',targetId:actor.characterId},keyframes:[
+  {keyframeId:'start',timeSeconds:0,value:[0,0,0],interpolation:'linear'},
+  {keyframeId:'end',timeSeconds:6,value:[0,2.4,0],interpolation:'linear'}]};
+ const gait=crowdGait(track,actor);
+ const pose=evaluateKeyframes(gait[0].keyframes,.2) as Record<string,number[]>;
+ for(const id of ['upper_arm_l','upper_arm_r']) {
+  const [x,y,z]=pose[id];bones.get(id)!.quaternion.multiply(new Quaternion().setFromEuler(new Euler(x*MathUtils.DEG2RAD,y*MathUtils.DEG2RAD,z*MathUtils.DEG2RAD)));
+ }
+ root.updateMatrixWorld(true);
+ expect(bones.get('wrist_l')!.getWorldPosition(new Vector3()).y).toBeLessThan(before.wrist_l);
+ expect(bones.get('wrist_r')!.getWorldPosition(new Vector3()).y).toBeGreaterThan(before.wrist_r);
+});
+
 it("keeps actual GLB support ankles within 1 cm through baked interpolation, departure, arrival and headings",async()=>{
  const {crowdGait}=await import('./crowd-navigation');
  const {evaluateDirectorFrame}=await import('../timeline/timeline-evaluation');
@@ -59,7 +82,7 @@ it("keeps actual GLB support ankles within 1 cm through baked interpolation, dep
   const tracks=[track,...crowdGait(track,actor)];
   // JSON replay and real timeline evaluator, including samples between baked keys.
   const replay=JSON.parse(JSON.stringify(tracks));
-  const count=Math.max(2,Math.ceil(length/.12/2)*2),step=length/count;
+  const count=Math.max(2,Math.ceil(length/.24/2)*2),step=length/count;
   for(let n=0;n<=420;n++) {
    const time=n/100;
    const evaluated=evaluateDirectorFrame({frame:n+1,fps:100,durationSeconds:5,tracks:replay,activeCameraTrackId:null,selectedCameraId:'',characters:{[actor.characterId]:actor},cameras:{},sceneObjects:{},actorPaths:{},cameraPaths:{}}).characters[actor.characterId];

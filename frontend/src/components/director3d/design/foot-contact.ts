@@ -37,10 +37,15 @@ export function solveFootTargets(targets: Record<string, {y:number;z:number}>, p
   return {rotations, targets};
 }
 
+/** Canonical flat-ground rig only; longer steps require pelvis/reach recalibration. */
+export function footfallSchedule(length: number) {
+  const count = Math.max(2, Math.ceil(length / .24 / 2) * 2);
+  return {count, step: length / count};
+}
+
 /** Distance-domain footsteps. Each non-swing foot remains at a fixed route anchor. */
 export function plantedFootPose(distance: number, length: number) {
-  const count = Math.max(2, Math.ceil(length / .12 / 2) * 2);
-  const step = length / count;
+  const {count, step} = footfallSchedule(length);
   const d = Math.max(0, Math.min(length, distance));
   const index = Math.min(count-1, Math.floor(d/step));
   const t = (d-index*step)/step;
@@ -55,5 +60,8 @@ export function plantedFootPose(distance: number, length: number) {
     targets[side] = {y: LEG_CONTACT.ankleY+(swing ? anchor+(next-anchor)*smooth : anchor)-d,
       z: LEG_CONTACT.ankleZ+(swing ? .06*Math.sin(Math.PI*t)**2 : 0)};
   }
-  return {...solveFootTargets(targets,pelvisZ),pelvisZ};
+  // Positive left-arm X counters the first (left-leg) forward swing. Fade at
+  // start/stop so the standing hold has no discontinuous arm displacement.
+  const armSwing = Math.cos(Math.PI*d/step) * Math.min(1,d/step,(length-d)/step);
+  return {...solveFootTargets(targets,pelvisZ),pelvisZ,armSwing};
 }

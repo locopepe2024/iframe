@@ -1,4 +1,4 @@
-import { plantedFootPose, solveFlatFoot } from "./foot-contact";
+import { footfallSchedule, plantedFootPose, solveFlatFoot } from "./foot-contact";
 import { navmeshRoute } from "./navmesh-routing";
 import type { CharacterAuthoringState } from "../state/workbench-store";
 import type { SceneObjectAuthoringState, TimelineTrackState, TimelineKeyframeState } from "../types";
@@ -117,17 +117,15 @@ export function navigateCrowd(tracks: TimelineTrackState[], characters: Record<s
 /** Flat-ground support anchors on straight segments; corners use discrete replants. */
 export function crowdGait(track: TimelineTrackState, actor: CharacterAuthoringState): TimelineTrackState[] {
   if (actor.transform.scale.some(v => v !== 1) || actor.transform.rotationDeg.slice(0,2).some(v => v !== 0)) throw new Error("平地支撑脚锁定仅支持未缩放、直立的标准白模。");
-  let traveled = 0;
   const poseKeys: TimelineKeyframeState[] = [], turnKeys: TimelineKeyframeState[] = [];
-  const pose = (phase: number, walking: boolean, d = 0, length = 1) => {
-    const swing = walking ? Math.sin(phase) : 0;
-    const solved = walking ? plantedFootPose(d,length) : {...solveFlatFoot(0,false),pelvisZ:0};
-    return {pose_root_offset_m: [0,0,solved.pelvisZ], ...Object.fromEntries(Object.entries(solved.rotations).map(([id, r]) => [id, [r.x,r.y,r.z]])), upper_arm_l: [(-16 * swing) || 0, 0, 0], upper_arm_r: [16 * swing, 0, 0]};
+  const pose = (walking: boolean, d = 0, length = 1) => {
+    const solved = walking ? plantedFootPose(d,length) : {...solveFlatFoot(0,false),pelvisZ:0,armSwing:0};
+    return {pose_root_offset_m: [0,0,solved.pelvisZ], ...Object.fromEntries(Object.entries(solved.rotations).map(([id, r]) => [id, [r.x,r.y,r.z]])), upper_arm_l: [(16 * solved.armSwing) || 0, 0, 0], upper_arm_r: [(-16 * solved.armSwing) || 0, 0, 0]};
   };
   for (let i = 0; i < track.keyframes.length - 1; i++) {
     const start = track.keyframes[i], end = track.keyframes[i + 1], from = start.value as Vec, to = end.value as Vec;
     const length = distance(from, to), walking = length > 1e-6;
-    const footfalls = Math.max(2, Math.ceil(length / .12 / 2) * 2);
+    const footfalls = footfallSchedule(length).count;
     const steps = walking ? footfalls * Math.max(8, Math.ceil(length / footfalls / .005)) : 1;
     const heading = (a: Vec,b: Vec) => Math.atan2(-(b[0]-a[0]),b[1]-a[1])*180/Math.PI;
     const previousYaw = turnKeys.length ? (turnKeys.at(-1)!.value as {rotation_deg: Vec}).rotation_deg[2] : actor.transform.rotationDeg[2];
@@ -144,11 +142,10 @@ export function crowdGait(track: TimelineTrackState, actor: CharacterAuthoringSt
     } else turnKeys.push({keyframeId: `${track.trackId}-yaw-${i}`, timeSeconds: start.timeSeconds, value: {rotation_deg: [0, 0, yaw]}, interpolation: "step"});
     for (let j = 0; j < steps; j++) {
       const amount = j / steps;
-      poseKeys.push({keyframeId: `${track.trackId}-gait-${i}-${j}`, timeSeconds: start.timeSeconds + amount * (end.timeSeconds - start.timeSeconds), value: pose((traveled + length * amount) * 2 * Math.PI / 1.2, walking, length * amount, length), interpolation: walking ? "linear" : "step"});
+      poseKeys.push({keyframeId: `${track.trackId}-gait-${i}-${j}`, timeSeconds: start.timeSeconds + amount * (end.timeSeconds - start.timeSeconds), value: pose(walking, length * amount, length), interpolation: walking ? "linear" : "step"});
     }
-    traveled += length;
   }
-  poseKeys.push({keyframeId: `${track.trackId}-gait-end`, timeSeconds: track.keyframes.at(-1)!.timeSeconds, value: pose(0, false), interpolation: "linear"});
+  poseKeys.push({keyframeId: `${track.trackId}-gait-end`, timeSeconds: track.keyframes.at(-1)!.timeSeconds, value: pose(false), interpolation: "linear"});
   return [{...track, trackId: `${track.trackId}-gait`, trackKind: "character_pose", propertyKey: "pose.normalized_values", keyframes: poseKeys},
     {...track, trackId: `${track.trackId}-heading`, propertyKey: "transform.rotation_deg", keyframes: turnKeys}];
 }
