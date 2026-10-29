@@ -1,0 +1,212 @@
+{
+  "schema": "addams-sole-frame-review.v1",
+  "source_range": [
+    46,
+    65
+  ],
+  "fps": 25,
+  "production_eligible": false,
+  "choices": {
+    "sole_evidence": [
+      "verified_visible",
+      "partial_contour",
+      "unavailable",
+      "out_of_frame"
+    ],
+    "contact_evidence": [
+      "contact_candidate",
+      "airborne_candidate",
+      "unknown"
+    ],
+    "visibility_note": [
+      "front_or_clear",
+      "side_but_contour",
+      "blurred",
+      "occluded",
+      "cut_or_unclear"
+    ]
+  },
+  "rule": "No coordinate entry. unavailable/unknown routes to temporal inference or manual review and blocks foot IK.",
+  "rows": [
+    {
+      "source_frame": 46,
+      "pts_s": 1.8,
+      "image": "frame-046.jpg",
+      "sole_evidence": "pending",
+      "contact_evidence": "pending",
+      "visibility_note": "pending",
+      "notes": ""
+    },
+    {
+      "source_frame": 47,
+      "pts_s": 1.84,
+      "image": "frame-047.jpg",
+      "sole_evidence": "pending",
+      "contact_evidence": "pending",
+      "visibility_note": "pending",
+      "notes": ""
+    },
+    {
+      "source_frame": 48,
+      "pts_s": 1.88,
+      "image": "frame-048.jpg",
+      "sole_evidence": "pending",
+      "contact_evidence": "pending",
+      "visibility_note": "pending",
+      "notes": ""
+    },
+    {
+      "source_frame": 49,
+      "pts_s": 1.92,
+      "image": "frame-049.jpg",
+      "sole_evidence": "pending",
+      "contact_evidence": "pending",
+      "visibility_note": "pending",
+      "notes": ""
+    },
+    {
+      "source_frame": 50,
+      "pts_s": 1.96,
+      "image": "frame-050.jpg",
+      "sole_evidence": "pending",
+      "contact_evidence": "pending",
+      "visibility_note": "pending",
+      "notes": ""
+    },
+    {
+      "source_frame": 51,
+      "pts_s": 2.0,
+      "image": "frame-051.jpg",
+      "sole_evidence": "pending",
+      "contact_evidence": "pending",
+      "visibility_note": "pending",
+      "notes": ""
+    },
+    {
+      "source_frame": 52,
+      "pts_s": 2.04,
+      "image": "frame-052.jpg",
+      "sole_evidence": "pending",
+      "contact_evidence": "pending",
+      "visibility_note": "pending",
+      "notes": ""
+    },
+    {
+      "source_frame": 53,
+      "pts_s": 2.08,
+      "image": "frame-053.jpg",
+      "sole_evidence": "pending",
+      "contact_evidence": "pending",
+      "visibility_note": "pending",
+      "notes": ""
+    },
+    {
+      "source_frame": 54,
+      "pts_s": 2.12,
+      "image": "frame-054.jpg",
+      "sole_evidence": "pending",
+      "contact_evidence": "pending",
+      "visibility_note": "pending",
+      "notes": ""
+    },
+    {
+      "source_frame": 55,
+      "pts_s": 2.16,
+      "image": "frame-055.jpg",
+      "sole_evidence": "pending",
+      "contact_evidence": "pending",
+      "visibility_note": "pending",
+      "notes": ""
+    },
+    {
+      "source_frame": 56,
+      "pts_s": 2.2,
+      "image": "frame-056.jpg",
+      "sole_evidence": "pending",
+      "contact_evidence": "pending",
+      "visibility_note": "pending",
+      "notes": ""
+    },
+    {
+      "source_frame": 57,
+      "pts_s": 2.24,
+      "image": "frame-057.jpg",
+      "sole_evidence": "pending",
+      "contact_evidence": "pending",
+      "visibility_note": "pending",
+      "notes": ""
+    },
+    {
+      "source_frame": 58,
+      "pts_s": 2.28,
+      "image": "frame-058.jpg",
+      "sole_evidence": "pending",
+      "contact_evidence": "pending",
+      "visibility_note": "pending",
+      "notes": ""
+    },
+    {
+      "source_frame": 59,
+      "pts_s": 2.32,
+      "image": "frame-059.jpg",
+      "sole_evidence": "pending",
+      "contact_evidence": "pending",
+      "visibility_note": "pending",
+      "notes": ""
+    },
+    {
+      "source_frame": 60,
+      "pts_s": 2.36,
+      "image": "frame-060.jpg",
+      "sole_evidence": "pending",
+      "contact_evidence": "pending",
+      "visibility_note": "pending",
+      "notes": ""
+    },
+    {
+      "source_frame": 61,
+      "pts_s": 2.4,
+      "image": "frame-061.jpg",
+      "sole_evidence": "pending",
+      "contact_evidence": "pending",
+      "visibility_note": "pending",
+      "notes": ""
+    },
+    {
+      "source_frame": 62,
+      "pts_s": 2.44,
+      "image": "frame-062.jpg",
+      "sole_evidence": "pending",
+      "contact_evidence": "pending",
+      "visibility_note": "pending",
+      "notes": ""
+    },
+    {
+      "source_frame": 63,
+      "pts_s": 2.48,
+      "image": "frame-063.jpg",
+      "sole_evidence": "pending",
+      "contact_evidence": "pending",
+      "visibility_note": "pending",
+      "notes": ""
+    },
+    {
+      "source_frame": 64,
+      "pts_s": 2.52,
+      "image": "frame-064.jpg",
+      "sole_evidence": "pending",
+      "contact_evidence": "pending",
+      "visibility_note": "pending",
+      "notes": ""
+    },
+    {
+      "source_frame": 65,
+      "pts_s": 2.56,
+      "image": "frame-065.jpg",
+      "sole_evidence": "pending",
+      "contact_evidence": "pending",
+      "visibility_note": "pending",
+      "notes": ""
+    }
+  ]
+}
