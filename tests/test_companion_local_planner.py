@@ -36,3 +36,19 @@ def test_prerequisites_and_diary_focus_are_checked():
     assert result.capability == 'diary'
     with pytest.raises(ValueError):
         check(plan({'tool': 'media.task.ensure'}), {'active': {'type': 'video_generate', 'status': 'active'}})
+
+
+def test_invalid_model_plan_remains_rejected_with_auditable_usage(monkeypatch):
+    from src.apps.companion_runtime import local_planner
+    class Response:
+        def raise_for_status(self):
+            pass
+        def json(self):
+            import json
+            return {'choices': [{'finish_reason': 'stop', 'message': {'content': json.dumps(plan({'tool': 'media.task.cancel'}))}}],
+                    'usage': {'prompt_tokens': 450, 'completion_tokens': 20}}
+    monkeypatch.setattr(local_planner.requests, 'post', lambda *args, **kwargs: Response())
+    with pytest.raises(local_planner.PlannerRejected) as rejected:
+        local_planner.propose_local('http://example.invalid', '取消', {})
+    assert rejected.value.usage['prompt_tokens'] == 450
+    assert rejected.value.proposal['decision']['steps'][0]['tool'] == 'media.task.cancel'

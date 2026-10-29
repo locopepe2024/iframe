@@ -72,7 +72,22 @@ SYSTEM = '''你是小安的主机任务编排器，只输出指定JSON，不执�
 steps按序执行：media.task.ensure取得图片编辑任务；media.brief.set保存完整修改要求；media.source.request请求选图，source为ask/album/upload；media.task.pause暂停；media.task.cancel取消。
 已有active任务不必ensure；没有则先ensure。没有选图也先保存明确要求。只说修改照片不是画面要求，不能写进brief。选择来源不是brief。保存要求时保留旧brief中未被用户撤销的约束。
 缺少照片且没有其他明确来源时，最后source=ask；明确选择相册/上传时source=album/upload。已选图则不重复询问来源。只输出注册步骤，不编造素材或任务ID。
-focus=diary_editor时，用户讲照片或视频也是日记内容，除非明确要求离开编辑；不明确时问清。'''
+focus=diary_editor时，用户讲照片或视频也是日记内容，除非明确要求离开编辑；不明确时问清。
+输出格式示例（选择符合用户请求的一种，不照抄内容）：
+新编辑任务：{"decision":{"kind":"image_edit","steps":[{"tool":"media.task.ensure"},{"tool":"media.source.request","source":"ask"}]}}
+已有任务补充要求：{"decision":{"kind":"image_edit","steps":[{"tool":"media.brief.set","brief":"调亮，人物不变"},{"tool":"media.source.request","source":"ask"}]}}
+暂停：{"decision":{"kind":"image_edit","steps":[{"tool":"media.task.pause"}]}}
+澄清：{"decision":{"kind":"clarify","question":"想修改画面，还是整理资料？"}}
+交给聊天：{"decision":{"kind":"delegate","capability":"chat"}}
+steps中一个工具至多一次；source步骤至多一个且排最后。'''
+
+
+class PlannerRejected(ValueError):
+    """Keep synthetic proposal/usage for evaluation without executing it."""
+    def __init__(self, reason, *, proposal, usage):
+        super().__init__(reason)
+        self.proposal = proposal
+        self.usage = usage
 
 
 def check(proposal, state):
@@ -110,6 +125,9 @@ def propose_local(url, text, state, *, timeout=30):
     if message.get('finish_reason') != 'stop':
         raise ValueError('Planner output is incomplete')
     proposal = json.loads(message['message']['content'])
-    decision = check(proposal, state)
+    try:
+        decision = check(proposal, state)
+    except ValueError as exc:
+        raise PlannerRejected(str(exc), proposal=proposal, usage=payload.get('usage', {})) from exc
     return dict(decision=decision.model_dump(), usage=payload.get('usage', {}),
                 model=payload.get('model'), timings=payload.get('timings', {}))
