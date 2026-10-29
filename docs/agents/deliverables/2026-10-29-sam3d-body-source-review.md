@@ -31,3 +31,11 @@
 5. 检查左右身份、整条腿末端退化、骨长/体形稳定、连续运动及耗时；单帧通过后再对46–65整段测试。最后接MHR到目标rig转换、时序求解与分段接触IK。
 
 来源：[SAM3D仓库](https://github.com/facebookresearch/sam-3d-body)、[安装](https://github.com/facebookresearch/sam-3d-body/blob/main/INSTALL.md)、[推理封装](https://github.com/facebookresearch/sam-3d-body/blob/main/sam_3d_body/sam_3d_body_estimator.py)、[FoV实现](https://github.com/facebookresearch/sam-3d-body/blob/main/tools/build_fov_estimator.py)、[MHR](https://github.com/facebookresearch/MHR)。
+
+## Deployment preflight observed
+
+media运行检查：x86_64、约15GiB RAM、73GiB可用磁盘；未发现nvidia-smi或/dev/nvidia设备，现有torch为2.3.0+cpu，cuda.is_available()为False。media访问官方DINOv3权重URL得到HTTP401、`x-error-code: GatedRepo`，明确要求获批访问且认证。这是匿名请求结果，不证明任何用户账号未获批；没有读取令牌或账户私有页面。
+
+已用`addams_sam3d_prepare.py`冻结49/51/53/55/56/62/64七张既有960×520诊断源图、逐文件SHA256、25fps时间戳、原生固定K候选及64帧用户腾空语义，输出`docs/agents/raw/2026-10-29-addams-sam3d-evaluation-v1/manifest.json`。人物ROI仍明确为pending；不将整张画面当主角裁剪，不输入验收标注。尚未安装新环境、下载权重或运行推理，未修改既有GVHMR环境。
+
+继续实测需要官方权重访问和可用CUDA运行条件，或单独验证CPU适配；不能把依赖安装完成当成推理成功。用户可在自己的Hugging Face账号申请`facebook/sam-3d-body-dinov3`访问并在运行主机自行登录，无需在聊天提供token。
