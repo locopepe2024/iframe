@@ -15,11 +15,11 @@ it("routes declarative choices through the server without opening local files on
  const view=render(<MediaDraftCard {...props} task={sourceTask}/>);
  fireEvent.click(screen.getByRole("button",{name:"上传照片"}));
  await waitFor(()=>expect(choose).toHaveBeenCalledWith(expect.objectContaining({card_id:"creative:3:source",option_id:"upload"})));
- expect(upload).not.toHaveBeenCalled();
- view.rerender(<MediaDraftCard {...props} task={{...sourceTask,ui_action:"open_upload",ui_event_id:"upload"}}/>);
- expect(upload).not.toHaveBeenCalled();
- fireEvent.click(screen.getByRole("button",{name:"选择手机或电脑里的照片"}));
  expect(upload).toHaveBeenCalledOnce();
+ view.rerender(<MediaDraftCard {...props} task={{...sourceTask,ui_action:"open_upload",ui_event_id:"upload"}}/>);
+ expect(upload).toHaveBeenCalledOnce();
+ fireEvent.click(screen.getByRole("button",{name:"重新选择上传照片"}));
+ expect(upload).toHaveBeenCalledTimes(2);
 });
 it("does not reopen a dismissed album when the same navigation receipt rerenders",async()=>{
  const props={disabled:false,onAction:vi.fn(),onUpload:vi.fn(),onChooseSource:vi.fn()};

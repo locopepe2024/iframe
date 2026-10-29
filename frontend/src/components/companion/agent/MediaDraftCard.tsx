@@ -25,8 +25,14 @@ export default function MediaDraftCard({task,disabled,onAction,onUpload,onRefres
  return <section className={styles.guideCard} aria-label="当前创作任务">
   <h2>{title}</h2>{!sourceCard && <p>{task.spoken_text}</p>}
   {assetCard && <AssetSlotCard card={assetCard} disabled={disabled||reserved} onAlbum={()=>openAlbum(assetCard.slot==="first_frame"?"first":assetCard.slot==="last_frame"?"last":"reference")} onBack={()=>void onAction("pause")}/>}
-  {sourceCard && <ChoiceCard key={sourceCard.card_id} card={sourceCard} disabled={disabled||reserved} onChoose={onChooseSource!}/>}
-  {sourceCard && task.ui_action==="open_upload" && <button type="button" disabled={disabled||reserved} onClick={onUpload}>选择手机或电脑里的照片</button>}
+  {sourceCard && <ChoiceCard key={sourceCard.card_id} card={sourceCard} disabled={disabled||reserved} onChoose={async event=>{
+    // A file picker must be opened from the original user gesture. Opening it
+    // after awaiting the server receipt is blocked by browsers and leaves the
+    // card looking inactive. The server event is still submitted for state.
+    if (event.option_id === "upload") onUpload();
+    return onChooseSource!(event);
+  }}/> }
+  {sourceCard && task.ui_action==="open_upload" && <button type="button" disabled={disabled||reserved} onClick={onUpload}>重新选择上传照片</button>}
   {!video && task.photo_id && <PhotoImage id={task.photo_id}/>} {task.brief && <><h3>{task.type==="image_edit"?"修改要求":"创作内容"}</h3><p>{task.brief}</p></>}
   <fieldset disabled={disabled||reserved}>
    {task.status==="active" && <>

@@ -56,7 +56,7 @@ export default function MediaUpload({files,disabled,onUploaded,onClose,onBusyCha
     <ul>{items.map((item,i)=><li key={item.operation} className={styles.uploadItem}>
       {previews[item.file.name] && (item.file.type.startsWith("video/") ? <video className={styles.uploadPreview} src={previews[item.file.name]} muted playsInline preload="metadata" aria-label={`${item.file.name} 缩略图`} /> : <picture><source srcSet={previews[item.file.name]} /><img className={styles.uploadPreview} src={objectPreviews[item.file.name] || previews[item.file.name]} alt={`${item.file.name} 缩略图`} /></picture>)}
       <p>{item.file.name}：{item.done?"已上传":"待上传"}</p>{item.error&&<p role="alert">{item.error}</p>}
-      {item.photoId && <PhotoOrganizationChoice photoId={item.photoId} name={item.file.name} disabled={busy || disabled}/>}
+      {item.photoId && <PhotoOrganizationChoice photoId={item.photoId} name={item.file.name} disabled={busy && !item.done}/> }
     </li>)}</ul>
     <button type="button" disabled={busy||disabled||items.every(item=>item.done)} onClick={()=>void upload()}>{busy?"正在上传…":items.some(item=>item.error)?"重试未完成的上传":"确认上传"}</button>
     <button type="button" disabled={busy} onClick={onClose}>{items.every(item=>item.done)?"完成":"关闭上传"}</button>
