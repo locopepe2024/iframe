@@ -1,0 +1,195 @@
+{
+  "sourceSha256": "0ff075c7ad6855c5c2c37a171592ee8f0d6ab2f58259e2be77a9b63dd8027765",
+  "targetSha256": "95eeb19c8abce2325479804b3dda429ebddfa6e8d07a2688541cc990fb676855",
+  "mappingSha256": "75ed3655f1d364adc037559db42e73b9a0a5eb9e4e248d62bddc79d3bfcef6e8",
+  "supportAnnotationSha256": "88b2ce3be70c8e0b174d611c50bc2044a86b9dcb182135d0c4949beaa53cba7d",
+  "blenderVersion": "4.5.9 LTS",
+  "rawReportSha256": "9dcd7c9f84fd95aca81f5605aff0ef7782a90d115994bf01a46ba5ecc71122dd",
+  "status": "diagnostic_only",
+  "supportIK": [
+    {
+      "frame": 0,
+      "side": "l",
+      "weight": 0.0,
+      "requestedOffsetM": [
+        0.0,
+        0.0,
+        -0.038380205631256104
+      ],
+      "blendedOffsetM": [
+        0.0,
+        0.0,
+        -0.0
+      ],
+      "ankleResidualM": 4.470348358154297e-08,
+      "kneeResidualM": 3.725290298461914e-08,
+      "soleAnchorResidualM": 0.03838023924757598,
+      "solverApplied": true,
+      "status": "diagnostic_only"
+    },
+    {
+      "frame": 1,
+      "side": "l",
+      "weight": 0.5,
+      "requestedOffsetM": [
+        0.0,
+        0.0,
+        -0.035139765590429306
+      ],
+      "blendedOffsetM": [
+        0.0,
+        0.0,
+        -0.017569882795214653
+      ],
+      "ankleResidualM": 1.1372817696983924e-07,
+      "kneeResidualM": 1.2310379476739693e-07,
+      "soleAnchorResidualM": 0.017829899954360864,
+      "solverApplied": true,
+      "status": "diagnostic_only"
+    },
+    {
+      "frame": 2,
+      "side": "l",
+      "weight": 1.0,
+      "requestedOffsetM": [
+        0.0,
+        0.0,
+        -0.02793920785188675
+      ],
+      "blendedOffsetM": [
+        0.0,
+        0.0,
+        -0.02793920785188675
+      ],
+      "ankleResidualM": 4.5698244050728244e-07,
+      "kneeResidualM": 1.6924465733171325e-07,
+      "soleAnchorResidualM": 0.0005557120521134022,
+      "solverApplied": true,
+      "status": "diagnostic_only"
+    },
+    {
+      "frame": 3,
+      "side": "l",
+      "weight": 0.5,
+      "requestedOffsetM": [
+        0.0,
+        0.0,
+        -0.021316157653927803
+      ],
+      "blendedOffsetM": [
+        0.0,
+        0.0,
+        -0.010658078826963902
+      ],
+      "ankleResidualM": 1.7022579399937187e-07,
+      "kneeResidualM": 6.705522537231445e-08,
+      "soleAnchorResidualM": 0.010745998543551325,
+      "solverApplied": true,
+      "status": "diagnostic_only"
+    },
+    {
+      "frame": 4,
+      "side": "l",
+      "weight": 0.0,
+      "requestedOffsetM": [
+        0.0,
+        7.450580596923828e-09,
+        -0.017976801842451096
+      ],
+      "blendedOffsetM": [
+        0.0,
+        0.0,
+        -0.0
+      ],
+      "ankleResidualM": 6.365778852490731e-08,
+      "kneeResidualM": 1.4901161193847656e-08,
+      "soleAnchorResidualM": 0.017976809332201714,
+      "solverApplied": true,
+      "status": "diagnostic_only"
+    }
+  ],
+  "annotatedSupport": [
+    {
+      "annotation": {
+        "action": "Walk_Loop",
+        "side": "l",
+        "startFrame": 0,
+        "endFrame": 4,
+        "mesh": "white-model-neutral-female-03",
+        "vertexIndex": 5342,
+        "provenance": "design_hypothesis",
+        "evidence": "Numerical plumbing trial: XY route fitted from original sampled contact offsets. Not authored support, valid speed or no-slide evidence.",
+        "routeTranslationsM": [
+          [
+            0.0,
+            0.0,
+            0
+          ],
+          [
+            0.00034131109714508057,
+            -0.053529247641563416,
+            0
+          ],
+          [
+            0.0005688071250915527,
+            -0.10841143131256104,
+            0
+          ],
+          [
+            0.0006950497627258301,
+            -0.16298286616802216,
+            0
+          ],
+          [
+            0.0007357597351074219,
+            -0.21302824467420578,
+            0
+          ]
+        ]
+      },
+      "measurement": {
+        "status": "diagnostic_only",
+        "anchorWorldM": [
+          0.16771216690540314,
+          -0.2987229824066162,
+          0.0
+        ],
+        "maxHorizontalDriftM": 0.0004510937957699035,
+        "maxHorizontalSpeedMps": 0.007166930229757717,
+        "heightRangeM": [
+          0.0003245454281568527,
+          0.03838023915886879
+        ],
+        "requestedAnchorOffsetsM": [
+          [
+            0.0,
+            0.0,
+            -0.03838023915886879
+          ],
+          [
+            -1.1235475540161133e-05,
+            0.00029841065406799316,
+            -0.01782739907503128
+          ],
+          [
+            -1.8104910850524902e-05,
+            0.0004507303237915039,
+            -0.0003245454281568527
+          ],
+          [
+            -6.42240047454834e-06,
+            0.0001529008150100708,
+            -0.010744908824563026
+          ],
+          [
+            0.0,
+            5.960464477539063e-08,
+            -0.017976809293031693
+          ]
+        ],
+        "solverApplied": true,
+        "sampleStage": "post_ik"
+      }
+    }
+  ]
+}

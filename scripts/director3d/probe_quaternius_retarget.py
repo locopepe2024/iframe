@@ -13,6 +13,55 @@ from mathutils import Matrix, Quaternion, Vector
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from sole_contact_metrics import summarize_sole
 from support_contact_metrics import measure_interval, validate_annotations
+from bounded_support_ik import blend_weight, solve_leg
+
+
+def apply_support_ik(target, regions, item, frame, anchor):
+    side = item['side']
+    slot = next(i for i, (obj, index) in enumerate(regions[side])
+                if obj.name == item['mesh'] and index == item['vertexIndex'])
+    route = Vector(item['routeTranslationsM'][frame-item['startFrame']])
+    point = Vector(evaluated_sole(regions)[side][slot])
+    offset = Vector(anchor)-route-point
+    upper, lower = [target.pose.bones[f'{name}_{side}'] for name in ('upper_leg', 'lower_leg')]
+    if lower.parent != upper:
+        raise ValueError('IK requires direct thigh/shin hierarchy')
+    world = target.matrix_world
+    if world.to_3x3().determinant() <= 0 or any(abs(v-1) > 1e-6 for v in world.to_scale()):
+        raise ValueError('IK trial requires unit armature scale')
+    if (upper.tail-lower.head).length > 1e-5:
+        raise ValueError('IK requires connected thigh/shin endpoints')
+    weight = blend_weight(frame, item['startFrame'], item['endFrame'])
+    solved = solve_leg(list(world @ upper.head), list(world @ lower.head),
+                       list(world @ lower.tail), list(offset), weight)
+    preserved = {name: target.pose.bones[name].matrix.to_quaternion().copy()
+                 for name in (f'ankle_{side}', f'foot_{side}', f'DEF_foot_{side}', f'toe_{side}')}
+    inverse = world.inverted()
+    for bone, endpoint in ((upper, solved['knee']), (lower, solved['ankle'])):
+        direction = inverse @ Vector(endpoint)-bone.head
+        delta = (bone.tail-bone.head).rotation_difference(direction)
+        matrix = bone.matrix.copy()
+        rotation = delta @ matrix.to_quaternion()
+        pose = Matrix.Translation(matrix.translation) @ rotation.to_matrix().to_4x4()
+        bone.rotation_quaternion = target.convert_space(pose_bone=bone, matrix=pose,
+                                                        from_space='POSE', to_space='LOCAL').to_quaternion()
+        bpy.context.view_layer.update()
+    for name, rotation in preserved.items():
+        bone = target.pose.bones[name]
+        pose = Matrix.Translation(bone.matrix.translation) @ rotation.to_matrix().to_4x4()
+        bone.rotation_quaternion = target.convert_space(pose_bone=bone, matrix=pose,
+                                                        from_space='POSE', to_space='LOCAL').to_quaternion()
+        bpy.context.view_layer.update()
+    actual = Vector(evaluated_sole(regions)[side][slot])+route
+    ankle_residual = (world @ lower.tail-Vector(solved['ankle'])).length
+    knee_residual = (world @ lower.head-Vector(solved['knee'])).length
+    if not all(math.isfinite(v) and v <= 0.0001 for v in (ankle_residual, knee_residual)):
+        raise ValueError('IK evaluated joint residual exceeds 0.1 mm')
+    return {'frame': frame, 'side': side, 'weight': weight, 'requestedOffsetM': list(offset),
+            'blendedOffsetM': list(offset*weight),
+            'ankleResidualM': ankle_residual, 'kneeResidualM': knee_residual,
+            'soleAnchorResidualM': (actual-Vector(anchor)).length,
+            'solverApplied': True, 'status': 'diagnostic_only'}
 
 
 def sole_regions(target):
@@ -203,6 +252,7 @@ def main():
     parser.add_argument("--preview-dir", type=Path)
     parser.add_argument("--sole-contact", action="store_true", help="Measure weighted sole-region geometry; no contact acceptance")
     parser.add_argument("--support-annotations", type=Path, help="Explicit checksum-bound support interval hypotheses and route offsets")
+    parser.add_argument("--support-ik", action="store_true", help="Offline bounded two-bone trial, not contact acceptance")
     parser.add_argument("--foot-pivot", choices=("foot", "ankle"), default="foot",
                         help="Diagnostic A/B: transfer source foot rotation at target ankle instead of mid-foot")
     parser.add_argument("--foot-axis-correction", action="store_true",
@@ -215,6 +265,8 @@ def main():
     args = parser.parse_args(raw)
     if args.support_annotations and not args.sole_contact:
         raise ValueError("support annotations require --sole-contact")
+    if args.support_ik and not args.support_annotations:
+        raise ValueError('support IK requires explicit annotations')
 
     mapping = json.loads(args.mapping.read_text())
     if mapping.get("schema") != "director3d-bone-map.v1" or mapping.get("retargetStatus") != "unmapped":
@@ -314,6 +366,8 @@ def main():
         sample_frames = range(start, end + 1)
         samples = []
         sole_samples = {side: [] for side in ("l", "r")}
+        ik_samples = []
+        anchors = {}
         previous = {}
         previous_source = {}
         for frame in sample_frames:
@@ -377,6 +431,17 @@ def main():
                     raise ValueError(f"pelvis translation changed bone basis: {name} frame {frame}")
                 translation_calibration["maxBasisChange"] = max(
                     translation_calibration["maxBasisChange"], basis_change)
+            if args.support_ik:
+                for item_index, item in enumerate(support_intervals):
+                    if item['action'] != name or not item['startFrame'] <= frame <= item['endFrame']:
+                        continue
+                    if frame == item['startFrame']:
+                        slot = next(i for i, (obj, index) in enumerate(regions[item['side']])
+                                    if obj.name == item['mesh'] and index == item['vertexIndex'])
+                        point = Vector(evaluated_sole(regions)[item['side']][slot])
+                        point += Vector(item['routeTranslationsM'][0])
+                        anchors[item_index] = [point.x, point.y, 0]
+                    ik_samples.append(apply_support_ik(target, regions, item, frame, anchors[item_index]))
             source_points = {
                 "pelvis": world_position(source, source.pose.bones["DEF-hips"]),
                 "foot_l": world_position(source, source.pose.bones["DEF-foot.L"], "tail"),
@@ -413,6 +478,7 @@ def main():
         }
         reports.append({"action": name, "frameRange": [start, end], "pelvisTravelM": travel, "footHeightRangeM": foot_heights, "previewFrame": (start + end) // 2 if args.preview_dir else None, "samples": samples})
         if regions:
+            reports[-1]['supportIK'] = ik_samples
             reports[-1]["soleGeometry"] = {
                 side: {**summarize_sole(sole_samples[side], bpy.context.scene.render.fps / bpy.context.scene.render.fps_base),
                        "selection": "rest weighted foot vertices, bottom 0.02m band, weight >= 0.5",
@@ -427,9 +493,11 @@ def main():
                                    if obj.name == item["mesh"] and index == item["vertexIndex"])
                 points = [sample["points"][vertex_slot] for sample in sole_samples[side]
                           if item["startFrame"] <= sample["frame"] <= item["endFrame"]]
-                reports[-1]["annotatedSupport"].append({
-                    "annotation": item, "measurement": measure_interval(points, item["routeTranslationsM"],
-                        bpy.context.scene.render.fps / bpy.context.scene.render.fps_base)})
+                measurement = measure_interval(points, item["routeTranslationsM"],
+                        bpy.context.scene.render.fps / bpy.context.scene.render.fps_base)
+                measurement['solverApplied'] = args.support_ik
+                measurement['sampleStage'] = 'post_ik' if args.support_ik else 'retarget_only'
+                reports[-1]["annotatedSupport"].append({"annotation": item, "measurement": measurement})
 
     report = {
         "schema": "director3d-retarget-diagnostic.v1",
