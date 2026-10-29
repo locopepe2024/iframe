@@ -28,3 +28,11 @@ combinations, IME composition and already handled events. Arrow keys seek in
 100 ms steps; Space toggles preview; S splits at the playhead; Delete/Backspace
 remove the selection. Repeated destructive commands are ignored. Verify outside
 focus, native control behavior and modifier/composition guards with UI tests.
+
+## Pointer edit transactions
+Audio/subtitle movement and all edge trims use a local draft during pointer
+movement, computed from the saved gesture-start plan. Release publishes at most
+one change; cancellation, lost capture and no-op gestures publish none. If the
+parent replaces the plan mid-gesture, discard the stale draft on release.
+Video drag/drop ordering retains its existing single-commit behavior.
+Verify audio movement/cancellation/no-op and video edge trim with full undo.
