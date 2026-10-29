@@ -90,3 +90,7 @@ media完成源49–56帧固定原生相机/根/人体形状的髋膝时序拟合
 ## 2026-10-30 shoe versus sole visual boundary
 
 七个已有shoe_proxy及邻帧放大复查：标记多在鞋面/鞋筒与踝附近连接，不能确定heel/forefoot/toe鞋底对应。Agent解释独立保存，用户原始选择不覆盖；全部禁止直接作为鞋底贴地或解剖踝中心硬约束。旧“shoe_proxy进入脚底候选”需收窄为“鞋相关观测，物理子类型确认后才进入对应约束”。见[七点页](../agents/raw/2026-10-30-addams-foot-proxy-boundary/review.html)。
+
+## 2026-10-30 shoe contact phase split
+
+已有鞋面点按邻帧视觉上下文暂分：右脚49/51/52/55为支撑候选，左脚50/51/53为腾空摆动候选；均为hypothesis，不是接触事实，禁止直接IK锁定。右脚仅进入阶段分割候选，左脚仅进入足向/轮廓证据。见[分流记录](../agents/raw/2026-10-30-addams-foot-proxy-boundary/contact-semantic-audit.json)。
