@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { AssemblyEditPlan } from "@/lib/api";
-import { insertAssemblyVideo, reorderAssemblyVideo, moveAssemblyClipInTimeline, removeAssemblyClip, splitAssemblyClip, trimAssemblyClip } from "./assemblyEditing";
+import { insertAssemblyVideo, snapAssemblyTimelineTime, reorderAssemblyVideo, moveAssemblyClipInTimeline, removeAssemblyClip, splitAssemblyClip, trimAssemblyClip } from "./assemblyEditing";
 function plan(): AssemblyEditPlan { return { id: "p", scope: "project", revision: 1, target_duration_ms: 6000, provenance: {}, markers: [], lanes: [{ id: "v", kind: "video", allow_overlap: false, clips: [
     { id: "a", timeline_start_ms: 0, timeline_end_ms: 4000, source_start_ms: 1000, source_end_ms: 5000, source_refs: ["frame:a"], enabled: true },
     { id: "b", timeline_start_ms: 4000, timeline_end_ms: 6000, source_start_ms: 0, source_end_ms: 2000, source_refs: ["frame:b"], enabled: true },
@@ -69,4 +69,14 @@ it("inserts a split video at a distant boundary without moving captions or sourc
     expect(moved.target_duration_ms).toBe(original.target_duration_ms);
     expect(insertAssemblyVideo(original, "a", "middle", false)).toBe(original);
     expect(insertAssemblyVideo(original, "a", "a", true)).toBe(original);
+});
+
+it("snaps a timeline edit to nearby boundaries and leaves distant edits unchanged", () => {
+    const source = { ...plan(), lanes: [{ id: "s", kind: "subtitle" as const, allow_overlap: true, clips: [
+        { id: "one", timeline_start_ms: 1000, timeline_end_ms: 2000, enabled: true, source_refs: [] },
+        { id: "two", timeline_start_ms: 3000, timeline_end_ms: 4000, enabled: true, source_refs: [] },
+    ] }] };
+    expect(snapAssemblyTimelineTime(source, "s", "one", 3050)).toBe(3000);
+    expect(snapAssemblyTimelineTime(source, "s", "one", 2181)).toBe(2181);
+    expect(snapAssemblyTimelineTime(source, "s", "one", 45)).toBe(0);
 });

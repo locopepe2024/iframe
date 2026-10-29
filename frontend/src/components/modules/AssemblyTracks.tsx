@@ -4,7 +4,7 @@ import { createRenderRequestId } from '@/lib/renderRequestId';
 import { useLocale } from "next-intl";
 import { api, type AssemblyEditPlan } from "@/lib/api";
 import type { Project } from "@/store/projectStore";
-import { insertAssemblyVideo, reorderAssemblyVideo, moveAssemblyClipInTimeline, removeAssemblyClip, resizeAssemblyClipInTimeline, splitAssemblyClip, trimAssemblyClip } from "./assemblyEditing";
+import { insertAssemblyVideo, reorderAssemblyVideo, snapAssemblyTimelineTime, moveAssemblyClipInTimeline, removeAssemblyClip, resizeAssemblyClipInTimeline, splitAssemblyClip, trimAssemblyClip } from "./assemblyEditing";
 import { extractErrorDetail, getAssetUrl, getVideoPosterUrl } from "@/lib/utils";
 import TimelineFilmstrip from './TimelineFilmstrip';
 
@@ -19,6 +19,7 @@ export function AssemblyTracks({ plan, resourceId, onChange, saved, project, mat
     const zh = useLocale().startsWith("zh");
     const t = (cn: string, en: string) => zh ? cn : en;
     const videoDrag = useRef<string | null>(null);
+    const [snapTime, setSnapTime] = useState<number | null>(null);
     const [dropTarget, setDropTarget] = useState<{ id: string; after: boolean } | null>(null);
     const [position, setPosition] = useState(0);
     const [showMaterials, setShowMaterials] = useState(false);
@@ -101,14 +102,17 @@ export function AssemblyTracks({ plan, resourceId, onChange, saved, project, mat
         const width = timeline?.clientWidth || 0;
         if (!width) return;
         const delta = Math.round((event.clientX - drag.startX) / width * plan.target_duration_ms / 10) * 10;
+        const raw = drag.origin + delta;
+        const snapped = snapAssemblyTimelineTime(plan, drag.laneId, drag.clipId, raw);
+        setSnapTime(snapped !== raw ? snapped : null);
         try {
             onChange(drag.mode === "move"
-                ? moveAssemblyClipInTimeline(plan, drag.laneId, drag.clipId, drag.origin + delta)
-                : resizeAssemblyClipInTimeline(plan, drag.laneId, drag.clipId, drag.edge!, drag.origin + delta));
+                ? moveAssemblyClipInTimeline(plan, drag.laneId, drag.clipId, snapped)
+                : resizeAssemblyClipInTimeline(plan, drag.laneId, drag.clipId, drag.edge!, snapped));
             setError(null);
         } catch (e) { setError(e instanceof Error ? e.message : String(e)); }
     };
-    const endDrag = () => { dragRef.current = null; };
+    const endDrag = () => { dragRef.current = null; setSnapTime(null); };
     const selectedLane = plan.lanes.find(l => l.id === selected?.laneId);
     const selectedClip = selectedLane?.clips.find(c => c.id === selected?.clipId);
     // Video splitting follows the visible playhead; explicitly selected audio
@@ -246,6 +250,7 @@ export function AssemblyTracks({ plan, resourceId, onChange, saved, project, mat
         }} onKeyDown={event => { if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') { event.preventDefault(); seek(position + (event.key === 'ArrowRight' ? 1 : -1) * (event.shiftKey ? 1000 : 10)); } }}>
             {ticks.map(seconds => <span key={seconds} className="pointer-events-none absolute inset-y-0 border-l border-glass-border pl-1 pt-1" style={{ left: `${seconds * 1000 / plan.target_duration_ms * 100}%` }}>{seconds.toFixed(tickSeconds < 1 ? 1 : 0)}s</span>)}
             <span className="pointer-events-none absolute inset-y-0 z-10 w-px bg-primary" style={{ left: `${position / plan.target_duration_ms * 100}%` }} />
+            {snapTime !== null && <span role="status" aria-label={t("吸附位置", "Snap position")} className="pointer-events-none absolute inset-y-0 z-20 w-0.5 bg-amber-300" style={{ left: `${snapTime / plan.target_duration_ms * 100}%` }} />}
         </div>
         {plan.lanes.map(lane => <div key={lane.id} className="space-y-2 border-t border-glass-border pt-2">
             <div className="flex flex-wrap items-center gap-2 text-xs text-text-secondary"><span>{laneName(lane.kind)}</span>

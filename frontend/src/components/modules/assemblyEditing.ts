@@ -124,3 +124,17 @@ export function insertAssemblyVideo(plan: AssemblyEditPlan, clipId: string, targ
     const positions = new Map(next.map(c => { const start = cursor; cursor += c.timeline_end_ms - c.timeline_start_ms; return [c.id, [start, cursor]] as const; }));
     return { ...plan, lanes: plan.lanes.map(l => l.kind !== "video" ? l : { ...l, clips: l.clips.map(c => ({ ...c, timeline_start_ms: positions.get(c.id)![0], timeline_end_ms: positions.get(c.id)![1] })) }) };
 }
+
+/** Snap a timeline edit to nearby clip boundaries without changing the source mapping. */
+export function snapAssemblyTimelineTime(plan: AssemblyEditPlan, laneId: string, clipId: string, proposed: number, threshold = 80): number {
+    const candidates = [0, plan.target_duration_ms];
+    for (const lane of plan.lanes) for (const clip of lane.clips) {
+        if (lane.id === laneId && clip.id === clipId) continue;
+        candidates.push(clip.timeline_start_ms, clip.timeline_end_ms);
+    }
+    const nearest = candidates.reduce<{ value: number; distance: number } | null>((best, value) => {
+        const distance = Math.abs(value - proposed);
+        return !best || distance < best.distance ? { value, distance } : best;
+    }, null);
+    return nearest && nearest.distance <= threshold ? nearest.value : proposed;
+}
