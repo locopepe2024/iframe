@@ -94,7 +94,7 @@ export default function AgentChat() {
   const [uploadFiles,setUploadFiles] = useState<File[]>([]);
   const [attached,setAttached] = useState<(UploadedMedia & { anchor: number })[]>([]);
   const fileRef = useRef<HTMLInputElement>(null);
-  const creativeUpload = useRef<{task_id:string;revision:number}|null>(null);
+  const creativeUpload = useRef<{task_id:string;revision:number;card_id:string}|null>(null);
   const streamRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const updateDraft = (value: string) => {
@@ -428,7 +428,7 @@ export default function AgentChat() {
       </div>{renderAttached(index+1)}</Fragment>;
       })}
     </section>
-    {creativeTask && creativeTask.status !== "cancelled" && <MediaDraftCard key={creativeTask.task_id} task={creativeTask} onChooseSource={async event=>{let ok=false;await run(async()=>{const task=await companionApi.updateMediaDraft(session,{...event,task_id:creativeTask.task_id,expected_revision:creativeTask.revision,action:"choose_source"});setCreativeTask(task);ok=true;});return ok;}} onRefresh={()=>{void run(async()=>{const data=await companionApi.mediaDrafts(session);setCreativeTask(data.tasks.find(task=>task.task_id===creativeTask.task_id)??null);});}} disabled={inputDisabled || !!pending} onAction={async(action,photo)=>{let ok=false;await run(async()=>{await changeCreative(action,photo);ok=true;});return ok;}} onUpload={()=>{creativeUpload.current={task_id:creativeTask.task_id,revision:creativeTask.revision};fileRef.current?.click();}}/>}
+    {creativeTask && creativeTask.status !== "cancelled" && <MediaDraftCard key={creativeTask.task_id} task={creativeTask} onChooseSource={async event=>{let ok=false;await run(async()=>{const task=await companionApi.updateMediaDraft(session,{...event,task_id:creativeTask.task_id,expected_revision:creativeTask.revision,action:"choose_source"});setCreativeTask(task);ok=true;});return ok;}} onRefresh={()=>{void run(async()=>{const data=await companionApi.mediaDrafts(session);setCreativeTask(data.tasks.find(task=>task.task_id===creativeTask.task_id)??null);});}} disabled={inputDisabled || !!pending} onAction={async(action,photo)=>{let ok=false;await run(async()=>{await changeCreative(action,photo);ok=true;});return ok;}} onUpload={()=>{creativeUpload.current={task_id:creativeTask.task_id,revision:creativeTask.revision,card_id:creativeTask.ui_card?.card_id || ""};fileRef.current?.click();}}/>}
     {turn?.result?.kind === "text" && !messages.some(m => m.turn?.turn_id === turn.turn_id) && (diaryDay(lastSubmittedText) ? <DiaryCard day={diaryDay(lastSubmittedText)!} text={turn.result.text} sourceTurn={turn.turn_id} onOpenDiary={() => setFeature("diary")} /> : <article className={chatStyles.assistant}><p>{turn.result.text}</p>{responseMode === "text" && <SpeechPlayback text={turn.result.text} voice={identity.voice}/>}</article>)}
     {turn?.result?.kind === "photo_action" && !messages.some(m => m.turn?.turn_id === turn.turn_id) && <PhotoActionCard key={turn.turn_id} result={turn.result} />}
     {turn?.result?.kind === "album_guide" && !messages.some(m => m.turn?.turn_id === turn.turn_id) && <AlbumScopeCard key={turn.turn_id} browse={turn.result.browse} disabled={inputDisabled || pending} onSelect={organizeSelectedPhoto} />}
@@ -443,8 +443,8 @@ export default function AgentChat() {
     {uploadFiles.length > 0 && <MediaUpload files={uploadFiles} disabled={inputDisabled || pending} onUploaded={item=>{
       const target=creativeUpload.current;
       if (!target) {attach(item);return;}
-      if (item.kind !== "photo" || target.task_id !== creativeTask?.task_id || target.revision !== creativeTask.revision || creativeTask.status!=="active") {setNotice("素材已保存到相册，当前创作已变化，请重新选择要用的照片。");return;}
-      void run(()=>changeCreative("select_photo",item.id));
+      if (item.kind !== "photo" || !target.card_id || target.task_id !== creativeTask?.task_id || target.revision !== creativeTask.revision || creativeTask.status!=="active") {setNotice("素材已保存到相册，当前创作已变化，请重新选择要用的照片。");return;}
+      void run(async()=>{const result=await companionApi.mediaEvent(session,{operation_id:crypto.randomUUID(),event_type:"photo_uploaded",task_id:target.task_id,card_id:target.card_id,photo_id:item.id,slot:"source",expected_revision:target.revision});setCreativeTask(result.task);});
     }} onBusyChange={setUploading} onClose={() => {setUploadFiles([]);creativeUpload.current=null;}} />}
     {albumOpen && <AlbumPicker disabled={inputDisabled || pending} onClose={() => setAlbumOpen(false)} onPhoto={photo => {
       attach({kind:"photo",id:photo.photo_id,name:"相册照片"});setAlbumOpen(false);

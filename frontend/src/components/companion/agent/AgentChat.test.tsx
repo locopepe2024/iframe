@@ -2,12 +2,12 @@ import { fireEvent, render, screen, waitFor, within } from "@testing-library/rea
 import { beforeEach, expect, it, vi } from "vitest";
 import AgentChat from "./AgentChat";
 import {diaryPrompt,today} from "./DiaryCard";
-const api=vi.hoisted(()=>({mediaDrafts:vi.fn(),startMediaDraft:vi.fn(),updateMediaDraft:vi.fn(),session:vi.fn(),messages:vi.fn(),chat:vi.fn(),turn:vi.fn(),tool:vi.fn(),confirm:vi.fn(),cancel:vi.fn(),diaries:vi.fn(),saveDiary:vi.fn()}));
+const api=vi.hoisted(()=>({mediaDrafts:vi.fn(),startMediaDraft:vi.fn(),updateMediaDraft:vi.fn(),mediaEvent:vi.fn(),session:vi.fn(),messages:vi.fn(),chat:vi.fn(),turn:vi.fn(),tool:vi.fn(),confirm:vi.fn(),cancel:vi.fn(),diaries:vi.fn(),saveDiary:vi.fn()}));
 const focusFetch=vi.hoisted(()=>vi.fn());
 vi.mock("@/lib/api",async importOriginal=>({...await importOriginal<typeof import("@/lib/api")>(),authenticatedFetch:focusFetch}));
 const playback=vi.hoisted(()=>vi.fn());
 vi.mock("./OpenTalkingReply",()=>({default:(props:unknown)=>{playback(props);return null;}}));
-const photoApi=vi.hoisted(()=>({list:vi.fn()}));
+const photoApi=vi.hoisted(()=>({list:vi.fn(),image:vi.fn()}));
 vi.mock("./UniArtSettings",()=>({default:()=> <section aria-label="UniArt 渠道设置"/>}));
 vi.mock("@/lib/companionApi",()=>({companionApi:api}));
 vi.mock("@/lib/photoApi",()=>({photoApi}));
@@ -15,7 +15,7 @@ vi.mock("../photos/PhotoImage",()=>({default:()=> <img alt="照片缩略图"/>})
 vi.mock("../PhotoConversationCard",()=>({default: ({label}:{label:string})=><article>{label}</article>}));
 const preview={status:"pending_confirmation",preview_token:"token",action:"save",preview:{content:"喜欢散步",quote:"喜欢散步",source_text:"请记住我喜欢散步",source_message_id:"m",type:"preference",importance:3}};
 beforeEach(()=>{
-  localStorage.clear();vi.resetAllMocks();api.mediaDrafts.mockResolvedValue({tasks:[]});focusFetch.mockResolvedValue({ok:true,json:async()=>({revision:0})});api.diaries.mockResolvedValue({diaries:[]});photoApi.list.mockResolvedValue({photos:[]});api.session.mockResolvedValue({session_id:"s"});api.messages.mockResolvedValue({messages:[],next_before:null});
+  localStorage.clear();vi.resetAllMocks();api.mediaDrafts.mockResolvedValue({tasks:[]});focusFetch.mockResolvedValue({ok:true,json:async()=>({revision:0})});photoApi.image.mockResolvedValue(new Blob());api.diaries.mockResolvedValue({diaries:[]});photoApi.list.mockResolvedValue({photos:[]});api.session.mockResolvedValue({session_id:"s"});api.messages.mockResolvedValue({messages:[],next_before:null});
   api.chat.mockResolvedValue({turn_id:"t",status:"completed",result:{kind:"confirmation",...preview}});
   api.confirm.mockResolvedValue({action:"save",memory_id:"memory"});api.cancel.mockResolvedValue({status:"preview_closed"});
 });
@@ -42,12 +42,12 @@ it("selects photos into an unsent attachment draft",async()=>{
   await start();
   photoApi.list.mockResolvedValue({photos:[{photo_id:"photo-1",batch_id:"batch",date:{date:null,status:"pending_confirmation",reason:"missing",source:"none",revision:0}}]});
   fireEvent.click(screen.getByRole("button",{name:"相册"}));
-  await screen.findByRole("button",{name:/选择照片 1/});
-  fireEvent.click(screen.getByRole("button",{name:/选择照片 1/}));
-  
+  await screen.findByRole("button",{name:/查看照片 1/});
+  fireEvent.click(screen.getByRole("button",{name:/查看照片 1/}));
+  fireEvent.click(screen.getByRole("button",{name:"使用这张照片"}));
   expect(screen.getByRole("region",{name:"待发送附件"})).toHaveTextContent("相册照片");
   expect(within(screen.getByRole("region",{name:"会话消息"})).queryByText("相册照片")).not.toBeInTheDocument();
-  expect(photoApi.list).toHaveBeenCalledWith("all","","","");
+  expect(photoApi.list).toHaveBeenCalledWith("all","","","", {date_prefix:"",order:"id",limit:12});
 });
 it("requires external text consent and final explicit button before saving",async()=>{
   await start();fireEvent.click(screen.getByRole("button",{name:"发送"}));expect(api.chat).not.toHaveBeenCalled();
@@ -222,8 +222,8 @@ it("explains the text consent before sending a diary draft",async()=>{
 async function selectPhoto() {
   photoApi.list.mockResolvedValue({photos:[{photo_id:"p"}],next_after_id:null});
   fireEvent.click(screen.getByRole("button",{name:"相册"}));
-  fireEvent.click(await screen.findByRole("button",{name:/选择照片 1/}));
-  
+  fireEvent.click(await screen.findByRole("button",{name:/查看照片 1/}));
+  fireEvent.click(screen.getByRole("button",{name:"使用这张照片"}));
 }
 it("removes a selected photo without sending or deleting the original",async()=>{
   await start();await selectPhoto();
@@ -393,12 +393,12 @@ it("restores the scope card and starts a durable task only for the explicitly se
   await screen.findByRole("article", {name: "选择整理范围"});
   expect(photoApi.list).not.toHaveBeenCalled();
   fireEvent.click(screen.getByRole("button", {name: "最近加入"}));
-  await screen.findByRole("button", {name: "选择照片 1"});
+  await screen.findByRole("button", {name: "查看照片 1"});
   const task = {turn_id: "picked", status: "completed", result: {kind: "photo_task", task_id: "task", step: "review_photo", status: "waiting_input", revision: 1, photos: []}};
   api.chat.mockResolvedValue(task);
   api.messages.mockResolvedValue({messages: [{id: "m2", sequence: 2, text: "整理这张照片", turn: task}], next_before: null});
-  fireEvent.click(screen.getByRole("button", {name: "选择照片 1"}));
-  
+  fireEvent.click(screen.getByRole("button", {name: "查看照片 1"}));
+  fireEvent.click(screen.getByRole("button",{name:"使用这张照片"}));
   await screen.findByRole("region", {name: "相册整理任务"});
   expect(api.chat.mock.calls[0][1]).toMatchObject({text: "整理这张照片", selected_photo_id: "selected"});
   expect(screen.queryByRole("dialog", {name: "浏览相册"})).not.toBeInTheDocument();
