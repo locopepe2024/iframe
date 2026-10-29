@@ -246,3 +246,17 @@ def test_unified_frame_event_uses_video_slot_card(client, monkeypatch):
         'slot': 'first_frame', 'expected_revision': 1})
     assert result.status_code == 200, result.text
     assert result.json()['task']['first_photo_id'] == 'first'
+
+
+def test_unified_photo_uploaded_event_binds_only_after_upload_returns_photo_id(client, monkeypatch):
+    c, store, _ = client
+    session = store.session('owner', 'upload-events')['session_id']
+    task = store.start_media_draft('owner', 'user', session, 'start-upload-event', {'type': 'image_edit'})
+    monkeypatch.setattr('src.apps.companion_runtime.media_drafts.read_photos', lambda owner, name, values: {
+        'photos': [{'photo_id': values['photo_id']}]} )
+    result = c.post(f'/companion-runtime/sessions/{session}/events', json={
+        'operation_id': 'upload-event-1', 'event_type': 'photo_uploaded',
+        'task_id': task['task_id'], 'card_id': task['ui_card']['card_id'],
+        'photo_id': 'uploaded-photo-id', 'expected_revision': 1})
+    assert result.status_code == 200, result.text
+    assert result.json()['task']['photo_id'] == 'uploaded-photo-id'

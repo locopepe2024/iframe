@@ -49,7 +49,7 @@ class DiarySave(Operation):
 
 
 class PhotoSelectedEvent(Operation):
-    event_type: Literal['photo_selected']
+    event_type: Literal['photo_selected', 'photo_uploaded']
     task_id: str = Field(min_length=1, max_length=120)
     card_id: str = Field(min_length=1, max_length=200)
     photo_id: str = Field(min_length=1, max_length=120)
