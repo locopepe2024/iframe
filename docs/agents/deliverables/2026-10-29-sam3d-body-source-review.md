@@ -39,3 +39,14 @@ media运行检查：x86_64、约15GiB RAM、73GiB可用磁盘；未发现nvidia-
 已用`addams_sam3d_prepare.py`冻结49/51/53/55/56/62/64七张既有960×520诊断源图、逐文件SHA256、25fps时间戳、原生固定K候选及64帧用户腾空语义，输出`docs/agents/raw/2026-10-29-addams-sam3d-evaluation-v1/manifest.json`。人物ROI仍明确为pending；不将整张画面当主角裁剪，不输入验收标注。尚未安装新环境、下载权重或运行推理，未修改既有GVHMR环境。
 
 继续实测需要官方权重访问和可用CUDA运行条件，或单独验证CPU适配；不能把依赖安装完成当成推理成功。用户可在自己的Hugging Face账号申请`facebook/sam-3d-body-dinov3`访问并在运行主机自行登录，无需在聊天提供token。
+
+## Authenticated access check
+
+media已用Hugging Face CLI成功登录账号`voalns`，但对`facebook/sam-3d-body-vith`的`hf download --dry-run`仍返回`Access denied ... requires approval`。因此当前状态是“身份认证成功、模型 gated 审批未通过”，不是Token格式或CLI安装问题。需要账号持有人在模型页完成申请/接受使用条件并等待批准；批准后可用下列命令复核：
+
+```bash
+/opt/hf-cli/bin/hf download facebook/sam-3d-body-vith \
+  --local-dir /opt/models/sam-3d-body-vith
+```
+
+批准前不继续重复下载请求，也不改现有推理环境。
