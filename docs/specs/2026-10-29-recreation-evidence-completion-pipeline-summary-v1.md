@@ -78,3 +78,7 @@
 ## Temporal overlay review
 
 已生成46–65帧语义分流叠图：黄为joint_center、青为shoe_proxy，O/I区分观测与插值。左踝两种语义轨迹保持分开；叠图仅用于发现二维跳变，尚不构成3D、接触或相机验收。下一步优先右/左膝短段骨架拟合，脚底轨迹独立进入接触阶段。
+
+## Selected temporal leg fit: rejected candidate
+
+media完成源49–56帧固定原生相机/根/人体形状的髋膝时序拟合，51帧两膝不参与姿态优化。0.35/0.70rad限幅下，训练9点RMSE由36.46降到22.29/21.78px，留出2点由28.40降到22.20/16.29px；但未约束踝投影相对基线最大移动65.03/141.96px，第51帧可见脚链退化。两档均不进入主链路。下一步必须完整腿链约束对照并检查未拟合部位退化，不能仅用膝点均值或插值验收。见[实验报告](../agents/deliverables/2026-10-29-addams-selected-temporal-pose-fit.md)。
