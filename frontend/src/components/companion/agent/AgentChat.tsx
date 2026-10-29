@@ -93,6 +93,8 @@ export default function AgentChat() {
   const [mediaAcknowledged,setMediaAcknowledged] = useState(false);
   const [uploadFiles,setUploadFiles] = useState<File[]>([]);
   const [attached,setAttached] = useState<(UploadedMedia & { anchor: number })[]>([]);
+  const [selectedPhotoId,setSelectedPhotoId] = useState<string | null>(null);
+  const selectedPhotoRef = useRef<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const creativeUpload = useRef<{task_id:string;revision:number;card_id:string}|null>(null);
   const streamRef = useRef<HTMLDivElement>(null);
@@ -175,16 +177,18 @@ export default function AgentChat() {
     localStorage.setItem(sessionKey, result.session_id); localStorage.removeItem(turnKey);
     sessionOperation.current = ""; sendOperation.current = null; setHasRetry(false);
     setCreativeTask(null);
+    selectedPhotoRef.current = null; setSelectedPhotoId(null);
     setMenu(false); setAlbumOpen(false); setUploadFiles([]); setAttached([]); setPendingMedia({chat:[],image:[],video:[]}); setMediaAcknowledged(false); setSession(result.session_id); setMessages([]); setAfter(null); setTurn(null); setPreview(null); setDraft(null); setDrafts({ chat: "", image: "", video: "" }); setGuides({ image: null, video: null }); setMode("chat"); setNotice("已开始新的聊天。");
   }
-  async function send(retry = false, voiceText?: string, selectedPhotoId?: string, capturedFocus?:InteractionFocus, capturedCreative?:CreativeContext) {
+  async function send(retry = false, voiceText?: string, selectedPhotoArg?: string, capturedFocus?:InteractionFocus, capturedCreative?:CreativeContext) {
     const requestSpeechEpoch = speechEpoch.current;
     const requestedText = voiceText ?? text;
     const turnFocus = capturedFocus ?? focus.current();
     const editing = turnFocus.kind !== "chat";
     const requestedDay = editing ? undefined : diaryDay(requestedText, "", today());
     const submittedText = requestedDay ? diaryPrompt(requestedDay) : requestedText;
-    if (!editing && !retry && !selectedPhotoId && !submittedText.trimStart().startsWith("/") && creativeTask?.status !== "active" && edgeCoordinatorEnabled && runtimeCapability.status === "edge_ready") {
+    const resolvedSelectedPhotoId = selectedPhotoArg || (/^(使用|用)(这张|该)照片/.test(requestedText.trim()) ? selectedPhotoRef.current : null);
+    if (!editing && !retry && !resolvedSelectedPhotoId && !submittedText.trimStart().startsWith("/") && creativeTask?.status !== "active" && edgeCoordinatorEnabled && runtimeCapability.status === "edge_ready") {
       try {
         const context = messages.slice(-10).map(message => {
           const reply = message.turn?.result?.kind === "text" ? `\n陪伴助手：${message.turn.result.text}` : "";
@@ -202,7 +206,7 @@ export default function AgentChat() {
         setNotice("端侧协调器暂不可用，本轮改用服务端处理。");
       }
     }
-    if (!sendOperation.current || !retry) sendOperation.current = { operation_id: crypto.randomUUID(), text: submittedText, allow_external_text: true, ...(selectedPhotoId ? {selected_photo_id: selectedPhotoId} : {}), ...(capturedCreative ? {creative_context:capturedCreative} : creativeTask?.status === "active" ? {creative_context:{task_id:creativeTask.task_id,revision:creativeTask.revision}} : {}) };
+    if (!sendOperation.current || !retry) sendOperation.current = { operation_id: crypto.randomUUID(), text: submittedText, allow_external_text: true, ...(resolvedSelectedPhotoId ? {selected_photo_id: resolvedSelectedPhotoId} : {}), ...(capturedCreative ? {creative_context:capturedCreative} : creativeTask?.status === "active" ? {creative_context:{task_id:creativeTask.task_id,revision:creativeTask.revision}} : {}) };
     if (!sendFocus.current || sendFocus.current.operation !== sendOperation.current.operation_id)
       sendFocus.current = {operation:sendOperation.current.operation_id,focus:{...turnFocus},ready:false};
     if (!retry) setLastSubmittedText(submittedText);
@@ -233,6 +237,7 @@ export default function AgentChat() {
       if (result.result?.kind === "media_draft") {setCreativeTask(result.result);}
       setDraft(null); setTurn(result); setPreview(result.result?.kind === "confirmation" ? result.result : null); setDrafts(old => ({ ...old, chat: "" })); sendOperation.current = null; setHasRetry(false);
       commitAttachments();
+      if (resolvedSelectedPhotoId) { selectedPhotoRef.current = null; setSelectedPhotoId(null); }
     }
     try { await history(activeSession); }
     catch { if (alive.current) setNotice("回复已收到，历史消息暂未刷新，请稍后重新打开聊天。"); }
@@ -303,7 +308,7 @@ export default function AgentChat() {
     };
   }
   function renderAttached(anchor: number) {
-    return attached.filter(item => item.anchor === anchor).map((item,index) => item.kind === "photo" ? <PhotoConversationCard key={`${item.id}-${index}`} photoId={item.id} label={item.name} onOrganize={() => organizeSelectedPhoto(item.id)} /> : <VideoConversationCard key={`${item.id}-${index}`} id={item.id} name={item.name} />);
+    return attached.filter(item => item.anchor === anchor).map((item,index) => item.kind === "photo" ? <PhotoConversationCard key={`${item.id}-${index}`} photoId={item.id} label={item.name} selected={selectedPhotoId === item.id} onOrganize={() => organizeSelectedPhoto(item.id)} /> : <VideoConversationCard key={`${item.id}-${index}`} id={item.id} name={item.name} />);
   }
   function submit() {
     if (inputDisabled || pending) return;
@@ -447,7 +452,7 @@ export default function AgentChat() {
       void run(async()=>{const result=await companionApi.mediaEvent(session,{operation_id:crypto.randomUUID(),event_type:"photo_uploaded",task_id:target.task_id,card_id:target.card_id,photo_id:item.id,slot:"source",expected_revision:target.revision});setCreativeTask(result.task);});
     }} onBusyChange={setUploading} onClose={() => {setUploadFiles([]);creativeUpload.current=null;}} />}
     {albumOpen && <AlbumPicker disabled={inputDisabled || pending} onClose={() => setAlbumOpen(false)} onPhoto={photo => {
-      attach({kind:"photo",id:photo.photo_id,name:"相册照片"});setAlbumOpen(false);
+      attach({kind:"photo",id:photo.photo_id,name:"相册照片"}); selectedPhotoRef.current = photo.photo_id; setSelectedPhotoId(photo.photo_id); setNotice("已选中这张照片。您可以说“使用这张照片”，或继续查看。"); setAlbumOpen(false);
     }} onVideo={video => {attach({kind:"video",id:video.video_id,name:video.name});setAlbumOpen(false);}} />}
     {feature === "diary" ? <DiaryCalendar initialMonth={diaryMonth} onClose={()=>setFeature(null)} onCreate={day=>{setFeature(null);startDiaryPrompt(day);}}/> : feature && <CompanionFeatureSheet feature={feature} onClose={() => setFeature(null)} />}
     {mode !== "chat" && (guide ? <GenerationGuide key={mode} value={guide} disabled={inputDisabled || pending} onChange={updateGuide} onEdit={() => { updateDraft(guide.prompt); inputRef.current?.focus(); }} onCancel={() => { updateDraft(guide.prompt); setNotice("已取消创作，描述草稿仍保留。"); }} /> : <article className={chatStyles.assistant}><span>陪伴助手</span><p>{mode === "video" ? "想做一段什么视频？" : "想生成一张什么图片？"}在下面说说，点箭头后我们一步步来。</p></article>)}

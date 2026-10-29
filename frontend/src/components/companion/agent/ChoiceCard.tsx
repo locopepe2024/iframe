@@ -19,10 +19,10 @@ export default function ChoiceCard({card,disabled,onChoose}:{card:Card;disabled:
   catch {setState("retry");}
   finally {pending.current=false;}
  }
- return <fieldset aria-label={card.props.title} disabled={disabled||state==="pending"}>
+ return <fieldset aria-label={card.props.title} aria-busy={state==="pending"} disabled={disabled||state==="pending"} style={state==="pending" ? {border:"2px solid var(--accent)",borderRadius:12,padding:12} : undefined}>
   <legend>{card.props.title}</legend>
   <div style={{display:"grid",gap:8}}>
-   {state!=="retry" && card.props.options.map(option=><button key={option.id} type="button" style={{minHeight:44,margin:0}} onClick={()=>void choose(option.id)}>{option.label}</button>)}
+   {state!=="retry" && card.props.options.map(option=><button key={option.id} type="button" aria-current={state==="pending" && operation.current?.option_id===option.id ? "step" : undefined} style={{minHeight:44,margin:0,border:state==="pending" && operation.current?.option_id===option.id ? "2px solid var(--accent)" : undefined}} onClick={()=>void choose(option.id)}>{option.label}</button>)}
    {state==="pending" && <span role="status">正在处理选择…</span>}
    {state==="retry" && <><p role="alert">这次选择尚未确认，可以重试。</p><button type="button" style={{minHeight:44}} onClick={()=>{if(operation.current)void choose(operation.current.option_id);}}>重试这次选择</button></>}
   </div>

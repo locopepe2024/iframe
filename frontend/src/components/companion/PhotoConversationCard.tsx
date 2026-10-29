@@ -1,17 +1,15 @@
 "use client";
 
-import { useState } from "react";
+import {useState} from "react";
 import PhotoImage from "./photos/PhotoImage";
-import PhotoStory from "./photos/PhotoStory";
+import MediaViewer from "./agent/MediaViewer";
+import chatStyles from "./agent/chat.module.css";
 import styles from "./photos/photos.module.css";
 
-export default function PhotoConversationCard({ photoId, label, onOrganize }: { photoId: string; label: string; onOrganize?: () => void }) {
-  const [opened, setOpened] = useState(false);
-  return <article className={styles.panel} aria-label={label}>
-    <h3>{label}</h3>
-    <PhotoImage id={photoId} large />
-    {onOrganize && <button type="button" onClick={onOrganize}>整理这张照片</button>}
-    {!opened && <button type="button" onClick={() => setOpened(true)}>看看这张照片的故事</button>}
-    {opened && <PhotoStory key={photoId} photoId={photoId} />}
+export default function PhotoConversationCard({photoId,label,selected,onOrganize}:{photoId:string;label:string;selected?:boolean;onOrganize?:()=>void}) {
+  const [opened,setOpened]=useState(false);
+  return <article className={styles.panel} aria-label={label} aria-current={selected ? "true" : undefined} style={selected ? {borderColor:"var(--accent)",boxShadow:"0 0 0 3px color-mix(in srgb, var(--accent) 28%, transparent)"} : undefined}>
+    <button className={chatStyles.mediaThumbnail} type="button" aria-label={`查看${label}`} onClick={()=>setOpened(true)}><PhotoImage id={photoId}/></button>
+    {opened && <MediaViewer items={[{id:photoId,kind:"photo",name:label}]} onClose={()=>setOpened(false)} useLabel="整理这张照片" onUse={onOrganize?()=>{setOpened(false);onOrganize();}:undefined}/>}
   </article>;
 }
