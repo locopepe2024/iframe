@@ -70,3 +70,7 @@
 ## User semantic decisions applied
 
 用户下载的18项决策已冻结到证据层：11 joint_center、7 shoe_proxy；joint_center中8项采用ViTPose、3项人工，原生投影未被选作joint_center。沿用既有review点的局部比较显示ViTPose中位21.72px、原生36.10px，但不是独立真值或全片准确率。下一步按语义分流做时序软观测，shoe_proxy不进入关节中心误差评价，当前不升级硬约束。
+
+## Temporal soft fusion slice
+
+用户语义选择已分流做二维诊断：右膝7个锚点、左膝3个、左脚底3个、右脚底4个；左踝joint_center只有1个锚点，禁止直接插值。左脚底最大相邻步长35.97px需复核，右脚底9.74px。当前只生成候选轨迹，不进入Blender或IK。
