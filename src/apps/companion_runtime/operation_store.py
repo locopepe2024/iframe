@@ -112,6 +112,27 @@ class OperationStore:
         with self.connection() as db:
             return self._operation(db, owner, session, operation)
 
+    def get_call(self, owner, session, operation):
+        """Immutable invocation metadata, scoped like its receipt."""
+        with self.connection() as db:
+            row = db.execute('SELECT request FROM operations WHERE owner=? AND session=? AND operation=?',
+                             (owner, session, operation)).fetchone()
+            if row is None:
+                raise Missing('Operation not found')
+            return json.loads(row['request'])
+
+    def wait_descriptor(self, owner, session, operation, wait_id):
+        """Read a prior wait for payload validation on resume retries."""
+        with self.connection() as db:
+            self._operation(db, owner, session, operation)
+            rows = db.execute('SELECT receipt FROM operation_commands WHERE owner=? AND session=? AND operation=? ORDER BY rowid DESC',
+                              (owner, session, operation))
+            for row in rows:
+                wait = json.loads(row['receipt']).get('wait')
+                if wait and wait['wait_id'] == wait_id:
+                    return wait
+            raise ValueError('Wait not found')
+
     def accept(self, owner, session, operation, task, expected_revision, tool, arguments):
         request = encode(dict(task=task, revision=expected_revision, tool=tool, arguments=arguments))
         with self.connection(write=True) as db:
