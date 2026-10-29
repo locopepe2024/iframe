@@ -25,3 +25,7 @@ LLM语义输出是否稳定、左右身份是否正确、对漫画模糊帧的�
 ## 可执行语义中间产物
 
 已生成[帧语义扩展种子](../raw/2026-10-30-addams-semantic-interpolation-v1/frame-semantics-seed.json)。它只扩展类别状态，不生成坐标、深度、焦距或公制离地距离。目前仅G5中的用户确认事实写入`human_confirmed`；其余组保持`unassessed`，不会被下游误用。将来LLM输出可以替换这些帧的语义字段，而不改变骨架/IK接口。
+
+## 双向语义插值执行器
+
+已生成[插值结果](../raw/2026-10-30-addams-semantic-interpolation-v1/frame-semantics-interpolated.json)。执行器只在前后清晰组对同一类别状态达成一致时扩展为`temporal_inference`；单侧锚点、冲突锚点或缺少语义时保持unknown/unassessed。它不生成像素坐标、深度、焦距或公制离地距离。
