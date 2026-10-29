@@ -45,7 +45,7 @@ export default function MediaDraftCard({task,disabled,onAction,onUpload,onRefres
    </>}
    {task.status==="paused" && <><button type="button" onClick={()=>void onAction("resume")}>继续这次创作</button><button type="button" onClick={()=>void onAction("cancel")}>取消创作</button></>}
   </fieldset>
-  {(task.step==="configuring"||task.status==="submitted") && <>
+  {((task.status==="active" && task.step==="configuring")||task.status==="submitted") && <>
    {task.status==="active" && <label>{video?"时长":"比例"}<select aria-label="创作参数" disabled={disabled||reserved} value={task.setting} onChange={e=>void onAction("setting",e.target.value)}>{(video?["5 秒","10 秒"]:["方形 1:1","横向 16:9","竖向 9:16"]).map(value=><option key={value}>{value}</option>)}</select></label>}
    <GenerationSubmit key={`${task.task_id}:${task.revision}`} value={{mode:video?"video":"image",prompt:task.brief,reference:video?null:task.photo_id,first_reference:task.first_photo_id,last_reference:task.last_photo_id,references:task.reference_photo_ids||[],video_mode:videoMode,setting:task.setting,step:"confirmed",task_id:task.task_id,expected_revision:task.revision,job_id:task.job_id}} disabled={disabled} onSubmitted={setReserved} onAccepted={onRefresh}/>
   </>}

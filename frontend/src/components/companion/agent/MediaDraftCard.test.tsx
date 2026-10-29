@@ -115,3 +115,9 @@ it.each(["first_frame","last_frame"] as const)("replaces the requested %s with i
  fireEvent.click(await screen.findByRole("button",{name:"选中测试照片"}));
  await waitFor(()=>expect(event).toHaveBeenCalledWith("selected",slot,`creative:3:${slot}`));
 });
+it("requires resuming a paused configured draft before offering paid generation",()=>{
+ render(<MediaDraftCard task={{...task,status:"paused"}} disabled={false} onAction={vi.fn()} onUpload={vi.fn()}/>);
+ expect(screen.getByRole("button",{name:"继续这次创作"})).not.toBeDisabled();
+ expect(screen.queryByRole("button",{name:"使用 UniArt 生成"})).not.toBeInTheDocument();
+ expect(api.models).not.toHaveBeenCalled();
+});

@@ -245,3 +245,24 @@ def test_album_search_phrase_is_registered_read_tool(chat, monkeypatch):
     assert response.status_code == 200
     assert response.json()['result']['name'] == 'photo.album.list'
     assert response.json()['result']['arguments']['query'] == '女儿在海边'
+
+
+def test_resume_incomplete_creative_task_receives_live_paused_context(chat, monkeypatch):
+    store, _, client, session, callback = chat
+    task = store.start_media_draft('owner', 'actor', session, 'creative-start', {'type': 'image_edit', 'brief': '换成黑袍'})
+    paused = store.update_media_draft('owner', 'actor', session, task['task_id'], 'pause', {'expected_revision': 1, 'action': 'pause'})
+    def resume(identity, messages, mid):
+        from src.apps.companion_runtime.tools import tool_schemas
+        assert 'active_media_draft' not in messages[-1]
+        tasks = messages[-1]['paused_media_drafts']
+        assert len(tasks) == 1 and tasks[0]['status'] == 'paused'
+        assert tasks[0]['brief'] == '换成黑袍'
+        schema = next(s for s in tool_schemas(messages) if s['name'] == 'media.draft.update')
+        assert schema['parameters']['properties']['task_id']['enum'] == [task['task_id']]
+        return dict(kind='tool', name='media.draft.update', arguments=dict(task_id=tasks[0]['task_id'], expected_revision=tasks[0]['revision'], action='resume'))
+    callback.side_effect = resume
+    response = client.post(f'/companion-runtime/sessions/{session}/chat', json=dict(operation_id='resume-creative', text='继续之前没有完成的任务', allow_external_text=True))
+    assert response.status_code == 200, response.text
+    result = response.json()['result']
+    assert result['kind'] == 'media_draft' and result['task_id'] == task['task_id'] and result['status'] == 'active'
+    callback.assert_called_once()

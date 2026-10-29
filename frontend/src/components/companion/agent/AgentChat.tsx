@@ -223,6 +223,9 @@ export default function AgentChat() {
       result = await companionApi.chat(activeSession, sendOperation.current);
     } catch (failure) {
       if (alive.current) setHasRetry(true);
+      // The server retains the user message even when tool validation fails.
+      // A history failure must not replace the original request error.
+      try { await history(activeSession); } catch { /* retain original failure */ }
       throw failure;
     }
     localStorage.setItem(turnKey, result.turn_id);
@@ -254,6 +257,8 @@ export default function AgentChat() {
     if (!creativeTask) return;
     const task=await companionApi.updateMediaDraft(session,{operation_id:crypto.randomUUID(),task_id:creativeTask.task_id,expected_revision:creativeTask.revision,action,...(photo_id?(action==="setting"?{setting:photo_id}:action==="video_mode"?{video_mode:photo_id as "t2v"|"i2v"|"f2v"|"r2v"}:{photo_id}):{})});
     setCreativeTask(task);
+    // An explicit task action supersedes the failed sentence, not a silent retry.
+    if (hasRetry) {sendOperation.current=null;setHasRetry(false);setNotice("已更新创作，先前失败的请求没有重新执行。");}
   }
   function organizeSelectedPhoto(id: string) {
     if (inputDisabled || pending) return;
@@ -350,7 +355,7 @@ export default function AgentChat() {
     setDraft(null); setPreview({ status: "preview_closed", preview_token: activePreview.preview_token }); setNotice("已关闭预览，未执行新的保存或删除。");
   }
   return <InteractionFocusContext.Provider value={focus}><main className={`${styles.shell} ${chatStyles.shell}`} data-agent-build="upload-preview-20261024-v3">
-    <header className={chatStyles.header}><div className={chatStyles.assistantIdentity}><h1><span aria-hidden="true">{identity.avatar}</span> {identity.name}</h1><span role="status" className={chatStyles.assistantStatus}>{voiceOutputStatus || (busy ? "正在处理…" : captureStatus || "在线")}</span></div><div className={chatStyles.headerActions}><button type="button" className={chatStyles.headerIcon} aria-label={voiceActive ? "停止语音聊天" : "打开语音聊天"} aria-pressed={voiceActive} disabled={(!voiceActive && (inputDisabled || pending))} onClick={() => {
+    <header className={chatStyles.header}><div className={chatStyles.assistantIdentity}><h1><span aria-hidden="true">{identity.avatar}</span> {identity.name}</h1><span role="status" className={chatStyles.assistantStatus}>{voiceOutputStatus || (busy ? "正在处理…" : hasRetry ? "请求未完成，请重试或操作创作卡片" : captureStatus || "在线")}</span></div><div className={chatStyles.headerActions}><button type="button" className={chatStyles.headerIcon} aria-label={voiceActive ? "停止语音聊天" : "打开语音聊天"} aria-pressed={voiceActive} disabled={(!voiceActive && (inputDisabled || pending))} onClick={() => {
       if (voiceActive) {speechEpoch.current++;setVoiceChat(false);companionPlayback.cancel();setVoiceControl(old=>({id:(old?.id ?? 0)+1,action:"stop"}));}
       else {
         if(!allowed){setMenu(true);setNotice("请先在聊天设置中允许发送文字，再开始语音聊天。");return;}
@@ -433,7 +438,7 @@ export default function AgentChat() {
       </div>{renderAttached(index+1)}</Fragment>;
       })}
     </section>
-    {creativeTask && creativeTask.status !== "cancelled" && <MediaDraftCard key={creativeTask.task_id} task={creativeTask} onChooseSource={async event=>{let ok=false;await run(async()=>{const task=await companionApi.updateMediaDraft(session,{...event,task_id:creativeTask.task_id,expected_revision:creativeTask.revision,action:"choose_source"});setCreativeTask(task);ok=true;});return ok;}} onRefresh={()=>{void run(async()=>{const data=await companionApi.mediaDrafts(session);setCreativeTask(data.tasks.find(task=>task.task_id===creativeTask.task_id)??null);});}} disabled={inputDisabled || !!pending} onAction={async(action,photo)=>{let ok=false;await run(async()=>{await changeCreative(action,photo);ok=true;});return ok;}} onAssetSelected={async(photoId,slot,cardId)=>{let ok=false;await run(async()=>{if(!creativeTask) return;const result=await companionApi.mediaEvent(session,{operation_id:crypto.randomUUID(),event_type:"photo_selected",task_id:creativeTask.task_id,card_id:cardId,photo_id:photoId,slot,expected_revision:creativeTask.revision});setCreativeTask(result.task);ok=true;});return ok;}} onUpload={()=>{creativeUpload.current={task_id:creativeTask.task_id,revision:creativeTask.revision,card_id:creativeTask.ui_card?.card_id || ""};fileRef.current?.click();}}/>}
+    {creativeTask && creativeTask.status !== "cancelled" && <MediaDraftCard key={creativeTask.task_id} task={creativeTask} onChooseSource={async event=>{let ok=false;await run(async()=>{const task=await companionApi.updateMediaDraft(session,{...event,task_id:creativeTask.task_id,expected_revision:creativeTask.revision,action:"choose_source"});setCreativeTask(task);ok=true;});return ok;}} onRefresh={()=>{void run(async()=>{const data=await companionApi.mediaDrafts(session);setCreativeTask(data.tasks.find(task=>task.task_id===creativeTask.task_id)??null);});}} disabled={busy || uploading || !!pending} onAction={async(action,photo)=>{let ok=false;await run(async()=>{await changeCreative(action,photo);ok=true;});return ok;}} onAssetSelected={async(photoId,slot,cardId)=>{let ok=false;await run(async()=>{if(!creativeTask) return;const result=await companionApi.mediaEvent(session,{operation_id:crypto.randomUUID(),event_type:"photo_selected",task_id:creativeTask.task_id,card_id:cardId,photo_id:photoId,slot,expected_revision:creativeTask.revision});setCreativeTask(result.task);ok=true;});return ok;}} onUpload={()=>{creativeUpload.current={task_id:creativeTask.task_id,revision:creativeTask.revision,card_id:creativeTask.ui_card?.card_id || ""};fileRef.current?.click();}}/>}
     {turn?.result?.kind === "text" && !messages.some(m => m.turn?.turn_id === turn.turn_id) && (diaryDay(lastSubmittedText) ? <DiaryCard day={diaryDay(lastSubmittedText)!} text={turn.result.text} sourceTurn={turn.turn_id} onOpenDiary={() => setFeature("diary")} /> : <article className={chatStyles.assistant}><p>{turn.result.text}</p>{responseMode === "text" && <SpeechPlayback text={turn.result.text} voice={identity.voice}/>}</article>)}
     {turn?.result?.kind === "photo_action" && !messages.some(m => m.turn?.turn_id === turn.turn_id) && <PhotoActionCard key={turn.turn_id} result={turn.result} />}
     {turn?.result?.kind === "album_guide" && !messages.some(m => m.turn?.turn_id === turn.turn_id) && <AlbumScopeCard key={turn.turn_id} browse={turn.result.browse} disabled={inputDisabled || pending} onSelect={organizeSelectedPhoto} />}

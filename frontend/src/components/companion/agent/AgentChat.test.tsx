@@ -556,3 +556,23 @@ it("opens the calendar from a fresh diary list reply without dumping saved entri
  fireEvent.click(screen.getByRole("button",{name:"关闭日记"}));
  expect(screen.queryByRole("dialog",{name:"日记"})).not.toBeInTheDocument();
 });
+it("shows a retained failed sentence and allows resuming a paused task without replaying it",async()=>{
+ localStorage.setItem("iframe-companion-agent-session-v1","s");
+ const paused={...creative,status:"paused",revision:2,brief:"换黑袍"};
+ api.mediaDrafts.mockResolvedValue({tasks:[paused]});
+ api.chat.mockRejectedValueOnce(new Error("操作未通过校验"));
+ api.updateMediaDraft.mockResolvedValue({...paused,status:"active",revision:3});
+ render(<AgentChat/>);
+ await screen.findByRole("button",{name:"继续这次创作"});
+ allowText();
+ api.messages.mockResolvedValue({messages:[{id:"failed",sequence:1,text:"继续之前没有完成的任务"}],next_before:null});
+ fireEvent.change(screen.getByLabelText("和我聊聊天"),{target:{value:"继续之前没有完成的任务"}});
+ fireEvent.click(screen.getByRole("button",{name:"发送"}));
+ await screen.findByRole("alert");
+ expect(screen.getByText("继续之前没有完成的任务",{selector:"p"})).toBeInTheDocument();
+ expect(screen.getByRole("button",{name:"继续这次创作"})).not.toBeDisabled();
+ fireEvent.click(screen.getByRole("button",{name:"继续这次创作"}));
+ await waitFor(()=>expect(api.updateMediaDraft).toHaveBeenCalledWith("s",expect.objectContaining({task_id:"creative",expected_revision:2,action:"resume"})));
+ await waitFor(()=>expect(screen.queryByRole("button",{name:"重试原请求"})).not.toBeInTheDocument());
+ expect(api.chat).toHaveBeenCalledOnce();
+});

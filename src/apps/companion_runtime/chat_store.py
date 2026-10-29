@@ -108,6 +108,11 @@ class ChatStore(MediaDrafts, PhotoTasks, DiaryStore, CompanionStore):
                 creative['available_actions'] = ['open_upload', 'open_album', 'brief', 'pause', 'cancel']
                 creative['asset_selection'] = 'user_selection_required' if not creative.get('photo_id') else 'selected'
                 messages[-1]['active_media_draft'] = creative
+            # Keep paused work explicit: it is resumable, never an active draft.
+            from .media_drafts import display
+            paused = db.execute("SELECT * FROM companion_media_drafts WHERE owner=? AND actor=? AND session_id=? AND status='paused' ORDER BY rowid DESC", (owner, actor, session)).fetchall()
+            if paused:
+                messages[-1]['paused_media_drafts'] = [dict(display(task), available_actions=['resume', 'cancel']) for task in paused]
             tasks = db.execute("SELECT * FROM companion_photo_tasks WHERE owner=? AND actor=? AND session_id=? AND status='waiting_input' ORDER BY rowid DESC LIMIT 3", (owner,actor,session)).fetchall()
             if tasks:
                 messages[-1]['workflow_tasks'] = [dict(task_id=t['id'], revision=t['revision'], step=t['step'],
@@ -130,7 +135,7 @@ class ChatStore(MediaDrafts, PhotoTasks, DiaryStore, CompanionStore):
                 raise Conflict('Turn claim expired')
             diary_request = diary_day(row['text']) is not None
             intent = classify(row['text'])
-            if claim.get('messages', [{}])[-1].get('active_media_draft'):
+            if any(claim.get('messages', [{}])[-1].get(key) for key in ('active_media_draft', 'paused_media_drafts')):
                 # Task-specific interpretation belongs to the model. An answer
                 # mentioning the album must not overwrite its tool proposal.
                 from .intent import Intent

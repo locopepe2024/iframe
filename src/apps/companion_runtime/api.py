@@ -377,7 +377,7 @@ def chat(session_id: str, body: ChatRequest, identity: Owner, store: Store):
                 proposal = creative_shortcut(body.text)
             elif editing:
                 proposal = propose(identity, claim['messages'], claim['message_id'])
-            elif current:
+            elif current or claim['messages'][-1].get('paused_media_drafts'):
                 # In a task, Qwen interprets the answer against the live state;
                 # generic upload/album keywords must not steal the turn.
                 proposal = propose(identity, claim['messages'], claim['message_id'])
