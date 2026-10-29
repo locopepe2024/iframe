@@ -48,3 +48,38 @@ the local temporary copy is `/private/tmp/director-locomotion-20261029.json`.
 No production assets were modified. Probe now accepts exact action names via
 `--actions`, retaining the original punch/sword defaults and failing for missing
 actions. Python compilation and the four-action media run succeeded.
+
+## Pelvis-translation A/B experiment
+
+The optional `--pelvis-translation` run on media Blender 4.5.9 LTS used the same
+pinned inputs, all 106 inclusive frame samples and 22 mapped bones. Rest hip/root
+distances were 0.91806816 m (source) and 0.93291989 m (target), giving scale
+1.01617715. The experiment rejects misaligned world orientations, nonuniform or
+nonpositive scales, missing calibration bones and invalid rest distances.
+
+| Action | Rotation only: left/right minimum (m) | With pelvis displacement: left/right minimum (m) |
+|---|---|---|
+| Walk_Loop | 0.01570 / 0.01443 | 0.01368 / 0.01266 |
+| Walk_Formal_Loop | 0.01927 / 0.01922 | 0.01026 / 0.01021 |
+| Jog_Fwd_Loop | 0.16887 / 0.17658 | 0.03430 / 0.02747 |
+| Sprint_Loop | 0.10098 / 0.10628 | 0.01592 / 0.04834 |
+
+These remain foot-bone tail minima, not skin/sole distances. Maximum pelvis
+position residual was 7.03e-8 m. Maximum change of a mapped bone's 3×3 pose-basis
+element after translation was 2.98e-7, below the 1e-5 diagnostic limit. Existing
+rotation residual/adjacent-frame metrics matched the rotation-only report.
+Jog pelvis first-to-last travel changed from zero to 0.02341 m, matching the
+scaled source endpoint travel; this is not a speed or root-motion classification.
+
+Direct implication: omitting pelvis displacement contributes to the measured
+elevated foot-tail baseline in jog/sprint. It does not establish the remaining
+cause, or prove any sole lock, no sliding, ground contact, terrain adaptation,
+natural appearance or loop-seam quality. No rendered animation was accepted.
+The option stays off by default and does not publish assets or change playback.
+
+Final media report: `locomotion-pelvis-ab-20261029.json` in the same remote
+temporary directory; SHA-256
+`cfac4c79b4e0a897459d3f03bd7042a37e40a811be49d7dcdb2f4612da4549a3`.
+Next gate: evaluated sole geometry, per-support-phase velocities and rendered
+full-body/foot sequences before any playable promotion. License provenance also
+remains unverified.
