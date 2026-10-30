@@ -549,6 +549,7 @@ def main():
         "supportAnnotationSha256": sha256(args.support_annotations) if args.support_annotations else None,
         "sharedRoute": shared_route,
         "routeContinuity": route_continuity,
+        "evaluationFPS": bpy.context.scene.render.fps / bpy.context.scene.render.fps_base,
         "authoredFPS": "unverified",
         "actions": reports,
         "warnings": mapping["warnings"] + [
