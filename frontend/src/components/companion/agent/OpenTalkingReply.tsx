@@ -9,6 +9,9 @@ export type SpokenReply = { id: string; text: string };
 const base = (process.env.NEXT_PUBLIC_OPENTALKING_URL || "/opentalking-mock/api").replace(/\/$/, "");
 
 type State = "idle" | "opening" | "ready" | "waiting" | "audio" | "blocked" | "error";
+class OpenTalkingHttpError extends Error {
+  constructor(readonly status: number) { super(`OpenTalking HTTP ${status}`); }
+}
 export function formatOpenTalkingError(failure: unknown): string {
   const value = failure as { message?: unknown; name?: unknown } | null | undefined;
   const message = typeof value?.message === "string" ? value.message : String(failure ?? "");
@@ -22,7 +25,7 @@ async function request<T>(path: string, signal?: AbortSignal, body?: object, met
     method, signal, credentials: "omit", headers: { "Content-Type": "application/json" },
     ...(body ? { body: JSON.stringify(body) } : {}),
   });
-  if (!response.ok) throw new Error(`OpenTalking HTTP ${response.status}`);
+  if (!response.ok) throw new OpenTalkingHttpError(response.status);
   return response.json();
 }
 
@@ -110,10 +113,20 @@ export default function OpenTalkingReply({ reply, voice, connectionEpoch = 0, on
     resumeAudio.current = () => { void audio?.resume().catch(() => {}); };
     const deleteSession = (id: string) => fetch(`${base}/sessions/${encodeURIComponent(id)}`, { method: "DELETE", credentials: "omit", keepalive: true }).catch(() => {});
     const update = (next: State) => { if (live()) setState(next); };
+    const releaseMedia = () => {
+      events?.close(); events = null;
+      if (peer) { peer.onconnectionstatechange = null; peer.ontrack = null; peer.close(); peer = null; }
+      cancelAnimationFrame(animation); source?.disconnect(); source = null; analyser = null;
+      void audio?.close().catch(() => {}); audio = null;
+      if (video.current) { video.current.pause(); video.current.srcObject = null; }
+      const previous = session; session = ""; opening = null;
+      if (previous) void deleteSession(previous);
+    };
     const mediaFailure = (message: string) => {
       if (!live()) return;
       setError(message); update("error");
       active?.fail(new Error(message)); companionPlayback.cancel(owner);
+      releaseMedia();
     };
     const open = async () => {
       update("opening"); report("opening");
@@ -217,7 +230,8 @@ export default function OpenTalkingReply({ reply, voice, connectionEpoch = 0, on
         let abort: (() => void) | undefined;
         let ownedCommand = "";
         try {
-          opening ??= open(); await opening;
+          try { opening ??= open(); await opening; }
+          catch (failure) { releaseMedia(); throw failure; }
           if (signal.aborted || !live()) return;
           // Do not consume a live WebRTC utterance while the browser blocks output.
           try {
@@ -248,9 +262,23 @@ export default function OpenTalkingReply({ reply, voice, connectionEpoch = 0, on
           // Claim playback before TTS to avoid capturing the first response syllable.
           playing();
           report("speak_sent");
-          const sent = await request<{ status: string }>(`/sessions/${session}/speak`, lifetime.signal, {
+          const payload = {
             text: item.text, mode: "replace", render_text: true, command_id: command, ...(voice ? { voice } : {}),
-          });
+          };
+          let sent: { status: string };
+          try {
+            sent = await request(`/sessions/${session}/speak`, lifetime.signal, payload);
+          } catch (failure) {
+            // A 404 proves this command was not accepted. Never replay a timeout
+            // or any other ambiguous failure: audio may already be queued.
+            if (!(failure instanceof OpenTalkingHttpError) || failure.status !== 404 || signal.aborted || !live()) throw failure;
+            releaseMedia();
+            opening = open();
+            try { await opening; } catch (failure) { releaseMedia(); throw failure; }
+            if (signal.aborted || !live()) return;
+            report("speak_sent");
+            sent = await request(`/sessions/${session}/speak`, lifetime.signal, payload);
+          }
           if (!["queued", "duplicate"].includes(sent.status)) throw new Error("语音任务未入队，请重试。");
           await complete;
           if (!signal.aborted && live()) {
@@ -261,6 +289,7 @@ export default function OpenTalkingReply({ reply, voice, connectionEpoch = 0, on
             update("ready");
           }
         } catch (failure) {
+          if (failure instanceof OpenTalkingHttpError && failure.status === 404) releaseMedia();
           if (live() && !signal.aborted) {
             report("failure"); failed.current = item; setError(formatOpenTalkingError(failure)); update("error");
           }
@@ -278,10 +307,7 @@ export default function OpenTalkingReply({ reply, voice, connectionEpoch = 0, on
       disposed = true; report("disposed", {state:peer?.iceGatheringState || "none"});
       lifetime.abort(); enqueue.current = null; resumeAudio.current = null;
       companionPlayback.cancel(owner);
-      active?.done(); events?.close(); peer?.close(); cancelAnimationFrame(animation);
-      source?.disconnect(); void audio?.close().catch(() => {});
-      if (video.current) { video.current.pause(); video.current.srcObject = null; }
-      if (session) void deleteSession(session);
+      active?.done(); releaseMedia();
     };
     window.addEventListener("pagehide", dispose);
     return () => { window.removeEventListener("pagehide", dispose); dispose(); };

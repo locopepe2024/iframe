@@ -22,6 +22,37 @@ beforeEach(()=>{
 afterEach(()=>{companionPlayback.cancel();vi.unstubAllGlobals();});
 vi.mock("@/lib/companionApi",()=>({companionApi:{voiceDiagnostic:vi.fn().mockResolvedValue({status:"recorded"})}}));
 const speaks=()=>calls.filter(c=>c.url.endsWith("/speak"));
+it("recreates a missing session once and retains the same command id",async()=>{
+ const original=vi.mocked(fetch).getMockImplementation()!;
+ let first=true;
+ vi.mocked(fetch).mockImplementation(async(url,init)=>{
+   if(String(url).endsWith("/speak") && first){first=false;calls.push({url:String(url),init:init!});return {ok:false,status:404} as Response;}
+   return original(url,init);
+ });
+ const view=render(<OpenTalkingReply reply={{id:"one",text:"你好"}}/>);
+ await waitFor(()=>expect(speaks()).toHaveLength(2));
+ expect(calls.filter(c=>c.url.endsWith("/sessions"))).toHaveLength(2);
+ expect(JSON.parse(speaks()[1].init.body as string).command_id).toBe(JSON.parse(speaks()[0].init.body as string).command_id);
+ expect(calls.some(c=>c.url.endsWith("/s1")&&c.init.method==="DELETE")).toBe(true);
+ view.unmount();
+});
+it("does not replay an uncertain failure and bounds repeated missing-session responses",async()=>{
+ const original=vi.mocked(fetch).getMockImplementation()!;
+ let status=503;
+ vi.mocked(fetch).mockImplementation(async(url,init)=>{
+   if(String(url).endsWith("/speak")){calls.push({url:String(url),init:init!});return {ok:false,status} as Response;}
+   return original(url,init);
+ });
+ const view=render(<OpenTalkingReply reply={{id:"one",text:"第一句"}}/>);
+ await waitFor(()=>expect(screen.getByText(/OpenTalking HTTP 503/)).toBeInTheDocument());
+ expect(speaks()).toHaveLength(1);
+ status=404;
+ view.rerender(<OpenTalkingReply reply={{id:"two",text:"第二句"}}/>);
+ await waitFor(()=>expect(screen.getByText(/OpenTalking HTTP 404/)).toBeInTheDocument());
+ expect(speaks()).toHaveLength(3);
+ expect(calls.filter(c=>c.url.endsWith("/sessions"))).toHaveLength(2);
+ view.unmount();
+});
 it("maps browser timeout errors to a clear Chinese recovery message",()=>{
  expect(formatOpenTalkingError(new DOMException("signal timed out","TimeoutError"))).toBe("语音连接超时，请稍后重试。");
  expect(formatOpenTalkingError(new Error("signal timed out"))).toBe("语音连接超时，请稍后重试。");
