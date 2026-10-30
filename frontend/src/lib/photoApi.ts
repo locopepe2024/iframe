@@ -157,8 +157,8 @@ export const photoApi = {
   descriptionHistory: (id: string, after = 0) => request<{ changes: DescriptionReview[]; next_after_revision: number | null }>(`/${encodeURIComponent(id)}/description/history?after_revision=${after}`),
   analysis: (id: string) => request<PhotoAnalysis | null>(`/${encodeURIComponent(id)}/analysis`),
   analyze: (id: string) => request<PhotoAnalysis>(`/${encodeURIComponent(id)}/analysis`, "POST", { allow_external_analysis: true }),
-  list: (view: string, year: string, after = "", query = "", filters?: {date_prefix?: string; order?: "id" | "recent"}) => request<{ photos: AlbumPhoto[]; next_after_id: string | null }>(
-    `/albums?${new URLSearchParams({ view, ...(year ? { year } : {}), ...(query ? { query } : {}), ...(filters?.date_prefix ? {date_prefix: filters.date_prefix} : {}), ...(filters?.order ? {order: filters.order} : {}), after_id: after, limit: "20" })}`),
+  list: (view: string, year: string, after = "", query = "", filters?: {date_prefix?: string; date_from?: string; date_to?: string; order?: "id" | "recent"}) => request<{ photos: AlbumPhoto[]; next_after_id: string | null }>(
+    `/albums?${new URLSearchParams({ view, ...(year ? { year } : {}), ...(query ? { query } : {}), ...(filters?.date_prefix ? {date_prefix: filters.date_prefix} : {}), ...(filters?.date_from ? {date_from: filters.date_from} : {}), ...(filters?.date_to ? {date_to: filters.date_to} : {}), ...(filters?.order ? {order: filters.order} : {}), after_id: after, limit: "20" })}`),
   batch: (id: string) => request<TimeConsent>(`/batches/${encodeURIComponent(id)}`),
   question: (id: string) => request<TimeQuestion>(`/batches/${encodeURIComponent(id)}/time-question`, "POST"),
   answer: (id: string, question: string, granted: boolean) => request<TimeConsent>(

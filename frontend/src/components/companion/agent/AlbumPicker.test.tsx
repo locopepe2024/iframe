@@ -8,6 +8,15 @@ vi.mock("@/lib/companionMediaApi",()=>({companionMediaApi:videos}));
 vi.mock("../photos/PhotoImage",()=>({default:({id}:{id:string})=><span>image {id}</span>}));
 vi.mock("./VideoConversationCard",()=>({VideoCover:()=>null}));
 beforeEach(()=>{vi.resetAllMocks();api.list.mockResolvedValue({photos:[{photo_id:"first"}],next_after_id:null});videos.list.mockResolvedValue({videos:[{video_id:"v",name:"garden.mp4"}],next_after_id:null});});
+it("keeps inclusive range filters in search and does not describe empty matches as an empty library",async()=>{
+ api.list.mockResolvedValue({photos:[],next_after_id:null});
+ render(<AlbumPicker initialFrom="2026-10-20" initialTo="2026-10-30" onPhoto={()=>{}} onClose={()=>{}}/>);
+ expect(await screen.findByText("没有找到符合这些条件的照片。")).toBeInTheDocument();
+ expect(screen.getByText("拍摄日期：2026-10-20 至 2026-10-30")).toBeInTheDocument();
+ fireEvent.change(screen.getByLabelText("搜索照片"),{target:{value:"女儿"}});
+ fireEvent.click(screen.getByRole("button",{name:"搜索"}));
+ await waitFor(()=>expect(api.list).toHaveBeenLastCalledWith("all","","","女儿",{date_prefix:"",date_from:"2026-10-20",date_to:"2026-10-30",order:"id"}));
+});
 it("browses without attaching, searches server descriptions, paginates and only selects explicitly",async()=>{
   const select=vi.fn();render(<AlbumPicker onPhoto={select} onClose={()=>{}}/>);
   await screen.findByText("image first");expect(select).not.toHaveBeenCalled();
