@@ -23,6 +23,11 @@ from .coordinator import decide
 from .voice_attention import attention_reply
 from .interaction_focus import FocusUpdate, read_focus, update_focus, active_editor
 from .media_draft_bridge import selection_event_from_draft, apply_selection
+from .latency import timed, trace_chat
+
+propose = timed('cloud_qwen', propose)
+propose_diary = timed('cloud_qwen_diary', propose_diary)
+decide = timed('coordinator', decide)
 
 
 class Operation(Strict):
@@ -39,6 +44,7 @@ class CreativeContext(Strict):
 
 
 class ChatRequest(UserMessage):
+    trace_id: str = Field(default='', max_length=80, pattern=r'^[a-zA-Z0-9_-]*$')
     creative_context: CreativeContext | None = None
     allow_external_text: Literal[True]
     selected_photo_id: str | None = Field(default=None, min_length=1, max_length=120)
@@ -111,18 +117,27 @@ _opentalking_bindings = SessionBindings()
 
 class VoiceDiagnostic(Strict):
     connection: str = Field(min_length=1, max_length=80, pattern=r'^[a-zA-Z0-9_-]+$')
-    event: Literal['opening', 'session_created', 'ice_state', 'ice_candidate', 'ice_error', 'ice_timeout', 'offer_sent', 'connected', 'speak_sent', 'play_blocked', 'failure', 'disposed']
+    event: Literal['opening', 'session_created', 'ice_state', 'ice_candidate', 'ice_error', 'ice_timeout', 'offer_sent', 'connected', 'speak_sent', 'play_blocked', 'failure', 'disposed', 'stage']
     elapsed_ms: int = Field(ge=0, le=86400000)
     session_id: str = Field(default='', max_length=80, pattern=r'^[a-zA-Z0-9_-]*$')
     state: str = Field(default='', max_length=30, pattern=r'^[a-zA-Z0-9_-]*$')
     candidates: int = Field(default=0, ge=0, le=1000)
     code: int = Field(default=0, ge=0, le=999)
+    trace_id: str = Field(default='', max_length=80, pattern=r'^[a-zA-Z0-9_-]*$')
+    operation_id: str = Field(default='', max_length=120, pattern=r'^[a-zA-Z0-9_-]*$')
+    command_id: str = Field(default='', max_length=120, pattern=r'^[a-zA-Z0-9_-]*$')
+    duration_ms: int | None = Field(default=None, ge=0, le=86400000)
+    server_ms: float | None = Field(default=None, ge=0, le=86400000)
+    inference_ms: float | None = Field(default=None, ge=0, le=86400000)
+    rtt_ms: float | None = Field(default=None, ge=0, le=86400000)
+    jitter_ms: float | None = Field(default=None, ge=0, le=86400000)
+    jitter_buffer_ms: float | None = Field(default=None, ge=0, le=86400000)
 
 
 @router.post('/voice-diagnostics')
 def voice_diagnostic(body: VoiceDiagnostic, identity: Owner):
     # Never accept transcripts, SDP, candidate addresses, URLs or TURN credentials.
-    logging.getLogger(__name__).warning('Companion voice diagnostic %s', body.model_dump_json())
+    logging.getLogger(__name__).warning('Companion voice diagnostic %s', body.model_dump_json(exclude_none=True))
     return {'status': 'recorded'}
 
 
@@ -370,6 +385,7 @@ def cancel(body: Cancellation, identity: Owner, store: Store):
 
 
 @router.post('/sessions/{session_id}/chat')
+@trace_chat
 def chat(session_id: str, body: ChatRequest, identity: Owner, store: Store):
     with errors():
         claim=store.claim_turn(identity.owner_profile_id,identity.user_id,session_id,body.operation_id,body.text,body.selected_photo_id)
@@ -391,7 +407,7 @@ def chat(session_id: str, body: ChatRequest, identity: Owner, store: Store):
                 if decision:
                     claim['messages'][-1]['coordinator_decision'] = decision
             from .planner_runtime import plan_turn
-            planned = plan_turn(claim['messages']) if not body.selected_photo_id and not editing and intent.name != 'diary.compose' and not creative_shortcut(body.text) else None
+            planned = timed('host_planner', plan_turn)(claim['messages']) if not body.selected_photo_id and not editing and intent.name != 'diary.compose' and not creative_shortcut(body.text) else None
             # Diary is a writing lane. It receives the current session's user
             # messages but never receives memory tools, even if the model
             # would otherwise interpret the request as a search.

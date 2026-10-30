@@ -2,6 +2,7 @@ import {act,renderHook,waitFor} from "@testing-library/react";
 import {afterEach,expect,it,vi} from "vitest";
 import {useContinuousCapture} from "./useContinuousCapture";
 const mock=vi.hoisted(()=>({capture:vi.fn()}));
+vi.mock("@/lib/companionApi",()=>({companionApi:{voiceDiagnostic:vi.fn().mockResolvedValue({status:"recorded"})}}));
 vi.mock("@/lib/companionRealtimeAudio",()=>({captureMicrophonePcm:mock.capture}));
 afterEach(()=>{vi.unstubAllGlobals();vi.restoreAllMocks();});
 function setup(){
@@ -22,7 +23,7 @@ it("retains one microphone through long silence and serializes recognition witho
  act(()=>{for(let i=0;i<4000;i++)s.getAudio()(new Float32Array(320));});expect(s.fetch).not.toHaveBeenCalled();expect(s.stop).not.toHaveBeenCalled();
  let resolve!:(value:unknown)=>void;s.fetch.mockImplementationOnce(()=>new Promise(r=>resolve=r));
  s.sentence();s.sentence();expect(s.fetch).toHaveBeenCalledOnce();
- await act(async()=>resolve({ok:true,json:async()=>({text:"第一段"})}));await waitFor(()=>expect(s.text.mock.calls).toEqual([["第一段"],["今天开心"]]));
+ await act(async()=>resolve({ok:true,json:async()=>({text:"第一段"})}));await waitFor(()=>expect(s.text.mock.calls.map(call=>call[0])).toEqual(["第一段","今天开心"]));
  expect(s.getUserMedia).toHaveBeenCalledOnce();s.hook.unmount();expect(s.stop).toHaveBeenCalledOnce();expect(s.disconnect).toHaveBeenCalledOnce();
 });
 it("preserves failed segment and later sentences for explicit retry",async()=>{

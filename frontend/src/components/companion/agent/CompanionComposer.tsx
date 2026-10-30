@@ -8,6 +8,7 @@ import { isOpenAlbumCommand } from "./localCommands";
 import styles from "./chat.module.css";
 import FeatureDialog from "./FeatureDialog";
 import { companionPlayback } from "@/lib/companionPlaybackQueue";
+import type {VoiceTrace} from "@/lib/companionVoiceTrace";
 
 export interface VoiceControl {id:number;action:"start"|"stop"|"cancel"}
 export type ComposerMode = "chat" | "image" | "video";
@@ -24,7 +25,7 @@ export default function CompanionComposer({ mode, value, disabled, busy, allowed
   mode: ComposerMode; value: string; disabled: boolean; busy: boolean; allowed: boolean;
   inputRef: RefObject<HTMLTextAreaElement>;
   onMode: (mode: ComposerMode) => void; onChange: (text: string) => void;
-  onSend: () => void; onVoiceFinal?: (text: string) => void; onUpload: () => void; onAllow: (allowed: boolean) => void; onRequestConsent: () => void;
+  onSend: () => void; onVoiceFinal?: (text: string,trace?:VoiceTrace) => void; onUpload: () => void; onAllow: (allowed: boolean) => void; onRequestConsent: () => void;
   retry: (() => void) | null;
   attachments?: ReactNode; hasAttachments?: boolean;
   mediaAcknowledged?: boolean; onMediaAcknowledged?: (value: boolean) => void;
@@ -33,7 +34,7 @@ export default function CompanionComposer({ mode, value, disabled, busy, allowed
   const [voiceConsent, setVoiceConsent] = useState(false), [voicePrompt, setVoicePrompt] = useState(false);
   const picker = useRef<HTMLDivElement>(null), trigger = useRef<HTMLButtonElement>(null);
   const [engine,setEngine] = useState<"browser"|"local">(process.env.NEXT_PUBLIC_API_URL === "/companion-demo" ? "local" : "browser");
-  const capture=useContinuousCapture(text=>onVoiceFinal?.(text.slice(0,4000)));
+  const capture=useContinuousCapture((text,trace)=>onVoiceFinal?.(text.slice(0,4000),trace));
   const browserVoice = useCompanionVoice(text => {
     if (mode === "chat" && onVoiceFinal) return;
     const next = `${value}${value ? " " : ""}${text}`.slice(0, 4000);

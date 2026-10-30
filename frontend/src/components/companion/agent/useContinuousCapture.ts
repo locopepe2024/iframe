@@ -3,12 +3,13 @@ import {useEffect,useRef,useState} from "react";
 import {captureMicrophonePcm} from "@/lib/companionRealtimeAudio";
 import {pcmWav,SilenceSegments} from "@/lib/companionSegments";
 import {companionPlayback} from "@/lib/companionPlaybackQueue";
+import {newVoiceTrace,voiceStage,type VoiceTrace} from "@/lib/companionVoiceTrace";
 
-export function useContinuousCapture(onText:(text:string)=>void) {
+export function useContinuousCapture(onText:(text:string,trace?:VoiceTrace)=>void) {
  const [listening,setListening]=useState(false),[finishing,setFinishing]=useState(false),[notice,setNotice]=useState(""),[failed,setFailed]=useState(false),[playing,setPlaying]=useState(false);
  const callback=useRef(onText);callback.current=onText;
  const generation=useRef(0),stream=useRef<MediaStream|null>(null),context=useRef<AudioContext|null>(null),cleanup=useRef<(()=>void)|null>(null),segment=useRef<SilenceSegments|null>(null);
- const queue=useRef<Blob[]>([]),running=useRef(false),paused=useRef(false),controller=useRef<AbortController|null>(null),intent=useRef(false);
+ const queue=useRef<{blob:Blob;trace:VoiceTrace}[]>([]),running=useRef(false),paused=useRef(false),controller=useRef<AbortController|null>(null),intent=useRef(false);
  function release(){intent.current=false;cleanup.current?.();cleanup.current=null;segment.current=null;stream.current?.getTracks().forEach(t=>{t.onended=null;t.stop();});stream.current=null;void context.current?.close().catch(()=>{});context.current=null;setListening(false);}
  function cancel(){generation.current++;controller.current?.abort();controller.current=null;queue.current=[];paused.current=false;release();setFinishing(false);setFailed(false);}
  async function drain(){
@@ -18,12 +19,14 @@ export function useContinuousCapture(onText:(text:string)=>void) {
      const request=new AbortController();controller.current=request;
      const timeout=setTimeout(()=>request.abort(),30000);
      try{
-       const form=new FormData();form.append("file",queue.current[0],"speech.wav");
+       const item=queue.current[0],sent=performance.now();voiceStage(item.trace,"asr_sent");
+       const form=new FormData();form.append("file",item.blob,"speech.wav");
        const response=await fetch("/companion-demo/sensevoice-test/analyze",{method:"POST",body:form,signal:request.signal});
        if(!response.ok)throw new Error(`HTTP ${response.status}`);
-       const result=await response.json() as {text?:string};
+       const result=await response.json() as {text?:string;total_ms?:number;inference_ms?:number};
+       voiceStage(item.trace,"asr_received",{duration_ms:Math.round(performance.now()-sent),server_ms:result.total_ms,inference_ms:result.inference_ms});
        if(version!==generation.current)return;
-       queue.current.shift();if(result.text?.trim())callback.current(result.text.trim());
+       queue.current.shift();if(result.text?.trim())callback.current(result.text.trim(),item.trace);
      }catch{
        if(version!==generation.current)return;
        paused.current=true;segment.current?.flush();setFailed(true);setNotice("这一段识别失败，录音暂存在本页。请重试，或结束并清空。");
@@ -42,7 +45,8 @@ export function useContinuousCapture(onText:(text:string)=>void) {
      if(version!==generation.current || !intent.current){microphone.getTracks().forEach(t=>t.stop());return;}
      stream.current=microphone;
      const parts=new SilenceSegments(audio.sampleRate,samples=>{
-       queue.current.push(pcmWav(samples,audio.sampleRate));
+       const trace=newVoiceTrace();voiceStage(trace,"segment_ready");
+       queue.current.push({blob:pcmWav(samples,audio.sampleRate),trace});
        if(queue.current.length>=12){release();setNotice("识别暂时跟不上，已暂停收音，正在处理已录内容。");setFinishing(true);}
        void drain();
      });segment.current=parts;

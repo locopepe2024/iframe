@@ -277,3 +277,5 @@ def test_voice_diagnostics_records_only_bounded_connection_metadata(chat, caplog
     assert 'ice_timeout' in caplog.text
     assert client.post('/companion-runtime/voice-diagnostics', json={**payload, 'sdp': 'secret'}).status_code == 422
     assert client.post('/companion-runtime/voice-diagnostics', json={**payload, 'state': 'turn:secret@host'}).status_code == 422
+    assert client.post('/companion-runtime/voice-diagnostics', json={**payload, 'event':'stage', 'state':'asr_received', 'trace_id':'trace-1', 'duration_ms':1234, 'server_ms':300.2, 'inference_ms':220.1}).status_code == 200
+    assert client.post('/companion-runtime/voice-diagnostics', json={**payload, 'trace_id':'private words'}).status_code == 422

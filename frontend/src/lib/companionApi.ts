@@ -41,7 +41,7 @@ async function request<T>(path: string, method = "GET", body?: unknown): Promise
   return response.json();
 }
 export const companionApi = {
-  voiceDiagnostic: (body: {connection:string;event:string;elapsed_ms:number;session_id:string;state?:string;candidates?:number;code?:number}) => request("/voice-diagnostics", "POST", body),
+  voiceDiagnostic: (body: {connection:string;event:string;elapsed_ms:number;session_id:string;state?:string;candidates?:number;code?:number;trace_id?:string;operation_id?:string;command_id?:string;duration_ms?:number;server_ms?:number;inference_ms?:number;rtt_ms?:number;jitter_ms?:number;jitter_buffer_ms?:number}) => request("/voice-diagnostics", "POST", body),
   mediaDrafts: (session: string) => request<{tasks:MediaDraft[]}>(`/sessions/${encodeURIComponent(session)}/media-drafts`),
   startMediaDraft: (session: string, body: {operation_id:string;type:MediaDraft["type"];brief?:string}) => request<MediaDraft>(`/sessions/${encodeURIComponent(session)}/media-drafts`, "POST", body),
   updateMediaDraft: (session: string, body: {operation_id:string;task_id:string;expected_revision:number;action:"choose_source"|"brief"|"select_photo"|"select_first_photo"|"select_last_photo"|"add_reference_photo"|"remove_reference_photo"|"video_mode"|"clear_photo"|"setting"|"pause"|"resume"|"cancel";card_id?:string;option_id?:"upload"|"album"|"back";brief?:string;photo_id?:string;setting?:string;video_mode?:"t2v"|"i2v"|"f2v"|"r2v"}) => request<MediaDraft>(`/sessions/${encodeURIComponent(session)}/media-drafts/input`, "POST", body),
@@ -52,7 +52,7 @@ export const companionApi = {
   session: (operation_id: string) => request<{ session_id: string }>("/sessions", "POST", { operation_id }),
   messages: (id: string, before?: number) => request<{ messages: UserMessage[]; next_after: number | null; next_before: number | null }>(`/sessions/${encodeURIComponent(id)}/conversation?${before === undefined ? "latest=true" : `before=${before}`}`),
   workflowContext: (id: string) => request<{ session_id: string; focused_task: string | null; album_tasks: unknown[]; recent_diaries: unknown[] }>(`/sessions/${encodeURIComponent(id)}/workflow-context`),
-  chat: (id: string, body: { operation_id: string; text: string; allow_external_text: true; selected_photo_id?: string; creative_context?:CreativeContext }) => request<Turn>(`/sessions/${encodeURIComponent(id)}/chat`, "POST", body),
+  chat: (id: string, body: { operation_id: string; text: string; allow_external_text: true; selected_photo_id?: string; creative_context?:CreativeContext;trace_id?:string }) => request<Turn>(`/sessions/${encodeURIComponent(id)}/chat`, "POST", body),
   turn: (id: string) => request<Turn>(`/turns/${encodeURIComponent(id)}`),
   tool: <T>(name: string, args: object) => request<T>("/tools", "POST", { name, arguments: args }),
   confirm: (preview_token: string, operation_id: string) => request<{ action: string; memory_id: string }>("/confirmations", "POST", { preview_token, operation_id, method: "button" }),

@@ -2,6 +2,7 @@ import {act,fireEvent,render,screen,waitFor} from "@testing-library/react";
 import {afterEach,beforeEach,expect,it,vi} from "vitest";
 import OpenTalkingReply, { formatOpenTalkingError } from "./OpenTalkingReply";
 import {companionPlayback} from "@/lib/companionPlaybackQueue";
+import {companionApi} from "@/lib/companionApi";
 let calls:{url:string;init:RequestInit}[],peer:PC,events:ES;
 class PC extends EventTarget {
   iceGatheringState="complete";connectionState="connected";localDescription={sdp:"offer",type:"offer" as RTCSdpType};
@@ -22,6 +23,16 @@ beforeEach(()=>{
 afterEach(()=>{companionPlayback.cancel();vi.unstubAllGlobals();});
 vi.mock("@/lib/companionApi",()=>({companionApi:{voiceDiagnostic:vi.fn().mockResolvedValue({status:"recorded"})}}));
 const speaks=()=>calls.filter(c=>c.url.endsWith("/speak"));
+it("links a captured voice turn to the accepted TTS command without sending its text to diagnostics",async()=>{
+ vi.mocked(companionApi.voiceDiagnostic).mockClear();
+ const trace={id:"trace-1",started:performance.now()};
+ const view=render(<OpenTalkingReply reply={{id:"one",text:"私密原话",trace}}/>);
+ await waitFor(()=>expect(vi.mocked(companionApi.voiceDiagnostic).mock.calls.some(([body])=>body.state==="tts_accepted")).toBe(true));
+ const sent=vi.mocked(companionApi.voiceDiagnostic).mock.calls.find(([body])=>body.state==="tts_sent")![0];
+ expect(sent).toMatchObject({trace_id:"trace-1",session_id:"s1",command_id:JSON.parse(speaks()[0].init.body as string).command_id});
+ expect(JSON.stringify(vi.mocked(companionApi.voiceDiagnostic).mock.calls)).not.toContain("私密原话");
+ view.unmount();
+});
 it("recreates a missing session once and retains the same command id",async()=>{
  const original=vi.mocked(fetch).getMockImplementation()!;
  let first=true;

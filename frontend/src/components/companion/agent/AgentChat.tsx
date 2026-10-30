@@ -28,6 +28,7 @@ import UploadGuideCard from "./UploadGuideCard";
 import { isOpenAlbumCommand } from "./localCommands";
 import { BookOpen, Images, UserRound, Compass, Mic } from "lucide-react";
 import { companionPlayback } from "@/lib/companionPlaybackQueue";
+import {voiceStage,type VoiceTrace} from "@/lib/companionVoiceTrace";
 import { detectCompanionRuntimeCapability, type CompanionRuntimeCapability } from "./companionRuntimeCapability";
 
 import { InteractionFocusContext, createInteractionFocus, createFocusSync, type InteractionFocus } from "./InteractionFocus";
@@ -75,7 +76,7 @@ export default function AgentChat() {
   const [settingsSaved, setSettingsSaved] = useState(false);
   const [runtimeCapability, setRuntimeCapability] = useState<CompanionRuntimeCapability>({ status: "checking", reason: "正在检查设备能力…", memoryGb: null });
   const locked = useRef(false), alive = useRef(true);
-  const voiceQueue = useRef<{text:string;focus:InteractionFocus;creative:CreativeContext}[]>([]);
+  const voiceQueue = useRef<{text:string;focus:InteractionFocus;creative:CreativeContext;trace?:VoiceTrace}[]>([]);
   const [voiceRevision, setVoiceRevision] = useState(0);
   const sessionOperation = useRef("");
   const sendOperation = useRef<{ operation_id: string; text: string; allow_external_text: true; selected_photo_id?: string;creative_context?:CreativeContext } | null>(null);
@@ -131,7 +132,7 @@ export default function AgentChat() {
     if (!allowed || locked.current || hasRetry || uploading || preview?.status === "pending_confirmation" || !voiceQueue.current.length) return;
     if ((preview ?? (turn?.result?.kind === "confirmation" ? turn.result : null))?.status === "pending_confirmation") return;
     const next = voiceQueue.current.shift()!;
-    void run(() => send(false, next.text, undefined, next.focus, next.creative));
+    void run(() => send(false, next.text, undefined, next.focus, next.creative,next.trace));
     // Use the current render's session and settings after each completed operation.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [voiceRevision, busy, hasRetry, uploading, preview, turn, allowed]);
@@ -179,7 +180,8 @@ export default function AgentChat() {
     selectedPhotoRef.current = null; setSelectedPhotoId(null);
     setMenu(false); setAlbumOpen(false); setUploadFiles([]); setAttached([]); setPendingMedia({chat:[],image:[],video:[]}); setMediaAcknowledged(false); setSession(result.session_id); setMessages([]); setAfter(null); setTurn(null); setPreview(null); setDraft(null); setDrafts({ chat: "", image: "", video: "" }); setGuides({ image: null, video: null }); setMode("chat"); setNotice("已开始新的聊天。");
   }
-  async function send(retry = false, voiceText?: string, selectedPhotoArg?: string, capturedFocus?:InteractionFocus, capturedCreative?:CreativeContext) {
+  async function send(retry = false, voiceText?: string, selectedPhotoArg?: string, capturedFocus?:InteractionFocus, capturedCreative?:CreativeContext,trace?:VoiceTrace) {
+    voiceStage(trace,"chat_dequeued");
     const requestSpeechEpoch = speechEpoch.current;
     const requestedText = voiceText ?? text;
     const turnFocus = capturedFocus ?? focus.current();
@@ -201,7 +203,9 @@ export default function AgentChat() {
         await syncFocus(activeSession, sendFocus.current.operation, sendFocus.current.focus);
         sendFocus.current.ready = true;
       }
-      result = await companionApi.chat(activeSession, sendOperation.current);
+      const sent=performance.now();voiceStage(trace,"chat_sent",{operation_id:sendOperation.current.operation_id});
+      result = await companionApi.chat(activeSession, {...sendOperation.current,...(trace?{trace_id:trace.id}:{})});
+      voiceStage(trace,"chat_received",{operation_id:sendOperation.current.operation_id,duration_ms:Math.round(performance.now()-sent)});
     } catch (failure) {
       if (alive.current) setHasRetry(true);
       // The server retains the user message even when tool validation fails.
@@ -213,7 +217,7 @@ export default function AgentChat() {
     if (alive.current) {
       if (audioReply && speechEnabled.current && requestSpeechEpoch === speechEpoch.current) {
         const replyText = spokenTurnText(result.result);
-        if (replyText) setSpokenReply({ id: result.turn_id, text: replyText });
+        if (replyText) setSpokenReply({ id: result.turn_id, text: replyText,trace });
       }
       if (result.result?.kind === "diary_read") {
         setAlbumRequest(null);setAlbumOpen(false);
@@ -502,9 +506,10 @@ export default function AgentChat() {
     <CompanionComposer unified onCreative={type=>void run(()=>startCreative(type))} voiceControl={voiceControl} onCaptureActive={captureChanged} onVoiceCancel={()=>setVoiceChat(false)} onCaptureStatus={setCaptureStatus} onVoiceStart={() => setVoiceConnectionEpoch(value => value + 1)} mode={mode} value={text} disabled={inputDisabled || pending} busy={busy} allowed={allowed} inputRef={inputRef}
       attachments={<AttachmentDraft items={pendingMedia[mode]} disabled={inputDisabled || pending} onRemove={id => {setPendingMedia(old => ({...old,[mode]:old[mode].filter(item=>item.id!==id)}));setMediaAcknowledged(false);}} />}
       hasAttachments={pendingMedia[mode].length > 0} mediaAcknowledged={mediaAcknowledged} onMediaAcknowledged={setMediaAcknowledged}
-      onMode={next => {setMode(next);setAlbumOpen(false);setMediaAcknowledged(false);}} onChange={updateDraft} onSend={submit} onVoiceFinal={voiceText => {
+      onMode={next => {setMode(next);setAlbumOpen(false);setMediaAcknowledged(false);}} onChange={updateDraft} onSend={submit} onVoiceFinal={(voiceText,trace) => {
         if (!allowed) { setMenu(true); setNotice("请先在“更多 → 聊天设置”中允许发送文字。"); return; }
-        voiceQueue.current.push({text:voiceText,focus:{...focus.current()},creative:creativeTask?.status === "active" ? {task_id:creativeTask.task_id,revision:creativeTask.revision} : {task_id:"",revision:0}});
+        voiceStage(trace,"chat_enqueued");
+        voiceQueue.current.push({text:voiceText,trace,focus:{...focus.current()},creative:creativeTask?.status === "active" ? {task_id:creativeTask.task_id,revision:creativeTask.revision} : {task_id:"",revision:0}});
         setVoiceRevision(value => value + 1);
       }} onAllow={setAllowed}
       onUpload={() => { if (uploadFiles.length) setNotice("请先完成或关闭当前上传。"); else {creativeUpload.current=null;fileRef.current?.click();} }}

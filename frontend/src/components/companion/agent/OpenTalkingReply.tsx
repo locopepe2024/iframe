@@ -4,8 +4,9 @@ import { useEffect, useRef, useState } from "react";
 import { companionPlayback } from "@/lib/companionPlaybackQueue";
 import styles from "./chat.module.css";
 import { companionApi } from "@/lib/companionApi";
+import {voiceStage,type VoiceTrace} from "@/lib/companionVoiceTrace";
 
-export type SpokenReply = { id: string; text: string };
+export type SpokenReply = { id: string; text: string;trace?:VoiceTrace };
 const base = (process.env.NEXT_PUBLIC_OPENTALKING_URL || "/opentalking-mock/api").replace(/\/$/, "");
 
 type State = "idle" | "opening" | "ready" | "waiting" | "audio" | "blocked" | "error";
@@ -107,7 +108,7 @@ export default function OpenTalkingReply({ reply, voice, connectionEpoch = 0, on
     let audio: AudioContext | null = null, source: MediaStreamAudioSourceNode | null = null;
     let analyser: AnalyserNode | null = null, animation = 0;
     let opening: Promise<void> | null = null;
-    let active: { command: string; done: () => void; fail: (e: Error) => void; playing: () => void } | null = null;
+    let active: { command: string; done: () => void; fail: (e: Error) => void; playing: () => void;trace?:VoiceTrace;firstAudio?:boolean } | null = null;
     let playbackBlocked = false;
     const live = () => !lifetime.signal.aborted;
     resumeAudio.current = () => { void audio?.resume().catch(() => {}); };
@@ -184,7 +185,25 @@ export default function OpenTalkingReply({ reply, voice, connectionEpoch = 0, on
             if (!live() || !analyser) return;
             analyser.getFloatTimeDomainData(samples);
             const rms = Math.sqrt(samples.reduce((sum, sample) => sum + sample * sample, 0) / samples.length);
-            if (active && rms > .003) { audible.current = true; active.playing(); if (!playbackBlocked && video.current && !video.current.paused && !video.current.muted) update("audio"); }
+            if (active && rms > .003) {
+              if(!active.firstAudio){
+                active.firstAudio=true;
+                const trace=active.trace,command_id=active.command,session_id=session;
+                voiceStage(trace,"audio_energy",{command_id,session_id});
+                if(trace) void peer?.getStats().then(stats=>{
+                  let rtt_ms:number|undefined,jitter_ms:number|undefined,jitter_buffer_ms:number|undefined;
+                  stats.forEach(stat=>{
+                    if(stat.type==="candidate-pair" && stat.state==="succeeded" && stat.nominated && typeof stat.currentRoundTripTime==="number")rtt_ms=stat.currentRoundTripTime*1000;
+                    if(stat.type==="inbound-rtp" && (stat.kind==="audio" || stat.mediaType==="audio")){
+                      if(typeof stat.jitter==="number")jitter_ms=stat.jitter*1000;
+                      if(stat.jitterBufferEmittedCount>0)jitter_buffer_ms=stat.jitterBufferDelay/stat.jitterBufferEmittedCount*1000;
+                    }
+                  });
+                  voiceStage(trace,"webrtc_stats",{command_id,session_id,rtt_ms,jitter_ms,jitter_buffer_ms});
+                }).catch(()=>{});
+              }
+              audible.current = true; active.playing(); if (!playbackBlocked && video.current && !video.current.paused && !video.current.muted) update("audio");
+            }
             animation = requestAnimationFrame(inspect);
           };
           inspect();
@@ -225,7 +244,9 @@ export default function OpenTalkingReply({ reply, voice, connectionEpoch = 0, on
       update("ready");
     };
     const queueReply = (item: SpokenReply) => {
+      voiceStage(item.trace,"playback_enqueued");
       companionPlayback.enqueue(owner, async (signal, playing) => {
+        voiceStage(item.trace,"playback_dequeued");
         let timeout: ReturnType<typeof setTimeout> | undefined;
         let abort: (() => void) | undefined;
         let ownedCommand = "";
@@ -248,7 +269,7 @@ export default function OpenTalkingReply({ reply, voice, connectionEpoch = 0, on
           ownedCommand = command;
           audible.current = false; update("waiting");
           const complete = new Promise<void>((resolve, reject) => {
-            active = { command, playing, done: resolve, fail: reject };
+            active = { command, playing, trace:item.trace,done: () => {voiceStage(item.trace,"speech_ended",{command_id:command,session_id:session});resolve();}, fail: reject };
             abort = () => {
               if (video.current) video.current.muted = true;
               update("ready");
@@ -262,6 +283,7 @@ export default function OpenTalkingReply({ reply, voice, connectionEpoch = 0, on
           // Claim playback before TTS to avoid capturing the first response syllable.
           playing();
           report("speak_sent");
+          voiceStage(item.trace,"tts_sent",{command_id:command,session_id:session});
           const payload = {
             text: item.text, mode: "replace", render_text: true, command_id: command, ...(voice ? { voice } : {}),
           };
@@ -280,6 +302,7 @@ export default function OpenTalkingReply({ reply, voice, connectionEpoch = 0, on
             sent = await request(`/sessions/${session}/speak`, lifetime.signal, payload);
           }
           if (!["queued", "duplicate"].includes(sent.status)) throw new Error("语音任务未入队，请重试。");
+          voiceStage(item.trace,"tts_accepted",{command_id:command,session_id:session});
           await complete;
           if (!signal.aborted && live()) {
             // Missing analyser samples are not evidence of autoplay denial:
