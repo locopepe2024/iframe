@@ -253,6 +253,7 @@ def main():
     parser.add_argument("--sole-contact", action="store_true", help="Measure weighted sole-region geometry; no contact acceptance")
     parser.add_argument("--support-annotations", type=Path, help="Explicit checksum-bound support interval hypotheses and route offsets")
     parser.add_argument("--support-ik", action="store_true", help="Offline bounded two-bone trial, not contact acceptance")
+    parser.add_argument("--sole-samples-output", type=Path, help="Optional fixed-vertex world trajectories for offline review")
     parser.add_argument("--foot-pivot", choices=("foot", "ankle"), default="foot",
                         help="Diagnostic A/B: transfer source foot rotation at target ankle instead of mid-foot")
     parser.add_argument("--foot-axis-correction", action="store_true",
@@ -267,6 +268,8 @@ def main():
         raise ValueError("support annotations require --sole-contact")
     if args.support_ik and not args.support_annotations:
         raise ValueError('support IK requires explicit annotations')
+    if args.sole_samples_output and not args.sole_contact:
+        raise ValueError('sole trajectories require --sole-contact')
 
     mapping = json.loads(args.mapping.read_text())
     if mapping.get("schema") != "director3d-bone-map.v1" or mapping.get("retargetStatus") != "unmapped":
@@ -353,6 +356,7 @@ def main():
                        for obj, index in regions[item["side"]]):
                 raise ValueError("annotated contact vertex is outside selected sole region")
     reports = []
+    trajectories = []
     if args.preview_dir:
         args.preview_dir.mkdir(parents=True, exist_ok=True)
     for name in actions:
@@ -478,6 +482,10 @@ def main():
         }
         reports.append({"action": name, "frameRange": [start, end], "pelvisTravelM": travel, "footHeightRangeM": foot_heights, "previewFrame": (start + end) // 2 if args.preview_dir else None, "samples": samples})
         if regions:
+            if args.sole_samples_output:
+                trajectories.append({'action': name, 'samples': sole_samples,
+                                     'vertices': {side: [{'mesh': obj.name, 'index': index}
+                                                        for obj, index in points] for side, points in regions.items()}})
             reports[-1]['supportIK'] = ik_samples
             reports[-1]['supportIKIntervals'] = [validate_cycle_samples(
                 [s for s in ik_samples if s['side'] == item['side']
@@ -541,6 +549,13 @@ def main():
     }
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(json.dumps(report, indent=2) + "\n")
+    if args.sole_samples_output:
+        args.sole_samples_output.parent.mkdir(parents=True, exist_ok=True)
+        args.sole_samples_output.write_text(json.dumps({
+            'schema': 'director3d-sole-trajectories.v1', 'sourceSha256': source_hash,
+            'targetSha256': target_hash, 'stage': 'post_ik' if args.support_ik else 'retarget_only',
+            'evaluationFPS': bpy.context.scene.render.fps / bpy.context.scene.render.fps_base,
+            'actions': trajectories})+'\n')
     print(json.dumps({"status": report["status"], "actions": len(reports), "mappedBones": len(pairs)}))
 
 

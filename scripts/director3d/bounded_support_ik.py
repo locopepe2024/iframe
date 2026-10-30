@@ -55,13 +55,13 @@ def solve_leg(hip, knee, ankle, offset, weight):
 
 def validate_cycle_samples(samples, fps):
     """Check IK diagnostics for interval continuity; never labels contact passed."""
-    if not samples or isinstance(fps, bool) or not math.isfinite(fps) or fps <= 0:
+    if not samples or isinstance(fps, bool) or not isinstance(fps, (int, float)) or not math.isfinite(fps) or fps <= 0:
         raise ValueError('invalid cycle samples or FPS')
     frames = [item.get('frame') for item in samples]
     if any(type(frame) is not int for frame in frames) or frames != list(range(frames[0], frames[-1]+1)):
         raise ValueError('cycle samples must be consecutive')
     weights = [item.get('weight') for item in samples]
-    if any(not isinstance(weight, (int, float)) or not math.isfinite(weight) or not 0 <= weight <= 1 for weight in weights):
+    if any(isinstance(weight, bool) or not isinstance(weight, (int, float)) or not math.isfinite(weight) or not 0 <= weight <= 1 for weight in weights):
         raise ValueError('invalid cycle weight')
     if weights[0] != 0 or weights[-1] != 0:
         raise ValueError('support interval must release at both endpoints')

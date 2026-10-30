@@ -1,0 +1,381 @@
+{
+  "status": "diagnostic_only",
+  "results": {
+    "alternating": {
+      "rawReportSha256": "76e7975c0e28c731b5a179ae22e1a9e8c32cfb8db112e18be43fce0adb162ce7",
+      "sourceSha256": "0ff075c7ad6855c5c2c37a171592ee8f0d6ab2f58259e2be77a9b63dd8027765",
+      "targetSha256": "95eeb19c8abce2325479804b3dda429ebddfa6e8d07a2688541cc990fb676855",
+      "supportAnnotationSha256": "309ed60f1fae6bf67aa2a52b33c824d2f520276919dba1ffa43b106cf280b3e5",
+      "blenderVersion": "4.5.9 LTS",
+      "frameRange": [
+        0,
+        32
+      ],
+      "intervals": [
+        {
+          "status": "diagnostic_only",
+          "frameRange": [
+            0,
+            8
+          ],
+          "evaluationFPS": 24.0,
+          "maxWeightStep": 0.5,
+          "entryWeight": 0.0,
+          "exitWeight": 0.0,
+          "maxJointResidualM": 2.334779443739712e-07,
+          "endpointSoleResidualM": [
+            0.0008802392954114964,
+            0.01018098177799141
+          ],
+          "supportAccepted": false
+        },
+        {
+          "status": "diagnostic_only",
+          "frameRange": [
+            16,
+            24
+          ],
+          "evaluationFPS": 24.0,
+          "maxWeightStep": 0.5,
+          "entryWeight": 0.0,
+          "exitWeight": 0.0,
+          "maxJointResidualM": 1.6743097494724565e-07,
+          "endpointSoleResidualM": [
+            0.0005557339200251716,
+            0.00964442532870553
+          ],
+          "supportAccepted": false
+        }
+      ],
+      "annotations": [
+        {
+          "action": "Walk_Loop",
+          "side": "l",
+          "startFrame": 0,
+          "endFrame": 8,
+          "mesh": "white-model-neutral-female-03",
+          "vertexIndex": 5535,
+          "provenance": "design_hypothesis",
+          "evidence": "Numerical trial only: fixed vertex selected for bounded height; per-interval XY route fitted to original trajectory, no continuous full-world route or authored support claim.",
+          "routeTranslationsM": [
+            [
+              0.0,
+              0.0,
+              0
+            ],
+            [
+              0.0006576478481292725,
+              -0.05869057774543762,
+              0
+            ],
+            [
+              0.0010929703712463379,
+              -0.11636391282081604,
+              0
+            ],
+            [
+              0.0013598054647445679,
+              -0.17158624529838562,
+              0
+            ],
+            [
+              0.0015009939670562744,
+              -0.2218828722834587,
+              0
+            ],
+            [
+              0.001621633768081665,
+              -0.2675475925207138,
+              0
+            ],
+            [
+              0.0016873478889465332,
+              -0.312263548374176,
+              0
+            ],
+            [
+              0.0017310529947280884,
+              -0.35604027658700943,
+              0
+            ],
+            [
+              0.0017385780811309814,
+              -0.3990391343832016,
+              0
+            ]
+          ]
+        },
+        {
+          "action": "Walk_Loop",
+          "side": "r",
+          "startFrame": 16,
+          "endFrame": 24,
+          "mesh": "white-model-neutral-female-03",
+          "vertexIndex": 6566,
+          "provenance": "design_hypothesis",
+          "evidence": "Numerical trial only: fixed vertex selected for bounded height; per-interval XY route fitted to original trajectory, no continuous full-world route or authored support claim.",
+          "routeTranslationsM": [
+            [
+              0.0,
+              0.0,
+              0
+            ],
+            [
+              -0.0008509010076522827,
+              -0.0638962835073471,
+              0
+            ],
+            [
+              -0.0014937818050384521,
+              -0.12581507861614227,
+              0
+            ],
+            [
+              -0.0019572973251342773,
+              -0.18504659831523895,
+              0
+            ],
+            [
+              -0.0022186189889907837,
+              -0.2391183078289032,
+              0
+            ],
+            [
+              -0.002354830503463745,
+              -0.2883377820253372,
+              0
+            ],
+            [
+              -0.0023697465658187866,
+              -0.3365100473165512,
+              0
+            ],
+            [
+              -0.0023118257522583008,
+              -0.38359035551548004,
+              0
+            ],
+            [
+              -0.0021905899047851562,
+              -0.4296036809682846,
+              0
+            ]
+          ]
+        }
+      ],
+      "maxFullWeightSoleResidualM": 0.0009768977735981977,
+      "soleGeometry": {
+        "l": {
+          "status": "diagnostic_only",
+          "groundZM": 0,
+          "nearGroundBandM": [
+            -0.01,
+            0.02
+          ],
+          "evaluationFPS": 24.0,
+          "vertexCount": 197,
+          "minZM": -0.0076849195174872875,
+          "maxZM": 0.36691853404045105,
+          "penetratingFrames": 0,
+          "nearGroundFrames": 23,
+          "adjacentNearGroundVertexSpeedSamples": 2339,
+          "maxAdjacentNearGroundVertexSpeedMps": 1.4153460883155267,
+          "endpointMaxVertexDisplacementM": 7.068241373080863e-08,
+          "rootRouteCompensation": "none",
+          "supportPhase": "unclassified",
+          "selection": "rest weighted foot vertices, bottom 0.02m band, weight >= 0.5"
+        },
+        "r": {
+          "status": "diagnostic_only",
+          "groundZM": 0,
+          "nearGroundBandM": [
+            -0.01,
+            0.02
+          ],
+          "evaluationFPS": 24.0,
+          "vertexCount": 197,
+          "minZM": -0.008042344823479652,
+          "maxZM": 0.353890597820282,
+          "penetratingFrames": 0,
+          "nearGroundFrames": 22,
+          "adjacentNearGroundVertexSpeedSamples": 2406,
+          "maxAdjacentNearGroundVertexSpeedMps": 1.5425179053448796,
+          "endpointMaxVertexDisplacementM": 0.0,
+          "rootRouteCompensation": "none",
+          "supportPhase": "unclassified",
+          "selection": "rest weighted foot vertices, bottom 0.02m band, weight >= 0.5"
+        }
+      },
+      "outsideIntervalMaxVertexDifferenceM": {
+        "l": 0.0,
+        "r": 0.0
+      }
+    },
+    "simultaneous": {
+      "rawReportSha256": "7b93dae5fb4769258441b18ea667591ffb960e8003b95d5f60d018d95d09e677",
+      "sourceSha256": "0ff075c7ad6855c5c2c37a171592ee8f0d6ab2f58259e2be77a9b63dd8027765",
+      "targetSha256": "95eeb19c8abce2325479804b3dda429ebddfa6e8d07a2688541cc990fb676855",
+      "supportAnnotationSha256": "1dfced8e23b439d3152e04b540785b767a82bee8ef1ed94b969e55f6d2bda2a3",
+      "blenderVersion": "4.5.9 LTS",
+      "frameRange": [
+        0,
+        32
+      ],
+      "intervals": [
+        {
+          "status": "diagnostic_only",
+          "frameRange": [
+            0,
+            4
+          ],
+          "evaluationFPS": 24.0,
+          "maxWeightStep": 0.5,
+          "entryWeight": 0.0,
+          "exitWeight": 0.0,
+          "maxJointResidualM": 2.334779443739712e-07,
+          "endpointSoleResidualM": [
+            0.0008802392954114964,
+            0.008921269227159474
+          ],
+          "supportAccepted": false
+        },
+        {
+          "status": "diagnostic_only",
+          "frameRange": [
+            0,
+            4
+          ],
+          "evaluationFPS": 24.0,
+          "maxWeightStep": 0.5,
+          "entryWeight": 0.0,
+          "exitWeight": 0.0,
+          "maxJointResidualM": 8.429369702178807e-08,
+          "endpointSoleResidualM": [
+            0.007755904353358533,
+            0.027456544793436732
+          ],
+          "supportAccepted": false
+        }
+      ],
+      "annotations": [
+        {
+          "action": "Walk_Loop",
+          "side": "l",
+          "startFrame": 0,
+          "endFrame": 4,
+          "mesh": "white-model-neutral-female-03",
+          "vertexIndex": 5535,
+          "provenance": "design_hypothesis",
+          "evidence": "Numerical trial only: fixed vertex selected for bounded height; per-interval XY route fitted to original trajectory, no continuous full-world route or authored support claim.",
+          "routeTranslationsM": [
+            [
+              0.0,
+              0.0,
+              0
+            ],
+            [
+              0.0006576478481292725,
+              -0.05869057774543762,
+              0
+            ],
+            [
+              0.0010929703712463379,
+              -0.11636391282081604,
+              0
+            ],
+            [
+              0.0013598054647445679,
+              -0.17158624529838562,
+              0
+            ],
+            [
+              0.0015009939670562744,
+              -0.2218828722834587,
+              0
+            ]
+          ]
+        },
+        {
+          "action": "Walk_Loop",
+          "side": "r",
+          "startFrame": 0,
+          "endFrame": 4,
+          "mesh": "white-model-neutral-female-03",
+          "vertexIndex": 7167,
+          "provenance": "design_hypothesis",
+          "evidence": "Independent fitted route, simultaneous solver isolation only; not a common character trajectory.",
+          "routeTranslationsM": [
+            [
+              0.0,
+              0.0,
+              0
+            ],
+            [
+              -0.00033530592918395996,
+              -0.014034569263458252,
+              0
+            ],
+            [
+              -0.0010951980948448181,
+              -0.011805534362792969,
+              0
+            ],
+            [
+              -0.001714654266834259,
+              -0.010251522064208984,
+              0
+            ],
+            [
+              -0.0019811391830444336,
+              -0.008212924003601074,
+              0
+            ]
+          ]
+        }
+      ],
+      "maxFullWeightSoleResidualM": 0.0005323268803043969,
+      "soleGeometry": {
+        "l": {
+          "status": "diagnostic_only",
+          "groundZM": 0,
+          "nearGroundBandM": [
+            -0.01,
+            0.02
+          ],
+          "evaluationFPS": 24.0,
+          "vertexCount": 197,
+          "minZM": -0.006515131331980228,
+          "maxZM": 0.36691853404045105,
+          "penetratingFrames": 0,
+          "nearGroundFrames": 23,
+          "adjacentNearGroundVertexSpeedSamples": 2278,
+          "maxAdjacentNearGroundVertexSpeedMps": 1.4153460883155267,
+          "endpointMaxVertexDisplacementM": 7.068241373080863e-08,
+          "rootRouteCompensation": "none",
+          "supportPhase": "unclassified",
+          "selection": "rest weighted foot vertices, bottom 0.02m band, weight >= 0.5"
+        },
+        "r": {
+          "status": "diagnostic_only",
+          "groundZM": 0,
+          "nearGroundBandM": [
+            -0.01,
+            0.02
+          ],
+          "evaluationFPS": 24.0,
+          "vertexCount": 197,
+          "minZM": -0.004182837437838316,
+          "maxZM": 0.353890597820282,
+          "penetratingFrames": 0,
+          "nearGroundFrames": 22,
+          "adjacentNearGroundVertexSpeedSamples": 2306,
+          "maxAdjacentNearGroundVertexSpeedMps": 1.5468014023607406,
+          "endpointMaxVertexDisplacementM": 9.835489547442295e-08,
+          "rootRouteCompensation": "none",
+          "supportPhase": "unclassified",
+          "selection": "rest weighted foot vertices, bottom 0.02m band, weight >= 0.5"
+        }
+      }
+    }
+  }
+}

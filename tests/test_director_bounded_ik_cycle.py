@@ -26,9 +26,19 @@ def test_cycle_gate_reports_release_without_accepting_contact():
     [sample(0, 1), sample(1, 0)],
 ])
 def test_cycle_gate_rejects_invalid_or_non_releasing_samples(bad):
-    if bad[0]['weight'] == 1:
-        with pytest.raises(ValueError):
-            validate_cycle_samples(bad, 24)
-    else:
-        with pytest.raises(ValueError):
-            validate_cycle_samples(bad, 24)
+    with pytest.raises(ValueError):
+        validate_cycle_samples(bad, 24)
+
+
+@pytest.mark.parametrize('key,value', [('ankleResidualM', float('nan')),
+    ('kneeResidualM', -0.01), ('soleAnchorResidualM', True), ('weight', True)])
+def test_invalid_residual_or_boolean_weight(key, value):
+    items = [sample(0, 0), sample(1, 0)]
+    items[0][key] = value
+    with pytest.raises(ValueError):
+        validate_cycle_samples(items, 24)
+
+
+def test_both_endpoint_residuals_reported_without_claiming_seam():
+    result = validate_cycle_samples([sample(0, 0, 0.01), sample(1, 0, 0.02)], 24)
+    assert result['endpointSoleResidualM'] == [0.01, 0.02]
