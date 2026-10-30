@@ -152,7 +152,9 @@ export default function OpenTalkingReply({ reply, voice, connectionEpoch = 0, on
       peer.addEventListener("icecandidateerror", event => {
         const detail = event as RTCPeerConnectionIceErrorEvent;
         iceDiagnostics.candidateErrors.push({ code: detail.errorCode, text: detail.errorText || "" });
-        report("ice_error", {code:detail.errorCode,candidates:iceDiagnostics.candidates});
+        const endpoint = detail.url?.startsWith("stun:") ? "stun" : detail.url?.includes("transport=tcp") ? "turn_tcp" : "turn_udp";
+        const reason = /lookup|resolv/i.test(detail.errorText) ? "lookup" : /timed? ?out|unreach/i.test(detail.errorText) ? "unreachable" : /allocat/i.test(detail.errorText) ? "allocate" : "other";
+        report("ice_error", {state:`${endpoint}_${reason}`,code:detail.errorCode,candidates:iceDiagnostics.candidates});
         recordGatheringState();
       });
       const stream = new MediaStream();
