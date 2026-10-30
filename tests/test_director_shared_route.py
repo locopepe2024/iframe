@@ -38,3 +38,30 @@ def test_non_overlapping_intervals_do_not_conflict():
 def test_invalid_route(bad):
     with pytest.raises(ValueError):
         validate_shared_routes(bad)
+
+
+def test_caller_gates_keep_actions_with_same_frames_independent():
+    from shared_route_metrics import validate_route_continuity
+    intervals = [dict(interval('l', 0, [[0, 0, 0]] * 2), action='Walk'),
+                 dict(interval('r', 0, [[10, 0, 0]] * 2), action='Run')]
+    # Same sequence as the retarget probe's pre-IK gates.
+    shared = validate_shared_routes(intervals)
+    continuous = validate_route_continuity(intervals, 24)
+    assert shared['shared'] is True
+    assert continuous['continuous'] is True
+    assert shared['coveredFramesByAction'] == {'Walk': [0, 1], 'Run': [0, 1]}
+
+
+def test_same_action_conflict_is_still_rejected_and_identified():
+    intervals = [dict(interval('l', 0, [[0, 0, 0]] * 2), action='Walk'),
+                 dict(interval('r', 0, [[10, 0, 0]] * 2), action='Walk'),
+                 dict(interval('r', 0, [[0, 0, 0]] * 2), action='Run')]
+    result = validate_shared_routes(intervals)
+    assert result['shared'] is False
+    assert {c['action'] for c in result['conflicts']} == {'Walk'}
+
+
+@pytest.mark.parametrize('action', [True, 1, [], {}])
+def test_invalid_shared_route_action(action):
+    with pytest.raises(ValueError):
+        validate_shared_routes([dict(interval('l', 0, [[0, 0, 0]] * 2), action=action)])

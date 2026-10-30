@@ -16,3 +16,9 @@ The scope is only the first through last annotated frame per action. A passing
 result does not cover action endpoints outside that span, loop closure,
 acceleration, heading, authored intent, terrain or no sliding. The gate runs
 before opt-in support IK. Production playback and catalog status are unchanged.
+
+The shared-route pre-IK gate also keys samples by (action, frame), so separate
+actions with identical frame numbers cannot conflict. Conflicts carry their
+action identity; coveredFramesByAction retains separate coverage. Legacy samples
+without action share one unnamed timeline. coveredFrames remains the union for
+compatibility and must not be interpreted as continuous cross-action coverage.

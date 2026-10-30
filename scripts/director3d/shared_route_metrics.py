@@ -12,6 +12,9 @@ def validate_shared_routes(intervals, tolerance_m=1e-4):
     for item in intervals:
         if not isinstance(item, dict) or item.get('side') not in ('l', 'r'):
             raise ValueError('invalid route interval')
+        action = item.get('action')
+        if action is not None and not isinstance(action, str):
+            raise ValueError('invalid route action')
         start, end = item.get('startFrame'), item.get('endFrame')
         route = item.get('routeTranslationsM')
         if type(start) is not int or type(end) is not int or start >= end or not isinstance(route, list) or len(route) != end-start+1:
@@ -20,19 +23,22 @@ def validate_shared_routes(intervals, tolerance_m=1e-4):
             if (not isinstance(point, (list, tuple)) or len(point) != 3
                     or any(isinstance(v, bool) or not isinstance(v, (int, float)) or not math.isfinite(v) for v in point)):
                 raise ValueError('invalid route point')
-            routes.setdefault(frame, []).append((item['side'], point))
+            routes.setdefault((action, frame), []).append((item['side'], point))
     conflicts = []
-    for frame, points in routes.items():
+    covered_by_action = {}
+    for (action, frame), points in routes.items():
+        covered_by_action.setdefault(action, []).append(frame)
         if len(points) < 2:
             continue
         reference = points[0][1]
         for side, point in points[1:]:
             delta = math.sqrt(sum((a-b)**2 for a, b in zip(reference, point)))
             if delta > tolerance_m:
-                conflicts.append({'frame': frame, 'referenceSide': points[0][0], 'side': side,
+                conflicts.append({'action': action, 'frame': frame, 'referenceSide': points[0][0], 'side': side,
                                   'deltaM': delta})
     return {'status': 'diagnostic_only', 'shared': not conflicts,
-            'toleranceM': tolerance_m, 'coveredFrames': sorted(routes),
+            'toleranceM': tolerance_m, 'coveredFrames': sorted({frame for _, frame in routes}),
+            'coveredFramesByAction': {action: sorted(frames) for action, frames in covered_by_action.items()},
             'conflicts': conflicts}
 
 
