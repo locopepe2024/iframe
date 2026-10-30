@@ -136,6 +136,20 @@ export default function AgentChat() {
     // Use the current render's session and settings after each completed operation.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [voiceRevision, busy, hasRetry, uploading, preview, turn, allowed]);
+  useEffect(() => {
+    const pauseForPhoto = () => {
+      speechEpoch.current++;
+      voiceQueue.current = [];
+      setVoiceChat(false);
+      companionPlayback.cancel();
+      setVoiceControl(old => ({ id: (old?.id ?? 0) + 1, action: "stop" }));
+      sendOperation.current = null;
+      setHasRetry(false);
+      setError("");
+    };
+    window.addEventListener("companion-photo-view-open", pauseForPhoto);
+    return () => window.removeEventListener("companion-photo-view-open", pauseForPhoto);
+  }, []);
   useEffect(() => { void detectCompanionRuntimeCapability().then(setRuntimeCapability); }, []);
   async function history(id: string, cursor?: number) {
     const result = await companionApi.messages(id, cursor);
@@ -189,7 +203,8 @@ export default function AgentChat() {
     const requestedDay = editing ? undefined : diaryDay(requestedText, "", today());
     const submittedText = requestedDay ? diaryPrompt(requestedDay) : requestedText;
     const resolvedSelectedPhotoId = selectedPhotoArg || (/^(使用|用)(这张|该)照片/.test(requestedText.trim()) ? selectedPhotoRef.current : null);
-    if (!sendOperation.current || !retry) sendOperation.current = { operation_id: crypto.randomUUID(), text: submittedText, allow_external_text: true, ...(resolvedSelectedPhotoId ? {selected_photo_id: resolvedSelectedPhotoId} : {}), ...(capturedCreative ? {creative_context:capturedCreative} : creativeTask?.status === "active" ? {creative_context:{task_id:creativeTask.task_id,revision:creativeTask.revision}} : {}) };
+    const activeCreative = !editing ? (capturedCreative ?? (creativeTask?.status === "active" ? {task_id:creativeTask.task_id,revision:creativeTask.revision} : undefined)) : undefined;
+    if (!sendOperation.current || !retry) sendOperation.current = { operation_id: crypto.randomUUID(), text: submittedText, allow_external_text: true, ...(resolvedSelectedPhotoId ? {selected_photo_id: resolvedSelectedPhotoId} : {}), ...(activeCreative ? {creative_context:activeCreative} : {}) };
     if (!sendFocus.current || sendFocus.current.operation !== sendOperation.current.operation_id)
       sendFocus.current = {operation:sendOperation.current.operation_id,focus:{...turnFocus},ready:false};
     if (!retry) setLastSubmittedText(submittedText);
@@ -445,7 +460,7 @@ export default function AgentChat() {
       <button type="button" onClick={() => {setDiaryMonth(turn.result?.kind === "diary_read" ? turn.result.month : undefined);setFeature("diary");}}>打开日记月历</button>
     </section>}
     {turn?.result?.kind === "upload_guide" && !messages.some(m => m.turn?.turn_id === turn.turn_id) && !dismissedUploadGuides.includes(turn.turn_id) && <UploadGuideCard {...uploadGuideActions(turn.turn_id)} />}
-    {uploadFiles.length > 0 && <MediaUpload files={uploadFiles} disabled={inputDisabled || pending} onUploaded={item=>{
+    {uploadFiles.length > 0 && <MediaUpload files={uploadFiles} disabled={busy || uploading || pending} onUploaded={item=>{
       const target=creativeUpload.current;
       if (!target) {attach(item);return;}
       if (item.kind !== "photo" || !target.card_id || target.task_id !== creativeTask?.task_id || target.revision !== creativeTask.revision || creativeTask.status!=="active") {setNotice("素材已保存到相册，当前创作已变化，请重新选择要用的照片。");return;}

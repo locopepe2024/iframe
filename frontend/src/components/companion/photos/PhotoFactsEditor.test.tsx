@@ -81,3 +81,15 @@ it('keeps secondary fields collapsed and uses one explicit save',async()=>{
  fireEvent.click(screen.getByRole('button',{name:'重试原保存'}));
  await waitFor(()=>expect(done).toHaveBeenCalledOnce());
 });
+
+it('releases the form after an invalid date so it can be corrected',async()=>{
+ api.saveAnnotations.mockRejectedValueOnce(new Error('资料格式不正确，请核对日期或选择静态 JPEG、PNG、WebP 照片。'));
+ render(<PhotoFactsEditor photoId="p"/>);
+ const date=await screen.findByLabelText('拍摄时间');
+ fireEvent.change(date,{target:{value:'2026-02-30'}});
+ fireEvent.click(screen.getByRole('button',{name:'保存照片资料'}));
+ await screen.findByRole('alert');
+ expect(date).toBeEnabled();
+ fireEvent.change(date,{target:{value:'2026-02-28'}});
+ expect(date).toHaveValue('2026-02-28');
+});

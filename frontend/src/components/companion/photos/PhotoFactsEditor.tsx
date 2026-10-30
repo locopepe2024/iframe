@@ -34,7 +34,13 @@ export default function PhotoFactsEditor({photoId, analysis, initialPatch, expec
     lock.current=true;setBusy(true);setError("");
     pending.current ??= {operation_id:crypto.randomUUID(),expected_revision:record.revision,facts};
     try{const value=await photoApi.saveAnnotations(photoId,pending.current);setRecord(value);setFacts(value.facts);pending.current=null;setNotice("照片资料已保存。");onSaved?.();}
-    catch(failure){setError(failure instanceof Error ? failure.message : "保存未确认，请重试原操作。");}
+    catch(failure){
+      const message = failure instanceof Error ? failure.message : "保存未确认，请重试原操作。";
+      if (/资料格式不正确|核对日期/.test(message)) {
+        pending.current = null;
+        setError(message + " 日期请填写 YYYY、YYYY-MM 或 YYYY-MM-DD。");
+      } else setError(message);
+    }
     finally{lock.current=false;setBusy(false);}
   }
   if(!facts)return <section aria-label="照片资料">{error ? <p role="alert">{error}</p> : <p role="status">正在读取照片资料…</p>}</section>;

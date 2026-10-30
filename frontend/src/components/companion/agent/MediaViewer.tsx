@@ -18,8 +18,13 @@ export default function MediaViewer({items, initialIndex = 0, disabled = false, 
   const [error, setError] = useState(false), [attempt, setAttempt] = useState(0), [zoom, setZoom] = useState(1), [info, setInfo] = useState(false);
   const dialog = useRef<HTMLDialogElement>(null);
   const item = items[index];
-  useInteractionFocus(item?.kind === "photo" ? {kind:"photo",object_id:item.id,phase:"viewing",draft:""} : null);
+  useInteractionFocus(item?.kind === "photo" ? {kind:"photo",object_id:item.id,phase:info ? "editing" : "viewing",draft:""} : null);
   useEffect(() => { const node = dialog.current; node?.showModal(); return () => {node?.close();}; }, []);
+  useEffect(() => {
+    if (item?.kind !== "photo") return;
+    window.dispatchEvent(new CustomEvent("companion-photo-view-open", { detail: { photoId: item.id } }));
+    return () => { window.dispatchEvent(new CustomEvent("companion-photo-view-close", { detail: { photoId: item.id } })); };
+  }, [item?.id, item?.kind]);
   useEffect(() => {
     if (!item) return;
     let active = true, objectUrl = "";

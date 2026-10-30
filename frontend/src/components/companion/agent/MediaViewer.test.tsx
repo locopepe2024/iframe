@@ -53,3 +53,11 @@ it('publishes the visible photo as voice focus and restores chat when closed',as
  expect(focus.current()).toMatchObject({kind:'photo',object_id:'two'});
  view.unmount();expect(focus.current().kind).toBe('chat');
 });
+
+it('announces photo focus so the chat microphone can pause while viewing',async()=>{
+ const opened=vi.fn();window.addEventListener('companion-photo-view-open',opened);
+ const view=render(<MediaViewer items={items} onClose={()=>{}}/>);
+ await screen.findByAltText('第一张');
+ expect(opened).toHaveBeenCalledWith(expect.objectContaining({detail:{photoId:'one'}}));
+ view.unmount();window.removeEventListener('companion-photo-view-open',opened);
+});
