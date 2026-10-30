@@ -5,6 +5,8 @@ import re
 import secrets
 import uuid
 from contextlib import contextmanager
+from datetime import datetime
+from zoneinfo import ZoneInfo
 
 from .store import CompanionStore, Missing, Conflict, encode
 from .tools import dispatch, MODELS
@@ -94,6 +96,7 @@ class ChatStore(MediaDrafts, PhotoTasks, DiaryStore, CompanionStore):
             db.execute("UPDATE companion_turns SET status='running',token=?,lease_until=?,result=NULL WHERE owner=? AND id=?",(token,self.clock()+120,owner,identity))
             rows=db.execute('SELECT id,text FROM companion_messages WHERE owner=? AND session_id=? AND sequence<=? ORDER BY sequence DESC LIMIT 20',(owner,session,message['sequence'])).fetchall()
             messages = [dict(r) for r in reversed(rows)]
+            messages[-1]['current_date'] = datetime.fromtimestamp(self.clock(), ZoneInfo('Asia/Hong_Kong')).date().isoformat()
             from .conversation_context import attach_replies, attach_last_operation
             attach_replies(db, owner, actor, session, messages)
             attach_last_operation(db, owner, actor, session, messages, identity)

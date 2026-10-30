@@ -392,10 +392,13 @@ def albums(identity: Owner, store: Store, view: Literal["all", "pending"] = "all
             limit: int = Query(default=50, ge=1, le=100),
             query: str = Query(default="", max_length=100),
             date_prefix: str = Query(default="", max_length=10),
+            date_from: str = Query(default="", max_length=10),
+            date_to: str = Query(default="", max_length=10),
             order: Literal["id", "recent"] = "id"):
     with api_errors():
         return store.album_page(identity.owner_profile_id, view=view, year=year,
-                                after_id=after_id, limit=limit, query=query, date_prefix=date_prefix, order=order)
+                                after_id=after_id, limit=limit, query=query, date_prefix=date_prefix, order=order,
+                                date_from=date_from, date_to=date_to)
 
 
 @router.post("/uploads/{upload_id}", status_code=201)

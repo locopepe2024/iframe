@@ -8,6 +8,22 @@ from src.apps.identity import UserContext, require_user_context
 from src.apps.photos.analysis import PhotoAnalysis, Observation
 
 
+def test_album_inclusive_date_range_and_invalid_ranges(setup):
+    client, _, _, path = setup
+    record = client.get(path + '/annotations').json()
+    body = dict(operation_id='range-facts', expected_revision=0,
+                facts={**record['facts'], 'capture_time':'2026-10-20'})
+    assert client.post(path + '/annotations', json=body).status_code == 200
+    params = dict(date_from='2026-10-20', date_to='2026-10-30')
+    assert len(client.get('/photos/albums', params=params).json()['photos']) == 1
+    assert client.get('/photos/albums', params={**params,'date_from':'2026-10-21'}).json()['photos'] == []
+    assert len(client.get('/photos/albums', params={**params,'date_to':'2026-10-20'}).json()['photos']) == 1
+    for invalid in ({'date_from':'2026-10-31','date_to':'2026-10-20'},
+                    {'date_from':'2026-02-30'}, {'date_to':'2026-10'},
+                    {**params,'date_prefix':'2026-10-29'}):
+        assert client.get('/photos/albums', params=invalid).status_code == 422
+
+
 def test_search_latest_sources_literal_text_owner_and_pagination(setup):
     client, store, app, path = setup
     pid = path.split('/')[-1]

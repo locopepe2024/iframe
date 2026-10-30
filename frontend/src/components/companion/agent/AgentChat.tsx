@@ -83,7 +83,7 @@ export default function AgentChat() {
   const [draft, setDraft] = useState<string | null>(null);
   const [hasRetry, setHasRetry] = useState(false);
   const [albumOpen,setAlbumOpen] = useState(false);
-  const [albumRequest,setAlbumRequest] = useState<{id:string;date:string;query:string;order:"id"|"recent"} | null>(null);
+  const [albumRequest,setAlbumRequest] = useState<{id:string;date:string;from:string;to:string;query:string;order:"id"|"recent"} | null>(null);
   const [diaryMonth, setDiaryMonth] = useState<string | undefined>();
   const [diarySelection, setDiarySelection] = useState<{day:string;request:string} | undefined>();
   const [feature,setFeature] = useState<CompanionFeature | null>(null);
@@ -225,7 +225,7 @@ export default function AgentChat() {
         setFeature(null);
         if (result.result.name === "photo.album.list") {
           const args = result.result.arguments;
-          setAlbumRequest({id:result.turn_id,date:String(args.date_prefix || args.year || ""),query:String(args.query || ""),order:args.order === "recent" ? "recent" : "id"});
+          setAlbumRequest({id:result.turn_id,date:String(args.date_prefix || args.year || ""),from:String(args.date_from || ""),to:String(args.date_to || ""),query:String(args.query || ""),order:args.order === "recent" ? "recent" : "id"});
           setAlbumOpen(true);
         }
       }
@@ -447,7 +447,7 @@ export default function AgentChat() {
       if (item.kind !== "photo" || !target.card_id || target.task_id !== creativeTask?.task_id || target.revision !== creativeTask.revision || creativeTask.status!=="active") {setNotice("素材已保存到相册，当前创作已变化，请重新选择要用的照片。");return;}
       void run(async()=>{const result=await companionApi.mediaEvent(session,{operation_id:crypto.randomUUID(),event_type:"photo_uploaded",task_id:target.task_id,card_id:target.card_id,photo_id:item.id,slot:"source",expected_revision:target.revision});setCreativeTask(result.task);});
     }} onBusyChange={setUploading} onClose={() => {setUploadFiles([]);creativeUpload.current=null;}} />}
-    {albumOpen && <AlbumPicker key={`album-${albumRequest?.id || "manual"}`} initialDate={albumRequest?.date} initialQuery={albumRequest?.query} order={albumRequest?.order} disabled={inputDisabled || pending} onClose={() => setAlbumOpen(false)} onPhoto={photo => {
+    {albumOpen && <AlbumPicker key={`album-${albumRequest?.id || "manual"}`} initialDate={albumRequest?.date} initialFrom={albumRequest?.from} initialTo={albumRequest?.to} initialQuery={albumRequest?.query} order={albumRequest?.order} disabled={inputDisabled || pending} onClose={() => setAlbumOpen(false)} onPhoto={photo => {
       attach({kind:"photo",id:photo.photo_id,name:"相册照片"}); selectedPhotoRef.current = photo.photo_id; setSelectedPhotoId(photo.photo_id); setNotice("已选中这张照片。您可以说“使用这张照片”，或继续查看。"); setAlbumOpen(false);
     }} onVideo={video => {attach({kind:"video",id:video.video_id,name:video.name});setAlbumOpen(false);}} />}
     {feature === "diary" ? <DiaryCalendar initialMonth={diaryMonth} selection={diarySelection} onClose={()=>{setDiarySelection(undefined);setFeature(null);}} onCreate={day=>{setFeature(null);startDiaryPrompt(day);}}/> : feature && <CompanionFeatureSheet feature={feature} onClose={() => setFeature(null)} />}

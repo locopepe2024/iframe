@@ -100,6 +100,8 @@ class ListPhotos(Strict):
     year: int | None = Field(default=None, ge=1800, le=2200)
     query: str = Field(default='', max_length=100)
     date_prefix: str = Field(default='', max_length=10)
+    date_from: str = Field(default='', max_length=10, description='范围开始日期 YYYY-MM-DD，含当天')
+    date_to: str = Field(default='', max_length=10, description='范围结束日期 YYYY-MM-DD，含当天；范围查询不填date_prefix')
     order: Literal['id', 'recent'] = 'id'
     after_id: str = Field(default='', max_length=120)
     limit: int = Field(default=6, ge=1, le=12)
@@ -147,7 +149,7 @@ DESCRIPTIONS = {
 
     'photo.organize.input': '继续当前会话的相册任务。依据 workflow_tasks 的 task_id、revision 和按顺序排列的候选照片ID选择照片，或明确结束、取消。仅在用户明确要求时操作；有歧义先问清楚。',
     'photo.organize.start': '先询问时间或人物范围；泛泛要求整理相册时不要无条件查询。明确范围后发起可恢复的相册整理工作流，先查询照片并等待用户选择。date_prefix 可用 YYYY、YYYY-MM、YYYY-MM-DD；query 使用空格分隔关键词，匹配最新用户资料、讲述及核对描述，每个词均须匹配。不能猜测亲属。没有日期用 pending。不会自动分析或保存修改。',
-    'photo.album.list': '浏览、查找照片使用同一工具。用户明确要求看全部照片时，不必询问时间或人物，以view=all、空query查询，仍按limit分页，不能一次读取全库。浏览不等于整理，不调用photo.organize.start。文字和语音查找照片使用同一工具。将明确年份放 year，年月日放 date_prefix（YYYY、YYYY-MM、YYYY-MM-DD）；人物、地点、场景、光影、故事关键词放 query，以空格分隔且每个词必须匹配。例如找2025年女儿在海边的照片：year=2025, query="女儿 海边"。仅搜索最新用户填写资料、讲述和已核对描述，不搜索未核对的AI观察，不推断姓名或亲属，不把整句指令当关键词。相对日期须依据明确的会话日期，不清楚只问一个问题。pending 表示无归档日期。零结果如实告知，可建议减少条件，不能擅自展示全库或声称照片不存在。保留筛选条件翻页，不编造照片ID。',
+    'photo.album.list': '浏览、查找照片使用同一工具。用户明确要求看全部照片时，不必询问时间或人物，以view=all、空query查询，仍按limit分页，不能一次读取全库。浏览不等于整理，不调用photo.organize.start。文字和语音查找照片使用同一工具。将明确年份放 year，年月日放 date_prefix（YYYY、YYYY-MM、YYYY-MM-DD）；日期范围必须完整保留为date_from/date_to（YYYY-MM-DD，含两端），不填date_prefix，不取中间某一天代替范围；例如10月20日到10月30日用当前会话年份的10-20至10-30，年份不明确先澄清。人物、地点、场景、光影、故事关键词放 query，以空格分隔且每个词必须匹配。例如找2025年女儿在海边的照片：year=2025, query="女儿 海边"。仅搜索最新用户填写资料、讲述和已核对描述，不搜索未核对的AI观察，不推断姓名或亲属，不把整句指令当关键词。相对日期须依据明确的会话日期，不清楚只问一个问题。pending 表示无归档日期。零结果如实告知，可建议减少条件，不能擅自展示全库或声称照片不存在。保留筛选条件翻页，不编造照片ID。',
     'photo.item.read': '用查询结果中的 photo_id 查看照片已有信息并展示整理卡片。不会调用看图模型或修改照片；用户可在卡片里继续讲述或确认分析。',
 }
 

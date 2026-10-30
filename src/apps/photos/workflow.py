@@ -147,11 +147,19 @@ class PhotoWorkflowStore(DateStore):
             ).fetchone()[0]
 
     def album_page(self, owner: str, *, view: str, year: int | None,
-                   after_id: str, limit: int, query: str = "", date_prefix: str = "", order: str = "id") -> dict:
+                   after_id: str, limit: int, query: str = "", date_prefix: str = "", order: str = "id",
+                   date_from: str = "", date_to: str = "") -> dict:
         if view not in ("all", "pending") or not 1 <= limit <= 100 or len(query) > 100:
             raise ValueError("Invalid album query")
         if order not in ('id', 'recent'):
             raise ValueError('Invalid album order')
+        for boundary in (date_from, date_to):
+            if boundary:
+                if not re.fullmatch(r'\d{4}-\d{2}-\d{2}', boundary):
+                    raise ValueError('Range boundaries require full dates')
+                datetime.fromisoformat(boundary)
+        if (date_from and date_to and date_from > date_to) or (date_prefix and (date_from or date_to)):
+            raise ValueError('Conflicting album date filters')
         if date_prefix:
             if not re.fullmatch(r'\d{4}(?:-\d{2}(?:-\d{2})?)?', date_prefix):
                 raise ValueError('Invalid album date')
@@ -170,6 +178,16 @@ class PhotoWorkflowStore(DateStore):
         if date_prefix:
             conditions.append("substr(COALESCE(NULLIF(json_extract(a.facts, '$.capture_time'), ''), json_extract(p.annotation, '$.date.value')), 1, ?) = ?")
             params.extend([len(date_prefix), date_prefix])
+        if date_from or date_to:
+            effective = "COALESCE(NULLIF(json_extract(a.facts, '$.capture_time'), ''), json_extract(p.annotation, '$.date.value'))"
+            # Partial year/month dates cannot establish membership in a day range.
+            conditions.append(f"length({effective}) >= 10")
+            if date_from:
+                conditions.append(f"substr({effective}, 1, 10) >= ?")
+                params.append(date_from)
+            if date_to:
+                conditions.append(f"substr({effective}, 1, 10) <= ?")
+                params.append(date_to)
         if view == "pending":
             conditions.append("p.album_year IS NULL AND COALESCE(json_extract(a.facts, '$.capture_time'), '') = ''")
         if year is not None:
