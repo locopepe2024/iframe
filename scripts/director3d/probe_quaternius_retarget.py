@@ -360,7 +360,7 @@ def main():
         if args.support_ik and len({item['side'] for item in support_intervals}) > 1 and not shared_route['shared']:
             raise ValueError('support IK requires one shared world route on overlapping intervals')
         if args.support_ik and not route_continuity['continuous']:
-            raise ValueError('support IK requires continuous, bounded-speed route segments')
+            raise ValueError('support IK requires continuous, bounded-speed routes across annotated spans')
         for item in support_intervals:
             if not any(obj.name == item["mesh"] and index == item["vertexIndex"]
                        for obj, index in regions[item["side"]]):

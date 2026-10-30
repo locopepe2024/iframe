@@ -1,13 +1,18 @@
 # Support route continuity validation
 
-Shared route equality prevents contradictory simultaneous foot routes. This
-second gate measures each annotated route segment's world speed at evaluation
-FPS and refuses to claim continuity when a segment exceeds a declared speed
-limit (default 4 m/s). Adjacent same-side intervals with missing bridge frames
-are reported as gaps and are not treated as continuous.
+The diagnostic validates finite XYZ samples, groups intervals by action, and
+compares every consecutive covered frame in their union, regardless of foot.
+Adjacent interval endpoints are measured at evaluation FPS; a missing frame
+blocks continuity, without interpolating or judging endpoint average speed.
+Overlapping conflicting proposals also block continuity. The declared speed
+limit defaults to 4 m/s and is a review constraint, not a gait classifier.
 
-The check is diagnostic only. A speed limit is a review constraint, not a
-walking-speed classifier; a passing segment does not prove authored intent,
-heading, terrain or no sliding. The gate runs before opt-in dual-foot IK, while
-single-foot measurements remain available for debugging. Production playback
-and catalog status are unchanged.
+Success criteria: cross-foot jumps fail, unobserved internal frames fail,
+consistent overlap can bridge intervals, and separate actions do not share a
+timeline. Validate with the route tests and media Blender 4.5.9 fixture checks.
+Affected paths: shared_route_metrics.py, the offline retarget probe, route tests.
+
+The scope is only the first through last annotated frame per action. A passing
+result does not cover action endpoints outside that span, loop closure,
+acceleration, heading, authored intent, terrain or no sliding. The gate runs
+before opt-in support IK. Production playback and catalog status are unchanged.
