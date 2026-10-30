@@ -196,7 +196,7 @@ class ChatStore(MediaDrafts, PhotoTasks, DiaryStore, CompanionStore):
                               spoken_text={'analyze':'要帮您分析这张照片吗？确认后会把缩略图交给看图模型。',
                                            'edit':'已整理您的修改，请核对后保存。', 'delete':'要删除这张照片吗？请先确认。'}[values['action']])
             elif proposal['kind']=='text' and not (diary_request and re.search(r'实际记忆查询结果|没有匹配的记忆|memory[._]search', proposal.get('text',''), re.I)):
-                result=dict(kind='text',text=proposal['text'])
+                result=dict(kind='text', text=proposal['text'], **({'reason': proposal['reason']} if proposal.get('reason') else {}))
             elif diary_request:
                 # A diary request is a writing task. Never expose an accidental
                 # memory read as the result; ask for the missing facts instead.

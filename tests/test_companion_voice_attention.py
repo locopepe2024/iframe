@@ -4,6 +4,7 @@ import pytest
 
 from src.apps.companion_runtime.voice_attention import attention_reply, silence_reply
 from src.apps.companion_runtime.emotion import analyze
+from src.apps.companion_runtime.response_gate import emotional_reply
 from tests.test_companion_chat import chat
 
 
@@ -44,6 +45,26 @@ def test_emotion_signal_is_structured_and_conservative(text, expected):
 def test_unknown_emotion_does_not_claim_a_feeling():
     assert analyze('今天下午有风') == dict(
         valence='neutral', arousal='unknown', need='none', confidence=0.25, evidence=[])
+
+
+def test_emotional_sharing_gets_one_short_acknowledgement():
+    signal = analyze('我有点难过')
+    assert emotional_reply('我有点难过', signal) == dict(
+        kind='text', text='听起来这让您有些难过，我在听。', reason='emotion')
+
+
+@pytest.mark.parametrize('text', ['我很着急，帮我重试', '我很难过，请打开日记'])
+def test_emotion_does_not_steal_an_explicit_request(text):
+    assert emotional_reply(text, analyze(text)) is None
+
+
+def test_emotional_acknowledgement_does_not_call_model(chat):
+    _, _, client, session, model = chat
+    result = client.post(f'/companion-runtime/sessions/{session}/chat', json=dict(
+        operation_id='emotion', text='我有点难过', allow_external_text=True))
+    assert result.status_code == 200, result.text
+    assert result.json()['result']['reason'] == 'emotion'
+    model.assert_not_called()
 
 
 def test_silent_turn_does_not_call_model(chat, monkeypatch):

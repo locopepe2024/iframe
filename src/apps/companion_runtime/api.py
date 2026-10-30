@@ -21,6 +21,7 @@ from .opentalking_binding import BindingUnavailable, SessionBindings
 from .opentalking_context import ContextUnavailable, IframeContextReader
 from .coordinator import decide
 from .voice_attention import attention_reply, silence_reply
+from .response_gate import emotional_reply
 from .interaction_focus import FocusUpdate, read_focus, update_focus, active_editor
 from .media_draft_bridge import selection_event_from_draft, apply_selection
 from .latency import timed, trace_chat
@@ -412,6 +413,9 @@ def chat(session_id: str, body: ChatRequest, identity: Owner, store: Store):
             silence = silence_reply(body.text) if not editing and not body.selected_photo_id else None
             if silence is not None:
                 return store.finish_turn(identity.owner_profile_id, identity.user_id, claim, silence)
+            emotion = emotional_reply(body.text, claim['messages'][-1].get('emotion_signal')) if not editing and not body.selected_photo_id else None
+            if emotion is not None:
+                return store.finish_turn(identity.owner_profile_id, identity.user_id, claim, emotion)
             if not editing and not body.selected_photo_id and intent.name not in ('album.scope', 'album.browse'):
                 decision = decide(body.text, store.workflow_context(identity.owner_profile_id, identity.user_id, session_id))
                 if decision:
