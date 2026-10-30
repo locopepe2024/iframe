@@ -15,6 +15,8 @@ from sole_contact_metrics import summarize_sole
 from support_contact_metrics import measure_interval, validate_annotations
 from bounded_support_ik import blend_weight, solve_leg, validate_cycle_samples
 from shared_route_metrics import validate_route_continuity, validate_shared_routes
+from world_route import validate_world_route
+from blender_world_route import capture_route_roots, apply_route_offset
 
 
 def apply_support_ik(target, regions, item, frame, anchor):
@@ -253,6 +255,7 @@ def main():
     parser.add_argument("--preview-dir", type=Path)
     parser.add_argument("--sole-contact", action="store_true", help="Measure weighted sole-region geometry; no contact acceptance")
     parser.add_argument("--support-annotations", type=Path, help="Explicit checksum-bound support interval hypotheses and route offsets")
+    parser.add_argument("--world-route", type=Path, help="Complete checksum/FPS-bound world translations; offline playback only")
     parser.add_argument("--support-ik", action="store_true", help="Offline bounded two-bone trial, not contact acceptance")
     parser.add_argument("--sole-samples-output", type=Path, help="Optional fixed-vertex world trajectories for offline review")
     parser.add_argument("--foot-pivot", choices=("foot", "ankle"), default="foot",
@@ -290,6 +293,7 @@ def main():
     else:
         source = import_armature(args.source)
         target = load_target(args.target)
+    route_roots = capture_route_roots(target) if args.world_route else []
     pairs = [dict(item) for item in mapping["pairs"]]
     if args.foot_pivot == "ankle":
         for side, source_side in (("l", "L"), ("r", "R")):
@@ -342,16 +346,23 @@ def main():
                                        sourceRestHipRootM=source_height, targetRestHipRootM=target_height,
                                        maxPositionResidualM=0.0, maxBasisChange=0.0)
     actions = list(dict.fromkeys(args.actions))
+    action_ranges = {}
+    for name in actions:
+        action = bpy.data.actions.get(name)
+        if not action:
+            raise ValueError(f"missing action: {name}")
+        action_ranges[name] = tuple(round(v) for v in action.frame_range)
+    full_route = None
+    route_by_action = {}
+    world_route_payload = json.loads(args.world_route.read_text()) if args.world_route else None
+    if args.world_route:
+        full_route = validate_world_route(world_route_payload, source_hash, target_hash,
+                                          action_ranges, bpy.context.scene.render.fps / bpy.context.scene.render.fps_base)
+        route_by_action = {r['action']: r for r in full_route['routes']}
     support_intervals = []
     shared_route = None
     route_continuity = None
     if args.support_annotations:
-        action_ranges = {}
-        for name in actions:
-            action = bpy.data.actions.get(name)
-            if not action:
-                raise ValueError(f"missing support action: {name}")
-            action_ranges[name] = tuple(round(v) for v in action.frame_range)
         support_intervals = validate_annotations(json.loads(args.support_annotations.read_text()),
                                                  source_hash, target_hash, action_ranges)
         shared_route = validate_shared_routes(support_intervals)
@@ -359,7 +370,12 @@ def main():
                                                      bpy.context.scene.render.fps / bpy.context.scene.render.fps_base)
         if args.support_ik and len({item['side'] for item in support_intervals}) > 1 and not shared_route['shared']:
             raise ValueError('support IK requires one shared world route on overlapping intervals')
-        if args.support_ik and not route_continuity['continuous']:
+        if full_route:
+            full_route = validate_world_route(world_route_payload, source_hash, target_hash,
+                                              action_ranges, bpy.context.scene.render.fps / bpy.context.scene.render.fps_base,
+                                              support_intervals)
+            support_intervals = full_route['supportIntervals']
+        if args.support_ik and not full_route and not route_continuity['continuous']:
             raise ValueError('support IK requires continuous, bounded-speed routes across annotated spans')
         for item in support_intervals:
             if not any(obj.name == item["mesh"] and index == item["vertexIndex"]
@@ -386,6 +402,9 @@ def main():
         previous_source = {}
         for frame in sample_frames:
             bpy.context.scene.frame_set(frame)
+            if route_roots:
+                apply_route_offset(route_roots, [0, 0, 0])
+                bpy.context.view_layer.update()
             for bone in target.pose.bones:
                 bone.rotation_mode = "QUATERNION"
                 bone.rotation_quaternion = Quaternion((1, 0, 0, 0))
@@ -456,6 +475,10 @@ def main():
                         point += Vector(item['routeTranslationsM'][0])
                         anchors[item_index] = [point.x, point.y, 0]
                     ik_samples.append(apply_support_ik(target, regions, item, frame, anchors[item_index]))
+            route_offset = (route_by_action[name]['translationsM'][frame-start] if full_route else [0, 0, 0])
+            if full_route:
+                apply_route_offset(route_roots, route_offset)
+                bpy.context.view_layer.update()
             source_points = {
                 "pelvis": world_position(source, source.pose.bones["DEF-hips"]),
                 "foot_l": world_position(source, source.pose.bones["DEF-foot.L"], "tail"),
@@ -466,7 +489,7 @@ def main():
                 "foot_l": world_position(target, target.pose.bones["foot_l"], "tail"),
                 "foot_r": world_position(target, target.pose.bones["foot_r"], "tail"),
             }
-            samples.append({"frame": frame, "sourceMotionDeg": source_motion, "sourceFrameStepDeg": source_continuity, "rotationResidualDeg": residuals, "directionErrorDeg": direction_errors, "frameStepDeg": continuity, "sourcePointsM": source_points, "targetPointsM": target_points})
+            samples.append({"routeOffsetM": route_offset, "frame": frame, "sourceMotionDeg": source_motion, "sourceFrameStepDeg": source_continuity, "rotationResidualDeg": residuals, "directionErrorDeg": direction_errors, "frameStepDeg": continuity, "sourcePointsM": source_points, "targetPointsM": target_points})
             if regions:
                 samples[-1]["anatomicalFootAxes"] = foot_axis_diagnostics(source, target)
                 for side, points in evaluated_sole(regions).items():
@@ -516,8 +539,9 @@ def main():
                                    if obj.name == item["mesh"] and index == item["vertexIndex"])
                 points = [sample["points"][vertex_slot] for sample in sole_samples[side]
                           if item["startFrame"] <= sample["frame"] <= item["endFrame"]]
-                measurement = measure_interval(points, item["routeTranslationsM"],
+                measurement = measure_interval(points, [[0, 0, 0]] * len(points) if full_route else item["routeTranslationsM"],
                         bpy.context.scene.render.fps / bpy.context.scene.render.fps_base)
+                measurement['routeApplied'] = bool(full_route)
                 measurement['solverApplied'] = args.support_ik
                 measurement['sampleStage'] = 'post_ik' if args.support_ik else 'retarget_only'
                 reports[-1]["annotatedSupport"].append({"annotation": item, "measurement": measurement})
@@ -547,6 +571,9 @@ def main():
         "targetBones": len(target.data.bones),
         "sequenceRendered": bool(args.sequence_dir),
         "supportAnnotationSha256": sha256(args.support_annotations) if args.support_annotations else None,
+        "worldRoute": {**full_route, 'routeApplied': True,
+                       'inputSha256': sha256(args.world_route),
+                       'applicationStage': 'post_ik_pre_measurement_world_translation'} if full_route else None,
         "sharedRoute": shared_route,
         "routeContinuity": route_continuity,
         "evaluationFPS": bpy.context.scene.render.fps / bpy.context.scene.render.fps_base,
@@ -554,7 +581,7 @@ def main():
         "actions": reports,
         "warnings": mapping["warnings"] + [
             "Mapping warnings describe the input map; effective pairs and neutral bones record diagnostic overrides.",
-            "Pelvis and foot positions are diagnostic only; no ground calibration, contact acceptance, or IK was performed.",
+            "Pelvis and foot positions are diagnostic only; no ground calibration or contact acceptance is claimed. See supportIK for solver execution.",
             *([] if args.target.suffix.lower() == ".blend" else [
                 "Target GLB is not the pinned Blender .blend rig; this report cannot validate production retargeting.",
             ]),
