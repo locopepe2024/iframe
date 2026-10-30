@@ -33,3 +33,21 @@ Uploaded media becomes difficult to manage as the library grows, and the timelin
 - Saved historical versions also prevent deletion. Save and delete share the editing database write lock to avoid a reference race.
 - The sidebar supports icon-only collapse/restore, localized names and tooltips, and optional local preference persistence.
 - No physical directory is created per folder. Folder metadata is stored in the owner-scoped editing database; media storage remains immutable and registry-backed.
+
+## Hierarchical navigation slice
+
+The current folder contract is flat and the browser renders every folder as a
+single filter list. This slice adds an optional owner-scoped `parent_id` to a
+folder. Existing rows migrate to the root (`parent_id = null`).
+
+The material manager opens at the root. A folder tile enters that folder; the
+content area then shows only its child folders and directly assigned materials.
+A breadcrumb provides return to the root or any ancestor. Creating a folder or
+uploading a file assigns it to the current folder. Moving a material targets a
+specific folder and refreshes the current view. A folder cannot be deleted when
+it has child folders or assigned materials.
+
+Success criteria: root and nested folders are owner-scoped; parent/child
+relationships survive reload; root and nested uploads appear only at their
+assigned level; breadcrumb navigation returns to the expected level; moving a
+material changes its level immediately; legacy flat folders remain at root.

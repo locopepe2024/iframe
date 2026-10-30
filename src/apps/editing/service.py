@@ -32,8 +32,12 @@ class EditingService:
         try:
             db.execute('CREATE TABLE IF NOT EXISTS edits (id TEXT PRIMARY KEY, owner TEXT NOT NULL, data TEXT NOT NULL)')
             db.execute('CREATE TABLE IF NOT EXISTS edit_versions (id TEXT, owner TEXT, revision INTEGER, data TEXT NOT NULL, PRIMARY KEY(id, owner, revision))')
-            db.execute('CREATE TABLE IF NOT EXISTS editing_folders (id TEXT PRIMARY KEY, owner TEXT NOT NULL, name TEXT NOT NULL, created_at REAL NOT NULL)')
-            db.execute('CREATE UNIQUE INDEX IF NOT EXISTS editing_folders_owner_name ON editing_folders(owner, name)')
+            db.execute('CREATE TABLE IF NOT EXISTS editing_folders (id TEXT PRIMARY KEY, owner TEXT NOT NULL, name TEXT NOT NULL, parent_id TEXT, created_at REAL NOT NULL)')
+            columns = {row[1] for row in db.execute('PRAGMA table_info(editing_folders)')}
+            if 'parent_id' not in columns:
+                db.execute('ALTER TABLE editing_folders ADD COLUMN parent_id TEXT')
+            db.execute('DROP INDEX IF EXISTS editing_folders_owner_name')
+            db.execute('CREATE UNIQUE INDEX IF NOT EXISTS editing_folders_owner_parent_name ON editing_folders(owner, parent_id, name)')
             db.execute('CREATE TABLE IF NOT EXISTS editing_material_folders (owner TEXT NOT NULL, material_key TEXT NOT NULL, folder_id TEXT NOT NULL, PRIMARY KEY(owner, material_key))')
             db.execute('CREATE TABLE IF NOT EXISTS editing_deleted_materials (owner TEXT NOT NULL, material_key TEXT NOT NULL, PRIMARY KEY(owner, material_key))')
             db.execute('BEGIN IMMEDIATE')
@@ -76,19 +80,21 @@ class EditingService:
 
     def folders(self):
         with self.db() as db:
-            return [dict(id=row[0], name=row[1], created_at=row[2]) for row in db.execute(
-                'SELECT id, name, created_at FROM editing_folders WHERE owner=? ORDER BY name COLLATE NOCASE, id',
+            return [dict(id=row[0], name=row[1], parent_id=row[2], created_at=row[3]) for row in db.execute(
+                'SELECT id, name, parent_id, created_at FROM editing_folders WHERE owner=? ORDER BY name COLLATE NOCASE, id',
                 (self.user.owner_profile_id,),
             )]
 
-    def create_folder(self, name):
+    def create_folder(self, name, parent_id=None):
         name = name.strip()
         if not name or len(name) > 80:
             raise HTTPException(422, 'Folder name must be 1 to 80 characters')
-        record = dict(id=uuid4().hex, name=name, created_at=time.time())
+        record = dict(id=uuid4().hex, name=name, parent_id=parent_id, created_at=time.time())
         try:
             with self.db() as db:
-                db.execute('INSERT INTO editing_folders(id, owner, name, created_at) VALUES(?,?,?,?)', (record['id'], self.user.owner_profile_id, name, record['created_at']))
+                if parent_id and not db.execute('SELECT 1 FROM editing_folders WHERE id=? AND owner=?', (parent_id, self.user.owner_profile_id)).fetchone():
+                    raise HTTPException(404, 'Parent folder not found')
+                db.execute('INSERT INTO editing_folders(id, owner, name, parent_id, created_at) VALUES(?,?,?,?,?)', (record['id'], self.user.owner_profile_id, name, parent_id, record['created_at']))
         except sqlite3.IntegrityError as exc:
             raise HTTPException(409, 'Folder name already exists') from exc
         return record
@@ -99,6 +105,8 @@ class EditingService:
             if not row:
                 raise HTTPException(404, 'Folder not found')
             if db.execute('SELECT 1 FROM editing_material_folders WHERE owner=? AND folder_id=? LIMIT 1', (self.user.owner_profile_id, folder_id)).fetchone():
+                raise HTTPException(409, 'Folder is not empty')
+            if db.execute('SELECT 1 FROM editing_folders WHERE owner=? AND parent_id=? LIMIT 1', (self.user.owner_profile_id, folder_id)).fetchone():
                 raise HTTPException(409, 'Folder is not empty')
             db.execute('DELETE FROM editing_folders WHERE id=? AND owner=?', (folder_id, self.user.owner_profile_id))
         return {'id': folder_id, 'deleted': True}
@@ -142,7 +150,7 @@ class EditingService:
                 continue
             key = 'core:'+item['media_id']
             assigned = assignments.get(key)
-            if key in deleted or (folder_id == '__none' and assigned is not None) or (folder_id not in (None, '__none') and assigned != folder_id):
+            if key in deleted or (folder_id in ('__none', '__root') and ((folder_id == '__none' and assigned is not None) or (folder_id == '__root' and assigned is not None))) or (folder_id not in (None, '__none', '__root') and assigned != folder_id):
                 continue
             items.append(dict(id=key, name=item['display_name'], url=item['storage_key'], origin='upload' if item['kind'] in ('editing_upload', 'temporary_input') else 'generated', sha256=item['sha256'], created_at=item['created_at'], folder_id=assigned, folder_name=folder_names.get(assigned), deletable=item['kind'] == 'editing_upload'))
         recreation = RecreationService(self.user, output_root=str(self.output_root))
@@ -153,7 +161,7 @@ class EditingService:
                 for item in page['items']:
                     key = 'recreation:'+item['media_id']
                     assigned = assignments.get(key)
-                    if key in deleted or (folder_id == '__none' and assigned is not None) or (folder_id not in (None, '__none') and assigned != folder_id):
+                    if key in deleted or (folder_id in ('__none', '__root') and ((folder_id == '__none' and assigned is not None) or (folder_id == '__root' and assigned is not None))) or (folder_id not in (None, '__none', '__root') and assigned != folder_id):
                         continue
                     items.append(dict(id=key, name=item['display_name'], url=item['storage_path'], origin='upload' if kind == 'source_video' else 'generated', sha256=item['sha256'], created_at=item['created_at'], folder_id=assigned, folder_name=folder_names.get(assigned), deletable=False))
                 if page['next_cursor'] is None:

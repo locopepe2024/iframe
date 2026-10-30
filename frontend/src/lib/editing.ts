@@ -1,7 +1,7 @@
 import axios from 'axios';
 import { API_URL, type AssemblyEditPlan } from './api';
 export interface EditMaterial { id: string; name: string; url: string; origin?: string; sha256: string; duration_ms: number; video: boolean; audio: boolean; folder_id?: string | null; folder_name?: string | null; deletable?: boolean }
-export interface EditFolder { id: string; name: string; created_at: number }
+export interface EditFolder { id: string; name: string; parent_id?: string | null; created_at: number }
 export interface EditProject { id: string; title: string; revision: number; plan: AssemblyEditPlan | null; sources: Record<string, EditMaterial>; output: { url: string; revision: number } | null }
 const base = `${API_URL}/editing`;
 export const editing = {
@@ -9,7 +9,7 @@ export const editing = {
   create: async (title: string): Promise<EditProject> => (await axios.post(`${base}/projects`, { title })).data,
   get: async (id: string): Promise<EditProject> => (await axios.get(`${base}/projects/${id}`)).data,
   folders: async (): Promise<EditFolder[]> => (await axios.get(`${base}/folders`)).data,
-  createFolder: async (name: string): Promise<EditFolder> => (await axios.post(`${base}/folders`, { name })).data,
+  createFolder: async (name: string, parentId?: string | null): Promise<EditFolder> => (await axios.post(`${base}/folders`, { name, parent_id: parentId || null })).data,
   renameFolder: async (id: string, name: string) => (await axios.patch(`${base}/folders/${encodeURIComponent(id)}`, { name })).data,
   moveMaterial: async (id: string, folderId: string | null) => (await axios.patch(`${base}/materials/${encodeURIComponent(id)}`, { folder_id: folderId })).data,
   deleteFolder: async (id: string) => (await axios.delete(`${base}/folders/${encodeURIComponent(id)}`)).data,

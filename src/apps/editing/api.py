@@ -23,6 +23,7 @@ class RestoreRequest(RevisionRequest):
 
 class FolderRequest(BaseModel):
     name: str = Field(min_length=1, max_length=80)
+    parent_id: str | None = Field(None, max_length=80)
 
 class MaterialFolderRequest(BaseModel):
     folder_id: str | None = Field(None, max_length=80)
@@ -45,7 +46,7 @@ def folders(user: UserContext = Depends(require_studio_user)):
 
 @router.post('/folders', status_code=201)
 def create_folder(body: FolderRequest, user: UserContext = Depends(require_studio_user)):
-    return public(EditingService(user).create_folder(body.name), user)
+    return public(EditingService(user).create_folder(body.name, body.parent_id), user)
 
 @router.delete('/folders/{folder_id}')
 def delete_folder(folder_id: str, user: UserContext = Depends(require_studio_user)):
