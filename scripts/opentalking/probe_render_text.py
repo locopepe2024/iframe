@@ -85,6 +85,7 @@ async def main():
             if early_hold:
                 await asyncio.sleep(early_hold)
                 assert pc.connectionState == 'connected', f'idle connection lost: {pc.connectionState}'
+            speech_at = time.monotonic()
             await post(f"/sessions/{sid}/speak", {"text": "第一轮语音测试，我是小安，很高兴见到您。",
                 "render_text": True, "command_id": str(uuid.uuid4())})
             deadline = time.monotonic() + 100
@@ -115,7 +116,10 @@ async def main():
             state = await request("GET", f"/sessions/{sid}")
             payload = state.json()
             assert state.status_code == 404 or payload.get("state") == "closed", payload
-            print(json.dumps({"decoded_frames": counts, "interrupt_tail_peak": max(tail, default=0),
+            first_audible = next((at for at, peak in samples if at >= speech_at and peak > 100), None)
+            print(json.dumps({"decoded_frames": counts,
+                "first_audible_ms": round((first_audible - speech_at) * 1000) if first_audible else None,
+                "interrupt_tail_peak": max(tail, default=0),
                 "interrupt_tail_frames": len(tail),
                 "hold_seconds": hold,
                 "destroy_http": state.status_code, "destroy_state": payload.get("state"),

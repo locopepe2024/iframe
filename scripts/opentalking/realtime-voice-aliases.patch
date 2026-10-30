@@ -1,0 +1,12 @@
+--- a/opentalking/providers/tts/dashscope_qwen/adapter.py
++++ b/opentalking/providers/tts/dashscope_qwen/adapter.py
+@@ -197,6 +197,9 @@
+         if not text.strip():
+             return
+         v = normalize_optional_qwen_voice(voice) or self.default_voice
++        # Demo's saved HTTP voices have different names in Qwen realtime.
++        # Map only those two known choices; retain all native realtime voices.
++        v = {"longanhuan_v3.6": "Cherry", "longanyang_v3.6": "Ethan"}.get(v, v)
+         cantonese_voice = _qwen_cantonese_voice_override()
+         if cantonese_voice is not None and v not in QWEN_CANTONESE_VOICES:
+             log.info("Qwen TTS Cantonese mode overriding voice %r -> %r", v, cantonese_voice)
