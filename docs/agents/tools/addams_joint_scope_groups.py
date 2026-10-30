@@ -1,0 +1,15 @@
+"""Add joint-scope subgroups so small upper-body events do not split lower-body phase."""
+import json
+from pathlib import Path
+ROOT=Path(__file__).resolve().parents[3]
+OUT=ROOT/'docs/agents/raw/2026-10-30-addams-motion-groups-v1'
+d={'schema':'addams-joint-scope-group-overrides.v1','production_eligible':False,
+ 'base_windows':[[46,47],[48,49],[50,53],[54,57],[58,61],[62,65]],
+ 'overrides':[{'scope':'lower_body','frames':[49,50,51],'semantic_relation':'same_lower_body_phase','evidence_level':'user_visual_review',
+   'rule':'inherit lower-body support/swing state unless a clear foot event is observed'},
+  {'scope':'upper_body_head_neck','frames':[49,50,51],'semantic_relation':'small_head_forward_tilt_at_50','evidence_level':'user_visual_review',
+   'rule':'allow local neck/head keyframe at 50 without splitting lower-body group'},
+  {'scope':'camera','frames':[49,50,51],'semantic_relation':'same_shot_candidate','evidence_level':'unverified'}],
+ 'evaluation_note':'The prior frame50 holdout only optimized hip/knee and cannot test the head/neck distinction.',
+ 'next_step':'Run scope-specific fitting: lower body group interpolation plus local neck/head correction; evaluate head/neck and legs separately.'}
+(OUT/'joint-scope-overrides.json').write_text(json.dumps(d,ensure_ascii=False,indent=2)+'\n');print(OUT/'joint-scope-overrides.json')
