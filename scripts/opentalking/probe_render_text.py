@@ -61,8 +61,10 @@ async def main():
             return response.json()
 
         try:
+            tts = {"tts_provider":"dashscope", "tts_model":"qwen3-tts-flash-realtime", "tts_voice":"longanhuan_v3.6"} if os.environ.get("MOCK_TEST_REALTIME_TTS") == "1" else {}
+            speak_options = {"tts_provider":tts["tts_provider"], "tts_model":tts["tts_model"], "voice":tts["tts_voice"]} if tts else {}
             created = await post("/sessions", {"avatar_id": "office-woman", "model": "mock",
-                "agent_enabled": False, "memory_enabled": False, "knowledge_enabled": False})
+                "agent_enabled": False, "memory_enabled": False, "knowledge_enabled": False, **tts})
             sid = created["session_id"]
             await post(f"/sessions/{sid}/start")
             pc.addTransceiver("video", direction="recvonly")
@@ -87,7 +89,8 @@ async def main():
                 assert pc.connectionState == 'connected', f'idle connection lost: {pc.connectionState}'
             speech_at = time.monotonic()
             await post(f"/sessions/{sid}/speak", {"text": "第一轮语音测试，我是小安，很高兴见到您。",
-                "render_text": True, "command_id": str(uuid.uuid4())})
+                "render_text": True, "command_id": str(uuid.uuid4()),
+                **speak_options})
             deadline = time.monotonic() + 100
             while counts["audible"] < 30 and time.monotonic() < deadline:
                 await asyncio.sleep(.1)
@@ -99,7 +102,7 @@ async def main():
                 assert pc.connectionState == 'connected', f'connection lost during hold: {pc.connectionState}'
                 previous = counts['audible']
                 await post(f'/sessions/{sid}/speak', {'text': '第二轮连接测试成功，语音连接保持不变。',
-                    'render_text': True, 'command_id': str(uuid.uuid4())})
+                    'render_text': True, 'command_id': str(uuid.uuid4()), **speak_options})
                 deadline = time.monotonic() + 100
                 while counts['audible'] < previous + 30 and time.monotonic() < deadline:
                     await asyncio.sleep(.1)

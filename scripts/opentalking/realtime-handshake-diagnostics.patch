@@ -1,0 +1,63 @@
+--- a/opentalking/providers/tts/dashscope_qwen/adapter.py
++++ b/opentalking/providers/tts/dashscope_qwen/adapter.py
+@@ -7,6 +7,7 @@
+ import logging
+ import os
+ import threading
++import time
+ from collections.abc import AsyncIterator
+ from typing import Any
+ 
+@@ -163,6 +164,7 @@
+         self._stable_cb: Any | None = None
+         self._active_inbox: asyncio.Queue[Any] | None = None
+         self._session_ready = threading.Event()
++        self._trace_start = time.monotonic()
+ 
+     async def aclose(self) -> None:
+         """关闭复用的 WebSocket（在单次 speak / 单次整段朗读结束后务必调用）。"""
+@@ -245,6 +247,11 @@
+                     def on_event(self, message: Any) -> None:
+                         if not isinstance(message, dict):
+                             return
++                        kind = message.get("type")
++                        if kind in {"session.created", "session.updated", "error"}:
++                            error = message.get("error") or {}
++                            code = error.get("code") if isinstance(error, dict) else None
++                            log.info("Qwen TTS handshake adapter=%s event=%s elapsed_ms=%d code=%s", id(self._adapter), kind, (time.monotonic()-self._adapter._trace_start)*1000, code)
+                         if message.get("type") == "session.updated":
+                             self._adapter._session_ready.set()
+                         q = self._adapter._active_inbox
+@@ -256,13 +263,14 @@
+                             log.exception("DashScope TTS inbox push failed")
+ 
+                     def on_close(self, close_status_code: Any = None, close_msg: Any = None) -> None:
+-                        _ = close_status_code
+-                        _ = close_msg
++                        log.info("Qwen TTS handshake adapter=%s event=closed elapsed_ms=%d", id(self._adapter), (time.monotonic()-self._adapter._trace_start)*1000)
+ 
+                 cb = _StableCb(self)
+                 self._stable_cb = cb
+                 client = QwenTtsRealtime(model=self._model, callback=cb, url=self._ws_url)
++                log.info("Qwen TTS handshake adapter=%s event=connecting", id(self))
+                 client.connect()
++                log.info("Qwen TTS handshake adapter=%s event=connected elapsed_ms=%d", id(self), (time.monotonic()-self._trace_start)*1000)
+                 self._session_ready.clear()
+                 client.update_session(
+                     voice=v,
+@@ -273,6 +281,7 @@
+                 )
+                 self._session_voice = v
+                 self._client = client
++                log.info("Qwen TTS handshake adapter=%s event=update_sent elapsed_ms=%d voice=%s", id(self), (time.monotonic()-self._trace_start)*1000, v)
+                 if not self._session_ready.wait(timeout=5.0):
+                     raise TimeoutError("DashScope TTS session update timed out")
+             elif v != self._session_voice:
+@@ -286,6 +295,7 @@
+                     language_type=_qwen_language_type(),
+                 )
+                 self._session_voice = v
++                log.info("Qwen TTS handshake adapter=%s event=update_sent elapsed_ms=%d voice=%s", id(self), (time.monotonic()-self._trace_start)*1000, v)
+                 if not self._session_ready.wait(timeout=5.0):
+                     raise TimeoutError("DashScope TTS session update timed out")
+ 

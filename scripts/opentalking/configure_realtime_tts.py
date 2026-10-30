@@ -2,6 +2,7 @@
 from pathlib import Path
 import os
 import shutil
+import sys
 from urllib.parse import urlsplit, urlunsplit
 
 from dotenv import dotenv_values, set_key
@@ -27,6 +28,8 @@ updates = {
     "OPENTALKING_QWEN_TTS_REUSE_WS": "1",
 }
 for name, value in updates.items():
+    if "--prepare-only" in sys.argv and name in {"OPENTALKING_TTS_DEFAULT_PROVIDER", "OPENTALKING_TTS_PROVIDER"}:
+        continue
     set_key(path, name, value)
 os.chmod(path, 0o600)
-print("Demo realtime TTS configured; original HTTP configuration and private rollback copy retained.")
+print("Demo realtime TTS configured; prepare-only=" + str("--prepare-only" in sys.argv))

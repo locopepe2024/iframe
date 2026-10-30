@@ -39,3 +39,12 @@
 - Frontend expired-session recovery is deployed, 10 UI tests and typecheck passed; static build passed. No ambiguous request retry. No TURN/ICE changes.
 - Next: capture timestamped session.created/session.updated/error/close events on the failing runner path, including concurrent sessions; distinguish missing/error acknowledgment from delayed acknowledgment. Do not widen timeout or enable automatic TTS regeneration as a substitute for diagnosis.
 - TCP's contribution to audible latency remains unmeasured from an external mobile client. Same-host public relay testing is not mobile network evidence.
+
+## Follow-up handshake diagnosis
+
+- Added metadata-only handshake tracing: connecting/connected/update_sent/session.created/session.updated/error/closed, adapter correlation, elapsed milliseconds and error code. No audio, text, credentials or complete error bodies are recorded.
+- Prepared realtime provider credentials without changing the HTTP default. Synthetic test sessions explicitly select realtime on every speak; default provider is not implicitly inherited for follow-up speak commands.
+- A preliminary two-turn smoke accidentally used HTTP on its second turn. This was discovered from provider logs, corrected in the probe, and excluded from realtime multi-turn evidence.
+- Verified public relay-only TCP: first run first audible 2496ms; corrected two-turn runs first audible 6671ms and 3553ms. Both corrected runs decoded audio in each turn, stopped after interrupt, and closed the session. These tests run from the host through its public endpoint and TURN, not from the user's mobile network.
+- In traced successful requests, WebSocket connected in about 100ms; session.created arrived at 772–2805ms and session.updated at 1030–3207ms. No error event or handshake timeout was reproduced in these runs. Previously observed 5-second timeout remains unexplained; successes do not invalidate it.
+- Diagnostic patch is active; default remains HTTP. No timeout extension, retry generation, UDP cutover, or claim of stable realtime rollout.
