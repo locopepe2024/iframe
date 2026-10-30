@@ -19,6 +19,7 @@ from .tools import StartMediaDraft, UpdateMediaDraft, Strict, dispatch, tool_sch
 from .opentalking_binding import BindingUnavailable, SessionBindings
 from .opentalking_context import ContextUnavailable, IframeContextReader
 from .coordinator import decide
+from .voice_attention import attention_reply
 from .interaction_focus import FocusUpdate, read_focus, update_focus, active_editor
 from .media_draft_bridge import selection_event_from_draft, apply_selection
 
@@ -364,6 +365,9 @@ def chat(session_id: str, body: ChatRequest, identity: Owner, store: Store):
                 expected = dict(task_id=current['task_id'],revision=current['revision']) if current else dict(task_id='',revision=0)
                 if body.creative_context.model_dump() != expected:
                     raise Conflict('Creative task changed since this sentence was captured; review before resending')
+            attention = attention_reply(body.text) if not editing and not body.selected_photo_id else None
+            if attention is not None:
+                return store.finish_turn(identity.owner_profile_id, identity.user_id, claim, attention)
             if not editing and not body.selected_photo_id and intent.name not in ('album.scope', 'album.browse'):
                 decision = decide(body.text, store.workflow_context(identity.owner_profile_id, identity.user_id, session_id))
                 if decision:
