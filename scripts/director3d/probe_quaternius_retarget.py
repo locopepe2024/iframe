@@ -14,7 +14,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from sole_contact_metrics import summarize_sole
 from support_contact_metrics import measure_interval, validate_annotations
 from bounded_support_ik import blend_weight, solve_leg, validate_cycle_samples
-from shared_route_metrics import validate_shared_routes
+from shared_route_metrics import validate_route_continuity, validate_shared_routes
 
 
 def apply_support_ik(target, regions, item, frame, anchor):
@@ -344,6 +344,7 @@ def main():
     actions = list(dict.fromkeys(args.actions))
     support_intervals = []
     shared_route = None
+    route_continuity = None
     if args.support_annotations:
         action_ranges = {}
         for name in actions:
@@ -354,8 +355,12 @@ def main():
         support_intervals = validate_annotations(json.loads(args.support_annotations.read_text()),
                                                  source_hash, target_hash, action_ranges)
         shared_route = validate_shared_routes(support_intervals)
+        route_continuity = validate_route_continuity(support_intervals,
+                                                     bpy.context.scene.render.fps / bpy.context.scene.render.fps_base)
         if args.support_ik and len({item['side'] for item in support_intervals}) > 1 and not shared_route['shared']:
             raise ValueError('support IK requires one shared world route on overlapping intervals')
+        if args.support_ik and not route_continuity['continuous']:
+            raise ValueError('support IK requires continuous, bounded-speed routes across annotated spans')
         for item in support_intervals:
             if not any(obj.name == item["mesh"] and index == item["vertexIndex"]
                        for obj, index in regions[item["side"]]):
@@ -543,6 +548,8 @@ def main():
         "sequenceRendered": bool(args.sequence_dir),
         "supportAnnotationSha256": sha256(args.support_annotations) if args.support_annotations else None,
         "sharedRoute": shared_route,
+        "routeContinuity": route_continuity,
+        "evaluationFPS": bpy.context.scene.render.fps / bpy.context.scene.render.fps_base,
         "authoredFPS": "unverified",
         "actions": reports,
         "warnings": mapping["warnings"] + [
