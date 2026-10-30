@@ -81,7 +81,10 @@ def test_http_shortcuts_and_stale_voice_context_do_not_call_model(tmp_path,monke
         assert stale.status_code==409
         assert client.get(path+'/media-drafts').json()['tasks'][0]['revision']==1
         assert client.post(path+'/media-drafts/input',json=dict(operation_id='pause',task_id=task['task_id'],expected_revision=1,action='pause')).status_code==200
-        assert client.post(path+'/media-drafts',json=dict(operation_id='new',type='video_generate')).status_code==200
+        video = client.post(path+'/media-drafts',json=dict(operation_id='new',type='video_generate')).json()
+        mode = client.post(path+'/media-drafts/input',json=dict(operation_id='video-mode',task_id=video['task_id'],expected_revision=video['revision'],action='video_mode',video_mode='f2v'))
+        assert mode.status_code == 200, mode.text
+        assert mode.json()['video_mode'] == 'f2v'
 
 
 def test_editor_content_cannot_start_creative_task(tmp_path):

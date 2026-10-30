@@ -51,6 +51,7 @@ class UpdateMediaDraft(Strict):
     setting: str | None = Field(default=None, max_length=40)
     brief: str = Field(default='', max_length=4000)
     photo_id: str | None = Field(default=None, max_length=120)
+    video_mode: Literal['t2v', 'i2v', 'f2v', 'r2v'] | None = None
 
 
 class OpenDiary(Strict):
