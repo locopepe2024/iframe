@@ -83,6 +83,7 @@ export default function AgentChat() {
   const [draft, setDraft] = useState<string | null>(null);
   const [hasRetry, setHasRetry] = useState(false);
   const [albumOpen,setAlbumOpen] = useState(false);
+  const [albumRequest,setAlbumRequest] = useState<{id:string;date:string;query:string;order:"id"|"recent"} | null>(null);
   const [diaryMonth, setDiaryMonth] = useState<string | undefined>();
   const [diarySelection, setDiarySelection] = useState<{day:string;request:string} | undefined>();
   const [feature,setFeature] = useState<CompanionFeature | null>(null);
@@ -215,9 +216,18 @@ export default function AgentChat() {
         if (replyText) setSpokenReply({ id: result.turn_id, text: replyText });
       }
       if (result.result?.kind === "diary_read") {
+        setAlbumRequest(null);setAlbumOpen(false);
         const day = result.result.name === "diary.read" ? result.result.arguments?.day || result.result.diaries[0]?.day : undefined;
         setDiarySelection(day ? {day,request:result.turn_id} : undefined);
         setDiaryMonth(day?.slice(0,7) || result.result.month); setFeature("diary");
+      }
+      if (result.result?.kind === "photo_read") {
+        setFeature(null);
+        if (result.result.name === "photo.album.list") {
+          const args = result.result.arguments;
+          setAlbumRequest({id:result.turn_id,date:String(args.date_prefix || args.year || ""),query:String(args.query || ""),order:args.order === "recent" ? "recent" : "id"});
+          setAlbumOpen(true);
+        }
       }
       if (result.result?.kind === "media_draft") {setCreativeTask(result.result);}
       setDraft(null); setTurn(result); setPreview(result.result?.kind === "confirmation" ? result.result : null); setDrafts(old => ({ ...old, chat: "" })); sendOperation.current = null; setHasRetry(false);
@@ -437,7 +447,7 @@ export default function AgentChat() {
       if (item.kind !== "photo" || !target.card_id || target.task_id !== creativeTask?.task_id || target.revision !== creativeTask.revision || creativeTask.status!=="active") {setNotice("素材已保存到相册，当前创作已变化，请重新选择要用的照片。");return;}
       void run(async()=>{const result=await companionApi.mediaEvent(session,{operation_id:crypto.randomUUID(),event_type:"photo_uploaded",task_id:target.task_id,card_id:target.card_id,photo_id:item.id,slot:"source",expected_revision:target.revision});setCreativeTask(result.task);});
     }} onBusyChange={setUploading} onClose={() => {setUploadFiles([]);creativeUpload.current=null;}} />}
-    {albumOpen && <AlbumPicker disabled={inputDisabled || pending} onClose={() => setAlbumOpen(false)} onPhoto={photo => {
+    {albumOpen && <AlbumPicker key={`album-${albumRequest?.id || "manual"}`} initialDate={albumRequest?.date} initialQuery={albumRequest?.query} order={albumRequest?.order} disabled={inputDisabled || pending} onClose={() => setAlbumOpen(false)} onPhoto={photo => {
       attach({kind:"photo",id:photo.photo_id,name:"相册照片"}); selectedPhotoRef.current = photo.photo_id; setSelectedPhotoId(photo.photo_id); setNotice("已选中这张照片。您可以说“使用这张照片”，或继续查看。"); setAlbumOpen(false);
     }} onVideo={video => {attach({kind:"video",id:video.video_id,name:video.name});setAlbumOpen(false);}} />}
     {feature === "diary" ? <DiaryCalendar initialMonth={diaryMonth} selection={diarySelection} onClose={()=>{setDiarySelection(undefined);setFeature(null);}} onCreate={day=>{setFeature(null);startDiaryPrompt(day);}}/> : feature && <CompanionFeatureSheet feature={feature} onClose={() => setFeature(null)} />}
@@ -503,7 +513,7 @@ export default function AgentChat() {
     <nav className={chatStyles.bottomNav} aria-label="主要功能">
       <button type="button" aria-current={feature === "diary" ? "page" : undefined} onClick={() => {setDiarySelection(undefined);setDiaryMonth(undefined);setFeature("diary");}}><BookOpen size={22} aria-hidden="true" /><span>日记</span></button>
       <button type="button" aria-current={feature === "plaza" ? "page" : undefined} onClick={() => setFeature("plaza")}><Compass size={22} aria-hidden="true" /><span>广场</span></button>
-      <button type="button" aria-current={albumOpen ? "page" : undefined} onClick={() => { setFeature(null); setAlbumOpen(true); }}><Images size={22} aria-hidden="true" /><span>相册</span></button>
+      <button type="button" aria-current={albumOpen ? "page" : undefined} onClick={() => { setFeature(null);setAlbumRequest(null); setAlbumOpen(true); }}><Images size={22} aria-hidden="true" /><span>相册</span></button>
       <button type="button" aria-current={feature === "mine" ? "page" : undefined} onClick={() => setFeature("mine")}><UserRound size={22} aria-hidden="true" /><span>我的</span></button>
     </nav>
   </main></InteractionFocusContext.Provider>;

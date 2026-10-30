@@ -566,9 +566,11 @@ it("keeps voice active and opens the requested diary inside the calendar",async(
  Object.defineProperty(window,"SpeechRecognition",{configurable:true,value:Recognition});
  try {
    const entry={day:"2025-10-28",text:"那天和女儿散步。",revision:1,source_turn_id:"",updated_at:1};
+   photoApi.list.mockResolvedValue({photos:[{photo_id:"dated-photo",batch_id:"",date:{date:null,status:"pending_confirmation",source:"none",revision:0}}],next_after_id:null});
    api.diaries.mockImplementation(async month=>({diaries:month === "2025-10" ? [entry] : []}));
    api.chat.mockResolvedValueOnce({turn_id:"open-calendar",status:"completed",result:{kind:"diary_read",name:"diary.open",open_calendar:true,diaries:[],spoken_text:"日记月历已打开。"}})
-     .mockResolvedValueOnce({turn_id:"read-day",status:"completed",result:{kind:"diary_read",name:"diary.read",arguments:{day:entry.day},open_calendar:false,diaries:[entry],spoken_text:"找到这一天的日记了。"}});
+     .mockResolvedValueOnce({turn_id:"read-day",status:"completed",result:{kind:"diary_read",name:"diary.read",arguments:{day:entry.day},open_calendar:false,diaries:[entry],spoken_text:"找到这一天的日记了。"}})
+     .mockResolvedValueOnce({turn_id:"photos-day",status:"completed",result:{kind:"photo_read",name:"photo.album.list",arguments:{date_prefix:entry.day},photos:[{photo_id:"dated-photo",date:{date:entry.day,status:"confirmed",source:"user",revision:1}}],next_after_id:null}});
    await start();allowText();
    fireEvent.click(screen.getByRole("button",{name:"打开语音聊天"}));
    fireEvent.click(await screen.findByRole("button",{name:"同意并开始聊天"}));
@@ -580,6 +582,14 @@ it("keeps voice active and opens the requested diary inside the calendar",async(
    expect(within(calendar).getByRole("button",{name:entry.day+"，已有日记"})).toHaveAttribute("aria-pressed","true");
    expect(recognition.stop).not.toHaveBeenCalled();
    expect(playback.mock.calls.some(([props])=>props.reply?.text === "找到这一天的日记了。")).toBe(true);
+   act(()=>recognition.onresult?.({results:[[{transcript:"打开日记月历"}],[{transcript:"打开2025年10月28日日记"}],[{transcript:"查看10月28日的照片"}]]}));
+   const album=await screen.findByRole("dialog",{name:"浏览相册"});
+   expect(screen.queryByRole("dialog",{name:"日记"})).not.toBeInTheDocument();
+   expect(within(album).getByRole("button",{name:"查看照片 1"})).toBeInTheDocument();
+   expect(photoApi.list).toHaveBeenLastCalledWith("all","","","",{date_prefix:entry.day,order:"id",limit:12});
+   expect(recognition.stop).not.toHaveBeenCalled();
+   fireEvent.click(within(album).getByRole("button",{name:"关闭相册"}));
+   expect(screen.queryByRole("dialog",{name:"浏览相册"})).not.toBeInTheDocument();
  } finally {delete (window as Window & {SpeechRecognition?:unknown}).SpeechRecognition;}
 });
 it("shows a retained failed sentence and allows resuming a paused task without replaying it",async()=>{
