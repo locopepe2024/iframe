@@ -32,7 +32,7 @@ async function decode(url: string, signal: AbortSignal, onProgress?: () => void)
             size += value.byteLength;
             if (size > LIMIT) throw new Error('Waveform exceeds limit');
             chunks.push(value);
-            onProgress?.();
+            if (value.byteLength) onProgress?.();
         }
     } finally { await reader.cancel(); }
     if (signal.aborted) throw new Error('Cancelled');
