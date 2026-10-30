@@ -27,6 +27,11 @@ class ChatStore(MediaDrafts, PhotoTasks, DiaryStore, CompanionStore):
         """Return a bounded, read-only snapshot for a coordinator."""
         with self.connection() as db:
             self.one(db, 'companion_sessions', owner, session)
+            from .interaction_focus import read_focus
+            focus = read_focus(db, owner, actor, session)
+            recent_rows = db.execute(
+                'SELECT sequence,text FROM companion_messages WHERE owner=? AND session_id=? '
+                'ORDER BY sequence DESC LIMIT 6', (owner, session)).fetchall()
             tasks = db.execute(
                 'SELECT id,status,step,revision,payload FROM companion_photo_tasks '
                 'WHERE owner=? AND actor=? AND session_id=? AND status=? ORDER BY rowid DESC LIMIT 3',
@@ -40,8 +45,10 @@ class ChatStore(MediaDrafts, PhotoTasks, DiaryStore, CompanionStore):
             active.append(dict(task_id=task['id'], status=task['status'], step=task['step'],
                                revision=task['revision'], candidate_count=len(payload.get('candidate_ids', [])),
                                selected=bool(payload.get('selected_id'))))
-        return dict(session_id=session, focused_task=active[0]['task_id'] if active else None,
-                    album_tasks=active, recent_diaries=[dict(row) for row in diaries])
+        return dict(session_id=session, focus=focus,
+                    focused_task=active[0]['task_id'] if active else None,
+                    album_tasks=active, recent_diaries=[dict(row) for row in diaries],
+                    recent_messages=[dict(row) for row in reversed(recent_rows)])
 
     def conversation(self, owner, actor, session, *, after=0, limit=20, latest=False, before=None):
         if latest or before is not None:

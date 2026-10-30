@@ -257,6 +257,13 @@ def workflow_context(session_id: str, identity: Owner, store: Store):
         return store.workflow_context(identity.owner_profile_id, identity.user_id, session_id)
 
 
+@router.get('/sessions/{session_id}/voice-context')
+def voice_context(session_id: str, identity: Owner, store: Store):
+    """Read the same bounded session snapshot used by chat orchestration."""
+    with errors():
+        return store.workflow_context(identity.owner_profile_id, identity.user_id, session_id)
+
+
 @router.get('/sessions/{session_id}/focus')
 def focus(session_id: str, identity: Owner, store: Store):
     with errors(), store.connection() as db:

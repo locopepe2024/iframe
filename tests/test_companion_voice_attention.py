@@ -39,6 +39,20 @@ def test_silent_turn_does_not_call_model(chat, monkeypatch):
     coordinator.assert_not_called()
 
 
+def test_voice_context_is_the_same_bounded_snapshot_as_workflow_context(chat):
+    _, _, client, session, model = chat
+    model.side_effect = None
+    model.return_value = dict(kind='text', text='收到。')
+    for index, text in enumerate(['第一句', '第二句']):
+        response = client.post(f'/companion-runtime/sessions/{session}/chat', json=dict(
+            operation_id=f'context-{index}', text=text, allow_external_text=True))
+        assert response.status_code == 200, response.text
+    workflow = client.get(f'/companion-runtime/sessions/{session}/workflow-context').json()
+    voice = client.get(f'/companion-runtime/sessions/{session}/voice-context').json()
+    assert voice == workflow
+    assert [item['text'] for item in voice['recent_messages']] == ['第一句', '第二句']
+
+
 def test_attention_keeps_history_and_task_without_model_calls(chat, monkeypatch):
     store, _, client, session, model = chat
     coordinator = Mock(side_effect=AssertionError('No coordinator for attention'))
