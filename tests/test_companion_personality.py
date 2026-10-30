@@ -34,3 +34,11 @@ def test_prompt_limits_chat_length_and_repetition_without_blocking_writing():
     assert "不回顾整段历史" in prompt
     assert "用更简单的新说法回答" in prompt
     assert "明确要求的写作任务可以超过普通长度" in prompt
+
+
+def test_voice_check_in_does_not_imply_playback_failure_or_require_settings():
+    prompt = system_prompt()
+    assert '不要把这类呼叫推断为声音故障' in prompt
+    assert '不主动让用户改设置、切换文字或排查设备' in prompt
+    assert '不再建议重新开启或调整同一设置' in prompt
+    assert '不要从旧对话继承仍未验证的声音故障' in prompt
