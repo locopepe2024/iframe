@@ -14,6 +14,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from sole_contact_metrics import summarize_sole
 from support_contact_metrics import measure_interval, validate_annotations
 from bounded_support_ik import blend_weight, solve_leg, validate_cycle_samples
+from shared_route_metrics import validate_shared_routes
 
 
 def apply_support_ik(target, regions, item, frame, anchor):
@@ -342,6 +343,7 @@ def main():
                                        maxPositionResidualM=0.0, maxBasisChange=0.0)
     actions = list(dict.fromkeys(args.actions))
     support_intervals = []
+    shared_route = None
     if args.support_annotations:
         action_ranges = {}
         for name in actions:
@@ -351,6 +353,9 @@ def main():
             action_ranges[name] = tuple(round(v) for v in action.frame_range)
         support_intervals = validate_annotations(json.loads(args.support_annotations.read_text()),
                                                  source_hash, target_hash, action_ranges)
+        shared_route = validate_shared_routes(support_intervals)
+        if args.support_ik and len({item['side'] for item in support_intervals}) > 1 and not shared_route['shared']:
+            raise ValueError('support IK requires one shared world route on overlapping intervals')
         for item in support_intervals:
             if not any(obj.name == item["mesh"] and index == item["vertexIndex"]
                        for obj, index in regions[item["side"]]):
@@ -537,6 +542,7 @@ def main():
         "targetBones": len(target.data.bones),
         "sequenceRendered": bool(args.sequence_dir),
         "supportAnnotationSha256": sha256(args.support_annotations) if args.support_annotations else None,
+        "sharedRoute": shared_route,
         "authoredFPS": "unverified",
         "actions": reports,
         "warnings": mapping["warnings"] + [
