@@ -1,0 +1,42 @@
+{
+  "retargetMaxTranslationResidualM": 1.0345470676565853e-05,
+  "supportIKMaxTranslationResidualM": 1.0345470676565853e-05,
+  "blenderVersion": "4.5.9 LTS",
+  "supportIKIntervals": [
+    {
+      "status": "diagnostic_only",
+      "frameRange": [
+        0,
+        8
+      ],
+      "evaluationFPS": 24.0,
+      "maxWeightStep": 0.5,
+      "entryWeight": 0.0,
+      "exitWeight": 0.0,
+      "maxJointResidualM": 2.334779443739712e-07,
+      "endpointSoleResidualM": [
+        0.0008802392954114964,
+        0.01018098177799141
+      ],
+      "supportAccepted": false
+    },
+    {
+      "status": "diagnostic_only",
+      "frameRange": [
+        16,
+        24
+      ],
+      "evaluationFPS": 24.0,
+      "maxWeightStep": 0.5,
+      "entryWeight": 0.0,
+      "exitWeight": 0.0,
+      "maxJointResidualM": 1.4994004217906377e-07,
+      "endpointSoleResidualM": [
+        0.0005557339200251716,
+        0.009644425328889714
+      ],
+      "supportAccepted": false
+    }
+  ],
+  "status": "diagnostic_only"
+}
