@@ -2,7 +2,7 @@ from unittest.mock import Mock
 
 import pytest
 
-from src.apps.companion_runtime.voice_attention import attention_reply
+from src.apps.companion_runtime.voice_attention import attention_reply, silence_reply
 from tests.test_companion_chat import chat
 
 
@@ -15,6 +15,28 @@ def test_attention_has_a_short_reply(text):
                                 '我叫小安', '把备注改成小安', '安安', ''])
 def test_real_requests_and_asr_approximations_are_not_attention(text):
     assert attention_reply(text) is None
+
+
+@pytest.mark.parametrize('text', ['嗯', '嗯嗯', '好的', '继续', '我听着'])
+def test_low_information_acknowledgements_are_silent(text):
+    assert silence_reply(text) == dict(kind='silent', reason='low_information')
+
+
+@pytest.mark.parametrize('text', ['好，打开相册', '嗯，我想看看女儿的照片', '继续说今天的事'])
+def test_real_requests_are_not_silenced(text):
+    assert silence_reply(text) is None
+
+
+def test_silent_turn_does_not_call_model(chat, monkeypatch):
+    _, _, client, session, model = chat
+    coordinator = Mock(side_effect=AssertionError('No coordinator for filler'))
+    monkeypatch.setattr('src.apps.companion_runtime.api.decide', coordinator)
+    result = client.post(f'/companion-runtime/sessions/{session}/chat', json=dict(
+        operation_id='filler', text='嗯嗯', allow_external_text=True))
+    assert result.status_code == 200, result.text
+    assert result.json()['result'] == dict(kind='silent', reason='low_information')
+    model.assert_not_called()
+    coordinator.assert_not_called()
 
 
 def test_attention_keeps_history_and_task_without_model_calls(chat, monkeypatch):

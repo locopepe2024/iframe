@@ -153,7 +153,9 @@ class ChatStore(MediaDrafts, PhotoTasks, DiaryStore, CompanionStore):
             arguments = proposal.get('arguments', {})
             unscoped_album = proposal.get('name') == 'photo.organize.start' and not (
                 arguments.get('year') or arguments.get('query', '').strip() or arguments.get('view') == 'pending' or arguments.get('photo_id') or arguments.get('date_prefix'))
-            if proposal['kind'] == 'local_plan':
+            if proposal['kind'] == 'silent':
+                result = dict(kind='silent', reason=proposal.get('reason', 'quiet'))
+            elif proposal['kind'] == 'local_plan':
                 from .planner_runtime import execute_plan
                 @contextmanager
                 def plan_connection(**_):

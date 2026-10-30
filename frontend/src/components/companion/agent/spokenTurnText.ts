@@ -6,6 +6,7 @@ export type SpokenTurnMeta = { text: string; announcementKey?: string; reason: "
 export function spokenTurnText(result: Turn["result"]): string | undefined {
   if (!result) return undefined;
   switch (result.kind) {
+    case "silent": return undefined;
     case "text": return result.text;
     case "media_draft": case "photo_task": case "diary_read": case "album_guide": case "photo_action":
       return result.spoken_text;
