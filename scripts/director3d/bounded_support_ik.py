@@ -77,3 +77,48 @@ def validate_cycle_samples(samples, fps):
             'maxJointResidualM': max(max(item.get(key, float('inf')) for key in ('ankleResidualM', 'kneeResidualM')) for item in samples),
             'endpointSoleResidualM': [samples[0]['soleAnchorResidualM'], samples[-1]['soleAnchorResidualM']],
             'supportAccepted': False}
+
+
+def bounded_refinement_offset(original_ankle, current_ankle, current_point, goal):
+    original_ankle, current_ankle, current_point, goal = [list(vector(v)) for v in
+                                                       (original_ankle, current_ankle, current_point, goal)]
+    offset = sub(goal, current_point)
+    if norm(sub(add(current_ankle, offset), original_ankle)) > .05:
+        raise ValueError('cumulative support correction exceeds 0.05 m')
+    return offset
+
+
+def summarize_contact_phases(samples, fps):
+    if not samples or isinstance(fps, bool) or not isinstance(fps, (int, float)) or not math.isfinite(fps) or fps <= 0:
+        raise ValueError('invalid phase samples or FPS')
+    groups = {'released': [], 'ramp': [], 'fullWeight': []}
+    previous_frame = None
+    count = None
+    for item in samples:
+        frame, weight = item.get('frame'), item.get('weight')
+        if (type(frame) is not int or (previous_frame is not None and frame != previous_frame+1)
+                or isinstance(weight, bool) or not isinstance(weight, (int, float))
+                or not math.isfinite(weight) or not 0 <= weight <= 1):
+            raise ValueError('invalid phase frame or weight')
+        previous_frame = frame
+        vector(item['soleWorldM']); vector(item['anchorWorldM'])
+        patch = item['soleRegionWorldM']
+        if not isinstance(patch, list) or not patch or (count is not None and len(patch) != count):
+            raise ValueError('invalid phase sole region')
+        for point in patch:
+            vector(point)
+        count = len(patch)
+        groups['released' if weight == 0 else 'fullWeight' if weight == 1 else 'ramp'].append(item)
+    result = {'status': 'diagnostic_only', 'supportAccepted': False}
+    for phase, items in groups.items():
+        pairs = [(a, b) for a, b in zip(items, items[1:]) if b['frame'] == a['frame']+1]
+        result[phase] = {'frames': [s['frame'] for s in items],
+            'maxAnchorResidualM': max((math.dist(s['soleWorldM'], s['anchorWorldM']) for s in items), default=None),
+            'maxHorizontalDriftM': max((math.dist(s['soleWorldM'][:2], items[0]['soleWorldM'][:2]) for s in items), default=None),
+            'maxHorizontalSpeedMps': max((math.dist(a['soleWorldM'][:2], b['soleWorldM'][:2])*fps for a, b in pairs), default=None),
+            'maxPatchVertexDriftM': max((math.dist(p[:2], q[:2]) for s in items
+                                          for p, q in zip(items[0]['soleRegionWorldM'], s['soleRegionWorldM'])), default=None),
+            'minPatchZM': min((p[2] for s in items for p in s['soleRegionWorldM']), default=None),
+            'maxPatchVertexSpeedMps': max((math.dist(p[:2], q[:2])*fps for a, b in pairs
+                                          for p, q in zip(a['soleRegionWorldM'], b['soleRegionWorldM'])), default=None)}
+    return result

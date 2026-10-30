@@ -13,13 +13,14 @@ from mathutils import Matrix, Quaternion, Vector
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from sole_contact_metrics import summarize_sole
 from support_contact_metrics import measure_interval, validate_annotations
-from bounded_support_ik import blend_weight, solve_leg, validate_cycle_samples
+from bounded_support_ik import (blend_weight, solve_leg, validate_cycle_samples,
+                                bounded_refinement_offset, summarize_contact_phases)
 from shared_route_metrics import validate_route_continuity, validate_shared_routes
 from world_route import validate_world_route
 from blender_world_route import capture_route_roots, apply_route_offset
 
 
-def apply_support_ik(target, regions, item, frame, anchor):
+def apply_support_ik(target, regions, item, frame, anchor, refine=False, original_ankle=None):
     side = item['side']
     slot = next(i for i, (obj, index) in enumerate(regions[side])
                 if obj.name == item['mesh'] and index == item['vertexIndex'])
@@ -30,6 +31,8 @@ def apply_support_ik(target, regions, item, frame, anchor):
     if lower.parent != upper:
         raise ValueError('IK requires direct thigh/shin hierarchy')
     world = target.matrix_world
+    if original_ankle is None:
+        original_ankle = list(world @ lower.tail)
     if world.to_3x3().determinant() <= 0 or any(abs(v-1) > 1e-6 for v in world.to_scale()):
         raise ValueError('IK trial requires unit armature scale')
     if (upper.tail-lower.head).length > 1e-5:
@@ -60,8 +63,27 @@ def apply_support_ik(target, regions, item, frame, anchor):
     knee_residual = (world @ lower.head-Vector(solved['knee'])).length
     if not all(math.isfinite(v) and v <= 0.0001 for v in (ankle_residual, knee_residual)):
         raise ValueError('IK evaluated joint residual exceeds 0.1 mm')
+    original_residual = (actual-Vector(anchor)).length
+    iterations = 0
+    if refine and weight == 1:
+        while (actual-Vector(anchor)).length > 1e-5 and iterations < 3:
+            bounded_refinement_offset(original_ankle, list(world @ lower.tail),
+                                                    list(actual), anchor)
+            before = (actual-Vector(anchor)).length
+            # Re-evaluate deformation at the same world anchor; route stays fixed.
+            step_report = apply_support_ik(target, regions, item, frame, anchor, refine=False,
+                             original_ankle=original_ankle)
+            ankle_residual = max(ankle_residual, step_report['ankleResidualM'])
+            knee_residual = max(knee_residual, step_report['kneeResidualM'])
+            iterations += 1
+            actual = Vector(evaluated_sole(regions)[side][slot])+route
+            if (actual-Vector(anchor)).length > before+1e-7:
+                raise ValueError('sole refinement increased anchor residual')
+    patch = [list(Vector(p)+route) for p in evaluated_sole(regions)[side]]
     return {'frame': frame, 'side': side, 'weight': weight, 'requestedOffsetM': list(offset),
             'blendedOffsetM': list(offset*weight),
+            'refinementIterations': iterations, 'preRefinementResidualM': original_residual,
+            'soleWorldM': list(actual), 'anchorWorldM': list(anchor), 'soleRegionWorldM': patch,
             'ankleResidualM': ankle_residual, 'kneeResidualM': knee_residual,
             'soleAnchorResidualM': (actual-Vector(anchor)).length,
             'solverApplied': True, 'status': 'diagnostic_only'}
@@ -255,6 +277,7 @@ def main():
     parser.add_argument("--preview-dir", type=Path)
     parser.add_argument("--sole-contact", action="store_true", help="Measure weighted sole-region geometry; no contact acceptance")
     parser.add_argument("--support-annotations", type=Path, help="Explicit checksum-bound support interval hypotheses and route offsets")
+    parser.add_argument("--sole-refine", action="store_true", help="Opt-in bounded full-weight evaluated-sole refinement")
     parser.add_argument("--world-route", type=Path, help="Complete checksum/FPS-bound world translations; offline playback only")
     parser.add_argument("--support-ik", action="store_true", help="Offline bounded two-bone trial, not contact acceptance")
     parser.add_argument("--sole-samples-output", type=Path, help="Optional fixed-vertex world trajectories for offline review")
@@ -268,6 +291,8 @@ def main():
     parser.add_argument("--pelvis-translation", action="store_true",
                         help="Diagnostic only: transfer scaled world-space hips displacement from rest")
     args = parser.parse_args(raw)
+    if args.sole_refine and not args.support_ik:
+        raise ValueError('sole refinement requires --support-ik')
     if args.support_annotations and not args.sole_contact:
         raise ValueError("support annotations require --sole-contact")
     if args.support_ik and not args.support_annotations:
@@ -474,7 +499,7 @@ def main():
                         point = Vector(evaluated_sole(regions)[item['side']][slot])
                         point += Vector(item['routeTranslationsM'][0])
                         anchors[item_index] = [point.x, point.y, 0]
-                    ik_samples.append(apply_support_ik(target, regions, item, frame, anchors[item_index]))
+                    ik_samples.append(apply_support_ik(target, regions, item, frame, anchors[item_index], refine=args.sole_refine))
             route_offset = (route_by_action[name]['translationsM'][frame-start] if full_route else [0, 0, 0])
             if full_route:
                 apply_route_offset(route_roots, route_offset)
@@ -525,6 +550,11 @@ def main():
                  and item['startFrame'] <= s['frame'] <= item['endFrame']],
                 bpy.context.scene.render.fps / bpy.context.scene.render.fps_base)
                 for item in support_intervals if args.support_ik and item['action'] == name]
+            reports[-1]['contactPhases'] = [summarize_contact_phases(
+                [s for s in ik_samples if s['side'] == item['side']
+                 and item['startFrame'] <= s['frame'] <= item['endFrame']],
+                bpy.context.scene.render.fps / bpy.context.scene.render.fps_base)
+                for item in support_intervals if args.support_ik and item['action'] == name]
             reports[-1]["soleGeometry"] = {
                 side: {**summarize_sole(sole_samples[side], bpy.context.scene.render.fps / bpy.context.scene.render.fps_base),
                        "selection": "rest weighted foot vertices, bottom 0.02m band, weight >= 0.5",
@@ -571,6 +601,7 @@ def main():
         "targetBones": len(target.data.bones),
         "sequenceRendered": bool(args.sequence_dir),
         "supportAnnotationSha256": sha256(args.support_annotations) if args.support_annotations else None,
+        "soleRefinementEnabled": args.sole_refine,
         "worldRoute": {**full_route, 'routeApplied': True,
                        'inputSha256': sha256(args.world_route),
                        'applicationStage': 'post_ik_pre_measurement_world_translation'} if full_route else None,
