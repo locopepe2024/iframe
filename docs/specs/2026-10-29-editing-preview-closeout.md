@@ -23,3 +23,21 @@ editing/compiler/subtitle regressions, typecheck and production build. GreenA
 acceptance uses new synthetic assets/projects only, checks editing, save/reopen,
 restore and MP4/SRT export, desktop/narrow layout and no client errors. Record
 actual evidence and remaining limitations before declaring acceptance.
+
+## GreenA network test constraint
+
+GreenA's local disk and server-side media path have been measured as healthy.
+When testing from the development workstation, slow transfers observed on the
+direct public route are a network-path issue, not evidence of server I/O
+congestion. The workstation's Xray SOCKS proxy listens on `127.0.0.1:10808`.
+
+Terminal downloads must explicitly use the proxy and disable curl's no-proxy
+override:
+
+```bash
+ALL_PROXY=socks5h://127.0.0.1:10808 \
+curl --noproxy '' ...
+```
+
+Browser automation must not pass `--no-proxy-server`; that flag bypasses Xray.
+Record whether each acceptance run used direct networking or the Xray route.
