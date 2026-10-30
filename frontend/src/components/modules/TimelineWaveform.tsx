@@ -66,8 +66,15 @@ export default function TimelineWaveform({ url, startMs, endMs }: { url: string;
         const controller = new AbortController();
         queue = queue.then(async () => {
             if (controller.signal.aborted) return;
+            let timedOut = false;
+            const timeout = setTimeout(() => {
+                timedOut = true;
+                setFailed(true);
+                controller.abort();
+            }, 15000);
             try { const decoded = await decode(url, controller.signal); if (!controller.signal.aborted) setData(decoded); }
-            catch { if (!controller.signal.aborted) setFailed(true); }
+            catch { if (!controller.signal.aborted || timedOut) setFailed(true); }
+            finally { clearTimeout(timeout); }
         });
         return () => controller.abort();
     }, [url, visible]);

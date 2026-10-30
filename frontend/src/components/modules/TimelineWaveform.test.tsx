@@ -27,3 +27,20 @@ it('reports oversized media without decoding or showing a fake waveform', async 
     await waitFor(() => expect(view.container.querySelector('[data-waveform-state]')).toHaveAttribute('data-waveform-state', 'unavailable'));
     expect(view.container.querySelector('svg')).toBeNull();
 });
+
+it('times out a stalled fetch and lets the next visible waveform proceed', async () => {
+    vi.stubGlobal('IntersectionObserver', undefined);
+    const realTimeout = globalThis.setTimeout;
+    const timer = vi.spyOn(globalThis, 'setTimeout').mockImplementation(((fn: TimerHandler, delay?: number, ...args: unknown[]) => realTimeout(fn, delay === 15000 ? 10 : delay, ...args)) as typeof setTimeout);
+    const fetcher = vi.fn().mockImplementation((url: string, options: RequestInit) => {
+        if (url === '/stalled.wav') return new Promise((_, reject) => options.signal?.addEventListener('abort', () => reject(new Error('Aborted'))));
+        return Promise.resolve(new Response(null, { status: 404 }));
+    });
+    vi.stubGlobal('fetch', fetcher);
+    try {
+        const view = render(<><TimelineWaveform url="/stalled.wav" startMs={0} endMs={1000} /><TimelineWaveform url="/next.wav" startMs={0} endMs={1000} /></>);
+        await waitFor(() => expect(fetcher).toHaveBeenCalledTimes(2));
+        await waitFor(() => expect(view.container.querySelectorAll('[data-waveform-state="unavailable"]')).toHaveLength(2));
+        expect((fetcher.mock.calls[0][1] as RequestInit).signal?.aborted).toBe(true);
+    } finally { timer.mockRestore(); }
+});
