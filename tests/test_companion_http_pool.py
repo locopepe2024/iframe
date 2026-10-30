@@ -21,3 +21,23 @@ def test_reuses_connections_without_retaining_credentials_or_cookies(monkeypatch
     assert session.cookies.clear.call_count == 6
     http_pool.close_pools()
     session.close.assert_called_once()
+
+
+def test_response_is_consumed_and_closed_before_reuse_even_on_body_failure(monkeypatch):
+    from unittest.mock import PropertyMock
+    http_pool.close_pools()
+    session = Mock()
+    response = session.post.return_value
+    monkeypatch.setattr(http_pool.requests, 'Session', Mock(return_value=session))
+    content = PropertyMock(return_value=b'{"choices":[]}')
+    type(response).content = content
+    assert http_pool.post('https://example.test/v1/chat') is response
+    assert session.post.call_args.kwargs['stream'] is True
+    content.assert_called_once()
+    response.close.assert_called_once()
+    content.side_effect = http_pool.requests.exceptions.ChunkedEncodingError('private')
+    with pytest.raises(http_pool.requests.exceptions.ChunkedEncodingError):
+        http_pool.post('https://example.test/v1/chat')
+    assert response.close.call_count == 2
+    assert session.post.call_count == 2
+    http_pool.close_pools()

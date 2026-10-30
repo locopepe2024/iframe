@@ -2,6 +2,7 @@
 import atexit
 import threading
 import requests
+from .latency import timed
 
 _local = threading.local()
 _sessions = []
@@ -30,6 +31,13 @@ def post(url, **kwargs):
             _sessions.append(session)
     session.cookies.clear()
     try:
-        return session.post(url, **kwargs)
+        # HTTP streaming only: model still receives a non-streaming request.
+        # Return headers first, then consume the body exactly once before reuse.
+        response = timed('cloud_http_headers', session.post)(url, stream=True, **kwargs)
+        try:
+            timed('cloud_http_body', lambda: response.content)()
+            return response
+        finally:
+            response.close()
     finally:
         session.cookies.clear()

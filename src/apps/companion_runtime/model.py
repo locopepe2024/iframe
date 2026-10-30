@@ -5,6 +5,7 @@ import sqlite3
 
 import requests
 from .http_pool import post as pooled_post
+from .latency import model_usage
 from fastapi import HTTPException
 
 from ..user_config import UserConfigStore
@@ -59,7 +60,9 @@ def _propose(identity, messages, current_message_id, *, diary=False):
                                 ],
                       **({'tools': tools} if tools else {})), timeout=(10,60))
         response.raise_for_status()
-        result = response.json()['choices'][0]['message']
+        payload = response.json()
+        model_usage(payload)
+        result = payload['choices'][0]['message']
         if not isinstance(result,dict) or len(json.dumps(result))>32000:
             raise ValueError('Invalid model reply')
         calls = result.get('tool_calls') or []

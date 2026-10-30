@@ -4,7 +4,7 @@ import sys
 
 traces = {}
 for line in sys.stdin:
-    for marker in ('Companion voice diagnostic ', 'Companion latency '):
+    for marker in ('Companion voice diagnostic ', 'Companion latency ', 'Companion model usage '):
         if marker not in line:
             continue
         try:
@@ -17,6 +17,8 @@ for line in sys.stdin:
         trace = traces.setdefault(trace_id, {'stages': {}, 'server_phases': []})
         if marker == 'Companion latency ':
             trace['server_phases'].append({k:item[k] for k in ('phase', 'duration_ms', 'status') if k in item})
+        elif marker == 'Companion model usage ':
+            trace['usage'] = {k:item[k] for k in ('prompt_tokens','completion_tokens','total_tokens') if k in item}
         elif item.get('event') == 'stage':
             trace['stages'].setdefault(item['state'], []).append(item)
 
@@ -35,6 +37,7 @@ for trace_id, trace in traces.items():
         'chat_queue_ms':gap('chat_enqueued','chat_dequeued'),
         'chat_round_trip_ms':first('chat_received').get('duration_ms'),
         'server_phases':trace['server_phases'],
+        'usage':trace.get('usage'),
         'tts_request_to_decoded_energy_ms':gap('tts_sent','audio_energy'),
         'segment_ready_to_decoded_energy_ms':gap('segment_ready','audio_energy'),
         'webrtc':{k:v for k,v in first('webrtc_stats').items() if k in ('rtt_ms','jitter_ms','jitter_buffer_ms')},

@@ -52,3 +52,9 @@ Observed: actual mobile coordinator phases were 3005.7/3003.6ms against a 3s rea
 Code facts: dict context was converted to Python repr and then parsed as JSON, losing local task state; unconstrained model output could exhaust 120 tokens; invalid focus was silently replaced with chat. Patch preserves typed JSON context, requires enum-constrained JSON schema using deployed llama-server support, rejects incomplete/invalid decisions, and keeps the existing deterministic command behavior and client timeout. No added fallback or reduced timeout.
 
 Regression: original service fails typed-context/invalid-output tests; patched service passes all 3 tests. Direct real-model synthetic calls returned valid chat/reply in 880/598/635ms. Reloaded service with original environment/user; host health passed. Mobile latency benefit remains to be measured.
+
+## Cloud HTTP boundary instrumentation
+
+Mobile follow-up showed coordinator phases 1253.9/966.8/978.8ms; cloud request phases 8063/10692.7/6821.5ms. A later utterance waited 8832ms in the browser chat queue. Preserve serial state-changing commands; concurrent tool execution is not a safe latency fix.
+
+HTTP pool now returns response headers before consuming response bytes, recording cloud_http_headers and cloud_http_body with the existing trace ID. This is transport-level streaming only; the provider request remains non-streaming and the agent still validates complete results before dispatch. Headers timing includes connection acquisition, DNS/TCP/TLS where needed, request upload, gateway and upstream wait; it cannot separate these internally. Response elapsed is not provider first-token latency. Record only allowlisted integer token counters. Consume and close responses before reuse, including body errors; do not retry ambiguous calls. 25 Python tests passed. Fresh mobile requests are needed for the new timings.

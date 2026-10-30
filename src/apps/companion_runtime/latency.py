@@ -36,3 +36,19 @@ def trace_chat(call):
         finally:
             _turn.reset(token)
     return wrapped
+
+
+def model_usage(payload):
+    """Allowlisted provider counters; never log response text or provider IDs."""
+    context = _turn.get()
+    if not context or not isinstance(payload, dict):
+        return
+    usage = payload.get('usage')
+    fields = {}
+    if isinstance(usage, dict):
+        for key in ('prompt_tokens', 'completion_tokens', 'total_tokens'):
+            value = usage.get(key)
+            if type(value) is int and value >= 0:
+                fields[key] = value
+    if fields:
+        logger.warning('Companion model usage %s', json.dumps({**context, **fields}))
