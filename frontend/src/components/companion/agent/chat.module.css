@@ -232,3 +232,26 @@
   .calendarGrid { grid-template-columns: repeat(7, minmax(0, 1fr)); }
   .viewerControls .zoomControls { order: 1; flex-basis: 100%; }
 }
+
+/* Match composer icons to the bottom navigation without shrinking their touch targets. */
+.shell .toolbar svg, .bottomNav svg { width: 22px; height: 22px; flex: 0 0 22px; }
+.toolbar > details { position: relative; }
+.shell .toolbar > details > summary { display: flex; align-items: center; justify-content: center; gap: .3rem; min-height: 48px; cursor: pointer; list-style: none; }
+.toolbar > details > summary::-webkit-details-marker { display: none; }
+.shell .toolbar > details > summary:focus-visible { outline: 3px solid var(--accent); outline-offset: -3px; border-radius: .5rem; }
+.toolbar > details > div { position: absolute; bottom: 100%; left: 0; z-index: 5; width: max-content; max-width: calc(100vw - 3rem); padding: .5rem; background: var(--surface); border: 1px solid var(--line); border-radius: .75rem; }
+.shell .toolbar > details > div button { display: flex; width: 100%; }
+@media (max-width: 36rem) {
+  .shell .toolbar { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: .25rem; align-items: center; }
+  .shell .toolbar:has(.composerActions > button:nth-child(3)) { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+  .shell .toolbar > .composerActions { display: contents; }
+  .shell .toolbar > details, .shell .toolbar > .modePicker { min-width: 0; }
+  .shell .toolbar button, .shell .toolbar .albumButton, .shell .toolbar .voiceButton, .shell .toolbar .sendButton, .shell .toolbar > .modePicker > button {
+    width: 100%; min-width: 0; max-width: none; height: 48px; min-height: 48px; margin: 0; padding: 0;
+    border: 0; border-radius: .5rem; background: transparent; color: var(--muted); flex-direction: row;
+  }
+  .shell .toolbar > details > summary { padding: 0; color: var(--muted); }
+  .shell .toolbar > details > summary > span { display: none; }
+  .shell .toolbar button svg { width: 22px; height: 22px; flex: 0 0 22px; }
+  .shell .toolbar .sendButton:not(:disabled) { color: var(--accent); }
+}

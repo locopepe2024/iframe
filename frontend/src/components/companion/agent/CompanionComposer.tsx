@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState, type ReactNode, type RefObject } from "react";
-import { ArrowUp, ChevronDown, Image, MessageCircle, Mic, Plus, Square, Video, VolumeX } from "lucide-react";
+import { ArrowUp, ChevronDown, Image, Sparkles, MessageCircle, Mic, Plus, Square, Video, VolumeX } from "lucide-react";
 import { useCompanionVoice } from "../useCompanionVoice";
 import { useContinuousCapture } from "./useContinuousCapture";
 import { isOpenAlbumCommand } from "./localCommands";
@@ -102,19 +102,19 @@ export default function CompanionComposer({ mode, value, disabled, busy, allowed
           <button ref={trigger} type="button" aria-label={`创作类型：${selected.label}`} aria-haspopup="menu" aria-expanded={menu} disabled={disabled || recording} onClick={() => setMenu(!menu)}><ModeIcon size={22} aria-hidden="true" /><span>{selected.label}</span><ChevronDown size={18} aria-hidden="true" /></button>
           {menu && <div role="menu" aria-label="选择创作类型" className={styles.modeMenu} style={{ left: Math.max(8, trigger.current?.getBoundingClientRect().left ?? 8), bottom: Math.max(8, Math.min(window.innerHeight * .45, window.innerHeight - (trigger.current?.getBoundingClientRect().top ?? 0) + 8)) }}>{modes.map(({ value: next, label, icon: Icon }) => <button type="button" role="menuitemradio" aria-checked={mode === next} key={next} onClick={() => { voice.stopAll(); onMode(next); setMenu(false); trigger.current?.focus(); }}><Icon size={22} aria-hidden="true" />{label}</button>)}</div>}
         </div>}
-        {!unified ? null : <details><summary aria-label="创作功能">创作</summary><div role="group" aria-label="创作功能卡片">{([['image_edit','修改照片'],['image_generate','生成图片'],['video_generate','生成视频']] as const).map(([type,label])=><button key={type} type="button" disabled={disabled || recording} onClick={()=>onCreative?.(type)}>{label}</button>)}</div></details>}
-        <button type="button" className={styles.albumButton} aria-label="上传" disabled={disabled || recording} onClick={onUpload}><Plus size={24} aria-hidden="true" /><span>上传</span></button>
+        {!unified ? null : <details><summary aria-label="创作功能"><Sparkles size={22} aria-hidden="true"/><span>创作</span></summary><div role="group" aria-label="创作功能卡片">{([['image_edit','修改照片'],['image_generate','生成图片'],['video_generate','生成视频']] as const).map(([type,label])=><button key={type} type="button" disabled={disabled || recording} onClick={()=>onCreative?.(type)}>{label}</button>)}</div></details>}
+        <button type="button" className={styles.albumButton} aria-label="上传" disabled={disabled || recording} onClick={onUpload}><Plus size={22} aria-hidden="true" /><span>上传</span></button>
         <div className={styles.composerActions}>
           {playing && <button type="button" aria-label="停止本轮播报" title="停止本轮播报，继续听您说话" onClick={() => companionPlayback.cancel()}><VolumeX size={22} aria-hidden="true" /></button>}
           <button type="button" className={styles.voiceButton} aria-label={voice.finishing ? "正在整理" : recording ? "停止" : "语音输入"} disabled={(!recording && ((disabled && !busy) || (localCapture && capture.failed))) || voice.finishing} onClick={() => {
             if (voiceConsent) toggleVoice(); else setVoicePrompt(true);
           }}>
-            {recording ? <Square size={28} aria-hidden="true" /> : <Mic size={28} aria-hidden="true" />}<span>{voice.finishing ? "正在整理" : recording ? "停止" : "语音输入"}</span>
+            {recording ? <Square size={22} aria-hidden="true" /> : <Mic size={22} aria-hidden="true" />}<span>{voice.finishing ? "正在整理" : recording ? "停止" : "语音输入"}</span>
           </button>
           <button type="button" className={styles.sendButton} aria-label="发送" disabled={disabled || recording || (!value.trim() && !hasAttachments) || (!localCommand && mode === "chat" && !!value.trim() && (hasAttachments && !mediaAcknowledged))} onClick={() => {
             if (!localCommand && mode === "chat" && value.trim() && !allowed) { onRequestConsent(); return; }
             onSend();
-          }}><ArrowUp size={30} aria-hidden="true" /></button>
+          }}><ArrowUp size={22} aria-hidden="true" /></button>
         </div>
       </div>
     </div>
