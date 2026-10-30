@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react';
 import { useLocale } from 'next-intl';
 import { editing, type EditFolder, type EditMaterial } from '@/lib/editing';
 import { extractErrorDetail } from '@/lib/utils';
+import { FolderInput, Lock, Play, Search, Trash2, Upload } from 'lucide-react';
 
 type Props = { onSelect?: (item: EditMaterial) => void; disabled?: boolean };
 export function EditingMaterials(props: Props) { return <MaterialBrowser {...props} manage={false} />; }
@@ -72,12 +73,12 @@ function MaterialBrowser({ onSelect, disabled = false, manage }: Props & { manag
       <button type="submit" className="glass-button min-h-11 px-3 py-2" disabled={busy || !name.trim()}>{t('保存目录', 'Save folder')}</button>
       <button type="button" className="glass-button min-h-11 px-3 py-2" disabled={busy} onClick={() => setFolderForm(null)}>{t('取消', 'Cancel')}</button>
     </form>}
-    <div className="flex flex-wrap gap-2">
-      <label className="text-sm">{t('素材目录', 'Material folder')} <select className="glass-input max-w-full px-3 py-2" disabled={mutating} value={folderId} onChange={event => { setFolderId(event.target.value); setFolderForm(null); }}>
+    <div className="flex flex-wrap items-center gap-2">
+      <label className="flex items-center gap-2"><FolderInput size={15} className="text-text-muted" /><select aria-label={t('素材目录', 'Material folder')} className="glass-input max-w-[12rem] px-3 py-2 text-sm" disabled={mutating} value={folderId} onChange={event => { setFolderId(event.target.value); setFolderForm(null); }}>
         <option value="">{t('全部目录', 'All folders')}</option><option value="__none">{t('未分类', 'Unfiled')}</option>{folders.map(folder => <option key={folder.id} value={folder.id}>{folder.name}</option>)}
       </select></label>
-      <label className="min-w-0 flex-1 text-sm">{t('搜索素材', 'Search materials')} <input className="glass-input w-full px-3 py-2" disabled={mutating} value={query} onChange={event => setQuery(event.target.value)} /></label>
-      {manage && <label className="glass-button flex min-h-11 cursor-pointer items-center px-3 py-2">{t('上传视频或音频', 'Upload video or audio')}<input className="sr-only" type="file" multiple accept="video/*,audio/*" disabled={busy} onChange={async event => {
+      <label className="relative w-full sm:w-52"><Search size={15} className="pointer-events-none absolute left-3 top-3 text-text-muted" /><input aria-label={t('搜索素材', 'Search materials')} className="glass-input w-full py-2 pl-9 pr-3" placeholder={t('搜索素材…', 'Search materials…')} disabled={mutating} value={query} onChange={event => setQuery(event.target.value)} /></label>
+      {manage && <label className="glass-button flex min-h-11 cursor-pointer items-center gap-2 px-3 py-2"><Upload size={15} />{t('上传视频或音频', 'Upload video or audio')}<input className="sr-only" type="file" multiple accept="video/*,audio/*" disabled={busy} onChange={async event => {
         const files = Array.from(event.target.files || []); event.target.value = ''; if (!files.length) return;
         setMutating(true); setError(''); setUploadErrors([]); const failures: string[] = []; let uploaded = 0;
         try {
@@ -95,15 +96,18 @@ function MaterialBrowser({ onSelect, disabled = false, manage }: Props & { manag
     {!!uploadErrors.length && <p role="alert" className="whitespace-pre-line text-sm text-status-failed-fg">{uploadErrors.join('\n')}</p>}
     {busy && <p role="status" className="text-sm text-text-secondary">{progress || t('正在处理…', 'Working…')}</p>}
     {!busy && !items.length && <p className="text-sm text-text-secondary">{t('当前目录没有素材。', 'No materials in this folder.')}</p>}
-    <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">{items.map(item => <article className="min-w-0 rounded-lg border border-glass-border p-3" key={item.id}>
-      <p className="truncate font-medium" title={item.name}>{item.name}</p>
+    <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">{items.map(item => <article className="group relative min-w-0 overflow-hidden rounded-xl border border-glass-border bg-surface" key={item.id}>
+      <div className="relative aspect-video overflow-hidden bg-black/40">
+        {item.video ? <video className="h-full w-full object-cover" src={item.url} muted preload="metadata" aria-label={item.name} /> : <div className="flex h-full items-center justify-center text-4xl text-text-muted">♫</div>}
+        <div className="absolute inset-0 flex items-center justify-center gap-2 bg-black/55 opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100">
+          {onSelect && <button type="button" className="rounded-full bg-primary p-3 text-white" aria-label={t('选择素材', 'Select material')} title={t('使用此素材', 'Use this material')} disabled={busy || disabled} onClick={() => void run(async () => { onSelect(await editing.material(item.id)); })}><Play size={16} fill="currentColor" /></button>}
+          {manage && item.deletable && <button type="button" className="rounded-full bg-red-500/80 p-3 text-white" aria-label={`${t('删除素材', 'Delete material')} ${item.name}`} disabled={busy} onClick={() => { if (window.confirm(t(`确认删除「${item.name}」？`, `Delete “${item.name}”?`))) void run(async () => { await editing.deleteMaterial(item.id); setReload(n => n + 1); }); }}><Trash2 size={16} /></button>}
+          {!item.deletable && manage && <span className="rounded-full bg-black/60 p-3 text-text-muted" title={t('来源素材不可删除', 'Source material is read-only')}><Lock size={16} /></span>}
+        </div>
+      </div>
+      <div className="p-3"><p className="truncate font-medium" title={item.name}>{item.name}</p>
       <p className="text-xs text-text-muted">{item.folder_name || t('未分类', 'Unfiled')} · {item.origin === 'generated' ? t('生成素材', 'Generated') : t('上传素材', 'Uploaded')}</p>
-      <div className="mt-2 flex flex-wrap gap-2">
-        {onSelect && <button type="button" className="glass-button min-h-11 px-3 py-2" disabled={busy || disabled} onClick={() => void run(async () => { onSelect(await editing.material(item.id)); })}>{t('选择素材', 'Select material')}</button>}
-        {manage && <>
-          <label className="min-w-0 text-xs">{t('移动到', 'Move to')} <select className="glass-input max-w-full px-2 py-2" aria-label={`${t('移动素材', 'Move material')} ${item.name}`} value={item.folder_id || ''} disabled={busy} onChange={event => { const target = event.target.value; void run(async () => { await editing.moveMaterial(item.id, target || null); setReload(n => n + 1); }); }}><option value="">{t('未分类', 'Unfiled')}</option>{folders.map(folder => <option key={folder.id} value={folder.id}>{folder.name}</option>)}</select></label>
-          {item.deletable && <button type="button" className="glass-button min-h-11 px-3 py-2 text-sm" disabled={busy} aria-label={`${t('删除素材', 'Delete material')} ${item.name}`} onClick={() => { if (window.confirm(t(`确认删除「${item.name}」？`, `Delete “${item.name}”?`))) void run(async () => { await editing.deleteMaterial(item.id); setReload(n => n + 1); }); }}>{t('删除', 'Delete')}</button>}
-        </>}
+      {manage && <div className="mt-2 flex items-center gap-2"><FolderInput size={14} className="shrink-0 text-text-muted" /><select className="glass-input min-w-0 flex-1 px-2 py-2 text-xs" aria-label={`${t('移动素材', 'Move material')} ${item.name}`} value={item.folder_id || ''} disabled={busy} onChange={event => { const target = event.target.value || null; void run(async () => { await editing.moveMaterial(item.id, target); setItems(old => old.map(current => current.id === item.id ? { ...current, folder_id: target, folder_name: folders.find(folder => folder.id === target)?.name || null } : current)); setReload(n => n + 1); }); }}><option value="">{t('未分类', 'Unfiled')}</option>{folders.map(folder => <option key={folder.id} value={folder.id}>{folder.name}</option>)}</select></div>}
       </div>
     </article>)}</div>
     {cursor !== null && <button type="button" className="glass-button min-h-11 px-3 py-2" disabled={busy} onClick={() => void run(async () => { const page = await editing.materials(query, cursor, folderId || null); setItems(old => [...old, ...page.items]); setCursor(page.next_cursor); })}>{t('加载更多', 'Load more')}</button>}
