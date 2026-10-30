@@ -51,3 +51,29 @@ def solve_leg(hip, knee, ankle, offset, weight):
     height = math.sqrt(max(0, upper*upper-along*along))
     solved_knee = add(add(hip, mul(axis, along)), mul(bend, height))
     return {'knee': solved_knee, 'ankle': goal, 'weight': weight}
+
+
+def validate_cycle_samples(samples, fps):
+    """Check IK diagnostics for interval continuity; never labels contact passed."""
+    if not samples or isinstance(fps, bool) or not math.isfinite(fps) or fps <= 0:
+        raise ValueError('invalid cycle samples or FPS')
+    frames = [item.get('frame') for item in samples]
+    if any(type(frame) is not int for frame in frames) or frames != list(range(frames[0], frames[-1]+1)):
+        raise ValueError('cycle samples must be consecutive')
+    weights = [item.get('weight') for item in samples]
+    if any(not isinstance(weight, (int, float)) or not math.isfinite(weight) or not 0 <= weight <= 1 for weight in weights):
+        raise ValueError('invalid cycle weight')
+    if weights[0] != 0 or weights[-1] != 0:
+        raise ValueError('support interval must release at both endpoints')
+    for item in samples:
+        for key in ('ankleResidualM', 'kneeResidualM', 'soleAnchorResidualM'):
+            value = item.get(key)
+            if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value) or value < 0:
+                raise ValueError('invalid contact residual')
+    max_step = max(abs(b-a) for a, b in zip(weights, weights[1:])) if len(weights) > 1 else 0
+    return {'status': 'diagnostic_only', 'frameRange': [frames[0], frames[-1]],
+            'evaluationFPS': fps, 'maxWeightStep': max_step,
+            'entryWeight': weights[0], 'exitWeight': weights[-1],
+            'maxJointResidualM': max(max(item.get(key, float('inf')) for key in ('ankleResidualM', 'kneeResidualM')) for item in samples),
+            'endpointSoleResidualM': [samples[0]['soleAnchorResidualM'], samples[-1]['soleAnchorResidualM']],
+            'supportAccepted': False}

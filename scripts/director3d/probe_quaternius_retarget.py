@@ -13,7 +13,7 @@ from mathutils import Matrix, Quaternion, Vector
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from sole_contact_metrics import summarize_sole
 from support_contact_metrics import measure_interval, validate_annotations
-from bounded_support_ik import blend_weight, solve_leg
+from bounded_support_ik import blend_weight, solve_leg, validate_cycle_samples
 
 
 def apply_support_ik(target, regions, item, frame, anchor):
@@ -479,6 +479,11 @@ def main():
         reports.append({"action": name, "frameRange": [start, end], "pelvisTravelM": travel, "footHeightRangeM": foot_heights, "previewFrame": (start + end) // 2 if args.preview_dir else None, "samples": samples})
         if regions:
             reports[-1]['supportIK'] = ik_samples
+            reports[-1]['supportIKIntervals'] = [validate_cycle_samples(
+                [s for s in ik_samples if s['side'] == item['side']
+                 and item['startFrame'] <= s['frame'] <= item['endFrame']],
+                bpy.context.scene.render.fps / bpy.context.scene.render.fps_base)
+                for item in support_intervals if args.support_ik and item['action'] == name]
             reports[-1]["soleGeometry"] = {
                 side: {**summarize_sole(sole_samples[side], bpy.context.scene.render.fps / bpy.context.scene.render.fps_base),
                        "selection": "rest weighted foot vertices, bottom 0.02m band, weight >= 0.5",
