@@ -1,0 +1,20 @@
+{
+  "schema": "addams-semantic-pass-response.v1",
+  "groups": [
+    {
+      "group_id": "G5",
+      "shot_id": "S_candidate_1",
+      "shot_change": "none",
+      "action_phase": "support_to_airborne_transition",
+      "body_orientation": "back",
+      "left_leg_state": "airborne",
+      "right_leg_state": "airborne",
+      "heel_state": "airborne",
+      "sole_evidence": "partial",
+      "observed_facts": ["64/65脚掌离地", "右脚尖高于左脚尖"],
+      "uncertainties": ["公制离地距离", "深度"],
+      "confidence": 0.9,
+      "evidence_level": "human_confirmed"
+    }
+  ]
+}

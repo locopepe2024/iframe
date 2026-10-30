@@ -33,3 +33,7 @@ LLM语义输出是否稳定、左右身份是否正确、对漫画模糊帧的�
 ## 结构化多模态语义请求
 
 已生成[语义分析请求包](../raw/2026-10-30-addams-semantic-interpolation-v1/semantic-pass-request.json)。每组只提供2–3个代表帧，要求模型输出镜头变化、动作阶段、左右脚状态、脚跟状态、鞋底证据和不确定性；明确禁止输出坐标、深度、焦距和公制离地距离。模型输出必须经过证据等级复核后，才能进入双向语义插值。
+
+## 语义结果校验
+
+已增加[语义结果校验器](../tools/addams_validate_semantic_pass.py)和[响应模板](../raw/2026-10-30-addams-semantic-interpolation-v1/semantic-pass-response.template.json)。校验器拒绝坐标、深度、焦距、内参和公制离地字段；同时检查动作状态、鞋底证据、镜头状态、置信度和不确定性。未通过校验的模型结果不能进入插值或骨架求解。
