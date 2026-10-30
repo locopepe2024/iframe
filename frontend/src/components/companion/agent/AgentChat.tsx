@@ -497,7 +497,7 @@ export default function AgentChat() {
       {page?.next_cursor && <button disabled={busy || pending} onClick={() => void run(() => memories(appliedQuery, page.next_cursor!))}>更多个人记忆</button>}
     </section>
     </details>}
-    {audioReply && <OpenTalkingReply key={session} reply={spokenReply} voice={identity.voice} connectionEpoch={voiceConnectionEpoch} onStatus={setVoiceOutputStatus} />}
+    {audioReply && <OpenTalkingReply key={session} reply={spokenReply} preconnect={voiceActive} voice={identity.voice} connectionEpoch={voiceConnectionEpoch} onStatus={setVoiceOutputStatus} />}
     <input ref={fileRef} type="file" hidden accept="image/jpeg,image/png,image/webp,video/mp4,video/quicktime,video/webm,.mov" multiple aria-label="选择要上传的照片或视频" onChange={event => {
       const files=Array.from(event.target.files ?? []);event.target.value="";
       if(files.length>20){setNotice("每次最多选择 20 个文件，请重新选择。");return;}

@@ -36,3 +36,11 @@ UniArt → Ali requires provider/gateway correlated request telemetry to split p
 Demo only, backed up backend and HTML; old hashed assets retained. No timeout, VAD thresholds, TURN or TTS provider change in this slice. Fresh mobile reload and natural speech are required for runtime measurements; synthetic host tests are not mobile latency evidence.
 
 Filtered log collection: `docker logs --since 10m --timestamps iframe-companion-demo 2>&1` followed by filtering `Companion voice diagnostic` and `Companion latency` only. Feed into `scripts/opentalking/summarize_voice_latency.py`. Results may arrive out of order, so join by trace ID and compare event elapsed times, not log arrival times.
+
+## UDP comparison and connection reuse slice
+
+Mobile UDP sample: selected-pair RTT 66ms, jitter 0ms, lifetime jitter-buffer average 38ms. Previous TCP sample was 2971/69/312ms. Different requests/times, not a controlled causal comparison. UDP remains selected in Demo; original configuration retained on host.
+
+Code facts: chat used top-level requests.post (temporary Session); each TTS synthesis used a temporary AsyncClient; browser opened media only when a reply was queued. Changes: thread-local chat Session, process-local asynchronous TTS HTTP pool with shutdown close, and preconnect on active capture. No model/provider/timeout changes or automatic model request retry. Auth stays per request; cookies are discarded. TTS pool is shared across ephemeral adapters, since the runner closes its per-turn adapter after speech. It is closed by the unified application lifespan after runners stop.
+
+Success criteria: listening opens media without submitting TTS; later reply reuses media; unmount releases media; chat connections reuse within a worker without carrying request credentials/cookies; HTTP failures are not replayed; TTS client reuses across adapters and closes on service shutdown. Actual latency benefit requires fresh mobile samples after deployment.

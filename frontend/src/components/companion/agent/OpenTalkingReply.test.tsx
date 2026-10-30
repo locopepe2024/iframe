@@ -155,3 +155,14 @@ it("never speaks a cancelled reply when its delayed player becomes ready",async(
    await waitFor(()=>expect(speaks()).toHaveLength(2));
  } finally {view.unmount();play.mockRestore();}
 });
+
+it("preconnects while listening without synthesizing and reuses that connection for the reply",async()=>{
+ const view=render(<OpenTalkingReply reply={null} preconnect/>);
+ await waitFor(()=>expect(calls.some(c=>c.url.endsWith("/webrtc/offer"))).toBe(true));
+ expect(speaks()).toHaveLength(0);
+ view.rerender(<OpenTalkingReply reply={{id:"warm",text:"你好"}} preconnect/>);
+ await waitFor(()=>expect(speaks()).toHaveLength(1));
+ expect(calls.filter(c=>c.url.endsWith("/sessions"))).toHaveLength(1);
+ view.unmount();
+ expect(peer.close).toHaveBeenCalledOnce();
+});

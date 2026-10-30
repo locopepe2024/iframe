@@ -153,7 +153,7 @@ def test_personal_channel_wire_strict_tools_and_safe_failure(monkeypatch):
     monkeypatch.setenv('IFRAME_COMPANION_USER_CONFIG_DB','/tmp/users.db')
     monkeypatch.setattr(model,'UserConfigStore',Mock(return_value=configured))
     response=Mock();response.json.return_value={'choices':[{'message':{'tool_calls':[dict(type='function',function=dict(name='memory_search',arguments='{"query":"散步"}'))]}}]}
-    post=Mock(return_value=response);monkeypatch.setattr(model.requests,'post',post)
+    post=Mock(return_value=response);monkeypatch.setattr(model,'pooled_post',post)
     identity=UserContext('actor','owner','','')
     assert model.propose(identity,[dict(id='m',text='散步')],'m')==dict(kind='tool',name='memory.search',arguments=dict(query='散步'))
     response.json.return_value={'choices':[{'message':{'content':'今天女儿来看我，我们一起喝了茶。'}}]}

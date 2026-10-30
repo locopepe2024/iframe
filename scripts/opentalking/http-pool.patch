@@ -1,0 +1,200 @@
+--- a/opentalking/providers/tts/openai_compatible/adapter.py
++++ b/opentalking/providers/tts/openai_compatible/adapter.py
+@@ -2,6 +2,7 @@
+ 
+ import base64
+ import io
++from http.cookiejar import CookieJar, DefaultCookiePolicy
+ from typing import Any, AsyncIterator
+ import wave
+ 
+@@ -50,6 +51,32 @@
+     if channels > 1 and pcm.size:
+         pcm = pcm.reshape(-1, channels).mean(axis=1).astype(np.int16)
+     return _resample_if_needed(pcm, sr, target_sr)
++
++
++_shared_client: httpx.AsyncClient | None = None
++
++
++def _http_client() -> httpx.AsyncClient:
++    global _shared_client
++    if _shared_client is None or _shared_client.is_closed:
++        _shared_client = httpx.AsyncClient(
++            timeout=httpx.Timeout(connect=30.0, read=180.0, write=30.0, pool=30.0),
++            cookies=CookieJar(policy=_RejectCookies()),
++            limits=httpx.Limits(max_connections=20, max_keepalive_connections=10, keepalive_expiry=60.0),
++        )
++    return _shared_client
++
++
++class _RejectCookies(DefaultCookiePolicy):
++    def set_ok(self, cookie, request):
++        return False
++
++
++async def close_http_pool() -> None:
++    global _shared_client
++    client, _shared_client = _shared_client, None
++    if client is not None:
++        await client.aclose()
+ 
+ 
+ class OpenAICompatibleTTSAdapter:
+@@ -91,79 +118,77 @@
+             "Authorization": f"Bearer {self.api_key}",
+             "Content-Type": "application/json",
+         }
+-        timeout = httpx.Timeout(connect=30.0, read=180.0, write=30.0, pool=30.0)
+-
+-        async with httpx.AsyncClient(timeout=timeout) as client:
+-            if self.protocol in {"chat_completions", "chat"}:
+-                payload: dict[str, Any] = {
+-                    "model": self.model,
+-                    "messages": [
+-                        {"role": "user", "content": self.prompt or "请用自然、清晰的中文朗读。"},
+-                        {"role": "assistant", "content": text},
+-                    ],
+-                    "audio": {"format": self.response_format or "wav", "voice": effective_voice},
+-                }
+-                resp = await client.post(f"{self.base_url}/chat/completions", headers=headers, json=payload)
+-                try:
+-                    resp.raise_for_status()
+-                except httpx.HTTPStatusError as exc:
+-                    raise RuntimeError(
+-                        f"OpenAI-compatible TTS failed ({exc.response.status_code}): {resp.text.strip()}"
+-                    ) from exc
+-                data = self._extract_chat_audio(resp)
+-            else:
+-                payload = {
+-                    "model": self.model,
+-                    "input": text,
+-                    "voice": effective_voice,
+-                    "response_format": self.response_format,
+-                }
+-                url = f"{self.base_url}/audio/speech"
+-                if self.response_format == "pcm":
+-                    async with client.stream("POST", url, headers=headers, json=payload) as resp:
+-                        try:
+-                            resp.raise_for_status()
+-                        except httpx.HTTPStatusError as exc:
+-                            detail = await resp.aread()
+-                            raise RuntimeError(
+-                                f"OpenAI-compatible TTS failed ({exc.response.status_code}): "
+-                                f"{detail.decode('utf-8', errors='ignore').strip()}"
+-                            ) from exc
+-                        chunk_bytes = max(2, int(self.sample_rate * (self.chunk_ms / 1000.0)) * 2)
+-                        if chunk_bytes % 2:
+-                            chunk_bytes += 1
+-                        buf = bytearray()
+-                        async for part in resp.aiter_bytes():
+-                            if not part:
+-                                continue
+-                            buf.extend(part)
+-                            while len(buf) >= chunk_bytes:
+-                                pcm = np.frombuffer(bytes(buf[:chunk_bytes]), dtype="<i2").copy()
+-                                del buf[:chunk_bytes]
+-                                yield AudioChunk(
+-                                    data=pcm,
+-                                    sample_rate=self.sample_rate,
+-                                    duration_ms=1000.0 * pcm.size / self.sample_rate,
+-                                )
+-                        if len(buf) % 2:
+-                            buf = buf[:-1]
+-                        if buf:
+-                            pcm = np.frombuffer(bytes(buf), dtype="<i2").copy()
++        client = _http_client()
++        if self.protocol in {"chat_completions", "chat"}:
++            payload: dict[str, Any] = {
++                "model": self.model,
++                "messages": [
++                    {"role": "user", "content": self.prompt or "请用自然、清晰的中文朗读。"},
++                    {"role": "assistant", "content": text},
++                ],
++                "audio": {"format": self.response_format or "wav", "voice": effective_voice},
++            }
++            resp = await client.post(f"{self.base_url}/chat/completions", headers=headers, json=payload)
++            try:
++                resp.raise_for_status()
++            except httpx.HTTPStatusError as exc:
++                raise RuntimeError(
++                    f"OpenAI-compatible TTS failed ({exc.response.status_code}): {resp.text.strip()}"
++                ) from exc
++            data = self._extract_chat_audio(resp)
++        else:
++            payload = {
++                "model": self.model,
++                "input": text,
++                "voice": effective_voice,
++                "response_format": self.response_format,
++            }
++            url = f"{self.base_url}/audio/speech"
++            if self.response_format == "pcm":
++                async with client.stream("POST", url, headers=headers, json=payload) as resp:
++                    try:
++                        resp.raise_for_status()
++                    except httpx.HTTPStatusError as exc:
++                        detail = await resp.aread()
++                        raise RuntimeError(
++                            f"OpenAI-compatible TTS failed ({exc.response.status_code}): "
++                            f"{detail.decode('utf-8', errors='ignore').strip()}"
++                        ) from exc
++                    chunk_bytes = max(2, int(self.sample_rate * (self.chunk_ms / 1000.0)) * 2)
++                    if chunk_bytes % 2:
++                        chunk_bytes += 1
++                    buf = bytearray()
++                    async for part in resp.aiter_bytes():
++                        if not part:
++                            continue
++                        buf.extend(part)
++                        while len(buf) >= chunk_bytes:
++                            pcm = np.frombuffer(bytes(buf[:chunk_bytes]), dtype="<i2").copy()
++                            del buf[:chunk_bytes]
+                             yield AudioChunk(
+                                 data=pcm,
+                                 sample_rate=self.sample_rate,
+                                 duration_ms=1000.0 * pcm.size / self.sample_rate,
+                             )
+-                    return
+-
+-                resp = await client.post(url, headers=headers, json=payload)
+-                try:
+-                    resp.raise_for_status()
+-                except httpx.HTTPStatusError as exc:
+-                    raise RuntimeError(
+-                        f"OpenAI-compatible TTS failed ({exc.response.status_code}): {resp.text.strip()}"
+-                    ) from exc
+-                data = resp.content
++                    if len(buf) % 2:
++                        buf = buf[:-1]
++                    if buf:
++                        pcm = np.frombuffer(bytes(buf), dtype="<i2").copy()
++                        yield AudioChunk(
++                            data=pcm,
++                            sample_rate=self.sample_rate,
++                            duration_ms=1000.0 * pcm.size / self.sample_rate,
++                        )
++                return
++
++            resp = await client.post(url, headers=headers, json=payload)
++            try:
++                resp.raise_for_status()
++            except httpx.HTTPStatusError as exc:
++                raise RuntimeError(
++                    f"OpenAI-compatible TTS failed ({exc.response.status_code}): {resp.text.strip()}"
++                ) from exc
++            data = resp.content
+ 
+         if self.response_format == "wav":
+             pcm = _decode_wav_to_pcm16_mono(data, self.sample_rate)
+--- a/apps/unified/main.py
++++ b/apps/unified/main.py
+@@ -211,6 +211,8 @@
+     for s in list(runners.values()):
+         await s.close()
+     runners.clear()
++    from opentalking.providers.tts.openai_compatible.adapter import close_http_pool
++    await close_http_pool()
+     await app.state.rtmps_video_jobs.close()
+     await app.state.video_creation_jobs.close()
+     await mem.aclose()

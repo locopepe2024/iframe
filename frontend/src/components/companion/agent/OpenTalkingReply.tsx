@@ -87,13 +87,14 @@ function waitForPeer(pc: RTCPeerConnection, signal: AbortSignal, gathering = fal
 }
 
 /** One media session per chat page, independent of message-history reconciliation. */
-export default function OpenTalkingReply({ reply, voice, connectionEpoch = 0, onStatus }: { reply: SpokenReply | null; voice?: string; connectionEpoch?: number; onStatus?: (status: string) => void }) {
+export default function OpenTalkingReply({ reply, voice, connectionEpoch = 0, preconnect = false, onStatus }: { reply: SpokenReply | null; voice?: string; connectionEpoch?: number; preconnect?: boolean; onStatus?: (status: string) => void }) {
   const video = useRef<HTMLVideoElement>(null);
   const [state, setState] = useState<State>("idle"), [error, setError] = useState("");
   const enqueue = useRef<((reply: SpokenReply) => void) | null>(null);
   const pending = useRef<SpokenReply[]>([]), seen = useRef(new Set<string>());
   const failed = useRef<SpokenReply | null>(null);
   const audible = useRef(false);
+  const warmConnection = useRef<(() => void) | null>(null);
   const resumeAudio = useRef<(() => void) | null>(null);
 
   useEffect(() => {
@@ -322,19 +323,27 @@ export default function OpenTalkingReply({ reply, voice, connectionEpoch = 0, on
         }
       });
     };
+    warmConnection.current = () => {
+      opening ??= open();
+      void opening.catch(failure => {
+        if (live()) { releaseMedia(); setError(formatOpenTalkingError(failure)); update("error"); }
+      });
+    };
     enqueue.current = queueReply;
     pending.current.splice(0).forEach(queueReply);
     let disposed = false;
     const dispose = () => {
       if (disposed) return;
       disposed = true; report("disposed", {state:peer?.iceGatheringState || "none"});
-      lifetime.abort(); enqueue.current = null; resumeAudio.current = null;
+      lifetime.abort(); warmConnection.current = null; enqueue.current = null; resumeAudio.current = null;
       companionPlayback.cancel(owner);
       active?.done(); releaseMedia();
     };
     window.addEventListener("pagehide", dispose);
     return () => { window.removeEventListener("pagehide", dispose); dispose(); };
   }, [voice, connectionEpoch]);
+
+  useEffect(() => { if (preconnect) warmConnection.current?.(); }, [preconnect, voice, connectionEpoch]);
 
   useEffect(() => {
     if (!reply || seen.current.has(reply.id)) return;
