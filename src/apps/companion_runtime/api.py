@@ -1,5 +1,6 @@
 """Opt-in routes for companion tools; no model provider or default app mount."""
 import os
+import logging
 import sqlite3
 import time
 from contextlib import contextmanager
@@ -107,6 +108,23 @@ Owner = Annotated[UserContext, Depends(require_user_context)]
 Store = Annotated[CompanionStore, Depends(get_store)]
 router = APIRouter(prefix='/companion-runtime', tags=['companion-runtime'])
 _opentalking_bindings = SessionBindings()
+
+class VoiceDiagnostic(Strict):
+    connection: str = Field(min_length=1, max_length=80, pattern=r'^[a-zA-Z0-9_-]+$')
+    event: Literal['opening', 'session_created', 'ice_state', 'ice_candidate', 'ice_error', 'ice_timeout', 'offer_sent', 'connected', 'speak_sent', 'play_blocked', 'failure', 'disposed']
+    elapsed_ms: int = Field(ge=0, le=86400000)
+    session_id: str = Field(default='', max_length=80, pattern=r'^[a-zA-Z0-9_-]*$')
+    state: str = Field(default='', max_length=30, pattern=r'^[a-zA-Z0-9_-]*$')
+    candidates: int = Field(default=0, ge=0, le=1000)
+    code: int = Field(default=0, ge=0, le=999)
+
+
+@router.post('/voice-diagnostics')
+def voice_diagnostic(body: VoiceDiagnostic, identity: Owner):
+    # Never accept transcripts, SDP, candidate addresses, URLs or TURN credentials.
+    logging.getLogger(__name__).warning('Companion voice diagnostic %s', body.model_dump_json())
+    return {'status': 'recorded'}
+
 
 
 class OpenTalkingBindRequest(Strict):

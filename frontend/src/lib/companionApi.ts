@@ -41,6 +41,7 @@ async function request<T>(path: string, method = "GET", body?: unknown): Promise
   return response.json();
 }
 export const companionApi = {
+  voiceDiagnostic: (body: {connection:string;event:string;elapsed_ms:number;session_id:string;state?:string;candidates?:number;code?:number}) => request("/voice-diagnostics", "POST", body),
   mediaDrafts: (session: string) => request<{tasks:MediaDraft[]}>(`/sessions/${encodeURIComponent(session)}/media-drafts`),
   startMediaDraft: (session: string, body: {operation_id:string;type:MediaDraft["type"];brief?:string}) => request<MediaDraft>(`/sessions/${encodeURIComponent(session)}/media-drafts`, "POST", body),
   updateMediaDraft: (session: string, body: {operation_id:string;task_id:string;expected_revision:number;action:"choose_source"|"brief"|"select_photo"|"select_first_photo"|"select_last_photo"|"add_reference_photo"|"remove_reference_photo"|"video_mode"|"clear_photo"|"setting"|"pause"|"resume"|"cancel";card_id?:string;option_id?:"upload"|"album"|"back";brief?:string;photo_id?:string;setting?:string;video_mode?:"t2v"|"i2v"|"f2v"|"r2v"}) => request<MediaDraft>(`/sessions/${encodeURIComponent(session)}/media-drafts/input`, "POST", body),

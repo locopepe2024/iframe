@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { companionPlayback } from "@/lib/companionPlaybackQueue";
 import styles from "./chat.module.css";
+import { companionApi } from "@/lib/companionApi";
 
 export type SpokenReply = { id: string; text: string };
 const base = (process.env.NEXT_PUBLIC_OPENTALKING_URL || "/opentalking-mock/api").replace(/\/$/, "");
@@ -94,6 +95,11 @@ export default function OpenTalkingReply({ reply, voice, connectionEpoch = 0, on
   useEffect(() => {
     setState("idle"); setError(""); failed.current = null;
     const lifetime = new AbortController(), owner = Symbol("opentalking-page");
+    const connection = crypto.randomUUID(), started = performance.now();
+    const report = (event: string, fields: {state?:string;candidates?:number;code?:number} = {}) => {
+      // Diagnostic failures must never change media behavior.
+      try { void companionApi.voiceDiagnostic({connection,event,elapsed_ms:Math.min(86400000,Math.round(performance.now()-started)),session_id:session,...fields}).catch(()=>{}); } catch { /* unavailable diagnostics */ }
+    };
     let session = "", peer: RTCPeerConnection | null = null, events: EventSource | null = null;
     let audio: AudioContext | null = null, source: MediaStreamAudioSourceNode | null = null;
     let analyser: AnalyserNode | null = null, animation = 0;
@@ -110,13 +116,13 @@ export default function OpenTalkingReply({ reply, voice, connectionEpoch = 0, on
       active?.fail(new Error(message)); companionPlayback.cancel(owner);
     };
     const open = async () => {
-      update("opening");
+      update("opening"); report("opening");
       // Do not cancel the create HTTP request: even a late result must be deleted.
       const created = await request<{ session_id: string }>("/sessions", AbortSignal.timeout(30000), {
         avatar_id: "office-woman", model: "mock", agent_enabled: false,
         memory_enabled: false, knowledge_enabled: false, ...(voice ? { tts_voice: voice } : {}),
       });
-      session = created.session_id;
+      session = created.session_id; report("session_created");
       if (!live()) { await deleteSession(session); throw new Error("语音连接已取消。"); }
       await request(`/sessions/${session}/start`, lifetime.signal, {});
       const ice = await request<RTCConfiguration>("/sessions/webrtc/ice-config", lifetime.signal);
@@ -130,6 +136,7 @@ export default function OpenTalkingReply({ reply, voice, connectionEpoch = 0, on
         if (iceDiagnostics.states[iceDiagnostics.states.length - 1] !== peer?.iceGatheringState) {
           iceDiagnostics.states.push(peer?.iceGatheringState || "unknown");
         }
+        report("ice_state", {state:peer!.iceGatheringState,candidates:iceDiagnostics.candidates});
         console.debug("[OpenTalking] ICE gathering", iceSummary(peer!, iceDiagnostics));
       };
       peer.addEventListener("icegatheringstatechange", recordGatheringState);
@@ -137,6 +144,7 @@ export default function OpenTalkingReply({ reply, voice, connectionEpoch = 0, on
         const candidate = event.candidate;
         if (!candidate) { iceDiagnostics.endOfCandidates = true; recordGatheringState(); return; }
         iceDiagnostics.candidates += 1;
+        report("ice_candidate", {state:candidate.type || "unknown",candidates:iceDiagnostics.candidates});
         const type = /\btyp\s+(host|srflx|relay|prflx)\b/i.exec(candidate.candidate)?.[1]?.toLowerCase() || "unknown";
         iceDiagnostics.candidateTypes[type] = (iceDiagnostics.candidateTypes[type] || 0) + 1;
         recordGatheringState();
@@ -144,6 +152,7 @@ export default function OpenTalkingReply({ reply, voice, connectionEpoch = 0, on
       peer.addEventListener("icecandidateerror", event => {
         const detail = event as RTCPeerConnectionIceErrorEvent;
         iceDiagnostics.candidateErrors.push({ code: detail.errorCode, text: detail.errorText || "" });
+        report("ice_error", {code:detail.errorCode,candidates:iceDiagnostics.candidates});
         recordGatheringState();
       });
       const stream = new MediaStream();
@@ -172,9 +181,13 @@ export default function OpenTalkingReply({ reply, voice, connectionEpoch = 0, on
       };
       peer.addTransceiver("video", { direction: "recvonly" }); peer.addTransceiver("audio", { direction: "recvonly" });
       await peer.setLocalDescription(await peer.createOffer());
-      await waitForPeer(peer, lifetime.signal, true, iceDiagnostics);
+      try { await waitForPeer(peer, lifetime.signal, true, iceDiagnostics); } catch (failure) {
+        report(lifetime.signal.aborted ? "disposed" : "ice_timeout", {state:peer.iceGatheringState,candidates:iceDiagnostics.candidates}); throw failure;
+      }
+      report("offer_sent", {state:peer.iceGatheringState,candidates:iceDiagnostics.candidates});
       const answer = await request<RTCSessionDescriptionInit>(`/sessions/${session}/webrtc/offer`, lifetime.signal, { sdp: peer.localDescription?.sdp, type: "offer" });
       await peer.setRemoteDescription(answer); await waitForPeer(peer, lifetime.signal);
+      report("connected");
       events = new EventSource(`${base}/sessions/${session}/events`);
       await new Promise<void>((resolve, reject) => {
         const finish = (error?: Error) => { clearTimeout(timeout); lifetime.signal.removeEventListener("abort", abort); events?.removeEventListener("open", ready); error ? reject(error) : resolve(); };
@@ -212,7 +225,7 @@ export default function OpenTalkingReply({ reply, voice, connectionEpoch = 0, on
             playbackBlocked = false;
           } catch {
             if (signal.aborted || !live()) return;
-            playbackBlocked = true; failed.current = item; update("blocked"); return;
+            report("play_blocked"); playbackBlocked = true; failed.current = item; update("blocked"); return;
           }
           if (signal.aborted || !live()) return;
           const command = `iframe-${crypto.randomUUID()}`;
@@ -232,6 +245,7 @@ export default function OpenTalkingReply({ reply, voice, connectionEpoch = 0, on
           void complete.catch(() => {});
           // Claim playback before TTS to avoid capturing the first response syllable.
           playing();
+          report("speak_sent");
           const sent = await request<{ status: string }>(`/sessions/${session}/speak`, lifetime.signal, {
             text: item.text, mode: "replace", render_text: true, command_id: command, ...(voice ? { voice } : {}),
           });
@@ -246,7 +260,7 @@ export default function OpenTalkingReply({ reply, voice, connectionEpoch = 0, on
           }
         } catch (failure) {
           if (live() && !signal.aborted) {
-            failed.current = item; setError(formatOpenTalkingError(failure)); update("error");
+            report("failure"); failed.current = item; setError(formatOpenTalkingError(failure)); update("error");
           }
         } finally {
           clearTimeout(timeout); if (abort) signal.removeEventListener("abort", abort);
@@ -259,7 +273,7 @@ export default function OpenTalkingReply({ reply, voice, connectionEpoch = 0, on
     let disposed = false;
     const dispose = () => {
       if (disposed) return;
-      disposed = true;
+      disposed = true; report("disposed", {state:peer?.iceGatheringState || "none"});
       lifetime.abort(); enqueue.current = null; resumeAudio.current = null;
       companionPlayback.cancel(owner);
       active?.done(); events?.close(); peer?.close(); cancelAnimationFrame(animation);

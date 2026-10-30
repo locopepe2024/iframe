@@ -266,3 +266,14 @@ def test_resume_incomplete_creative_task_receives_live_paused_context(chat, monk
     result = response.json()['result']
     assert result['kind'] == 'media_draft' and result['task_id'] == task['task_id'] and result['status'] == 'active'
     callback.assert_called_once()
+
+
+def test_voice_diagnostics_records_only_bounded_connection_metadata(chat, caplog):
+    _, _, client, _, _ = chat
+    payload = dict(connection='probe-1', event='ice_timeout', elapsed_ms=30000,
+                   session_id='sess_test', state='gathering', candidates=4, code=0)
+    response = client.post('/companion-runtime/voice-diagnostics', json=payload)
+    assert response.status_code == 200
+    assert 'ice_timeout' in caplog.text
+    assert client.post('/companion-runtime/voice-diagnostics', json={**payload, 'sdp': 'secret'}).status_code == 422
+    assert client.post('/companion-runtime/voice-diagnostics', json={**payload, 'state': 'turn:secret@host'}).status_code == 422

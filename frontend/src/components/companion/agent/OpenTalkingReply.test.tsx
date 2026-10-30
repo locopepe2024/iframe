@@ -20,6 +20,7 @@ beforeEach(()=>{
  }));
 });
 afterEach(()=>{companionPlayback.cancel();vi.unstubAllGlobals();});
+vi.mock("@/lib/companionApi",()=>({companionApi:{voiceDiagnostic:vi.fn().mockResolvedValue({status:"recorded"})}}));
 const speaks=()=>calls.filter(c=>c.url.endsWith("/speak"));
 it("maps browser timeout errors to a clear Chinese recovery message",()=>{
  expect(formatOpenTalkingError(new DOMException("signal timed out","TimeoutError"))).toBe("语音连接超时，请稍后重试。");
