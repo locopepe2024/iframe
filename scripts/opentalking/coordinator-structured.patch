@@ -1,0 +1,81 @@
+--- a/coordinator_service.py
++++ b/coordinator_service.py
+@@ -15,18 +15,35 @@
+ SYSTEM = (
+     "你是陪伴应用的任务协调器。只输出一个 JSON 对象，不要 Markdown。"
+     "focus 必须是 chat、diary 或 album；action 是简短动作名；"
+-    "need_clarification 必须是布尔值。不要执行工具，不要编造 task_id、photo_id，"
++    "action 必须是 reply、compose、open_or_select、continue_task、select_next、clarify 之一；"
++    "普通聊天用 chat/reply，无法判断用 chat/clarify。need_clarification 必须是布尔值。不要执行工具，不要编造 task_id、photo_id，"
+     "不要声称已保存、已分析或已生成。"
+ )
+ 
+ 
++DECISION_SCHEMA = {
++    "type": "object",
++    "properties": {
++        "focus": {"type": "string", "enum": ["chat", "diary", "album"]},
++        "action": {"type": "string", "enum": ["reply", "compose", "open_or_select", "continue_task", "select_next", "clarify"]},
++        "need_clarification": {"type": "boolean"},
++    },
++    "required": ["focus", "action", "need_clarification"],
++    "additionalProperties": False,
++}
++
++
+ def coordinate(payload):
+     text = str(payload.get("input", ""))[:MAX_INPUT]
+-    context = str(payload.get("workflow_context", ""))[:MAX_CONTEXT]
+-    try:
+-        state = json.loads(context) if context else {}
+-    except json.JSONDecodeError:
+-        state = {}
++    context = payload.get("workflow_context", {})
++    if isinstance(context, str):
++        context = json.loads(context) if context else {}
++    if not isinstance(context, dict):
++        raise ValueError("workflow_context must be an object")
++    # Preserve JSON types and keys; never truncate serialized JSON mid-field.
++    if len(json.dumps(context, ensure_ascii=False)) > MAX_CONTEXT:
++        raise ValueError("workflow_context too large")
++    state = context
+     # High-confidence elderly-facing commands should not wait for a model
+     # round-trip. They are still returned as suggestions and are revalidated by
+     # the iframe backend.
+@@ -48,28 +65,20 @@
+             ],
+             "temperature": 0,
+             "max_tokens": 120,
++            "response_format": {"type": "json_object", "schema": DECISION_SCHEMA},
+         }).encode(),
+         headers={"Content-Type": "application/json"},
+     )
+     with urllib.request.urlopen(request, timeout=10) as response:
+         result = json.loads(response.read())
+-    raw = result["choices"][0]["message"]["content"].strip()
++    choice = result["choices"][0]
++    if choice.get("finish_reason") != "stop":
++        raise ValueError("coordinator output incomplete")
++    raw = choice["message"]["content"].strip()
+     decision = json.loads(raw.removeprefix("```json").removesuffix("```").strip())
+-    if decision.get("focus") not in {"chat", "diary", "album"}:
+-        # The 0.5B model is an optimization, not an authority. Keep a narrow
+-        # deterministic safety net for the high-confidence demo commands.
+-        if any(token in text for token in ("日记", "回忆", "记录下来")):
+-            decision = {"focus": "diary", "action": "compose", "need_clarification": False, "source": "deterministic_fallback"}
+-        elif any(token in text for token in ("相册", "照片", "图片", "视频")):
+-            action = "open_or_select"
+-            if state.get("focused_task") and "继续" in text:
+-                action = "continue_task"
+-            elif any(token in text for token in ("第二张", "第2张", "下一张")):
+-                action = "select_next"
+-            decision = {"focus": "album", "action": action, "need_clarification": False, "source": "deterministic_fallback"}
+-        else:
+-            decision = {"focus": "chat", "action": "reply", "need_clarification": False, "source": "deterministic_fallback"}
+-    if not isinstance(decision.get("action"), str) or not isinstance(decision.get("need_clarification"), bool):
++    if not isinstance(decision, dict) or set(decision) != set(DECISION_SCHEMA["required"]):
++        raise ValueError("invalid decision fields")
++    if decision["focus"] not in DECISION_SCHEMA["properties"]["focus"]["enum"] or decision["action"] not in DECISION_SCHEMA["properties"]["action"]["enum"] or not isinstance(decision["need_clarification"], bool):
+         raise ValueError("invalid decision")
+     return {"focus": decision["focus"], "action": decision["action"][:80], "need_clarification": decision["need_clarification"], "source": decision.get("source", "model"), **({"question": str(decision["question"])[:300]} if decision.get("question") else {})}
+ 
