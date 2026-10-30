@@ -34,3 +34,30 @@ def validate_shared_routes(intervals, tolerance_m=1e-4):
     return {'status': 'diagnostic_only', 'shared': not conflicts,
             'toleranceM': tolerance_m, 'coveredFrames': sorted(routes),
             'conflicts': conflicts}
+
+
+def validate_route_continuity(intervals, fps, max_speed_mps=4.0):
+    if isinstance(fps, bool) or not isinstance(fps, (int, float)) or not math.isfinite(fps) or fps <= 0:
+        raise ValueError('invalid route FPS')
+    if isinstance(max_speed_mps, bool) or not isinstance(max_speed_mps, (int, float)) or not math.isfinite(max_speed_mps) or max_speed_mps <= 0:
+        raise ValueError('invalid route speed limit')
+    segments = []
+    for item in intervals:
+        route = item.get('routeTranslationsM', [])
+        speeds = [math.sqrt(sum((b[i]-a[i])**2 for i in range(3)))*fps for a, b in zip(route, route[1:])]
+        segments.append({'side': item['side'], 'startFrame': item['startFrame'], 'endFrame': item['endFrame'],
+                         'maxSpeedMps': max(speeds) if speeds else 0.0,
+                         'speedViolation': max(speeds, default=0.0) > max_speed_mps})
+    gaps = []
+    for left in segments:
+        for right in segments:
+            if left['side'] != right['side'] or right['startFrame'] <= left['endFrame']:
+                continue
+            if right['startFrame'] - left['endFrame'] <= 1:
+                gaps.append({'side': left['side'], 'fromFrame': left['endFrame'], 'toFrame': right['startFrame'],
+                             'gapFrames': right['startFrame']-left['endFrame']-1,
+                             'boundaryChecked': False,
+                             'reason': 'missing route samples between intervals'})
+    return {'status': 'diagnostic_only', 'maxSpeedMps': max_speed_mps,
+            'segments': segments, 'speedViolations': [s for s in segments if s['speedViolation']],
+            'gaps': gaps, 'continuous': not any(s['speedViolation'] for s in segments) and not gaps}
