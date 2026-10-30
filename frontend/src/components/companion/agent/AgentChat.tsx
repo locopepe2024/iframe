@@ -84,6 +84,7 @@ export default function AgentChat() {
   const [hasRetry, setHasRetry] = useState(false);
   const [albumOpen,setAlbumOpen] = useState(false);
   const [diaryMonth, setDiaryMonth] = useState<string | undefined>();
+  const [diarySelection, setDiarySelection] = useState<{day:string;request:string} | undefined>();
   const [feature,setFeature] = useState<CompanionFeature | null>(null);
   const [dismissedUploadGuides, setDismissedUploadGuides] = useState<string[]>([]);
   const [uploading,setUploading] = useState(false);
@@ -213,8 +214,10 @@ export default function AgentChat() {
         const replyText = spokenTurnText(result.result);
         if (replyText) setSpokenReply({ id: result.turn_id, text: replyText });
       }
-      if (result.result?.kind === "diary_read" && (result.result.open_calendar || result.result.name !== "diary.read")) {
-        setDiaryMonth(result.result.month); setFeature("diary");
+      if (result.result?.kind === "diary_read") {
+        const day = result.result.name === "diary.read" ? result.result.arguments?.day || result.result.diaries[0]?.day : undefined;
+        setDiarySelection(day ? {day,request:result.turn_id} : undefined);
+        setDiaryMonth(day?.slice(0,7) || result.result.month); setFeature("diary");
       }
       if (result.result?.kind === "media_draft") {setCreativeTask(result.result);}
       setDraft(null); setTurn(result); setPreview(result.result?.kind === "confirmation" ? result.result : null); setDrafts(old => ({ ...old, chat: "" })); sendOperation.current = null; setHasRetry(false);
@@ -437,7 +440,7 @@ export default function AgentChat() {
     {albumOpen && <AlbumPicker disabled={inputDisabled || pending} onClose={() => setAlbumOpen(false)} onPhoto={photo => {
       attach({kind:"photo",id:photo.photo_id,name:"相册照片"}); selectedPhotoRef.current = photo.photo_id; setSelectedPhotoId(photo.photo_id); setNotice("已选中这张照片。您可以说“使用这张照片”，或继续查看。"); setAlbumOpen(false);
     }} onVideo={video => {attach({kind:"video",id:video.video_id,name:video.name});setAlbumOpen(false);}} />}
-    {feature === "diary" ? <DiaryCalendar initialMonth={diaryMonth} onClose={()=>setFeature(null)} onCreate={day=>{setFeature(null);startDiaryPrompt(day);}}/> : feature && <CompanionFeatureSheet feature={feature} onClose={() => setFeature(null)} />}
+    {feature === "diary" ? <DiaryCalendar initialMonth={diaryMonth} selection={diarySelection} onClose={()=>{setDiarySelection(undefined);setFeature(null);}} onCreate={day=>{setFeature(null);startDiaryPrompt(day);}}/> : feature && <CompanionFeatureSheet feature={feature} onClose={() => setFeature(null)} />}
     {mode !== "chat" && (guide ? <GenerationGuide key={mode} value={guide} disabled={inputDisabled || pending} onChange={updateGuide} onEdit={() => { updateDraft(guide.prompt); inputRef.current?.focus(); }} onCancel={() => { updateDraft(guide.prompt); setNotice("已取消创作，描述草稿仍保留。"); }} /> : <article className={chatStyles.assistant}><span>陪伴助手</span><p>{mode === "video" ? "想做一段什么视频？" : "想生成一张什么图片？"}在下面说说，点箭头后我们一步步来。</p></article>)}
     {notice && <p role="status">{notice}</p>}{error && <p role="alert">{error}</p>}
     {turn?.result?.kind === "read" && <section className={styles.panel} aria-label="工具读取结果"><h2>实际记忆查询结果</h2>
@@ -498,7 +501,7 @@ export default function AgentChat() {
       onRequestConsent={() => { setMenu(true); setNotice("请在“更多 → 聊天设置”中允许发送文字。"); }}
       retry={hasRetry ? retryLastRequest : null} />
     <nav className={chatStyles.bottomNav} aria-label="主要功能">
-      <button type="button" aria-current={feature === "diary" ? "page" : undefined} onClick={() => {setDiaryMonth(undefined);setFeature("diary");}}><BookOpen size={22} aria-hidden="true" /><span>日记</span></button>
+      <button type="button" aria-current={feature === "diary" ? "page" : undefined} onClick={() => {setDiarySelection(undefined);setDiaryMonth(undefined);setFeature("diary");}}><BookOpen size={22} aria-hidden="true" /><span>日记</span></button>
       <button type="button" aria-current={feature === "plaza" ? "page" : undefined} onClick={() => setFeature("plaza")}><Compass size={22} aria-hidden="true" /><span>广场</span></button>
       <button type="button" aria-current={albumOpen ? "page" : undefined} onClick={() => { setFeature(null); setAlbumOpen(true); }}><Images size={22} aria-hidden="true" /><span>相册</span></button>
       <button type="button" aria-current={feature === "mine" ? "page" : undefined} onClick={() => setFeature("mine")}><UserRound size={22} aria-hidden="true" /><span>我的</span></button>

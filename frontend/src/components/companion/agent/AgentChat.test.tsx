@@ -556,6 +556,32 @@ it("opens the calendar from a fresh diary list reply without dumping saved entri
  fireEvent.click(screen.getByRole("button",{name:"关闭日记"}));
  expect(screen.queryByRole("dialog",{name:"日记"})).not.toBeInTheDocument();
 });
+it("keeps voice active and opens the requested diary inside the calendar",async()=>{
+ const {act}=await import("@testing-library/react");
+ let recognition!:{onresult:((event:unknown)=>void)|null;stop:ReturnType<typeof vi.fn>};
+ class Recognition {
+   onresult=null;onerror=null;onend=null;lang="";continuous=false;interimResults=false;
+   stop=vi.fn();abort=vi.fn();start=vi.fn();constructor(){recognition=this;}
+ }
+ Object.defineProperty(window,"SpeechRecognition",{configurable:true,value:Recognition});
+ try {
+   const entry={day:"2025-10-28",text:"那天和女儿散步。",revision:1,source_turn_id:"",updated_at:1};
+   api.diaries.mockImplementation(async month=>({diaries:month === "2025-10" ? [entry] : []}));
+   api.chat.mockResolvedValueOnce({turn_id:"open-calendar",status:"completed",result:{kind:"diary_read",name:"diary.open",open_calendar:true,diaries:[],spoken_text:"日记月历已打开。"}})
+     .mockResolvedValueOnce({turn_id:"read-day",status:"completed",result:{kind:"diary_read",name:"diary.read",arguments:{day:entry.day},open_calendar:false,diaries:[entry],spoken_text:"找到这一天的日记了。"}});
+   await start();allowText();
+   fireEvent.click(screen.getByRole("button",{name:"打开语音聊天"}));
+   fireEvent.click(await screen.findByRole("button",{name:"同意并开始聊天"}));
+   act(()=>recognition.onresult?.({results:[[{transcript:"打开日记月历"}]]}));
+   const calendar=await screen.findByRole("dialog",{name:"日记"});
+   act(()=>recognition.onresult?.({results:[[{transcript:"打开日记月历"}],[{transcript:"打开2025年10月28日日记"}]]}));
+   await waitFor(()=>expect(api.chat).toHaveBeenCalledTimes(2));
+   expect(await within(calendar).findByText(entry.text)).toBeInTheDocument();
+   expect(within(calendar).getByRole("button",{name:entry.day+"，已有日记"})).toHaveAttribute("aria-pressed","true");
+   expect(recognition.stop).not.toHaveBeenCalled();
+   expect(playback.mock.calls.some(([props])=>props.reply?.text === "找到这一天的日记了。")).toBe(true);
+ } finally {delete (window as Window & {SpeechRecognition?:unknown}).SpeechRecognition;}
+});
 it("shows a retained failed sentence and allows resuming a paused task without replaying it",async()=>{
  localStorage.setItem("iframe-companion-agent-session-v1","s");
  const paused={...creative,status:"paused",revision:2,brief:"换黑袍"};

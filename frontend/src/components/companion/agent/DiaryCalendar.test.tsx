@@ -5,6 +5,15 @@ import DiaryCard,{today} from "./DiaryCard";
 const api=vi.hoisted(()=>({diaries:vi.fn(),saveDiary:vi.fn()}));
 vi.mock("@/lib/companionApi",()=>({companionApi:api}));
 beforeEach(()=>{vi.resetAllMocks();api.diaries.mockResolvedValue({diaries:[]});});
+it("opens an agent-selected missing day and accepts a repeated selection after manual browsing",async()=>{
+ const view=render(<DiaryCalendar onClose={()=>{}} onCreate={()=>{}} initialMonth="2025-02" selection={{day:"2025-02-14",request:"first"}}/>);
+ expect(await screen.findByText("2025-02-14 还没有保存日记。")).toBeInTheDocument();
+ fireEvent.click(screen.getByRole("button",{name:"2025-02-15"}));
+ expect(screen.getByRole("button",{name:"2025-02-15"})).toHaveAttribute("aria-pressed","true");
+ view.rerender(<DiaryCalendar onClose={()=>{}} onCreate={()=>{}} initialMonth="2025-02" selection={{day:"2025-02-14",request:"second"}}/>);
+ expect(screen.getByRole("button",{name:"2025-02-14"})).toHaveAttribute("aria-pressed","true");
+ expect(api.saveDiary).not.toHaveBeenCalled();
+});
 it("defaults to today, marks only saved days and browses a different month",async()=>{
   const day=today(),saved={day,text:"和女儿一起喝茶。",source_turn_id:"turn",revision:1,updated_at:1};
   api.diaries.mockResolvedValueOnce({diaries:[saved]}).mockResolvedValue({diaries:[]});

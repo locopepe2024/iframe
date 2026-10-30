@@ -7,13 +7,17 @@ import DiaryCard, { today } from "./DiaryCard";
 import FeatureDialog from "./FeatureDialog";
 import styles from "./chat.module.css";
 
-export default function DiaryCalendar({onClose,onCreate,initialMonth}: {onClose:()=>void;onCreate:(day:string)=>void;initialMonth?:string}) {
+export default function DiaryCalendar({onClose,onCreate,initialMonth,selection}: {onClose:()=>void;onCreate:(day:string)=>void;initialMonth?:string;selection?:{day:string;request:string}}) {
   const [selected,setSelected]=useState(today),[month,setMonth]=useState(()=>initialMonth || today().slice(0,7));
   const [entries,setEntries]=useState<Diary[]>([]),[busy,setBusy]=useState(true),[error,setError]=useState("");
   const [reload,setReload]=useState(0);const serial=useRef(0);
   const [writing,setWriting]=useState(false);
   const [showEntry,setShowEntry]=useState(false);
   useEffect(()=>{setMonth(initialMonth || today().slice(0,7));setShowEntry(false);},[initialMonth]);
+  useEffect(()=>{
+    if (!selection) return;
+    setMonth(selection.day.slice(0,7));setSelected(selection.day);setShowEntry(true);
+  },[selection]);
   useEffect(()=>{
     const request=++serial.current;setBusy(true);setError("");setEntries([]);
     companionApi.diaries(month).then(result=>{if(request===serial.current)setEntries(result.diaries);}).catch(()=>{if(request===serial.current)setError("日记暂时没有打开，请重试。");}).finally(()=>{if(request===serial.current)setBusy(false);});
