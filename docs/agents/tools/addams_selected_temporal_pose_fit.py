@@ -13,10 +13,11 @@ BASE = Path('/tmp/addams-pose/gvhmr-native-v1')
 parser = argparse.ArgumentParser()
 parser.add_argument('--ankle-prior-px', type=float, default=0.0)
 parser.add_argument('--phase-smooth-weight', type=float, default=0.0)
+parser.add_argument('--group-keyframes', action='store_true')
 args = parser.parse_args()
 if args.ankle_prior_px < 0 or args.phase_smooth_weight < 0:
     parser.error('ankle prior weight must be nonnegative')
-OUT = BASE / ('selected-temporal-fit-v1' if args.ankle_prior_px == 0 and args.phase_smooth_weight == 0 else 'selected-temporal-phase-prior-v1')
+OUT = BASE / ('selected-temporal-group-fit-v1' if args.group_keyframes else ('selected-temporal-fit-v1' if args.ankle_prior_px == 0 and args.phase_smooth_weight == 0 else 'selected-temporal-phase-prior-v1'))
 OUT.mkdir(exist_ok=True)
 fusion_path = BASE / 'selected-temporal-input.json'
 fusion = json.loads(fusion_path.read_text())
@@ -65,10 +66,23 @@ with torch.no_grad():
 
 def fit(bound, holdout):
     train = [r for r in records if r['source_frame'] != holdout]
-    delta = torch.zeros(F, 4, 3, requires_grad=True)
-    opt = torch.optim.Adam([delta], lr=.015)
+    key_idx = [0, 2, 4, 6] if args.group_keyframes else list(range(F))
+    delta_key = torch.zeros(len(key_idx), 4, 3, requires_grad=True)
+    opt = torch.optim.Adam([delta_key], lr=.015)
+    def expand_delta():
+        if not args.group_keyframes: return delta_key
+        out = torch.zeros(F, 4, 3)
+        for j in range(F):
+            if j <= key_idx[0]: out[j]=delta_key[0]
+            elif j >= key_idx[-1]: out[j]=delta_key[-1]
+            elif j in key_idx:
+                out[j] = delta_key[key_idx.index(j)]
+            else:
+                a=max(k for k in key_idx if k<j); b=min(k for k in key_idx if k>j); t=(j-a)/(b-a); out[j]=delta_key[key_idx.index(a)]*(1-t)+delta_key[key_idx.index(b)]*t
+        return out
     for step in range(220):
         opt.zero_grad()
+        delta = expand_delta()
         body = body0.clone()
         body[:, pose_indices] += delta
         joints, xy = evaluate(body)
@@ -89,8 +103,9 @@ def fit(bound, holdout):
         loss.backward()
         opt.step()
         with torch.no_grad():
-            delta.clamp_(-bound, bound)
+            delta_key.clamp_(-bound, bound)
     with torch.no_grad():
+        delta = expand_delta()
         body = body0.clone()
         body[:, pose_indices] += delta
         joints, xy = evaluate(body)

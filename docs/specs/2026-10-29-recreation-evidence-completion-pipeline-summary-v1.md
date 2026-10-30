@@ -134,3 +134,7 @@ media完成源49–56帧固定原生相机/根/人体形状的髋膝时序拟合
 ## 2026-10-30 semantic grouping and interpolation
 
 确认可采用LLM/视觉模型结构化解读：先按镜头输出帧语义，再按相邻兼容状态归组；每组定义姿势、动作、接触、离地和相机目标。前后清晰组可做双向语义补偿，但保持`temporal_inference`证据等级，不能生成未观测的像素/深度/焦距/公制离地距离。冲突组输出unknown进入人工队列。见[语义插值契约](../agents/raw/2026-10-30-addams-semantic-interpolation-v1/contract.json)。
+
+## 2026-10-30 CPU group-keyframe fit
+
+组级关键帧拟合在media CPU跑通：49/51/53/55四点优化、组内delta插值。0.70rad下训练RMSE36.46→23.01px，留出51帧28.40→17.47px，踝最大变化48.47px；逐帧自由版本留出14.99px。组级仍显著优于原恢复但略逊逐帧自由拟合，关键帧应按动作转折选择，不能等间隔替代。见[报告](../agents/deliverables/2026-10-30-cpu-group-keyframe-fit.md)。
