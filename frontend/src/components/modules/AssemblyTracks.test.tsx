@@ -224,3 +224,90 @@ it('keeps shortcuts inside the workbench and preserves browser and control keys'
     fireEvent.keyDown(editor, { key: 'Delete' });
     expect(onChange).toHaveBeenCalledTimes(1);
 });
+
+it('previews a pointer gesture locally, commits once, and rolls back cancellation', () => {
+    const initial: AssemblyEditPlan = { ...plan, lanes: [{ id: 'a', kind: 'bgm', allow_overlap: true, clips: [{ id: 'audio', label: 'Music', timeline_start_ms: 0, timeline_end_ms: 2000, enabled: true, source_refs: [] }] }] };
+    const onChange = vi.fn();
+    render(<AssemblyTracks plan={initial} project={project} resourceId="p" saved onChange={onChange} />);
+    const clip = screen.getByRole('button', { name: 'Music' });
+    const track = screen.getByLabelText('bgm timeline');
+    Object.defineProperty(track, 'clientWidth', { value: 500 });
+    clip.setPointerCapture = vi.fn();
+    const pointer = (target: Element, type: string, x: number) => {
+        const event = new Event(type, { bubbles: true });
+        Object.defineProperties(event, { clientX: { value: x }, pointerId: { value: 1 }, button: { value: 0 } });
+        fireEvent(target, event);
+    };
+    pointer(clip, 'pointerdown', 0);
+    pointer(track, 'pointermove', 50);
+    pointer(track, 'pointermove', 100);
+    expect(onChange).not.toHaveBeenCalled();
+    expect(clip.style.left).toBe('20%');
+    pointer(track, 'pointerup', 100);
+    expect(onChange).toHaveBeenCalledTimes(1);
+    expect(onChange.mock.calls[0][0].lanes[0].clips[0]).toMatchObject({ timeline_start_ms: 1000, timeline_end_ms: 3000 });
+    pointer(clip, 'pointerdown', 0);
+    pointer(track, 'pointermove', 150);
+    pointer(track, 'pointercancel', 150);
+    expect(clip.style.left).toBe('0%');
+    expect(onChange).toHaveBeenCalledTimes(1);
+    pointer(clip, 'pointerdown', 0);
+    pointer(track, 'pointerup', 0);
+    expect(onChange).toHaveBeenCalledTimes(1);
+});
+
+it('commits a video edge trim once and restores the entire gesture with undo', () => {
+    const initial: AssemblyEditPlan = { ...plan, lanes: [{ id: 'v', kind: 'video', allow_overlap: false, clips: [{ id: 'one', label: 'One', timeline_start_ms: 0, timeline_end_ms: 5000, source_start_ms: 0, source_end_ms: 5000, enabled: true, source_refs: [] }] }] };
+    const changed = vi.fn();
+    function Editor() {
+        const [value, setValue] = useState(initial);
+        const [previous, setPrevious] = useState(initial);
+        return <><button onClick={() => setValue(previous)}>Undo gesture</button><AssemblyTracks plan={value} project={project} resourceId="p" saved onChange={next => { changed(next); setPrevious(value); setValue(next); }} /></>;
+    }
+    render(<Editor />);
+    const clip = screen.getByRole('button', { name: 'Edit clip 1: One' });
+    fireEvent.click(clip);
+    const handle = screen.getByRole('button', { name: 'One end handle' });
+    handle.setPointerCapture = vi.fn();
+    const track = screen.getByLabelText('video timeline');
+    Object.defineProperty(track, 'clientWidth', { value: 500 });
+    const pointer = (target: Element, type: string, x: number) => {
+        const event = new Event(type, { bubbles: true });
+        Object.defineProperties(event, { clientX: { value: x }, pointerId: { value: 1 }, button: { value: 0 } });
+        fireEvent(target, event);
+    };
+    pointer(handle, 'pointerdown', 500);
+    pointer(track, 'pointermove', 450);
+    pointer(track, 'pointermove', 400);
+    expect(changed).not.toHaveBeenCalled();
+    pointer(track, 'pointerup', 400);
+    expect(changed).toHaveBeenCalledTimes(1);
+    expect(changed.mock.calls[0][0].lanes[0].clips[0].source_end_ms).toBe(4000);
+    fireEvent.click(screen.getByRole('button', { name: 'Undo gesture' }));
+    expect(screen.getByRole('slider', { name: 'Timeline playhead' })).toHaveAttribute('max', '5000');
+});
+
+it('synchronizes overlapping audio lanes and removes muted or disabled players', () => {
+    const play = vi.spyOn(HTMLMediaElement.prototype, 'play').mockResolvedValue(undefined);
+    const pause = vi.spyOn(HTMLMediaElement.prototype, 'pause').mockImplementation(() => undefined);
+    const initial: AssemblyEditPlan = { ...plan, lanes: [
+        { id: 'v', kind: 'video', allow_overlap: false, clips: [{ id: 'video', source_media_id: 'v', timeline_start_ms: 0, timeline_end_ms: 5000, enabled: true, source_refs: [] }] },
+        ...(['bgm', 'dialogue', 'sfx'] as const).map((kind, i) => ({ id: kind, kind, allow_overlap: true, clips: [{ id: kind, label: kind, source_media_id: kind, timeline_start_ms: 1000, timeline_end_ms: 3000, source_start_ms: 2000, source_end_ms: 4000, gain: 0.5 + i * 0.1, enabled: true, source_refs: [] }] })),
+    ] };
+    const materials = { v: { url: 'v.mp4' }, bgm: { url: 'b.wav' }, dialogue: { url: 'd.wav' }, sfx: { url: 's.wav' } };
+    const view = render(<AssemblyTracks plan={initial} project={project} materials={materials} resourceId="p" saved onChange={vi.fn()} />);
+    fireEvent.change(screen.getByRole('slider', { name: 'Timeline playhead' }), { target: { value: '1500' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Play' }));
+    for (const [name, gain] of [['Music · bgm', 0.5], ['Dialogue · dialogue', 0.6], ['SFX · sfx', 0.7]] as const) {
+        const audio = screen.getByLabelText(name) as HTMLAudioElement;
+        expect(audio.currentTime).toBe(2.5);
+        expect(audio.volume).toBe(gain);
+        expect(play.mock.instances).toContain(audio);
+    }
+    fireEvent.click(screen.getByRole('button', { name: 'Pause' }));
+    expect(pause).toHaveBeenCalled();
+    view.rerender(<AssemblyTracks plan={{ ...initial, lanes: initial.lanes.map(l => l.kind === 'bgm' ? { ...l, muted: true } : l.kind === 'sfx' ? { ...l, clips: l.clips.map(c => ({ ...c, enabled: false })) } : l) }} project={project} materials={materials} resourceId="p" saved onChange={vi.fn()} />);
+    expect(screen.queryByLabelText('Music · bgm')).toBeNull();
+    expect(screen.queryByLabelText('SFX · sfx')).toBeNull();
+    play.mockRestore(); pause.mockRestore();
+});
