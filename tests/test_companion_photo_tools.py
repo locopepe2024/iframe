@@ -290,3 +290,16 @@ def test_selection_is_part_of_turn_retry_identity(stores):
     for changed in ('theirs',None):
         with pytest.raises(Conflict,match='Selected photo changed'):
             chat.claim_turn('owner','actor',session,'select-turn','选择这张照片',changed)
+
+def test_photo_action_accepts_current_viewer_focus_without_mutating(stores):
+    from src.apps.companion_runtime.interaction_focus import update_focus
+    chat, photos = stores
+    session = chat.session('owner','viewer-action')['session_id']
+    update_focus(chat,'owner','actor',session,dict(operation_id='view',expected_revision=0,
+        focus=dict(kind='photo',object_id='mine',phase='viewing',draft='')))
+    claim = chat.claim_turn('owner','actor',session,'analyze-viewed','分析这张照片')
+    result = chat.finish_turn('owner','actor',claim,dict(kind='tool',name='photo.action',
+        arguments=dict(photo_id='mine',action='analyze',changes={})))['result']
+    assert result['kind'] == 'photo_action'
+    assert result['photo_id'] == 'mine'
+    assert photos.annotations('owner','mine')['revision'] == 0

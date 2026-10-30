@@ -171,7 +171,9 @@ class ChatStore(MediaDrafts, PhotoTasks, DiaryStore, CompanionStore):
                 from ..photos.annotations import PhotoFacts
                 values = MODELS['photo.action'].model_validate(proposal['arguments']).model_dump()
                 tasks = db.execute("SELECT payload FROM companion_photo_tasks WHERE owner=? AND actor=? AND session_id=? AND status='waiting_input' AND step='review_photo'", (owner, actor, row['session_id'])).fetchall()
-                if not any(json.loads(t['payload'])['selected_id'] == values['photo_id'] for t in tasks):
+                focus = claim.get('messages', [{}])[-1].get('interaction_focus') or {}
+                focused = focus.get('kind') == 'photo' and focus.get('object_id') == values['photo_id']
+                if not focused and not any(json.loads(t['payload'])['selected_id'] == values['photo_id'] for t in tasks):
                     raise ValueError('Select this photo in the current session first')
                 if values['action'] != 'edit' and values['changes']:
                     raise ValueError('Only edit actions accept changes')
