@@ -22,7 +22,7 @@ import DiaryCard, { diaryDay, diaryPrompt, formatDiaryDay, today, type DiaryCont
 import UniArtSettings from "./UniArtSettings";
 import CompanionIdentitySettings, { defaultCompanionIdentity, readCompanionIdentity, type CompanionIdentity } from "./CompanionIdentitySettings";
 import SpeechPlayback from "./SpeechPlayback";
-import { spokenTurnText } from "./spokenTurnText";
+import { spokenTurnMeta } from "./spokenTurnText";
 import OpenTalkingReply, { type SpokenReply } from "./OpenTalkingReply";
 import UploadGuideCard from "./UploadGuideCard";
 import { isOpenAlbumCommand } from "./localCommands";
@@ -52,7 +52,19 @@ export default function AgentChat() {
   const [voiceChat,setVoiceChat] = useState(false);
   const speechEpoch = useRef(0);
   const speechEnabled = useRef(false);
-  const captureChanged = useCallback((active:boolean)=>{setVoiceActive(active);if(!active){speechEpoch.current++;setVoiceChat(false);}},[]);
+  const captureChanged = useCallback((active:boolean)=>{
+    setVoiceActive(active);
+    if(active){
+      // A new user utterance owns the floor. Drop queued/playing assistant
+      // speech before the next ASR segment is submitted.
+      speechEpoch.current++;
+      companionPlayback.cancel();
+      setSpokenReply(null);
+    } else {
+      speechEpoch.current++;
+      setVoiceChat(false);
+    }
+  },[]);
   const [messages, setMessages] = useState<UserMessage[]>([]), [after, setAfter] = useState<number | null>(null);
   const [allowed, setAllowed] = useState(false);
   const [voiceConnectionEpoch, setVoiceConnectionEpoch] = useState(0);
@@ -77,6 +89,7 @@ export default function AgentChat() {
   const [runtimeCapability, setRuntimeCapability] = useState<CompanionRuntimeCapability>({ status: "checking", reason: "正在检查设备能力…", memoryGb: null });
   const locked = useRef(false), alive = useRef(true);
   const voiceQueue = useRef<{text:string;focus:InteractionFocus;creative:CreativeContext;trace?:VoiceTrace}[]>([]);
+  const announcedTaskStates = useRef(new Set<string>());
   const [voiceRevision, setVoiceRevision] = useState(0);
   const sessionOperation = useRef("");
   const sendOperation = useRef<{ operation_id: string; text: string; allow_external_text: true; selected_photo_id?: string;creative_context?:CreativeContext } | null>(null);
@@ -191,6 +204,7 @@ export default function AgentChat() {
     localStorage.setItem(sessionKey, result.session_id); localStorage.removeItem(turnKey);
     sessionOperation.current = ""; sendOperation.current = null; setHasRetry(false);
     setCreativeTask(null);
+    announcedTaskStates.current.clear();
     selectedPhotoRef.current = null; setSelectedPhotoId(null);
     setMenu(false); setAlbumOpen(false); setUploadFiles([]); setAttached([]); setPendingMedia({chat:[],image:[],video:[]}); setMediaAcknowledged(false); setSession(result.session_id); setMessages([]); setAfter(null); setTurn(null); setPreview(null); setDraft(null); setDrafts({ chat: "", image: "", video: "" }); setGuides({ image: null, video: null }); setMode("chat"); setNotice("已开始新的聊天。");
   }
@@ -231,8 +245,10 @@ export default function AgentChat() {
     localStorage.setItem(turnKey, result.turn_id);
     if (alive.current) {
       if (audioReply && speechEnabled.current && requestSpeechEpoch === speechEpoch.current) {
-        const replyText = spokenTurnText(result.result);
-        if (replyText) setSpokenReply({ id: result.turn_id, text: replyText,trace });
+        const spoken = spokenTurnMeta(result.result);
+        const alreadyAnnounced = spoken?.announcementKey && announcedTaskStates.current.has(spoken.announcementKey);
+        if (spoken?.announcementKey && !alreadyAnnounced) announcedTaskStates.current.add(spoken.announcementKey);
+        if (spoken && !alreadyAnnounced) setSpokenReply({ id: result.turn_id, text: spoken.text,trace });
       }
       if (result.result?.kind === "diary_read") {
         setAlbumRequest(null);setAlbumOpen(false);

@@ -1,5 +1,7 @@
 import type { Turn } from "@/lib/companionApi";
 
+export type SpokenTurnMeta = { text: string; announcementKey?: string; reason: "chat" | "task_transition" | "question" };
+
 /** Describe the result that actually exists; a proposal is never a saved outcome. */
 export function spokenTurnText(result: Turn["result"]): string | undefined {
   if (!result) return undefined;
@@ -18,4 +20,23 @@ export function spokenTurnText(result: Turn["result"]): string | undefined {
       ? "这项操作还没有执行，请核对卡片内容，再确认是否执行。"
       : "这项操作的确认已关闭。";
   }
+}
+
+/**
+ * Return the short voice line and the durable state key used for announcement
+ * de-duplication. A new turn is not automatically a new task state: retries
+ * and polling can produce multiple turns for the same task revision.
+ */
+export function spokenTurnMeta(result: Turn["result"]): SpokenTurnMeta | undefined {
+  const text = spokenTurnText(result);
+  if (!text || !result) return undefined;
+  if (result.kind === "media_draft" || result.kind === "photo_task") {
+    return { text, reason: "task_transition", announcementKey: `${result.kind}:${result.task_id}:${result.revision}:${result.status}:${result.step}` };
+  }
+  if (result.kind === "text" && "operation_status" in result && typeof result.operation_status === "string") {
+    const diaryResult = result as typeof result & { day?: unknown };
+    const day = typeof diaryResult.day === "string" ? diaryResult.day : "";
+    return { text, reason: "task_transition", announcementKey: `diary:${day}:${result.operation_status}` };
+  }
+  return { text, reason: result.kind === "text" ? "chat" : "question" };
 }
