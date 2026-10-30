@@ -7,7 +7,6 @@ import PhotoFactsEditor from "./PhotoFactsEditor";
 
 export default function PhotoContent({ photoId, onSaved }: { photoId: string; onSaved?:()=>void }) {
   const [analysis, setAnalysis] = useState<PhotoAnalysis | null>(null);
-  const [allowed, setAllowed] = useState(false);
   const [loaded, setLoaded] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -20,7 +19,7 @@ export default function PhotoContent({ photoId, onSaved }: { photoId: string; on
   }, [photoId]);
 
   async function analyze() {
-    if (!allowed || busy) return;
+    if (busy) return;
     setBusy(true); setError("");
     try { setAnalysis(await photoApi.analyze(photoId)); }
     catch (failure) { setError(failure instanceof Error ? failure.message : "照片分析暂不可用，请稍后重试。照片和日期仍保留。"); }
@@ -30,8 +29,7 @@ export default function PhotoContent({ photoId, onSaved }: { photoId: string; on
     {!loaded && <p role="status">正在读取照片描述…</p>}
     {loaded && !analysis && <>
       <p>小安可以帮您填写画面资料，将照片缩略图发给您配置的 Qwen 服务分析。</p>
-      <label><input type="checkbox" checked={allowed} disabled={busy} onChange={e => setAllowed(e.target.checked)} />本次允许 Qwen 分析这张照片</label>
-      <button disabled={!allowed || busy || !!error} onClick={() => void analyze()}>{busy ? "正在看照片…" : "看看照片内容"}</button>
+      <button disabled={busy || !!error} onClick={() => void analyze()}>{busy ? "正在分析照片…" : "允许小安分析照片"}</button>
       {error && <button disabled={busy} onClick={() => { setError(""); }}>准备重试</button>}
     </>}
     {error && <p role="alert">{error}</p>}

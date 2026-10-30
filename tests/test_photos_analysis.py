@@ -114,3 +114,22 @@ def test_read_only_current_user_channel_does_not_fall_back_to_shared(tmp_path, m
     with pytest.raises(analysis.AnalysisUnavailable):
         analysis.analyze_photo(b"webp", identity)
     assert not absent.exists()
+
+
+def test_analysis_uses_same_personal_demo_channel_as_chat(tmp_path, monkeypatch):
+    identity = UserContext('actor', 'owner', '', '')
+    shared = tmp_path / 'users.db'
+    local = tmp_path / 'companion.db'
+    UserConfigStore(str(shared))
+    UserConfigStore(str(local)).update(identity, UserConfigUpdate(UNIART_API_KEY='demo-personal', UNIART_BASE_URL='https://example.test/v1'))
+    monkeypatch.setenv('IFRAME_PHOTOS_USER_CONFIG_DB', str(shared))
+    monkeypatch.setenv('IFRAME_COMPANION_DB_PATH', str(local))
+    response = Mock(status_code=200)
+    response.json.return_value = {'choices':[{'message':{'content':analysis.Observation(**OBSERVATION).model_dump_json()}}]}
+    post = Mock(return_value=response)
+    monkeypatch.setattr(analysis.requests, 'post', post)
+    analysis.analyze_photo(b'webp', identity)
+    assert post.call_args.kwargs['headers']['Authorization'] == 'Bearer demo-personal'
+    with pytest.raises(HTTPException):
+        analysis.analyze_photo(b'webp', UserContext('other', 'other', '', ''))
+    assert post.call_count == 1

@@ -10,9 +10,8 @@ beforeEach(() => { vi.resetAllMocks(); api.analysis.mockResolvedValue(null); api
 describe("Qwen photo observations", () => {
   it("loads without sending photos and requires explicit external analysis permission", async () => {
     render(<PhotoContent photoId="one" />);
-    const button = await screen.findByRole("button", { name: "看看照片内容" });
-    expect(button).toBeDisabled(); expect(api.analyze).not.toHaveBeenCalled();
-    fireEvent.click(screen.getByLabelText("本次允许 Qwen 分析这张照片"));
+    const button = await screen.findByRole("button", { name: "允许小安分析照片" });
+    expect(button).not.toBeDisabled(); expect(api.analyze).not.toHaveBeenCalled();
     fireEvent.click(button);
     expect(await screen.findByText("已填入资料")).toBeInTheDocument();
     expect(api.analyze).toHaveBeenCalledWith("one");
@@ -31,12 +30,12 @@ describe("Qwen photo observations", () => {
   it("shows provider failure and allows an explicit retry", async () => {
     api.analyze.mockRejectedValueOnce(new Error("unavailable"));
     render(<PhotoContent photoId="one" />);
-    fireEvent.click(await screen.findByLabelText("本次允许 Qwen 分析这张照片"));
-    fireEvent.click(screen.getByRole("button", { name: "看看照片内容" }));
+    await screen.findByRole("button", {name:"允许小安分析照片"});
+    fireEvent.click(screen.getByRole("button", { name: "允许小安分析照片" }));
     await screen.findByRole("alert");
     expect(screen.queryByText("AI 看图描述，尚待您核对")).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "准备重试" }));
-    fireEvent.click(screen.getByRole("button", { name: "看看照片内容" }));
+    fireEvent.click(screen.getByRole("button", { name: "允许小安分析照片" }));
     await waitFor(() => expect(api.analyze).toHaveBeenCalledTimes(2));
     await screen.findByText("已填入资料");
   });

@@ -1,7 +1,7 @@
 "use client";
 
 import {useEffect, useRef, useState} from "react";
-import {ArrowLeft, ChevronLeft, ChevronRight, Info, Minus, Plus} from "lucide-react";
+import {ArrowLeft, ChevronLeft, ChevronRight, Minus, Plus} from "lucide-react";
 import {photoApi} from "@/lib/photoApi";
 import {companionMediaApi} from "@/lib/companionMediaApi";
 import PhotoContent from "../photos/PhotoContent";
@@ -39,7 +39,7 @@ export default function MediaViewer({items, initialIndex = 0, disabled = false, 
     <header className={styles.albumHeader}>
       <button autoFocus className={styles.albumIcon} type="button" aria-label={info ? "返回照片" : "返回相册"} onClick={back}><ArrowLeft aria-hidden="true" size={24}/></button>
       <span>{info ? "照片资料" : `${index + 1} / ${items.length}`}</span>
-      {item.kind === "photo" && !info ? <button className={styles.albumIcon} type="button" aria-label="查看照片资料" onClick={() => setInfo(true)}><Info aria-hidden="true" size={24}/></button> : <span/>}
+      {item.kind === "photo" && !info ? <button className={styles.viewerEdit} type="button" aria-label="编辑照片资料" onClick={() => setInfo(true)}>编辑</button> : <span/>}
     </header>
     {info ? <div className={styles.mediaDetails}><PhotoContent key={item.id} photoId={item.id}/><PhotoStory key={`story-${item.id}`} photoId={item.id}/></div> : <>
       <div className={styles.mediaStage}>

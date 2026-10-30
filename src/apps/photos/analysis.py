@@ -76,8 +76,13 @@ def analyze_photo(raw: bytes, identity: UserContext) -> PhotoAnalysis:
     path = os.getenv("IFRAME_PHOTOS_USER_CONFIG_DB") or os.getenv("LUMENX_USER_DB_PATH") or "output/lumenx_users.db"
     try:
         store = UserConfigStore(path, read_only=True)
+        local_path = os.getenv("IFRAME_COMPANION_DB_PATH")
+        if local_path:
+            local = UserConfigStore(local_path, read_only=True)
+            if local.get_public(identity)["secrets_configured"]["UNIART_API_KEY"]:
+                store = local
         if not store.get_public(identity)["secrets_configured"]["UNIART_API_KEY"]:
-            raise HTTPException(409, "请先在 iFrame 创作台为当前用户配置 UniArt 渠道。")
+            raise HTTPException(409, "请在“更多 → UniArt 渠道”配置并保存当前用户的渠道。")
         configured = store.get_runtime_uniart(identity)
     except (sqlite3.Error, OSError) as exc:
         raise AnalysisUnavailable("User channel configuration unavailable") from exc

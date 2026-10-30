@@ -23,7 +23,7 @@ it('loads originals, keeps viewing separate from selection and navigates only th
 it('opens details only on request and cancels back to the image before closing the viewer',async()=>{
  const close=vi.fn();render(<MediaViewer items={items} onClose={close}/>);
  await screen.findByAltText('第一张');expect(screen.queryByText('资料 one')).not.toBeInTheDocument();
- fireEvent.click(screen.getByRole('button',{name:'查看照片资料'}));expect(screen.getByText('资料 one')).toBeInTheDocument();
+ fireEvent.click(screen.getByRole('button',{name:'编辑照片资料'}));expect(screen.getByText('资料 one')).toBeInTheDocument();
  fireEvent(screen.getByRole('dialog'),new Event('cancel',{cancelable:true}));
  await screen.findByAltText('第一张');expect(close).not.toHaveBeenCalled();
  fireEvent.click(screen.getByRole('button',{name:'返回相册'}));expect(close).toHaveBeenCalledOnce();
