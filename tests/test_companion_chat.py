@@ -279,3 +279,14 @@ def test_voice_diagnostics_records_only_bounded_connection_metadata(chat, caplog
     assert client.post('/companion-runtime/voice-diagnostics', json={**payload, 'state': 'turn:secret@host'}).status_code == 422
     assert client.post('/companion-runtime/voice-diagnostics', json={**payload, 'event':'stage', 'state':'asr_received', 'trace_id':'trace-1', 'duration_ms':1234, 'server_ms':300.2, 'inference_ms':220.1}).status_code == 200
     assert client.post('/companion-runtime/voice-diagnostics', json={**payload, 'trace_id':'private words'}).status_code == 422
+
+
+def test_model_prompt_history_is_bounded_without_dropping_current_message():
+    import json
+    from src.apps.companion_runtime.model import _bounded_model_messages
+    messages = [{'id': str(i), 'role': 'user', 'text': '旧内容' * 3000} for i in range(30)]
+    messages[-1]['text'] = '当前任务'
+    result = _bounded_model_messages(messages)
+    assert result[-1]['text'] == '当前任务'
+    assert len(result) <= 20
+    assert len(json.dumps(result, ensure_ascii=False)) <= 28000

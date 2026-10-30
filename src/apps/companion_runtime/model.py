@@ -1,16 +1,39 @@
 """Single-round Qwen function proposals through the current user's UniArt channel."""
 import json
+import logging
 import os
 import sqlite3
 
 import requests
 from .http_pool import post as pooled_post
 from .latency import model_usage
+
+logger = logging.getLogger(__name__)
 from fastapi import HTTPException
 
 from ..user_config import UserConfigStore
 from .personality import get_profile, system_prompt
 from .tools import tool_schemas, MODELS, DESCRIPTIONS, CAPABILITIES
+
+
+MAX_MODEL_MESSAGES = 20
+MAX_MODEL_CONTEXT_CHARS = 28000
+
+def _bounded_model_messages(messages):
+    """Keep current task state and a bounded recent transcript for Qwen."""
+    selected = list(messages[-MAX_MODEL_MESSAGES:])
+    compact = []
+    for item in selected:
+        if not isinstance(item, dict):
+            continue
+        value = dict(item)
+        for key, limit in (("text", 1400), ("result", 1400), ("quote", 600), ("content", 1400)):
+            if isinstance(value.get(key), str) and len(value[key]) > limit:
+                value[key] = value[key][:limit] + "…"
+        compact.append(value)
+    while compact and len(json.dumps(compact, ensure_ascii=False)) > MAX_MODEL_CONTEXT_CHARS and len(compact) > 1:
+        compact.pop(0)
+    return compact
 
 
 class ModelUnavailable(RuntimeError):
@@ -48,20 +71,27 @@ def _propose(identity, messages, current_message_id, *, diary=False):
         if not diary:
             prompt += '\n图片视频创作通过media_draft_start和media_draft_update准备卡片；用户只说想编辑或生成时brief必须留空，不把操作指令当提示词。active_media_draft是当前真实创作草稿，用户补充要求时更新，不重复新建。日记和相册正在编辑时其内容优先，不把编辑内容当生成指令。生成设置与计费提交由卡片核对完成，未执行时不能称生成完成。'
         if not diary:
-            prompt += '\nlast_operation是服务端实际操作回执。日记saved/already_saved表示保存任务已结束，不再追问或继续写；needs_review/needs_date只说明下一步，不能称保存成功。可见照片、旧workflow_tasks只是保留工作域，不代表用户要继续讨论。用户没有明确新意图时等待，不重复之前的问题，不主动切回照片。对无法理解的语音片段，只简短说明没听清，不补全意图、不反复追问。'
+            prompt += '\nlast_operation是服务端实际操作回执。日记saved/already_saved表示保存任务已结束，不再追问或继续写；needs_review/needs_date只说明下一步，不能称保存成功。可见照片、旧workflow_tasks只是保留工作域，不代表用户要继续讨论。用户没有明确新意图时等待，不重复之前的问题，不主动切回照片。对无法理解的语音片段，只简短说明没听清，不补全意图、不反复追问。' 
+        coordinator = messages[-1].get('coordinator_decision') if messages else None
+        if coordinator:
+            prompt += '\n协调器只提供任务焦点建议，必须以当前任务状态和用户原话为准：' + json.dumps(coordinator, ensure_ascii=False)
         if not diary:
             prompt += '\n你已注册以下站内能力，应按需求调用工具，不要声称无法打开站内相册或日记。外部手机相册仍需用户上传。\n' + json.dumps(CAPABILITIES, ensure_ascii=False)
+        model_context = _bounded_model_messages(messages)
+        logger.info('Companion Qwen prompt context messages=%d chars=%d', len(model_context), len(json.dumps(model_context, ensure_ascii=False)))
         response = pooled_post(configured['base_url'].rstrip('/')+'/chat/completions',
             headers={'Authorization': 'Bearer '+configured['api_key']},
             # Keep ordinary spoken/chat turns compact. Diary writing is an explicit
             # long-form task and retains the larger budget.
             json=dict(model=model, max_tokens=1600 if diary else 480, parallel_tool_calls=False,
-                      messages=[dict(role='system',content=prompt),dict(role='user',content=json.dumps(dict(current_message_id=current_message_id,user_messages=messages),ensure_ascii=False)),
+                      messages=[dict(role='system',content=prompt),dict(role='user',content=json.dumps(dict(current_message_id=current_message_id,user_messages=model_context),ensure_ascii=False)),
                                 ],
                       **({'tools': tools} if tools else {})), timeout=(10,60))
+        logger.info('Companion Qwen upstream status=%s content_type=%s', response.status_code, response.headers.get('content-type', ''))
         response.raise_for_status()
         payload = response.json()
         model_usage(payload)
+        logger.info('Companion Qwen upstream keys=%s', sorted(payload.keys()) if isinstance(payload, dict) else type(payload).__name__)
         result = payload['choices'][0]['message']
         if not isinstance(result,dict) or len(json.dumps(result))>32000:
             raise ValueError('Invalid model reply')
@@ -80,6 +110,7 @@ def _propose(identity, messages, current_message_id, *, diary=False):
             raise ValueError('Invalid text reply')
         return dict(kind='text',text=text)
     except (requests.RequestException,ValueError,KeyError,IndexError,TypeError) as exc:
+        logger.warning('Companion Qwen proposal failed: %s: %s', type(exc).__name__, str(exc)[:240])
         raise ModelUnavailable('Qwen request failed or returned an invalid proposal') from exc
 
 
