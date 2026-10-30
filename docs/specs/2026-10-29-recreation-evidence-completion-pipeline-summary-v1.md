@@ -138,3 +138,7 @@ media完成源49–56帧固定原生相机/根/人体形状的髋膝时序拟合
 ## 2026-10-30 CPU group-keyframe fit
 
 组级关键帧拟合在media CPU跑通：49/51/53/55四点优化、组内delta插值。0.70rad下训练RMSE36.46→23.01px，留出51帧28.40→17.47px，踝最大变化48.47px；逐帧自由版本留出14.99px。组级仍显著优于原恢复但略逊逐帧自由拟合，关键帧应按动作转折选择，不能等间隔替代。见[报告](../agents/deliverables/2026-10-30-cpu-group-keyframe-fit.md)。
+
+## 2026-10-30 fair group-vs-frame comparison
+
+修正评估泄漏：此前把关键帧51同时作为组级关键帧和留出帧，不公平。改用非关键帧52留出后，逐帧自由拟合RMSE27.69px，组级关键帧+delta插值28.50px，差0.81px；两者均优于基线34.57px。组级精度代价目前很小，关键优势是减少自由度/重复标注；仍需多组非关键帧留出验证。见[对照报告](../agents/deliverables/2026-10-30-group-vs-frame-fit-comparison.md)。

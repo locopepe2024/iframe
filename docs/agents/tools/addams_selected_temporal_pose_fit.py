@@ -14,6 +14,7 @@ parser = argparse.ArgumentParser()
 parser.add_argument('--ankle-prior-px', type=float, default=0.0)
 parser.add_argument('--phase-smooth-weight', type=float, default=0.0)
 parser.add_argument('--group-keyframes', action='store_true')
+parser.add_argument('--holdout', type=int, default=51)
 args = parser.parse_args()
 if args.ankle_prior_px < 0 or args.phase_smooth_weight < 0:
     parser.error('ankle prior weight must be nonnegative')
@@ -145,7 +146,7 @@ result = {'schema': 'addams-selected-temporal-pose-fit.v1', 'production_eligible
               'Original30fps samples retained; source-frame timing errors are reported.',
               'No evidence beyond frame56 extrapolated; frame64 flight not addressed.']}
 for bound in [.35, .7]:
-    case = fit(bound, 51)
+    case = fit(bound, args.holdout)
     result['cases'].append(case)
     (OUT/'report.json').write_text(json.dumps(result, indent=2)+'\n')
     print(json.dumps({'bound':bound,'metrics':case['metrics'],'bound_fraction':case['bound_component_fraction']}),flush=True)
