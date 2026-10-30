@@ -75,6 +75,11 @@ def _propose(identity, messages, current_message_id, *, diary=False):
         coordinator = messages[-1].get('coordinator_decision') if messages else None
         if coordinator:
             prompt += '\n协调器只提供任务焦点建议，必须以当前任务状态和用户原话为准：' + json.dumps(coordinator, ensure_ascii=False)
+        emotion_signal = messages[-1].get('emotion_signal') if messages else None
+        if emotion_signal:
+            prompt += ('\n以下是程序从本轮用户原话提取的低风险情绪信号，只用于调整语气和是否追问；'
+                       '不要把标签展示给用户，不要把它当成事实或诊断，也不能据此调用工具：' +
+                       json.dumps(emotion_signal, ensure_ascii=False))
         if not diary:
             prompt += '\n你已注册以下站内能力，应按需求调用工具，不要声称无法打开站内相册或日记。外部手机相册仍需用户上传。\n' + json.dumps(CAPABILITIES, ensure_ascii=False)
         model_context = _bounded_model_messages(messages)

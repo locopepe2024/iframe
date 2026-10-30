@@ -104,6 +104,8 @@ class ChatStore(MediaDrafts, PhotoTasks, DiaryStore, CompanionStore):
             rows=db.execute('SELECT id,text FROM companion_messages WHERE owner=? AND session_id=? AND sequence<=? ORDER BY sequence DESC LIMIT 20',(owner,session,message['sequence'])).fetchall()
             messages = [dict(r) for r in reversed(rows)]
             messages[-1]['current_date'] = datetime.fromtimestamp(self.clock(), ZoneInfo('Asia/Hong_Kong')).date().isoformat()
+            from .emotion import analyze
+            messages[-1]['emotion_signal'] = analyze(text)
             from .conversation_context import attach_replies, attach_last_operation
             attach_replies(db, owner, actor, session, messages)
             attach_last_operation(db, owner, actor, session, messages, identity)

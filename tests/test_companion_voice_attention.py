@@ -3,6 +3,7 @@ from unittest.mock import Mock
 import pytest
 
 from src.apps.companion_runtime.voice_attention import attention_reply, silence_reply
+from src.apps.companion_runtime.emotion import analyze
 from tests.test_companion_chat import chat
 
 
@@ -25,6 +26,24 @@ def test_low_information_acknowledgements_are_silent(text):
 @pytest.mark.parametrize('text', ['好，打开相册', '嗯，我想看看女儿的照片', '继续说今天的事'])
 def test_real_requests_are_not_silenced(text):
     assert silence_reply(text) is None
+
+
+@pytest.mark.parametrize('text,expected', [
+    ('今天女儿来看我，我很开心', ('positive', 'celebrate')),
+    ('我有点难过', ('negative', 'comfort')),
+    ('一直失败，我很着急', ('negative', 'solve')),
+    ('我不明白怎么打开', ('neutral', 'clarify')),
+])
+def test_emotion_signal_is_structured_and_conservative(text, expected):
+    signal = analyze(text)
+    assert (signal['valence'], signal['need']) == expected
+    assert 0 < signal['confidence'] <= 1
+    assert signal['evidence']
+
+
+def test_unknown_emotion_does_not_claim_a_feeling():
+    assert analyze('今天下午有风') == dict(
+        valence='neutral', arousal='unknown', need='none', confidence=0.25, evidence=[])
 
 
 def test_silent_turn_does_not_call_model(chat, monkeypatch):
