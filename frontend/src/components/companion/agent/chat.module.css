@@ -207,3 +207,28 @@
 .assistantIdentity h1 { flex-shrink: 0; }
 .assistantStatus { min-width: 0; font-size: .85rem; line-height: 1.4; color: var(--muted); overflow-wrap: anywhere; }
 .headerActions { flex-shrink: 0; }
+
+/* Keep enlarged text and native date controls inside narrow mobile surfaces. */
+.shell { padding-left: max(1rem, env(safe-area-inset-left)); padding-right: max(1rem, env(safe-area-inset-right)); }
+.assistant, .user, .guideCard, .filterChips { min-width: 0; overflow-wrap: anywhere; }
+.featureDialog { box-sizing: border-box; }
+.calendarGrid { grid-template-columns: repeat(7, minmax(0, 1fr)); }
+.shell .calendarGrid button { min-width: 0; padding-inline: 0; gap: .1rem; font-size: min(1em, 6vw); }
+.calendarToolbar input { min-width: 0; }
+.calendarToolbar label { flex-basis: 8rem; }
+.viewerControls > .albumHeader { flex-wrap: wrap; gap: .25rem; }
+.zoomControls { flex-wrap: wrap; justify-content: center; gap: .25rem; }
+.mediaLibrary, .mediaViewer { padding-left: max(.75rem, env(safe-area-inset-left)); padding-right: max(.75rem, env(safe-area-inset-right)); }
+@media (max-width: 36rem) {
+  .shell { padding-left: max(.6rem, env(safe-area-inset-left)); padding-right: max(.6rem, env(safe-area-inset-right)); }
+  .shell .toolbar { flex-wrap: wrap; }
+  .shell .toolbar button { flex-shrink: 0; min-width: 44px; }
+  .shell .toolbar .albumButton, .shell .toolbar .voiceButton { width: 44px; min-width: 44px; max-width: 44px; flex: 0 0 44px; }
+  .shell .composerActions { flex: 0 0 auto; flex-wrap: wrap; margin-left: auto; }
+  .shell .toolbar details > summary { min-height: 44px; min-width: 44px; }
+  .shell .settingsPanel { padding-left: max(.9rem, env(safe-area-inset-left)); padding-right: max(.9rem, env(safe-area-inset-right)); }
+}
+@media (max-width: 22rem) {
+  .calendarGrid { grid-template-columns: repeat(7, minmax(0, 1fr)); }
+  .viewerControls .zoomControls { order: 1; flex-basis: 100%; }
+}
