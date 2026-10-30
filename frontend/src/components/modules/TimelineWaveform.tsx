@@ -17,7 +17,7 @@ export function waveformPeaks(channels: Float32Array[], count = 1200): number[] 
     });
 }
 
-async function decode(url: string, signal: AbortSignal) {
+async function decode(url: string, signal: AbortSignal, onProgress?: () => void) {
     const cached = cache.get(url);
     if (cached) return cached;
     const response = await fetch(url, { signal, credentials: 'same-origin' });
@@ -32,6 +32,7 @@ async function decode(url: string, signal: AbortSignal) {
             size += value.byteLength;
             if (size > LIMIT) throw new Error('Waveform exceeds limit');
             chunks.push(value);
+            if (value.byteLength) onProgress?.();
         }
     } finally { await reader.cancel(); }
     if (signal.aborted) throw new Error('Cancelled');
@@ -67,12 +68,19 @@ export default function TimelineWaveform({ url, startMs, endMs }: { url: string;
         queue = queue.then(async () => {
             if (controller.signal.aborted) return;
             let timedOut = false;
-            const timeout = setTimeout(() => {
-                timedOut = true;
-                setFailed(true);
-                controller.abort();
-            }, 15000);
-            try { const decoded = await decode(url, controller.signal); if (!controller.signal.aborted) setData(decoded); }
+            let timeout: ReturnType<typeof setTimeout> | undefined;
+            const armTimeout = () => {
+                if (timeout) clearTimeout(timeout);
+                timeout = setTimeout(() => {
+                    timedOut = true;
+                    setFailed(true);
+                    controller.abort();
+                }, 15000);
+            };
+            // Bound inactivity, while allowing a large/slow response to finish
+            // when bytes continue to arrive.
+            armTimeout();
+            try { const decoded = await decode(url, controller.signal, armTimeout); if (!controller.signal.aborted) setData(decoded); }
             catch { if (!controller.signal.aborted || timedOut) setFailed(true); }
             finally { clearTimeout(timeout); }
         });
