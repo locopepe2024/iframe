@@ -1,0 +1,121 @@
+{
+  "schema": "director3d-support-annotations.v1",
+  "sourceSha256": "0ff075c7ad6855c5c2c37a171592ee8f0d6ab2f58259e2be77a9b63dd8027765",
+  "targetSha256": "95eeb19c8abce2325479804b3dda429ebddfa6e8d07a2688541cc990fb676855",
+  "intervals": [
+    {
+      "action": "Walk_Loop",
+      "side": "l",
+      "startFrame": 0,
+      "endFrame": 8,
+      "mesh": "white-model-neutral-female-03",
+      "vertexIndex": 5535,
+      "provenance": "design_hypothesis",
+      "evidence": "Numerical trial only: fixed vertex selected for bounded height; per-interval XY route fitted to original trajectory, no continuous full-world route or authored support claim.",
+      "routeTranslationsM": [
+        [
+          0.0,
+          0.0,
+          0
+        ],
+        [
+          0.0006576478481292725,
+          -0.05869057774543762,
+          0
+        ],
+        [
+          0.0010929703712463379,
+          -0.11636391282081604,
+          0
+        ],
+        [
+          0.0013598054647445679,
+          -0.17158624529838562,
+          0
+        ],
+        [
+          0.0015009939670562744,
+          -0.2218828722834587,
+          0
+        ],
+        [
+          0.001621633768081665,
+          -0.2675475925207138,
+          0
+        ],
+        [
+          0.0016873478889465332,
+          -0.312263548374176,
+          0
+        ],
+        [
+          0.0017310529947280884,
+          -0.35604027658700943,
+          0
+        ],
+        [
+          0.0017385780811309814,
+          -0.3990391343832016,
+          0
+        ]
+      ]
+    },
+    {
+      "action": "Walk_Loop",
+      "side": "r",
+      "startFrame": 16,
+      "endFrame": 24,
+      "mesh": "white-model-neutral-female-03",
+      "vertexIndex": 6566,
+      "provenance": "design_hypothesis",
+      "evidence": "Numerical trial only: fixed vertex selected for bounded height; per-interval XY route fitted to original trajectory, no continuous full-world route or authored support claim.",
+      "routeTranslationsM": [
+        [
+          0.001798778772354126,
+          -0.743029996752739,
+          0
+        ],
+        [
+          0.0009478777647018433,
+          -0.8069262802600861,
+          0
+        ],
+        [
+          0.00030499696731567383,
+          -0.8688450753688812,
+          0
+        ],
+        [
+          -0.00015851855278015137,
+          -0.9280765950679779,
+          0
+        ],
+        [
+          -0.0004198402166366577,
+          -0.9821483045816422,
+          0
+        ],
+        [
+          -0.0005560517311096191,
+          -1.0313677787780762,
+          0
+        ],
+        [
+          -0.0005709677934646606,
+          -1.0795400440692902,
+          0
+        ],
+        [
+          -0.0005130469799041748,
+          -1.126620352268219,
+          0
+        ],
+        [
+          -0.0003918111324310303,
+          -1.1726336777210236,
+          0
+        ]
+      ]
+    }
+  ]
+}

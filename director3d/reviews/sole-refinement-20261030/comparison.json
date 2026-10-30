@@ -1,0 +1,167 @@
+{
+  "blenderVersion": "4.5.9 LTS",
+  "baseline": [
+    {
+      "status": "diagnostic_only",
+      "supportAccepted": false,
+      "released": {
+        "frames": [
+          0,
+          8
+        ],
+        "maxAnchorResidualM": 0.010180981830296797,
+        "maxHorizontalDriftM": 1.0536712127723508e-07,
+        "maxHorizontalSpeedMps": null,
+        "minPatchZM": -0.0034116203896701336,
+        "maxPatchVertexSpeedMps": null
+      },
+      "ramp": {
+        "frames": [
+          1,
+          7
+        ],
+        "maxAnchorResidualM": 0.0024710656146544933,
+        "maxHorizontalDriftM": 0.0002354092656392966,
+        "maxHorizontalSpeedMps": null,
+        "minPatchZM": -0.006150722969323397,
+        "maxPatchVertexSpeedMps": null
+      },
+      "fullWeight": {
+        "frames": [
+          2,
+          3,
+          4,
+          5,
+          6
+        ],
+        "maxAnchorResidualM": 0.0009546261727218805,
+        "maxHorizontalDriftM": 0.0003583883170195746,
+        "maxHorizontalSpeedMps": 0.004938922762450745,
+        "minPatchZM": -0.0076849195174872875,
+        "maxPatchVertexSpeedMps": 0.10309832980097534
+      }
+    },
+    {
+      "status": "diagnostic_only",
+      "supportAccepted": false,
+      "released": {
+        "frames": [
+          16,
+          24
+        ],
+        "maxAnchorResidualM": 0.00964442547429145,
+        "maxHorizontalDriftM": 1.228781230931777e-07,
+        "maxHorizontalSpeedMps": null,
+        "minPatchZM": -0.004182812292128801,
+        "maxPatchVertexSpeedMps": null
+      },
+      "ramp": {
+        "frames": [
+          17,
+          23
+        ],
+        "maxAnchorResidualM": 0.0024296312473900644,
+        "maxHorizontalDriftM": 0.0002408032669763536,
+        "maxHorizontalSpeedMps": null,
+        "minPatchZM": -0.006525977049022913,
+        "maxPatchVertexSpeedMps": null
+      },
+      "fullWeight": {
+        "frames": [
+          18,
+          19,
+          20,
+          21,
+          22
+        ],
+        "maxAnchorResidualM": 0.000976844255892276,
+        "maxHorizontalDriftM": 0.00037723306465211513,
+        "maxHorizontalSpeedMps": 0.005137408181491107,
+        "minPatchZM": -0.008042341098189354,
+        "maxPatchVertexSpeedMps": 0.11369521342527444
+      }
+    }
+  ],
+  "refined": [
+    {
+      "status": "diagnostic_only",
+      "supportAccepted": false,
+      "released": {
+        "frames": [
+          0,
+          8
+        ],
+        "maxAnchorResidualM": 0.010180981830296797,
+        "maxHorizontalDriftM": 1.0536712127723508e-07,
+        "maxHorizontalSpeedMps": null,
+        "minPatchZM": -0.0034116203896701336,
+        "maxPatchVertexSpeedMps": null
+      },
+      "ramp": {
+        "frames": [
+          1,
+          7
+        ],
+        "maxAnchorResidualM": 0.0024710656146544933,
+        "maxHorizontalDriftM": 0.0002354092656392966,
+        "maxHorizontalSpeedMps": null,
+        "minPatchZM": -0.006150722969323397,
+        "maxPatchVertexSpeedMps": null
+      },
+      "fullWeight": {
+        "frames": [
+          2,
+          3,
+          4,
+          5,
+          6
+        ],
+        "maxAnchorResidualM": 9.426692338607095e-06,
+        "maxHorizontalDriftM": 3.6068506148650874e-06,
+        "maxHorizontalSpeedMps": 4.2201603846094415e-05,
+        "minPatchZM": -0.0073305098339915276,
+        "maxPatchVertexSpeedMps": 0.09862162012487055
+      }
+    },
+    {
+      "status": "diagnostic_only",
+      "supportAccepted": false,
+      "released": {
+        "frames": [
+          16,
+          24
+        ],
+        "maxAnchorResidualM": 0.00964442547429145,
+        "maxHorizontalDriftM": 1.228781230931777e-07,
+        "maxHorizontalSpeedMps": null,
+        "minPatchZM": -0.004182812292128801,
+        "maxPatchVertexSpeedMps": null
+      },
+      "ramp": {
+        "frames": [
+          17,
+          23
+        ],
+        "maxAnchorResidualM": 0.0024296312473900644,
+        "maxHorizontalDriftM": 0.0002408032669763536,
+        "maxHorizontalSpeedMps": null,
+        "minPatchZM": -0.006525977049022913,
+        "maxPatchVertexSpeedMps": null
+      },
+      "fullWeight": {
+        "frames": [
+          18,
+          19,
+          20,
+          21,
+          22
+        ],
+        "maxAnchorResidualM": 9.721621259319073e-06,
+        "maxHorizontalDriftM": 3.7553587035865846e-06,
+        "maxHorizontalSpeedMps": 4.57819547819288e-05,
+        "minPatchZM": -0.007665496319532394,
+        "maxPatchVertexSpeedMps": 0.10904053766749666
+      }
+    }
+  ]
+}
