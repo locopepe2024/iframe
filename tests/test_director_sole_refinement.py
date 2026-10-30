@@ -48,3 +48,16 @@ def test_patch_motion_is_visible_even_if_anchor_is_stationary():
     assert result['maxAnchorResidualM'] == 0
     assert result['minPatchZM'] == -.008
     assert result['maxPatchVertexSpeedMps'] > .2
+
+
+def test_contact_anchor_centroid_uses_full_patch_and_ground_plane():
+    from bounded_support_ik import contact_anchor_from_patch
+    assert contact_anchor_from_patch([[0, 0, .01], [2, 0, .02], [0, 2, .03]]) == [pytest.approx(2/3), pytest.approx(2/3), 0]
+
+
+def test_contact_anchor_rejects_empty_or_nonfinite_patch():
+    from bounded_support_ik import contact_anchor_from_patch
+    with pytest.raises(ValueError):
+        contact_anchor_from_patch([])
+    with pytest.raises(ValueError):
+        contact_anchor_from_patch([[float('nan'), 0, 0]])

@@ -33,3 +33,8 @@ cumulative limit, nonfinite input and moving patch vertices despite a fixed poin
 Next boundary: constrained foot orientation/contact patch fitting and entry/exit
 planning. Do not widen tolerance or mark a point-only result as full-foot acceptance.
 No deployment, catalog promotion or UI default changes.
+
+A follow-up centroid-anchor trial was intentionally rejected by the existing
+5 cm support-offset bound before IK. It produced no accepted output. This is an
+input/model-shape limitation, not evidence to relax the limit; fixed annotated
+anchors remain the default.

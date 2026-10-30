@@ -122,3 +122,13 @@ def summarize_contact_phases(samples, fps):
             'maxPatchVertexSpeedMps': max((math.dist(p[:2], q[:2])*fps for a, b in pairs
                                           for p, q in zip(a['soleRegionWorldM'], b['soleRegionWorldM'])), default=None)}
     return result
+
+
+def contact_anchor_from_patch(points, ground_z=0.0):
+    if not isinstance(points, list) or not points:
+        raise ValueError('contact patch requires points')
+    for point in points:
+        vector(point)
+    if isinstance(ground_z, bool) or not isinstance(ground_z, (int, float)) or not math.isfinite(ground_z):
+        raise ValueError('invalid contact ground')
+    return [sum(point[i] for point in points) / len(points) for i in range(2)] + [ground_z]
