@@ -29,3 +29,23 @@ def emotional_reply(text: str, signal: dict | None):
     if need == 'celebrate':
         return dict(kind='text', text='听起来今天有件开心的事。', reason='emotion')
     return None
+
+
+def emotion_already_acknowledged(messages: list[dict], signal: dict | None) -> bool:
+    """Avoid repeating the same emotional acknowledgement in one short turn."""
+    if not isinstance(signal, dict) or signal.get('confidence', 0) < 0.68:
+        return False
+    need = signal.get('need')
+    phrases = {
+        'comfort': '难过',
+        'solve': '着急',
+        'celebrate': '开心',
+    }
+    marker = phrases.get(need)
+    if not marker:
+        return False
+    for message in reversed(messages[-4:]):
+        reply = message.get('assistant_reply') or {}
+        if reply.get('reason') == 'emotion' and marker in reply.get('text', ''):
+            return True
+    return False

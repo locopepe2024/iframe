@@ -34,6 +34,8 @@ def attach_replies(db, owner, actor, session, messages):
         reply = dict(turn_id=row['id'], kind=kind)
         if kind == 'text':
             reply['text'] = result['text'][:4000]
+            if result.get('reason'):
+                reply['reason'] = result['reason']
             if result.get('name') == 'diary.save_draft' and result.get('operation_status'):
                 reply.update(tool=result['name'], operation_status=result['operation_status'], day=result['day'])
         elif kind == 'read':

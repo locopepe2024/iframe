@@ -67,6 +67,18 @@ def test_emotional_acknowledgement_does_not_call_model(chat):
     model.assert_not_called()
 
 
+def test_repeated_emotion_is_silent_after_the_first_acknowledgement(chat):
+    _, _, client, session, model = chat
+    first = client.post(f'/companion-runtime/sessions/{session}/chat', json=dict(
+        operation_id='emotion-first', text='我有点难过', allow_external_text=True))
+    assert first.status_code == 200
+    second = client.post(f'/companion-runtime/sessions/{session}/chat', json=dict(
+        operation_id='emotion-second', text='我有点难过', allow_external_text=True))
+    assert second.status_code == 200, second.text
+    assert second.json()['result'] == dict(kind='silent', reason='emotion_already_acknowledged')
+    model.assert_not_called()
+
+
 def test_silent_turn_does_not_call_model(chat, monkeypatch):
     _, _, client, session, model = chat
     coordinator = Mock(side_effect=AssertionError('No coordinator for filler'))
