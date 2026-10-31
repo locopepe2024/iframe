@@ -449,9 +449,10 @@ export default function CharacterWorkbench({ asset, seriesId, onClose, onUpdateD
     const updateProject = useProjectStore(state => state.updateProject);
     const currentProject = useProjectStore(state => state.currentProject);
     const currentSeries = useProjectStore(state => state.currentSeries);
-    const variantNameFallback = (index: number) => asset.name?.trim()
-        ? `${asset.name.trim()}-${index + 1}`
-        : `${currentSeries?.id === currentProject?.series_id ? currentSeries?.title || "项目" : "项目"}.${currentProject?.title || "剧集"}.view ${index + 1}`;
+    // Variants are views of the same character asset. Keep the generated
+    // fallback neutral and stable; users can save a semantic display name
+    // per variant without creating another character asset.
+    const variantNameFallback = (index: number) => `view ${index + 1}`;
     const [assetIndex, setAssetIndex] = useState<AssetReferenceIndexEntry[]>([]);
     const assetIndexRequest = useRef(0);
     const assetIndexRevision = JSON.stringify(
