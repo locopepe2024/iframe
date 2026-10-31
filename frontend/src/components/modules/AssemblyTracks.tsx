@@ -9,13 +9,20 @@ import { extractErrorDetail, getAssetUrl, getVideoPosterUrl } from "@/lib/utils"
 import TimelineFilmstrip from './TimelineFilmstrip';
 import TimelineAudioPreview, { usePreviewGain } from './TimelineAudioPreview';
 import TimelineWaveform from './TimelineWaveform';
+import { ChevronLeft, ChevronRight, Undo2, Redo2 } from 'lucide-react';
 
-export function AssemblyTracks({ plan: committedPlan, resourceId, onChange, saved, project, materials, onUploadAudio, onExportSubtitles, materialPanel }: {
+export function AssemblyTracks({ plan: committedPlan, resourceId, onChange, saved, project, materials, onUploadAudio, onExportSubtitles, materialPanel, audioLane, onAudioLaneChange, canUndo, canRedo, onUndo, onRedo }: {
     plan: AssemblyEditPlan; resourceId: string; saved: boolean; project: Pick<Project, "id" | "frames" | "video_tasks" | "bgm_url">;
     materialPanel?: ReactNode;
     materials?: Record<string, { url: string }>;
     onUploadAudio?: (file: File) => Promise<{ media_id: string; url: string; duration_ms: number }>;
     onExportSubtitles?: (lane: string) => Promise<Blob>;
+    audioLane?: 'bgm' | 'dialogue' | 'sfx';
+    onAudioLaneChange?: (lane: 'bgm' | 'dialogue' | 'sfx') => void;
+    canUndo?: boolean;
+    canRedo?: boolean;
+    onUndo?: () => void;
+    onRedo?: () => void;
     onChange: (plan: AssemblyEditPlan) => void;
 }) {
     const [dragPreview, setDragPreview] = useState<AssemblyEditPlan | null>(null);
@@ -191,9 +198,9 @@ export function AssemblyTracks({ plan: committedPlan, resourceId, onChange, save
     };
     return <section tabIndex={0} onKeyDown={onWorkbenchKeyDown} aria-label={t("多泳道编辑", "Multitrack editing")} className="min-w-0 space-y-3 rounded-lg border border-glass-border p-3" style={{ contain: "inline-size" }}>
         <div data-editing-workspace className="min-w-0 space-y-3">
-        <div className="flex flex-wrap gap-2">
-            {materialPanel && <button type="button" className={control} aria-expanded={showMaterials} onClick={() => setShowMaterials(value => !value)}>{t("素材面板", "Material panel")}</button>}
-            <button type="button" className={control} aria-expanded={showInspector} onClick={() => setShowInspector(value => !value)}>{t("片段属性", "Clip properties")}</button>
+        <div className="flex flex-wrap items-center gap-2">
+            {materialPanel && <button type="button" className={`${control} px-2`} aria-label={t("切换素材面板", "Toggle material panel")} title={t("素材面板", "Material panel")} aria-expanded={showMaterials} onClick={() => setShowMaterials(value => !value)}>{showMaterials ? <ChevronLeft size={16} /> : <ChevronRight size={16} />}</button>}
+            <button type="button" className={`${control} px-2`} aria-label={t("切换片段属性", "Toggle clip properties")} title={t("片段属性", "Clip properties")} aria-expanded={showInspector} onClick={() => setShowInspector(value => !value)}>{showInspector ? <ChevronRight size={16} /> : <ChevronLeft size={16} />}</button>
         </div>
         <div className="flex min-w-0 flex-col gap-3 lg:flex-row lg:items-stretch">
         {materialPanel && showMaterials && <aside aria-label={t("素材选择面板", "Material picker panel")} className="min-w-0 overflow-auto rounded-lg border border-glass-border p-2 lg:max-h-[45dvh] lg:w-72 lg:shrink-0">{materialPanel}</aside>}
@@ -251,7 +258,10 @@ export function AssemblyTracks({ plan: committedPlan, resourceId, onChange, save
         </aside>}
         </div>
         <div data-editing-timeline className="min-w-0 space-y-2 rounded-lg border border-glass-border p-2">
-        <div className="flex flex-wrap items-center gap-2 rounded-lg border border-glass-border bg-surface p-2" role="group" aria-label={t("时间轴缩放", "Timeline zoom")}><span className="text-sm font-medium">{t("时间轴", "Timeline")}</span>
+        <div className="flex flex-wrap items-center gap-2 rounded-lg border border-glass-border bg-surface p-2" role="toolbar" aria-label={t("时间轴工具", "Timeline tools")}><span className="text-sm font-medium">{t("时间轴", "Timeline")}</span>
+            {onUndo && <button type="button" className={`${control} px-2`} aria-label={t("撤销", "Undo")} title={t("撤销", "Undo")} disabled={!canUndo} onClick={onUndo}><Undo2 size={15} /></button>}
+            {onRedo && <button type="button" className={`${control} px-2`} aria-label={t("重做", "Redo")} title={t("重做", "Redo")} disabled={!canRedo} onClick={onRedo}><Redo2 size={15} /></button>}
+            {onAudioLaneChange && <label className="flex items-center gap-1 text-xs text-text-secondary"><span>{t("添加音频", "Add audio")}</span><select className={control} value={audioLane} onChange={e => onAudioLaneChange(e.target.value as 'bgm' | 'dialogue' | 'sfx')}><option value="bgm">BGM</option><option value="dialogue">{t("对白", "Dialogue")}</option><option value="sfx">{t("音效", "SFX")}</option></select></label>}
             <button type="button" className={control} aria-label={t("缩小时间轴", "Zoom out")} disabled={zoom <= 0.5} onClick={() => setZoom(z => Math.max(0.5, z / 2))}>{t("缩小时间轴 −", "Zoom out −")}</button>
             <span className="text-xs tabular-nums">{Math.round(zoom * 100)}%</span>
             <button type="button" className={control} aria-label={t("放大时间轴", "Zoom in")} disabled={zoom >= 16} onClick={() => setZoom(z => Math.min(16, z * 2))}>{t("放大时间轴 ＋", "Zoom in ＋")}</button>
