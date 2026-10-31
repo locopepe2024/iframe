@@ -48,6 +48,7 @@ export default function EditingPage() {
     setSources(old => ({ ...old, [item.id]: item }));
     change({ ...current, lanes, target_duration_ms: item.video ? start + duration : current.target_duration_ms });
   };
+  const importMaterials = () => { setTab('materials'); window.location.hash = '#/editing?tab=materials'; };
   const deleteCurrentProject = () => {
     if (!project || dirty || busy) return;
     if (!window.confirm(t('删除这个剪辑项目？项目源素材不会被删除。', 'Delete this editing project? Source materials will remain.'))) return;
@@ -81,14 +82,13 @@ export default function EditingPage() {
       {versions.length > 0 && <div className="flex flex-wrap gap-2">{versions.filter(v => v.revision > 0).map(v => <button className="glass-button px-3 py-2" key={v.revision} disabled={busy || dirty || v.revision === project.revision} onClick={() => void run(async () => accept(await editing.restore(project.id, project.revision, v.revision)))}>{t('恢复', 'Restore')} v{v.revision}</button>)}</div>}
       <fieldset disabled={busy} className="space-y-4 disabled:opacity-60">
         {plan && <>
-          <AssemblyTracks plan={plan} resourceId={project.id} saved={!dirty} project={{ id: project.id, frames: [], video_tasks: [] }} materials={sources} materialPanel={<EditingMaterials onSelect={add} disabled={busy} />} onChange={change}
+          <AssemblyTracks plan={plan} resourceId={project.id} saved={!dirty} project={{ id: project.id, frames: [], video_tasks: [] }} materials={sources} materialPanel={<EditingMaterials onSelect={add} onImport={importMaterials} materials={sources} disabled={busy} />} onChange={change}
             audioLane={audioLane} onAudioLaneChange={setAudioLane} canUndo={undo.length > 0} canRedo={redo.length > 0}
             onUndo={() => { setRedo(old => [...old, plan]); setPlan(undo[undo.length - 1]); setUndo(old => old.slice(0, -1)); setDirty(true); }}
             onRedo={() => { setUndo(old => [...old, plan]); setPlan(redo[redo.length - 1]); setRedo(old => old.slice(0, -1)); setDirty(true); }}
             onExportSubtitles={lane => editing.subtitles(project.id, lane)} onUploadAudio={async file => { const item = await editing.upload(file); setSources(old => ({ ...old, [item.id]: item })); return { media_id: item.id, url: item.url, duration_ms: item.duration_ms }; }} />
         </>}
-        {!plan && <EditingMaterials onSelect={add} disabled={busy} />}
-        <button type="button" className="glass-button px-3 py-2 text-sm" onClick={() => { setTab('materials'); window.location.hash = '#/editing?tab=materials'; }}>{t('上传或管理素材', 'Upload or manage materials')}</button>
+        {!plan && <EditingMaterials onSelect={add} onImport={importMaterials} materials={sources} disabled={busy} />}
       </fieldset>
     </>}
     </>}

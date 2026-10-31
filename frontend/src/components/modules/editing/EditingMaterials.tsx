@@ -3,10 +3,26 @@ import { useEffect, useState } from 'react';
 import { useLocale } from 'next-intl';
 import { editing, type EditFolder, type EditMaterial } from '@/lib/editing';
 import { extractErrorDetail, getVideoPosterUrl } from '@/lib/utils';
-import { ChevronRight, Folder, FolderInput, Lock, Music, Play, Search, Trash2, Upload } from 'lucide-react';
+import { ChevronRight, Folder, FolderInput, Lock, Music, Plus, Search, Trash2, Upload } from 'lucide-react';
 
 type Props = { onSelect?: (item: EditMaterial) => void; disabled?: boolean };
-export function EditingMaterials(props: Props) { return <MaterialBrowser {...props} manage={false} />; }
+export function EditingMaterials({ onSelect, onImport, materials = {}, disabled = false }: Props & { onImport: () => void; materials?: Record<string, EditMaterial> }) {
+  const zh = useLocale().startsWith('zh');
+  const t = (cn: string, en: string) => zh ? cn : en;
+  const items = Object.values(materials);
+  return <section className="min-w-0 space-y-3" aria-label={t('剪辑素材库', 'Editing materials')}>
+    <button type="button" className="glass-button min-h-11 px-3 py-2" disabled={disabled} onClick={onImport}>{t('导入', 'Import')}</button>
+    {!items.length && <p className="text-xs text-text-secondary">{t('导入视频或音频开始剪辑。', 'Import video or audio to start editing.')}</p>}
+    <div className="grid grid-cols-2 gap-2">{items.map(item => <article key={item.id} className="group relative min-w-0 overflow-hidden rounded-lg border border-glass-border bg-surface" title={`${item.name} · ${(item.duration_ms / 1000).toFixed(3)}s`}>
+      <div className="aspect-video overflow-hidden bg-black/40">
+        {item.video ? <video className="h-full w-full object-cover" src={item.url} poster={getVideoPosterUrl(item.url) || undefined} muted preload="metadata" aria-label={item.name} /> : <div className="flex h-full items-center justify-center text-text-muted"><Music size={24} aria-hidden="true" /></div>}
+      </div>
+      <div className="flex items-center gap-1 p-1"><span className="min-w-0 flex-1 truncate text-xs">{item.name}</span>
+        <button type="button" className="flex min-h-11 min-w-11 items-center justify-center rounded-md bg-primary text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary disabled:opacity-40" aria-label={`${t('添加素材', 'Add material')} ${item.name}`} title={t('添加到时间线', 'Add to timeline')} disabled={disabled} onClick={() => onSelect?.(item)}><Plus size={18} aria-hidden="true" /></button>
+      </div>
+    </article>)}</div>
+  </section>;
+}
 export function EditingMaterialManager(props: Props) { return <MaterialBrowser {...props} manage />; }
 
 function MaterialBrowser({ onSelect, disabled = false, manage }: Props & { manage: boolean }) {
@@ -77,7 +93,7 @@ function MaterialBrowser({ onSelect, disabled = false, manage }: Props & { manag
     </form>}
     <div className="flex flex-wrap items-center gap-2">
       <nav className="flex min-w-0 items-center gap-1 text-sm" aria-label={t('目录路径', 'Folder path')}>
-        <button type="button" className="glass-button px-2 py-1" disabled={mutating} onClick={() => setFolderId('')}>{t('打开', 'Open')}</button>
+        <button type="button" className="glass-button px-2 py-1" disabled={mutating} onClick={() => setFolderId('')}>{t('根目录', 'Root')}</button>
         {ancestors.map(folder => <span key={folder.id} className="inline-flex items-center gap-1"><ChevronRight size={14} className="text-text-muted" /><button type="button" className="glass-button max-w-40 truncate px-2 py-1" disabled={mutating} onClick={() => setFolderId(folder.id)}>{folder.name}</button></span>)}
       </nav>
       <label className="relative w-full sm:w-52"><Search size={15} className="pointer-events-none absolute left-3 top-3 text-text-muted" /><input aria-label={t('搜索素材', 'Search materials')} className="glass-input w-full py-2 pl-9 pr-3" placeholder={t('搜索素材…', 'Search materials…')} disabled={mutating} value={query} onChange={event => setQuery(event.target.value)} /></label>
@@ -104,8 +120,8 @@ function MaterialBrowser({ onSelect, disabled = false, manage }: Props & { manag
       <div className={`relative overflow-hidden bg-black/40 ${manage ? 'aspect-video' : 'h-16 w-24 shrink-0 rounded-md'}`}>
         {item.video ? <video className="h-full w-full object-cover" src={item.url} poster={getVideoPosterUrl(item.url) || undefined} muted preload="metadata" aria-label={item.name} /> : <div className="flex h-full items-center justify-center text-text-muted"><Music size={24} aria-hidden="true" /></div>}
         <div className="absolute inset-0 flex items-center justify-center gap-2 bg-black/60 opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100">
-          <span className="pointer-events-none absolute bottom-1 left-1 right-1 truncate text-[10px] text-white">{item.name} · {(item.duration_ms / 1000).toFixed(1)}s</span>
-          {onSelect && <button type="button" className="rounded-full bg-primary p-3 text-white" aria-label={t('选择素材', 'Select material')} title={t('使用此素材', 'Use this material')} disabled={busy || disabled} onClick={() => void run(async () => { onSelect(await editing.material(item.id)); })}><Play size={16} fill="currentColor" /></button>}
+          <span className="pointer-events-none absolute bottom-1 left-1 right-1 truncate text-[10px] text-white">{item.name} · {item.duration_ms > 0 ? `${(item.duration_ms / 1000).toFixed(1)}s` : t('打开后查看时长', 'Open to inspect duration')}</span>
+          {onSelect && <button type="button" className="min-h-11 min-w-11 rounded-full bg-primary p-3 text-white" aria-label={`${t('添加素材', 'Add material')} ${item.name}`} title={t('添加到时间线', 'Add to timeline')} disabled={busy || disabled} onClick={() => void run(async () => { onSelect(await editing.material(item.id)); })}><Plus size={18} aria-hidden="true" /></button>}
           {manage && item.deletable && <button type="button" className="rounded-full bg-red-500/80 p-3 text-white" aria-label={`${t('删除素材', 'Delete material')} ${item.name}`} disabled={busy} onClick={() => { if (window.confirm(t(`确认删除「${item.name}」？`, `Delete “${item.name}”?`))) void run(async () => { await editing.deleteMaterial(item.id); setReload(n => n + 1); }); }}><Trash2 size={16} /></button>}
           {!item.deletable && manage && <span className="rounded-full bg-black/60 p-3 text-text-muted" title={t('来源素材不可删除', 'Source material is read-only')}><Lock size={16} /></span>}
         </div>
