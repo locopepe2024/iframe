@@ -254,15 +254,15 @@ def test_series_extra_roster_and_shot_instance_snapshot(tmp_path):
     assert manifest.crowd_asset_revision_pins[0].revision == fixed.asset_revision
     assert manifest.crowd_asset_revision_pins[0].variant_ids == ["v1"]
     assert "群演：粮铺常客；near层；粮铺门前；约170厘米" in pipeline.storyboard_continuity_sheet(script.id)["rows"][0]["asset_visual_context"]
-    with pytest.raises(ValueError, match="invalidate a shot reference"):
-        pipeline.update_series("series", {"extra_roster": [template]})
     shot.consistency_manifest = manifest
+    pipeline.update_series("series", {"extra_roster": [template]})
+    assert shot.consistency_manifest.crowd_asset_status == "missing"
     with pytest.raises(ValueError, match="fixed extra asset"):
         pipeline.update_frame(script.id, shot.id, crowd_instances=[
             ExtraShotInstance(template_id="street-template", layer="near", face_readable=True),
         ])
     assert shot.consistency_manifest is manifest
-    with pytest.raises(ValueError, match="missing extra variant"):
+    with pytest.raises(ValueError, match="missing series extra"):
         pipeline.update_frame(script.id, shot.id, crowd_instances=[
             ExtraShotInstance(extra_id="extra-01", layer="near", variant_ids=["missing"]),
         ])
