@@ -33,9 +33,6 @@ import WorkflowActionButton from "@/components/shared/WorkflowActionButton";
 import VoicePickerModal from "./cast/VoicePickerModal";
 import CastWorkbenchModal, { activePolls } from "./cast/CastWorkbenchModal";
 import CharacterWorkbenchBridge from "./cast/CharacterWorkbenchBridge";
-import CrowdGroupEditor from "@/components/shared/CrowdGroupEditor";
-import type { ExtraRosterEntry } from "@/store/projectStore";
-import { toast } from "@/store/toastStore";
 
 type AssetKind = "character" | "scene" | "prop";
 
@@ -61,8 +58,6 @@ export default function Cast() {
     const tStep = useTranslations("stepHeader");
     const t = useTranslations("cast");
     const currentProject = useProjectStore((state) => state.currentProject);
-    const currentSeries = useProjectStore((state) => state.currentSeries);
-    const setCurrentSeries = useProjectStore((state) => state.setCurrentSeries);
 
     // R2V v2 Phase 5 — add new asset modal (placeholder for full
     // generation flow which lands in a follow-up patch). For now this
@@ -71,14 +66,6 @@ export default function Cast() {
     // PR-3* · Cast redesign — tab filter + workbench launcher.
     const [activeTab, setActiveTab] = useState<"all" | "character" | "scene" | "prop">("all");
     const [workbench, setWorkbench] = useState<{ kind: "character" | "scene" | "prop"; entityId: string } | null>(null);
-    const [selectedCrowd, setSelectedCrowd] = useState<ExtraRosterEntry | null>(null);
-    const openCrowd = async (group: ExtraRosterEntry) => {
-        if (!currentProject?.series_id) { toast.warning("请先将群演加入系列资产库"); return; }
-        try {
-            if (currentSeries?.id !== currentProject.series_id) setCurrentSeries(await api.getSeries(currentProject.series_id));
-            setSelectedCrowd(group);
-        } catch { toast.error("无法读取系列群演资产"); }
-    };
 
     const removeGeneratingTask = useProjectStore((s) => s.removeGeneratingTask);
     const generatingTasks = useProjectStore((s) => s.generatingTasks);
@@ -160,18 +147,9 @@ export default function Cast() {
         return { characters, scenes, props };
     }, [currentProject?.frames, currentProject?.characters, currentProject?.scenes, currentProject?.props]);
 
-    const crowdGroups = useMemo(() => {
-        const seriesGroups = currentSeries && currentSeries.id === currentProject?.series_id ? currentSeries.extra_roster ?? [] : [];
-        const groups = [...(currentProject?.crowd_group_candidates ?? []), ...(currentProject?.crowd_groups ?? []), ...seriesGroups];
-        return Array.from(new Map(groups.map(group => [group.extra_id, group])).values());
-    }, [
-        currentSeries,
-        currentSeries?.extra_roster,
-        currentProject?.series_id,
-        currentProject?.crowd_groups,
-        currentProject?.crowd_group_candidates,
-    ]);
-    const totalCast = characters.length + crowdGroups.length + scenes.length + props.length;
+    // Crowd characters are regular character assets. The legacy roster is
+    // still read for storyboard compatibility, but is not a separate cast UI.
+    const totalCast = characters.length + scenes.length + props.length;
 
     return (
         <div className="flex h-full w-full flex-col overflow-hidden">
@@ -214,7 +192,7 @@ export default function Cast() {
                     <div className="shrink-0 flex items-center gap-1 px-6 pt-3 border-b border-glass-border bg-surface">
                         {([
                             { id: "all" as const, label: t("tabAll"), icon: <Layers size={11} />, count: totalCast },
-                            { id: "character" as const, label: t("tabCharacters"), icon: <Users size={11} />, count: characters.length + crowdGroups.length },
+                            { id: "character" as const, label: t("tabCharacters"), icon: <Users size={11} />, count: characters.length },
                             { id: "scene" as const, label: t("tabScenes"), icon: <MapPin size={11} />, count: scenes.length },
                             { id: "prop" as const, label: t("tabProps"), icon: <Box size={11} />, count: props.length },
                         ]).map((tab) => (
@@ -253,38 +231,6 @@ export default function Cast() {
                                 onOpenWorkbench={(id) => setWorkbench({ kind: "character", entityId: id })}
                                 hideHeader={activeTab === "character"}
                             />
-                        )}
-                        {(activeTab === "all" || activeTab === "character") && crowdGroups.length > 0 && (
-                            <section aria-label={t("sectionCrowdGroups")}>
-                                <header className="mb-3 flex items-center gap-2 text-text-secondary">
-                                    <Users size={14} />
-                                    <h3 className="font-mono text-[0.6875rem] font-medium uppercase">{t("sectionCrowdGroups")}</h3>
-                                    <span className="font-mono text-[0.625rem] text-text-muted">({crowdGroups.length})</span>
-                                    <div aria-hidden="true" className="ml-3 h-px flex-1 bg-glass-border" />
-                                </header>
-                                <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-                                    {crowdGroups.map(group => (
-                                        <button type="button" key={group.extra_id}
-                                            onClick={() => void openCrowd(group)}
-                                            className="min-w-0 rounded border border-glass-border bg-glass px-3 py-2.5 text-left hover:border-primary/60">
-                                            <div className="flex items-center gap-3">
-                                                <div className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded bg-surface-inset">
-                                                    {(() => {
-                                                        const character = currentSeries?.characters?.find(item => item.id === group.visual_asset_id);
-                                                        const url = character && characterImageUrl(character);
-                                                        return url ? <img src={getAssetUrl(url)} alt="" className="h-full w-full object-cover" /> : <Users size={18} className="text-text-muted" />;
-                                                    })()}
-                                                </div>
-                                                <div className="min-w-0"><div className="truncate text-sm font-medium text-foreground" title={group.label}>{group.label}</div>
-                                                    <div className="text-xs text-text-muted">{group.kind === "fixed_extra" ? "固定群演" : "人群模板"}</div></div>
-                                            </div>
-                                            {group.role_tags?.length ? (
-                                                <div className="mt-1 truncate text-xs text-text-muted" title={group.role_tags.join("、")}>{group.role_tags.join("、")}</div>
-                                            ) : null}
-                                        </button>
-                                    ))}
-                                </div>
-                            </section>
                         )}
                         {(activeTab === "all" || activeTab === "scene") && (
                             <CastSection
@@ -327,10 +273,6 @@ export default function Cast() {
                     onClose={() => setWorkbench(null)}
                 />
             )}
-            {selectedCrowd && currentSeries && currentSeries.id === currentProject?.series_id && <CrowdGroupEditor
-                group={selectedCrowd} series={currentSeries} onClose={() => setSelectedCrowd(null)} onSaved={setCurrentSeries}
-                onEditCharacter={currentSeries?.characters?.some(character => character.id === selectedCrowd.visual_asset_id) ? id => setWorkbench({ kind: "character", entityId: id }) : undefined} />}
-
             {/* R2V v2 Phase 5 — real Add new cast modal (AI / upload tabs). */}
             <AddCastPlaceholderModal
                 kind={addModalOpen}

@@ -43,11 +43,15 @@ export function effectiveReferenceIndex(
   scenes: any[],
   props: any[],
 ): AssetReferenceIndexEntry[] {
-  // Crowd entries are metadata for the storyboard crowd picker. They are
-  // intentionally excluded from image-reference pickers until a fixed extra
-  // is explicitly resolved through its linked Character visual asset.
+  // Crowd entries are legacy roster metadata. Once a fixed crowd entry has a
+  // linked visual character, expose that character in the same reference
+  // namespace as every other role; unresolved templates remain metadata only.
   return (index ?? legacyAssetsToReferenceIndex(characters, scenes, props))
-    .filter((entry) => entry.asset_type !== "crowd");
+    .flatMap((entry) => {
+      if (entry.asset_type !== "crowd") return [entry];
+      if (!entry.linked_visual_asset_id) return [];
+      return [{ ...entry, asset_type: "character" as const, asset_id: entry.linked_visual_asset_id }];
+    });
 }
 
 /** Shot pickers consume membership, never the entire reusable candidate pool. */

@@ -32,7 +32,7 @@ interface PolishedPrompt {
     en: string;
 }
 
-type R2VPolishSlot = { description: string; slot?: number; asset_id?: string; asset_type?: "character" | "scene" | "prop"; name?: string; variant_ids?: string[] };
+type R2VPolishSlot = { description: string; slot?: number; asset_id?: string; asset_type?: "character" | "scene" | "prop" | "crowd"; name?: string; variant_ids?: string[] };
 
 interface PolishReview {
     messages: { system: string; user: string };

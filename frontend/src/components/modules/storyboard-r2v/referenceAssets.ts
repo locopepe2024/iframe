@@ -13,7 +13,7 @@ export interface ReferenceVariant {
 export interface ReferenceAsset {
     id: string;
     name: string;
-    kind: "character" | "scene" | "prop";
+    kind: "character" | "scene" | "prop" | "crowd";
     variants: ReferenceVariant[];
     selectedId?: string | null;
 }

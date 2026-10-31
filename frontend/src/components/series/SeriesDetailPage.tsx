@@ -240,8 +240,6 @@ export default function SeriesDetailPage({ seriesId }: SeriesDetailPageProps) {
               plan={assemblyPlan}
               onChange={setAssemblyPlan}
             />
-          ) : activeItem.kind === "extras" ? (
-            <ExtraRosterPanel series={series} seriesId={seriesId} onSaved={refreshSeriesData} />
           ) : activeItem.kind === "asset" ? (
             <AssetContentPanel
               key={`asset-${activeItem.tab}`}

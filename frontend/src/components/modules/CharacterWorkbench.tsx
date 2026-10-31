@@ -511,7 +511,14 @@ export default function CharacterWorkbench({ asset, seriesId, onClose, onUpdateD
         void api.getAssetReferenceIndex(projectId)
             .then((index) => {
                 if (requestId !== assetIndexRequest.current) return;
-                const entries = index.assets.filter((entry) => entry.asset_type !== "crowd" && entry.variants?.some((variant) => variant.id));
+                // Resolve legacy fixed crowd entries to their linked visual
+                // character. Unresolved templates do not have a face asset to
+                // reference and therefore stay out of the @ picker.
+                const entries = index.assets.flatMap((entry) => {
+                    if (entry.asset_type !== "crowd") return [entry];
+                    if (!entry.linked_visual_asset_id) return [];
+                    return [{ ...entry, asset_type: "character" as const, asset_id: entry.linked_visual_asset_id }];
+                }).filter((entry) => entry.variants?.some((variant) => variant.id));
                 setAssetIndex(entries);
                 const available = new Set(entries.flatMap((entry) => entry.variants.map((variant) =>
                     `${entry.asset_type}:${entry.asset_id}:${variant.id}`)));
@@ -1699,7 +1706,10 @@ export function WorkbenchPanel({
     const [openSlashRequest, setOpenSlashRequest] = useState(0);
     const slashKeyHandler = useRef<((event: globalThis.KeyboardEvent) => boolean) | null>(null);
     const selectedCandidates = useMemo(() => selectedReferenceCandidates(referenceCandidates, pickerReferences), [referenceCandidates, pickerReferences]);
-    const matchingReferenceCandidates = searchReferenceCandidates(selectedCandidates, mention?.query ?? "");
+    // @ should search the complete owner-scoped asset index, including crowd
+    // variants. The explicit reference picker remains available for users who
+    // want to constrain the generation set before typing the prompt.
+    const matchingReferenceCandidates = searchReferenceCandidates(referenceCandidates, mention?.query ?? "");
 
     const imageReferenceControls = <>
                 <div className="p-2 border-b border-border-subtle flex justify-between items-center bg-surface">
@@ -1762,7 +1772,7 @@ export function WorkbenchPanel({
                         onSlashChange={!isVideo && !designEditor ? (next) => { setPromptSlash(next); if (next) setMention(null); } : undefined}
                         onSlashKeyDown={(event) => slashKeyHandler.current?.(event) || false}
                         openSlashRequest={openSlashRequest}
-                        allowImplicitMentions={false}
+                        allowImplicitMentions
                         pruneUnlistedReferences
                         expanded
                         editable={!isLocked}

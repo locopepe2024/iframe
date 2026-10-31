@@ -206,7 +206,7 @@ interface ShotCardProps {
     generateAudio?: boolean;
     targetDuration?: number;
     referenceImageUrls?: string[];
-    onResolvePolishReferences?: () => Promise<{ urls: string[]; slots: { slot: number; asset_id: string; asset_type: "character" | "scene" | "prop"; name: string; variant_ids: string[]; description: string }[] }>;
+    onResolvePolishReferences?: () => Promise<{ urls: string[]; slots: { slot: number; asset_id: string; asset_type: "character" | "scene" | "prop" | "crowd"; name: string; variant_ids: string[]; description: string }[] }>;
     videoModel?: string;
     shot: ShotNode;
     index: number;

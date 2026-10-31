@@ -71,7 +71,7 @@ beforeEach(() => {
     vi.spyOn(window, "alert").mockImplementation(() => {});
 });
 
-it("shows all merged crowd templates in Assets without treating them as character assets", () => {
+it("does not render a separate crowd roster panel", () => {
     useProjectStore.setState({ currentProject: {
         id: "episode-1", characters: [], scenes: [], props: [],
         series_id: "series-1", crowd_groups: [],
@@ -87,13 +87,10 @@ it("shows all merged crowd templates in Assets without treating them as characte
 
     render(<ConsistencyVault />);
 
-    const crowdSection = screen.getByRole("region", { name: "背景群演" });
-    expect(within(crowdSection).getByText("玄宸阁随行探子")).toBeInTheDocument();
-    expect(within(crowdSection).getByText("往来江湖客")).toBeInTheDocument();
-    expect(within(crowdSection).getAllByText(/流民匪寇|江湖打手|青溪镇市井百姓/)).toHaveLength(3);
-    expect(screen.queryByText("No characters found")).not.toBeInTheDocument();
-    fireEvent.click(within(crowdSection).getByRole("button", { name: /玄宸阁随行探子/ }));
-    expect(screen.getByRole("dialog", { name: "编辑群演：玄宸阁随行探子" })).toBeInTheDocument();
+    expect(screen.queryByRole("region", { name: "背景群演" })).not.toBeInTheDocument();
+    expect(screen.queryByText("玄宸阁随行探子")).not.toBeInTheDocument();
+    expect(screen.queryByText("往来江湖客")).not.toBeInTheDocument();
+    expect(screen.queryByText("流民匪寇")).not.toBeInTheDocument();
 });
 
 it("saves only character design and retains current assets without refetching the project", async () => {

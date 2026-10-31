@@ -28,7 +28,7 @@ export default function AssetChipBar({
 }: AssetChipBarProps) {
     const t = useTranslations("storyboardR2V");
     const [expandedAssetId, setExpandedAssetId] = useState<string | null>(null);
-    const colors = { character: "bg-blue-400", scene: "bg-teal-400", prop: "bg-orange-400" };
+    const colors = { character: "bg-blue-400", scene: "bg-teal-400", prop: "bg-orange-400", crowd: "bg-violet-400" };
     const assets = projectReferenceIndex(assetIndex, characters, scenes, props);
 
     if (assets.length === 0) return null;

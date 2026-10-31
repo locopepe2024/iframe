@@ -234,7 +234,7 @@ export const authenticatedFetch = (
 export type ProviderMode = "dashscope" | "vendor";
 
 export interface AssetLibraryReference {
-    asset_type: "character" | "scene" | "prop";
+    asset_type: "character" | "scene" | "prop" | "crowd";
     asset_id: string;
     variant_id: string;
     source_scope?: "shared" | "project" | "episode" | "series" | "private";
@@ -977,7 +977,7 @@ export const api = {
         lastFrameUrl?: string,
         lastFrameMediaId?: string,
         visualSourceHash?: string,
-        referenceAssetInputs?: Array<{ asset_type: "character" | "scene" | "prop"; asset_id: string; variant_id: string; media_id?: string | null }>,
+        referenceAssetInputs?: AssetLibraryReference[],
     ) => {
         const res = await axios.post(`${API_URL}/projects/${id}/video_tasks`, {
             image_url,
@@ -1880,7 +1880,7 @@ export const api = {
     },
     polishR2VPrompt: async (
         draftPrompt: string,
-        slots: { description: string; slot?: number; asset_id?: string; asset_type?: "character" | "scene" | "prop"; name?: string; variant_ids?: string[] }[],
+        slots: { description: string; slot?: number; asset_id?: string; asset_type?: "character" | "scene" | "prop" | "crowd"; name?: string; variant_ids?: string[] }[],
         feedback: string = "",
         scriptId: string = "",
         prevCn: string = "",

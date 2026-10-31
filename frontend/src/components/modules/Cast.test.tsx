@@ -15,7 +15,7 @@ vi.mock("./cast/CharacterWorkbenchBridge", () => ({ default: () => null }));
 
 afterEach(() => cleanup());
 
-it("shows merged characters and series crowd groups in Cast", () => {
+it("renders regular character cards without a separate crowd panel", () => {
     useProjectStore.setState({
         currentProject: {
             id: "episode", title: "第一幕", series_id: "series",
@@ -35,14 +35,13 @@ it("shows merged characters and series crowd groups in Cast", () => {
     render(<NextIntlClientProvider locale="zh" messages={messages}><Cast /></NextIntlClientProvider>);
 
     expect(screen.getByText("苏砚（雪痕客）")).toBeTruthy();
-    expect(screen.getByText("流民匪寇")).toBeTruthy();
-    expect(screen.getByText("青溪镇市井百姓")).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: /流民匪寇/ }));
-    expect(screen.getByRole("dialog", { name: "编辑群演：流民匪寇" })).toBeTruthy();
+    expect(screen.queryByText("流民匪寇")).toBeNull();
+    expect(screen.queryByText("青溪镇市井百姓")).toBeNull();
+    expect(screen.queryByRole("dialog", { name: /群演/ })).toBeNull();
 });
 
 
-it("refreshes newly merged crowd groups when the project response changes", async () => {
+it("does not surface legacy crowd roster entries as standalone cards", async () => {
     useProjectStore.setState({
         currentProject: {
             id: "episode-refresh", title: "第一幕", series_id: "series",
@@ -59,8 +58,8 @@ it("refreshes newly merged crowd groups when the project response changes", asyn
     });
 
     render(<NextIntlClientProvider locale="zh" messages={messages}><Cast /></NextIntlClientProvider>);
-    expect(screen.queryByText("玄宸阁随行探子")).toBeNull();
-    expect(screen.queryByText("往来江湖客")).toBeNull();
+    expect(screen.queryByText("流民匪寇")).toBeNull();
+    expect(screen.queryByText("江湖打手")).toBeNull();
 
     await act(async () => {
         useProjectStore.getState().updateProject("episode-refresh", {
@@ -74,6 +73,6 @@ it("refreshes newly merged crowd groups when the project response changes", asyn
         } as any);
     });
 
-    expect(screen.getByText("玄宸阁随行探子")).toBeTruthy();
-    expect(screen.getByText("往来江湖客")).toBeTruthy();
+    expect(screen.queryByText("玄宸阁随行探子")).toBeNull();
+    expect(screen.queryByText("往来江湖客")).toBeNull();
 });

@@ -37,16 +37,12 @@ import { characterImageUrl } from "@/lib/characterImage";
 import AssetNameEditor from "../common/AssetNameEditor";
 import AssetWorkbenchLayout from "@/components/shared/AssetWorkbenchLayout";
 import AssetImageSubmissionReview from "@/components/shared/AssetImageSubmissionReview";
-import CrowdGroupEditor from "@/components/shared/CrowdGroupEditor";
-import type { ExtraRosterEntry } from "@/store/projectStore";
 import VideoPolishReview, { type VideoPolishMessages } from "./storyboard-r2v/VideoPolishReview";
 
 export default function ConsistencyVault() {
     const tv = useTranslations("vault");
     const tStep = useTranslations("stepHeader");
     const currentProject = useProjectStore((state) => state.currentProject);
-    const currentSeries = useProjectStore((state) => state.currentSeries);
-    const setCurrentSeries = useProjectStore((state) => state.setCurrentSeries);
     const updateProject = useProjectStore((state) => state.updateProject);
 
 
@@ -88,14 +84,6 @@ export default function ConsistencyVault() {
     // Store ID and Type instead of full object to ensure reactivity
     const [selectedAssetId, setSelectedAssetId] = useState<string | null>(null);
     const [selectedAssetType, setSelectedAssetType] = useState<string | null>(null);
-    const [selectedCrowd, setSelectedCrowd] = useState<ExtraRosterEntry | null>(null);
-    const openCrowd = async (group: ExtraRosterEntry) => {
-        if (!currentProject?.series_id) { toast.warning("请先将群演加入系列资产库"); return; }
-        try {
-            if (currentSeries?.id !== currentProject.series_id) setCurrentSeries(await api.getSeries(currentProject.series_id));
-            setSelectedCrowd(group);
-        } catch { toast.error("无法读取系列群演资产"); }
-    };
 
     // Create asset dialog state
     const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
@@ -687,11 +675,6 @@ export default function ConsistencyVault() {
     const assets = activeTab === "character" ? currentProject?.characters :
         activeTab === "scene" ? currentProject?.scenes :
             activeTab === "prop" ? currentProject?.props : [];
-    const crowdGroups = Array.from(new Map([
-        ...(currentProject?.crowd_group_candidates ?? []),
-        ...(currentProject?.crowd_groups ?? []),
-        ...(currentSeries && currentSeries.id === currentProject?.series_id ? currentSeries.extra_roster ?? [] : []),
-    ].map(group => [group.extra_id, group])).values());
     const selectedPlanEntries = selectedAssetId && selectedAssetType
         ? getAssetPlanEntries(episodeAssetState.context, selectedAssetType as "character" | "scene" | "prop", selectedAssetId)
         : [];
@@ -714,7 +697,7 @@ export default function ConsistencyVault() {
                         onClick={() => setActiveTab("character")}
                         icon={<User size={14} />}
                         label="Characters"
-                        count={(currentProject?.characters?.length || 0) + crowdGroups.length}
+                        count={currentProject?.characters?.length || 0}
                     />
                     <TabButton
                         active={activeTab === "scene"}
@@ -793,7 +776,7 @@ export default function ConsistencyVault() {
                     <div className="flex items-center justify-center h-full text-text-muted">
                         Loading project...
                     </div>
-                ) : assets?.length === 0 && (activeTab !== "character" || crowdGroups.length === 0) ? (
+                ) : assets?.length === 0 ? (
                     <div className="flex flex-col items-center justify-center h-full text-text-muted gap-4">
                         <div className="w-16 h-16 rounded-full bg-glass flex items-center justify-center">
                             {activeTab === "character" ? <User size={32} /> : activeTab === "scene" ? <MapPin size={32} /> : <Box size={32} />}
@@ -802,30 +785,6 @@ export default function ConsistencyVault() {
                     </div>
                 ) : (
                     <div className="space-y-8">
-                        {activeTab === "character" && crowdGroups.length > 0 && (
-                            <section aria-label="背景群演">
-                                <h3 className="mb-3 flex items-center gap-2 text-sm font-medium text-foreground">
-                                    <Users size={16} />背景群演 <span className="text-xs text-text-muted">({crowdGroups.length})</span>
-                                </h3>
-                                <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                                    {crowdGroups.map(group => (
-                                        <button type="button" key={group.extra_id} onClick={() => void openCrowd(group)} className="min-w-0 rounded border border-glass-border bg-glass px-4 py-3 text-left hover:border-primary/60">
-                                            <div className="flex items-center gap-3">
-                                                <div className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded bg-surface-inset">
-                                                    {(() => {
-                                                        const character = currentSeries?.characters?.find(item => item.id === group.visual_asset_id);
-                                                        const url = character && characterImageUrl(character);
-                                                        return url ? <img src={getAssetUrl(url)} alt="" className="h-full w-full object-cover" /> : <Users size={18} className="text-text-muted" />;
-                                                    })()}
-                                                </div>
-                                                <div className="min-w-0"><div className="text-sm font-medium text-foreground">{group.label}</div><div className="text-xs text-text-muted">{group.kind === "fixed_extra" ? "固定群演" : "人群模板"}</div></div>
-                                            </div>
-                                            {(group.wardrobe || group.body_build) && <p className="mt-1 text-xs text-text-muted">{[group.body_build, group.wardrobe].filter(Boolean).join(" · ")}</p>}
-                                        </button>
-                                    ))}
-                                </div>
-                            </section>
-                        )}
                         {!!assets?.length && <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-6">
                         {assets?.map((asset: any) => (
                             <AssetCard
@@ -867,9 +826,6 @@ export default function ConsistencyVault() {
             </div>
 
             {/* Detail Modal / Workbench */}
-            {selectedCrowd && currentSeries && currentSeries.id === currentProject?.series_id && <CrowdGroupEditor
-                group={selectedCrowd} series={currentSeries} onClose={() => setSelectedCrowd(null)} onSaved={setCurrentSeries}
-                onEditCharacter={currentProject?.characters?.some(character => character.id === selectedCrowd.visual_asset_id) ? id => { setSelectedAssetId(id); setSelectedAssetType("character"); } : undefined} />}
             <AnimatePresence>
                 {selectedAsset && selectedAssetId && selectedAssetType && (
                     selectedAssetType === "character" ? (
