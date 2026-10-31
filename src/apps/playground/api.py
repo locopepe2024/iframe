@@ -507,6 +507,14 @@ router.add_api_route("/upload", upload_media, methods=["POST"])
 router.add_api_route("/input-media/{filename}", get_input_media, methods=["GET"])
 
 
+@router.get("/media-inventory")
+def media_inventory(limit: int = Query(50, ge=1, le=100), offset: int = Query(0, ge=0),
+                    identity: UserContext = Depends(require_user_context)):
+    """Read-only retention review; never grants deletion permission."""
+    from .media_inventory import owner_inventory
+    return owner_inventory(identity, media_root(), limit=limit, offset=offset)
+
+
 # Local image editing is separate from paid generation.
 @router.post("/image-editor/library-import")
 def image_editor_library_import(source_scope: str = Form(...), source_container_id: str = Form(default=""),
