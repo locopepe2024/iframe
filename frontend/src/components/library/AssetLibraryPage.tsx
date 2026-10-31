@@ -429,6 +429,11 @@ function SemanticAssetLibrary() {
         return { id: entry.asset_id, name: entry.name, description: entry.description, starred: entry.starred, cover_variant_id: coverVariantId, image_asset: imageAsset } as Scene | Prop;
       };
       for (const entry of index.assets) {
+        // Crowd entries are metadata-first roster records. They are consumed
+        // by Cast/Storyboard pickers and are not image-library assets; keep
+        // them out of this three-type renderer instead of indexing
+        // `source.crowds` (which would crash the library at runtime).
+        if (entry.asset_type === "crowd") continue;
         const key = entry.source_scope === "global" ? "global" : `${entry.source_scope}-${entry.source_container_id}`;
         const kind = entry.source_scope === "global" ? "global" : entry.source_scope === "series" ? "series" : "project";
         const source = grouped.get(key) || { id: key, rawId: entry.source_container_id || "global", name: entry.source_name || t("globalGroup"), kind, characters: [], scenes: [], props: [] };

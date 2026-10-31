@@ -96,6 +96,19 @@ it('opens a project folder and returns to the folder list', async () => {
   expect(screen.getByRole('button', { name: /Project B/ })).toBeInTheDocument();
 });
 
+it('keeps metadata-only crowd entries from breaking the image asset library', async () => {
+  mocked.getAssetLibraryIndex.mockResolvedValue({ schema_version: 1, project_id: 'library', assets: [
+    { asset_type: 'crowd', asset_id: 'crowd-1', name: '流民匪寇', source_scope: 'series', source_container_id: 'series-1', source_name: '青溪镇', crowd_kind: 'extra_template', variants: [] },
+    { asset_type: 'character', asset_id: 'character-1', name: '苏砚', source_scope: 'series', source_container_id: 'series-1', source_name: '青溪镇', variants: [] },
+  ] });
+  render(<AssetLibraryPage />);
+
+  fireEvent.click(await screen.findByRole('button', { name: /青溪镇/ }));
+  expect(await screen.findByText('苏砚')).toBeInTheDocument();
+  expect(screen.queryByText('流民匪寇')).not.toBeInTheDocument();
+  expect(mocked.error).not.toHaveBeenCalledWith('loadFailed', expect.anything());
+});
+
 it.each([
   ['global', null, 'updateLibraryAsset'],
   ['series', 'series-1', 'updateSeriesAssetAttributes'],
