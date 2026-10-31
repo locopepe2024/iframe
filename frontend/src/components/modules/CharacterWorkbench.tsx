@@ -507,7 +507,7 @@ export default function CharacterWorkbench({ asset, seriesId, onClose, onUpdateD
         void api.getAssetReferenceIndex(projectId)
             .then((index) => {
                 if (requestId !== assetIndexRequest.current) return;
-                const entries = index.assets.filter((entry) => entry.variants?.some((variant) => variant.id));
+                const entries = index.assets.filter((entry) => entry.asset_type !== "crowd" && entry.variants?.some((variant) => variant.id));
                 setAssetIndex(entries);
                 const available = new Set(entries.flatMap((entry) => entry.variants.map((variant) =>
                     `${entry.asset_type}:${entry.asset_id}:${variant.id}`)));

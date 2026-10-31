@@ -43,7 +43,11 @@ export function effectiveReferenceIndex(
   scenes: any[],
   props: any[],
 ): AssetReferenceIndexEntry[] {
-  return index ?? legacyAssetsToReferenceIndex(characters, scenes, props);
+  // Crowd entries are metadata for the storyboard crowd picker. They are
+  // intentionally excluded from image-reference pickers until a fixed extra
+  // is explicitly resolved through its linked Character visual asset.
+  return (index ?? legacyAssetsToReferenceIndex(characters, scenes, props))
+    .filter((entry) => entry.asset_type !== "crowd");
 }
 
 /** Shot pickers consume membership, never the entire reusable candidate pool. */

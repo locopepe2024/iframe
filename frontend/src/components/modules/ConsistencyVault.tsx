@@ -1290,7 +1290,7 @@ function CharacterDetailModal({ asset, type, onClose, onUpdateDescription, onUpd
         let active = true;
         void api.getAssetReferenceIndex(currentProject.id)
             .then((index) => {
-                if (active) setAssetIndex(index.assets.filter((entry) => entry.variants?.length));
+                if (active) setAssetIndex(index.assets.filter((entry) => entry.asset_type !== "crowd" && entry.variants?.length));
             })
             .catch(() => undefined);
         return () => { active = false; };
