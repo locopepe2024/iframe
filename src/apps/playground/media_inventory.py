@@ -40,8 +40,9 @@ def inventory(storage, *, limit=50, offset=0, now=None):
         for output in generation.outputs:
             items.append(dict(id=f'generation:{generation.id}:{output.id}',
                 source_kind='generation_output', reference=f'/playground/media/{generation.id}/{output.id}',
-                created_at=timestamp(generation.created_at), proposed_expires_at=None,
-                time_basis='request_created_not_output_completed', archived=output.saved_to_library))
+                title=f'{generation.id[:8]} · {output.id[:8]}', media_type=getattr(output, 'media_type', 'image'),
+                created_at=timestamp(generation.created_at), proposed_expires_at=(output.available_at + RETENTION_SECONDS) if getattr(output, 'available_at', None) else None,
+                time_basis='output_available' if getattr(output, 'available_at', None) else 'request_created_not_output_completed', archived=output.saved_to_library))
     edits_path = Path(storage.output_dir) / 'image-edits.sqlite3'
     if edits_path.is_file():
         try:
@@ -50,7 +51,7 @@ def inventory(storage, *, limit=50, offset=0, now=None):
                     record = json.loads(row[0])
                     created = timestamp(record.get('created_at', row[1]))
                     items.append(dict(id='edit:'+record['id'], source_kind='editor_output',
-                        reference=record['path'], source_reference=record.get('source_reference'),
+                        reference=record['path'], title=record.get('title', 'Edited image'), media_type='image', source_reference=record.get('source_reference'),
                         created_at=created, proposed_expires_at=created + RETENTION_SECONDS if created is not None else None,
                         time_basis='edit_saved', archived=False))
         except (sqlite3.Error, ValueError, KeyError, TypeError):
@@ -63,15 +64,28 @@ def inventory(storage, *, limit=50, offset=0, now=None):
             created = timestamp(record['created_at'])
             # Avoid exposing raw filesystem paths in the public inventory.
             items.append(dict(id='registry:'+record['media_id'], source_kind=record['kind'],
-                reference=None, created_at=created,
+                reference=f"/playground/input-media/{Path(record['storage_key']).name}" if '/playground/uploads/' in record['storage_key'] else None, title=record['display_name'] or record['media_id'][:8], media_type='video' if Path(record['storage_key']).suffix.lower() in ('.mp4', '.mov', '.webm', '.mkv') else 'audio' if Path(record['storage_key']).suffix.lower() in ('.wav', '.mp3', '.m4a', '.aac', '.ogg') else 'image', created_at=created,
                 proposed_expires_at=created + RETENTION_SECONDS if created is not None else None,
                 time_basis='registry_created', archived=False))
     except (sqlite3.Error, ValueError, KeyError, TypeError):
         diagnostics.append('media_registry_unreadable')
+    # Permanent collection membership is explicit; an old archive flag alone
+    # does not establish that a library asset/version was created.
+    from .material_library import MaterialLibrary
+    try:
+        collection = MaterialLibrary(storage).list() if hasattr(storage, 'asset_dir') else []
+        permanent = {record['reference']: record for record in collection}
+    except (sqlite3.Error, ValueError, KeyError, TypeError):
+        permanent = {}
+        diagnostics.append('material_library_unreadable')
     for item in items:
         item.update(retention_state='legacy_review', delete_eligible=False,
             protection_reasons=['asset_and_project_references_not_reconciled'],
             past_proposed_expiry=item['proposed_expires_at'] is not None and now >= item['proposed_expires_at'])
+        saved = permanent.get(item['reference'])
+        if saved:
+            item.update(retention_state='permanent', asset_id=saved['asset_id'], version_id=saved['id'],
+                        protection_reasons=['saved_to_material_library'])
     items.sort(key=lambda item: (item['created_at'] or 0, item['id']), reverse=True)
     return dict(items=items[offset:offset+limit], total=len(items),
         next_offset=offset+limit if offset+limit < len(items) else None,
@@ -99,7 +113,7 @@ def owner_inventory(identity, output_root, *, limit=50, offset=0):
         except (OSError, ValueError, TypeError):
             diagnostics.append('history_unreadable')
     storage = SimpleNamespace(owner_profile_id=identity.owner_profile_id, media_root=str(output_root),
-        output_dir=str(owner_dir / 'playground'), list_history=lambda **kwargs: generations)
+        output_dir=str(owner_dir / 'playground'), asset_dir=str(owner_dir / 'assets'), list_history=lambda **kwargs: generations)
     result = inventory(storage, limit=limit, offset=offset)
     result['diagnostics'].extend(diagnostics)
     return result

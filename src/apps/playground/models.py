@@ -17,6 +17,7 @@ class PlaygroundOutput(BaseModel):
     id: str = Field(..., description="Unique identifier (UUID)")
     media_path: str = Field(..., description="Generated file path relative to output/")
     media_type: str = Field(..., description="Output media type: image or video")
+    available_at: Optional[float] = Field(None, description="Output successfully persisted at Unix timestamp; absent on legacy outputs")
     thumbnail_path: Optional[str] = Field(None, description="Thumbnail file path relative to output/")
     saved_to_library: bool = Field(False, description="Legacy flag: whether this output file has been archived as material")
 

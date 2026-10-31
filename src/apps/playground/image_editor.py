@@ -16,6 +16,7 @@ from urllib.request import Request as UrlRequest, urlopen
 from fastapi import HTTPException
 from PIL import Image, UnidentifiedImageError
 from ..media_registry import register_media
+from ...utils.managed_media_root import ManagedMediaRoot
 
 MAX_IMAGE_BYTES = 25 * 1024 * 1024
 
@@ -88,11 +89,12 @@ class ImageEditStore:
                 raise
 
     def source_bytes(self, reference):
-        if not reference.startswith(('/playground/input-media/', '/playground/media/')):
+        if not reference.startswith(('/playground/input-media/', '/playground/media/', '/playground/material-library/')):
             raise HTTPException(422, 'Select an owned Playground image')
         try:
-            path = Path(self.storage.resolve_media_reference(reference)).resolve()
-            if not path.is_relative_to(self.root) or not path.is_file():
+            from .material_library import MaterialLibrary
+            path = MaterialLibrary(self.storage).resolve(reference)
+            if not path.is_file():
                 raise ValueError('Not owned')
             with path.open('rb') as stream:
                 data = stream.read(MAX_IMAGE_BYTES + 1)
@@ -147,7 +149,8 @@ class ImageEditStore:
             stream.write(data)
         media_id = register_media(
             self.storage.owner_profile_id,
-            os.path.relpath(target, "output"),
+            ManagedMediaRoot(self.storage.media_root).key(str(target)),
+            output_root=self.storage.media_root,
             kind="temporary_input",
             display_name=entry.name,
             sha256=hashlib.sha256(data).hexdigest(),
@@ -230,7 +233,8 @@ class ImageEditStore:
                     stream.write(data)
                 register_media(
                     self.storage.owner_profile_id,
-                    os.path.relpath(target, "output"),
+                    ManagedMediaRoot(self.storage.media_root).key(str(target)),
+                    output_root=self.storage.media_root,
                     kind="editor_output",
                     display_name=title,
                     sha256=digest,

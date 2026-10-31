@@ -260,3 +260,13 @@ def test_folder_api_routes(service, video, monkeypatch):
     assert client.patch('/editing/materials/'+key, json={'folder_id': None}).status_code == 200
     assert client.delete('/editing/materials/'+key).status_code == 200
     assert client.delete('/editing/folders/'+folder['id']).status_code == 200
+
+
+def test_material_cards_include_verified_streams_and_duration(service, video):
+    item = material(service, video)
+    card = service.materials()['items'][0]
+    assert card['id'] == item['id']
+    assert card['video'] is True and card['audio'] is True
+    assert card['duration_ms'] == 1000
+    legacy = service._card_media(dict(storage_key='old.mp4', metadata={}))
+    assert legacy['video'] is True and legacy['duration_ms'] == 0

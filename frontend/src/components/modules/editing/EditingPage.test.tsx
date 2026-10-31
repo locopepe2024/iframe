@@ -26,7 +26,7 @@ it('adds multiple clips and an audio lane over HTTP without crypto.randomUUID', 
   fireEvent.change(screen.getByRole('combobox', { name: 'Editing project' }), { target: { value: project.id } });
   fireEvent.click(await screen.findByRole('button', { name: 'Select material' }));
   await waitFor(() => expect(screen.getByRole('button', { name: 'Save edit' })).toBeEnabled());
-  fireEvent.click(screen.getByRole('button', { name: 'Material panel' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Toggle material panel' }));
   await waitFor(() => expect(screen.getByRole('button', { name: 'Select material' })).toBeEnabled());
   fireEvent.click(screen.getByRole('button', { name: 'Select material' }));
   await waitFor(() => expect(editing.material).toHaveBeenCalledTimes(2));
@@ -115,7 +115,7 @@ it('creates a folder, uploads into it, moves a material and reports deletion con
   fireEvent.change(screen.getByLabelText('Folder name'), { target: { value: folder.name } });
   fireEvent.click(screen.getByRole('button', { name: 'Save folder' }));
   await waitFor(() => expect(editing.createFolder).toHaveBeenCalledWith(folder.name, null));
-  expect(screen.getByRole('button', { name: 'Root' })).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'Open' })).toBeInTheDocument();
   const upload = screen.getByLabelText('Upload video or audio');
   await waitFor(() => expect(upload).toBeEnabled());
   const file = new File(['test'], 'clip.mp4', { type: 'video/mp4' });
@@ -153,6 +153,6 @@ it('navigates nested folders with a breadcrumb and scopes materials to the curre
   expect(editing.materials).toHaveBeenLastCalledWith('', 0, 'root-folder');
   fireEvent.click(screen.getByRole('button', { name: 'Day 1' }));
   await waitFor(() => expect(editing.materials).toHaveBeenLastCalledWith('', 0, 'child-folder'));
-  expect(screen.getByRole('button', { name: 'Root' })).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'Open' })).toBeInTheDocument();
   expect(screen.getByRole('button', { name: 'Rushes' })).toBeInTheDocument();
 });

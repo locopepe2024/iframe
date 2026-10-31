@@ -1,5 +1,6 @@
 "use client";
 
+import TemporaryMaterials from "./TemporaryMaterials";
 import { EditingMaterialManager } from "../modules/editing/EditingPage";
 import { useState, useEffect, useMemo, useRef } from "react";
 import { useTranslations } from "next-intl";
@@ -182,10 +183,10 @@ export default function AssetLibraryPage() {
   }, []);
   return <div className="flex h-full min-h-0 flex-col">
     <div className="flex flex-wrap gap-2 px-4 pt-3 md:px-7" role="group" aria-label={t("sections")}>
-      {["assets", "platform", "templates", "media", "editing"].map(value => <button key={value} type="button" aria-pressed={section === value}
-        className="glass-button px-4 py-2 aria-pressed:text-primary" onClick={() => setSection(value)}>{value === "editing" ? "剪辑素材" : value === "platform" ? tl("platform") : value === "templates" ? "工作台模板" : t(value)}</button>)}
+      {["assets", "platform", "templates", "media", "editing", "temporary"].map(value => <button key={value} type="button" aria-pressed={section === value}
+        className="glass-button px-4 py-2 aria-pressed:text-primary" onClick={() => setSection(value)}>{value === "temporary" ? "临时与已保存素材" : value === "editing" ? "剪辑素材" : value === "platform" ? tl("platform") : value === "templates" ? "工作台模板" : t(value)}</button>)}
     </div>
-    {section === "assets" ? <SemanticAssetLibrary /> : section === "platform" ? <PlatformReferenceReviewQueue /> : section === "templates" ? <WorkbenchTemplateLibrary /> : section === "editing" ? <div className="min-h-0 flex-1 overflow-y-auto p-4"><EditingMaterialManager /></div> : <RecreationMediaLibrary />}
+    {section === "assets" ? <SemanticAssetLibrary /> : section === "platform" ? <PlatformReferenceReviewQueue /> : section === "templates" ? <WorkbenchTemplateLibrary /> : section === "editing" ? <div className="min-h-0 flex-1 overflow-y-auto p-4"><EditingMaterialManager /></div> : section === "temporary" ? <TemporaryMaterials /> : <RecreationMediaLibrary />}
   </div>;
 }
 

@@ -1,4 +1,5 @@
 'use client';
+import { imageEditSaveIntent, type ImageEditSaveIntent } from '@/lib/imageEditSaveIntent';
 
 import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
 import { useTranslations } from 'next-intl';
@@ -39,7 +40,7 @@ function EditorSession({ reference, title, sessionId, onClose }: { reference?: s
   const [hasUnsavedEdit, setHasUnsavedEdit] = useState(false);
   const mounted = useRef(true);
   useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
-  const retry = useRef<{ hash: string; key: string }>();
+  const retry = useRef<ImageEditSaveIntent>();
   useEffect(() => { imageEditorApi.list().then(records => { copiesRef.current = records; setCopies(records); }).catch(() => setError(t('historyFailed'))); }, [t]);
   useEffect(() => {
     if (!selected) return;
@@ -101,11 +102,10 @@ function EditorSession({ reference, title, sessionId, onClose }: { reference?: s
     onMove={moveReference} onUseResult={useResult}/>;
   const saveFile = async (file: File, projection?: ImageProjectionType) => {
     if (!loaded) throw new Error('No source');
-    const bytes = await crypto.subtle.digest('SHA-256', await file.arrayBuffer());
-    const hash = Array.from(new Uint8Array(bytes), v => v.toString(16).padStart(2, '0')).join('') + file.name + (projection ?? projectionType);
-    if (retry.current?.hash !== hash) retry.current = { hash, key: crypto.randomUUID() };
+    const bytes = new Uint8Array(await file.arrayBuffer());
+    retry.current = imageEditSaveIntent(retry.current, bytes, JSON.stringify([loaded.source.reference, loaded.source.sha256, file.name, projection ?? projectionType]));
     const saved = await imageEditorApi.save(loaded.source, file, retry.current.key, projection ?? projectionType);
-    append(saved); toast.success(t('saved')); onClose();
+    append(saved); toast.success(saved.retention_state === 'permanent' ? t('savedPermanent') : t('saved')); onClose();
   };
   const chooseAnotherSource = () => {
     if (hasUnsavedEdit && !window.confirm(t('discard'))) return;
@@ -150,10 +150,10 @@ function EditorSession({ reference, title, sessionId, onClose }: { reference?: s
     emptyState={<div data-testid="image-editor-empty-canvas" className="h-full min-h-[520px] bg-transparent" />} />;
 }
 
-export default function PlaygroundImageEditor({ children }: { children: ReactNode }) {
+export default function PlaygroundImageEditor({ children, standalone = false }: { children: ReactNode; standalone?: boolean }) {
   const t = useTranslations('imageEditor');
   const [editor, setEditor] = useState<{ reference?: string; title: string; sessionId: string | null } | null>(null);
-  return <EditorContext.Provider value={(reference, title) => setEditor({ reference, title: title || t('title'), sessionId: usePlaygroundStore.getState().activeSessionId })}>
+  return <EditorContext.Provider value={(reference, title) => setEditor({ reference, title: title || t('title'), sessionId: standalone ? null : usePlaygroundStore.getState().activeSessionId })}>
     {children}
     {editor && <EditorSession {...editor} onClose={() => setEditor(null)} />}
   </EditorContext.Provider>;

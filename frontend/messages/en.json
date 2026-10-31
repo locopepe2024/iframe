@@ -3441,6 +3441,7 @@
     "loadFailed": "Could not load the image. Import again or reopen from the result card.",
     "historyFailed": "Could not load saved copies. Close and retry.",
     "tooLarge": "Image must be no larger than 25 MB.",
+    "savedPermanent": "Saved as a new version; the earlier version remains available.",
     "copies": "Recently saved copies",
     "empty": "Saved images will appear here.",
     "edit": "Edit image",
