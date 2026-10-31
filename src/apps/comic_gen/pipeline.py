@@ -6005,6 +6005,7 @@ class ComicGenPipeline(StudioOwnerMixin):
             crowd_instances=[item.model_copy(deep=True) for item in frame.crowd_instances],
             crowd_roster_snapshot=selected_extras,
             crowd_asset_revision_pins=crowd_pins,
+            crowd_asset_status="current",
             reference_package_revision=package.revision,
             reference_visual_projection=visual_projection,
             shot_visual_design=visual_design,
@@ -11990,8 +11991,20 @@ class ComicGenPipeline(StudioOwnerMixin):
                         for instance in frame.crowd_instances:
                             entry = roster_by_id.get(instance.extra_id or instance.template_id)
                             expected = "fixed_extra" if instance.extra_id else "extra_template"
+                            manifest = frame.consistency_manifest
+                            if manifest is None or not manifest.crowd_asset_revision_pins:
+                                continue
                             if entry is None or entry.kind != expected:
-                                raise ValueError("Series extra roster change would invalidate a shot reference")
+                                manifest.crowd_asset_status = "missing"
+                                continue
+                            pin = next(
+                                (item for item in manifest.crowd_asset_revision_pins
+                                 if item.extra_id == entry.extra_id),
+                                None,
+                            )
+                            pinned_revision = instance.asset_revision or (pin.revision if pin else None)
+                            if pinned_revision and pinned_revision != entry.asset_revision:
+                                manifest.crowd_asset_status = "stale"
                 updates["extra_roster"] = roster
             for key, value in updates.items():
                 if hasattr(series, key) and key not in ("id", "created_at", "episode_ids"):

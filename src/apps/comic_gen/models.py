@@ -966,6 +966,7 @@ class StoryboardConsistencyManifest(BaseModel):
     crowd_instances: List[ExtraShotInstance] = Field(default_factory=list)
     crowd_roster_snapshot: List[ExtraRosterEntry] = Field(default_factory=list)
     crowd_asset_revision_pins: List[CrowdAssetRevisionPin] = Field(default_factory=list)
+    crowd_asset_status: Literal["current", "stale", "missing", "unresolved"] = "unresolved"
     reference_package_revision: Optional[int] = Field(None, ge=1)
     reference_visual_projection: Optional[StoryboardReferenceProjectionSnapshot] = None
     shot_visual_design: Optional[ShotVisualDesignSnapshot] = None

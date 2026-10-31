@@ -5,7 +5,7 @@ import pytest
 from src.apps.comic_gen.models import (
     AssetImageSubmissionSnapshot, Character, EpisodeCharacterUse, GlobalAssetLibrary, ImageVariant,
     Scene, Script, Series, StoryboardFrame, ExtraRosterEntry, ExtraShotInstance,
-    StoryboardReferenceProjectionSnapshot,
+    StoryboardReferenceProjectionSnapshot, StoryboardConsistencyManifest, CrowdAssetRevisionPin,
 )
 from src.apps.comic_gen.pipeline import ComicGenPipeline
 
@@ -283,6 +283,33 @@ def test_series_extra_roster_edit_creates_revision_without_rewriting_old_snapsho
     assert [item.revision for item in saved.asset_revisions] == [1, 2]
     assert saved.asset_revisions[0].snapshot["wardrobe"] == "暮秋布衣"
     assert saved.asset_revisions[1].snapshot["wardrobe"] == "暮秋灰蓝布衣"
+
+
+def test_series_extra_roster_edit_marks_saved_manifest_stale(tmp_path):
+    pipeline, script = make_pipeline(tmp_path, [], [])
+    script.series_id = "series"
+    series = Series(
+        id="series", title="青溪镇", episode_ids=[script.id], created_at=1, updated_at=1,
+        extra_roster=[ExtraRosterEntry(extra_id="bandits", label="流民匪寇", wardrobe="旧衣")],
+    )
+    pipeline.series_store[series.id] = series
+    frame = StoryboardFrame(
+        id="shot-1", scene_id="street", shot_id="shot-1",
+        crowd_instances=[ExtraShotInstance(extra_id="bandits", asset_revision=1)],
+        consistency_manifest=StoryboardConsistencyManifest(
+            crowd_instances=[ExtraShotInstance(extra_id="bandits", asset_revision=1)],
+            crowd_asset_revision_pins=[CrowdAssetRevisionPin(extra_id="bandits", kind="fixed_extra", revision=1)],
+            crowd_asset_status="current",
+        ),
+    )
+    script.frames = [frame]
+
+    pipeline.update_series("series", {"extra_roster": [
+        ExtraRosterEntry(extra_id="bandits", label="流民匪寇", wardrobe="新衣")
+    ]})
+
+    assert series.extra_roster[0].asset_revision == 2
+    assert frame.consistency_manifest.crowd_asset_status == "stale"
 
 
 def test_extra_roster_proposals_are_review_only(tmp_path):
