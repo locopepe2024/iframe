@@ -292,7 +292,7 @@ export interface AssetReferenceIndexVariant {
 }
 
 export interface AssetReferenceIndexEntry {
-    asset_type: "character" | "scene" | "prop";
+    asset_type: "character" | "scene" | "prop" | "crowd";
     asset_id: string;
     name: string;
     description?: string;
@@ -303,6 +303,11 @@ export interface AssetReferenceIndexEntry {
     selected_variant_id?: string | null;
     cover_variant_id?: string | null;
     variants: AssetReferenceIndexVariant[];
+    crowd_kind?: "fixed_extra" | "extra_template";
+    role_tags?: string[];
+    linked_visual_asset_id?: string | null;
+    reference_variant_ids?: string[];
+    reference_media_ids?: Record<string, string>;
 }
 
 export interface AssetCoverSelectionResult {

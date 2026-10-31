@@ -448,7 +448,7 @@ class ScenePromptWorkspace(BaseModel):
 class AssetReferenceIndexEntry(BaseModel):
     """Normalized reusable asset entry projected for reference pickers."""
 
-    asset_type: Literal["character", "scene", "prop"]
+    asset_type: Literal["character", "scene", "prop", "crowd"]
     asset_id: str
     name: str
     description: str = ""
@@ -461,6 +461,13 @@ class AssetReferenceIndexEntry(BaseModel):
         None, description="Explicit Asset Library cover; independent from generation-container selection."
     )
     variants: List[ImageVariant] = Field(default_factory=list)
+    # Crowd entries are metadata-first. A fixed extra may point at a Character
+    # visual asset, while a template intentionally has no single face.
+    crowd_kind: Optional[Literal["fixed_extra", "extra_template"]] = None
+    role_tags: List[str] = Field(default_factory=list, max_length=12)
+    linked_visual_asset_id: Optional[str] = None
+    reference_variant_ids: List[str] = Field(default_factory=list, max_length=20)
+    reference_media_ids: Dict[str, str] = Field(default_factory=dict, max_length=20)
 
 
 class AssetReferenceIndex(BaseModel):

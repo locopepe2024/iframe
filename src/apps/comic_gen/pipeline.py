@@ -2858,6 +2858,50 @@ class ComicGenPipeline(StudioOwnerMixin):
                     variants=variants,
                 ))
 
+        def append_crowd(
+            extras: List[ExtraRosterEntry],
+            source_scope: str,
+            source_container_id: Optional[str],
+            source_name: Optional[str],
+            seen: set,
+            characters: List[Any],
+        ) -> None:
+            """Project crowd definitions into the same read index.
+
+            Crowd templates are metadata-only by design. Fixed extras may
+            expose the variants of their linked Character visual asset, but
+            the crowd entry remains the owner of social role and placement
+            metadata; it is never silently converted into a Character.
+            """
+            for extra in extras or []:
+                if extra.extra_id in seen:
+                    continue
+                seen.add(extra.extra_id)
+                linked = next(
+                    (item for item in characters if item.id == extra.visual_asset_id),
+                    None,
+                ) if extra.visual_asset_id else None
+                variants = self._register_asset_variant_media(
+                    self._asset_image_variants(linked, "character"),
+                    script.owner_profile_id,
+                ) if linked is not None else []
+                entries.append(AssetReferenceIndexEntry(
+                    asset_type="crowd",
+                    asset_id=extra.extra_id,
+                    name=extra.label,
+                    description="；".join(filter(None, [extra.height, extra.body_build, extra.wardrobe, extra.palette])),
+                    source_scope=source_scope,
+                    source_container_id=source_container_id,
+                    source_name=source_name,
+                    selected_variant_id=extra.reference_variant_id or (variants[0].id if variants else None),
+                    variants=variants,
+                    crowd_kind=extra.kind,
+                    role_tags=list(extra.role_tags),
+                    linked_visual_asset_id=extra.visual_asset_id,
+                    reference_variant_ids=list(extra.reference_variant_ids),
+                    reference_media_ids=dict(extra.reference_media_ids),
+                ))
+
         for asset_type, attr in (
             ("character", "characters"),
             ("scene", "scenes"),
@@ -2876,6 +2920,29 @@ class ComicGenPipeline(StudioOwnerMixin):
                     None,
                     seen,
                 )
+
+        # Crowd definitions live in the script extraction candidates and the
+        # series roster, rather than in characters/scenes/props containers.
+        # Keep them in the same index so Cast, Assets and Storyboard can
+        # discover one canonical read projection without changing ownership.
+        crowd_seen: set = set()
+        append_crowd(
+            script.crowd_group_candidates,
+            "project",
+            script.id,
+            script.title,
+            crowd_seen,
+            script.characters + (series.characters if series else []),
+        )
+        if series:
+            append_crowd(
+                series.extra_roster,
+                "series",
+                series.id,
+                series.title,
+                crowd_seen,
+                series.characters,
+            )
 
         return AssetReferenceIndex(project_id=script.id, assets=entries)
 
@@ -2901,6 +2968,29 @@ class ComicGenPipeline(StudioOwnerMixin):
                         selected_variant_id=self._selected_asset_variant_id(asset, asset_type),
                         cover_variant_id=self._explicit_asset_cover_variant_id(asset, asset_type),
                         variants=variants,
+                    ))
+            if scope == "series":
+                for extra in getattr(container, "extra_roster", []) or []:
+                    linked = next((item for item in container.characters if item.id == extra.visual_asset_id), None) if extra.visual_asset_id else None
+                    variants = self._register_asset_variant_media(
+                        self._asset_image_variants(linked, "character"),
+                        owner_profile_id,
+                    ) if linked is not None else []
+                    entries.append(AssetReferenceIndexEntry(
+                        asset_type="crowd",
+                        asset_id=extra.extra_id,
+                        name=extra.label,
+                        description="；".join(filter(None, [extra.height, extra.body_build, extra.wardrobe, extra.palette])),
+                        source_scope="series",
+                        source_container_id=container_id,
+                        source_name=name,
+                        selected_variant_id=extra.reference_variant_id or (variants[0].id if variants else None),
+                        variants=variants,
+                        crowd_kind=extra.kind,
+                        role_tags=list(extra.role_tags),
+                        linked_visual_asset_id=extra.visual_asset_id,
+                        reference_variant_ids=list(extra.reference_variant_ids),
+                        reference_media_ids=dict(extra.reference_media_ids),
                     ))
 
         for series in self.list_series(owner_profile_id):
