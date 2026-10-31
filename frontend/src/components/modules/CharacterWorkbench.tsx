@@ -463,6 +463,7 @@ export default function CharacterWorkbench({ asset, seriesId, onClose, onUpdateD
     const [savingDesign, setSavingDesign] = useState(false);
     const [designError, setDesignError] = useState("");
     const [designInput, setDesignInput] = useState(savedInput?.prompt ?? ([savedDesign.user_visual_requirements?.identity, savedDesign.user_visual_requirements?.look].filter(Boolean).join("\n") || confirmedDesignContent(savedDesign) || asset.full_body_prompt || ""));
+    const [designReferenceAssets, setDesignReferenceAssets] = useState<AssetLibraryReference[]>(savedDesign.reference_assets || []);
     const [designResult, setDesignResult] = useState<string | null>(savedResult?.source === "panel" ? null
         : savedResult?.prompt || confirmedDesignContent(savedDesign) || null);
     const [designResultSource, setDesignResultSource] = useState<DesignResultSnapshot["source"]>(savedResult?.source || (savedResult ? "ai" : "legacy"));
@@ -519,6 +520,12 @@ export default function CharacterWorkbench({ asset, seriesId, onClose, onUpdateD
         full_body: null, three_view: null, headshot: null,
     });
     const [pendingImageReview, setPendingImageReview] = useState<AssetImageReviewRequest | null>(null);
+
+    const selectedDesignReferences = useMemo(() => Array.from(new Map([
+        ...promptReferences.full_body, ...promptReferences.three_view, ...promptReferences.headshot,
+        ...promptPickerReferences.full_body, ...promptPickerReferences.three_view, ...promptPickerReferences.headshot,
+        ...designReferenceAssets,
+    ].map((reference) => [referenceKey(reference), reference] as const)).values()), [promptReferences, promptPickerReferences, designReferenceAssets]);
 
     useEffect(() => {
         let active = true;
@@ -717,7 +724,7 @@ export default function CharacterWorkbench({ asset, seriesId, onClose, onUpdateD
     const characterDesignRequest = {
         model: designModel,
         project_id: currentProject?.id,
-        reference_assets: [],
+        reference_assets: designReferenceAssets,
         character_name: asset.name,
         profile: asset.description,
         current_draft: designInput,
@@ -1252,6 +1259,9 @@ export default function CharacterWorkbench({ asset, seriesId, onClose, onUpdateD
             clearAIResultForInput();
             setDesignConstraints(value); setDesignStatus("draft"); setPromptsNeedDesignApply(true);
         }}
+        referenceCandidates={selectedReferenceCandidates(referenceCandidates, selectedDesignReferences)}
+        referenceSelections={designReferenceAssets}
+        onReferenceSelectionsChange={setDesignReferenceAssets}
         supplemental={supplementalPrompt} onSupplementalChange={value => {
             setSupplementalPrompt(value);
             clearAIResultForInput();

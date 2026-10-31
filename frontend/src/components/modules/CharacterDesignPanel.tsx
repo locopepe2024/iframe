@@ -3,14 +3,14 @@
 import { useContext, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { X } from "lucide-react";
-import type { ChatModel } from "@/lib/api";
-import ReferencePromptEditor, { type PromptSlashSuggestion } from "./playground/ReferencePromptEditor";
+import type { AssetLibraryReference, ChatModel } from "@/lib/api";
+import ReferencePromptEditor, { type PromptSlashSuggestion, type ReferenceCandidate } from "./playground/ReferencePromptEditor";
 import { IDENTITY_FIELDS, LOOK_FIELDS, type IdentityFeatures, type LookFeatures, type CharacterConstraints } from "@/lib/characterStructuredDesign";
 import type { DictionaryConfiguration } from "@/lib/characterDictionaryPresets";
 import CharacterPromptDictionary, { CharacterDictionaryHost } from "./CharacterPromptDictionary";
 
 export default function CharacterDesignPanel({ description, details, onDetailsChange, result, onResultChange,
-    identityFields, lookFields, onFieldsChange, onDictionaryFields, onDictionaryConfiguration, configurations, previousExpressionText, constraints, onConstraintsChange, supplemental, onSupplementalChange, reviewItems, models, model, onModelChange, busy, saving, canSave, canReedit, error, status, tab, onTabChange, onSubmit, onSave, onReedit,
+    identityFields, lookFields, onFieldsChange, onDictionaryFields, onDictionaryConfiguration, configurations, previousExpressionText, constraints, onConstraintsChange, supplemental, onSupplementalChange, reviewItems, models, model, onModelChange, busy, saving, canSave, canReedit, error, status, tab, onTabChange, onSubmit, onSave, onReedit, referenceCandidates = [], referenceSelections = [], onReferenceSelectionsChange,
 }: {
     description: string; details: string; onDetailsChange: (value: string) => void;
     result: string | null; onResultChange: (value: string) => void;
@@ -27,6 +27,8 @@ export default function CharacterDesignPanel({ description, details, onDetailsCh
     busy: boolean; saving: boolean; canSave: boolean; canReedit: boolean; error: string; status: string;
     tab: "design" | "ai"; onTabChange: (tab: "design" | "ai") => void;
     onSubmit: () => void; onSave: (source: "panel" | "ai") => void; onReedit: () => void;
+    referenceCandidates?: ReferenceCandidate[]; referenceSelections?: AssetLibraryReference[];
+    onReferenceSelectionsChange?: (references: AssetLibraryReference[]) => void;
 }) {
     const [showFields, setShowFields] = useState(false);
     const host = useContext(CharacterDictionaryHost);
@@ -109,7 +111,7 @@ export default function CharacterDesignPanel({ description, details, onDetailsCh
             </div>
             <p className="mb-2 text-[11px] text-text-muted">可直接使用角色设计，也可先提交 AI 完善。保存会保留两份内容，当前页签决定用于出图的版本。</p>
             <div className="relative min-h-36 rounded border border-glass-border p-2">
-                <ReferencePromptEditor value={details} onChange={onDetailsChange} candidates={[]} expanded editable={!saving}
+                <ReferencePromptEditor value={details} onChange={onDetailsChange} candidates={referenceCandidates} restoreSelectedReferences={referenceSelections} onReferencesChange={onReferenceSelectionsChange} expanded editable={!saving}
                     placeholder="角色设计，/ 选择词典，[] 调整细节" openSlashRequest={openSlashRequest}
                     allowImplicitMentions={false} onSlashChange={setSlash}
                     onSlashKeyDown={event => keyHandler.current?.(event) || false} />
