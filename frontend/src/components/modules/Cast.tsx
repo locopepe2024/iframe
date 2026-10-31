@@ -318,7 +318,7 @@ export default function Cast() {
 
             {/* Workbench — per-entity generate / pick reference image */}
             {workbench?.kind === "character" ? (
-                <CharacterWorkbenchBridge entityId={workbench.entityId} onClose={() => setWorkbench(null)} />
+                <CharacterWorkbenchBridge entityId={workbench.entityId} seriesId={currentProject?.series_id} onClose={() => setWorkbench(null)} />
             ) : (
                 <CastWorkbenchModal
                     isOpen={workbench !== null}
@@ -329,7 +329,7 @@ export default function Cast() {
             )}
             {selectedCrowd && currentSeries && currentSeries.id === currentProject?.series_id && <CrowdGroupEditor
                 group={selectedCrowd} series={currentSeries} onClose={() => setSelectedCrowd(null)} onSaved={setCurrentSeries}
-                onEditCharacter={currentProject?.characters?.some(character => character.id === selectedCrowd.visual_asset_id) ? id => setWorkbench({ kind: "character", entityId: id }) : undefined} />}
+                onEditCharacter={currentSeries?.characters?.some(character => character.id === selectedCrowd.visual_asset_id) ? id => setWorkbench({ kind: "character", entityId: id }) : undefined} />}
 
             {/* R2V v2 Phase 5 — real Add new cast modal (AI / upload tabs). */}
             <AddCastPlaceholderModal

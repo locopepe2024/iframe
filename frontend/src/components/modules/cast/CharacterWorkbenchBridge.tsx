@@ -11,12 +11,16 @@ import CharacterWorkbench from "@/components/modules/CharacterWorkbench";
  * in CharacterWorkbench; this component only supplies the Cast workflow's
  * project callbacks.
  */
-export default function CharacterWorkbenchBridge({ entityId, onClose }: { entityId: string; onClose: () => void }) {
+export default function CharacterWorkbenchBridge({ entityId, onClose, seriesId }: { entityId: string; onClose: () => void; seriesId?: string | null }) {
     const project = useProjectStore((state) => state.currentProject);
+    const series = useProjectStore((state) => state.currentSeries);
+    const setCurrentSeries = useProjectStore((state) => state.setCurrentSeries);
     const updateProject = useProjectStore((state) => state.updateProject);
     const addGeneratingTask = useProjectStore((state) => state.addGeneratingTask);
     const removeGeneratingTask = useProjectStore((state) => state.removeGeneratingTask);
-    const character = project?.characters?.find((item: any) => item.id === entityId);
+    const character = project?.characters?.find((item: any) => item.id === entityId)
+        ?? series?.characters?.find((item: any) => item.id === entityId);
+    const isSeriesCharacter = Boolean(seriesId && series?.characters?.some((item: any) => item.id === entityId));
 
     const style = project?.art_direction?.style_config;
     const stylePrompt = style?.positive_prompt || "";
@@ -32,7 +36,7 @@ export default function CharacterWorkbenchBridge({ entityId, onClose }: { entity
         imageGenerationMode: "text" | "reference" = "text",
         reviewFingerprint?: string,
     ) => {
-        if (!project) return;
+        if (!project || !character) return;
         const generationType = type === "reference_sheet" ? "reference_sheet" : type;
         const isDerivedView = generationType === "three_view" || generationType === "headshot";
         if (isDerivedView && (imageGenerationMode !== "reference" || references.length !== 1)) {
@@ -41,7 +45,16 @@ export default function CharacterWorkbenchBridge({ entityId, onClose }: { entity
         }
         addGeneratingTask(entityId, generationType, batchSize);
         try {
-            const result = await api.generateAsset(
+            const result = isSeriesCharacter
+                ? await api.generateSeriesCharacter(seriesId!, {
+                    asset_id: entityId, asset_type: "character", style_preset: "realistic",
+                    generation_type: generationType, prompt, apply_style: false,
+                    negative_prompt: negativePrompt, batch_size: batchSize,
+                    ...(isDerivedView ? { reference: references[0] } : { references }),
+                    image_generation_mode: imageGenerationMode, preserve_prompt: true,
+                    expected_review_fingerprint: reviewFingerprint,
+                })
+                : await api.generateAsset(
                 project.id,
                 entityId,
                 "character",
@@ -59,14 +72,14 @@ export default function CharacterWorkbenchBridge({ entityId, onClose }: { entity
                 imageGenerationMode,
                 true,
                 reviewFingerprint,
-            );
+                );
             if ((result as any)?._task_id) {
                 const taskId = (result as any)._task_id;
                 const poll = async () => {
                     const status = await api.getTaskStatus(taskId);
                     if (status?.status === "completed") {
-                        const fresh = await api.getProject(project.id);
-                        updateProject(project.id, fresh);
+                        if (isSeriesCharacter) setCurrentSeries(await api.getSeries(seriesId!));
+                        else updateProject(project.id, await api.getProject(project.id));
                         removeGeneratingTask(entityId, generationType);
                         return;
                     }
@@ -78,7 +91,8 @@ export default function CharacterWorkbenchBridge({ entityId, onClose }: { entity
                 };
                 void poll();
             } else {
-                updateProject(project.id, result);
+                if (isSeriesCharacter) setCurrentSeries(await api.getSeries(seriesId!));
+                else updateProject(project.id, result);
                 removeGeneratingTask(entityId, generationType);
             }
         } catch (error) {
@@ -89,20 +103,20 @@ export default function CharacterWorkbenchBridge({ entityId, onClose }: { entity
 
     const onUpdateDescription = async (description: string) => {
         if (!project) return;
-        const updated = await api.updateAssetDescription(project.id, entityId, "character", description);
-        updateProject(project.id, updated);
+        if (isSeriesCharacter) setCurrentSeries(await api.updateSeriesAssetAttributes(seriesId!, entityId, "character", { description }));
+        else updateProject(project.id, await api.updateAssetDescription(project.id, entityId, "character", description));
     };
 
     const onUpdateAttributes = async (attributes: Record<string, unknown>) => {
         if (!project) return;
-        const updated = await api.updateAssetAttributes(project.id, entityId, "character", attributes);
-        updateProject(project.id, updated);
+        if (isSeriesCharacter) setCurrentSeries(await api.updateSeriesAssetAttributes(seriesId!, entityId, "character", attributes));
+        else updateProject(project.id, await api.updateAssetAttributes(project.id, entityId, "character", attributes));
     };
 
     const onRename = async (name: string) => {
         if (!project) return;
-        const updated = await api.updateAssetAttributes(project.id, entityId, "character", { name });
-        updateProject(project.id, updated);
+        if (isSeriesCharacter) setCurrentSeries(await api.updateSeriesAssetAttributes(seriesId!, entityId, "character", { name }));
+        else updateProject(project.id, await api.updateAssetAttributes(project.id, entityId, "character", { name }));
     };
 
     if (!project || !character) return null;
@@ -113,6 +127,7 @@ export default function CharacterWorkbenchBridge({ entityId, onClose }: { entity
         onUpdateAttributes={onUpdateAttributes}
         onRename={onRename}
         onGenerate={onGenerate}
+        seriesId={seriesId ?? undefined}
         generatingTypes={[]}
         stylePrompt={stylePrompt}
         styleNegativePrompt={styleNegativePrompt}

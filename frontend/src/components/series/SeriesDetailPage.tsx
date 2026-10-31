@@ -301,10 +301,11 @@ export function ExtraRosterPanel({ series, seriesId, onSaved }: { series: Series
   const [creatingVisualAsset, setCreatingVisualAsset] = useState<string | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [editingCharacterId, setEditingCharacterId] = useState<string | null>(null);
+  const [editingCharacterAsset, setEditingCharacterAsset] = useState<Character | null>(null);
   const [error, setError] = useState("");
   useEffect(() => setEntries(series.extra_roster ?? []), [series.extra_roster]);
   const selected = entries.find(item => item.extra_id === selectedId) ?? entries[0];
-  const linkedCharacter = series.characters?.find(item => item.id === editingCharacterId);
+  const linkedCharacter = editingCharacterAsset ?? series.characters?.find(item => item.id === editingCharacterId);
   const add = (kind: ExtraRosterEntry["kind"]) => {
     const extra_id = "extra-" + crypto.randomUUID();
     setEntries(items => [...items, { extra_id, label: kind === "fixed_extra" ? "新固定群演" : "新人群模板", kind }]);
@@ -347,6 +348,7 @@ export function ExtraRosterPanel({ series, seriesId, onSaved }: { series: Series
           .filter(Boolean).join("；"),
       });
       await bindCharacter(entry, character.id);
+      setEditingCharacterAsset(character);
       setEditingCharacterId(character.id);
     } catch (cause) { setError(extractErrorDetail(cause, "创建角色失败")); }
     finally { setCreatingVisualAsset(null); }
@@ -391,7 +393,7 @@ export function ExtraRosterPanel({ series, seriesId, onSaved }: { series: Series
               {(series.characters ?? []).map(character => <option key={character.id} value={character.id}>{character.name}</option>)}
               {entry.visual_asset_id && !series.characters?.some(character => character.id === entry.visual_asset_id) && <option value={entry.visual_asset_id}>原角色已失效</option>}
             </select>
-            {entry.visual_asset_id && series.characters?.some(character => character.id === entry.visual_asset_id) && <button type="button" onClick={() => setEditingCharacterId(entry.visual_asset_id!)} className="rounded border border-primary px-2 py-1 text-xs text-primary">编辑角色</button>}
+            {entry.visual_asset_id && series.characters?.some(character => character.id === entry.visual_asset_id) && <button type="button" onClick={() => { setEditingCharacterAsset(null); setEditingCharacterId(entry.visual_asset_id!); }} className="rounded border border-primary px-2 py-1 text-xs text-primary">设计角色 / 生成资产</button>}
             <button type="button" disabled={Boolean(entry.visual_asset_id) || creatingVisualAsset === entry.extra_id || saving}
               onClick={() => void createVisualAsset(entry)}
               className="whitespace-nowrap rounded border border-primary px-2 py-1 text-[11px] text-primary">
@@ -409,7 +411,7 @@ export function ExtraRosterPanel({ series, seriesId, onSaved }: { series: Series
       </div>
       </div>
     </div>
-    {linkedCharacter && <CharacterWorkbench asset={linkedCharacter} seriesId={seriesId} onClose={() => setEditingCharacterId(null)}
+    {linkedCharacter && <CharacterWorkbench asset={linkedCharacter} seriesId={seriesId} onClose={() => { setEditingCharacterId(null); setEditingCharacterAsset(null); }}
       onUpdateDescription={async description => { await api.updateSeriesAssetAttributes(seriesId, linkedCharacter.id, "character", { description }); await onSaved(); }}
       onUpdateAttributes={async attributes => { await api.updateSeriesAssetAttributes(seriesId, linkedCharacter.id, "character", attributes); await onSaved(); }}
       onRename={async name => { await api.updateSeriesAssetAttributes(seriesId, linkedCharacter.id, "character", { name }); await onSaved(); }}
