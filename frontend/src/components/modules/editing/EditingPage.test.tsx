@@ -31,6 +31,7 @@ it('adds multiple clips and an audio lane over HTTP without crypto.randomUUID', 
   fireEvent.click(screen.getByRole('button', { name: 'Select material' }));
   await waitFor(() => expect(editing.material).toHaveBeenCalledTimes(2));
   await waitFor(() => expect(screen.getByRole('button', { name: 'Select material' })).toBeEnabled());
+  fireEvent.click(screen.getByText('Track settings'));
   fireEvent.click(screen.getByRole('button', { name: 'Add Music' }));
   fireEvent.click(screen.getByRole('button', { name: 'Save edit' }));
   await waitFor(() => expect(editing.save).toHaveBeenCalledOnce());

@@ -93,8 +93,8 @@ it("offers visible sequence controls and recombines trimmed and split sources", 
     const ordered = () => latest.lanes[0].clips.slice().sort((a,b) => a.timeline_start_ms - b.timeline_start_ms);
     expect(ordered().map(c => c.label)).toEqual(["2.mp4", "1.mp4", "3.mp4"]);
     fireEvent.click(screen.getByRole("button", { name: "Edit clip 2: 1.mp4" }));
-    fireEvent.change(screen.getByRole("spinbutton", { name: "Source in (ms)" }), { target: { value: "500" } });
-    fireEvent.change(screen.getByRole("spinbutton", { name: "Source out (ms)" }), { target: { value: "2500" } });
+    fireEvent.change(screen.getByRole("spinbutton", { name: "Source in (seconds)" }), { target: { value: "0.5" } });
+    fireEvent.change(screen.getByRole("spinbutton", { name: "Source out (seconds)" }), { target: { value: "2.5" } });
     fireEvent.click(screen.getByRole("button", { name: "Apply trim at original speed" }));
     expect(ordered()[1]).toMatchObject({ source_start_ms: 500, source_end_ms: 2500, timeline_start_ms: 3000, timeline_end_ms: 5000 });
     fireEvent.change(screen.getByRole("slider", { name: "Timeline playhead" }), { target: { value: "4000" } });
@@ -144,10 +144,11 @@ it('collapses optional panels and adjusts track height without changing the plan
     const onChange = vi.fn();
     render(<AssemblyTracks plan={plan} project={project} resourceId="p" saved onChange={onChange} materialPanel={<div>Project materials</div>} />);
     expect(screen.queryByText('Project materials')).toBeNull();
-    fireEvent.click(screen.getByRole('button', { name: 'Material panel' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Toggle material panel' }));
     expect(screen.getByText('Project materials')).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: 'Clip properties' }));
-    expect(screen.queryByRole('complementary', { name: 'Selected clip properties' })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Toggle clip properties' }));
+    expect(screen.queryByLabelText('Selected clip properties')).toBeNull();
+    fireEvent.click(screen.getByText('Track settings'));
     fireEvent.change(screen.getByRole('slider', { name: /Track area height/ }), { target: { value: '420' } });
     expect(screen.getByLabelText('Scrollable timeline')).toHaveStyle({ height: '420px' });
     expect(onChange).not.toHaveBeenCalled();
@@ -207,7 +208,7 @@ it('keeps shortcuts inside the workbench and preserves browser and control keys'
         expect(fireEvent.keyDown(editor, { key: 'Delete', [modifier]: true })).toBe(true);
     }
     expect(fireEvent.keyDown(editor, { key: 'Delete', isComposing: true })).toBe(true);
-    const control = screen.getByRole('button', { name: 'Clip properties' });
+    const control = screen.getByRole('button', { name: 'Toggle clip properties' });
     expect(fireEvent.keyDown(control, { key: ' ' })).toBe(true);
     const editable = document.createElement('div');
     editable.setAttribute('contenteditable', 'true');
@@ -223,6 +224,33 @@ it('keeps shortcuts inside the workbench and preserves browser and control keys'
     expect(onChange).not.toHaveBeenCalled();
     fireEvent.keyDown(editor, { key: 'Delete' });
     expect(onChange).toHaveBeenCalledTimes(1);
+});
+
+it('maps playhead trim marks to a selected source and applies them as one edit', () => {
+    const initial: AssemblyEditPlan = { ...plan, target_duration_ms: 10000, lanes: [{ id: 'v', kind: 'video', allow_overlap: false, clips: [
+        { id: 'a', label: 'First', timeline_start_ms: 0, timeline_end_ms: 5000, source_start_ms: 0, source_end_ms: 5000, enabled: true, source_refs: [] },
+        { id: 'b', label: 'Second', timeline_start_ms: 5000, timeline_end_ms: 10000, source_start_ms: 12000, source_end_ms: 17000, enabled: true, source_refs: [] },
+    ] }] };
+    const onChange = vi.fn();
+    render(<AssemblyTracks plan={initial} project={project} resourceId="p" saved onChange={onChange} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Toggle clip properties' }));
+    expect(screen.queryByLabelText('Selected clip properties')).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Edit clip 2: Second' }));
+    expect(screen.getByLabelText('Selected clip properties')).toBeInTheDocument();
+    fireEvent.change(screen.getByRole('spinbutton', { name: 'Playhead (seconds)' }), { target: { value: '6.234' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Set in at playhead' }));
+    expect(screen.getByRole('spinbutton', { name: 'Source in (seconds)' })).toHaveValue(13.234);
+    fireEvent.change(screen.getByRole('spinbutton', { name: 'Playhead (seconds)' }), { target: { value: '8.5' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Set out at playhead' }));
+    expect(screen.getByRole('spinbutton', { name: 'Source out (seconds)' })).toHaveValue(15.5);
+    expect(screen.getByText('Keep duration · 2.266s')).toBeInTheDocument();
+    expect(onChange).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('button', { name: 'Apply trim at original speed' }));
+    expect(onChange).toHaveBeenCalledOnce();
+    expect(onChange.mock.calls[0][0].lanes[0].clips[1]).toMatchObject({ source_start_ms: 13234, source_end_ms: 15500, timeline_start_ms: 5000, timeline_end_ms: 7266 });
+    fireEvent.change(screen.getByRole('spinbutton', { name: 'Playhead (seconds)' }), { target: { value: '2' } });
+    expect(screen.getByRole('button', { name: 'Set in at playhead' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Set out at playhead' })).toBeDisabled();
 });
 
 it('previews a pointer gesture locally, commits once, and rolls back cancellation', () => {
