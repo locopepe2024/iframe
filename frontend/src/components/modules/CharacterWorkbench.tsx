@@ -256,7 +256,10 @@ function AssetReferencePicker({
     const searchId = `character-reference-search-${generatedId}`;
     const optionId = (index: number) => `${searchId}-option-${index}`;
     const selectedKeys = new Set(selected.map(referenceKey));
-    const filtered = searchReferenceCandidates(candidates, query).slice(0, 20);
+    // Keep the complete owner-scoped candidate set available. The picker is
+    // already scroll-bounded; truncating to the first 20 hides valid assets
+    // (for example a generated crowd roster) behind earlier shared assets.
+    const filtered = searchReferenceCandidates(candidates, query);
 
     const toggle = (candidate: ReferenceCandidate) => {
         if (!candidate.reference) return;
