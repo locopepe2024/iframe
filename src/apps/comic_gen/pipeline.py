@@ -5865,6 +5865,8 @@ class ComicGenPipeline(StudioOwnerMixin):
             media_ids = []
             for variant_id in variant_ids:
                 media_id = entry.reference_media_ids.get(variant_id)
+                if not media_id and entry.reference_variant_id == variant_id:
+                    media_id = entry.reference_media_id
                 if media_id:
                     media_ids.append(media_id)
             crowd_pins.append(CrowdAssetRevisionPin(
