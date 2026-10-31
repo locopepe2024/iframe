@@ -114,13 +114,13 @@ it('creates a folder, uploads into it, moves a material and reports deletion con
   fireEvent.click(await screen.findByRole('button', { name: 'New folder' }));
   fireEvent.change(screen.getByLabelText('Folder name'), { target: { value: folder.name } });
   fireEvent.click(screen.getByRole('button', { name: 'Save folder' }));
-  await waitFor(() => expect(editing.createFolder).toHaveBeenCalledWith(folder.name));
-  await waitFor(() => expect(screen.getByLabelText('Material folder')).toHaveValue(folder.id));
+  await waitFor(() => expect(editing.createFolder).toHaveBeenCalledWith(folder.name, null));
+  expect(screen.getByRole('button', { name: 'Root' })).toBeInTheDocument();
   const upload = screen.getByLabelText('Upload video or audio');
   await waitFor(() => expect(upload).toBeEnabled());
   const file = new File(['test'], 'clip.mp4', { type: 'video/mp4' });
   fireEvent.change(upload, { target: { files: [file] } });
-  await waitFor(() => expect(editing.upload).toHaveBeenCalledWith(file, folder.id));
+  await waitFor(() => expect(editing.upload).toHaveBeenCalledWith(file, null));
   await waitFor(() => expect(screen.getByLabelText('Move material Original.mp4')).toBeEnabled());
   fireEvent.change(screen.getByLabelText('Move material Original.mp4'), { target: { value: folder.id } });
   await waitFor(() => expect(editing.moveMaterial).toHaveBeenCalledWith(material.id, folder.id));
@@ -136,5 +136,23 @@ it('loads subsequent pages using the selected folder', async () => {
   render(<EditingMaterials onSelect={vi.fn()} />);
   fireEvent.click(await screen.findByRole('button', { name: 'Load more' }));
   expect(await screen.findByText('Next.mp4')).toBeInTheDocument();
-  expect(editing.materials).toHaveBeenLastCalledWith('', 24, null);
+  expect(editing.materials).toHaveBeenLastCalledWith('', 24, '__root');
+});
+
+it('navigates nested folders with a breadcrumb and scopes materials to the current level', async () => {
+  vi.mocked(editing.folders).mockResolvedValue([
+    { id: 'root-folder', name: 'Rushes', parent_id: null, created_at: 1 },
+    { id: 'child-folder', name: 'Day 1', parent_id: 'root-folder', created_at: 2 },
+  ]);
+  vi.mocked(editing.materials).mockResolvedValue({ items: [], next_cursor: null });
+  render(<EditingMaterialManager />);
+  await screen.findByRole('button', { name: 'Rushes' });
+  expect(screen.queryByRole('button', { name: 'Day 1' })).not.toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button', { name: 'Rushes' }));
+  expect(await screen.findByRole('button', { name: 'Day 1' })).toBeInTheDocument();
+  expect(editing.materials).toHaveBeenLastCalledWith('', 0, 'root-folder');
+  fireEvent.click(screen.getByRole('button', { name: 'Day 1' }));
+  await waitFor(() => expect(editing.materials).toHaveBeenLastCalledWith('', 0, 'child-folder'));
+  expect(screen.getByRole('button', { name: 'Root' })).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'Rushes' })).toBeInTheDocument();
 });
