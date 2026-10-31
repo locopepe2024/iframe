@@ -4,6 +4,7 @@ import { useState } from "react";
 import { X } from "lucide-react";
 import { api } from "@/lib/api";
 import { extractErrorDetail } from "@/lib/utils";
+import { nextCrowdCharacterName } from "@/lib/crowdNaming";
 import type { ExtraRosterEntry, Series } from "@/store/projectStore";
 
 export default function CrowdGroupEditor({ group, series, onClose, onSaved, onEditCharacter }: {
@@ -40,7 +41,7 @@ export default function CrowdGroupEditor({ group, series, onClose, onSaved, onEd
     setError("");
     try {
       const character = await api.createSeriesCharacter(series.id, {
-        name: draft.label,
+        name: nextCrowdCharacterName(draft.label, (series.characters ?? []).map(item => item.name)),
         persona: draft.label,
         description: [draft.body_build, draft.wardrobe, draft.palette].filter(Boolean).join("；"),
       });

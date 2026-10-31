@@ -14,6 +14,7 @@ import { AssemblyPlanPhase } from "@/components/modules/VideoAssembly";
 import { buildDraftSeriesAssemblyPlan, hasAssemblyPlanChanges } from "@/components/modules/assemblyEditPlan";
 import type { AssemblyEditPlan } from "@/lib/api";
 import { extractErrorDetail, getAssetUrl } from "@/lib/utils";
+import { nextCrowdCharacterName } from "@/lib/crowdNaming";
 import { episodeReadableSummary, seriesReadableContext } from "./episodeReadableSummary";
 
 const SeriesModelSettingsModal = dynamic(() => import("./SeriesModelSettingsModal"), { ssr: false });
@@ -340,7 +341,7 @@ export function ExtraRosterPanel({ series, seriesId, onSaved }: { series: Series
     setCreatingVisualAsset(entry.extra_id);
     try {
       const character = await api.createSeriesCharacter(seriesId, {
-        name: entry.label,
+        name: nextCrowdCharacterName(entry.label, (series.characters ?? []).map(item => item.name)),
         persona: entry.label,
         description: [entry.height, entry.body_build, entry.wardrobe, entry.palette, ...(entry.props ?? [])]
           .filter(Boolean).join("；"),
