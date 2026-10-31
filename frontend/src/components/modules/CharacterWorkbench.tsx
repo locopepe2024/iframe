@@ -521,11 +521,6 @@ export default function CharacterWorkbench({ asset, seriesId, onClose, onUpdateD
     });
     const [pendingImageReview, setPendingImageReview] = useState<AssetImageReviewRequest | null>(null);
 
-    const selectedDesignReferences = useMemo(() => Array.from(new Map([
-        ...promptReferences.full_body, ...promptReferences.three_view, ...promptReferences.headshot,
-        ...promptPickerReferences.full_body, ...promptPickerReferences.three_view, ...promptPickerReferences.headshot,
-        ...designReferenceAssets,
-    ].map((reference) => [referenceKey(reference), reference] as const)).values()), [promptReferences, promptPickerReferences, designReferenceAssets]);
 
     useEffect(() => {
         let active = true;
@@ -1259,7 +1254,7 @@ export default function CharacterWorkbench({ asset, seriesId, onClose, onUpdateD
             clearAIResultForInput();
             setDesignConstraints(value); setDesignStatus("draft"); setPromptsNeedDesignApply(true);
         }}
-        referenceCandidates={selectedReferenceCandidates(referenceCandidates, selectedDesignReferences)}
+        referenceCandidates={referenceCandidates}
         referenceSelections={designReferenceAssets}
         onReferenceSelectionsChange={setDesignReferenceAssets}
         supplemental={supplementalPrompt} onSupplementalChange={value => {
