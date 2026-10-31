@@ -1,6 +1,6 @@
 # 素材生命周期与不可变编辑版本 v1
 
-状态：规则已确认；第一片仅实现只读盘点，不启用自动删除。
+状态：只读盘点、素材收藏及收藏版本链、查询界面已实现；跨模块引用迁移和自动清理未启用。
 
 ## 已核实的代码事实
 
@@ -55,3 +55,13 @@
 5. 清理任务：覆盖过期边界、共享文件、运行中任务、软删项目、恢复版本与并发新增引用；通过 GreenA 隔离验收后再启用。
 
 第一片受影响路径：src/apps/playground/media_inventory.py、api.py、tests/test_playground_media_inventory.py。验证：定向 pytest、compileall。其余分片未交付前不能声称七天自动清理或临时素材 UI 已生效。
+
+## 2026-10-31 本次发布边界
+
+- 新增 owner 独立的 assets/materials/library.sqlite3。versions 保存 asset_id、parent_version_id、来源 reference、SHA-256 和独立副本；并发重复收藏幂等，失败回滚文件和记录。
+- GET/POST /playground/material-library，GET /playground/material-library/{version_id}/content；用户身份验证后读取，不暴露文件路径。
+- 从本集合已保存图片继续编辑会追加版本。临时图片编辑仍保存临时副本。语义角色/场景/道具的导入编辑与其原资产版本链尚未打通，不能宣称所有资产编辑均已覆盖。
+- 新生成输出新增 available_at，用于正确计算候选期限；存量无完成时间则不推断。
+- 资产库新增临时与已保存素材入口：类型/名称筛选已加载记录、分页、预览、编辑、收藏。当前删除按钮未开放；本集合也未提供回收站和永久删除。
+- 本片不执行物理删除。history、session drafts、编辑项目历史、复刻任务、语义资产、共享文件引用尚需统一事务边界；所有未对齐记录仍 legacy_review。项目既有引用保护继续生效。
+- 因此分片 2/3 为可用子集，4/5 尚未完成；部署可用子集不等于生命周期全量收口。

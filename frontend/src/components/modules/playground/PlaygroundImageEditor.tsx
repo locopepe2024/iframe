@@ -105,7 +105,7 @@ function EditorSession({ reference, title, sessionId, onClose }: { reference?: s
     const bytes = new Uint8Array(await file.arrayBuffer());
     retry.current = imageEditSaveIntent(retry.current, bytes, JSON.stringify([loaded.source.reference, loaded.source.sha256, file.name, projection ?? projectionType]));
     const saved = await imageEditorApi.save(loaded.source, file, retry.current.key, projection ?? projectionType);
-    append(saved); toast.success(t('saved')); onClose();
+    append(saved); toast.success(saved.retention_state === 'permanent' ? t('savedPermanent') : t('saved')); onClose();
   };
   const chooseAnotherSource = () => {
     if (hasUnsavedEdit && !window.confirm(t('discard'))) return;
@@ -150,10 +150,10 @@ function EditorSession({ reference, title, sessionId, onClose }: { reference?: s
     emptyState={<div data-testid="image-editor-empty-canvas" className="h-full min-h-[520px] bg-transparent" />} />;
 }
 
-export default function PlaygroundImageEditor({ children }: { children: ReactNode }) {
+export default function PlaygroundImageEditor({ children, standalone = false }: { children: ReactNode; standalone?: boolean }) {
   const t = useTranslations('imageEditor');
   const [editor, setEditor] = useState<{ reference?: string; title: string; sessionId: string | null } | null>(null);
-  return <EditorContext.Provider value={(reference, title) => setEditor({ reference, title: title || t('title'), sessionId: usePlaygroundStore.getState().activeSessionId })}>
+  return <EditorContext.Provider value={(reference, title) => setEditor({ reference, title: title || t('title'), sessionId: standalone ? null : usePlaygroundStore.getState().activeSessionId })}>
     {children}
     {editor && <EditorSession {...editor} onClose={() => setEditor(null)} />}
   </EditorContext.Provider>;

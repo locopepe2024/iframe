@@ -27,7 +27,7 @@ beforeEach(() => {
   mocks.save.mockResolvedValue(saved);
   mocks.library.mockResolvedValue({ assets: [] });
   mocks.importVariant.mockResolvedValue({ path: '/playground/input-media/library.png', title: 'Library image' });
-  vi.stubGlobal('crypto', { subtle: { digest: vi.fn().mockResolvedValue(new ArrayBuffer(32)) }, randomUUID: () => 'operation-key' });
+  vi.stubGlobal('crypto', { subtle: { digest: vi.fn().mockResolvedValue(new ArrayBuffer(32)) }, getRandomValues: (array: Uint8Array) => array.fill(7), randomUUID: () => 'operation-key' });
   URL.createObjectURL = vi.fn(() => 'blob:preview'); URL.revokeObjectURL = vi.fn();
   usePlaygroundStore.setState({ activeSessionId: 'original', mode: 'i2v', inputMedia: ['/first.png', '/second.png'] });
 });
@@ -38,7 +38,7 @@ it('appends a saved edit without replacing ordered references or changing mode',
   fireEvent.click(await screen.findByText('Save'));
   await waitFor(() => expect(usePlaygroundStore.getState().inputMedia).toEqual(['/first.png', '/second.png', saved.path]));
   expect(usePlaygroundStore.getState().mode).toBe('i2v');
-  expect(mocks.save).toHaveBeenCalledWith(expect.objectContaining({ sha256: 'a'.repeat(64) }), expect.any(File), 'operation-key', 'perspective_plane');
+  expect(mocks.save).toHaveBeenCalledWith(expect.objectContaining({ sha256: 'a'.repeat(64) }), expect.any(File), expect.any(String), 'perspective_plane');
   expect(URL.revokeObjectURL).toHaveBeenCalledWith('blob:preview');
 });
 it('keeps saved copies available after reopening and appends at the end', async () => {
