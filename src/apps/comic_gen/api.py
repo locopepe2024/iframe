@@ -3188,8 +3188,6 @@ def reconcile_apply(script_id: str, request: ApplyReconcileRequest):
             target = series_groups.get(act.target_series_id)
             if target is None or target.kind != local.kind:
                 raise HTTPException(status_code=400, detail="Crowd merge target is missing or has a different kind")
-        elif act.action == "create_new_in_series" and local.extra_id in series_groups:
-            raise HTTPException(status_code=400, detail="Crowd group ID already exists in series")
     new_group_ids = {act.local_id for act in request.crowd_groups
                      if act.action == "create_new_in_series" and act.local_id in local_groups}
     if len(series.extra_roster) + len(new_group_ids) > 100:
@@ -3236,7 +3234,25 @@ def reconcile_apply(script_id: str, request: ApplyReconcileRequest):
         if local is None or local not in script.crowd_group_candidates:
             continue
         if act.action == "create_new_in_series":
-            series.extra_roster.append(local)
+            # Episode extraction IDs are only unique within the episode. If
+            # the series already contains the same ID, preserve both records
+            # under a deterministic suffix and rewire shot references below.
+            original_id = local.extra_id
+            next_id = original_id
+            suffix = 2
+            while next_id in {item.extra_id for item in series.extra_roster}:
+                next_id = f"{original_id}-{suffix}"
+                suffix += 1
+            promoted = local.model_copy(deep=True)
+            promoted.extra_id = next_id
+            series.extra_roster.append(promoted)
+            if next_id != original_id:
+                for frame in script.frames:
+                    for instance in frame.crowd_instances:
+                        if instance.extra_id == original_id:
+                            instance.extra_id = next_id
+                        if instance.template_id == original_id:
+                            instance.template_id = next_id
             script.crowd_group_candidates.remove(local)
         elif act.action == "merge_into_series":
             for frame in script.frames:
