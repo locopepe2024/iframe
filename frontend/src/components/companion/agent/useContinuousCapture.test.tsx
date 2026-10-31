@@ -55,3 +55,25 @@ it("bounds pending audio and pauses capture on backlog without dropping the reco
  for(let i=0;i<12;i++)s.sentence();expect(s.stop).toHaveBeenCalledOnce();expect(s.fetch).toHaveBeenCalledOnce();
  await act(async()=>resolve({ok:true,json:async()=>({text:"第一段"})}));await waitFor(()=>expect(s.text).toHaveBeenCalledTimes(12));s.hook.unmount();clock.mockRestore();
 });
+
+it("preserves unfinished user speech when an assistant reply starts playing",async()=>{
+ const {companionPlayback}=await import("@/lib/companionPlaybackQueue");
+ const clock=vi.spyOn(performance,"now").mockReturnValue(performance.now()+5000);
+ const s=setup();
+ act(()=>s.hook.result.current.toggleListening());
+ await waitFor(()=>expect(s.getAudio()).toBeDefined());
+ act(()=>{for(let i=0;i<30;i++)s.getAudio()(new Float32Array(320).fill(.1));});
+ expect(s.fetch).not.toHaveBeenCalled();
+ let begin!:()=>void;
+ act(()=>companionPlayback.enqueue(Symbol(),async(signal,playing)=>{
+   begin=playing;
+   await new Promise<void>(resolve=>signal.addEventListener("abort",()=>resolve(),{once:true}));
+ }));
+ expect(s.fetch).not.toHaveBeenCalled();
+ act(()=>begin());
+ await waitFor(()=>expect(s.text).toHaveBeenCalledOnce());
+ s.sentence();
+ expect(s.fetch).toHaveBeenCalledOnce();
+ await act(async()=>companionPlayback.cancel());
+ s.hook.unmount();clock.mockRestore();
+});

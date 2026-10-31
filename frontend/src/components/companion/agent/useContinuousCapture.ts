@@ -62,7 +62,14 @@ export function useContinuousCapture(onText:(text:string,trace?:VoiceTrace)=>voi
    }catch{if(version===generation.current){release();setNotice("麦克风无法启动，请检查权限后重试。");}}
  }
  useEffect(()=>{
-   const unsubscribe=companionPlayback.subscribe(()=>{setPlaying(companionPlayback.isPlaying());segment.current?.reset();});
+   let wasPlaying=companionPlayback.isPlaying();
+   const unsubscribe=companionPlayback.subscribe(()=>{
+     const nowPlaying=companionPlayback.isPlaying();
+     // Preserve user audio acquired before output begins. Queue admission and
+     // connection changes are not reasons to discard an unfinished sentence.
+     if(nowPlaying && !wasPlaying)segment.current?.flush();
+     wasPlaying=nowPlaying;setPlaying(nowPlaying);
+   });
    const leaving=()=>cancel();window.addEventListener("pagehide",leaving);
    return()=>{unsubscribe();window.removeEventListener("pagehide",leaving);cancel();};
    // eslint-disable-next-line react-hooks/exhaustive-deps
