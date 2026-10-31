@@ -268,6 +268,23 @@ def test_series_extra_roster_and_shot_instance_snapshot(tmp_path):
         ])
 
 
+def test_series_extra_roster_edit_creates_revision_without_rewriting_old_snapshot(tmp_path):
+    pipeline, script = make_pipeline(tmp_path, [], [Scene(id="street", name="长街", description="")])
+    script.series_id = "series"
+    pipeline.series_store["series"] = Series(
+        id="series", title="青溪镇", episode_ids=[script.id], created_at=1, updated_at=1,
+    )
+    original = ExtraRosterEntry(extra_id="townspeople", label="市井百姓", wardrobe="暮秋布衣")
+    pipeline.update_series("series", {"extra_roster": [original]})
+    edited = original.model_copy(update={"wardrobe": "暮秋灰蓝布衣"})
+    pipeline.update_series("series", {"extra_roster": [edited]})
+    saved = pipeline.series_store["series"].extra_roster[0]
+    assert saved.asset_revision == 2
+    assert [item.revision for item in saved.asset_revisions] == [1, 2]
+    assert saved.asset_revisions[0].snapshot["wardrobe"] == "暮秋布衣"
+    assert saved.asset_revisions[1].snapshot["wardrobe"] == "暮秋灰蓝布衣"
+
+
 def test_extra_roster_proposals_are_review_only(tmp_path):
     pipeline, script = make_pipeline(tmp_path, [], [])
     series = Series(id="series", title="青溪镇", episode_ids=[], created_at=1, updated_at=1)

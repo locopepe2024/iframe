@@ -56,6 +56,7 @@ from .models import (
     EpisodeVisualPropContext,
     EpisodeVisualShotContext,
     EpisodeAssetBinding,
+    AssetRevision,
     AssetRevisionPin,
     CrowdAssetRevisionPin,
     ArtifactLineage,
@@ -11858,6 +11859,37 @@ class ComicGenPipeline(StudioOwnerMixin):
                 if len(roster) > 100 or len({item.extra_id for item in roster}) != len(roster):
                     raise ValueError("Series extra roster has duplicate IDs or exceeds 100 entries")
                 roster_by_id = {item.extra_id: item for item in roster}
+                previous_roster = {item.extra_id: item for item in series.extra_roster}
+                for item in roster:
+                    previous = previous_roster.get(item.extra_id)
+                    if previous is None:
+                        continue
+                    comparable = {"extra_id", "label", "kind", "height", "body_build", "wardrobe", "palette", "props", "role_tags", "reference_variant_id", "reference_media_id", "reference_variant_ids", "reference_media_ids", "visual_asset_id"}
+                    before = previous.model_dump(include=comparable, exclude_none=True)
+                    after = item.model_dump(include=comparable, exclude_none=True)
+                    if before == after:
+                        item.asset_revision = previous.asset_revision
+                        item.asset_revisions = [revision.model_copy(deep=True) for revision in previous.asset_revisions]
+                        continue
+                    next_revision = previous.asset_revision + 1
+                    history = [revision.model_copy(deep=True) for revision in previous.asset_revisions]
+                    if not history or history[-1].revision != previous.asset_revision:
+                        before_payload = json.dumps(before, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+                        history.append(AssetRevision(
+                            revision=previous.asset_revision,
+                            content_hash=hashlib.sha256(before_payload.encode("utf-8")).hexdigest(),
+                            snapshot=before,
+                            confirmation_status="user_confirmed",
+                        ))
+                    after_payload = json.dumps(after, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+                    history.append(AssetRevision(
+                        revision=next_revision,
+                        content_hash=hashlib.sha256(after_payload.encode("utf-8")).hexdigest(),
+                        snapshot=after,
+                        confirmation_status="user_confirmed",
+                    ))
+                    item.asset_revision = next_revision
+                    item.asset_revisions = history
                 for episode_id in series.episode_ids:
                     episode = self.scripts.get(episode_id)
                     if episode is None or episode.series_id != series_id:
