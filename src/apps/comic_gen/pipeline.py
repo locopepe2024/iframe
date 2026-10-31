@@ -57,6 +57,7 @@ from .models import (
     EpisodeVisualShotContext,
     EpisodeAssetBinding,
     AssetRevisionPin,
+    CrowdAssetRevisionPin,
     ArtifactLineage,
     SourceRange,
     ScriptSourceRevision,
@@ -5856,6 +5857,23 @@ class ComicGenPipeline(StudioOwnerMixin):
         roster = {item.extra_id: item for item in series.extra_roster} if series else {}
         selected_extras = [roster[item.extra_id or item.template_id].model_copy(deep=True)
                            for item in frame.crowd_instances]
+        crowd_pins = []
+        for instance in frame.crowd_instances:
+            entry = roster[instance.extra_id or instance.template_id]
+            variant_ids = list(instance.variant_ids)
+            media_ids = []
+            for variant_id in variant_ids:
+                media_id = entry.reference_media_ids.get(variant_id)
+                if media_id:
+                    media_ids.append(media_id)
+            crowd_pins.append(CrowdAssetRevisionPin(
+                extra_id=entry.extra_id,
+                kind=entry.kind,
+                revision=instance.asset_revision or entry.asset_revision,
+                variant_ids=variant_ids,
+                media_ids=media_ids,
+                visual_asset_id=entry.visual_asset_id,
+            ))
         package = frame.reference_package
         pins = (
             [item.model_copy(deep=True) for item in package.asset_revision_pins]
@@ -5893,6 +5911,7 @@ class ComicGenPipeline(StudioOwnerMixin):
             asset_dimensions=asset_dimensions,
             crowd_instances=[item.model_copy(deep=True) for item in frame.crowd_instances],
             crowd_roster_snapshot=selected_extras,
+            crowd_asset_revision_pins=crowd_pins,
             reference_package_revision=package.revision,
             reference_visual_projection=visual_projection,
             shot_visual_design=visual_design,

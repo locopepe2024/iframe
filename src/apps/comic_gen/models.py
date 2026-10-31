@@ -387,6 +387,17 @@ class AssetRevisionPin(BaseModel):
     confirmation_status: Literal["legacy_attached", "user_confirmed"] = "legacy_attached"
 
 
+class CrowdAssetRevisionPin(BaseModel):
+    """Immutable reference to a series crowd entry used by one shot."""
+
+    extra_id: str = Field(..., min_length=1)
+    kind: Literal["fixed_extra", "extra_template"]
+    revision: int = Field(..., ge=1)
+    variant_ids: List[str] = Field(default_factory=list, max_length=20)
+    media_ids: List[str] = Field(default_factory=list, max_length=20)
+    visual_asset_id: Optional[str] = None
+
+
 class PoseReferenceSelection(BaseModel):
     """Durable pose evidence selected for one storyboard shot.
 
@@ -640,6 +651,8 @@ class ExtraRosterEntry(BaseModel):
     """Reusable series-level crowd performer or bounded performer template."""
 
     extra_id: str = Field(..., min_length=1, max_length=120)
+    asset_revision: int = Field(1, ge=1)
+    asset_revisions: List[AssetRevision] = Field(default_factory=list)
     label: str = Field(..., min_length=1, max_length=160)
     kind: Literal["fixed_extra", "extra_template"] = "fixed_extra"
     height: Optional[str] = Field(None, max_length=120)
@@ -663,6 +676,7 @@ class ExtraShotInstance(BaseModel):
 
     extra_id: Optional[str] = Field(None, max_length=120)
     template_id: Optional[str] = Field(None, max_length=120)
+    asset_revision: Optional[int] = Field(None, ge=1)
     layer: Literal["near", "mid", "far"] = "mid"
     region: str = Field("", max_length=240)
     relative_scale: Optional[str] = Field(None, max_length=120)
@@ -944,6 +958,7 @@ class StoryboardConsistencyManifest(BaseModel):
     asset_dimensions: Dict[str, Dict[str, Any]] = Field(default_factory=dict)
     crowd_instances: List[ExtraShotInstance] = Field(default_factory=list)
     crowd_roster_snapshot: List[ExtraRosterEntry] = Field(default_factory=list)
+    crowd_asset_revision_pins: List[CrowdAssetRevisionPin] = Field(default_factory=list)
     reference_package_revision: Optional[int] = Field(None, ge=1)
     reference_visual_projection: Optional[StoryboardReferenceProjectionSnapshot] = None
     shot_visual_design: Optional[ShotVisualDesignSnapshot] = None

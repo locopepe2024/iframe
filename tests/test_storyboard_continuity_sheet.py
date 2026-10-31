@@ -250,6 +250,9 @@ def test_series_extra_roster_and_shot_instance_snapshot(tmp_path):
     assert [item.extra_id for item in manifest.crowd_roster_snapshot] == ["extra-01", "street-template"]
     assert manifest.crowd_instances[0].region == "粮铺门前"
     assert manifest.crowd_instances[0].variant_ids == ["v1"]
+    assert manifest.crowd_asset_revision_pins[0].extra_id == "extra-01"
+    assert manifest.crowd_asset_revision_pins[0].revision == fixed.asset_revision
+    assert manifest.crowd_asset_revision_pins[0].variant_ids == ["v1"]
     assert "群演：粮铺常客；near层；粮铺门前；约170厘米" in pipeline.storyboard_continuity_sheet(script.id)["rows"][0]["asset_visual_context"]
     with pytest.raises(ValueError, match="invalidate a shot reference"):
         pipeline.update_series("series", {"extra_roster": [template]})
