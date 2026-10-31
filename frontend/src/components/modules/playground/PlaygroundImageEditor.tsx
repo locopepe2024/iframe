@@ -1,4 +1,5 @@
 'use client';
+import { imageEditSaveIntent, type ImageEditSaveIntent } from '@/lib/imageEditSaveIntent';
 
 import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
 import { useTranslations } from 'next-intl';
@@ -39,7 +40,7 @@ function EditorSession({ reference, title, sessionId, onClose }: { reference?: s
   const [hasUnsavedEdit, setHasUnsavedEdit] = useState(false);
   const mounted = useRef(true);
   useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
-  const retry = useRef<{ hash: string; key: string }>();
+  const retry = useRef<ImageEditSaveIntent>();
   useEffect(() => { imageEditorApi.list().then(records => { copiesRef.current = records; setCopies(records); }).catch(() => setError(t('historyFailed'))); }, [t]);
   useEffect(() => {
     if (!selected) return;
@@ -101,9 +102,8 @@ function EditorSession({ reference, title, sessionId, onClose }: { reference?: s
     onMove={moveReference} onUseResult={useResult}/>;
   const saveFile = async (file: File, projection?: ImageProjectionType) => {
     if (!loaded) throw new Error('No source');
-    const bytes = await crypto.subtle.digest('SHA-256', await file.arrayBuffer());
-    const hash = Array.from(new Uint8Array(bytes), v => v.toString(16).padStart(2, '0')).join('') + file.name + (projection ?? projectionType);
-    if (retry.current?.hash !== hash) retry.current = { hash, key: crypto.randomUUID() };
+    const bytes = new Uint8Array(await file.arrayBuffer());
+    retry.current = imageEditSaveIntent(retry.current, bytes, JSON.stringify([loaded.source.reference, loaded.source.sha256, file.name, projection ?? projectionType]));
     const saved = await imageEditorApi.save(loaded.source, file, retry.current.key, projection ?? projectionType);
     append(saved); toast.success(t('saved')); onClose();
   };
