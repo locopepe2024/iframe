@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { spokenTurnMeta } from "./spokenTurnText";
+import { spokenAnnouncementKey, spokenTurnMeta } from "./spokenTurnText";
 
 describe("spokenTurnMeta", () => {
   it("uses task identity and revision for announcement de-duplication", () => {
@@ -26,5 +26,12 @@ describe("spokenTurnMeta", () => {
     expect(spokenTurnMeta({ kind: "text", text: "我在听。" })).toEqual({
       text: "我在听。", reason: "chat",
     });
+  });
+
+  it("can hydrate the announcement ledger from a persisted task result", () => {
+    expect(spokenAnnouncementKey({
+      kind: "photo_task", task_id: "photos-2", revision: 1,
+      status: "waiting_input", step: "select_photo", photos: [], spoken_text: "请选一张。",
+    })).toBe("photo_task:photos-2:1:waiting_input:select_photo");
   });
 });

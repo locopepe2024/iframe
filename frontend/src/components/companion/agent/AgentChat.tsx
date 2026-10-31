@@ -166,7 +166,17 @@ export default function AgentChat() {
   useEffect(() => { void detectCompanionRuntimeCapability().then(setRuntimeCapability); }, []);
   async function history(id: string, cursor?: number) {
     const result = await companionApi.messages(id, cursor);
-    if (alive.current) { setMessages(old => cursor !== undefined ? [...result.messages, ...old] : result.messages); setAfter(result.next_before ?? null); }
+    if (alive.current) {
+      // Rebuild the task announcement ledger from persisted turns so a page
+      // refresh does not make the same task revision speak again.
+      if (cursor === undefined) {
+        for (const message of result.messages) {
+          const spoken = spokenTurnMeta(message.turn?.result);
+          if (spoken?.announcementKey) announcedTaskStates.current.add(spoken.announcementKey);
+        }
+      }
+      setMessages(old => cursor !== undefined ? [...result.messages, ...old] : result.messages); setAfter(result.next_before ?? null);
+    }
   }
   useEffect(() => {
     setIdentity(readCompanionIdentity());
