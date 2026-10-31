@@ -53,7 +53,24 @@ class EditingService:
         row = db.execute('SELECT data FROM edits WHERE id=? AND owner=?', (edit_id, self.user.owner_profile_id)).fetchone()
         if not row:
             raise HTTPException(404, 'Editing project not found')
-        return json.loads(row[0])
+        record = json.loads(row[0])
+        if record.get('deleted_at') is not None:
+            raise HTTPException(404, 'Editing project not found')
+        self._ensure_workspace(record)
+        return record
+
+    def _workspace(self, record):
+        return self.root / 'projects' / record['id']
+
+    def _ensure_workspace(self, record):
+        workspace = self._workspace(record)
+        (workspace / 'tmp').mkdir(parents=True, exist_ok=True)
+        (workspace / 'outputs').mkdir(parents=True, exist_ok=True)
+        if record.get('workspace') != workspace.relative_to(self.output_root).as_posix():
+            record['workspace'] = workspace.relative_to(self.output_root).as_posix()
+            # Best effort migration for old records; callers that have a write
+            # transaction persist the updated record as part of their operation.
+        return workspace
 
     def _persist(self, db, record):
         serialized = json.dumps(record)
@@ -62,18 +79,33 @@ class EditingService:
 
     def list(self):
         with self.db() as db:
-            return [json.loads(row[0]) for row in db.execute('SELECT data FROM edits WHERE owner=? ORDER BY rowid DESC', (self.user.owner_profile_id,))]
+            records = []
+            for row in db.execute('SELECT data FROM edits WHERE owner=? ORDER BY rowid DESC', (self.user.owner_profile_id,)):
+                record = json.loads(row[0])
+                if record.get('deleted_at') is not None:
+                    continue
+                self._ensure_workspace(record)
+                records.append(record)
+            return records
 
     def get(self, edit_id):
         with self.db() as db:
             return self._get(db, edit_id)
 
     def create(self, title):
-        record = dict(id=uuid4().hex, title=title, revision=0, plan=None, sources={}, output=None, created_at=time.time())
+        record = dict(id=uuid4().hex, title=title, revision=0, plan=None, sources={}, output=None, created_at=time.time(), deleted_at=None)
+        self._ensure_workspace(record)
         with self.db() as db:
             db.execute('INSERT INTO edits VALUES(?,?,?)', (record['id'], self.user.owner_profile_id, json.dumps(record)))
             self._persist(db, record)
         return record
+
+    def delete(self, edit_id):
+        with self.db() as db:
+            record = self._get(db, edit_id)
+            record['deleted_at'] = time.time()
+            db.execute('UPDATE edits SET data=? WHERE id=? AND owner=?', (json.dumps(record), edit_id, self.user.owner_profile_id))
+        return {'id': edit_id, 'deleted': True}
 
     def materials(self, query='', cursor=0):
         return self.materials_page(query=query, cursor=cursor)
@@ -348,7 +380,8 @@ class EditingService:
         plan = AssemblyEditPlan.model_validate(record['plan'])
         _, paths, videos = self.validate(plan, record['sources'])
         audio = [(l.kind,c) for l in plan.lanes if l.kind in ('dialogue','bgm','sfx') and not l.muted for c in l.clips if c.enabled]
-        output = self.root / (uuid4().hex + '.mp4')
+        output = self._workspace(record) / 'outputs' / (uuid4().hex + '.mp4')
+        output.parent.mkdir(parents=True, exist_ok=True)
         try:
             ffmpeg = get_ffmpeg_path()
             if not ffmpeg:
