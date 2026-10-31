@@ -5,9 +5,10 @@ import {pcmWav,SilenceSegments} from "@/lib/companionSegments";
 import {companionPlayback} from "@/lib/companionPlaybackQueue";
 import {newVoiceTrace,voiceStage,type VoiceTrace} from "@/lib/companionVoiceTrace";
 
-export function useContinuousCapture(onText:(text:string,trace?:VoiceTrace)=>void) {
+export function useContinuousCapture(onText:(text:string,trace?:VoiceTrace)=>void,onSpeechStart?:()=>void) {
  const [listening,setListening]=useState(false),[finishing,setFinishing]=useState(false),[notice,setNotice]=useState(""),[failed,setFailed]=useState(false),[playing,setPlaying]=useState(false);
  const callback=useRef(onText);callback.current=onText;
+ const speechStart=useRef(onSpeechStart);speechStart.current=onSpeechStart;
  const generation=useRef(0),stream=useRef<MediaStream|null>(null),context=useRef<AudioContext|null>(null),cleanup=useRef<(()=>void)|null>(null),segment=useRef<SilenceSegments|null>(null);
  const queue=useRef<{blob:Blob;trace:VoiceTrace}[]>([]),running=useRef(false),paused=useRef(false),controller=useRef<AbortController|null>(null),intent=useRef(false);
  function release(){intent.current=false;cleanup.current?.();cleanup.current=null;segment.current=null;stream.current?.getTracks().forEach(t=>{t.onended=null;t.stop();});stream.current=null;void context.current?.close().catch(()=>{});context.current=null;setListening(false);}
@@ -49,7 +50,7 @@ export function useContinuousCapture(onText:(text:string,trace?:VoiceTrace)=>voi
        queue.current.push({blob:pcmWav(samples,audio.sampleRate),trace});
        if(queue.current.length>=12){release();setNotice("识别暂时跟不上，已暂停收音，正在处理已录内容。");setFinishing(true);}
        void drain();
-     });segment.current=parts;
+     },()=>speechStart.current?.());segment.current=parts;
      const disconnect=await captureMicrophonePcm(audio,microphone,frame=>{
        if(version!==generation.current || !intent.current)return;
        if(companionPlayback.blocksCapture()){parts.reset();return;}

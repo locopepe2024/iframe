@@ -18,9 +18,10 @@ const modes = [
   { value: "video", label: "视频", icon: Video },
 ] as const;
 
-export default function CompanionComposer({ mode, value, disabled, busy, allowed, inputRef, onMode, onChange, onSend, onVoiceFinal, onUpload, onAllow, onRequestConsent, retry, attachments, hasAttachments = false, mediaAcknowledged = false, onMediaAcknowledged, onCaptureStatus, onVoiceStart, voiceControl, onCaptureActive, onVoiceCancel, unified = false, onCreative }: {
+export default function CompanionComposer({ mode, value, disabled, busy, allowed, inputRef, onMode, onChange, onSend, onVoiceFinal, onUpload, onAllow, onRequestConsent, retry, attachments, hasAttachments = false, mediaAcknowledged = false, onMediaAcknowledged, onCaptureStatus, onVoiceStart, voiceControl, onCaptureActive, onSpeechStart, onVoiceCancel, unified = false, onCreative }: {
   unified?: boolean; onCreative?: (type:"image_edit"|"image_generate"|"video_generate")=>void;
   onVoiceCancel?: ()=>void; voiceControl?: VoiceControl; onCaptureActive?: (active:boolean)=>void;
+  onSpeechStart?: ()=>void;
   onCaptureStatus?: (status: string) => void; onVoiceStart?: () => void;
   mode: ComposerMode; value: string; disabled: boolean; busy: boolean; allowed: boolean;
   inputRef: RefObject<HTMLTextAreaElement>;
@@ -34,7 +35,7 @@ export default function CompanionComposer({ mode, value, disabled, busy, allowed
   const [voiceConsent, setVoiceConsent] = useState(false), [voicePrompt, setVoicePrompt] = useState(false);
   const picker = useRef<HTMLDivElement>(null), trigger = useRef<HTMLButtonElement>(null);
   const [engine,setEngine] = useState<"browser"|"local">(process.env.NEXT_PUBLIC_API_URL === "/companion-demo" ? "local" : "browser");
-  const capture=useContinuousCapture((text,trace)=>onVoiceFinal?.(text.slice(0,4000),trace));
+  const capture=useContinuousCapture((text,trace)=>onVoiceFinal?.(text.slice(0,4000),trace),onSpeechStart);
   const browserVoice = useCompanionVoice(text => {
     if (mode === "chat" && onVoiceFinal) return;
     const next = `${value}${value ? " " : ""}${text}`.slice(0, 4000);

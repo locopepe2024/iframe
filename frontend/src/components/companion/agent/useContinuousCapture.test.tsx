@@ -5,7 +5,7 @@ const mock=vi.hoisted(()=>({capture:vi.fn()}));
 vi.mock("@/lib/companionApi",()=>({companionApi:{voiceDiagnostic:vi.fn().mockResolvedValue({status:"recorded"})}}));
 vi.mock("@/lib/companionRealtimeAudio",()=>({captureMicrophonePcm:mock.capture}));
 afterEach(()=>{vi.unstubAllGlobals();vi.restoreAllMocks();});
-function setup(){
+function setup(onSpeechStart?:()=>void){
  let audio!:(chunk:Float32Array)=>void;
  const stop=vi.fn(),close=vi.fn().mockResolvedValue(undefined),disconnect=vi.fn();
  const track={stop,onended:null};
@@ -14,7 +14,7 @@ function setup(){
  vi.stubGlobal("AudioContext",class {sampleRate=16000;resume=vi.fn().mockResolvedValue(undefined);close=close;});
  mock.capture.mockImplementation(async(_a,_s,cb)=>{audio=cb;return disconnect;});
  const fetch=vi.fn().mockResolvedValue({ok:true,json:async()=>({text:"今天开心"})});vi.stubGlobal("fetch",fetch);
- const text=vi.fn(),hook=renderHook(()=>useContinuousCapture(text));
+ const text=vi.fn(),hook=renderHook(()=>useContinuousCapture(text,onSpeechStart));
  const sentence=()=>act(()=>{for(let i=0;i<25;i++)audio(new Float32Array(320).fill(.1));for(let i=0;i<45;i++)audio(new Float32Array(320));});
  return {hook,text,fetch,stop,close,disconnect,getUserMedia,sentence,getAudio:()=>audio};
 }
@@ -76,4 +76,18 @@ it("preserves unfinished user speech when an assistant reply starts playing",asy
  expect(s.fetch).toHaveBeenCalledOnce();
  await act(async()=>companionPlayback.cancel());
  s.hook.unmount();clock.mockRestore();
+});
+
+it("reports utterance onset once per segment and ignores silence and playback echo",async()=>{
+ const {companionPlayback}=await import("@/lib/companionPlaybackQueue");
+ const clock=vi.spyOn(performance,"now").mockReturnValue(performance.now()+10000);
+ const onset=vi.fn(),s=setup(onset);
+ act(()=>s.hook.result.current.toggleListening());await waitFor(()=>expect(s.getAudio()).toBeDefined());
+ act(()=>{for(let i=0;i<50;i++)s.getAudio()(new Float32Array(320));});
+ expect(onset).not.toHaveBeenCalled();
+ s.sentence();s.sentence();
+ expect(onset).toHaveBeenCalledTimes(2);
+ act(()=>companionPlayback.enqueue(Symbol(),async(signal,playing)=>{playing();await new Promise<void>(r=>signal.addEventListener("abort",()=>r(),{once:true}));}));
+ s.sentence();expect(onset).toHaveBeenCalledTimes(2);
+ await act(async()=>companionPlayback.cancel());s.hook.unmount();clock.mockRestore();
 });

@@ -6,7 +6,7 @@ export class SilenceSegments {
   private quiet = 0;
   private voiced = 0;
   private active = false;
-  constructor(private rate: number, private emit: (samples: Float32Array) => void) {}
+  constructor(private rate: number, private emit: (samples: Float32Array) => void, private onSpeechStart: () => void = () => {}) {}
   reset() { this.frames=[];this.lead=[];this.count=this.quiet=this.voiced=0;this.active=false; }
   push(frame: Float32Array) {
     const rms=Math.sqrt(frame.reduce((sum,v)=>sum+v*v,0)/frame.length);
@@ -17,6 +17,7 @@ export class SilenceSegments {
       this.voiced=loud?this.voiced+frame.length:0;
       if(this.voiced<this.rate*.08)return;
       this.active=true;this.frames=this.lead;this.lead=[];this.count=this.frames.reduce((n,f)=>n+f.length,0);
+      this.onSpeechStart();
     } else {this.frames.push(frame.slice());this.count+=frame.length;}
     this.quiet=loud?0:this.quiet+frame.length;
     if(this.quiet>=this.rate*.9 || this.count>=this.rate*15)this.flush();

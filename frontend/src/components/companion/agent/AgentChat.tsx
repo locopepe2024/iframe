@@ -542,7 +542,13 @@ export default function AgentChat() {
       if(files.length>20){setNotice("每次最多选择 20 个文件，请重新选择。");return;}
       if(files.length){setUploadFiles(files);setNotice("");}
     }} />
-    <CompanionComposer unified onCreative={type=>void run(()=>startCreative(type))} voiceControl={voiceControl} onCaptureActive={captureChanged} onVoiceCancel={()=>setVoiceChat(false)} onCaptureStatus={setCaptureStatus} onVoiceStart={() => setVoiceConnectionEpoch(value => value + 1)} mode={mode} value={text} disabled={inputDisabled || pending} busy={busy} allowed={allowed} inputRef={inputRef}
+    <CompanionComposer onSpeechStart={() => {
+      // Local capture emits onset only outside playback/echo suppression.
+      // Invalidate an older request's audio while the user speaks again.
+      speechEpoch.current++;
+      companionPlayback.cancel();
+      setSpokenReply(null);
+    }} unified onCreative={type=>void run(()=>startCreative(type))} voiceControl={voiceControl} onCaptureActive={captureChanged} onVoiceCancel={()=>setVoiceChat(false)} onCaptureStatus={setCaptureStatus} onVoiceStart={() => setVoiceConnectionEpoch(value => value + 1)} mode={mode} value={text} disabled={inputDisabled || pending} busy={busy} allowed={allowed} inputRef={inputRef}
       attachments={<AttachmentDraft items={pendingMedia[mode]} disabled={inputDisabled || pending} onRemove={id => {setPendingMedia(old => ({...old,[mode]:old[mode].filter(item=>item.id!==id)}));setMediaAcknowledged(false);}} />}
       hasAttachments={pendingMedia[mode].length > 0} mediaAcknowledged={mediaAcknowledged} onMediaAcknowledged={setMediaAcknowledged}
       onMode={next => {setMode(next);setAlbumOpen(false);setMediaAcknowledged(false);}} onChange={updateDraft} onSend={submit} onVoiceFinal={(voiceText,trace) => {
