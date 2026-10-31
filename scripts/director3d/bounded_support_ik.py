@@ -119,6 +119,73 @@ def summarize_contact_phases(samples, fps):
             'maxPatchVertexDriftM': max((math.dist(p[:2], q[:2]) for s in items
                                           for p, q in zip(items[0]['soleRegionWorldM'], s['soleRegionWorldM'])), default=None),
             'minPatchZM': min((p[2] for s in items for p in s['soleRegionWorldM']), default=None),
+            'patchPlane': fit_contact_plane(items[0]['soleRegionWorldM']) if items and len(items[0]['soleRegionWorldM']) >= 3 else None,
+            'planeCorrection': None,
             'maxPatchVertexSpeedMps': max((math.dist(p[:2], q[:2])*fps for a, b in pairs
                                           for p, q in zip(a['soleRegionWorldM'], b['soleRegionWorldM'])), default=None)}
+    for phase, items in groups.items():
+        plane = result[phase]['patchPlane']
+        if plane is not None:
+            try:
+                result[phase]['planeCorrection'] = bounded_plane_correction(items[0]['soleRegionWorldM'])
+            except ValueError as exc:
+                result[phase]['planeCorrection'] = {'status': 'rejected', 'reason': str(exc), 'applied': False}
     return result
+
+
+def contact_anchor_from_patch(points, ground_z=0.0):
+    if not isinstance(points, list) or not points:
+        raise ValueError('contact patch requires points')
+    for point in points:
+        vector(point)
+    if isinstance(ground_z, bool) or not isinstance(ground_z, (int, float)) or not math.isfinite(ground_z):
+        raise ValueError('invalid contact ground')
+    return [sum(point[i] for point in points) / len(points) for i in range(2)] + [ground_z]
+
+
+def fit_contact_plane(points):
+    """Fit z=ax+by+c; return tilt and residuals without accepting contact."""
+    if not isinstance(points, list) or len(points) < 3:
+        raise ValueError('contact plane requires three points')
+    for point in points:
+        vector(point)
+    sxx = sum(p[0]*p[0] for p in points); sxy = sum(p[0]*p[1] for p in points)
+    syy = sum(p[1]*p[1] for p in points); sx = sum(p[0] for p in points); sy = sum(p[1] for p in points)
+    sz = sum(p[2] for p in points); sxz = sum(p[0]*p[2] for p in points); syz = sum(p[1]*p[2] for p in points)
+    matrix = [[sxx, sxy, sx], [sxy, syy, sy], [sx, sy, len(points)]]; rhs = [sxz, syz, sz]
+    for col in range(3):
+        pivot = max(range(col, 3), key=lambda row: abs(matrix[row][col]))
+        if abs(matrix[pivot][col]) < 1e-10:
+            raise ValueError('contact patch is collinear in XY')
+        matrix[col], matrix[pivot] = matrix[pivot], matrix[col]; rhs[col], rhs[pivot] = rhs[pivot], rhs[col]
+        scale = matrix[col][col]
+        matrix[col] = [v/scale for v in matrix[col]]; rhs[col] /= scale
+        for row in range(3):
+            if row == col: continue
+            factor = matrix[row][col]
+            matrix[row] = [a-factor*b for a,b in zip(matrix[row], matrix[col])]
+            rhs[row] -= factor*rhs[col]
+    a, b, c = rhs
+    residuals = [p[2]-(a*p[0]+b*p[1]+c) for p in points]
+    tilt = math.degrees(math.atan(math.sqrt(a*a+b*b)))
+    return {'status': 'diagnostic_only', 'slopeXY': [a, b], 'interceptZM': c,
+            'tiltDeg': tilt, 'maxAbsResidualM': max(abs(v) for v in residuals),
+            'rmsResidualM': math.sqrt(sum(v*v for v in residuals)/len(residuals))}
+
+
+def bounded_plane_correction(points, max_tilt_deg=8.0):
+    fit = fit_contact_plane(points)
+    if isinstance(max_tilt_deg, bool) or not isinstance(max_tilt_deg, (int, float)) or not math.isfinite(max_tilt_deg) or max_tilt_deg <= 0:
+        raise ValueError('invalid contact tilt limit')
+    if fit['tiltDeg'] > max_tilt_deg:
+        raise ValueError('contact plane tilt exceeds bounded correction')
+    a, b = fit['slopeXY']
+    length = math.sqrt(a*a+b*b)
+    if length < 1e-10:
+        axis = [0.0, 0.0, 0.0]
+    else:
+        axis = [-b/length, a/length, 0.0]
+    return {'status': 'diagnostic_only', 'tiltDeg': fit['tiltDeg'],
+            'maxTiltDeg': max_tilt_deg, 'axisWorld': axis,
+            'angleDeg': -fit['tiltDeg'], 'applied': False,
+            'planeResidualM': fit['maxAbsResidualM']}

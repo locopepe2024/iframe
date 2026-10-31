@@ -14,7 +14,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from sole_contact_metrics import summarize_sole
 from support_contact_metrics import measure_interval, validate_annotations
 from bounded_support_ik import (blend_weight, solve_leg, validate_cycle_samples,
-                                bounded_refinement_offset, summarize_contact_phases)
+                                bounded_refinement_offset, summarize_contact_phases, contact_anchor_from_patch)
 from shared_route_metrics import validate_route_continuity, validate_shared_routes
 from world_route import validate_world_route
 from blender_world_route import capture_route_roots, apply_route_offset
@@ -277,6 +277,8 @@ def main():
     parser.add_argument("--preview-dir", type=Path)
     parser.add_argument("--sole-contact", action="store_true", help="Measure weighted sole-region geometry; no contact acceptance")
     parser.add_argument("--support-annotations", type=Path, help="Explicit checksum-bound support interval hypotheses and route offsets")
+    parser.add_argument("--sole-anchor", choices=("fixed", "centroid"), default="fixed",
+                        help="Support anchor source: annotated fixed vertex or weighted sole-region centroid")
     parser.add_argument("--sole-refine", action="store_true", help="Opt-in bounded full-weight evaluated-sole refinement")
     parser.add_argument("--world-route", type=Path, help="Complete checksum/FPS-bound world translations; offline playback only")
     parser.add_argument("--support-ik", action="store_true", help="Offline bounded two-bone trial, not contact acceptance")
@@ -496,7 +498,11 @@ def main():
                     if frame == item['startFrame']:
                         slot = next(i for i, (obj, index) in enumerate(regions[item['side']])
                                     if obj.name == item['mesh'] and index == item['vertexIndex'])
-                        point = Vector(evaluated_sole(regions)[item['side']][slot])
+                        evaluated_points = evaluated_sole(regions)[item['side']]
+                        if args.sole_anchor == 'centroid':
+                            point = Vector(contact_anchor_from_patch(evaluated_points))
+                        else:
+                            point = Vector(evaluated_points[slot])
                         point += Vector(item['routeTranslationsM'][0])
                         anchors[item_index] = [point.x, point.y, 0]
                     ik_samples.append(apply_support_ik(target, regions, item, frame, anchors[item_index], refine=args.sole_refine))
@@ -602,6 +608,7 @@ def main():
         "sequenceRendered": bool(args.sequence_dir),
         "supportAnnotationSha256": sha256(args.support_annotations) if args.support_annotations else None,
         "soleRefinementEnabled": args.sole_refine,
+        "soleAnchorMode": args.sole_anchor,
         "worldRoute": {**full_route, 'routeApplied': True,
                        'inputSha256': sha256(args.world_route),
                        'applicationStage': 'post_ik_pre_measurement_world_translation'} if full_route else None,

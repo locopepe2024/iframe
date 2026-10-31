@@ -23,3 +23,16 @@ Success: local behavioral tests cover phase attribution and unsafe cumulative
 requests; media Blender A/B on the same model/route/support must improve full-
 weight selected-point residual, preserve ramps and report patch limits honestly.
 Render paired full-body/feet video in director3d/reviews for inspection.
+
+The optional `--sole-anchor centroid` experiment was run against the same media
+white model. It failed closed at the existing `requested support offset exceeds
+0.05 m` bound before IK, so no centroid result or video is accepted. The selected
+region contains vertices too far from the ankle target for a direct whole-region
+centroid. Keep `fixed` as the default; a usable patch anchor needs a contact-region
+filter and foot-orientation model before this option can be enabled for review.
+
+`bounded_plane_correction` converts a fitted z-plane slope into a world-axis
+rotation request. It is diagnostic only and defaults to an 8 degree limit;
+requests above the limit are rejected. The current fixture's 12 degree tilt is
+therefore rejected rather than silently rotating the ankle. A future solver must
+apply the request to a validated foot chain and remeasure patch residuals.

@@ -48,3 +48,43 @@ def test_patch_motion_is_visible_even_if_anchor_is_stationary():
     assert result['maxAnchorResidualM'] == 0
     assert result['minPatchZM'] == -.008
     assert result['maxPatchVertexSpeedMps'] > .2
+
+
+def test_contact_anchor_centroid_uses_full_patch_and_ground_plane():
+    from bounded_support_ik import contact_anchor_from_patch
+    assert contact_anchor_from_patch([[0, 0, .01], [2, 0, .02], [0, 2, .03]]) == [pytest.approx(2/3), pytest.approx(2/3), 0]
+
+
+def test_contact_anchor_rejects_empty_or_nonfinite_patch():
+    from bounded_support_ik import contact_anchor_from_patch
+    with pytest.raises(ValueError):
+        contact_anchor_from_patch([])
+    with pytest.raises(ValueError):
+        contact_anchor_from_patch([[float('nan'), 0, 0]])
+
+
+def test_contact_plane_reports_tilt_and_residual():
+    from bounded_support_ik import fit_contact_plane
+    result = fit_contact_plane([[0, 0, 0], [1, 0, .1], [0, 1, 0], [1, 1, .1]])
+    assert result['tiltDeg'] == pytest.approx(5.7106, rel=1e-3)
+    assert result['maxAbsResidualM'] == pytest.approx(0)
+
+
+def test_contact_plane_rejects_xy_collinear_points():
+    from bounded_support_ik import fit_contact_plane
+    with pytest.raises(ValueError, match='collinear'):
+        fit_contact_plane([[0, 0, 0], [1, 0, .1], [2, 0, .2]])
+
+
+def test_bounded_plane_correction_returns_unapplied_request():
+    from bounded_support_ik import bounded_plane_correction
+    result = bounded_plane_correction([[0, 0, 0], [1, 0, .01], [0, 1, 0]])
+    assert result['applied'] is False
+    assert result['angleDeg'] == pytest.approx(-0.5729, rel=1e-3)
+    assert result['planeResidualM'] == pytest.approx(0)
+
+
+def test_bounded_plane_correction_rejects_large_tilt():
+    from bounded_support_ik import bounded_plane_correction
+    with pytest.raises(ValueError, match='tilt'):
+        bounded_plane_correction([[0, 0, 0], [1, 0, .3], [0, 1, 0]])
