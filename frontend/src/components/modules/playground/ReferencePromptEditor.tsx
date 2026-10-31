@@ -17,6 +17,7 @@ export type ReferenceCandidate = {
   previewUrl?: string;
   sourceLabel?: string;
   variantLabel?: string;
+  description?: string;
 };
 
 export type ReferenceSuggestion = {

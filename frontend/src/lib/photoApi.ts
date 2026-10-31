@@ -179,8 +179,8 @@ export const photoApi = {
     if (!response.ok) throw serviceError(response.status);
     return response.json() as Promise<{ photo_id: string; batch_id: string; created: boolean }>;
   },
-  image: async (id: string) => {
-    const response = await authenticatedFetch(`${base}/${encodeURIComponent(id)}/thumbnail`, {
+  image: async (id: string, original = false) => {
+    const response = await authenticatedFetch(`${base}/${encodeURIComponent(id)}/${original ? "original" : "thumbnail"}`, {
       credentials: "include", cache: "no-store",
     });
     if (!response.ok) throw serviceError(response.status);
