@@ -170,6 +170,15 @@ class EditingService:
             self._assign_folder(db, material_key, folder_id)
         return dict(id=material_key, folder_id=folder_id)
 
+    @staticmethod
+    def _card_media(item):
+        # Never probe all historic videos on a directory read. New uploads carry
+        # verified metadata; legacy cards show an unknown duration until opened.
+        metadata = item.get('metadata') or {}
+        video = Path(item.get('storage_key') or item.get('storage_path') or '').suffix.lower() in ('.mp4', '.mov', '.mkv', '.webm')
+        return dict(video=metadata.get('video', video), audio=metadata.get('audio', not video),
+                    duration_ms=metadata.get('duration_ms', 0))
+
     def materials_page(self, query='', cursor=0, folder_id=None):
         items = []
         with self.db() as db:
@@ -184,7 +193,7 @@ class EditingService:
             assigned = assignments.get(key)
             if key in deleted or (folder_id in ('__none', '__root') and ((folder_id == '__none' and assigned is not None) or (folder_id == '__root' and assigned is not None))) or (folder_id not in (None, '__none', '__root') and assigned != folder_id):
                 continue
-            items.append(dict(id=key, name=item['display_name'], url=item['storage_key'], origin='upload' if item['kind'] in ('editing_upload', 'temporary_input') else 'generated', sha256=item['sha256'], created_at=item['created_at'], folder_id=assigned, folder_name=folder_names.get(assigned), deletable=item['kind'] == 'editing_upload'))
+            items.append(dict(id=key, name=item['display_name'], url=item['storage_key'], origin='upload' if item['kind'] in ('editing_upload', 'temporary_input') else 'generated', sha256=item['sha256'], created_at=item['created_at'], **self._card_media(item), folder_id=assigned, folder_name=folder_names.get(assigned), deletable=item['kind'] == 'editing_upload'))
         recreation = RecreationService(self.user, output_root=str(self.output_root))
         for kind in ('source_video', 'generated_video', 'final_video'):
             offset = 0
@@ -195,7 +204,7 @@ class EditingService:
                     assigned = assignments.get(key)
                     if key in deleted or (folder_id in ('__none', '__root') and ((folder_id == '__none' and assigned is not None) or (folder_id == '__root' and assigned is not None))) or (folder_id not in (None, '__none', '__root') and assigned != folder_id):
                         continue
-                    items.append(dict(id=key, name=item['display_name'], url=item['storage_path'], origin='upload' if kind == 'source_video' else 'generated', sha256=item['sha256'], created_at=item['created_at'], folder_id=assigned, folder_name=folder_names.get(assigned), deletable=False))
+                    items.append(dict(id=key, name=item['display_name'], url=item['storage_path'], origin='upload' if kind == 'source_video' else 'generated', sha256=item['sha256'], created_at=item['created_at'], **self._card_media(item), folder_id=assigned, folder_name=folder_names.get(assigned), deletable=False))
                 if page['next_cursor'] is None:
                     break
                 offset = page['next_cursor']
@@ -300,7 +309,7 @@ class EditingService:
             with self.db() as db:
                 if folder_id and not db.execute('SELECT 1 FROM editing_folders WHERE id=? AND owner=?', (folder_id, self.user.owner_profile_id)).fetchone():
                     raise HTTPException(404, 'Folder not found')
-                media_id = register_media(self.user.owner_profile_id, path.relative_to(self.output_root).as_posix(), kind='editing_upload', display_name=Path(filename).name, sha256=fingerprint(path), output_root=str(self.output_root))
+                media_id = register_media(self.user.owner_profile_id, path.relative_to(self.output_root).as_posix(), kind='editing_upload', display_name=Path(filename).name, sha256=fingerprint(path), metadata=dict(duration_ms=round(float(data['format']['duration']) * 1000), video=any(s['codec_type'] == 'video' for s in data['streams']), audio=any(s['codec_type'] == 'audio' for s in data['streams'])), output_root=str(self.output_root))
                 self._assign_folder(db, 'core:'+media_id, folder_id)
             return self.resolve('core:'+media_id)[0]
         except BaseException:
