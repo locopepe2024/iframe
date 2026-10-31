@@ -4,7 +4,7 @@ import pytest
 
 from tests.test_director_shooting_plan import make_pipeline, make_plan, SOURCE_TEXT
 from src.apps.comic_gen.pipeline import StaleStoryboardDraftError
-from src.apps.comic_gen.storyboard_workflow import validate_plan_coverage
+from src.apps.comic_gen.storyboard_workflow import materialize_plan, validate_plan_coverage
 from src.apps import director_skills
 
 
@@ -45,6 +45,22 @@ def test_coverage_rejects_loss_unknown_and_reordering(ids):
 def test_coverage_allows_contiguous_splitting():
     validate_plan_coverage([{'shot_id': 'a'}, {'shot_id': 'b'}],
                            [{'shot_id': key} for key in ['a', 'a', 'b']])
+
+
+def test_materialize_plan_carries_structured_crowd_instances():
+    context = {
+        'scenes': [{'scene_id': 'street', 'scene_ref': '粮铺'}],
+        'shots': [{
+            'shot_id': 'shot-1', 'scene_id': 'street', 'character_ids': [], 'prop_ids': [],
+            'crowd_instances': [{
+                'template_id': 'townspeople', 'layer': 'mid',
+                'region': '粮铺两侧', 'motion': '近景避让，中景观察，远景通行',
+            }],
+        }],
+    }
+    result = materialize_plan(context, {'characters': [], 'props': []})
+    assert result[0]['crowd_instances'][0]['template_id'] == 'townspeople'
+    assert result[0]['crowd_instances'][0]['layer'] == 'mid'
 
 
 def test_apply_missing_shot_leaves_saved_frames_unchanged():

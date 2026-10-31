@@ -33,6 +33,10 @@ def materialize_plan(context, entities):
             'scene_ref_name': scene.get('scene_ref') or scene.get('location', ''),
             'character_ref_names': [characters[key] for key in shot['character_ids'] if key in characters],
             'prop_ref_names': [props[key] for key in shot['prop_ids'] if key in props],
+            # Crowd placement is already structured and pinned by the
+            # confirmed shooting plan; carry it into the Storyboard draft
+            # without asking the model to recreate identities or positions.
+            'crowd_instances': [dict(item) for item in shot.get('crowd_instances', [])],
             'action_summary': shot.get('visual_intent', ''),
             'character_acting': shot.get('performance_action', ''),
             'key_action_physics': shot.get('action_physics', ''),
