@@ -47,7 +47,28 @@ def test_save_restore_and_owner_boundary(service, video):
     for operation in (lambda: stranger.get(project['id']), lambda: stranger.resolve(item['id']), lambda: stranger.versions(project['id'])):
         with pytest.raises(HTTPException) as error:
             operation()
+            assert error.value.status_code == 404
+
+
+def test_project_workspace_and_soft_delete_preserve_sources(service, video):
+    item = material(service, video)
+    project = service.create('Workspace')
+    workspace = service.output_root / project['workspace']
+    assert (workspace / 'tmp').is_dir()
+    assert (workspace / 'outputs').is_dir()
+    service.save(project['id'], 0, plan_for(item))
+    deleted = service.delete(project['id'])
+    assert deleted == {'id': project['id'], 'deleted': True}
+    assert service.list() == []
+    for operation in (
+        lambda: service.get(project['id']),
+        lambda: service.versions(project['id']),
+        lambda: service.render(project['id'], 1),
+    ):
+        with pytest.raises(HTTPException) as error:
+            operation()
         assert error.value.status_code == 404
+    assert service.resolve(item['id'])[0]['sha256'] == item['sha256']
 
 
 def test_source_mutation_and_invalid_range_rejected(service, video):

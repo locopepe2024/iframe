@@ -31,6 +31,12 @@ it('passes an expired Studio reference to the authenticated refresh endpoint', a
   expect(new URL(request, 'http://localhost').searchParams.get('preview')).toBe('320');
 });
 
+it('keeps a signed historical Playground URL when refresh index is missing', async () => {
+  fetchMock.mockResolvedValueOnce({ ok: false, status: 404 });
+  const url = await resolveMediaDelivery('/playground/media/g/o?expires=999&signature=still-valid');
+  expect(url).toBe('/api-proxy/playground/media/g/o?expires=999&signature=still-valid');
+});
+
 it('uses stable shot and assembly identities for video playback', async () => {
   await resolveVideoDelivery('https://old.example/take.mp4', null, 'project', 'task');
   expect(fetchMock.mock.calls[0][0]).toBe('/api-proxy/projects/project/video_tasks/task/delivery');

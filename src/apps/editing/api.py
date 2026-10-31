@@ -40,6 +40,10 @@ def projects(user: UserContext = Depends(require_studio_user)):
 def create(body: CreateRequest, user: UserContext = Depends(require_studio_user)):
     return public(EditingService(user).create(body.title), user)
 
+@router.delete('/projects/{edit_id}')
+def delete_project(edit_id: str, user: UserContext = Depends(require_studio_user)):
+    return EditingService(user).delete(edit_id)
+
 @router.get('/folders')
 def folders(user: UserContext = Depends(require_studio_user)):
     return public(EditingService(user).folders(), user)

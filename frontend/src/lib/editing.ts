@@ -7,6 +7,7 @@ const base = `${API_URL}/editing`;
 export const editing = {
   list: async (): Promise<EditProject[]> => (await axios.get(`${base}/projects`)).data,
   create: async (title: string): Promise<EditProject> => (await axios.post(`${base}/projects`, { title })).data,
+  delete: async (id: string): Promise<{ id: string; deleted: boolean }> => (await axios.delete(`${base}/projects/${encodeURIComponent(id)}`)).data,
   get: async (id: string): Promise<EditProject> => (await axios.get(`${base}/projects/${id}`)).data,
   folders: async (): Promise<EditFolder[]> => (await axios.get(`${base}/folders`)).data,
   createFolder: async (name: string, parentId?: string | null): Promise<EditFolder> => (await axios.post(`${base}/folders`, { name, parent_id: parentId || null })).data,

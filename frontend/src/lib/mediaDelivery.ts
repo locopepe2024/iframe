@@ -39,7 +39,15 @@ export async function resolveMediaDelivery(reference: string, preview = 0): Prom
     return getAssetUrl(reference);
   }
   const response = await authenticatedFetch(endpoint, { cache: 'no-store' });
-  if (!response.ok) throw new Error(`Media unavailable (HTTP ${response.status})`);
+  // Older history rows can outlive the generation index used to refresh a
+  // signed URL. If the caller still has a signed managed URL, preserve it as
+  // a delivery fallback; the media endpoint continues to enforce ownership
+  // and expiry. This avoids turning a stale index record into a false preview
+  // failure while keeping refresh behavior for current rows.
+  if (!response.ok) {
+    if (response.status === 404 && /[?&]signature=[^&]+/.test(reference)) return getAssetUrl(reference);
+    throw new Error(`Media unavailable (HTTP ${response.status})`);
+  }
   const value = await response.json() as { url: string };
   return getAssetUrl(value.url);
 }
