@@ -393,6 +393,23 @@ it("supports selecting a searched reference with the keyboard", () => {
     expect(onPickerReferencesChange).toHaveBeenCalledWith([candidate.reference]);
 });
 
+it("closes the reference search when clicking outside or using the close control", () => {
+    const candidate = {
+        label: "Pocket watch · front",
+        reference: { asset_type: "prop" as const, asset_id: "watch-1", variant_id: "watch-front" },
+    };
+    render(<WorkbenchPanel {...baseProps} referenceCandidates={[candidate]} showReferencePicker pickerReferences={[]} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "选择参考素材" }));
+    expect(screen.getByRole("textbox", { name: "搜索角色参考素材" })).toBeInTheDocument();
+    fireEvent.pointerDown(document.body);
+    expect(screen.queryByRole("textbox", { name: "搜索角色参考素材" })).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "选择参考素材" }));
+    fireEvent.click(screen.getByRole("button", { name: "关闭参考素材搜索" }));
+    expect(screen.queryByRole("textbox", { name: "搜索角色参考素材" })).not.toBeInTheDocument();
+});
+
 it("does not turn a manually typed @name into an implicit reference", () => {
     const setPrompt = vi.fn();
     const onReferencesChange = vi.fn();

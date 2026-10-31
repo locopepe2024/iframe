@@ -252,6 +252,7 @@ function AssetReferencePicker({
 }) {
     const [query, setQuery] = useState("");
     const [isOpen, setIsOpen] = useState(false);
+    const pickerRef = useRef<HTMLElement | null>(null);
     const generatedId = useId().replace(/:/g, "");
     const searchId = `character-reference-search-${generatedId}`;
     const optionId = (index: number) => `${searchId}-option-${index}`;
@@ -260,6 +261,18 @@ function AssetReferencePicker({
     // already scroll-bounded; truncating to the first 20 hides valid assets
     // (for example a generated crowd roster) behind earlier shared assets.
     const filtered = searchReferenceCandidates(candidates, query);
+
+    useEffect(() => {
+        if (!isOpen) return;
+        const handlePointerDown = (event: PointerEvent) => {
+            const target = event.target as Node | null;
+            if (target && pickerRef.current?.contains(target)) return;
+            setIsOpen(false);
+            setQuery("");
+        };
+        document.addEventListener("pointerdown", handlePointerDown);
+        return () => document.removeEventListener("pointerdown", handlePointerDown);
+    }, [isOpen]);
 
     const toggle = (candidate: ReferenceCandidate) => {
         if (!candidate.reference) return;
@@ -270,7 +283,7 @@ function AssetReferencePicker({
     };
 
     return (
-        <section className="mt-3 rounded-md border border-glass-border bg-surface/60 p-3">
+        <section ref={pickerRef} data-reference-picker className="mt-3 rounded-md border border-glass-border bg-surface/60 p-3">
             <button
                 type="button"
                 aria-expanded={isOpen}
@@ -281,7 +294,18 @@ function AssetReferencePicker({
                 className="flex min-h-8 w-full items-center justify-between gap-2 text-left text-xs font-medium text-foreground focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary"
             >
                 <span>{title}{selected.length > 0 ? ` · ${selected.length}` : ""}</span>
-                <ImageIcon size={15} className="shrink-0 text-text-muted" aria-hidden="true" />
+                <span className="inline-flex items-center gap-1">
+                    {isOpen && <span
+                        role="button"
+                        tabIndex={0}
+                        aria-label="关闭参考素材搜索"
+                        onMouseDown={(event) => event.stopPropagation()}
+                        onClick={(event) => { event.stopPropagation(); setIsOpen(false); setQuery(""); }}
+                        onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); setIsOpen(false); setQuery(""); } }}
+                        className="inline-flex h-7 w-7 items-center justify-center rounded hover:bg-hover-bg focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary"
+                    ><X size={14} aria-hidden="true" /></span>}
+                    <ImageIcon size={15} className="shrink-0 text-text-muted" aria-hidden="true" />
+                </span>
             </button>
             {isOpen && <>
             <p className="mt-1 text-[11px] leading-4 text-text-muted">{description}</p>
@@ -293,6 +317,12 @@ function AssetReferencePicker({
                     value={query}
                     onChange={(event) => setQuery(event.target.value)}
                     onKeyDown={(event) => {
+                        if (event.key === "Escape") {
+                            event.preventDefault();
+                            setIsOpen(false);
+                            setQuery("");
+                            return;
+                        }
                         if (event.key === "ArrowDown" && filtered.length > 0) {
                             event.preventDefault();
                             document.getElementById(optionId(0))?.focus();
@@ -1709,7 +1739,7 @@ export function WorkbenchPanel({
     // @ should search the complete owner-scoped asset index, including crowd
     // variants. The explicit reference picker remains available for users who
     // want to constrain the generation set before typing the prompt.
-    const matchingReferenceCandidates = searchReferenceCandidates(referenceCandidates, mention?.query ?? "");
+    const matchingReferenceCandidates = searchReferenceCandidates(selectedCandidates, mention?.query ?? "");
 
     const imageReferenceControls = <>
                 <div className="p-2 border-b border-border-subtle flex justify-between items-center bg-surface">
@@ -1772,7 +1802,7 @@ export function WorkbenchPanel({
                         onSlashChange={!isVideo && !designEditor ? (next) => { setPromptSlash(next); if (next) setMention(null); } : undefined}
                         onSlashKeyDown={(event) => slashKeyHandler.current?.(event) || false}
                         openSlashRequest={openSlashRequest}
-                        allowImplicitMentions
+                        allowImplicitMentions={false}
                         pruneUnlistedReferences
                         expanded
                         editable={!isLocked}
