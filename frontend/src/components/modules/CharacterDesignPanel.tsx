@@ -11,7 +11,7 @@ import CharacterPromptDictionary, { CharacterDictionaryHost } from "./CharacterP
 import { searchReferenceCandidates, selectedReferenceCandidates } from "@/lib/referenceCandidateSearch";
 import { AssetIndexPreview } from "@/components/shared/AssetIndexPreview";
 
-function DesignReferencePicker({ candidates, selected, onChange }: { candidates: ReferenceCandidate[]; selected: AssetLibraryReference[]; onChange?: (references: AssetLibraryReference[]) => void }) {
+function DesignReferencePicker({ candidates, selected, onChange, onOpen }: { candidates: ReferenceCandidate[]; selected: AssetLibraryReference[]; onChange?: (references: AssetLibraryReference[]) => void; onOpen?: () => void }) {
     const [open, setOpen] = useState(false);
     const [query, setQuery] = useState("");
     const keys = new Set(selected.map((item) => `${item.asset_type}:${item.asset_id}:${item.variant_id}`));
@@ -22,8 +22,8 @@ function DesignReferencePicker({ candidates, selected, onChange }: { candidates:
         onChange(keys.has(key) ? selected.filter((item) => `${item.asset_type}:${item.asset_id}:${item.variant_id}` !== key) : [...selected, candidate.reference]);
     };
     return <div className="rounded border border-glass-border bg-surface/60 p-2">
-        <button type="button" aria-expanded={open} onClick={() => setOpen((value) => !value)} className="flex min-h-10 w-full items-center justify-between px-2 text-left text-xs text-text-secondary hover:text-foreground">
-            <span className="inline-flex items-center gap-1.5"><ImageIcon size={14} />参考素材{selected.length ? ` · ${selected.length}` : ""}</span>
+        <button type="button" aria-expanded={open} onClick={() => { if (!open) onOpen?.(); setOpen((value) => !value); }} className="flex min-h-10 w-full items-center justify-between px-2 text-left text-xs text-text-secondary hover:text-foreground">
+            <span className="inline-flex items-center gap-1.5"><ImageIcon size={14} />角色设计参考素材{selected.length ? ` · ${selected.length}` : ""}</span>
             {open ? <X size={14} aria-label="关闭参考素材列表" /> : <Search size={14} />}
         </button>
         {open && <div className="mt-2">
@@ -43,7 +43,7 @@ function DesignReferencePicker({ candidates, selected, onChange }: { candidates:
 }
 
 export default function CharacterDesignPanel({ description, details, onDetailsChange, result, onResultChange,
-    identityFields, lookFields, onFieldsChange, onDictionaryFields, onDictionaryConfiguration, configurations, previousExpressionText, constraints, onConstraintsChange, supplemental, onSupplementalChange, reviewItems, models, model, onModelChange, busy, saving, canSave, canReedit, error, status, tab, onTabChange, onSubmit, onSave, onReedit, referenceCandidates = [], referenceSelections = [], onReferenceSelectionsChange,
+    identityFields, lookFields, onFieldsChange, onDictionaryFields, onDictionaryConfiguration, configurations, previousExpressionText, constraints, onConstraintsChange, supplemental, onSupplementalChange, reviewItems, models, model, onModelChange, busy, saving, canSave, canReedit, error, status, tab, onTabChange, onSubmit, onSave, onReedit, referenceCandidates = [], referenceSelections = [], onReferenceSelectionsChange, onRefreshReferences,
 }: {
     description: string; details: string; onDetailsChange: (value: string) => void;
     result: string | null; onResultChange: (value: string) => void;
@@ -60,7 +60,7 @@ export default function CharacterDesignPanel({ description, details, onDetailsCh
     busy: boolean; saving: boolean; canSave: boolean; canReedit: boolean; error: string; status: string;
     tab: "design" | "ai"; onTabChange: (tab: "design" | "ai") => void;
     onSubmit: () => void; onSave: (source: "panel" | "ai") => void; onReedit: () => void;
-    referenceCandidates?: ReferenceCandidate[]; referenceSelections?: AssetLibraryReference[];
+    referenceCandidates?: ReferenceCandidate[]; referenceSelections?: AssetLibraryReference[]; onRefreshReferences?: () => void;
     onReferenceSelectionsChange?: (references: AssetLibraryReference[]) => void;
 }) {
     const [showFields, setShowFields] = useState(false);
@@ -142,7 +142,7 @@ export default function CharacterDesignPanel({ description, details, onDetailsCh
                 <button type="button" disabled={saving} onMouseDown={event => event.preventDefault()} onClick={() => setOpenSlashRequest(value => value + 1)} className="min-h-11 rounded border border-glass-border px-3 text-xs hover:bg-hover-bg focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary">快捷面板</button>
                 </div>
             </div>
-            <DesignReferencePicker candidates={referenceCandidates} selected={referenceSelections} onChange={onReferenceSelectionsChange} />
+            <DesignReferencePicker candidates={referenceCandidates} selected={referenceSelections} onChange={onReferenceSelectionsChange} onOpen={onRefreshReferences} />
             <p className="mb-2 text-[11px] text-text-muted">可直接使用角色设计，也可先提交 AI 完善。保存会保留两份内容，当前页签决定用于出图的版本。</p>
             <div className="relative min-h-36 rounded border border-glass-border p-2">
                 <ReferencePromptEditor value={details} onChange={onDetailsChange} candidates={selectedReferenceCandidates(referenceCandidates, referenceSelections)} restoreSelectedReferences={referenceSelections} onReferencesChange={onReferenceSelectionsChange} expanded editable={!saving}

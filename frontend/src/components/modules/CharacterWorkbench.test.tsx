@@ -464,7 +464,7 @@ it("loads the project reference index for the character workbench", async () => 
 
     await waitFor(() => expect(apiMocks.getAssetReferenceIndex).toHaveBeenCalledWith("project-1"));
     openImagePrompt();
-    fireEvent.click(screen.getByRole("button", { name: "选择参考素材" }));
+    fireEvent.click(screen.getByRole("button", { name: "角色设计参考素材" }));
     fireEvent.click(await screen.findByRole("option", { name: /Pocket watch/ }));
     const editors = screen.getAllByRole("textbox") as Array<HTMLElement & { editor?: import("@tiptap/core").Editor }>;
     const promptEditor = imagePromptInput() as HTMLElement & { editor: import("@tiptap/core").Editor };
@@ -505,13 +505,13 @@ it("removes a deleted shared asset when the reference picker opens again", async
         onClose={vi.fn()} onUpdateDescription={vi.fn()} onGenerate={vi.fn()} generatingTypes={[]} />);
 
     openImagePrompt();
-    const picker = screen.getAllByRole("button", { name: "选择参考素材" })[0];
+    const picker = screen.getAllByRole("button", { name: "角色设计参考素材" })[0];
     fireEvent.click(picker);
     expect(await screen.findByText("Deleted actor")).toBeInTheDocument();
     fireEvent.click(picker);
     fireEvent.click(picker);
     await waitFor(() => expect(apiMocks.getAssetReferenceIndex).toHaveBeenCalledTimes(3));
-    await waitFor(() => expect(screen.getAllByText("暂无可用参考素材").length).toBeGreaterThan(0));
+    await waitFor(() => expect(screen.getAllByText(/请先在.*参考素材/).length).toBeGreaterThan(0));
     expect(screen.queryByText("Deleted actor")).not.toBeInTheDocument();
 });
 
@@ -636,7 +636,7 @@ it("refreshes the reference index when a generated project snapshot arrives", as
     await waitFor(() => expect(apiMocks.getAssetReferenceIndex).toHaveBeenCalledTimes(2));
 
     openImagePrompt();
-    fireEvent.click(screen.getByRole("button", { name: "选择参考素材" }));
+    fireEvent.click(screen.getByRole("button", { name: "角色设计参考素材" }));
     fireEvent.click(await screen.findByRole("option", { name: /Hero/ }));
     const editor = imagePromptInput() as HTMLElement & { editor: import("@tiptap/core").Editor };
     expect(editor?.editor).toBeDefined();
@@ -1528,7 +1528,7 @@ it('exposes full-body reference controls before generation and carries the selec
     await waitFor(() => expect(screen.getByRole('button', { name: 'Text to image' })).toBeVisible());
     fireEvent.click(screen.getByRole('button', { name: 'Reference image' }));
     expect(screen.getByRole('button', { name: 'Reference image' })).toHaveAttribute('aria-pressed', 'true');
-    fireEvent.click(screen.getByRole('button', { name: '选择参考素材' }));
+    fireEvent.click(screen.getByRole('button', { name: '角色设计参考素材' }));
     fireEvent.click(await screen.findByRole('option', { name: /Pocket watch/ }));
     fireEvent.click(screen.getByTestId('variant-generate'));
     const confirm = await screen.findByRole('button', { name: '确认并生成' });

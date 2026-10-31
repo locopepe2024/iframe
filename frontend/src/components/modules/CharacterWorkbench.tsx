@@ -554,6 +554,7 @@ export default function CharacterWorkbench({ asset, seriesId, onClose, onUpdateD
                 setAssetIndex(entries);
                 const available = new Set(entries.flatMap((entry) => entry.variants.map((variant) =>
                     `${entry.asset_type}:${entry.asset_id}:${variant.id}`)));
+                setDesignReferenceAssets((current) => current.filter((reference) => available.has(referenceKey(reference))));
                 setPromptPickerReferences((current) => Object.fromEntries(Object.entries(current).map(([panel, refs]) =>
                     [panel, refs.filter((ref) => available.has(referenceKey(ref)))])) as typeof current);
             })
@@ -1086,7 +1087,7 @@ export default function CharacterWorkbench({ asset, seriesId, onClose, onUpdateD
         else if (type === "headshot") prompt = headshotPrompt;
 
         const promptType = type === "reference_sheet" ? "full_body" : type;
-        const references = [...promptReferences[promptType], ...promptPickerReferences[promptType]]
+        const references = [...designReferenceAssets, ...promptReferences[promptType], ...promptPickerReferences[promptType]]
             .filter((reference, index, all) => all.findIndex((candidate) => referenceKey(candidate) === referenceKey(reference)) === index);
         const imageGenerationMode = promptModes[promptType];
         if (!seriesId && !currentProject?.id) return;
@@ -1125,7 +1126,7 @@ export default function CharacterWorkbench({ asset, seriesId, onClose, onUpdateD
         const type = pendingImageReview.generation_type === "reference_sheet" ? "full_body" : pendingImageReview.generation_type;
         if (type !== "full_body" && type !== "three_view" && type !== "headshot") return pendingImageReview;
         const prompt = type === "full_body" ? fullBodyPrompt : type === "three_view" ? threeViewPrompt : headshotPrompt;
-        const references = [...promptReferences[type], ...promptPickerReferences[type]]
+        const references = [...designReferenceAssets, ...promptReferences[type], ...promptPickerReferences[type]]
             .filter((reference, index, all) => all.findIndex(candidate => referenceKey(candidate) === referenceKey(reference)) === index);
         const isDerived = type === "three_view" || type === "headshot";
         return {
@@ -1133,7 +1134,7 @@ export default function CharacterWorkbench({ asset, seriesId, onClose, onUpdateD
             reference: isDerived ? references[0] : undefined,
             references: isDerived ? [] : references,
         };
-    }, [fullBodyPrompt, threeViewPrompt, headshotPrompt, negativePrompt, promptReferences, promptPickerReferences,
+    }, [fullBodyPrompt, threeViewPrompt, headshotPrompt, negativePrompt, designReferenceAssets, promptReferences, promptPickerReferences,
         promptModes, pendingImageReview]);
     const reviewReferences = imageReviewRequest?.reference ? [imageReviewRequest.reference] : imageReviewRequest?.references || [];
     const reviewValidationError = !imageReviewRequest ? "" :
@@ -1256,6 +1257,7 @@ export default function CharacterWorkbench({ asset, seriesId, onClose, onUpdateD
         }}
         referenceCandidates={referenceCandidates}
         referenceSelections={designReferenceAssets}
+        onRefreshReferences={refreshAssetIndex}
         onReferenceSelectionsChange={setDesignReferenceAssets}
         supplemental={supplementalPrompt} onSupplementalChange={value => {
             setSupplementalPrompt(value);
@@ -1459,6 +1461,7 @@ export default function CharacterWorkbench({ asset, seriesId, onClose, onUpdateD
                         onRefreshReferences={refreshAssetIndex}
                         onReferencesChange={(references: AssetLibraryReference[]) => setPanelReferences("full_body", references)}
                         showReferencePicker
+                        designReferences={designReferenceAssets}
                         pickerReferences={promptPickerReferences.full_body}
                         onPickerReferencesChange={(references: AssetLibraryReference[]) => setPanelPickerReferences("full_body", references)}
                         imageGenerationMode={promptModes.full_body}
@@ -1524,6 +1527,7 @@ export default function CharacterWorkbench({ asset, seriesId, onClose, onUpdateD
                         onRefreshReferences={refreshAssetIndex}
                         onReferencesChange={(references: AssetLibraryReference[]) => setPanelReferences("three_view", references)}
                         showReferencePicker
+                        designReferences={designReferenceAssets}
                         pickerReferences={promptPickerReferences.three_view}
                         onPickerReferencesChange={(references: AssetLibraryReference[]) => setPanelPickerReferences("three_view", references)}
                         imageGenerationMode={promptModes.three_view}
@@ -1570,6 +1574,7 @@ export default function CharacterWorkbench({ asset, seriesId, onClose, onUpdateD
                         onRefreshReferences={refreshAssetIndex}
                         onReferencesChange={(references: AssetLibraryReference[]) => setPanelReferences("headshot", references)}
                         showReferencePicker
+                        designReferences={designReferenceAssets}
                         pickerReferences={promptPickerReferences.headshot}
                         onPickerReferencesChange={(references: AssetLibraryReference[]) => setPanelPickerReferences("headshot", references)}
                         imageGenerationMode={promptModes.headshot}
@@ -1692,6 +1697,7 @@ export function WorkbenchPanel({
     onRefreshReferences,
     onReferencesChange,
     showReferencePicker = false,
+    designReferences,
     pickerReferences = [],
     onPickerReferencesChange,
     imageGenerationMode = "text",
@@ -1740,7 +1746,7 @@ export function WorkbenchPanel({
     const [promptSlash, setPromptSlash] = useState<PromptSlashSuggestion | null>(null);
     const [openSlashRequest, setOpenSlashRequest] = useState(0);
     const slashKeyHandler = useRef<((event: globalThis.KeyboardEvent) => boolean) | null>(null);
-    const selectedCandidates = useMemo(() => selectedReferenceCandidates(referenceCandidates, pickerReferences), [referenceCandidates, pickerReferences]);
+    const selectedCandidates = useMemo(() => selectedReferenceCandidates(referenceCandidates, designEditor ? (designReferences || []) : pickerReferences), [referenceCandidates, designEditor, designReferences, pickerReferences]);
     // @ should search the complete owner-scoped asset index, including crowd
     // variants. The explicit reference picker remains available for users who
     // want to constrain the generation set before typing the prompt.
@@ -1763,7 +1769,7 @@ export function WorkbenchPanel({
                         ))}
                     </div>
                 </div>
-                {showReferencePicker && <div className="px-4 pt-2">
+                {showReferencePicker && !designEditor && <div className="px-4 pt-2">
                     <AssetReferencePicker
                         candidates={referenceCandidates}
                         selected={pickerReferences}
