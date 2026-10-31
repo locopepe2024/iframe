@@ -6,7 +6,7 @@ import styles from "./chat.module.css";
 import { companionApi } from "@/lib/companionApi";
 import {voiceStage,type VoiceTrace} from "@/lib/companionVoiceTrace";
 
-export type SpokenReply = { id: string; text: string;trace?:VoiceTrace };
+export type SpokenReply = { id: string; text: string; announcementKey?: string;trace?:VoiceTrace };
 const base = (process.env.NEXT_PUBLIC_OPENTALKING_URL || "/opentalking-mock/api").replace(/\/$/, "");
 
 type State = "idle" | "opening" | "ready" | "waiting" | "audio" | "blocked" | "error";
@@ -87,7 +87,9 @@ function waitForPeer(pc: RTCPeerConnection, signal: AbortSignal, gathering = fal
 }
 
 /** One media session per chat page, independent of message-history reconciliation. */
-export default function OpenTalkingReply({ reply, voice, connectionEpoch = 0, preconnect = false, onStatus }: { reply: SpokenReply | null; voice?: string; connectionEpoch?: number; preconnect?: boolean; onStatus?: (status: string) => void }) {
+export default function OpenTalkingReply({ reply, voice, connectionEpoch = 0, preconnect = false, onStatus, onCompleted }: { reply: SpokenReply | null; voice?: string; connectionEpoch?: number; preconnect?: boolean; onStatus?: (status: string) => void; onCompleted?: (reply: SpokenReply) => void }) {
+  const completed = useRef(onCompleted);
+  completed.current = onCompleted;
   const video = useRef<HTMLVideoElement>(null);
   const [state, setState] = useState<State>("idle"), [error, setError] = useState("");
   const enqueue = useRef<((reply: SpokenReply) => void) | null>(null);
@@ -310,6 +312,7 @@ export default function OpenTalkingReply({ reply, voice, connectionEpoch = 0, pr
             // speech.ended can arrive before the next animation frame. Only
             // an actual play() rejection above asks the user to unlock audio.
             // The server receipt confirms completion, not physical audibility.
+            completed.current?.(item);
             update("ready");
           }
         } catch (failure) {

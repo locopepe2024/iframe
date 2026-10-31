@@ -166,3 +166,22 @@ it("preconnects while listening without synthesizing and reuses that connection 
  view.unmount();
  expect(peer.close).toHaveBeenCalledOnce();
 });
+
+it("acknowledges only matching completed speech, never enqueue or cancellation",async()=>{
+ const onCompleted=vi.fn();
+ const first={id:"receipt-one",text:"请选照片。",announcementKey:"photo:1:2"};
+ const view=render(<OpenTalkingReply reply={first} onCompleted={onCompleted}/>);
+ await waitFor(()=>expect(speaks()).toHaveLength(1));
+ expect(onCompleted).not.toHaveBeenCalled();
+ act(()=>events.dispatchEvent(new MessageEvent("speech.ended",{data:JSON.stringify({utterance_id:"unrelated"})})));
+ expect(onCompleted).not.toHaveBeenCalled();
+ const command=JSON.parse(speaks()[0].init.body as string).command_id;
+ act(()=>events.dispatchEvent(new MessageEvent("speech.ended",{data:JSON.stringify({utterance_id:command})})));
+ await waitFor(()=>expect(onCompleted).toHaveBeenCalledExactlyOnceWith(first));
+ view.rerender(<OpenTalkingReply reply={{id:"receipt-two",text:"第二句"}} onCompleted={onCompleted}/>);
+ await waitFor(()=>expect(speaks()).toHaveLength(2));
+ act(()=>companionPlayback.cancel());
+ await act(async()=>{});
+ expect(onCompleted).toHaveBeenCalledTimes(1);
+ view.unmount();
+});

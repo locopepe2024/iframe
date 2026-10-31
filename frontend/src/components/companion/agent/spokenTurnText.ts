@@ -41,8 +41,3 @@ export function spokenTurnMeta(result: Turn["result"]): SpokenTurnMeta | undefin
   }
   return { text, reason: result.kind === "text" ? "chat" : "question" };
 }
-
-/** Populate the same ledger key without generating or playing a reply. */
-export function spokenAnnouncementKey(result: Turn["result"]): string | undefined {
-  return spokenTurnMeta(result)?.announcementKey;
-}

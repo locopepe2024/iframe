@@ -55,8 +55,8 @@ export default function AgentChat() {
   const captureChanged = useCallback((active:boolean)=>{
     setVoiceActive(active);
     if(active){
-      // A new user utterance owns the floor. Drop queued/playing assistant
-      // speech before the next ASR segment is submitted.
+      // Capture-session start cancels old output. This callback is not
+      // a per-utterance VAD event and does not implement automatic barge-in.
       speechEpoch.current++;
       companionPlayback.cancel();
       setSpokenReply(null);
@@ -167,14 +167,6 @@ export default function AgentChat() {
   async function history(id: string, cursor?: number) {
     const result = await companionApi.messages(id, cursor);
     if (alive.current) {
-      // Rebuild the task announcement ledger from persisted turns so a page
-      // refresh does not make the same task revision speak again.
-      if (cursor === undefined) {
-        for (const message of result.messages) {
-          const spoken = spokenTurnMeta(message.turn?.result);
-          if (spoken?.announcementKey) announcedTaskStates.current.add(spoken.announcementKey);
-        }
-      }
       setMessages(old => cursor !== undefined ? [...result.messages, ...old] : result.messages); setAfter(result.next_before ?? null);
     }
   }
@@ -257,8 +249,7 @@ export default function AgentChat() {
       if (audioReply && speechEnabled.current && requestSpeechEpoch === speechEpoch.current) {
         const spoken = spokenTurnMeta(result.result);
         const alreadyAnnounced = spoken?.announcementKey && announcedTaskStates.current.has(spoken.announcementKey);
-        if (spoken?.announcementKey && !alreadyAnnounced) announcedTaskStates.current.add(spoken.announcementKey);
-        if (spoken && !alreadyAnnounced) setSpokenReply({ id: result.turn_id, text: spoken.text,trace });
+        if (spoken && !alreadyAnnounced) setSpokenReply({ id: result.turn_id, text: spoken.text, announcementKey: spoken.announcementKey,trace });
       }
       if (result.result?.kind === "diary_read") {
         setAlbumRequest(null);setAlbumOpen(false);
@@ -538,7 +529,14 @@ export default function AgentChat() {
       {page?.next_cursor && <button disabled={busy || pending} onClick={() => void run(() => memories(appliedQuery, page.next_cursor!))}>更多个人记忆</button>}
     </section>
     </details>}
-    {audioReply && <OpenTalkingReply key={session} reply={spokenReply} preconnect={voiceActive} voice={identity.voice} connectionEpoch={voiceConnectionEpoch} onStatus={setVoiceOutputStatus} />}
+    {audioReply && <OpenTalkingReply key={session} reply={spokenReply} preconnect={voiceActive} voice={identity.voice} connectionEpoch={voiceConnectionEpoch} onStatus={setVoiceOutputStatus} onCompleted={reply => {
+      if (!reply.announcementKey) return;
+      announcedTaskStates.current.add(reply.announcementKey);
+      // Receipts are session-local and bounded. History is not playback evidence.
+      if (announcedTaskStates.current.size > 200) {
+        announcedTaskStates.current.delete(announcedTaskStates.current.values().next().value!);
+      }
+    }} />}
     <input ref={fileRef} type="file" hidden accept="image/jpeg,image/png,image/webp,video/mp4,video/quicktime,video/webm,.mov" multiple aria-label="选择要上传的照片或视频" onChange={event => {
       const files=Array.from(event.target.files ?? []);event.target.value="";
       if(files.length>20){setNotice("每次最多选择 20 个文件，请重新选择。");return;}
