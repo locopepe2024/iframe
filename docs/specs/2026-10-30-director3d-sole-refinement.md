@@ -36,3 +36,10 @@ rotation request. It is diagnostic only and defaults to an 8 degree limit;
 requests above the limit are rejected. The current fixture's 12 degree tilt is
 therefore rejected rather than silently rotating the ankle. A future solver must
 apply the request to a validated foot chain and remeasure patch residuals.
+
+Ground-patch selection now uses a 10 mm band above the lowest evaluated sole
+vertex. Plane and orientation diagnostics operate on this filtered patch and
+report selected/total counts. On the media fixture this changes full-weight tilt
+from roughly 12.4–12.8 degrees to 5.2–5.5 degrees and plane residual to about
+4.4 mm. This is a measurement improvement, not contact acceptance or a claim
+that all selected vertices belong to one rigid support patch.

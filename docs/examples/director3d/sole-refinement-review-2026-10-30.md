@@ -43,3 +43,10 @@ The new orientation diagnostic produces no applied rotation for the current
 fixture: its 12.4–12.8° full-weight plane tilt exceeds the 8° bounded request
 limit. Reports now include the candidate world axis/angle for smaller tilts or a
 rejected reason. No foot orientation was changed in this experiment.
+
+The ground-band rerun selected 21/197 and 21/197 vertices in the two full-weight
+frames groups. Their fitted tilts were 5.21° and 5.46° with about 4.4 mm maximum
+plane residual, below the 8° candidate correction limit. The correction remains
+unapplied; the result only identifies a safer candidate patch than the original
+whole-region fit. Released/ramp groups can still exceed the limit and are
+rejected.
