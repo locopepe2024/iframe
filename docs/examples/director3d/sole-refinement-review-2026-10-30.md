@@ -38,3 +38,8 @@ A follow-up centroid-anchor trial was intentionally rejected by the existing
 5 cm support-offset bound before IK. It produced no accepted output. This is an
 input/model-shape limitation, not evidence to relax the limit; fixed annotated
 anchors remain the default.
+
+The new orientation diagnostic produces no applied rotation for the current
+fixture: its 12.4–12.8° full-weight plane tilt exceeds the 8° bounded request
+limit. Reports now include the candidate world axis/angle for smaller tilts or a
+rejected reason. No foot orientation was changed in this experiment.

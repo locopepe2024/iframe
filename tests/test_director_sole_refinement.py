@@ -74,3 +74,17 @@ def test_contact_plane_rejects_xy_collinear_points():
     from bounded_support_ik import fit_contact_plane
     with pytest.raises(ValueError, match='collinear'):
         fit_contact_plane([[0, 0, 0], [1, 0, .1], [2, 0, .2]])
+
+
+def test_bounded_plane_correction_returns_unapplied_request():
+    from bounded_support_ik import bounded_plane_correction
+    result = bounded_plane_correction([[0, 0, 0], [1, 0, .01], [0, 1, 0]])
+    assert result['applied'] is False
+    assert result['angleDeg'] == pytest.approx(-0.5729, rel=1e-3)
+    assert result['planeResidualM'] == pytest.approx(0)
+
+
+def test_bounded_plane_correction_rejects_large_tilt():
+    from bounded_support_ik import bounded_plane_correction
+    with pytest.raises(ValueError, match='tilt'):
+        bounded_plane_correction([[0, 0, 0], [1, 0, .3], [0, 1, 0]])

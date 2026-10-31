@@ -30,3 +30,9 @@ white model. It failed closed at the existing `requested support offset exceeds
 region contains vertices too far from the ankle target for a direct whole-region
 centroid. Keep `fixed` as the default; a usable patch anchor needs a contact-region
 filter and foot-orientation model before this option can be enabled for review.
+
+`bounded_plane_correction` converts a fitted z-plane slope into a world-axis
+rotation request. It is diagnostic only and defaults to an 8 degree limit;
+requests above the limit are rejected. The current fixture's 12 degree tilt is
+therefore rejected rather than silently rotating the ankle. A future solver must
+apply the request to a validated foot chain and remeasure patch residuals.

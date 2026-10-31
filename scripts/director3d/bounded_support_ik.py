@@ -120,8 +120,16 @@ def summarize_contact_phases(samples, fps):
                                           for p, q in zip(items[0]['soleRegionWorldM'], s['soleRegionWorldM'])), default=None),
             'minPatchZM': min((p[2] for s in items for p in s['soleRegionWorldM']), default=None),
             'patchPlane': fit_contact_plane(items[0]['soleRegionWorldM']) if items and len(items[0]['soleRegionWorldM']) >= 3 else None,
+            'planeCorrection': None,
             'maxPatchVertexSpeedMps': max((math.dist(p[:2], q[:2])*fps for a, b in pairs
                                           for p, q in zip(a['soleRegionWorldM'], b['soleRegionWorldM'])), default=None)}
+    for phase, items in groups.items():
+        plane = result[phase]['patchPlane']
+        if plane is not None:
+            try:
+                result[phase]['planeCorrection'] = bounded_plane_correction(items[0]['soleRegionWorldM'])
+            except ValueError as exc:
+                result[phase]['planeCorrection'] = {'status': 'rejected', 'reason': str(exc), 'applied': False}
     return result
 
 
@@ -163,3 +171,21 @@ def fit_contact_plane(points):
     return {'status': 'diagnostic_only', 'slopeXY': [a, b], 'interceptZM': c,
             'tiltDeg': tilt, 'maxAbsResidualM': max(abs(v) for v in residuals),
             'rmsResidualM': math.sqrt(sum(v*v for v in residuals)/len(residuals))}
+
+
+def bounded_plane_correction(points, max_tilt_deg=8.0):
+    fit = fit_contact_plane(points)
+    if isinstance(max_tilt_deg, bool) or not isinstance(max_tilt_deg, (int, float)) or not math.isfinite(max_tilt_deg) or max_tilt_deg <= 0:
+        raise ValueError('invalid contact tilt limit')
+    if fit['tiltDeg'] > max_tilt_deg:
+        raise ValueError('contact plane tilt exceeds bounded correction')
+    a, b = fit['slopeXY']
+    length = math.sqrt(a*a+b*b)
+    if length < 1e-10:
+        axis = [0.0, 0.0, 0.0]
+    else:
+        axis = [-b/length, a/length, 0.0]
+    return {'status': 'diagnostic_only', 'tiltDeg': fit['tiltDeg'],
+            'maxTiltDeg': max_tilt_deg, 'axisWorld': axis,
+            'angleDeg': -fit['tiltDeg'], 'applied': False,
+            'planeResidualM': fit['maxAbsResidualM']}
