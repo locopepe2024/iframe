@@ -119,7 +119,9 @@ def summarize_contact_phases(samples, fps):
             'maxPatchVertexDriftM': max((math.dist(p[:2], q[:2]) for s in items
                                           for p, q in zip(items[0]['soleRegionWorldM'], s['soleRegionWorldM'])), default=None),
             'minPatchZM': min((p[2] for s in items for p in s['soleRegionWorldM']), default=None),
-            'patchPlane': fit_contact_plane(items[0]['soleRegionWorldM']) if items and len(items[0]['soleRegionWorldM']) >= 3 else None,
+            'groundPatch': select_ground_patch(items[0]['soleRegionWorldM']) if items else None,
+            'patchPlane': (fit_contact_plane(select_ground_patch(items[0]['soleRegionWorldM'])['points'])
+                          if items and len(select_ground_patch(items[0]['soleRegionWorldM'])['points']) >= 3 else None),
             'planeCorrection': None,
             'maxPatchVertexSpeedMps': max((math.dist(p[:2], q[:2])*fps for a, b in pairs
                                           for p, q in zip(a['soleRegionWorldM'], b['soleRegionWorldM'])), default=None)}
@@ -127,7 +129,7 @@ def summarize_contact_phases(samples, fps):
         plane = result[phase]['patchPlane']
         if plane is not None:
             try:
-                result[phase]['planeCorrection'] = bounded_plane_correction(items[0]['soleRegionWorldM'])
+                result[phase]['planeCorrection'] = bounded_plane_correction(select_ground_patch(items[0]['soleRegionWorldM'])['points'])
             except ValueError as exc:
                 result[phase]['planeCorrection'] = {'status': 'rejected', 'reason': str(exc), 'applied': False}
     return result
@@ -141,6 +143,18 @@ def contact_anchor_from_patch(points, ground_z=0.0):
     if isinstance(ground_z, bool) or not isinstance(ground_z, (int, float)) or not math.isfinite(ground_z):
         raise ValueError('invalid contact ground')
     return [sum(point[i] for point in points) / len(points) for i in range(2)] + [ground_z]
+
+
+def select_ground_patch(points, band_m=0.01):
+    if not isinstance(points, list) or not points:
+        raise ValueError('ground patch requires points')
+    for point in points:
+        vector(point)
+    if isinstance(band_m, bool) or not isinstance(band_m, (int, float)) or not math.isfinite(band_m) or band_m <= 0:
+        raise ValueError('invalid ground patch band')
+    floor = min(point[2] for point in points)
+    selected = [point for point in points if point[2] <= floor + band_m]
+    return {'points': selected, 'groundZM': floor, 'bandM': band_m, 'selectedCount': len(selected), 'totalCount': len(points)}
 
 
 def fit_contact_plane(points):

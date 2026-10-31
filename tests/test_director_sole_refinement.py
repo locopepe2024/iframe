@@ -88,3 +88,16 @@ def test_bounded_plane_correction_rejects_large_tilt():
     from bounded_support_ik import bounded_plane_correction
     with pytest.raises(ValueError, match='tilt'):
         bounded_plane_correction([[0, 0, 0], [1, 0, .3], [0, 1, 0]])
+
+
+def test_ground_patch_filters_high_vertices_by_height_band():
+    from bounded_support_ik import select_ground_patch
+    result = select_ground_patch([[0, 0, 0], [1, 0, .005], [0, 1, .009], [0, 0, .04]])
+    assert result['selectedCount'] == 3
+    assert result['totalCount'] == 4
+
+
+def test_ground_patch_rejects_invalid_band():
+    from bounded_support_ik import select_ground_patch
+    with pytest.raises(ValueError):
+        select_ground_patch([[0, 0, 0]], 0)
