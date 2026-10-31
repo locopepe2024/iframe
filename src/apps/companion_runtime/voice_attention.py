@@ -1,10 +1,7 @@
 """A name-only attention call is a conversational acknowledgement, not a task."""
 import re
 
-_QUIET_FILLERS = {
-    '嗯', '嗯嗯', '嗯嗯嗯', '哦', '哦哦', '好', '好的', '知道了',
-    '行', '可以', '没事', '继续', '我听着', '我在听',
-}
+_QUIET_FILLERS = {'嗯', '嗯嗯', '嗯嗯嗯', '哦', '哦哦', '我听着', '我在听'}
 
 
 def attention_reply(text):

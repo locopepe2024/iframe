@@ -410,14 +410,21 @@ def chat(session_id: str, body: ChatRequest, identity: Owner, store: Store):
             attention = attention_reply(body.text) if not editing and not body.selected_photo_id else None
             if attention is not None:
                 return store.finish_turn(identity.owner_profile_id, identity.user_id, claim, attention)
-            silence = silence_reply(body.text) if not editing and not body.selected_photo_id else None
+            context = claim['messages'][-1]
+            # A short utterance can answer an outstanding task or edit a focused
+            # object. Fast conversational gates must not consume those turns.
+            task_context = bool(editing or body.selected_photo_id or current
+                                or context.get('paused_media_drafts') or context.get('workflow_tasks')
+                                or (context.get('interaction_focus') or {}).get('kind', 'chat') != 'chat')
+            silence = silence_reply(body.text) if not task_context else None
             if silence is not None:
                 return store.finish_turn(identity.owner_profile_id, identity.user_id, claim, silence)
-            emotion = emotional_reply(body.text, claim['messages'][-1].get('emotion_signal')) if not editing and not body.selected_photo_id else None
+            emotion = emotional_reply(body.text, claim['messages'][-1].get('emotion_signal')) if not task_context else None
             if emotion is not None:
                 if emotion_already_acknowledged(claim['messages'][:-1], claim['messages'][-1].get('emotion_signal')):
-                    emotion = dict(kind='silent', reason='emotion_already_acknowledged')
-                return store.finish_turn(identity.owner_profile_id, identity.user_id, claim, emotion)
+                    emotion = None
+                if emotion is not None:
+                    return store.finish_turn(identity.owner_profile_id, identity.user_id, claim, emotion)
             if not editing and not body.selected_photo_id and intent.name not in ('album.scope', 'album.browse'):
                 decision = decide(body.text, store.workflow_context(identity.owner_profile_id, identity.user_id, session_id))
                 if decision:

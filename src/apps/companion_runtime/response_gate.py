@@ -2,15 +2,12 @@
 import re
 
 
-_REQUEST_MARKERS = (
-    '怎么', '如何', '请', '帮我', '打开', '保存', '修改', '删除', '上传',
-    '查找', '搜索', '重试', '继续', '选择', '生成', '整理', '写日记',
+# Only standalone first-person disclosures qualify for a canned response.
+# Everything outside this small grammar needs contextual interpretation.
+_SELF_DISCLOSURE = re.compile(
+    r'我(?:现在|今天)?(?:有点|有些|很|好|特别|非常)?'
+    r'(?:难过|伤心|失望|孤单|寂寞|不开心|着急|开心|高兴|幸福)[。.!！]*'
 )
-
-
-def _has_request(text: str) -> bool:
-    compact = re.sub(r'\s+', '', text or '')
-    return any(marker in compact for marker in _REQUEST_MARKERS) or '?' in compact or '？' in compact
 
 
 def emotional_reply(text: str, signal: dict | None):
@@ -19,7 +16,7 @@ def emotional_reply(text: str, signal: dict | None):
     The gate is deliberately narrow. Any possible task request delegates to
     the normal planner/model path, even when the utterance also sounds urgent.
     """
-    if not isinstance(signal, dict) or signal.get('confidence', 0) < 0.68 or _has_request(text):
+    if not isinstance(signal, dict) or signal.get('confidence', 0) < 0.68 or not _SELF_DISCLOSURE.fullmatch((text or '').strip()):
         return None
     need = signal.get('need')
     if need == 'comfort':

@@ -19,7 +19,7 @@ def test_real_requests_and_asr_approximations_are_not_attention(text):
     assert attention_reply(text) is None
 
 
-@pytest.mark.parametrize('text', ['嗯', '嗯嗯', '好的', '继续', '我听着'])
+@pytest.mark.parametrize('text', ['嗯', '嗯嗯', '我听着'])
 def test_low_information_acknowledgements_are_silent(text):
     assert silence_reply(text) == dict(kind='silent', reason='low_information')
 
@@ -67,16 +67,18 @@ def test_emotional_acknowledgement_does_not_call_model(chat):
     model.assert_not_called()
 
 
-def test_repeated_emotion_is_silent_after_the_first_acknowledgement(chat):
+def test_repeated_emotion_reaches_context_model(chat):
     _, _, client, session, model = chat
     first = client.post(f'/companion-runtime/sessions/{session}/chat', json=dict(
         operation_id='emotion-first', text='我有点难过', allow_external_text=True))
     assert first.status_code == 200
+    model.side_effect = None
+    model.return_value = dict(kind='text', text='您想说说发生了什么吗？')
     second = client.post(f'/companion-runtime/sessions/{session}/chat', json=dict(
         operation_id='emotion-second', text='我有点难过', allow_external_text=True))
     assert second.status_code == 200, second.text
-    assert second.json()['result'] == dict(kind='silent', reason='emotion_already_acknowledged')
-    model.assert_not_called()
+    assert second.json()['result']['text'] == '您想说说发生了什么吗？'
+    model.assert_called_once()
 
 
 def test_silent_turn_does_not_call_model(chat, monkeypatch):
@@ -140,3 +142,30 @@ def test_attention_does_not_consume_editor_dictation(chat):
     assert response.status_code == 200
     assert response.json()['result'] == model.return_value
     model.assert_called_once()
+
+
+@pytest.mark.parametrize('text', ['继续', '可以', '好', '好的', '行'])
+def test_short_task_answers_are_never_globally_silenced(text):
+    assert silence_reply(text) is None
+
+
+@pytest.mark.parametrize('text', ['我不着急', '他很难过', '我不喜欢', '他说“我很难过”',
+                                '失败了还能恢复吗', '我很开心，把它记下来', '谢谢'])
+def test_ambiguous_emotion_never_short_circuits_model(text):
+    assert emotional_reply(text, analyze(text)) is None
+
+
+@pytest.mark.parametrize('text', ['嗯', '可以', '我有点难过'])
+def test_active_creation_keeps_answers_in_model_context(chat, monkeypatch, text):
+    store, _, client, session, model = chat
+    monkeypatch.setattr('src.apps.companion_runtime.api.decide', lambda *args: None)
+    monkeypatch.setattr('src.apps.companion_runtime.planner_runtime.plan_turn', lambda *args: None)
+    task = store.start_media_draft('owner', 'actor', session, 'draft', dict(type='image_edit', brief=''))
+    model.side_effect = None
+    model.return_value = dict(kind='text', text='请选一张要修改的照片。')
+    result = client.post(f'/companion-runtime/sessions/{session}/chat', json=dict(
+        operation_id='task-answer', text=text, allow_external_text=True))
+    assert result.status_code == 200, result.text
+    assert result.json()['result']['text'] == '请选一张要修改的照片。'
+    model.assert_called_once()
+    assert model.call_args.args[1][-1]['active_media_draft']['task_id'] == task['task_id']
