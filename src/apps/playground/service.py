@@ -7,6 +7,7 @@ routing logic in ``src/apps/comic_gen/pipeline.py:process_video_task()``.
 
 import os
 import shutil
+import time
 import uuid
 from urllib.parse import urlsplit
 from datetime import datetime, timezone
@@ -172,6 +173,8 @@ class PlaygroundService:
         ManagedMediaRoot(self.storage.asset_dir).resolve(os.path.abspath(dest_path))
         os.makedirs(dest_dir, exist_ok=True)
 
+        from .material_library import MaterialLibrary
+        MaterialLibrary(self.storage).promote(f'/playground/media/{generation_id}/{output_id}', os.path.basename(src_path))
         shutil.copy2(src_path, dest_path)
         logger.info("Archived output %s as material: %s", output_id, dest_path)
 
@@ -205,6 +208,7 @@ class PlaygroundService:
                     id=str(uuid.uuid4()),
                     media_path=out_path,
                     media_type="image",
+                    available_at=time.time(),
                 )
                 gen.outputs.append(output_entry)
                 self.storage.update_generation(gen)
@@ -322,6 +326,7 @@ class PlaygroundService:
                     id=str(uuid.uuid4()),
                     media_path=out_path,
                     media_type="video",
+                    available_at=time.time(),
                 )
                 gen.outputs.append(output_entry)
                 self.storage.update_generation(gen)

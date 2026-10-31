@@ -12,6 +12,7 @@ from urllib.parse import urlsplit
 
 from fastapi import APIRouter, BackgroundTasks, Cookie, Depends, Header, HTTPException, UploadFile, File, Form, Query
 from fastapi.responses import FileResponse, Response
+from pydantic import BaseModel, Field
 
 from .models import (
     CreateSessionRequest,
@@ -550,7 +551,11 @@ def image_editor_preview(reference: str = Query(max_length=2000), expected_sha25
 def image_edits(limit: int = Query(50, ge=1, le=100), offset: int = Query(0, ge=0),
                 identity: UserContext = Depends(require_user_context)):
     from .image_editor import ImageEditStore
-    return ImageEditStore(_storage_for(identity)).list(limit, offset)
+    from .material_library import MaterialLibrary
+    storage = _storage_for(identity)
+    saved = {row['reference']: row for row in MaterialLibrary(storage).list()}
+    return [{**row, **({'retention_state': 'permanent', 'asset_id': saved[row['path']]['asset_id'], 'version_id': saved[row['path']]['id']} if row['path'] in saved else {'retention_state': 'temporary'})}
+            for row in ImageEditStore(storage).list(limit, offset)]
 
 
 @router.get("/panorama-assets")
@@ -566,5 +571,38 @@ def save_image_edit(file: UploadFile = File(...), reference: str = Form(max_leng
                     projection_type: str = Form(default="perspective_plane"),
                     identity: UserContext = Depends(require_user_context)):
     from .image_editor import ImageEditStore, MAX_IMAGE_BYTES
-    return ImageEditStore(_storage_for(identity)).save(reference, source_sha256,
+    from .material_library import MaterialLibrary
+    storage = _storage_for(identity)
+    library = MaterialLibrary(storage)
+    parent = library.parent_for_edit(reference)
+    record = ImageEditStore(storage).save(reference, source_sha256,
         file.file.read(MAX_IMAGE_BYTES + 1), file.filename or "edited.png", operation_key, projection_type)
+    # Retryable promotion: edit save is immutable/idempotent; failed collection
+    # promotion can be retried with the same operation key without another copy.
+    if parent:
+        saved = library.promote(record['path'], record['title'], parent_reference=reference)
+        return {**record, 'retention_state': 'permanent', 'asset_id': saved['asset_id'], 'version_id': saved['id']}
+    return {**record, 'retention_state': 'temporary'}
+
+
+class PromoteMaterialRequest(BaseModel):
+    reference: str = Field(min_length=1, max_length=2000)
+    title: str = Field(default='', max_length=200)
+
+
+@router.get('/material-library')
+def material_library(identity: UserContext = Depends(require_user_context)):
+    from .material_library import MaterialLibrary
+    return MaterialLibrary(_storage_for(identity)).list()
+
+
+@router.post('/material-library', status_code=201)
+def promote_material(body: PromoteMaterialRequest, identity: UserContext = Depends(require_user_context)):
+    from .material_library import MaterialLibrary
+    return MaterialLibrary(_storage_for(identity)).promote(body.reference, body.title)
+
+
+@router.get('/material-library/{version_id}/content')
+def saved_material_content(version_id: str, identity: UserContext = Depends(require_user_context)):
+    from .material_library import MaterialLibrary
+    return FileResponse(MaterialLibrary(_storage_for(identity)).content(version_id))
