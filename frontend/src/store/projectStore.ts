@@ -200,6 +200,8 @@ export interface StoryboardFrame {
 
 export interface ExtraRosterEntry {
     extra_id: string;
+    asset_revision?: number;
+    asset_revisions?: Array<{ revision: number; content_hash: string; snapshot: Record<string, unknown> }>;
     label: string;
     kind: "fixed_extra" | "extra_template";
     height?: string | null;
@@ -218,6 +220,7 @@ export interface ExtraRosterEntry {
 export interface ExtraShotInstance {
     extra_id?: string | null;
     template_id?: string | null;
+    asset_revision?: number | null;
     layer: "near" | "mid" | "far";
     region: string;
     relative_scale?: string | null;

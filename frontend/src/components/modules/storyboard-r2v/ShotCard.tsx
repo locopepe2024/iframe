@@ -1156,6 +1156,7 @@ export default function ShotCard({
                                     if (!entry) return;
                                     onUpdateCrowdInstances([...(shot.crowdInstances ?? []), {
                                         ...(entry.kind === "fixed_extra" ? { extra_id: entry.extra_id } : { template_id: entry.extra_id }),
+                                        asset_revision: entry.asset_revision ?? 1,
                                         layer: entry.kind === "fixed_extra" ? "near" : "far",
                                         region: "", face_readable: false, text_readable: false, variant_ids: [],
                                     }]);
