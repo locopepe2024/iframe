@@ -4,7 +4,7 @@ import { createRenderRequestId } from '@/lib/renderRequestId';
 import { useLocale } from "next-intl";
 import { api, type AssemblyEditPlan } from "@/lib/api";
 import type { Project } from "@/store/projectStore";
-import { insertAssemblyVideo, reorderAssemblyVideo, snapAssemblyTimelineTime, moveAssemblyClipInTimeline, removeAssemblyClip, resizeAssemblyClipInTimeline, splitAssemblyClip, trimAssemblyClip } from "./assemblyEditing";
+import { insertAssemblyVideo, reorderAssemblyVideo, snapAssemblyTimelineTime, moveAssemblyClipInTimeline, removeAssemblyClip, resizeAssemblyClipInTimeline, splitAssemblyClip, trimAssemblyClip, trimAssemblyClipAtPlayhead } from "./assemblyEditing";
 import { extractErrorDetail, getAssetUrl, getVideoPosterUrl } from "@/lib/utils";
 import TimelineFilmstrip from './TimelineFilmstrip';
 import TimelineAudioPreview, { usePreviewGain } from './TimelineAudioPreview';
@@ -97,6 +97,7 @@ export function AssemblyTracks({ plan: committedPlan, resourceId, onChange, save
     useEffect(() => { setPosition(value => Math.min(value, plan.target_duration_ms)); }, [plan.target_duration_ms]);
     const selectClip = (laneId: string, clip: typeof videos[number]) => {
         setSelected({ laneId, clipId: clip.id });
+        setShowInspector(true);
         setSourceIn(clip.source_start_ms ?? 0);
         setSourceOut(clip.source_end_ms ?? (clip.source_start_ms ?? 0) + clip.timeline_end_ms - clip.timeline_start_ms);
         seek(clip.timeline_start_ms);
@@ -135,6 +136,12 @@ export function AssemblyTracks({ plan: committedPlan, resourceId, onChange, save
     };
     const selectedLane = plan.lanes.find(l => l.id === selected?.laneId);
     const selectedClip = selectedLane?.clips.find(c => c.id === selected?.clipId);
+    const selectedSourceTime = selectedClip && selectedLane?.kind !== 'subtitle'
+        && position >= selectedClip.timeline_start_ms && position <= selectedClip.timeline_end_ms
+        ? Math.round((selectedClip.source_start_ms ?? 0) + (position - selectedClip.timeline_start_ms)
+            / (selectedClip.timeline_end_ms - selectedClip.timeline_start_ms)
+            * ((selectedClip.source_end_ms ?? (selectedClip.source_start_ms ?? 0) + selectedClip.timeline_end_ms - selectedClip.timeline_start_ms) - (selectedClip.source_start_ms ?? 0)))
+        : null;
     useEffect(() => {
         if (!selectedClip) return;
         setSourceIn(selectedClip.source_start_ms ?? 0);
@@ -198,13 +205,15 @@ export function AssemblyTracks({ plan: committedPlan, resourceId, onChange, save
     };
     return <section tabIndex={0} onKeyDown={onWorkbenchKeyDown} aria-label={t("多泳道编辑", "Multitrack editing")} className="min-w-0 space-y-3 rounded-lg border border-glass-border p-3" style={{ contain: "inline-size" }}>
         <div data-editing-workspace className="min-w-0 space-y-3">
-        <div className="flex flex-wrap items-center gap-2">
-            {materialPanel && <button type="button" className={`${control} px-2`} aria-label={t("切换素材面板", "Toggle material panel")} title={t("素材面板", "Material panel")} aria-expanded={showMaterials} onClick={() => setShowMaterials(value => !value)}>{showMaterials ? <ChevronLeft size={16} /> : <ChevronRight size={16} />}</button>}
-            <button type="button" className={`${control} px-2`} aria-label={t("切换片段属性", "Toggle clip properties")} title={t("片段属性", "Clip properties")} aria-expanded={showInspector} onClick={() => setShowInspector(value => !value)}>{showInspector ? <ChevronRight size={16} /> : <ChevronLeft size={16} />}</button>
-        </div>
         <div className="flex min-w-0 flex-col gap-3 lg:flex-row lg:items-stretch">
         {materialPanel && showMaterials && <aside aria-label={t("素材选择面板", "Material picker panel")} className="min-w-0 overflow-auto rounded-lg border border-glass-border p-2 lg:max-h-[45dvh] lg:w-72 lg:shrink-0">{materialPanel}</aside>}
         <div data-editing-preview className="min-w-0 flex-1 space-y-2 rounded-lg bg-surface p-2">
+        <div className="flex flex-wrap items-center gap-2">
+            {materialPanel && <button type="button" className={`${control} px-2`} aria-label={t("切换素材面板", "Toggle material panel")} title={t("素材面板", "Material panel")} aria-expanded={showMaterials} onClick={() => setShowMaterials(value => !value)}>{showMaterials ? <ChevronLeft size={16} /> : <ChevronRight size={16} />}</button>}
+            <button type="button" className={control} disabled={!currentMedia} onClick={() => setPlaying(value => !value)}>{playing ? t("暂停", "Pause") : t("播放", "Play")}</button>
+            <span className="mr-auto min-w-0 flex-1 truncate text-xs text-text-secondary" title={t("音轨随播放头同步预览；最终混音和字幕样式以导出成片为准。", "Audio tracks follow the playhead. Export to review final mixing and caption styling.")}>{currentVideo?.label || t("选择镜头预览", "Select a shot to preview")}</span>
+            <button type="button" className={`${control} px-2`} aria-label={t("片段属性", "Clip properties")} title={t("片段属性", "Clip properties")} aria-expanded={showInspector} onClick={() => setShowInspector(value => !value)}>{showInspector ? <ChevronRight size={16} /> : <ChevronLeft size={16} />}</button>
+        </div>
         <div className="relative mx-auto aspect-video max-h-[24dvh] lg:max-h-[45dvh] w-full overflow-hidden rounded-lg bg-black">
             {currentMedia ? <video ref={videoRef} key={currentMedia.url} src={currentMedia.url} poster={currentMedia.poster || undefined} preload="metadata" playsInline className="h-full w-full object-contain" aria-label={t("剪辑画面预览", "Timeline video preview")}
                 onLoadedMetadata={syncVideo} onWaiting={() => setBuffering(true)} onPlaying={() => setBuffering(false)} onError={() => { setPlaying(false); setMediaError(t("视频无法加载，请检查该镜头素材。", "Video unavailable. Check this shot's media.")); }}
@@ -219,11 +228,6 @@ export function AssemblyTracks({ plan: committedPlan, resourceId, onChange, save
                     } else setPosition(Math.max(currentVideo.timeline_start_ms, time));
                 }} onEnded={() => { if (currentVideo && currentVideo.timeline_end_ms < plan.target_duration_ms) setPosition(currentVideo.timeline_end_ms); else setPlaying(false); }} /> : <div className="flex h-full items-center justify-center text-sm text-white">{t("此位置没有可用视频，请选择时间线中的镜头。", "No video at this position. Select a shot on the timeline.")}</div>}
             {active.length > 0 && <div className="pointer-events-none absolute inset-x-4 bottom-6 whitespace-pre-wrap text-center text-lg text-white [text-shadow:0_1px_3px_black]">{active.map(c => c.text).join("\n")}</div>}
-        </div>
-        <div className="flex flex-wrap items-center gap-3">
-            <button type="button" className={control} disabled={!currentMedia} onClick={() => setPlaying(value => !value)}>{playing ? t("暂停", "Pause") : t("播放", "Play")}</button>
-            <span className="text-xs text-text-secondary">{currentVideo?.label || t("选择镜头预览", "Select a shot to preview")}</span>
-            <span className="text-xs text-text-muted">{t("音轨随播放头同步预览；最终混音和字幕样式以导出成片为准。", "Audio tracks follow the playhead. Export to review final mixing and caption styling.")}</span>
         </div>
         {audioClips.filter(item => item.url).map(({ lane, clip, url }) => <TimelineAudioPreview key={project.id + lane.id + clip.id + url} url={url} position={position} start={clip.timeline_start_ms} end={clip.timeline_end_ms} sourceStart={clip.source_start_ms ?? 0} sourceEnd={clip.source_end_ms ?? (clip.source_start_ms ?? 0) + clip.timeline_end_ms - clip.timeline_start_ms} gain={clip.gain ?? 1} playing={playing && !buffering} label={laneName(lane.kind) + " · " + (clip.label || clip.id)} onError={reportAudioError} />)}
         {(audioError || audioClips.some(item => !item.url)) && <p role="alert" className="text-xs text-red-300">{t("部分音频无法预览，请检查素材或重新播放。", "Some audio could not be previewed. Check the source or retry playback.")}</p>}
@@ -240,6 +244,9 @@ export function AssemblyTracks({ plan: committedPlan, resourceId, onChange, save
             {selectedLane?.kind !== "subtitle" && <>
                 <label className="text-xs text-text-secondary">{t("源入点（毫秒）", "Source in (ms)")}<input className={`${control} block w-32`} type="number" min={0} step={1} value={sourceIn} onChange={e => setSourceIn(Number(e.target.value))} /></label>
                 <label className="text-xs text-text-secondary">{t("源出点（毫秒）", "Source out (ms)")}<input className={`${control} block w-32`} type="number" min={1} step={1} value={sourceOut} onChange={e => setSourceOut(Number(e.target.value))} /></label>
+                <button type="button" className={control} disabled={selectedSourceTime === null || selectedSourceTime >= sourceOut} onClick={() => { if (selectedSourceTime !== null) setSourceIn(selectedSourceTime); }}>{t("播放头设为入点", "Set in at playhead")}</button>
+                <button type="button" className={control} disabled={selectedSourceTime === null || selectedSourceTime <= sourceIn} onClick={() => { if (selectedSourceTime !== null) setSourceOut(selectedSourceTime); }}>{t("播放头设为出点", "Set out at playhead")}</button>
+                <span className="w-full text-xs tabular-nums text-text-secondary">{t("保留时长", "Keep duration")} · {Math.max(0, (sourceOut - sourceIn) / 1000).toFixed(3)}s</span>
                 <button type="button" className={control} onClick={() => applyEdit(() => trimAssemblyClip(plan, selected.laneId, selected.clipId, sourceIn, sourceOut))}>{t("应用原速裁切", "Apply trim at original speed")}</button>
             </>}
             {selectedLane?.kind === "video" && <>
@@ -262,22 +269,36 @@ export function AssemblyTracks({ plan: committedPlan, resourceId, onChange, save
             {onUndo && <button type="button" className={`${control} px-2`} aria-label={t("撤销", "Undo")} title={t("撤销", "Undo")} disabled={!canUndo} onClick={onUndo}><Undo2 size={15} /></button>}
             {onRedo && <button type="button" className={`${control} px-2`} aria-label={t("重做", "Redo")} title={t("重做", "Redo")} disabled={!canRedo} onClick={onRedo}><Redo2 size={15} /></button>}
             {onAudioLaneChange && <label className="flex items-center gap-1 text-xs text-text-secondary"><span>{t("添加音频", "Add audio")}</span><select className={control} value={audioLane} onChange={e => onAudioLaneChange(e.target.value as 'bgm' | 'dialogue' | 'sfx')}><option value="bgm">BGM</option><option value="dialogue">{t("对白", "Dialogue")}</option><option value="sfx">{t("音效", "SFX")}</option></select></label>}
+            <label className="text-xs">{t("播放头（秒）", "Playhead (seconds)")} <input className={`${control} w-28`} type="number" min={0} max={plan.target_duration_ms / 1000} step={0.001} value={position / 1000} onChange={e => seek(Number(e.target.value) * 1000)} /></label>
+            <button type="button" className={`${control} border-primary text-primary`} disabled={!canSplit} onClick={() => {
+                if (splitClip && splitLane) applyEdit(() => splitAssemblyClip(plan, splitLane.id, splitClip.id, position, createRenderRequestId()));
+            }}>{t("断开", "Split")}</button>
+            {(['left', 'right'] as const).map(side => <button key={side} type="button" className={control} disabled={!canSplit} title={side === 'left' ? t("删除播放头左侧，保留右侧片段", "Remove the left side; keep the right side of this clip") : t("删除播放头右侧，保留左侧片段", "Remove the right side; keep the left side of this clip")} onClick={() => {
+                if (splitClip && splitLane) applyEdit(() => {
+                    const next = trimAssemblyClipAtPlayhead(plan, splitLane.id, splitClip.id, position, side);
+                    const kept = next.lanes.find(l => l.id === splitLane.id)!.clips.find(c => c.id === splitClip.id)!;
+                    setSelected({ laneId: splitLane.id, clipId: kept.id });
+                    setShowInspector(true);
+                    setPlaying(false);
+                    seek(side === 'left' ? kept.timeline_start_ms : kept.timeline_end_ms - 1);
+                    return next;
+                });
+            }}>{side === 'left' ? t("向左剪辑", "Trim left") : t("向右剪辑", "Trim right")}</button>)}
             <button type="button" className={control} aria-label={t("缩小时间轴", "Zoom out")} disabled={zoom <= 0.5} onClick={() => setZoom(z => Math.max(0.5, z / 2))}>{t("缩小时间轴 −", "Zoom out −")}</button>
             <span className="text-xs tabular-nums">{Math.round(zoom * 100)}%</span>
             <button type="button" className={control} aria-label={t("放大时间轴", "Zoom in")} disabled={zoom >= 16} onClick={() => setZoom(z => Math.min(16, z * 2))}>{t("放大时间轴 ＋", "Zoom in ＋")}</button>
             <button type="button" className={control} onClick={() => { setZoom(1); if (timelineViewport.current) timelineViewport.current.scrollLeft = 0; }}>{t("适应时间轴", "Fit timeline")}</button>
+            <details className="open:w-full">
+                <summary className={`${control} cursor-pointer py-3`}>{t("轨道设置", "Track settings")}</summary>
+                <div className="mt-2 flex flex-wrap items-center gap-3 rounded-lg border border-glass-border bg-elevated p-3">
+                    <div className="flex flex-wrap gap-2">{(["subtitle", "dialogue", "bgm", "sfx"] as const).map(kind => <button key={kind} className={control} type="button" disabled={plan.lanes.length >= 8} onClick={() => onChange({ ...plan, lanes: [...plan.lanes, { id: `${kind}-${createRenderRequestId()}`, kind, label: kind, clips: [], allow_overlap: kind !== "subtitle" }] })}>{t("添加", "Add")} {laneName(kind)}</button>)}</div>
+                    <label className="flex flex-wrap items-center gap-2 text-xs text-text-secondary">{t("轨道区域高度", "Track area height")}<input type="range" min={180} max={600} step={20} value={trackHeight} onChange={event => setTrackHeight(Number(event.target.value))} /><span>{trackHeight}px</span></label>
+                </div>
+            </details>
         </div>
-        <div className="flex flex-wrap gap-2">{(["subtitle", "dialogue", "bgm", "sfx"] as const).map(kind => <button key={kind} className={control} type="button" disabled={plan.lanes.length >= 8} onClick={() => onChange({ ...plan, lanes: [...plan.lanes, { id: `${kind}-${createRenderRequestId()}`, kind, label: kind, clips: [], allow_overlap: kind !== "subtitle" }] })}>{t("添加", "Add")} {laneName(kind)}</button>)}</div>
         <label className="block text-xs text-text-secondary">{t("时间线播放头", "Timeline playhead")} · {(position / 1000).toFixed(2)}s<input className="block w-full accent-primary" type="range" aria-label={t("时间线播放头", "Timeline playhead")} min={0} max={plan.target_duration_ms} step={10} value={position} onChange={e => seek(Number(e.target.value))} /></label>
-        <div className="flex flex-wrap items-center gap-2">
-            <label className="text-xs">{t("播放头（秒）", "Playhead (seconds)")} <input className={`${control} w-28`} type="number" min={0} max={plan.target_duration_ms / 1000} step={0.001} value={position / 1000} onChange={e => seek(Number(e.target.value) * 1000)} /></label>
-            <button type="button" className={`${control} border-primary text-primary`} disabled={!canSplit} onClick={() => {
-                if (splitClip && splitLane) applyEdit(() => splitAssemblyClip(plan, splitLane.id, splitClip.id, position, createRenderRequestId()));
-            }}>{t("在播放头分割", "Split at playhead")}</button>
-            <span className="text-xs text-text-secondary" role="status">{splitClip ? t(`分割对象：${splitClip.label || splitClip.id} · ${(position / 1000).toFixed(3)} 秒`, `Split target: ${splitClip.label || splitClip.id} · ${(position / 1000).toFixed(3)}s`) : t("将播放头移到要分割的片段内部。", "Move the playhead inside the clip to split it.")}{splitClip && !canSplit ? t(" · 请将播放头移到片段内部。", " · Move the playhead inside the clip.") : ''}</span>
+        <p className="text-xs text-text-secondary" role="status">{splitClip ? t(`分割对象：${splitClip.label || splitClip.id} · ${(position / 1000).toFixed(3)} 秒`, `Split target: ${splitClip.label || splitClip.id} · ${(position / 1000).toFixed(3)}s`) : t("将播放头移到要分割的片段内部。", "Move the playhead inside the clip to split it.")}{splitClip && !canSplit ? t(" · 请将播放头移到片段内部。", " · Move the playhead inside the clip.") : ''}</p>
 
-        </div>
-        <label className="flex items-center gap-2 text-xs text-text-secondary">{t("轨道区域高度", "Track area height")}<input type="range" min={180} max={600} step={20} value={trackHeight} onChange={event => setTrackHeight(Number(event.target.value))} /><span>{trackHeight}px</span></label>
         <div ref={timelineViewport} className="w-full min-w-0 overflow-auto" style={{ contain: "inline-size", height: trackHeight }} aria-label={t("可横向滚动的时间线", "Scrollable timeline")}><div data-timeline-canvas style={{ width: timelineWidth }}>
         <div role="slider" tabIndex={0} aria-label={t("时间轴刻度", "Timeline ruler")} aria-valuemin={0} aria-valuemax={plan.target_duration_ms / 1000} aria-valuenow={position / 1000} className="relative h-10 cursor-crosshair border-b border-glass-border bg-elevated text-xs tabular-nums" onPointerDown={event => {
             const bounds = event.currentTarget.getBoundingClientRect();
@@ -337,12 +358,7 @@ export function AssemblyTracks({ plan: committedPlan, resourceId, onChange, save
                         if (next !== plan) onChange(next);
                         videoDrag.current = null; setDropTarget(null);
                     }}
-                    onDragEnd={() => { videoDrag.current = null; setDropTarget(null); }} aria-label={lane.kind === "video" ? `${t("编辑片段", "Edit clip")} ${sequence.findIndex(item => item.clip.id === c.id) + 1}: ${c.label || c.id}` : (c.text || c.label || c.id)} title={c.text || c.label || c.id} onPointerDown={e => { selectClip(lane.id, c); beginDrag(e, lane.id, c.id, c.timeline_start_ms); }} onClick={() => {
-                    setSelected({ laneId: lane.id, clipId: c.id });
-                    setSourceIn(c.source_start_ms ?? 0);
-                    setSourceOut(c.source_end_ms ?? (c.source_start_ms ?? 0) + c.timeline_end_ms - c.timeline_start_ms);
-                    seek(c.timeline_start_ms);
-                }} aria-pressed={selected?.laneId === lane.id && selected?.clipId === c.id} className="absolute inset-y-1 min-w-1 truncate rounded bg-primary/40 px-1 text-left text-xs text-foreground aria-pressed:ring-2 aria-pressed:ring-inset aria-pressed:ring-primary focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary" style={{ left: `${c.timeline_start_ms / plan.target_duration_ms * 100}%`, width: `${(c.timeline_end_ms - c.timeline_start_ms) / plan.target_duration_ms * 100}%`, opacity: c.enabled && !lane.muted ? 1 : 0.3 }}>{lane.kind === "video" && mediaFor(c) && <TimelineFilmstrip url={mediaFor(c)!.url} poster={mediaFor(c)!.poster} startMs={c.source_start_ms ?? 0} endMs={c.source_end_ms ?? (c.source_start_ms ?? 0) + c.timeline_end_ms - c.timeline_start_ms} width={timelineWidth * (c.timeline_end_ms - c.timeline_start_ms) / plan.target_duration_ms} />}{dropTarget?.id === c.id && <span aria-hidden="true" className={`pointer-events-none absolute inset-y-0 z-20 w-1 bg-primary ${dropTarget.after ? "right-0" : "left-0"}`} />}
+                    onDragEnd={() => { videoDrag.current = null; setDropTarget(null); }} aria-label={lane.kind === "video" ? `${t("编辑片段", "Edit clip")} ${sequence.findIndex(item => item.clip.id === c.id) + 1}: ${c.label || c.id}` : (c.text || c.label || c.id)} title={c.text || c.label || c.id} onPointerDown={e => { selectClip(lane.id, c); beginDrag(e, lane.id, c.id, c.timeline_start_ms); }} onClick={() => selectClip(lane.id, c)} aria-pressed={selected?.laneId === lane.id && selected?.clipId === c.id} className="absolute inset-y-1 min-w-1 truncate rounded bg-primary/40 px-1 text-left text-xs text-foreground aria-pressed:ring-2 aria-pressed:ring-inset aria-pressed:ring-primary focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary" style={{ left: `${c.timeline_start_ms / plan.target_duration_ms * 100}%`, width: `${(c.timeline_end_ms - c.timeline_start_ms) / plan.target_duration_ms * 100}%`, opacity: c.enabled && !lane.muted ? 1 : 0.3 }}>{lane.kind === "video" && mediaFor(c) && <TimelineFilmstrip url={mediaFor(c)!.url} poster={mediaFor(c)!.poster} startMs={c.source_start_ms ?? 0} endMs={c.source_end_ms ?? (c.source_start_ms ?? 0) + c.timeline_end_ms - c.timeline_start_ms} width={timelineWidth * (c.timeline_end_ms - c.timeline_start_ms) / plan.target_duration_ms} />}{dropTarget?.id === c.id && <span aria-hidden="true" className={`pointer-events-none absolute inset-y-0 z-20 w-1 bg-primary ${dropTarget.after ? "right-0" : "left-0"}`} />}
                     {["dialogue", "bgm", "sfx"].includes(lane.kind) && audioUrlFor(c, lane.kind) && <TimelineWaveform url={audioUrlFor(c, lane.kind)} startMs={c.source_start_ms ?? 0} endMs={c.source_end_ms ?? (c.source_start_ms ?? 0) + c.timeline_end_ms - c.timeline_start_ms} />}
                     <span className="pointer-events-none block truncate">{c.text || c.label || c.id}</span>{selected?.laneId === lane.id && selected?.clipId === c.id && <><span role="button" aria-label={`${c.label || c.id} start handle`} className="absolute inset-y-0 left-0 z-10 w-3 cursor-ew-resize bg-foreground/30" onPointerDown={e => { e.stopPropagation(); dragRef.current = { laneId: lane.id, clipId: c.id, startX: e.clientX, origin: c.timeline_start_ms, base: committedPlan, mode: "resize", edge: "start" }; e.currentTarget.setPointerCapture(e.pointerId); }} /><span role="button" aria-label={`${c.label || c.id} end handle`} className="absolute inset-y-0 right-0 z-10 w-3 cursor-ew-resize bg-foreground/30" onPointerDown={e => { e.stopPropagation(); dragRef.current = { laneId: lane.id, clipId: c.id, startX: e.clientX, origin: c.timeline_end_ms, base: committedPlan, mode: "resize", edge: "end" }; e.currentTarget.setPointerCapture(e.pointerId); }} /></>}</button>)}
                 <span className="pointer-events-none absolute inset-y-0 w-px bg-foreground" style={{ left: `${position / plan.target_duration_ms * 100}%` }} />

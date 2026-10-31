@@ -98,7 +98,7 @@ it("offers visible sequence controls and recombines trimmed and split sources", 
     fireEvent.click(screen.getByRole("button", { name: "Apply trim at original speed" }));
     expect(ordered()[1]).toMatchObject({ source_start_ms: 500, source_end_ms: 2500, timeline_start_ms: 3000, timeline_end_ms: 5000 });
     fireEvent.change(screen.getByRole("slider", { name: "Timeline playhead" }), { target: { value: "4000" } });
-    fireEvent.click(screen.getByRole("button", { name: "Split at playhead" }));
+    fireEvent.click(screen.getByRole("button", { name: "Split" }));
     expect(ordered().map(c => c.source_media_id)).toEqual(["m2", "m1", "m1", "m3"]);
     const secondHalf = ordered()[2];
     expect(secondHalf).toMatchObject({ source_start_ms: 1500, source_end_ms: 2500 });
@@ -128,7 +128,7 @@ it("splits the video under the precise playhead without hidden clip selection", 
     const initial: AssemblyEditPlan = { ...plan, target_duration_ms: 30000, lanes: [{ id: "v", kind: "video", allow_overlap: false, clips: [{ id: "one", label: "1.mp4", source_media_id: "m1", timeline_start_ms: 0, timeline_end_ms: 30000, source_start_ms: 0, source_end_ms: 30000, enabled: true, source_refs: [] }] }] };
     const onChange = vi.fn();
     render(<AssemblyTracks plan={initial} project={project} resourceId="p" saved onChange={onChange} />);
-    const split = screen.getByRole("button", { name: "Split at playhead" });
+    const split = screen.getByRole("button", { name: "Split" });
     expect(split).toBeDisabled();
     fireEvent.change(screen.getByRole("spinbutton", { name: "Playhead (seconds)" }), { target: { value: "16.484" } });
     expect(split).toBeEnabled();
@@ -310,4 +310,19 @@ it('synchronizes overlapping audio lanes and removes muted or disabled players',
     expect(screen.queryByLabelText('Music · bgm')).toBeNull();
     expect(screen.queryByLabelText('SFX · sfx')).toBeNull();
     play.mockRestore(); pause.mockRestore();
+});
+
+
+it.each(['left', 'right'] as const)('offers a visible %s trim, preserves its source and commits one edit', side => {
+    const initial: AssemblyEditPlan = { ...plan, lanes: [{ id: 'v', kind: 'video', allow_overlap: false, clips: [{ id: 'one', label: 'One', timeline_start_ms: 0, timeline_end_ms: 5000, source_start_ms: 10000, source_end_ms: 15000, enabled: true, source_refs: [] }] }] };
+    const onChange = vi.fn();
+    render(<AssemblyTracks plan={initial} project={project} resourceId="p" saved onChange={onChange} />);
+    const button = screen.getByRole('button', { name: side === 'left' ? 'Trim left' : 'Trim right' });
+    expect(button).toBeDisabled();
+    fireEvent.change(screen.getByRole('spinbutton', { name: 'Playhead (seconds)' }), { target: { value: '2' } });
+    fireEvent.click(button);
+    expect(onChange).toHaveBeenCalledOnce();
+    expect(onChange.mock.calls[0][0].lanes[0].clips[0]).toMatchObject(side === 'left'
+        ? { source_start_ms: 12000, source_end_ms: 15000, timeline_start_ms: 0, timeline_end_ms: 3000 }
+        : { source_start_ms: 10000, source_end_ms: 12000, timeline_start_ms: 0, timeline_end_ms: 2000 });
 });

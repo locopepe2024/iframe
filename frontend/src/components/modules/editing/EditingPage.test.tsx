@@ -177,3 +177,22 @@ it('shows only project materials in the workspace and opens the library through 
   expect(onSelect).toHaveBeenCalledWith(material);
 });
 
+
+it('undoes and redoes a directional trim before saving the source interval', async () => {
+  render(<EditingPage />);
+  await screen.findByRole('option', { name: project.title });
+  fireEvent.change(screen.getByRole('combobox', { name: 'Editing project' }), { target: { value: project.id } });
+  fireEvent.click(await screen.findByRole('button', { name: 'Import' }));
+  fireEvent.click(await screen.findByRole('button', { name: 'Add material Original.mp4' }));
+  const playhead = await screen.findByRole('spinbutton', { name: 'Playhead (seconds)' });
+  fireEvent.change(playhead, { target: { value: '0.4' } });
+  fireEvent.click(screen.getByRole('button', { name: 'Trim left' }));
+  expect(screen.getByRole('slider', { name: 'Timeline playhead' })).toHaveAttribute('max', '600');
+  fireEvent.click(screen.getByRole('button', { name: 'Undo' }));
+  expect(screen.getByRole('slider', { name: 'Timeline playhead' })).toHaveAttribute('max', '1000');
+  fireEvent.click(screen.getByRole('button', { name: 'Redo' }));
+  expect(screen.getByRole('slider', { name: 'Timeline playhead' })).toHaveAttribute('max', '600');
+  fireEvent.click(screen.getByRole('button', { name: 'Save edit' }));
+  await waitFor(() => expect(editing.save).toHaveBeenCalledOnce());
+  expect(vi.mocked(editing.save).mock.calls[0][2].lanes[0].clips[0]).toMatchObject({ source_start_ms: 400, source_end_ms: 1000, timeline_start_ms: 0, timeline_end_ms: 600 });
+});

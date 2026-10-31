@@ -16,6 +16,32 @@ export function splitAssemblyClip(plan: AssemblyEditPlan, laneId: string, clipId
     return { ...plan, lanes: plan.lanes.map(l => l.id !== laneId ? l : { ...l, clips: l.clips.flatMap(c => c.id === clipId ? [first, second] : [c]) }) };
 }
 
+/** Remove one side of the playhead; video ripples, audio/captions keep their placement. */
+export function trimAssemblyClipAtPlayhead(plan: AssemblyEditPlan, laneId: string, clipId: string, time: number, side: 'left' | 'right'): AssemblyEditPlan {
+    const lane = plan.lanes.find(l => l.id === laneId);
+    const clip = lane?.clips.find(c => c.id === clipId);
+    if (!lane || !clip || !Number.isInteger(time) || time <= clip.timeline_start_ms || time >= clip.timeline_end_ms) {
+        throw new Error('Place the playhead inside a clip to trim it');
+    }
+    if (lane.kind === 'video') {
+        const sourceStart = clip.source_start_ms ?? 0;
+        const sourceEnd = clip.source_end_ms ?? sourceStart + clip.timeline_end_ms - clip.timeline_start_ms;
+        if (sourceEnd - sourceStart !== clip.timeline_end_ms - clip.timeline_start_ms) throw new Error('Directional video trimming requires original speed');
+        const cut = sourceStart + time - clip.timeline_start_ms;
+        return trimAssemblyClip(plan, laneId, clipId, side === 'left' ? cut : sourceStart, side === 'right' ? cut : sourceEnd);
+    }
+    if (!['dialogue', 'bgm', 'sfx', 'subtitle'].includes(lane.kind)) throw new Error('Select a media clip or caption to trim');
+    const resized = resizeAssemblyClipInTimeline(plan, laneId, clipId, side === 'left' ? 'start' : 'end', time);
+    if (lane.kind === 'subtitle') return resized;
+    const sourceStart = clip.source_start_ms ?? 0;
+    const sourceEnd = clip.source_end_ms ?? sourceStart + clip.timeline_end_ms - clip.timeline_start_ms;
+    const cut = sourceStart + Math.round((time - clip.timeline_start_ms) / (clip.timeline_end_ms - clip.timeline_start_ms) * (sourceEnd - sourceStart));
+    if (cut <= sourceStart || cut >= sourceEnd) throw new Error('Trim is too close to the source boundary');
+    return { ...resized, lanes: resized.lanes.map(l => l.id !== laneId ? l : { ...l, clips: l.clips.map(c => c.id !== clipId ? c : {
+        ...c, source_start_ms: side === 'left' ? cut : sourceStart, source_end_ms: side === 'right' ? cut : sourceEnd,
+    }) }) };
+}
+
 /** Trim at original speed and ripple only video; independent audio/captions stay anchored. */
 export function trimAssemblyClip(plan: AssemblyEditPlan, laneId: string, clipId: string, start: number, end: number): AssemblyEditPlan {
     if (!Number.isInteger(start) || !Number.isInteger(end) || start < 0 || end <= start) throw new Error("Source out must be after source in (integer milliseconds)");
