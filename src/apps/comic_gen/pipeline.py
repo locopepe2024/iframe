@@ -4776,6 +4776,20 @@ class ComicGenPipeline(StudioOwnerMixin):
                 unresolved_characters,
                 unresolved_props,
             )
+        if any(shot.crowd_instances for scene in plan.scenes for beat in scene.beats for shot in beat.shots):
+            series = self.series_store.get(script.series_id) if script.series_id else None
+            roster = {item.extra_id: item for item in (series.extra_roster if series else [])}
+            for scene in plan.scenes:
+                for beat in scene.beats:
+                    for shot in beat.shots:
+                        for crowd in shot.crowd_instances:
+                            key = crowd.extra_id or crowd.template_id
+                            entry = roster.get(key)
+                            expected = "fixed_extra" if crowd.extra_id else "extra_template"
+                            if entry is None:
+                                raise ValueError(f"Shooting plan references missing crowd asset: {key}")
+                            if entry.kind != expected:
+                                raise ValueError(f"Shooting plan crowd kind does not match: {key}")
         from .llm import split_director_source
         allowed_source_refs = {
             item["source_ref"] for item in split_director_source(
@@ -5303,6 +5317,8 @@ class ComicGenPipeline(StudioOwnerMixin):
         baselines = {(item.place_continuity_id, item.time_continuity_id): item
                      for item in plan.lighting_baselines}
         resolved_assets = self.resolve_episode_assets(script)
+        series = self.series_store.get(script.series_id) if script.series_id else None
+        crowd_roster = {item.extra_id: item for item in (series.extra_roster if series else [])}
         def current_asset_id(asset_type: str, plan_asset_id: Optional[str]) -> Optional[str]:
             if not plan_asset_id:
                 return None
@@ -5421,6 +5437,18 @@ class ComicGenPipeline(StudioOwnerMixin):
                     shot_scene_binding = shot.scene_binding
                     if isinstance(shot_scene_binding, dict):
                         shot_scene_binding = DirectorPlanSceneBinding.model_validate(shot_scene_binding)
+                    crowd_instances = []
+                    for crowd in shot.crowd_instances:
+                        key = crowd.extra_id or crowd.template_id
+                        entry = crowd_roster.get(key)
+                        if entry is None:
+                            raise ValueError(f"Shooting plan references missing crowd asset {key}")
+                        expected = "fixed_extra" if crowd.extra_id else "extra_template"
+                        if entry.kind != expected:
+                            raise ValueError(f"Shooting plan crowd kind does not match {key}")
+                        crowd_instances.append(crowd.model_copy(update={
+                            "asset_revision": crowd.asset_revision or entry.asset_revision,
+                        }, deep=True))
                     shots.append(EpisodeVisualShotContext(
                         scene_id=scene.scene_id, beat_id=beat.beat_id, shot_id=shot.shot_id,
                         source_chunk_refs=list(dict.fromkeys(
@@ -5436,6 +5464,7 @@ class ComicGenPipeline(StudioOwnerMixin):
                         character_ids=shot_char_ids,
                         person_ids=list(dict.fromkeys(cast.person_id for cast in cast_items)),
                         prop_ids=shot_prop_ids,
+                        crowd_instances=crowd_instances,
                         visual_intent=shot.visual_intent, director_effect=shot.director_effect,
                         information_design=shot.information_design,
                         performance_action=shot.performance_action, action_physics=shot.action_physics,

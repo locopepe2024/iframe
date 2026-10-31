@@ -21,6 +21,7 @@ from src.apps.comic_gen.models import (
     DirectorShootingPlan,
     DirectorStoryMap,
     EpisodeAssetBinding,
+    ExtraRosterEntry, ExtraShotInstance, Series,
     Prop,
     Scene,
     Script,
@@ -179,6 +180,29 @@ def test_plan_contract_is_strict_and_requires_contiguous_order_values():
         )
     with pytest.raises(ValidationError, match="Extra inputs are not permitted"):
         DirectorPlanLighting(key_source="window", surprise="ignored?")
+
+
+def test_shooting_plan_carries_crowd_instances_and_validates_series_roster():
+    pipeline, script = make_pipeline()
+    script.series_id = "series"
+    pipeline.series_store["series"] = Series(
+        id="series", title="青溪镇", created_at=1, updated_at=1,
+        extra_roster=[ExtraRosterEntry(extra_id="townspeople", label="市井百姓", kind="extra_template")],
+    )
+    plan = make_plan(pipeline)
+    plan.scenes[0].beats[0].shots[0].crowd_instances = [
+        ExtraShotInstance(template_id="townspeople", layer="far", motion="沿街通行")
+    ]
+
+    validated = pipeline._validate_director_shooting_plan(script, plan)
+
+    assert validated.scenes[0].beats[0].shots[0].crowd_instances[0].template_id == "townspeople"
+
+    plan.scenes[0].beats[0].shots[0].crowd_instances = [
+        ExtraShotInstance(template_id="missing-crowd", layer="far")
+    ]
+    with pytest.raises(ValueError, match="missing crowd asset"):
+        pipeline._validate_director_shooting_plan(script, plan)
 
 
 def test_saved_plan_scene_asset_id_survives_project_reload(tmp_path):
