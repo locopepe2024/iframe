@@ -11,9 +11,10 @@ import TimelineAudioPreview, { usePreviewGain } from './TimelineAudioPreview';
 import TimelineWaveform from './TimelineWaveform';
 import { ChevronLeft, ChevronRight, Undo2, Redo2 } from 'lucide-react';
 
-export function AssemblyTracks({ plan: committedPlan, resourceId, onChange, saved, project, materials, onUploadAudio, onExportSubtitles, materialPanel, audioLane, onAudioLaneChange, canUndo, canRedo, onUndo, onRedo }: {
+export function AssemblyTracks({ plan: committedPlan, resourceId, onChange, saved, project, materials, onUploadAudio, onExportSubtitles, materialPanel, onImport, audioLane, onAudioLaneChange, canUndo, canRedo, onUndo, onRedo }: {
     plan: AssemblyEditPlan; resourceId: string; saved: boolean; project: Pick<Project, "id" | "frames" | "video_tasks" | "bgm_url">;
     materialPanel?: ReactNode;
+    onImport?: () => void;
     materials?: Record<string, { url: string }>;
     onUploadAudio?: (file: File) => Promise<{ media_id: string; url: string; duration_ms: number }>;
     onExportSubtitles?: (lane: string) => Promise<Blob>;
@@ -33,7 +34,7 @@ export function AssemblyTracks({ plan: committedPlan, resourceId, onChange, save
     const [snapTime, setSnapTime] = useState<number | null>(null);
     const [dropTarget, setDropTarget] = useState<{ id: string; after: boolean } | null>(null);
     const [position, setPosition] = useState(0);
-    const [showMaterials, setShowMaterials] = useState(false);
+    const [showMaterials, setShowMaterials] = useState(true);
     const [showInspector, setShowInspector] = useState(true);
     const [trackHeight, setTrackHeight] = useState(300);
     const [zoom, setZoom] = useState(1);
@@ -210,6 +211,7 @@ export function AssemblyTracks({ plan: committedPlan, resourceId, onChange, save
         <div data-editing-preview className="min-w-0 flex-1 space-y-2 rounded-lg bg-surface p-2">
         <div className="flex flex-wrap items-center gap-2">
             {materialPanel && <button type="button" className={`${control} px-2`} aria-label={t("切换素材面板", "Toggle material panel")} title={t("素材面板", "Material panel")} aria-expanded={showMaterials} onClick={() => setShowMaterials(value => !value)}>{showMaterials ? <ChevronLeft size={16} /> : <ChevronRight size={16} />}</button>}
+            {onImport && <button type="button" className={control} onClick={onImport}>{t("导入", "Import")}</button>}
             <button type="button" className={control} disabled={!currentMedia} onClick={() => setPlaying(value => !value)}>{playing ? t("暂停", "Pause") : t("播放", "Play")}</button>
             <span className="mr-auto min-w-0 flex-1 truncate text-xs text-text-secondary" title={t("音轨随播放头同步预览；最终混音和字幕样式以导出成片为准。", "Audio tracks follow the playhead. Export to review final mixing and caption styling.")}>{currentVideo?.label || t("选择镜头预览", "Select a shot to preview")}</span>
             <button type="button" className={`${control} px-2`} aria-label={t("切换片段属性", "Toggle clip properties")} title={t("片段属性", "Clip properties")} aria-expanded={showInspector} onClick={() => setShowInspector(value => !value)}>{showInspector ? <ChevronRight size={16} /> : <ChevronLeft size={16} />}</button>

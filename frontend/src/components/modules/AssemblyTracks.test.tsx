@@ -143,9 +143,9 @@ it("splits the video under the precise playhead without hidden clip selection", 
 it('collapses optional panels and adjusts track height without changing the plan', () => {
     const onChange = vi.fn();
     render(<AssemblyTracks plan={plan} project={project} resourceId="p" saved onChange={onChange} materialPanel={<div>Project materials</div>} />);
-    expect(screen.queryByText('Project materials')).toBeNull();
-    fireEvent.click(screen.getByRole('button', { name: 'Toggle material panel' }));
     expect(screen.getByText('Project materials')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Toggle material panel' }));
+    expect(screen.queryByText('Project materials')).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: 'Toggle clip properties' }));
     expect(screen.queryByLabelText('Selected clip properties')).toBeNull();
     fireEvent.click(screen.getByText('Track settings'));

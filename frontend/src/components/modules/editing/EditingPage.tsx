@@ -30,7 +30,8 @@ export default function EditingPage() {
   useEffect(() => { const read = () => setPendingMedia(new URLSearchParams(window.location.hash.split('?')[1] || '').get('media') || ''); read(); window.addEventListener('hashchange', read); return () => window.removeEventListener('hashchange', read); }, []);
   useEffect(() => { const warn = (e: BeforeUnloadEvent) => { if (dirty) { e.preventDefault(); e.returnValue = ''; } }; window.addEventListener('beforeunload', warn); return () => window.removeEventListener('beforeunload', warn); }, [dirty]);
   const [audioLane, setAudioLane] = useState<'bgm' | 'dialogue' | 'sfx'>('bgm');
-  const accept = (p: EditProject) => { setProject(p); setPlan(p.plan); setSources(p.sources); setDirty(false); setUndo([]); setRedo([]); setVersions([]); };
+  const emptyPlan = (id: string): AssemblyEditPlan => ({ id: `assembly-${id}`, scope: 'project', revision: 1, target_duration_ms: 1000, lanes: [], markers: [], provenance: {} });
+  const accept = (p: EditProject) => { setProject(p); setPlan(p.plan || emptyPlan(p.id)); setSources(p.sources); setDirty(false); setUndo([]); setRedo([]); setVersions([]); };
   useEffect(() => { editing.list().then(setProjects).catch(e => setError(extractErrorDetail(e))); }, []);
   const run = async (fn: () => Promise<void>) => { setBusy(true); setError(''); try { await fn(); } catch (e) { setError(extractErrorDetail(e)); } finally { setBusy(false); } };
   const change = (next: AssemblyEditPlan) => { if (plan) setUndo(old => [...old.slice(-49), plan]); setRedo([]); setPlan(next); setDirty(true); };
@@ -40,7 +41,8 @@ export default function EditingPage() {
     const current: AssemblyEditPlan = plan || { id: `assembly-${project.id}`, scope: 'project', revision: 1, target_duration_ms: item.duration_ms, lanes: [], markers: [], provenance: {} };
     const kind: 'video' | 'bgm' | 'dialogue' | 'sfx' = item.video ? 'video' : audioLane;
     const lane = current.lanes.find(l => l.kind === kind);
-    const start = item.video && plan ? plan.target_duration_ms : 0;
+    const hasVideo = current.lanes.some(l => l.kind === 'video' && l.clips.length > 0);
+    const start = item.video && hasVideo ? current.target_duration_ms : 0;
     const duration = item.video ? item.duration_ms : Math.min(item.duration_ms, current.target_duration_ms);
     const clip = { id: createRenderRequestId(), timeline_start_ms: start, timeline_end_ms: start + duration, source_start_ms: 0, source_end_ms: duration, source_media_id: item.id, source_refs: [`media:${item.id}`], label: item.name, enabled: true, gain: 1 };
     const lanes = lane ? current.lanes.map(l => l.id === lane.id ? { ...l, clips: [...l.clips, clip] } : l) : [...current.lanes, { id: createRenderRequestId(), kind, label: kind, allow_overlap: kind !== 'video', clips: [clip] }];
@@ -92,7 +94,7 @@ export default function EditingPage() {
       {versions.length > 0 && <div className="flex flex-wrap gap-2">{versions.filter(v => v.revision > 0).map(v => <button className="glass-button px-3 py-2" key={v.revision} disabled={busy || dirty || v.revision === project.revision} onClick={() => void run(async () => accept(await editing.restore(project.id, project.revision, v.revision)))}>{t('恢复', 'Restore')} v{v.revision}</button>)}</div>}
       <fieldset disabled={busy} className="space-y-4 disabled:opacity-60">
         {plan && <>
-          <AssemblyTracks plan={plan} resourceId={project.id} saved={!dirty} project={{ id: project.id, frames: [], video_tasks: [] }} materials={sources} materialPanel={<EditingMaterials onSelect={add} onImport={importMaterials} materials={sources} disabled={busy} />} onChange={change}
+          <AssemblyTracks plan={plan} resourceId={project.id} saved={!dirty} project={{ id: project.id, frames: [], video_tasks: [] }} materials={sources} onImport={importMaterials} materialPanel={<EditingMaterials onSelect={add} materials={sources} disabled={busy} />} onChange={change}
             audioLane={audioLane} onAudioLaneChange={setAudioLane} canUndo={undo.length > 0} canRedo={redo.length > 0}
             onUndo={() => { setRedo(old => [...old, plan]); setPlan(undo[undo.length - 1]); setUndo(old => old.slice(0, -1)); setDirty(true); }}
             onRedo={() => { setUndo(old => [...old, plan]); setPlan(redo[redo.length - 1]); setRedo(old => old.slice(0, -1)); setDirty(true); }}

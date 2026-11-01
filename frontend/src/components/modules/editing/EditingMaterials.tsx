@@ -6,12 +6,12 @@ import { extractErrorDetail, getVideoPosterUrl } from '@/lib/utils';
 import { ChevronRight, Folder, FolderInput, Lock, Music, Plus, Search, Trash2, Upload } from 'lucide-react';
 
 type Props = { onSelect?: (item: EditMaterial) => void; disabled?: boolean };
-export function EditingMaterials({ onSelect, onImport, materials = {}, disabled = false }: Props & { onImport: () => void; materials?: Record<string, EditMaterial> }) {
+export function EditingMaterials({ onSelect, onImport, materials = {}, disabled = false }: Props & { onImport?: () => void; materials?: Record<string, EditMaterial> }) {
   const zh = useLocale().startsWith('zh');
   const t = (cn: string, en: string) => zh ? cn : en;
   const items = Object.values(materials);
   return <section className="min-w-0 space-y-3" aria-label={t('剪辑素材库', 'Editing materials')}>
-    <button type="button" className="glass-button min-h-11 px-3 py-2" disabled={disabled} onClick={onImport}>{t('导入', 'Import')}</button>
+    {onImport && <button type="button" className="glass-button min-h-11 px-3 py-2" disabled={disabled} onClick={onImport}>{t('导入', 'Import')}</button>}
     {!items.length && <p className="text-xs text-text-secondary">{t('导入视频或音频开始剪辑。', 'Import video or audio to start editing.')}</p>}
     <div className="flex min-w-0 flex-col gap-1">{items.map(item => <article key={item.id} className="group flex min-h-12 min-w-0 items-center gap-2 overflow-hidden rounded-md border border-glass-border bg-surface p-1" title={`${item.name} · ${(item.duration_ms / 1000).toFixed(3)}s`}>
       <div className="h-10 w-16 shrink-0 overflow-hidden rounded bg-black/40">

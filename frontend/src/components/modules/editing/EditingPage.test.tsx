@@ -29,7 +29,7 @@ it('adds multiple clips and an audio lane over HTTP without crypto.randomUUID', 
   fireEvent.click(await screen.findByRole('button', { name: 'Import to workspace Original.mp4' }));
   fireEvent.click(await screen.findByRole('button', { name: 'Add to edit Original.mp4' }));
   await waitFor(() => expect(screen.getByRole('button', { name: 'Save edit' })).toBeEnabled());
-  fireEvent.click(screen.getByRole('button', { name: 'Toggle material panel' }));
+  if (!screen.queryByRole('button', { name: 'Add to edit Original.mp4' })) fireEvent.click(screen.getByRole('button', { name: 'Toggle material panel' }));
   await waitFor(() => expect(screen.getByRole('button', { name: 'Add to edit Original.mp4' })).toBeEnabled());
   fireEvent.click(screen.getByRole('button', { name: 'Add to edit Original.mp4' }));
   await waitFor(() => expect(editing.material).toHaveBeenCalledTimes(1));
